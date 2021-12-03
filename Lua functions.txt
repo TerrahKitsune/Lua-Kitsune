@@ -1,0 +1,2058 @@
+Misc global functions:
+
+	-Returns a UUID from windows CoCreateGuid
+	-returns nil if the UUID cannot be garantueed unique
+	string, raw16bytestring UUID()
+
+	-Sleep for 1 milisecond second or opt int, max 1000 (1 second)
+	nil Sleep(opt int);
+	
+	-Get the current unix epoch in miliseconds
+	int Time()
+
+	-Retrives the last error code as a message and code, if no lasterrorcode is provided it'll retrive it
+	string, code GetLastError(opt lasterrorcode)
+
+	--non nwnx functions
+	nil CLS()
+	fore,background GetTextColor()
+	nil SetTextColor(fore,background)
+	int GetKey() -waits for a keystroke or if its a pipe reads a single byte from stdin, returns -1 on failure
+	bool HasKeyDown()
+	nil Put(text)
+	bool ShellExecute(file, parameter)
+
+	--Sets a function as a ticker function
+	--if the function parameter isnt a function the ticker is disabled
+	nil SetTicker(function, opt ms)
+
+	--return memory in bytes used by lua
+	int GetMemory()
+
+	--called when GFF.exe shuts down can also be called to shut gff.exe down prematurely
+	Exit()
+
+	--key:
+	--0: HKEY_LOCAL_MACHINE
+	--1: HKEY_CLASSES_ROOT
+ 	--2: HKEY_CURRENT_CONFIG
+	--3: HKEY_CURRENT_USER
+	--4: HKEY_PERFORMANCE_DATA
+	--5: HKEY_PERFORMANCE_NLSTEXT
+	--6: HKEY_PERFORMANCE_TEXT
+	--7: HKEY_USERS
+	string GetRegistryValue(key,subkey,entry)
+
+	-Compares two strings ignore case
+	bool string.equal(str1, str2)
+
+	int setenv(var, value, override)
+	string (or nil on fail) getenv(var)
+
+	-Returns the first object that the delegate returns that isnt nil
+	object table.first(table, function(key, value) ... end)
+
+	-Returns all non nil values from the delegate as an array
+	array table.select(table, function(key, value) ... end)
+
+	ToggleConsole(bool)
+	SetTitle(newtitle)
+
+	ms Runtime()
+
+	-Resolve dns, if full is true then it'll return an array containing ipv6 and ipv4 if not full then it returns a single ipv4 address
+	string or array Dns(name, full default false)
+
+	-Retrive the computer name dns fully qualified
+	string GetComputerName()
+
+	-Calculate a crc32
+	int CRC32(stringdata, opt existingcrc)
+
+	-Retrive global memory status
+	-type:
+	-0 (default) percentage in use
+	-1 total KB of physical memory
+	-2 free  KB of physical memory
+	-3 total KB of paging file
+	-4 free  KB of paging file
+	-5 total KB of virtual memory
+	-6 free  KB of virtual memory
+	int GlobalMemoryStatus(opt type)
+
+	x,y GetScreenSize()
+	x,y GetCursorPosition();
+
+	- https://docs.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes
+	-returns true if the key is down
+	bool GetKeyState(key)
+
+	-Contains special characters 0 - 31 (http://www.asciitable.com/)
+	-Example c.LF = '\n'
+	table c
+
+	-A key(resourceid) value (extension) table used to determine the extensions used for erf containers
+	-can be modifed during runtime
+	table ResList
+
+	-A string variable that is set by io.tmpfile() containing the filename of the created file
+	LAST_TEMP_FILE
+
+	-Array containing commandline parameters passed though to gff.exe
+	ARGS[]
+
+Console:
+
+	-Creates a new console if one does not exist
+	bool Console.Create()
+
+	-Deallocates the console
+	bool Console.Destroy()
+
+	-Attaches to an existing console
+	-If no process id is given it attaches to the parents console
+	bool Console.Attach(opt processId)
+
+	-Get the position and sizes of the console window
+	cursorx, cursory, sizex, sizey, maxsizex, maxsizey Console.GetInfo()
+
+	-Moves the cursor to a new location
+	nil Console.SetCursorPosition(x, y);
+
+	-Empties the console
+	nil Console.Clear();
+
+	-Prints to the console (same as default print except towards the console)
+	charactersprinted Console.Print(...)
+
+	-Reads if a key is pressed, returns nil if no key is pressed otherwise it returns the int of the key pressed
+	key Console.ReadKey()
+
+	-Writes data to the console 
+	characterswritten Console.Write(data)
+
+	-Sets the background and foreground colors of the console
+	nil Console.SetColor(Background, Foreground)
+
+	-Get the colors of the console
+	Background, Foreground Console.GetColor()
+
+	-Toggles if the console should be visible or not
+	nil Console.SetVisible(toggle)
+
+	-Set the title of the console
+	nil Console.SetTitle(newtitle)
+
+Mutex:
+
+	-Opens a global named mutex or creates one if none exists
+	Mutex Mutex.Open(name)
+
+	-Lock a mutex
+	-If no timeout is given it'll wait infinitely
+	-returns true if the mutex was locked
+	bool Mutex:Lock(opt timeout)
+
+	-Unlocks the mutex
+	nil Mutex:Unlock()
+
+	-Get information about the mutex
+	islocked, name, internalid Mutex:Info()
+
+Window:
+
+	-Opens all windows
+	-if a process id is specified it opens only the ones for that process
+	-returns an array containg Window objects
+	array Window.Open(opt processId)
+
+	-Gets an id from the window (this is the HWND value)
+	int Window:GetID()
+
+	-Returns a window object, tupe should be one of these: https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getwindow
+	-Returns nil if no window is found
+	Window Window:GetWindow(type)
+
+	-Get the parent window
+	-Returns nil if the window does not have a parent
+	Window Window:GetParent()
+
+	-Returns true if the window is visible
+	bool Window:GetIsVisible()
+
+	-Returns true if the window is enabled
+	bool Window:GetIsEnabled()
+
+	-Gets the text of the window
+	string Window:GetText()
+
+	-Retrive the processid and threadid that created the window
+	processId, threadId Window:GetProcessId()
+
+	-Retruns info on the table, object:
+	- https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getwindowinfo
+	-AtomWindowType
+	-XWindowBorders
+	-YWindowBorders
+	-ExStyle
+	-Style
+	-WindowStatus
+	-CreatorVersion
+	-Client (object: Bottom, Left, Right, Top)
+	-Window (object: Bottom, Left, Right, Top)
+	info Window:GetInfo()
+
+	-Returns the sizes of a window/component
+	-Window (object: Bottom, Left, Right, Top, Width, Height)
+	-Client (object: Bottom, Left, Right, Top, Width, Height)
+	window, client Window:Size()
+
+	-Retrives the content of a window (such as window titles, button captions, text field data etc)
+	string Window:GetContent()
+
+	-Sets the content of a window
+	void Window:SetContent(newcontent)
+
+	--Custom Window (These functions only work with windows created by Window.Create)
+
+	-Creates a window and returns a window instance and a coroutine for the messageloop.
+	-------------------
+	-classname = a unique classname for the window
+	-title = window title
+	-x = x coordinate to spawn on
+	-y = y coordinate to spawn on
+	-width = width of the window
+	-height = height of the window
+	-style = (defaults to WS_OVERLAPPEDWINDOW 0x2CB0000 0xcf0000 for resizeable) dwStyle https://docs.microsoft.com/en-us/windows/win32/winmsg/window-styles
+	-eventhandler eventhandler is a function to handle the events of the window, may be nil
+	-eventhandler: function(eventData) end
+	-------------------
+	-returns nil on failure
+	-coroutine.resume will return a array of messages that was processed
+	-message object: https://docs.microsoft.com/en-us/previous-versions/windows/desktop/legacy/ms633573(v=vs.85)
+	-Message = uMsg
+	-WParam = wParam
+	-LParam  = lParam
+	-ID = windowhandleID
+	Window, Coroutine Window.Create(parentwindow (nil), classname, title, x, y, width, height, style, eventhandler)
+
+	-Creates a button on a window and returns the window object for it
+	-function is the event that runs when the button is pressed, buttonWindow is the button, parentWindow is window with the button
+	Window Window:CreateButton(caption, x,y,width, height, function(buttonWindow, parentWindow) end);
+
+	-Creates a textbox containing content
+	-if multiline is true then the textbox allows multiple lines
+	-if enablescroll is enable then the scrollbar will be enabled
+	-use Window:GetContent or Window:SetContent to manipulate the content
+	-function(buttonWindow, parentWindow) end is fired when the textbox is changed (can be nil)
+ 	Window Window:CreateTextBox(content, x,y,width,height, opt multiline, opt enablescroll, function(buttonWindow, parentWindow) end)
+
+	-Creates a static text field with content
+	-align: 0 = left, 1 = center, 2 = right text alignment, default 0
+	-use Window:GetContent or Window:SetContent to manipulate the content
+	Window Window:CreateStaticText(content, x,y,width,height, opt align)
+
+	-Creates a combobox
+	-function runs when a new item is selected returning the index that was selected
+	Window Window:CreateComboBox(x,y,width,height, function(buttonWindow, parentWindow, index) end)
+
+	-Creates a combobox
+	-function runs when a new item is selected returning the index that was selected
+	Window Window:CreateListBox(x,y,width,height, function(buttonWindow, parentWindow, index) end)
+
+	-Creates a listview
+	-Columns should be an array with column names
+	-function runs when a new item is selected returning the index that was selected
+	Window Window:CreateListView(x,y,width,height, columns, function(buttonWindow, parentWindow, index) end)
+
+	-Sets the text of a listview cell
+	nil Window:SetListViewText(row, column, text)
+
+	-Sets the width of a listview column
+	nil Window:SetListViewColumnWidth(column, width)
+
+	-Creates a progressbar
+	-min = 0
+	-max = 100
+	-step = 1
+	Window Window:CreateProgressbar(x,y,width,height, opt min, opt max, opt step)
+
+	-Advances the progress bar by advancement (may be negative)
+	-if no advacement is given its incremented by step as defined in the creation of the bar
+	nil Window:StepProgressbar(opt advancement)
+
+	-Retrives the current step of the progressbar
+	int Window:GetProgressbarStep()
+
+	-Add an entry to a combo/listbox/listview
+	-If the target is a listview then an array of values should be provided instead
+	nil Window:AddBoxItem(string)
+
+	-1 index'd, removes an entry from the combo/listbox
+	nil Window:RemoveBoxItem(index)
+
+	-Gets the array of the data that is being returned by the combo/listbox
+	-modifying this array modifies the return results in the event in CreateTextBox or CreateListBox
+	-If the window is a ListView then column can be used to return another column, defaults to the first (1)
+	array Window:GetBoxItems(opt column)
+
+	-Check if there is any pending messages
+	-if true then the Coroutine from Window.Create or Window:GetThread() should be resumed
+	bool Window:CheckHasMessage()
+
+	-Toggles if the window should be shown or not
+	nil Window:Show(bool)
+
+	-Moves a window or component relative to the screen or the parent
+	nil Window:Move(X, Y, Width, Height)
+
+	-Toggles if a window/component is enabled or disabled
+	nil Window:Enable(bool)
+
+	-Returns the coroutine for a created window, returns nil if the window was not created with Window.Create
+	coroutine Window:GetThread()
+
+	-Sets a drawing function which is called when the window is being redrawn
+	-a draw object is passed to this object see Draw:
+	-SetDrawFunction(function(draw) 
+	-	local offset = draw:Text("Hello world");
+	-	draw:SetTextColor(draw:RgbToHex(255, 0, 255));
+	-	draw:SetBackgroundColor(0);
+	-	draw:SetBackgroundMode(2);
+	-	offset = draw:Text("Purple text on black background", 0, offset);
+	-end);
+
+	nil Window:SetDrawFunction(function(draw) end)
+
+	Draw:
+
+		-Draws text at x,y coordinates in the drawing rectangle
+		-flags: see format: https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-drawtext
+		int Draw:Text(text, x, y, flags)
+
+		-Calculates the size of a string to be drawn
+		width, height Draw:CalcTextSize(string)
+
+		-Sets the text color to use (should be RGB hex int)
+		-returns the previously used color
+		int Draw:SetTextColor(int)
+
+		-Sets the background color to use (should be RGB hex int)
+		-returns the previously used color
+		int Draw:SetBackgroundColor(int)
+
+		-Sets the background mode https://docs.microsoft.com/en-us/windows/win32/api/wingdi/nf-wingdi-setbkmode
+		-returns the previous mode (OPAQUE = 2, TRANSPARENT = 1)
+		int Draw:SetBackgroundMode(mode)
+
+		-Sets or gets a pixel, if colorref is set then the pixel is replaced
+		-returns the previous (or current if COLORREF is nil) pixel color
+		int Draw:Pixel(x,y, opt COLORREF)
+
+		-Returns an rgb as a COLORREF hexint
+		int Draw:RgbToHex(r,g,b)
+
+		-Returns the r,g,b from a colorref int
+		r,g,b Draw:HexToRgb(COLORREF)
+Macro:
+	
+	-Converts screen X, Y coordinates to mouse coodinates that can be used with X,Y ccodinates in Macro.Create. 
+	x,y Macro.ScreenToMousePoint(x,y)
+
+	-Creates a macro. Inputs should be an array containing "inputs"
+	- https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput?redirectedfrom=MSDN
+	-Input:
+	-Type 0 = mouse, 1 = keyboard
+	-Keyboard input:
+	-ExtraInfo
+	-Flags (0 button down, 2 = button up)
+	-Time
+	-Scan
+	-Key (key to emulate https://docs.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes)
+	-Mouse input:
+	-ExtraInfo
+	-Flags (0x8000 absorlute, 0x0001 move, 0x0002 leftdown, 0x0004 left up https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-mouse_event)
+	-Time
+	-Data
+	-X (0-65536)
+	-Y (0-65536)
+	-See GetScreenSize() and GetCursorPosition() and Macro.ScreenToMousePoint(x,y) for helpers
+	Macro Macro.Create(inputs)
+
+	-Execute the macro, returns the number of commands that was successful
+	int Macro:Send()
+
+	-Retrives the inputs as given in the create function
+	inputs Macro:GetInputs()
+
+Kafka:
+
+	-Creates a consumer object
+	-conf should be a table with keys and values as strings
+	-https://kafka.apache.org/documentation/#consumerconfigs
+	-example: 
+	-local conf = {};
+	-conf["offset.store.method"]="broker";
+	-conf["enable.partition.eof"]="true";
+	-conf["group.id"]="LUA";
+	-default is conf is just with group.id = "LUAC"
+	Kafka Kafka.NewConsumer(opt conf)
+
+	-Same as NewConsumer, default group = "LUAP"
+	-https://kafka.apache.org/documentation/#producerconfigs
+	Kafka Kafka.NewProducer(opt conf)
+
+	-Send a message on the kafka topic (Only works for producers)
+	-data: the data to send, must be a string
+	-partition: the partition to send to (default is the partition that was subscribed to) -1 and it'll automatically partition
+	-key: default nil, otherwise it should be a string
+	-timeout default 10000
+	-headers should be table of key values
+	bool, errormsg Kafka:Send(Kafkatopic, data, opt partition, opt key, opt timeout, opt headers)
+
+	-Poll for any events on the kafka object
+	-This should be done regularly
+	-Object properties:
+	-Name
+	-Type
+	-Error
+	-ErrorCode
+	-returns nil if there are no events
+	event Kafka:Events()
+
+	-Adds a broker to a kafka object
+	-Adress should be a full adress e.g "localhost:9092"
+	-returns true/false success/failure
+	bool Kafka:AddBroker(adress)
+
+	-Retrives all groups
+	-If no group is given (or its nil) it will retrive all
+	-Timeout 10000 (in ms)
+	-Return nil and an error message on failure
+	-Group object:
+	-Broker: {Host, Id, Port}
+	-Error: Error message (Success=ok)
+	-ErrorCode: Error number (0=ok)
+	-Group: Name of the group
+	-Protocol: Protocol used
+	-ProtocolType: protocoltype
+	-State: State the group is in
+	-Members: [{Host, Id, Assignment, MemberId, Metadata}...]
+	Groups Kafka:GetGroups(opt group, opt timeout)
+
+	-Retrives all metadata
+	-Timeout is default 10000 (in ms)
+	-Returns nil and an error message on failure
+	-Metadata object:
+	-BrokerId: Id of the broker the metadata came from
+	-BrokerName: Name of the broker the metadata came from
+	-Brokers: [{Host, Id, Port}...]
+	-Topics: array of topic objects
+	-Topic object:
+	-Error
+	-ErrorCode
+	-name
+	-Partitions: array of partition objects
+	-Partition object:
+	-Error
+	-ErrorCode
+	-Id
+	-Leader
+	-InSyncReplicas: array of integer ids
+	-Replicas: array of intiger ids
+	Metadata Kafka:GetMetadata(opt timeout)
+
+	-Retrives the logs from the internal buffer and empties the internal buffer
+	-If a filename is given it'll open that file and start dumping the kafka logs to it
+	-If the filename is an empty string the file will be closed
+	string Kafka.Logs(opt filename)
+
+	-Subscribes to a kafka topic if no partition is given it subscribes to all of them
+	-use Poll to retrive messages
+	bool, errormsg Kafka:Subscribe(topic, opt partition)
+
+	-Assigns to a topic+partition
+	bool, errormsg Kafka:Assign(topic, partition)
+
+	-Polls for messages from assigned or subscribed topics
+	-returns nil if there is no new message
+	kafkamessage Kafka:Poll()
+
+	-Consume a message from a kafkatopic (started with StartTopicConsumer)
+	-This fails if attempted on a kafka that isnt a consumer
+	-Returns nil if there is no new messages
+	-kafka message object is described below
+	kafkamessage Kafka:Consume(topicobject)
+
+	-Get the current commited offset (-1001 = none recorded)
+	int Kafka:GetCommitted(topic, partition)
+
+	-Query for the offset for a topic and a partition
+	-returns true and lowest, highest on success and false and an error message on failure
+	bool, low, high Kafka:GetOffsets(topic, partition, opt timeout)
+
+	-Start consuming on a topic+partition
+	-This returns a kafkatopic object (see below) or nil and an error message
+	kafkatopic, errormsg Kafka:OpenTopic(topicname, opt partition, offset, opt conf)
+
+	-Creates a topic with a number of partitions
+	table, errormsg Kafka:CreateTopic(topicname, opt partitions, opt replicationfactor, opt brokerid, opt requesttimeout, opt operationtimeout)
+
+	-Delete a topic, this might fail if the broker does not allow topic deletion
+	table, errormsg Kafka:DeleteTopic(topicname)
+
+	-Set a config
+	-resource type: any=1, topic=2, group=3, broker=4
+	-resourcename: example: a topic name
+	-configvalue: example: retention.ms
+	-configvalue: example: 604800000
+	table, errormsg Kafka:AlterConfig(resourcetype, resourcename, configname, configvalue, opt timeout)
+
+	-Get config
+	-returns nil and an error msg on error
+	table Kafka:GetConfig(resourcetype, resourcename, opt timeout)
+
+	-Create new partions in the topic
+	table, errormsg Kafka:SetPartitions(topicname, newpartitioncount, opt timeout)
+
+	-Pauses a topic+partition
+	bool, errormsg Kafka:PauseTopic(Kafkatopic)
+
+	-Resumes a topic+partition
+	bool, errormsg Kafka:ResmuleTopic(Kafkatopic)
+
+	-Get a unique internal id for this object (used for association)
+	int Kafka:GetId()
+
+Kafkatopic:
+	
+	-Get a unique internal id for the kafka object that spawned this message object (used for association)
+	int Kafkatopic:GetOwnerId()
+
+	-Retrive the name and the partition
+	name, partition Kafkatopic:GetInfo()
+
+	-Prematurely closes the object and stops the consumer for this topic
+	nil Kafkatopic:Dispose()
+
+	-Check if the topic is paused
+	bool Kafkatopic:IsPaused()
+
+Kafkamessage:
+
+	-Retrives the data from the message:
+	-Error: Error message (Success=normal message)
+	-ErrorCode: Error code (0=normal message)
+	-Key: Key of the message
+	-Offset: Offset of the message
+	-Partition: The partition the message came from
+	-Payload: The actual data
+	-Topic: Name of the topic the message came from
+	-Headers: table containing key values
+	table Kafkamessage:GetData()
+
+	-Get the timestamp (The timestamp is the number of milliseconds since the epoch (UTC).)
+	-second return is the type of timestamp: 0 = not available, 1= created, 2=log appended
+	int, int Kafkamessage:GetTimestamp()
+
+	-Get the time in miliseconds since the message was produced, -1 is unavailable
+	int Kafkamessage:GetLatency()
+
+	-Get a unique internal id for the kafka object that spawned this message object (used for association)
+	int Kafkamessage:GetOwnerId()
+
+	-Prematurely closes the object and frees any message data
+	nil Kafkamessage:Dispose()
+
+FileAsync:
+
+	-Opens a file and starts a thread to work with the file
+	-buffersize is the max amount of data to be exhanged between the threads, default 1 mb
+	-returns nil, error on failure
+	FileAsync FileAsync.Open(file, mode, opt buffersize)
+
+	-Checks if the file thread is busy
+	-If wait is true then it'll wait until it is
+	-If cancel is true then it'll cause the thread to cancel whateaver its doing
+	bool FileAsync:Busy(opt wait, opt cancel)
+
+	-Get the current position in the file
+	int FileAsync:Tell()
+
+	-Seek in the file
+	-pos the position to set
+	-type 0=start of file, 1 = current position 2 = end of file
+	-returns the result from fseek
+	int FileAsync:Seek(pos, opt type 0)
+
+	-Resets all flags and sets the position to 0 from start of file
+	nil FileAsync:Rewind()
+
+	-Check if end of file is set
+	bool FileAsync:EndOfFile()
+
+	-Start reading a file
+	-bytestoread number of bytes to read from the file from the current position, default read to end (0)
+	-readbuffersize number of bytes to read before writing to the exhange buffer
+	nil FileAsync:Read(opt bytestoread, opt readbuffersize)
+
+	-Get how many bytes the exhangebuffer contains and what its max size is
+	currentlength, maxlength FileAsync:BufferStatus()
+
+	-Empty the exhangebuffer and return its contents
+	-Returns the contents of the buffer or empty string and the if any command is running
+	string, bool FileAsync:EmptyBuffer()
+
+	-Close the file, the object should not be used afterwards
+	nil FileAsync:Close()
+FTP:
+
+	-Attempts connecting to a server and returning a new ftp client object on success
+	-returns nil, error on failure
+	ftp, arraycontainingwelcomemessages FTP.Open(address, opt port)
+
+	-Set the endline format to use cannot be longer than 4 bytes
+	-default: "\r\n"
+	nil FTP:SetEndline(endline)
+
+	-Sends user and password commands in seqeunce and returns true on success or false and error on failure
+	bool, error FTP:Login(user, password)
+
+	-Sends a FTP command to the server (command should not contain any \r\n)
+	bool, error FTP:Command(command)
+
+	-Enters passive-mode and returns the address and port to connect the datachannel to
+	-returns nil, error on failure
+	ip, port FTP:Passive()
+
+	-Sets the timeout to use for communications (inactivity timer)
+	-Default 1 second
+	nil FTP.SetTimeout(timeinseconds)
+
+	-Returns the messages that the server has responded with on the ftp channel
+	-this checks for any incoming messages and empties the queue containing messages
+	-returns an array of strings
+	msgs FTP:GetMessages(opt timeout)
+
+	-Closes the ftp client/object, it should not be used after this
+	nil FTP:Close()
+
+	-Get the status of the ftp channel
+	isconnected, wsaerror FTP:GetConnectionStatus()
+
+	-Opens a datachannel for datatransfer to upload or download data
+	-address: should be the address the ftp server provided from Passive
+	-port: should be the port the ftp server provided from passive
+	-Returns a ftpchannel object see ftpchannel object for references
+	ftpchannel FTP.OpenDataChannel(address, port)
+
+	-Sends data on an open ftpchannel
+	-returns true if the data was successfully sent
+	bool ftpchannel:Send(data)
+
+	-Receive data from an open datachannel
+	-returns if the connection is open and data received, returns empty string if there was none
+	isalive, data ftpchannel:Recv(opt buffersize)
+
+	-Check if an open ftp channel is alive and or has data available to be read
+	isalive, hasdata ftpchannel:GetConnectionStatus()
+
+	-Closes a datachannel, it should not be used after its been closed
+	nil ftpchannel:Close()
+
+Sound: 
+	
+	-Plays a .wav file
+	-optional bool async = if true the function will play the sound async
+	-returns true or false if it managed to play the file
+	bool Sound.Play(wavefile, async opt false)
+
+	-Beeps at the frequency for duration
+	bool Sound.Beep(freq, duration)
+
+	-Send a MCS (https://docs.microsoft.com/en-us/windows/win32/multimedia/multimedia-command-strings?redirectedfrom=MSDN)
+	-Returns the errorcode (0 on success) and a string (if any)
+	int, string Sound.SendMCS(command)
+
+ODBC:
+
+	-Return an array of all available drivers
+	array ODBC.GetAllDrivers()
+
+	-Connect to a driver using a connectionstring
+	-returns nil, error on failure
+	ODBC ODBC.DriverConnect(connectionstring)
+
+	-Prepare an SQL query
+	-EG: "SELECT * FROM ... WHERE Col1=? AND Col2=?;"
+	-returns false and an error message on failure
+	bool, error ODBC:Prepare(sql)
+
+	-Bind data to a prepared statement
+	-Bind will bind the parameters in order left to right
+	-Optional bool (default false) if true it will interpret the data as binary
+	bool, error ODBC:Bind(data, opt bool asbinary)
+
+	-Executes the prepared statement
+	bool, error ODBC:Execute()
+
+	-Advance the cursor in the resultset
+	-returns false when there is no more data
+	-returns false and an error on failure
+	bool, error ODBC:Fetch()
+
+	-Returns a table containing key values with the column names and its data
+	table, error ODBC:GetRow()
+
+	-Retrive the column names and their types 
+	-https://docs.microsoft.com/en-us/sql/odbc/reference/appendixes/sql-data-types?view=sql-server-2017
+	table ODBC:GetRowColumnTypes()
+
+	-Toggles autocommiting on or off
+	-true=on, false=off
+	bool, error ODBC:ToggleAutoCommit(bool)
+
+	-Begins a transaction and toggles autocommit off
+	bool, error ODBC:Begin();
+
+	-Commits a transaction and toggles autocommit on
+	bool, error ODBC:Begin();
+
+	-Rollbacks a transaction and toggles autocommit on
+	bool, error ODBC:Rollback();
+
+	-Querries ODCB for all tables
+	-parameters optional: driver dependant
+	-This generates a resultset use Fetch/GetRow to iterate
+	bool, error ODBC:Tables(schema);
+
+	-Querries ODCB for all columns on a table
+	-parameters optional: driver dependant
+	-This generates a resultset use Fetch/GetRow to iterate
+	bool, error ODBC:Columns(table, schema);
+
+	-Querries ODCB for all special (usually hidden) columns on a table such as ROWID
+	-parameters optional: driver dependant
+	-This generates a resultset use Fetch/GetRow to iterate
+	bool, error ODBC:SpecialColumns(table, schema);
+	
+	-Querries ODCB for all primary keys on a table
+	-parameters optional: driver dependant
+	-This generates a resultset use Fetch/GetRow to iterate
+	bool, error ODBC:PrimaryKeys(table, schema);
+
+	-Querries ODCB for all foreign keys
+	-parameters optional: driver dependant
+	-This generates a resultset use Fetch/GetRow to iterate
+	bool, error ODBC:ForeignKeys(table, schema);
+
+	-Querries ODCB for all procedures
+	-parameters optional: driver dependant
+	-This generates a resultset use Fetch/GetRow to iterate
+	bool, error ODBC:Procedures(schema);
+
+	-Querries ODCB for all procedure info
+	-parameters optional: driver dependant
+	-This generates a resultset use Fetch/GetRow to iterate
+	bool, error ODBC:ProcedureColumns(procedure, schema);
+
+	-Disconnects the ODBC object, it should not be used afterwards
+	-This is done automatically by the GC but this closes it earlier
+	nil ODBC:Disconnect();
+
+Stream:
+
+	-Create a new stream object
+	-initialsize is the size that should be allocated at the start (default 1 mb)
+	-if a function is provided instead it'll be passed the first argument as the requested size
+	-function(size) return size; end
+	Stream Stream.Create(opt initialsize/allocfunc)
+
+	-Querries and returns shared memory information
+	-https://docs.microsoft.com/en-gb/windows/win32/api/winnt/ns-winnt-memory_basic_information
+	-returns nil and an errorcode on failure
+	table Stream.GetSharedMemoryStreamInfo(name)
+
+	-Create a shared memory with a name as a stream (Or opens existing with full rights)
+	-a shared memory stream cannot be resized once created
+	-use GetInfo() to retrive the actual size of the block
+	-"Global\\" can be suffixed
+	-Returns nil and an errorcode (GetLastError) on failure
+	Stream Stream.CreateSharedMemoryStream(name, size);
+
+	-Opens an existing shared memory by name
+	-use GetInfo() to retrive the actual size of the block
+	-"Global\\" can be suffixed
+	-Returns nil and an errorcode (GetLastError) on failure
+	Stream Stream.OpenSharedMemoryStream(name, opt bool readonly);
+
+	-Opens a file and reads all its contents and returns it as a stream
+	Stream Stream.Open(filename);
+
+	-Creates (or truncates existing) file and writes the entire stream to it
+	nil Stream:Save(filename);
+
+	-Opens an existing file and seeks to pos in the file and writes len bytes from the stream onto the file
+	-pos = position in the file to write to, file is padded with null bytes if the pos is larger then the current size
+	-len = number of bytes from the stream (determined on the position in the stream)
+	nil Stream:WriteToFile(filename, pos, len);
+
+	-Writes reads len bytes from file from position pos in the file to the current position in the stream
+	nil Stream:ReadFromFile(filename, pos, len);
+
+	-Write a byte at the current position in the stream and advance the position
+	-byte should be between 0-255
+	-returns false if unable to write and an error message
+	bool, err Stream:WriteByte(byte);
+
+	-Read the byte at the current position and advance the position
+	-byte 0-255 returns -1 on failure (such as end of stream)
+	byte Stream:ReadByte();
+
+	-Reads a byte but does not advance the position
+	-byte 0-255 returns -1 on failure (such as end of stream)
+	-If pos is omitted it reads the current position, 0 indexed
+	byte Stream:PeekByte(opt pos);
+
+	-Sets a byte in positon, does nothing if position is out of range
+	void Stream:SetByte(byte, position)
+
+	-Writes a number, string, bool or other stream (from position to end)
+	-returns number of bytes written
+	int Stream:Write(obj, opt size);
+
+	-Reads the next bytes as utf8 returning a string representing a utf8 character and the codepoint
+	-returns nil on failure
+	string, int Stream:ReadUtf8()
+
+	-Writes a string to the end of the stream reguardless of position
+	int Stream:Buffer(str);
+
+	-Discards all data before the current position and sets the position to 0
+	void Stream:Shrink();
+
+	-Reads a number of bytes and returns it as a string
+	-Reads from the current position, if length is omitted it reads to the end
+	string Stream:Read(opt length);
+
+	-Returns from the current position until the first occurance of toFind byte
+	-toFind is 0 by default
+	string Stream:ReadUntil(opt tofind)
+
+	-Finds the next occurance from the current position
+	-Returns nil if none found
+	pos Stream:IndexOf(string or byte)
+
+	-Retrives the current position, length and the current allocated size of the stream
+	position, length, allocated Stream:GetInfo();
+
+	-Set the length of the stream, clamped to 0 and whats currently allocated
+	-Resets position to 0
+	void Stream:SetLength(newlength);
+
+	length Stream:len();
+	pos Stream:pos();
+
+	-Sets the current position in the stream
+	-If no position is given the stream is rewinded to 0
+	void Stream:Seek(opt pos)
+
+	-Returns a stream containing a compressed version of the original
+	-algorithm: https://docs.microsoft.com/en-gb/windows/win32/cmpapi/using-the-compression-api
+	-COMPRESS_ALGORITHM_INVALID      0
+	-COMPRESS_ALGORITHM_NULL         1
+	-COMPRESS_ALGORITHM_MSZIP        2 (default)
+	-COMPRESS_ALGORITHM_XPRESS       3
+	-COMPRESS_ALGORITHM_XPRESS_HUFF  4
+	-COMPRESS_ALGORITHM_LZMS         5
+	-COMPRESS_ALGORITHM_MAX          6
+	Stream Stream:Compress(opt algorithm)
+
+	-Returns a stream containing a decompressed version of the original
+	-algorithm: https://docs.microsoft.com/en-gb/windows/win32/cmpapi/using-the-compression-api
+	-COMPRESS_ALGORITHM_INVALID      0
+	-COMPRESS_ALGORITHM_NULL         1
+	-COMPRESS_ALGORITHM_MSZIP        2 (default)
+	-COMPRESS_ALGORITHM_XPRESS       3
+	-COMPRESS_ALGORITHM_XPRESS_HUFF  4
+	-COMPRESS_ALGORITHM_LZMS         5
+	-COMPRESS_ALGORITHM_MAX          6
+	Stream Stream:Decompress(opt algorithm)
+
+	bool Stream:WriteFloat()
+	number Stream:ReadFloat()
+
+	bool Stream:WriteDouble()
+	number Stream:ReadDouble()
+
+	bool Stream:WriteShort()
+	int Stream:ReadShort()
+
+	bool Stream:WriteUnsignedShort()
+	int Stream:ReadUnsignedShort()
+
+	bool Stream:WriteInt()
+	int Stream:ReadInt()
+
+	bool Stream:WriteUnsignedInt()
+	int Stream:ReadUnsignedInt()
+
+	bool Stream:WriteLong()
+	int Stream:ReadLong()
+
+	bool Stream:WriteUnsignedLong()
+	int Stream:ReadUnsignedLong()
+
+Env:
+
+	-Creates a new environment table with said name, discards any old
+	table Env.Create(name);	
+
+	-Retrives an environment table by name, nil if none exists
+	table Env.Get(name);
+
+	-Returns an existing table or creates a new one if it does not exist
+	table Env.GetOrCreate(name);
+
+	-Gets the table that contains all other environment tables
+	table Env.Meta();
+
+BinaryTree:
+
+	-Create a new binary tree
+	BinaryTree BinaryTree.Create()
+
+	-Get the number of entries in the tree
+	int BinaryTree:Count()
+
+	-Key that the value can then be seached on, must be an int
+	-Value the value associated with they key, must be a bool, string, or number
+	-fails (and returns false) if the key is already in the tree
+	bool BinaryTree:Add(key, value)
+
+	-Deletes the key by rebuilding the tree without any nodes that has the key
+	-returns false if key does not exist in the tree
+	bool BinaryTree:Delete(key)
+
+	-func = function(k,v) end if it returns a value then the value is passed back to the caller
+	-order = 0 (default) pre-order
+	-1 = in-order
+	-2 = post-order
+	value BinaryTree:Iterate(func, opt order)
+
+	-Returns the first value by key
+	-returns nil if none is found
+	value BinaryTree:Get(key)
+
+LinkedList:
+	
+	-create a new instance
+	LinkedList LinkedList.New()
+
+	-add first in the entry
+	-returns the key of the inserted data
+	int LinkedList:AddFirst(data)
+
+	-add last in the entry
+	-returns the key of the inserted data
+	int LinkedList:AddLast(data)
+
+	-Remove all entries
+	nil LinkedList:Clear()
+
+	-Iterates forwards for index,value,key in LinkedList:Forward() do ... end
+	iterator LinkedList:Forward()
+
+	-Iterates backwards for index,value,key in LinkedList:Backward() do ... end
+	iterator LinkedList:Backward()
+
+	-Retrives data from the list based on index, returns nil on failure
+	data LinkedList:GetFromIndex(index)
+
+	-Retrives data from the list based on key, returns nil on failure
+	data LinkedList:GetFromKey(key)
+
+	-Removes and returns the data that was removed
+	data LinkedList:Remove(index)
+
+	-Inserts data at the index and pushes down data
+	-returns the key of the inserted data
+	int LinkedList:Insert(index, data)
+
+	-Retrive the count
+	number LinkedList:Count()
+
+	-Get the index the entry with the key is in
+	-Returns nil on failure
+	int LinkedList:IndexFromKey(key)
+
+	-Get the key in the index
+	-Returns nil on failure
+	int LinkedList:KeyFromIndex(index)
+
+	-Adds the data before the existing element by key
+	-returns the inserted key or nil
+	int LinkedList:AddBefore(key, data)
+
+	-Adds the data after the existing element by key
+	-returns the inserted key or nil
+	int LinkedList:AddAfter(key, data)
+
+Zip:
+
+	-Opens/creates a zipfile
+	-returns nil, error on failure
+	Zip Zip.Open(zipfile)
+
+	-Adds a file as key into the zipfile, file should be the path to file
+	-returns nil, error on failure
+	-returns the index the data was placed in on success
+	int Zip:AddFile(key, file)
+
+	-Adds data (a string) as key into the zip file
+	-returns nil, error on failure
+	-returns the index the data was placed in on success
+	int Zip:AddData(key, data)
+
+	-Extract data from a zip file by key or index
+	-if a target file is given the data will be extrated to that file
+	-if no file is given then the data will be returned on success
+	-returns nil, error on failure
+	true/data Zip:Extract(key/index, opt targetfile)
+
+	-Retrive info about a key/index from the zipfile
+	-keys:
+	-comp_method
+	-comp_size
+	-crc
+	-encryption_method
+	-flags
+	-index
+	-mtime
+	-name
+	-size
+	-valid
+	-returns nil on failure
+	table Zip:GetInfo(key/index)
+
+	-Mark a file as deleted within the zip
+	int Zip:Delete(key/index)
+
+	-Retrives all keys existing in the zipfile
+	array Zip:GetFiles()
+
+	-Close an open zipfile
+	nil Zip:Close()
+
+Server:
+
+	-Creates a server instance on the port
+	-Returns nil and errormsg on failure
+	Server Server.Start(port)
+
+	-Stops the server, terminating the socket and associated resources
+	nil Server:Stop()
+
+	-Returns a network event
+	-Returns nil if there are no events
+	-Returns table on success with fields:
+	-socket: client socket
+	-type: event type (see types)
+	-data: binary/string containing the data
+	event/nil Server:GetEvent()
+
+	-Disconnect a client by socket
+	bool Server:Disconnect(socket)
+
+	-Send data (string) to a client by socket
+	bool Server:Send(socket,data)
+
+	-Set a function to run when a server instance is started
+	-function(server) ...
+	nil Server.SetStartFunc(function)
+
+	-Retrive all clients
+	-key = socket
+	-value = address
+	table Server:GetClients()
+
+Client:
+
+	-Start a client
+	Client Client.Connect(address, port)
+
+	-Retrive the status of the client
+	-first bool is if the client is considered connected or not
+	-second is the last errorcode if any
+	bool/error Client:Status()
+		
+	-Disconenct the client, client object should not be used after this
+	nil Client:Disconnect()
+	
+	-Returns a network event
+	-Returns nil if there are no events
+	-Returns table on success with fields:
+	-socket: client socket
+	-type: event type (NETEVENT_CONNECTED 1, NETEVENT_DISCONNECTED 2, NETEVENT_SEND 3, NETEVENT_RECEIVE 4)
+	-data: binary/string containing the data
+	event/nil Client:GetEvent()
+
+	-Send data (string) to the server
+	bool Client:Send(data)
+
+Pipe:
+
+	-Creates a named pipe and opens it
+	-Name should be just the name, no path
+	-default 1 instance, 1024 buffersize, timeout 1000 (miliseconds), write true, read true
+	-returns nil and error code on failure
+	Pipe Pipe.Create(name, opt maxinstances, opt buffersize, opt timeout, opt write, opt read);
+
+	-Opens an existing pipe
+	-Name should be just the name, no path
+	- write true, read true
+	-returns nil and error code on failure
+	Pipe Pipe.Open(name, opt write, opt read)
+
+	-Writes a string to a pipe
+	-returns the number of written bytes
+	-returns nil and error code on failure
+	int Pipe:Write(string)
+
+	-Reads from a pipe
+	-returns nil if there was nothing to read
+	string Pipe:Read(opt buffersize)
+
+	-Reads a single byte from the pipe as an int
+	-returns -1 if there was nothing read
+	int Pipe:ReadByte();
+
+	-Writes a single byte (number 0-255) to the stream
+	-returns true/false on success or not
+	bool Pipe:WriteByte(byte);
+
+	-Check the amount of data available to read
+	-if avail is nil then GetLastError() can be used to evaluate the error
+	avail Pipe:Available();
+
+	-Closes a pipe, it should not be used after closing
+	nil Pipe:Close();
+
+Base64:
+
+	-Returns a base64 version of the provided data
+	base64string Base64.Encode(string)
+	
+	-Returns the decoded data from the base64 string
+	string Base64.Decode(base64string)
+
+	-Retrive the base64 encode table used, its a 64 character string
+	string Base64.GetEncodeTable()
+
+	-Set the encode table to the provided encode table
+	-the provided string must be 64 characters long and all characters in it must be unique
+	void Base64.GetEncodeTable(encodetablestring)
+
+Socket:
+
+	-Opens a socket and attempts connecting
+	-family = ipv6=23, ipv4=2, default 2 (ipv4)
+	-sockettype = stream = 1, datagram = 2, raw = 3, rdm = 4, seqpacket = 5 default = 1
+	-protocol: tcp=6, udp=17 default = 6
+	Socket Socket.Connect(address, port, family, sockettype, protocol)
+
+	-Opens a socket to listen for connections
+	-family = ipv6=23, ipv4=2, default 2 (ipv4)
+	-sockettype = stream = 1, datagram = 2, raw = 3, rdm = 4, seqpacket = 5 default = 1
+	-protocol: tcp=6, udp=17 default = 6
+	Socket Socket.Listen(port, family, sockettype, protocol)
+
+	-Checks the status of the socket
+	-1st: is the socket ok
+	-2nd: is read fd set
+	-3rd: is write fd set
+	-4th: is expected fd set
+	bool, bool, bool, bool Socket:Select()
+
+	-Checks if the socket has data to read
+	-Returns nil if the socket is dead otehrwise true/false
+	bool/nil Socket:HasData()
+
+	-Read data from the socket, returns nil if there is no data to read
+	-Cannot be ran with a listener socket
+	string Socket:Read()
+
+	-Writes data to the socket, returns the number that was set
+	-Cannot be ran with a listener socket
+	-returns -1 on failure otherwise returns the number of bytes that was sent
+	int Socket:Write()
+
+	-Attempts accepting an incoming connection on a listener socket
+	-Cannot be ran with a client socket
+	-On success returns a client socket
+	-If there is no connection to accept it returns nil
+	Socket Socket:Accept()
+
+	-Retrives info about the socket
+	address, port, socketid Socket:Info()
+
+	-Closes the socket
+	nil Socket:Close()
+
+Services:
+
+	-Returns an array containing all services
+	-each entry is a table containing these fields:
+	-DisplayName
+	-ServiceName
+	-CheckPoint
+	-ControlsAccepted
+	-CurrentState
+	-ServiceSpecificExitCode
+	-ServiceType
+	-WaitHint
+	-Win32ExitCode
+	-See: https://docs.microsoft.com/en-us/windows/win32/api/winsvc/ns-winsvc-service_status
+	-returns nil on failure, use GetLastError to evaluate the error
+	array Services.All()
+
+	-Opens a service by its name
+	-Readonly default false if true will only request read privs
+	-returns nil on failure, use GetLastError to evaluate the error
+	Service Services.Open(serivcename, opt readonly)
+
+	-Retrive the status of an opened service
+	-returns a table containing:
+	-CheckPoint
+	-ControlsAccepted
+	-CurrentState
+	-ServiceSpecificExitCode
+	-ServiceType
+	-WaitHint
+	-Win32ExitCode
+	-See: https://docs.microsoft.com/en-us/windows/win32/api/winsvc/ns-winsvc-service_status
+	-returns nil on failure, use GetLastError to evaluate the error
+	status Service:Status()
+
+	-Retrive the config of an opened service
+	-Returns a table containing:
+	-ErrorControl
+	-ServiceType
+	-StartType
+	-TagId
+	-BinaryPathName
+	-Dependencies
+	-DisplayName
+	-LoadOrderGroup
+	-ServiceStartName
+	-See: https://docs.microsoft.com/en-us/windows/win32/api/winsvc/ns-winsvc-query_service_configa
+	-returns nil on failure, use GetLastError to evaluate the error
+	config Service:Config()
+
+	-Attempts starting a service
+	-use GetLastError to evaluate errors on failure 
+	bool Service:Start();
+
+	-Attempts stopping  a service
+	-use GetLastError to evaluate errors on failure 
+	bool Service:Stop();
+
+Aes:
+
+	-Create a aes-256-cbc or aes-256-ecb context
+	-Key to use, should be 32 bytes
+	-Iv if provided the context will be considered cbc instead of ecb should be 16 bytes if provided
+	-usectr if true then the context will be aes-256-ctr
+	-If key and or iv is smaller than their expected sizes they are padded with '\0'
+	Aes Aes.Create(key, opt iv, opt usectr)
+
+	-Encrypt data
+	data Aes:Encrypt(data)
+
+	-Decrypt data
+	data Aes:Decrypt(data)
+
+	-Reset (default) or change the iv of a cbc context
+	nil Aes:SetIV(opt iv)
+
+Process:
+
+	-returns a table with process ids as keys and values as names
+	table Process.All()
+
+	-Opens a process, if no process ID is provided it opens the running instance
+	Process Process.Open(opt id)
+
+	-app = path to the application
+	-cmd = commandline to be passed to the application
+	-directory = path to the directory to run in
+	-noconsole if true the process will not spawn its own console
+	-redirectinputoutput (default false) if true enables ReadFromPipe and WriteToPipe, this can also be a mask 0x1 stdin, 0x2 stdout, 0x4 stderr
+	Process Process.Start(app,cmd,directory,noconsole, opt redirectinputoutput)
+
+	-Reads from the the child process stdout
+	-only works if redirectinputoutput was true when a process was started
+	-returns nil on failure
+	string Process:ReadFromPipe(opt buffersize)
+
+	-Writes a string to the childs stdin
+	-only works if redirectinputoutput was true when a process was started
+	-returns number of bytes written
+	int Process:WriteToPipe();
+
+	-Same as ReadFromPipe but reads from stderr
+	string Process:ReadErrorFromPipe(opt buffersize);
+
+	-Attempts to stop the process
+	bool Process:Stop()
+
+	-The return code from the process, if the process is still running this returns nil
+	int/nil Process:GetExitCode()
+
+	-Get the process ID
+	int Process:GetID();
+
+	-Get the process name
+	string Process:GetName();
+
+	-Get process utilization in percent since process start or since the last call to GetCPU
+	number Process:GetCPU();
+
+	-Get the current physical memory (ram) utilized by the process
+	number Process:GetRAM();
+
+	-Gets or sets a prio on the process
+	-if no parameter is given this will return the current prio
+	-if a prio is given then it'll attempt setting the prio returning true/false
+	-https://msdn.microsoft.com/en-us/library/ms686219(v=vs.85).aspx
+	int/bool Process:Priority(opt prio)
+
+	-Gets or sets the affinity mask for the process
+	-Returns the process and system affinity masks
+	-returns nil on failure
+	int, int Process:Affinity(opt newmask);
+
+	-Retrives an array of all threads in the process
+	-Thread object:
+	-ID: int id of the thread
+	-BasePrio: Priority for the thread
+	-DeltaPrio: 
+	array Process:Threads();
+
+HTTP:
+
+	-does a http (or https) request, method should be a http method IE "GET"
+	-url = "http(s)://address:port/page"
+	-content = content to tbe passed in the request
+	-headers = key-value table containing the headers, content-length and host is automatically filled
+	-Returns http object
+	Http Http.Start(method, url, content, headers)
+
+	-Sets the timeout on the running request
+	-0 or less = infinite
+	nil Http:SetTimeout(timeout)
+
+	-Retrives the results from the http request
+	-if the http request is still in progress this call will block until its finished
+	-returns nil, msg on error
+	code, ok, contents, header Http:GetResult()
+
+	-Returns the status on a http request
+	-IsRunning bool: is the request still running?
+	-ms: miliseconds the request has been running for
+	-sent: bytes sent
+	-recv: bytes recieved
+	IsRunning, ms, sent, recv Http:GetStatus()
+
+SHA256:
+	
+	-Returns a newly initilized instance of SHA256
+	SHA256 SHA256.New()
+
+	-Digests data into the SHA256 instance	
+	nil SHA256:Update(data)
+
+	-Finilizes the digest and returns the hash as a hex string and a 32 byte string representation
+	-if the digest is finalized already it just returns the previous result without doing anything
+	hexstring, 32bytes SHA256:Finish()
+
+MD5:
+	
+	-Returns a newly initilized instance of MD5
+	MD5 MD5.New()
+
+	-Digests data into the MD5 instance	
+	nil MD5:Update(data)
+
+	-Finilizes the digest and returns the hash as a hex string and a 16 byte string representation
+	-if the digest is finalized already it just returns the previous result without doing anything
+	hexstring, 16bytes MD:Finish()
+
+MySQL:
+	-Escapes a string using a mysql object
+	string MySQL:EscapeString(string)
+
+	-turns a string into a hex literal which can be used in queries
+	-Does *not* need a mysql object
+	string MySQL.EncodeString(string)
+
+	-Set the desired timeout on the connection (read,write and connect)
+	nil MySQL:SetTimeout(timeout)
+
+	-use the mysql library to connect to a server
+	-if successful this returns a MySQL object that other functions are called from
+	-Timeout in seconds, use SetTimeout if you want to change it
+	-returns nil on failure
+	MySQL MySQL.Connect(address, user, password, database, opt port 3306, opt timeout 3600)
+
+	-Closes the connection, it should *NOT* be used afterwards
+	MySQL:Close();
+
+	-runs querystring on the opened mysql object
+	-async is true then the mysql query will run async, async results are stored as opposed to used
+	-use MySQL:IsRunning() and MySQL:GetResult() to evaluate the state of an async query
+	-returns true, rowsaffected on success or false and an error message on failure
+	bool, msg MySQL:Query(querystring, async=false)
+
+	-Returns true if the connection is running an async query
+	bool MySQL:IsRunning();
+
+	-Evaluate the result of an async query
+	-If the query is still running this will wait
+	-returns the result MySQL:Query returns on non async queries for async queries
+	bool, msg MySQL:GetResult();
+
+	-Advances the resultset to the next row
+	-Using on an async query will cause blocking until the query is finished
+	-returns false if there is no more rows or there was none to begin with
+	bool MySQL:Fetch()
+
+	-Changes the default database to database (the one that gets reconnected to)
+	-and runs "USE DATABASE `database`;"
+	-returns the same as MySQL:Query
+	bool, msg MySQL:ChangeDatabase(database)
+
+	-Returns a table containing the the column names and their values
+	-if an optional index is provided it'll return a single value from that index
+	-1 indexed
+	table (or single value) MySQL:GetRow(opt index)
+
+	-Forks the result into a seperate object
+	-useful for async querries where you wish to process the result while a new query is running
+	MySQLResult MySQL:ForkResult()
+
+	-Toggles if GetRow should always return all data as strings or as their proper typing
+	-default: false
+	nil MySQL:ToggleAsString(bool)
+
+	MySQLResult:
+
+	-Same as MySQL:GetRow()
+	table (or single value) MySQLResult:GetRow(opt index)
+
+	-Same as MySQL:Fetch()
+	bool MySQLResult:Fetch();
+
+	-Retrive the number of rows in a stored result, this is 0 on used results
+	int MySQLResult:Count()
+
+	-Toggles if GetRow should always return all data as strings or as their proper typing
+	-default: inherited from the MySQL object that created the result
+	nil MySQLResult:ToggleAsString(bool)
+
+Timer:
+
+	-Returns a new timer object
+	Timer Timer.New()
+
+	-Returns true if the timer is running
+	bool Timer:IsRunning()	
+
+	-Resets the time elapsed back to 0
+	nil Timer:Reset()
+
+	-Starts (or Restarts) a timer
+	nil Timer:Start()
+
+	-Stops the timer
+	nil Stop()
+
+	-Returns the amount of time the timer has run for
+	number (miliseconds) Timer:Elapsed()
+
+SQLite:
+
+	-Opens a new SQLite instance and returns the instance object
+	-if a filename is provided it will attempt opening that file or create a new one
+	-if no filename is given the sqlite database will be opened in memory
+	-mode: 0: single thread (default) 1: multithreaded. 2: serialized
+	-returns nil on failure
+	SQLite SQLite.Open(opt filename, opt mode)
+
+	-Runs a query on the sqlite object, preparedstatements should contain values matching the query
+	-IE: "INSERT INTO Test (@Data)" then preparedstatements should contain a value with the key "Data"
+	-preparedstatements can also be a function function(key) end where key is the prepared statement without the @
+	-preparedstatment data can be WChars
+	-returns true,"OK" on success, false and an error message on failure
+	bool, txt SQLite:Query(querystring, preparedstatements)
+
+	-Advance the recordset to the next row, returns false if there are no more rows
+	bool SQLite:Fetch()
+
+	-Returns a table containing the the column names and their values
+	-if an optional index is provided it'll return a single value from that index
+	-1 indexed
+	table (or single value) SQLite:GetRow(opt index)
+
+	-Executes a query, if a callback is present function(table) ... end
+	-the results are pushed as key-value columnname: value tables to the callback function one at the time as strings
+	-returns false if something failed
+	-if no callback is passed any resultset (if any) is ignored
+	-For more accurate data or binary data Query
+	bool, txt SQLite:Execute(querystring, opt callback)
+
+	-If toggled true then strings from GetRow will be returned at Wchars
+	nil SQLite:ToggleWidechar(bool);
+
+	-closes the database connection, it should not be used afterwards
+	nil SQLite:Close()
+
+Image: 
+	
+	--ALL COORDINATES ARE 1 INDEXED
+
+	-Take a screenshot with the desired width and height on a monitor
+	-If no parameters are given it'll take a full screenshot of the first monitor
+	Image Image.Screenshot(width, height, startx, starty, monitor)
+
+	-Saves an image as a bitmap (bmp)
+	bool Image:Save(filename)
+
+	-Loads a bmp file
+	-returns nil, message on failure
+	Image Image.Load(filename);
+
+	-Create an empty bmp with the desired width and height
+	-Returns nil, message on failure
+	Image Image.Create(Width, Height)
+
+	-Create a cropped image from another image
+	-returns nil, message on failure
+	Image Image:Crop(Width, Height, StartX, StartY)
+
+	-Returns raw bit map vector
+	-e.g array[1].r = first red, array[1].g, array[1].b
+	array Image:GetPixels()
+
+	-Sets the raw pixles to that of the given array
+	-returns false, message on failure
+	bool Image:SetPixels(pixel)
+
+	-Returns pixels in a matrix
+	-matrix[1][1].r = first red, matrix[1][1].g, matrix[1][1].b
+	matrix Image:GetPixelMatrix()
+
+	-Sets the raw pixles to that of the given matrix
+	-returns false, message on failure
+	bool Image:SetPixelMatrix(pixelmatrix)
+
+	-Get a single pixel
+	-Returns a table containing r,g,b
+	pixel Image:GetPixel(y, x);
+
+	-Set a single pixel
+	-pixel should be a table containing r,g,b
+	void Image:SetPixel(y, x, pixel);
+
+	-Retrive the dimentions of an image
+	width, height Image:GetSize()
+
+	-Discards the image from memory
+	-the image item should *not* be used after this
+	void Image:Close();
+
+Json:
+	
+	-nan (0/0) is considered null
+	-empty objects are []
+	-Create a json instance
+	Json Json.Create()
+
+	-Sets a value that will represent null when decoding or encoding.
+	-Default this is nil and keys will be skipped.
+	-Returns the previous value.
+	nil/value Json:SetNullValue(value)
+
+	-Encodes a table (or coroutine that yeilds key-values) to a json string
+	jsonstring Json:Encode(table)
+
+	-Decodes a json string to a table
+	table Json:Decode(jsonstring)
+
+	-Encodes a table (or coroutine that yeilds key-values) to a file
+	void Json:EncodeToFile(filename, table)
+
+	-Decodes a json from a file
+	table Json:DecodeFromFile(filename)
+
+	-returns the json data to a function
+	-function (part) end
+	-were part is going to be json text parsing
+	void Json:EncodeToFunction(func, table)
+
+	-Returns a deserilized json table based on the data a function returns
+	-function() return jsonstring; end
+	-were jsonstring needs to be part of a full json
+	-function is called more if the json is not complete
+	table Json:DecodeFromFunction(func)
+
+	-Prematurely closes a json instance
+	void Json:Dispose()
+
+	-Returns a corotune that can be coroutine.resume()'d 
+	-the resume returns ok, key, value, table
+	-the table returned contains the parents in order
+	-if value is a table it contains a field "type" that will be either "array" or "object"
+	-subsequent iterations will be data in that object until it yeilds nil, nil to step-down
+	coroutine Json:Iterator(function() return datastring; end)
+
+	coroutine instead of table example:
+
+	jsonstring Json:Encode(coroutine.create(function() 
+	
+		--Yield the root element
+		coroutine.yield(nil, {});
+
+		--yield an object
+		coroutine.yield("MyTable", {});
+
+		for n=1,10 do 
+			--When the first key in an element is not a string it'll be treated as an array []
+			coroutine.yield(n, "Hello");
+		end
+
+		--Step out of "MyTable"
+		coroutine.yield(nil, nil);
+
+		--Add another value to the root object
+		coroutine.yield("Cake", "Is good");
+
+		--Step out of the root object thereby finishing the object
+		coroutine.yield(nil, nil);
+	end))
+
+	result: {"MyTable":["Hello","Hello","Hello","Hello","Hello","Hello","Hello","Hello","Hello","Hello"],"Cake":"Is good"}
+
+Wchar:
+
+	-Creates a wchar string from an ansi string
+	Wchar Wchar.FromAnsi(str)
+
+	-Converts an array of integers into a wchar
+	-Opposite of Wchar:FromBytes
+	Wchar Wchar.FromBytes(array)
+
+	-Returns the wchar as an ansi string, missing characters are replaced with ?
+	string Wchar:ToAnsi()
+	
+	-Returns the string representation of the wide
+	string Wchar:ToWide()
+
+	-Returns a wchar with the characters lowered or uppered
+	Wchar Wchar:ToLower()
+	Wchar Wchar:ToUpper()
+
+	-Retrive a substring
+	-1 Indexed
+	Wchar Wchar:Substring(start, opt length)
+
+	-Returns the wchar as an array containing integers representing the characters
+	-Opposite of Wchar.FromBytes
+	array Wchar:ToBytes()
+
+	-Find the first instance of the substring starting at offset
+	-1 Indexed
+	-Retruns nil if none is found
+	int Wchar:Find(substring, opt offset)
+
+	meta:
+		tostring: same as ToAnsi
+		concat (..): returns a new Wchar
+		length (#): returns the length of the wchar
+		equal (==): returns true if a wchar is matching another wchar
+	
+FileSystem:
+
+	-Returns an array containing all files that exists in path
+	Array FileSystem.GetFiles(path, opt filter)
+
+	-Returns an array containing all directories that exists in path
+	Array FileSystem.GetDirectories(path, opt filter)
+
+	-Returns a table containing file info:
+	-isFolder bool
+	-Attributes attribute flags (int)
+	-Size integer
+	-Creation unix time when the file was created
+	-Access unix time when the file was accessed
+	-Write unix time when the file was written to
+	-FileName name of the file
+	-AlternateFileName alternate filename if any
+	-returns nil on failure
+	FileInfo FileSystem.GetFileInfo(file)
+
+	-Same as above but with wchars
+	FileInfo FileSystem.GetFileInfoWide(file)
+
+	-Returns an array of all objects in the path
+	-Each entry in the array is the same object as FileSystem.GetFileInfo
+	Array FileSystem.GetAll(path)
+
+	-Retrives all files from a widepath (must include filters)
+	-widepath must be a widestring (See WideToAnsi and AnsiToWide)
+	-results are the same as GetAll except filenames are wide
+	Array FileSystem.GetAllWide(widepath)
+
+	-Open a file using widestrings
+	-equal to io.open
+	file FileSystem.OpenFileWide(widefilename, widemode)
+
+	-Renames a file using wide characters (see AnsiToWide)
+	bool FileSystem.RenameWide(widefilenamesrc, widefilenamedst)
+
+	-Sets new attributes on a file
+	-Works with Wchar
+	bool FileSystem.SetAttributes(filename, attributemask)
+
+	-Copies file source to destination
+	-if overwrite is true existing file will be overwritten
+	-returns false on failure
+	bool FileSystem.Copy(source, destination, bool overwrite)
+
+	-Moves file source to destination
+	-true on success
+	bool FileSystem.Move(source, destination)
+
+	-Deletes source, returns true on success
+	-Works with Wchar
+	bool FileSystem.Delete(source)
+
+	-Creates a directory at path
+	-Works with Wchar
+	-returns true on success
+	bool FileSystem.CreateDirectory(path)
+
+	-Creates a directory at path
+	-Folder has to be empty
+	-Works with Wchar
+	-returns true on success
+	bool FileSystem.RemoveDirectory(path)
+
+	-Renames source to destination
+	bool FileSystem.Rename(source, destination)
+	
+	-Retruns the current active directory in full path (the directory the program lives in)
+	string FileSystem.CurrentDirectory()
+	WChar FileSystem.CurrentDirectoryWide()
+
+	-Sets the current directory (where relative paths start)
+	-Works with Wchar
+	-returns true/false on success or failure
+	bool FileSystem.SetCurrentDirectory(dir)
+
+	-Returns path+filename of a temporary file
+	-If pathonly is true it'll only return the path to the temp directory
+	string FileSystem.GetTempFileName(optional bool pathonly)
+
+	-Returns an array of drives
+	-If a drive is specified it returns a table containing info for that drive
+	-each drive is a table containing:
+	-Drive: string letter (A,B,C,D)
+	-Type: int (0 unknown, 1 not mounted, 2 removable, 3 fixed, 4 remote, 5 cdrom, 6 ramdisk)
+	-FreeBytesAvailableToCaller: number of bytes available to the caller (this environment)
+	-TotalNumberOfBytes: Total size in bytes of the drive
+	-TotalNumberOfFreeBytes: total number of free bytes
+	array FileSystem.GetDrives(opt drive)
+
+TWODA (2da):
+
+	-opens and parses a 2da file, returns nil on failure
+	TWODA TWODA.Open(file);
+
+	-Returns the data from row depending on index (0 based) or columnname (case sensetive)
+	-returns nil on failure
+	string TWODA:Get2DAString(row, index or columnname)
+
+	-Returns a table key-value of the row
+	table TWODA:Get2DARow(row);
+
+	-Returns an array of columnnames, number of rows and version of the 2da
+	array, numbrows, version TWODA:GetInfo();
+
+TLK:
+
+	-Creates a TLK file from a table and opens it
+	-languageid: default 0(english)
+	-version: must be 4 characters default V3.0
+	-array *MUST* start on 0 and be without gaps, empty strings are used as not present (same as the result from TLK:GetAll)
+	TLK TLK.Create(filename, array, opt languageid, opt version)
+
+	-Open a tlk file, returns nil if the file is not a valid tlk file
+	TLK TLK.Open(filename)
+
+	-Return all entries in a table key is the strref
+	-index starts at 0 rather then 1
+	-returns nil on failure
+	table TLK:GetAll()
+
+	-Read a single strref of the tlk, returns nil on failure
+	-Returns a table containg the stringref data:
+	-Flags: 0x0001 (Texts exists), 0x0002 (Sound exists), 0x0004 (Sound length exists)
+	-SoundResRef: if sound exists this is the resref to it
+	-VolumeVariance: not used
+	-PitchVariance: not used
+	-String: actual string data, is empty string if it doesnt exist
+	-SoundLength: Length of the sound
+	table TLK:Get(strref)
+
+	-Updates the tlk file with new sound info for a strref
+	-if no soundresref is empty sound info will be stripped. soundresref cannot be longer then 16 characters.
+	-soundlength (float) if provided will flag as having a sound length and set it, if not it'll unflag and set to 0
+	-VolumeVariance: not used DWORD
+	-PitchVariance: not used DWORD
+	bool TLK:SetSoundInfo(strref, soundresref, opt soundlength, opt VolumeVariance, opt PitchVariance);
+
+	-sets a stringref in the tlk, if the stringref wasnt present it'll be flagged as such and written at the end
+	-if the string is larger then the original then it will be written at the end of the file instead
+	-if newstring is an empty string the entry will instead be flagged as not present (deleted)
+	bool TLK:Set(strref, newstring)
+
+	-Defragments the tlk files ensuring all strings are written packed end to end with no gaps
+	-extra adds empty extra entries at the end of the file
+	bool TLK:Defragment(opt extra)
+
+	-return the number of entries, languageid and version of the tlk
+	count,languageid,version TLK:GetInfo()
+
+KeyBif:
+
+	KeyBif KeyBif.Create()
+
+ERF:
+	
+	-opens filename as a erf returning a erf object
+	-entries = the number of resources in the file
+	-filetype = what kind of file it is "ERF ", "MOD " etc
+	-version = what the version is "V1.0"
+	ERF, entries, filetype, version ERF.Open(filename)
+
+	-Create an erf file
+	-filenae = the path+name of the file to create
+	-type header, a 4 character field in the header that describes the file IE "HAK\0"
+	-filelist an array containing the files+path to include in the erf
+	-version default 1. 1 = nwn1 2 = nwn2 erfs
+	-desc default "LUA" what the description should be
+	ERF ERF.Create(filename, typeheader, filelist, opt version, opt desc);
+
+	-Retrive all header data
+	header ERF:GetHeader()
+
+	-Returns an array containing localized strings describing the container
+	-localsized string is a table containing:
+	-LanguageID int
+	-String string
+	array of localized strings ERF:GetStrings()
+
+	-Returns an array of tables each containing these fields:
+	-ResRef string (max 16 characters)
+	-ResID int (key to get the actual resource in GetResource)
+	-ResType int (type of resource)
+	-File name of the file with extension
+	-Unused int 0
+	array of keys ERF:GetKeys()
+
+	-Returns a binary string from the ResID provided
+	-ResID is modified to be 1 index'ed instead of 0 indexed
+	binary ERF:GetResource(ResID);
+
+	-Extracts a file to the desired path/folder
+	-will overwrite existing files
+	nil ERF:Extract(ResID, targetfile);
+GFF:
+
+	-Opens file and attempts decodings its content as a gff
+	-Throws errors on failure
+	struct GFF.OpenFile(file)
+
+	-Deserializes a string into a gff
+	-Throws errors on failure
+	struct GFF.OpenString(string)
+
+	-Save gff to file, overwrites the file if it exists
+	-Throws errors on failure
+	nil GFF.SaveToFile(gff, file)
+
+	-returns a serilized version of the gff as a binary string
+	-Throws errors on failure
+	string GFF.SaveToString(gff)
+
+	*gff parameters are top structs as described below
+
+struct:
+
+	*4 chars "BIC", "UTI" etc, only exists on toplevel struct
+	string FileType
+
+	*4 chars describing the version usually "V3.2" topstruct only
+	string FileVersion
+
+	*programmer defined int of the struct type topstruct is always 0xFFFFFFFF
+	int Type
+
+	*Number of fields loaded in Field
+	*Largly irrelevant as its recalculated when the gff is saved
+	int FieldCount
+
+	*1 index array of all fields in the array
+	array Fields
+
+	*The gff type for this table, this can be "topstruct" or "struct"
+	string gff
+
+field:
+
+	*Int that represents the type in the field
+	*0 = byte
+	*1 = char
+	*2 = word
+	*3 = short
+	*4 = dword
+	*5 = int
+	*6 = dword64
+	*7 = int64
+	*8 = float
+	*9 = double
+	*10 = string (CExoString)
+	*11 = ResRef (no space lowercase string max 16 characters)
+	*12 = CExoLocString
+	*13 = string (of binary data)
+	*14 = struct
+	*15 = array of structs (list)
+	int Type
+
+	*Name of this field (should not be longer then 16 chars)
+	string Label
+
+	*Contains the data as speificed by the Type (see GFFTYPES)
+	variable Data
+
+	*The gff type for this table, its always "field" on a field
+	string gff
+
+CExoLocString:
+
+	*Index into the tlk files, this is 0xFFFFFFFF it unused
+	int StringRef
+
+	*The amount of strings this CExoLocString contains
+	*Largly irrelevant as its recalculated when the gff is saved
+	int StringCount
+
+	*Total size in bytes (minus this field) that the CExoLocString contains
+	*Largly irrelevant as its recalculated when the gff is saved
+	int TotalSize
+
+	*An array that contains the CExoLocSubstrings
+	*this will be empty rather then nil if there are none
+	array Strings
+
+CExoLocStringSubString:
+
+	*This is equal to LanguageID * 2 + gender (0 for masculine 1 for feminine)
+	int StringID
+
+	*Length of the string
+	*Largly irrelevant as its recalculated when the gff is saved
+	int StringLength
+
+	*The string this exolocsubstring contains
+	string String
+
+xp_lua.dll ONLY (Starts with NWN.):
+
+	-returns address of creature or nil of none exists
+	string GetCreature(objid)
+
+	-returns address of any object or nil of none exists
+	string GetObject(objid)
+
+	-retrives all variables in an array
+	-Variable table: Name (Name of the var), Type (string, location, object, int, float), Data depends on the type
+	-Location table: Position vector, Facing vector, Area objid
+	table GetLocalVariables(objid)
+
+	-Copies all effect ids to effectints index to
+	-This can then be retrived using the nwscript function GetEffectInteger(eEffect, 10)
+	bool CopyEffectIdsToEffectInts(objid)
+
+	-Retrives information about an effect where effectid is retrivable using CopyEffectIdsToEffectInts
+	-if effectid is not provided all effects will be provided in an array
+	-table keys: 
+	-ID: effect id
+	-Creator: object id of the creator
+	-Duration: float of the duration
+	-ExpireDay: int some sort of internal timekeeping of the current day
+	-ExpireTime: int some sort of interal timekeeping of the time in the ExpireDay to expire the effect
+	-Exposed: bool if the effect is exposed to nwscripts GetFirst/NextEffect
+	-ShowIcon: bool if the icon is shown
+	-SpellID: int the spell id
+	-CasterLevel: int casterlevel (might not be working)
+	-LinkID: int Effects that share the same link share this id
+	-Type: int the *internal* type of the effect
+	-SubType: int *internal* subtype
+	-EffectStrings array containing strings stored on the effect
+	-EffectObjects array containing objectid's stored on the effect
+	-EffectInts array of effect ints stored on the effect
+	table GetEffectData(objid, effectid)
+
+	-Sets the effect string on target index of the effect to newstring
+	-idx must be between 0 and 5
+	-Returns true/false
+	bool SetEffectString(objid, effectid, idx, newstring)
+
+	-Sets if the effect is to be considered exposed
+	-an effect that is *not* exposed will not be returned by nwn2's GetFirst/NextEffect
+	void EffectSetExposed(objid, effectid, bool)
+
+	-Sets the effect int on target index of the effect to newint
+	-idx must be between 0 and 9
+	-Returns true/false
+	bool EffectSetEffectInt(objid, effectid, idx, newint);
+
+	-Sets the effect object on target index of the effect to object
+	-idx must be between 0 and 3
+	-Returns true/false
+	bool SetEffectObject(objid, effectid, idx, newobjid);
+
+	-Retrive a single variable from an object by name
+	-if type is not given (or -1) it'll use the first variable by name
+	-if a type is given it need to match too
+	-types:
+	-1: int
+	-2: float
+	-3: string
+	-4: object
+	-5: location
+	value GetLocalVariable(objid, name, opt type)
+
+	-Get or Set a creature script
+	-If newscript is nil then no new script is set
+	-returns the old script
+	-Max index >= 25
+	string SetGetCreatureScript(objid, index, opt newscript)
+
+	-retrive the temp hp of a creature
+	int GetTempHP(objid)
+
+	-Set the temp hp of a creature
+	void GetTempHP(objid, newhp)

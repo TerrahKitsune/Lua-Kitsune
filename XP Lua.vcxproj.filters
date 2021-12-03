@@ -1,0 +1,1143 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="Lua">
+      <UniqueIdentifier>{67048521-d3e2-4392-bfe2-a682a2b4647c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaGff">
+      <UniqueIdentifier>{cf1c4b0e-b215-40d7-b6d0-c39481b8aa60}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaGff\Source Files">
+      <UniqueIdentifier>{a32cfe0e-0649-4fad-ab37-c61c5bbfba5c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaGff\Header Files">
+      <UniqueIdentifier>{fc543bfa-a1e0-4c4b-9181-7dcd08ec602e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaMySQL">
+      <UniqueIdentifier>{dde33a42-690e-49cf-a0f8-d3af11d5de16}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaMySQL\Header Files">
+      <UniqueIdentifier>{2abe92cf-51ea-45bf-82f9-824123293a3e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaMySQL\Source Files">
+      <UniqueIdentifier>{5780448a-79a0-4eb7-80fe-68bcbb81de27}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaTimer">
+      <UniqueIdentifier>{7a8efc7a-d2f0-4c6e-836f-2a158163e034}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaTimer\Source Files">
+      <UniqueIdentifier>{2c5a9cae-7cc3-40b9-b935-ff685a422fb3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaTimer\Header Files">
+      <UniqueIdentifier>{71f8fdca-5425-425a-977b-5c025c9aa3ec}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaSQLite">
+      <UniqueIdentifier>{7ba3c5e5-c6b4-482a-af92-277f1ba530e1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaSQLite\Header Files">
+      <UniqueIdentifier>{436b3e00-f762-4325-9d4c-8396ca58abcc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaSQLite\Source Files">
+      <UniqueIdentifier>{fefbe6e0-fe6b-459e-a1de-3e3fbfd3dcb9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaFileSystem">
+      <UniqueIdentifier>{6841bb59-2231-450d-b353-913e5c201d4e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaFileSystem\Header Files">
+      <UniqueIdentifier>{7924f7ad-aa75-4733-b94d-805a8a7c3c4a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaFileSystem\Source Files">
+      <UniqueIdentifier>{3441ad4d-451a-4302-aeea-1be3c58fd123}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaErf">
+      <UniqueIdentifier>{7e901d3b-7f65-4a4f-88aa-10d5c0983bbe}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaErf\Header Files">
+      <UniqueIdentifier>{af0eefe7-1a43-46eb-afd4-4bcaa86abb14}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaErf\Source Files">
+      <UniqueIdentifier>{6652e13a-08df-4c05-98f4-b32f7d341610}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaMD5">
+      <UniqueIdentifier>{3a92cb55-9246-47af-8322-a9c4c1334a08}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaMD5\Header Files">
+      <UniqueIdentifier>{0860ec31-06e2-4bc3-9221-3819accb6d16}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaMD5\Source Files">
+      <UniqueIdentifier>{64426d92-43ad-44e8-93e8-d950fb46b7bc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaHTTP">
+      <UniqueIdentifier>{1d6af272-67e1-4958-9b3c-6e60088e1051}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaHTTP\Header Files">
+      <UniqueIdentifier>{60384e17-e8f2-48f0-a350-26e8b4ed8e17}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaHTTP\Source Files">
+      <UniqueIdentifier>{119694b8-3c14-4da7-a256-31887d13a975}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaProcess">
+      <UniqueIdentifier>{3a7232ca-cc2d-4afd-9441-981c5e7dc18d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaProcess\Header Files">
+      <UniqueIdentifier>{b0b0adbc-9053-4d1a-9f59-7c07fae78504}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaProcess\Source Files">
+      <UniqueIdentifier>{6bfa8724-6cf7-4f01-b995-bcc9c87095dd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaService">
+      <UniqueIdentifier>{17eaa8c3-c74f-4ee5-96de-0a158d3603ae}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaService\Client">
+      <UniqueIdentifier>{7329db10-f22b-4aa0-99e4-f2997dd94c97}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaService\Server">
+      <UniqueIdentifier>{a61aff54-b6df-4b78-aef2-4f3c5a53f27f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaService\Client\Header Files">
+      <UniqueIdentifier>{de6d8c20-c94a-424b-a29c-567ba192b64f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaService\Server\Header Files">
+      <UniqueIdentifier>{626338c7-32ec-4126-977c-dd66f680038e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaService\Client\Source Files">
+      <UniqueIdentifier>{f75bac87-3de4-4680-a6be-09edf7ce8acc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaService\Server\Source Files">
+      <UniqueIdentifier>{1fe6166b-b8a7-486e-96aa-6b708b36e85f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaNWN">
+      <UniqueIdentifier>{d8e20306-2bba-4dab-8064-7b03879ac0b3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaNWN\Header Files">
+      <UniqueIdentifier>{96964f47-16c1-4fc4-a605-09b231b43531}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaNWN\Source Files">
+      <UniqueIdentifier>{d5e9c852-e017-4931-971e-ed8bc1b17ca9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="NWN2">
+      <UniqueIdentifier>{5193bdc8-0820-4119-9349-f00c68628e50}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="NWN2\Objects">
+      <UniqueIdentifier>{e39e9162-a206-4ff0-897e-569edfa40698}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaZIP">
+      <UniqueIdentifier>{08a543d8-84f8-44fe-8d11-d84be22870b5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaZIP\Header Files">
+      <UniqueIdentifier>{a1708c23-8fdb-4f50-953a-6ebc32e77591}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaZIP\Source Files">
+      <UniqueIdentifier>{29d63bb4-8a0c-4580-83aa-83b533a9d12d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaTLK">
+      <UniqueIdentifier>{5e35cebb-0295-4015-8660-4da5323cb187}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaTLK\Header Files">
+      <UniqueIdentifier>{b21355dc-bc19-4b38-b3fc-c75d6086454d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaTLK\Source Files">
+      <UniqueIdentifier>{6fd01e37-f571-4e1a-96bb-13b5fff59886}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Lua2DA">
+      <UniqueIdentifier>{e317cdda-b25b-4345-b6b0-1545369cedef}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Lua2DA\Header Files">
+      <UniqueIdentifier>{c9242ab0-2dab-47ad-a1f5-db6a10314a02}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Lua2DA\Source Files">
+      <UniqueIdentifier>{7049f1df-4ef6-456b-b4f4-8dca26adbf5c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Util">
+      <UniqueIdentifier>{ab395c13-4677-4653-85e6-38dd433dd51a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="NamedPipes">
+      <UniqueIdentifier>{4aedcb85-8005-4a71-8952-065af7769902}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="NamedPipes\Header Files">
+      <UniqueIdentifier>{b514932c-baf3-4638-99d3-f8c9c21d3ba2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="NamedPipes\Source Files">
+      <UniqueIdentifier>{7e25cd7a-0a81-4727-83de-ca13ffd62cfb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaImage">
+      <UniqueIdentifier>{c1b85932-9ff0-4dd7-8d4c-c99814266181}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaImage\Header Files">
+      <UniqueIdentifier>{a65ac2b6-6a6d-47b7-a5a7-6b4cc2ff6048}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaImage\Source Files">
+      <UniqueIdentifier>{6b093fe2-e618-44a7-8d76-c6a6ff855f13}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaStream">
+      <UniqueIdentifier>{5b3dbfd5-51ff-4e88-a661-4980821a7f1f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaStream\Header Files">
+      <UniqueIdentifier>{8ba49da5-1692-4ac7-b6bc-f64e752f8ec9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaStream\Source Files">
+      <UniqueIdentifier>{eb1c989b-ce28-46ea-a9a0-855f721ec6f2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaODBC">
+      <UniqueIdentifier>{d3ff7644-8572-4eef-8d04-1505a3bfd8a3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaODBC\Header Files">
+      <UniqueIdentifier>{c54736d7-07de-485c-8499-92ae4f68605b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaODBC\Source Files">
+      <UniqueIdentifier>{673b3119-e90f-4979-93e7-05a71f860e3b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaWindowsServices">
+      <UniqueIdentifier>{0aad42e8-781b-4f6d-a705-da0973254dd4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaWindowsServices\Header Files">
+      <UniqueIdentifier>{7247510d-4aa0-4600-b32f-b52d1752da15}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaWindowsServices\Source Files">
+      <UniqueIdentifier>{0be47098-d5dc-4997-a20d-12f302610e02}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaLinkedList">
+      <UniqueIdentifier>{1d8d66a1-c5c2-47fe-804c-f2cf769d7594}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaLinkedList\Header Files">
+      <UniqueIdentifier>{3a2e82b2-cfd9-4af3-a52c-c30dde1a3ce9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaLinkedList\Source Files">
+      <UniqueIdentifier>{f3a3814e-0583-41e2-a668-8a5fd069da1c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaSocket">
+      <UniqueIdentifier>{43a2f330-008c-4952-91a8-04654f26ac5c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaSocket\Header Files">
+      <UniqueIdentifier>{7f35ace3-fc0b-40ac-92f7-bdd5a236412f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaSocket\Source Files">
+      <UniqueIdentifier>{ce47cc33-a80a-43b4-9980-85ebbc4b3fa9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaKafka">
+      <UniqueIdentifier>{5f9445c5-2f22-4508-98ab-259f8be0894c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaKafka\Header Files">
+      <UniqueIdentifier>{e98933c9-685e-488d-8ade-65f9d8b729db}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaKafka\Source Files">
+      <UniqueIdentifier>{dfecfb33-e7ad-43d5-bc3a-ed74d9301809}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaSha256">
+      <UniqueIdentifier>{3270e4f0-d618-40b7-a475-1199ba859049}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaSha256\Header Files">
+      <UniqueIdentifier>{49414460-974c-471b-bd46-07023c9af69a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaSha256\Source Files">
+      <UniqueIdentifier>{1fce70a0-b18f-4b7a-9904-6a38ad897361}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaFTP">
+      <UniqueIdentifier>{5c7b4d6d-94aa-4547-84ba-b66874e528e1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaFTP\Header Files">
+      <UniqueIdentifier>{42ea09ba-3a99-4fe9-969f-bc99f882b1fb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaFTP\Source Files">
+      <UniqueIdentifier>{c0558c8e-e5d6-4d2b-afa0-a82b188e5ffb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaFileAsync">
+      <UniqueIdentifier>{52516615-2238-40c6-b340-c8f050dec6b3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaFileAsync\Header Files">
+      <UniqueIdentifier>{cec9fb57-81f9-4b14-9d44-4c4d1fafae31}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaFileAsync\Source Files">
+      <UniqueIdentifier>{1501465f-00ec-445e-989c-24ac74161830}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaAes">
+      <UniqueIdentifier>{dc2cf17f-ddf3-45bc-b208-90d3f85c8fc6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaAes\Header Files">
+      <UniqueIdentifier>{c178555a-8117-4d69-b63c-4c600e56805c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaAes\Source Files">
+      <UniqueIdentifier>{3f12c35b-5b06-4002-9b41-dfe7ace6e5d9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaMutex">
+      <UniqueIdentifier>{d7258c31-5a85-425c-ab1a-c3bfa1c93a58}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaMutex\Header Files">
+      <UniqueIdentifier>{035dde4d-dd14-4043-9d3a-80f620391d68}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaMutex\Source Files">
+      <UniqueIdentifier>{2619e57d-21a3-49b5-8986-6586ef405051}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaJson">
+      <UniqueIdentifier>{b9b2f842-2794-42f0-b74e-41bbeb6a6c58}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaJson\Header Files">
+      <UniqueIdentifier>{f4612d7f-1750-49df-91c0-77139a12c2d0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaJson\Source Files">
+      <UniqueIdentifier>{3ef82f93-ec01-4966-abc6-a4baad5c2c13}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Memory">
+      <UniqueIdentifier>{e99ce517-6995-4ae0-b7cf-fa840a0eb295}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Memory\Header Files">
+      <UniqueIdentifier>{25676c6c-cefe-414c-8938-6bd83638805b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Memory\Source Files">
+      <UniqueIdentifier>{600b7231-e941-4b61-84d6-e6ec244b3fd7}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\plugin.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\misc\log.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Lua\lfunc.c">
+      <Filter>Lua</Filter>
+    </ClCompile>
+    <ClCompile Include="Lua\lgc.c">
+      <Filter>Lua</Filter>
+    </ClCompile>
+    <ClCompile Include="Lua\linit.c">
+      <Filter>Lua</Filter>
+    </ClCompile>
+    <ClCompile Include="Lua\liolib.c">
+      <Filter>Lua</Filter>
+    </ClCompile>
+    <ClCompile Include="Lua\llex.c">
+      <Filter>Lua</Filter>
+    </ClCompile>
+    <ClCompile Include="Lua\lmathlib.c">
+      <Filter>Lua</Filter>
+    </ClCompile>
+    <ClCompile Include="Lua\lmem.c">
+      <Filter>Lua</Filter>
+    </ClCompile>
+    <ClCompile Include="Lua\loadlib.c">
+      <Filter>Lua</Filter>
+    </ClCompile>
+    <ClCompile Include="Lua\lobject.c">
+      <Filter>Lua</Filter>
+    </ClCompile>
+    <ClCompile Include="Lua\lopcodes.c">
+      <Filter>Lua</Filter>
+    </ClCompile>
+    <ClCompile Include="Lua\loslib.c">
+      <Filter>Lua</Filter>
+    </ClCompile>
+    <ClCompile Include="Lua\lparser.c">
+      <Filter>Lua</Filter>
+    </ClCompile>
+    <ClCompile Include="Lua\lstate.c">
+      <Filter>Lua</Filter>
+    </ClCompile>
+    <ClCompile Include="Lua\lstring.c">
+      <Filter>Lua</Filter>
+    </ClCompile>
+    <ClCompile Include="Lua\lstrlib.c">
+      <Filter>Lua</Filter>
+    </ClCompile>
+    <ClCompile Include="Lua\ltable.c">
+      <Filter>Lua</Filter>
+    </ClCompile>
+    <ClCompile Include="Lua\ltablib.c">
+      <Filter>Lua</Filter>
+    </ClCompile>
+    <ClCompile Include="Lua\ltm.c">
+      <Filter>Lua</Filter>
+    </ClCompile>
+    <ClCompile Include="Lua\lua.c">
+      <Filter>Lua</Filter>
+    </ClCompile>
+    <ClCompile Include="Lua\lundump.c">
+      <Filter>Lua</Filter>
+    </ClCompile>
+    <ClCompile Include="Lua\lutf8lib.c">
+      <Filter>Lua</Filter>
+    </ClCompile>
+    <ClCompile Include="Lua\lvm.c">
+      <Filter>Lua</Filter>
+    </ClCompile>
+    <ClCompile Include="Lua\lzio.c">
+      <Filter>Lua</Filter>
+    </ClCompile>
+    <ClCompile Include="Lua\lapi.c">
+      <Filter>Lua</Filter>
+    </ClCompile>
+    <ClCompile Include="Lua\lauxlib.c">
+      <Filter>Lua</Filter>
+    </ClCompile>
+    <ClCompile Include="Lua\lbaselib.c">
+      <Filter>Lua</Filter>
+    </ClCompile>
+    <ClCompile Include="Lua\lbitlib.c">
+      <Filter>Lua</Filter>
+    </ClCompile>
+    <ClCompile Include="Lua\lcode.c">
+      <Filter>Lua</Filter>
+    </ClCompile>
+    <ClCompile Include="Lua\lcorolib.c">
+      <Filter>Lua</Filter>
+    </ClCompile>
+    <ClCompile Include="Lua\lctype.c">
+      <Filter>Lua</Filter>
+    </ClCompile>
+    <ClCompile Include="Lua\ldblib.c">
+      <Filter>Lua</Filter>
+    </ClCompile>
+    <ClCompile Include="Lua\ldebug.c">
+      <Filter>Lua</Filter>
+    </ClCompile>
+    <ClCompile Include="Lua\ldo.c">
+      <Filter>Lua</Filter>
+    </ClCompile>
+    <ClCompile Include="Lua\ldump.c">
+      <Filter>Lua</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaEngine.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="plua.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="AssemblyHelper.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="NWN2LuaLib.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="GffField.cpp">
+      <Filter>LuaGff\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="GffHeader.cpp">
+      <Filter>LuaGff\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="GffLabel.cpp">
+      <Filter>LuaGff\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="GffStruct.cpp">
+      <Filter>LuaGff\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaGff.cpp">
+      <Filter>LuaGff</Filter>
+    </ClCompile>
+    <ClCompile Include="GFFMain.cpp">
+      <Filter>LuaGff</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaMySQL.cpp">
+      <Filter>LuaMySQL\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="MySQLMain.cpp">
+      <Filter>LuaMySQL</Filter>
+    </ClCompile>
+    <ClCompile Include="Timer.cpp">
+      <Filter>LuaTimer\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="TimerMain.cpp">
+      <Filter>LuaTimer</Filter>
+    </ClCompile>
+    <ClCompile Include="SQLite\sqlite3.c">
+      <Filter>LuaSQLite\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaSQLite.cpp">
+      <Filter>LuaSQLite\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaSQLiteMain.cpp">
+      <Filter>LuaSQLite</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaFileSystem.cpp">
+      <Filter>LuaFileSystem\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaFileSystemMain.cpp">
+      <Filter>LuaFileSystem</Filter>
+    </ClCompile>
+    <ClCompile Include="lua_misc.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Erf.cpp">
+      <Filter>LuaErf\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ERFMain.cpp">
+      <Filter>LuaErf</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaMD5.cpp">
+      <Filter>LuaMD5\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="md5.c">
+      <Filter>LuaMD5\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="MD5Main.cpp">
+      <Filter>LuaMD5</Filter>
+    </ClCompile>
+    <ClCompile Include="Http.cpp">
+      <Filter>LuaHTTP\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="HttpMain.cpp">
+      <Filter>LuaHTTP</Filter>
+    </ClCompile>
+    <ClCompile Include="Buffer.cpp">
+      <Filter>LuaHTTP\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ProcessMain.cpp">
+      <Filter>LuaProcess</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaProcess.cpp">
+      <Filter>LuaProcess\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaServer.cpp">
+      <Filter>LuaService\Server\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaClient.cpp">
+      <Filter>LuaService\Client\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaClientMain.cpp">
+      <Filter>LuaService\Client</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaServerMain.cpp">
+      <Filter>LuaService\Server</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaNWN.cpp">
+      <Filter>LuaNWN</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaNWNFunctions.cpp">
+      <Filter>LuaNWN\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="NWN2Funcs.cpp">
+      <Filter>NWN2</Filter>
+    </ClCompile>
+    <ClCompile Include="NWN2_API\CNWSCreature.cpp">
+      <Filter>NWN2\Objects</Filter>
+    </ClCompile>
+    <ClCompile Include="NWN2_API\CNWSObject.cpp">
+      <Filter>NWN2\Objects</Filter>
+    </ClCompile>
+    <ClCompile Include="NWN2_API\CExoString.cpp">
+      <Filter>NWN2\Objects</Filter>
+    </ClCompile>
+    <ClCompile Include="NWN2_API\NWN2_API.cpp">
+      <Filter>NWN2\Objects</Filter>
+    </ClCompile>
+    <ClCompile Include="luazip.cpp">
+      <Filter>LuaZIP\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ZIPMain.cpp">
+      <Filter>LuaZIP</Filter>
+    </ClCompile>
+    <ClCompile Include="tlk.cpp">
+      <Filter>LuaTLK\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="TlkMain.cpp">
+      <Filter>LuaTLK</Filter>
+    </ClCompile>
+    <ClCompile Include="2da.cpp">
+      <Filter>Lua2DA\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="2DAMain.cpp">
+      <Filter>Lua2DA</Filter>
+    </ClCompile>
+    <ClCompile Include="ResourceTypes.cpp">
+      <Filter>LuaErf</Filter>
+    </ClCompile>
+    <ClCompile Include="Hooks.cpp">
+      <Filter>NWN2</Filter>
+    </ClCompile>
+    <ClCompile Include="Client.cpp">
+      <Filter>LuaService\Client\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Server.cpp">
+      <Filter>LuaService\Server\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="NetEvent.cpp">
+      <Filter>LuaService</Filter>
+    </ClCompile>
+    <ClCompile Include="List.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="Queue.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="networking.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="MainLoop.cpp">
+      <Filter>LuaNWN\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="lua_helper.cpp">
+      <Filter>LuaNWN\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaMySQLResult.cpp">
+      <Filter>LuaMySQL\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="mysql_main_incl.cpp">
+      <Filter>LuaMySQL\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="namedpipe.cpp">
+      <Filter>NamedPipes\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="NamedPipeMain.cpp">
+      <Filter>NamedPipes</Filter>
+    </ClCompile>
+    <ClCompile Include="NwnLuaHooks.cpp">
+      <Filter>LuaNWN\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="NWN2_API\CNWSCreatureStats.cpp">
+      <Filter>NWN2\Objects</Filter>
+    </ClCompile>
+    <ClCompile Include="NWN2_API\CNWSVarTable.cpp">
+      <Filter>NWN2\Objects</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaImageMain.cpp">
+      <Filter>LuaImage</Filter>
+    </ClCompile>
+    <ClCompile Include="image.cpp">
+      <Filter>LuaImage\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="StreamMain.cpp">
+      <Filter>LuaStream</Filter>
+    </ClCompile>
+    <ClCompile Include="stream.cpp">
+      <Filter>LuaStream\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="odbc.cpp">
+      <Filter>LuaODBC\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ODBCMain.cpp">
+      <Filter>LuaODBC</Filter>
+    </ClCompile>
+    <ClCompile Include="WinServices.cpp">
+      <Filter>LuaWindowsServices\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="WinServicesMain.cpp">
+      <Filter>LuaWindowsServices</Filter>
+    </ClCompile>
+    <ClCompile Include="LinkedList.cpp">
+      <Filter>LuaLinkedList\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaLinkedList.cpp">
+      <Filter>LuaLinkedList\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaLinkedListMain.cpp">
+      <Filter>LuaLinkedList</Filter>
+    </ClCompile>
+    <ClCompile Include="luasocket.cpp">
+      <Filter>LuaSocket\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="luasocketmain.cpp">
+      <Filter>LuaSocket</Filter>
+    </ClCompile>
+    <ClCompile Include="luakafka.cpp">
+      <Filter>LuaKafka\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="luakafkamain.cpp">
+      <Filter>LuaKafka</Filter>
+    </ClCompile>
+    <ClCompile Include="luakafkamessage.cpp">
+      <Filter>LuaKafka\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="kafkahelpers.cpp">
+      <Filter>LuaKafka\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="luakafkatopic.cpp">
+      <Filter>LuaKafka\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaSha256.cpp">
+      <Filter>LuaSha256\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="sha256.c">
+      <Filter>LuaSha256\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Sha256Main.cpp">
+      <Filter>LuaSha256</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaFTPMain.cpp">
+      <Filter>LuaFTP</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaFTP.cpp">
+      <Filter>LuaFTP\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaFTPChannel.cpp">
+      <Filter>LuaFTP\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="FileAsyncMain.cpp">
+      <Filter>LuaFileAsync</Filter>
+    </ClCompile>
+    <ClCompile Include="FileAsync.cpp">
+      <Filter>LuaFileAsync\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="aes.c">
+      <Filter>LuaAes\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="luaaes.cpp">
+      <Filter>LuaAes\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaAesMain.cpp">
+      <Filter>LuaAes</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaMutex.cpp">
+      <Filter>LuaMutex\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaMutexMain.cpp">
+      <Filter>LuaMutex</Filter>
+    </ClCompile>
+    <ClCompile Include="lua_json.cpp">
+      <Filter>LuaJson\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="jsonencode.cpp">
+      <Filter>LuaJson\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="jsondecode.cpp">
+      <Filter>LuaJson\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="jsonutil.cpp">
+      <Filter>LuaJson\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="luajsonmain.cpp">
+      <Filter>LuaJson</Filter>
+    </ClCompile>
+    <ClCompile Include="base64.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="mem.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="MemoryManager.cpp">
+      <Filter>Memory\Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\dbplugin.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\misc\log.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Lua\lfunc.h">
+      <Filter>Lua</Filter>
+    </ClInclude>
+    <ClInclude Include="Lua\lgc.h">
+      <Filter>Lua</Filter>
+    </ClInclude>
+    <ClInclude Include="Lua\llex.h">
+      <Filter>Lua</Filter>
+    </ClInclude>
+    <ClInclude Include="Lua\llimits.h">
+      <Filter>Lua</Filter>
+    </ClInclude>
+    <ClInclude Include="Lua\lmem.h">
+      <Filter>Lua</Filter>
+    </ClInclude>
+    <ClInclude Include="Lua\lobject.h">
+      <Filter>Lua</Filter>
+    </ClInclude>
+    <ClInclude Include="Lua\lopcodes.h">
+      <Filter>Lua</Filter>
+    </ClInclude>
+    <ClInclude Include="Lua\lparser.h">
+      <Filter>Lua</Filter>
+    </ClInclude>
+    <ClInclude Include="Lua\lprefix.h">
+      <Filter>Lua</Filter>
+    </ClInclude>
+    <ClInclude Include="Lua\lstate.h">
+      <Filter>Lua</Filter>
+    </ClInclude>
+    <ClInclude Include="Lua\lstring.h">
+      <Filter>Lua</Filter>
+    </ClInclude>
+    <ClInclude Include="Lua\ltable.h">
+      <Filter>Lua</Filter>
+    </ClInclude>
+    <ClInclude Include="Lua\ltm.h">
+      <Filter>Lua</Filter>
+    </ClInclude>
+    <ClInclude Include="Lua\lua.h">
+      <Filter>Lua</Filter>
+    </ClInclude>
+    <ClInclude Include="Lua\lua.hpp">
+      <Filter>Lua</Filter>
+    </ClInclude>
+    <ClInclude Include="Lua\luaconf.h">
+      <Filter>Lua</Filter>
+    </ClInclude>
+    <ClInclude Include="Lua\lualib.h">
+      <Filter>Lua</Filter>
+    </ClInclude>
+    <ClInclude Include="Lua\lundump.h">
+      <Filter>Lua</Filter>
+    </ClInclude>
+    <ClInclude Include="Lua\lvm.h">
+      <Filter>Lua</Filter>
+    </ClInclude>
+    <ClInclude Include="Lua\lzio.h">
+      <Filter>Lua</Filter>
+    </ClInclude>
+    <ClInclude Include="Lua\lapi.h">
+      <Filter>Lua</Filter>
+    </ClInclude>
+    <ClInclude Include="Lua\lauxlib.h">
+      <Filter>Lua</Filter>
+    </ClInclude>
+    <ClInclude Include="Lua\lcode.h">
+      <Filter>Lua</Filter>
+    </ClInclude>
+    <ClInclude Include="Lua\lctype.h">
+      <Filter>Lua</Filter>
+    </ClInclude>
+    <ClInclude Include="Lua\ldebug.h">
+      <Filter>Lua</Filter>
+    </ClInclude>
+    <ClInclude Include="Lua\ldo.h">
+      <Filter>Lua</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaEngine.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="plua.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="AssemblyHelper.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="NWN2LuaLib.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="xp_lua_incl.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="GffHeader.h">
+      <Filter>LuaGff\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="GffLabel.h">
+      <Filter>LuaGff\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="GffStruct.h">
+      <Filter>LuaGff\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="GffField.h">
+      <Filter>LuaGff\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="GFFMain.h">
+      <Filter>LuaGff</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaGff.h">
+      <Filter>LuaGff</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaMySQL.h">
+      <Filter>LuaMySQL\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="MySQLMain.h">
+      <Filter>LuaMySQL</Filter>
+    </ClInclude>
+    <ClInclude Include="Timer.h">
+      <Filter>LuaTimer\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="TimerMain.h">
+      <Filter>LuaTimer</Filter>
+    </ClInclude>
+    <ClInclude Include="lua_main_incl.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SQLite\sqlite3.h">
+      <Filter>LuaSQLite\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaSQLite.h">
+      <Filter>LuaSQLite\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaSQLiteMain.h">
+      <Filter>LuaSQLite</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaFileSystem.h">
+      <Filter>LuaFileSystem\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaFileSystemMain.h">
+      <Filter>LuaFileSystem</Filter>
+    </ClInclude>
+    <ClInclude Include="lua_misc.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Erf.h">
+      <Filter>LuaErf\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ERFMain.h">
+      <Filter>LuaErf</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaMD5.h">
+      <Filter>LuaMD5\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="md5.h">
+      <Filter>LuaMD5\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="MD5Main.h">
+      <Filter>LuaMD5</Filter>
+    </ClInclude>
+    <ClInclude Include="Http.h">
+      <Filter>LuaHTTP\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="HttpMain.h">
+      <Filter>LuaHTTP</Filter>
+    </ClInclude>
+    <ClInclude Include="Buffer.h">
+      <Filter>LuaHTTP\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ProcessMain.h">
+      <Filter>LuaProcess</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaProcess.h">
+      <Filter>LuaProcess\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaServer.h">
+      <Filter>LuaService\Server\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaClient.h">
+      <Filter>LuaService\Client\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaClientMain.h">
+      <Filter>LuaService\Client</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaServerMain.h">
+      <Filter>LuaService\Server</Filter>
+    </ClInclude>
+    <ClInclude Include="networking.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaNWN.h">
+      <Filter>LuaNWN</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaNWNFunctions.h">
+      <Filter>LuaNWN\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="NWN2Funcs.h">
+      <Filter>NWN2</Filter>
+    </ClInclude>
+    <ClInclude Include="NWN2_API\CNWSCreature.h">
+      <Filter>NWN2\Objects</Filter>
+    </ClInclude>
+    <ClInclude Include="NWN2_API\CNWSObject.h">
+      <Filter>NWN2\Objects</Filter>
+    </ClInclude>
+    <ClInclude Include="NWN2_API\NWN2_API.h">
+      <Filter>NWN2\Objects</Filter>
+    </ClInclude>
+    <ClInclude Include="NWN2_API\CExoString.h">
+      <Filter>NWN2\Objects</Filter>
+    </ClInclude>
+    <ClInclude Include="zip\zip.h">
+      <Filter>LuaZIP\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="zip\zipconf.h">
+      <Filter>LuaZIP\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="luazip.h">
+      <Filter>LuaZIP\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ZIPMain.h">
+      <Filter>LuaZIP</Filter>
+    </ClInclude>
+    <ClInclude Include="tlk.h">
+      <Filter>LuaTLK\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="TlkMain.h">
+      <Filter>LuaTLK</Filter>
+    </ClInclude>
+    <ClInclude Include="2da.h">
+      <Filter>Lua2DA\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="2DAMain.h">
+      <Filter>Lua2DA</Filter>
+    </ClInclude>
+    <ClInclude Include="ResourcesTypes.h">
+      <Filter>LuaErf</Filter>
+    </ClInclude>
+    <ClInclude Include="Hooks.h">
+      <Filter>NWN2</Filter>
+    </ClInclude>
+    <ClInclude Include="Client.h">
+      <Filter>LuaService\Client\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Server.h">
+      <Filter>LuaService\Server\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="NetEvent.h">
+      <Filter>LuaService</Filter>
+    </ClInclude>
+    <ClInclude Include="List.h">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="Queue.h">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="MainLoop.h">
+      <Filter>LuaNWN\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lua_helper.h">
+      <Filter>LuaNWN\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaMySQLResult.h">
+      <Filter>LuaMySQL\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="mysql_main_incl.h">
+      <Filter>LuaMySQL\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="namedpipe.h">
+      <Filter>NamedPipes\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="NamedPipeMain.h">
+      <Filter>NamedPipes</Filter>
+    </ClInclude>
+    <ClInclude Include="NwnLuaHooks.h">
+      <Filter>LuaNWN\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="NWN2_API\BaseObjects.h">
+      <Filter>NWN2\Objects</Filter>
+    </ClInclude>
+    <ClInclude Include="NWN2_API\CGameEffect.h">
+      <Filter>NWN2\Objects</Filter>
+    </ClInclude>
+    <ClInclude Include="NWN2_API\CNWSCreatureStats.h">
+      <Filter>NWN2\Objects</Filter>
+    </ClInclude>
+    <ClInclude Include="NWN2_API\CNWSVarTable.h">
+      <Filter>NWN2\Objects</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaImageMain.h">
+      <Filter>LuaImage</Filter>
+    </ClInclude>
+    <ClInclude Include="image.h">
+      <Filter>LuaImage\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="StreamMain.h">
+      <Filter>LuaStream</Filter>
+    </ClInclude>
+    <ClInclude Include="stream.h">
+      <Filter>LuaStream\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="odbc.h">
+      <Filter>LuaODBC\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ODBCMain.h">
+      <Filter>LuaODBC</Filter>
+    </ClInclude>
+    <ClInclude Include="WinServices.h">
+      <Filter>LuaWindowsServices\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="WinServicesMain.h">
+      <Filter>LuaWindowsServices</Filter>
+    </ClInclude>
+    <ClInclude Include="LinkedList.h">
+      <Filter>LuaLinkedList\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaLinkedList.h">
+      <Filter>LuaLinkedList\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaLinkedListMain.h">
+      <Filter>LuaLinkedList</Filter>
+    </ClInclude>
+    <ClInclude Include="luasocket.h">
+      <Filter>LuaSocket\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="luasocketmain.h">
+      <Filter>LuaSocket</Filter>
+    </ClInclude>
+    <ClInclude Include="luakafka.h">
+      <Filter>LuaKafka\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="luakafkamain.h">
+      <Filter>LuaKafka</Filter>
+    </ClInclude>
+    <ClInclude Include="luakafkamessage.h">
+      <Filter>LuaKafka\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="kafkahelpers.h">
+      <Filter>LuaKafka\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="luakafkatopic.h">
+      <Filter>LuaKafka\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaSha256.h">
+      <Filter>LuaSha256\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="sha256.h">
+      <Filter>LuaSha256\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Sha256Main.h">
+      <Filter>LuaSha256</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaFTPMain.h">
+      <Filter>LuaFTP</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaFTP.h">
+      <Filter>LuaFTP\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaFTPChannel.h">
+      <Filter>LuaFTP\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="FileAsyncMain.h">
+      <Filter>LuaFileAsync</Filter>
+    </ClInclude>
+    <ClInclude Include="FileAsync.h">
+      <Filter>LuaFileAsync\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="aes.h">
+      <Filter>LuaAes\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="aes.hpp">
+      <Filter>LuaAes\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="luaaes.h">
+      <Filter>LuaAes\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaAesMain.h">
+      <Filter>LuaAes</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaMutex.h">
+      <Filter>LuaMutex\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaMutexMain.h">
+      <Filter>LuaMutex</Filter>
+    </ClInclude>
+    <ClInclude Include="lua_json.h">
+      <Filter>LuaJson\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="jsondecode.h">
+      <Filter>LuaJson\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="jsonencode.h">
+      <Filter>LuaJson\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="jsonutil.h">
+      <Filter>LuaJson\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="luajsonmain.h">
+      <Filter>LuaJson</Filter>
+    </ClInclude>
+    <ClInclude Include="base64.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="mem.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="MemoryManager.h">
+      <Filter>Memory\Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Lua\Makefile">
+      <Filter>Lua</Filter>
+    </None>
+    <None Include="packages.config" />
+  </ItemGroup>
+</Project>

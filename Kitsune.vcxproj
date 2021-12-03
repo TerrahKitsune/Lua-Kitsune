@@ -1,0 +1,392 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{DB53B7C6-DAD2-432E-839F-75E1809C9C59}</ProjectGuid>
+    <RootNamespace>GFF</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0.15063.0</WindowsTargetPlatformVersion>
+    <ProjectName>Kitsune</ProjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v120</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v120</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <EmbedManifest>false</EmbedManifest>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <EmbedManifest>false</EmbedManifest>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <SDLCheck>true</SDLCheck>
+      <AdditionalIncludeDirectories>$(SolutionDir)\mysql\include;$(SolutionDir)\OpenSSL\include;$(SolutionDir)\zip;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <DisableSpecificWarnings>4703;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+      <PreprocessorDefinitions>STANDALONEGFF;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
+      <LargeAddressAware>true</LargeAddressAware>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <AdditionalIncludeDirectories>$(SolutionDir)\mysql\include;$(SolutionDir)\OpenSSL\include;$(SolutionDir)\zip;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <DisableSpecificWarnings>4703;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+      <PreprocessorDefinitions>STANDALONEGFF;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
+      <LargeAddressAware>true</LargeAddressAware>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="2da.cpp" />
+    <ClCompile Include="2DAMain.cpp" />
+    <ClCompile Include="aes.c" />
+    <ClCompile Include="base64.cpp" />
+    <ClCompile Include="BinaryTree.cpp" />
+    <ClCompile Include="Buffer.cpp" />
+    <ClCompile Include="Client.cpp" />
+    <ClCompile Include="custombutton.cpp" />
+    <ClCompile Include="customcombobox.cpp" />
+    <ClCompile Include="customdrawing.cpp" />
+    <ClCompile Include="customprogressbar.cpp" />
+    <ClCompile Include="customtextbox.cpp" />
+    <ClCompile Include="customwindow.cpp" />
+    <ClCompile Include="Erf.cpp" />
+    <ClCompile Include="ERFMain.cpp" />
+    <ClCompile Include="FileAsync.cpp" />
+    <ClCompile Include="FileAsyncMain.cpp" />
+    <ClCompile Include="GffField.cpp" />
+    <ClCompile Include="GffHeader.cpp" />
+    <ClCompile Include="GffLabel.cpp" />
+    <ClCompile Include="GFFMain.cpp" />
+    <ClCompile Include="GffStruct.cpp" />
+    <ClCompile Include="Http.cpp" />
+    <ClCompile Include="image.cpp" />
+    <ClCompile Include="jsondecode.cpp" />
+    <ClCompile Include="jsonencode.cpp" />
+    <ClCompile Include="jsonutil.cpp" />
+    <ClCompile Include="kafkahelpers.cpp" />
+    <ClCompile Include="keybif.cpp" />
+    <ClCompile Include="KeyBifMain.cpp" />
+    <ClCompile Include="keyfile.cpp" />
+    <ClCompile Include="LinkedList.cpp" />
+    <ClCompile Include="luaaes.cpp" />
+    <ClCompile Include="LuaAesMain.cpp" />
+    <ClCompile Include="LuaBinaryTree.cpp" />
+    <ClCompile Include="LuaFTP.cpp" />
+    <ClCompile Include="LuaFTPChannel.cpp" />
+    <ClCompile Include="LuaFTPMain.cpp" />
+    <ClCompile Include="LuaImageMain.cpp" />
+    <ClCompile Include="luajsonmain.cpp" />
+    <ClCompile Include="luakafka.cpp" />
+    <ClCompile Include="luakafkamain.cpp" />
+    <ClCompile Include="luakafkamessage.cpp" />
+    <ClCompile Include="luakafkatopic.cpp" />
+    <ClCompile Include="LuaLinkedList.cpp" />
+    <ClCompile Include="LuaLinkedListMain.cpp" />
+    <ClCompile Include="LuaMutex.cpp" />
+    <ClCompile Include="LuaMutexMain.cpp" />
+    <ClCompile Include="LuaMySQLResult.cpp" />
+    <ClCompile Include="LuaSha256.cpp" />
+    <ClCompile Include="luasocket.cpp" />
+    <ClCompile Include="luasocketmain.cpp" />
+    <ClCompile Include="luawchar.cpp" />
+    <ClCompile Include="luawindow.cpp" />
+    <ClCompile Include="lua_json.cpp" />
+    <ClCompile Include="macro.cpp" />
+    <ClCompile Include="MacroMain.cpp" />
+    <ClCompile Include="mem.cpp" />
+    <ClCompile Include="MemoryManager.cpp" />
+    <ClCompile Include="mysql_main_incl.cpp" />
+    <ClCompile Include="namedpipe.cpp" />
+    <ClCompile Include="NamedPipeMain.cpp" />
+    <ClCompile Include="odbc.cpp" />
+    <ClCompile Include="ODBCMain.cpp" />
+    <ClCompile Include="sha256.c" />
+    <ClCompile Include="Sha256Main.cpp" />
+    <ClCompile Include="LuaBinaryTreeMain.cpp" />
+    <ClCompile Include="stream.cpp" />
+    <ClCompile Include="StreamMain.cpp" />
+    <ClCompile Include="wcharmain.cpp" />
+    <ClCompile Include="WindowMain.cpp" />
+    <ClCompile Include="WinServices.cpp" />
+    <ClCompile Include="WinServicesMain.cpp" />
+    <ClCompile Include="HttpMain.cpp" />
+    <ClCompile Include="List.cpp" />
+    <ClCompile Include="LuaClient.cpp" />
+    <ClCompile Include="LuaClientMain.cpp" />
+    <ClCompile Include="LuaFileSystem.cpp" />
+    <ClCompile Include="LuaFileSystemMain.cpp" />
+    <ClCompile Include="LuaGff.cpp" />
+    <ClCompile Include="LuaMD5.cpp" />
+    <ClCompile Include="LuaProcess.cpp" />
+    <ClCompile Include="LuaServer.cpp" />
+    <ClCompile Include="LuaServerMain.cpp" />
+    <ClCompile Include="LuaSQLite.cpp" />
+    <ClCompile Include="LuaSQLiteMain.cpp" />
+    <ClCompile Include="luazip.cpp" />
+    <ClCompile Include="Lua\lapi.c" />
+    <ClCompile Include="Lua\lauxlib.c" />
+    <ClCompile Include="Lua\lbaselib.c" />
+    <ClCompile Include="Lua\lbitlib.c" />
+    <ClCompile Include="Lua\lcode.c" />
+    <ClCompile Include="Lua\lcorolib.c" />
+    <ClCompile Include="Lua\lctype.c" />
+    <ClCompile Include="Lua\ldblib.c" />
+    <ClCompile Include="Lua\ldebug.c" />
+    <ClCompile Include="Lua\ldo.c" />
+    <ClCompile Include="Lua\ldump.c" />
+    <ClCompile Include="Lua\lfunc.c" />
+    <ClCompile Include="Lua\lgc.c" />
+    <ClCompile Include="Lua\linit.c" />
+    <ClCompile Include="Lua\liolib.c" />
+    <ClCompile Include="Lua\llex.c" />
+    <ClCompile Include="Lua\lmathlib.c" />
+    <ClCompile Include="Lua\lmem.c" />
+    <ClCompile Include="Lua\loadlib.c" />
+    <ClCompile Include="Lua\lobject.c" />
+    <ClCompile Include="Lua\lopcodes.c" />
+    <ClCompile Include="Lua\loslib.c" />
+    <ClCompile Include="Lua\lparser.c" />
+    <ClCompile Include="Lua\lstate.c" />
+    <ClCompile Include="Lua\lstring.c" />
+    <ClCompile Include="Lua\lstrlib.c" />
+    <ClCompile Include="Lua\ltable.c" />
+    <ClCompile Include="Lua\ltablib.c" />
+    <ClCompile Include="Lua\ltm.c" />
+    <ClCompile Include="Lua\lundump.c" />
+    <ClCompile Include="Lua\lutf8lib.c" />
+    <ClCompile Include="Lua\lvm.c" />
+    <ClCompile Include="Lua\lzio.c" />
+    <ClCompile Include="LuaMySQL.cpp" />
+    <ClCompile Include="lua_misc.cpp" />
+    <ClCompile Include="md5.c" />
+    <ClCompile Include="MD5Main.cpp" />
+    <ClCompile Include="MySQLMain.cpp" />
+    <ClCompile Include="NetEvent.cpp" />
+    <ClCompile Include="networking.cpp" />
+    <ClCompile Include="ProcessMain.cpp" />
+    <ClCompile Include="Program.cpp" />
+    <ClCompile Include="Queue.cpp" />
+    <ClCompile Include="ResourceTypes.cpp" />
+    <ClCompile Include="Server.cpp" />
+    <ClCompile Include="SQLite\sqlite3.c" />
+    <ClCompile Include="Timer.cpp" />
+    <ClCompile Include="TimerMain.cpp" />
+    <ClCompile Include="tlk.cpp" />
+    <ClCompile Include="TlkMain.cpp" />
+    <ClCompile Include="ZIPMain.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="2da.h" />
+    <ClInclude Include="2DAMain.h" />
+    <ClInclude Include="aes.h" />
+    <ClInclude Include="aes.hpp" />
+    <ClInclude Include="base64.h" />
+    <ClInclude Include="BinaryTree.h" />
+    <ClInclude Include="Buffer.h" />
+    <ClInclude Include="Client.h" />
+    <ClInclude Include="custombutton.h" />
+    <ClInclude Include="customcombobox.h" />
+    <ClInclude Include="customdrawing.h" />
+    <ClInclude Include="customprogressbar.h" />
+    <ClInclude Include="customtextbox.h" />
+    <ClInclude Include="customwindow.h" />
+    <ClInclude Include="Erf.h" />
+    <ClInclude Include="ERFMain.h" />
+    <ClInclude Include="FileAsync.h" />
+    <ClInclude Include="FileAsyncMain.h" />
+    <ClInclude Include="GffField.h" />
+    <ClInclude Include="GffHeader.h" />
+    <ClInclude Include="GffLabel.h" />
+    <ClInclude Include="GFFMain.h" />
+    <ClInclude Include="GffStruct.h" />
+    <ClInclude Include="Http.h" />
+    <ClInclude Include="image.h" />
+    <ClInclude Include="jsondecode.h" />
+    <ClInclude Include="jsonencode.h" />
+    <ClInclude Include="jsonutil.h" />
+    <ClInclude Include="kafkahelpers.h" />
+    <ClInclude Include="keybif.h" />
+    <ClInclude Include="KeyBifMain.h" />
+    <ClInclude Include="keyfile.h" />
+    <ClInclude Include="LinkedList.h" />
+    <ClInclude Include="luaaes.h" />
+    <ClInclude Include="LuaAesMain.h" />
+    <ClInclude Include="LuaBinaryTree.h" />
+    <ClInclude Include="LuaBinaryTreeMain.h" />
+    <ClInclude Include="LuaFTP.h" />
+    <ClInclude Include="LuaFTPChannel.h" />
+    <ClInclude Include="LuaFTPMain.h" />
+    <ClInclude Include="LuaImageMain.h" />
+    <ClInclude Include="luajsonmain.h" />
+    <ClInclude Include="luakafka.h" />
+    <ClInclude Include="luakafkamain.h" />
+    <ClInclude Include="luakafkamessage.h" />
+    <ClInclude Include="luakafkatopic.h" />
+    <ClInclude Include="LuaLinkedList.h" />
+    <ClInclude Include="LuaLinkedListMain.h" />
+    <ClInclude Include="LuaMutex.h" />
+    <ClInclude Include="LuaMutexMain.h" />
+    <ClInclude Include="LuaMySQLResult.h" />
+    <ClInclude Include="LuaSha256.h" />
+    <ClInclude Include="luasocket.h" />
+    <ClInclude Include="luasocketmain.h" />
+    <ClInclude Include="luawchar.h" />
+    <ClInclude Include="luawindow.h" />
+    <ClInclude Include="lua_json.h" />
+    <ClInclude Include="macro.h" />
+    <ClInclude Include="MacroMain.h" />
+    <ClInclude Include="mem.h" />
+    <ClInclude Include="MemoryManager.h" />
+    <ClInclude Include="mysql_main_incl.h" />
+    <ClInclude Include="namedpipe.h" />
+    <ClInclude Include="NamedPipeMain.h" />
+    <ClInclude Include="odbc.h" />
+    <ClInclude Include="ODBCMain.h" />
+    <ClInclude Include="resource.h" />
+    <ClInclude Include="sha256.h" />
+    <ClInclude Include="Sha256Main.h" />
+    <ClInclude Include="stream.h" />
+    <ClInclude Include="StreamMain.h" />
+    <ClInclude Include="wcharmain.h" />
+    <ClInclude Include="WindowMain.h" />
+    <ClInclude Include="WinServices.h" />
+    <ClInclude Include="WinServicesMain.h" />
+    <ClInclude Include="_Http.h" />
+    <ClInclude Include="HttpMain.h" />
+    <ClInclude Include="List.h" />
+    <ClInclude Include="LuaClient.h" />
+    <ClInclude Include="LuaClientMain.h" />
+    <ClInclude Include="LuaFileSystem.h" />
+    <ClInclude Include="LuaFileSystemMain.h" />
+    <ClInclude Include="LuaGff.h" />
+    <ClInclude Include="LuaMD5.h" />
+    <ClInclude Include="LuaProcess.h" />
+    <ClInclude Include="LuaServer.h" />
+    <ClInclude Include="LuaServerMain.h" />
+    <ClInclude Include="LuaSQLite.h" />
+    <ClInclude Include="LuaSQLiteMain.h" />
+    <ClInclude Include="Lua\lapi.h" />
+    <ClInclude Include="Lua\lauxlib.h" />
+    <ClInclude Include="Lua\lcode.h" />
+    <ClInclude Include="Lua\lctype.h" />
+    <ClInclude Include="Lua\ldebug.h" />
+    <ClInclude Include="Lua\ldo.h" />
+    <ClInclude Include="Lua\lfunc.h" />
+    <ClInclude Include="Lua\lgc.h" />
+    <ClInclude Include="Lua\llex.h" />
+    <ClInclude Include="Lua\llimits.h" />
+    <ClInclude Include="Lua\lmem.h" />
+    <ClInclude Include="Lua\lobject.h" />
+    <ClInclude Include="Lua\lopcodes.h" />
+    <ClInclude Include="Lua\lparser.h" />
+    <ClInclude Include="Lua\lprefix.h" />
+    <ClInclude Include="Lua\lstate.h" />
+    <ClInclude Include="Lua\lstring.h" />
+    <ClInclude Include="Lua\ltable.h" />
+    <ClInclude Include="Lua\ltm.h" />
+    <ClInclude Include="Lua\lua.h" />
+    <ClInclude Include="Lua\lua.hpp" />
+    <ClInclude Include="Lua\luaconf.h" />
+    <ClInclude Include="Lua\lualib.h" />
+    <ClInclude Include="Lua\lundump.h" />
+    <ClInclude Include="Lua\lvm.h" />
+    <ClInclude Include="Lua\lzio.h" />
+    <ClInclude Include="lua_main_incl.h" />
+    <ClInclude Include="LuaMySQL.h" />
+    <ClInclude Include="lua_misc.h" />
+    <ClInclude Include="md5.h" />
+    <ClInclude Include="MD5Main.h" />
+    <ClInclude Include="MySQLMain.h" />
+    <ClInclude Include="NetEvent.h" />
+    <ClInclude Include="networking.h" />
+    <ClInclude Include="ProcessMain.h" />
+    <ClInclude Include="Queue.h" />
+    <ClInclude Include="ResourcesTypes.h" />
+    <ClInclude Include="Server.h" />
+    <ClInclude Include="SQLite\sqlite3.h" />
+    <ClInclude Include="Timer.h" />
+    <ClInclude Include="TimerMain.h" />
+    <ClInclude Include="tlk.h" />
+    <ClInclude Include="TlkMain.h" />
+    <ClInclude Include="luazip.h" />
+    <ClInclude Include="ZIPMain.h" />
+    <ClInclude Include="zip\zip.h" />
+    <ClInclude Include="zip\zipconf.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="main.lua">
+      <FileType>Document</FileType>
+      <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</DeploymentContent>
+    </Text>
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="Lua functions.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="Kitsune.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="Lua\jiiiiiiiiitsu.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <Manifest Include="kitsune.exe.manifest" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+    <Import Project="packages\librdkafka.redist.1.7.0\build\native\librdkafka.redist.targets" Condition="Exists('packages\librdkafka.redist.1.7.0\build\native\librdkafka.redist.targets')" />
+  </ImportGroup>
+  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
+    </PropertyGroup>
+    <Error Condition="!Exists('packages\librdkafka.redist.1.7.0\build\native\librdkafka.redist.targets')" Text="$([System.String]::Format('$(ErrorText)', 'packages\librdkafka.redist.1.7.0\build\native\librdkafka.redist.targets'))" />
+  </Target>
+</Project>
