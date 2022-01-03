@@ -328,6 +328,15 @@
     <Filter Include="LuaWchar\Source Files">
       <UniqueIdentifier>{5152b899-2bcf-47db-bb32-93b6dca0ed23}</UniqueIdentifier>
     </Filter>
+    <Filter Include="LuaCSV">
+      <UniqueIdentifier>{035b992b-c43a-4798-9516-67392a93ebeb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaCSV\Header Files">
+      <UniqueIdentifier>{8e1bef7b-5a87-41e6-9e64-865a1808af33}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaCSV\Source Files">
+      <UniqueIdentifier>{993c9efe-3750-4dc3-9fb1-21d95b416e9a}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Program.cpp">
@@ -744,6 +753,12 @@
     <ClCompile Include="customprogressbar.cpp">
       <Filter>Windows\Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="luacsv.cpp">
+      <Filter>LuaCSV\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaCsvMain.cpp">
+      <Filter>LuaCSV</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Lua\lapi.h">
@@ -1153,6 +1168,12 @@
     </ClInclude>
     <ClInclude Include="customprogressbar.h">
       <Filter>Windows\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="luacsv.h">
+      <Filter>LuaCSV\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaCsvMain.h">
+      <Filter>LuaCSV</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

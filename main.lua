@@ -129,4 +129,10 @@ end
 CreateGCPrint();
 collectgarbage();
 
-dofile("C:/Users/Terrah/Desktop/bloons.lua");
+TablePrint(CSV);
+
+local csv = CSV.Create();
+
+local test = csv:DecodeFile("r:/test.csv");
+
+TablePrint(test);

@@ -388,6 +388,21 @@ Macro:
 	-Retrives the inputs as given in the create function
 	inputs Macro:GetInputs()
 
+CSV:
+
+	-Creates a new csv instance
+	csv CSV.Create() 
+
+	-Decodes a string into a table
+	-Table contains "Comments" and "Rows"
+	-Commands is an array of strings containing csv comments (if any)
+	-Rows contains an array of rows
+	-Strings are Wchars
+	table csv:DecodeString(string)
+
+	-Same as DecodeString but from a file
+	table csv:DecodeFile(fileName)
+
 Kafka:
 
 	-Creates a consumer object

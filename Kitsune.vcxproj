@@ -116,6 +116,8 @@
     <ClCompile Include="luaaes.cpp" />
     <ClCompile Include="LuaAesMain.cpp" />
     <ClCompile Include="LuaBinaryTree.cpp" />
+    <ClCompile Include="luacsv.cpp" />
+    <ClCompile Include="LuaCsvMain.cpp" />
     <ClCompile Include="LuaFTP.cpp" />
     <ClCompile Include="LuaFTPChannel.cpp" />
     <ClCompile Include="LuaFTPMain.cpp" />
@@ -258,6 +260,8 @@
     <ClInclude Include="LuaAesMain.h" />
     <ClInclude Include="LuaBinaryTree.h" />
     <ClInclude Include="LuaBinaryTreeMain.h" />
+    <ClInclude Include="luacsv.h" />
+    <ClInclude Include="LuaCsvMain.h" />
     <ClInclude Include="LuaFTP.h" />
     <ClInclude Include="LuaFTPChannel.h" />
     <ClInclude Include="LuaFTPMain.h" />

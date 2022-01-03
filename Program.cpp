@@ -47,6 +47,7 @@
 #include "MacroMain.h"
 #include "WindowMain.h"
 #include "wcharmain.h"
+#include "LuaCsvMain.h"
 
 #define HI_PART(x)  ((x>>4) & 0x0F)
 #define LO_PART(x)  ((x) & 0x0F)
@@ -571,6 +572,8 @@ int main(int argc, char *argv[]) {
 	lua_setglobal(L, "Window");
 	luaopen_wchar(L);
 	lua_setglobal(L, "Wchar");
+	luaopen_csv(L);
+	lua_setglobal(L, "CSV");
 
 	lua_pushcfunction(L, L_GetRuntime);
 	lua_setglobal(L, "Runtime");
