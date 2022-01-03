@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <stdlib.h> 
 #include <windows.h> 
+#include "luawindow.h"
 
 static int iterator;
 
@@ -65,14 +66,13 @@ BOOL CALLBACK MonitorEnumProcCallback(_In_  HMONITOR hMonitor, _In_  HDC DevC, _
 
 		HDC CaptureDC = CreateCompatibleDC(DevC);
 		HBITMAP CaptureBitmap = CreateCompatibleBitmap(DevC, image->Width, image->Height);
-		SelectObject(CaptureDC, CaptureBitmap);
+		HGDIOBJ oldBitmap = SelectObject(CaptureDC, CaptureBitmap);
 		BitBlt(CaptureDC, 0, 0, image->Width, image->Height, DevC, info.rcMonitor.left + image->StartX, info.rcMonitor.top + image->StartY, SRCCOPY | CAPTUREBLT);
 		GetDIBits(CaptureDC, CaptureBitmap, 0, image->Height, Image, (LPBITMAPINFO)BInfoHeader, DIB_RGB_COLORS);
 
-		/*DWORD Junk;
-		HANDLE FH = CreateFileA(BmpName, GENERIC_WRITE, FILE_SHARE_WRITE, 0, CREATE_ALWAYS, 0, 0);
-		WriteFile(FH, BmpFileData, FileSize, &Junk, 0);
-		CloseHandle(FH);*/
+		SelectObject(CaptureDC, oldBitmap);
+		DeleteObject(CaptureBitmap);
+		DeleteDC(CaptureDC);
 
 		return FALSE;
 	}
@@ -238,6 +238,68 @@ int lua_getpixels(lua_State *L) {
 	return 1;
 }
 
+int lua_screenshotwindow(lua_State* L) {
+
+	LuaWindow* window = lua_tonwindow(L, 1);
+
+	HDC hdc = GetDC(window->handle);
+	LuaImage* image = lua_pushimage(L);
+
+	if (!hdc) {
+		lua_pop(L, lua_gettop(L));
+		lua_pushnil(L);
+		return 1;
+	}
+
+	BITMAP structBitmapHeader;
+	memset(&structBitmapHeader, 0, sizeof(BITMAP));
+
+	HGDIOBJ hBitmap = GetCurrentObject(hdc, OBJ_BITMAP);
+	GetObject(hBitmap, sizeof(BITMAP), &structBitmapHeader);
+
+	image->Height = structBitmapHeader.bmHeight;
+	image->Width = structBitmapHeader.bmWidth;
+
+	DWORD FileSize = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER) + (sizeof(RGBTRIPLE) + 1 * (image->Width * image->Height * 4));
+	
+	image->Data = (BYTE*)gff_calloc(FileSize, sizeof(1));
+
+	if (!image->Data) {
+		ReleaseDC(window->handle, hdc);
+		luaL_error(L, "Out of memory");
+		return 0;
+	}
+
+	PBITMAPFILEHEADER BFileHeader = (PBITMAPFILEHEADER)image->Data;
+	PBITMAPINFOHEADER  BInfoHeader = (PBITMAPINFOHEADER)&image->Data[sizeof(BITMAPFILEHEADER)];
+
+	BFileHeader->bfType = 0x4D42; // BM
+	BFileHeader->bfSize = sizeof(BITMAPFILEHEADER);
+	BFileHeader->bfOffBits = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER);
+
+	BInfoHeader->biSize = sizeof(BITMAPINFOHEADER);
+	BInfoHeader->biPlanes = 1;
+	BInfoHeader->biBitCount = 24;
+	BInfoHeader->biCompression = BI_RGB;
+	BInfoHeader->biHeight = image->Height;
+	BInfoHeader->biWidth = image->Width;
+
+	RGBTRIPLE* Image = (RGBTRIPLE*)&image->Data[sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER)];
+
+	HDC CaptureDC = CreateCompatibleDC(hdc);
+	HBITMAP CaptureBitmap = CreateCompatibleBitmap(hdc, image->Width, image->Height);
+	HGDIOBJ oldBitmap = SelectObject(CaptureDC, CaptureBitmap);
+	BitBlt(CaptureDC, 0, 0, image->Width, image->Height, hdc, 0, 0, SRCCOPY);
+	GetDIBits(CaptureDC, CaptureBitmap, 0, image->Height, Image, (LPBITMAPINFO)BInfoHeader, DIB_RGB_COLORS);
+
+	SelectObject(CaptureDC, oldBitmap);
+	DeleteObject(CaptureBitmap);
+	DeleteDC(CaptureDC);
+	ReleaseDC(window->handle, hdc);
+	
+	return 1;
+}
+
 int lua_screenshot(lua_State *L) {
 
 	int x, y, startx, starty;
@@ -258,6 +320,8 @@ int lua_screenshot(lua_State *L) {
 	img->StartY = starty;
 	iterator = 0;
 	BOOL b = EnumDisplayMonitors(DevC, NULL, MonitorEnumProcCallback, (LPARAM)img);
+
+	ReleaseDC(NULL, DevC);
 
 	if (!img->Data) {
 		lua_pop(L, 1);

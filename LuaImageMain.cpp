@@ -2,7 +2,8 @@
 #include "LuaImageMain.h"
 
 static const struct luaL_Reg namedpipefunctions[] = {
-	{ "Screenshot", lua_screenshot},
+	{ "Screenshot", lua_screenshot },
+	{ "ScreenshotWindow", lua_screenshotwindow },
 	{ "Save", lua_savetofile },
 	{ "Load", lua_loadfromfile },
 	{ "Create", lua_createimage },

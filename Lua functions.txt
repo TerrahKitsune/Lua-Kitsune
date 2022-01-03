@@ -321,7 +321,6 @@ Window:
 	-	draw:SetBackgroundMode(2);
 	-	offset = draw:Text("Purple text on black background", 0, offset);
 	-end);
-
 	nil Window:SetDrawFunction(function(draw) end)
 
 	Draw:
@@ -348,6 +347,10 @@ Window:
 		-Sets or gets a pixel, if colorref is set then the pixel is replaced
 		-returns the previous (or current if COLORREF is nil) pixel color
 		int Draw:Pixel(x,y, opt COLORREF)
+
+		-Draws a bitmap onto the screen, see Image: section for the image type
+		-x,y = destination on the window to draw the image
+		nil Draw:Bitmap(Image, x, y)
 
 		-Returns an rgb as a COLORREF hexint
 		int Draw:RgbToHex(r,g,b)

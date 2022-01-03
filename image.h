@@ -21,6 +21,7 @@ LuaImage * lua_toimage(lua_State *L, int index);
 
 int lua_savetofile(lua_State *L);
 int lua_screenshot(lua_State *L);
+int lua_screenshotwindow(lua_State* L);
 int lua_getpixels(lua_State *L);
 int lua_setpixels(lua_State *L);
 int lua_loadfromfile(lua_State *L);

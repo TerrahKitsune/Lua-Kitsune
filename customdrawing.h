@@ -22,6 +22,7 @@ int luaopen_windowdrawing(lua_State* L);
 LuaCustomDrawing* lua_pushwindowdrawing(lua_State* L);
 LuaCustomDrawing* lua_tonwindowdrawing(lua_State* L, int index);
 
+int DrawBitmap(lua_State* L);
 int DrawCustomText(lua_State* L);
 int CreateCustomDrawing(lua_State* L);
 int DrawSetTextColor(lua_State* L);

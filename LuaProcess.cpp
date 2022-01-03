@@ -68,12 +68,11 @@ int GetAllProcesses(lua_State *L) {
 	needed = needed / sizeof(DWORD);
 	lua_createtable(L, 0, needed);
 	for (unsigned int n = 0; n < needed; n++) {
+		
 		name = GetProcessName(processes[n]);
-		if (name[0] != '\0') {
-			lua_pushinteger(L, processes[n]);
-			lua_pushstring(L, name);
-			lua_settable(L, -3);
-		}
+		lua_pushinteger(L, processes[n]);
+		lua_pushstring(L, name);
+		lua_settable(L, -3);
 	}
 
 	return 1;

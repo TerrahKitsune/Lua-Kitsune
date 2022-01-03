@@ -2,6 +2,7 @@
 #include "luawindow.h"
 #include "customdrawing.h"
 #include "luawchar.h"
+#include "image.h"
 
 int CustomDrawEvent(lua_State* L) {
 
@@ -74,6 +75,34 @@ int CustomDrawEvent(lua_State* L) {
 		}
 	}
 	
+	return 0;
+}
+
+int DrawBitmap(lua_State* L) {
+
+	LuaCustomDrawing* window = lua_tonwindowdrawing(L, 1);
+	LuaImage* image = lua_toimage(L, 2);
+	int x = luaL_optinteger(L, 3, 0);
+	int y = luaL_optinteger(L, 4, 0);
+
+	BITMAPFILEHEADER* bmfh = (BITMAPFILEHEADER*)image->Data;
+	BITMAPINFOHEADER* bmih = (BITMAPINFOHEADER*)(image->Data + sizeof(BITMAPFILEHEADER));
+	BITMAPINFO* bmi = (BITMAPINFO*)bmih;
+	void* bits = (void*)(image->Data + bmfh->bfOffBits);
+
+	HDC hdcMem = CreateCompatibleDC(*window->hdc);
+	HBITMAP hBitmap = CreateDIBitmap(*window->hdc, bmih, CBM_INIT, bits, bmi, DIB_RGB_COLORS);
+
+	BITMAP bitmap;
+	
+	HGDIOBJ oldBitmap = SelectObject(hdcMem, hBitmap);
+
+	GetObject(hBitmap, sizeof(bitmap), &bitmap);
+	BitBlt(*window->hdc, 0, 0, bitmap.bmWidth, bitmap.bmHeight, hdcMem, 0, 0, SRCCOPY);
+
+	SelectObject(hdcMem, oldBitmap);
+	DeleteDC(hdcMem);
+
 	return 0;
 }
 
@@ -239,6 +268,7 @@ static const struct luaL_Reg windowdrawingfunctions[] = {
 	{ "SetBackgroundColor", DrawSetBackgroundColor},
 	{ "SetTextColor", DrawSetTextColor},
 	{ "Text", DrawCustomText },
+	{ "Bitmap", DrawBitmap },
 	{ "CalcTextSize", DrawCalcTextSize },
 	{ NULL, NULL }
 };

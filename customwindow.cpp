@@ -14,6 +14,7 @@ int msgcount;
 int windowdrawMeta = LUA_REFNIL;
 int windowTable = LUA_REFNIL;
 int messageLoopThread = LUA_REFNIL;
+bool isInPaint = false;
 
 void CleanUp(LuaCustomWindow* custom) {
 
@@ -521,6 +522,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT Msg, WPARAM wParam, LPARAM lParam)
 
 	case WM_PAINT:
 
+		isInPaint = true;
+
 		if (L) {
 			lua_pushvalue(L, -2);
 			CustomDrawEvent(L);
@@ -532,6 +535,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT Msg, WPARAM wParam, LPARAM lParam)
 			hdc = BeginPaint(window->handle, &ps);
 			EndPaint(window->handle, &ps);
 		}
+
+		isInPaint = false;
+
 		break;
 
 	default:
