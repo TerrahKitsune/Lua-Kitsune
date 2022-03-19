@@ -1,6 +1,7 @@
 #include "LuaMD5.h"
 #include <stdlib.h>
 #include <string.h>
+#include "luawchar.h"
 
 LuaMD5 * lua_tomd5(lua_State *L, int index){
 
@@ -40,12 +41,21 @@ int UpdateMD5(lua_State *L){
 	else if (luamd5->hash && luamd5->hash[0] != '\0')
 		luaL_error(L, "Cannot update already finished md5 digest");
 
-	size_t len;
-	const char * data = luaL_tolstring(L, 2, &len);
-	if (data){
-		MD5Update(&luamd5->MD5, (unsigned char*)data, len);
+	LuaWChar* wchar = (LuaWChar*)luaL_checkudata(L, 2, LUAWCHAR);
+
+	if (wchar) {	
+		MD5Update(&luamd5->MD5, (unsigned char*)wchar->str, wchar->len * sizeof(wchar_t));
 	}
+	else {
+		size_t len;
+		const char* data = luaL_tolstring(L, 2, &len);
+		if (data) {
+			MD5Update(&luamd5->MD5, (unsigned char*)data, len);
+		}		
+	}
+	
 	lua_pop(L, 2);
+
 	return 0;
 }
 

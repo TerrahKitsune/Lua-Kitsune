@@ -129,10 +129,5 @@ end
 CreateGCPrint();
 collectgarbage();
 
-TablePrint(CSV);
-
-local csv = CSV.Create();
-
-local test = csv:DecodeFile("r:/test.csv");
-
-TablePrint(test);
+FileSystem.SetCurrentDirectory("C:/Users/Terrah/Desktop");
+dofile("importchatlogs.lua");

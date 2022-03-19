@@ -108,8 +108,8 @@ void ClearBuffer(LuaCsv* csv, bool dealloc) {
 		csv->file = NULL;
 	}
 
-	csv->data = NULL;
-	csv->pos = 0;
+csv->data = NULL;
+csv->pos = 0;
 }
 
 bool IsEndline(LuaCsv* csv) {
@@ -189,7 +189,7 @@ bool ReadCsvFieldIntoBuffer(LuaCsv* csv) {
 				WriteToBuffer(csv, GetNext(csv));
 			}
 			else if (isSkipping) {
-				
+
 				while (true) {
 
 					if (IsEndline(csv) || IsAtEnd(csv)) {
@@ -207,6 +207,10 @@ bool ReadCsvFieldIntoBuffer(LuaCsv* csv) {
 			}
 		}
 		else if (isSkipping) {
+			if (IsAtEnd(csv)){
+				break;
+			}
+
 			WriteToBuffer(csv, wc);
 		}
 		else if (wc == csv->delimiter) {
