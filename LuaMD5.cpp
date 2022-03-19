@@ -41,7 +41,7 @@ int UpdateMD5(lua_State *L){
 	else if (luamd5->hash && luamd5->hash[0] != '\0')
 		luaL_error(L, "Cannot update already finished md5 digest");
 
-	LuaWChar* wchar = (LuaWChar*)luaL_checkudata(L, 2, LUAWCHAR);
+	LuaWChar* wchar = lua_type(L, 2) == LUA_TUSERDATA ? (LuaWChar*)luaL_checkudata(L, 2, LUAWCHAR) : NULL;
 
 	if (wchar) {	
 		MD5Update(&luamd5->MD5, (unsigned char*)wchar->str, wchar->len * sizeof(wchar_t));
