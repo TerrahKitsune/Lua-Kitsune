@@ -8,6 +8,7 @@ static const char * LUAJSON = "LUAJSON";
 
 typedef struct JsonContext {
 
+	int pretty;
 	int resultReallocStep;
 	unsigned int * antiRecursion;
 	size_t antiRecursionSize;

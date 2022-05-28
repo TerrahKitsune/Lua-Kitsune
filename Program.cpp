@@ -48,6 +48,8 @@
 #include "WindowMain.h"
 #include "wcharmain.h"
 #include "LuaCsvMain.h"
+#include <crtdbg.h>
+#include <cassert>
 
 #define HI_PART(x)  ((x>>4) & 0x0F)
 #define LO_PART(x)  ((x) & 0x0F)

@@ -129,5 +129,11 @@ end
 CreateGCPrint();
 collectgarbage();
 
-FileSystem.SetCurrentDirectory("C:/Users/Terrah/Desktop");
-dofile("importchatlogs.lua");
+local r = Http.Start("POST", "https://webhook.site/99b10327-11fa-448d-ba90-a2aee86ae079", [[{"a": 1}]]);
+
+local f = r:GetRaw();
+
+local all = f:read("*all");
+f:close();
+
+print(all);

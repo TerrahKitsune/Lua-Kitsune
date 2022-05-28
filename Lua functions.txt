@@ -1366,7 +1366,7 @@ HTTP:
 	-Returns http object
 	Http Http.Start(method, url, content, headers)
 
-	-Sets the timeout on the running request
+	-Sets the timeout on the running request in seconds
 	-0 or less = infinite
 	nil Http:SetTimeout(timeout)
 
@@ -1377,10 +1377,20 @@ HTTP:
 
 	-Returns the status on a http request
 	-IsRunning bool: is the request still running?
-	-ms: miliseconds the request has been running for
-	-sent: bytes sent
-	-recv: bytes recieved
-	IsRunning, ms, sent, recv Http:GetStatus()
+	-status status message
+	-Runtime = time its ran in seconds
+	-recv = bytes received
+	-send = bytes sent
+	IsRunning, status, runtime, recv, send Http:GetStatus()
+
+	-Gets the response as a raw file
+	-This closes the request
+	file Http:GetRaw()
+
+	-Waits for the request to finish
+	-if no timeout is given it waits forever
+	-returns false on timeout
+	bool Http:Wait(opt timeout)
 
 SHA256:
 	

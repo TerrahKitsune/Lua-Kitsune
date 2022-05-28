@@ -1,44 +1,44 @@
 #pragma once
-
 #include "lua_main_incl.h"
-#include <ppltasks.h>
-#include "Buffer.h"
+#include "networking.h"
 
-using namespace concurrency;
+#define IP_ADDR_SIZE 255
+#define STATUS_SIZE 255
 
-static const char * LUAHTTP = "LuaHTTP";
-
-typedef struct HttpResult {
-	char* error;
-	Buffer * result;
-} HttpResult;
+static const char* LUAHTTP = "LuaHTTP";
 
 typedef struct LuaHttp {
-	
-	size_t sent;
-	size_t recv;
-	char*packet;
-	double Timeout;
-	double PCFreq;
-	__int64 CounterStart;
-	char *ip;
-	int port;
-	bool ssl;
-	Buffer * request;
-	volatile bool alive;
-	HttpResult* result;
-	HANDLE tHandle;
 
+	FILE* buffer;	
+	HANDLE thread;
+
+	size_t memalloc;
+	char* membuffer;
+
+	time_t start;
+	time_t timeout;
+
+	unsigned long recv;
+	unsigned long send;
+
+	bool success;
+	bool cancel;
+	bool ssl;
+	int port;
+	char ip[IP_ADDR_SIZE];
+	char status[STATUS_SIZE];
 } LuaHttp;
 
-LuaHttp * lua_tohttp(lua_State *L, int index);
-LuaHttp * luaL_checkhttp(lua_State *L, int index);
-LuaHttp * lua_pushhttp(lua_State *L);
+int StartHttp(lua_State* L);
+int GetStatus(lua_State* L);
+int GetResult(lua_State* L);
+int SetHttpTimeout(lua_State* L);
+int GetRaw(lua_State* L);
+int WaitForFinish(lua_State* L);
 
-int Start(lua_State *L);
-int SetHttpTimeout(lua_State *L);
-int GetResult(lua_State *L);
-int GetStatus(lua_State *L);
+LuaHttp* lua_tohttp(lua_State* L, int index);
+LuaHttp* luaL_checkhttp(lua_State* L, int index);
+LuaHttp* lua_pushhttp(lua_State* L);
 
-int luahttp_gc(lua_State *L);
-int luahttp_tostring(lua_State *L);
+int luahttp_gc(lua_State* L);
+int luahttp_tostring(lua_State* L);

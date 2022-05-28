@@ -107,7 +107,14 @@ int lua_jsonencodefunction(lua_State *L) {
 	lua_copy(L, 3, 2);
 	lua_pop(L, 1);
 
-	json_encodevalue(L, json, NULL);
+	int* depth = NULL;
+	int n = 0;
+
+	if (json->pretty) {
+		depth = &n;
+	}
+
+	json_encodevalue(L, json, depth);
 	json_append("", 0, L, json, true);
 	json_bail(L, json, NULL);
 
@@ -167,7 +174,14 @@ int lua_jsonencodetabletostring(lua_State *L) {
 	JsonContext * json = lua_tojson(L, 1);
 	lua_jsonprepasthread(L, json, 2);
 
-	json_encodevalue(L, json, NULL);
+	int* depth = NULL;
+	int n = 0;
+
+	if (json->pretty) {
+		depth = &n;
+	}
+
+	json_encodevalue(L, json, depth);
 
 	lua_pushlstring(L, json->buffer, json->bufferLength);
 	json_bail(L, json, NULL);
@@ -195,8 +209,14 @@ int lua_jsonencodetabletofile(lua_State *L) {
 	json->fileName = (char*)gff_calloc(filelen+1, sizeof(char));
 	strcpy(json->fileName, file);
 
-	int depth = 0;
-	json_encodevalue(L, json, &depth);
+	int* depth = NULL;
+	int n = 0;
+
+	if (json->pretty) {
+		depth = &n;
+	}
+
+	json_encodevalue(L, json, &n);
 
 	json_bail(L, json, NULL);
 
@@ -205,7 +225,12 @@ int lua_jsonencodetabletofile(lua_State *L) {
 
 int lua_jsoncreate(lua_State *L) {
 
+	int pretty = lua_toboolean(L, 1);
+
 	JsonContext * json = lua_pushjson(L);
+
+	json->pretty = pretty;
+
 	return 1;
 }
 

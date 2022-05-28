@@ -3,106 +3,46 @@
 #define WIN32_LEAN_AND_MEAN
 #include "Http.h"
 #include "networking.h"
-#define PACKETSIZE 1500
-static HttpResult * mustdieonpanic = NULL;
-lua_CFunction panic;
 
-char PACKET[PACKETSIZE];
+#define BUFFER_SIZE 1500
 
-char * FindInStringNoCase(char * data, size_t dataLen, const char * substr, size_t substrLen) {
+static int io_fclose(lua_State* L) {
+	luaL_Stream* p = (luaL_Stream*)luaL_checkudata(L, 1, LUA_FILEHANDLE);
+	int res = fclose(p->f);
+	return luaL_fileresult(L, (res == 0), NULL);
+}
 
-	if (dataLen <= 0 || substrLen <= 0 || !data || !substr) {
-		return NULL;
-	}
+static void _dumpbuffer(FILE* f) {
 
-	size_t found = 0;
-	char * ptr = NULL;
-	char a, b;
+	char b[1000];
+	int n;
 
-	for (size_t i = 0; i < dataLen; i++)
-	{
-		if (isalpha(data[i])) {
-			a = tolower(data[i]);
+	rewind(f);
+	do {
+
+		n = fread(b, 1, 1000, f);
+		b[n] = '\0';
+		puts(b);
+
+	} while (b[0] != '\0');
+}
+
+char* sstrstr(char* haystack, char* needle, size_t length)
+{
+	size_t needle_length = strlen(needle);
+	size_t i;
+	for (i = 0; i < length; i++) {
+		if (i + needle_length > length) {
+			return NULL;
 		}
-		else {
-			a = data[i];
-		}
-
-		if (isalpha(substr[found])) {
-			b = tolower(substr[found]);
-		}
-		else {
-			b = substr[found];
-		}
-
-		if (a == b) {
-
-			if (!ptr) {
-				ptr = &data[i];
-			}
-
-			if (++found == substrLen) {
-				return ptr;
-			}
-		}
-		else if (ptr || found > 0) {
-			found = 0;
-			ptr = NULL;
+		else if (haystack[i] == needle[0] && memcmp(&haystack[i], needle, needle_length) == 0) {
+			return &haystack[i];
 		}
 	}
-
 	return NULL;
 }
 
-void StartCounter(LuaHttp* luahttp)
-{
-	LARGE_INTEGER li;
-	if (!QueryPerformanceFrequency(&li))
-		puts("QueryPerformanceFrequency failed!");
-
-	luahttp->PCFreq = double(li.QuadPart) / 1000.0;
-
-	QueryPerformanceCounter(&li);
-	luahttp->CounterStart = li.QuadPart;
-}
-double GetCounter(LuaHttp* luahttp)
-{
-	LARGE_INTEGER li;
-	QueryPerformanceCounter(&li);
-	return double(li.QuadPart - luahttp->CounterStart) / luahttp->PCFreq;
-}
-
-void Destroy(HttpResult * result) {
-	if (result) {
-
-		if (result->result) {
-			Destroy(result->result);
-			result->result = NULL;
-		}
-		if (result->error) {
-			gff_free(result->error);
-			result->error = NULL;
-		}
-
-		gff_free(result);
-	}
-}
-
-HttpResult * CreateResult(const char * error, Buffer * b = NULL) {
-
-	HttpResult * result = (HttpResult *)gff_calloc(1, sizeof(HttpResult));
-
-	if (error) {
-		result->error = (char*)gff_calloc(strlen(error) + 1, sizeof(char));
-		strcpy(result->error, error);
-	}
-
-	result->result = b;
-
-	return result;
-}
-
-int GetUrls(const char * url, char * ip, char * page, char * proto) {
+int GetUrls(const char* url, char* ip, char* page, char* proto) {
 
 	int port = -1;
 	int iResult;
@@ -123,87 +63,11 @@ int GetUrls(const char * url, char * ip, char * page, char * proto) {
 	return port;
 }
 
-Buffer * GetHeaders(lua_State *L, int idx, size_t contentlen, const char * host) {
-
-	Buffer * b = New();
-	if (!b)
-		return NULL;
-
-	if (lua_type(L, idx) != LUA_TTABLE) {
-		if (!BufferFormat(b, "Host: %s\r\n", host))
-			goto bad;
-		if (!BufferFormat(b, "Content-Length: %u\r\n", contentlen))
-			goto bad;
-	}
-	else {
-
-		bool hashost = false;
-		bool hasclen = false;
-		const char * key;
-		lua_pushvalue(L, idx);
-		lua_pushnil(L);
-
-		while (lua_next(L, -2) != 0) {
-
-			key = lua_tostring(L, -2);
-
-			if (_stricmp(key, "host") == 0) {
-				hashost = true;
-			}
-			else if (_stricmp(key, "content-length") == 0) {
-				lua_pop(L, 1);
-				continue;
-			}
-
-			if (!BufferFormat(b, "%s: %s\r\n", key, lua_tostring(L, -1))) {
-				lua_pop(L, 2);
-				goto bad;
-			}
-			lua_pop(L, 1);
-		}
-		lua_pop(L, 1);
-		if (!BufferFormat(b, "Content-Length: %u\r\n", contentlen))
-			goto bad;
-		if (!hashost) {
-			if (!BufferFormat(b, "Host: %s\r\n", host))
-				goto bad;
-		}
-	}
-
-	return b;
-bad:
-	Destroy(b);
-	return NULL;
-}
-
-Buffer * CreateRequest(const char * method, const char * page, Buffer * headers, const void * data, size_t len)
-{
-	Buffer * b = New();
-	if (!b)
-		goto bad;
-
-	if (!BufferFormat(b, "%s /%s HTTP/1.0\r\n", method, page))
-		goto bad;
-	if (!BufferAdd(b, headers))
-		goto bad;
-	if (!BufferAdd(b, "\r\n", 2))
-		goto bad;
-	if (data && len > 0) {
-		if (!BufferAdd(b, data, len))
-			goto bad;
-	}
-
-	return b;
-bad:
-	Destroy(b);
-	return NULL;
-}
-
-SOCKET Connect(const char * ip, int port) {
+SOCKET Connect(const char* ip, int port) {
 
 	int iResult;
-	struct addrinfo *result = NULL,
-		*ptr = NULL,
+	struct addrinfo* result = NULL,
+		* ptr = NULL,
 		hints;
 	SOCKET ConnectSocket = INVALID_SOCKET;
 
@@ -252,140 +116,121 @@ SOCKET Connect(const char * ip, int port) {
 	return ConnectSocket;
 }
 
-bool CheckTimeout(LuaHttp* luahttp, size_t total, size_t processed, bool recv) {
-
-	if (recv) {
-		luahttp->recv = processed;
-	}
-	else {
-		luahttp->sent = processed;
-	}
-
-	if (!luahttp->alive) {
-		return true;
-	}
-	else if (luahttp->Timeout <= 0) {
-		return false;
-	}
-
-	double ms = GetCounter(luahttp);
-
-	return ms < luahttp->Timeout;
-}
-
 bool IsBlocking(SSL* ssl, int ret) {
 
 	if (ssl) {
 		return SSL_get_error(ssl, ret) == SSL_ERROR_WANT_READ;
 	}
 
-	return ret == -1 && WSAGetLastError() == WSAEWOULDBLOCK;
+	return ret == SOCKET_ERROR && WSAGetLastError() == WSAEWOULDBLOCK;
 }
 
-int GetContentLength(char * header, size_t totalsize) {
-	
-	const char * end;
-	char * contentlen;
-	int ret = -1;
-
-	contentlen = FindInStringNoCase(header, totalsize, "content-length: ", 16);
-	if (contentlen) {
-
-		contentlen = contentlen + 16;
-
-		end = FindInStringNoCase(contentlen, totalsize - (contentlen - header), "\r\n", 2);
-		if (end) {
-			ret = atoi(contentlen);
-		}
-	}
-
-	return ret;
-}
-
-
-HttpResult * SendRecv(LuaHttp* luahttp, SOCKET ConnectSocket, SSL* ssl) {
+int SendRecv(LuaHttp* luahttp, SOCKET ConnectSocket, SSL* ssl) {
 
 	int result;
-	int tosend = -1;
-	int contentlen = 0;
+	char buffer[BUFFER_SIZE];
+	int size;
+	int offset;
 	u_long flag = 1;
+
+	rewind(luahttp->buffer);
 	ioctlsocket(ConnectSocket, FIONBIO, &flag);
-	const char * endofheader = NULL;
-	size_t total = 0;
-
-	StartCounter(luahttp);
 
 	do {
 
-		if (!CheckTimeout(luahttp, luahttp->request->length, total, false)) {
-			return CreateResult("Request timed out");
+		size = fread(buffer, sizeof(char), BUFFER_SIZE, luahttp->buffer);
+
+		if (size == 0) {
+			break;
 		}
 
-		result = ssl == NULL ? send(ConnectSocket, &luahttp->request->data[total], luahttp->request->length - total, 0) : SSL_write(ssl, &luahttp->request->data[total], luahttp->request->length - total);
+		offset = 0;
 
-		if (result <= 0) {
-
-			if (IsBlocking(ssl, result))
-			{
-				Sleep(1);
-				continue;
+		do {
+			if (luahttp->cancel) {
+				return -3;
 			}
-			else
-				break;
-		}
-		else {
-			total += result;
-		}
 
-	} while (total < luahttp->request->length);
+			result = ssl == NULL ? send(ConnectSocket, &buffer[offset], size, 0) : SSL_write(ssl, &buffer[offset], size);
 
-	Buffer * b = New(luahttp->packet);
-	if (!b)
-		return NULL;
+			if (IsBlocking(ssl, result)) {
 
-	do {
-
-		if (!CheckTimeout(luahttp, max(tosend, 0), max(b->length, b->filelength), true)) {
-			Destroy(b);
-			return CreateResult("Request timed out");
-		}
-
-		result = ssl == NULL ? recv(ConnectSocket, luahttp->packet, PACKETSIZE, 0) : SSL_read(ssl, luahttp->packet, PACKETSIZE);
-
-		if (result <= 0) {
-
-			if (IsBlocking(ssl, result))
-			{
-				Sleep(1);
-				continue;
-			}
-			else
-				return CreateResult(NULL, b);
-		}
-		else {
-			if (!BufferAdd(b, luahttp->packet, result)) {
-				Destroy(b);
-				return CreateResult("Failed to allocate memory for message buffer");
-			}
-			if (!endofheader) {
-				endofheader = FindInStringNoCase(c_str(b), b->length, "\r\n\r\n", 4);
-				if (endofheader) {
-					tosend = GetContentLength(c_str(b), b->length);
-					if (tosend != -1 && !PreAlloc(b, tosend + (endofheader - c_str(b)) + 2))
-					{
-						Destroy(b);
-						return CreateResult("Failed to allocate memory for message buffer");
-					}
+				if (luahttp->timeout != 0 && (time(NULL) - luahttp->start) >= luahttp->timeout) {
+					return -2;
 				}
+
+				Sleep(10);
+				continue;
 			}
+			else if (result > 0 && result != size) {
+				offset += result;
+				size -= result;
+			}
+			else if (result <= 0) {
+				return -1;
+			}
+
+			luahttp->send += result;
+
+		} while (result != size);
+
+	} while (size > 0);
+
+	fclose(luahttp->buffer);
+	luahttp->buffer = tmpfile();
+
+	if (!luahttp->buffer) {
+		return -1;
+	}
+
+	do {
+
+		if (luahttp->cancel) {
+			return -3;
 		}
 
-	} while (tosend == -1 || (int)max(b->length, b->filelength) < tosend);
+		result = ssl == NULL ? recv(ConnectSocket, buffer, BUFFER_SIZE, 0) : SSL_read(ssl, buffer, BUFFER_SIZE);
 
-	return CreateResult(NULL, b);
+		if (result > 0) {
+			result = fwrite(buffer, sizeof(char), result, luahttp->buffer);
+			fflush(luahttp->buffer);
+			size += result;
+			luahttp->recv += result;
+		}
+		else if (IsBlocking(ssl, result)) {
+
+			if (luahttp->timeout != 0 && (time(NULL) - luahttp->start) >= luahttp->timeout) {
+				return -1;
+			}
+
+			Sleep(10);
+			result = 1;
+		}
+		else if(result == SOCKET_ERROR){
+			return -1;
+		}
+
+	} while (result > 0);
+
+	luahttp->success = true;
+
+	return size;
 }
 
-void ShutdownSSL(SSL *ssl, SSL_CTX * ctx)
+int DoHttp(SOCKET socket, LuaHttp* http) {
+
+	int result = SendRecv(http, socket, NULL);
+
+	if (result == -1) {
+
+		FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, NULL, WSAGetLastError(),
+			MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), http->status, STATUS_SIZE, NULL);
+	}
+
+	return result;
+}
+
+void ShutdownSSL(SSL* ssl, SSL_CTX* ctx)
 {
 	if (ctx)
 		SSL_CTX_free(ctx);
@@ -396,20 +241,7 @@ void ShutdownSSL(SSL *ssl, SSL_CTX * ctx)
 	}
 }
 
-
-HttpResult * DoHttp(LuaHttp* luahttp, SOCKET ConnectSocket) {
-
-	HttpResult * result = SendRecv(luahttp, ConnectSocket, NULL);
-	closesocket(ConnectSocket);
-
-	if (!result) {
-		return CreateResult("Unable to allocate buffer for response");
-	}
-
-	return result;
-}
-
-HttpResult * DoHttps(LuaHttp* luahttp, SOCKET ConnectSocket) {
+int DoHttps(SOCKET socket, LuaHttp* http) {
 
 	SSL_CTX* ctx;
 	SSL* ssl;
@@ -418,62 +250,244 @@ HttpResult * DoHttps(LuaHttp* luahttp, SOCKET ConnectSocket) {
 
 	ctx = SSL_CTX_new(TLS_client_method());
 	if (ctx == NULL) {
-		closesocket(ConnectSocket);
-		return CreateResult("Unable to open ctx client method");
+		strcpy(http->status, "Unable to open ctx client method");
+		return 0;
 	}
 
 	ssl = SSL_new(ctx);
-	SSL_set_fd(ssl, ConnectSocket);
+	SSL_set_fd(ssl, socket);
 	result = SSL_connect(ssl);
 
 	if (result != 1) {
-		closesocket(ConnectSocket);
 		ShutdownSSL(ssl, ctx);
 
-		return CreateResult("TLS handshake failed");
+		strcpy(http->status, "TLS handshake failed");
+		return 0;
 	}
 
-	HttpResult * resp = SendRecv(luahttp, ConnectSocket, ssl);
-
-	closesocket(ConnectSocket);
+	result = SendRecv(http, socket, ssl);
 
 	ShutdownSSL(ssl, ctx);
 
-	if (!resp) {
-		return CreateResult("Unable to allocate memory for response");
+	if (result == -1) {
+
+		FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, NULL, WSAGetLastError(),
+			MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), http->status, STATUS_SIZE, NULL);
 	}
 
-	return resp;
+	return result;
 }
 
-void TaskProcess(LuaHttp* luahttp) {
+int httpprocess(LuaHttp* http) {
 
-	if (!luahttp->packet) {
-		luahttp->result = CreateResult("Unable to allocate message buffer");
-		return;
+	http->success = false;
+	int result = 0;
+	SOCKET socket = Connect(http->ip, http->port);
+
+	if (socket == INVALID_SOCKET) {
+		strcpy(http->status, "Failed to connect");
+		return result;
 	}
 
-	SOCKET ConnectSocket = Connect(luahttp->ip, luahttp->port);
+	result = http->ssl ? DoHttps(socket, http) : DoHttp(socket, http);
 
-	if (ConnectSocket == INVALID_SOCKET) {
-		luahttp->result = CreateResult("Unable to connect to server");
-		return;
+	closesocket(socket);
+
+	if (result == -2) {
+		strcpy(http->status, "Timeout");
+	}
+	else if (result == -3) {
+		strcpy(http->status, "Cancel");
+	}
+	else if(result >= 0){
+		strcpy(http->status, "Finished");
 	}
 
-	luahttp->result = luahttp->ssl ? DoHttps(luahttp, ConnectSocket) : DoHttp(luahttp, ConnectSocket);
+	return result >= 0;
 }
 
-int Start(lua_State *L) {
+int GetResult(lua_State* L) {
 
-	char ip[100];
-	int port = -1;
+	LuaHttp* luahttp = luaL_checkhttp(L, 1);
+
+	if (luahttp->thread == INVALID_HANDLE_VALUE) {
+		lua_pop(L, lua_gettop(L));
+		lua_pushnil(L);
+		lua_pushstring(L, "Request not alive");
+		return 2;
+	}
+
+	WaitForSingleObject(luahttp->thread, INFINITE);
+
+	lua_pop(L, lua_gettop(L));
+
+	if (!luahttp->success) {
+		lua_pushnil(L);
+		lua_pushstring(L, "Request failed");
+		return 2;
+	}
+
+	fseek(luahttp->buffer, 0L, SEEK_END);
+	long size = ftell(luahttp->buffer);
+	rewind(luahttp->buffer);
+
+	if (luahttp->membuffer) {
+		gff_free(luahttp->membuffer);
+	}
+
+	luahttp->memalloc = size;
+	luahttp->membuffer = (char*)gff_malloc(luahttp->memalloc + 1);
+
+	if (!luahttp->membuffer) {
+		luaL_error(L, "Not enough memory");
+		return 0;
+	}
+
+	luahttp->membuffer[luahttp->memalloc] = '\0';
+	size = fread(luahttp->membuffer, sizeof(char), size, luahttp->buffer);
+	char * content = sstrstr(luahttp->membuffer, "\r\n\r\n", size);
+	size_t headerLength = (content - luahttp->membuffer);
+
+	if (!content) {
+		luaL_error(L, "Response malformed");
+		return 0;
+	}
+	else {
+		content += 4;
+	}
+
+	char* cursor = luahttp->membuffer;
+	char * end = sstrstr(cursor, "\r\n", headerLength);
+	char version;
+	int code;
+	int offset;
+
+	for (size_t n = 0; n < 5; n++) {
+		cursor[n] = tolower(cursor[n]);
+	}
+
+	if (strncmp(cursor, "http/", 4) != 0) {
+		luaL_error(L, "Response malformed");
+		return 0;
+	}
+	else {
+		cursor += 5;
+	}
+
+	if (cursor[0]!='1' || cursor[1] != '.') {
+		luaL_error(L, "Response malformed");
+		return 0;
+	}
+	else {
+		cursor += 2;
+	}
+
+	version = cursor[0];
+
+	if (version != '0' && version != '1' && cursor[1] != ' ') {
+		luaL_error(L, "Invalid version");
+		return 0;
+	}
+	else {
+		cursor += 2;
+	}
+
+	if (sscanf(cursor, "%d", &code) != 1) {
+		luaL_error(L, "Invalid code");
+		return 0;
+	}
+	else {
+		lua_pop(L, lua_gettop(L));
+		lua_pushinteger(L, code);
+	}
+
+	offset = 0;
+
+	for (size_t n = 0; n < end - cursor; n++) {
+		if (cursor[n] == ' ') {
+			offset = n;
+			break;
+		}
+	}
+
+	if (cursor[offset] == '\0') {
+		luaL_error(L, "Invalid status");
+		return 0;
+	}
+	else {
+		cursor += offset + 1;
+	}
+
+	lua_pushlstring(L, cursor, end - cursor);
+
+	cursor = end + 2;
+
+	size_t contentLength = size - (content - luahttp->membuffer);
+
+	lua_pushlstring(L, content, contentLength);
+
+	lua_createtable(L, 0, 10);
+
+	char* divider;
+
+	while (cursor < (content - 4)) {
+
+		end = sstrstr(cursor, "\r\n", (content - cursor));
+
+		if (!end) {
+			luaL_error(L, "Headers malformed");
+			return 0;
+		}
+
+		divider = sstrstr(cursor, ": ", end - cursor);
+
+		if (!divider) {
+			luaL_error(L, "Headers malformed");
+			return 0;
+		}
+
+		lua_pushlstring(L, cursor, divider - cursor);
+		divider += 2;
+		lua_pushlstring(L, divider, end - divider);
+		lua_settable(L, -3);
+
+		cursor = end + 2;
+	}
+
+	if (luahttp->membuffer) {
+		gff_free(luahttp->membuffer);
+		luahttp->membuffer = NULL;
+		luahttp->memalloc = 0;
+	}
+
+	return 4;
+}
+
+int StartHttp(lua_State* L) {
+
+	char ip[IP_ADDR_SIZE];
 	char page[1024];
 	char proto[100];
-	const char * method = luaL_checkstring(L, 1);
-
-	port = GetUrls(luaL_checkstring(L, 2), ip, page, proto);
-
+	const char* method = luaL_checkstring(L, 1);
+	int port = GetUrls(luaL_checkstring(L, 2), ip, page, proto);
 	bool ssl = _stricmp(proto, "https") == 0;
+	const char* key;
+	const char* content;
+	size_t len;
+
+	lua_settop(L, 4);
+
+	if (lua_type(L, 3) != LUA_TSTRING) {
+		lua_pushstring(L, "");
+		lua_copy(L, -1, 3);
+		lua_pop(L, 1);
+	}
+
+	if (lua_type(L, 4) != LUA_TTABLE) {
+		lua_createtable(L, 0, 5);
+		lua_copy(L, -1, 4);
+		lua_pop(L, 1);
+	}
 
 	if (port <= 0) {
 		if (ssl)
@@ -482,313 +496,252 @@ int Start(lua_State *L) {
 			port = 80;
 	}
 
-	size_t len;
-	const char * content = lua_tolstring(L, 3, &len);
+	content = lua_tolstring(L, 3, &len);
 
-	Buffer * h = GetHeaders(L, 4, len, ip);
+	lua_getfield(L, -1, "Host");
+	if (lua_type(L, -1) != LUA_TSTRING) {
 
-	if (!h) {
-		lua_pop(L, lua_gettop(L));
-		lua_pushnil(L);
-		lua_pushstring(L, "Unable to allocate buffer for headers");
-		return 2;
+		lua_pop(L, 1);
+		lua_pushstring(L, "Host");
+		lua_pushstring(L, ip);
+		lua_settable(L, -3);
 	}
 
-	Buffer * b = CreateRequest(method, page, h, content, len);
+	lua_getfield(L, -1, "Content-Length");
+	if (lua_type(L, -1) != LUA_TSTRING) {
 
-	Destroy(h);
+		lua_pop(L, 1);
+		lua_pushstring(L, "Content-Length");
+		lua_pushfstring(L, "%d", len);
+		lua_settable(L, -3);
+	}
 
-	lua_pop(L, lua_gettop(L));
+	lua_getfield(L, -1, "Content-Type");
+	if (lua_type(L, -1) != LUA_TSTRING) {
 
-	if (!b) {
-		lua_pushnil(L);
-		lua_pushstring(L, "Unable to allocate buffer for request");
-		return 2;
+		lua_pop(L, 1);
+		lua_pushstring(L, "Content-Type");
+		lua_pushstring(L, "text/plain");
+		lua_settable(L, -3);
 	}
 
 	LuaHttp* luahttp = lua_pushhttp(L);
 
-	luahttp->ip = (char*)gff_calloc(strlen(ip) + 1, sizeof(char));
-	strcpy(luahttp->ip, ip);
-	luahttp->port = port;
-	luahttp->request = b;
-	luahttp->alive = true;
 	luahttp->ssl = ssl;
+	luahttp->buffer = tmpfile();
 
-	luahttp->tHandle = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)TaskProcess, luahttp, 0, NULL);
+	if (!luahttp->buffer) {
+		lua_pushnil(L);
+		lua_pushstring(L, "Unable to open tempfle");
+		return 2;
+	}
+
+	memcpy(luahttp->ip, ip, IP_ADDR_SIZE);
+	luahttp->port = port;
+
+	fprintf(luahttp->buffer, "%s /%s HTTP/1.0\r\n", method, page);
+	lua_pushvalue(L, 4);
+	lua_pushnil(L);
+
+	while (lua_next(L, -2) != 0) {
+		key = lua_tostring(L, -2);
+		fprintf(luahttp->buffer, "%s: %s\r\n", key, lua_tostring(L, -1));
+		lua_pop(L, 1);
+	}
+	fwrite("\r\n", 1, 2, luahttp->buffer);
+	fflush(luahttp->buffer);
+
+	lua_pop(L, 1);
+
+	if (content && len > 0) {
+		fwrite(content, sizeof(char), len, luahttp->buffer);
+		fflush(luahttp->buffer);
+	}
+
+	luahttp->start = time(NULL);
+	luahttp->thread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)httpprocess, luahttp, 0, NULL);
 
 	return 1;
 }
 
-static int Panic_PushHttpResultToLua(lua_State *L) {
-	Destroy(mustdieonpanic);
-	mustdieonpanic = NULL;
-	lua_atpanic(L, panic);
-	return panic(L);
-}
+int GetStatus(lua_State* L) {
 
-static int PushHttpResultToLua(lua_State *L, HttpResult * b, const char * file) {
+	LuaHttp* luahttp = luaL_checkhttp(L, 1);
+	DWORD code = 0;
 
-	mustdieonpanic = b;
-	panic = lua_atpanic(L, Panic_PushHttpResultToLua);
-	char * endofheader = NULL;
-	if (b->result->file) {
-		rewind(b->result->file);
-		int read = fread(PACKET, 1, PACKETSIZE, b->result->file);
-		endofheader = FindInStringNoCase(PACKET, read, "\r\n\r\n", 4);
-	}
-	else {
-		endofheader = FindInStringNoCase(b->result->data, b->result->length, "\r\n\r\n", 4);
-	}
-
-	lua_pop(L, lua_gettop(L));
-	if (!b || b->result->length < 15)
-		goto bad;
-
-	if (_strnicmp(b->result->data, "http/", 5) != 0)
-		goto bad;
-
-	char * version = &b->result->data[5];
-	if (_strnicmp(version, "1.0", 3) != 0 && _strnicmp(version, "1.1", 3) != 0)
-		goto bad;
-
-	if (!endofheader)
-		goto bad;
-
-	memset(&endofheader[2], 0, 2);
-	endofheader += 4;
-
-	char * cursor = FindInStringNoCase(b->result->data, b->result->length, " ", 1);
-	if (!cursor)
-		goto bad;
-	cursor++;
-
-	lua_pushinteger(L, atoi(cursor));
-	cursor = FindInStringNoCase(cursor, b->result->length - (cursor - b->result->data), " ", 1);
-	if (!cursor)
-		goto bad;
-	cursor++;
-
-	char * end = FindInStringNoCase(cursor, b->result->length - (cursor - b->result->data), "\r\n", 2);
-	if (!end)
-		goto bad;
-
-	lua_pushlstring(L, cursor, end - cursor);
-
-	int data;
-	if (b->result->file) {
-		data = endofheader - b->result->data;
-		rewind(b->result->file);
-		fseek(b->result->file, data, SEEK_CUR);
-
-		Buffer * real = New(file);
-		if (!real || !real->file) {
-			Destroy(real);
-			goto bad;
-		}
-		size_t read;
-		while ((read = fread(PACKET, 1, PACKETSIZE, b->result->file))>0) {
-			BufferAdd(real, PACKET, read);
-		}
-		Destroy(real);
+	if (luahttp->thread == INVALID_HANDLE_VALUE) {
 		lua_pushnil(L);
+		lua_pushstring(L, "Thread closed");
+		return 2;
 	}
 	else {
-		data = b->result->length - (endofheader - b->result->data);
-		data = max(data, 0);
-		lua_pushlstring(L, endofheader, data);
+		GetExitCodeThread(luahttp->thread, &code);
 	}
 
-	char * key;
-	cursor = end + 2;
-	lua_newtable(L);
-	while (cursor) {
-		end = FindInStringNoCase(cursor, b->result->length - (cursor - b->result->data), "\r\n", 2);
-		if (!end)
-			break;
-		key = FindInStringNoCase(cursor, b->result->length - (cursor - b->result->data), ": ", 2);
-		if (!key)
-			break;
+	lua_pop(L, lua_gettop(L));
 
-		lua_pushlstring(L, cursor, key - cursor);
-		key += 2;
-		lua_pushlstring(L, key, end - key);
-		lua_settable(L, -3);
-		cursor = end + 2;
+	if (code == STILL_ACTIVE) {
+		
+		lua_pushboolean(L, TRUE);
+		lua_pushstring(L, "Running");
+	}
+	else {
+		lua_pushboolean(L, FALSE);
+		lua_pushstring(L, luahttp->status);
 	}
 
-	if (b->result->file)
-	{
-		fclose(b->result->file);
-		b->result->file = NULL;
-		sprintf(PACKET, "%s.temp", file);
-		remove(PACKET);
-	}
+	lua_pushinteger(L, time(NULL) - luahttp->start);
+	lua_pushinteger(L, luahttp->recv);
+	lua_pushinteger(L, luahttp->send);
 
-	Destroy(b);
-	mustdieonpanic = NULL;
-	lua_atpanic(L, panic);
-	return 4;
-
-bad:
-
-	if (b->result->file)
-	{
-		fclose(b->result->file);
-		b->result->file = NULL;
-		sprintf(PACKET, "%s.temp", file);
-		remove(PACKET);
-	}
-
-	lua_pushnil(L);
-	lua_pushstring(L, "http response malformed");
-	Destroy(b);
-	mustdieonpanic = NULL;
-	lua_atpanic(L, panic);
-	return 2;
+	return 5;
 }
 
-int SetHttpTimeout(lua_State *L) {
+int SetHttpTimeout(lua_State* L) {
 
-	LuaHttp * luahttp = luaL_checkhttp(L, 1);
-	luahttp->Timeout = luaL_checknumber(L, 2);
-	lua_pop(L, lua_gettop(L));
+	LuaHttp* luahttp = luaL_checkhttp(L, 1);
+	lua_Integer timeout = luaL_optinteger(L, 2, 0);
+
+	if (timeout < 0) {
+		timeout = 0;
+	}
+
+	luahttp->timeout = (time_t)timeout;
+
 	return 0;
 }
 
-int GetResult(lua_State *L) {
+int GetRaw(lua_State* L) {
 
-	LuaHttp * luahttp = luaL_checkhttp(L, 1);
+	LuaHttp* luahttp = luaL_checkhttp(L, 1);
 
-	if (!luahttp->alive) {
+	if (luahttp->thread == INVALID_HANDLE_VALUE) {
 		lua_pop(L, lua_gettop(L));
 		lua_pushnil(L);
 		lua_pushstring(L, "Request not alive");
 		return 2;
 	}
 
-	if (luahttp->tHandle != INVALID_HANDLE_VALUE) {
-		WaitForSingleObject(luahttp->tHandle, INFINITE);
-	}
-
-	luahttp->alive = false;
+	WaitForSingleObject(luahttp->thread, INFINITE);
 
 	lua_pop(L, lua_gettop(L));
 
-	HttpResult* result = luahttp->result;
-
-	luahttp->result = NULL;
-
-	if (result->error) {
-		lua_pop(L, lua_gettop(L));
+	if (!luahttp->success) {
 		lua_pushnil(L);
-		lua_pushstring(L, result->error);
-		Destroy(result);
+		lua_pushstring(L, "Request failed");
 		return 2;
 	}
 
-	int lreturn = PushHttpResultToLua(L, result, NULL);
+	luaL_Stream* p = (luaL_Stream*)lua_newuserdata(L, sizeof(luaL_Stream));
+	p->closef = &io_fclose;
+	p->f = luahttp->buffer;
+	luaL_setmetatable(L, LUA_FILEHANDLE);
+	
+	rewind(luahttp->buffer);
+	luahttp->buffer = NULL;
 
-	return lreturn;
+	CloseHandle(luahttp->thread);
+	luahttp->thread = INVALID_HANDLE_VALUE;
+
+	return 1;
 }
 
-int GetStatus(lua_State *L) {
+int WaitForFinish(lua_State* L) {
 
-	LuaHttp * luahttp = luaL_checkhttp(L, 1);
-	DWORD code = 0;
+	LuaHttp* luahttp = luaL_checkhttp(L, 1);
+	lua_Number param = luaL_optinteger(L, 2, 0);
+	DWORD timeout;
 
-	if (luahttp->tHandle != INVALID_HANDLE_VALUE) {
-		GetExitCodeThread(luahttp->tHandle, &code);
+	if (param <= 0) {
+		timeout = INFINITE;
+	}
+	else {
+		timeout = (DWORD)param;
 	}
 
-	bool isrunnning = code == STILL_ACTIVE;
-	double elapsed = GetCounter(luahttp);
-	size_t recv = luahttp->recv;
-	size_t sent = luahttp->sent;
+	if (luahttp->thread == INVALID_HANDLE_VALUE) {
+		lua_pushboolean(L, true);
+		return 2;
+	}
 
-	lua_pop(L, lua_gettop(L));
-	lua_pushboolean(L, isrunnning);
-	lua_pushnumber(L, elapsed);
-	lua_pushinteger(L, sent);
-	lua_pushinteger(L, recv);
+	DWORD result = WaitForSingleObject(luahttp->thread, timeout);
 
-	return 4;
+	lua_pushboolean(L, result != WAIT_TIMEOUT);
+
+	return 1;
 }
 
-LuaHttp * lua_tohttp(lua_State *L, int index) {
+LuaHttp* lua_tohttp(lua_State* L, int index) {
 
-	LuaHttp * luahttp = (LuaHttp*)lua_touserdata(L, index);
-	if (luahttp == NULL)
+	LuaHttp* luahttp = (LuaHttp*)lua_touserdata(L, index);
+	if (luahttp == NULL) {
 		luaL_error(L, "parameter is not a %s", LUAHTTP);
+		return NULL;
+	}
 	return luahttp;
 }
 
-LuaHttp * luaL_checkhttp(lua_State *L, int index) {
+LuaHttp* luaL_checkhttp(lua_State* L, int index) {
 
-	LuaHttp * luahttp = (LuaHttp*)luaL_checkudata(L, index, LUAHTTP);
-	if (luahttp == NULL)
+	LuaHttp* luahttp = (LuaHttp*)luaL_checkudata(L, index, LUAHTTP);
+	if (luahttp == NULL) {
 		luaL_error(L, "parameter is not a %s", LUAHTTP);
+		return NULL;
+	}
 
 	return luahttp;
 }
 
-LuaHttp * lua_pushhttp(lua_State *L) {
+LuaHttp* lua_pushhttp(lua_State* L) {
 
-	LuaHttp * luahttp = (LuaHttp*)lua_newuserdata(L, sizeof(LuaHttp));
-	if (luahttp == NULL)
+	LuaHttp* luahttp = (LuaHttp*)lua_newuserdata(L, sizeof(LuaHttp));
+	if (luahttp == NULL) {
 		luaL_error(L, "Unable to create http");
+		return NULL;
+	}
 
 	luaL_getmetatable(L, LUAHTTP);
 	lua_setmetatable(L, -2);
 	memset(luahttp, 0, sizeof(LuaHttp));
 
-	luahttp->Timeout = 10000.0;
-	luahttp->packet = (char*)gff_calloc(PACKETSIZE, sizeof(char));
+	luahttp->thread = INVALID_HANDLE_VALUE;
 
 	return luahttp;
 }
 
-int luahttp_gc(lua_State *L) {
+int luahttp_gc(lua_State* L) {
 
-	LuaHttp * luahttp = (LuaHttp*)lua_tohttp(L, 1);
+	LuaHttp* luahttp = (LuaHttp*)lua_tohttp(L, 1);
 
-	luahttp->alive = false;
+	luahttp->cancel = true;
 
-	if (luahttp->tHandle != INVALID_HANDLE_VALUE) {
+	if (luahttp->thread != INVALID_HANDLE_VALUE) {
+		while (WaitForSingleObject(luahttp->thread, 1000) == WAIT_TIMEOUT) {
+			luahttp->cancel = true;
+		}
 
-		WaitForSingleObject(luahttp->tHandle, INFINITE);
-		CloseHandle(luahttp->tHandle);
-		luahttp->tHandle = INVALID_HANDLE_VALUE;
+		CloseHandle(luahttp->thread);
+		luahttp->thread = INVALID_HANDLE_VALUE;
 	}
 
-	if (luahttp->result) {
+	if (luahttp->buffer) {
 
-		Destroy(luahttp->result);
-		luahttp->result = NULL;
+		fclose(luahttp->buffer);
+		luahttp->buffer = NULL;
 	}
 
-	if (luahttp->request) {
-
-		Destroy(luahttp->request);
-		luahttp->request = NULL;
-	}
-
-	if (luahttp->ip) {
-		gff_free(luahttp->ip);
-		luahttp->ip = NULL;
-	}
-
-	if (luahttp->packet) {
-		gff_free(luahttp->packet);
-		luahttp->packet = NULL;
+	if (luahttp->membuffer) {
+		gff_free(luahttp->membuffer);
+		luahttp->membuffer = NULL;
+		luahttp->memalloc = 0;
 	}
 
 	return 0;
 }
 
-int luahttp_tostring(lua_State *L) {
+int luahttp_tostring(lua_State* L) {
 
-	LuaHttp * sq = lua_tohttp(L, 1);
+	LuaHttp* sq = lua_tohttp(L, 1);
 	char my[500];
 	sprintf(my, "Http: 0x%08X", sq);
 	lua_pushstring(L, my);

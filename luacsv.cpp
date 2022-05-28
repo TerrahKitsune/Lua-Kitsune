@@ -255,7 +255,7 @@ void DecodeRows(LuaCsv* csv, lua_State* L) {
 
 void Decode(LuaCsv* csv, lua_State* L) {
 
-	lua_createtable(L, 0, 3);
+	lua_createtable(L, 0, 2);
 
 	lua_pushstring(L, "Comments");
 	DecodeComments(csv, L);	

@@ -86,7 +86,6 @@
     <ClCompile Include="aes.c" />
     <ClCompile Include="base64.cpp" />
     <ClCompile Include="BinaryTree.cpp" />
-    <ClCompile Include="Buffer.cpp" />
     <ClCompile Include="Client.cpp" />
     <ClCompile Include="custombutton.cpp" />
     <ClCompile Include="customcombobox.cpp" />
@@ -104,6 +103,7 @@
     <ClCompile Include="GFFMain.cpp" />
     <ClCompile Include="GffStruct.cpp" />
     <ClCompile Include="Http.cpp" />
+    <ClCompile Include="HttpMain.cpp" />
     <ClCompile Include="image.cpp" />
     <ClCompile Include="jsondecode.cpp" />
     <ClCompile Include="jsonencode.cpp" />
@@ -156,7 +156,6 @@
     <ClCompile Include="WindowMain.cpp" />
     <ClCompile Include="WinServices.cpp" />
     <ClCompile Include="WinServicesMain.cpp" />
-    <ClCompile Include="HttpMain.cpp" />
     <ClCompile Include="List.cpp" />
     <ClCompile Include="LuaClient.cpp" />
     <ClCompile Include="LuaClientMain.cpp" />
@@ -229,7 +228,6 @@
     <ClInclude Include="aes.hpp" />
     <ClInclude Include="base64.h" />
     <ClInclude Include="BinaryTree.h" />
-    <ClInclude Include="Buffer.h" />
     <ClInclude Include="Client.h" />
     <ClInclude Include="custombutton.h" />
     <ClInclude Include="customcombobox.h" />
@@ -247,6 +245,7 @@
     <ClInclude Include="GFFMain.h" />
     <ClInclude Include="GffStruct.h" />
     <ClInclude Include="Http.h" />
+    <ClInclude Include="HttpMain.h" />
     <ClInclude Include="image.h" />
     <ClInclude Include="jsondecode.h" />
     <ClInclude Include="jsonencode.h" />
@@ -300,8 +299,6 @@
     <ClInclude Include="WindowMain.h" />
     <ClInclude Include="WinServices.h" />
     <ClInclude Include="WinServicesMain.h" />
-    <ClInclude Include="_Http.h" />
-    <ClInclude Include="HttpMain.h" />
     <ClInclude Include="List.h" />
     <ClInclude Include="LuaClient.h" />
     <ClInclude Include="LuaClientMain.h" />
