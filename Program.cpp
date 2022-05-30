@@ -710,6 +710,8 @@ int main(int argc, char *argv[]) {
 	_SKIPEXIT = 1;
 	L_Exit(L);
 
+	GetHttpBuffer(0);
+
 #ifdef _DEBUG
 
 	_CrtMemCheckpoint(&sNew); //take a snapchot 
@@ -721,6 +723,7 @@ int main(int argc, char *argv[]) {
 		_CrtMemDumpAllObjectsSince(&sOld);
 		OutputDebugString("-----------_CrtDumpMemoryLeaks ---------");
 		_CrtDumpMemoryLeaks();
+		DebugBreak();
 	}
 #endif
 

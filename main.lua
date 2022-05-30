@@ -129,9 +129,14 @@ end
 CreateGCPrint();
 collectgarbage();
 
-local r = Http.Start("POST", "https://webhook.site/99b10327-11fa-448d-ba90-a2aee86ae079", [[{"a": 1}]]);
+local encoded = Http.UrlEncode("hello there!");
 
-local f = r:GetRaw();
+print(Http.UrlDecode(encoded));
+
+local f = io.open("main.lua", "rb");
+local r = Http.Start("POST", "https://webhook.site/99b10327-11fa-448d-ba90-a2aee86ae079?test=1&b="..encoded, f, {TestHeader=123});
+
+f = r:GetRaw();
 
 local all = f:read("*all");
 f:close();

@@ -9,10 +9,10 @@ static const char* LUAHTTP = "LuaHTTP";
 
 typedef struct LuaHttp {
 
+	FILE* content;
 	FILE* buffer;	
 	HANDLE thread;
 
-	size_t memalloc;
 	char* membuffer;
 
 	time_t start;
@@ -35,6 +35,8 @@ int GetResult(lua_State* L);
 int SetHttpTimeout(lua_State* L);
 int GetRaw(lua_State* L);
 int WaitForFinish(lua_State* L);
+int UrlEncode(lua_State* L);
+int UrlDecode(lua_State* L);
 
 LuaHttp* lua_tohttp(lua_State* L, int index);
 LuaHttp* luaL_checkhttp(lua_State* L, int index);

@@ -3,6 +3,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include "Http.h"
 #include "networking.h"
+#include "HttpMain.h"
 
 #define BUFFER_SIZE 1500
 
@@ -27,7 +28,7 @@ static void _dumpbuffer(FILE* f) {
 	} while (b[0] != '\0');
 }
 
-char* sstrstr(char* haystack, char* needle, size_t length)
+char* sstrstr(char* haystack, const char* needle, size_t length)
 {
 	size_t needle_length = strlen(needle);
 	size_t i;
@@ -49,9 +50,9 @@ int GetUrls(const char* url, char* ip, char* page, char* proto) {
 	proto[0] = '\0';
 	page[0] = '\0';
 	ip[0] = '\0';
-	iResult = sscanf(url, "%99[^:]://%99[^:]:%99d/%1023[^\n]", proto, ip, &port, page);
+	iResult = sscanf(url, "%99[^:]://%99[^:]:%99d/%2048[^\n]", proto, ip, &port, page);
 	if (iResult != 4) {
-		iResult = sscanf(url, "%99[^:]://%99[^/]/%1023[^\n]", proto, ip, page);
+		iResult = sscanf(url, "%99[^:]://%99[^/]/%2048[^\n]", proto, ip, page);
 		if (iResult != 3) {
 			iResult = sscanf(url, "%99[^:]://%99[^:]:%i[^\n]", proto, ip, &port);
 		}
@@ -132,16 +133,27 @@ int SendRecv(LuaHttp* luahttp, SOCKET ConnectSocket, SSL* ssl) {
 	int size;
 	int offset;
 	u_long flag = 1;
+	FILE* sendcontent = luahttp->buffer;
 
-	rewind(luahttp->buffer);
+	rewind(sendcontent);
 	ioctlsocket(ConnectSocket, FIONBIO, &flag);
 
 	do {
 
-		size = fread(buffer, sizeof(char), BUFFER_SIZE, luahttp->buffer);
+		size = fread(buffer, sizeof(char), BUFFER_SIZE, sendcontent);
 
 		if (size == 0) {
-			break;
+			
+			if (!luahttp->content) {
+				break;
+			}
+			
+			sendcontent = luahttp->content;
+			size = fread(buffer, sizeof(char), BUFFER_SIZE, sendcontent);
+
+			if (size == 0) {
+				break;
+			}
 		}
 
 		offset = 0;
@@ -175,6 +187,11 @@ int SendRecv(LuaHttp* luahttp, SOCKET ConnectSocket, SSL* ssl) {
 		} while (result != size);
 
 	} while (size > 0);
+
+	if (luahttp->content) {
+		fclose(luahttp->content);
+		luahttp->content = NULL;
+	}
 
 	fclose(luahttp->buffer);
 	luahttp->buffer = tmpfile();
@@ -335,15 +352,14 @@ int GetResult(lua_State* L) {
 		gff_free(luahttp->membuffer);
 	}
 
-	luahttp->memalloc = size;
-	luahttp->membuffer = (char*)gff_malloc(luahttp->memalloc + 1);
+	luahttp->membuffer = (char*)gff_malloc(size + 1);
 
 	if (!luahttp->membuffer) {
 		luaL_error(L, "Not enough memory");
 		return 0;
 	}
 
-	luahttp->membuffer[luahttp->memalloc] = '\0';
+	luahttp->membuffer[size] = '\0';
 	size = fread(luahttp->membuffer, sizeof(char), size, luahttp->buffer);
 	char * content = sstrstr(luahttp->membuffer, "\r\n\r\n", size);
 	size_t headerLength = (content - luahttp->membuffer);
@@ -457,7 +473,6 @@ int GetResult(lua_State* L) {
 	if (luahttp->membuffer) {
 		gff_free(luahttp->membuffer);
 		luahttp->membuffer = NULL;
-		luahttp->memalloc = 0;
 	}
 
 	return 4;
@@ -466,7 +481,7 @@ int GetResult(lua_State* L) {
 int StartHttp(lua_State* L) {
 
 	char ip[IP_ADDR_SIZE];
-	char page[1024];
+	char page[2050];
 	char proto[100];
 	const char* method = luaL_checkstring(L, 1);
 	int port = GetUrls(luaL_checkstring(L, 2), ip, page, proto);
@@ -474,14 +489,9 @@ int StartHttp(lua_State* L) {
 	const char* key;
 	const char* content;
 	size_t len;
+	luaL_Stream* p = NULL;
 
 	lua_settop(L, 4);
-
-	if (lua_type(L, 3) != LUA_TSTRING) {
-		lua_pushstring(L, "");
-		lua_copy(L, -1, 3);
-		lua_pop(L, 1);
-	}
 
 	if (lua_type(L, 4) != LUA_TTABLE) {
 		lua_createtable(L, 0, 5);
@@ -496,7 +506,24 @@ int StartHttp(lua_State* L) {
 			port = 80;
 	}
 
-	content = lua_tolstring(L, 3, &len);
+	if (lua_type(L, 3) == LUA_TUSERDATA && luaL_testudata(L, 3, LUA_FILEHANDLE)) {
+		
+		p = (luaL_Stream*)lua_touserdata(L, 3);
+
+		if (p->f) {
+			fseek(p->f, 0L, SEEK_END);
+			len = (size_t)ftell(p->f);
+			rewind(p->f);
+		}
+		else {
+			len = 0;
+		}
+
+		content = NULL;
+	}
+	else {
+		content = lua_tolstring(L, 3, &len);
+	}
 
 	lua_getfield(L, -1, "Host");
 	if (lua_type(L, -1) != LUA_TSTRING) {
@@ -529,6 +556,12 @@ int StartHttp(lua_State* L) {
 
 	luahttp->ssl = ssl;
 	luahttp->buffer = tmpfile();
+
+	if (p) {
+		luahttp->content = p->f;
+		p->f = NULL;
+		p->closef = NULL;
+	}
 
 	if (!luahttp->buffer) {
 		lua_pushnil(L);
@@ -649,7 +682,7 @@ int GetRaw(lua_State* L) {
 int WaitForFinish(lua_State* L) {
 
 	LuaHttp* luahttp = luaL_checkhttp(L, 1);
-	lua_Number param = luaL_optinteger(L, 2, 0);
+	lua_Integer param = luaL_optinteger(L, 2, 0);
 	DWORD timeout;
 
 	if (param <= 0) {
@@ -667,6 +700,92 @@ int WaitForFinish(lua_State* L) {
 	DWORD result = WaitForSingleObject(luahttp->thread, timeout);
 
 	lua_pushboolean(L, result != WAIT_TIMEOUT);
+
+	return 1;
+}
+
+inline int ishex(int x)
+{
+	return	(x >= '0' && x <= '9') ||
+		(x >= 'a' && x <= 'f') ||
+		(x >= 'A' && x <= 'F');
+}
+
+int UrlDecode(lua_State* L) {
+
+	size_t len;
+	const char* s = lua_tolstring(L, -1, &len);
+	char* o;
+	const char* end = s + len;
+	int c;
+
+	char* dec = GetHttpBuffer(len + 1);
+
+	if (!dec) {
+		luaL_error(L, "Out of memory");
+		return 0;
+	}
+
+	dec[len] = '\0';
+
+	for (o = dec; s <= end; o++) {
+		c = *s++;
+		if (c == '+') c = ' ';
+		else if (c == '%' && (!ishex(*s++) ||
+			!ishex(*s++) ||
+			!sscanf(s - 2, "%2x", &c)))
+			return -1;
+
+		if (dec) *o = c;
+	}
+
+	lua_pop(L, 1);
+	lua_pushlstring(L, dec, o - dec);
+
+	if (len+1 > 1024) {
+		GetHttpBuffer(0);
+	}
+
+	return 1;
+}
+
+int UrlEncode(lua_State* L) {
+	size_t len;
+	const char* data = lua_tolstring(L, -1, &len);
+
+	size_t allocSize = sizeof(char) * len * 3 + 1;
+	char* buffer = (char*)GetHttpBuffer(allocSize);
+	if (!buffer) {
+		luaL_error(L, "Not enough memory");
+		return 0;
+	}
+	const char* hex = "0123456789abcdef";
+
+	int pos = 0;
+	for (int i = 0; i < len; i++) {
+		if (('a' <= data[i] && data[i] <= 'z')
+			|| ('A' <= data[i] && data[i] <= 'Z')
+			|| ('0' <= data[i] && data[i] <= '9')
+			|| data[i] == '-'
+			|| data[i] == '_'
+			|| data[i] == '.'
+			|| data[i] == '~') {
+			buffer[pos++] = data[i];
+		}
+		else {
+			buffer[pos++] = '%';
+			buffer[pos++] = hex[data[i] >> 4];
+			buffer[pos++] = hex[data[i] & 15];
+		}
+	}
+	buffer[pos] = '\0';
+
+	lua_pop(L, 1);
+	lua_pushlstring(L, buffer, pos);
+
+	if (allocSize > 1024) {
+		GetHttpBuffer(0);
+	}
 
 	return 1;
 }
@@ -730,10 +849,15 @@ int luahttp_gc(lua_State* L) {
 		luahttp->buffer = NULL;
 	}
 
+	if (luahttp->content) {
+
+		fclose(luahttp->content);
+		luahttp->content = NULL;
+	}
+
 	if (luahttp->membuffer) {
 		gff_free(luahttp->membuffer);
 		luahttp->membuffer = NULL;
-		luahttp->memalloc = 0;
 	}
 
 	return 0;

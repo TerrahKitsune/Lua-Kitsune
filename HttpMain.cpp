@@ -3,6 +3,8 @@
 
 static const struct luaL_Reg httpfunctions[] = {
 
+	{ "UrlDecode", UrlDecode },
+	{ "UrlEncode", UrlEncode },
 	{ "Wait", WaitForFinish },
 	{ "Start", StartHttp },
 	{ "GetStatus", GetStatus },
@@ -36,4 +38,30 @@ int luaopen_http(lua_State* L) {
 
 	lua_pop(L, 1);
 	return 1;
+}
+
+size_t bufferalloc = 0;
+char* buffer = NULL;
+char* GetHttpBuffer(size_t len) {
+
+	if (len == 0 && buffer) {
+		free(buffer);
+		buffer = NULL;
+		bufferalloc = 0;
+	}
+	else if (!buffer || len > bufferalloc) {
+		if (buffer) {
+			free(buffer);
+		}
+		void* temp = malloc(len);
+		if (!temp) {
+			bufferalloc = 0;
+		}
+		else {
+			bufferalloc = len;
+		}
+		buffer = (char*)temp;
+	}
+
+	return buffer;
 }
