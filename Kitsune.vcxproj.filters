@@ -337,6 +337,15 @@
     <Filter Include="LuaCSV\Source Files">
       <UniqueIdentifier>{993c9efe-3750-4dc3-9fb1-21d95b416e9a}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Archive">
+      <UniqueIdentifier>{35379424-1ef9-403f-b316-0d3ae712448b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Archive\Header Files">
+      <UniqueIdentifier>{3da93d8f-6f6d-451f-9399-9f20f935a854}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Archive\Source Files">
+      <UniqueIdentifier>{d28e2238-1d0d-47af-8487-91b2c49f39ca}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Program.cpp">
@@ -756,6 +765,12 @@
     <ClCompile Include="Http.cpp">
       <Filter>LuaHTTP\Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="LuaArchiveMain.cpp">
+      <Filter>Archive</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaArchive.cpp">
+      <Filter>Archive\Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Lua\lapi.h">
@@ -1165,6 +1180,63 @@
     </ClInclude>
     <ClInclude Include="Http.h">
       <Filter>LuaHTTP\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaArchiveMain.h">
+      <Filter>Archive</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaArchive.h">
+      <Filter>Archive\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="libarchive\archive.h">
+      <Filter>Archive\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="libarchive\archive_entry.h">
+      <Filter>Archive\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="libarchive\lzma.h">
+      <Filter>Archive\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="libarchive\lzma\base.h">
+      <Filter>Archive\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="libarchive\lzma\bcj.h">
+      <Filter>Archive\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="libarchive\lzma\block.h">
+      <Filter>Archive\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="libarchive\lzma\check.h">
+      <Filter>Archive\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="libarchive\lzma\container.h">
+      <Filter>Archive\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="libarchive\lzma\delta.h">
+      <Filter>Archive\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="libarchive\lzma\filter.h">
+      <Filter>Archive\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="libarchive\lzma\hardware.h">
+      <Filter>Archive\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="libarchive\lzma\index.h">
+      <Filter>Archive\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="libarchive\lzma\index_hash.h">
+      <Filter>Archive\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="libarchive\lzma\lzma12.h">
+      <Filter>Archive\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="libarchive\lzma\stream_flags.h">
+      <Filter>Archive\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="libarchive\lzma\version.h">
+      <Filter>Archive\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="libarchive\lzma\vli.h">
+      <Filter>Archive\Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

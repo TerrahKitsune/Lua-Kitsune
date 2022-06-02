@@ -129,8 +129,7 @@ end
 CreateGCPrint();
 collectgarbage();
 
-local l = SQLite.Open();
+ArrayPrint(Archive);
 
-assert(l:Query([[select json('{"Test": 123}')->'Test';]]));
-assert(l:Fetch());
-print(l:GetRow(1));
+local l = Archive.Open("R:/sroroa_.7z");
+print(l);
