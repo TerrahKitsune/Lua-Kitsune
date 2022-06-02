@@ -129,16 +129,8 @@ end
 CreateGCPrint();
 collectgarbage();
 
-local encoded = Http.UrlEncode("hello there!");
+local l = SQLite.Open();
 
-print(Http.UrlDecode(encoded));
-
-local f = io.open("main.lua", "rb");
-local r = Http.Start("POST", "https://webhook.site/99b10327-11fa-448d-ba90-a2aee86ae079?test=1&b="..encoded, f, {TestHeader=123});
-
-f = r:GetRaw();
-
-local all = f:read("*all");
-f:close();
-
-print(all);
+assert(l:Query([[select json('{"Test": 123}')->'Test';]]));
+assert(l:Fetch());
+print(l:GetRow(1));

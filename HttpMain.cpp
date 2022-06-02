@@ -44,8 +44,10 @@ size_t bufferalloc = 0;
 char* buffer = NULL;
 char* GetHttpBuffer(size_t len) {
 
-	if (len == 0 && buffer) {
-		free(buffer);
+	if (len == 0) {
+		if (buffer) {
+			free(buffer);
+		}
 		buffer = NULL;
 		bufferalloc = 0;
 	}
