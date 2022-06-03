@@ -778,6 +778,27 @@ ODBC:
 	-This is done automatically by the GC but this closes it earlier
 	nil ODBC:Disconnect();
 
+Archive:
+
+	-Opens an archive or returns nil and error on failure
+	-usewchar then names will be returned as wchar instead
+	Archive Archive.OpenRead(filename, opt usewchar)
+
+	-Get all entries in an open file
+	-contains tables with the following properties
+	-Name (wchar if usewchar was used)
+	-Size (size of the file)
+	array Archive:Entries()
+
+	-Sets the entry to be read from, 1 based index
+	-returns nil, error (error = "EOF" if end of file)
+	-returns file and size on success
+	file, size Archive:SetEntry(index)
+
+	-Reads from the entry that SetEntry is currently on
+	-Returns nil when there is no more data or on failure
+	data Archive:Read(opt buffer)
+
 Stream:
 
 	-Create a new stream object

@@ -3,6 +3,9 @@
 
 static const struct luaL_Reg archivefunctions[] = {
 
+	{ "Read", ReadEntry },
+	{ "SetEntry", SetReadEntry },
+	{ "Entries", ReadArchiveEntries },
 	{ "OpenRead", OpenReadArchive },
 	{ NULL, NULL }
 };

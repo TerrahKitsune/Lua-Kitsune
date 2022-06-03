@@ -133,3 +133,31 @@ ArrayPrint(Archive);
 
 local l = Archive.OpenRead("R:/sroroa_.7z");
 print(l);
+
+local e = l:Entries();
+e = assert(l:Entries());
+
+for n=1, #e do 
+	TablePrint(e[n]);
+end 
+local file, size;
+local b;
+local f;
+
+for i=1,#e do
+	file, size = assert(l:SetEntry(i));
+	print(file, size);
+	b = l:Read(1);
+
+	if b then 
+		f = assert(io.open("R:/"..file, "wb"));
+	end
+
+	while b do 	
+		f:write(b);
+		f:flush();
+		b = l:Read(1);
+	end
+
+	f:close();
+end
