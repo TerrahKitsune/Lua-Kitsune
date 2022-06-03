@@ -18,13 +18,16 @@ static const char* ARCHIVE = "ARCHIVE";
 
 typedef struct LuaArchive {
 
+	char* file;
+	bool isRead;
+
 } LuaArchive;
 
 
 LuaArchive* lua_pusharchive(lua_State* L);
 LuaArchive* lua_toarchive(lua_State* L, int index);
 
-int OpenArchive(lua_State* L);
+int OpenReadArchive(lua_State* L);
 
 int archive_gc(lua_State* L);
 int archive_tostring(lua_State* L);

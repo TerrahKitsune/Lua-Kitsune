@@ -1,46 +1,46 @@
 #include "LuaArchive.h"
 
-int OpenArchive(lua_State* L) {
+int OpenReadArchive(lua_State* L) {
 
-	const char* file = luaL_checkstring(L, 1);
+	size_t len;
+	const char* file = luaL_checklstring(L, 1, &len);
 
 	struct archive* a;
-	struct archive_entry* entry = NULL;
+	struct archive_entry* entry;
 	int r;
 
 	a = archive_read_new();
+
 	archive_read_support_filter_all(a);
 	archive_read_support_format_all(a);
 
-	r = archive_read_open_filename(a, file, 102400);
+	r = archive_read_open_filename(a, file, 10240);
 
 	if (r != ARCHIVE_OK) {
-		r = archive_read_free(a);
+		
 		lua_pushnil(L);
-		return 1;
-	}
-	
-	r = archive_read_next_header(a, &entry);
-	
-	if (r != ARCHIVE_OK) {
-		puts(archive_error_string(a));
+		lua_pushstring(L, archive_error_string(a));
+		archive_read_free(a);
+		return 2;
 	}
 
-	while (r == ARCHIVE_OK) {
-		printf("%s\n", archive_entry_pathname(entry));
+	archive_read_free(a);
 
-		r = archive_read_next_header(a, &entry);
-	}
-	
-	if (r != ARCHIVE_OK) {
-		r = archive_read_free(a);
+	LuaArchive* arc = lua_pusharchive(L);
+
+	arc->isRead = true;
+	arc->file = (char*)gff_malloc(len+1);
+
+	if (!arc->file) {
+
 		lua_pushnil(L);
-		return 1;
+		lua_pushstring(L, "Out of memory");
+		return 2;
 	}
-
-	r = archive_read_free(a);
-
-	LuaArchive* archive = lua_pusharchive(L);
+	else {
+		memcpy(arc->file, file, len);
+		arc->file[len] = '\0';
+	}
 
 	return 1;
 }
@@ -72,7 +72,13 @@ LuaArchive* lua_toarchive(lua_State* L, int index) {
 
 int archive_gc(lua_State* L) {
 
-	LuaArchive* pipe = lua_toarchive(L, 1);
+	LuaArchive* arc = lua_toarchive(L, 1);
+
+	if (arc->file) {
+
+		gff_free(arc->file);
+		arc->file = NULL;
+	}
 
 	return 0;
 }

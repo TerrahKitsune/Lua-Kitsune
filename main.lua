@@ -131,5 +131,5 @@ collectgarbage();
 
 ArrayPrint(Archive);
 
-local l = Archive.Open("R:/sroroa_.7z");
+local l = Archive.OpenRead("R:/sroroa_.7z");
 print(l);

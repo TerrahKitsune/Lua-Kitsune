@@ -3,7 +3,7 @@
 
 static const struct luaL_Reg archivefunctions[] = {
 
-	{ "Open", OpenArchive },
+	{ "OpenRead", OpenReadArchive },
 	{ NULL, NULL }
 };
 
