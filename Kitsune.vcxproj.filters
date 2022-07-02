@@ -346,6 +346,15 @@
     <Filter Include="Archive\Source Files">
       <UniqueIdentifier>{d28e2238-1d0d-47af-8487-91b2c49f39ca}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Imgui">
+      <UniqueIdentifier>{28f4a5f4-4b61-4b16-a872-235852e750af}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Imgui\Header Files">
+      <UniqueIdentifier>{180c8cc8-8314-4151-a50f-080e37780147}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Imgui\Source Files">
+      <UniqueIdentifier>{64d3e537-82d4-4f39-8f6e-f43250c29acd}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Program.cpp">
@@ -770,6 +779,36 @@
     </ClCompile>
     <ClCompile Include="LuaArchive.cpp">
       <Filter>Archive\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Imgui\imgui_draw.cpp">
+      <Filter>Imgui\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Imgui\imgui_tables.cpp">
+      <Filter>Imgui\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Imgui\imgui_widgets.cpp">
+      <Filter>Imgui\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Imgui\imgui.cpp">
+      <Filter>Imgui\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Imgui\imgui_demo.cpp">
+      <Filter>Imgui\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaImguiMain.cpp">
+      <Filter>Imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaImgui.cpp">
+      <Filter>Imgui\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Imgui\imgui_impl_win32.cpp">
+      <Filter>Imgui\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Imgui\imgui_impl_dx12.cpp">
+      <Filter>Imgui\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaImguiInterface.cpp">
+      <Filter>Imgui\Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -1237,6 +1276,36 @@
     </ClInclude>
     <ClInclude Include="libarchive\lzma\vli.h">
       <Filter>Archive\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Imgui\imgui_internal.h">
+      <Filter>Imgui\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Imgui\imstb_rectpack.h">
+      <Filter>Imgui\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Imgui\imstb_textedit.h">
+      <Filter>Imgui\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Imgui\imstb_truetype.h">
+      <Filter>Imgui\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Imgui\imconfig.h">
+      <Filter>Imgui\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Imgui\imgui.h">
+      <Filter>Imgui\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaImguiMain.h">
+      <Filter>Imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaImgui.h">
+      <Filter>Imgui\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Imgui\imgui_impl_win32.h">
+      <Filter>Imgui\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Imgui\imgui_impl_dx12.h">
+      <Filter>Imgui\Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

@@ -1378,6 +1378,76 @@ Process:
 	-DeltaPrio: 
 	array Process:Threads();
 
+Imgui:
+
+	-Create the imgui window
+	-renderfunction:
+	-function renderer(ImguiDraw) ImguiDraw:Text("Hello world"); end
+	-Tag is a vec4 that represents the background color
+	Imgui Imgui.Create(title, tag, width, height, renderfunction);
+
+	--types:
+	-1 = bool true/false
+	-2 = float 0.0
+	-3 = vec4 {x,y,z,w}
+
+	-Gets the value from a tag (element values)
+	-opt type if type is given it'll look specifically for that type
+	-if type (see types) is not given it'll return the first available by name
+	-returns nil if no such tag exists
+	value Imgui:GetValue(tag, opt type);
+
+	-Sets a imgur value by tag
+	-type (see types) defines what kind of type the value is
+	nil Imgui:SetValue(tag, type, value)
+
+	-This is the mainloop, it should be called every frame
+	-returns false if close was requested
+	bool Imgui:Tick();
+
+	-Force close the Imgui window
+	nil Imgui:Close();
+
+	-Gets info about the ui
+	info Imgui:Info();
+
+	-Draw functions, can only be called from within the renderer function:
+	ImguiDraw:
+
+	-Show the demo window, if tag is set it'll have an close button
+	-Tag is a bool (1)
+	nil ImguiDraw:ShowDemoWindow(opt tag)
+
+	-Draw text
+	nil ImguiDraw:Text(text);
+
+	-Draw a checkbox
+	-Tag is a bool (1)
+	nil ImguiDraw:Checkbox(title, tag);
+
+	-Draws a float slider between min and max
+	-tag is a float (2)
+	nil ImguiDraw:SliderFloat(title, tag, min, max);
+
+	-Draws a color edit
+	-tag is a vec4 (3)
+	nil ImguiDraw:ColorEdit3(title, tag);
+
+	-Draws a button
+	-Returns true if the button was pressed
+	bool ImguiDraw:Button(title);
+
+	-Draws selectable text/row
+	-selected should be true if the element is selected
+	-returns true if the text was selected
+	bool ImguiDraw:Selectable("text", selected)
+
+	-Draws a seperator
+	nil ImguiDraw:Separator();
+
+	-Marks the next element to be drawn on the same line
+	nil ImguiDraw:SameLine();
+
 HTTP:
 
 	-does a http (or https) request, method should be a http method IE "GET"

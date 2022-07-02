@@ -129,35 +129,75 @@ end
 CreateGCPrint();
 collectgarbage();
 
-ArrayPrint(Archive);
+TablePrint(Imgui);
 
-local l = Archive.OpenRead("R:/sroroa_.7z");
-print(l);
+local test = {};
+local testSelected = 0;
 
-local e = l:Entries();
-e = assert(l:Entries());
-
-for n=1, #e do 
-	TablePrint(e[n]);
+for n=1, 10 do 
+	table.insert(test, tostring(math.random()));
 end 
-local file, size;
-local b;
-local f;
 
-for i=1,#e do
-	file, size = assert(l:SetEntry(i));
-	print(file, size);
-	b = l:Read(1);
+local cnt = 0;
 
-	if b then 
-		f = assert(io.open("R:/"..file, "wb"));
+local window = Imgui.Create("Test", "bg", 1280, 800, function(ui)
+
+	if ui:Begin("Demo") then
+		
+		ui:Text("Test");
+		ui:SameLine();
+		if ui:Button("Open") then 
+			ui:SetValue("property", 1, true);
+		end
+
+		ui:Checkbox("Show Demo", "demo");
+		ui:SliderFloat("Float", "float", 0, 1);
+		ui:ColorEdit3("Background Color", "bg");
+
+		ui:Separator();
+
+		if ui:Button("Counter") then 
+			cnt = cnt + 1;
+			ui:SetValue("float", 2, 0.5);
+		end
+
+		ui:SameLine();
+		ui:Text("Count: "..tostring(cnt * ui:GetValue("float", 2)));
+
+		ui:Separator();
+
+		for n=1, #test do 		
+			if ui:Selectable(test[n], testSelected == n) then 
+				testSelected = n;
+			end
+
+			if (n-1) % 2 == 0 then 
+				ui:SameLine();
+			end 
+		end
 	end
 
-	while b do 	
-		f:write(b);
-		f:flush();
-		b = l:Read(1);
+	ui:End();
+
+	if ui:GetValue("demo", 1) then
+		ui:ShowDemoWindow("demo");
 	end
 
-	f:close();
-end
+	if ui:GetValue("property", 1) then
+
+		ui:SetNextWindowSize(500,440,4);
+
+		if ui:Begin("Example: Simple layout", "property") then
+
+		end
+
+		ui:End();
+	end
+end);
+
+window:SetValue("bg", 3, {x=0.45,y=0.55,z=0.6, w=1.0});
+window:SetValue("property", 1, true);
+window:SetValue("demo", 1, true);
+window:SetValue("float", 2, 0.5);
+
+while window:Tick() do end

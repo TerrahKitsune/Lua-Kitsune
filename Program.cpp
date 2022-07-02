@@ -51,6 +51,7 @@
 #include <crtdbg.h>
 #include <cassert>
 #include "LuaArchiveMain.h"
+#include "LuaImguiMain.h"
 
 #define HI_PART(x)  ((x>>4) & 0x0F)
 #define LO_PART(x)  ((x) & 0x0F)
@@ -579,6 +580,8 @@ int main(int argc, char *argv[]) {
 	lua_setglobal(L, "CSV");
 	luaopen_archive(L);
 	lua_setglobal(L, "Archive");
+	luaopen_imgui(L);
+	lua_setglobal(L, "Imgui");
 
 	lua_pushcfunction(L, L_GetRuntime);
 	lua_setglobal(L, "Runtime");
