@@ -3,6 +3,21 @@
 
 static const struct luaL_Reg imguifunctions[] = {
 
+	{ "TextWrapped", LuaImguiTextWrapped },
+	{ "BeginTabItem", LuaImguiBeginTabItem },
+	{ "EndTabItem", LuaImguiEndTabBarItem },
+	{ "EndTabBar", LuaImguiEndTabBar },
+	{ "BeginTabBar", LuaImguiBeginTabBar },
+	{ "GetFrameHeightWithSpacing", LuaImguiGetFrameHeightWithSpacing },
+	{ "BeginGroup", LuaImguiBeginGroup },
+	{ "EndGroup", LuaImguiEndGroup },
+	{ "EndChild", LuaImguiEndChild },
+	{ "BeginChild", LuaImguiBeginChild },
+	{ "MenuItem", LuaImguiMenuItem },
+	{ "BeginMenu", LuaImguiBeginMenu },
+	{ "EndMenu", LuaImguiEndMenu },
+	{ "EndMenuBar", LuaImguiEndMenuBar },
+	{ "BeginMenuBar", LuaImguiBeginMenuBar },
 	{ "SameLine", LuaImguiSameLine },
 	{ "Separator", LuaImguiSeparator },
 	{ "Selectable", LuaImguiSelectable },

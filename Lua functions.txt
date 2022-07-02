@@ -1414,12 +1414,69 @@ Imgui:
 	-Draw functions, can only be called from within the renderer function:
 	ImguiDraw:
 
+	-Get the height of the current frame (Window)
+	float ImguiDraw:GetFrameHeightWithSpacing()
+
+	-Begins drawing a window
+	-Tag is a bool (1) if not given the window does not have a close button
+	-Flags: see imgui window flags (show 1024 menubar)
+	-Returns true if the content of the window is showing
+	-ImguiDraw:End MUST be called before the render function finishes
+	bool ImguiDraw:Begin(title, opt tag, flags)
+
+	-Call before Begin to set the width and height of the next window
+	-flags = ImGuiCond flags. (4 = ImGuiCond_FirstUseEver)
+	nil ImguiDraw:SetNextWindowSize(width, height, flags)
+
+	-Finish drawing a window, must be called if Begin was called
+	nil ImguiDraw:End();
+
+	-Begin a group, a call to EndGroup must be made
+	nil ImguiDraw:BeginGroup();
+	nil ImguiDraw:EndGroup();
+
+	-Begin drawing a tab bar
+	-id is a string that identifies this bar
+	-flags = ImGuiTabBarFlags
+	-a call to EndTabBar must be done if this returns true
+	bool ImguiDraw:BeginTabBar(id, flags);
+
+	-Finish a tabbar
+	nil ImguiDraw:EndTabBar(id, flags);
+
+	-Create a tab item
+	-tag: if not nil then it is a bool (1) tracking the open state of the tag
+	-if this returns true then a call to EndTabItem should be made
+	bool ImguiDraw:BeginTabItem(label, opt tag, flags);
+
+	-Start drawing a child window
+	-a call to EndChild should be made after, reguardless of success
+	bool ImguiDraw:BeginChild(title, width, height, noborder)
+
 	-Show the demo window, if tag is set it'll have an close button
 	-Tag is a bool (1)
 	nil ImguiDraw:ShowDemoWindow(opt tag)
 
+	-Begin drawing a menubar
+	-Returns true if showing, if this returns true a call to EndMenuBar *should* be made
+	bool ImguiDraw:BeginMenuBar();
+
+	-Finish drawing a menubar, must be called if BeginMenuBar returned true
+	nil ImguiDraw:EndMenuBar();
+
+	-Draw a menu, returns true if its expanded
+	-A call to EndMenu should be made if this returns true
+	bool ImguiDraw:BeginMenu(title, disabled)
+
+	-Draw a menu item
+	-returns true if it was clicked
+	bool ImguiDraw:MenuItem(title);
+
 	-Draw text
 	nil ImguiDraw:Text(text);
+
+	-Draw wrapped text
+	nil ImguiDraw:TextWrapped(text)
 
 	-Draw a checkbox
 	-Tag is a bool (1)

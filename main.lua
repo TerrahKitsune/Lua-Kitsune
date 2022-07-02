@@ -164,17 +164,11 @@ local window = Imgui.Create("Test", "bg", 1280, 800, function(ui)
 		ui:SameLine();
 		ui:Text("Count: "..tostring(cnt * ui:GetValue("float", 2)));
 
+		local framerate = ui:Info().Framerate;
+
+		ui:Text(string.format("Application average %.3f ms/frame (%.1f FPS)", 1000.0 / framerate, framerate));
+
 		ui:Separator();
-
-		for n=1, #test do 		
-			if ui:Selectable(test[n], testSelected == n) then 
-				testSelected = n;
-			end
-
-			if (n-1) % 2 == 0 then 
-				ui:SameLine();
-			end 
-		end
 	end
 
 	ui:End();
@@ -187,7 +181,66 @@ local window = Imgui.Create("Test", "bg", 1280, 800, function(ui)
 
 		ui:SetNextWindowSize(500,440,4);
 
-		if ui:Begin("Example: Simple layout", "property") then
+		if ui:Begin("Example: Simple layout", "property", 1024) then
+
+			if ui:BeginMenuBar() then
+
+				if ui:BeginMenu("File") then 
+					
+					if ui:MenuItem("Close") then
+						ui:SetValue("property", 1, false);
+					end
+
+					ui:EndMenu();
+				end
+
+				ui:EndMenuBar();
+			end
+
+			if ui:BeginChild("left pane", 150, 0, false) then 
+
+				for n=1, #test do 		
+					if ui:Selectable(test[n], testSelected == n) then 
+						testSelected = n;
+					end
+				end
+			end
+
+			ui:EndChild();
+			ui:SameLine();
+
+			ui:BeginGroup();
+
+			local frameHeight = 0 - ui:GetFrameHeightWithSpacing();
+
+			if ui:BeginChild("item view", 0, frameHeight, false) then 
+
+				ui:Text(string.format("MyObject: %s", tostring(test[testSelected] or "None" )));
+				ui:Separator();
+
+				if ui:BeginTabBar("##Tabs") then 
+
+					if ui:BeginTabItem("Description") then
+						ui:TextWrapped("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.");
+						ui:EndTabItem();
+					end
+
+					if ui:BeginTabItem("Details") then
+						ui:TextWrapped("ID: 0123456789");
+						ui:EndTabItem();
+					end
+
+					ui:EndTabBar();
+				end
+
+			end
+			ui:EndChild();
+
+			ui:Button("Revert");
+			ui:SameLine();
+			ui:Button("Save");
+
+			ui:EndGroup();
 
 		end
 

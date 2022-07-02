@@ -90,6 +90,21 @@ struct ImguiElement {
 	ImguiElement* Next;
 };
 
+int LuaImguiTextWrapped(lua_State* L);
+int LuaImguiBeginTabItem(lua_State* L);
+int LuaImguiEndTabBarItem(lua_State* L);
+int LuaImguiBeginTabBar(lua_State* L);
+int LuaImguiEndTabBar(lua_State* L);
+int LuaImguiGetFrameHeightWithSpacing(lua_State* L);
+int LuaImguiBeginGroup(lua_State* L);
+int LuaImguiEndGroup(lua_State* L);
+int LuaImguiEndChild(lua_State* L);
+int LuaImguiBeginChild(lua_State* L);
+int LuaImguiMenuItem(lua_State* L);
+int LuaImguiBeginMenu(lua_State* L);
+int LuaImguiEndMenu(lua_State* L);
+int LuaImguiBeginMenuBar(lua_State* L);
+int LuaImguiEndMenuBar(lua_State* L);
 int LuaImguiSetNextWindowSize(lua_State* L);
 int LuaImguiSelectable(lua_State* L);
 int LuaImguiSeparator(lua_State* L);
