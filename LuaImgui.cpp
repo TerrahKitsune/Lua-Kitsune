@@ -1,5 +1,114 @@
 #include "LuaImgui.h"
 
+int LuaImguiPopStyleColor(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImGui::PopStyleColor();
+
+	return 0;
+}
+
+int LuaImguiPushStyleColor(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	luaL_checktype(L, 3, LUA_TTABLE);
+	ImGui::PushStyleColor(luaL_checkinteger(L, 2), lua_toimvec4(L, 3));
+
+	return 0;
+}
+
+int LuaImguiPopId(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImGui::PopID();
+
+	return 0;
+}
+
+int LuaImguiPushId(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+	
+	if (lua_type(L, 2) == LUA_TNUMBER) {
+		ImGui::PushID(lua_tointeger(L, 2));
+	}
+	else if (lua_type(L, 2) == LUA_TSTRING) {
+		ImGui::PushID(lua_tostring(L, 2));
+	}
+	else {
+		luaL_error(L, "Id must be an int or a string");
+	}
+
+	return 0;
+}
+
+int LuaImguiRadioButton(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+	const char* title = luaL_checkstring(L, 2);
+	const char* tag = luaL_checkstring(L, 3);
+	int id = lua_tointeger(L, 4);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImguiElement* element = GetElement(imgui, tag, IMGUI_TYPE_INT);
+	if (!element) {
+		element = AddElement(imgui, tag, IMGUI_TYPE_INT);
+		if (!element) {
+			luaL_error(L, "Imgui Out of memory");
+			return 0;
+		}
+	}
+
+	int* f = (int*)element->Data;
+
+	lua_pushboolean(L, ImGui::RadioButton(title, f, id) == true);
+
+	return 1;
+}
+
+int LuaImguiTextColored(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+	luaL_checktype(L, 2, LUA_TTABLE);
+	const char* text = luaL_checkstring(L, 3);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImGui::TextColored(lua_toimvec4(L, 2), "%s", text);
+
+	return 0;
+}
+
 int LuaImguiTextWrapped(lua_State* L) {
 
 	LuaImgui* imgui = lua_toimgui(L, 1);
@@ -95,7 +204,7 @@ int LuaImguiGetFrameHeightWithSpacing(lua_State* L) {
 		luaL_error(L, "Draw functions can only be called inside renderer");
 		return 0;
 	}
-	
+
 	lua_pushnumber(L, ImGui::GetFrameHeightWithSpacing());
 	return 1;
 }
@@ -325,9 +434,9 @@ int LuaImguiColorEdit3(lua_State* L) {
 
 	ImVec4* f = (ImVec4*)element->Data;
 
-	ImGui::ColorEdit3(text, (float*)f);
+	lua_pushboolean(L, ImGui::ColorEdit3(text, (float*)f) == true);
 
-	return 0;
+	return 1;
 }
 
 int LuaImguiSliderFloat(lua_State* L) {
@@ -337,7 +446,6 @@ int LuaImguiSliderFloat(lua_State* L) {
 	const char* tag = luaL_checkstring(L, 3);
 	float min = luaL_checknumber(L, 4);
 	float max = luaL_checknumber(L, 5);
-
 
 	if (!imgui->isInRender) {
 		luaL_error(L, "Draw functions can only be called inside renderer");
@@ -355,9 +463,9 @@ int LuaImguiSliderFloat(lua_State* L) {
 
 	float* f = (float*)element->Data;
 
-	ImGui::SliderFloat(text, f, min, max);
+	lua_pushboolean(L, ImGui::SliderFloat(text, f, min, max) == true);
 
-	return 0;
+	return 1;
 }
 
 int LuaImguiText(lua_State* L) {
@@ -398,9 +506,9 @@ int LuaImguiCheckbox(lua_State* L) {
 
 	bool* check = (bool*)element->Data;
 
-	ImGui::Checkbox(text, check);
+	lua_pushboolean(L, ImGui::Checkbox(text, check) == true);
 
-	return 0;
+	return 1;
 }
 
 int LuaImguiShowDemoWindow(lua_State* L) {
@@ -552,23 +660,10 @@ int GetValueFromTag(lua_State* L) {
 
 		ImVec4* vec = (ImVec4*)element->Data;
 
-		lua_createtable(L, 4, 0);
-
-		lua_pushstring(L, "x");
-		lua_pushnumber(L, vec->x);
-		lua_settable(L, -3);
-
-		lua_pushstring(L, "y");
-		lua_pushnumber(L, vec->y);
-		lua_settable(L, -3);
-
-		lua_pushstring(L, "z");
-		lua_pushnumber(L, vec->z);
-		lua_settable(L, -3);
-
-		lua_pushstring(L, "w");
-		lua_pushnumber(L, vec->w);
-		lua_settable(L, -3);
+		lua_pushimvec4(L, *vec);
+	}
+	else if (type == IMGUI_TYPE_INT) {
+		lua_pushinteger(L, *(int*)element->Data);
 	}
 
 	return 1;
@@ -605,34 +700,103 @@ int SetValueFromTag(lua_State* L) {
 	else if (type == IMGUI_TYPE_VEC4) {
 
 		luaL_checktype(L, 4, LUA_TTABLE);
-		ImVec4* vec = (ImVec4*)element->Data;
+		ImVec4 vec = lua_toimvec4(L, 4);
 
-		lua_pushvalue(L, 4);
-
-		lua_pushstring(L, "x");
-		lua_gettable(L, -2);
-		vec->x = lua_tonumber(L, -1);
-		lua_pop(L, 1);
-
-		lua_pushstring(L, "y");
-		lua_gettable(L, -2);
-		vec->y = lua_tonumber(L, -1);
-		lua_pop(L, 1);
-
-		lua_pushstring(L, "z");
-		lua_gettable(L, -2);
-		vec->z = lua_tonumber(L, -1);
-		lua_pop(L, 1);
-
-		lua_pushstring(L, "w");
-		lua_gettable(L, -2);
-		vec->w = lua_tonumber(L, -1);
-		lua_pop(L, 1);
-
-		lua_pop(L, 1);
+		memcpy(element->Data, &vec, sizeof(ImVec4));
+	}
+	else if (type == IMGUI_TYPE_INT) {
+		*((int*)element->Data) = lua_tointeger(L, 4);
 	}
 
 	return 0;
+}
+
+int Vec4ToRGB(lua_State* L) {
+
+	ImVec4 vec = lua_toimvec4(L, 1);
+
+	int r = MAX(MIN((int)(vec.x * 255.0) , 255), 0);
+	int g = MAX(MIN((int)(vec.y * 255.0), 255), 0);
+	int b = MAX(MIN((int)(vec.z * 255.0), 255), 0);
+
+	lua_pushinteger(L, r);
+	lua_pushinteger(L, g);
+	lua_pushinteger(L, b);
+
+	return 3;
+}
+
+int RGBToVec4(lua_State* L) {
+
+	int r = luaL_checkinteger(L, 1);
+	int g = luaL_checkinteger(L, 2);
+	int b = luaL_checkinteger(L, 3);
+	int a = luaL_optnumber(L, 4, 4);
+
+	r = MAX(MIN(r, 255), 0);
+	g = MAX(MIN(g, 255), 0);
+	b = MAX(MIN(b, 255), 0);
+	a = MAX(MIN(a, 1.0), 0.0);
+
+	lua_pushimvec4(L, ImVec4(r / 255.0, g / 255.0, b / 255.0, a));
+
+	return 1;
+}
+
+void lua_pushimvec4(lua_State* L, ImVec4 vec) {
+
+	lua_createtable(L, 4, 0);
+
+	lua_pushstring(L, "x");
+	lua_pushnumber(L, vec.x);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "y");
+	lua_pushnumber(L, vec.y);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "z");
+	lua_pushnumber(L, vec.z);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "w");
+	lua_pushnumber(L, vec.w);
+	lua_settable(L, -3);
+}
+
+ImVec4 lua_toimvec4(lua_State* L, int idx) {
+
+	ImVec4 vec = ImVec4(0, 0, 0, 0);
+
+	if (lua_type(L, idx) != LUA_TTABLE) {
+		return vec;
+	}
+
+	lua_pushvalue(L, idx);
+
+	lua_pushstring(L, "x");
+	lua_gettable(L, -2);
+	vec.x = lua_tonumber(L, -1);
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "y");
+	lua_gettable(L, -2);
+	vec.y = lua_tonumber(L, -1);
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "z");
+	lua_gettable(L, -2);
+	vec.z = lua_tonumber(L, -1);
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "w");
+	lua_gettable(L, -2);
+	vec.w = lua_tonumber(L, -1);
+	lua_pop(L, 1);
+
+	lua_pop(L, 1);
+
+	return vec;
 }
 
 LuaImgui* lua_pushimgui(lua_State* L) {
@@ -793,6 +957,19 @@ ImguiElement* AddElement(LuaImgui* ui, const char* name, int type) {
 			}
 
 			ZeroMemory((*addr)->Data, sizeof(ImVec4));
+		}
+		else if (type == IMGUI_TYPE_INT) {
+
+			(*addr)->Data = gff_malloc(sizeof(int));
+
+			if (!(*addr)->Data) {
+				gff_free((*addr)->Name);
+				gff_free(*addr);
+				*addr = NULL;
+				return NULL;
+			}
+
+			ZeroMemory((*addr)->Data, sizeof(int));
 		}
 		else {
 			assert(false, "INVALID TYPE");

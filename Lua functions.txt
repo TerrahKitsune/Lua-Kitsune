@@ -1414,6 +1414,24 @@ Imgui:
 	-Draw functions, can only be called from within the renderer function:
 	ImguiDraw:
 
+	-Convert a vector4 to rgb
+	-vector4 = {x,y,z,w}
+	r,g,b ImguiDraw.Vec4ToRGB(vector4)
+
+	-Convert r,g,b into a vec4
+	vec4 ImguiDraw.RGBToVec4(r,g,b)
+
+	-Pushes an id to be used by the next element thats drawn
+	-PopId should be called before drawing another element
+	nil ImguiDraw:PushId(int or string)
+	nil ImguiDraw:PopId();
+
+	-Push a style color change for the next element
+	-col = ImGuiCol (Button 21, ButtonHovered 22, ButtonActive 23)
+	-color is a vec4 {x,y,z,w} see ImguiDraw.RGBToVec4
+	-Should call PopStyleColor for each call to Push after the desired elements has been drawn
+	nil ImguiDraw:PushStyleColor(col, color);
+
 	-Get the height of the current frame (Window)
 	float ImguiDraw:GetFrameHeightWithSpacing()
 
@@ -1478,17 +1496,30 @@ Imgui:
 	-Draw wrapped text
 	nil ImguiDraw:TextWrapped(text)
 
+	-Draw colored text
+	-color = vec4 {x,y,z,w}
+	nil ImguiDraw:TextColored(color, text)
+
+	-Draw a radio button
+	-Radiobuttons with the same tag are considered the same
+	-tag is an int(4)
+	-id should be which int this radio button represents
+	-Returns true if clicked
+	bool ImguiDraw:RadioButton(title, tag, id);
+
 	-Draw a checkbox
 	-Tag is a bool (1)
-	nil ImguiDraw:Checkbox(title, tag);
+	-Returns true if clicked
+	bool ImguiDraw:Checkbox(title, tag);
 
 	-Draws a float slider between min and max
 	-tag is a float (2)
-	nil ImguiDraw:SliderFloat(title, tag, min, max);
+	bool ImguiDraw:SliderFloat(title, tag, min, max);
 
 	-Draws a color edit
 	-tag is a vec4 (3)
-	nil ImguiDraw:ColorEdit3(title, tag);
+	-returns true if the color was updated
+	bool ImguiDraw:ColorEdit3(title, tag);
 
 	-Draws a button
 	-Returns true if the button was pressed

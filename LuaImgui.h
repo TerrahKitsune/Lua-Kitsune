@@ -79,7 +79,8 @@ extern bool windowExists;
 #define IMGUI_TYPE_BOOL 1
 #define IMGUI_TYPE_FLOAT 2
 #define IMGUI_TYPE_VEC4 3
-#define IMGUI_TYPE_MAX 3
+#define IMGUI_TYPE_INT 4
+#define IMGUI_TYPE_MAX 4
 
 struct ImguiElement {
 
@@ -90,6 +91,12 @@ struct ImguiElement {
 	ImguiElement* Next;
 };
 
+int LuaImguiPushStyleColor(lua_State* L);
+int LuaImguiPopStyleColor(lua_State* L);
+int LuaImguiPushId(lua_State* L);
+int LuaImguiPopId(lua_State* L);
+int LuaImguiRadioButton(lua_State* L);
+int LuaImguiTextColored(lua_State* L);
 int LuaImguiTextWrapped(lua_State* L);
 int LuaImguiBeginTabItem(lua_State* L);
 int LuaImguiEndTabBarItem(lua_State* L);
@@ -118,9 +125,13 @@ int LuaImguiShowDemoWindow(lua_State* L);
 int LuaImguiBegin(lua_State* L);
 int LuaImguiEnd(lua_State* L);
 
+void lua_pushimvec4(lua_State* L, ImVec4 vec);
+ImVec4 lua_toimvec4(lua_State* L, int idx);
 LuaImgui* lua_pushimgui(lua_State* L);
 LuaImgui* lua_toimgui(lua_State* L, int index);
 
+int Vec4ToRGB(lua_State* L);
+int RGBToVec4(lua_State* L);
 int GetImguiInfo(lua_State* L);
 int CreateImguiWindow(lua_State* L);
 int MainloopImguiWindow(lua_State* L);

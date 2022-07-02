@@ -3,6 +3,12 @@
 
 static const struct luaL_Reg imguifunctions[] = {
 
+	{ "PushStyleColor", LuaImguiPushStyleColor },
+	{ "PopStyleColor", LuaImguiPopStyleColor },
+	{ "PushId", LuaImguiPushId },
+	{ "PopId", LuaImguiPopId },
+	{ "RadioButton", LuaImguiRadioButton },
+	{ "TextColored", LuaImguiTextColored },
 	{ "TextWrapped", LuaImguiTextWrapped },
 	{ "BeginTabItem", LuaImguiBeginTabItem },
 	{ "EndTabItem", LuaImguiEndTabBarItem },
@@ -31,6 +37,8 @@ static const struct luaL_Reg imguifunctions[] = {
 	{ "Begin", LuaImguiBegin },
 	{ "SetNextWindowSize", LuaImguiSetNextWindowSize },
 	
+	{ "Vec4ToRGB", Vec4ToRGB },
+	{ "RGBToVec4", RGBToVec4 },
 	{ "GetValue", GetValueFromTag },
 	{ "SetValue", SetValueFromTag },
 	{ "Info", GetImguiInfo },

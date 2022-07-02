@@ -144,15 +144,28 @@ local window = Imgui.Create("Test", "bg", 1280, 800, function(ui)
 
 	if ui:Begin("Demo") then
 		
-		ui:Text("Test");
+		local r,g,b = ui.Vec4ToRGB(ui:GetValue("bg", 3));
+
+		ui:TextColored(ui.RGBToVec4(r,g,b), "Test");
+		ui:SameLine();
+
+		ui:Text(tostring(r).."|"..tostring(g).."|"..tostring(b));
 		ui:SameLine();
 		if ui:Button("Open") then 
 			ui:SetValue("property", 1, true);
 		end
 
-		ui:Checkbox("Show Demo", "demo");
-		ui:SliderFloat("Float", "float", 0, 1);
-		ui:ColorEdit3("Background Color", "bg");
+		if ui:Checkbox("Show Demo", "demo") then 
+			print("Click show demo checkbox");
+		end 
+
+		if ui:SliderFloat("Float", "float", 0, 1) then 
+			print("Slider changed");
+		end 
+
+		if ui:ColorEdit3("Background Color", "bg") then 
+			print("Changed color");
+		end
 
 		ui:Separator();
 
@@ -169,6 +182,32 @@ local window = Imgui.Create("Test", "bg", 1280, 800, function(ui)
 		ui:Text(string.format("Application average %.3f ms/frame (%.1f FPS)", 1000.0 / framerate, framerate));
 
 		ui:Separator();
+
+		if ui:RadioButton("A", "radiobutton", string.byte("A")) then 
+			print("Click radio button a");
+		end 
+		ui:SameLine();
+		ui:RadioButton("B", "radiobutton", string.byte("B"));
+		ui:SameLine();
+		ui:RadioButton("C", "radiobutton", string.byte("C"));
+		ui:SameLine();
+		ui:Text(string.char(ui:GetValue("radiobutton", 4)));
+
+		for n=1, 3 do 
+
+			if n > 1 then 
+				ui:SameLine();
+			end
+
+			ui:PushId(n);
+			ui:PushStyleColor(21, ui.RGBToVec4(n*50, n*50,n*50));
+			ui:PushStyleColor(23, ui.RGBToVec4(math.random(0,255), math.random(0,255), math.random(0,255)));
+			ui:Button("Button "..tostring(n));
+			ui:PopStyleColor();
+			ui:PopStyleColor();
+			ui:PopId(n);
+		end
+
 	end
 
 	ui:End();
@@ -252,5 +291,6 @@ window:SetValue("bg", 3, {x=0.45,y=0.55,z=0.6, w=1.0});
 window:SetValue("property", 1, true);
 window:SetValue("demo", 1, true);
 window:SetValue("float", 2, 0.5);
+window:SetValue("radiobutton", 4, string.byte("B"));
 
 while window:Tick() do end
