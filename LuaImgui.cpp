@@ -1333,40 +1333,6 @@ LuaImgui* lua_toimgui(lua_State* L, int index) {
 	return imgui;
 }
 
-int imgui_gc(lua_State* L) {
-
-	LuaImgui* imgui = lua_toimgui(L, 1);
-
-	if (imgui->hWnd != INVALID_HANDLE_VALUE) {
-
-		ClearMemory(L);
-
-		WaitForLastSubmittedFrame(imgui);
-
-		ImGui_ImplDX12_Shutdown();
-		ImGui_ImplWin32_Shutdown();
-		ImGui::DestroyContext();
-
-		CleanupDeviceD3D(imgui);
-		DestroyWindow(imgui->hWnd);
-		UnregisterClass(imgui->wc.lpszClassName, imgui->wc.hInstance);
-
-		imgui->hWnd = (HWND)INVALID_HANDLE_VALUE;
-
-		luaL_unref(L, LUA_REGISTRYINDEX, imgui->renderFuncRef);
-
-		windowExists = false;
-
-		if (imgui->backgroundTag) {
-			gff_free(imgui->backgroundTag);
-		}
-
-		imgui->isInRender = false;
-	}
-
-	return 0;
-}
-
 int imgui_tostring(lua_State* L) {
 	char tim[100];
 	sprintf(tim, "Imgui: 0x%08X", lua_toimgui(L, 1));
@@ -1630,6 +1596,40 @@ int LuaImGuiInputTextCallback(ImGuiInputTextCallbackData* data) {
 		}
 
 		element->Len = data->BufTextLen;
+	}
+
+	return 0;
+}
+
+int imgui_gc(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (imgui->hWnd != INVALID_HANDLE_VALUE) {
+
+		ClearMemory(L);
+
+		WaitForLastSubmittedFrame(imgui);
+
+		ImGui_ImplDX12_Shutdown();
+		ImGui_ImplWin32_Shutdown();
+		ImGui::DestroyContext();
+
+		CleanupDeviceD3D(imgui);
+		DestroyWindow(imgui->hWnd);
+		UnregisterClass(imgui->wc.lpszClassName, imgui->wc.hInstance);
+
+		imgui->hWnd = (HWND)INVALID_HANDLE_VALUE;
+
+		luaL_unref(L, LUA_REGISTRYINDEX, imgui->renderFuncRef);
+
+		windowExists = false;
+
+		if (imgui->backgroundTag) {
+			gff_free(imgui->backgroundTag);
+		}
+
+		imgui->isInRender = false;
 	}
 
 	return 0;
