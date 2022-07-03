@@ -134,6 +134,8 @@ TablePrint(Imgui);
 local test = {};
 local testSelected = 0;
 
+local elements = {"Wind", "Fire", "Water", "Earth"}
+
 for n=1, 10 do 
 	table.insert(test, tostring(math.random()));
 end 
@@ -159,7 +161,7 @@ local window = Imgui.Create("Test", "bg", 1280, 800, function(ui)
 			print("Click show demo checkbox");
 		end 
 
-		if ui:SliderFloat("Float", "float", 0, 1) then 
+		if ui:SliderFloat("Float", "float", 0, 1, "Nice = %.3f") then 
 			print("Slider changed");
 		end 
 
@@ -187,6 +189,12 @@ local window = Imgui.Create("Test", "bg", 1280, 800, function(ui)
 
 		ui:SameLine();
 		ui:Text("Count: "..tostring(cnt * ui:GetValue("float", 2)));
+
+		if ui:IsItemHovered() then 
+			ui:BeginTooltip();
+			ui:Text("Real: "..tostring(cnt));
+			ui:EndTooltip();
+		end
 
 		local framerate = ui:Info().Framerate;
 
@@ -218,6 +226,74 @@ local window = Imgui.Create("Test", "bg", 1280, 800, function(ui)
 			ui:PopStyleColor();
 			ui:PopId(n);
 		end
+
+		ui:Separator();
+		ui:LabelText("label", "Value");
+		local letters = {"a","b","c","d","e"};
+		if ui:Combo("Combo", "comboselected", letters, 2) then 
+			print("Combo changed");
+		end
+
+		ui:SameLine();
+		ui:HelpMarker("Selected "..tostring(letters[ui:GetValue("comboselected", 4) + 1]));
+
+		if ui:InputText("Text!", "textinput", "Hint text") then 
+			print("Text was changed");
+		end 
+		ui:SameLine();
+		ui:HelpMarker("Text: "..ui:GetValue("textinput", 5));
+
+		if ui:InputInt("Ints", "intinput") then 
+			print("Int was changed");
+		end
+		ui:SameLine();
+		ui:HelpMarker("Int: "..tostring(ui:GetValue("intinput", 4)));
+
+		if ui:InputFloat("Floats", "floatinput", 1.0) then 
+			print("Float was changed");
+		end
+		ui:SameLine();
+		ui:HelpMarker("Float: "..tostring(ui:GetValue("floatinput", 2)));
+
+		if ui:InputDouble("Doubles", "doubleinput", 1.0) then 
+			print("Double was changed");
+		end
+		ui:SameLine();
+		ui:HelpMarker("Double: "..tostring(ui:GetValue("doubleinput", 6)));
+
+		if ui:SliderInt("Int slider", "intslider", 0, 100) then 
+			print("Int slider was changed");
+		end
+		ui:SameLine();
+		ui:HelpMarker("Int: "..tostring(ui:GetValue("intslider", 4)));
+
+
+		if ui:SliderInt("Enum", "enumslider", 0, #elements - 1, elements[ui:GetValue("enumslider", 4) + 1]) then 
+			print("enum slider was changed");
+		end
+		ui:SameLine();
+		ui:HelpMarker("Element: "..elements[ui:GetValue("enumslider", 4) + 1]);
+
+		ui:Separator();
+		ui:LabelText("label", "Value");
+		local testlistbox = {"asd","dsa","abc","haha"};
+		if ui:ListBox("Listbox", "listboxselected", testlistbox) then 
+			print("Listbox changed");
+		end
+		ui:SameLine();
+		ui:HelpMarker("Listbox: "..testlistbox[ui:GetValue("listboxselected", 4) + 1]);
+		
+		local size = ui:GetWindowSize();
+
+		size.y = ui:GetTextLineHeight() * 10;
+		size.x = 0;
+
+		ui:Separator();
+		if ui:InputTextMultiline("Big box", "bigtext", size) then 
+			print("Big box changed");
+		end
+		ui:SameLine();
+		ui:HelpMarker("Bigtext: "..ui:GetValue("bigtext", 5));
 	end
 
 	ui:End();
@@ -298,9 +374,11 @@ local window = Imgui.Create("Test", "bg", 1280, 800, function(ui)
 end);
 
 window:SetValue("bg", 3, {x=0.45,y=0.55,z=0.6, w=1.0});
-window:SetValue("property", 1, true);
+window:SetValue("property", 1, false);
 window:SetValue("demo", 1, true);
 window:SetValue("float", 2, 0.5);
 window:SetValue("radiobutton", 4, string.byte("B"));
+window:SetValue("comboselected", 4, 2);
+window:SetValue("enumslider", 4, 0);
 
 while window:Tick() do end

@@ -1390,6 +1390,9 @@ Imgui:
 	-1 = bool true/false
 	-2 = float 0.0
 	-3 = vec4 {x,y,z,w}
+	-4 = int
+	-5 = string
+	-6 = double
 
 	-Gets the value from a tag (element values)
 	-opt type if type is given it'll look specifically for that type
@@ -1421,10 +1424,64 @@ Imgui:
 	-Convert r,g,b into a vec4
 	vec4 ImguiDraw.RGBToVec4(r,g,b)
 
+	-Gets the size of the window being drawn
+	-vec2 = {x,y}
+	vec2 ImguiDraw:GetWindowSize()
+
+	-Sets the next content size to draw
+	-vec2 = {x,y}
+	nil ImguiDraw:NextWindowContentSize(vec2)
+
+	-Get the text height
+	float ImguiDraw:GetTextLineHeight();
+
+	-Checks if the previously drawn element is hovered
+	-flags: ImGuiHoveredFlags
+	bool ImguiDraw:IsItemHovered(opt flags);
+
 	-Pushes an id to be used by the next element thats drawn
 	-PopId should be called before drawing another element
 	nil ImguiDraw:PushId(int or string)
 	nil ImguiDraw:PopId();
+
+	-Starts a tooltip render
+	-A call to EndTooltip is needed for each to begin
+	nil ImguiDraw:BeginTooltip()
+	nil ImguiDraw:EndTooltip();
+
+	-Draws a (?) marker that when hovered shows Text
+	nil ImguiDraw:HelpMarker(Text)
+	
+	-Draw a text input
+	-tag is a string (5)
+	-hint is the text shown if no input has been made
+	-returns true if the text was changed
+	bool ImguiDraw:InputText(label, tag, opt hint)
+
+	-Draw a multiline text input
+	-tag is a string (5)
+	-size is a vec2 {x,y}, lines = {x=0, y=ImguiDraw:GetTextLineHeight() * lines}
+	bool ImguiDraw:InputTextMultiline(label, tag, size, flags)
+
+	-Draw an int input
+	-tag is an int (4)
+	-return true if the int was changed
+	bool Imgui:InputInt(label, tag, opt step, opt faststep, opt flags)
+
+	-Draw an float input
+	-tag is a float (2)
+	-format = %.3f by default
+	bool Imgui:InputFloat(label, tag, opt step, opt faststep, opt format, opt flags)
+
+	-Same as InputFloat
+	-tag is a double (6)
+	bool Imgui:InputDouble(label, tag, opt step, opt faststep, opt format, opt flags)
+
+	-Draw a combo menu
+	-tag is an int(4) of the selected item (0 indexed)
+	-stringarray is a table of string {"a", "b", "etc"}
+	-maxitemsshown is the max amount of items (in height) to show in the combobox -1 = all
+	bool ImguiDraw:Combo(label, tag, stringarray, opt maxitemsshown)
 
 	-Push a style color change for the next element
 	-col = ImGuiCol (Button 21, ButtonHovered 22, ButtonActive 23)
@@ -1529,7 +1586,13 @@ Imgui:
 
 	-Draws a float slider between min and max
 	-tag is a float (2)
-	bool ImguiDraw:SliderFloat(title, tag, min, max);
+	-format= default %.3f
+	bool ImguiDraw:SliderFloat(title, tag, min, max, opt format, opt flags);
+
+	-Draws a int slider between min and max
+	-tag is a int (4)
+	-format= default %d
+	bool ImguiDraw:SliderInt(title, tag, min, max, opt format, opt flags);
 
 	-Draws a color edit
 	-tag is a vec4 (3)
@@ -1549,7 +1612,7 @@ Imgui:
 	nil ImguiDraw:Separator();
 
 	-Marks the next element to be drawn on the same line
-	nil ImguiDraw:SameLine();
+	nil ImguiDraw:SameLine(opt offsetstartx (0.0), opt spacing (-1.0));
 
 HTTP:
 

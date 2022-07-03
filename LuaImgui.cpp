@@ -1,5 +1,351 @@
 #include "LuaImgui.h"
 
+int LuaImguiGetTextLineHeight(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	lua_pushnumber(L, ImGui::GetTextLineHeight());
+
+	return 1;
+}
+
+int LuaImguiNextWindowContentSize(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImGui::SetNextWindowContentSize(lua_toimvec2(L, 2));
+
+	return 0;
+}
+
+int LuaImguiGetWindowSize(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	lua_pushimvec2(L, ImGui::GetWindowSize());
+
+	return 1;
+}
+
+int LuaImguiInputTextMultiline(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+	const char* label = luaL_checkstring(L, 2);
+	const char* tag = luaL_checkstring(L, 3);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImguiElement* element = GetElement(imgui, tag, IMGUI_TYPE_STRING);
+	if (!element) {
+		element = AddElement(imgui, tag, IMGUI_TYPE_STRING);
+		if (!element) {
+			luaL_error(L, "Imgui Out of memory");
+			return 0;
+		}
+	}
+
+	ImVec2 size = lua_toimvec2(L, 4);
+	int flags = luaL_optinteger(L, 5, 0);
+
+	flags |= ImGuiInputTextFlags_CallbackResize;
+
+	bool result = ImGui::InputTextMultiline(label, (char*)element->Data, element->Size, size, flags, &LuaImGuiInputTextCallback, element);
+
+	lua_pushboolean(L, result == true);
+
+	return 1;
+}
+
+int LuaImguiListBox(lua_State* L) {
+	
+	LuaImgui* imgui = lua_toimgui(L, 1);
+	const char* label = luaL_checkstring(L, 2);
+	const char* tag = luaL_checkstring(L, 3);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImguiElement* element = GetElement(imgui, tag, IMGUI_TYPE_INT);
+	if (!element) {
+		element = AddElement(imgui, tag, IMGUI_TYPE_INT);
+		if (!element) {
+			luaL_error(L, "Imgui Out of memory");
+			return 0;
+		}
+	}
+
+	int* f = (int*)element->Data;
+
+	LoadTableIntoStringArray(L, imgui, 4);
+
+	lua_pushboolean(L, ImGui::ListBox(label, f, imgui->stringArray, imgui->stringArrayLen, luaL_optinteger(L, 5, -1)));
+
+	return 1;
+}
+
+int LuaImguiSliderInt(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+	const char* label = luaL_checkstring(L, 2);
+	const char* tag = luaL_checkstring(L, 3);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImguiElement* element = GetElement(imgui, tag, IMGUI_TYPE_INT);
+	if (!element) {
+		element = AddElement(imgui, tag, IMGUI_TYPE_INT);
+		if (!element) {
+			luaL_error(L, "Imgui Out of memory");
+			return 0;
+		}
+	}
+
+	lua_pushboolean(L, ImGui::SliderInt(label, (int*)element->Data, luaL_checkinteger(L, 4), luaL_checkinteger(L, 5), luaL_optstring(L, 6, "%d"), luaL_optinteger(L, 7, 0)) == true);
+
+	return 1;
+}
+
+int LuaImguiInputDouble(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+	const char* label = luaL_checkstring(L, 2);
+	const char* tag = luaL_checkstring(L, 3);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImguiElement* element = GetElement(imgui, tag, IMGUI_TYPE_DOUBLE);
+	if (!element) {
+		element = AddElement(imgui, tag, IMGUI_TYPE_DOUBLE);
+		if (!element) {
+			luaL_error(L, "Imgui Out of memory");
+			return 0;
+		}
+	}
+
+	lua_pushboolean(L, ImGui::InputDouble(label, (double*)element->Data, luaL_optnumber(L, 4, 0), luaL_optnumber(L, 5, 0), luaL_optstring(L, 6, "%.3f"), luaL_optinteger(L, 7, 0)) == true);
+
+	return 1;
+}
+
+int LuaImguiInputFloat(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+	const char* label = luaL_checkstring(L, 2);
+	const char* tag = luaL_checkstring(L, 3);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImguiElement* element = GetElement(imgui, tag, IMGUI_TYPE_FLOAT);
+	if (!element) {
+		element = AddElement(imgui, tag, IMGUI_TYPE_FLOAT);
+		if (!element) {
+			luaL_error(L, "Imgui Out of memory");
+			return 0;
+		}
+	}
+
+	lua_pushboolean(L, ImGui::InputFloat(label, (float*)element->Data, luaL_optnumber(L, 4, 0), luaL_optnumber(L, 5, 0), luaL_optstring(L, 6, "%.3f"), luaL_optinteger(L, 7, 0)) == true);
+
+	return 1;
+}
+
+int LuaImguiInputInt(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+	const char* label = luaL_checkstring(L, 2);
+	const char* tag = luaL_checkstring(L, 3);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImguiElement* element = GetElement(imgui, tag, IMGUI_TYPE_INT);
+	if (!element) {
+		element = AddElement(imgui, tag, IMGUI_TYPE_INT);
+		if (!element) {
+			luaL_error(L, "Imgui Out of memory");
+			return 0;
+		}
+	}
+
+	lua_pushboolean(L, ImGui::InputInt(label, (int*)element->Data, luaL_optinteger(L, 4, 1), luaL_optinteger(L, 5, 100), luaL_optinteger(L, 6, 0)) == true);
+
+	return 1;
+}
+
+int LuaImguiInputText(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+	const char* label = luaL_checkstring(L, 2);
+	const char* tag = luaL_checkstring(L, 3);
+	const char* hint = lua_tostring(L, 4);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImguiElement* element = GetElement(imgui, tag, IMGUI_TYPE_STRING);
+	if (!element) {
+		element = AddElement(imgui, tag, IMGUI_TYPE_STRING);
+		if (!element) {
+			luaL_error(L, "Imgui Out of memory");
+			return 0;
+		}
+	}
+
+	int flags = luaL_optinteger(L, 5, 0);
+
+	flags |= ImGuiInputTextFlags_CallbackResize;
+
+	if (hint) {
+		lua_pushboolean(L, ImGui::InputTextWithHint(label, hint, (char*)element->Data, element->Size, flags, &LuaImGuiInputTextCallback, element) == true);
+	}
+	else {
+		lua_pushboolean(L, ImGui::InputText(label, (char*)element->Data, element->Size, flags, &LuaImGuiInputTextCallback, element) == true);
+	}
+
+	return 1;
+}
+
+int LuaImguiHelpMarker(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+	const char* text = luaL_checkstring(L, 2);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImGui::TextDisabled("(?)");
+	if (ImGui::IsItemHovered())
+	{
+		ImGui::BeginTooltip();
+		ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+		ImGui::TextUnformatted(text);
+		ImGui::PopTextWrapPos();
+		ImGui::EndTooltip();
+	}
+
+	return 0;
+}
+
+int LuaImguiCombo(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+	const char* label = luaL_checkstring(L, 2);
+	const char* tag = luaL_checkstring(L, 3);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImguiElement* element = GetElement(imgui, tag, IMGUI_TYPE_INT);
+	if (!element) {
+		element = AddElement(imgui, tag, IMGUI_TYPE_INT);
+		if (!element) {
+			luaL_error(L, "Imgui Out of memory");
+			return 0;
+		}
+	}
+
+	int* f = (int*)element->Data;
+
+	LoadTableIntoStringArray(L, imgui, 4);
+
+	lua_pushboolean(L, ImGui::Combo(label, f, imgui->stringArray, imgui->stringArrayLen, luaL_optinteger(L, 5, -1)));
+
+	return 1;
+}
+
+int LuaImguiLabelText(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImGui::LabelText(luaL_checkstring(L, 2), "%s", luaL_checkstring(L, 3));
+
+	return 0;
+}
+
+int LuaImguiBeginTooltip(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImGui::BeginTooltip();
+
+	return 0;
+}
+
+int LuaImguiEndTooltip(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImGui::EndTooltip();
+
+	return 0;
+}
+
+int LuaImguiIsItemHovered(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	lua_pushboolean(L, ImGui::IsItemHovered(lua_tointeger(L, 2)) == true);
+
+	return 1;
+}
+
 int LuaImguiArrowButton(lua_State* L) {
 
 	LuaImgui* imgui = lua_toimgui(L, 1);
@@ -25,7 +371,7 @@ int LuaImguiPopButtonRepeat(lua_State* L) {
 
 	ImGui::PopButtonRepeat();
 
-	return 0; 
+	return 0;
 }
 
 int LuaImguiPushButtonRepeat(lua_State* L) {
@@ -448,7 +794,7 @@ int LuaImguiSameLine(lua_State* L) {
 		return 0;
 	}
 
-	ImGui::SameLine();
+	ImGui::SameLine(luaL_optnumber(L, 2, 0), luaL_optnumber(L, 3, -1.0));
 
 	return 0;
 }
@@ -519,7 +865,7 @@ int LuaImguiSliderFloat(lua_State* L) {
 
 	float* f = (float*)element->Data;
 
-	lua_pushboolean(L, ImGui::SliderFloat(text, f, min, max) == true);
+	lua_pushboolean(L, ImGui::SliderFloat(text, f, min, max, luaL_optstring(L, 6, "%.3f"), (ImGuiSliderFlags)luaL_optinteger(L, 7, 0)) == true);
 
 	return 1;
 }
@@ -721,6 +1067,12 @@ int GetValueFromTag(lua_State* L) {
 	else if (type == IMGUI_TYPE_INT) {
 		lua_pushinteger(L, *(int*)element->Data);
 	}
+	else if (type == IMGUI_TYPE_STRING) {
+		lua_pushlstring(L, (char*)element->Data, element->Len);
+	}
+	else if (type == IMGUI_TYPE_DOUBLE) {
+		lua_pushnumber(L, *(double*)element->Data);
+	}
 
 	return 1;
 }
@@ -763,6 +1115,37 @@ int SetValueFromTag(lua_State* L) {
 	else if (type == IMGUI_TYPE_INT) {
 		*((int*)element->Data) = lua_tointeger(L, 4);
 	}
+	else if (type == IMGUI_TYPE_STRING) {
+
+		size_t len;
+		const char* str = lua_tolstring(L, 4, &len);
+
+		if (len + 1 > element->Size || !element->Data) {
+
+			if (element->Data) {
+				gff_free(element->Data);
+				element->Size = 0;
+				element->Len = 0;
+			}
+
+			element->Data = gff_malloc(sizeof(char) * len + 1);
+
+			if (!element->Data) {
+				luaL_error(L, "Out of memory");
+				return 0;
+			}
+
+			element->Size = len + 1;
+		}
+
+		char* elementStr = (char*)element->Data;
+		memcpy(elementStr, str, sizeof(char) * len);
+		elementStr[len] = '\0';
+		element->Len = len;
+	}
+	else if (type == IMGUI_TYPE_DOUBLE) {
+		*((double*)element->Data) = lua_tonumber(L, 4);
+	}
 
 	return 0;
 }
@@ -797,6 +1180,71 @@ int RGBToVec4(lua_State* L) {
 	lua_pushimvec4(L, ImVec4(r / 255.0, g / 255.0, b / 255.0, a));
 
 	return 1;
+}
+
+int ClearMemory(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	ImguiElement* c = imgui->Elements;
+	ImguiElement* temp;
+	imgui->Elements = NULL;
+
+	while (c) {
+
+		temp = c;
+		c = c->Next;
+
+		temp->freeFunc(temp);
+	}
+
+	if (imgui->stringArray) {
+		gff_free(imgui->stringArray);
+	}
+
+	imgui->stringArray = NULL;
+	imgui->stringArrayLen = 0;
+	imgui->stringArraySize = 0;
+
+	return 0;
+}
+
+void lua_pushimvec2(lua_State* L, ImVec2 vec) {
+
+	lua_createtable(L, 2, 0);
+
+	lua_pushstring(L, "x");
+	lua_pushnumber(L, vec.x);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "y");
+	lua_pushnumber(L, vec.y);
+	lua_settable(L, -3);
+}
+
+ImVec2 lua_toimvec2(lua_State* L, int idx) {
+
+	ImVec2 vec = ImVec2(0, 0);
+
+	if (lua_type(L, idx) != LUA_TTABLE) {
+		return vec;
+	}
+
+	lua_pushvalue(L, idx);
+
+	lua_pushstring(L, "x");
+	lua_gettable(L, -2);
+	vec.x = lua_tonumber(L, -1);
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "y");
+	lua_gettable(L, -2);
+	vec.y = lua_tonumber(L, -1);
+	lua_pop(L, 1);
+
+	lua_pop(L, 1);
+
+	return vec;
 }
 
 void lua_pushimvec4(lua_State* L, ImVec4 vec) {
@@ -891,6 +1339,8 @@ int imgui_gc(lua_State* L) {
 
 	if (imgui->hWnd != INVALID_HANDLE_VALUE) {
 
+		ClearMemory(L);
+
 		WaitForLastSubmittedFrame(imgui);
 
 		ImGui_ImplDX12_Shutdown();
@@ -907,24 +1357,11 @@ int imgui_gc(lua_State* L) {
 
 		windowExists = false;
 
-		ImguiElement* c = imgui->Elements;
-		ImguiElement* temp;
-		imgui->Elements = NULL;
-		while (c) {
-
-			temp = c;
-			c = c->Next;
-
-			if (temp->Data)
-				gff_free(temp->Data);
-			if (temp->Name)
-				gff_free(temp->Name);
-			gff_free(temp);
-		}
-
 		if (imgui->backgroundTag) {
 			gff_free(imgui->backgroundTag);
 		}
+
+		imgui->isInRender = false;
 	}
 
 	return 0;
@@ -950,6 +1387,21 @@ ImguiElement* GetElement(LuaImgui* ui, const char* name, int type) {
 	}
 
 	return NULL;
+}
+
+void GenericElementFree(ImguiElement* element) {
+
+	if (element->Name) {
+		gff_free(element->Name);
+		element->Name = NULL;
+	}
+
+	if (element->Data) {
+		gff_free(element->Data);
+		element->Data = NULL;
+	}
+
+	gff_free(element);
 }
 
 ImguiElement* AddElement(LuaImgui* ui, const char* name, int type) {
@@ -986,6 +1438,9 @@ ImguiElement* AddElement(LuaImgui* ui, const char* name, int type) {
 				return NULL;
 			}
 
+			(*addr)->Len = sizeof(bool);
+			(*addr)->Size = sizeof(bool);
+			(*addr)->freeFunc = &GenericElementFree;
 			ZeroMemory((*addr)->Data, sizeof(bool));
 		}
 		else if (type == IMGUI_TYPE_FLOAT) {
@@ -999,6 +1454,9 @@ ImguiElement* AddElement(LuaImgui* ui, const char* name, int type) {
 				return NULL;
 			}
 
+			(*addr)->Len = sizeof(float);
+			(*addr)->Size = sizeof(float);
+			(*addr)->freeFunc = &GenericElementFree;
 			ZeroMemory((*addr)->Data, sizeof(float));
 		}
 		else if (type == IMGUI_TYPE_VEC4) {
@@ -1012,6 +1470,9 @@ ImguiElement* AddElement(LuaImgui* ui, const char* name, int type) {
 				return NULL;
 			}
 
+			(*addr)->Len = sizeof(ImVec4);
+			(*addr)->Size = sizeof(ImVec4);
+			(*addr)->freeFunc = &GenericElementFree;
 			ZeroMemory((*addr)->Data, sizeof(ImVec4));
 		}
 		else if (type == IMGUI_TYPE_INT) {
@@ -1025,7 +1486,42 @@ ImguiElement* AddElement(LuaImgui* ui, const char* name, int type) {
 				return NULL;
 			}
 
+			(*addr)->Len = sizeof(int);
+			(*addr)->Size = sizeof(int);
+			(*addr)->freeFunc = &GenericElementFree;
 			ZeroMemory((*addr)->Data, sizeof(int));
+		}
+		else if (type == IMGUI_TYPE_STRING) {
+
+			(*addr)->Data = gff_malloc(sizeof(char) * 20);
+
+			if (!(*addr)->Data) {
+				gff_free((*addr)->Name);
+				gff_free(*addr);
+				*addr = NULL;
+				return NULL;
+			}
+
+			(*addr)->Len = 0;
+			(*addr)->Size = sizeof(char) * 20;
+			(*addr)->freeFunc = &GenericElementFree;
+			ZeroMemory((*addr)->Data, sizeof(int));
+		}
+		else if (type == IMGUI_TYPE_DOUBLE) {
+
+			(*addr)->Data = gff_malloc(sizeof(double));
+
+			if (!(*addr)->Data) {
+				gff_free((*addr)->Name);
+				gff_free(*addr);
+				*addr = NULL;
+				return NULL;
+			}
+
+			(*addr)->Len = sizeof(double);
+			(*addr)->Size = sizeof(double);
+			(*addr)->freeFunc = &GenericElementFree;
+			ZeroMemory((*addr)->Data, sizeof(double));
 		}
 		else {
 			assert(false, "INVALID TYPE");
@@ -1049,8 +1545,7 @@ bool RemoveElement(LuaImgui* ui, const char* name, int type) {
 			temp = *addr;
 			*addr = temp->Next;
 
-			gff_free(temp->Name);
-			gff_free(temp);
+			temp->freeFunc(temp);
 
 			return true;
 		}
@@ -1059,4 +1554,83 @@ bool RemoveElement(LuaImgui* ui, const char* name, int type) {
 	}
 
 	return false;
+}
+
+void LoadTableIntoStringArray(lua_State* L, LuaImgui* ui, int idx) {
+
+	if (lua_type(L, idx) != LUA_TTABLE) {
+		return;
+	}
+
+	lua_pushvalue(L, idx);
+	lua_len(L, -1);
+	int len = lua_tointeger(L, -1);
+	lua_pop(L, 1);
+
+	if (len <= 0) {
+
+		ui->stringArrayLen = 0;
+		return;
+	}
+	else if (ui->stringArraySize < len) {
+
+		if (ui->stringArray) {
+			gff_free(ui->stringArray);
+			ui->stringArraySize = 0;
+			ui->stringArrayLen = 0;
+		}
+
+		ui->stringArray = (const char**)gff_malloc(sizeof(const char*) * len);
+
+		if (!ui->stringArray) {
+			luaL_error(L, "Out of memory");
+			return;
+		}
+
+		ui->stringArraySize = len;
+		ui->stringArrayLen = len;
+	}
+	else {
+		ui->stringArrayLen = len;
+	}
+
+	for (int n = 1; n <= len; n++) {
+
+		lua_pushinteger(L, n);
+		lua_gettable(L, -2);
+
+		ui->stringArray[n - 1] = lua_tostring(L, -1);
+
+		lua_pop(L, 1);
+	}
+
+	lua_pop(L, 1);
+}
+
+int LuaImGuiInputTextCallback(ImGuiInputTextCallbackData* data) {
+
+	if (data->EventFlag == ImGuiInputTextFlags_CallbackResize) {
+
+		ImguiElement* element = (ImguiElement*)data->UserData;
+
+		if (element->Size <= data->BufTextLen) {
+
+			char* temp = (char*)realloc(element->Data, element->Size + 100 + 1);
+
+			if (temp) {
+				element->Data = temp;
+				element->Size = element->Size + 100;
+				data->Buf = temp;
+				data->BufSize = element->Size;
+			}
+			else {
+				data->BufSize = element->Size;
+				data->BufTextLen = element->Size;
+			}
+		}
+
+		element->Len = data->BufTextLen;
+	}
+
+	return 0;
 }

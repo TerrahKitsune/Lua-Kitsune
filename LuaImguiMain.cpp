@@ -3,6 +3,22 @@
 
 static const struct luaL_Reg imguifunctions[] = {
 
+	{ "GetTextLineHeight", LuaImguiGetTextLineHeight },
+	{ "NextWindowContentSize", LuaImguiNextWindowContentSize },
+	{ "GetWindowSize", LuaImguiGetWindowSize },
+	{ "InputTextMultiline", LuaImguiInputTextMultiline },
+	{ "ListBox", LuaImguiListBox },
+	{ "SliderInt", LuaImguiSliderInt },
+	{ "InputDouble", LuaImguiInputDouble },
+	{ "InputFloat", LuaImguiInputFloat },
+	{ "InputInt", LuaImguiInputInt },
+	{ "InputText", LuaImguiInputText },
+	{ "HelpMarker", LuaImguiHelpMarker },
+	{ "Combo", LuaImguiCombo },
+	{ "LabelText", LuaImguiLabelText },
+	{ "BeginTooltip", LuaImguiBeginTooltip },
+	{ "EndTooltip", LuaImguiEndTooltip },
+	{ "IsItemHovered", LuaImguiIsItemHovered },
 	{ "PushButtonRepeat", LuaImguiPushButtonRepeat },
 	{ "PopButtonRepeat", LuaImguiPopButtonRepeat },
 	{ "ArrowButton", LuaImguiArrowButton },
@@ -41,6 +57,7 @@ static const struct luaL_Reg imguifunctions[] = {
 	{ "Begin", LuaImguiBegin },
 	{ "SetNextWindowSize", LuaImguiSetNextWindowSize },
 	
+	{ "Clear" ,ClearMemory },
 	{ "Vec4ToRGB", Vec4ToRGB },
 	{ "RGBToVec4", RGBToVec4 },
 	{ "GetValue", GetValueFromTag },
