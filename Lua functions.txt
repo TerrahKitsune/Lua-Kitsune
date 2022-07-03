@@ -1435,9 +1435,24 @@ Imgui:
 	-Get the height of the current frame (Window)
 	float ImguiDraw:GetFrameHeightWithSpacing()
 
+	-Align the next text to the frame
+	nil ImguiDraw:AlignTextToFramePadding()
+
+	-Pushes a repeating bottom config
+	-if repeating is true then the following buttons will be repeated
+	-a PopButtonRepeat should be called for each PushButtonRepeat
+	nil ImguiDraw:PushButtonRepeat(repeating)
+
+	-idstring should be unique to the button
+	-direction = ImGuiDir (0 left, 1, right, 2 up, 3 down)
+	bool Imgui:ArrowButton(idstring, direction);
+
+	-Pops a PushButtonRepeat, should be called after PushButtonRepeat
+	nil ImguiDraw:PopButtonRepeat()
+
 	-Begins drawing a window
 	-Tag is a bool (1) if not given the window does not have a close button
-	-Flags: see imgui window flags (show 1024 menubar)
+	-Flags: see imgui window flags (show 1024 menubar, always_autoresize 64)
 	-Returns true if the content of the window is showing
 	-ImguiDraw:End MUST be called before the render function finishes
 	bool ImguiDraw:Begin(title, opt tag, flags)

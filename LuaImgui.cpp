@@ -1,5 +1,61 @@
 #include "LuaImgui.h"
 
+int LuaImguiArrowButton(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	lua_pushboolean(L, ImGui::ArrowButton(luaL_checkstring(L, 2), luaL_checkinteger(L, 3)));
+
+	return 1;
+}
+
+int LuaImguiPopButtonRepeat(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImGui::PopButtonRepeat();
+
+	return 0; 
+}
+
+int LuaImguiPushButtonRepeat(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImGui::PushButtonRepeat(lua_toboolean(L, 2) != 0);
+
+	return 0;
+}
+
+int LuaImguiAlignTextToFramePadding(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImGui::AlignTextToFramePadding();
+
+	return 0;
+}
+
 int LuaImguiPopStyleColor(lua_State* L) {
 
 	LuaImgui* imgui = lua_toimgui(L, 1);
@@ -51,7 +107,7 @@ int LuaImguiPushId(lua_State* L) {
 		luaL_error(L, "Draw functions can only be called inside renderer");
 		return 0;
 	}
-	
+
 	if (lua_type(L, 2) == LUA_TNUMBER) {
 		ImGui::PushID(lua_tointeger(L, 2));
 	}
@@ -715,7 +771,7 @@ int Vec4ToRGB(lua_State* L) {
 
 	ImVec4 vec = lua_toimvec4(L, 1);
 
-	int r = MAX(MIN((int)(vec.x * 255.0) , 255), 0);
+	int r = MAX(MIN((int)(vec.x * 255.0), 255), 0);
 	int g = MAX(MIN((int)(vec.y * 255.0), 255), 0);
 	int b = MAX(MIN((int)(vec.z * 255.0), 255), 0);
 

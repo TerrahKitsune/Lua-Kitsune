@@ -3,6 +3,10 @@
 
 static const struct luaL_Reg imguifunctions[] = {
 
+	{ "PushButtonRepeat", LuaImguiPushButtonRepeat },
+	{ "PopButtonRepeat", LuaImguiPopButtonRepeat },
+	{ "ArrowButton", LuaImguiArrowButton },
+	{ "AlignTextToFramePadding", LuaImguiAlignTextToFramePadding },
 	{ "PushStyleColor", LuaImguiPushStyleColor },
 	{ "PopStyleColor", LuaImguiPopStyleColor },
 	{ "PushId", LuaImguiPushId },

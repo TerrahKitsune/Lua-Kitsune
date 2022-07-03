@@ -142,7 +142,7 @@ local cnt = 0;
 
 local window = Imgui.Create("Test", "bg", 1280, 800, function(ui)
 
-	if ui:Begin("Demo") then
+	if ui:Begin("Demo", nil, 64) then
 		
 		local r,g,b = ui.Vec4ToRGB(ui:GetValue("bg", 3));
 
@@ -173,6 +173,17 @@ local window = Imgui.Create("Test", "bg", 1280, 800, function(ui)
 			cnt = cnt + 1;
 			ui:SetValue("float", 2, 0.5);
 		end
+
+		ui:SameLine();
+		ui:PushButtonRepeat(true);	
+		if ui:ArrowButton("left", 0) then 
+			cnt = cnt - 1;
+		end		
+		ui:SameLine();
+		if ui:ArrowButton("right", 1) then 
+			cnt = cnt + 1;
+		end
+		ui:PopButtonRepeat();
 
 		ui:SameLine();
 		ui:Text("Count: "..tostring(cnt * ui:GetValue("float", 2)));
@@ -207,7 +218,6 @@ local window = Imgui.Create("Test", "bg", 1280, 800, function(ui)
 			ui:PopStyleColor();
 			ui:PopId(n);
 		end
-
 	end
 
 	ui:End();

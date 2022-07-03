@@ -53,7 +53,7 @@ typedef struct LuaImgui {
 	WNDCLASSEX wc;
 
 	//--- Interface	end
-	
+
 	bool isInRender;
 	int renderFuncRef;
 	char* backgroundTag;
@@ -91,6 +91,10 @@ struct ImguiElement {
 	ImguiElement* Next;
 };
 
+int LuaImguiPushButtonRepeat(lua_State* L);
+int LuaImguiPopButtonRepeat(lua_State* L);
+int LuaImguiArrowButton(lua_State* L);
+int LuaImguiAlignTextToFramePadding(lua_State* L);
 int LuaImguiPushStyleColor(lua_State* L);
 int LuaImguiPopStyleColor(lua_State* L);
 int LuaImguiPushId(lua_State* L);
