@@ -294,6 +294,8 @@ local window = Imgui.Create("Test", "bg", 1280, 800, function(ui)
 		end
 		ui:SameLine();
 		ui:HelpMarker("Bigtext: "..ui:GetValue("bigtext", 5));
+
+		ui:ProgressBar(ui:GetValue("float", 2), nil, "textinput");
 	end
 
 	ui:End();
@@ -380,5 +382,11 @@ window:SetValue("float", 2, 0.5);
 window:SetValue("radiobutton", 4, string.byte("B"));
 window:SetValue("comboselected", 4, 2);
 window:SetValue("enumslider", 4, 0);
+
+local values = window:GetAllValues();
+
+for n=1, #values do 
+	print(values[n].Name, values[n].Type);
+end 
 
 while window:Tick() do end

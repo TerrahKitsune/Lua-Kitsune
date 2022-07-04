@@ -3,6 +3,7 @@
 
 static const struct luaL_Reg imguifunctions[] = {
 
+	{ "ProgressBar", LuaImguiProgressBar },
 	{ "GetTextLineHeight", LuaImguiGetTextLineHeight },
 	{ "NextWindowContentSize", LuaImguiNextWindowContentSize },
 	{ "GetWindowSize", LuaImguiGetWindowSize },
@@ -57,7 +58,8 @@ static const struct luaL_Reg imguifunctions[] = {
 	{ "Begin", LuaImguiBegin },
 	{ "SetNextWindowSize", LuaImguiSetNextWindowSize },
 	
-	{ "Clear" ,ClearMemory },
+	{ "GetAllValues", GetAllValues },
+	{ "Clear", ClearMemory },
 	{ "Vec4ToRGB", Vec4ToRGB },
 	{ "RGBToVec4", RGBToVec4 },
 	{ "GetValue", GetValueFromTag },

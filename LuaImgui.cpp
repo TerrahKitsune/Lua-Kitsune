@@ -1,5 +1,42 @@
 #include "LuaImgui.h"
 
+int LuaImguiProgressBar(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+	float fraction = lua_tonumber(L, 2);
+	const char * tag = lua_tostring(L, 4);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImVec2 size = ImVec2(-FLT_MIN, 0.0f);
+
+	if (lua_type(L, 3) == LUA_TTABLE) {
+		size = lua_toimvec2(L, 3);
+	}
+
+	const char* overlay = NULL;
+
+	if (tag) {
+		ImguiElement* element = GetElement(imgui, tag, IMGUI_TYPE_STRING);
+		if (!element) {
+			element = AddElement(imgui, tag, IMGUI_TYPE_STRING);
+			if (!element) {
+				luaL_error(L, "Imgui Out of memory");
+				return 0;
+			}
+		}
+
+		overlay = (const char*)element->Data;
+	}
+
+	ImGui::ProgressBar(fraction, size, overlay);
+
+	return 0;
+}
+
 int LuaImguiGetTextLineHeight(lua_State* L) {
 
 	LuaImgui* imgui = lua_toimgui(L, 1);
@@ -994,7 +1031,7 @@ int GetImguiInfo(lua_State* L) {
 
 	LuaImgui* imgui = lua_toimgui(L, 1);
 
-	lua_createtable(L, 9, 0);
+	lua_createtable(L, 0, 10);
 
 	lua_pushstring(L, "InRender");
 	lua_pushboolean(L, imgui->isInRender == true);
@@ -1209,9 +1246,42 @@ int ClearMemory(lua_State* L) {
 	return 0;
 }
 
+int GetAllValues(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	int cnt = 0;
+	ImguiElement* c = imgui->Elements;
+	while (c) {
+		cnt++;
+		c = c->Next;
+	}
+
+	lua_createtable(L, cnt, 0);
+	cnt = 0;
+	c = imgui->Elements;
+	while (c) {
+
+		lua_createtable(L, 0, 2);
+
+		lua_pushstring(L, "Name");
+		lua_pushstring(L, c->Name);
+		lua_settable(L, -3);
+
+		lua_pushstring(L, "Type");
+		lua_pushinteger(L, c->Type);
+		lua_settable(L, -3);
+
+		lua_rawseti(L, -2, ++cnt);
+		c = c->Next;
+	}
+
+	return 1;
+}
+
 void lua_pushimvec2(lua_State* L, ImVec2 vec) {
 
-	lua_createtable(L, 2, 0);
+	lua_createtable(L, 0, 2);
 
 	lua_pushstring(L, "x");
 	lua_pushnumber(L, vec.x);
@@ -1249,7 +1319,7 @@ ImVec2 lua_toimvec2(lua_State* L, int idx) {
 
 void lua_pushimvec4(lua_State* L, ImVec4 vec) {
 
-	lua_createtable(L, 4, 0);
+	lua_createtable(L, 0, 4);
 
 	lua_pushstring(L, "x");
 	lua_pushnumber(L, vec.x);

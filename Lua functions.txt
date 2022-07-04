@@ -1404,6 +1404,12 @@ Imgui:
 	-type (see types) defines what kind of type the value is
 	nil Imgui:SetValue(tag, type, value)
 
+	-Gets an array of all values as items
+	-item:
+	-Name = name of the value (or tag)
+	-Type = What type it is see types above
+	array Imgui:GetAllValues()
+
 	-This is the mainloop, it should be called every frame
 	-returns false if close was requested
 	bool Imgui:Tick();

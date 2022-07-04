@@ -92,6 +92,8 @@ extern bool windowExists;
 typedef struct ImguiElement;
 typedef void (*ImguiElementFree) (ImguiElement*);
 
+int LuaImGuiInputTextCallback(ImGuiInputTextCallbackData* data);
+
 struct ImguiElement {
 
 	ImguiElement* Next;
@@ -103,6 +105,7 @@ struct ImguiElement {
 	ImguiElementFree freeFunc;
 };
 
+int LuaImguiProgressBar(lua_State* L);
 int LuaImguiGetTextLineHeight(lua_State* L);
 int LuaImguiNextWindowContentSize(lua_State* L);
 int LuaImguiGetWindowSize(lua_State* L);
@@ -176,8 +179,8 @@ int SetValueFromTag(lua_State* L);
 int imgui_gc(lua_State* L);
 int imgui_tostring(lua_State* L);
 int ClearMemory(lua_State* L);
+int GetAllValues(lua_State* L);
 
 ImguiElement* AddElement(LuaImgui* ui, const char* name, int type);
 ImguiElement* GetElement(LuaImgui* ui, const char* name, int type);
 bool RemoveElement(LuaImgui* ui, const char* name, int type);
-int LuaImGuiInputTextCallback(ImGuiInputTextCallbackData* data);
