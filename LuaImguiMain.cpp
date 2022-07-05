@@ -3,6 +3,16 @@
 
 static const struct luaL_Reg imguifunctions[] = {
 
+	{ "TableSetColumnIndex", LuaImguiTableSetColumnIndex },
+	{ "TableNextRow", LuaImguiTableNextRow },
+	{ "TreePop", LuaImguiTreePop },
+	{ "TreeNode", LuaImguiTreeNode },
+	{ "SetNextItemOpen", LuaImguiSetNextItemOpen },
+	{ "PopStyleVar", LuaImguiPopStyleVar },
+	{ "PushStyleVar", LuaImguiPushStyleVar },
+	{ "GetTextLineHeightWithSpacing", LuaImguiGetTextLineHeightWithSpacing },
+	{ "GetCursorStartPos", LuaImguiGetCursorStartPos },
+	{ "GetCursorPos", LuaImguiGetCursorPos },
 	{ "CalcTextSize", LuaImguiCalcTextSize },
 	{ "BeginDisabled", LuaImguiBeginDisabled },
 	{ "EndDisabled", LuaImguiEndDisabled },
@@ -69,6 +79,7 @@ static const struct luaL_Reg imguifunctions[] = {
 	{ "Begin", LuaImguiBegin },
 	{ "SetNextWindowSize", LuaImguiSetNextWindowSize },
 
+	{ "GetEnums", lua_pushimguienums },
 	{ "GetAllValues", GetAllValues },
 	{ "Clear", ClearMemory },
 	{ "Vec4ToRGB", Vec4ToRGB },

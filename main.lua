@@ -176,6 +176,7 @@ local window = Imgui.Create("Test", "bg", 1280, 800, function(ui)
 
 			if ui:Checkbox("Show Demo", "demo") then 
 				print("Click show demo checkbox");
+				ui:SetValue("tabletabopen", 1, true);
 			end 
 
 			if ui:SliderFloat("Float", "float", 0, 1, "Nice = %.3f") then 
@@ -318,7 +319,11 @@ local window = Imgui.Create("Test", "bg", 1280, 800, function(ui)
 			ui:ProgressBar(ui:GetValue("float", 2), nil, "textinput");
 		end
 
-		if ui:CollapsingHeader("Table", "demo") and ui:BeginTable("tablestuff", 3) then 
+		ui:SetNextItemOpen(ui:GetValue("tabletabopen", 1));
+		
+		local windowSize = ui:GetWindowSize();
+
+		if ui:CollapsingHeader("Table", "demo") and ui:BeginTable("tablestuff",  3, 1920 | 64) then 
 
 			if ui:TableNextColumn() then 
 				ui:Checkbox("Test 1", "demo");
@@ -345,6 +350,9 @@ local window = Imgui.Create("Test", "bg", 1280, 800, function(ui)
 			end
 
 			ui:EndTable();
+			ui:SetValue("tabletabopen", 1, true);
+		else 
+			ui:SetValue("tabletabopen", 1, false);
 		end
 	end
 
@@ -425,6 +433,8 @@ local window = Imgui.Create("Test", "bg", 1280, 800, function(ui)
 	end
 end);
 
+window.GetEnums();
+
 window:SetValue("bg", 3, {x=0.45,y=0.55,z=0.6, w=1.0});
 window:SetValue("property", 1, false);
 window:SetValue("demo", 1, true);
@@ -432,11 +442,23 @@ window:SetValue("float", 2, 0.5);
 window:SetValue("radiobutton", 4, string.byte("B"));
 window:SetValue("comboselected", 4, 2);
 window:SetValue("enumslider", 4, 0);
+window:SetValue("tabletabopen", 1, true);
 
 local values = window:GetAllValues();
 
 for n=1, #values do 
 	print(values[n].Name, values[n].Type);
 end 
+
+print("Enums:-----------");
+
+for def,vals in pairs(window.GetEnums()) do
+
+	print(def);
+
+	for k,v in pairs(vals) do 
+		print("   "..k.."="..v);
+	end
+end
 
 while window:Tick() do end

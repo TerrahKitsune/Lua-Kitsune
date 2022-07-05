@@ -1420,15 +1420,49 @@ Imgui:
 	-Gets info about the ui
 	info Imgui:Info();
 
-	-Draw functions, can only be called from within the renderer function:
-	ImguiDraw:
-
 	-Convert a vector4 to rgb
 	-vector4 = {x,y,z,w}
 	r,g,b ImguiDraw.Vec4ToRGB(vector4)
 
 	-Convert r,g,b into a vec4
 	vec4 ImguiDraw.RGBToVec4(r,g,b)
+
+	-Draw functions, can only be called from within the renderer function:
+	ImguiDraw:
+
+	-Marks the next element to be drawn on the same line
+	nil ImguiDraw:SameLine(opt offsetstartx (0.0), opt spacing (-1.0));
+
+	vec2 Imgui:GetCursorPos();
+	vec2 Imgui:GetCursorStartPos();
+
+	-Indent the next elements
+	nil ImguiDraw:Indent(opt w);
+
+	-Unindent the next elements
+	nil ImguiDraw:Unindent(opt w);
+
+	-Get the text height
+	float ImguiDraw:GetTextLineHeight();
+	float ImguiDraw:GetTextLineHeightWithSpacing();
+
+	-Begin a group, a call to EndGroup must be made
+	nil ImguiDraw:BeginGroup();
+	nil ImguiDraw:EndGroup();
+
+	-Push a stylevar, PopStyleVar should be called after for each call to this
+	-flag = ImGuiStyleVar_
+	-value depends on the flag, it is either a float of a vec2 {x,y}
+	nil ImguiDraw:PushStyleVar(opt flag, value);
+
+	-Set if the next item should be open
+	nil ImguiDraw:SetNextItemOpen(open, opt ImGuiCond)
+
+	-Draws a TreeNode, returns true if its open
+	-A call to TreePop() should be made for each time this returns true
+	bool ImguiDraw:TreeNode(label)
+
+	nil ImguiDraw:TreePop();
 
 	-Gets the size of the window being drawn
 	-vec2 = {x,y}
@@ -1437,9 +1471,6 @@ Imgui:
 	-Sets the next content size to draw
 	-vec2 = {x,y}
 	nil ImguiDraw:NextWindowContentSize(vec2)
-
-	-Get the text height
-	float ImguiDraw:GetTextLineHeight();
 
 	-Calculates the size the next needs
 	-returns a vec2 {x,y}
@@ -1467,12 +1498,24 @@ Imgui:
 
 	-Begins a table draw, returns true if its rendering
 	-if this returns true a call to EndTable must be made
-	bool Imgui:BeginTable(labelid, columns, opt flags, opt vec2outersize, opt innersize)
+	-Flags:
+	-64: alternating bg colors
+	-1920: borders
+	-640: Borders inner
+	-1280: borders outer
+	bool ImguiDraw:BeginTable(labelid, columns, opt flags, opt vec2outersize, opt innersize)
 
-	nil Imgui:EndTable()
+	nil ImguiDraw:EndTable()
 
 	-Signal the next column inside a Begin/EndTable
-	bool Imgui:TableNextColumn()
+	bool ImguiDraw:TableNextColumn()
+
+	-Set a column index to draw in next
+	-returns true if the column is visible, if not no draw calls should follow
+	-0 indexed
+	bool ImguiDraw:TableSetColumnIndex(idx)
+
+	nil ImguiDraw:TableNextRow(opt ImGuiTableRowFlags, opt row_min_height)
 
 	-Draw a text input
 	-tag is a string (5)
@@ -1543,10 +1586,6 @@ Imgui:
 	-Finish drawing a window, must be called if Begin was called
 	nil ImguiDraw:End();
 
-	-Begin a group, a call to EndGroup must be made
-	nil ImguiDraw:BeginGroup();
-	nil ImguiDraw:EndGroup();
-
 	-Begin drawing a tab bar
 	-id is a string that identifies this bar
 	-flags = ImGuiTabBarFlags
@@ -1568,12 +1607,6 @@ Imgui:
 	-Show the demo window, if tag is set it'll have an close button
 	-Tag is a bool (1)
 	nil ImguiDraw:ShowDemoWindow(opt tag)
-
-	-Indent the next elements
-	nil ImguiDraw:Indent(opt w);
-
-	-Unindent the next elements
-	nil ImguiDraw:Unindent(opt w);
 
 	-Disable the following widgets, they'll be dimmed
 	-a call to BeginDisabled must be followed by a call to EndDisabled
@@ -1652,8 +1685,7 @@ Imgui:
 	-Draws a seperator
 	nil ImguiDraw:Separator();
 
-	-Marks the next element to be drawn on the same line
-	nil ImguiDraw:SameLine(opt offsetstartx (0.0), opt spacing (-1.0));
+	
 
 HTTP:
 

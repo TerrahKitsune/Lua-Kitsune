@@ -140,6 +140,7 @@
     <ClCompile Include="LuaFTPMain.cpp" />
     <ClCompile Include="LuaImageMain.cpp" />
     <ClCompile Include="LuaImgui.cpp" />
+    <ClCompile Include="LuaImguiEnums.cpp" />
     <ClCompile Include="LuaImguiInterface.cpp" />
     <ClCompile Include="LuaImguiMain.cpp" />
     <ClCompile Include="luajsonmain.cpp" />

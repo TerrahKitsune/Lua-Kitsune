@@ -1,5 +1,143 @@
 #include "LuaImgui.h"
 
+int LuaImguiTableSetColumnIndex(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	lua_pushboolean(L, ImGui::TableSetColumnIndex(luaL_checkinteger(L, 2)) == true);
+
+	return 1;
+}
+
+int LuaImguiTableNextRow(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImGui::TableNextRow(luaL_optinteger(L, 2, 0), luaL_optnumber(L, 3, 0.0));
+
+	return 0;
+}
+
+int LuaImguiTreePop(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImGui::TreePop();
+
+	return 0;
+}
+
+int LuaImguiTreeNode(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	lua_pushboolean(L, ImGui::TreeNode(luaL_checkstring(L, 2)) == true);
+	return 1;
+}
+
+int LuaImguiSetNextItemOpen(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImGui::SetNextItemOpen(lua_toboolean(L, 2) != 0, luaL_optinteger(L, 3, 0));
+
+	return 0;
+}
+
+int LuaImguiPopStyleVar(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImGui::PopStyleVar();
+
+	return 0;
+}
+
+int LuaImguiPushStyleVar(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	if (lua_type(L, 3) == LUA_TTABLE) {
+		ImGui::PushStyleVar(luaL_checkinteger(L, 2), lua_toimvec2(L, 3));
+	}
+	else {
+		ImGui::PushStyleVar(luaL_checkinteger(L, 2), luaL_checknumber(L, 3));
+	}
+
+	return 0;
+}
+
+int LuaImguiGetTextLineHeightWithSpacing(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	lua_pushnumber(L, ImGui::GetTextLineHeightWithSpacing());
+
+	return 1;
+}
+
+int LuaImguiGetCursorStartPos(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+	size_t len;
+	const char* str = luaL_checklstring(L, 2, &len);
+
+	ImVec2 size = ImGui::GetCursorStartPos();
+	lua_pushimvec2(L, size);
+	return 1;
+}
+
+int LuaImguiGetCursorPos(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+	size_t len;
+	const char* str = luaL_checklstring(L, 2, &len);
+
+	ImVec2 size = ImGui::GetCursorPos();
+	lua_pushimvec2(L, size);
+	return 1;
+}
+
 int LuaImguiCalcTextSize(lua_State* L) {
 
 	LuaImgui* imgui = lua_toimgui(L, 1);
@@ -1544,25 +1682,6 @@ ImVec4 lua_toimvec4(lua_State* L, int idx) {
 	return vec;
 }
 
-LuaImgui* lua_pushimgui(lua_State* L) {
-
-	LuaImgui* imgui = (LuaImgui*)lua_newuserdata(L, sizeof(LuaImgui));
-
-	if (imgui == NULL) {
-		luaL_error(L, "Unable to push imgui");
-		return 0;
-	}
-
-	luaL_getmetatable(L, IMGUI);
-	lua_setmetatable(L, -2);
-	memset(imgui, 0, sizeof(LuaImgui));
-
-	imgui->hWnd = (HWND)INVALID_HANDLE_VALUE;
-	imgui->renderFuncRef = LUA_REFNIL;
-
-	return imgui;
-}
-
 LuaImgui* lua_toimgui(lua_State* L, int index) {
 
 	LuaImgui* imgui = (LuaImgui*)luaL_checkudata(L, index, IMGUI);
@@ -1840,6 +1959,26 @@ int LuaImGuiInputTextCallback(ImGuiInputTextCallbackData* data) {
 	}
 
 	return 0;
+}
+
+
+LuaImgui* lua_pushimgui(lua_State* L) {
+
+	LuaImgui* imgui = (LuaImgui*)lua_newuserdata(L, sizeof(LuaImgui));
+
+	if (imgui == NULL) {
+		luaL_error(L, "Unable to push imgui");
+		return 0;
+	}
+
+	luaL_getmetatable(L, IMGUI);
+	lua_setmetatable(L, -2);
+	memset(imgui, 0, sizeof(LuaImgui));
+
+	imgui->hWnd = (HWND)INVALID_HANDLE_VALUE;
+	imgui->renderFuncRef = LUA_REFNIL;
+
+	return imgui;
 }
 
 int imgui_gc(lua_State* L) {

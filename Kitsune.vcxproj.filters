@@ -810,6 +810,9 @@
     <ClCompile Include="LuaImguiInterface.cpp">
       <Filter>Imgui\Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="LuaImguiEnums.cpp">
+      <Filter>Imgui\Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Lua\lapi.h">
