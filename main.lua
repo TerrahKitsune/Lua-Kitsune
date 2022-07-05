@@ -144,158 +144,208 @@ local cnt = 0;
 
 local window = Imgui.Create("Test", "bg", 1280, 800, function(ui)
 
-	if ui:Begin("Demo", nil, 64) then
-		
-		local r,g,b = ui.Vec4ToRGB(ui:GetValue("bg", 3));
+	if ui:BeginMainMenuBar() then 
 
-		ui:TextColored(ui.RGBToVec4(r,g,b), "Test");
-		ui:SameLine();
+		if ui:BeginMenu("File") then 
 
-		ui:Text(tostring(r).."|"..tostring(g).."|"..tostring(b));
-		ui:SameLine();
-		if ui:Button("Open") then 
-			ui:SetValue("property", 1, true);
-		end
-
-		if ui:Checkbox("Show Demo", "demo") then 
-			print("Click show demo checkbox");
-		end 
-
-		if ui:SliderFloat("Float", "float", 0, 1, "Nice = %.3f") then 
-			print("Slider changed");
-		end 
-
-		if ui:ColorEdit3("Background Color", "bg") then 
-			print("Changed color");
-		end
-
-		ui:Separator();
-
-		if ui:Button("Counter") then 
-			cnt = cnt + 1;
-			ui:SetValue("float", 2, 0.5);
-		end
-
-		ui:SameLine();
-		ui:PushButtonRepeat(true);	
-		if ui:ArrowButton("left", 0) then 
-			cnt = cnt - 1;
-		end		
-		ui:SameLine();
-		if ui:ArrowButton("right", 1) then 
-			cnt = cnt + 1;
-		end
-		ui:PopButtonRepeat();
-
-		ui:SameLine();
-		ui:Text("Count: "..tostring(cnt * ui:GetValue("float", 2)));
-
-		if ui:IsItemHovered() then 
-			ui:BeginTooltip();
-			ui:Text("Real: "..tostring(cnt));
-			ui:EndTooltip();
-		end
-
-		local framerate = ui:Info().Framerate;
-
-		ui:Text(string.format("Application average %.3f ms/frame (%.1f FPS)", 1000.0 / framerate, framerate));
-
-		ui:Separator();
-
-		if ui:RadioButton("A", "radiobutton", string.byte("A")) then 
-			print("Click radio button a");
-		end 
-		ui:SameLine();
-		ui:RadioButton("B", "radiobutton", string.byte("B"));
-		ui:SameLine();
-		ui:RadioButton("C", "radiobutton", string.byte("C"));
-		ui:SameLine();
-		ui:Text(string.char(ui:GetValue("radiobutton", 4)));
-
-		for n=1, 3 do 
-
-			if n > 1 then 
-				ui:SameLine();
+			ui:Separator();
+			if ui:MenuItem("Exit") then 
+				ui:Quit();
 			end
 
-			ui:PushId(n);
-			ui:PushStyleColor(21, ui.RGBToVec4(n*50, n*50,n*50));
-			ui:PushStyleColor(23, ui.RGBToVec4(math.random(0,255), math.random(0,255), math.random(0,255)));
-			ui:Button("Button "..tostring(n));
-			ui:PopStyleColor();
-			ui:PopStyleColor();
-			ui:PopId(n);
+			ui:EndMenu();
 		end
 
-		ui:Separator();
-		ui:LabelText("label", "Value");
-		local letters = {"a","b","c","d","e"};
-		if ui:Combo("Combo", "comboselected", letters, 2) then 
-			print("Combo changed");
-		end
+		ui:EndMainMenuBar();
+	end
 
-		ui:SameLine();
-		ui:HelpMarker("Selected "..tostring(letters[ui:GetValue("comboselected", 4) + 1]));
-
-		if ui:InputText("Text!", "textinput", "Hint text") then 
-			print("Text was changed");
-		end 
-		ui:SameLine();
-		ui:HelpMarker("Text: "..ui:GetValue("textinput", 5));
-
-		if ui:InputInt("Ints", "intinput") then 
-			print("Int was changed");
-		end
-		ui:SameLine();
-		ui:HelpMarker("Int: "..tostring(ui:GetValue("intinput", 4)));
-
-		if ui:InputFloat("Floats", "floatinput", 1.0) then 
-			print("Float was changed");
-		end
-		ui:SameLine();
-		ui:HelpMarker("Float: "..tostring(ui:GetValue("floatinput", 2)));
-
-		if ui:InputDouble("Doubles", "doubleinput", 1.0) then 
-			print("Double was changed");
-		end
-		ui:SameLine();
-		ui:HelpMarker("Double: "..tostring(ui:GetValue("doubleinput", 6)));
-
-		if ui:SliderInt("Int slider", "intslider", 0, 100) then 
-			print("Int slider was changed");
-		end
-		ui:SameLine();
-		ui:HelpMarker("Int: "..tostring(ui:GetValue("intslider", 4)));
-
-
-		if ui:SliderInt("Enum", "enumslider", 0, #elements - 1, elements[ui:GetValue("enumslider", 4) + 1]) then 
-			print("enum slider was changed");
-		end
-		ui:SameLine();
-		ui:HelpMarker("Element: "..elements[ui:GetValue("enumslider", 4) + 1]);
-
-		ui:Separator();
-		ui:LabelText("label", "Value");
-		local testlistbox = {"asd","dsa","abc","haha"};
-		if ui:ListBox("Listbox", "listboxselected", testlistbox) then 
-			print("Listbox changed");
-		end
-		ui:SameLine();
-		ui:HelpMarker("Listbox: "..testlistbox[ui:GetValue("listboxselected", 4) + 1]);
+	if ui:Begin("Demo", nil, 64) then
 		
-		local size = ui:GetWindowSize();
+		if ui:CollapsingHeader("Stuff") then
 
-		size.y = ui:GetTextLineHeight() * 10;
-		size.x = 0;
+			local r,g,b = ui.Vec4ToRGB(ui:GetValue("bg", 3));
 
-		ui:Separator();
-		if ui:InputTextMultiline("Big box", "bigtext", size) then 
-			print("Big box changed");
+			ui:TextColored(ui.RGBToVec4(r,g,b), "Test");
+			ui:SameLine();
+
+			ui:Text(tostring(r).."|"..tostring(g).."|"..tostring(b));
+			ui:SameLine();
+			if ui:Button("Open") then 
+				ui:SetValue("property", 1, true);
+			end
+
+			if ui:Checkbox("Show Demo", "demo") then 
+				print("Click show demo checkbox");
+			end 
+
+			if ui:SliderFloat("Float", "float", 0, 1, "Nice = %.3f") then 
+				print("Slider changed");
+			end 
+
+			if ui:ColorEdit3("Background Color", "bg") then 
+				print("Changed color");
+			end
+
+			ui:Separator();
+
+			if ui:Button("Counter") then 
+				cnt = cnt + 1;
+				ui:SetValue("float", 2, 0.5);
+			end
+
+			ui:SameLine();
+			ui:PushButtonRepeat(true);	
+			if ui:ArrowButton("left", 0) then 
+				cnt = cnt - 1;
+			end		
+			ui:SameLine();
+			if ui:ArrowButton("right", 1) then 
+				cnt = cnt + 1;
+			end
+			ui:PopButtonRepeat();
+
+			ui:SameLine();
+			ui:Text("Count: "..tostring(cnt * ui:GetValue("float", 2)));
+
+			if ui:IsItemHovered() then 
+				ui:BeginTooltip();
+				ui:Text("Real: "..tostring(cnt));
+				ui:EndTooltip();
+			end
+		end 
+
+		if ui:CollapsingHeader("FPS") then
+			local framerate = ui:Info().Framerate;
+
+			ui:Text(string.format("Application average %.3f ms/frame (%.1f FPS)", 1000.0 / framerate, framerate));
 		end
-		ui:SameLine();
-		ui:HelpMarker("Bigtext: "..ui:GetValue("bigtext", 5));
 
-		ui:ProgressBar(ui:GetValue("float", 2), nil, "textinput");
+		if ui:CollapsingHeader("Input") then
+
+			if ui:RadioButton("A", "radiobutton", string.byte("A")) then 
+				print("Click radio button a");
+			end 
+			ui:SameLine();
+			ui:RadioButton("B", "radiobutton", string.byte("B"));
+			ui:SameLine();
+			ui:RadioButton("C", "radiobutton", string.byte("C"));
+			ui:SameLine();
+			ui:Text(string.char(ui:GetValue("radiobutton", 4)));
+
+			for n=1, 3 do 
+
+				if n > 1 then 
+					ui:SameLine();
+				end
+
+				ui:PushId(n);
+				ui:PushStyleColor(21, ui.RGBToVec4(n*50, n*50,n*50));
+				ui:PushStyleColor(23, ui.RGBToVec4(math.random(0,255), math.random(0,255), math.random(0,255)));
+				ui:Button("Button "..tostring(n));
+				ui:PopStyleColor();
+				ui:PopStyleColor();
+				ui:PopId(n);
+			end
+
+			ui:Separator();
+			ui:LabelText("label", "Value");
+			local letters = {"a","b","c","d","e"};
+			if ui:Combo("Combo", "comboselected", letters, 2) then 
+				print("Combo changed");
+			end
+
+			ui:SameLine();
+			ui:HelpMarker("Selected "..tostring(letters[ui:GetValue("comboselected", 4) + 1]));
+
+			if ui:InputText("Text!", "textinput", "Hint text") then 
+				print("Text was changed");
+			end 
+			ui:SameLine();
+			ui:HelpMarker("Text: "..ui:GetValue("textinput", 5));
+
+			if ui:InputInt("Ints", "intinput") then 
+				print("Int was changed");
+			end
+			ui:SameLine();
+			ui:HelpMarker("Int: "..tostring(ui:GetValue("intinput", 4)));
+
+			if ui:InputFloat("Floats", "floatinput", 1.0) then 
+				print("Float was changed");
+			end
+			ui:SameLine();
+			ui:HelpMarker("Float: "..tostring(ui:GetValue("floatinput", 2)));
+
+			if ui:InputDouble("Doubles", "doubleinput", 1.0) then 
+				print("Double was changed");
+			end
+			ui:SameLine();
+			ui:HelpMarker("Double: "..tostring(ui:GetValue("doubleinput", 6)));
+
+			if ui:SliderInt("Int slider", "intslider", 0, 100) then 
+				print("Int slider was changed");
+			end
+			ui:SameLine();
+			ui:HelpMarker("Int: "..tostring(ui:GetValue("intslider", 4)));
+
+
+			if ui:SliderInt("Enum", "enumslider", 0, #elements - 1, elements[ui:GetValue("enumslider", 4) + 1]) then 
+				print("enum slider was changed");
+			end
+			ui:SameLine();
+			ui:HelpMarker("Element: "..elements[ui:GetValue("enumslider", 4) + 1]);
+
+			ui:Separator();
+			ui:LabelText("label", "Value");
+			local testlistbox = {"asd","dsa","abc","haha"};
+			if ui:ListBox("Listbox", "listboxselected", testlistbox) then 
+				print("Listbox changed");
+			end
+			ui:SameLine();
+			ui:HelpMarker("Listbox: "..testlistbox[ui:GetValue("listboxselected", 4) + 1]);
+		
+			local size = ui:GetWindowSize();
+
+			size.y = ui:GetTextLineHeight() * 10;
+			size.x = 0;
+
+			ui:Separator();
+			if ui:InputTextMultiline("Big box", "bigtext", size) then 
+				print("Big box changed");
+			end
+			ui:SameLine();
+			ui:HelpMarker("Bigtext: "..ui:GetValue("bigtext", 5));
+
+			ui:ProgressBar(ui:GetValue("float", 2), nil, "textinput");
+		end
+
+		if ui:CollapsingHeader("Table", "demo") and ui:BeginTable("tablestuff", 3) then 
+
+			if ui:TableNextColumn() then 
+				ui:Checkbox("Test 1", "demo");
+			end
+
+			if ui:TableNextColumn() then 
+				ui:Checkbox("Test 2", "demo");
+			end
+
+			if ui:TableNextColumn() then 
+				ui:Checkbox("Test 3", "demo");
+			end
+
+			if ui:TableNextColumn() then 
+				ui:Checkbox("Test 4", "demo");
+			end
+
+			if ui:TableNextColumn() then 
+				ui:Checkbox("Test 5", "demo");
+			end
+
+			if ui:TableNextColumn() then 
+				ui:Button("Test 6");
+			end
+
+			ui:EndTable();
+		end
 	end
 
 	ui:End();

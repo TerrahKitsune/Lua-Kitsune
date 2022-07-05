@@ -77,6 +77,10 @@ void WaitForLastSubmittedFrame(LuaImgui* ui);
 FrameContext* WaitForNextFrameResources(LuaImgui* ui);
 LRESULT WINAPI ImguiWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
+int MainLoopQuit(lua_State* L);
+int CreateImguiWindow(lua_State* L);
+int MainloopImguiWindow(lua_State* L);
+
 extern LuaImgui* g_currentImgui;
 extern bool windowExists;
 
@@ -105,6 +109,17 @@ struct ImguiElement {
 	ImguiElementFree freeFunc;
 };
 
+int LuaImguiCalcTextSize(lua_State* L);
+int LuaImguiBeginDisabled(lua_State* L);
+int LuaImguiEndDisabled(lua_State* L);
+int LuaImguiIndent(lua_State* L);
+int LuaImguiUnindent(lua_State* L);
+int LuaImguiBeginMainMenuBar(lua_State* L);
+int LuaImguiEndMainMenuBar(lua_State* L);
+int LuaImguiEndTable(lua_State* L);
+int LuaImguiBeginTable(lua_State* L);
+int LuaImguiTableNextColumn(lua_State* L);
+int LuaImguiCollapsingHeader(lua_State* L);
 int LuaImguiProgressBar(lua_State* L);
 int LuaImguiGetTextLineHeight(lua_State* L);
 int LuaImguiNextWindowContentSize(lua_State* L);
@@ -171,8 +186,6 @@ void LoadTableIntoStringArray(lua_State* L, LuaImgui* ui, int idx);
 int Vec4ToRGB(lua_State* L);
 int RGBToVec4(lua_State* L);
 int GetImguiInfo(lua_State* L);
-int CreateImguiWindow(lua_State* L);
-int MainloopImguiWindow(lua_State* L);
 int GetValueFromTag(lua_State* L);
 int SetValueFromTag(lua_State* L);
 

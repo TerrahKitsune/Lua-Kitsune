@@ -3,6 +3,14 @@
 LuaImgui* g_currentImgui = NULL;
 bool windowExists = false;
 
+int MainLoopQuit(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	PostQuitMessage(luaL_optinteger(L, 2, 0));
+	return 0;
+}
+
 int MainloopImguiWindow(lua_State* L) {
 
 	LuaImgui* imgui = lua_toimgui(L, 1);
@@ -12,8 +20,8 @@ int MainloopImguiWindow(lua_State* L) {
 		return 0;
 	}
 	else if (imgui->hWnd == INVALID_HANDLE_VALUE) {
-		luaL_error(L, "Window handle is closed");
-		return 0;
+		lua_pushboolean(L, FALSE);
+		return 1;
 	}
 
 	bool done = false;
@@ -33,6 +41,9 @@ int MainloopImguiWindow(lua_State* L) {
 	g_currentImgui = NULL;
 
 	if (done) {
+
+		lua_settop(L, 1);
+		imgui_gc(L);
 
 		lua_pushboolean(L, FALSE);
 		return 1;

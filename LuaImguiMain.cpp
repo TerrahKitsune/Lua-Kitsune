@@ -3,6 +3,17 @@
 
 static const struct luaL_Reg imguifunctions[] = {
 
+	{ "CalcTextSize", LuaImguiCalcTextSize },
+	{ "BeginDisabled", LuaImguiBeginDisabled },
+	{ "EndDisabled", LuaImguiEndDisabled },
+	{ "Indent", LuaImguiIndent },
+	{ "Unindent", LuaImguiUnindent },
+	{ "BeginMainMenuBar", LuaImguiBeginMainMenuBar },
+	{ "EndMainMenuBar", LuaImguiEndMainMenuBar },
+	{ "EndTable", LuaImguiEndTable },
+	{ "BeginTable", LuaImguiBeginTable },
+	{ "TableNextColumn", LuaImguiTableNextColumn },
+	{ "CollapsingHeader", LuaImguiCollapsingHeader },
 	{ "ProgressBar", LuaImguiProgressBar },
 	{ "GetTextLineHeight", LuaImguiGetTextLineHeight },
 	{ "NextWindowContentSize", LuaImguiNextWindowContentSize },
@@ -57,7 +68,7 @@ static const struct luaL_Reg imguifunctions[] = {
 	{ "End", LuaImguiEnd },
 	{ "Begin", LuaImguiBegin },
 	{ "SetNextWindowSize", LuaImguiSetNextWindowSize },
-	
+
 	{ "GetAllValues", GetAllValues },
 	{ "Clear", ClearMemory },
 	{ "Vec4ToRGB", Vec4ToRGB },
@@ -68,6 +79,7 @@ static const struct luaL_Reg imguifunctions[] = {
 	{ "Tick", MainloopImguiWindow },
 	{ "Create", CreateImguiWindow },
 	{ "Close", imgui_gc },
+	{ "Quit", MainLoopQuit },
 	{ NULL, NULL }
 };
 

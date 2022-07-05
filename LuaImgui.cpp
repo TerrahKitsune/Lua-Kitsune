@@ -1,5 +1,176 @@
 #include "LuaImgui.h"
 
+int LuaImguiCalcTextSize(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+	size_t len;
+	const char* str = luaL_checklstring(L, 2, &len);
+
+	ImVec2 size = ImGui::CalcTextSize(str, str + len, lua_toboolean(L, 3) != 0, luaL_optnumber(L, 4, -1.0));
+	lua_pushimvec2(L, size);
+	return 1;
+}
+
+int LuaImguiEndDisabled(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImGui::EndDisabled();
+
+	return 0;
+}
+
+int LuaImguiBeginDisabled(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImGui::BeginDisabled();
+
+	return 0;
+}
+
+int LuaImguiUnindent(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImGui::Unindent(luaL_optnumber(L, 2, 0.0));
+
+	return 0;
+}
+
+int LuaImguiIndent(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImGui::Indent(luaL_optnumber(L, 2, 0.0));
+
+	return 0;
+}
+
+int LuaImguiEndMainMenuBar(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImGui::EndMainMenuBar();
+
+	return 0;
+}
+
+int LuaImguiBeginMainMenuBar(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	lua_pushboolean(L, ImGui::BeginMainMenuBar() == true);
+
+	return 1;
+}
+
+int LuaImguiTableNextColumn(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	lua_pushboolean(L, ImGui::TableNextColumn() == true);
+
+	return 1;
+}
+
+int LuaImguiEndTable(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImGui::EndTable();
+	
+	return 0;
+}
+
+int LuaImguiBeginTable(lua_State* L) {
+	
+	LuaImgui* imgui = lua_toimgui(L, 1);
+	const char* label = luaL_checkstring(L, 2);
+	int columns = luaL_checkinteger(L, 3);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	bool result = ImGui::BeginTable(label, columns, luaL_optinteger(L, 4, 0), lua_toimvec2(L, 5), luaL_optnumber(L, 6, 0.0));
+
+	lua_pushboolean(L, result == true);
+	return 1;
+}
+
+int LuaImguiCollapsingHeader(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+	const char* label = luaL_checkstring(L, 2);
+	const char* tag = lua_tostring(L, 3);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	bool* open = NULL;
+
+	if (tag) {
+		ImguiElement* element = GetElement(imgui, tag, IMGUI_TYPE_BOOL);
+		if (!element) {
+			element = AddElement(imgui, tag, IMGUI_TYPE_BOOL);
+			if (!element) {
+				luaL_error(L, "Imgui Out of memory");
+				return 0;
+			}
+		}
+
+		open = (bool*)element->Data;
+	}
+
+	lua_pushboolean(L, ImGui::CollapsingHeader(label, open, luaL_optinteger(L, 4, 0)) == true);
+
+	return 1;
+}
+
 int LuaImguiProgressBar(lua_State* L) {
 
 	LuaImgui* imgui = lua_toimgui(L, 1);

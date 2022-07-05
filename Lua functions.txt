@@ -1441,6 +1441,10 @@ Imgui:
 	-Get the text height
 	float ImguiDraw:GetTextLineHeight();
 
+	-Calculates the size the next needs
+	-returns a vec2 {x,y}
+	vec2 ImguiDraw:CalcTextSize(string, opt boolhide_text_after_double_hash, opt floatwrapwidth);
+
 	-Checks if the previously drawn element is hovered
 	-flags: ImGuiHoveredFlags
 	bool ImguiDraw:IsItemHovered(opt flags);
@@ -1458,6 +1462,18 @@ Imgui:
 	-Draws a (?) marker that when hovered shows Text
 	nil ImguiDraw:HelpMarker(Text)
 	
+	-Draw a header, returns true if its expanded
+	bool ImguiDraw:CollapsingHeader(label, opt flags)
+
+	-Begins a table draw, returns true if its rendering
+	-if this returns true a call to EndTable must be made
+	bool Imgui:BeginTable(labelid, columns, opt flags, opt vec2outersize, opt innersize)
+
+	nil Imgui:EndTable()
+
+	-Signal the next column inside a Begin/EndTable
+	bool Imgui:TableNextColumn()
+
 	-Draw a text input
 	-tag is a string (5)
 	-hint is the text shown if no input has been made
@@ -1552,6 +1568,25 @@ Imgui:
 	-Show the demo window, if tag is set it'll have an close button
 	-Tag is a bool (1)
 	nil ImguiDraw:ShowDemoWindow(opt tag)
+
+	-Indent the next elements
+	nil ImguiDraw:Indent(opt w);
+
+	-Unindent the next elements
+	nil ImguiDraw:Unindent(opt w);
+
+	-Disable the following widgets, they'll be dimmed
+	-a call to BeginDisabled must be followed by a call to EndDisabled
+	nil ImguiDraw:BeginDisabled();
+
+	nil ImguiDraw:EndDisabled();
+
+	-Draw the top application main menu bar
+	-Returns true if it should draw menues. 
+	-A call to EndMainMenuBar should be made if this returns true.
+	bool ImguiDraw:BeginMainMenuBar();
+
+	nil ImguiDraw:EndMainMenuBar();
 
 	-Begin drawing a menubar
 	-Returns true if showing, if this returns true a call to EndMenuBar *should* be made
