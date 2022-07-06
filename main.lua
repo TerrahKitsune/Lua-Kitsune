@@ -141,23 +141,99 @@ for n=1, 10 do
 end 
 
 local cnt = 0;
+local maxfpses = 100;
+local fpses = {};
+local fpstimer = Timer.New();
+fpstimer:Start();
+
+local function AddFps(ui, fps)
+
+	if fps <= 0 then 
+		return;
+	end 
+
+	local fpsavg = fps;
+	local offset = 0; 
+
+	if #fpses < maxfpses then 
+		offset = offset + 1;
+	end
+
+	local temp;
+	for n=#fpses + offset, 2, -1 do 
+		fpses[n] = fpses[n - 1];
+		fpsavg = fpsavg + fpses[n];
+	end
+
+	fpses[1] = fps;
+
+	if #fpses > 0 then
+		fpsavg = fpsavg / #fpses
+	end
+
+	ui:SetValue("fpsgraphoverlay", 5, tostring(math.floor(fpsavg)).." avg");
+end
 
 local window = Imgui.Create("Test", "bg", 1280, 800, function(ui)
 
-	if ui:BeginMainMenuBar() then 
+	local framerate;
+
+	local info = ui:Info();
+	local vec0 = {x=0,y=0};
+	ui:PushStyleVar(3, 0.0);
+	ui:PushStyleVar(5, vec0);
+	ui:SetNextWindowSize({x=info.DisplaySizeX,y=25});
+	ui:SetNextWindowPos(vec0);
+
+	if ui:Begin("##mainmenubar", nil, 1295) and ui:BeginMenuBar() then 
+		
+		ui:PopStyleVar(2);
+
+		if fpstimer:Elapsed() >= 100 then
+			
+		framerate = framerate or ui:Info().Framerate;
+
+			AddFps(ui, framerate);
+
+			fpstimer:Stop();
+			fpstimer:Reset();
+			fpstimer:Start();
+		end
 
 		if ui:BeginMenu("File") then 
 
 			ui:Separator();
 			if ui:MenuItem("Exit") then 
+				Exit=_exit;
 				ui:Quit();
 			end
 
 			ui:EndMenu();
 		end
 
-		ui:EndMainMenuBar();
+		framerate = ui:Info().Framerate;
+
+		local fps = math.floor(framerate).." fps";
+		local size = ui:GetWindowSize();
+		local textSize = ui:CalcTextSize(fps);
+		local cursor = ui:GetCursorPos();
+
+		ui:SameLine(size.x - cursor.x - textSize.x);
+
+		ui:Text(fps);
+		if ui:IsItemHovered() then
+			ui:BeginTooltip()  			
+			ui:PlotLines("##fpsgraph", fpses, "fpsgraphoverlay");		
+			ui:EndTooltip();
+		end
+
+		ui:EndMenuBar();
+	else 
+		ui:PopStyleVar(2);
 	end
+
+	ui:End();
+	
 
 	if ui:Begin("Demo", nil, 64) then
 		
@@ -216,7 +292,8 @@ local window = Imgui.Create("Test", "bg", 1280, 800, function(ui)
 		end 
 
 		if ui:CollapsingHeader("FPS") then
-			local framerate = ui:Info().Framerate;
+			
+			framerate = framerate or ui:Info().Framerate;
 
 			ui:Text(string.format("Application average %.3f ms/frame (%.1f FPS)", 1000.0 / framerate, framerate));
 		end

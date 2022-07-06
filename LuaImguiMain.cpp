@@ -3,6 +3,9 @@
 
 static const struct luaL_Reg imguifunctions[] = {
 
+	{ "SetNextWindowPos", LuaImguiSetNextWindowPos },
+	{ "SetNextItemWidth", LuaImguiSetNextItemWidth },
+	{ "PlotLines", LuaImguiPlotLines },
 	{ "TableSetColumnIndex", LuaImguiTableSetColumnIndex },
 	{ "TableNextRow", LuaImguiTableNextRow },
 	{ "TreePop", LuaImguiTreePop },

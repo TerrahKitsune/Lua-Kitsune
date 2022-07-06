@@ -109,6 +109,9 @@ struct ImguiElement {
 	ImguiElementFree freeFunc;
 };
 
+int LuaImguiSetNextWindowPos(lua_State* L);
+int LuaImguiSetNextItemWidth(lua_State* L);
+int LuaImguiPlotLines(lua_State* L);
 int LuaImguiTableSetColumnIndex(lua_State* L);
 int LuaImguiTableNextRow(lua_State* L);
 int LuaImguiTreePop(lua_State* L);
