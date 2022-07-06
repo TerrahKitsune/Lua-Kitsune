@@ -1104,13 +1104,30 @@ int LuaImguiBeginChild(lua_State* L) {
 int LuaImguiMenuItem(lua_State* L) {
 
 	LuaImgui* imgui = lua_toimgui(L, 1);
+	const char* tag = lua_tostring(L, 3);
 
 	if (!imgui->isInRender) {
 		luaL_error(L, "Draw functions can only be called inside renderer");
 		return 0;
 	}
 
-	lua_pushboolean(L, ImGui::MenuItem(luaL_checkstring(L, 2)) == true);
+	bool* checkbox = NULL;
+
+	if (tag) {
+
+		ImguiElement* element = GetElement(imgui, tag, IMGUI_TYPE_BOOL);
+		if (!element) {
+			element = AddElement(imgui, tag, IMGUI_TYPE_BOOL);
+			if (!element) {
+				luaL_error(L, "Imgui Out of memory");
+				return 0;
+			}
+		}
+
+		checkbox = (bool*)element->Data;
+	}
+
+	lua_pushboolean(L, ImGui::MenuItem(luaL_checkstring(L, 2), NULL, checkbox) == true);
 
 	return 1;
 }
