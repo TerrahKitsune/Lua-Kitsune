@@ -107,8 +107,21 @@ struct ImguiElement {
 	size_t Size;
 	size_t Len;
 	ImguiElementFree freeFunc;
-};
+}; 
 
+int LuaImguiTableSetStyle(lua_State* L);
+int LuaImguiTableGetStyle(lua_State* L);
+int LuaImguiSetScrollHereY(lua_State* L);
+int LuaImguiGetScrollMaxY(lua_State* L);
+int LuaImguiGetScrollY(lua_State* L);
+int LuaImguiTableSetupColumn(lua_State* L);
+int LuaImguiPushTextWrapPos(lua_State* L);
+int LuaImguiPopTextWrapPos(lua_State* L);
+int LuaImguiGetFontSize(lua_State* L);
+int LuaImguiOpenPopup(lua_State* L);
+int LuaImguiCloseCurrentPopup(lua_State* L);
+int LuaImguiBeginPopup(lua_State* L);
+int LuaImguiEndPopup(lua_State* L);
 int LuaImguiSetNextWindowPos(lua_State* L);
 int LuaImguiSetNextItemWidth(lua_State* L);
 int LuaImguiPlotLines(lua_State* L);

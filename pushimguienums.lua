@@ -5,14 +5,17 @@ local imguifiles = {
 
 local function Any(t)
 
+	local cnt = 0;
+
 	if type(t) ~= "table" then
-	return false;
+		return cnt;
 	end
 
 	for k,v in pairs(t) do 
-		return true;
+		cnt = cnt + 1;
 	end 
-	return false;
+	
+	return cnt;
 end
 
 local function DoRow(lastnumber, defname, defs, row)
@@ -99,7 +102,7 @@ local function DoFile(enums, file)
 	local defs;
 	local temps;
 	f:close();
-	for defname, def in text:gmatch("enum%s-(.-)%s-{(.-)}") do 
+	for defname, def in text:gmatch("\nenum%s-(.-)%s-{(.-)}") do 
 	
 		if not defname or defname:len() <= 0 or not def or def:len() <= 0 then 
 			error("Missing name");
@@ -116,7 +119,9 @@ local function DoFile(enums, file)
 			temps = DoRow(temps, defname, defs,row);
 		end
 		
-		if Any(defs) then
+		print(defname, Any(defs));
+		
+		if Any(defs) > 0 then
 			enums[defname] = defs;
 		end
 	end
@@ -242,7 +247,7 @@ for defname, defs in pairs(enums) do
 	
 	for k,v in pairs(defs) do 
 		f:write('\t\tlua_pushstring(L, "'..k..'");\n');
-		f:write('\t\tlua_pushnumber(L, '..v..');\n');
+		f:write('\t\tlua_pushinteger(L, '..v..');\n');
 		f:write("\t\tlua_settable(L, -3);\n");
 	end
 	

@@ -3,6 +3,19 @@
 
 static const struct luaL_Reg imguifunctions[] = {
 
+	{ "SetStyle", LuaImguiTableSetStyle },
+	{ "GetStyle", LuaImguiTableGetStyle },
+	{ "SetScrollHereY", LuaImguiSetScrollHereY },
+	{ "GetScrollMaxY", LuaImguiGetScrollMaxY },
+	{ "GetScrollY", LuaImguiGetScrollY },
+	{ "TableSetupColumn", LuaImguiTableSetupColumn },
+	{ "PushTextWrapPos", LuaImguiPushTextWrapPos },
+	{ "PopTextWrapPos", LuaImguiPopTextWrapPos },
+	{ "GetFontSize", LuaImguiGetFontSize },
+	{ "OpenPopup", LuaImguiOpenPopup },
+	{ "CloseCurrentPopup", LuaImguiCloseCurrentPopup },
+	{ "BeginPopup", LuaImguiBeginPopup },
+	{ "EndPopup", LuaImguiEndPopup },
 	{ "SetNextWindowPos", LuaImguiSetNextWindowPos },
 	{ "SetNextItemWidth", LuaImguiSetNextItemWidth },
 	{ "PlotLines", LuaImguiPlotLines },

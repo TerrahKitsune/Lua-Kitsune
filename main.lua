@@ -121,8 +121,6 @@ local function SetGCFunction(tbl, func)
 	return setmetatable(tbl, {__gc = func})
 end
 
-local gigabuttonoffset = 275;
-
 local function CreateGCPrint()
 	SetGCFunction({last=Time()}, function(obj) local t=Time();print("COLLECTING GARBAGE Lua mem: "..math.floor(collectgarbage("count")) .. " KB Time: "..(t-obj.last)); CreateGCPrint(); end);
 end
@@ -140,6 +138,7 @@ for n=1, 10 do
 	table.insert(test, tostring(math.random()));
 end 
 
+local stream = Stream.Create();
 local cnt = 0;
 local maxfpses = 100;
 local fpses = {};
@@ -174,6 +173,43 @@ local function AddFps(ui, fps)
 	ui:SetValue("fpsgraphoverlay", 5, tostring(math.floor(fpsavg)).." avg");
 end
 
+local testlogdata = {};
+
+for n=1, 100 do
+	table.insert(testlogdata, tostring(math.random()));
+end 
+
+local function DrawLogWindow(ui, title, tag, data)
+
+	ui:SetNextWindowSize({x=500, y=400}, ui.GetEnums().ImGuiCond.FirstUseEver);
+	if not ui:Begin(title, tag) then
+		ui:End();
+		return;
+	end
+	
+	if ui:BeginPopup("Options") then
+        
+		ui:Checkbox("Auto-scroll", title.."_autoscroll");
+		ui:EndPopup();
+	end  
+
+	if ui:Button("Options") then
+		ui:OpenPopup("Options");
+	end 
+
+	ui:PushStyleVar(ui.GetEnums().ImGuiStyleVar.ItemSpacing, {x=0, y=0});
+
+	for n=1, #data do
+		ui:Selectable(n);
+		ui:SameLine();
+		ui:TextWrapped(data[n]);
+		ui:Separator();
+	end
+
+	ui:PopStyleVar();
+	ui:End();
+end
+
 local window = Imgui.Create("Test", "bg", 1280, 800, function(ui)
 
 	local framerate;
@@ -182,7 +218,7 @@ local window = Imgui.Create("Test", "bg", 1280, 800, function(ui)
 	local vec0 = {x=0,y=0};
 	ui:PushStyleVar(3, 0.0);
 	ui:PushStyleVar(5, vec0);
-	ui:SetNextWindowSize({x=info.DisplaySizeX,y=25});
+	ui:SetNextWindowSize({x=info.DisplaySizeX,y=20});
 	ui:SetNextWindowPos(vec0);
 
 	if ui:Begin("##mainmenubar", nil, 1295) and ui:BeginMenuBar() then 
@@ -233,7 +269,6 @@ local window = Imgui.Create("Test", "bg", 1280, 800, function(ui)
 	end
 
 	ui:End();
-	
 
 	if ui:Begin("Demo", nil, 64) then
 		
@@ -249,10 +284,18 @@ local window = Imgui.Create("Test", "bg", 1280, 800, function(ui)
 			if ui:Button("Open") then 
 				ui:SetValue("property", 1, true);
 			end
+			ui:SameLine();
+			if ui:Button("Style") then 
+				ui.SetStyle(ui.GetStyle());
+			end
 
 			if ui:Checkbox("Show Demo", "demo") then 
 				print("Click show demo checkbox");
 				ui:SetValue("tabletabopen", 1, true);
+			end
+
+			if ui:Checkbox("Show Log", "showlog") then 
+				ui:SetValue("showlog", 1, true);
 			end 
 
 			if ui:SliderFloat("Float", "float", 0, 1, "Nice = %.3f") then 
@@ -327,7 +370,7 @@ local window = Imgui.Create("Test", "bg", 1280, 800, function(ui)
 
 			ui:Separator();
 			ui:LabelText("label", "Value");
-			local letters = {"a","b","c","d","e"};
+			local letters = {"a","b","c","d","e", Wchar.FromAnsi("ö")};
 			if ui:Combo("Combo", "comboselected", letters, 2) then 
 				print("Combo changed");
 			end
@@ -336,8 +379,12 @@ local window = Imgui.Create("Test", "bg", 1280, 800, function(ui)
 			ui:HelpMarker("Selected "..tostring(letters[ui:GetValue("comboselected", 4) + 1]));
 
 			if ui:InputText("Text!", "textinput", "Hint text") then 
-				print("Text was changed");
+				
+				print("Text was changed "..ui:GetValue("textinput", 5):len().." "..ui:GetValue("textinput", 5));
+
+				
 			end 
+
 			ui:SameLine();
 			ui:HelpMarker("Text: "..ui:GetValue("textinput", 5));
 
@@ -439,6 +486,10 @@ local window = Imgui.Create("Test", "bg", 1280, 800, function(ui)
 		ui:ShowDemoWindow("demo");
 	end
 
+	if ui:GetValue("showlog", 1) then
+		DrawLogWindow(ui, "Log" ,"showlog", testlogdata);
+	end
+
 	if ui:GetValue("property", 1) then
 
 		ui:SetNextWindowSize(500,440,4);
@@ -529,13 +580,46 @@ end
 
 print("Enums:-----------");
 
+local f = io.open("ImguiEnums.txt", "w");
+
 for def,vals in pairs(window.GetEnums()) do
 
 	print(def);
+	f:write(def.."\n");
 
 	for k,v in pairs(vals) do 
 		print("   "..k.."="..v);
+		f:write("   "..k.."="..v.."\n");
 	end
 end
+
+f:flush();
+f:close();
+
+local encoding = io.open("r:/test.txt", "w");
+
+for n=1, 255 do 
+	stream:SetLength(0);
+	stream:WriteUtf8(string.char(n));
+	stream:Seek();
+
+	local str, code = stream:ReadUtf8();
+
+	encoding:write(str.." = "..string.char(n).."\n");
+end
+
+encoding:close();
+
+window:SetValue("textinput", 5, stream:Read());
+
+local style = window.GetStyle();
+
+style.Colors.Text = {x=0.5,y=1,z=1,w=1};
+style.Font = "Test";
+
+TablePrint(style);
+window.SetStyle(style);
+
+TablePrint(window:Info());
 
 while window:Tick() do end

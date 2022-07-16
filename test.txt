@@ -1,4 +1,668 @@
-#include "LuaImgui.h"
+ImGuiTabItemFlags_
+   NoCloseWithMiddleMouseButton=4
+   NoReorder=32
+   Leading=64
+   None=0
+   NoTooltip=16
+   UnsavedDocument=1
+   Trailing=128
+   SetSelected=2
+   NoPushId=8
+-----
+ImGuiMouseCursor_
+   Hand=7
+   Arrow=0
+   ResizeNESW=5
+   ResizeAll=2
+   None=-1
+   TextInput=1
+   ResizeNS=3
+   COUNT=9
+   ResizeEW=4
+   ResizeNWSE=6
+   NotAllowed=8
+-----
+ImGuiFocusedFlags_
+   None=0
+   AnyWindow=4
+   RootWindow=2
+   RootAndChildWindows=3
+   NoPopupHierarchy=8
+   ChildWindows=1
+-----
+ImGuiSortDirection_
+   None=0
+   Ascending=1
+   Descending=2
+-----
+ImGuiPopupFlags_
+   MouseButtonMiddle=2
+   MouseButtonLeft=0
+   NoOpenOverExistingPopup=32
+   MouseButtonRight=1
+   MouseButtonMask_=31
+   NoOpenOverItems=64
+   None=0
+   MouseButtonDefault_=1
+   AnyPopup=384
+   AnyPopupId=128
+   AnyPopupLevel=256
+-----
+ImGuiComboFlags_
+   NoArrowButton=32
+   HeightLarge=8
+   PopupAlignLeft=1
+   NoPreview=64
+   HeightSmall=2
+   HeightMask_=30
+   HeightLargest=16
+   None=0
+   HeightRegular=4
+-----
+ImGuiBackendFlags_
+   None=0
+   HasMouseCursors=2
+   HasGamepad=1
+   RendererHasVtxOffset=8
+   HasSetMousePos=4
+-----
+ImDrawListFlags_
+   None=0
+   AntiAliasedLinesUseTex=2
+   AntiAliasedLines=1
+   AllowVtxOffset=8
+   AntiAliasedFill=4
+-----
+ImGuiViewportFlags_
+   None=0
+   OwnedByApp=4
+   IsPlatformWindow=1
+   IsPlatformMonitor=2
+-----
+ImGuiStyleVar_
+   PopupBorderSize=10
+   PopupRounding=9
+   FramePadding=11
+   GrabRounding=21
+   GrabMinSize=20
+   ItemSpacing=14
+   WindowTitleAlign=6
+   ScrollbarRounding=19
+   ButtonTextAlign=23
+   FrameBorderSize=13
+   ScrollbarSize=18
+   COUNT=25
+   WindowPadding=2
+   FrameRounding=12
+   SelectableTextAlign=24
+   TabRounding=22
+   Alpha=0
+   WindowRounding=3
+   CellPadding=17
+   IndentSpacing=16
+   ChildRounding=7
+   DisabledAlpha=1
+   ItemInnerSpacing=15
+   WindowMinSize=5
+   WindowBorderSize=4
+   ChildBorderSize=8
+-----
+ImGuiConfigFlags_
+   NavEnableSetMousePos=4
+   None=0
+   NavEnableKeyboard=1
+   NoMouseCursorChange=32
+   IsSRGB=1048576
+   NoMouse=16
+   NavEnableGamepad=2
+   IsTouchScreen=2097152
+   NavNoCaptureKeyboard=8
+-----
+ImGuiMouseButton_
+   Middle=2
+   COUNT=5
+   Right=1
+   Left=0
+-----
+ImDrawCornerFlags_
+   BotRight=128
+   Top=48
+   TopRight=32
+   Bot=192
+   BotLeft=64
+   Left=80
+   TopLeft=16
+   None=256
+   All=240
+   Right=160
+-----
+ImGuiDataType_
+   Float=8
+   U64=7
+   S8=0
+   Double=9
+   U16=3
+   S16=2
+   COUNT=10
+   U8=1
+   S32=4
+   U32=5
+   S64=6
+-----
+ImGuiTableBgTarget_
+   None=0
+   CellBg=3
+   RowBg1=2
+   RowBg0=1
+-----
+ImGuiSelectableFlags_
+   AllowDoubleClick=4
+   SpanAllColumns=2
+   Disabled=8
+   DontClosePopups=1
+   AllowItemOverlap=16
+   None=0
+-----
+ImGuiTreeNodeFlags_
+   CollapsingHeader=26
+   NavLeftJumpsBackHere=8192
+   FramePadding=1024
+   NoTreePushOnOpen=8
+   OpenOnDoubleClick=64
+   SpanFullWidth=4096
+   OpenOnArrow=128
+   SpanAvailWidth=2048
+   None=0
+   Bullet=512
+   NoAutoOpenOnLog=16
+   AllowItemOverlap=4
+   DefaultOpen=32
+   Selected=1
+   Leaf=256
+   Framed=2
+-----
+ImGuiKey_
+   GamepadBack=618
+   KeypadDivide=611
+   RightAlt=533
+   Tab=512
+   CapsLock=595
+   GamepadLStickRight=636
+   KeypadEqual=616
+   Keypad0=600
+   Equal=590
+   Pause=599
+   ModSuper=644
+   LeftSuper=530
+   ModAlt=643
+   F2=573
+   GamepadR1=628
+   Period=587
+   RightBracket=593
+   KeypadAdd=614
+   Keypad5=605
+   GamepadRStickDown=638
+   Menu=535
+   Apostrophe=584
+   PageDown=518
+   Space=524
+   F1=572
+   GraveAccent=594
+   GamepadLStickLeft=635
+   LeftCtrl=527
+   NamedKey_BEGIN=512
+   Keypad8=608
+   GamepadL1=627
+   COUNT=645
+   GamepadL2=629
+   F8=579
+   PrintScreen=598
+   RightShift=532
+   GamepadFaceRight=622
+   F11=582
+   GamepadStart=617
+   Keypad6=606
+   GamepadLStickDown=634
+   KeypadMultiply=612
+   KeysData_OFFSET=0
+   F9=580
+   None=0
+   F7=578
+   PageUp=517
+   Keypad2=602
+   UpArrow=515
+   GamepadDpadLeft=625
+   End=520
+   Insert=521
+   Minus=586
+   KeysData_SIZE=645
+   3=539
+   2=538
+   1=537
+   F6=577
+   7=543
+   6=542
+   5=541
+   4=540
+   Keypad4=604
+   GamepadDpadUp=623
+   GamepadL3=631
+   Keypad7=607
+   DownArrow=516
+   KeypadSubtract=613
+   KeyPadEnter=615
+   Slash=588
+   Keypad3=603
+   ModCtrl=641
+   GamepadFaceDown=620
+   F5=576
+   KeypadEnter=615
+   ScrollLock=596
+   NamedKey_COUNT=133
+   Delete=522
+   Z=571
+   Y=570
+   X=569
+   GamepadFaceLeft=621
+   ModShift=642
+   GamepadRStickRight=640
+   RightSuper=534
+   GamepadRStickLeft=639
+   Escape=526
+   GamepadRStickUp=637
+   GamepadR3=632
+   LeftShift=528
+   GamepadLStickUp=633
+   RightArrow=514
+   GamepadFaceUp=619
+   NamedKey_END=645
+   Keypad1=601
+   0=536
+   RightCtrl=531
+   GamepadDpadRight=626
+   N=559
+   Enter=525
+   GamepadR2=630
+   Keypad9=609
+   F4=575
+   KeypadDecimal=610
+   NumLock=597
+   Backslash=592
+   Comma=585
+   LeftBracket=591
+   Semicolon=589
+   F12=583
+   Backspace=523
+   9=545
+   8=544
+   Home=519
+   F10=581
+   GamepadDpadDown=624
+   LeftAlt=529
+   C=548
+   B=547
+   A=546
+   F3=574
+   G=552
+   F=551
+   E=550
+   D=549
+   K=556
+   J=555
+   I=554
+   H=553
+   O=560
+   LeftArrow=513
+   M=558
+   L=557
+   S=564
+   R=563
+   Q=562
+   P=561
+   W=568
+   V=567
+   U=566
+   T=565
+-----
+ImGuiCond_
+   None=0
+   FirstUseEver=4
+   Always=1
+   Once=2
+   Appearing=8
+-----
+ImGuiColorEditFlags_
+   NoInputs=32
+   InputMask_=402653184
+   NoPicker=4
+   DataTypeMask_=25165824
+   PickerMask_=100663296
+   NoOptions=8
+   NoLabel=128
+   NoSidePreview=256
+   HDR=524288
+   NoDragDrop=512
+   InputHSV=268435456
+   PickerHueWheel=67108864
+   AlphaPreview=131072
+   InputRGB=134217728
+   AlphaBar=65536
+   DefaultOptions_=177209344
+   NoSmallPreview=16
+   DisplayHSV=2097152
+   Float=16777216
+   DisplayHex=4194304
+   AlphaPreviewHalf=262144
+   None=0
+   NoBorder=1024
+   Uint8=8388608
+   NoTooltip=64
+   DisplayMask_=7340032
+   DisplayRGB=1048576
+   PickerHueBar=33554432
+   NoAlpha=2
+-----
+ImGuiInputTextFlags_
+   CallbackResize=262144
+   CallbackCompletion=64
+   CharsDecimal=1
+   AllowTabInput=1024
+   CallbackHistory=128
+   EnterReturnsTrue=32
+   NoHorizontalScroll=4096
+   CharsNoBlank=8
+   AutoSelectAll=16
+   CharsHexadecimal=2
+   CallbackCharFilter=512
+   CtrlEnterForNewLine=2048
+   AlwaysInsertMode=8192
+   AlwaysOverwrite=8192
+   None=0
+   CallbackEdit=524288
+   NoUndoRedo=65536
+   Password=32768
+   ReadOnly=16384
+   CallbackAlways=256
+   CharsUppercase=4
+   CharsScientific=131072
+-----
+ImFontAtlasFlags_
+   None=0
+   NoBakedLines=4
+   NoMouseCursors=2
+   NoPowerOfTwoHeight=1
+-----
+ImGuiHoveredFlags_
+   NoPopupHierarchy=8
+   AllowWhenBlockedByPopup=32
+   NoNavOverride=1024
+   ChildWindows=1
+   RectOnly=416
+   AllowWhenBlockedByActiveItem=128
+   None=0
+   AllowWhenDisabled=512
+   RootWindow=2
+   RootAndChildWindows=3
+   AnyWindow=4
+   AllowWhenOverlapped=256
+-----
+ImGuiTableColumnFlags_
+   NoClip=256
+   NoSort=512
+   IndentMask_=196608
+   DefaultSort=4
+   IndentDisable=131072
+   NoSortDescending=2048
+   DefaultHide=2
+   Disabled=1
+   NoDirectResize_=1073741824
+   NoHeaderWidth=8192
+   StatusMask_=251658240
+   IsEnabled=16777216
+   WidthStretch=8
+   IsSorted=67108864
+   IsVisible=33554432
+   IsHovered=134217728
+   WidthMask_=24
+   IndentEnable=65536
+   PreferSortDescending=32768
+   None=0
+   PreferSortAscending=16384
+   NoHeaderLabel=4096
+   NoReorder=64
+   NoHide=128
+   NoSortAscending=1024
+   NoResize=32
+   WidthFixed=16
+-----
+ImGuiModFlags_
+   None=0
+   Ctrl=1
+   Shift=2
+   Super=8
+   Alt=4
+-----
+ImGuiWindowFlags_
+   NoSavedSettings=256
+   NoMouseInputs=512
+   NoMove=4
+   Popup=67108864
+   ChildMenu=268435456
+   Modal=134217728
+   NoCollapse=32
+   NoTitleBar=1
+   NoNavFocus=524288
+   ChildWindow=16777216
+   NoNav=786432
+   NavFlattened=8388608
+   NoInputs=786944
+   NoDecoration=43
+   AlwaysAutoResize=64
+   MenuBar=1024
+   UnsavedDocument=1048576
+   Tooltip=33554432
+   HorizontalScrollbar=2048
+   AlwaysUseWindowPadding=65536
+   AlwaysHorizontalScrollbar=32768
+   NoBackground=128
+   None=0
+   AlwaysVerticalScrollbar=16384
+   NoScrollbar=8
+   NoFocusOnAppearing=4096
+   NoBringToFrontOnFocus=8192
+   NoNavInputs=262144
+   NoResize=2
+   NoScrollWithMouse=16
+-----
+ImGuiTableRowFlags_
+   None=0
+   Headers=1
+-----
+ImGuiSliderFlags_
+   Logarithmic=32
+   NoInput=128
+   ClampOnInput=16
+   InvalidMask_=1879048207
+   AlwaysClamp=16
+   None=0
+   NoRoundToFormat=64
+-----
+ImGuiTabBarFlags_
+   NoCloseWithMiddleMouseButton=8
+   FittingPolicyDefault_=64
+   AutoSelectNewTabs=2
+   TabListPopupButton=4
+   None=0
+   NoTooltip=32
+   FittingPolicyResizeDown=64
+   FittingPolicyScroll=128
+   FittingPolicyMask_=192
+   NoTabListScrollingButtons=16
+   Reorderable=1
+-----
+ImGuiCol_
+   Separator=27
+   ButtonActive=23
+   ResizeGrip=30
+   TabHovered=34
+   TextDisabled=1
+   TableBorderLight=44
+   BorderShadow=6
+   ScrollbarGrab=15
+   HeaderActive=26
+   FrameBg=7
+   ModalWindowDimBg=52
+   COUNT=53
+   PlotLinesHovered=39
+   TabUnfocusedActive=37
+   ResizeGripActive=32
+   FrameBgActive=9
+   Header=24
+   Text=0
+   WindowBg=2
+   ScrollbarGrabHovered=16
+   SeparatorActive=29
+   Button=21
+   MenuBarBg=13
+   PopupBg=4
+   SliderGrab=19
+   CheckMark=18
+   TableRowBgAlt=46
+   TitleBg=10
+   NavWindowingDimBg=51
+   NavWindowingHighlight=50
+   NavHighlight=49
+   DragDropTarget=48
+   ButtonHovered=22
+   TableRowBg=45
+   TableBorderStrong=43
+   TableHeaderBg=42
+   PlotHistogramHovered=41
+   ResizeGripHovered=31
+   PlotHistogram=40
+   PlotLines=38
+   ScrollbarBg=14
+   TabActive=35
+   TitleBgCollapsed=12
+   ChildBg=3
+   Tab=33
+   Border=5
+   TitleBgActive=11
+   TextSelectedBg=47
+   SeparatorHovered=28
+   HeaderHovered=25
+   SliderGrabActive=20
+   TabUnfocused=36
+   ScrollbarGrabActive=17
+   FrameBgHovered=8
+-----
+ImGuiNavInput_
+   TweakFast=15
+   LStickRight=9
+   LStickLeft=8
+   FocusPrev=12
+   DpadDown=7
+   DpadLeft=4
+   DpadUp=6
+   LStickUp=10
+   KeyUp_=18
+   DpadRight=5
+   Activate=0
+   TweakSlow=14
+   COUNT=20
+   KeyDown_=19
+   KeyRight_=17
+   LStickDown=11
+   KeyLeft_=16
+   FocusNext=13
+   Cancel=1
+   Menu=3
+   Input=2
+-----
+ImGuiButtonFlags_
+   MouseButtonMiddle=4
+   MouseButtonLeft=1
+   MouseButtonDefault_=1
+   MouseButtonRight=2
+   MouseButtonMask_=7
+   None=0
+-----
+ImGuiDragDropFlags_
+   SourceNoDisableHover=2
+   SourceNoPreviewTooltip=1
+   AcceptBeforeDelivery=1024
+   AcceptNoPreviewTooltip=4096
+   None=0
+   AcceptPeekOnly=3072
+   AcceptNoDrawDefaultRect=2048
+   SourceNoHoldToOpenOthers=4
+   SourceExtern=16
+   SourceAutoExpirePayload=32
+   SourceAllowNullID=8
+-----
+ImGuiTableFlags_
+   NoClip=1048576
+   BordersH=384
+   BordersV=1536
+   SizingMask_=57344
+   Reorderable=2
+   BordersOuterH=256
+   Sortable=8
+   PadOuterX=2097152
+   NoHostExtendX=65536
+   NoPadInnerX=8388608
+   BordersInnerV=512
+   NoSavedSettings=16
+   NoPadOuterX=4194304
+   Borders=1920
+   SortTristate=134217728
+   PreciseWidths=524288
+   SortMulti=67108864
+   ContextMenuInBody=32
+   Resizable=1
+   SizingFixedSame=16384
+   NoBordersInBodyUntilResize=4096
+   NoBordersInBody=2048
+   SizingStretchProp=24576
+   NoKeepColumnsVisible=262144
+   SizingFixedFit=8192
+   ScrollX=16777216
+   RowBg=64
+   BordersInnerH=128
+   None=0
+   Hideable=4
+   BordersInner=640
+   BordersOuter=1280
+   NoHostExtendY=131072
+   ScrollY=33554432
+   SizingStretchSame=32768
+   BordersOuterV=1024
+-----
+ImDrawFlags_
+   RoundCornersTopRight=32
+   RoundCornersRight=160
+   RoundCornersBottom=192
+   RoundCornersTopLeft=16
+   Closed=1
+   RoundCornersTop=48
+   None=0
+   RoundCornersMask_=496
+   RoundCornersBottomLeft=64
+   RoundCornersAll=240
+   RoundCornersNone=256
+   RoundCornersBottomRight=128
+   RoundCornersDefault_=240
+   RoundCornersLeft=80
+-----
+ImGuiDir_
+   None=-1
+   Left=0
+   COUNT=4
+   Up=2
+   Down=3
+   Right=1
+-----
+Code:
 
 int existingEnumTable = LUA_REFNIL;
 
@@ -2050,6 +2714,8 @@ int lua_pushimguienums(lua_State* L) {
 		lua_pushinteger(L, 80);
 		lua_settable(L, -3);
 	}
+	
+/lua local l=""; for n=1, 100 do l=l..tostring(math.random()); end SINFAR:AddChat({Timestamp="test", Channel="test", Name="test", Text=l});
 
 	lua_settable(L, -3);
 

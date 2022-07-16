@@ -121,6 +121,73 @@ int MainloopImguiWindow(lua_State* L) {
 	return 1;
 }
 
+static void LoadAllFonts(ImGuiIO& io, const char* folder) {
+
+	char ext[4] = { 0 };
+	const char* strmatch;
+	char path[MAX_PATH + 1];
+	int size;
+	int numbs;
+	WIN32_FIND_DATA fdFile;
+	HANDLE hFind = NULL;
+
+	io.Fonts->AddFontDefault();
+
+	if (strlen(folder) >= MAX_PATH-10) {
+		return;
+	}
+	else {
+		strcpy(path, folder);
+		strcat(path, "*.*");
+	}
+
+	if ((hFind = FindFirstFile(path, &fdFile)) == INVALID_HANDLE_VALUE)
+	{
+		return;
+	}
+
+	do
+	{
+		strmatch = strstr(fdFile.cFileName, ".");
+
+		if (strcmp(fdFile.cFileName, ".") != 0
+			&& strcmp(fdFile.cFileName, "..") != 0
+			&& (fdFile.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0
+			&& strmatch && strlen(strmatch) == 4)
+		{
+			strcpy(ext, strmatch + 1);
+
+			for (int n = 0; n < 3; n++) {
+				ext[n] = tolower(ext[n]);
+			}
+
+			if (strcmp(ext, "otf") == 0 || strcmp(ext, "ttf") == 0) {
+
+				size = 0;
+				numbs = 0;
+				
+				while (isdigit((int)*(--strmatch))) {
+					numbs++;
+				}
+
+				if (numbs > 0) {
+					sscanf(strmatch+1, "%d", &size);
+				}
+
+				if (size <= 0) {
+					size = 13;
+				}
+
+				strcpy(path, folder);
+				strcat(path, fdFile.cFileName);
+				io.Fonts->AddFontFromFileTTF(path, size);
+			}
+		}
+	} while (FindNextFile(hFind, &fdFile));
+
+	FindClose(hFind);
+}
+
 int CreateImguiWindow(lua_State* L) {
 
 	size_t len;
@@ -185,6 +252,8 @@ int CreateImguiWindow(lua_State* L) {
 		DXGI_FORMAT_R8G8B8A8_UNORM, ui->pd3dSrvDescHeap,
 		ui->pd3dSrvDescHeap->GetCPUDescriptorHandleForHeapStart(),
 		ui->pd3dSrvDescHeap->GetGPUDescriptorHandleForHeapStart());
+
+	LoadAllFonts(ImGui::GetIO(), "./Fonts/");
 
 	return 1;
 }

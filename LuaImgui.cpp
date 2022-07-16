@@ -1,5 +1,665 @@
 #include "LuaImgui.h"
 
+int LuaImguiTableSetStyle(lua_State* L) {
+
+	luaL_checktype(L, 1, LUA_TTABLE);
+	lua_settop(L, 1);
+	ImGuiStyle& style = ImGui::GetStyle();
+
+	lua_pushstring(L, "Alpha");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TNUMBER) {
+		style.Alpha = lua_tonumber(L, -1);
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "DisabledAlpha");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TNUMBER) {
+		style.DisabledAlpha = lua_tonumber(L, -1);
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "WindowPadding");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TTABLE) {
+		style.WindowPadding = lua_toimvec2(L, -1);
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "WindowRounding");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TNUMBER) {
+		style.WindowRounding = lua_tonumber(L, -1);
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "WindowBorderSize");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TNUMBER) {
+		style.WindowBorderSize = lua_tonumber(L, -1);
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "WindowMinSize");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TTABLE) {
+		style.WindowMinSize = lua_toimvec2(L, -1);
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "WindowTitleAlign");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TTABLE) {
+		style.WindowTitleAlign = lua_toimvec2(L, -1);
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "WindowMenuButtonPosition");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TNUMBER) {
+		style.WindowMenuButtonPosition = lua_tointeger(L, -1);
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "ChildRounding");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TNUMBER) {
+		style.ChildRounding = lua_tonumber(L, -1);
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "ChildBorderSize");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TNUMBER) {
+		style.ChildBorderSize = lua_tonumber(L, -1);
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "PopupRounding");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TNUMBER) {
+		style.PopupRounding = lua_tonumber(L, -1);
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "PopupBorderSize");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TNUMBER) {
+		style.PopupBorderSize = lua_tonumber(L, -1);
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "FramePadding");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TTABLE) {
+		style.FramePadding = lua_toimvec2(L, -1);
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "FrameRounding");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TNUMBER) {
+		style.FrameRounding = lua_tonumber(L, -1);
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "FrameBorderSize");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TNUMBER) {
+		style.FrameBorderSize = lua_tonumber(L, -1);
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "ItemSpacing");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TTABLE) {
+		style.ItemSpacing = lua_toimvec2(L, -1);
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "ItemInnerSpacing");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TTABLE) {
+		style.ItemInnerSpacing = lua_toimvec2(L, -1);
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "CellPadding");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TTABLE) {
+		style.CellPadding = lua_toimvec2(L, -1);
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "TouchExtraPadding");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TTABLE) {
+		style.TouchExtraPadding = lua_toimvec2(L, -1);
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "IndentSpacing");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TNUMBER) {
+		style.IndentSpacing = lua_tonumber(L, -1);
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "ColumnsMinSpacing");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TNUMBER) {
+		style.ColumnsMinSpacing = lua_tonumber(L, -1);
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "ScrollbarSize");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TNUMBER) {
+		style.ScrollbarSize = lua_tonumber(L, -1);
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "ScrollbarRounding");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TNUMBER) {
+		style.ScrollbarRounding = lua_tonumber(L, -1);
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "GrabMinSize");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TNUMBER) {
+		style.GrabMinSize = lua_tonumber(L, -1);
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "GrabRounding");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TNUMBER) {
+		style.GrabRounding = lua_tonumber(L, -1);
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "LogSliderDeadzone");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TNUMBER) {
+		style.LogSliderDeadzone = lua_tonumber(L, -1);
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "TabRounding");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TNUMBER) {
+		style.TabRounding = lua_tonumber(L, -1);
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "TabBorderSize");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TNUMBER) {
+		style.TabBorderSize = lua_tonumber(L, -1);
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "TabMinWidthForCloseButton");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TNUMBER) {
+		style.TabMinWidthForCloseButton = lua_tonumber(L, -1);
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "ColorButtonPosition");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TNUMBER) {
+		style.ColorButtonPosition = lua_tointeger(L, -1);
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "ButtonTextAlign");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TTABLE) {
+		style.ButtonTextAlign = lua_toimvec2(L, -1);
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "SelectableTextAlign");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TTABLE) {
+		style.SelectableTextAlign = lua_toimvec2(L, -1);
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "DisplayWindowPadding");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TTABLE) {
+		style.DisplayWindowPadding = lua_toimvec2(L, -1);
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "DisplaySafeAreaPadding");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TTABLE) {
+		style.DisplaySafeAreaPadding = lua_toimvec2(L, -1);
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "MouseCursorScale");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TNUMBER) {
+		style.MouseCursorScale = lua_tonumber(L, -1);
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "AntiAliasedLines");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TBOOLEAN) {
+		style.AntiAliasedLines = lua_toboolean(L, -1) != 0;
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "AntiAliasedLinesUseTex");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TBOOLEAN) {
+		style.AntiAliasedLinesUseTex = lua_toboolean(L, -1) != 0;
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "AntiAliasedFill");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TBOOLEAN) {
+		style.AntiAliasedFill = lua_toboolean(L, -1) != 0;
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "CurveTessellationTol");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TNUMBER) {
+		style.CurveTessellationTol = lua_tonumber(L, -1);
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "CircleTessellationMaxError");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TNUMBER) {
+		style.CircleTessellationMaxError = lua_tonumber(L, -1);
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "Colors");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TTABLE) {
+
+		for (int n = 0; n < ImGuiCol_COUNT; n++) {
+
+			lua_pushstring(L, ImGui::GetStyleColorName(n));
+			lua_gettable(L, -2);
+			if (lua_type(L, -1) == LUA_TTABLE) {
+				style.Colors[n] = lua_toimvec4(L, -1);
+			}
+			lua_pop(L, 1);
+		}
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "Font");
+	lua_gettable(L, -2);
+	if (lua_type(L, -1) == LUA_TSTRING) {
+
+		const char* font = lua_tostring(L, -1);
+		ImGuiIO& io = ImGui::GetIO();
+		ImFontConfig config;
+
+		for (int n = 0; n < io.Fonts->ConfigData.Size; n++) {
+
+			config = io.Fonts->ConfigData[n];
+
+			if (strcmp(config.Name, font) == 0) {
+
+				io.FontDefault = config.DstFont;
+				break;
+			}
+		}
+	}
+	lua_pop(L, 1);
+
+	return 0;
+}
+
+int LuaImguiTableGetStyle(lua_State* L) {
+
+	ImGuiStyle& style = ImGui::GetStyle();
+
+	lua_createtable(L, 0, 100);
+
+	lua_pushstring(L, "Alpha");
+	lua_pushnumber(L, style.Alpha);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "DisabledAlpha");
+	lua_pushnumber(L, style.DisabledAlpha);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "WindowPadding");
+	lua_pushimvec2(L, style.WindowPadding);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "WindowRounding");
+	lua_pushnumber(L, style.WindowRounding);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "WindowBorderSize");
+	lua_pushnumber(L, style.WindowBorderSize);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "WindowMinSize");
+	lua_pushimvec2(L, style.WindowMinSize);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "WindowTitleAlign");
+	lua_pushimvec2(L, style.WindowTitleAlign);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "WindowMenuButtonPosition");
+	lua_pushinteger(L, style.WindowMenuButtonPosition);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "ChildRounding");
+	lua_pushnumber(L, style.ChildRounding);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "ChildBorderSize");
+	lua_pushnumber(L, style.ChildBorderSize);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "PopupRounding");
+	lua_pushnumber(L, style.PopupRounding);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "PopupBorderSize");
+	lua_pushnumber(L, style.PopupBorderSize);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "FramePadding");
+	lua_pushimvec2(L, style.FramePadding);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "FrameRounding");
+	lua_pushnumber(L, style.FrameRounding);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "FrameBorderSize");
+	lua_pushnumber(L, style.FrameBorderSize);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "ItemSpacing");
+	lua_pushimvec2(L, style.ItemSpacing);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "ItemInnerSpacing");
+	lua_pushimvec2(L, style.ItemInnerSpacing);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "CellPadding");
+	lua_pushimvec2(L, style.CellPadding);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "TouchExtraPadding");
+	lua_pushimvec2(L, style.TouchExtraPadding);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "IndentSpacing");
+	lua_pushnumber(L, style.IndentSpacing);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "ColumnsMinSpacing");
+	lua_pushnumber(L, style.ColumnsMinSpacing);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "ScrollbarSize");
+	lua_pushnumber(L, style.ScrollbarSize);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "ScrollbarRounding");
+	lua_pushnumber(L, style.ScrollbarRounding);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "GrabMinSize");
+	lua_pushnumber(L, style.GrabMinSize);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "GrabRounding");
+	lua_pushnumber(L, style.GrabRounding);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "LogSliderDeadzone");
+	lua_pushnumber(L, style.LogSliderDeadzone);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "TabRounding");
+	lua_pushnumber(L, style.TabRounding);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "TabBorderSize");
+	lua_pushnumber(L, style.TabBorderSize);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "TabMinWidthForCloseButton");
+	lua_pushnumber(L, style.TabMinWidthForCloseButton);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "ColorButtonPosition");
+	lua_pushinteger(L, style.ColorButtonPosition);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "ButtonTextAlign");
+	lua_pushimvec2(L, style.ButtonTextAlign);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "SelectableTextAlign");
+	lua_pushimvec2(L, style.SelectableTextAlign);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "DisplayWindowPadding");
+	lua_pushimvec2(L, style.DisplayWindowPadding);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "DisplaySafeAreaPadding");
+	lua_pushimvec2(L, style.DisplaySafeAreaPadding);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "MouseCursorScale");
+	lua_pushnumber(L, style.MouseCursorScale);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "AntiAliasedLines");
+	lua_pushboolean(L, style.AntiAliasedLines == true);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "AntiAliasedLinesUseTex");
+	lua_pushboolean(L, style.AntiAliasedLinesUseTex == true);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "AntiAliasedFill");
+	lua_pushboolean(L, style.AntiAliasedFill == true);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "CurveTessellationTol");
+	lua_pushnumber(L, style.CurveTessellationTol);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "CircleTessellationMaxError");
+	lua_pushnumber(L, style.CircleTessellationMaxError);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "Colors");
+	lua_createtable(L, 0, ImGuiCol_COUNT);
+	for (int n = 0; n < ImGuiCol_COUNT; n++) {
+
+		lua_pushstring(L, ImGui::GetStyleColorName(n));
+		lua_pushimvec4(L, style.Colors[n]);
+		lua_settable(L, -3);
+	}
+	lua_settable(L, -3);
+
+	ImGuiIO& io = ImGui::GetIO();
+
+	if (io.FontDefault && io.FontDefault->ConfigData && io.FontDefault->ConfigData[0].Name) {
+
+		lua_pushstring(L, "Font");
+		lua_pushstring(L, io.FontDefault->ConfigData[0].Name);
+		lua_settable(L, -3);
+	}
+
+	return 1; ;
+}
+
+int LuaImguiSetScrollHereY(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImGui::SetScrollHereY(luaL_checknumber(L, 2));
+
+	return 0;
+}
+
+int LuaImguiGetScrollMaxY(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	lua_pushnumber(L, ImGui::GetScrollMaxY());
+
+	return 1;
+}
+
+int LuaImguiGetScrollY(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	lua_pushnumber(L, ImGui::GetScrollY());
+
+	return 1;
+}
+
+int LuaImguiTableSetupColumn(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImGui::TableSetupColumn(luaL_checkstring(L, 2), luaL_checkinteger(L, 3), luaL_checkinteger(L, 4));
+
+	return 0;
+}
+
+int LuaImguiGetFontSize(lua_State* L) {
+
+	lua_pushnumber(L, ImGui::GetFontSize());
+	return 1;
+}
+
+int LuaImguiPopTextWrapPos(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImGui::PopTextWrapPos();
+
+	return 0;
+}
+
+int LuaImguiPushTextWrapPos(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImGui::PushTextWrapPos(luaL_checknumber(L, 2));
+
+	return 0;
+}
+
+int LuaImguiCloseCurrentPopup(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImGui::CloseCurrentPopup();
+
+	return 0;
+}
+
+int LuaImguiOpenPopup(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImGui::OpenPopup(luaL_checkstring(L, 2), luaL_optinteger(L, 3, 0));
+
+	return 0;
+}
+
+int LuaImguiEndPopup(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImGui::EndPopup();
+
+	return 0;
+}
+
+int LuaImguiBeginPopup(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	lua_pushboolean(L, ImGui::BeginPopup(luaL_checkstring(L, 2), luaL_optinteger(L, 3, 0)) == true);
+
+	return 1;
+}
+
 int LuaImguiSetNextWindowPos(lua_State* L) {
 
 	LuaImgui* imgui = lua_toimgui(L, 1);
@@ -1446,7 +2106,7 @@ int GetImguiInfo(lua_State* L) {
 
 	LuaImgui* imgui = lua_toimgui(L, 1);
 
-	lua_createtable(L, 0, 10);
+	lua_createtable(L, 0, 11);
 
 	lua_pushstring(L, "InRender");
 	lua_pushboolean(L, imgui->isInRender == true);
@@ -1480,6 +2140,17 @@ int GetImguiInfo(lua_State* L) {
 
 	lua_pushstring(L, "DisplaySizeY");
 	lua_pushnumber(L, io.DisplaySize.y);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "Fonts");
+	lua_createtable(L, io.Fonts->ConfigData.Size, 0);
+
+	for (int n = 0; n < io.Fonts->ConfigData.Size; n++) {
+
+		lua_pushstring(L, io.Fonts->ConfigData[n].Name);
+		lua_rawseti(L, -2, n + 1);
+	}
+
 	lua_settable(L, -3);
 
 	return 1;

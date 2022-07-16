@@ -516,7 +516,8 @@ int StreamLen(lua_State* L) {
 	LuaStream* stream = lua_toluastream(L, 1);
 	lua_pop(L, lua_gettop(L));
 	lua_pushinteger(L, stream->len);
-	return 1;
+	lua_pushinteger(L, stream->alloc);
+	return 2;
 }
 
 int StreamPos(lua_State* L) {
@@ -764,6 +765,51 @@ int WriteStreamByte(lua_State* L) {
 		return 2;
 	}
 
+	lua_pop(L, lua_gettop(L));
+	lua_pushboolean(L, true);
+
+	return 1;
+}
+
+int WriteUtf8(lua_State* L) {
+
+	LuaStream* stream = lua_toluastream(L, 1);
+	size_t len;
+	const char* str = luaL_checklstring(L, 2, &len);
+
+	if (stream->tempBuffer) {
+		gff_free(stream->tempBuffer);
+	}
+	
+	stream->tempBuffer = (BYTE*)gff_calloc(len+1, sizeof(unsigned short));
+
+	if (!stream->tempBuffer) {
+
+		lua_pop(L, lua_gettop(L));
+		lua_pushboolean(L, false);
+		lua_pushstring(L, "Unable to allocate memory");
+		return 2;
+	}
+
+	unsigned char* in = (unsigned char*)str;
+	unsigned char * out = (unsigned char*)stream->tempBuffer;
+
+	while (*in)
+		if (*in < 128) *out++ = *in++;
+		else *out++ = 0xc2 + (*in > 0xbf), * out++ = (*in++ & 0x3f) + 0x80;
+
+	if (!StreamWrite(L, stream, stream->tempBuffer, strlen((const char*)stream->tempBuffer))) {
+
+		gff_free(stream->tempBuffer);
+		stream->tempBuffer = NULL;
+		lua_pop(L, lua_gettop(L));
+		lua_pushboolean(L, false);
+		lua_pushstring(L, "Unable to allocate memory");
+		return 2;
+	}
+
+	gff_free(stream->tempBuffer);
+	stream->tempBuffer = NULL;
 	lua_pop(L, lua_gettop(L));
 	lua_pushboolean(L, true);
 
@@ -1418,7 +1464,12 @@ int luastream_gc(lua_State* L) {
 		gff_free(pipe->data);
 	}
 
+	if (pipe->tempBuffer) {
+		gff_free(pipe->tempBuffer);
+	}
+
 	pipe->data = NULL;
+	pipe->tempBuffer = NULL;
 
 	if (pipe->allocfunc != LUA_NOREF) {
 		luaL_unref(L, LUA_REGISTRYINDEX, pipe->allocfunc);

@@ -159,7 +159,6 @@ int FromAnsi(lua_State* L) {
 	return 1;
 }
 
-
 size_t to_narrow(const wchar_t* src, char* dest, size_t dest_len) {
 
 	size_t i;

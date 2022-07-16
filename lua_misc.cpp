@@ -866,6 +866,35 @@ int L_DebugBreak(lua_State* L) {
 	return 0;
 }
 
+static const char* cpuId(void)
+{
+	unsigned long s1 = 0;
+	unsigned long s2 = 0;
+	unsigned long s3 = 0;
+	unsigned long s4 = 0;
+	__asm
+	{
+		mov eax, 00h
+		xor edx, edx
+		cpuid
+		mov s1, edx
+		mov s2, eax
+	}
+	__asm
+	{
+		mov eax, 01h
+		xor ecx, ecx
+		xor edx, edx
+		cpuid
+		mov s3, edx
+		mov s4, ecx
+	}
+
+	static char buf[100];
+	sprintf(buf, "%08X%08X%08X%08X", s1, s2, s3, s4);
+	return buf;
+}
+
 int Test(lua_State* L) {
 
 	return 0;
@@ -1091,8 +1120,11 @@ int luaopen_misc(lua_State* L) {
 	lua_pushcfunction(L, Test);
 	lua_setglobal(L, "Test");
 
+	lua_pushstring(L, cpuId());
+	lua_setglobal(L, "CPUID");
+
 	lua_pushcfunction(L, L_DebugBreak);
-	lua_setglobal(L, "Break");
+	lua_setglobal(L, "Break"); 
 
 	lua_pushcfunction(L, L_GetGlobalMemoryStatus);
 	lua_setglobal(L, "GlobalMemoryStatus");

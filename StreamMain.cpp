@@ -2,6 +2,7 @@
 #include "StreamMain.h"
 
 static const struct luaL_Reg streamfunctions[] = {
+	{ "WriteUtf8",  WriteUtf8 },
 	{ "Close",  luastream_gc },
 	{ "Create",  NewStream },
 	{ "Open",  OpenFileToStream },

@@ -13,12 +13,14 @@ typedef struct LuaStream {
 	int allocfunc;
 	HANDLE hSharedMemory;
 
+	BYTE* tempBuffer;
 } LuaStream;
 
 
 LuaStream* lua_pushluastream(lua_State* L);
 LuaStream* lua_toluastream(lua_State* L, int index);
 
+int WriteUtf8(lua_State* L);
 int ReadUntilLuaStream(lua_State* L);
 int StreamIndexOf(lua_State* L);
 int GetSharedMemoryStreamInfo(lua_State* L);
