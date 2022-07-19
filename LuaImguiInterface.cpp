@@ -15,6 +15,8 @@ int MainloopImguiWindow(lua_State* L) {
 
 	LuaImgui* imgui = lua_toimgui(L, 1);
 
+	lua_settop(L, 1);
+
 	if (imgui->isInRender) {
 		luaL_error(L, "Cannot call Tick from within renderer");
 		return 0;
@@ -42,14 +44,11 @@ int MainloopImguiWindow(lua_State* L) {
 
 	if (done) {
 
-		lua_settop(L, 1);
 		imgui_gc(L);
 
 		lua_pushboolean(L, FALSE);
 		return 1;
 	}
-
-	imgui->isInRender = true;
 
 	// Start the Dear ImGui frame
 	ImGui_ImplDX12_NewFrame();
@@ -59,10 +58,9 @@ int MainloopImguiWindow(lua_State* L) {
 	lua_rawgeti(L, LUA_REGISTRYINDEX, imgui->renderFuncRef);
 	lua_pushvalue(L, 1);
 
-	if (lua_pcall(L, 1, 0, NULL)) {
-		lua_error(L);
-		return 0;
-	}
+	imgui->isInRender = true;
+	int result = lua_pcall(L, 1, 0, NULL);
+	imgui->isInRender = false;
 
 	// Rendering
 	ImGui::Render();
@@ -115,7 +113,10 @@ int MainloopImguiWindow(lua_State* L) {
 	imgui->fenceLastSignaledValue = fenceValue;
 	frameCtx->FenceValue = fenceValue;
 
-	imgui->isInRender = false;
+	if (result) {
+		lua_error(L);
+	}
+
 	lua_pushboolean(L, TRUE);
 
 	return 1;
