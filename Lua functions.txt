@@ -1386,6 +1386,15 @@ Imgui:
 	-Tag is a vec4 that represents the background color
 	Imgui Imgui.Create(title, tag, width, height, renderfunction);
 
+	-Get the size of the current font
+	float Imgui.GetFontSize();
+
+	-Sets the style from a table, same format as GetStyle
+	nil Imgui.SetStyle(table)
+
+	-Retrives a table containing the full style settings
+	table Imgui.GetStyle()
+
 	--types:
 	-1 = bool true/false
 	-2 = float 0.0
@@ -1493,8 +1502,40 @@ Imgui:
 	-Draws a (?) marker that when hovered shows Text
 	nil ImguiDraw:HelpMarker(Text)
 	
+	-Plots a line based on the data given
+	-Data = a table, uses length and index metamethods
+	-Overlay = string (5) the string is drawn over the plotline
+	nil ImguiDraw:PlotLines(label, data, overlay)
+
+	-Begins drawing a popup
+	-If this returns true a call to EndPopup must be made
+	bool ImguiDraw:BeginPopup(id, flags)
+
+	nil ImguiDraw:EndPopup()
+
+	-Opens a popup window, the id should be the same as the id given to BeginPopup
+	nil ImguiDraw:OpenPopup(id, flags)
+
+	-Closes the popup its called inside of
+	nil ImguiDraw:CloseCurrentPopup()
+
+	-Defines where the next textblock should wrap at
+	-A call to PopTextWrapPos() should be made for each call to this afterwards
+	nil ImguiDraw:PushTextWrapPos(wrapposx)
+
+	-Sets the next window position
+	-Pos is a vec2 {x,y}
+	nil ImguiDraw:SetNextWindowPos(pos)
+
+	-Sets the next item width
+	nil ImguiDraw:SetNextItemWidth(width)
+
 	-Draw a header, returns true if its expanded
 	bool ImguiDraw:CollapsingHeader(label, opt flags)
+
+	float ImguiDraw:SetScrollHereY(float);
+	float ImguiDraw:GetScrollMaxY()
+	float ImguiDraw:GetScrollY()
 
 	-Begins a table draw, returns true if its rendering
 	-if this returns true a call to EndTable must be made
@@ -1506,6 +1547,9 @@ Imgui:
 	bool ImguiDraw:BeginTable(labelid, columns, opt flags, opt vec2outersize, opt innersize)
 
 	nil ImguiDraw:EndTable()
+
+	-Sets up a column for a table
+	nil ImguiDraw:TableSetupColumn(columnname, columnflags, widthorweight)
 
 	-Signal the next column inside a Begin/EndTable
 	bool ImguiDraw:TableNextColumn()
