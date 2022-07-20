@@ -121,11 +121,17 @@ local function SetGCFunction(tbl, func)
 	return setmetatable(tbl, {__gc = func})
 end
 
+oprint=print;
 local function CreateGCPrint()
-	SetGCFunction({last=Time()}, function(obj) local t=Time();print("COLLECTING GARBAGE Lua mem: "..math.floor(collectgarbage("count")) .. " KB Time: "..(t-obj.last)); CreateGCPrint(); end);
+	SetGCFunction({last=Time()}, function(obj) local t=Time();oprint("COLLECTING GARBAGE Lua mem: "..math.floor(collectgarbage("count")) .. " KB Time: "..(t-obj.last)); CreateGCPrint(); end);
 end
 CreateGCPrint();
 collectgarbage();
+
+FileSystem.SetCurrentDirectory("C:/Users/Terrah/Desktop/Stresser")
+dofile("C:/Users/Terrah/Desktop/Stresser/main.lua");
+
+if true then return; end 
 
 TablePrint(Imgui);
 

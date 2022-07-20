@@ -91,7 +91,8 @@ extern bool windowExists;
 #define IMGUI_TYPE_INT 4
 #define IMGUI_TYPE_STRING 5
 #define IMGUI_TYPE_DOUBLE 6
-#define IMGUI_TYPE_MAX 6
+#define IMGUI_TYPE_LUA 7
+#define IMGUI_TYPE_MAX 7
 
 typedef struct ImguiElement;
 typedef void (*ImguiElementFree) (ImguiElement*);
@@ -109,6 +110,14 @@ struct ImguiElement {
 	ImguiElementFree freeFunc;
 }; 
 
+struct ImguiElementLuaValue {
+
+	lua_State* L;
+	int ref;
+};
+
+int LuaImguiSetKeyboardFocusHere(lua_State* L);
+int LuaImguiShowStyleEditor(lua_State* L);
 int LuaImguiTableSetStyle(lua_State* L);
 int LuaImguiTableGetStyle(lua_State* L);
 int LuaImguiSetScrollHereY(lua_State* L);

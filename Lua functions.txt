@@ -1729,7 +1729,9 @@ Imgui:
 	-Draws a seperator
 	nil ImguiDraw:Separator();
 
-	
+	-Set the keyboard focus on a widget
+	-Offset default = -1 which is the previously drawn widget
+	nil ImguiDraw:SetKeyboardFocusHere(opt offset)
 
 HTTP:
 

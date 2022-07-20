@@ -1,7 +1,9 @@
 #include "LuaImgui.h"
+#include "Imgui/imgui_internal.h"
 
 LuaImgui* g_currentImgui = NULL;
 bool windowExists = false;
+char* errorMsgBuffer;
 
 int MainLoopQuit(lua_State* L) {
 
@@ -11,9 +13,38 @@ int MainLoopQuit(lua_State* L) {
 	return 0;
 }
 
+void LogCallback(void* user_data, const char* fmt, ...) {
+
+	char buf[1024];
+	va_list args;
+	va_start(args, fmt);
+	vsnprintf(buf, sizeof(buf), fmt, args);
+	va_end(args);
+
+	size_t current = 0;
+
+	if (errorMsgBuffer) {
+		current = strlen(errorMsgBuffer);
+	}
+
+	char* temp = (char*)realloc(errorMsgBuffer, current + strlen(buf) + 2);
+	if (!temp) {
+		return;
+	}
+
+	errorMsgBuffer = temp;
+	strcat(errorMsgBuffer, "\n");
+	strcat(errorMsgBuffer, buf);
+}
+
 int MainloopImguiWindow(lua_State* L) {
 
 	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (errorMsgBuffer) {
+		free(errorMsgBuffer);
+		errorMsgBuffer = NULL;
+	}
 
 	lua_settop(L, 1);
 
@@ -61,6 +92,23 @@ int MainloopImguiWindow(lua_State* L) {
 	imgui->isInRender = true;
 	int result = lua_pcall(L, 1, 0, NULL);
 	imgui->isInRender = false;
+
+	if (result) {
+		const char* err = lua_tostring(L, -1);
+		if (!err) {
+			err = "unknown error";
+		}
+
+		errorMsgBuffer = (char*)malloc(strlen(err) + 1);
+		if (!errorMsgBuffer) {
+			lua_error(L);
+			return 0;
+		}
+
+		strcpy(errorMsgBuffer, err);
+	}
+
+	ImGui::ErrorCheckEndFrameRecover(&LogCallback, L);
 
 	// Rendering
 	ImGui::Render();
@@ -113,8 +161,10 @@ int MainloopImguiWindow(lua_State* L) {
 	imgui->fenceLastSignaledValue = fenceValue;
 	frameCtx->FenceValue = fenceValue;
 
-	if (result) {
-		lua_error(L);
+	if (errorMsgBuffer) {
+		luaL_error(L, errorMsgBuffer);
+		free(errorMsgBuffer);
+		errorMsgBuffer = NULL;
 	}
 
 	lua_pushboolean(L, TRUE);

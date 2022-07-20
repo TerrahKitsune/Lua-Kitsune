@@ -3,6 +3,8 @@
 
 static const struct luaL_Reg imguifunctions[] = {
 
+	{ "SetKeyboardFocusHere", LuaImguiSetKeyboardFocusHere },
+	{ "ShowStyleEditor", LuaImguiShowStyleEditor },
 	{ "SetStyle", LuaImguiTableSetStyle },
 	{ "GetStyle", LuaImguiTableGetStyle },
 	{ "SetScrollHereY", LuaImguiSetScrollHereY },

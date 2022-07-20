@@ -179,6 +179,11 @@ int SendRecv(LuaHttp* luahttp, SOCKET ConnectSocket, SSL* ssl) {
 				size -= result;
 			}
 			else if (result <= 0) {
+
+				if (WSAGetLastError() == ERROR_SUCCESS) {
+					break;
+				}
+
 				return -1;
 			}
 
@@ -224,6 +229,11 @@ int SendRecv(LuaHttp* luahttp, SOCKET ConnectSocket, SSL* ssl) {
 			result = 1;
 		}
 		else if(result == SOCKET_ERROR){
+
+			if (WSAGetLastError() == ERROR_SUCCESS) {
+				break;
+			}
+			
 			return -1;
 		}
 
@@ -276,10 +286,13 @@ int DoHttps(SOCKET socket, LuaHttp* http) {
 	result = SSL_connect(ssl);
 
 	if (result != 1) {
-		ShutdownSSL(ssl, ctx);
 
-		strcpy(http->status, "TLS handshake failed");
-		return 0;
+		int err = SSL_get_error(ssl, result);
+
+		ShutdownSSL(ssl, ctx);
+		
+		sprintf(http->status, "TLS handshake failed %d", err);
+		return -1;
 	}
 
 	result = SendRecv(http, socket, ssl);
@@ -340,7 +353,12 @@ int GetResult(lua_State* L) {
 
 	if (!luahttp->success) {
 		lua_pushnil(L);
-		lua_pushstring(L, "Request failed");
+		if (strlen(luahttp->status) > 0) {
+			lua_pushstring(L, luahttp->status);
+		}
+		else {
+			lua_pushstring(L, "Request failed");
+		}
 		return 2;
 	}
 

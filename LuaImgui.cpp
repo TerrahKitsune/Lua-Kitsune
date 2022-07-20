@@ -1,5 +1,51 @@
 #include "LuaImgui.h"
 
+int LuaImguiSetKeyboardFocusHere(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImGui::SetKeyboardFocusHere(luaL_optinteger(L, 2, -1));
+	return 0;
+}
+
+int LuaImguiShowStyleEditor(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+	const char* tag = lua_tostring(L, 2);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	bool* closeable = NULL;
+
+	if (tag) {
+
+		ImguiElement* element = GetElement(imgui, tag, IMGUI_TYPE_BOOL);
+		if (!element) {
+			element = AddElement(imgui, tag, IMGUI_TYPE_BOOL);
+			if (!element) {
+				luaL_error(L, "Imgui Out of memory");
+				return 0;
+			}
+		}
+
+		closeable = (bool*)element->Data;
+	}
+
+	ImGui::Begin("Dear ImGui Style Editor", closeable);
+	ImGui::ShowStyleEditor();
+	ImGui::End();
+
+	return 0;
+}
+
 int LuaImguiTableSetStyle(lua_State* L) {
 
 	luaL_checktype(L, 1, LUA_TTABLE);
@@ -2106,7 +2152,7 @@ int GetImguiInfo(lua_State* L) {
 
 	LuaImgui* imgui = lua_toimgui(L, 1);
 
-	lua_createtable(L, 0, 11);
+	lua_createtable(L, 0, 15);
 
 	lua_pushstring(L, "InRender");
 	lua_pushboolean(L, imgui->isInRender == true);
@@ -2196,6 +2242,17 @@ int GetValueFromTag(lua_State* L) {
 	else if (type == IMGUI_TYPE_DOUBLE) {
 		lua_pushnumber(L, *(double*)element->Data);
 	}
+	else if (type == IMGUI_TYPE_LUA) {
+
+		ImguiElementLuaValue* luaValue = (ImguiElementLuaValue*)element->Data;
+
+		if (luaValue->L != L || luaValue->ref == LUA_REFNIL) {
+			lua_pushnil(L);
+		}
+		else {
+			lua_rawgeti(L, LUA_REGISTRYINDEX, luaValue->ref);
+		}
+	}
 
 	return 1;
 }
@@ -2268,6 +2325,22 @@ int SetValueFromTag(lua_State* L) {
 	}
 	else if (type == IMGUI_TYPE_DOUBLE) {
 		*((double*)element->Data) = lua_tonumber(L, 4);
+	}
+	else if (type == IMGUI_TYPE_LUA) {
+
+		ImguiElementLuaValue* luaValue = (ImguiElementLuaValue*)element->Data;
+
+		if (luaValue->L && luaValue->ref != LUA_REFNIL) {
+			luaL_unref(luaValue->L, LUA_REGISTRYINDEX, luaValue->ref);
+			luaValue->ref = LUA_REFNIL;
+		}
+
+		if (!lua_isnoneornil(L, 4)) {
+
+			luaValue->L = L;
+			lua_pushvalue(L, 4);
+			luaValue->ref = luaL_ref(L, LUA_REGISTRYINDEX);
+		}
 	}
 
 	return 0;
@@ -2507,6 +2580,18 @@ void GenericElementFree(ImguiElement* element) {
 	gff_free(element);
 }
 
+void LuaElementFree(ImguiElement* element) {
+
+	ImguiElementLuaValue* luaValue = (ImguiElementLuaValue*)element->Data;
+
+	if (luaValue->L && luaValue->ref != LUA_REFNIL) {
+		luaL_unref(luaValue->L, LUA_REGISTRYINDEX, luaValue->ref);
+		luaValue->ref = LUA_REFNIL;
+	}
+
+	GenericElementFree(element);
+}
+
 ImguiElement* AddElement(LuaImgui* ui, const char* name, int type) {
 
 	ImguiElement** addr = &ui->Elements;
@@ -2625,6 +2710,26 @@ ImguiElement* AddElement(LuaImgui* ui, const char* name, int type) {
 			(*addr)->Size = sizeof(double);
 			(*addr)->freeFunc = &GenericElementFree;
 			ZeroMemory((*addr)->Data, sizeof(double));
+		}
+		else if (type == IMGUI_TYPE_LUA) {
+
+			(*addr)->Data = gff_malloc(sizeof(ImguiElementLuaValue));
+
+			if (!(*addr)->Data) {
+				gff_free((*addr)->Name);
+				gff_free(*addr);
+				*addr = NULL;
+				return NULL;
+			}
+
+			(*addr)->Len = sizeof(ImguiElementLuaValue);
+			(*addr)->Size = sizeof(ImguiElementLuaValue);
+			(*addr)->freeFunc = &LuaElementFree;
+			
+			ImguiElementLuaValue* luaValue = (ImguiElementLuaValue*)(*addr)->Data;
+
+			luaValue->L = NULL;
+			luaValue->ref = LUA_REFNIL;
 		}
 		else {
 			assert(false, "INVALID TYPE");
