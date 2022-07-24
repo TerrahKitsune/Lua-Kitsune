@@ -1,5 +1,43 @@
 #include "LuaImgui.h"
 
+int LuaImguiSetClipboardText(lua_State* L) {
+
+	ImGui::SetClipboardText(luaL_checkstring(L, 1));
+	return 0;
+}
+
+int LuaImguiGetClipboardText(lua_State* L) {
+
+	lua_pushstring(L, ImGui::GetClipboardText());
+	return 1;
+}
+
+int LuaImguiIsMouseDoubleClicked(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImGui::IsMouseDoubleClicked(luaL_optinteger(L, 2, -1));
+	return 0;
+}
+
+int LuaImguiIsItemClicked(lua_State* L) {
+
+	LuaImgui* imgui = lua_toimgui(L, 1);
+
+	if (!imgui->isInRender) {
+		luaL_error(L, "Draw functions can only be called inside renderer");
+		return 0;
+	}
+
+	ImGui::IsItemClicked(luaL_optinteger(L, 2, 0));
+	return 0;
+}
+
 int LuaImguiSetKeyboardFocusHere(lua_State* L) {
 
 	LuaImgui* imgui = lua_toimgui(L, 1);

@@ -3,6 +3,10 @@
 
 static const struct luaL_Reg imguifunctions[] = {
 
+	{ "IsItemClicked", LuaImguiIsItemClicked },
+	{ "IsMouseDoubleClicked", LuaImguiIsMouseDoubleClicked },
+	{ "SetClipboardText", LuaImguiSetClipboardText },
+	{ "GetClipboardText", LuaImguiGetClipboardText },
 	{ "SetKeyboardFocusHere", LuaImguiSetKeyboardFocusHere },
 	{ "ShowStyleEditor", LuaImguiShowStyleEditor },
 	{ "SetStyle", LuaImguiTableSetStyle },

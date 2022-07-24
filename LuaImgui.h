@@ -116,6 +116,10 @@ struct ImguiElementLuaValue {
 	int ref;
 };
 
+int LuaImguiIsItemClicked(lua_State* L);
+int LuaImguiIsMouseDoubleClicked(lua_State* L);
+int LuaImguiSetClipboardText(lua_State* L);
+int LuaImguiGetClipboardText(lua_State* L);
 int LuaImguiSetKeyboardFocusHere(lua_State* L);
 int LuaImguiShowStyleEditor(lua_State* L);
 int LuaImguiTableSetStyle(lua_State* L);

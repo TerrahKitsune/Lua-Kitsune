@@ -129,7 +129,7 @@ CreateGCPrint();
 collectgarbage();
 
 FileSystem.SetCurrentDirectory("C:/Users/Terrah/Desktop/Stresser")
-dofile("C:/Users/Terrah/Desktop/Stresser/main.lua");
+dofile("C:/Users/Terrah/Desktop/Stresser/worker.lua");
 
 if true then return; end 
 
