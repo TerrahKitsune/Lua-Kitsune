@@ -355,6 +355,15 @@
     <Filter Include="Imgui\Source Files">
       <UniqueIdentifier>{64d3e537-82d4-4f39-8f6e-f43250c29acd}</UniqueIdentifier>
     </Filter>
+    <Filter Include="LuaVhd">
+      <UniqueIdentifier>{33d678c2-16a1-4a13-bab9-14f76be375b3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaVhd\Header Files">
+      <UniqueIdentifier>{fd637104-1b95-4272-882e-4fee77728998}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaVhd\Source Files">
+      <UniqueIdentifier>{a4e96e44-559e-41ce-acd6-ce741f812415}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Program.cpp">
@@ -812,6 +821,12 @@
     </ClCompile>
     <ClCompile Include="LuaImguiEnums.cpp">
       <Filter>Imgui\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="vhd.cpp">
+      <Filter>LuaVhd\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="VhdMain.cpp">
+      <Filter>LuaVhd</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -1310,6 +1325,12 @@
     <ClInclude Include="Imgui\imgui_impl_dx12.h">
       <Filter>Imgui\Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="vhd.h">
+      <Filter>LuaVhd\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="VhdMain.h">
+      <Filter>LuaVhd</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Text Include="Lua functions.txt" />
@@ -1321,14 +1342,14 @@
     </Image>
   </ItemGroup>
   <ItemGroup>
-    <None Include="packages.config" />
-  </ItemGroup>
-  <ItemGroup>
     <ResourceCompile Include="Kitsune.rc">
       <Filter>Resource Files</Filter>
     </ResourceCompile>
   </ItemGroup>
   <ItemGroup>
     <Manifest Include="kitsune.exe.manifest" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
   </ItemGroup>
 </Project>

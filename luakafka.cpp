@@ -83,6 +83,39 @@ int CommitMessage(lua_State* L) {
 	return 1;
 }
 
+int SeekOffset(lua_State* L) {
+
+	LuaKafka* luak = lua_tokafka(L, 1);
+	const char* topic = luaL_checkstring(L, 2);
+	int partition = (int)luaL_checkinteger(L, 3);
+	int64_t offset = (int64_t)luaL_checkinteger(L, 4);
+	int timeout = (int)luaL_optinteger(L, 5, 10000);
+
+	if (!luak->rd) {
+		luaL_error(L, "Kafka object not open");
+		return 0;
+	}
+	else if (luak->type != RD_KAFKA_CONSUMER) {
+		luaL_error(L, "Only consumers may seek");
+		return 0;
+	}
+
+	rd_kafka_topic_partition_list_t* partitonList = rd_kafka_topic_partition_list_new(1);
+	rd_kafka_topic_partition_list_add(partitonList, topic, partition)->offset = offset;
+	rd_kafka_error_t* seekError = rd_kafka_seek_partitions(luak->rd, partitonList, timeout);
+	rd_kafka_topic_partition_list_destroy(partitonList);
+
+	if (seekError) {
+		lua_pop(L, lua_gettop(L));
+		lua_pushboolean(L, false);
+		lua_pushstring(L, rd_kafka_err2str(*(rd_kafka_resp_err_t*)seekError));
+		return 2;
+	}
+	
+	lua_pushboolean(L, true);
+	return 1;
+}
+
 int PollMessages(lua_State* L) {
 
 	LuaKafka* luak = lua_tokafka(L, 1);
@@ -311,6 +344,7 @@ int Assign(lua_State* L) {
 	LuaKafka* luak = lua_tokafka(L, 1);
 	const char* topic = luaL_checkstring(L, 2);
 	int partition = (int)luaL_checkinteger(L, 3);
+	int64_t offset = (int64_t)luaL_optinteger(L, 4, -1001);
 
 	if (!luak->rd) {
 		luaL_error(L, "Kafka object not open");
@@ -342,6 +376,9 @@ int Assign(lua_State* L) {
 		lua_pushboolean(L, false);
 		lua_pushstring(L, "Unable to add partition to list");
 		return 2;
+	}
+	else {
+		part->offset = offset;
 	}
 
 	err = rd_kafka_assign(luak->rd, topics);

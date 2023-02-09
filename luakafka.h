@@ -19,6 +19,7 @@ typedef struct LuaKafka {
 LuaKafka* lua_pushkafka(lua_State* L);
 LuaKafka* lua_tokafka(lua_State* L, int index);
 
+int SeekOffset(lua_State* L);
 int GetCommitted(lua_State* L);
 int ProduceMessage(lua_State* L);
 int AlterConfig(lua_State* L);

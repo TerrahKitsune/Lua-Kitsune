@@ -13,20 +13,20 @@
   <PropertyGroup Label="Globals">
     <ProjectGuid>{DB53B7C6-DAD2-432E-839F-75E1809C9C59}</ProjectGuid>
     <RootNamespace>GFF</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0.18362.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0.22000.0</WindowsTargetPlatformVersion>
     <ProjectName>Kitsune</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v141</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v141</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
@@ -173,6 +173,8 @@
     <ClCompile Include="LuaBinaryTreeMain.cpp" />
     <ClCompile Include="stream.cpp" />
     <ClCompile Include="StreamMain.cpp" />
+    <ClCompile Include="vhd.cpp" />
+    <ClCompile Include="VhdMain.cpp" />
     <ClCompile Include="wcharmain.cpp" />
     <ClCompile Include="WindowMain.cpp" />
     <ClCompile Include="WinServices.cpp" />
@@ -345,6 +347,8 @@
     <ClInclude Include="Sha256Main.h" />
     <ClInclude Include="stream.h" />
     <ClInclude Include="StreamMain.h" />
+    <ClInclude Include="vhd.h" />
+    <ClInclude Include="VhdMain.h" />
     <ClInclude Include="wcharmain.h" />
     <ClInclude Include="WindowMain.h" />
     <ClInclude Include="WinServices.h" />
@@ -425,10 +429,10 @@
     <Image Include="Lua\jiiiiiiiiitsu.ico" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="packages.config" />
+    <Manifest Include="kitsune.exe.manifest" />
   </ItemGroup>
   <ItemGroup>
-    <Manifest Include="kitsune.exe.manifest" />
+    <None Include="packages.config" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

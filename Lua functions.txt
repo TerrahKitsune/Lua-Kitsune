@@ -505,6 +505,9 @@ Kafka:
 	-Get the current commited offset (-1001 = none recorded)
 	int Kafka:GetCommitted(topic, partition)
 
+	-Seeks on a subscribed topic
+	bool, err Kafka:Seek(topic, partiton, offset, opt timeout)
+
 	-Query for the offset for a topic and a partition
 	-returns true and lowest, highest on success and false and an error message on failure
 	bool, low, high Kafka:GetOffsets(topic, partition, opt timeout)
@@ -537,7 +540,7 @@ Kafka:
 	bool, errormsg Kafka:PauseTopic(Kafkatopic)
 
 	-Resumes a topic+partition
-	bool, errormsg Kafka:ResmuleTopic(Kafkatopic)
+	bool, errormsg Kafka:ResumeTopic(Kafkatopic)
 
 	-Get a unique internal id for this object (used for association)
 	int Kafka:GetId()

@@ -11,6 +11,7 @@ static const struct luaL_Reg kafkafunctions[] = {
 	{ "NewProducer",  CreateProducer },
 	{ "Send",  ProduceMessage },
 	{ "Commit",  CommitMessage },
+	{ "Seek", SeekOffset },
 	{ "AddBroker",  AddBroker },
 	{ "GetGroups",  DescribeGroups },
 	{ "GetMetadata",  GetMetadata },
@@ -31,7 +32,7 @@ static const struct luaL_Reg kafkafunctions[] = {
 	{ "Subscribe",  Subscribe },
 	{ "Assign",  Assign },
 	{ NULL, NULL }
-}; 
+};
 
 static const luaL_Reg kafkameta[] = {
 	{ "__gc",  kafka_gc },
