@@ -122,8 +122,8 @@ int FromToUpper(lua_State* L) {
 int FromSubstring(lua_State* L) {
 
 	LuaWChar* wchar = lua_towchar(L, 1);
-	int start = luaL_checkinteger(L, 2);
-	int length = luaL_optinteger(L, 3, wchar->len - (start - 1));
+	size_t start = (size_t)luaL_checkinteger(L, 2);
+	size_t length = (size_t)luaL_optinteger(L, 3, wchar->len - (start - 1));
 
 	if (start > wchar->len || start <= 0) {
 		lua_pushnil(L);
@@ -239,7 +239,7 @@ int WcharFind(lua_State* L) {
 		lua_pushnil(L);
 	}
 	else {
-		for (int i = offset; i < wchar->len; i++)
+		for (size_t i = offset; i < wchar->len; i++)
 		{
 			if (wchar->str[i] == substr->str[0]) {
 				find = wcsstr(&wchar->str[i], substr->str);

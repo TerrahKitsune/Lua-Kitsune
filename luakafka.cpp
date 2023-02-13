@@ -25,12 +25,12 @@ static void logger(const rd_kafka_t* rk, int level, const char* fac, const char*
 
 	if (KafkaLogFile) {
 
-		fprintf(KafkaLogFile, "[%s] [%08X] [%d] [%s]: %s\n", timestamp, rk, level, fac, buf);
+		fprintf(KafkaLogFile, "[%s] [%08X] [%d] [%s]: %s\n", timestamp, (unsigned int)rk, level, fac, buf);
 		fflush(KafkaLogFile);
 	}
 
 	size_t len = strlen(lasterror);
-	_snprintf(&lasterror[len], kafka_last_error_buffer_len - len - 1, "[%s] [%08X] [%d] [%s]: %s\n", timestamp, rk, level, fac, buf);
+	_snprintf(&lasterror[len], kafka_last_error_buffer_len - len - 1, "[%s] [%08X] [%d] [%s]: %s\n", timestamp, (unsigned int)rk, level, fac, buf);
 }
 
 int GetLastLogs(lua_State* L) {

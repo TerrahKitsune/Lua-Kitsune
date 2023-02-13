@@ -41,27 +41,27 @@ static void DumpStack(lua_State *L, bool untilnil = false){
 			printf("STRING %s", lua_tostring(L, n));
 			break;
 		case LUA_TTABLE:
-			fprintf(file, "TABLE 0x%08X", lua_topointer(L, n));
-			printf("TABLE 0x%08X", lua_topointer(L, n));
+			fprintf(file, "TABLE 0x%08X", (unsigned int)lua_topointer(L, n));
+			printf("TABLE 0x%08X", (unsigned int)lua_topointer(L, n));
 			break;
 		case LUA_TFUNCTION:
-			fprintf(file, "FUNCTION 0x%08X", lua_topointer(L, n));
-			printf("FUNCTION 0x%08X", lua_topointer(L, n));
+			fprintf(file, "FUNCTION 0x%08X", (unsigned int)lua_topointer(L, n));
+			printf("FUNCTION 0x%08X", (unsigned int)lua_topointer(L, n));
 			break;
 		case LUA_TUSERDATA:
 
 			str = luaL_tolstring(L, n, &len);
 			lua_pop(L, 1);
-			fprintf(file, "USERDATA 0x%08X", str);
-			printf("USERDATA 0x%08X", str);
+			fprintf(file, "USERDATA 0x%08X", (unsigned int)str);
+			printf("USERDATA 0x%08X", (unsigned int)str);
 			break;
 		case LUA_TTHREAD:
-			fprintf(file, "THREAD 0x%08X", lua_topointer(L, n));
-			printf("THREAD 0x%08X", lua_topointer(L, n));
+			fprintf(file, "THREAD 0x%08X", (unsigned int)lua_topointer(L, n));
+			printf("THREAD 0x%08X", (unsigned int)lua_topointer(L, n));
 			break;
 		case LUA_TLIGHTUSERDATA:
-			fprintf(file, "LIGHTUSERDATA 0x%08X", lua_topointer(L, n));
-			printf("LIGHTUSERDATA 0x%08X", lua_topointer(L, n));
+			fprintf(file, "LIGHTUSERDATA 0x%08X", (unsigned int)lua_topointer(L, n));
+			printf("LIGHTUSERDATA 0x%08X", (unsigned int)lua_topointer(L, n));
 			break;
 		}
 
