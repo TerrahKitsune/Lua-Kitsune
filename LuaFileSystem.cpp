@@ -3,6 +3,7 @@
 #include <time.h>
 #include <io.h>
 #include "luawchar.h"
+#include <shlobj.h>
 
 #define tolstream(L)	((LStream *)luaL_checkudata(L, 1, LUA_FILEHANDLE))
 #define MAX_PATH_LENGTH 1024
@@ -39,7 +40,7 @@ const wchar_t* lua_topathw(lua_State* L, int idx, bool wildcard = false) {
 
 	if (wildcard) {
 
-		c = _PATHW[fromlua->len - 1];
+		c = (wchar_t)_PATHW[fromlua->len - 1];
 
 		if (c == L'/' || c == L'\\') {
 
@@ -78,7 +79,7 @@ const char* lua_topath(lua_State* L, int idx, bool wildcard = false) {
 
 	if (wildcard) {
 
-		c = _PATH[len - 1];
+		c = (char)_PATH[len - 1];
 
 		if (c == '/' || c == '\\') {
 
@@ -102,6 +103,19 @@ int GetCurrentWide(lua_State* L) {
 int GetCurrent(lua_State* L) {
 	GetCurrentDirectory(MAX_PATH_LENGTH, _PATH);
 	lua_pushstring(L, _PATH);
+	return 1;
+}
+
+int GetSpecialFolder(lua_State* L) {
+
+	if (SUCCEEDED(SHGetFolderPathW(NULL, (int)luaL_optinteger(L, 1, CSIDL_DESKTOPDIRECTORY), NULL, 0, _PATHW)))
+	{
+		lua_pushwchar(L, _PATHW);
+	}
+	else {
+		lua_pushnil(L);
+	}
+
 	return 1;
 }
 

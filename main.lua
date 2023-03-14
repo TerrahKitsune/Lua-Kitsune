@@ -128,5 +128,4 @@ end
 CreateGCPrint();
 collectgarbage();
 
-FileSystem.SetCurrentDirectory(":/Users/Terrah/Desktop/Consumer");
-dofile("C:/Users/Terrah/Desktop/Consumer/kafka.lua");
+print(FileSystem.GetSpecialFolder(0x0010));

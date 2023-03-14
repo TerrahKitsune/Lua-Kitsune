@@ -22,6 +22,7 @@ static const struct luaL_Reg filesystemfuncs[] = {
 	{ "RenameWide", RenameWide },
 	{ "GetFileInfoWide", GetFileInfoWide },
 	{ "CurrentDirectoryWide", GetCurrentWide },
+	{ "GetSpecialFolder", GetSpecialFolder },
 	{ NULL, NULL }
 };
 
