@@ -344,6 +344,7 @@ int SendRecv(LuaHttp* luahttp, SOCKET ConnectSocket, SSL* ssl) {
 
 	long headerSize = -1;
 	long contentLength = -1;
+	long sleeps = 0;
 
 	do {
 
@@ -358,6 +359,7 @@ int SendRecv(LuaHttp* luahttp, SOCKET ConnectSocket, SSL* ssl) {
 			fflush(luahttp->buffer);
 			size += result;
 			luahttp->recv += result;
+			sleeps = 0;
 		}
 		else if (IsBlocking(ssl, result)) {
 
@@ -375,7 +377,7 @@ int SendRecv(LuaHttp* luahttp, SOCKET ConnectSocket, SSL* ssl) {
 			else if (contentLength > 0 && GetFileSize(luahttp->buffer) >= contentLength) {
 				break;
 			}
-			else if (FileEndsWithCRLF(luahttp->buffer)) {
+			else if (++sleeps >= 100 && FileEndsWithCRLF(luahttp->buffer)) {
 				break;
 			}
 
