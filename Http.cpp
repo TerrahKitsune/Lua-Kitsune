@@ -126,37 +126,141 @@ bool IsBlocking(SSL* ssl, int ret) {
 	return ret == SOCKET_ERROR && WSAGetLastError() == WSAEWOULDBLOCK;
 }
 
-int file_ends_with_crlf(FILE* file) {
+char* stristr(const char* str1, const char* str2) {
+	size_t len1 = strlen(str1);
+	size_t len2 = strlen(str2);
+	size_t i;
 
-	int c, last_c = EOF;
-
-	long pos = ftell(file);
-	fseek(file, -2, SEEK_END);
-
-	c = fgetc(file);
-	if (c == EOF || c != '\r') {
-		fseek(file, pos, SEEK_SET);
-		return 0;
+	for (i = 0; i <= len1 - len2; i++) {
+		if (_strnicmp(str1 + i, str2, len2) == 0) {
+			return (char*)str1 + i;
+		}
 	}
 
-	last_c = c;
+	return NULL;
+}
 
-	c = fgetc(file);
-	if (c == EOF || c != '\n') {
-		fseek(file, pos, SEEK_SET);
-		return 0;
+#define CHUNK_SIZE 1024
+
+long GetHeaderSize(FILE* fp) {
+
+	long pos = ftell(fp);
+	rewind(fp);
+	int size = 0;
+	char buf[5] = { 0 };
+	long headerSize = -1;
+
+	int cursor = fgetc(fp);
+	while (cursor != EOF) {
+
+		if (size < 4) {
+			buf[size++] = (char)cursor;
+		}
+		else {
+			buf[0] = buf[1];
+			buf[1] = buf[2];
+			buf[2] = buf[3];
+			buf[3] = (char)cursor;
+		}
+
+		if (strcmp(buf, "\r\n\r\n") == 0) {
+			headerSize = ftell(fp) - 2;
+			break;
+		}
+
+		cursor = fgetc(fp);
 	}
 
-	last_c = c;
+	fseek(fp, pos, SEEK_SET);
+	return headerSize;
+}
 
-	c = fgetc(file);
-	if (c != EOF && c != '\0') {
-		fseek(file, pos, SEEK_SET);
-		return 0;
+long GetContentLength(FILE* fp, long headerSize) {
+
+	long pos = ftell(fp);
+	char* buffer = (char*)gff_malloc(headerSize + 1);
+	size_t nread;
+	char* header_value;
+	long content_length = -1;
+
+	if (!buffer) {
+		return -1;
+	}
+	else {
+		buffer[headerSize] = '\0';
 	}
 
-	fseek(file, pos, SEEK_SET);
-	return last_c == '\n' ? 1 : 0;
+	rewind(fp);
+	if ((nread = fread(buffer, 1, headerSize, fp)) != headerSize) {
+		gff_free(buffer);
+		fseek(fp, pos, SEEK_SET);
+		return content_length;
+	}
+
+	char* content_length_header = stristr(buffer, "Content-Length:");
+
+	if (!content_length_header) {
+		gff_free(buffer);
+		fseek(fp, pos, SEEK_SET);
+		return content_length;
+	}
+
+	header_value = strtok(content_length_header, " ");
+
+	if (!header_value) {
+		gff_free(buffer);
+		fseek(fp, pos, SEEK_SET);
+		return content_length;
+	}
+
+	header_value = strtok(NULL, "\r\n");
+
+	if (!header_value) {
+		gff_free(buffer);
+		fseek(fp, pos, SEEK_SET);
+		return content_length;
+	}
+
+	content_length = atol(header_value);
+
+	gff_free(buffer);
+	fseek(fp, pos, SEEK_SET);
+	return content_length;
+}
+
+long GetFileSize(FILE* fp) {
+	
+	long size;
+	long pos = ftell(fp);
+	fseek(fp, pos, SEEK_END);
+	size = ftell(fp);
+	fseek(fp, pos, SEEK_SET);
+
+	return size;
+}
+
+int FileEndsWithCRLF(FILE* fp) {
+
+	int found = 0;
+	long pos;
+	int ch1, ch2;
+
+	pos = ftell(fp);
+	fseek(fp, 0, SEEK_END);
+
+	while (ftell(fp) > 2) {
+		fseek(fp, -2, SEEK_CUR);
+		ch1 = fgetc(fp);
+		ch2 = fgetc(fp);
+		if (ch1 == '\r' && ch2 == '\n') {
+			found = 1;
+			break;
+		}
+	}
+
+	fseek(fp, pos, SEEK_SET);
+
+	return found;
 }
 
 int SendRecv(LuaHttp* luahttp, SOCKET ConnectSocket, SSL* ssl) {
@@ -238,7 +342,8 @@ int SendRecv(LuaHttp* luahttp, SOCKET ConnectSocket, SSL* ssl) {
 		return -1;
 	}
 
-	int sleeps = 0;
+	long headerSize = -1;
+	long contentLength = -1;
 
 	do {
 
@@ -253,7 +358,6 @@ int SendRecv(LuaHttp* luahttp, SOCKET ConnectSocket, SSL* ssl) {
 			fflush(luahttp->buffer);
 			size += result;
 			luahttp->recv += result;
-			sleeps = 0;
 		}
 		else if (IsBlocking(ssl, result)) {
 
@@ -261,7 +365,17 @@ int SendRecv(LuaHttp* luahttp, SOCKET ConnectSocket, SSL* ssl) {
 				return -1;
 			}
 
-			if (++sleeps >= 10 && file_ends_with_crlf(luahttp->buffer)) {
+			if (headerSize < 0) {
+				headerSize = GetHeaderSize(luahttp->buffer);
+
+				if (headerSize > 0) {
+					contentLength = GetContentLength(luahttp->buffer, headerSize);
+				}
+			}
+			else if (contentLength > 0 && GetFileSize(luahttp->buffer) >= contentLength) {
+				break;
+			}
+			else if (FileEndsWithCRLF(luahttp->buffer)) {
 				break;
 			}
 
@@ -630,7 +744,7 @@ int StartHttp(lua_State* L) {
 	memcpy(luahttp->ip, ip, IP_ADDR_SIZE);
 	luahttp->port = port;
 
-	fprintf(luahttp->buffer, "%s /%s HTTP/1.0\r\n", method, page);
+	fprintf(luahttp->buffer, "%s /%s HTTP/1.1\r\n", method, page);
 	lua_pushvalue(L, 4);
 	lua_pushnil(L);
 

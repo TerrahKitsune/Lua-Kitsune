@@ -129,3 +129,13 @@ CreateGCPrint();
 collectgarbage();
 
 print(FileSystem.GetSpecialFolder(0x0010));
+
+local r = Http.Start("GET", "https://www.google.se", nil, nil);
+
+local code, ok, contents, header = r:GetResult();
+
+print(code, ok, contents);
+
+for n=1, contents:len() do 
+	--print(contents:byte(n));
+end
