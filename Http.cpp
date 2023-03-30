@@ -228,17 +228,6 @@ long GetContentLength(FILE* fp, long headerSize) {
 	return content_length;
 }
 
-long GetFileSize(FILE* fp) {
-	
-	long size;
-	long pos = ftell(fp);
-	fseek(fp, pos, SEEK_END);
-	size = ftell(fp);
-	fseek(fp, pos, SEEK_SET);
-
-	return size;
-}
-
 int FileEndsWithCRLF(FILE* fp) {
 
 	int found = 0;
@@ -374,14 +363,14 @@ int SendRecv(LuaHttp* luahttp, SOCKET ConnectSocket, SSL* ssl) {
 					contentLength = GetContentLength(luahttp->buffer, headerSize);
 				}
 			}
-			else if (contentLength > 0 && GetFileSize(luahttp->buffer) >= contentLength) {
+			else if (contentLength > 0 && luahttp->recv >= contentLength + headerSize + 2) {
 				break;
 			}
-			else if (++sleeps >= 100 && FileEndsWithCRLF(luahttp->buffer)) {
+			else if (++sleeps >= 10 && FileEndsWithCRLF(luahttp->buffer)) {
 				break;
 			}
 
-			Sleep(10);
+			Sleep(100);
 			result = 1;
 		}
 		else if (result == SOCKET_ERROR) {
