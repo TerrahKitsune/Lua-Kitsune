@@ -126,10 +126,43 @@ bool IsBlocking(SSL* ssl, int ret) {
 	return ret == SOCKET_ERROR && WSAGetLastError() == WSAEWOULDBLOCK;
 }
 
+int file_ends_with_crlf(FILE* file) {
+
+	int c, last_c = EOF;
+
+	long pos = ftell(file);
+	fseek(file, -2, SEEK_END);
+
+	c = fgetc(file);
+	if (c == EOF || c != '\r') {
+		fseek(file, pos, SEEK_SET);
+		return 0;
+	}
+
+	last_c = c;
+
+	c = fgetc(file);
+	if (c == EOF || c != '\n') {
+		fseek(file, pos, SEEK_SET);
+		return 0;
+	}
+
+	last_c = c;
+
+	c = fgetc(file);
+	if (c != EOF && c != '\0') {
+		fseek(file, pos, SEEK_SET);
+		return 0;
+	}
+
+	fseek(file, pos, SEEK_SET);
+	return last_c == '\n' ? 1 : 0;
+}
+
 int SendRecv(LuaHttp* luahttp, SOCKET ConnectSocket, SSL* ssl) {
 
 	int result;
-	char buffer[BUFFER_SIZE];
+	char buffer[BUFFER_SIZE + 1] = { 0 };
 	int size;
 	int offset;
 	u_long flag = 1;
@@ -143,11 +176,11 @@ int SendRecv(LuaHttp* luahttp, SOCKET ConnectSocket, SSL* ssl) {
 		size = fread(buffer, sizeof(char), BUFFER_SIZE, sendcontent);
 
 		if (size == 0) {
-			
+
 			if (!luahttp->content) {
 				break;
 			}
-			
+
 			sendcontent = luahttp->content;
 			size = fread(buffer, sizeof(char), BUFFER_SIZE, sendcontent);
 
@@ -205,6 +238,8 @@ int SendRecv(LuaHttp* luahttp, SOCKET ConnectSocket, SSL* ssl) {
 		return -1;
 	}
 
+	int sleeps = 0;
+
 	do {
 
 		if (luahttp->cancel) {
@@ -218,6 +253,7 @@ int SendRecv(LuaHttp* luahttp, SOCKET ConnectSocket, SSL* ssl) {
 			fflush(luahttp->buffer);
 			size += result;
 			luahttp->recv += result;
+			sleeps = 0;
 		}
 		else if (IsBlocking(ssl, result)) {
 
@@ -225,15 +261,19 @@ int SendRecv(LuaHttp* luahttp, SOCKET ConnectSocket, SSL* ssl) {
 				return -1;
 			}
 
+			if (++sleeps >= 10 && file_ends_with_crlf(luahttp->buffer)) {
+				break;
+			}
+
 			Sleep(10);
 			result = 1;
 		}
-		else if(result == SOCKET_ERROR){
+		else if (result == SOCKET_ERROR) {
 
 			if (WSAGetLastError() == ERROR_SUCCESS) {
 				break;
 			}
-			
+
 			return -1;
 		}
 
@@ -290,7 +330,7 @@ int DoHttps(SOCKET socket, LuaHttp* http) {
 		int err = SSL_get_error(ssl, result);
 
 		ShutdownSSL(ssl, ctx);
-		
+
 		sprintf(http->status, "TLS handshake failed %d", err);
 		return -1;
 	}
@@ -329,7 +369,7 @@ int httpprocess(LuaHttp* http) {
 	else if (result == -3) {
 		strcpy(http->status, "Cancel");
 	}
-	else if(result >= 0){
+	else if (result >= 0) {
 		strcpy(http->status, "Finished");
 	}
 
@@ -379,7 +419,7 @@ int GetResult(lua_State* L) {
 
 	luahttp->membuffer[size] = '\0';
 	size = fread(luahttp->membuffer, sizeof(char), size, luahttp->buffer);
-	char * content = sstrstr(luahttp->membuffer, "\r\n\r\n", size);
+	char* content = sstrstr(luahttp->membuffer, "\r\n\r\n", size);
 	size_t headerLength = (content - luahttp->membuffer);
 
 	if (!content) {
@@ -391,7 +431,7 @@ int GetResult(lua_State* L) {
 	}
 
 	char* cursor = luahttp->membuffer;
-	char * end = sstrstr(cursor, "\r\n", headerLength);
+	char* end = sstrstr(cursor, "\r\n", headerLength);
 	char version;
 	int code;
 	int offset;
@@ -408,7 +448,7 @@ int GetResult(lua_State* L) {
 		cursor += 5;
 	}
 
-	if (cursor[0]!='1' || cursor[1] != '.') {
+	if (cursor[0] != '1' || cursor[1] != '.') {
 		luaL_error(L, "Response malformed");
 		return 0;
 	}
@@ -525,7 +565,7 @@ int StartHttp(lua_State* L) {
 	}
 
 	if (lua_type(L, 3) == LUA_TUSERDATA && luaL_testudata(L, 3, LUA_FILEHANDLE)) {
-		
+
 		p = (luaL_Stream*)lua_touserdata(L, 3);
 
 		if (p->f) {
@@ -632,7 +672,7 @@ int GetStatus(lua_State* L) {
 	lua_pop(L, lua_gettop(L));
 
 	if (code == STILL_ACTIVE) {
-		
+
 		lua_pushboolean(L, TRUE);
 		lua_pushstring(L, "Running");
 	}
@@ -687,7 +727,7 @@ int GetRaw(lua_State* L) {
 	p->closef = &io_fclose;
 	p->f = luahttp->buffer;
 	luaL_setmetatable(L, LUA_FILEHANDLE);
-	
+
 	rewind(luahttp->buffer);
 	luahttp->buffer = NULL;
 
@@ -760,7 +800,7 @@ int UrlDecode(lua_State* L) {
 	lua_pop(L, 1);
 	lua_pushlstring(L, dec, o - dec);
 
-	if (len+1 > 1024) {
+	if (len + 1 > 1024) {
 		GetHttpBuffer(0);
 	}
 
