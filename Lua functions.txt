@@ -1743,7 +1743,7 @@ HTTP:
 	-content = content to tbe passed in the request
 	-headers = key-value table containing the headers, content-length and host is automatically filled
 	-Returns http object
-	Http Http.Start(method, url, content, headers)
+	Http Http.Start(method, url, content, headers, opt bool usehttp1.0)
 
 	-Sets the timeout on the running request in seconds
 	-0 or less = infinite

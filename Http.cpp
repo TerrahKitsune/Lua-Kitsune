@@ -200,9 +200,41 @@ long GetContentLength(FILE* fp, long headerSize) {
 	char* content_length_header = stristr(buffer, "Content-Length:");
 
 	if (!content_length_header) {
-		gff_free(buffer);
-		fseek(fp, pos, SEEK_SET);
-		return content_length;
+
+		content_length_header = stristr(buffer, "Transfer-Encoding:");
+
+		if (content_length_header) {
+
+			header_value = strtok(content_length_header, " ");
+
+			if (!header_value) {
+				gff_free(buffer);
+				fseek(fp, pos, SEEK_SET);
+				return content_length;
+			}
+
+			header_value = strtok(NULL, "\r\n");
+
+			if (!header_value) {
+				gff_free(buffer);
+				fseek(fp, pos, SEEK_SET);
+				return content_length;
+			}
+
+			if (_strnicmp(header_value, "chunked", 7) == 0) {
+				content_length = -2;
+			}
+
+			gff_free(buffer);
+			fseek(fp, pos, SEEK_SET);
+			return content_length;
+
+		}
+		else {
+			gff_free(buffer);
+			fseek(fp, pos, SEEK_SET);
+			return content_length;
+		}
 	}
 
 	header_value = strtok(content_length_header, " ");
@@ -236,20 +268,104 @@ int FileEndsWithCRLF(FILE* fp) {
 
 	pos = ftell(fp);
 	fseek(fp, 0, SEEK_END);
+	fseek(fp, ftell(fp) - 2, SEEK_SET);
 
-	while (ftell(fp) > 2) {
-		fseek(fp, -2, SEEK_CUR);
-		ch1 = fgetc(fp);
-		ch2 = fgetc(fp);
-		if (ch1 == '\r' && ch2 == '\n') {
-			found = 1;
-			break;
-		}
-	}
+	ch1 = fgetc(fp);
+	ch2 = fgetc(fp);
 
 	fseek(fp, pos, SEEK_SET);
 
-	return found;
+	return ch1 == '\r' && ch2 == '\n';
+}
+
+int FileChunkedComplete(FILE* fp) {
+
+	long pos = ftell(fp);
+	int result = FALSE;
+
+	fseek(fp, 0, SEEK_END);
+	fseek(fp, ftell(fp) - 7, SEEK_SET);
+
+	if (fgetc(fp) == '\r' && fgetc(fp) == '\n' &&
+		fgetc(fp) == '0' &&
+		fgetc(fp) == '\r' && fgetc(fp) == '\n' &&
+		fgetc(fp) == '\r' && fgetc(fp) == '\n') {
+		result = TRUE;
+	}
+
+	fseek(fp, pos, SEEK_SET);
+	return result;
+}
+
+int CopyToFile(FILE* src, FILE* dst, int size) {
+
+	char buf[CHUNK_SIZE + 1] = { 0 };
+	size_t read;
+
+	while (size > 0) {
+
+		read = fread(buf, sizeof(char), MIN(CHUNK_SIZE, size), src);
+
+		if (read == 0) {
+			return FALSE;
+		}
+
+		fwrite(buf, sizeof(char), read, dst);
+
+		size -= read;
+	}
+
+	return TRUE;
+}
+
+FILE* AssembleChunks(FILE* fp, long headersize) {
+
+	char buf[CHUNK_SIZE + 1] = {0};
+	long pos;
+	char* cursor;
+	size_t read;
+	int chunksize;
+	FILE* temp = tmpfile();
+
+	rewind(fp);
+	CopyToFile(fp, temp, headersize + 2);
+
+	fseek(fp, headersize+2, SEEK_SET);
+
+	while (true) {
+
+		pos = ftell(fp);
+		read = fread(buf, sizeof(char), CHUNK_SIZE, fp);
+
+		if (read == 0) {
+			fclose(temp);
+			return fp;
+		}
+
+		cursor = strtok(buf, "\r\n");
+
+		if (!cursor) {
+			fclose(temp);
+			return fp;
+		}
+
+		chunksize = strtol(buf, NULL, 16);
+		
+		if (chunksize <= 0) {
+			break;
+		}
+
+		fseek(fp, pos + strlen(cursor) + 2, SEEK_SET);
+
+		if (!CopyToFile(fp, temp, chunksize)) {
+			fclose(temp);
+			return fp;
+		}
+	}
+
+	fclose(fp);
+
+	return temp;
 }
 
 int SendRecv(LuaHttp* luahttp, SOCKET ConnectSocket, SSL* ssl) {
@@ -363,14 +479,17 @@ int SendRecv(LuaHttp* luahttp, SOCKET ConnectSocket, SSL* ssl) {
 					contentLength = GetContentLength(luahttp->buffer, headerSize);
 				}
 			}
+			else if (contentLength == -2 && FileChunkedComplete(luahttp->buffer)) {
+				break;
+			}
 			else if (contentLength > 0 && luahttp->recv >= contentLength + headerSize + 2) {
 				break;
 			}
-			else if (++sleeps >= 10 && FileEndsWithCRLF(luahttp->buffer)) {
+			else if (++sleeps >= 100 && FileEndsWithCRLF(luahttp->buffer)) {
 				break;
 			}
 
-			Sleep(100);
+			Sleep(10);
 			result = 1;
 		}
 		else if (result == SOCKET_ERROR) {
@@ -383,6 +502,10 @@ int SendRecv(LuaHttp* luahttp, SOCKET ConnectSocket, SSL* ssl) {
 		}
 
 	} while (result > 0);
+
+	if (contentLength == -2) {
+		luahttp->buffer = AssembleChunks(luahttp->buffer, headerSize);
+	}
 
 	luahttp->success = true;
 
@@ -527,6 +650,14 @@ int GetResult(lua_State* L) {
 	char* content = sstrstr(luahttp->membuffer, "\r\n\r\n", size);
 	size_t headerLength = (content - luahttp->membuffer);
 
+#if _DEBUG
+	FILE* test = fopen("http.txt", "wb");
+
+	fwrite(luahttp->membuffer, sizeof(char), size, test);
+	fflush(test);
+	fclose(test);
+#endif
+
 	if (!content) {
 		luaL_error(L, "Response malformed");
 		return 0;
@@ -653,6 +784,7 @@ int StartHttp(lua_State* L) {
 	const char* content;
 	size_t len;
 	luaL_Stream* p = NULL;
+	int useHttp0 = lua_toboolean(L, 5);
 
 	lua_settop(L, 4);
 
@@ -696,6 +828,9 @@ int StartHttp(lua_State* L) {
 		lua_pushstring(L, ip);
 		lua_settable(L, -3);
 	}
+	else {
+		lua_pop(L, 1);
+	}
 
 	lua_getfield(L, -1, "Content-Length");
 	if (lua_type(L, -1) != LUA_TSTRING) {
@@ -705,6 +840,9 @@ int StartHttp(lua_State* L) {
 		lua_pushfstring(L, "%d", len);
 		lua_settable(L, -3);
 	}
+	else {
+		lua_pop(L, 1);
+	}
 
 	lua_getfield(L, -1, "Content-Type");
 	if (lua_type(L, -1) != LUA_TSTRING) {
@@ -713,6 +851,21 @@ int StartHttp(lua_State* L) {
 		lua_pushstring(L, "Content-Type");
 		lua_pushstring(L, "text/plain");
 		lua_settable(L, -3);
+	}
+	else {
+		lua_pop(L, 1);
+	}
+
+	lua_getfield(L, -1, "Connection");
+	if (lua_type(L, -1) != LUA_TSTRING) {
+
+		lua_pop(L, 1);
+		lua_pushstring(L, "Connection");
+		lua_pushstring(L, "close");
+		lua_settable(L, -3);
+	}
+	else {
+		lua_pop(L, 1);
 	}
 
 	LuaHttp* luahttp = lua_pushhttp(L);
@@ -735,7 +888,12 @@ int StartHttp(lua_State* L) {
 	memcpy(luahttp->ip, ip, IP_ADDR_SIZE);
 	luahttp->port = port;
 
-	fprintf(luahttp->buffer, "%s /%s HTTP/1.1\r\n", method, page);
+	if (useHttp0) {
+		fprintf(luahttp->buffer, "%s /%s HTTP/1.0\r\n", method, page);
+	}
+	else {
+		fprintf(luahttp->buffer, "%s /%s HTTP/1.1\r\n", method, page);
+	}
 	lua_pushvalue(L, 4);
 	lua_pushnil(L);
 
