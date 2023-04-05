@@ -7,10 +7,33 @@
 
 static const char* LUAHTTP = "LuaHTTP";
 
+typedef struct HttpBuffer {
+
+	char* buf;
+	size_t alloc;
+	size_t len;
+	size_t pos;
+
+	FILE* fp;
+
+} HttpBuffer;
+
+HttpBuffer* bopen();
+HttpBuffer* bopen(FILE* fp);
+void bclose(HttpBuffer* buf);
+void brewind(HttpBuffer* buf);
+size_t bread(void* dest, size_t bytes, HttpBuffer* buf);
+size_t bwrite(const void* src, size_t bytes, HttpBuffer* buf);
+long btell(HttpBuffer* buf);
+int bgetc(HttpBuffer* buf);
+int bseek(HttpBuffer* buf, long offset, int origin);
+int bprintf(HttpBuffer* buf, const char* format, ...);
+FILE* bdumptmp(HttpBuffer* buf);
+
 typedef struct LuaHttp {
 
-	FILE* content;
-	FILE* buffer;	
+	HttpBuffer* content;
+	HttpBuffer* buffer;
 	HANDLE thread;
 
 	char* membuffer;
@@ -27,6 +50,7 @@ typedef struct LuaHttp {
 	int port;
 	char ip[IP_ADDR_SIZE];
 	char status[STATUS_SIZE];
+
 } LuaHttp;
 
 int StartHttp(lua_State* L);

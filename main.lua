@@ -130,4 +130,5 @@ collectgarbage();
 
 print(FileSystem.GetSpecialFolder(0x0010));
 
-dofile("C:\\Users\\Terrah\\Desktop\\Stresser\\auth.lua");
+FileSystem.SetCurrentDirectory("C:\\Users\\Terrah\\Desktop\\Stresser");
+dofile("worker.lua");
