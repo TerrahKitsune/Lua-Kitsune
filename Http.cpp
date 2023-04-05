@@ -468,7 +468,7 @@ int SendRecv(LuaHttp* luahttp, SOCKET ConnectSocket, SSL* ssl) {
 		else if (IsBlocking(ssl, result)) {
 
 			if (luahttp->timeout != 0 && (time(NULL) - luahttp->start) >= luahttp->timeout) {
-				return -1;
+				return -2;
 			}
 
 			if (headerSize < 0) {
@@ -863,17 +863,17 @@ int StartHttp(lua_State* L) {
 		lua_pop(L, 1);
 	}
 
-	lua_getfield(L, -1, "Connection");
-	if (lua_type(L, -1) != LUA_TSTRING) {
+	//lua_getfield(L, -1, "Connection");
+	//if (lua_type(L, -1) != LUA_TSTRING) {
 
-		lua_pop(L, 1);
-		lua_pushstring(L, "Connection");
-		lua_pushstring(L, "close");
-		lua_settable(L, -3);
-	}
-	else {
-		lua_pop(L, 1);
-	}
+	//	lua_pop(L, 1);
+	//	lua_pushstring(L, "Connection");
+	//	lua_pushstring(L, "close");
+	//	lua_settable(L, -3);
+	//}
+	//else {
+	//	lua_pop(L, 1);
+	//}
 
 	LuaHttp* luahttp = lua_pushhttp(L);
 
