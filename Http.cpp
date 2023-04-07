@@ -355,7 +355,7 @@ HttpBuffer* AssembleChunks(HttpBuffer* fp, long headersize) {
 			break;
 		}
 
-		bseek(fp, pos + strlen(cursor) + 2, SEEK_SET);
+		bseek(fp, pos + strlen(cursor) + 4, SEEK_SET);
 
 		if (!CopyToFile(fp, temp, chunksize)) {
 			bclose(temp);
@@ -656,14 +656,6 @@ int GetResult(lua_State* L) {
 	size = bread(luahttp->membuffer, size, luahttp->buffer);
 	char* content = sstrstr(luahttp->membuffer, "\r\n\r\n", size);
 	size_t headerLength = (content - luahttp->membuffer);
-
-#if _DEBUG
-	FILE* test = fopen("http.txt", "wb");
-
-	fwrite(luahttp->membuffer, sizeof(char), size, test);
-	fflush(test);
-	fclose(test);
-#endif
 
 	if (!content) {
 		luaL_error(L, "Response malformed");
@@ -1237,7 +1229,7 @@ size_t bread(void* dest, size_t bytes, HttpBuffer* buf) {
 	}
 
 	bytes = MIN(bytes, buf->len - buf->pos);
-	memcpy(dest, buf->buf, bytes);
+	memcpy(dest, &buf->buf[buf->pos], bytes);
 	buf->pos += bytes;
 	return bytes;
 }
