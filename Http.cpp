@@ -28,6 +28,26 @@ static void _dumpbuffer(FILE* f) {
 	} while (b[0] != '\0');
 }
 
+static void DumpFile(HttpBuffer* fp) {
+
+#if DEBUG
+	return;
+#endif
+
+	FILE* f = fopen("http.txt", "wb");
+	long pos = btell(fp);
+	int c;
+	brewind(fp);
+	c = bgetc(fp);
+	while (c != EOF) {
+		fputc(c, f);
+		c = bgetc(fp);
+	}
+	bseek(fp, pos, SEEK_SET);
+	fflush(f);
+	fclose(f);
+}
+
 char* sstrstr(char* haystack, const char* needle, size_t length)
 {
 	size_t needle_length = strlen(needle);
@@ -329,7 +349,6 @@ HttpBuffer* AssembleChunks(HttpBuffer* fp, long headersize) {
 
 	brewind(fp);
 	CopyToFile(fp, temp, headersize + 2);
-
 	bseek(fp, headersize + 2, SEEK_SET);
 
 	while (true) {
@@ -355,11 +374,14 @@ HttpBuffer* AssembleChunks(HttpBuffer* fp, long headersize) {
 			break;
 		}
 
-		bseek(fp, pos + strlen(cursor) + 4, SEEK_SET);
+		bseek(fp, pos + strlen(cursor) + 2, SEEK_SET);
 
 		if (!CopyToFile(fp, temp, chunksize)) {
 			bclose(temp);
 			return fp;
+		}
+		else {
+			bseek(fp, btell(fp) + 2, SEEK_SET);
 		}
 	}
 
