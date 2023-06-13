@@ -93,7 +93,7 @@ SOCKET Connect(const char* ip, int port) {
 	SOCKET ConnectSocket = INVALID_SOCKET;
 
 	ZeroMemory(&hints, sizeof(hints));
-	hints.ai_family = AF_UNSPEC;
+	hints.ai_family = AF_INET;
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_protocol = IPPROTO_TCP;
 
@@ -435,7 +435,7 @@ int SendRecv(LuaHttp* luahttp, SOCKET ConnectSocket, SSL* ssl) {
 					return -2;
 				}
 
-				Sleep(10);
+				Sleep(1);
 				continue;
 			}
 			else if (result > 0 && result != size) {
@@ -510,7 +510,7 @@ int SendRecv(LuaHttp* luahttp, SOCKET ConnectSocket, SSL* ssl) {
 				break;
 			}
 
-			Sleep(10);
+			Sleep(1);
 			result = 1;
 		}
 		else if (result == SOCKET_ERROR) {
