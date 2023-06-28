@@ -132,4 +132,53 @@ print(FileSystem.GetSpecialFolder(0x0010));
 
 TablePrint(Redis);
 
-local redis = Redis.Open();
+local redis = Redis.Open("10.9.23.123");
+
+TablePrint(redis:Command("AUTH hej123"));
+TablePrint(redis:Command("LOLWUT"));
+
+TablePrint(redis:Command("GET teststring"));
+TablePrint(redis:Command("GET testbool"));
+TablePrint(redis:Command("GET testdouble"));
+TablePrint(redis:Command("GET testnumber"));
+TablePrint(redis:Command("GET testnil"));
+
+local len = redis:Command("LLEN testlist");
+TablePrint(len);
+
+local list = redis:Command("LRANGE testlist 0 "..len.Value);
+TablePrint(list);
+
+local keys={};
+local cursor = 0;
+local data;
+repeat
+	data = redis:Command("scan "..cursor);
+
+	if not data then 
+		break;
+	end
+
+	cursor = tonumber(data.Value[1].Value);
+
+	for n=1, #data.Value[2].Value do
+		table.insert(keys, data.Value[2].Value[n].Value);
+	end
+
+until cursor == nil or cursor == 0;
+
+for n=1, #keys do 
+	print(n, keys[n]);
+end
+
+local tim = Timer.New();
+tim:Start();
+for n=1, 1000000 do 
+	data = UUID();
+	data = redis:Command("SET test:"..data.." "..n).Value;
+	if data ~= "OK" then 
+		error(data);
+	end
+end
+tim:Stop();
+print(tim:Elapsed());

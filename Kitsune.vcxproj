@@ -253,6 +253,10 @@
     <ClInclude Include="2DAMain.h" />
     <ClInclude Include="aes.h" />
     <ClInclude Include="aes.hpp" />
+    <ClInclude Include="hiredis\alloc.h" />
+    <ClInclude Include="hiredis\hiredis.h" />
+    <ClInclude Include="hiredis\read.h" />
+    <ClInclude Include="hiredis\sds.h" />
     <ClInclude Include="Imgui\imconfig.h" />
     <ClInclude Include="Imgui\imgui.h" />
     <ClInclude Include="Imgui\imgui_impl_dx12.h" />

@@ -2,6 +2,8 @@
 #include "RedisMain.h"
 
 static const struct luaL_Reg redisfunctions[] = {
+	{ "Escape", RedisEscape },
+	{ "Command", RedisCommand},
 	{ "Open", RedisOpen },
 	{ NULL, NULL }
 };

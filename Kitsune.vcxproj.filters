@@ -373,6 +373,9 @@
     <Filter Include="LuaRedis\Source Files">
       <UniqueIdentifier>{9203d280-003e-4184-a146-3595ed5b1735}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Hiredis">
+      <UniqueIdentifier>{676718aa-d0b4-494d-8e46-c5c32376e3ad}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Program.cpp">
@@ -1351,6 +1354,18 @@
     </ClInclude>
     <ClInclude Include="Redis.h">
       <Filter>LuaRedis\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="hiredis\hiredis.h">
+      <Filter>Hiredis</Filter>
+    </ClInclude>
+    <ClInclude Include="hiredis\read.h">
+      <Filter>Hiredis</Filter>
+    </ClInclude>
+    <ClInclude Include="hiredis\sds.h">
+      <Filter>Hiredis</Filter>
+    </ClInclude>
+    <ClInclude Include="hiredis\alloc.h">
+      <Filter>Hiredis</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

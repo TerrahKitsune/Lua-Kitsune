@@ -394,6 +394,35 @@ Macro:
 	-Retrives the inputs as given in the create function
 	inputs Macro:GetInputs()
 
+Redis:
+
+	-Opens a connection to redis returning a redis object
+	-Send AUTH command using Command after connecting if authentication is required
+	Redis Redis.Open(host, port)
+
+	-Executes a command on the redis server returning a reply:
+	-Reply
+	-Reply.Value = the value (int, string, array, nil, etc), if it is an array its an array of Replies
+	-Reply.Type = 
+	-REDIS_REPLY_STRING 1
+	-REDIS_REPLY_ARRAY 2
+	-REDIS_REPLY_INTEGER 3
+	-REDIS_REPLY_NIL 4
+	-REDIS_REPLY_STATUS 5
+	-REDIS_REPLY_ERROR 6
+	-REDIS_REPLY_DOUBLE 7
+	-REDIS_REPLY_BOOL 8
+	-REDIS_REPLY_MAP 9
+	-REDIS_REPLY_SET 10
+	-REDIS_REPLY_ATTR 11
+	-REDIS_REPLY_PUSH 12
+	-REDIS_REPLY_BIGNUM 13
+	-REDIS_REPLY_VERB 14
+	reply Redis:Command(command)
+
+	-Escapes a string (putting in backslashes for backslashes and doublequotes)
+	string Redis:Escape(string)
+
 CSV:
 
 	-Creates a new csv instance
