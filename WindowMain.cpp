@@ -21,6 +21,7 @@ static const struct luaL_Reg windowfunctions[] = {
 	{ "GetContent", LuaGetContent },
 	{ "SetContent", LuaSetContent },
 	{ "Size", GetWindowSize },
+	{ "GetIsFocused", HasWindowFocus },
 
 	{ "Create", CreateLuaWindow },
 	{ "Redraw", InvalidateWindow},

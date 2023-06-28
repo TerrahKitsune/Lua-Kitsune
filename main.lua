@@ -130,5 +130,6 @@ collectgarbage();
 
 print(FileSystem.GetSpecialFolder(0x0010));
 
-FileSystem.SetCurrentDirectory("C:\\Users\\Terrah\\Desktop\\Stresser");
-dofile("worker.lua");
+TablePrint(Redis);
+
+local redis = Redis.Open();

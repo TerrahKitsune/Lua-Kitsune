@@ -364,6 +364,15 @@
     <Filter Include="LuaVhd\Source Files">
       <UniqueIdentifier>{a4e96e44-559e-41ce-acd6-ce741f812415}</UniqueIdentifier>
     </Filter>
+    <Filter Include="LuaRedis">
+      <UniqueIdentifier>{2c662f44-4ed7-450c-a511-9a2b90d61b06}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaRedis\Header Files">
+      <UniqueIdentifier>{04b5d665-bc13-4be8-b5ac-c4a34f07573e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaRedis\Source Files">
+      <UniqueIdentifier>{9203d280-003e-4184-a146-3595ed5b1735}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Program.cpp">
@@ -827,6 +836,12 @@
     </ClCompile>
     <ClCompile Include="VhdMain.cpp">
       <Filter>LuaVhd</Filter>
+    </ClCompile>
+    <ClCompile Include="RedisMain.cpp">
+      <Filter>LuaRedis</Filter>
+    </ClCompile>
+    <ClCompile Include="Redis.cpp">
+      <Filter>LuaRedis\Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -1330,6 +1345,12 @@
     </ClInclude>
     <ClInclude Include="VhdMain.h">
       <Filter>LuaVhd</Filter>
+    </ClInclude>
+    <ClInclude Include="RedisMain.h">
+      <Filter>LuaRedis</Filter>
+    </ClInclude>
+    <ClInclude Include="Redis.h">
+      <Filter>LuaRedis\Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

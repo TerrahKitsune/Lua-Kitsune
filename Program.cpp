@@ -53,6 +53,7 @@
 #include "LuaArchiveMain.h"
 #include "LuaImguiMain.h"
 #include "VhdMain.h"
+#include "RedisMain.h"
 
 #define HI_PART(x)  ((x>>4) & 0x0F)
 #define LO_PART(x)  ((x) & 0x0F)
@@ -585,6 +586,8 @@ int main(int argc, char *argv[]) {
 	lua_setglobal(L, "Imgui");
 	luaopen_vhd(L);
 	lua_setglobal(L, "Vhd");
+	luaopen_redis(L);
+	lua_setglobal(L, "Redis");
 
 	lua_pushcfunction(L, L_GetRuntime);
 	lua_setglobal(L, "Runtime");

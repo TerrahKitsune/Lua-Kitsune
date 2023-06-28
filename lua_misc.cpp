@@ -79,6 +79,29 @@ static int GetLastErrorAsMessage(lua_State* L)
 	return 2;
 }
 
+
+int GetIsAdmin(lua_State* L) {
+
+	BOOL isAdmin = FALSE;
+	SID_IDENTIFIER_AUTHORITY authority = SECURITY_NT_AUTHORITY;
+	PSID adminGroupSID = NULL;
+
+	if (AllocateAndInitializeSid(&authority, 2, SECURITY_BUILTIN_DOMAIN_RID,
+		DOMAIN_ALIAS_RID_ADMINS, 0, 0, 0, 0, 0, 0, &adminGroupSID))
+	{
+		if (!CheckTokenMembership(NULL, adminGroupSID, &isAdmin))
+		{
+			isAdmin = FALSE;
+		}
+
+		FreeSid(adminGroupSID);
+	}
+
+	lua_pushboolean(L, isAdmin);
+
+	return 1;
+}
+
 int Time(lua_State* L) {
 
 	//https://gist.github.com/e-yes/278302
@@ -1146,6 +1169,9 @@ int luaopen_misc(lua_State* L) {
 
 	lua_pushcfunction(L, Time);
 	lua_setglobal(L, "Time");
+
+	lua_pushcfunction(L, GetIsAdmin);
+	lua_setglobal(L, "GetIsAdmin");
 
 	lua_pushcfunction(L, CRC32);
 	lua_setglobal(L, "CRC32");

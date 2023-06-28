@@ -46,6 +46,7 @@ void lua_pushhwnd(lua_State* L, HWND handle);
 int OpenWindow(lua_State* L);
 int GetWindowParent(lua_State* L);
 int GetWindow(lua_State* L);
+int HasWindowFocus(lua_State* L);
 int GetIsVisible(lua_State* L);
 int GetText(lua_State* L);
 int GetWindowProcessId(lua_State* L);

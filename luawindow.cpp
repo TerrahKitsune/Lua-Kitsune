@@ -119,6 +119,21 @@ int LuaCheckHasMessage(lua_State* L) {
 	return 1;
 }
 
+int HasWindowFocus(lua_State* L) {
+
+	LuaWindow* window = lua_tonwindow(L, 1);
+
+	lua_pop(L, lua_gettop(L));
+
+	HWND foregroundWindow = GetForegroundWindow();
+	DWORD foregroundThreadId = GetWindowThreadProcessId(foregroundWindow, NULL);
+	DWORD currentThreadId = GetWindowThreadProcessId(window->handle, NULL);
+
+	lua_pushboolean(L, (foregroundWindow == window->handle) || (foregroundThreadId == currentThreadId));
+
+	return 1;
+}
+
 int GetIsVisible(lua_State* L) {
 
 	LuaWindow* window = lua_tonwindow(L, 1);

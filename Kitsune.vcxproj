@@ -51,7 +51,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(SolutionDir)mysql\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)zip;$(SolutionDir)libarchive;$(SolutionDir)libarchive/lzma;$(SolutionDir)Imgui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)mysql\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)zip;$(SolutionDir)libarchive;$(SolutionDir)libarchive/lzma;$(SolutionDir)Imgui;$(SolutionDir)hiredis;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4703;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <PreprocessorDefinitions>STANDALONEGFF;_CRT_SECURE_NO_WARNINGS;ImTextureID=ImU64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
@@ -63,6 +63,7 @@
       </IgnoreAllDefaultLibraries>
       <ImportLibrary>
       </ImportLibrary>
+      <IgnoreSpecificDefaultLibraries>msvcrt.lib;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -72,7 +73,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(SolutionDir)mysql\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)zip;$(SolutionDir)libarchive;$(SolutionDir)libarchive/lzma;$(SolutionDir)Imgui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)mysql\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)zip;$(SolutionDir)libarchive;$(SolutionDir)libarchive/lzma;$(SolutionDir)Imgui;$(SolutionDir)hiredis;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4703;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <PreprocessorDefinitions>STANDALONEGFF;_CRT_SECURE_NO_WARNINGS;ImTextureID=ImU64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
@@ -86,6 +87,7 @@
       </IgnoreAllDefaultLibraries>
       <ImportLibrary>
       </ImportLibrary>
+      <IgnoreSpecificDefaultLibraries>msvcrt.lib;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -168,6 +170,8 @@
     <ClCompile Include="NamedPipeMain.cpp" />
     <ClCompile Include="odbc.cpp" />
     <ClCompile Include="ODBCMain.cpp" />
+    <ClCompile Include="Redis.cpp" />
+    <ClCompile Include="RedisMain.cpp" />
     <ClCompile Include="sha256.c" />
     <ClCompile Include="Sha256Main.cpp" />
     <ClCompile Include="LuaBinaryTreeMain.cpp" />
@@ -342,6 +346,8 @@
     <ClInclude Include="NamedPipeMain.h" />
     <ClInclude Include="odbc.h" />
     <ClInclude Include="ODBCMain.h" />
+    <ClInclude Include="Redis.h" />
+    <ClInclude Include="RedisMain.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="sha256.h" />
     <ClInclude Include="Sha256Main.h" />

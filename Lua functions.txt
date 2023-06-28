@@ -83,6 +83,9 @@ Misc global functions:
 	x,y GetScreenSize()
 	x,y GetCursorPosition();
 
+	-Returns true if the application has admin rights
+	bool GetIsAdmin()
+
 	- https://docs.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes
 	-returns true if the key is down
 	bool GetKeyState(key)
@@ -176,6 +179,9 @@ Window:
 	-Get the parent window
 	-Returns nil if the window does not have a parent
 	Window Window:GetParent()
+
+	-Returns true if the window has focus (is in the foreground)
+	bool Window:GetIsFocused()
 
 	-Returns true if the window is visible
 	bool Window:GetIsVisible()
