@@ -87,7 +87,6 @@
       </IgnoreAllDefaultLibraries>
       <ImportLibrary>
       </ImportLibrary>
-      <IgnoreSpecificDefaultLibraries>msvcrt.lib;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
