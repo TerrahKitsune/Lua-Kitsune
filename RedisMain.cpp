@@ -2,8 +2,7 @@
 #include "RedisMain.h"
 
 static const struct luaL_Reg redisfunctions[] = {
-	{ "Escape", RedisEscape },
-	{ "Command", RedisCommand},
+	{ "Command", RedisCommand },
 	{ "Open", RedisOpen },
 	{ NULL, NULL }
 };
@@ -15,6 +14,8 @@ static const luaL_Reg redismeta[] = {
 };
 
 int luaopen_redis(lua_State* L) {
+
+	redisInitOpenSSL();
 
 	luaL_newlibtable(L, redisfunctions);
 	luaL_setfuncs(L, redisfunctions, 0);

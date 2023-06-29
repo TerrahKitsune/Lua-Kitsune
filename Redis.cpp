@@ -6,6 +6,7 @@
 #include <windows.h> 
 
 #pragma comment(lib, "hiredis/hiredis.lib")
+#pragma comment(lib, "hiredis/hiredis_ssl.lib")
 
 void CleanReply(LuaRedis* luaRedis) {
 
@@ -15,11 +16,11 @@ void CleanReply(LuaRedis* luaRedis) {
 	}
 }
 
-int PushReply(lua_State* L, LuaRedis* luaRedis, redisReply* reply) {
+int PushReply(lua_State* L, redisReply* reply) {
 
-	if (luaRedis) {
-		CleanReply(luaRedis);
-		luaRedis->reply = reply;
+	if (!reply) {
+		lua_pushnil(L);
+		return 1;
 	}
 
 	lua_createtable(L, 0, 2);
@@ -43,7 +44,7 @@ int PushReply(lua_State* L, LuaRedis* luaRedis, redisReply* reply) {
 		lua_createtable(L, reply->elements, 0);
 
 		for (int n = 0; n < reply->elements; n++) {
-			PushReply(L, NULL, reply->element[n]);
+			PushReply(L, reply->element[n]);
 			lua_rawseti(L, -2, n + 1);
 		}
 	}
@@ -60,49 +61,106 @@ int PushReply(lua_State* L, LuaRedis* luaRedis, redisReply* reply) {
 }
 
 int RedisOpen(lua_State* L) {
-
+	
 	const char* host = luaL_checkstring(L, 1);
 	int port = luaL_optinteger(L, 2, 5257);
+	const char* data;
+	BOOL useTls = lua_toboolean(L, 3);
+	long timeout = luaL_optinteger(L, 4, 10);
+
 	LuaRedis* redis = lua_pushredis(L);
+	redisSSLContextError ssl_error = REDIS_SSL_CTX_NONE;
 
-	redis->context = redisConnect(host, port);
+	if (useTls) {
 
-	return 1;
-}
+		redisSSLOptions sslOptions = {0};
 
-char* escapeBuffer = NULL;
+		if (lua_istable(L, 5)) {
+			
+			lua_pushvalue(L, 5);
 
-int RedisEscape(lua_State* L) {
+			lua_pushstring(L, "cacert");
+			lua_gettable(L, -2);
+			data = lua_tostring(L, -1);
+			lua_pop(L, 1);
 
-	size_t inputLength = 0;
-	const char* input = lua_tostring(L, 1, &inputLength);
-	size_t outputLength = inputLength * 2 + 1; // Max possible length after escaping
-	
-	if (escapeBuffer) {
-		free(escapeBuffer);
-		escapeBuffer = NULL;
-	}
-	
-	char* output = (char*)malloc(outputLength);
-	escapeBuffer = output;
-	if (output == NULL) {
-		return NULL;
-	}
+			if (data) {
+				sslOptions.cacert_filename = data;
+			}
 
-	size_t j = 0;
-	for (size_t i = 0; i < inputLength; i++) {
-		if (input[i] == '\\' || input[i] == '\"') {
-			output[j++] = '\\';
+			lua_pushstring(L, "capath");
+			lua_gettable(L, -2);
+			data = lua_tostring(L, -1);
+			lua_pop(L, 1);
+
+			if (data) {
+				sslOptions.capath = data;
+			}
+
+			lua_pushstring(L, "cert");
+			lua_gettable(L, -2);
+			data = lua_tostring(L, -1);
+			lua_pop(L, 1);
+
+			if (data) {
+				sslOptions.cert_filename = data;
+			}
+
+			lua_pushstring(L, "privatekey");
+			lua_gettable(L, -2);
+			data = lua_tostring(L, -1);
+			lua_pop(L, 1);
+
+			if (data) {
+				sslOptions.private_key_filename = data;
+			}
+
+			lua_pushstring(L, "servername");
+			lua_gettable(L, -2);
+			data = lua_tostring(L, -1);
+			lua_pop(L, 1);
+
+			if (data) {
+				sslOptions.server_name = data;
+			}
+
+			lua_pushstring(L, "verifymode");
+			lua_gettable(L, -2);
+			sslOptions.verify_mode = luaL_optinteger(L, -1, sslOptions.verify_mode);
+			lua_pop(L, 2);
 		}
-		output[j++] = input[i];
+
+		redis->ssl = redisCreateSSLContextWithOptions(&sslOptions, &ssl_error);
+
+		if (!redis->ssl || ssl_error != REDIS_SSL_CTX_NONE) {
+			luaL_error(L, "SSL Context error: %s", redisSSLContextGetError(ssl_error));
+			return 0;
+		}
 	}
-	output[j] = '\0';
 
-	lua_pushlstring(L, output, j);
+	struct timeval tv = { timeout, 0};
+	redisOptions options = { 0 };
+	REDIS_OPTIONS_SET_TCP(&options, host, port);
+	options.connect_timeout = &tv;
 
-	if (escapeBuffer) {
-		free(escapeBuffer);
-		escapeBuffer = NULL;
+	redis->context = redisConnectWithOptions(&options);
+
+	if (redis->context == NULL || redis->context->err) {
+		if (redis->context) {
+			luaL_error(L, "Connection error: %s", redis->context->errstr);
+		}
+		else {
+			luaL_error(L, "Connection error: can't allocate redis context");
+		}
+		return 0;
+	}
+
+	if (redis->ssl) {
+
+		if (redisInitiateSSLWithContext(redis->context, redis->ssl) != REDIS_OK) {
+			luaL_error(L, "Error: %s", redis->context->errstr);
+			return 0;
+		}
 	}
 
 	return 1;
@@ -111,16 +169,34 @@ int RedisEscape(lua_State* L) {
 int RedisCommand(lua_State* L) {
 
 	LuaRedis* luaRedis = lua_toredis(L, 1);
+	size_t paramLen = 0;
 	const char* command = luaL_checkstring(L, 2);
+	const char* param = lua_tolstring(L, 3, &paramLen);
 
 	if (!luaRedis->context) {
 		luaL_error(L, "Redis not connected");
 		return 0;
 	}
 
-	redisReply* reply = (redisReply*)redisCommand(luaRedis->context, command);
+	CleanReply(luaRedis);
 
-	return PushReply(L, luaRedis, reply);
+	luaRedis->reply = (redisReply*)redisCommand(luaRedis->context, command, param, paramLen);
+
+	if (!luaRedis->reply) {
+
+		luaL_error(L, "Redis connection failed: %s", luaRedis->context->errstr);
+		return 0;
+	}
+	else if (luaRedis->reply->type == REDIS_REPLY_ERROR) {
+
+		luaL_error(L, "Redis error: %s", luaRedis->reply->str);
+		return 0;
+	}
+
+	int result = PushReply(L, luaRedis->reply);
+	CleanReply(luaRedis);
+
+	return result;
 }
 
 LuaRedis* lua_pushredis(lua_State* L) {
@@ -153,12 +229,11 @@ int redis_gc(lua_State* L) {
 		redisFree(redis->context);
 	}
 
-	memset(redis, 0, sizeof(LuaRedis));
-
-	if (escapeBuffer) {
-		free(escapeBuffer);
-		escapeBuffer = NULL;
+	if (redis->ssl) {
+		redisFreeSSLContext(redis->ssl);
 	}
+
+	memset(redis, 0, sizeof(LuaRedis));
 
 	return 0;
 }

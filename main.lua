@@ -130,36 +130,23 @@ collectgarbage();
 
 print(FileSystem.GetSpecialFolder(0x0010));
 
-TablePrint(Redis);
-
 local redis = Redis.Open("10.9.23.123");
 
-TablePrint(redis:Command("AUTH hej123"));
-TablePrint(redis:Command("LOLWUT"));
-
-TablePrint(redis:Command("GET teststring"));
-TablePrint(redis:Command("GET testbool"));
-TablePrint(redis:Command("GET testdouble"));
-TablePrint(redis:Command("GET testnumber"));
-TablePrint(redis:Command("GET testnil"));
-
-local len = redis:Command("LLEN testlist");
-TablePrint(len);
-
-local list = redis:Command("LRANGE testlist 0 "..len.Value);
-TablePrint(list);
+TablePrint(redis:Command("AUTH %s", "hej123"));
 
 local keys={};
 local cursor = 0;
 local data;
 repeat
-	data = redis:Command("scan "..cursor);
+	data = redis:Command([[SCAN %b COUNT 1000]], tostring(cursor));
 
 	if not data then 
 		break;
 	end
 
 	cursor = tonumber(data.Value[1].Value);
+
+	print(cursor, #keys);
 
 	for n=1, #data.Value[2].Value do
 		table.insert(keys, data.Value[2].Value[n].Value);
@@ -173,9 +160,9 @@ end
 
 local tim = Timer.New();
 tim:Start();
-for n=1, 1000000 do 
+for n=1, 1 do 
 	data = UUID();
-	data = redis:Command("SET test:"..data.." "..n).Value;
+	data = redis:Command("SETEX test:"..data.." 3600 %s", n).Value;
 	if data ~= "OK" then 
 		error(data);
 	end

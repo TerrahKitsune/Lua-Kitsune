@@ -398,9 +398,19 @@ Redis:
 
 	-Opens a connection to redis returning a redis object
 	-Send AUTH command using Command after connecting if authentication is required
-	Redis Redis.Open(host, port)
+	-useTls = default false, if true redis will attempt to create an ssl context and use that
+	-Timeout: default 10 seconds
+	-sslOptions optional table with keys:
+	-sslOptions.cacert = cacert file
+	-sslOptions.capath = capath
+	-sslOptions.cert = cert file
+	-sslOptions.privatekey = private key file
+	-sslOptions.servername = servername
+	-sslOptions.verifymode (flags) = 0 = none, 1 = peer, 2= fail if no peer cert, 4 = once, 8 = handshake
+	Redis Redis.Open(host, port, opt useTls, opt timeout, opt sslOptions)
 
 	-Executes a command on the redis server returning a reply:
+	-param: added as a parameters to the command. Works with %b.
 	-Reply
 	-Reply.Value = the value (int, string, array, nil, etc), if it is an array its an array of Replies
 	-Reply.Type = 
@@ -418,10 +428,7 @@ Redis:
 	-REDIS_REPLY_PUSH 12
 	-REDIS_REPLY_BIGNUM 13
 	-REDIS_REPLY_VERB 14
-	reply Redis:Command(command)
-
-	-Escapes a string (putting in backslashes for backslashes and doublequotes)
-	string Redis:Escape(string)
+	reply Redis:Command(command, param)
 
 CSV:
 

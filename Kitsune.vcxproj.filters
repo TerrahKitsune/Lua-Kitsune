@@ -1367,6 +1367,9 @@
     <ClInclude Include="hiredis\alloc.h">
       <Filter>Hiredis</Filter>
     </ClInclude>
+    <ClInclude Include="hiredis\hiredis_ssl.h">
+      <Filter>Hiredis</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Text Include="Lua functions.txt" />
