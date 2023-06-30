@@ -497,8 +497,8 @@ int lua_getpixel(lua_State *L) {
 		return 0;
 	}
 
-	int y = (int)luaL_checkinteger(L, 2) - 1;
-	int x = (int)luaL_checkinteger(L, 3) - 1;
+	int x = (int)luaL_checkinteger(L, 2) - 1;
+	int y = (int)luaL_checkinteger(L, 3) - 1;
 
 	if (y < 0 || x < 0 || y >= (int)img->Height || x >= (int)img->Width) {
 		luaL_error(L, "Argument out of range");
