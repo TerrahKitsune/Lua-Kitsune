@@ -29,10 +29,37 @@ LuaWChar* lua_pushwchar(lua_State* L, const wchar_t* str, size_t len) {
 
 int FromBytes(lua_State* L) {
 
+	size_t len;
+	LuaWChar* wchar;
+
+	if (lua_type(L, 1) == LUA_TSTRING) {
+
+		const char* raw = lua_tolstring(L, 1, &len);
+
+		if ((len % sizeof(wchar_t)) != 0) {
+			luaL_error(L, "%s is not a widecharstring", raw);
+			return 0;
+		}
+		
+		LuaWChar* wchar = lua_pushwchar(L);
+
+		wchar->str = (wchar_t*)gff_calloc(len + 1, sizeof(wchar_t));
+		wchar->len = len / sizeof(wchar_t);
+
+		if (!wchar->str) {
+			luaL_error(L, "out of memory");
+			return 0;
+		}
+
+		memcpy(wchar->str, raw, len);
+
+		return 1;
+	}
+
 	luaL_checktype(L, 1, LUA_TTABLE);
-	size_t len = lua_rawlen(L, 1);
-	LuaWChar* wchar = lua_pushwchar(L);
-	wchar->str = (wchar_t*)gff_calloc(len + 1, sizeof(len));
+	len = lua_rawlen(L, 1);
+	wchar = lua_pushwchar(L);
+	wchar->str = (wchar_t*)gff_calloc(len + 1, sizeof(wchar_t));
 	wchar_t c;
 	lua_Integer b;
 

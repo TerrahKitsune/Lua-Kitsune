@@ -2097,9 +2097,9 @@ Wchar:
 	-Creates a wchar string from an ansi string
 	Wchar Wchar.FromAnsi(str)
 
-	-Converts an array of integers into a wchar
+	-Converts an array of integers or a string (such as created by ToWide) into a wchar
 	-Opposite of Wchar:FromBytes
-	Wchar Wchar.FromBytes(array)
+	Wchar Wchar.FromBytes(array or widestring)
 
 	-Returns the wchar as an ansi string, missing characters are replaced with ?
 	string Wchar:ToAnsi()
