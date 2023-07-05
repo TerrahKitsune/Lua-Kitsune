@@ -128,44 +128,8 @@ end
 CreateGCPrint();
 collectgarbage();
 
-print(FileSystem.GetSpecialFolder(0x0010));
-
-local redis = Redis.Open("10.9.23.123");
-
-TablePrint(redis:Command("AUTH %s", "hej123"));
-
-local keys={};
-local cursor = 0;
-local data;
-repeat
-	data = redis:Command([[SCAN %b COUNT 1000]], tostring(cursor));
-
-	if not data then 
-		break;
-	end
-
-	cursor = tonumber(data.Value[1].Value);
-
-	print(cursor, #keys);
-
-	for n=1, #data.Value[2].Value do
-		table.insert(keys, data.Value[2].Value[n].Value);
-	end
-
-until cursor == nil or cursor == 0;
-
-for n=1, #keys do 
-	print(n, keys[n]);
-end
-
-local tim = Timer.New();
-tim:Start();
-for n=1, 1 do 
-	data = UUID();
-	data = redis:Command("SETEX test:"..data.." 3600 %s", n).Value;
-	if data ~= "OK" then 
-		error(data);
-	end
-end
-tim:Stop();
-print(tim:Elapsed());
+local r = Redis.Open("10.9.23.123", 5257);
+TablePrint(r:Command("AUTH", "hej123"));
+TablePrint(r:Command("SETEX", "test", 420, "Hello redis\0 with a null"));
+TablePrint(r:Command("GET", "test"));
+print(string.find(r:Command("GET", "test").Value, "\0"));

@@ -862,7 +862,72 @@ int GetKeyState(lua_State* L) {
 	return 1;
 }
 
+typedef struct DisplayEnumData {
+
+	int count;
+	HMONITOR search;
+	int idx;
+
+} DisplayEnumData;
+
+BOOL CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM dwData) {
+
+	DisplayEnumData* DisplayCallback = (DisplayEnumData*)dwData;
+
+	DisplayCallback->count++;
+
+	if (DisplayCallback->search == hMonitor) {
+		DisplayCallback->idx = DisplayCallback->count;
+	}
+
+	return TRUE;
+}
+
+
+
+int GetMonitorIndex(HMONITOR hMonitor) {
+
+	DisplayEnumData data;
+
+	data.count = 0;
+	data.search = hMonitor;
+	data.idx = 0;
+
+	if (EnumDisplayMonitors(NULL, NULL, MonitorEnumProc, (LPARAM)&data)) {
+		return data.idx;
+	}
+
+	return 0;
+}
+
 int GetCursorPosition(lua_State* L) {
+
+	POINT cursorPos;
+	HMONITOR hMonitor;
+	MONITORINFO monitorInfo;
+	UINT monitorIndex;
+
+	if (GetCursorPos(&cursorPos)) {
+
+		hMonitor = MonitorFromPoint(cursorPos, MONITOR_DEFAULTTONEAREST);
+		monitorInfo.cbSize = sizeof(MONITORINFO);
+
+		if (GetMonitorInfo(hMonitor, &monitorInfo))
+		{
+			monitorIndex = GetMonitorIndex(hMonitor);
+			lua_pushinteger(L, cursorPos.x - monitorInfo.rcMonitor.left);
+			lua_pushinteger(L, cursorPos.y - monitorInfo.rcMonitor.top);
+			lua_pushinteger(L, monitorIndex);
+		}
+
+		return 3;
+	}
+
+	lua_pushnil(L);
+	return 1;
+}
+
+int GetCursorPointPosition(lua_State* L) {
 
 	POINT point;
 
@@ -1134,6 +1199,9 @@ int luaopen_misc(lua_State* L) {
 	lua_pushcfunction(L, GetKeyState);
 	lua_setglobal(L, "GetKeyState");
 
+	lua_pushcfunction(L, GetCursorPointPosition);
+	lua_setglobal(L, "GetCursorPointPosition");
+
 	lua_pushcfunction(L, GetCursorPosition);
 	lua_setglobal(L, "GetCursorPosition");
 
@@ -1147,7 +1215,7 @@ int luaopen_misc(lua_State* L) {
 	lua_setglobal(L, "CPUID");
 
 	lua_pushcfunction(L, L_DebugBreak);
-	lua_setglobal(L, "Break"); 
+	lua_setglobal(L, "Break");
 
 	lua_pushcfunction(L, L_GetGlobalMemoryStatus);
 	lua_setglobal(L, "GlobalMemoryStatus");

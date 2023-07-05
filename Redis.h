@@ -3,7 +3,7 @@
 #include <Windows.h>
 static const char* REDIS = "REDIS";
 
-#pragma comment (lib, "crypt32");
+#pragma comment (lib, "crypt32")
 #include "hiredis/hiredis.h"
 #include "hiredis/hiredis_ssl.h"
 
@@ -12,6 +12,9 @@ typedef struct LuaRedis {
 	redisSSLContext* ssl;
 	redisContext* context;
 	redisReply* reply;
+	int argc;
+	char** argv;
+	size_t* argvlen;
 	
 } LuaRedis;
 

@@ -10,9 +10,30 @@
 
 void CleanReply(LuaRedis* luaRedis) {
 
-	if (luaRedis && luaRedis->reply) {
-		freeReplyObject(luaRedis->reply);
-		luaRedis->reply = NULL;
+	if (luaRedis) {
+
+		if (luaRedis->reply) {
+			freeReplyObject(luaRedis->reply);
+			luaRedis->reply = NULL;
+		}
+
+		if (luaRedis->argv) {
+
+			for (int n = 0; n < luaRedis->argc; n++) {
+				if (luaRedis->argv[n]) {
+					gff_free(luaRedis->argv[n]);
+				}
+			}
+
+			gff_free(luaRedis->argv);
+			luaRedis->argv = NULL;
+			luaRedis->argc = 0;
+		}
+
+		if (luaRedis->argvlen) {
+			gff_free(luaRedis->argvlen);
+			luaRedis->argvlen = NULL;
+		}
 	}
 }
 
@@ -61,7 +82,7 @@ int PushReply(lua_State* L, redisReply* reply) {
 }
 
 int RedisOpen(lua_State* L) {
-	
+
 	const char* host = luaL_checkstring(L, 1);
 	int port = luaL_optinteger(L, 2, 5257);
 	const char* data;
@@ -73,10 +94,10 @@ int RedisOpen(lua_State* L) {
 
 	if (useTls) {
 
-		redisSSLOptions sslOptions = {0};
+		redisSSLOptions sslOptions = { 0 };
 
 		if (lua_istable(L, 5)) {
-			
+
 			lua_pushvalue(L, 5);
 
 			lua_pushstring(L, "cacert");
@@ -138,7 +159,7 @@ int RedisOpen(lua_State* L) {
 		}
 	}
 
-	struct timeval tv = { timeout, 0};
+	struct timeval tv = { timeout, 0 };
 	redisOptions options = { 0 };
 	REDIS_OPTIONS_SET_TCP(&options, host, port);
 	options.connect_timeout = &tv;
@@ -170,8 +191,7 @@ int RedisCommand(lua_State* L) {
 
 	LuaRedis* luaRedis = lua_toredis(L, 1);
 	size_t paramLen = 0;
-	const char* command = luaL_checkstring(L, 2);
-	const char* param = lua_tolstring(L, 3, &paramLen);
+	const char* command;
 
 	if (!luaRedis->context) {
 		luaL_error(L, "Redis not connected");
@@ -180,7 +200,37 @@ int RedisCommand(lua_State* L) {
 
 	CleanReply(luaRedis);
 
-	luaRedis->reply = (redisReply*)redisCommand(luaRedis->context, command, param, paramLen);
+	int top = lua_gettop(L) - 1;
+
+	if (top > 0)
+	{
+		luaRedis->argv = (char**)gff_calloc(top, sizeof(char*));
+		luaRedis->argvlen = (size_t*)gff_calloc(top, sizeof(size_t));
+
+		if (!luaRedis->argv) {
+			luaL_error(L, "Out of memory");
+			return 0;
+		}
+
+		for (int n = 0; n < top; n++) {
+
+			command = lua_tolstring(L, n + 2, &paramLen);
+			luaRedis->argv[n] = (char*)gff_malloc(paramLen);
+
+			if (!luaRedis->argv[n]) {
+				luaL_error(L, "Out of memory");
+				return 0;
+			}
+
+			luaRedis->argvlen[n] = paramLen;
+			memcpy(luaRedis->argv[n], command, paramLen);
+			puts(command);
+		}
+
+		luaRedis->argc = top;
+	}
+
+	luaRedis->reply = (redisReply*)redisCommandArgv(luaRedis->context, luaRedis->argc, (const char**)luaRedis->argv, luaRedis->argvlen);
 
 	if (!luaRedis->reply) {
 

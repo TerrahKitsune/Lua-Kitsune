@@ -81,7 +81,8 @@ Misc global functions:
 	int GlobalMemoryStatus(opt type)
 
 	x,y GetScreenSize()
-	x,y GetCursorPosition();
+	x,y GetCursorPointPosition();
+	x,y, monitor GetCursorPosition()
 
 	-Returns true if the application has admin rights
 	bool GetIsAdmin()
@@ -409,8 +410,7 @@ Redis:
 	-sslOptions.verifymode (flags) = 0 = none, 1 = peer, 2= fail if no peer cert, 4 = once, 8 = handshake
 	Redis Redis.Open(host, port, opt useTls, opt timeout, opt sslOptions)
 
-	-Executes a command on the redis server returning a reply:
-	-param: added as a parameters to the command. Works with %b.
+	-Executes a command on the redis server returning a reply
 	-Reply
 	-Reply.Value = the value (int, string, array, nil, etc), if it is an array its an array of Replies
 	-Reply.Type = 
@@ -428,7 +428,7 @@ Redis:
 	-REDIS_REPLY_PUSH 12
 	-REDIS_REPLY_BIGNUM 13
 	-REDIS_REPLY_VERB 14
-	reply Redis:Command(command, param)
+	reply Redis:Command(command, arg, arg, arg, ...)
 
 CSV:
 
