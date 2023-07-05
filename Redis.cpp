@@ -224,7 +224,6 @@ int RedisCommand(lua_State* L) {
 
 			luaRedis->argvlen[n] = paramLen;
 			memcpy(luaRedis->argv[n], command, paramLen);
-			puts(command);
 		}
 
 		luaRedis->argc = top;
