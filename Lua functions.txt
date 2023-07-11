@@ -2095,11 +2095,22 @@ Json:
 Wchar:
 
 	-Creates a wchar string from an ansi string
+	-uses mbstowcs
 	Wchar Wchar.FromAnsi(str)
 
 	-Converts an array of integers or a string (such as created by ToWide) into a wchar
 	-Opposite of Wchar:FromBytes
 	Wchar Wchar.FromBytes(array or widestring)
+
+	-Convert a utf8 string into a widechar
+	-uses MultiByteToWideChar with utf8 codepage
+	Wchar Wchar.FromUtf8()
+
+	-https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/setlocale-wsetlocale?view=msvc-170
+	nil Wcar.Setlocale(codepage)
+
+	-Wide to multibyte using utf8 codepage
+	string Wchar:ToUtf8()
 
 	-Returns the wchar as an ansi string, missing characters are replaced with ?
 	string Wchar:ToAnsi()
@@ -2125,7 +2136,7 @@ Wchar:
 	int Wchar:Find(substring, opt offset)
 
 	meta:
-		tostring: same as ToAnsi
+		tostring: same as ToUtf8
 		concat (..): returns a new Wchar
 		length (#): returns the length of the wchar
 		equal (==): returns true if a wchar is matching another wchar

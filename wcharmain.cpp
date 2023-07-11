@@ -5,6 +5,8 @@ static const struct luaL_Reg wcharfunctions[] = {
 	{ "Find", WcharFind},
 	{ "FromAnsi",  FromAnsi },
 	{ "ToAnsi", ToAnsi },
+	{ "FromUtf8", FromUtf8 },
+	{ "ToUtf8", ToUtf8 },
 	{ "Substring", FromSubstring },
 	{ "ToWide", ToWide},
 	{ "ToLower", FromToLower },
@@ -12,6 +14,7 @@ static const struct luaL_Reg wcharfunctions[] = {
 	{ "ToBytes", ToBytes },
 	{ "FromBytes", FromBytes },
 	{ "len", wchar_len },
+	{ "Setlocale", SetLocale },
 	{ NULL, NULL }
 };
 

@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <stdlib.h> 
 #include <windows.h> 
+#include <locale.h>
 
 LuaWChar* lua_pushwchar(lua_State* L, const wchar_t* str) {
 	return lua_pushwchar(L, str, wcslen(str));
@@ -162,6 +163,37 @@ int FromSubstring(lua_State* L) {
 	return 1;
 }
 
+int SetLocale(lua_State* L) {
+
+	setlocale(LC_ALL, luaL_optstring(L, 1, ""));
+
+	return 0;
+}
+
+int FromUtf8(lua_State* L) {
+
+	if (lua_gettop(L) < 1) {
+		return 0;
+	}
+
+	size_t len;
+	const char* data = luaL_tolstring(L, -1, &len);
+	lua_pop(L, 1);
+
+	LuaWChar* wchar = lua_pushwchar(L);
+
+	wchar->str = (WCHAR*)gff_calloc(len + 1, sizeof(WCHAR));
+
+	if (!wchar->str) {
+		luaL_error(L, "out of memory");
+		return 0;
+	}
+
+	wchar->len = MultiByteToWideChar(CP_UTF8, 0, data, len, wchar->str, len);
+
+	return 1;
+}
+
 int FromAnsi(lua_State* L) {
 
 	if (lua_gettop(L) < 1) {
@@ -218,6 +250,32 @@ int ToWide(lua_State* L) {
 	else {
 		lua_pushlstring(L, (const char*)wchar->str, wchar->len * sizeof(wchar_t));
 	}
+
+	return 1;
+}
+
+int ToUtf8(lua_State* L) {
+
+	LuaWChar* wchar = lua_towchar(L, 1);
+
+	if (!wchar->str) {
+
+		lua_pushstring(L, "");
+		return 1;
+	}
+
+	size_t bufferlen = wchar->len * 4;
+	unsigned char* utf8String = (unsigned char*)gff_calloc(bufferlen + 1, sizeof(unsigned char));
+
+	if (!utf8String) {
+		luaL_error(L, "out of memory");
+		return 0;
+	}
+
+	int convertedSize = WideCharToMultiByte(CP_UTF8, 0, wchar->str, wchar->len, (LPSTR)utf8String, bufferlen, NULL, NULL);
+
+	lua_pushlstring(L, (const char*)utf8String, convertedSize);
+	gff_free(utf8String);
 
 	return 1;
 }
@@ -335,7 +393,7 @@ int wchar_gc(lua_State* L) {
 }
 
 int wchar_tostring(lua_State* L) {
-	return ToAnsi(L);
+	return ToUtf8(L);
 }
 
 int wchar_len(lua_State* L) {
