@@ -5,6 +5,7 @@
 #include <stdlib.h> 
 #include <windows.h> 
 #include <locale.h>
+#include <cstdarg>
 
 LuaWChar* lua_pushwchar(lua_State* L, const wchar_t* str) {
 	return lua_pushwchar(L, str, wcslen(str));
@@ -28,6 +29,47 @@ LuaWChar* lua_pushwchar(lua_State* L, const wchar_t* str, size_t len) {
 	return wchar;
 }
 
+int GetWCharCountForCodePoint(int codePoint) {
+	if (codePoint >= 0 && codePoint <= 0x10FFFF) {
+		if (codePoint <= 0xFFFF) {
+			return 1;
+		}
+		else {
+			return 2;
+		}
+	}
+
+	return 0;
+}
+
+bool FillLuaWCharWithCodePoint(LuaWChar* luaStr, int codePoint) {
+	
+	int wcharCount = GetWCharCountForCodePoint(codePoint);
+
+	if (wcharCount != -1) {
+		
+		luaStr->str = (wchar_t*)gff_calloc(wcharCount + 1, sizeof(wchar_t));
+
+		if (!luaStr->str) {
+			return false;
+		}
+
+		luaStr->len = wcharCount;
+
+		if (wcharCount == 1) {
+			luaStr->str[0] = (wchar_t)codePoint;
+		}
+		else {
+			luaStr->str[0] = (wchar_t)(((codePoint - 0x10000) >> 10) + 0xD800);
+			luaStr->str[1] = (wchar_t)(((codePoint - 0x10000) & 0x3FF) + 0xDC00);
+		}
+
+		return true;
+	}
+
+	return false;
+}
+
 int FromBytes(lua_State* L) {
 
 	size_t len;
@@ -41,7 +83,7 @@ int FromBytes(lua_State* L) {
 			luaL_error(L, "%s is not a widecharstring", raw);
 			return 0;
 		}
-		
+
 		LuaWChar* wchar = lua_pushwchar(L);
 
 		wchar->str = (wchar_t*)gff_calloc(len + 1, sizeof(wchar_t));
@@ -53,6 +95,15 @@ int FromBytes(lua_State* L) {
 		}
 
 		memcpy(wchar->str, raw, len);
+
+		return 1;
+	}
+	else if (lua_type(L, 1) == LUA_TNUMBER) {
+
+		int byte = (int)lua_tointeger(L, 1);
+
+		LuaWChar* wchar = lua_pushwchar(L);
+		FillLuaWCharWithCodePoint(wchar, byte);
 
 		return 1;
 	}
@@ -191,6 +242,56 @@ int FromUtf8(lua_State* L) {
 
 	wchar->len = MultiByteToWideChar(CP_UTF8, 0, data, len, wchar->str, len);
 
+	return 1;
+}
+
+int GetCodepoints(lua_State* L) {
+
+	LuaWChar* wchar = lua_towchar(L, 1);
+
+	lua_newtable(L);
+	int count = 0;
+
+	for (size_t i = 0; i < wchar->len; i++) {
+		int codepoint = wchar->str[i];
+
+		if ((codepoint & 0xFC00) == 0xD800 && (i + 1 < wchar->len) && (wchar->str[i + 1] & 0xFC00) == 0xDC00) {
+			codepoint = (((codepoint & 0x03FF) << 10) | (wchar->str[i + 1] & 0x03FF)) + 0x10000;
+			i++;
+		}
+
+		lua_pushinteger(L, codepoint);
+		lua_rawseti(L, -2, ++count);
+	}
+
+	return 1;
+}
+
+int GetCharacterAt(lua_State* L) {
+
+	LuaWChar* wchar = lua_towchar(L, 1);
+	size_t nth = luaL_optinteger(L, 2, 1) - 1;
+
+	size_t count = 0;
+	size_t strLen = wchar->len;
+
+	for (size_t i = 0; i < strLen; i++) {
+		int codepoint = wchar->str[i];
+
+		if ((codepoint & 0xFC00) == 0xD800 && (i + 1 < strLen) && (wchar->str[i + 1] & 0xFC00) == 0xDC00) {
+			codepoint = (((codepoint & 0x03FF) << 10) | (wchar->str[i + 1] & 0x03FF)) + 0x10000;
+			i++;
+		}
+
+		if (count == nth) {
+			lua_pushinteger(L, codepoint);
+			return 1;
+		}
+
+		count++;
+	}
+
+	lua_pushnil(L);
 	return 1;
 }
 

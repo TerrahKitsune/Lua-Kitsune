@@ -16,6 +16,8 @@ LuaWChar* lua_towchar(lua_State* L, int index);
 LuaWChar* lua_pushwchar(lua_State* L);
 LuaWChar* lua_stringtowchar(lua_State* L, int index);
 
+int GetCodepoints(lua_State* L);
+int GetCharacterAt(lua_State* L);
 int ToUtf8(lua_State* L);
 int FromUtf8(lua_State* L);
 int SetLocale(lua_State* L);

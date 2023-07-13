@@ -1,4 +1,4 @@
-local _exit=Exit;Exit=function(ret) GetKey(); return ret; end
+﻿local _exit=Exit;Exit=function(ret) GetKey(); return ret; end
 
 function TablePrint(tbl, depth)
 
@@ -128,8 +128,29 @@ end
 CreateGCPrint();
 collectgarbage();
 
-local r = Redis.Open("10.9.23.123", 5257);
-TablePrint(r:Command("AUTH", "hej123"));
-TablePrint(r:Command("SETEX", "test", 420, "Hello redis\0 with a null"));
-TablePrint(r:Command("GET", "test"));
-print(string.find(r:Command("GET", "test").Value, "\0"));
+local function HexToString(hexString)
+    local str = ""
+    for i = 1, #hexString, 2 do
+        local byte = tonumber(hexString:sub(i, i+1), 16)
+        str = str .. string.char(byte)
+    end
+    return str
+end
+
+
+local redis = Redis.Open("10.9.23.123", 5257);
+print(redis:Command("AUTH", "hej123").Value);
+
+local test = Wchar.FromUtf8("🤙🤙🤙");
+print(test);
+local c = test:Codepoints();
+
+print(#c);
+local r = Wchar.FromAnsi("");
+for n=1, #c do 
+	print(Wchar.FromBytes(c[n]):ToUtf8());
+	r = r .. Wchar.FromBytes(c[n]);
+end
+
+print(r);
+

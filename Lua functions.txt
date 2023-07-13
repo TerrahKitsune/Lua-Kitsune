@@ -2103,9 +2103,9 @@ Wchar:
 	-uses mbstowcs
 	Wchar Wchar.FromAnsi(str)
 
-	-Converts an array of integers or a string (such as created by ToWide) into a wchar
+	-Converts an array of integers or a string (such as created by ToWide) into a wchar or a single int to be interpeted as a codepoint
 	-Opposite of Wchar:FromBytes
-	Wchar Wchar.FromBytes(array or widestring)
+	Wchar Wchar.FromBytes(array or widestring or int)
 
 	-Convert a utf8 string into a widechar
 	-uses MultiByteToWideChar with utf8 codepage
@@ -2120,6 +2120,13 @@ Wchar:
 	-Returns the wchar as an ansi string, missing characters are replaced with ?
 	string Wchar:ToAnsi()
 	
+	-Retrives a unicode codepoint from index (from nth codepoints)
+	-Use Wchar.FromBytes to convert back to a WChar
+	int WChar:At(index)
+
+	-Returns an array of codepoints
+	array WChar:Codepoints()
+
 	-Returns the string representation of the wide
 	string Wchar:ToWide()
 
