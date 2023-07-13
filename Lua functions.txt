@@ -430,6 +430,11 @@ Redis:
 	-REDIS_REPLY_VERB 14
 	reply Redis:Command(command, arg, arg, arg, ...)
 
+	-Starts a thread that will poll, calling this function will check if a message has been retrived
+	-if no message has been retrived this returns nil.
+	-Make this context is subscribed before calling poll, a context that has started polling cannot run other redis commands.
+	channel, message Redis:Poll()
+
 CSV:
 
 	-Creates a new csv instance

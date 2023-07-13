@@ -3,6 +3,7 @@
 
 static const struct luaL_Reg redisfunctions[] = {
 	{ "Command", RedisCommand },
+	{ "Poll", RedisPoll },
 	{ "Open", RedisOpen },
 	{ NULL, NULL }
 };

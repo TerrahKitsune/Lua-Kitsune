@@ -187,6 +187,87 @@ int RedisOpen(lua_State* L) {
 	return 1;
 }
 
+unsigned __stdcall threadPollFunc(void* data) {
+
+	LuaRedis* luaRedis = (LuaRedis*)data;
+	redisReply* pollReply = NULL;
+	bool hasReply;
+
+	while (luaRedis->isAlive) {
+
+		redisGetReply(luaRedis->context, (void**)&pollReply);
+
+		EnterCriticalSection(&luaRedis->CriticalSection);
+
+		while (luaRedis->pollReply != NULL) {
+			LeaveCriticalSection(&luaRedis->CriticalSection);
+			if (!luaRedis->isAlive) {
+				return 0;
+			}
+			Sleep(1);
+			EnterCriticalSection(&luaRedis->CriticalSection);
+		}
+
+		luaRedis->pollReply = pollReply;	
+		LeaveCriticalSection(&luaRedis->CriticalSection);
+		pollReply = NULL;
+	}
+
+	return 0;
+}
+
+int RedisPushPollReply(lua_State* L, redisReply* reply) {
+
+	if (reply && reply->type == REDIS_REPLY_ARRAY && reply->elements == 3) {
+
+		for (int n = 0; n < 3; n++) {
+			if (reply->element[n]->type != REDIS_REPLY_STRING) {
+				return FALSE;
+			}
+		}
+
+		if (reply->element[0]->len != 7 || strncmp(reply->element[0]->str, "message", 7) != 0) {
+			return FALSE;
+		}
+
+		lua_pushlstring(L, reply->element[1]->str, reply->element[1]->len);
+		lua_pushlstring(L, reply->element[2]->str, reply->element[2]->len);
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
+int RedisPoll(lua_State* L) {
+
+	LuaRedis* luaRedis = lua_toredis(L, 1);
+	
+	if (!luaRedis->isAlive) {
+		luaL_error(L, "Context is disposed");
+		return 0;
+	}
+
+	if (luaRedis->thread == INVALID_HANDLE_VALUE) {
+		InitializeCriticalSectionAndSpinCount(&luaRedis->CriticalSection, 0x00000400);
+		luaRedis->thread = (HANDLE)_beginthreadex(NULL, 0, &threadPollFunc, luaRedis, 0, NULL);
+	}
+	else if (WaitForSingleObject(luaRedis->thread, 0) != WAIT_TIMEOUT) {
+		luaRedis->thread = (HANDLE)_beginthreadex(NULL, 0, &threadPollFunc, luaRedis, 0, NULL);
+	}
+
+	CleanReply(luaRedis);
+	EnterCriticalSection(&luaRedis->CriticalSection);
+	luaRedis->reply = luaRedis->pollReply;
+	luaRedis->pollReply = NULL;
+	LeaveCriticalSection(&luaRedis->CriticalSection);
+
+	if (RedisPushPollReply(L, luaRedis->reply)) {
+		return 2;
+	}
+
+	return PushReply(L, luaRedis->reply);
+}
+
 int RedisCommand(lua_State* L) {
 
 	LuaRedis* luaRedis = lua_toredis(L, 1);
@@ -195,6 +276,14 @@ int RedisCommand(lua_State* L) {
 
 	if (!luaRedis->context) {
 		luaL_error(L, "Redis not connected");
+		return 0;
+	}
+	else if (!luaRedis->isAlive) {
+		luaL_error(L, "Context is disposed");
+		return 0;
+	}
+	else if (luaRedis->thread != INVALID_HANDLE_VALUE) {
+		luaL_error(L, "Cannot run redis commands on context that is polling");
 		return 0;
 	}
 
@@ -257,6 +346,8 @@ LuaRedis* lua_pushredis(lua_State* L) {
 	luaL_getmetatable(L, REDIS);
 	lua_setmetatable(L, -2);
 	memset(redis, 0, sizeof(LuaRedis));
+	redis->thread = INVALID_HANDLE_VALUE;
+	redis->isAlive = true;
 
 	return redis;
 }
@@ -274,6 +365,21 @@ int redis_gc(lua_State* L) {
 
 	CleanReply(redis);
 
+	if (redis->thread != INVALID_HANDLE_VALUE) {
+		
+		redis->isAlive = false;
+
+		redisCommand(redis->context, "QUIT");
+
+		WaitForSingleObject(redis->thread, INFINITE);
+		CloseHandle(redis->thread);
+		DeleteCriticalSection(&redis->CriticalSection);
+	}
+
+	if (redis->pollReply) {
+		freeReplyObject(redis->pollReply);
+	}
+
 	if (redis->context) {
 		redisFree(redis->context);
 	}
@@ -283,6 +389,7 @@ int redis_gc(lua_State* L) {
 	}
 
 	memset(redis, 0, sizeof(LuaRedis));
+	redis->thread = INVALID_HANDLE_VALUE;
 
 	return 0;
 }
