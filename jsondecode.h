@@ -9,7 +9,7 @@
 int json_lua_coroutineiterator(lua_State *L, int status, lua_KContext ctx);
 void json_stepback(JsonContext* context);
 char json_readnext(lua_State *L, JsonContext* context);
-void json_unexpected(char c, lua_State *L, JsonContext* context);
+void json_unexpected(char c, lua_State* L, JsonContext* context);
 void json_decodevalue(lua_State *L, JsonContext* context);
 void json_decodecharacter(lua_State *L, JsonContext* context);
 void json_decodestring(lua_State *L, JsonContext* context);

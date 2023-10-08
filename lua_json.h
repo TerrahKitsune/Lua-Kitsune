@@ -40,6 +40,7 @@ typedef struct JsonContext {
 	size_t readSize;
 	const char * read;
 
+	char quoteSymbol;
 } JsonContext;
 
 int lua_jsoniterator(lua_State *L);

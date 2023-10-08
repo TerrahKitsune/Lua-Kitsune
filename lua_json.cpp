@@ -235,6 +235,7 @@ int lua_jsoncreate(lua_State *L) {
 }
 
 JsonContext * lua_pushjson(lua_State *L) {
+
 	JsonContext * luajson = (JsonContext*)lua_newuserdata(L, sizeof(JsonContext));
 	if (luajson == NULL)
 		luaL_error(L, "Unable to push json");

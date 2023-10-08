@@ -1,10 +1,10 @@
 #include "jsondecode.h"
 #include "jsonutil.h"
 
-int json_lua_objectiterator(lua_State *L, int status, lua_KContext ctx);
-int json_lua_arrayiterator(lua_State *L, int status, lua_KContext ctx);
+int json_lua_objectiterator(lua_State* L, int status, lua_KContext ctx);
+int json_lua_arrayiterator(lua_State* L, int status, lua_KContext ctx);
 
-int json_lua_arrayiterator(lua_State *L, int status, lua_KContext ctx) {
+int json_lua_arrayiterator(lua_State* L, int status, lua_KContext ctx) {
 
 	JsonContext* context = lua_tojson(L, 1);
 
@@ -18,12 +18,12 @@ int json_lua_arrayiterator(lua_State *L, int status, lua_KContext ctx) {
 	else if (next == ']') {
 		lua_pop(L, 1);
 		unsigned int raw = json_popfromantirecursion(context);
-		if (raw == 0) {	
+		if (raw == 0) {
 			json_bail(L, context, NULL);
-			lua_settop(L, 0); 
+			lua_settop(L, 0);
 			return -1;
 		}
-		
+
 		lua_pushnil(L);
 		lua_pushnil(L);
 
@@ -31,10 +31,10 @@ int json_lua_arrayiterator(lua_State *L, int status, lua_KContext ctx) {
 		return 0;
 	}
 
-	int count = (int)lua_tointeger(L, -1)+1;
+	int count = (int)lua_tointeger(L, -1) + 1;
 	lua_pop(L, 1);
 	lua_pushinteger(L, count);
-	
+
 	if (next == '{') {
 
 		lua_pushinteger(L, count);
@@ -70,12 +70,12 @@ int json_lua_arrayiterator(lua_State *L, int status, lua_KContext ctx) {
 	return 0;
 }
 
-int json_lua_objectiterator(lua_State *L, int status, lua_KContext ctx) {
+int json_lua_objectiterator(lua_State* L, int status, lua_KContext ctx) {
 
 	JsonContext* context = lua_tojson(L, 1);
 	json_advancewhitespace(L, context);
 	char next = json_readnext(L, context);
-	
+
 	if (next == ',') {
 		json_advancewhitespace(L, context);
 		next = json_readnext(L, context);
@@ -145,7 +145,7 @@ int json_lua_objectiterator(lua_State *L, int status, lua_KContext ctx) {
 	return 0;
 }
 
-int json_lua_coroutineiterator(lua_State *L, int status, lua_KContext ctx) {
+int json_lua_coroutineiterator(lua_State* L, int status, lua_KContext ctx) {
 
 	JsonContext* context = lua_tojson(L, 1);
 
@@ -185,7 +185,7 @@ int json_lua_coroutineiterator(lua_State *L, int status, lua_KContext ctx) {
 	return 0;
 }
 
-void json_advancewhitespace(lua_State *L, JsonContext* context) {
+void json_advancewhitespace(lua_State* L, JsonContext* context) {
 
 	char next = json_readnext(L, context);
 	while (true) {
@@ -210,7 +210,7 @@ void json_advancewhitespace(lua_State *L, JsonContext* context) {
 	}
 }
 
-char json_readnext(lua_State *L, JsonContext* context) {
+char json_readnext(lua_State* L, JsonContext* context) {
 
 	if (context->prevFileChar[0]) {
 		context->prevFileChar[0] = 0;
@@ -238,7 +238,7 @@ char json_readnext(lua_State *L, JsonContext* context) {
 
 		if (lua_pcall(L, 0, 1, NULL)) {
 
-			const char * err = lua_tostring(L, -1);
+			const char* err = lua_tostring(L, -1);
 			lua_pop(L, 1);
 
 			if (!err) {
@@ -249,13 +249,13 @@ char json_readnext(lua_State *L, JsonContext* context) {
 		}
 
 		size_t len;
-		const char * data = lua_tolstring(L, -1, &len);
+		const char* data = lua_tolstring(L, -1, &len);
 
 		if (len > 0 && data) {
 
 			if (len >= context->readFileBufferSize) {
 
-				void * temp = gff_realloc(context->readFileBuffer, len + 1);
+				void* temp = gff_realloc(context->readFileBuffer, len + 1);
 
 				if (!temp) {
 					lua_gc(L, LUA_GCCOLLECT, 0);
@@ -318,14 +318,15 @@ void json_stepback(JsonContext* context) {
 	context->prevFileChar[0] = 1;
 }
 
-void json_unexpected(char c, lua_State *L, JsonContext* context) {
+void json_unexpected(char c, lua_State* L, JsonContext* context) {
+
 	char buf[100];
 	sprintf(buf, "Unexpected character %c on line %u position %u", c, context->readLine, context->readPosition);
 	json_bail(L, context, buf);
 	return;
 }
 
-void json_decodecharacter(lua_State *L, JsonContext* context) {
+void json_decodecharacter(lua_State* L, JsonContext* context) {
 
 	char hex[5] = { 0 };
 	char result[2] = { 0 };
@@ -355,13 +356,38 @@ void json_decodecharacter(lua_State *L, JsonContext* context) {
 	}
 }
 
-void json_decodestring(lua_State *L, JsonContext* context) {
+int InsensitiveStrncmp(const char* s1, const char* s2, size_t n) {
+
+	for (size_t i = 0; i < n; i++) {
+		int c1 = tolower((unsigned char)s1[i]);
+		int c2 = tolower((unsigned char)s2[i]);
+
+		if (c1 != c2) {
+			return 0;
+		}
+
+		if (c1 == '\0' || c2 == '\0') {
+			return 0;
+		}
+	}
+
+	return 1;
+}
+
+void json_decodestring(lua_State* L, JsonContext* context) {
 
 	context->bufferLength = 0;
 	char next = json_readnext(L, context);
-	if (next != '"') {
-		json_unexpected(next, L, context);
-		return;
+
+	if (next == '\'') {
+		context->quoteSymbol = '\'';
+	}
+	else if (next == '"') {
+		context->quoteSymbol = '"';
+	}
+	else {
+		context->quoteSymbol = '\0';
+		json_append(&next, 1, L, context);
 	}
 
 	bool isEscaping = false;
@@ -374,9 +400,6 @@ void json_decodestring(lua_State *L, JsonContext* context) {
 			isEscaping = false;
 
 			switch (next) {
-			case '"':
-				next = '"';
-				break;
 			case '/':
 				next = '/';
 				break;
@@ -421,26 +444,59 @@ void json_decodestring(lua_State *L, JsonContext* context) {
 			isEscaping = true;
 			continue;
 		}
-		else if (next == '"') {
+		else if (context->quoteSymbol == '\0') {
+
+			if (next == ' ' || next == ',' || next == '}' || next == ']') {
+				json_stepback(context);
+				break;
+			}
+		}
+		else if (next == context->quoteSymbol) {
+
 			break;
 		}
 
 		json_append(&next, 1, L, context);
 	}
 
+	if (context->quoteSymbol == '\0') {
+
+		if (context->bufferLength == 4) {
+
+			if (InsensitiveStrncmp(context->buffer, "true", 4)) {
+
+				lua_pushboolean(L, 1);
+				return;
+			}
+			else if (InsensitiveStrncmp(context->buffer, "null", 4)) {
+
+				lua_pushnil(L);
+				return;
+			}
+		}
+		else if (context->bufferLength == 5) {
+
+			if (InsensitiveStrncmp(context->buffer, "false", 5)) {
+
+				lua_pushboolean(L, 0);
+				return;
+			}
+		}
+	}
+	
 	lua_pushlstring(L, context->buffer, context->bufferLength);
 }
 
-static bool parse_sign(const char **const s)
+static bool parse_sign(const char** const s)
 {
 	switch (**s) {
-	case '-': ++*s; return false;
-	case '+': ++*s; return true;
+	case '-': ++ * s; return false;
+	case '+': ++ * s; return true;
 	default: return true;
 	}
 }
 
-static double parse_digits(const char **const s, int *const count)
+static double parse_digits(const char** const s, int* const count)
 {
 	double value = 0.0;
 	int c = 0;
@@ -454,7 +510,7 @@ static double parse_digits(const char **const s, int *const count)
 }
 
 // https://codereview.stackexchange.com/questions/158519/c-program-to-convert-string-to-floating-point
-double extended_atof(const char *s)
+double extended_atof(const char* s)
 {
 	/*skip white space*/
 	while (isspace(*s))
@@ -487,7 +543,7 @@ double extended_atof(const char *s)
 	return value;
 }
 
-void json_decodenumber(lua_State *L, JsonContext* context) {
+void json_decodenumber(lua_State* L, JsonContext* context) {
 
 	context->bufferLength = 0;
 	char next = json_readnext(L, context);
@@ -542,15 +598,12 @@ void json_decodenumber(lua_State *L, JsonContext* context) {
 	}
 }
 
-void json_decodevalue(lua_State *L, JsonContext* context) {
+void json_decodevalue(lua_State* L, JsonContext* context) {
 
+	size_t symbolStart = context->readCursor;
 	char next = json_readnext(L, context);
-
-	if (next == '"') {
-		json_stepback(context);
-		json_decodestring(L, context);
-	}
-	else if (next == '{' || next == '[') {
+	
+	if (next == '{' || next == '[') {
 		json_stepback(context);
 		json_decodetable(L, context);
 	}
@@ -558,84 +611,13 @@ void json_decodevalue(lua_State *L, JsonContext* context) {
 		json_stepback(context);
 		json_decodenumber(L, context);
 	}
-	else if (tolower(next) == 't') {
-
-		next = json_readnext(L, context);
-		if (tolower(next) != 'r') {
-			json_unexpected(next, L, context);
-			return;
-		}
-
-		next = json_readnext(L, context);
-		if (tolower(next) != 'u') {
-			json_unexpected(next, L, context);
-			return;
-		}
-
-		next = json_readnext(L, context);
-		if (tolower(next) != 'e') {
-			json_unexpected(next, L, context);
-			return;
-		}
-
-		lua_pushboolean(L, 1);
-	}
-	else if (tolower(next) == 'f') {
-
-		next = json_readnext(L, context);
-		if (tolower(next) != 'a') {
-			json_unexpected(next, L, context);
-			return;
-		}
-
-		next = json_readnext(L, context);
-		if (tolower(next) != 'l') {
-			json_unexpected(next, L, context);
-			return;
-		}
-
-		next = json_readnext(L, context);
-		if (tolower(next) != 's') {
-			json_unexpected(next, L, context);
-			return;
-		}
-
-		next = json_readnext(L, context);
-		if (tolower(next) != 'e') {
-			json_unexpected(next, L, context);
-			return;
-		}
-
-		lua_pushboolean(L, 0);
-	}
-	else if (tolower(next) == 'n') {
-
-		next = json_readnext(L, context);
-		if (tolower(next) != 'u') {
-			json_unexpected(next, L, context);
-			return;
-		}
-
-		next = json_readnext(L, context);
-		if (tolower(next) != 'l') {
-			json_unexpected(next, L, context);
-			return;
-		}
-
-		next = json_readnext(L, context);
-		if (tolower(next) != 'l') {
-			json_unexpected(next, L, context);
-			return;
-		}
-
-		json_pushnullornil(L, context);
-	}
 	else {
-		json_unexpected(next, L, context);
+		json_stepback(context);
+		json_decodestring(L, context);
 	}
 }
 
-void json_decodetable(lua_State *L, JsonContext* C) {
+void json_decodetable(lua_State* L, JsonContext* C) {
 
 	json_advancewhitespace(L, C);
 	char next = json_readnext(L, C);
@@ -673,7 +655,7 @@ void json_decodetable(lua_State *L, JsonContext* C) {
 				}
 
 				json_advancewhitespace(L, C);
-				json_decodevalue(L, C);
+ 				json_decodevalue(L, C);
 				lua_settable(L, -3);
 				json_advancewhitespace(L, C);
 				next = json_readnext(L, C);
