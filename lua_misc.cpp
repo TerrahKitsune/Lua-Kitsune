@@ -489,7 +489,7 @@ static int L_cls(lua_State* L) {
 static int L_SetConsoleCoords(lua_State* L) {
 
 	int x = (int)luaL_checkinteger(L, 1);
-	int y = (int)luaL_checkinteger(L, 1);
+	int y = (int)luaL_checkinteger(L, 2);
 	HANDLE hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
 	if (hStdOut == INVALID_HANDLE_VALUE) return 0;
 

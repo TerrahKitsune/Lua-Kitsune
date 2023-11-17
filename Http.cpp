@@ -30,7 +30,7 @@ static void _dumpbuffer(FILE* f) {
 
 static void DumpFile(HttpBuffer* fp) {
 
-#if DEBUG
+#if !DEBUG
 	return;
 #endif
 
@@ -195,6 +195,90 @@ long GetHeaderSize(HttpBuffer* fp) {
 	return headerSize;
 }
 
+
+int GetContentTypeMatches(HttpBuffer* fp, long headerSize, const char* contentType) {
+
+	long pos = btell(fp);
+	char* buffer = (char*)gff_malloc(headerSize + 1);
+	size_t nread;
+	char* header_value;
+	long content_length = -1;
+
+	if (!buffer) {
+		return FALSE;
+	}
+	else {
+		buffer[headerSize] = '\0';
+	}
+
+	brewind(fp);
+	if ((nread = bread(buffer, headerSize, fp)) != headerSize) {
+		gff_free(buffer);
+		bseek(fp, pos, SEEK_SET);
+		return FALSE;
+	}
+
+	char* contentTypeHeader = stristr(buffer, "Content-Type:");
+
+	if (contentTypeHeader) {
+
+		header_value = strtok(contentTypeHeader, " ");
+
+		if (!header_value) {
+			gff_free(buffer);
+			bseek(fp, pos, SEEK_SET);
+			return FALSE;
+		}
+
+		header_value = strtok(NULL, "\r\n");
+
+		if (!header_value) {
+			gff_free(buffer);
+			bseek(fp, pos, SEEK_SET);
+			return FALSE;
+		}
+
+		char* src = header_value;
+		header_value = strtok(NULL, "\r\n");
+
+		if (!header_value) {
+			gff_free(buffer);
+			bseek(fp, pos, SEEK_SET);
+			return FALSE;
+		}
+
+		size_t len = header_value - contentTypeHeader;
+		char* result = (char*)gff_malloc(len + 1);
+		if (!result) {
+			gff_free(buffer);
+			bseek(fp, pos, SEEK_SET);
+			return FALSE;
+		}
+
+		result[len] = '\0';
+		memcpy(result, src, len);
+
+		for (size_t i = 0; i < strlen(result); i++)
+		{
+			if (result[i] == ';') {
+				result[i] = '\0';
+				break;
+			}
+		}
+
+		int isMatch = _strnicmp(result, contentType, strlen(contentType)) == 0;
+		gff_free(buffer);
+		gff_free(result);
+		bseek(fp, pos, SEEK_SET);
+		return isMatch;
+	}
+
+	gff_free(buffer);
+	bseek(fp, pos, SEEK_SET);
+	return FALSE;
+}
+
+
 long GetContentLength(HttpBuffer* fp, long headerSize) {
 
 	long pos = btell(fp);
@@ -242,7 +326,13 @@ long GetContentLength(HttpBuffer* fp, long headerSize) {
 			}
 
 			if (_strnicmp(header_value, "chunked", 7) == 0) {
-				content_length = -2;
+
+				if (GetContentTypeMatches(fp, headerSize, "text/event-stream")) {
+					content_length = -3;
+				}
+				else {
+					content_length = -2;
+				}
 			}
 
 			gff_free(buffer);
@@ -298,16 +388,20 @@ int FileEndsWithCRLF(HttpBuffer* fp) {
 	return ch1 == '\r' && ch2 == '\n';
 }
 
+int DoEventStream(HttpBuffer* fp, long headersize) {
+
+	return FALSE;
+}
+
 int FileChunkedComplete(HttpBuffer* fp) {
 
 	long pos = btell(fp);
 	int result = FALSE;
 
 	bseek(fp, 0, SEEK_END);
-	bseek(fp, btell(fp) - 7, SEEK_SET);
+	bseek(fp, btell(fp) - 5, SEEK_SET);
 
-	if (bgetc(fp) == '\r' && bgetc(fp) == '\n' &&
-		bgetc(fp) == '0' &&
+	if (bgetc(fp) == '0' &&
 		bgetc(fp) == '\r' && bgetc(fp) == '\n' &&
 		bgetc(fp) == '\r' && bgetc(fp) == '\n') {
 		result = TRUE;
@@ -500,6 +594,11 @@ int SendRecv(LuaHttp* luahttp, SOCKET ConnectSocket, SSL* ssl) {
 					contentLength = GetContentLength(luahttp->buffer, headerSize);
 				}
 			}
+			else if (contentLength == -3) {
+				if (DoEventStream(luahttp->buffer, headerSize)) {
+					break;
+				}
+			}
 			else if (contentLength == -2 && FileChunkedComplete(luahttp->buffer)) {
 				break;
 			}
@@ -532,7 +631,7 @@ int SendRecv(LuaHttp* luahttp, SOCKET ConnectSocket, SSL* ssl) {
 		}
 	}
 
-	if (contentLength == -2) {
+	if (contentLength == -2 || contentLength == -3) {
 		luahttp->buffer = AssembleChunks(luahttp->buffer, headerSize);
 	}
 
@@ -1163,6 +1262,7 @@ LuaHttp* lua_pushhttp(lua_State* L) {
 	memset(luahttp, 0, sizeof(LuaHttp));
 
 	luahttp->thread = INVALID_HANDLE_VALUE;
+	luahttp->socket = INVALID_SOCKET;
 
 	return luahttp;
 }
@@ -1180,6 +1280,16 @@ int luahttp_gc(lua_State* L) {
 
 		CloseHandle(luahttp->thread);
 		luahttp->thread = INVALID_HANDLE_VALUE;
+	}
+
+	if (luahttp->sslconnection) {
+		ShutdownSSL(luahttp->sslconnection, luahttp->ctx);
+		luahttp->sslconnection = NULL;
+	}
+
+	if (luahttp->socket != INVALID_SOCKET) {
+		closesocket(luahttp->socket);
+		luahttp->socket = INVALID_SOCKET;
 	}
 
 	if (luahttp->buffer) {

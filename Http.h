@@ -30,6 +30,15 @@ int bseek(HttpBuffer* buf, long offset, int origin);
 int bprintf(HttpBuffer* buf, const char* format, ...);
 FILE* bdumptmp(HttpBuffer* buf);
 
+int GetUrls(const char* url, char* ip, char* page, char* proto);
+SOCKET Connect(const char* ip, int port);
+void ShutdownSSL(SSL* ssl, SSL_CTX* ctx);
+bool IsBlocking(SSL* ssl, int ret);
+long GetHeaderSize(HttpBuffer* fp);
+long GetContentLength(HttpBuffer* fp, long headerSize);
+int FileChunkedComplete(HttpBuffer* fp);
+char* sstrstr(char* haystack, const char* needle, size_t length);
+
 typedef struct LuaHttp {
 
 	HttpBuffer* content;
@@ -51,6 +60,9 @@ typedef struct LuaHttp {
 	char ip[IP_ADDR_SIZE];
 	char status[STATUS_SIZE];
 
+	SOCKET socket;
+	SSL_CTX* ctx;
+	SSL* sslconnection;
 } LuaHttp;
 
 int StartHttp(lua_State* L);
@@ -61,6 +73,8 @@ int GetRaw(lua_State* L);
 int WaitForFinish(lua_State* L);
 int UrlEncode(lua_State* L);
 int UrlDecode(lua_State* L);
+
+int StartCoroutineHttp(lua_State* L);
 
 LuaHttp* lua_tohttp(lua_State* L, int index);
 LuaHttp* luaL_checkhttp(lua_State* L, int index);

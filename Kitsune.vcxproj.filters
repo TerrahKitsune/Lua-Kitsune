@@ -846,6 +846,9 @@
     <ClCompile Include="Redis.cpp">
       <Filter>LuaRedis\Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="HttpCoroutine.cpp">
+      <Filter>LuaHTTP\Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Lua\lapi.h">

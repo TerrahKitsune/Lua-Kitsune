@@ -137,20 +137,32 @@ local function HexToString(hexString)
     return str
 end
 
+FileSystem.SetCurrentDirectory("C:\\Users\\Terrah\\Desktop");
 
-local redis = Redis.Open("10.9.23.123", 5257);
-print(redis:Command("AUTH", "hej123").Value);
+--dofile("test.lua");
 
-local test = Wchar.FromUtf8("🤙🤙🤙");
-print(test);
-local c = test:Codepoints();
+--local co, r = Http.CoStart("GET", "http://foxy:8008/api/chat/");
+local co, r = Http.CoStart("GET", "http://foxy:8008/api/chat/008f23ce-1d4d-41e4-8a2f-741e20c941fd/question?prompt=who%20are%20you%3F");
+--local co, r = Http.CoStart("GET", "http://anglesharp.azurewebsites.net/Chunked");
 
-print(#c);
-local r = Wchar.FromAnsi("");
-for n=1, #c do 
-	print(Wchar.FromBytes(c[n]):ToUtf8());
-	r = r .. Wchar.FromBytes(c[n]);
+print(co, r);
+local data = "";
+
+while(coroutine.status(co) ~= "dead") do
+
+	local ok, header, raw = coroutine.resume(co);
+
+	if raw then
+		io.write(raw);
+		data = data .. raw;
+	end 
+
+	--TablePrint(ok);
 end
 
-print(r);
+print("");
+print(tostring(co));
+--print("---------------");
+--print("|"..data.."|");
 
+--TablePrint(Json.Create():Decode(data));

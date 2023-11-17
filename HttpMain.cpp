@@ -7,6 +7,7 @@ static const struct luaL_Reg httpfunctions[] = {
 	{ "UrlEncode", UrlEncode },
 	{ "Wait", WaitForFinish },
 	{ "Start", StartHttp },
+	{ "CoStart", StartCoroutineHttp },
 	{ "GetStatus", GetStatus },
 	{ "GetResult", GetResult },
 	{ "SetTimeout", SetHttpTimeout },
