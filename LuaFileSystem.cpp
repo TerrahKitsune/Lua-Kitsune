@@ -11,6 +11,14 @@
 static char _PATH[MAX_PATH_LENGTH];
 static wchar_t _PATHW[MAX_PATH_LENGTH];
 
+typedef struct REPARSE_DATA {
+	DWORD  ReparseTag;
+	WORD   ReparseDataLength;
+	WORD   Reserved;
+	GUID   ReparseGuid;
+	WCHAR  Data[MAX_PATH];
+} REPARSE_DATA;
+
 const wchar_t* lua_topathw(lua_State* L, int idx, bool wildcard = false) {
 
 	LuaWChar* fromlua = lua_stringtowchar(L, idx);
@@ -468,6 +476,35 @@ int GetFileInfoWide(lua_State* L) {
 		lua_pushstring(L, "Write");
 		lua_pushinteger(L, FILETIME_to_time_t(&data.ftLastWriteTime));
 		lua_settable(L, -3);
+
+		if ((data.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0) {
+
+			HANDLE fileHandle = CreateFileW(path, 0, FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE, 0, OPEN_EXISTING,
+				FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, 0);
+
+			if (fileHandle != INVALID_HANDLE_VALUE) {
+
+				REPARSE_DATA Data = { 0 };
+				DWORD returnedBytes = 0;
+
+				if (DeviceIoControl(
+					fileHandle,
+					FSCTL_GET_REPARSE_POINT,
+					NULL,
+					0,
+					&Data,
+					sizeof(REPARSE_DATA),
+					&returnedBytes,
+					NULL)) {
+
+					lua_pushstring(L, "Link");
+					lua_pushwchar(L, Data.Data);
+					lua_settable(L, -3);
+				}
+
+				CloseHandle(fileHandle);
+			}
+		}
 	}
 	else {
 		lua_pop(L, 1);
@@ -524,6 +561,38 @@ int GetFileInfo(lua_State* L) {
 		lua_pushstring(L, "Write");
 		lua_pushinteger(L, FILETIME_to_time_t(&data.ftLastWriteTime));
 		lua_settable(L, -3);
+
+		if ((data.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0) {
+
+			HANDLE fileHandle = CreateFile(path, 0, FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE, 0, OPEN_EXISTING,
+				FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, 0);
+
+			if (fileHandle != INVALID_HANDLE_VALUE) {
+
+				REPARSE_DATA Data = {0};
+				DWORD returnedBytes = 0;
+				
+				if (DeviceIoControl(
+					fileHandle,
+					FSCTL_GET_REPARSE_POINT,
+					NULL,
+					0,
+					&Data,
+					sizeof(REPARSE_DATA),
+					&returnedBytes,
+					NULL)) {
+
+					lua_pushstring(L, "Link");
+					lua_pushwchar(L, Data.Data);
+					ToAnsi(L);
+					lua_copy(L, -1, -2);
+					lua_pop(L, 1);
+					lua_settable(L, -3);
+				}
+
+				CloseHandle(fileHandle);
+			}
+		}
 	}
 	else {
 		lua_pop(L, 1);

@@ -383,7 +383,7 @@ int ToUtf8(lua_State* L) {
 
 int ToAnsi(lua_State* L) {
 
-	LuaWChar* wchar = lua_towchar(L, 1);
+	LuaWChar* wchar = lua_towchar(L, -1);
 
 	if (!wchar->str) {
 

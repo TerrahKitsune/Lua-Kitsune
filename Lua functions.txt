@@ -2170,6 +2170,7 @@ FileSystem:
 	-Write unix time when the file was written to
 	-FileName name of the file
 	-AlternateFileName alternate filename if any
+	-Link returns link data if any such as symbolic links or mountpoints
 	-returns nil on failure
 	FileInfo FileSystem.GetFileInfo(file)
 

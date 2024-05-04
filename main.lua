@@ -139,30 +139,4 @@ end
 
 FileSystem.SetCurrentDirectory("C:\\Users\\Terrah\\Desktop");
 
---dofile("test.lua");
-
---local co, r = Http.CoStart("GET", "http://foxy:8008/api/chat/");
-local co, r = Http.CoStart("GET", "http://foxy:8008/api/chat/008f23ce-1d4d-41e4-8a2f-741e20c941fd/question?prompt=who%20are%20you%3F");
---local co, r = Http.CoStart("GET", "http://anglesharp.azurewebsites.net/Chunked");
-
-print(co, r);
-local data = "";
-
-while(coroutine.status(co) ~= "dead") do
-
-	local ok, header, raw = coroutine.resume(co);
-
-	if raw then
-		io.write(raw);
-		data = data .. raw;
-	end 
-
-	--TablePrint(ok);
-end
-
-print("");
-print(tostring(co));
---print("---------------");
---print("|"..data.."|");
-
---TablePrint(Json.Create():Decode(data));
+dofile("test.lua");
