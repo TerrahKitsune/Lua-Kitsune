@@ -376,6 +376,15 @@
     <Filter Include="Hiredis">
       <UniqueIdentifier>{676718aa-d0b4-494d-8e46-c5c32376e3ad}</UniqueIdentifier>
     </Filter>
+    <Filter Include="LuaTTS">
+      <UniqueIdentifier>{890d1bef-7d2c-42b8-bf2d-688046aa8f8b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaTTS\Header Files">
+      <UniqueIdentifier>{ce613e57-ba15-43b4-812a-e62470e36907}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaTTS\Source Files">
+      <UniqueIdentifier>{00156f34-012e-4fac-ac1c-a57c34e8dc76}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Program.cpp">
@@ -848,6 +857,12 @@
     </ClCompile>
     <ClCompile Include="HttpCoroutine.cpp">
       <Filter>LuaHTTP\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaTTSMain.cpp">
+      <Filter>LuaTTS</Filter>
+    </ClCompile>
+    <ClCompile Include="luatts.cpp">
+      <Filter>LuaTTS\Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -1372,6 +1387,12 @@
     </ClInclude>
     <ClInclude Include="hiredis\hiredis_ssl.h">
       <Filter>Hiredis</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaTTSMain.h">
+      <Filter>LuaTTS</Filter>
+    </ClInclude>
+    <ClInclude Include="luatts.h">
+      <Filter>LuaTTS\Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

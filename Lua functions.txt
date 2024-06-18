@@ -992,6 +992,28 @@ Stream:
 	bool Stream:WriteUnsignedLong()
 	int Stream:ReadUnsignedLong()
 
+TTS:
+	
+	-Create a tts instance
+	TTS TTS.Create()
+
+	-Get the available voices
+	array TTS.GetVoices()
+
+	-Speak text flags SPF_IS_XML
+	bool TTS:Speak(text, opt flags)
+
+	-Returns true if its currently speaking
+	bool TTS:GetIsSpeaking()
+
+	-Set the name of the voice to use
+	bool TTS:SetVoice(voicename)
+
+	-Stop speaking
+	bool TTS:Skip()
+
+	-Prematurely end the TTS context
+	nil TTS:Dispose()
 Env:
 
 	-Creates a new environment table with said name, discards any old

@@ -4,12 +4,12 @@
 #define _CRT_SECURE_NO_WARNINGS
 
 #include "mem.h"
-
 #include "lua_main_incl.h" 
 #include "networking.h"
 #include <conio.h>
 #include "GFFMain.h"
 #include <windows.h>
+#include "objbase.h"
 #include "TimerMain.h"
 #include "MySQLMain.h"
 #include "lua_misc.h"
@@ -54,6 +54,7 @@
 #include "LuaImguiMain.h"
 #include "VhdMain.h"
 #include "RedisMain.h"
+#include "LuaTTSMain.h"
 
 #define HI_PART(x)  ((x>>4) & 0x0F)
 #define LO_PART(x)  ((x) & 0x0F)
@@ -477,6 +478,10 @@ int main(int argc, char *argv[]) {
 	_CrtMemCheckpoint(&sOld); //take a snapchot
 #endif
 
+	if (FAILED(CoInitialize(NULL))) {
+		puts("CoInitialize failed");
+	}
+
 	int ret = 0;
 
 	SetConsoleOutputCP(65001);
@@ -588,6 +593,8 @@ int main(int argc, char *argv[]) {
 	lua_setglobal(L, "Vhd");
 	luaopen_redis(L);
 	lua_setglobal(L, "Redis");
+	luaopen_tts(L);
+	lua_setglobal(L, "TTS");
 
 	lua_pushcfunction(L, L_GetRuntime);
 	lua_setglobal(L, "Runtime");
@@ -723,6 +730,8 @@ int main(int argc, char *argv[]) {
 	L_Exit(L);
 
 	GetHttpBuffer(0);
+
+	CoUninitialize();
 
 #ifdef _DEBUG
 

@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <compressapi.h>
 #include <cstdint>
+#include <aclapi.h>
 
 #pragma comment(lib, "Cabinet.lib")
 
@@ -47,6 +48,9 @@ bool CheckStreamSize(lua_State* L, LuaStream* stream, size_t requestedsize) {
 	}
 	else if (stream->pos + requestedsize > stream->len) {
 		requestedsize = (stream->pos + requestedsize) - stream->len;
+	}
+	else if (stream->pos + requestedsize <= stream->len) {
+		return true;
 	}
 
 	if (stream->len + requestedsize > stream->alloc) {
@@ -166,7 +170,7 @@ int WriteFloat(lua_State* L) {
 
 	lua_pop(L, lua_gettop(L));
 
-	lua_pushboolean(L, StreamWrite(L, stream, (BYTE*)& f, sizeof(float)));
+	lua_pushboolean(L, StreamWrite(L, stream, (BYTE*)&f, sizeof(float)));
 
 	return 1;
 }
@@ -198,7 +202,7 @@ int WriteDouble(lua_State* L) {
 
 	lua_pop(L, lua_gettop(L));
 
-	lua_pushboolean(L, StreamWrite(L, stream, (BYTE*)& f, sizeof(double)));
+	lua_pushboolean(L, StreamWrite(L, stream, (BYTE*)&f, sizeof(double)));
 
 	return 1;
 }
@@ -230,7 +234,7 @@ int WriteShort(lua_State* L) {
 
 	lua_pop(L, lua_gettop(L));
 
-	lua_pushboolean(L, StreamWrite(L, stream, (BYTE*)& n, sizeof(short)));
+	lua_pushboolean(L, StreamWrite(L, stream, (BYTE*)&n, sizeof(short)));
 
 	return 1;
 }
@@ -262,7 +266,7 @@ int WriteUShort(lua_State* L) {
 
 	lua_pop(L, lua_gettop(L));
 
-	lua_pushboolean(L, StreamWrite(L, stream, (BYTE*)& n, sizeof(unsigned short)));
+	lua_pushboolean(L, StreamWrite(L, stream, (BYTE*)&n, sizeof(unsigned short)));
 
 	return 1;
 }
@@ -294,7 +298,7 @@ int WriteInt(lua_State* L) {
 
 	lua_pop(L, lua_gettop(L));
 
-	lua_pushboolean(L, StreamWrite(L, stream, (BYTE*)& n, sizeof(int)));
+	lua_pushboolean(L, StreamWrite(L, stream, (BYTE*)&n, sizeof(int)));
 
 	return 1;
 }
@@ -326,7 +330,7 @@ int WriteUInt(lua_State* L) {
 
 	lua_pop(L, lua_gettop(L));
 
-	lua_pushboolean(L, StreamWrite(L, stream, (BYTE*)& n, sizeof(unsigned int)));
+	lua_pushboolean(L, StreamWrite(L, stream, (BYTE*)&n, sizeof(unsigned int)));
 
 	return 1;
 }
@@ -378,7 +382,7 @@ int WriteLong(lua_State* L) {
 
 	lua_pop(L, lua_gettop(L));
 
-	lua_pushboolean(L, StreamWrite(L, stream, (BYTE*)& n, sizeof(long long)));
+	lua_pushboolean(L, StreamWrite(L, stream, (BYTE*)&n, sizeof(long long)));
 
 	return 1;
 }
@@ -390,7 +394,7 @@ int WriteUnsignedLong(lua_State* L) {
 
 	lua_pop(L, lua_gettop(L));
 
-	lua_pushboolean(L, StreamWrite(L, stream, (BYTE*)& n, sizeof(unsigned long long)));
+	lua_pushboolean(L, StreamWrite(L, stream, (BYTE*)&n, sizeof(unsigned long long)));
 
 	return 1;
 }
@@ -535,7 +539,7 @@ int StreamIndexOf(lua_State* L) {
 	if (lua_type(L, 2) == LUA_TSTRING) {
 
 		size_t len;
-		const char * data = lua_tolstring(L, 2, &len);
+		const char* data = lua_tolstring(L, 2, &len);
 
 		if (len <= 0 || len >= (stream->len - stream->pos)) {
 			lua_pushnil(L);
@@ -692,7 +696,7 @@ int WriteLuaValue(lua_State* L) {
 
 	case LUA_TNUMBER:
 		number = lua_tonumber(L, 2);
-		raw = (BYTE*)& number;
+		raw = (BYTE*)&number;
 		len = sizeof(LUA_NUMBER);
 		break;
 
@@ -780,8 +784,8 @@ int WriteUtf8(lua_State* L) {
 	if (stream->tempBuffer) {
 		gff_free(stream->tempBuffer);
 	}
-	
-	stream->tempBuffer = (BYTE*)gff_calloc(len+1, sizeof(unsigned short));
+
+	stream->tempBuffer = (BYTE*)gff_calloc(len + 1, sizeof(unsigned short));
 
 	if (!stream->tempBuffer) {
 
@@ -792,11 +796,11 @@ int WriteUtf8(lua_State* L) {
 	}
 
 	unsigned char* in = (unsigned char*)str;
-	unsigned char * out = (unsigned char*)stream->tempBuffer;
+	unsigned char* out = (unsigned char*)stream->tempBuffer;
 
 	while (*in)
 		if (*in < 128) *out++ = *in++;
-		else *out++ = 0xc2 + (*in > 0xbf), * out++ = (*in++ & 0x3f) + 0x80;
+		else *out++ = 0xc2 + (*in > 0xbf), *out++ = (*in++ & 0x3f) + 0x80;
 
 	if (!StreamWrite(L, stream, stream->tempBuffer, strlen((const char*)stream->tempBuffer))) {
 
@@ -918,11 +922,11 @@ int ReadUtf8(lua_State* L) {
 int ReadFromFile(lua_State* L) {
 
 	LuaStream* stream = lua_toluastream(L, 1);
-	const char * file = luaL_checkstring(L, 2);
+	const char* file = luaL_checkstring(L, 2);
 	size_t pos = (size_t)luaL_checkinteger(L, 3);
 	size_t len = (size_t)luaL_checkinteger(L, 4);
 
-	FILE * f = fopen(file, "rb");
+	FILE* f = fopen(file, "rb");
 
 	if (!f) {
 		luaL_error(L, "Unable to open file");
@@ -940,7 +944,7 @@ int ReadFromFile(lua_State* L) {
 		return 0;
 	}
 
-	BYTE * temp = (BYTE*)gff_malloc(len);
+	BYTE* temp = (BYTE*)gff_malloc(len);
 	if (!temp) {
 		fclose(f);
 		luaL_error(L, "Unable to allocate memory");
@@ -962,18 +966,18 @@ int ReadFromFile(lua_State* L) {
 int WriteToFile(lua_State* L) {
 
 	LuaStream* stream = lua_toluastream(L, 1);
-	const char * file = luaL_checkstring(L, 2);
+	const char* file = luaL_checkstring(L, 2);
 	size_t pos = (size_t)luaL_checkinteger(L, 3);
 	size_t len = (size_t)luaL_checkinteger(L, 4);
 
-	const BYTE * data = ReadStream(stream, len);
+	const BYTE* data = ReadStream(stream, len);
 
 	if (data == NULL) {
 		luaL_error(L, "Stream out of bounds");
 		return 0;
 	}
 
-	FILE * f = fopen(file, "r+b");
+	FILE* f = fopen(file, "r+b");
 
 	if (!f) {
 		luaL_error(L, "Unable to open file");
@@ -1019,9 +1023,9 @@ int WriteToFile(lua_State* L) {
 int DumpToFile(lua_State* L) {
 
 	LuaStream* stream = lua_toluastream(L, 1);
-	const char * file = luaL_checkstring(L, 2);
+	const char* file = luaL_checkstring(L, 2);
 
-	FILE * f = fopen(file, "wb");
+	FILE* f = fopen(file, "wb");
 
 	if (!f) {
 		luaL_error(L, "Unable to open file");
@@ -1037,9 +1041,9 @@ int DumpToFile(lua_State* L) {
 
 int OpenFileToStream(lua_State* L) {
 
-	const char * file = luaL_checkstring(L, 1);
+	const char* file = luaL_checkstring(L, 1);
 
-	FILE * f = fopen(file, "rb");
+	FILE* f = fopen(file, "rb");
 
 	if (!f) {
 		luaL_error(L, "Unable to open file");
@@ -1253,7 +1257,7 @@ int NewStream(lua_State* L) {
 
 int GetSharedMemoryStreamInfo(lua_State* L) {
 
-	const char * name = luaL_checkstring(L, 1);
+	const char* name = luaL_checkstring(L, 1);
 
 	HANDLE h = OpenFileMapping(FILE_MAP_READ, FALSE, name);
 
@@ -1264,7 +1268,7 @@ int GetSharedMemoryStreamInfo(lua_State* L) {
 		return 2;
 	}
 
-	void * ptr = MapViewOfFile(h, FILE_MAP_READ, 0, 0, 0);
+	void* ptr = MapViewOfFile(h, FILE_MAP_READ, 0, 0, 0);
 
 	if (ptr == NULL) {
 		CloseHandle(h);
@@ -1328,7 +1332,7 @@ int GetSharedMemoryStreamInfo(lua_State* L) {
 
 int OpenSharedMemoryStream(lua_State* L) {
 
-	const char * name = luaL_checkstring(L, 1);
+	const char* name = luaL_checkstring(L, 1);
 	int readOnly = lua_isboolean(L, 2) && lua_toboolean(L, 2);
 
 	LuaStream* stream = lua_pushluastream(L);
@@ -1378,18 +1382,89 @@ int OpenSharedMemoryStream(lua_State* L) {
 
 int NewSharedMemoryStream(lua_State* L) {
 
-	const char * name = luaL_checkstring(L, 1);
+	const char* name = luaL_checkstring(L, 1);
 	int size = (int)luaL_checkinteger(L, 2);
 
 	LuaStream* stream = lua_pushluastream(L);
 
-	stream->hSharedMemory = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, size, name);
+	SECURITY_ATTRIBUTES sa;
+	PSECURITY_DESCRIPTOR psd = NULL;
+	PACL pAcl = NULL;
+	SID_IDENTIFIER_AUTHORITY SIDAuthWorld = SECURITY_WORLD_SID_AUTHORITY;
+	PSID pEveryoneSID = NULL;
+	SID_IDENTIFIER_AUTHORITY SIDAuthNT = SECURITY_NT_AUTHORITY;
+	PSID pCurrentUserSID = NULL;
+	EXPLICIT_ACCESS ea[2];
+
+	if (!AllocateAndInitializeSid(&SIDAuthWorld, 1, SECURITY_WORLD_RID, 0, 0, 0, 0, 0, 0, 0, &pEveryoneSID)) {
+		lua_pop(L, lua_gettop(L));
+		lua_pushnil(L);
+		lua_pushinteger(L, GetLastError());
+		goto Cleanup;
+	}
+
+	if (!AllocateAndInitializeSid(&SIDAuthNT, 1, SECURITY_LOCAL_SYSTEM_RID, 0, 0, 0, 0, 0, 0, 0, &pCurrentUserSID)) {
+		lua_pop(L, lua_gettop(L));
+		lua_pushnil(L);
+		lua_pushinteger(L, GetLastError());
+		goto Cleanup;
+	}
+
+	memset(&ea, NULL, 2 * sizeof(EXPLICIT_ACCESS));
+	ea[0].grfAccessPermissions = GENERIC_READ;
+	ea[0].grfAccessMode = SET_ACCESS;
+	ea[0].grfInheritance = NO_INHERITANCE;
+	ea[0].Trustee.TrusteeForm = TRUSTEE_IS_SID;
+	ea[0].Trustee.TrusteeType = TRUSTEE_IS_WELL_KNOWN_GROUP;
+	ea[0].Trustee.ptstrName = (LPTSTR)pEveryoneSID;
+
+	ea[1].grfAccessPermissions = GENERIC_ALL;
+	ea[1].grfAccessMode = SET_ACCESS;
+	ea[1].grfInheritance = NO_INHERITANCE;
+	ea[1].Trustee.TrusteeForm = TRUSTEE_IS_SID;
+	ea[1].Trustee.TrusteeType = TRUSTEE_IS_USER;
+	ea[1].Trustee.ptstrName = (LPTSTR)pCurrentUserSID;
+
+	if (SetEntriesInAcl(2, ea, NULL, &pAcl) != ERROR_SUCCESS) {
+		lua_pop(L, lua_gettop(L));
+		lua_pushnil(L);
+		lua_pushinteger(L, GetLastError());
+		goto Cleanup;
+	}
+
+	psd = (PSECURITY_DESCRIPTOR)LocalAlloc(LPTR, SECURITY_DESCRIPTOR_MIN_LENGTH);
+	if (psd == NULL) {
+		lua_pop(L, lua_gettop(L));
+		lua_pushnil(L);
+		lua_pushinteger(L, GetLastError());
+		goto Cleanup;
+	}
+
+	if (!InitializeSecurityDescriptor(psd, SECURITY_DESCRIPTOR_REVISION)) {
+		lua_pop(L, lua_gettop(L));
+		lua_pushnil(L);
+		lua_pushinteger(L, GetLastError());
+		goto Cleanup;
+	}
+
+	if (!SetSecurityDescriptorDacl(psd, TRUE, pAcl, FALSE)) {
+		lua_pop(L, lua_gettop(L));
+		lua_pushnil(L);
+		lua_pushinteger(L, GetLastError());
+		goto Cleanup;
+	}
+
+	sa.nLength = sizeof(SECURITY_ATTRIBUTES);
+	sa.lpSecurityDescriptor = psd;
+	sa.bInheritHandle = FALSE;
+
+	stream->hSharedMemory = CreateFileMapping(INVALID_HANDLE_VALUE, &sa, PAGE_READWRITE, 0, size, name);
 
 	if (stream->hSharedMemory == NULL) {
 		lua_pop(L, lua_gettop(L));
 		lua_pushnil(L);
 		lua_pushinteger(L, GetLastError());
-		return 2;
+		goto Cleanup;
 	}
 
 	stream->data = (BYTE*)MapViewOfFile(stream->hSharedMemory, FILE_MAP_ALL_ACCESS, 0, 0, size);
@@ -1400,7 +1475,7 @@ int NewSharedMemoryStream(lua_State* L) {
 		lua_pop(L, lua_gettop(L));
 		lua_pushnil(L);
 		lua_pushinteger(L, GetLastError());
-		return 2;
+		goto Cleanup;
 	}
 
 	MEMORY_BASIC_INFORMATION info;
@@ -1416,13 +1491,26 @@ int NewSharedMemoryStream(lua_State* L) {
 		lua_pop(L, lua_gettop(L));
 		lua_pushnil(L);
 		lua_pushinteger(L, GetLastError());
-		return 2;
+		goto Cleanup;
 	}
 	else {
 		stream->alloc = info.RegionSize;
+		stream->len = info.RegionSize;
+		lua_pushnil(L);
 	}
 
-	return 1;
+Cleanup:
+
+	if (pEveryoneSID) 
+		FreeSid(pEveryoneSID);
+	if (pCurrentUserSID) 
+		FreeSid(pCurrentUserSID);
+	if (pAcl) 
+		LocalFree(pAcl);
+	if (psd) 
+		LocalFree(psd);
+
+	return 2;
 }
 
 LuaStream* lua_pushluastream(lua_State* L) {

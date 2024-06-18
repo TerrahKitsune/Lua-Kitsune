@@ -59,7 +59,6 @@ static const luaL_Reg windowmeta[] = {
 
 int luaopen_window(lua_State* L) {
 
-	CoInitialize(NULL);
 	INITCOMMONCONTROLSEX icex;
 	icex.dwSize = sizeof(INITCOMMONCONTROLSEX);
 	icex.dwICC = ICC_ANIMATE_CLASS | 
