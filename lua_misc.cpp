@@ -50,6 +50,94 @@ int lua_uuid(lua_State* L) {
 	return 2;
 }
 
+int lua_SetClipboard(lua_State* L) {
+
+	size_t len;
+	const char* data = lua_tolstring(L, -1, &len);
+
+	if (!OpenClipboard(NULL)) {
+		lua_pushboolean(L, false);
+		return 1;
+	}
+
+	if (!data || len == 0) {
+
+		if (!EmptyClipboard()) {
+			lua_pushboolean(L, false);
+		}
+		else {
+			lua_pushboolean(L, true);
+		}
+
+		CloseClipboard();
+
+		return 1;
+	}
+
+	HGLOBAL hGlobal = GlobalAlloc(GMEM_MOVEABLE, len + 1);
+
+	if (hGlobal == NULL) {
+		
+		CloseClipboard();
+		lua_pushboolean(L, false);
+		return 1;
+	}
+
+	char* pGlobal = (char*)GlobalLock(hGlobal);
+
+	if (pGlobal == NULL) {
+		GlobalFree(hGlobal);
+		CloseClipboard();
+		lua_pushboolean(L, false);
+		return 1;
+	}
+
+	memcpy(pGlobal, data, len);
+	GlobalUnlock(hGlobal);
+
+	if (SetClipboardData(CF_TEXT, hGlobal) == NULL) {
+		GlobalFree(hGlobal);
+		lua_pushboolean(L, false);
+	}
+	else {
+		lua_pushboolean(L, true);
+	}
+
+	CloseClipboard();
+
+	return 1;
+}
+
+int lua_GetClipboard(lua_State* L) {
+
+	if (!OpenClipboard(NULL)) {
+		lua_pushnil(L);
+		return 1;
+	}
+
+	HANDLE hData = GetClipboardData(CF_TEXT);
+	if (hData == NULL) {
+		CloseClipboard();
+		lua_pushnil(L);
+		return 1;
+	}
+
+	char* pszText = (char*)GlobalLock(hData);
+
+	if (pszText == NULL) {
+		CloseClipboard();
+		lua_pushnil(L);
+		return 1;
+	}
+
+	lua_pushstring(L, pszText);
+
+	GlobalUnlock(hData);
+	CloseClipboard();
+
+	return 1;
+}
+
 int lua_sleep(lua_State* L) {
 
 	int zzz = (int)luaL_optinteger(L, 1, 1);
@@ -1209,7 +1297,13 @@ int luaopen_misc(lua_State* L) {
 	lua_setglobal(L, "GetScreenSize");
 
 	lua_pushcfunction(L, Test);
-	lua_setglobal(L, "Test");
+	lua_setglobal(L, "Test"); 
+
+	lua_pushcfunction(L, lua_SetClipboard);
+	lua_setglobal(L, "SetClipboard");
+
+	lua_pushcfunction(L, lua_GetClipboard);
+	lua_setglobal(L, "GetClipboard");
 
 	lua_pushstring(L, cpuId());
 	lua_setglobal(L, "CPUID");

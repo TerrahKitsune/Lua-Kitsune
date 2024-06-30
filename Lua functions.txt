@@ -87,6 +87,12 @@ Misc global functions:
 	-Returns true if the application has admin rights
 	bool GetIsAdmin()
 
+	-Sets the clipboard to data or clears if no data is given
+	bool SetClipboard(data);
+
+	-Get clipboard contents or nil
+	string GetClipboard();
+
 	- https://docs.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes
 	-returns true if the key is down
 	bool GetKeyState(key)
