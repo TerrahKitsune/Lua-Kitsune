@@ -1012,6 +1012,24 @@ TTS:
 	-Returns true if its currently speaking
 	bool TTS:GetIsSpeaking()
 
+	-Pauses if its speaking and unpauses if its paused
+	nil TTS:PlayPause()
+
+	-Returns true if the tts is paused
+	bool TTS:GetIsPaused()
+
+	-Gets the volume between 100 and 0
+	int TTS:GetVolume()
+
+	-Set the volume between 100 and 0 returns true on success
+	bool TTS:SetVolume(volume)
+
+	-Get the rate of speech
+	int TTS:GetRate()
+
+	-Set the rate of speech
+	bool TTS:SetRate(rate)
+
 	-Set the name of the voice to use
 	bool TTS:SetVoice(voicename)
 

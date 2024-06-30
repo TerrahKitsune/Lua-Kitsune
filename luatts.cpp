@@ -50,10 +50,91 @@ int Skip(lua_State* L) {
 	return 1;
 }
 
+int PlayPause(lua_State* L) {
+
+	LuaTTS* tts = lua_totts(L, -1);
+
+	if (tts->speaking) {
+
+		if (tts->paused) {
+			tts->pVoice->Resume();
+			tts->paused = false;
+		}
+		else {
+			tts->pVoice->Pause();
+			tts->paused = true;
+		}
+	}
+
+	return 0;
+}
+
+int GetIsPaused(lua_State* L) {
+
+	LuaTTS* tts = lua_totts(L, -1);
+	lua_pushboolean(L, tts->paused);
+	return 1;
+}
+
+
+int SetVolume(lua_State* L) {
+
+	LuaTTS* tts = lua_totts(L, 1);
+	if (SUCCEEDED(tts->pVoice->SetVolume((USHORT)luaL_checkinteger(L, 2)))) {
+		lua_pushboolean(L, true);
+	}
+	else {
+		lua_pushboolean(L, false);
+	}
+
+	return 1;
+}
+
+int GetVolume(lua_State* L) {
+	LuaTTS* tts = lua_totts(L, 1);
+	USHORT rate = 0;
+
+	if (SUCCEEDED(tts->pVoice->GetVolume(&rate))) {
+		lua_pushinteger(L, rate);
+	}
+	else {
+		lua_pushnil(L);
+	}
+
+	return 1;
+}
+
+int SetRate(lua_State* L) {
+
+	LuaTTS* tts = lua_totts(L, 1);
+	if (SUCCEEDED(tts->pVoice->SetRate(luaL_checkinteger(L, 2)))) {
+		lua_pushboolean(L, true);
+	}
+	else {
+		lua_pushboolean(L, false);
+	}
+
+	return 1;
+}
+
+int GetRate(lua_State* L) {
+	LuaTTS* tts = lua_totts(L, 1);
+	long rate = 0;
+
+	if (SUCCEEDED(tts->pVoice->GetRate(&rate))) {
+		lua_pushinteger(L, rate);
+	}
+	else {
+		lua_pushnil(L);
+	}
+
+	return 1;
+}
+
 int Speak(lua_State* L) {
 
-	LuaTTS* tts = lua_totts(L, -3);
-	LuaWChar* wchar = lua_stringtowchar(L, -2);
+	LuaTTS* tts = lua_totts(L, 1);
+	LuaWChar* wchar = lua_stringtowchar(L, 2);
 
 	if (tts->speaking || !tts->alive) {
 		lua_pushboolean(L, false);
@@ -71,7 +152,7 @@ int Speak(lua_State* L) {
 			return 0;
 		}
 
-		tts->flags = luaL_optinteger(L, -1, SPF_IS_XML);
+		tts->flags = luaL_optinteger(L, 3, SPF_IS_XML);
 		memcpy(tts->textToSpeak, wchar->str, wchar->len * sizeof(wchar_t));
 		tts->speaking = true;
 		SetEvent(tts->hEvent);
@@ -105,13 +186,13 @@ int SetVoice(lua_State* L) {
 			if (SUCCEEDED(hr)) {
 
 				cpSpAttributesKey->GetStringValue(L"Name", &data);
-				
+
 				if (StrCmpW(data, wchar->str) == 0) {
 					tts->pVoice->SetVoice(cpVoiceToken);
 					CoTaskMemFree(data);
 					cpSpAttributesKey.Release();
 
-					lua_pushboolean(L, true);	
+					lua_pushboolean(L, true);
 					return 1;
 				}
 
@@ -226,7 +307,6 @@ int tts_gc(lua_State* L) {
 	tts->alive = false;
 
 	if (tts->pVoice) {
-		tts->pVoice->Skip(L"SENTENCE", 1, NULL);
 		tts->pVoice->Release();
 		tts->pVoice = NULL;
 	}

@@ -9,6 +9,7 @@
 #include <mmsystem.h>
 #include <conio.h>
 #include "lua_json.h"
+#include "luawchar.h"
 
 #pragma comment (lib , "winmm.lib")
 
@@ -77,7 +78,7 @@ int lua_SetClipboard(lua_State* L) {
 	HGLOBAL hGlobal = GlobalAlloc(GMEM_MOVEABLE, len + 1);
 
 	if (hGlobal == NULL) {
-		
+
 		CloseClipboard();
 		lua_pushboolean(L, false);
 		return 1;
@@ -115,14 +116,14 @@ int lua_GetClipboard(lua_State* L) {
 		return 1;
 	}
 
-	HANDLE hData = GetClipboardData(CF_TEXT);
+	HANDLE hData = GetClipboardData(CF_UNICODETEXT);
 	if (hData == NULL) {
 		CloseClipboard();
 		lua_pushnil(L);
 		return 1;
 	}
 
-	char* pszText = (char*)GlobalLock(hData);
+	wchar_t* pszText = (wchar_t*)GlobalLock(hData);
 
 	if (pszText == NULL) {
 		CloseClipboard();
@@ -130,7 +131,7 @@ int lua_GetClipboard(lua_State* L) {
 		return 1;
 	}
 
-	lua_pushstring(L, pszText);
+	lua_pushwchar(L, pszText);
 
 	GlobalUnlock(hData);
 	CloseClipboard();
@@ -1297,7 +1298,7 @@ int luaopen_misc(lua_State* L) {
 	lua_setglobal(L, "GetScreenSize");
 
 	lua_pushcfunction(L, Test);
-	lua_setglobal(L, "Test"); 
+	lua_setglobal(L, "Test");
 
 	lua_pushcfunction(L, lua_SetClipboard);
 	lua_setglobal(L, "SetClipboard");
