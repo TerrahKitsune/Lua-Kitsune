@@ -93,6 +93,7 @@
     <ClCompile Include="2da.cpp" />
     <ClCompile Include="2DAMain.cpp" />
     <ClCompile Include="aes.c" />
+    <ClCompile Include="Bencode.cpp" />
     <ClCompile Include="HttpCoroutine.cpp" />
     <ClCompile Include="Imgui\imgui.cpp" />
     <ClCompile Include="Imgui\imgui_demo.cpp" />
@@ -255,6 +256,7 @@
     <ClInclude Include="2DAMain.h" />
     <ClInclude Include="aes.h" />
     <ClInclude Include="aes.hpp" />
+    <ClInclude Include="Bencode.h" />
     <ClInclude Include="hiredis\alloc.h" />
     <ClInclude Include="hiredis\hiredis.h" />
     <ClInclude Include="hiredis\hiredis_ssl.h" />

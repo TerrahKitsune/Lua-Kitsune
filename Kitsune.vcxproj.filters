@@ -864,6 +864,9 @@
     <ClCompile Include="luatts.cpp">
       <Filter>LuaTTS\Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Bencode.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Lua\lapi.h">
@@ -1393,6 +1396,9 @@
     </ClInclude>
     <ClInclude Include="luatts.h">
       <Filter>LuaTTS\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Bencode.h">
+      <Filter>Util</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

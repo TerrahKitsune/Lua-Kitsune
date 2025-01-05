@@ -139,4 +139,8 @@ end
 
 FileSystem.SetCurrentDirectory("C:\\Users\\Terrah\\Desktop");
 
-dofile("test.lua");
+local f = io.open("test.torrent", "rb");
+local raw = f:read("*all");
+f:close();
+
+print(Json.Create():Encode(BencodeDecode(raw)));

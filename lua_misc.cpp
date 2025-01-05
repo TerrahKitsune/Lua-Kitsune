@@ -10,6 +10,7 @@
 #include <conio.h>
 #include "lua_json.h"
 #include "luawchar.h"
+#include "Bencode.h"
 
 #pragma comment (lib , "winmm.lib")
 
@@ -1338,6 +1339,9 @@ int luaopen_misc(lua_State* L) {
 
 	lua_pushcfunction(L, CRC32);
 	lua_setglobal(L, "CRC32");
+
+	lua_pushcfunction(L, BencodeDecode);
+	lua_setglobal(L, "BencodeDecode");
 
 	lua_pushcfunction(L, luasetenv);
 	lua_setglobal(L, "setenv");
