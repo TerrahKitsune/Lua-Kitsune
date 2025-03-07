@@ -139,8 +139,20 @@ end
 
 FileSystem.SetCurrentDirectory("C:\\Users\\Terrah\\Desktop");
 
-local f = io.open("test.torrent", "rb");
-local raw = f:read("*all");
-f:close();
+local db = SQLite.Open(":memory:");
 
-print(Json.Create():Encode(BencodeDecode(raw)));
+assert(db:Query([[select Lua("local uid = UUID(); return uid;");]]));
+assert(db:Fetch(), "Emtpy result");
+print(db:GetRow(1));
+
+local function GenerateAUUID()
+	local u = UUID();
+	print("Test", u);
+	return u;
+end
+
+db:RegisterFunction(GenerateAUUID, "TUID", 1);
+
+assert(db:Query([[select TUID('a');]]));
+assert(db:Fetch(), "Emtpy result");
+print(db:GetRow(1));
