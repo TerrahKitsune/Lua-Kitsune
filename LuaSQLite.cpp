@@ -508,6 +508,11 @@ void SqlitePCallFunction(sqlite3_context* context, int argc, sqlite3_value** arg
 		lua_pop(L, 1);
 		return;
 	}
+	else if (type == LUA_TBOOLEAN) {
+		sqlite3_result_int(context, lua_toboolean(L, -1));
+		lua_pop(L, 1);
+		return;
+	}
 
 	result = luaL_tolstring(L, -1, &len);
 
