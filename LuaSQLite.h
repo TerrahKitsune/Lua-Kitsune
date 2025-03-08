@@ -7,6 +7,7 @@ typedef struct LuaSQLiteFunction {
 	char* name;
 	int index;
 	int args;
+	bool isaggregate;
 	lua_State* L;
 } LuaSQLiteFunction;
 
@@ -18,7 +19,7 @@ typedef struct LuaSQLite {
 	int busyhandler;
 	bool useWidechar;
 	int funcs;
-	LuaSQLiteFunction* functions;
+	LuaSQLiteFunction** functions;
 } LuaSQLite;
 
 int SQLiteConnect(lua_State *L);
@@ -29,6 +30,7 @@ int SQLiteExecuteWithCallback(lua_State *L);
 int SQLiteSetBusyHandler(lua_State *L);
 int SQLiteSetUseWidechar(lua_State* L);
 int SQLiteRegisterFunction(lua_State* L);
+int SQLiteRegisterAggregateFunction(lua_State* L);
 
 int SQLite_ToString(lua_State *L);
 int SQLite_GC(lua_State *L);

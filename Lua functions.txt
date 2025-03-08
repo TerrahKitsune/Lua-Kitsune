@@ -2011,6 +2011,11 @@ SQLite:
 	-args the numeber of expected arguments
 	nil SQLite:RegisterFunction(function, name, args)
 
+	-Register an aggregate function. The 
+	-first parameter passed to the function is a bool if true 
+	-the function should return its aggregated result.
+	nil SQLite:RegisterAggregateFunction(function, name, args);
+
 	-Executes a query, if a callback is present function(table) ... end
 	-the results are pushed as key-value columnname: value tables to the callback function one at the time as strings
 	-returns false if something failed

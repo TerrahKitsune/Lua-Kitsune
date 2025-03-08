@@ -14,8 +14,10 @@ LuaSQLite* luaL_checksqlite(lua_State* L, int index) {
 LuaSQLite* lua_pushsqlite(lua_State* L) {
 
 	LuaSQLite* luasqlite = (LuaSQLite*)lua_newuserdata(L, sizeof(LuaSQLite));
-	if (luasqlite == NULL)
+	if (luasqlite == NULL) {
 		luaL_error(L, "Unable to create sqlite connection");
+		return NULL;
+	}
 	luaL_getmetatable(L, LUASQLITE);
 	lua_setmetatable(L, -2);
 	memset(luasqlite, 0, sizeof(LuaSQLite));
@@ -455,12 +457,15 @@ void SqliteLuaFunction(sqlite3_context* context, int argc, sqlite3_value** argv)
 	}
 }
 
-void SqlitePCallFunction(sqlite3_context* context, int argc, sqlite3_value** argv) {
+void SqlitePCallFunction(bool isFinish, LuaSQLiteFunction* function, sqlite3_context* context, int argc, sqlite3_value** argv) {
 
-	LuaSQLiteFunction* function = (LuaSQLiteFunction*)sqlite3_user_data(context);
 	lua_State* L = function->L;
 
 	lua_rawgeti(L, LUA_REGISTRYINDEX, function->index);
+
+	if (function->isaggregate) {
+		lua_pushboolean(L, isFinish);
+	}
 
 	for (int n = 0; n < argc; n++) {
 		switch (sqlite3_value_type(argv[n])) {
@@ -471,8 +476,10 @@ void SqlitePCallFunction(sqlite3_context* context, int argc, sqlite3_value** arg
 			lua_pushnumber(L, sqlite3_value_double(argv[n]));
 			break;
 		case SQLITE_TEXT:
-		case SQLITE_BLOB:
 			lua_pushlstring(L, (const char*)sqlite3_value_text(argv[n]), sqlite3_value_bytes(argv[n]));
+			break;
+		case SQLITE_BLOB:
+			lua_pushlstring(L, (const char*)sqlite3_value_text(argv[n]), sqlite3_value_bytes(argv[n])/2);
 			break;
 		default:
 			lua_pushnil(L);
@@ -483,10 +490,23 @@ void SqlitePCallFunction(sqlite3_context* context, int argc, sqlite3_value** arg
 	const char* result;
 	size_t len;
 
-	if (lua_pcall(L, argc, 1, 0) != LUA_OK) {
+	int returns = 1;
+
+	if (function->isaggregate) {
+		argc++;
+		if (!isFinish) {
+			returns = 0;
+		}
+	}
+
+	if (lua_pcall(L, argc, returns, 0) != LUA_OK) {
 		result = lua_tostring(L, -1);
 		lua_pop(L, 1);
 		sqlite3_result_error(context, result, -1);
+		return;
+	}
+
+	if (returns == 0) {
 		return;
 	}
 
@@ -521,7 +541,17 @@ void SqlitePCallFunction(sqlite3_context* context, int argc, sqlite3_value** arg
 	sqlite3_result_text(context, result, len, SQLITE_TRANSIENT);
 }
 
-int SQLiteRegisterFunction(lua_State* L) {
+void DoPcallFunction(sqlite3_context* context, int argc, sqlite3_value** argv) {
+	LuaSQLiteFunction* function = (LuaSQLiteFunction*)sqlite3_user_data(context);
+	SqlitePCallFunction(false, function, context, argc, argv);
+}
+
+void DoPcallFunctionFinish(sqlite3_context* context) {
+	LuaSQLiteFunction* function = (LuaSQLiteFunction*)sqlite3_user_data(context);
+	SqlitePCallFunction(true, function, context, 0, NULL);
+}
+
+int RegisterFunction(lua_State* L, bool isAggregate) {
 
 	LuaSQLite* luasqlite = (LuaSQLite*)luaL_checksqlite(L, 1);
 	if (!luasqlite || luasqlite->db == NULL) {
@@ -543,14 +573,14 @@ int SQLiteRegisterFunction(lua_State* L) {
 
 	if (luasqlite->functions) {
 		for (int n = 0; n < luasqlite->funcs; n++) {
-			if (strcmp(luasqlite->functions[n].name, name) == 0) {
+			if (strcmp(luasqlite->functions[n]->name, name) == 0) {
 				luaL_error(L, "SQLite function with name %s already exists", name);
 				return 0;
 			}
 		}
 	}
 
-	LuaSQLiteFunction* newArray = (LuaSQLiteFunction*)gff_calloc(luasqlite->funcs + 1, sizeof(LuaSQLiteFunction));
+	LuaSQLiteFunction** newArray = (LuaSQLiteFunction**)gff_calloc(luasqlite->funcs + 1, sizeof(LuaSQLiteFunction*));
 
 	if (!newArray) {
 		luaL_error(L, "Out of memory", name);
@@ -562,33 +592,63 @@ int SQLiteRegisterFunction(lua_State* L) {
 	}
 
 	luasqlite->functions = newArray;
-	luasqlite->functions[luasqlite->funcs].name = (char*)gff_malloc(strlen(name) + 1);
-	if (!luasqlite->functions[luasqlite->funcs].name) {
+	luasqlite->functions[luasqlite->funcs] = (LuaSQLiteFunction*)gff_calloc(1, sizeof(LuaSQLiteFunction));
+	if (!luasqlite->functions[luasqlite->funcs]) {
+		luaL_error(L, "Out of memory", name);
+		return 0;
+	}
+
+	luasqlite->functions[luasqlite->funcs]->name = (char*)gff_malloc(strlen(name) + 1);
+	if (!luasqlite->functions[luasqlite->funcs]->name) {
 		luaL_error(L, "Out of memory", name);
 		return 0;
 	}
 	else {
-		strcpy(luasqlite->functions[luasqlite->funcs].name, name);
+		strcpy(luasqlite->functions[luasqlite->funcs]->name, name);
 	}
 
 	lua_pushvalue(L, -3);
-	luasqlite->functions[luasqlite->funcs].L = L;
-	luasqlite->functions[luasqlite->funcs].index = luaL_ref(L, LUA_REGISTRYINDEX);
-	luasqlite->functions[luasqlite->funcs].args = args;
-	sqlite3_create_function(
-		luasqlite->db,
-		luasqlite->functions[luasqlite->funcs].name,
-		luasqlite->functions[luasqlite->funcs].args,
-		SQLITE_UTF8,
-		&luasqlite->functions[luasqlite->funcs],
-		SqlitePCallFunction,
-		NULL,
-		NULL);
+	luasqlite->functions[luasqlite->funcs]->isaggregate = isAggregate;
+	luasqlite->functions[luasqlite->funcs]->L = L;
+	luasqlite->functions[luasqlite->funcs]->index = luaL_ref(L, LUA_REGISTRYINDEX);
+	luasqlite->functions[luasqlite->funcs]->args = args;
+
+	if (!isAggregate)
+	{
+		sqlite3_create_function(
+			luasqlite->db,
+			luasqlite->functions[luasqlite->funcs]->name,
+			luasqlite->functions[luasqlite->funcs]->args,
+			SQLITE_UTF8,
+			luasqlite->functions[luasqlite->funcs],
+			DoPcallFunction,
+			NULL,
+			NULL);
+	}
+	else {
+		sqlite3_create_function(
+			luasqlite->db,
+			luasqlite->functions[luasqlite->funcs]->name,
+			luasqlite->functions[luasqlite->funcs]->args,
+			SQLITE_UTF8,
+			luasqlite->functions[luasqlite->funcs],
+			NULL,
+			DoPcallFunction,
+			DoPcallFunctionFinish);
+	}
 
 	luasqlite->funcs++;
 	lua_pop(L, 3);
 
 	return 0;
+}
+
+int SQLiteRegisterFunction(lua_State* L) {
+	return RegisterFunction(L, false);
+}
+
+int SQLiteRegisterAggregateFunction(lua_State* L) {
+	return RegisterFunction(L, true);
 }
 
 int SQLiteConnect(lua_State* L) {
@@ -683,13 +743,18 @@ int SQLite_GC(lua_State* L) {
 	if (luasqlite->functions) {
 
 		for (int n = 0; n < luasqlite->funcs; n++) {
-			if (luasqlite->functions[n].index >= 0) {
-				luaL_unref(L, LUA_REGISTRYINDEX, luasqlite->functions[n].index);
-				luasqlite->functions[n].index = -1;
-			}
-			if (luasqlite->functions[n].name) {
-				gff_free(luasqlite->functions[n].name);
-				luasqlite->functions[n].name = NULL;
+
+			if (luasqlite->functions[n]) {
+
+				if (luasqlite->functions[n]->index >= 0) {
+					luaL_unref(L, LUA_REGISTRYINDEX, luasqlite->functions[n]->index);
+					luasqlite->functions[n]->index = -1;
+				}
+				if (luasqlite->functions[n]->name) {
+					gff_free(luasqlite->functions[n]->name);
+					luasqlite->functions[n]->name = NULL;
+				}
+				gff_free(luasqlite->functions[n]);
 			}
 		}
 
@@ -704,7 +769,7 @@ int SQLite_ToString(lua_State* L) {
 
 	LuaSQLite* sq = luaL_checksqlite(L, 1);
 	char sqlite[_MAX_PATH + 20];
-	sprintf(sqlite, "SQLite: 0x%08X File: %s", sq, sq->file);
+	sprintf(sqlite, "SQLite: 0x%08X File: %s", (int)sq, sq->file);
 
 	lua_pushstring(L, sqlite);
 	return 1;

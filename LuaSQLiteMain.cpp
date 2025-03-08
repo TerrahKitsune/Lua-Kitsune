@@ -11,6 +11,7 @@ static const struct luaL_Reg lasqlitefunctions[] = {
 	{ "SetBusyHandler", SQLiteSetBusyHandler },
 	{ "ToggleWidechar", SQLiteSetUseWidechar },
 	{ "RegisterFunction", SQLiteRegisterFunction },
+	{ "RegisterAggregateFunction", SQLiteRegisterAggregateFunction },
 	{ NULL, NULL }
 };
 

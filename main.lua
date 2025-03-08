@@ -141,18 +141,43 @@ FileSystem.SetCurrentDirectory("C:\\Users\\Terrah\\Desktop");
 
 local db = SQLite.Open(":memory:");
 
+db:Query([[CREATE TABLE "test" (
+	"Id"	INTEGER NOT NULL,
+	"Data"	TEXT NOT NULL,
+	PRIMARY KEY("Id" AUTOINCREMENT)
+);]]);
+
 assert(db:Query([[select Lua("local uid = UUID(); return uid;");]]));
 assert(db:Fetch(), "Emtpy result");
 print(db:GetRow(1));
 
-local function GenerateAUUID()
-	local u = UUID();
-	print("Test", u);
-	return u;
+local test = {};
+
+local function AggregateFunction(isFinish, id, data)
+
+	if isFinish then
+		local r = Json.Create():Encode(test);
+		test = {};
+		return r;
+	else
+		table.insert(test, {Id = id, Data=data});
+	end
 end
 
-db:RegisterFunction(GenerateAUUID, "TUID", 1);
+db:RegisterAggregateFunction(AggregateFunction, "LuaAgg", 2);
+db:RegisterFunction(UUID, "UUID", 1);
 
-assert(db:Query([[select TUID('a');]]));
-assert(db:Fetch(), "Emtpy result");
-print(db:GetRow(1));
+for n=1, 10 do
+	assert(db:Query([[insert into "test" ("Data")VALUES(UUID('a'))]]));
+end
+
+assert(db:Query([[select * from "test";]]));
+while db:Fetch() do
+	print(db:GetRow(1), db:GetRow(2));
+end
+
+assert(db:Query([[select "Id" % 2 as "T", JSON(LuaAgg("Id", "Data")) from "test" group by "Id" % 2;]]));
+
+while db:Fetch() do
+	print(db:GetRow(1), db:GetRow(2));
+end
