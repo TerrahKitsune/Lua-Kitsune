@@ -165,19 +165,31 @@ local function AggregateFunction(isFinish, id, data)
 end
 
 db:RegisterAggregateFunction(AggregateFunction, "LuaAgg", 2);
-db:RegisterFunction(UUID, "UUID", 1);
+db:RegisterFunction(function()
+
+	local u = UUID();
+	return u;
+
+end, "UUID", 0);
 
 for n=1, 10 do
-	assert(db:Query([[insert into "test" ("Data")VALUES(UUID('a'))]]));
+	assert(db:Query([[insert into "test" ("Data")VALUES(UUID())]]));
 end
 
 assert(db:Query([[select * from "test";]]));
 while db:Fetch() do
-	print(db:GetRow(1), db:GetRow(2));
+	print(db:GetRow(1), db:GetRow(2), db:GetRow(2):len());
 end
 
 assert(db:Query([[select "Id" % 2 as "T", JSON(LuaAgg("Id", "Data")) from "test" group by "Id" % 2;]]));
 
 while db:Fetch() do
 	print(db:GetRow(1), db:GetRow(2));
+end
+
+assert(db:Query([[SELECT load_extension("C:/Users/Terrah/Documents/GitHub/Lua-Kitsune/Debug/SQLiteKitsune.dll");]]));
+
+assert(db:Query([[select sqlite_version();)]]));
+while db:Fetch() do
+	print(db:GetRow(1));
 end

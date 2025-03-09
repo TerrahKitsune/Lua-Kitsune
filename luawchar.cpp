@@ -462,10 +462,28 @@ LuaWChar* lua_stringtowchar(lua_State* L, int index) {
 	return wchar;
 }
 
+int lua_iswchar(lua_State* L, int index) {
+
+	if (lua_type(L, index) != LUA_TUSERDATA) {
+		return 0;
+	}
+	else if (!lua_getmetatable(L, index)) {
+		return 0;
+	}
+
+	luaL_getmetatable(L, LUAWCHAR);
+	int result = lua_rawequal(L, -1, -2);
+	lua_pop(L, 2);
+
+	return result;
+}
+
 LuaWChar* lua_pushwchar(lua_State* L) {
 	LuaWChar* wchar = (LuaWChar*)lua_newuserdata(L, sizeof(LuaWChar));
-	if (wchar == NULL)
-		luaL_error(L, "Unable to push namedpipe");
+	if (wchar == NULL) {
+		luaL_error(L, "Unable to push wchar");
+		return NULL;
+	}
 	luaL_getmetatable(L, LUAWCHAR);
 	lua_setmetatable(L, -2);
 	memset(wchar, 0, sizeof(LuaWChar));
@@ -475,8 +493,10 @@ LuaWChar* lua_pushwchar(lua_State* L) {
 
 LuaWChar* lua_towchar(lua_State* L, int index) {
 	LuaWChar* wchar = (LuaWChar*)luaL_checkudata(L, index, LUAWCHAR);
-	if (wchar == NULL)
+	if (wchar == NULL) {
 		luaL_error(L, "parameter is not a %s", LUAWCHAR);
+		return NULL;
+	}
 	return wchar;
 }
 

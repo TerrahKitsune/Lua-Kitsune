@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "luawchar.h"
+#include "stream.h"
 
 LuaMD5 * lua_tomd5(lua_State *L, int index){
 
@@ -14,8 +15,11 @@ LuaMD5 * lua_tomd5(lua_State *L, int index){
 LuaMD5 * lua_pushmd5(lua_State *L){
 
 	LuaMD5 * luamd5 = (LuaMD5*)lua_newuserdata(L, sizeof(LuaMD5));
-	if (luamd5 == NULL)
+	if (luamd5 == NULL) {
 		luaL_error(L, "Unable to create md5 instance");
+		return NULL;
+	}
+
 	luaL_getmetatable(L, LUAMD5);
 	lua_setmetatable(L, -2);
 	memset(luamd5, 0, sizeof(LuaMD5));
@@ -25,8 +29,10 @@ LuaMD5 * lua_pushmd5(lua_State *L){
 int NewMD5(lua_State *L){
 
 	LuaMD5 * luamd5 = lua_pushmd5(L);
-	if (!luamd5)
+	if (!luamd5) {
 		luaL_error(L, "Unable to push md5 instance");
+		return NULL;
+	}
 
 	MD5Init(&luamd5->MD5);
 
@@ -36,19 +42,40 @@ int NewMD5(lua_State *L){
 int UpdateMD5(lua_State *L){
 
 	LuaMD5 * luamd5 = lua_tomd5(L, 1);
-	if (!luamd5)
+	if (!luamd5) {
 		luaL_error(L, "Unable to get md5 instance");
-	else if (luamd5->hash && luamd5->hash[0] != '\0')
+		return 0;
+	}
+	else if (luamd5->hash && luamd5->hash[0] != '\0') {
 		luaL_error(L, "Cannot update already finished md5 digest");
+		return 0;
+	}
 
-	LuaWChar* wchar = lua_type(L, 2) == LUA_TUSERDATA ? (LuaWChar*)luaL_checkudata(L, 2, LUAWCHAR) : NULL;
+	int type = lua_type(L, 2);
 
-	if (wchar) {	
-		MD5Update(&luamd5->MD5, (unsigned char*)wchar->str, wchar->len * sizeof(wchar_t));
+	if (type == LUA_TUSERDATA && luaL_testudata(L, -1, LUAWCHAR)) {
+		LuaWChar* wchar = lua_towchar(L, -1);
+		if (wchar && wchar->str) {
+			MD5Update(&luamd5->MD5, (unsigned char*)wchar->str, wchar->len * sizeof(wchar_t));
+		}
+	}
+	else if (type == LUA_TUSERDATA && luaL_testudata(L, -1, STREAM)) {
+		LuaStream* stream = lua_toluastream(L, -1);
+		if (stream && stream->data) {
+			MD5Update(&luamd5->MD5, (unsigned char*)stream->data, stream->len);
+		}
+	}
+	else if (type == LUA_TSTRING) {
+		size_t len;
+		const char* data = lua_tolstring(L, 2, &len);
+		if (data) {
+			MD5Update(&luamd5->MD5, (unsigned char*)data, len);
+		}
 	}
 	else {
 		size_t len;
 		const char* data = luaL_tolstring(L, 2, &len);
+		lua_pop(L, 1);
 		if (data) {
 			MD5Update(&luamd5->MD5, (unsigned char*)data, len);
 		}		

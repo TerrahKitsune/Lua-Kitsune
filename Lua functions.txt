@@ -863,6 +863,9 @@ Stream:
 	-function(size) return size; end
 	Stream Stream.Create(opt initialsize/allocfunc)
 
+	-Creates a stream thats filled with a copy of a string
+	Stream Stream.FromString(string)
+
 	-Querries and returns shared memory information
 	-https://docs.microsoft.com/en-gb/windows/win32/api/winnt/ns-winnt-memory_basic_information
 	-returns nil and an errorcode on failure

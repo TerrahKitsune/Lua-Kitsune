@@ -1210,6 +1210,24 @@ int Decompress(lua_State* L) {
 	return 1;
 }
 
+int NewStreamFromString(lua_State* L) {
+	
+	size_t len;
+	const char* data;
+
+	if (lua_isstring(L, -1)) {
+		data = lua_tolstring(L, -1, &len);
+	}
+	else {
+		data = luaL_tolstring(L, -1, &len);
+		lua_pop(L, 1);
+	}
+
+	lua_pushluastream(L, (const BYTE*)data, len);
+
+	return 1;
+}
+
 int NewStream(lua_State* L) {
 
 	if (lua_type(L, 1) == LUA_TFUNCTION) {
@@ -1517,8 +1535,10 @@ LuaStream* lua_pushluastream(lua_State* L) {
 
 	LuaStream* stream = (LuaStream*)lua_newuserdata(L, sizeof(LuaStream));
 
-	if (stream == NULL)
+	if (stream == NULL) {
 		luaL_error(L, "Unable to push stream");
+		return NULL;
+	}
 
 	luaL_getmetatable(L, STREAM);
 	lua_setmetatable(L, -2);
@@ -1527,6 +1547,39 @@ LuaStream* lua_pushluastream(lua_State* L) {
 	stream->allocfunc = LUA_NOREF;
 
 	return stream;
+}
+
+LuaStream* lua_pushluastream(lua_State* L, const BYTE* data, size_t len) {
+	LuaStream* stream = lua_pushluastream(L);
+	stream->data = (BYTE*)gff_malloc(len+1);
+	
+	if (!stream->data) {
+		luaL_error(L, "Unable to push stream");
+		return NULL;
+	}
+
+	memcpy(stream->data, data, len);
+	stream->data[len] = '\0';
+	stream->alloc = len;
+	stream->len = len;
+
+	return stream;
+}
+
+int lua_isstream(lua_State* L, int index) {
+
+	if (lua_type(L, index) != LUA_TUSERDATA) {
+		return 0;
+	}
+	else if (!lua_getmetatable(L, index)) {
+		return 0;
+	}
+
+	luaL_getmetatable(L, STREAM);
+	int result = lua_rawequal(L, -1, -2);
+	lua_pop(L, 2);
+
+	return result;
 }
 
 LuaStream* lua_toluastream(lua_State* L, int index) {

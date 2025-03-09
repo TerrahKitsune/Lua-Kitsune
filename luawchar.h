@@ -15,6 +15,7 @@ LuaWChar* lua_pushwchar(lua_State* L, const wchar_t* str, size_t len);
 LuaWChar* lua_towchar(lua_State* L, int index);
 LuaWChar* lua_pushwchar(lua_State* L);
 LuaWChar* lua_stringtowchar(lua_State* L, int index);
+int lua_iswchar(lua_State* L, int index);
 
 int GetCodepoints(lua_State* L);
 int GetCharacterAt(lua_State* L);

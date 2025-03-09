@@ -19,7 +19,10 @@ typedef struct LuaStream {
 
 LuaStream* lua_pushluastream(lua_State* L);
 LuaStream* lua_toluastream(lua_State* L, int index);
+int lua_isstream(lua_State* L, int index);
+LuaStream* lua_pushluastream(lua_State* L, const BYTE* data, size_t len);
 
+int NewStreamFromString(lua_State* L);
 int WriteUtf8(lua_State* L);
 int ReadUntilLuaStream(lua_State* L);
 int StreamIndexOf(lua_State* L);

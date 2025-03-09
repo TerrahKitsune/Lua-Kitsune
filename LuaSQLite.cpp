@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include "luawchar.h"
+#include "stream.h"
 
 LuaSQLite* luaL_checksqlite(lua_State* L, int index) {
 
@@ -33,14 +34,17 @@ void push_sqlitevalue(lua_State* L, sqlite3_stmt* pStmt, int idx, bool usewchar)
 		lua_pushnumber(L, sqlite3_column_double(pStmt, idx));
 		break;
 	case SQLITE_TEXT:
-	case SQLITE_BLOB:
-
 		if (usewchar) {
 			lua_pushwchar(L, (wchar_t*)sqlite3_column_text16(pStmt, idx), sqlite3_column_bytes16(pStmt, idx) / sizeof(wchar_t));
 		}
 		else {
-			lua_pushlstring(L, (const char*)sqlite3_column_blob(pStmt, idx), sqlite3_column_bytes(pStmt, idx));
+			lua_pushlstring(L, (const char*)sqlite3_column_text(pStmt, idx), sqlite3_column_bytes(pStmt, idx));
 		}
+		break;
+
+	case SQLITE_BLOB:
+
+		lua_pushluastream(L, (const BYTE*)sqlite3_column_blob(pStmt, idx), sqlite3_column_bytes(pStmt, idx));
 		break;
 	case SQLITE_NULL:
 	default:
@@ -232,6 +236,7 @@ int SQLiteExecute(lua_State* L) {
 	const char* data;
 	const char* name;
 	LuaWChar* wchar;
+	LuaStream* stream;
 
 	if (luasqlite->stmt) {
 		sqlite3_finalize(luasqlite->stmt);
@@ -277,15 +282,26 @@ int SQLiteExecute(lua_State* L) {
 				break;
 			case LUA_TSTRING:
 				data = lua_tolstring(L, -1, &len);
-				sqlite3_bind_blob64(luasqlite->stmt, ++cnt, data, len, NULL);
+				sqlite3_bind_text(luasqlite->stmt, ++cnt, data, len, SQLITE_STATIC);
 				break;
 			case LUA_TUSERDATA:
 
 				if (luaL_testudata(L, -1, LUAWCHAR)) {
 					wchar = lua_towchar(L, -1);
-					sqlite3_bind_text16(luasqlite->stmt, ++cnt, wchar->str, wchar->len * sizeof(wchar_t), NULL);
+					if (wchar->str) {
+						sqlite3_bind_text16(luasqlite->stmt, ++cnt, wchar->str, wchar->len * sizeof(wchar_t), SQLITE_STATIC);
+						break;
+					}
+				}
+				else if (luaL_testudata(L, -1, STREAM)) {
+					stream = lua_toluastream(L, -1);
+					if (stream->data) {
+						sqlite3_bind_blob64(luasqlite->stmt, ++cnt, stream->data, stream->len, SQLITE_STATIC);
+						break;
+					}
 				}
 
+				sqlite3_bind_null(luasqlite->stmt, ++cnt);
 				break;
 			}
 
@@ -330,15 +346,26 @@ int SQLiteExecute(lua_State* L) {
 				break;
 			case LUA_TSTRING:
 				data = lua_tolstring(L, -1, &len);
-				sqlite3_bind_blob64(luasqlite->stmt, ++cnt, data, len, NULL);
+				sqlite3_bind_text(luasqlite->stmt, ++cnt, data, len, SQLITE_STATIC);
 				break;
 			case LUA_TUSERDATA:
 
 				if (luaL_testudata(L, -1, LUAWCHAR)) {
 					wchar = lua_towchar(L, -1);
-					sqlite3_bind_text16(luasqlite->stmt, ++cnt, wchar->str, wchar->len * sizeof(wchar_t), NULL);
+					if (wchar->str) {
+						sqlite3_bind_text16(luasqlite->stmt, ++cnt, wchar->str, wchar->len * sizeof(wchar_t), SQLITE_STATIC);
+						break;
+					}
+				}
+				else if (luaL_testudata(L, -1, STREAM)) {
+					stream = lua_toluastream(L, -1);
+					if (stream->data) {
+						sqlite3_bind_blob64(luasqlite->stmt, ++cnt, stream->data, stream->len, SQLITE_STATIC);
+						break;
+					}
 				}
 
+				sqlite3_bind_null(luasqlite->stmt, ++cnt);
 				break;
 			}
 
@@ -470,7 +497,7 @@ void SqlitePCallFunction(bool isFinish, LuaSQLiteFunction* function, sqlite3_con
 	for (int n = 0; n < argc; n++) {
 		switch (sqlite3_value_type(argv[n])) {
 		case SQLITE_INTEGER:
-			lua_pushinteger(L, sqlite3_value_int(argv[n]));
+			lua_pushinteger(L, sqlite3_value_int64(argv[n]));
 			break;
 		case SQLITE_FLOAT:
 			lua_pushnumber(L, sqlite3_value_double(argv[n]));
@@ -479,7 +506,7 @@ void SqlitePCallFunction(bool isFinish, LuaSQLiteFunction* function, sqlite3_con
 			lua_pushlstring(L, (const char*)sqlite3_value_text(argv[n]), sqlite3_value_bytes(argv[n]));
 			break;
 		case SQLITE_BLOB:
-			lua_pushlstring(L, (const char*)sqlite3_value_text(argv[n]), sqlite3_value_bytes(argv[n])/2);
+			lua_pushluastream(L, (const BYTE*)sqlite3_value_blob(argv[n]), sqlite3_value_bytes(argv[n]));
 			break;
 		default:
 			lua_pushnil(L);
@@ -524,7 +551,7 @@ void SqlitePCallFunction(bool isFinish, LuaSQLiteFunction* function, sqlite3_con
 	}
 	else if (type == LUA_TSTRING) {
 		result = lua_tolstring(L, -1, &len);
-		sqlite3_result_blob(context, result, len * 2, SQLITE_TRANSIENT);
+		sqlite3_result_text(context, result, len, SQLITE_TRANSIENT);
 		lua_pop(L, 1);
 		return;
 	}
@@ -532,6 +559,25 @@ void SqlitePCallFunction(bool isFinish, LuaSQLiteFunction* function, sqlite3_con
 		sqlite3_result_int(context, lua_toboolean(L, -1));
 		lua_pop(L, 1);
 		return;
+	}
+	else if (type == LUA_TUSERDATA) {
+		if (lua_iswchar(L, -1)) {
+			LuaWChar* wchar = lua_towchar(L, -1);
+			sqlite3_result_text16(context, wchar->str, wchar->len * sizeof(wchar_t), SQLITE_TRANSIENT);
+			lua_pop(L, 1);
+			return;
+		}
+		else if (lua_isstream(L, -1)) {
+			LuaStream* stream = lua_toluastream(L, -1);
+			if (stream->data) {
+				sqlite3_result_blob(context, stream->data, stream->len, SQLITE_TRANSIENT);
+			}
+			else {
+				sqlite3_result_null(context);
+			}
+			lua_pop(L, 1);
+			return;
+		}
 	}
 
 	result = luaL_tolstring(L, -1, &len);
@@ -714,6 +760,7 @@ int SQLiteConnect(lua_State* L) {
 	luasqlite->file = file;
 	luasqlite->useWidechar = true;
 
+	sqlite3_enable_load_extension(luasqlite->db, 1);
 	sqlite3_create_function(luasqlite->db, "Lua", 1, SQLITE_UTF8, L, SqliteLuaFunction, NULL, NULL);
 
 	return 1;
