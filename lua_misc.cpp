@@ -11,6 +11,7 @@
 #include "lua_json.h"
 #include "luawchar.h"
 #include "Bencode.h"
+#include <intrin.h>
 
 #pragma comment (lib , "winmm.lib")
 
@@ -1046,30 +1047,22 @@ int L_DebugBreak(lua_State* L) {
 
 static const char* cpuId(void)
 {
-	unsigned long s1 = 0;
-	unsigned long s2 = 0;
-	unsigned long s3 = 0;
-	unsigned long s4 = 0;
-	__asm
-	{
-		mov eax, 00h
-		xor edx, edx
-		cpuid
-		mov s1, edx
-		mov s2, eax
-	}
-	__asm
-	{
-		mov eax, 01h
-		xor ecx, ecx
-		xor edx, edx
-		cpuid
-		mov s3, edx
-		mov s4, ecx
-	}
+	int cpuInfo[4] = { 0 };
 
+	// CPUID function 0: Get Vendor ID (s1, s2)
+	__cpuid(cpuInfo, 0);
+	unsigned long s1 = cpuInfo[3]; // EDX
+	unsigned long s2 = cpuInfo[0]; // EAX
+
+	// CPUID function 1: Get Processor Features (s3, s4)
+	__cpuid(cpuInfo, 1);
+	unsigned long s3 = cpuInfo[3]; // EDX
+	unsigned long s4 = cpuInfo[2]; // ECX
+
+	// Store as a formatted string
 	static char buf[100];
-	sprintf(buf, "%08X%08X%08X%08X", s1, s2, s3, s4);
+	snprintf(buf, sizeof(buf), "%08lX%08lX%08lX%08lX", s1, s2, s3, s4);
+
 	return buf;
 }
 

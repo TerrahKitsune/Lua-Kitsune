@@ -482,8 +482,8 @@ int GetThreads(lua_State *L) {
 int GetSetAffinity(lua_State *L) {
 
 	LuaProcess * proc = lua_toprocess(L, 1);
-	DWORD newmask;
-	DWORD process, system;
+	DWORD64 newmask;
+	DWORD64 process, system;
 
 	bool ok = GetProcessAffinityMask(proc->processInfo.hProcess, &process, &system) > 0;
 

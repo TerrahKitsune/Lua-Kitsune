@@ -519,8 +519,8 @@ int main(int argc, char *argv[]) {
 	lua_setglobal(L, "GFF");
 	luaopen_timer(L);
 	lua_setglobal(L, "Timer");
-	luaopen_mysql(L);
-	lua_setglobal(L, "MySQL");
+	//luaopen_mysql(L);
+	//lua_setglobal(L, "MySQL");
 	luaopen_filesystem(L);
 	lua_setglobal(L, "FileSystem");
 	luaopen_sqlite(L);
@@ -541,8 +541,8 @@ int main(int argc, char *argv[]) {
 	lua_setglobal(L, "TLK");
 	luaopen_twoda(L);
 	lua_setglobal(L, "TWODA");
-	luaopen_zip(L);
-	lua_setglobal(L, "Zip");
+	//luaopen_zip(L);
+	//lua_setglobal(L, "Zip");
 	luaopen_namedpipe(L);
 	lua_setglobal(L, "Pipe");
 	luaopen_image(L);
@@ -585,8 +585,8 @@ int main(int argc, char *argv[]) {
 	lua_setglobal(L, "Wchar");
 	luaopen_csv(L);
 	lua_setglobal(L, "CSV");
-	luaopen_archive(L);
-	lua_setglobal(L, "Archive");
+	//luaopen_archive(L);
+	//lua_setglobal(L, "Archive");
 	luaopen_imgui(L);
 	lua_setglobal(L, "Imgui");
 	luaopen_vhd(L);

@@ -703,7 +703,7 @@ int ODBCGetResultColumns(lua_State* L) {
 	SQLCHAR columnname[254];
 	SQLSMALLINT columnnamesize;
 	SQLSMALLINT datatype;
-	SQLUINTEGER columnsize;
+	SQLULEN columnsize;
 	SQLSMALLINT decimaldigits;
 	SQLSMALLINT nullable;
 
@@ -761,11 +761,11 @@ int ODBCGetRow(lua_State* L) {
 	SQLCHAR columnname[254];
 	SQLSMALLINT columnnamesize;
 	SQLSMALLINT datatype;
-	SQLUINTEGER columnsize;
+	SQLULEN columnsize;
 	SQLSMALLINT decimaldigits;
 	SQLSMALLINT nullable;
 	SQLPOINTER data;
-	SQLINTEGER datalen;
+	SQLULEN datalen;
 	SQLCHAR bit;
 
 	lua_pop(L, lua_gettop(L));
@@ -791,7 +791,7 @@ int ODBCGetRow(lua_State* L) {
 				luaL_error(L, "Unable to allocate memory");
 			}
 
-			if (!SUCCEEDED(SQLGetData(odbc->stmt, i + 1, SQL_C_DOUBLE, data, sizeof(lua_Number), &datalen))) {
+			if (!SUCCEEDED(SQLGetData(odbc->stmt, i + 1, SQL_C_DOUBLE, data, sizeof(lua_Number), (SQLLEN*)&datalen))) {
 
 				lua_pop(L, lua_gettop(L));
 				lua_pushboolean(L, false);
@@ -816,7 +816,7 @@ int ODBCGetRow(lua_State* L) {
 				luaL_error(L, "Unable to allocate memory");
 			}
 
-			if (!SUCCEEDED(SQLGetData(odbc->stmt, i + 1, SQL_C_SLONG, data, sizeof(lua_Integer), &datalen))) {
+			if (!SUCCEEDED(SQLGetData(odbc->stmt, i + 1, SQL_C_SLONG, data, sizeof(lua_Integer), (SQLLEN*)&datalen))) {
 
 				lua_pop(L, lua_gettop(L));
 				lua_pushboolean(L, false);
@@ -835,7 +835,7 @@ int ODBCGetRow(lua_State* L) {
 		}
 		else if (datatype == SQL_BIT) {
 
-			if (!SUCCEEDED(SQLGetData(odbc->stmt, i + 1, SQL_C_BIT, &bit, sizeof(SQLCHAR), &datalen))) {
+			if (!SUCCEEDED(SQLGetData(odbc->stmt, i + 1, SQL_C_BIT, &bit, sizeof(SQLCHAR), (SQLLEN*)&datalen))) {
 
 				lua_pop(L, lua_gettop(L));
 				lua_pushboolean(L, false);
@@ -860,7 +860,7 @@ int ODBCGetRow(lua_State* L) {
 				luaL_error(L, "Unable to allocate memory");
 			}
 
-			if (!SUCCEEDED(SQLGetData(odbc->stmt, i + 1, SQL_WCHAR, data, columnsize * sizeof(wchar_t), &datalen))) {
+			if (!SUCCEEDED(SQLGetData(odbc->stmt, i + 1, SQL_WCHAR, data, columnsize * sizeof(wchar_t), (SQLLEN*)&datalen))) {
 
 				lua_pop(L, lua_gettop(L));
 				lua_pushboolean(L, false);

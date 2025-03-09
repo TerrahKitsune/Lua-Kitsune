@@ -11,8 +11,8 @@
 #pragma comment (lib, "Mswsock.lib")
 #pragma comment (lib, "AdvApi32.lib")
 
-#include <openssl/err.h>
-#include <openssl/ssl.h>
+#include <OpenSSL/err.h>
+#include <OpenSSL/ssl.h>
 
 #pragma comment(lib, "OpenSSL/libssl.lib")
 #pragma comment(lib, "OpenSSL/libcrypto.lib")

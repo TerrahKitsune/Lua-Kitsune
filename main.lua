@@ -138,58 +138,8 @@ local function HexToString(hexString)
 end
 
 FileSystem.SetCurrentDirectory("C:\\Users\\Terrah\\Desktop");
+local j = Json.Create();
 
-local db = SQLite.Open(":memory:");
-
-db:Query([[CREATE TABLE "test" (
-	"Id"	INTEGER NOT NULL,
-	"Data"	TEXT NOT NULL,
-	PRIMARY KEY("Id" AUTOINCREMENT)
-);]]);
-
-assert(db:Query([[select Lua("local uid = UUID(); return uid;");]]));
-assert(db:Fetch(), "Emtpy result");
-print(db:GetRow(1));
-
-local test = {};
-
-local function AggregateFunction(isFinish, id, data)
-
-	if isFinish then
-		local r = Json.Create():Encode(test);
-		test = {};
-		return r;
-	else
-		table.insert(test, {Id = id, Data=data});
-	end
-end
-
-db:RegisterAggregateFunction(AggregateFunction, "LuaAgg", 2);
-db:RegisterFunction(function()
-
-	local u = UUID();
-	return u;
-
-end, "UUID", 0);
-
-for n=1, 10 do
-	assert(db:Query([[insert into "test" ("Data")VALUES(UUID())]]));
-end
-
-assert(db:Query([[select * from "test";]]));
-while db:Fetch() do
-	print(db:GetRow(1), db:GetRow(2), db:GetRow(2):len());
-end
-
-assert(db:Query([[select "Id" % 2 as "T", JSON(LuaAgg("Id", "Data")) from "test" group by "Id" % 2;]]));
-
-while db:Fetch() do
-	print(db:GetRow(1), db:GetRow(2));
-end
-
-assert(db:Query([[SELECT load_extension("C:/Users/Terrah/Documents/GitHub/Lua-Kitsune/Debug/SQLiteKitsune.dll");]]));
-
-assert(db:Query([[select sqlite_version();)]]));
-while db:Fetch() do
-	print(db:GetRow(1));
-end
+local http = Http.Start("GET", "https://www.google.com");
+local code, ok, contents, header = http:GetResult();
+print(j:Encode({C=code,Ok=ok,Content=contents, H=Header}));
