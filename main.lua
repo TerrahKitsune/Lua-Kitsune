@@ -139,7 +139,18 @@ end
 
 FileSystem.SetCurrentDirectory("C:\\Users\\Terrah\\Desktop");
 local j = Json.Create();
+print(j:Encode({Test = Wchar.FromAnsi("Ansi")}));
 
-local http = Http.Start("GET", "https://www.google.com");
-local code, ok, contents, header = http:GetResult();
-print(j:Encode({C=code,Ok=ok,Content=contents, H=Header}));
+local db = MySQL.Connect("10.9.23.252", "OtherTest", "qEa4f6skr9?u", "lua");
+print(assert(db:Query("SELECT * FROM mem where Runtime > "..MySQL.EscapeValue([["null"]])..";")));
+
+local result = db:GetResultFields();
+print(j:Encode(result));
+local row = db:GetResultRow();
+while row do
+	print(row[1]);
+	row = db:GetResultRow();
+end
+
+result = assert(db:GetResult());
+print(j:Encode(result));

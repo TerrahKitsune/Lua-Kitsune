@@ -136,15 +136,6 @@
     <Filter Include="Lua2DA\Source Files">
       <UniqueIdentifier>{f7e519d6-566e-49be-9360-4812b3bda180}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaZIP">
-      <UniqueIdentifier>{3716acaf-984a-49de-bf47-12dc010641b1}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaZIP\Header Files">
-      <UniqueIdentifier>{f82b5040-a667-404d-8af9-5b0f2a82d073}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaZIP\Source Files">
-      <UniqueIdentifier>{d7427226-cd79-4fc8-97fc-359314db5588}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Util">
       <UniqueIdentifier>{4c3c8bdb-38d8-4af7-b632-e2a1a5a1a63e}</UniqueIdentifier>
     </Filter>
@@ -582,12 +573,6 @@
     <ClCompile Include="2DAMain.cpp">
       <Filter>Lua2DA</Filter>
     </ClCompile>
-    <ClCompile Include="luazip.cpp">
-      <Filter>LuaZIP\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="ZIPMain.cpp">
-      <Filter>LuaZIP</Filter>
-    </ClCompile>
     <ClCompile Include="ResourceTypes.cpp">
       <Filter>LuaErf</Filter>
     </ClCompile>
@@ -608,12 +593,6 @@
     </ClCompile>
     <ClCompile Include="Client.cpp">
       <Filter>LuaService\Client\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaMySQLResult.cpp">
-      <Filter>LuaMySQL\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="mysql_main_incl.cpp">
-      <Filter>LuaMySQL\Source Files</Filter>
     </ClCompile>
     <ClCompile Include="NamedPipeMain.cpp">
       <Filter>NamedPipes</Filter>
@@ -1046,18 +1025,6 @@
     <ClInclude Include="2DAMain.h">
       <Filter>Lua2DA</Filter>
     </ClInclude>
-    <ClInclude Include="luazip.h">
-      <Filter>LuaZIP\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="ZIPMain.h">
-      <Filter>LuaZIP</Filter>
-    </ClInclude>
-    <ClInclude Include="zip\zip.h">
-      <Filter>LuaZIP\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="zip\zipconf.h">
-      <Filter>LuaZIP\Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="ResourcesTypes.h">
       <Filter>LuaErf</Filter>
     </ClInclude>
@@ -1078,12 +1045,6 @@
     </ClInclude>
     <ClInclude Include="resource.h">
       <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="LuaMySQLResult.h">
-      <Filter>LuaMySQL\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="mysql_main_incl.h">
-      <Filter>LuaMySQL\Header Files</Filter>
     </ClInclude>
     <ClInclude Include="NamedPipeMain.h">
       <Filter>NamedPipes</Filter>
@@ -1280,58 +1241,10 @@
     <ClInclude Include="LuaArchiveMain.h">
       <Filter>Archive</Filter>
     </ClInclude>
-    <ClInclude Include="LuaArchive.h">
-      <Filter>Archive\Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="libarchive\archive.h">
       <Filter>Archive\Header Files</Filter>
     </ClInclude>
     <ClInclude Include="libarchive\archive_entry.h">
-      <Filter>Archive\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="libarchive\lzma.h">
-      <Filter>Archive\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="libarchive\lzma\base.h">
-      <Filter>Archive\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="libarchive\lzma\bcj.h">
-      <Filter>Archive\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="libarchive\lzma\block.h">
-      <Filter>Archive\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="libarchive\lzma\check.h">
-      <Filter>Archive\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="libarchive\lzma\container.h">
-      <Filter>Archive\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="libarchive\lzma\delta.h">
-      <Filter>Archive\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="libarchive\lzma\filter.h">
-      <Filter>Archive\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="libarchive\lzma\hardware.h">
-      <Filter>Archive\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="libarchive\lzma\index.h">
-      <Filter>Archive\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="libarchive\lzma\index_hash.h">
-      <Filter>Archive\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="libarchive\lzma\lzma12.h">
-      <Filter>Archive\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="libarchive\lzma\stream_flags.h">
-      <Filter>Archive\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="libarchive\lzma\version.h">
-      <Filter>Archive\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="libarchive\lzma\vli.h">
       <Filter>Archive\Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Imgui\imgui_internal.h">
@@ -1399,6 +1312,9 @@
     </ClInclude>
     <ClInclude Include="Bencode.h">
       <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaArchive.h">
+      <Filter>Archive\Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

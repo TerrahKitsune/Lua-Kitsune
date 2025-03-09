@@ -53,82 +53,6 @@ void push_sqlitevalue(lua_State* L, sqlite3_stmt* pStmt, int idx, bool usewchar)
 	}
 }
 
-static int callback(void* NotUsed, int argc, char** argv, char** azColName) {
-
-	lua_State* L = (lua_State*)NotUsed;
-
-	lua_createtable(L, argc, 0);
-
-	for (int n = 0; n < argc; n++) {
-		lua_pushstring(L, azColName[n]);
-		lua_pushstring(L, argv[n]);
-		lua_settable(L, -3);
-	}
-
-	if (lua_pcall(L, 1, 0, NULL)) {
-		return 1;
-	}
-	else {
-
-		//Repush the function
-		lua_pushvalue(L, -1);
-
-		return 0;
-	}
-}
-
-int SQLiteExecuteWithCallback(lua_State* L) {
-
-	size_t len;
-	LuaSQLite* luasqlite = (LuaSQLite*)luaL_checksqlite(L, 1);
-	if (luasqlite->db == NULL)
-		luaL_error(L, "SQLite instance has been closed");
-	const char* query = luaL_checklstring(L, 2, &len);
-	int err;
-	char* zErrMsg = 0;
-	char* current = (char*)gff_malloc(len + 1);
-	if (current == NULL) {
-
-		lua_pop(L, lua_gettop(L));
-		lua_pushboolean(L, false);
-		lua_pushstring(L, "Unable to allocate memory for query");
-		return 2;
-	}
-
-	current[len] = '\0';
-	memcpy(current, query, len);
-
-	if (lua_isfunction(L, 3)) {
-		lua_pushvalue(L, 3);
-		err = sqlite3_exec(luasqlite->db, query, callback, L, &zErrMsg);
-	}
-	else {
-		err = sqlite3_exec(luasqlite->db, query, NULL, NULL, &zErrMsg);
-	}
-
-	if (err == SQLITE_ABORT) {
-		lua_pushboolean(L, false);
-		lua_pushfstring(L, "%s: %s", zErrMsg, lua_tostring(L, -2));
-		gff_free(current);
-		sqlite3_free(zErrMsg);
-		return 2;
-	}
-	else if (err) {
-		lua_pop(L, lua_gettop(L));
-		lua_pushboolean(L, false);
-		lua_pushstring(L, zErrMsg);
-		sqlite3_free(zErrMsg);
-	}
-	else {
-		lua_pop(L, lua_gettop(L));
-		lua_pushboolean(L, true);
-		lua_pushstring(L, "OK");
-	}
-
-	gff_free(current);
-	return 2;
-}
-
 int SQLiteSetUseWidechar(lua_State* L) {
 
 	LuaSQLite* luasqlite = (LuaSQLite*)luaL_checksqlite(L, 1);
@@ -228,8 +152,10 @@ int SQLiteFetch(lua_State* L) {
 int SQLiteExecute(lua_State* L) {
 
 	LuaSQLite* luasqlite = (LuaSQLite*)luaL_checksqlite(L, 1);
-	if (luasqlite->db == NULL)
+	if (luasqlite->db == NULL) {
 		luaL_error(L, "SQLite instance has been closed");
+		return 0;
+	}
 	const char* query = luaL_checkstring(L, 2);
 	int cnt = 0;
 	size_t len;

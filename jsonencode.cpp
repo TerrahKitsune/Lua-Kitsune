@@ -1,8 +1,10 @@
 #include "jsonencode.h"
 #include "jsonutil.h"
 #include "math.h"
+#include "stream.h"
+#include "luawchar.h"
 
-void json_encodenumber(lua_State *L, JsonContext* context) {
+void json_encodenumber(lua_State* L, JsonContext* context) {
 
 	double numb = lua_tonumber(L, -1);
 	char number[50];
@@ -49,7 +51,7 @@ void json_encodenumber(lua_State *L, JsonContext* context) {
 	json_append(number, strlen(number), L, context);
 }
 
-void json_encodevalue(lua_State *L, JsonContext* context, int* depth) {
+void json_encodevalue(lua_State* L, JsonContext* context, int* depth) {
 
 	if (json_isnull(L, context)) {
 
@@ -80,9 +82,32 @@ void json_encodevalue(lua_State *L, JsonContext* context, int* depth) {
 
 void json_encodestring(lua_State* L, JsonContext* C) {
 
-	size_t stackSize = lua_gettop(L);
 	size_t len;
-	const char * str = luaL_tolstring(L, -1, &len);
+	const char* str;
+	if (lua_isstring(L, -1)) {
+		str = lua_tolstring(L, -1, &len);
+	}
+	else if (lua_isstream(L, -1)) {
+		LuaStream* stream = lua_toluastream(L, -1);
+		if (stream) {
+			str = (const char*)stream->data;
+			len = stream->len;
+		}
+		else {
+			str = NULL;
+			len = 0;
+		}
+	}
+	else if (lua_iswchar(L, -1)) {
+		ToUtf8(L);
+		lua_copy(L, -1, -2);
+		lua_pop(L, 1);
+		str = lua_tolstring(L, -1, &len);
+	}
+	else {
+		str = luaL_tolstring(L, -1, &len);
+		lua_pop(L, 1);
+	}
 	char hex[7] = { 0 };
 	int data = 0;
 
@@ -121,13 +146,9 @@ void json_encodestring(lua_State* L, JsonContext* C) {
 	}
 
 	json_append("\"", 1, L, C);
-
-	if (lua_gettop(L) != stackSize) {
-		lua_settop(L, stackSize);
-	}
 }
 
-void json_pad(char padding, int numbpadding, lua_State*L, JsonContext*C) {
+void json_pad(char padding, int numbpadding, lua_State* L, JsonContext* C) {
 
 	if (numbpadding <= 0) {
 		return;
@@ -147,7 +168,7 @@ void json_encodetable(lua_State* L, JsonContext* C, int* depth) {
 	}
 
 	size_t len;
-	const char * rawid = luaL_tolstring(L, -1, &len);
+	const char* rawid = luaL_tolstring(L, -1, &len);
 	lua_pop(L, 1);
 	lua_len(L, -1);
 	int size = (int)lua_tointeger(L, -1);
@@ -283,7 +304,7 @@ void json_getnextthread(lua_State* L, JsonContext* C) {
 
 	lua_rawgeti(L, LUA_REGISTRYINDEX, C->refThreadInput);
 
-	lua_State*T = lua_tothread(L, -1);
+	lua_State* T = lua_tothread(L, -1);
 	int result = lua_resume(T, L, 0);
 
 	if (result == LUA_YIELD) {
@@ -298,7 +319,7 @@ void json_getnextthread(lua_State* L, JsonContext* C) {
 	}
 	else {
 		lua_xmove(T, L, 1);
-		const char * err = lua_tostring(L, -1);
+		const char* err = lua_tostring(L, -1);
 		if (!err) {
 			err = "Coroutine error";
 		}

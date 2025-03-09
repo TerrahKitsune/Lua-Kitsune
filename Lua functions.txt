@@ -1892,76 +1892,52 @@ MD5:
 	hexstring, 16bytes MD:Finish()
 
 MySQL:
-	-Escapes a string using a mysql object
-	string MySQL:EscapeString(string)
-
-	-turns a string into a hex literal which can be used in queries
-	-Does *not* need a mysql object
-	string MySQL.EncodeString(string)
-
-	-Set the desired timeout on the connection (read,write and connect)
-	nil MySQL:SetTimeout(timeout)
-
 	-use the mysql library to connect to a server
 	-if successful this returns a MySQL object that other functions are called from
 	-Timeout in seconds, use SetTimeout if you want to change it
 	-returns nil on failure
 	MySQL MySQL.Connect(address, user, password, database, opt port 3306, opt timeout 3600)
 
+	-Escapes a value turning it into a safe variant for mysql
+	-Works with streams and wchars
+	-will call tostring on non strings
+	string MySQL.EscapeValue(value)
+
+	-Starts a query on the connection
+	-fails if a query is already running
+	bool, txt MySQL:Query(query)
+
+	-Returns true if a query is running
+	bool MySQL:IsBusy()
+
+	-fetches and returns rows
+	-Returns nil when there is none left
+	-Returns rows as an array of strings
+	-Waits for the query if its running
+	array MySQL:GetResultRow()
+
+	-Returns the field metadata
+	-each entry in the array is an object that contains:
+	-catalog
+	-charsetnr
+	-decimals
+	-def
+	-flags
+	-length
+	-maxlenth
+	-name
+	-orgname
+	-orgtable
+	-table
+	-type
+	array MySQL:GetResultFields()
+
+	-Returns the full result as an array of rows
+	-waits if the query is running
+	array MySQL:GetResult()
+
 	-Closes the connection, it should *NOT* be used afterwards
 	MySQL:Close();
-
-	-runs querystring on the opened mysql object
-	-async is true then the mysql query will run async, async results are stored as opposed to used
-	-use MySQL:IsRunning() and MySQL:GetResult() to evaluate the state of an async query
-	-returns true, rowsaffected on success or false and an error message on failure
-	bool, msg MySQL:Query(querystring, async=false)
-
-	-Returns true if the connection is running an async query
-	bool MySQL:IsRunning();
-
-	-Evaluate the result of an async query
-	-If the query is still running this will wait
-	-returns the result MySQL:Query returns on non async queries for async queries
-	bool, msg MySQL:GetResult();
-
-	-Advances the resultset to the next row
-	-Using on an async query will cause blocking until the query is finished
-	-returns false if there is no more rows or there was none to begin with
-	bool MySQL:Fetch()
-
-	-Changes the default database to database (the one that gets reconnected to)
-	-and runs "USE DATABASE `database`;"
-	-returns the same as MySQL:Query
-	bool, msg MySQL:ChangeDatabase(database)
-
-	-Returns a table containing the the column names and their values
-	-if an optional index is provided it'll return a single value from that index
-	-1 indexed
-	table (or single value) MySQL:GetRow(opt index)
-
-	-Forks the result into a seperate object
-	-useful for async querries where you wish to process the result while a new query is running
-	MySQLResult MySQL:ForkResult()
-
-	-Toggles if GetRow should always return all data as strings or as their proper typing
-	-default: false
-	nil MySQL:ToggleAsString(bool)
-
-	MySQLResult:
-
-	-Same as MySQL:GetRow()
-	table (or single value) MySQLResult:GetRow(opt index)
-
-	-Same as MySQL:Fetch()
-	bool MySQLResult:Fetch();
-
-	-Retrive the number of rows in a stored result, this is 0 on used results
-	int MySQLResult:Count()
-
-	-Toggles if GetRow should always return all data as strings or as their proper typing
-	-default: inherited from the MySQL object that created the result
-	nil MySQLResult:ToggleAsString(bool)
 
 Timer:
 
@@ -2018,13 +1994,6 @@ SQLite:
 	-first parameter passed to the function is a bool if true 
 	-the function should return its aggregated result.
 	nil SQLite:RegisterAggregateFunction(function, name, args);
-
-	-Executes a query, if a callback is present function(table) ... end
-	-the results are pushed as key-value columnname: value tables to the callback function one at the time as strings
-	-returns false if something failed
-	-if no callback is passed any resultset (if any) is ignored
-	-For more accurate data or binary data Query
-	bool, txt SQLite:Execute(querystring, opt callback)
 
 	-If toggled true then strings from GetRow will be returned at Wchars
 	nil SQLite:ToggleWidechar(bool);

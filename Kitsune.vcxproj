@@ -1,17 +1,9 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
-    <ProjectConfiguration Include="Debug|Win32">
-      <Configuration>Debug</Configuration>
-      <Platform>Win32</Platform>
-    </ProjectConfiguration>
     <ProjectConfiguration Include="Debug|x64">
       <Configuration>Debug</Configuration>
       <Platform>x64</Platform>
-    </ProjectConfiguration>
-    <ProjectConfiguration Include="Release|Win32">
-      <Configuration>Release</Configuration>
-      <Platform>Win32</Platform>
     </ProjectConfiguration>
     <ProjectConfiguration Include="Release|x64">
       <Configuration>Release</Configuration>
@@ -25,23 +17,10 @@
     <ProjectName>Kitsune</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
-    <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
-    <CharacterSet>MultiByte</CharacterSet>
-  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v143</PlatformToolset>
-    <CharacterSet>MultiByte</CharacterSet>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
-    <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
-    <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
@@ -54,51 +33,19 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
   </ImportGroup>
-  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
-  </ImportGroup>
   <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
-    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
-  </ImportGroup>
-  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <EmbedManifest>false</EmbedManifest>
-  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <EmbedManifest>false</EmbedManifest>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <EmbedManifest>false</EmbedManifest>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <EmbedManifest>false</EmbedManifest>
   </PropertyGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <ClCompile>
-      <WarningLevel>Level3</WarningLevel>
-      <Optimization>Disabled</Optimization>
-      <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(SolutionDir)mysql\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)zip;$(SolutionDir)libarchive;$(SolutionDir)libarchive/lzma;$(SolutionDir)Imgui;$(SolutionDir)hiredis;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <DisableSpecificWarnings>4703;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <PreprocessorDefinitions>STANDALONEGFF;_CRT_SECURE_NO_WARNINGS;ImTextureID=ImU64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-    </ClCompile>
-    <Link>
-      <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
-      <LargeAddressAware>true</LargeAddressAware>
-      <IgnoreAllDefaultLibraries>
-      </IgnoreAllDefaultLibraries>
-      <ImportLibrary>
-      </ImportLibrary>
-      <IgnoreSpecificDefaultLibraries>msvcrt.lib;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
-    </Link>
-  </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
@@ -117,29 +64,6 @@
       <ImportLibrary>
       </ImportLibrary>
       <IgnoreSpecificDefaultLibraries>msvcrt.lib;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
-    </Link>
-  </ItemDefinitionGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <ClCompile>
-      <WarningLevel>Level3</WarningLevel>
-      <Optimization>MaxSpeed</Optimization>
-      <FunctionLevelLinking>true</FunctionLevelLinking>
-      <IntrinsicFunctions>true</IntrinsicFunctions>
-      <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(SolutionDir)mysql\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)zip;$(SolutionDir)libarchive;$(SolutionDir)libarchive/lzma;$(SolutionDir)Imgui;$(SolutionDir)hiredis;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <DisableSpecificWarnings>4703;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <PreprocessorDefinitions>STANDALONEGFF;_CRT_SECURE_NO_WARNINGS;ImTextureID=ImU64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-    </ClCompile>
-    <Link>
-      <GenerateDebugInformation>true</GenerateDebugInformation>
-      <EnableCOMDATFolding>true</EnableCOMDATFolding>
-      <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
-      <LargeAddressAware>true</LargeAddressAware>
-      <IgnoreAllDefaultLibraries>
-      </IgnoreAllDefaultLibraries>
-      <ImportLibrary>
-      </ImportLibrary>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -231,7 +155,6 @@
     <ClCompile Include="LuaLinkedListMain.cpp" />
     <ClCompile Include="LuaMutex.cpp" />
     <ClCompile Include="LuaMutexMain.cpp" />
-    <ClCompile Include="LuaMySQLResult.cpp" />
     <ClCompile Include="LuaSha256.cpp" />
     <ClCompile Include="luasocket.cpp" />
     <ClCompile Include="luasocketmain.cpp" />
@@ -244,7 +167,6 @@
     <ClCompile Include="MacroMain.cpp" />
     <ClCompile Include="mem.cpp" />
     <ClCompile Include="MemoryManager.cpp" />
-    <ClCompile Include="mysql_main_incl.cpp" />
     <ClCompile Include="namedpipe.cpp" />
     <ClCompile Include="NamedPipeMain.cpp" />
     <ClCompile Include="odbc.cpp" />
@@ -274,7 +196,6 @@
     <ClCompile Include="LuaServerMain.cpp" />
     <ClCompile Include="LuaSQLite.cpp" />
     <ClCompile Include="LuaSQLiteMain.cpp" />
-    <ClCompile Include="luazip.cpp" />
     <ClCompile Include="Lua\lapi.c" />
     <ClCompile Include="Lua\lauxlib.c" />
     <ClCompile Include="Lua\lbaselib.c" />
@@ -325,7 +246,6 @@
     <ClCompile Include="TimerMain.cpp" />
     <ClCompile Include="tlk.cpp" />
     <ClCompile Include="TlkMain.cpp" />
-    <ClCompile Include="ZIPMain.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="2da.h" />
@@ -348,21 +268,6 @@
     <ClInclude Include="Imgui\imstb_truetype.h" />
     <ClInclude Include="libarchive\archive.h" />
     <ClInclude Include="libarchive\archive_entry.h" />
-    <ClInclude Include="libarchive\lzma.h" />
-    <ClInclude Include="libarchive\lzma\base.h" />
-    <ClInclude Include="libarchive\lzma\bcj.h" />
-    <ClInclude Include="libarchive\lzma\block.h" />
-    <ClInclude Include="libarchive\lzma\check.h" />
-    <ClInclude Include="libarchive\lzma\container.h" />
-    <ClInclude Include="libarchive\lzma\delta.h" />
-    <ClInclude Include="libarchive\lzma\filter.h" />
-    <ClInclude Include="libarchive\lzma\hardware.h" />
-    <ClInclude Include="libarchive\lzma\index.h" />
-    <ClInclude Include="libarchive\lzma\index_hash.h" />
-    <ClInclude Include="libarchive\lzma\lzma12.h" />
-    <ClInclude Include="libarchive\lzma\stream_flags.h" />
-    <ClInclude Include="libarchive\lzma\version.h" />
-    <ClInclude Include="libarchive\lzma\vli.h" />
     <ClInclude Include="LuaArchive.h" />
     <ClInclude Include="LuaArchiveMain.h" />
     <ClInclude Include="base64.h" />
@@ -415,7 +320,6 @@
     <ClInclude Include="LuaLinkedListMain.h" />
     <ClInclude Include="LuaMutex.h" />
     <ClInclude Include="LuaMutexMain.h" />
-    <ClInclude Include="LuaMySQLResult.h" />
     <ClInclude Include="LuaSha256.h" />
     <ClInclude Include="luasocket.h" />
     <ClInclude Include="luasocketmain.h" />
@@ -428,7 +332,6 @@
     <ClInclude Include="MacroMain.h" />
     <ClInclude Include="mem.h" />
     <ClInclude Include="MemoryManager.h" />
-    <ClInclude Include="mysql_main_incl.h" />
     <ClInclude Include="namedpipe.h" />
     <ClInclude Include="NamedPipeMain.h" />
     <ClInclude Include="odbc.h" />
@@ -501,15 +404,10 @@
     <ClInclude Include="TimerMain.h" />
     <ClInclude Include="tlk.h" />
     <ClInclude Include="TlkMain.h" />
-    <ClInclude Include="luazip.h" />
-    <ClInclude Include="ZIPMain.h" />
-    <ClInclude Include="zip\zip.h" />
-    <ClInclude Include="zip\zipconf.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="main.lua">
       <FileType>Document</FileType>
-      <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</DeploymentContent>
       <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</DeploymentContent>
     </Text>
   </ItemGroup>
