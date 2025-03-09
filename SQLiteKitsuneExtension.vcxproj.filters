@@ -16,6 +16,9 @@
     <Filter Include="Lua">
       <UniqueIdentifier>{8f4a6cbd-7613-4e0f-9df3-41da212451b3}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Kitsune">
+      <UniqueIdentifier>{1b128717-2db9-4139-b6af-8388d3ce5d56}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp">
@@ -129,6 +132,21 @@
     <ClCompile Include="Lua\lzio.c">
       <Filter>Lua</Filter>
     </ClCompile>
+    <ClCompile Include="LuaArchive.cpp">
+      <Filter>Kitsune</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaArchiveMain.cpp">
+      <Filter>Kitsune</Filter>
+    </ClCompile>
+    <ClCompile Include="luawchar.cpp">
+      <Filter>Kitsune</Filter>
+    </ClCompile>
+    <ClCompile Include="wcharmain.cpp">
+      <Filter>Kitsune</Filter>
+    </ClCompile>
+    <ClCompile Include="mem.cpp">
+      <Filter>Kitsune</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="SQLite\sqlite3.h">
@@ -203,9 +221,6 @@
     <ClInclude Include="Lua\lua.hpp">
       <Filter>Lua</Filter>
     </ClInclude>
-    <ClInclude Include="lua_main_incl.h">
-      <Filter>Lua</Filter>
-    </ClInclude>
     <ClInclude Include="Lua\luaconf.h">
       <Filter>Lua</Filter>
     </ClInclude>
@@ -220,6 +235,30 @@
     </ClInclude>
     <ClInclude Include="Lua\lzio.h">
       <Filter>Lua</Filter>
+    </ClInclude>
+    <ClInclude Include="libarchive\archive.h">
+      <Filter>Kitsune</Filter>
+    </ClInclude>
+    <ClInclude Include="libarchive\archive_entry.h">
+      <Filter>Kitsune</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaArchive.h">
+      <Filter>Kitsune</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaArchiveMain.h">
+      <Filter>Kitsune</Filter>
+    </ClInclude>
+    <ClInclude Include="luawchar.h">
+      <Filter>Kitsune</Filter>
+    </ClInclude>
+    <ClInclude Include="lua_main_incl.h">
+      <Filter>Kitsune</Filter>
+    </ClInclude>
+    <ClInclude Include="wcharmain.h">
+      <Filter>Kitsune</Filter>
+    </ClInclude>
+    <ClInclude Include="mem.h">
+      <Filter>Kitsune</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

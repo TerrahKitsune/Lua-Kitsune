@@ -88,6 +88,9 @@
   <ItemGroup>
     <ClCompile Include="dlllua.cpp" />
     <ClCompile Include="dllmain.cpp" />
+    <ClCompile Include="LuaArchive.cpp" />
+    <ClCompile Include="LuaArchiveMain.cpp" />
+    <ClCompile Include="luawchar.cpp" />
     <ClCompile Include="Lua\lapi.c" />
     <ClCompile Include="Lua\lauxlib.c" />
     <ClCompile Include="Lua\lbaselib.c" />
@@ -122,10 +125,17 @@
     <ClCompile Include="Lua\lutf8lib.c" />
     <ClCompile Include="Lua\lvm.c" />
     <ClCompile Include="Lua\lzio.c" />
+    <ClCompile Include="mem.cpp" />
     <ClCompile Include="SQLite\sqlite3.c" />
+    <ClCompile Include="wcharmain.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="dlllua.h" />
+    <ClInclude Include="libarchive\archive.h" />
+    <ClInclude Include="libarchive\archive_entry.h" />
+    <ClInclude Include="LuaArchive.h" />
+    <ClInclude Include="LuaArchiveMain.h" />
+    <ClInclude Include="luawchar.h" />
     <ClInclude Include="Lua\lapi.h" />
     <ClInclude Include="Lua\lauxlib.h" />
     <ClInclude Include="Lua\lcode.h" />
@@ -153,8 +163,10 @@
     <ClInclude Include="Lua\lvm.h" />
     <ClInclude Include="Lua\lzio.h" />
     <ClInclude Include="lua_main_incl.h" />
+    <ClInclude Include="mem.h" />
     <ClInclude Include="SQLite\sqlite3.h" />
     <ClInclude Include="SQLite\sqlite3ext.h" />
+    <ClInclude Include="wcharmain.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
