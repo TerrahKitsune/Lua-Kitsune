@@ -54,10 +54,11 @@
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;SQLITEKITSUNEEXTENSION_EXPORTS;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <ConformanceMode>true</ConformanceMode>
+      <ConformanceMode>Default</ConformanceMode>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>
       </PrecompiledHeaderFile>
+      <AdditionalIncludeDirectories>$(SolutionDir)mysql\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)libarchive;$(SolutionDir)hiredis;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -72,10 +73,11 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;NDEBUG;SQLITEKITSUNEEXTENSION_EXPORTS;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <ConformanceMode>true</ConformanceMode>
+      <ConformanceMode>Default</ConformanceMode>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>
       </PrecompiledHeaderFile>
+      <AdditionalIncludeDirectories>$(SolutionDir)mysql\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)libarchive;$(SolutionDir)hiredis;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -86,10 +88,41 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="aes.c" />
+    <ClCompile Include="base64.cpp" />
+    <ClCompile Include="Bencode.cpp" />
     <ClCompile Include="dlllua.cpp" />
     <ClCompile Include="dllmain.cpp" />
+    <ClCompile Include="Http.cpp" />
+    <ClCompile Include="HttpCoroutine.cpp" />
+    <ClCompile Include="HttpMain.cpp" />
+    <ClCompile Include="jsondecode.cpp" />
+    <ClCompile Include="jsonencode.cpp" />
+    <ClCompile Include="jsonutil.cpp" />
+    <ClCompile Include="kafkahelpers.cpp" />
+    <ClCompile Include="luaaes.cpp" />
+    <ClCompile Include="LuaAesMain.cpp" />
     <ClCompile Include="LuaArchive.cpp" />
     <ClCompile Include="LuaArchiveMain.cpp" />
+    <ClCompile Include="luacsv.cpp" />
+    <ClCompile Include="LuaCsvMain.cpp" />
+    <ClCompile Include="LuaFileSystem.cpp" />
+    <ClCompile Include="LuaFileSystemMain.cpp" />
+    <ClCompile Include="LuaFTP.cpp" />
+    <ClCompile Include="LuaFTPChannel.cpp" />
+    <ClCompile Include="LuaFTPMain.cpp" />
+    <ClCompile Include="luajsonmain.cpp" />
+    <ClCompile Include="luakafka.cpp" />
+    <ClCompile Include="luakafkamain.cpp" />
+    <ClCompile Include="luakafkamessage.cpp" />
+    <ClCompile Include="luakafkatopic.cpp" />
+    <ClCompile Include="LuaMD5.cpp" />
+    <ClCompile Include="LuaMutex.cpp" />
+    <ClCompile Include="LuaMutexMain.cpp" />
+    <ClCompile Include="LuaMySQL.cpp" />
+    <ClCompile Include="LuaSha256.cpp" />
+    <ClCompile Include="LuaSQLite.cpp" />
+    <ClCompile Include="LuaSQLiteMain.cpp" />
     <ClCompile Include="luawchar.cpp" />
     <ClCompile Include="Lua\lapi.c" />
     <ClCompile Include="Lua\lauxlib.c" />
@@ -125,16 +158,64 @@
     <ClCompile Include="Lua\lutf8lib.c" />
     <ClCompile Include="Lua\lvm.c" />
     <ClCompile Include="Lua\lzio.c" />
+    <ClCompile Include="lua_json.cpp" />
+    <ClCompile Include="md5.c" />
+    <ClCompile Include="MD5Main.cpp" />
     <ClCompile Include="mem.cpp" />
+    <ClCompile Include="MySQLMain.cpp" />
+    <ClCompile Include="namedpipe.cpp" />
+    <ClCompile Include="NamedPipeMain.cpp" />
+    <ClCompile Include="networking.cpp" />
+    <ClCompile Include="odbc.cpp" />
+    <ClCompile Include="ODBCMain.cpp" />
+    <ClCompile Include="Redis.cpp" />
+    <ClCompile Include="RedisMain.cpp" />
+    <ClCompile Include="sha256.c" />
+    <ClCompile Include="Sha256Main.cpp" />
     <ClCompile Include="SQLite\sqlite3.c" />
+    <ClCompile Include="stream.cpp" />
+    <ClCompile Include="StreamMain.cpp" />
+    <ClCompile Include="Timer.cpp" />
+    <ClCompile Include="TimerMain.cpp" />
     <ClCompile Include="wcharmain.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="aes.h" />
+    <ClInclude Include="aes.hpp" />
+    <ClInclude Include="base64.h" />
+    <ClInclude Include="Bencode.h" />
     <ClInclude Include="dlllua.h" />
+    <ClInclude Include="Http.h" />
+    <ClInclude Include="HttpMain.h" />
+    <ClInclude Include="jsondecode.h" />
+    <ClInclude Include="jsonencode.h" />
+    <ClInclude Include="jsonutil.h" />
+    <ClInclude Include="kafkahelpers.h" />
     <ClInclude Include="libarchive\archive.h" />
     <ClInclude Include="libarchive\archive_entry.h" />
+    <ClInclude Include="luaaes.h" />
+    <ClInclude Include="LuaAesMain.h" />
     <ClInclude Include="LuaArchive.h" />
     <ClInclude Include="LuaArchiveMain.h" />
+    <ClInclude Include="luacsv.h" />
+    <ClInclude Include="LuaCsvMain.h" />
+    <ClInclude Include="LuaFileSystem.h" />
+    <ClInclude Include="LuaFileSystemMain.h" />
+    <ClInclude Include="LuaFTP.h" />
+    <ClInclude Include="LuaFTPChannel.h" />
+    <ClInclude Include="LuaFTPMain.h" />
+    <ClInclude Include="luajsonmain.h" />
+    <ClInclude Include="luakafka.h" />
+    <ClInclude Include="luakafkamain.h" />
+    <ClInclude Include="luakafkamessage.h" />
+    <ClInclude Include="luakafkatopic.h" />
+    <ClInclude Include="LuaMD5.h" />
+    <ClInclude Include="LuaMutex.h" />
+    <ClInclude Include="LuaMutexMain.h" />
+    <ClInclude Include="LuaMySQL.h" />
+    <ClInclude Include="LuaSha256.h" />
+    <ClInclude Include="LuaSQLite.h" />
+    <ClInclude Include="LuaSQLiteMain.h" />
     <ClInclude Include="luawchar.h" />
     <ClInclude Include="Lua\lapi.h" />
     <ClInclude Include="Lua\lauxlib.h" />
@@ -162,13 +243,41 @@
     <ClInclude Include="Lua\lundump.h" />
     <ClInclude Include="Lua\lvm.h" />
     <ClInclude Include="Lua\lzio.h" />
+    <ClInclude Include="lua_json.h" />
     <ClInclude Include="lua_main_incl.h" />
+    <ClInclude Include="md5.h" />
+    <ClInclude Include="MD5Main.h" />
     <ClInclude Include="mem.h" />
+    <ClInclude Include="MySQLMain.h" />
+    <ClInclude Include="namedpipe.h" />
+    <ClInclude Include="NamedPipeMain.h" />
+    <ClInclude Include="networking.h" />
+    <ClInclude Include="odbc.h" />
+    <ClInclude Include="ODBCMain.h" />
+    <ClInclude Include="Redis.h" />
+    <ClInclude Include="RedisMain.h" />
+    <ClInclude Include="sha256.h" />
+    <ClInclude Include="Sha256Main.h" />
     <ClInclude Include="SQLite\sqlite3.h" />
     <ClInclude Include="SQLite\sqlite3ext.h" />
+    <ClInclude Include="stream.h" />
+    <ClInclude Include="StreamMain.h" />
+    <ClInclude Include="Timer.h" />
+    <ClInclude Include="TimerMain.h" />
     <ClInclude Include="wcharmain.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
+    <None Include="sqlitemain.lua" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
+    <Import Project="packages\librdkafka.redist.1.9.2\build\native\librdkafka.redist.targets" Condition="Exists('packages\librdkafka.redist.1.9.2\build\native\librdkafka.redist.targets')" />
   </ImportGroup>
+  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
+    </PropertyGroup>
+    <Error Condition="!Exists('packages\librdkafka.redist.1.9.2\build\native\librdkafka.redist.targets')" Text="$([System.String]::Format('$(ErrorText)', 'packages\librdkafka.redist.1.9.2\build\native\librdkafka.redist.targets'))" />
+  </Target>
 </Project>

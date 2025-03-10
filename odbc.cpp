@@ -764,7 +764,7 @@ int ODBCGetRow(lua_State* L) {
 	SQLULEN columnsize;
 	SQLSMALLINT decimaldigits;
 	SQLSMALLINT nullable;
-	SQLPOINTER data;
+	SQLPOINTER data = NULL;
 	SQLULEN datalen;
 	SQLCHAR bit;
 
@@ -789,6 +789,7 @@ int ODBCGetRow(lua_State* L) {
 
 			if (!data) {
 				luaL_error(L, "Unable to allocate memory");
+				return 0;
 			}
 
 			if (!SUCCEEDED(SQLGetData(odbc->stmt, i + 1, SQL_C_DOUBLE, data, sizeof(lua_Number), (SQLLEN*)&datalen))) {
@@ -814,6 +815,7 @@ int ODBCGetRow(lua_State* L) {
 
 			if (!data) {
 				luaL_error(L, "Unable to allocate memory");
+				return 0;
 			}
 
 			if (!SUCCEEDED(SQLGetData(odbc->stmt, i + 1, SQL_C_SLONG, data, sizeof(lua_Integer), (SQLLEN*)&datalen))) {
@@ -858,6 +860,7 @@ int ODBCGetRow(lua_State* L) {
 
 			if (!data) {
 				luaL_error(L, "Unable to allocate memory");
+				return 0;
 			}
 
 			if (!SUCCEEDED(SQLGetData(odbc->stmt, i + 1, SQL_WCHAR, data, columnsize * sizeof(wchar_t), (SQLLEN*)&datalen))) {

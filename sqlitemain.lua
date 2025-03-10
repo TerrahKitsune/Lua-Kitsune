@@ -1,0 +1,3 @@
+﻿
+
+return Wchar.FromAnsi("test");

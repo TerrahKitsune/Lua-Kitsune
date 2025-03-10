@@ -143,3 +143,5 @@ local j = Json.Create();
 local sqlite = SQLite.Open();
 
 assert(sqlite:Query([[SELECT load_extension("C:/Users/Terrah/Documents/GitHub/Lua-Kitsune/x64/Debug/SQLiteKitsune.dll");]]));
+assert(sqlite:Query([[SELECT ExecuteLuaString("return dofile('C:/Users/Terrah/Documents/GitHub/Lua-Kitsune/sqlitemain.lua')");]]));
+assert(sqlite:Fetch()); print(sqlite:GetRow(1));

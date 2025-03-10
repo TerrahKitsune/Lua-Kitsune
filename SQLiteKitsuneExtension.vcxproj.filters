@@ -19,6 +19,177 @@
     <Filter Include="Kitsune">
       <UniqueIdentifier>{1b128717-2db9-4139-b6af-8388d3ce5d56}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Kitsune\LuaJson">
+      <UniqueIdentifier>{66667aaf-42a1-40d8-aced-0821c3fe3b74}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaJson\Header Files">
+      <UniqueIdentifier>{3a824431-2202-4ce6-8fd7-48a93d9f3904}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaJson\Source Files">
+      <UniqueIdentifier>{bc89ddd4-dd4c-499f-96ff-4b52a60bc8b9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\Archive">
+      <UniqueIdentifier>{b84b0ce9-1ca2-41f1-962a-9ba892aa01de}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\Archive\Header Files">
+      <UniqueIdentifier>{47bff67d-84fa-4b61-b9b6-738ca8f90f52}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\Archive\Source Files">
+      <UniqueIdentifier>{178bfcb1-cf00-4a05-b5a0-48f735603a96}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaWchar">
+      <UniqueIdentifier>{d6fbf42f-28bc-418b-ba95-fc29f48fc590}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaWchar\Header Files">
+      <UniqueIdentifier>{5ba370a8-0755-446b-ab57-616fa591d607}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaWchar\Source Files">
+      <UniqueIdentifier>{9d136a9e-6093-4fae-bb45-a541ec37f437}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaStream">
+      <UniqueIdentifier>{1c312859-099b-4981-97f7-81105fe9f8a8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaStream\Header Files">
+      <UniqueIdentifier>{eef4728e-36a3-4df8-b67a-68b137e09ebf}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaStream\Source Files">
+      <UniqueIdentifier>{3dea2567-1d45-4d62-8d7c-3e5a8c2f8ddc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaAes">
+      <UniqueIdentifier>{49c33c61-efdb-49ad-86bd-8298ba95f542}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaAes\Header Files">
+      <UniqueIdentifier>{8ead77f0-b3f4-4ead-9dca-e85504e22a72}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaAes\Source Files">
+      <UniqueIdentifier>{13e1891d-c50b-4be6-8c74-fc83d7953665}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaCSV">
+      <UniqueIdentifier>{223875e8-cc71-49a9-a417-fc2a306d850d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaCSV\Header Files">
+      <UniqueIdentifier>{2670daaf-db3d-4fe9-a1c4-72a38082299b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaCSV\Source Files">
+      <UniqueIdentifier>{2c044a1f-9bbd-46e5-8d84-99cfd51bb39b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaFileSystem">
+      <UniqueIdentifier>{fa61f0a7-4a79-4952-9a89-bf8b77efa95b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaFileSystem\Header Files">
+      <UniqueIdentifier>{d995ac05-975b-4df6-b3e9-2fbdff4583d8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaFileSystem\Source Files">
+      <UniqueIdentifier>{c1ff2b9e-a456-43ce-868a-acd328e2b967}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaFTP">
+      <UniqueIdentifier>{8e28cf8e-77e8-4496-b7e1-d34012a37a9d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaFTP\Header Files">
+      <UniqueIdentifier>{b5174714-7e52-4205-af5a-2b1733315750}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaFTP\Source Files">
+      <UniqueIdentifier>{49e00b4a-a63b-457b-bf17-f78b555b8f18}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaHTTP">
+      <UniqueIdentifier>{f7d33e86-ba9b-4063-b645-9d8adbee1e65}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaHTTP\Header Files">
+      <UniqueIdentifier>{d6ac206e-79e2-4915-9f88-b411dffc0042}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaHTTP\Source Files">
+      <UniqueIdentifier>{6800b08b-132f-4efb-aa8e-8c910fd80cc8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaKafka">
+      <UniqueIdentifier>{412e62d8-1977-496e-9a9f-a569e2492d79}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaKafka\Header Files">
+      <UniqueIdentifier>{ab241ea7-518b-48f8-a1f8-1df016a33d60}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaKafka\Source Files">
+      <UniqueIdentifier>{048db624-5cc5-4154-a79a-24ad7b3d7f34}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaMD5">
+      <UniqueIdentifier>{37e291a1-f1b4-4609-ad39-84b7861c0c12}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaMD5\Header Files">
+      <UniqueIdentifier>{86157d7a-f83a-4134-bd43-ef931d241338}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaMD5\Source Files">
+      <UniqueIdentifier>{d289210b-a0f9-4b97-bbe3-c56fa1b86c63}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaMutex">
+      <UniqueIdentifier>{e1d79bbf-a532-4b4c-bbab-765763bd33ec}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaMutex\Header Files">
+      <UniqueIdentifier>{c62ac36e-e8cb-4055-ad1f-78e4f5d3535f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaMutex\Source Files">
+      <UniqueIdentifier>{72030756-93bf-4ca6-b94a-af938c2d4c22}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaMySQL">
+      <UniqueIdentifier>{634fe6df-f197-4597-aac8-4e1617f70a6c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaMySQL\Header Files">
+      <UniqueIdentifier>{5300f4f5-b33d-4288-af3a-a49a20a609de}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaMySQL\Source Files">
+      <UniqueIdentifier>{b2b51430-ded9-4f2e-abe0-32d0f780f701}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaODBC">
+      <UniqueIdentifier>{78fe964c-4659-4613-9dfa-e3f1969dc2a4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaODBC\Header Files">
+      <UniqueIdentifier>{992d5c66-89ab-499e-9b9b-d383ecfc3d17}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaODBC\Source Files">
+      <UniqueIdentifier>{4a7f1b5e-e921-46b1-ad40-7c2769c0f5ba}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaRedis">
+      <UniqueIdentifier>{425e033f-d5b7-4985-94ad-fafc826e9ecf}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaRedis\Header Files">
+      <UniqueIdentifier>{62efa870-7a9a-48f7-818c-fbd4df9e27ad}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaRedis\Source Files">
+      <UniqueIdentifier>{f3e4b25e-e8f9-46f8-b376-73f245ea673e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaSQLite">
+      <UniqueIdentifier>{665045e8-5c07-4aaf-8f47-44d902f71abd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaSQLite\Header Files">
+      <UniqueIdentifier>{34f691b1-c5a4-4a06-a66b-fa436e373afe}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaSQLite\Source Files">
+      <UniqueIdentifier>{28d12875-5002-4cb8-9148-fb5e156d379a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaSha256">
+      <UniqueIdentifier>{a9312ce5-7dbb-4593-a233-3c8e9059ed51}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaSha256\Header Files">
+      <UniqueIdentifier>{30f83e1f-f13e-4f74-8f32-fea1c01b7c73}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaSha256\Source Files">
+      <UniqueIdentifier>{fd4a6f3a-4052-4802-960f-5f89b0e2e7aa}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaTimer">
+      <UniqueIdentifier>{72f3ae3f-5a20-4dc0-ada6-8e5213785e1d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaTimer\Header Files">
+      <UniqueIdentifier>{d85e7d9e-d2ff-4f6f-bfc3-b00376d38266}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaTimer\Source Files">
+      <UniqueIdentifier>{45874707-f2cd-4cca-bb76-5d86d131e690}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\NamedPipes">
+      <UniqueIdentifier>{79e04a15-8e4e-4df9-9c89-e357777fed45}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\NamedPipes\Header Files">
+      <UniqueIdentifier>{fe801468-b841-4d80-a8bf-16b10540854f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\NamedPipes\Source Files">
+      <UniqueIdentifier>{f4165156-70fd-4d83-9bec-40154121e23b}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp">
@@ -132,20 +303,164 @@
     <ClCompile Include="Lua\lzio.c">
       <Filter>Lua</Filter>
     </ClCompile>
-    <ClCompile Include="LuaArchive.cpp">
-      <Filter>Kitsune</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaArchiveMain.cpp">
-      <Filter>Kitsune</Filter>
-    </ClCompile>
-    <ClCompile Include="luawchar.cpp">
-      <Filter>Kitsune</Filter>
-    </ClCompile>
-    <ClCompile Include="wcharmain.cpp">
-      <Filter>Kitsune</Filter>
-    </ClCompile>
     <ClCompile Include="mem.cpp">
       <Filter>Kitsune</Filter>
+    </ClCompile>
+    <ClCompile Include="luajsonmain.cpp">
+      <Filter>Kitsune\LuaJson</Filter>
+    </ClCompile>
+    <ClCompile Include="jsondecode.cpp">
+      <Filter>Kitsune\LuaJson\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="jsonencode.cpp">
+      <Filter>Kitsune\LuaJson\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="jsonutil.cpp">
+      <Filter>Kitsune\LuaJson\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="lua_json.cpp">
+      <Filter>Kitsune\LuaJson\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaArchiveMain.cpp">
+      <Filter>Kitsune\Archive</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaArchive.cpp">
+      <Filter>Kitsune\Archive\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="wcharmain.cpp">
+      <Filter>Kitsune\LuaWchar</Filter>
+    </ClCompile>
+    <ClCompile Include="luawchar.cpp">
+      <Filter>Kitsune\LuaWchar\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="StreamMain.cpp">
+      <Filter>Kitsune\LuaStream</Filter>
+    </ClCompile>
+    <ClCompile Include="stream.cpp">
+      <Filter>Kitsune\LuaStream\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaAesMain.cpp">
+      <Filter>Kitsune\LuaAes</Filter>
+    </ClCompile>
+    <ClCompile Include="aes.c">
+      <Filter>Kitsune\LuaAes\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="luaaes.cpp">
+      <Filter>Kitsune\LuaAes\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaCsvMain.cpp">
+      <Filter>Kitsune\LuaCSV</Filter>
+    </ClCompile>
+    <ClCompile Include="luacsv.cpp">
+      <Filter>Kitsune\LuaCSV\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaFileSystemMain.cpp">
+      <Filter>Kitsune\LuaFileSystem</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaFileSystem.cpp">
+      <Filter>Kitsune\LuaFileSystem\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaFTPMain.cpp">
+      <Filter>Kitsune\LuaFTP</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaFTP.cpp">
+      <Filter>Kitsune\LuaFTP\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaFTPChannel.cpp">
+      <Filter>Kitsune\LuaFTP\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="HttpMain.cpp">
+      <Filter>Kitsune\LuaHTTP</Filter>
+    </ClCompile>
+    <ClCompile Include="HttpCoroutine.cpp">
+      <Filter>Kitsune\LuaHTTP\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Http.cpp">
+      <Filter>Kitsune\LuaHTTP\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="luakafkamain.cpp">
+      <Filter>Kitsune\LuaKafka</Filter>
+    </ClCompile>
+    <ClCompile Include="kafkahelpers.cpp">
+      <Filter>Kitsune\LuaKafka\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="luakafka.cpp">
+      <Filter>Kitsune\LuaKafka\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="luakafkamessage.cpp">
+      <Filter>Kitsune\LuaKafka\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="luakafkatopic.cpp">
+      <Filter>Kitsune\LuaKafka\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="MD5Main.cpp">
+      <Filter>Kitsune\LuaMD5</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaMD5.cpp">
+      <Filter>Kitsune\LuaMD5\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="md5.c">
+      <Filter>Kitsune\LuaMD5\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaMutexMain.cpp">
+      <Filter>Kitsune\LuaMutex</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaMutex.cpp">
+      <Filter>Kitsune\LuaMutex\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="MySQLMain.cpp">
+      <Filter>Kitsune\LuaMySQL</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaMySQL.cpp">
+      <Filter>Kitsune\LuaMySQL\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ODBCMain.cpp">
+      <Filter>Kitsune\LuaODBC</Filter>
+    </ClCompile>
+    <ClCompile Include="odbc.cpp">
+      <Filter>Kitsune\LuaODBC\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="RedisMain.cpp">
+      <Filter>Kitsune\LuaRedis</Filter>
+    </ClCompile>
+    <ClCompile Include="Redis.cpp">
+      <Filter>Kitsune\LuaRedis\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaSQLiteMain.cpp">
+      <Filter>Kitsune\LuaSQLite</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaSQLite.cpp">
+      <Filter>Kitsune\LuaSQLite\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Sha256Main.cpp">
+      <Filter>Kitsune\LuaSha256</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaSha256.cpp">
+      <Filter>Kitsune\LuaSha256\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="sha256.c">
+      <Filter>Kitsune\LuaSha256\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="TimerMain.cpp">
+      <Filter>Kitsune\LuaTimer</Filter>
+    </ClCompile>
+    <ClCompile Include="Timer.cpp">
+      <Filter>Kitsune\LuaTimer\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="NamedPipeMain.cpp">
+      <Filter>Kitsune\NamedPipes</Filter>
+    </ClCompile>
+    <ClCompile Include="namedpipe.cpp">
+      <Filter>Kitsune\NamedPipes\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="base64.cpp">
+      <Filter>Kitsune</Filter>
+    </ClCompile>
+    <ClCompile Include="Bencode.cpp">
+      <Filter>Kitsune</Filter>
+    </ClCompile>
+    <ClCompile Include="networking.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -236,29 +551,177 @@
     <ClInclude Include="Lua\lzio.h">
       <Filter>Lua</Filter>
     </ClInclude>
-    <ClInclude Include="libarchive\archive.h">
-      <Filter>Kitsune</Filter>
-    </ClInclude>
-    <ClInclude Include="libarchive\archive_entry.h">
-      <Filter>Kitsune</Filter>
-    </ClInclude>
-    <ClInclude Include="LuaArchive.h">
-      <Filter>Kitsune</Filter>
-    </ClInclude>
-    <ClInclude Include="LuaArchiveMain.h">
-      <Filter>Kitsune</Filter>
-    </ClInclude>
-    <ClInclude Include="luawchar.h">
-      <Filter>Kitsune</Filter>
-    </ClInclude>
     <ClInclude Include="lua_main_incl.h">
-      <Filter>Kitsune</Filter>
-    </ClInclude>
-    <ClInclude Include="wcharmain.h">
       <Filter>Kitsune</Filter>
     </ClInclude>
     <ClInclude Include="mem.h">
       <Filter>Kitsune</Filter>
     </ClInclude>
+    <ClInclude Include="luajsonmain.h">
+      <Filter>Kitsune\LuaJson</Filter>
+    </ClInclude>
+    <ClInclude Include="jsondecode.h">
+      <Filter>Kitsune\LuaJson\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="jsonencode.h">
+      <Filter>Kitsune\LuaJson\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="jsonutil.h">
+      <Filter>Kitsune\LuaJson\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lua_json.h">
+      <Filter>Kitsune\LuaJson\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaArchiveMain.h">
+      <Filter>Kitsune\Archive</Filter>
+    </ClInclude>
+    <ClInclude Include="libarchive\archive.h">
+      <Filter>Kitsune\Archive\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="libarchive\archive_entry.h">
+      <Filter>Kitsune\Archive\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaArchive.h">
+      <Filter>Kitsune\Archive\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="wcharmain.h">
+      <Filter>Kitsune\LuaWchar</Filter>
+    </ClInclude>
+    <ClInclude Include="luawchar.h">
+      <Filter>Kitsune\LuaWchar\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="StreamMain.h">
+      <Filter>Kitsune\LuaStream</Filter>
+    </ClInclude>
+    <ClInclude Include="stream.h">
+      <Filter>Kitsune\LuaStream\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaAesMain.h">
+      <Filter>Kitsune\LuaAes</Filter>
+    </ClInclude>
+    <ClInclude Include="aes.h">
+      <Filter>Kitsune\LuaAes\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="aes.hpp">
+      <Filter>Kitsune\LuaAes\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="luaaes.h">
+      <Filter>Kitsune\LuaAes\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaCsvMain.h">
+      <Filter>Kitsune\LuaCSV</Filter>
+    </ClInclude>
+    <ClInclude Include="luacsv.h">
+      <Filter>Kitsune\LuaCSV\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaFileSystemMain.h">
+      <Filter>Kitsune\LuaFileSystem</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaFileSystem.h">
+      <Filter>Kitsune\LuaFileSystem\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaFTPMain.h">
+      <Filter>Kitsune\LuaFTP</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaFTP.h">
+      <Filter>Kitsune\LuaFTP\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaFTPChannel.h">
+      <Filter>Kitsune\LuaFTP\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="HttpMain.h">
+      <Filter>Kitsune\LuaHTTP</Filter>
+    </ClInclude>
+    <ClInclude Include="Http.h">
+      <Filter>Kitsune\LuaHTTP\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="luakafkamain.h">
+      <Filter>Kitsune\LuaKafka</Filter>
+    </ClInclude>
+    <ClInclude Include="kafkahelpers.h">
+      <Filter>Kitsune\LuaKafka\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="luakafka.h">
+      <Filter>Kitsune\LuaKafka\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="luakafkamessage.h">
+      <Filter>Kitsune\LuaKafka\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="luakafkatopic.h">
+      <Filter>Kitsune\LuaKafka\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="MD5Main.h">
+      <Filter>Kitsune\LuaMD5</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaMD5.h">
+      <Filter>Kitsune\LuaMD5\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="md5.h">
+      <Filter>Kitsune\LuaMD5\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaMutexMain.h">
+      <Filter>Kitsune\LuaMutex</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaMutex.h">
+      <Filter>Kitsune\LuaMutex\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="MySQLMain.h">
+      <Filter>Kitsune\LuaMySQL</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaMySQL.h">
+      <Filter>Kitsune\LuaMySQL\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ODBCMain.h">
+      <Filter>Kitsune\LuaODBC</Filter>
+    </ClInclude>
+    <ClInclude Include="odbc.h">
+      <Filter>Kitsune\LuaODBC\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="RedisMain.h">
+      <Filter>Kitsune\LuaRedis</Filter>
+    </ClInclude>
+    <ClInclude Include="Redis.h">
+      <Filter>Kitsune\LuaRedis\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaSQLiteMain.h">
+      <Filter>Kitsune\LuaSQLite</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaSQLite.h">
+      <Filter>Kitsune\LuaSQLite\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Sha256Main.h">
+      <Filter>Kitsune\LuaSha256</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaSha256.h">
+      <Filter>Kitsune\LuaSha256\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="sha256.h">
+      <Filter>Kitsune\LuaSha256\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="TimerMain.h">
+      <Filter>Kitsune\LuaTimer</Filter>
+    </ClInclude>
+    <ClInclude Include="Timer.h">
+      <Filter>Kitsune\LuaTimer\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="NamedPipeMain.h">
+      <Filter>Kitsune\NamedPipes</Filter>
+    </ClInclude>
+    <ClInclude Include="namedpipe.h">
+      <Filter>Kitsune\NamedPipes\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="base64.h">
+      <Filter>Kitsune</Filter>
+    </ClInclude>
+    <ClInclude Include="Bencode.h">
+      <Filter>Kitsune</Filter>
+    </ClInclude>
+    <ClInclude Include="networking.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="sqlitemain.lua" />
+    <None Include="packages.config" />
   </ItemGroup>
 </Project>

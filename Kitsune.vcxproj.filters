@@ -585,9 +585,6 @@
     <ClCompile Include="Server.cpp">
       <Filter>LuaService\Server\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="networking.cpp">
-      <Filter>Header Files</Filter>
-    </ClCompile>
     <ClCompile Include="NetEvent.cpp">
       <Filter>LuaService</Filter>
     </ClCompile>
@@ -845,6 +842,9 @@
     </ClCompile>
     <ClCompile Include="Bencode.cpp">
       <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="networking.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
