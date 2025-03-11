@@ -12,6 +12,8 @@
 #include "luawchar.h"
 #include "Bencode.h"
 #include <intrin.h>
+#include "stream.h"
+#include "luawchar.h"
 
 #pragma comment (lib , "winmm.lib")
 
@@ -974,8 +976,6 @@ BOOL CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMoni
 	return TRUE;
 }
 
-
-
 int GetMonitorIndex(HMONITOR hMonitor) {
 
 	DisplayEnumData data;
@@ -1064,6 +1064,51 @@ static const char* cpuId(void)
 	snprintf(buf, sizeof(buf), "%08lX%08lX%08lX%08lX", s1, s2, s3, s4);
 
 	return buf;
+}
+
+#define CRC64_POLY 0xD800000000000000ULL
+
+static int crc64(lua_State* L) {
+
+	const BYTE* data;
+	size_t len;
+
+	if (lua_isstring(L, -1)) {
+		data = (const BYTE*)lua_tolstring(L, -1, &len);
+	}
+	else if (lua_isstream(L, -1)) {
+		LuaStream* stream = lua_toluastream(L, -1);
+		data = stream->data;
+		len = stream->len;
+	}
+	else if (lua_iswchar(L, -1)) {
+		LuaWChar* wchar = lua_towchar(L, -1);
+		data = (const BYTE*)wchar->str;
+		len = wchar->len * sizeof(wchar_t);
+	}
+	else {
+		data = (const BYTE*)luaL_tolstring(L, -1, &len);
+		lua_pop(L, 1);
+	}
+
+	uint64_t crc = 0xFFFFFFFFFFFFFFFFULL;
+
+	for (size_t i = 0; i < len; i++) {
+		crc ^= (uint64_t)data[i];
+
+		for (int j = 0; j < 8; j++) {
+			if (crc & 1) { 
+				crc = (crc >> 1) ^ CRC64_POLY;
+			}
+			else {
+				crc >>= 1;
+			}
+		}
+	}
+
+	uint64_t result = crc ^ 0xFFFFFFFFFFFFFFFFULL;
+	lua_pushinteger(L, result);
+	return 1;
 }
 
 int Test(lua_State* L) {
@@ -1293,6 +1338,9 @@ int luaopen_misc(lua_State* L) {
 
 	lua_pushcfunction(L, Test);
 	lua_setglobal(L, "Test");
+
+	lua_pushcfunction(L, crc64);
+	lua_setglobal(L, "CRC64");
 
 	lua_pushcfunction(L, lua_SetClipboard);
 	lua_setglobal(L, "SetClipboard");

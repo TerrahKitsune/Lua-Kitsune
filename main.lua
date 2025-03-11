@@ -140,6 +140,7 @@ end
 FileSystem.SetCurrentDirectory("C:\\Users\\Terrah\\Desktop");
 local j = Json.Create();
 
+print(string.format("0x%016X", CRC64("Hello!")));
 local sqlite = SQLite.Open();
 
 assert(sqlite:Query([[SELECT load_extension("C:/Users/Terrah/Documents/GitHub/Lua-Kitsune/x64/Debug/SQLiteKitsune.dll");]]));
@@ -150,6 +151,18 @@ assert(sqlite:Query([[SELECT ExecuteLuaString("return RegisterFunction('Testx', 
 assert(sqlite:Fetch()); print(sqlite:GetRow(1));
 
 assert(sqlite:Query([[SELECT * FROM Testx()]]));
+while sqlite:Fetch() do
+	print(j:Encode(sqlite:GetRow()));
+end
+
+for i=1, 1000000 do
+	assert(sqlite:Query([[insert into TestTable (Id, Value, Data)VALUES(@id, @u, @r);]], {id=i,u=UUID(), r=math.random()}));
+end
+
+assert(sqlite:Query([[update TestTable set Data=Id;]]));
+assert(sqlite:Query([[delete from TestTable where Id%2!=0;]]));
+
+assert(sqlite:Query([[SELECT * FROM TestTable ORDER BY Value]]));
 while sqlite:Fetch() do
 	print(j:Encode(sqlite:GetRow()));
 end

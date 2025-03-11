@@ -468,6 +468,9 @@
     <ClCompile Include="lua_misc.cpp">
       <Filter>Kitsune</Filter>
     </ClCompile>
+    <ClCompile Include="sqliteextension\registerluatable.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="SQLite\sqlite3.h">

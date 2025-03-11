@@ -1,28 +1,20 @@
-﻿
+﻿local testTable = {};
+
 function TestFunction()
 
-	local test = {};
+	return coroutine.create(function ()
+                 
+        print("start");
 
-	for n=1, 10 do
-		local id=UUID;
-		table.insert(test, id);
-	end
+        for n=1, 10 do
+            local id=UUID();
+            coroutine.yield(id, math.random());
+        end
 
-	if true then return test end
-
-	local iterator = 0;
-
-	return function(row) 
-	
-		iterator = iterator + 1;
-		local val = test[iterator];
-
-		if not val then return nil; end
-
-		--if iterator == 2 then error("error"); end
-
-		return iterator, val;
-	end;
+        print("stop");
+    end);
 end
+
+RegisterTable("TestTable", {"Id", "Value", "Data"}, testTable);
 
 return Wchar.FromAnsi("test");

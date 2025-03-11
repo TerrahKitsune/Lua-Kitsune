@@ -175,6 +175,14 @@ int lua_registerfunction(lua_State* L) {
 	return sqlite3_createfunction(L, db);
 }
 
+int lua_registertable(lua_State* L) {
+
+	lua_rawgeti(L, LUA_REGISTRYINDEX, SqliteDbRef);
+	sqlite3* db = (sqlite3*)lua_touserdata(L, -1);
+	lua_pop(L, 1);
+	return sqlite3_registertable(L, db);	
+}
+
 extern "C" __declspec(dllexport)
 int sqlite3_sqlitekitsune_init(sqlite3* db, char** pzErrMsg, const sqlite3_api_routines* pApi) {
 	SQLITE_EXTENSION_INIT2(pApi);
@@ -199,6 +207,9 @@ int sqlite3_sqlitekitsune_init(sqlite3* db, char** pzErrMsg, const sqlite3_api_r
 
 	lua_pushcfunction(L, lua_registerfunction);
 	lua_setglobal(L, "RegisterFunction");
+
+	lua_pushcfunction(L, lua_registertable);
+	lua_setglobal(L, "RegisterTable");
 
 	sqlite3_create_function(db, "ExecuteLuaString", 1, SQLITE_UTF8, L, executeluastring, NULL, NULL);
 

@@ -4,6 +4,9 @@ Misc global functions:
 	-returns nil if the UUID cannot be garantueed unique
 	string, raw16bytestring UUID()
 
+	-Get the crc for a string, stream, or wchar (non strings runs tostring)
+	int CRC64(str)
+
 	-Sleep for 1 milisecond second or opt int, max 1000 (1 second)
 	nil Sleep(opt int);
 	

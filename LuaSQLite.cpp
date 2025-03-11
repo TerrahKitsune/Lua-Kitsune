@@ -703,7 +703,7 @@ int SQLite_GC(lua_State* L) {
 		luasqlite->stmt = NULL;
 	}
 
-	if (luasqlite->db) {
+	if (luasqlite->db) {		
 		sqlite3_close(luasqlite->db);
 		luasqlite->db = NULL;
 	}
