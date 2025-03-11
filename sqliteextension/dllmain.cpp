@@ -1,15 +1,14 @@
-#include "networking.h"
+#include "../networking.h"
 #include <Windows.h>
 #include "objbase.h"
-#include "SQLite/sqlite3ext.h"
-#include "lua_main_incl.h"
+#include "luasqlite.h"
 #include "dlllua.h"
-#include "stream.h"
-#include "luawchar.h"
-#include "HttpMain.h"
+#include "../stream.h"
+#include "../luawchar.h"
+#include "../HttpMain.h"
 SQLITE_EXTENSION_INIT1
-
 int JsonObjectRef = -1;
+int SqliteDbRef = -1;
 lua_State* GlobalState = NULL;
 
 static void* l_alloc(void* ud, void* ptr, size_t osize, size_t nsize) {
@@ -162,6 +161,14 @@ static void executeluastring(sqlite3_context* context, int argc, sqlite3_value**
 	}
 }
 
+int lua_registerfunction(lua_State* L) {
+
+	lua_rawgeti(L, LUA_REGISTRYINDEX, SqliteDbRef);
+	sqlite3* db = (sqlite3*)lua_touserdata(L, -1);
+	lua_pop(L, 1);
+	return sqlite3_createfunction(L, db);
+}
+
 extern "C" __declspec(dllexport)
 int sqlite3_sqlitekitsune_init(sqlite3* db, char** pzErrMsg, const sqlite3_api_routines* pApi) {
 	SQLITE_EXTENSION_INIT2(pApi);
@@ -180,6 +187,12 @@ int sqlite3_sqlitekitsune_init(sqlite3* db, char** pzErrMsg, const sqlite3_api_r
 
 	JsonObjectRef = luaL_ref(L, LUA_REGISTRYINDEX);
 	lua_pop(L, 1);
+
+	lua_pushlightuserdata(L, db);
+	SqliteDbRef = luaL_ref(L, LUA_REGISTRYINDEX);
+
+	lua_pushcfunction(L, lua_registerfunction);
+	lua_setglobal(L, "RegisterFunction");
 
 	sqlite3_create_function(db, "ExecuteLuaString", 1, SQLITE_UTF8, L, executeluastring, NULL, NULL);
 

@@ -145,3 +145,11 @@ local sqlite = SQLite.Open();
 assert(sqlite:Query([[SELECT load_extension("C:/Users/Terrah/Documents/GitHub/Lua-Kitsune/x64/Debug/SQLiteKitsune.dll");]]));
 assert(sqlite:Query([[SELECT ExecuteLuaString("return dofile('C:/Users/Terrah/Documents/GitHub/Lua-Kitsune/sqlitemain.lua')");]]));
 assert(sqlite:Fetch()); print(sqlite:GetRow(1));
+
+assert(sqlite:Query([[SELECT ExecuteLuaString("local t=function() return 2; end return RegisterFunction('Testx', t);");]]));
+assert(sqlite:Fetch()); print(sqlite:GetRow(1));
+
+assert(sqlite:Query([[SELECT * FROM Testx()]]));
+while sqlite:Fetch() do
+	print(j:Encode(sqlite:GetRow()));
+end

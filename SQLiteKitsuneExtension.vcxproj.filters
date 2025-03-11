@@ -192,13 +192,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="dllmain.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="SQLite\sqlite3.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="dlllua.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Lua\lapi.c">
@@ -462,15 +456,21 @@
     <ClCompile Include="networking.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="sqliteextension\dllmain.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="sqliteextension\dlllua.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="sqliteextension\executeluafunction.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="SQLite\sqlite3.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="SQLite\sqlite3ext.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="dlllua.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Lua\lapi.h">
@@ -717,6 +717,12 @@
       <Filter>Kitsune</Filter>
     </ClInclude>
     <ClInclude Include="networking.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="sqliteextension\dlllua.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="sqliteextension\luasqlite.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

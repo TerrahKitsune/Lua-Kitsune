@@ -58,7 +58,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>
       </PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>$(SolutionDir)mysql\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)libarchive;$(SolutionDir)hiredis;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)mysql\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)libarchive;$(SolutionDir)hiredis;$(SolutionDir)sqliteextension;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -77,7 +77,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>
       </PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>$(SolutionDir)mysql\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)libarchive;$(SolutionDir)hiredis;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)mysql\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)libarchive;$(SolutionDir)hiredis;$(SolutionDir)sqliteextension;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -91,8 +91,6 @@
     <ClCompile Include="aes.c" />
     <ClCompile Include="base64.cpp" />
     <ClCompile Include="Bencode.cpp" />
-    <ClCompile Include="dlllua.cpp" />
-    <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="Http.cpp" />
     <ClCompile Include="HttpCoroutine.cpp" />
     <ClCompile Include="HttpMain.cpp" />
@@ -172,6 +170,9 @@
     <ClCompile Include="RedisMain.cpp" />
     <ClCompile Include="sha256.c" />
     <ClCompile Include="Sha256Main.cpp" />
+    <ClCompile Include="sqliteextension\dlllua.cpp" />
+    <ClCompile Include="sqliteextension\dllmain.cpp" />
+    <ClCompile Include="sqliteextension\executeluafunction.cpp" />
     <ClCompile Include="SQLite\sqlite3.c" />
     <ClCompile Include="stream.cpp" />
     <ClCompile Include="StreamMain.cpp" />
@@ -184,7 +185,6 @@
     <ClInclude Include="aes.hpp" />
     <ClInclude Include="base64.h" />
     <ClInclude Include="Bencode.h" />
-    <ClInclude Include="dlllua.h" />
     <ClInclude Include="Http.h" />
     <ClInclude Include="HttpMain.h" />
     <ClInclude Include="jsondecode.h" />
@@ -258,6 +258,8 @@
     <ClInclude Include="RedisMain.h" />
     <ClInclude Include="sha256.h" />
     <ClInclude Include="Sha256Main.h" />
+    <ClInclude Include="sqliteextension\dlllua.h" />
+    <ClInclude Include="sqliteextension\luasqlite.h" />
     <ClInclude Include="SQLite\sqlite3.h" />
     <ClInclude Include="SQLite\sqlite3ext.h" />
     <ClInclude Include="stream.h" />
