@@ -24,6 +24,7 @@
 #include "../base64.h"
 //#include "LuaBinaryTreeMain.h"
 #include "../OpenSSL/include/openssl/ssl.h"
+#include "../lua_misc.h"
 
 lua_State* OpenLuaState(lua_Alloc memoryAllocator) {
 
@@ -82,6 +83,9 @@ lua_State* OpenLuaState(lua_Alloc memoryAllocator) {
 	lua_setglobal(L, "Base64");
 	//luaopen_binarytree(L);
 	//lua_setglobal(L, "BinaryTree");
+
+	// Returns nothing
+	luaopen_misc(L);
 
 	return L;
 }

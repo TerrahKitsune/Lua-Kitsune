@@ -157,6 +157,7 @@
     <ClCompile Include="Lua\lvm.c" />
     <ClCompile Include="Lua\lzio.c" />
     <ClCompile Include="lua_json.cpp" />
+    <ClCompile Include="lua_misc.cpp" />
     <ClCompile Include="md5.c" />
     <ClCompile Include="MD5Main.cpp" />
     <ClCompile Include="mem.cpp" />
@@ -245,6 +246,7 @@
     <ClInclude Include="Lua\lzio.h" />
     <ClInclude Include="lua_json.h" />
     <ClInclude Include="lua_main_incl.h" />
+    <ClInclude Include="lua_misc.h" />
     <ClInclude Include="md5.h" />
     <ClInclude Include="MD5Main.h" />
     <ClInclude Include="mem.h" />

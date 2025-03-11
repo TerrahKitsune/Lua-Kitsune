@@ -146,7 +146,7 @@ assert(sqlite:Query([[SELECT load_extension("C:/Users/Terrah/Documents/GitHub/Lu
 assert(sqlite:Query([[SELECT ExecuteLuaString("return dofile('C:/Users/Terrah/Documents/GitHub/Lua-Kitsune/sqlitemain.lua')");]]));
 assert(sqlite:Fetch()); print(sqlite:GetRow(1));
 
-assert(sqlite:Query([[SELECT ExecuteLuaString("local t=function() return 2; end return RegisterFunction('Testx', t);");]]));
+assert(sqlite:Query([[SELECT ExecuteLuaString("return RegisterFunction('Testx', TestFunction);");]]));
 assert(sqlite:Fetch()); print(sqlite:GetRow(1));
 
 assert(sqlite:Query([[SELECT * FROM Testx()]]));

@@ -87,6 +87,12 @@ void lua_tosqlite3value(lua_State* L, int idx, sqlite3_context* context) {
 		}
 		lua_pop(L, 3);
 		break;
+	case LUA_TFUNCTION:
+		lua_pushvalue(L, idx);
+		lua_pcall(L, 0, 1, NULL);
+		lua_tosqlite3value(L, -1, context);
+		lua_pop(L, 1);
+		break;
 	case LUA_TUSERDATA:
 
 		if (lua_isstream(L, idx)) {

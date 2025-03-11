@@ -465,6 +465,9 @@
     <ClCompile Include="sqliteextension\executeluafunction.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="lua_misc.cpp">
+      <Filter>Kitsune</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="SQLite\sqlite3.h">
@@ -724,6 +727,9 @@
     </ClInclude>
     <ClInclude Include="sqliteextension\luasqlite.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lua_misc.h">
+      <Filter>Kitsune</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
