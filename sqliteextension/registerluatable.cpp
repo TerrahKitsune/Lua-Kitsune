@@ -2,8 +2,6 @@
 #include <string.h>
 #include <ctype.h>
 
-int crc64func_ref = LUA_NOREF;
-
 typedef struct {
 	int table_ref;
 	int numbfields;
@@ -317,8 +315,10 @@ static sqlite3_module registertableModule = {
 static void destroytable(void* pClientData) {
 	RegisteredTable* data = (RegisteredTable*)pClientData;
 	if (data) {
-		luaL_unref(data->L, LUA_REGISTRYINDEX, data->table_ref);
-		data->table_ref = -1;
+		if (data->table_ref != LUA_NOREF) {
+			luaL_unref(data->L, LUA_REGISTRYINDEX, data->table_ref);
+			data->table_ref = LUA_NOREF;
+		}
 
 		if (data->fields)
 		{
@@ -340,21 +340,16 @@ static void destroytable(void* pClientData) {
 
 int sqlite3_registertable(lua_State* L, sqlite3* db) {
 
-	if (lua_type(L, -1) != LUA_TTABLE) {
-		luaL_error(L, "Third argument is not a table");
-		return 0;
-	}
-	else if (lua_type(L, -2) != LUA_TTABLE) {
+	if (lua_type(L, 2) != LUA_TTABLE) {
 		luaL_error(L, "Second argument is not a table");
 		return 0;
 	}
-
-	if (crc64func_ref == LUA_NOREF) {
-		lua_getglobal(L, "CRC64");
-		crc64func_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+	else if (lua_type(L, 3) != LUA_TTABLE) {
+		luaL_error(L, "Third argument is not a table");
+		return 0;
 	}
 
-	const char* name = luaL_checkstring(L, -3);
+	const char* name = luaL_checkstring(L, 1);
 
 	RegisteredTable* data = (RegisteredTable*)sqlite3_malloc(sizeof(RegisteredTable));
 	if (!data) {
@@ -366,7 +361,7 @@ int sqlite3_registertable(lua_State* L, sqlite3* db) {
 		data->table_ref = LUA_NOREF;
 	}
 
-	lua_pushvalue(L, -2);
+	lua_pushvalue(L, 2);
 	lua_len(L, -1);
 	data->numbfields = lua_tointeger(L, -1);
 	lua_pop(L, 1);
@@ -416,7 +411,7 @@ int sqlite3_registertable(lua_State* L, sqlite3* db) {
 
 			data->fields[i] = (char*)sqlite3_malloc(sizeof(char) * (len + 1));
 
-			if (!data->fields[i]) {
+			if (data->fields[i] == NULL) {
 				lua_pop(L, 2);
 				destroytable(data);
 				luaL_error(L, "No memory");

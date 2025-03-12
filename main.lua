@@ -150,9 +150,6 @@ assert(sqlite:Fetch()); print(sqlite:GetRow(1));
 assert(sqlite:Query([[SELECT LuaFunction('Testy.Test.P', 1, 'a', 12.345);]]));
 assert(sqlite:Fetch()); print(sqlite:GetRow(1));
 
-assert(sqlite:Query([[SELECT LuaFunction('dostring', "RegisterFunction('Testx', TestFunction); return 'cat';");]]));
-assert(sqlite:Fetch()); print(sqlite:GetRow(1));
-
 assert(sqlite:Query([[SELECT * FROM Testx()]]));
 while sqlite:Fetch() do
 	print(j:Encode(sqlite:GetRow()));

@@ -459,7 +459,7 @@ int sqlite3_sqlitekitsune_init(sqlite3* db, char** pzErrMsg, const sqlite3_api_r
 	SqliteDbRef = luaL_ref(L, LUA_REGISTRYINDEX);
 
 	lua_pushcfunction(L, lua_registerfunction);
-	lua_setglobal(L, "RegisterFunction");
+	lua_setglobal(L, "RegisterVirtualTable");
 
 	lua_pushcfunction(L, lua_registertable);
 	lua_setglobal(L, "RegisterTable");

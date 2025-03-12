@@ -1,26 +1,29 @@
 #include "luasqlite.h"
 #include <string.h>
+#include <ctype.h>
 
 typedef struct {
-	sqlite3_vtab_cursor cursor;
+	int function_read;
+	int function_update;
+	int numbfields;
+	char** fields;
 	lua_State* L;
-	sqlite_int64 row;
-	int result_ref;
-	int iterator_ref;
-	int value_ref;
-	int elresult;
-} ExecuteLuaFunctionCursor;
+} ExecuteLuaFunction;
 
 typedef struct {
 	sqlite3_vtab vtab;
-	lua_State* L;
-	int function_ref;
+	ExecuteLuaFunction* state;
 } ExecuteLuaFunctionContext;
 
 typedef struct {
-	int function_ref;
-	lua_State* L;
-} ExecuteLuaFunction;
+	sqlite3_vtab_cursor cursor;
+	ExecuteLuaFunctionContext* context;
+	int context_ref;
+	int current_ref;
+
+} ExecuteLuaFunctionCursor;
+
+int executeluastring_next(sqlite3_vtab_cursor* cursor);
 
 static int executeluastring_connect(sqlite3* db, void* pAux, int argc, const char* const* argv, sqlite3_vtab** ppVtab, char** pzErr) {
 
@@ -30,14 +33,33 @@ static int executeluastring_connect(sqlite3* db, void* pAux, int argc, const cha
 		return SQLITE_NOMEM;
 	}
 
-	ExecuteLuaFunction* func = (ExecuteLuaFunction*)pAux;
+	char* createtable = (char*)sqlite3_malloc(1000000 * sizeof(char));
+	if (!createtable) {
+		sqlite3_free(context);
+		return SQLITE_NOMEM;
+	}
 
-	context->L = func->L;
-	context->function_ref = func->function_ref;
+	context->state = (ExecuteLuaFunction*)pAux;
 	*ppVtab = &context->vtab;
 	(*ppVtab)->nRef = 0;
 
-	return sqlite3_declare_vtab(db, "CREATE TABLE x(key, value)");
+	strcpy(createtable, "CREATE TABLE x(");
+	for (size_t i = 0; i < context->state->numbfields; i++)
+	{
+		strcat(createtable, context->state->fields[i]);
+		if (i == 0) {
+			strcat(createtable, " PRIMARY KEY");
+		}
+		strcat(createtable, ",");
+	}
+
+	createtable[strlen(createtable) - 1] = ')';
+	strcat(createtable, "WITHOUT ROWID;");
+
+	int result = sqlite3_declare_vtab(db, createtable);
+	sqlite3_free(createtable);
+
+	return result;
 }
 
 static int executeluastring_disconnect(sqlite3_vtab* pVtab) {
@@ -56,85 +78,28 @@ static int executeluastring_open(sqlite3_vtab* pVtab, sqlite3_vtab_cursor** ppCu
 	else {
 		memset(cursor, 0, sizeof(ExecuteLuaFunctionCursor));
 	}
-
-	cursor->iterator_ref = LUA_NOREF;
-	cursor->value_ref = LUA_NOREF;
-	lua_State* L = context->L;
-	lua_State* thread;
-	lua_rawgeti(L, LUA_REGISTRYINDEX, context->function_ref);
-
-	if (lua_pcall(L, 0, 1, NULL)) {
-		pVtab->zErrMsg = sqlite3_mprintf("Error: %s", lua_tostring(L, -1));
-		lua_pop(L, 1);
-		return SQLITE_ERROR;
-	}
-
-	switch (lua_type(L, -1)) {
-
-	case LUA_TBOOLEAN:
-	case LUA_TSTRING:
-	case LUA_TNUMBER:
-		cursor->elresult = EL_RESULT_SIMPLE;
-		cursor->result_ref = luaL_ref(L, LUA_REGISTRYINDEX);
-		break;
-	case LUA_TFUNCTION:
-		cursor->elresult = EL_RESULT_FUNC;
-		cursor->result_ref = luaL_ref(L, LUA_REGISTRYINDEX);
-		break;
-	case LUA_TTHREAD:
-		cursor->elresult = EL_RESULT_THREAD;
-		cursor->result_ref = luaL_ref(L, LUA_REGISTRYINDEX);
-		break;
-	case LUA_TTABLE:
-		lua_rawgeti(L, -1, 1);
-		if (lua_isnoneornil(L, -1)) {
-			if (lua_next(L, -2)) {
-				lua_pop(L, 2);
-				cursor->elresult = EL_RESULT_TABLE;
-				cursor->result_ref = luaL_ref(L, LUA_REGISTRYINDEX);
-			}
-			else {
-				lua_pop(L, 2);
-				cursor->elresult = EL_RESULT_NONE;
-				cursor->result_ref = LUA_NOREF;
-			}
-		}
-		else {
-			lua_pop(L, 1);
-			cursor->elresult = EL_RESULT_ARRAY;
-			cursor->result_ref = luaL_ref(L, LUA_REGISTRYINDEX);
-		}
-		break;
-	default:
-		lua_pop(L, 1);
-		cursor->result_ref = LUA_NOREF;
-		break;
-	}
-
-	cursor->L = L;
+	cursor->context = context;
+	lua_State* L = context->state->L;
+	lua_newtable(L);
+	cursor->context_ref = luaL_ref(L, LUA_REGISTRYINDEX);
 	*ppCursor = (sqlite3_vtab_cursor*)cursor;
-	return SQLITE_OK;
+	return executeluastring_next(*ppCursor);
 }
 
 static int executeluastring_close(sqlite3_vtab_cursor* cursor) {
 
 	ExecuteLuaFunctionCursor* luacursor = (ExecuteLuaFunctionCursor*)cursor;
-	if (luacursor->result_ref != LUA_NOREF) {
-		luaL_unref(luacursor->L, LUA_REGISTRYINDEX, luacursor->result_ref);
-		luacursor->result_ref = LUA_NOREF;
+
+	if (luacursor->context_ref != LUA_NOREF) {
+		luaL_unref(luacursor->context->state->L, LUA_REGISTRYINDEX, luacursor->context_ref);
+		luacursor->context_ref = LUA_NOREF;
 	}
 
-	if (luacursor->iterator_ref != LUA_NOREF) {
-		luaL_unref(luacursor->L, LUA_REGISTRYINDEX, luacursor->iterator_ref);
-		luacursor->iterator_ref = LUA_NOREF;
+	if (luacursor->current_ref != LUA_NOREF) {
+		luaL_unref(luacursor->context->state->L, LUA_REGISTRYINDEX, luacursor->current_ref);
+		luacursor->current_ref = LUA_NOREF;
 	}
 
-	if (luacursor->value_ref != LUA_NOREF) {
-		luaL_unref(luacursor->L, LUA_REGISTRYINDEX, luacursor->value_ref);
-		luacursor->value_ref = LUA_NOREF;
-	}
-
-	lua_gc(luacursor->L, LUA_GCCOLLECT, 0);
 	sqlite3_free(cursor);
 	return SQLITE_OK;
 }
@@ -148,275 +113,96 @@ int executeluastring_filter(sqlite3_vtab_cursor*, int idxNum, const char* idxStr
 }
 
 int executeluastring_eof(sqlite3_vtab_cursor* cursor) {
+
 	ExecuteLuaFunctionCursor* luacursor = (ExecuteLuaFunctionCursor*)cursor;
-	lua_State* L = luacursor->L;
-	lua_State* thread;
-	int status;
-	lua_rawgeti(L, LUA_REGISTRYINDEX, luacursor->result_ref);
-
-	switch (luacursor->elresult) {
-	case EL_RESULT_ARRAY:
-		lua_len(L, -1);
-		if (lua_tointeger(L, -1) <= luacursor->row) {
-			luaL_unref(L, LUA_REGISTRYINDEX, luacursor->result_ref);
-			luacursor->result_ref = LUA_NOREF;
-		}
-		lua_pop(L, 1);
-		break;
-	case EL_RESULT_TABLE:
-		if (luacursor->iterator_ref == LUA_NOREF) {
-			lua_pushnil(L);
-		}
-		else {
-			lua_rawgeti(L, LUA_REGISTRYINDEX, luacursor->iterator_ref);
-		}
-
-		if (lua_next(L, -2)) {
-
-			if (luacursor->value_ref == LUA_NOREF) {
-				luacursor->value_ref = luaL_ref(L, LUA_REGISTRYINDEX);
-			}
-			else {
-				lua_rawseti(L, LUA_REGISTRYINDEX, luacursor->value_ref);
-			}
-			if (luacursor->iterator_ref == LUA_NOREF) {
-				luacursor->iterator_ref = luaL_ref(L, LUA_REGISTRYINDEX);
-			}
-			else {
-				lua_rawseti(L, LUA_REGISTRYINDEX, luacursor->iterator_ref);
-			}
-		}
-		else if (luacursor->iterator_ref != LUA_NOREF) {
-			if (luacursor->result_ref != LUA_NOREF) {
-				luaL_unref(luacursor->L, LUA_REGISTRYINDEX, luacursor->result_ref);
-				luacursor->result_ref = LUA_NOREF;
-			}
-			if (luacursor->iterator_ref != LUA_NOREF) {
-				luaL_unref(luacursor->L, LUA_REGISTRYINDEX, luacursor->iterator_ref);
-				luacursor->iterator_ref = LUA_NOREF;
-			}
-			if (luacursor->value_ref != LUA_NOREF) {
-				luaL_unref(luacursor->L, LUA_REGISTRYINDEX, luacursor->value_ref);
-				luacursor->value_ref = LUA_NOREF;
-			}
-		}
-
-		break;
-	case EL_RESULT_THREAD:
-
-		thread = lua_tothread(L, -1);
-		status = lua_status(thread);
-
-		if (status == LUA_YIELD || (status == LUA_OK && luacursor->iterator_ref == LUA_NOREF)) {
-			lua_resume(thread, L, 0);
-			status = lua_gettop(thread);
-
-			if (status == 0) {
-				lua_pushnil(L);
-				lua_pushnil(L);
-			}
-			else if (status == 1) {
-				lua_xmove(thread, L, 1);
-				lua_pushnil(L);
-			}
-			else {
-				lua_xmove(thread, L, 2);
-				if (status > 2) {
-					lua_settop(thread, 0);
-				}
-			}
-
-			if (lua_type(L, -1) == LUA_TNIL && lua_type(L, -2) == LUA_TNIL) {
-
-				if (luacursor->result_ref != LUA_NOREF) {
-					luaL_unref(luacursor->L, LUA_REGISTRYINDEX, luacursor->result_ref);
-					luacursor->result_ref = LUA_NOREF;
-				}
-				if (luacursor->iterator_ref != LUA_NOREF) {
-					luaL_unref(luacursor->L, LUA_REGISTRYINDEX, luacursor->iterator_ref);
-					luacursor->iterator_ref = LUA_NOREF;
-				}
-				if (luacursor->value_ref != LUA_NOREF) {
-					luaL_unref(luacursor->L, LUA_REGISTRYINDEX, luacursor->value_ref);
-					luacursor->value_ref = LUA_NOREF;
-				}
-
-				lua_pop(L, 2);
-			}
-			else 
-			{
-				if (luacursor->value_ref == LUA_NOREF) {
-					luacursor->value_ref = luaL_ref(L, LUA_REGISTRYINDEX);
-				}
-				else {
-					lua_rawseti(L, LUA_REGISTRYINDEX, luacursor->value_ref);
-				}
-
-				if (luacursor->iterator_ref == LUA_NOREF) {
-					luacursor->iterator_ref = luaL_ref(L, LUA_REGISTRYINDEX);
-				}
-				else {
-					lua_rawseti(L, LUA_REGISTRYINDEX, luacursor->iterator_ref);
-				}
-			}
-		}
-		else {
-
-			if (luacursor->result_ref != LUA_NOREF) {
-				luaL_unref(luacursor->L, LUA_REGISTRYINDEX, luacursor->result_ref);
-				luacursor->result_ref = LUA_NOREF;
-			}
-			if (luacursor->iterator_ref != LUA_NOREF) {
-				luaL_unref(luacursor->L, LUA_REGISTRYINDEX, luacursor->iterator_ref);
-				luacursor->iterator_ref = LUA_NOREF;
-			}
-			if (luacursor->value_ref != LUA_NOREF) {
-				luaL_unref(luacursor->L, LUA_REGISTRYINDEX, luacursor->value_ref);
-				luacursor->value_ref = LUA_NOREF;
-			}
-		}
-		break;
-	case EL_RESULT_FUNC:
-
-		lua_pushinteger(L, luacursor->row + 1);
-		if (lua_pcall(L, 1, 2, NULL)) {
-
-			if (luacursor->iterator_ref != LUA_NOREF) {
-				luaL_unref(L, LUA_REGISTRYINDEX, luacursor->iterator_ref);
-				luacursor->iterator_ref = LUA_NOREF;
-			}
-
-			if (luacursor->value_ref == LUA_NOREF) {
-				luacursor->value_ref = luaL_ref(L, LUA_REGISTRYINDEX);
-			}
-			else {
-				lua_rawseti(L, LUA_REGISTRYINDEX, luacursor->value_ref);
-			}
-
-			lua_pop(L, 1);
-		}
-		else {
-			if (luacursor->value_ref == LUA_NOREF) {
-				luacursor->value_ref = luaL_ref(L, LUA_REGISTRYINDEX);
-			}
-			else {
-				lua_rawseti(L, LUA_REGISTRYINDEX, luacursor->value_ref);
-			}
-
-			if (luacursor->iterator_ref == LUA_NOREF) {
-				luacursor->iterator_ref = luaL_ref(L, LUA_REGISTRYINDEX);
-			}
-			else {
-				lua_rawseti(L, LUA_REGISTRYINDEX, luacursor->iterator_ref);
-			}
-		}
-
-		if (luacursor->iterator_ref == LUA_NOREF) {
-			lua_pushnil(L);
-		}
-		else {
-			lua_rawgeti(L, LUA_REGISTRYINDEX, luacursor->iterator_ref);
-			if (lua_type(L, -1) == LUA_TNIL) {
-				if (luacursor->result_ref != LUA_NOREF) {
-					luaL_unref(luacursor->L, LUA_REGISTRYINDEX, luacursor->result_ref);
-					luacursor->result_ref = LUA_NOREF;
-				}
-				if (luacursor->iterator_ref != LUA_NOREF) {
-					luaL_unref(luacursor->L, LUA_REGISTRYINDEX, luacursor->iterator_ref);
-					luacursor->iterator_ref = LUA_NOREF;
-				}
-				if (luacursor->value_ref != LUA_NOREF) {
-					luaL_unref(luacursor->L, LUA_REGISTRYINDEX, luacursor->value_ref);
-					luacursor->value_ref = LUA_NOREF;
-				}
-			}
-		}
-
-		break;
-	default:
-		if (luacursor->row > 0) {
-			luaL_unref(L, LUA_REGISTRYINDEX, luacursor->result_ref);
-			luacursor->result_ref = LUA_NOREF;
-		}
-		break;
-	}
-
-	lua_pop(L, 1);
-
-	return luacursor->result_ref == LUA_NOREF;
+	return luacursor->current_ref == LUA_NOREF;
 }
 
 int executeluastring_column(sqlite3_vtab_cursor* cursor, sqlite3_context* context, int N) {
 
 	ExecuteLuaFunctionCursor* luacursor = (ExecuteLuaFunctionCursor*)cursor;
-	lua_State* L = luacursor->L;
-	lua_rawgeti(L, LUA_REGISTRYINDEX, luacursor->result_ref);
+	lua_State* L = luacursor->context->state->L;
 
-	if (N == 0) {
-		switch (luacursor->elresult) {
-		case EL_RESULT_TABLE:
-		case EL_RESULT_FUNC:
-		case EL_RESULT_THREAD:
-			if (luacursor->iterator_ref == LUA_NOREF && luacursor->value_ref != LUA_NOREF) {
-				lua_rawgeti(L, LUA_REGISTRYINDEX, luacursor->value_ref);
-				sqlite3_result_error(context, lua_tostring(L, -1), -1);
-				lua_pop(L, 1);
-				return SQLITE_ERROR;
-			}
-			else {
-				lua_rawgeti(L, LUA_REGISTRYINDEX, luacursor->iterator_ref);
-				lua_tosqlite3value(L, -1, context);
-				lua_pop(L, 1);
-			}
-			break;
-		default:
-			lua_pushinteger(L, luacursor->row + 1);
-			lua_tosqlite3value(L, -1, context);
-			lua_pop(L, 1);
-			break;
-		}
-	}
-	else if (N == 1) {
-		switch (luacursor->elresult) {
-		case EL_RESULT_TABLE:
-		case EL_RESULT_FUNC:
-		case EL_RESULT_THREAD:
-			lua_rawgeti(L, LUA_REGISTRYINDEX, luacursor->value_ref);
-			lua_tosqlite3value(L, -1, context);
-			lua_pop(L, 1);
-			break;
-		case EL_RESULT_ARRAY:
-			lua_rawgeti(L, -1, luacursor->row + 1);
-			lua_tosqlite3value(L, -1, context);
-			lua_pop(L, 1);
-			break;
-		default:
-			DumpStack(L);
-			lua_tosqlite3value(L, -1, context);
-			break;
-		}
-	}
-
-	lua_pop(L, 1);
+	lua_rawgeti(L, LUA_REGISTRYINDEX, luacursor->current_ref);
+	lua_rawgeti(L, -1, N + 1);
+	lua_tosqlite3value(L, -1, context);
+	lua_pop(L, 2);
 
 	return SQLITE_OK;
 }
 
 int executeluastring_next(sqlite3_vtab_cursor* cursor) {
 	ExecuteLuaFunctionCursor* luacursor = (ExecuteLuaFunctionCursor*)cursor;
-	luacursor->row++;
+	lua_State* L = luacursor->context->state->L;
+
+	lua_rawgeti(L, LUA_REGISTRYINDEX, luacursor->context->state->function_read);
+	lua_rawgeti(L, LUA_REGISTRYINDEX, luacursor->context_ref);
+
+	if (lua_pcall(L, 1, 1, NULL)) {
+		cursor->pVtab->zErrMsg = sqlite3_mprintf("Error: %s", lua_tostring(L, -1));
+		lua_pop(L, 1);
+		return SQLITE_ERROR;
+	}
+
+	if (lua_istable(L, -1)) {
+
+		if (luacursor->current_ref == LUA_NOREF) {
+			luacursor->current_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+		}
+		else {
+			lua_rawseti(L, LUA_REGISTRYINDEX, luacursor->current_ref);
+		}
+	}
+	else if (luacursor->current_ref != LUA_NOREF) {
+
+		luaL_unref(L, LUA_REGISTRYINDEX, luacursor->current_ref);
+		luacursor->current_ref = LUA_NOREF;
+		lua_pop(L, 1);
+	}
+
 	return SQLITE_OK;
 }
 
 int executeluastring_rowid(sqlite3_vtab_cursor* cursor, sqlite_int64* pRowid) {
-
 	ExecuteLuaFunctionCursor* luacursor = (ExecuteLuaFunctionCursor*)cursor;
-	*pRowid = luacursor->row;
-
 	return SQLITE_OK;
 }
 
 int executeluastring_findfunction(sqlite3_vtab* pVtab, int nArg, const char* zName, void (**pxFunc)(sqlite3_context*, int, sqlite3_value**), void** ppArg) {
+
+	return SQLITE_OK;
+}
+
+static int executeluastring_update(sqlite3_vtab* vtab, int argc, sqlite3_value** argv, sqlite3_int64* pRowid) {
+
+	ExecuteLuaFunctionContext* context = (ExecuteLuaFunctionContext*)vtab;
+	if (context->state->function_update == LUA_NOREF) {
+		vtab->zErrMsg = sqlite3_mprintf("Readonly");
+		return SQLITE_READONLY;
+	}
+	lua_State* L = context->state->L;
+	int top = lua_gettop(L);
+	lua_rawgeti(L, LUA_REGISTRYINDEX, context->state->function_update);
+
+	if (argc == 1) {
+		lua_pushsqlite3value(L, argv[0]);
+		lua_pushnil(L);
+	}
+	else {
+		lua_pushsqlite3value(L, argv[0]);
+		lua_createtable(L, argc - 2, 0);
+		for (size_t i = 2; i < argc; i++)
+		{
+			lua_pushsqlite3value(L, argv[i]);
+			lua_rawseti(L, -2, i - 1);
+		}
+	}
+
+	if (lua_pcall(L, 2, 0, NULL)) {
+		vtab->zErrMsg = sqlite3_mprintf(lua_tostring(L, -1));
+		lua_pop(L, 1);
+		return SQLITE_ERROR;
+	}
 
 	return SQLITE_OK;
 }
@@ -435,12 +221,12 @@ static sqlite3_module executeluastringModule = {
 	executeluastring_eof,
 	executeluastring_column,
 	executeluastring_rowid,
+	executeluastring_update,
 	0,
 	0,
 	0,
 	0,
 	0,
-	executeluastring_findfunction,
 	0,
 	0,
 	0,
@@ -452,29 +238,140 @@ static sqlite3_module executeluastringModule = {
 static void destroyfunction(void* pClientData) {
 	ExecuteLuaFunction* data = (ExecuteLuaFunction*)pClientData;
 	if (data) {
-		luaL_unref(data->L, LUA_REGISTRYINDEX, data->function_ref);
-		data->function_ref = -1;
+		if (data->function_read != LUA_NOREF) {
+			luaL_unref(data->L, LUA_REGISTRYINDEX, data->function_read);
+			data->function_read = LUA_NOREF;
+		}
+		if (data->function_update = LUA_NOREF) {
+			luaL_unref(data->L, LUA_REGISTRYINDEX, data->function_update);
+			data->function_update = LUA_NOREF;
+		}
+
+		if (data->fields)
+		{
+			for (size_t i = 0; i < data->numbfields; i++)
+			{
+				if (data->fields[i]) {
+					sqlite3_free(data->fields[i]);
+				}
+			}
+
+			sqlite3_free(data->fields);
+			data->fields = NULL;
+			data->numbfields = 0;
+		}
+
 		sqlite3_free(data);
 	}
 }
 
 int sqlite3_createfunction(lua_State* L, sqlite3* db) {
 
-	if (lua_type(L, -1) != LUA_TFUNCTION) {
-		luaL_error(L, "Second argument is not a function");
+	if (lua_type(L, 2) != LUA_TTABLE) {
+		luaL_error(L, "Second argument is not a table");
+		return 0;
+	}
+	else if (lua_type(L, 3) != LUA_TFUNCTION) {
+		luaL_error(L, "Third argument is not a function");
 		return 0;
 	}
 
-	const char* name = luaL_checkstring(L, -2);
+	const char* name = luaL_checkstring(L, 1);
 
 	ExecuteLuaFunction* data = (ExecuteLuaFunction*)sqlite3_malloc(sizeof(ExecuteLuaFunction));
 	if (!data) {
 		luaL_error(L, "Out of memory");
 		return 0;
 	}
+	else {
+		memset(data, 0, sizeof(ExecuteLuaFunction));
+		data->function_read = LUA_NOREF;
+		data->function_update = LUA_NOREF;
+	}
 
-	data->function_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+	lua_pushvalue(L, 2);
+	lua_len(L, -1);
+	data->numbfields = lua_tointeger(L, -1);
+	lua_pop(L, 1);
+
+	if (data->numbfields <= 0) {
+		lua_pop(L, 1);
+		destroyfunction(data);
+		luaL_error(L, "Definition table contains no entries");
+		return 0;
+	}
+	else {
+
+		data->fields = (char**)sqlite3_malloc(sizeof(char*) * data->numbfields);
+		memset(data->fields, 0, sizeof(char*) * data->numbfields);
+
+		if (!data->fields) {
+			lua_pop(L, 1);
+			destroyfunction(data);
+			luaL_error(L, "No memory");
+			return 0;
+		}
+
+		size_t len;
+		const char* field;
+
+		for (int i = 0; i < data->numbfields; i++)
+		{
+			lua_geti(L, -1, i + 1);
+			field = luaL_tolstring(L, -1, &len);
+			if (!field || len == 0) {
+				lua_pop(L, 2);
+				destroyfunction(data);
+				luaL_error(L, "Field cannot be empty string");
+				return 0;
+			}
+			else {
+				for (size_t n = 0; n < len; n++)
+				{
+					if (!isalpha(field[n])) {
+						lua_pop(L, 2);
+						destroyfunction(data);
+						luaL_error(L, "Field names may only contain letters");
+						return 0;
+					}
+				}
+			}
+
+			data->fields[i] = (char*)sqlite3_malloc(sizeof(char) * (len + 1));
+
+			if (data->fields[i] == NULL) {
+				lua_pop(L, 2);
+				destroyfunction(data);
+				luaL_error(L, "No memory");
+				return 0;
+			}
+
+			data->fields[i][len] = '\0';
+			memcpy(data->fields[i], field, len * sizeof(char));
+
+			lua_pop(L, 2);
+		}
+		lua_pop(L, 1);
+	}
+
 	data->L = L;
+	lua_pushvalue(L, 4);
+
+	if (lua_type(L, -1) == LUA_TFUNCTION) {
+		data->function_update = luaL_ref(L, LUA_REGISTRYINDEX);
+	}
+
+	lua_pushvalue(L, 3);
+
+	if (lua_type(L, -1) == LUA_TFUNCTION) {
+		data->function_read = luaL_ref(L, LUA_REGISTRYINDEX);
+	}
+	else {
+		destroyfunction(data);
+		luaL_error(L, "No read function found");
+		return 0;
+	}
+
 	lua_pop(L, 1);
 
 	return sqlite3_create_module_v2(db, name, &executeluastringModule, data, destroyfunction);
