@@ -118,7 +118,7 @@ void lua_tosqlite3value(lua_State* L, int idx, sqlite3_context* context) {
 			lua_pop(L, 2);
 			break;
 		}
-	// Intentionally fallthrough here.
+		// Intentionally fallthrough here.
 	default:
 		str = luaL_tolstring(L, idx, &len);
 		if (str) {
@@ -132,39 +132,82 @@ void lua_tosqlite3value(lua_State* L, int idx, sqlite3_context* context) {
 	}
 }
 
-static void executeluastring(sqlite3_context* context, int argc, sqlite3_value** argv) {
+static void runluafunction(sqlite3_context* context, int argc, sqlite3_value** argv) {
 	lua_State* L = (lua_State*)sqlite3_user_data(context);
-	GlobalState = L;
 
-	if (argc == 1 && sqlite3_value_type(argv[0]) == SQLITE_TEXT) {
+	if (argc < 1) {
+		sqlite3_result_error(context, "LuaFunction requires at least one argument", -1);
+		return;
+	}
 
-		const char* script = (const char*)sqlite3_value_text(argv[0]);
-		if (luaL_loadstring(L, script) != LUA_OK) {
-			script = lua_tostring(L, -1);
-			lua_pop(L, 1);
-			sqlite3_result_error(context, script, -1);
+	const char* function = (const char*)sqlite3_value_text(argv[0]);
+	if (strstr(function, ".")) {
+
+		char* buf = (char*)sqlite3_malloc(strlen(function) + 1);
+		if (!buf) {
+			sqlite3_result_error(context, "Out of memory", -1);
 			return;
 		}
 
-		if (lua_pcall(L, 0, 1, 0) != LUA_OK) {
-			script = lua_tostring(L, -1);
-			lua_pop(L, 1);
-			sqlite3_result_error(context, script, -1);
-			return;
+		const char* start = function;
+		bool first = true;
+		int len;
+		int idx = lua_gettop(L);
+		for (size_t i = 0; function[i]; i++)
+		{
+			if (function[i] == '.') {
+				len = &function[i] - start;
+				strncpy(buf, start, len);
+				buf[len] = '\0';
+				start = &function[i + 1];
+
+				if (first) {
+					lua_getglobal(L, buf);
+					first = false;
+				}
+				else {
+					lua_pushstring(L, buf);
+					lua_gettable(L, -2);
+				}
+
+				if (!lua_istable(L, -1)) {
+					lua_pop(L, lua_gettop(L) - idx);
+					sqlite3_result_error(context, "Function not found", -1);
+					return;
+				}
+			}
 		}
 
-		if (lua_type(L, -1) == LUA_TNIL) {
-			sqlite3_result_null(context);
-			lua_pop(L, 1);
-			return;
-		}
+		sqlite3_free(buf);
 
-		lua_tosqlite3value(L, -1, context);
-		lua_pop(L, 1);
+		lua_pushstring(L, start);
+		lua_gettable(L, -2);
+		lua_copy(L, -1, idx + 1);
+		lua_pop(L, lua_gettop(L) - idx - 1);
 	}
 	else {
-		sqlite3_result_null(context);
+		lua_getglobal(L, function);
 	}
+
+	if (lua_type(L, -1) != LUA_TFUNCTION) {
+		lua_pop(L, 1);
+		sqlite3_result_error(context, "Function not found", -1);
+		return;
+	}
+
+	for (int i = 1; i < argc; i++)
+	{
+		lua_pushsqlite3value(L, argv[i]);
+	}
+
+	if (lua_pcall(L, argc - 1, 1, NULL)) {
+		sqlite3_result_error(context, lua_tostring(L, -1), -1);
+		lua_pop(L, 1);
+		return;
+	}
+
+	lua_tosqlite3value(L, -1, context);
+	lua_pop(L, 1);
 }
 
 int lua_registerfunction(lua_State* L) {
@@ -180,13 +223,14 @@ int lua_registertable(lua_State* L) {
 	lua_rawgeti(L, LUA_REGISTRYINDEX, SqliteDbRef);
 	sqlite3* db = (sqlite3*)lua_touserdata(L, -1);
 	lua_pop(L, 1);
-	return sqlite3_registertable(L, db);	
+	return sqlite3_registertable(L, db);
 }
 
 extern "C" __declspec(dllexport)
 int sqlite3_sqlitekitsune_init(sqlite3* db, char** pzErrMsg, const sqlite3_api_routines* pApi) {
 	SQLITE_EXTENSION_INIT2(pApi);
 	lua_State* L = OpenLuaState(l_alloc);
+	GlobalState = L;
 
 	lua_getglobal(L, "Json");
 	lua_pushstring(L, "Create");
@@ -211,7 +255,7 @@ int sqlite3_sqlitekitsune_init(sqlite3* db, char** pzErrMsg, const sqlite3_api_r
 	lua_pushcfunction(L, lua_registertable);
 	lua_setglobal(L, "RegisterTable");
 
-	sqlite3_create_function(db, "ExecuteLuaString", 1, SQLITE_UTF8, L, executeluastring, NULL, NULL);
+	sqlite3_create_function(db, "LuaFunction", -1, SQLITE_UTF8, L, runluafunction, NULL, NULL);
 
 	return SQLITE_OK;
 }

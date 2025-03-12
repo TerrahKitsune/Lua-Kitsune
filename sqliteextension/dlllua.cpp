@@ -26,6 +26,20 @@
 #include "../OpenSSL/include/openssl/ssl.h"
 #include "../lua_misc.h"
 
+static int dostring(lua_State* L) {
+
+	if (luaL_loadstring(L, luaL_checkstring(L, -1))) {
+		lua_error(L);
+		return 0;
+	}
+	else if (lua_pcall(L, 0 , 1, NULL)) {
+		lua_error(L);
+		return 0;
+	}
+
+	return 1;
+}
+
 lua_State* OpenLuaState(lua_Alloc memoryAllocator) {
 
 	WSADATA wsa;
@@ -86,6 +100,9 @@ lua_State* OpenLuaState(lua_Alloc memoryAllocator) {
 
 	// Returns nothing
 	luaopen_misc(L);
+
+	lua_pushcfunction(L, dostring);
+	lua_setglobal(L, "dostring");
 
 	return L;
 }

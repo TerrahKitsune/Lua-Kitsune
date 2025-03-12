@@ -1,5 +1,9 @@
 ﻿local testTable = {};
 
+Testy = {Test={1}};
+
+Testy.Test.P = print;
+
 function TestFunction()
 
 	return coroutine.create(function ()
