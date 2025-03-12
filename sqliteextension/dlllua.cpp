@@ -103,6 +103,9 @@ lua_State* OpenLuaState(lua_Alloc memoryAllocator) {
 
 	lua_pushcfunction(L, dostring);
 	lua_setglobal(L, "dostring");
+	
+	lua_pushcfunction(L, query);
+	lua_setglobal(L, "query");
 
 	return L;
 }

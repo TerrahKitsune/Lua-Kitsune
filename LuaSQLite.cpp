@@ -97,7 +97,7 @@ int SQLiteGetRow(lua_State* L) {
 
 	int cnt = sqlite3_column_count(luasqlite->stmt);
 	lua_pop(L, lua_gettop(L));
-	lua_createtable(L, cnt, 0);
+	lua_createtable(L, 0, cnt);
 	for (int n = 0; n < cnt; n++) {
 
 		lua_pushstring(L, sqlite3_column_name(luasqlite->stmt, n));

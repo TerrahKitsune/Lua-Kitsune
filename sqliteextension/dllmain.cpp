@@ -7,12 +7,221 @@
 #include "../luawchar.h"
 #include "../HttpMain.h"
 SQLITE_EXTENSION_INIT1
-int JsonObjectRef = -1;
-int SqliteDbRef = -1;
+int JsonObjectRef = LUA_NOREF;
+int SqliteDbRef = LUA_NOREF;
 lua_State* GlobalState = NULL;
 
 static void* l_alloc(void* ud, void* ptr, size_t osize, size_t nsize) {
 	return sqlite3_realloc(ptr, nsize);
+}
+
+int query(lua_State* L) {
+
+	if (SqliteDbRef == LUA_NOREF) {
+		luaL_error(L, "Internal context is not set");
+		return 0;
+	}
+
+	lua_rawgeti(L, LUA_REGISTRYINDEX, SqliteDbRef);
+	sqlite3* db = (sqlite3*)lua_touserdata(L, -1);
+	lua_pop(L, 1);
+	if (db == NULL) {
+		luaL_error(L, "SQLite instance has been closed");
+		return 0;
+	}
+	sqlite3_stmt* stmt;
+
+	const char* query = luaL_checkstring(L, 1);
+	int cnt = 0;
+	size_t len;
+	const char* data;
+	const char* name;
+	LuaWChar* wchar;
+	LuaStream* stream;
+
+	int err = sqlite3_prepare_v2(db, query, -1, &stmt, 0);
+	if (err) {
+		lua_pop(L, lua_gettop(L));
+		lua_pushboolean(L, false);
+		lua_pushstring(L, sqlite3_errmsg(db));
+		return 2;
+	}
+	else if (lua_istable(L, 2)) {
+
+		for (int n = 0; n < sqlite3_bind_parameter_count(stmt); n++) {
+			name = sqlite3_bind_parameter_name(stmt, n + 1);
+			if (name == NULL || strlen(name) < 2) {
+				lua_pop(L, lua_gettop(L));
+				lua_pushboolean(L, false);
+				lua_pushstring(L, "Parameters contain a nameless parameter!");
+				return 2;
+			}
+
+			lua_pushstring(L, &name[1]);
+			lua_gettable(L, -2);
+
+			switch (lua_type(L, -1))
+			{
+			case LUA_TNIL:
+				sqlite3_bind_null(stmt, ++cnt);
+				break;
+			case LUA_TNUMBER:
+				if (lua_isinteger(L, -1)) {
+					sqlite3_bind_int64(stmt, ++cnt, lua_tointeger(L, -1));
+				}
+				else {
+					sqlite3_bind_double(stmt, ++cnt, lua_tonumber(L, -1));
+				}
+				break;
+			case LUA_TBOOLEAN:
+				sqlite3_bind_int(stmt, ++cnt, lua_toboolean(L, -1));
+				break;
+			case LUA_TSTRING:
+				data = lua_tolstring(L, -1, &len);
+				sqlite3_bind_text(stmt, ++cnt, data, len, SQLITE_STATIC);
+				break;
+			case LUA_TUSERDATA:
+
+				if (luaL_testudata(L, -1, LUAWCHAR)) {
+					wchar = lua_towchar(L, -1);
+					if (wchar->str) {
+						sqlite3_bind_text16(stmt, ++cnt, wchar->str, wchar->len * sizeof(wchar_t), SQLITE_STATIC);
+						break;
+					}
+				}
+				else if (luaL_testudata(L, -1, STREAM)) {
+					stream = lua_toluastream(L, -1);
+					if (stream->data) {
+						sqlite3_bind_blob64(stmt, ++cnt, stream->data, stream->len, SQLITE_STATIC);
+						break;
+					}
+				}
+
+				sqlite3_bind_null(stmt, ++cnt);
+				break;
+			}
+
+			lua_pop(L, 1);
+		}
+	}
+	else if (lua_isfunction(L, 2)) {
+
+		for (int n = 0; n < sqlite3_bind_parameter_count(stmt); n++) {
+			name = sqlite3_bind_parameter_name(stmt, n + 1);
+			if (name == NULL || strlen(name) < 2) {
+				lua_pop(L, lua_gettop(L));
+				lua_pushboolean(L, false);
+				lua_pushstring(L, "Parameters contain a nameless parameter!");
+				return 2;
+			}
+
+			lua_pushvalue(L, 2);
+			lua_pushstring(L, &name[1]);
+
+			if (lua_pcall(L, 1, 1, 0) != 0) {
+				lua_error(L);
+				return 0;
+			}
+
+			switch (lua_type(L, -1))
+			{
+			case LUA_TNIL:
+				sqlite3_bind_null(stmt, ++cnt);
+				break;
+			case LUA_TNUMBER:
+
+				if (lua_isinteger(L, -1)) {
+					sqlite3_bind_int64(stmt, ++cnt, lua_tointeger(L, -1));
+				}
+				else {
+					sqlite3_bind_double(stmt, ++cnt, lua_tonumber(L, -1));
+				}
+				break;
+			case LUA_TBOOLEAN:
+				sqlite3_bind_int(stmt, ++cnt, lua_toboolean(L, -1));
+				break;
+			case LUA_TSTRING:
+				data = lua_tolstring(L, -1, &len);
+				sqlite3_bind_text(stmt, ++cnt, data, len, SQLITE_STATIC);
+				break;
+			case LUA_TUSERDATA:
+
+				if (luaL_testudata(L, -1, LUAWCHAR)) {
+					wchar = lua_towchar(L, -1);
+					if (wchar->str) {
+						sqlite3_bind_text16(stmt, ++cnt, wchar->str, wchar->len * sizeof(wchar_t), SQLITE_STATIC);
+						break;
+					}
+				}
+				else if (luaL_testudata(L, -1, STREAM)) {
+					stream = lua_toluastream(L, -1);
+					if (stream->data) {
+						sqlite3_bind_blob64(stmt, ++cnt, stream->data, stream->len, SQLITE_STATIC);
+						break;
+					}
+				}
+
+				sqlite3_bind_null(stmt, ++cnt);
+				break;
+			}
+
+			lua_pop(L, 1);
+		}
+	}
+
+	int status = sqlite3_step(stmt);
+
+	lua_pop(L, lua_gettop(L));
+
+	if (status == SQLITE_OK) {
+		lua_pushstring(L, "OK");
+	}
+	else if (status == SQLITE_ROW) {
+		lua_newtable(L);
+		int fields = sqlite3_column_count(stmt);
+		int cnt = 0;
+		while (status == SQLITE_ROW) {
+			lua_createtable(L, 0, cnt);
+			for (int i = 0; i < fields; i++)
+			{
+				lua_pushstring(L, sqlite3_column_name(stmt, i));
+				switch (sqlite3_column_type(stmt, i)) {
+				case SQLITE_INTEGER:
+					lua_pushinteger(L, sqlite3_column_int64(stmt, i));
+					break;
+				case SQLITE_FLOAT:
+					lua_pushnumber(L, sqlite3_column_double(stmt, i));
+					break;
+				case SQLITE_BLOB:
+					lua_pushluastream(L, (const BYTE*)sqlite3_column_blob(stmt, i), sqlite3_column_bytes(stmt, i));
+					break;
+				case SQLITE_NULL:
+					lua_pushnil(L);
+					break;
+				default:
+					lua_pushlstring(L, (const char*)sqlite3_column_text(stmt, i), sqlite3_column_bytes(stmt, i));
+					break;
+				}
+				lua_settable(L, -3);			
+			}
+
+			lua_rawseti(L, -2, ++cnt);
+			status = sqlite3_step(stmt);
+		}
+	}
+	else if (status == SQLITE_DONE) {
+		lua_pushstring(L, "DONE");
+	}
+	else {
+		lua_pushboolean(L, false);
+		lua_pushstring(L, sqlite3_errmsg(db));
+		sqlite3_finalize(stmt);
+		return 2;
+	}
+
+	sqlite3_finalize(stmt);
+
+	return 1;
 }
 
 void lua_pushsqlite3value(lua_State* L, sqlite3_value* value) {
@@ -282,8 +491,10 @@ BOOL APIENTRY DllMain(HMODULE hModule,
 		break;
 	case DLL_PROCESS_DETACH:
 		GetHttpBuffer(0);
-		JsonObjectRef = -1;
+		JsonObjectRef = LUA_NOREF;
+		SqliteDbRef = LUA_NOREF;
 		lua_close(GlobalState);
+		GlobalState = NULL;
 		CoUninitialize();
 		break;
 	}

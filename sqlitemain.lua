@@ -1,4 +1,7 @@
 ﻿local testTable = {};
+table.insert(testTable, {"abc", math.random()});
+table.insert(testTable, {"cba", math.random()});
+table.insert(testTable, {"xyz", math.random()});
 
 Testy = {Test={1}};
 
@@ -19,6 +22,13 @@ function TestFunction()
     end);
 end
 
+local j=Json.Create();
+print(j:Encode(query("select 'abc' as B;")));
+
 RegisterTable("TestTable", {"Id", "Value", "Data"}, testTable);
+
+print(j:Encode(query("select * from TestTable where Id >= @id;", {id=2})));
+
+for k,v in pairs(testTable) do testTable[k]=nil; end
 
 return Wchar.FromAnsi("test");
