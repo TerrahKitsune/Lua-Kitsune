@@ -155,14 +155,17 @@ while sqlite:Fetch() do
 	print(j:Encode(sqlite:GetRow()));
 end
 
-for i=1, 1000000 do
-	assert(sqlite:Query([[insert into TestTable (Id, Value, Data)VALUES(@id, @u, @r);]], {id=i,u=UUID(), r=math.random()}));
+for i=1, 100 do
+	assert(sqlite:Query([[insert into TestTable (Id, Value, Data)VALUES(@id, @r, @u);]], {id=i,u=UUID(), r=i}));
 end
 
-assert(sqlite:Query([[update TestTable set Data=Id;]]));
-assert(sqlite:Query([[delete from TestTable where Id%2!=0;]]));
+assert(sqlite:Query([[update TestTable set Data=RANDOM();]]));
+assert(sqlite:Query([[update TestTable set Id=Lua("return UUID()");]]));
+assert(sqlite:Query([[delete from TestTable where Value > 10]]));
 
 assert(sqlite:Query([[SELECT * FROM TestTable ORDER BY Value]]));
+local n=0;
 while sqlite:Fetch() do
-	print(j:Encode(sqlite:GetRow()));
+	n = n + 1;
+	print(n, j:Encode(sqlite:GetRow()));
 end
