@@ -22,7 +22,7 @@
 #include "../TimerMain.h"
 #include "../NamedPipeMain.h"
 #include "../base64.h"
-//#include "LuaBinaryTreeMain.h"
+#include "../SHA1Main.h"
 #include "../OpenSSL/include/openssl/ssl.h"
 #include "../lua_misc.h"
 
@@ -95,8 +95,8 @@ lua_State* OpenLuaState(lua_Alloc memoryAllocator) {
 	lua_setglobal(L, "Pipe");
 	luaopen_base64(L);
 	lua_setglobal(L, "Base64");
-	//luaopen_binarytree(L);
-	//lua_setglobal(L, "BinaryTree");
+	luaopen_sha1(L);
+	lua_setglobal(L, "SHA1");
 
 	// Returns nothing
 	luaopen_misc(L);

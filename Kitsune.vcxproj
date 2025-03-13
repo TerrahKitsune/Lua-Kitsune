@@ -155,6 +155,7 @@
     <ClCompile Include="LuaLinkedListMain.cpp" />
     <ClCompile Include="LuaMutex.cpp" />
     <ClCompile Include="LuaMutexMain.cpp" />
+    <ClCompile Include="LuaSHA1.cpp" />
     <ClCompile Include="LuaSha256.cpp" />
     <ClCompile Include="luasocket.cpp" />
     <ClCompile Include="luasocketmain.cpp" />
@@ -173,6 +174,8 @@
     <ClCompile Include="ODBCMain.cpp" />
     <ClCompile Include="Redis.cpp" />
     <ClCompile Include="RedisMain.cpp" />
+    <ClCompile Include="sha1.c" />
+    <ClCompile Include="SHA1Main.cpp" />
     <ClCompile Include="sha256.c" />
     <ClCompile Include="Sha256Main.cpp" />
     <ClCompile Include="LuaBinaryTreeMain.cpp" />
@@ -320,6 +323,7 @@
     <ClInclude Include="LuaLinkedListMain.h" />
     <ClInclude Include="LuaMutex.h" />
     <ClInclude Include="LuaMutexMain.h" />
+    <ClInclude Include="LuaSHA1.h" />
     <ClInclude Include="LuaSha256.h" />
     <ClInclude Include="luasocket.h" />
     <ClInclude Include="luasocketmain.h" />
@@ -339,6 +343,8 @@
     <ClInclude Include="Redis.h" />
     <ClInclude Include="RedisMain.h" />
     <ClInclude Include="resource.h" />
+    <ClInclude Include="sha1.h" />
+    <ClInclude Include="SHA1Main.h" />
     <ClInclude Include="sha256.h" />
     <ClInclude Include="Sha256Main.h" />
     <ClInclude Include="stream.h" />

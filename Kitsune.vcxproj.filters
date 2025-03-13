@@ -376,6 +376,15 @@
     <Filter Include="LuaTTS\Source Files">
       <UniqueIdentifier>{00156f34-012e-4fac-ac1c-a57c34e8dc76}</UniqueIdentifier>
     </Filter>
+    <Filter Include="LuaSHA1">
+      <UniqueIdentifier>{8aec9a9e-65f4-41fd-8ed4-fbdbadf9415b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaSHA1\Header Files">
+      <UniqueIdentifier>{0c6080ea-bcf9-4408-bf4a-377650a7c5ee}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaSHA1\Source Files">
+      <UniqueIdentifier>{1f0f5f4b-8350-4ae9-9c61-bacfaf063fc4}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Program.cpp">
@@ -846,6 +855,15 @@
     <ClCompile Include="networking.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="LuaSHA1.cpp">
+      <Filter>LuaSHA1\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="SHA1Main.cpp">
+      <Filter>LuaSHA1</Filter>
+    </ClCompile>
+    <ClCompile Include="sha1.c">
+      <Filter>LuaSHA1\Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Lua\lapi.h">
@@ -1315,6 +1333,15 @@
     </ClInclude>
     <ClInclude Include="LuaArchive.h">
       <Filter>Archive\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaSHA1.h">
+      <Filter>LuaSHA1\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SHA1Main.h">
+      <Filter>LuaSHA1\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="sha1.h">
+      <Filter>LuaSHA1\Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

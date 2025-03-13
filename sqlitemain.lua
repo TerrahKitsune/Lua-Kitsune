@@ -3,27 +3,7 @@ table.insert(testTable, {"abc", math.random()});
 table.insert(testTable, {"cba", math.random()});
 table.insert(testTable, {"xyz", math.random()});
 
-Testy = {Test={1}};
-
-Testy.Test.P = print;
-
-function TestFunction()
-
-	return coroutine.create(function ()
-                 
-        print("start");
-
-        for n=1, 10 do
-            local id=UUID();
-            coroutine.yield(id, math.random());
-        end
-
-        print("stop");
-    end);
-end
-
 local j=Json.Create();
-print(j:Encode(query("select 'abc' as B;")));
 
 local testdata = {};
 local function reader(context) 
@@ -82,6 +62,11 @@ local function update(pk, data)
         end
     end
 end
+
+local kluffu1, kluffu2 = dofile("kluffu.lua");
+RegisterTable("Kluffu1", {"Id", "Value"}, kluffu1);
+RegisterTable("Kluffu2", {"Id", "Value"}, kluffu2);
+print(j:Encode(query("select * from Kluffu1;")));
 
 RegisterTable("TestTable", {"Id", "Value", "Data"}, testTable);
 RegisterVirtualTable("Testx", {"Id", "Value", "Data"}, reader, update);

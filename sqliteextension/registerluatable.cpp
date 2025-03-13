@@ -130,6 +130,7 @@ static int registeredtable_next(sqlite3_vtab_cursor* cursor) {
 	}
 
 	if (lua_next(L, -2)) {
+
 		if (luacursor->value_ref == LUA_NOREF) {
 			luacursor->value_ref = luaL_ref(L, LUA_REGISTRYINDEX);
 		}
@@ -171,11 +172,16 @@ static int registeredtable_column(sqlite3_vtab_cursor* cursor, sqlite3_context* 
 	}
 	else {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, luacursor->value_ref);
-		lua_geti(L, -1, N);
-		lua_tosqlite3value(L, -1, context);
-		lua_pop(L, 1);
+		if (lua_istable(L, -1)) {
+			lua_geti(L, -1, N);
+			lua_tosqlite3value(L, -1, context);
+			lua_pop(L, 1);
+		}
+		else {
+			lua_tosqlite3value(L, -1, context);
+		}
 	}
-
+	
 	lua_pop(L, 1);
 
 	return SQLITE_OK;

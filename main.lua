@@ -143,11 +143,14 @@ local j = Json.Create();
 print(string.format("0x%016X", CRC64("Hello!")));
 local sqlite = SQLite.Open();
 
+local sha = SHA1.New();
+sha:Update("Hello!");
+print(sha:Finish());
+GetKey();
 assert(sqlite:Query([[SELECT load_extension("C:/Users/Terrah/Documents/GitHub/Lua-Kitsune/x64/Debug/SQLiteKitsune.dll");]]));
-assert(sqlite:Query([[SELECT LuaFunction('dofile', 'C:/Users/Terrah/Documents/GitHub/Lua-Kitsune/sqlitemain.lua');]]));
+assert(sqlite:Query([[SELECT sqlite_version();]]));
 assert(sqlite:Fetch()); print(sqlite:GetRow(1));
-
-assert(sqlite:Query([[SELECT LuaFunction('Testy.Test.P', 1, 'a', 12.345);]]));
+assert(sqlite:Query([[SELECT LuaFunction('dofile', 'C:/Users/Terrah/Documents/GitHub/Lua-Kitsune/sqlitemain.lua');]]));
 assert(sqlite:Fetch()); print(sqlite:GetRow(1));
 
 assert(sqlite:Query([[SELECT * FROM Testx()]]));

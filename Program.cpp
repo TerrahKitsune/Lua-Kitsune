@@ -54,6 +54,7 @@
 #include "VhdMain.h"
 #include "RedisMain.h"
 #include "LuaTTSMain.h"
+#include "SHA1Main.h"
 
 #define HI_PART(x)  ((x>>4) & 0x0F)
 #define LO_PART(x)  ((x) & 0x0F)
@@ -592,6 +593,8 @@ int main(int argc, char *argv[]) {
 	lua_setglobal(L, "Redis");
 	luaopen_tts(L);
 	lua_setglobal(L, "TTS");
+	luaopen_sha1(L);
+	lua_setglobal(L, "SHA1");
 
 	lua_pushcfunction(L, L_GetRuntime);
 	lua_setglobal(L, "Runtime");

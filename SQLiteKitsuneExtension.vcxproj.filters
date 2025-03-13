@@ -190,6 +190,15 @@
     <Filter Include="Kitsune\NamedPipes\Source Files">
       <UniqueIdentifier>{f4165156-70fd-4d83-9bec-40154121e23b}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Kitsune\LuaSHA1">
+      <UniqueIdentifier>{bf8a66d4-cae9-4cf3-8ab7-a520df71aa4d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaSHA1\Header Files">
+      <UniqueIdentifier>{cdce9008-953c-4fdb-ad15-54559e729444}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Kitsune\LuaSHA1\Source Files">
+      <UniqueIdentifier>{1cae14f7-3955-4601-820c-721d85c1685a}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="SQLite\sqlite3.c">
@@ -471,6 +480,15 @@
     <ClCompile Include="sqliteextension\registerluatable.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="SHA1Main.cpp">
+      <Filter>Kitsune\LuaSHA1</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaSHA1.cpp">
+      <Filter>Kitsune\LuaSHA1\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="sha1.c">
+      <Filter>Kitsune\LuaSHA1\Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="SQLite\sqlite3.h">
@@ -733,6 +751,15 @@
     </ClInclude>
     <ClInclude Include="lua_misc.h">
       <Filter>Kitsune</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaSHA1.h">
+      <Filter>Kitsune\LuaSHA1\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SHA1Main.h">
+      <Filter>Kitsune\LuaSHA1\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="sha1.h">
+      <Filter>Kitsune\LuaSHA1\Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

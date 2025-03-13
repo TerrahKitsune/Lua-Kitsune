@@ -435,7 +435,7 @@ int lua_registertable(lua_State* L) {
 	return sqlite3_registertable(L, db);
 }
 
-extern "C" __declspec(dllexport)
+__declspec(dllexport) 
 int sqlite3_sqlitekitsune_init(sqlite3* db, char** pzErrMsg, const sqlite3_api_routines* pApi) {
 	SQLITE_EXTENSION_INIT2(pApi);
 	lua_State* L = OpenLuaState(l_alloc);
@@ -469,9 +469,12 @@ int sqlite3_sqlitekitsune_init(sqlite3* db, char** pzErrMsg, const sqlite3_api_r
 	return SQLITE_OK;
 }
 
-extern "C" __declspec(dllexport)
-int sqlite3_extension_init(sqlite3* db, char** pzErrMsg, const sqlite3_api_routines* pApi) {
-	return sqlite3_sqlitekitsune_init(db, pzErrMsg, pApi);
+extern "C" 
+{
+	__declspec(dllexport)
+	int sqlite3_extension_init(sqlite3* db, char** pzErrMsg, const sqlite3_api_routines* pApi) {
+		return sqlite3_sqlitekitsune_init(db, pzErrMsg, pApi);
+	}
 }
 
 BOOL APIENTRY DllMain(HMODULE hModule,
