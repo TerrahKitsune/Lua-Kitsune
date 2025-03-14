@@ -1,9 +1,4 @@
-﻿local testTable = {};
-table.insert(testTable, {"abc", math.random()});
-table.insert(testTable, {"cba", math.random()});
-table.insert(testTable, {"xyz", math.random()});
-
-local j=Json.Create();
+﻿local j=Json.Create();
 
 local testdata = {};
 local function reader(context) 
@@ -63,18 +58,24 @@ local function update(pk, data)
     end
 end
 
-local kluffu1, kluffu2 = dofile("kluffu.lua");
-RegisterTable("Kluffu1", {"Id", "Value"}, kluffu1);
-RegisterTable("Kluffu2", {"Id", "Value"}, kluffu2);
-print(j:Encode(query("select * from Kluffu1;")));
+local testTable = {};
+RegisterTable("TestTable", {"Id", "Value"}, testTable);
+RegisterAggregate("TestAgg", function(isfinished, context) 
 
-RegisterTable("TestTable", {"Id", "Value", "Data"}, testTable);
-RegisterVirtualTable("Testx", {"Id", "Value", "Data"}, reader, update);
+    context.cnt = context.cnt or 0;   
+    if isfinished then return context.cnt; end
+    context.cnt = context.cnt + 1;
+end);
+
+RegisterVirtualTable("Testx", {"Id", "Value"}, reader, update);
 for n=1, 10 do
-    query([[INSERT INTO Testx ("Id", "Value", "Data")VALUES(@id, "abc", @uuid);]], {id=n,uuid=UUID()});
+    query([[INSERT INTO TestTable ("Id", "Value")VALUES(@id, @uuid);]], {id=n,uuid=UUID()});
 end
 
-print(j:Encode(query("select * from Testx;")));
+query([[Update TestTable set "Value"=@uuid WHERE "Id"=@id;]], {id=10,uuid="bla"});
+query([[Update TestTable set "Id"=@uuid WHERE "Id"=@id;]], {id=10,uuid=15});
+query([[Delete from TestTable WHERE "Id"=@id;]], {id=1});
+print(j:Encode(query("select TestAgg(Id) as cnt from TestTable;")));
 
 for k,v in pairs(testTable) do testTable[k]=nil; end
 

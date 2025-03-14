@@ -72,6 +72,9 @@ Misc global functions:
 	-Calculate a crc32
 	int CRC32(stringdata, opt existingcrc)
 
+	-Calculate a crc32 data is converted to a string, works with stream and wchar
+	int CRC64(data)
+
 	-Retrive global memory status
 	-type:
 	-0 (default) percentage in use
@@ -86,6 +89,9 @@ Misc global functions:
 	x,y GetScreenSize()
 	x,y GetCursorPointPosition();
 	x,y, monitor GetCursorPosition()
+
+	-Decodes a bencode string into a table
+	table BencodeDecode(binarystring)
 
 	-Returns true if the application has admin rights
 	bool GetIsAdmin()
@@ -163,7 +169,7 @@ Mutex:
 
 	-Lock a mutex
 	-If no timeout is given it'll wait infinitely
-	-returns true if the mutex was locked
+	-returns true if the mutex was successfully or already locked by this instance
 	bool Mutex:Lock(opt timeout)
 
 	-Unlocks the mutex
@@ -1893,6 +1899,18 @@ MD5:
 	-Finilizes the digest and returns the hash as a hex string and a 16 byte string representation
 	-if the digest is finalized already it just returns the previous result without doing anything
 	hexstring, 16bytes MD:Finish()
+
+SHA1:
+	
+	-Returns a newly initilized instance of SHA1
+	SHA1 SHA1.New()
+
+	-Digests data into the SHA1 instance	
+	nil SHA1:Update(data)
+
+	-Finilizes the digest and returns the hash as a hex string and a 16 byte string representation
+	-if the digest is finalized already it just returns the previous result without doing anything
+	hexstring, 20bytes SHA1:Finish()
 
 MySQL:
 	-use the mysql library to connect to a server

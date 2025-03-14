@@ -100,6 +100,7 @@ static int executeluastring_close(sqlite3_vtab_cursor* cursor) {
 		luacursor->current_ref = LUA_NOREF;
 	}
 
+	lua_gc(luacursor->context->state->L, LUA_GCCOLLECT, 0);
 	sqlite3_free(cursor);
 	return SQLITE_OK;
 }
@@ -373,6 +374,6 @@ int sqlite3_createfunction(lua_State* L, sqlite3* db) {
 	}
 
 	lua_pop(L, 1);
-
-	return sqlite3_create_module_v2(db, name, &executeluastringModule, data, destroyfunction);
+	sqlite3_create_module_v2(db, name, &executeluastringModule, data, destroyfunction);
+	return 0;
 }

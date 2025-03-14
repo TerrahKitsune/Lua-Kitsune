@@ -11,6 +11,12 @@ int JsonObjectRef = LUA_NOREF;
 int SqliteDbRef = LUA_NOREF;
 lua_State* GlobalState = NULL;
 
+typedef struct {
+	lua_State* L;
+	int function_ref;
+	int context_ref;
+}AggregateData;
+
 static void* l_alloc(void* ud, void* ptr, size_t osize, size_t nsize) {
 	return sqlite3_realloc(ptr, nsize);
 }
@@ -202,7 +208,7 @@ int query(lua_State* L) {
 					lua_pushlstring(L, (const char*)sqlite3_column_text(stmt, i), sqlite3_column_bytes(stmt, i));
 					break;
 				}
-				lua_settable(L, -3);			
+				lua_settable(L, -3);
 			}
 
 			lua_rawseti(L, -2, ++cnt);
@@ -341,7 +347,8 @@ void lua_tosqlite3value(lua_State* L, int idx, sqlite3_context* context) {
 	}
 }
 
-static void runluafunction(sqlite3_context* context, int argc, sqlite3_value** argv) {
+static void executeluafunction(sqlite3_context* context, int argc, sqlite3_value** argv) {
+
 	lua_State* L = (lua_State*)sqlite3_user_data(context);
 
 	if (argc < 1) {
@@ -435,7 +442,94 @@ int lua_registertable(lua_State* L) {
 	return sqlite3_registertable(L, db);
 }
 
-__declspec(dllexport) 
+void runluaaggregate(sqlite3_context* context, int argc, sqlite3_value** argv, AggregateData* aggregate, bool isFinished) {
+	lua_State* L = aggregate->L;
+
+	int top = lua_gettop(L);
+	lua_rawgeti(L, LUA_REGISTRYINDEX, aggregate->function_ref);
+	lua_pushboolean(L, isFinished);
+	lua_rawgeti(L, LUA_REGISTRYINDEX, aggregate->context_ref);
+
+	for (size_t i = 0; i < argc; i++)
+	{
+		lua_pushsqlite3value(L, argv[i]);
+	}
+
+	if (lua_pcall(L, argc+2, isFinished ? 1 : 0, NULL)) {
+		sqlite3_result_error(context, lua_tostring(L, -1), -1);
+		lua_settop(L, top);
+		return;
+	}
+
+	if (isFinished) {
+		lua_tosqlite3value(L, -1, context);
+	}
+
+	lua_settop(L, top);
+}
+
+void runluaaggregatestep(sqlite3_context* context, int argc, sqlite3_value** argv) {
+	AggregateData* aggregate = (AggregateData*)sqlite3_user_data(context);
+
+	if (aggregate->context_ref == LUA_NOREF) {
+		lua_newtable(aggregate->L);
+		aggregate->context_ref = luaL_ref(aggregate->L, LUA_REGISTRYINDEX);
+	}
+
+	runluaaggregate(context, argc, argv, aggregate, false);
+}
+
+void runluaaggregatefinish(sqlite3_context* context) {
+	AggregateData* aggregate = (AggregateData*)sqlite3_user_data(context);
+
+	runluaaggregate(context, 0, NULL, aggregate, true);
+
+	if (aggregate->context_ref != LUA_NOREF) {
+		luaL_unref(aggregate->L, LUA_REGISTRYINDEX, aggregate->context_ref);
+		aggregate->context_ref = LUA_NOREF;
+	}
+
+	lua_gc(aggregate->L, LUA_GCCOLLECT, 0);
+}
+
+void destroyaggregate(void* data) {
+	AggregateData* aggData = (AggregateData*)data;
+
+	if (aggData->context_ref != LUA_NOREF) {
+		luaL_unref(aggData->L, LUA_REGISTRYINDEX, aggData->context_ref);
+	}
+
+	if (aggData->function_ref != LUA_NOREF) {
+		luaL_unref(aggData->L, LUA_REGISTRYINDEX, aggData->function_ref);
+	}
+
+	sqlite3_free(aggData);
+}
+
+int lua_registeraggregate(lua_State* L) {
+
+	luaL_checktype(L, -2, LUA_TSTRING);
+	luaL_checktype(L, -1, LUA_TFUNCTION);
+
+	lua_rawgeti(L, LUA_REGISTRYINDEX, SqliteDbRef);
+	sqlite3* db = (sqlite3*)lua_touserdata(L, -1);
+	lua_pop(L, 1);
+
+	AggregateData* aggData = (AggregateData*)sqlite3_malloc(sizeof(AggregateData));
+	if (!aggData) {
+		luaL_error(L, "Out of memory");
+		return 0;
+	}
+	aggData->L = L;
+	aggData->context_ref = LUA_NOREF;
+	aggData->function_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+
+	sqlite3_create_function_v2(db, lua_tostring(L, -1), -1, SQLITE_UTF8, aggData, NULL, runluaaggregatestep, runluaaggregatefinish, destroyaggregate);
+
+	return 0;
+}
+
+__declspec(dllexport)
 int sqlite3_sqlitekitsune_init(sqlite3* db, char** pzErrMsg, const sqlite3_api_routines* pApi) {
 	SQLITE_EXTENSION_INIT2(pApi);
 	lua_State* L = OpenLuaState(l_alloc);
@@ -464,15 +558,21 @@ int sqlite3_sqlitekitsune_init(sqlite3* db, char** pzErrMsg, const sqlite3_api_r
 	lua_pushcfunction(L, lua_registertable);
 	lua_setglobal(L, "RegisterTable");
 
-	sqlite3_create_function(db, "LuaFunction", -1, SQLITE_UTF8, L, runluafunction, NULL, NULL);
+	lua_pushcfunction(L, lua_registeraggregate);
+	lua_setglobal(L, "RegisterAggregate");
+
+	lua_pushcfunction(L, query);
+	lua_setglobal(L, "query");
+
+	sqlite3_create_function(db, "LuaFunction", -1, SQLITE_UTF8, L, executeluafunction, NULL, NULL);
 
 	return SQLITE_OK;
 }
 
-extern "C" 
+extern "C"
 {
 	__declspec(dllexport)
-	int sqlite3_extension_init(sqlite3* db, char** pzErrMsg, const sqlite3_api_routines* pApi) {
+		int sqlite3_extension_init(sqlite3* db, char** pzErrMsg, const sqlite3_api_routines* pApi) {
 		return sqlite3_sqlitekitsune_init(db, pzErrMsg, pApi);
 	}
 }

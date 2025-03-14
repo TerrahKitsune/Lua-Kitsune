@@ -194,10 +194,11 @@ static int registeredtable_rowid(sqlite3_vtab_cursor* cursor, sqlite_int64* pRow
 static int registeredtable_update(sqlite3_vtab* vtab, int argc, sqlite3_value** argv, sqlite3_int64* pRowid) {
 	RegisteredTableContext* context = (RegisteredTableContext*)vtab;
 	lua_State* L = context->table->L;
+	int top = lua_gettop(L);
 	lua_rawgeti(L, LUA_REGISTRYINDEX, context->table->table_ref);
 
 	if (lua_isnoneornil(L, -1)) {
-		lua_pop(L, 1);
+		lua_settop(L, top);
 		return SQLITE_ERROR;
 	}
 
@@ -210,7 +211,7 @@ static int registeredtable_update(sqlite3_vtab* vtab, int argc, sqlite3_value** 
 	if (argc == 1) {
 		lua_pushnil(L);
 		lua_settable(L, -3);
-		lua_pop(L, 1);
+		lua_settop(L, top);
 		return SQLITE_OK;
 	}
 	// Insert 
@@ -224,31 +225,39 @@ static int registeredtable_update(sqlite3_vtab* vtab, int argc, sqlite3_value** 
 			lua_pop(L, 2);
 
 			int realargs = argc - 3;
-			lua_createtable(L, realargs, 0);
-
-			for (size_t i = 0; i < realargs; i++)
+			if (context->table->numbfields > 2)
 			{
-				lua_pushvalue(L, (realargs - i + 1) * -1);
-				lua_rawseti(L, -2, i + 1);
+				lua_createtable(L, realargs, 0);
+
+				for (size_t i = 0; i < realargs; i++)
+				{
+					lua_pushvalue(L, (realargs - i + 1) * -1);
+					lua_rawseti(L, -2, i + 1);
+				}
+			}
+			else if (context->table->numbfields == 2) {
+				lua_pushvalue(L, -1);
+			}
+			else if (context->table->numbfields == 1) {
+				lua_pushboolean(L, 1);
 			}
 
 			lua_pushvalue(L, (argc - 1) * -1);
 			lua_pushvalue(L, -2);
 			lua_settable(L, (argc + 4) * -1);
-			lua_pop(L, argc + 2);
+			lua_settop(L, top);
 			return SQLITE_OK;
 		}
 		else {
 			lua_pop(L, 2);
 			size_t len;
 			const char* errorkey = luaL_tolstring(L, (argc - 2) * -1, &len);
-			lua_pop(L, argc + 2);
+			lua_settop(L, top);
 			vtab->zErrMsg = sqlite3_mprintf("Duplicate key: %s", errorkey);
 			return SQLITE_ERROR;
 		}
 	}
 	else if (argc >= 3) {
-
 		lua_pushvalue(L, argc * -1);
 		lua_gettable(L, (argc + 2) * -1);
 
@@ -257,34 +266,55 @@ static int registeredtable_update(sqlite3_vtab* vtab, int argc, sqlite3_value** 
 			lua_pop(L, 2);
 			size_t len;
 			const char* errorkey = luaL_tolstring(L, (argc - 2) * -1, &len);
-			lua_pop(L, argc + 2);
+			lua_settop(L, top);
 			vtab->zErrMsg = sqlite3_mprintf("Update key not found: %s", errorkey);
 			return SQLITE_ERROR;
 		}
+		else if (context->table->numbfields <= 2) {
+			lua_pop(L, 1);
+			if (context->table->numbfields == 1) {
+				lua_pushboolean(L, 1);
+			}
+			lua_settable(L, (argc + 1) * -1);
 
-		int realargs = argc - 3;
-		for (size_t i = 0; i < realargs; i++)
-		{
-			lua_pushvalue(L, (realargs - i + 1) * -1);
-			lua_rawseti(L, -2, i + 1);
-		}
+			if (lua_rawequal(L, (argc - 2) * -1, (argc - 3) * -1)) {
+				lua_settop(L, top);
+				return SQLITE_OK;
+			}
 
-		if (lua_rawequal(L, (argc + 1) * -1, argc * -1)){
-			lua_pop(L, argc + 2);
+			lua_pushvalue(L, (argc - 2) * -1);
+			lua_pushnil(L);
+			lua_settable(L, (argc + 1) * -1);
+			lua_settop(L, top);
 			return SQLITE_OK;
 		}
+		else 
+		{
+			int realargs = argc - 3;
+			for (size_t i = 0; i < realargs; i++)
+			{
+				lua_pushvalue(L, (realargs - i + 1) * -1);
+				lua_rawseti(L, -2, i + 1);
+			}
 
-		lua_pushvalue(L, (argc + 1) * -1);
-		lua_pushnil(L);
-		lua_settable(L, (argc + 4) * -1);
-		lua_pushvalue(L, argc * -1);
-		lua_pushvalue(L, -2);
-		lua_settable(L, (argc + 4) * -1);
-		lua_pop(L, argc + 2);
+			if (lua_rawequal(L, (argc + 1) * -1, argc * -1)) {
+				lua_settop(L, top);
+				return SQLITE_OK;
+			}
+
+			lua_pushvalue(L, (argc + 1) * -1);
+			lua_pushnil(L);
+			lua_settable(L, (argc + 4) * -1);
+			lua_pushvalue(L, argc * -1);
+			lua_pushvalue(L, -2);
+			lua_settable(L, (argc + 4) * -1);
+			lua_settop(L, top);
+		}
+
 		return SQLITE_OK;
 	}
 	else {
-		lua_pop(L, 1);
+		lua_settop(L, top);
 	}
 
 	return SQLITE_ERROR;
@@ -435,6 +465,6 @@ int sqlite3_registertable(lua_State* L, sqlite3* db) {
 	data->table_ref = luaL_ref(L, LUA_REGISTRYINDEX);
 	data->L = L;
 	lua_pop(L, 1);
-
-	return sqlite3_create_module_v2(db, name, &registertableModule, data, destroytable);
+	sqlite3_create_module_v2(db, name, &registertableModule, data, destroytable);
+	return 0;
 }

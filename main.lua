@@ -145,30 +145,13 @@ local sqlite = SQLite.Open();
 
 local sha = SHA1.New();
 sha:Update("Hello!");
-print(sha:Finish());
-GetKey();
+sha = sha:Finish();
+print(sha);
+
 assert(sqlite:Query([[SELECT load_extension("C:/Users/Terrah/Documents/GitHub/Lua-Kitsune/x64/Debug/SQLiteKitsune.dll");]]));
-assert(sqlite:Query([[SELECT sqlite_version();]]));
-assert(sqlite:Fetch()); print(sqlite:GetRow(1));
 assert(sqlite:Query([[SELECT LuaFunction('dofile', 'C:/Users/Terrah/Documents/GitHub/Lua-Kitsune/sqlitemain.lua');]]));
-assert(sqlite:Fetch()); print(sqlite:GetRow(1));
 
-assert(sqlite:Query([[SELECT * FROM Testx()]]));
-while sqlite:Fetch() do
-	print(j:Encode(sqlite:GetRow()));
-end
-
-for i=1, 100 do
-	assert(sqlite:Query([[insert into TestTable (Id, Value, Data)VALUES(@id, @r, @u);]], {id=i,u=UUID(), r=i}));
-end
-
-assert(sqlite:Query([[update TestTable set Data=RANDOM();]]));
-assert(sqlite:Query([[update TestTable set Id=Lua("return UUID()");]]));
-assert(sqlite:Query([[delete from TestTable where Value > 10]]));
-
-assert(sqlite:Query([[SELECT * FROM TestTable ORDER BY Value]]));
-local n=0;
-while sqlite:Fetch() do
-	n = n + 1;
-	print(n, j:Encode(sqlite:GetRow()));
-end
+local f=io.open("test.torrent", "rb");
+local raw=f:read("*all");
+f:close();
+--print(j:Encode(BencodeDecode(raw)));

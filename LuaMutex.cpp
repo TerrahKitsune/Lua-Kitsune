@@ -8,26 +8,8 @@
 int LuaCreateMutex(lua_State* L) {
 
 	const char* name = luaL_checkstring(L, 1);
-	size_t len = strlen(name);
-	char mutexname[MAX_PATH];
 
-	strcpy(mutexname, "Global\\");
-
-	if (len <= 0 || len + strlen(mutexname) >= (MAX_PATH - 1)) {
-		luaL_error(L, "Mutex name is invalid");
-		return 0;
-	}
-
-	for (size_t n = 0; n < len; n++) {
-		if (name[n] == '\\') {
-			luaL_error(L, "Mutex name is invalid");
-			return 0;
-		}
-	}
-
-	strcat(mutexname, name);
-
-	HANDLE mutex = CreateMutex(NULL, false, mutexname);
+	HANDLE mutex = CreateMutex(NULL, false, name);
 
 	lua_pop(L, lua_gettop(L));
 
@@ -41,7 +23,7 @@ int LuaCreateMutex(lua_State* L) {
 
 	LuaMutex* luamutex = lua_pushmutex(L);
 
-	memcpy(luamutex->mutexname, mutexname, MAX_PATH);
+	memcpy(luamutex->mutexname, name, MAX_PATH);
 	luamutex->mutex = mutex;
 
 	return 1;
@@ -58,12 +40,6 @@ int LuaLockMutex(lua_State* L) {
 		lua_pushboolean(L, mutex->istaken);
 
 		return 1;
-	}
-
-	DWORD wait = INFINITE;
-
-	if (timeout > 0) {
-		wait = (DWORD)timeout;
 	}
 
 	DWORD result = WaitForSingleObject(mutex->mutex, (DWORD)timeout);
