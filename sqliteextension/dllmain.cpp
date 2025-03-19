@@ -8,28 +8,71 @@
 #include "../HttpMain.h"
 SQLITE_EXTENSION_INIT1
 int JsonObjectRef = LUA_NOREF;
-int SqliteDbRef = LUA_NOREF;
-lua_State* GlobalState = NULL;
+int StateRef = LUA_NOREF;
+
+ResState* GlobalState = NULL;
 
 typedef struct {
 	lua_State* L;
 	int function_ref;
 	int context_ref;
+	bool isAggregate;
 }AggregateData;
+
+ResRegistration* GetRegistration(ResState* state, const char* name) {
+
+	for (size_t i = 0; i < state->numbRegistrations; i++)
+	{
+		if (strcmp(state->Registrations[i].name, name) == 0) {
+			return state->Registrations;
+		}
+	}
+
+	return NULL;
+}
+
+ResRegistration* AddRegistration(ResState* state, const char* name, int type) {
+
+	ResRegistration* temp = (ResRegistration*)sqlite3_realloc(state->Registrations, sizeof(ResRegistration) * (state->numbRegistrations + 1));
+	if (!temp) {
+		return NULL;
+	}
+	else {
+		state->Registrations = temp;
+	}
+
+	ResRegistration* current = &state->Registrations[state->numbRegistrations];
+	state->numbRegistrations++;
+
+	current->ptr = NULL;
+	current->type = type;
+	current->name = (char*)sqlite3_malloc(sizeof(char) * (strlen(name) + 1));
+
+	if (!current->name) {
+		return NULL;
+	}
+	else {
+		current->name[strlen(name)] = '\0';
+		strcpy(current->name, name);
+	}
+
+	return current;
+}
 
 static void* l_alloc(void* ud, void* ptr, size_t osize, size_t nsize) {
 	return sqlite3_realloc(ptr, nsize);
 }
 
-int query(lua_State* L) {
+int querysqlite(lua_State* L, bool isScalar) {
 
-	if (SqliteDbRef == LUA_NOREF) {
+	if (StateRef == LUA_NOREF) {
 		luaL_error(L, "Internal context is not set");
 		return 0;
 	}
 
-	lua_rawgeti(L, LUA_REGISTRYINDEX, SqliteDbRef);
-	sqlite3* db = (sqlite3*)lua_touserdata(L, -1);
+	lua_rawgeti(L, LUA_REGISTRYINDEX, StateRef);
+	ResState* state = (ResState*)lua_touserdata(L, -1);
+	sqlite3* db = state->db;
 	lua_pop(L, 1);
 	if (db == NULL) {
 		luaL_error(L, "SQLite instance has been closed");
@@ -50,6 +93,12 @@ int query(lua_State* L) {
 		lua_pop(L, lua_gettop(L));
 		lua_pushboolean(L, false);
 		lua_pushstring(L, sqlite3_errmsg(db));
+		sqlite3_finalize(stmt);
+
+		if (isScalar) {
+			lua_error(L);
+		}
+
 		return 2;
 	}
 	else if (lua_istable(L, 2)) {
@@ -118,6 +167,11 @@ int query(lua_State* L) {
 				lua_pop(L, lua_gettop(L));
 				lua_pushboolean(L, false);
 				lua_pushstring(L, "Parameters contain a nameless parameter!");
+				sqlite3_finalize(stmt);
+
+				if (isScalar) {
+					lua_error(L);
+				}
 				return 2;
 			}
 
@@ -178,56 +232,107 @@ int query(lua_State* L) {
 	int status = sqlite3_step(stmt);
 
 	lua_pop(L, lua_gettop(L));
-
+	
 	if (status == SQLITE_OK) {
-		lua_pushstring(L, "OK");
+
+		if (isScalar) {
+			lua_pushnil(L);
+		}
+		else {
+			lua_pushstring(L, "OK");
+		}
 	}
 	else if (status == SQLITE_ROW) {
-		lua_newtable(L);
-		int fields = sqlite3_column_count(stmt);
-		int cnt = 0;
-		while (status == SQLITE_ROW) {
-			lua_createtable(L, 0, cnt);
-			for (int i = 0; i < fields; i++)
-			{
-				lua_pushstring(L, sqlite3_column_name(stmt, i));
-				switch (sqlite3_column_type(stmt, i)) {
+
+		if (isScalar) {
+			if (sqlite3_column_count(stmt) <= 0) {
+				lua_pushnil(L);
+			}
+			else {
+				switch (sqlite3_column_type(stmt, 0)) {
 				case SQLITE_INTEGER:
-					lua_pushinteger(L, sqlite3_column_int64(stmt, i));
+					lua_pushinteger(L, sqlite3_column_int64(stmt, 0));
 					break;
 				case SQLITE_FLOAT:
-					lua_pushnumber(L, sqlite3_column_double(stmt, i));
+					lua_pushnumber(L, sqlite3_column_double(stmt, 0));
 					break;
 				case SQLITE_BLOB:
-					lua_pushluastream(L, (const BYTE*)sqlite3_column_blob(stmt, i), sqlite3_column_bytes(stmt, i));
+					lua_pushluastream(L, (const BYTE*)sqlite3_column_blob(stmt, 0), sqlite3_column_bytes(stmt, 0));
 					break;
 				case SQLITE_NULL:
 					lua_pushnil(L);
 					break;
 				default:
-					lua_pushlstring(L, (const char*)sqlite3_column_text(stmt, i), sqlite3_column_bytes(stmt, i));
+					lua_pushlstring(L, (const char*)sqlite3_column_text(stmt, 0), sqlite3_column_bytes(stmt, 0));
 					break;
 				}
-				lua_settable(L, -3);
 			}
+		}
+		else {
+			lua_newtable(L);
+			int fields = sqlite3_column_count(stmt);
+			int cnt = 0;
+			while (status == SQLITE_ROW) {
+				lua_createtable(L, 0, cnt);
+				for (int i = 0; i < fields; i++)
+				{
+					lua_pushstring(L, sqlite3_column_name(stmt, i));
+					switch (sqlite3_column_type(stmt, i)) {
+					case SQLITE_INTEGER:
+						lua_pushinteger(L, sqlite3_column_int64(stmt, i));
+						break;
+					case SQLITE_FLOAT:
+						lua_pushnumber(L, sqlite3_column_double(stmt, i));
+						break;
+					case SQLITE_BLOB:
+						lua_pushluastream(L, (const BYTE*)sqlite3_column_blob(stmt, i), sqlite3_column_bytes(stmt, i));
+						break;
+					case SQLITE_NULL:
+						lua_pushnil(L);
+						break;
+					default:
+						lua_pushlstring(L, (const char*)sqlite3_column_text(stmt, i), sqlite3_column_bytes(stmt, i));
+						break;
+					}
+					lua_settable(L, -3);
+				}
 
-			lua_rawseti(L, -2, ++cnt);
-			status = sqlite3_step(stmt);
+				lua_rawseti(L, -2, ++cnt);
+				status = sqlite3_step(stmt);
+			}
 		}
 	}
 	else if (status == SQLITE_DONE) {
-		lua_pushstring(L, "DONE");
+		if (isScalar) {
+			lua_pushnil(L);
+		}
+		else {
+			lua_pushstring(L, "DONE");
+		}
 	}
 	else {
 		lua_pushboolean(L, false);
 		lua_pushstring(L, sqlite3_errmsg(db));
 		sqlite3_finalize(stmt);
+		
+		if (isScalar) {
+			lua_error(L);
+		}
+		
 		return 2;
 	}
 
 	sqlite3_finalize(stmt);
 
 	return 1;
+}
+
+int query(lua_State* L) {
+	return querysqlite(L, false);
+}
+
+int scalar(lua_State* L) {
+	return querysqlite(L, true);
 }
 
 void lua_pushsqlite3value(lua_State* L, sqlite3_value* value) {
@@ -428,18 +533,18 @@ static void executeluafunction(sqlite3_context* context, int argc, sqlite3_value
 
 int lua_registerfunction(lua_State* L) {
 
-	lua_rawgeti(L, LUA_REGISTRYINDEX, SqliteDbRef);
-	sqlite3* db = (sqlite3*)lua_touserdata(L, -1);
+	lua_rawgeti(L, LUA_REGISTRYINDEX, StateRef);
+	ResState* state = (ResState*)lua_touserdata(L, -1);
 	lua_pop(L, 1);
-	return sqlite3_createfunction(L, db);
+	return sqlite3_createfunction(L, state);
 }
 
 int lua_registertable(lua_State* L) {
 
-	lua_rawgeti(L, LUA_REGISTRYINDEX, SqliteDbRef);
-	sqlite3* db = (sqlite3*)lua_touserdata(L, -1);
+	lua_rawgeti(L, LUA_REGISTRYINDEX, StateRef);
+	ResState* state = (ResState*)lua_touserdata(L, -1);
 	lua_pop(L, 1);
-	return sqlite3_registertable(L, db);
+	return sqlite3_registertable(L, state);
 }
 
 void runluaaggregate(sqlite3_context* context, int argc, sqlite3_value** argv, AggregateData* aggregate, bool isFinished) {
@@ -447,7 +552,12 @@ void runluaaggregate(sqlite3_context* context, int argc, sqlite3_value** argv, A
 
 	int top = lua_gettop(L);
 	lua_rawgeti(L, LUA_REGISTRYINDEX, aggregate->function_ref);
-	lua_pushboolean(L, isFinished);
+	if (aggregate->isAggregate) {
+		lua_pushboolean(L, isFinished);
+	}
+	else {
+		isFinished = true;
+	}
 	lua_rawgeti(L, LUA_REGISTRYINDEX, aggregate->context_ref);
 
 	for (size_t i = 0; i < argc; i++)
@@ -455,7 +565,7 @@ void runluaaggregate(sqlite3_context* context, int argc, sqlite3_value** argv, A
 		lua_pushsqlite3value(L, argv[i]);
 	}
 
-	if (lua_pcall(L, argc+2, isFinished ? 1 : 0, NULL)) {
+	if (lua_pcall(L, argc + (aggregate->isAggregate ? 2 : 1), isFinished ? 1 : 0, NULL)) {
 		sqlite3_result_error(context, lua_tostring(L, -1), -1);
 		lua_settop(L, top);
 		return;
@@ -506,14 +616,42 @@ void destroyaggregate(void* data) {
 	sqlite3_free(aggData);
 }
 
-int lua_registeraggregate(lua_State* L) {
+int lua_registerext(lua_State* L, bool isAggregate) {
 
 	luaL_checktype(L, -2, LUA_TSTRING);
 	luaL_checktype(L, -1, LUA_TFUNCTION);
 
-	lua_rawgeti(L, LUA_REGISTRYINDEX, SqliteDbRef);
-	sqlite3* db = (sqlite3*)lua_touserdata(L, -1);
+	lua_rawgeti(L, LUA_REGISTRYINDEX, StateRef);
+	ResState* state = (ResState*)lua_touserdata(L, -1);
+	sqlite3* db = state->db;
 	lua_pop(L, 1);
+
+	const char* name = lua_tostring(L, -2);
+
+	int type = isAggregate ? RES_TYPE_AGGREGATE_FUNCTION : RES_TYPE_FUNCTION;
+	ResRegistration* res = GetRegistration(state, name);
+
+	if (res && res->type != type) {
+		luaL_error(L, "%s is already a registered sqlite resource", name);
+		return 0;
+	}
+	else if (res && res->type == type) {
+		AggregateData* existing = (AggregateData*)res->ptr;
+		
+		if (existing->context_ref != LUA_NOREF) {
+			luaL_unref(L, LUA_REGISTRYINDEX, existing->context_ref);
+			existing->context_ref = LUA_NOREF;
+		}
+
+		if (existing->function_ref != LUA_NOREF) {
+			luaL_unref(L, LUA_REGISTRYINDEX, existing->function_ref);
+			existing->function_ref = LUA_NOREF;
+		}
+
+		existing->function_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+
+		return 0;
+	}
 
 	AggregateData* aggData = (AggregateData*)sqlite3_malloc(sizeof(AggregateData));
 	if (!aggData) {
@@ -523,17 +661,45 @@ int lua_registeraggregate(lua_State* L) {
 	aggData->L = L;
 	aggData->context_ref = LUA_NOREF;
 	aggData->function_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+	aggData->isAggregate = isAggregate;
 
-	sqlite3_create_function_v2(db, lua_tostring(L, -1), -1, SQLITE_UTF8, aggData, NULL, runluaaggregatestep, runluaaggregatefinish, destroyaggregate);
+	if (aggData->isAggregate) {
+		sqlite3_create_function_v2(db, name, -1, SQLITE_UTF8, aggData, NULL, runluaaggregatestep, runluaaggregatefinish, destroyaggregate);
+	}
+	else {
+		sqlite3_create_function_v2(db, name, -1, SQLITE_UTF8, aggData, runluaaggregatestep, NULL, NULL, destroyaggregate);
+	}
+
+	res = AddRegistration(state, name, type);
+
+	if (res) {
+		res->ptr = aggData;
+	}
 
 	return 0;
+}
+
+int lua_registersqliteaggregate(lua_State* L) {
+	return lua_registerext(L, true);
+}
+
+int lua_registersqlitefunction(lua_State* L) {
+	return lua_registerext(L, false);
 }
 
 __declspec(dllexport)
 int sqlite3_sqlitekitsune_init(sqlite3* db, char** pzErrMsg, const sqlite3_api_routines* pApi) {
 	SQLITE_EXTENSION_INIT2(pApi);
+
+	GlobalState = (ResState*)sqlite3_malloc(sizeof(ResState));
+	if (!GlobalState) {
+		return SQLITE_NOMEM;
+	}
+	memset(GlobalState, 0, sizeof(ResState));
+
 	lua_State* L = OpenLuaState(l_alloc);
-	GlobalState = L;
+	GlobalState->L = L;
+	GlobalState->db = db;
 
 	lua_getglobal(L, "Json");
 	lua_pushstring(L, "Create");
@@ -549,8 +715,8 @@ int sqlite3_sqlitekitsune_init(sqlite3* db, char** pzErrMsg, const sqlite3_api_r
 	JsonObjectRef = luaL_ref(L, LUA_REGISTRYINDEX);
 	lua_pop(L, 1);
 
-	lua_pushlightuserdata(L, db);
-	SqliteDbRef = luaL_ref(L, LUA_REGISTRYINDEX);
+	lua_pushlightuserdata(L, GlobalState);
+	StateRef = luaL_ref(L, LUA_REGISTRYINDEX);
 
 	lua_pushcfunction(L, lua_registerfunction);
 	lua_setglobal(L, "RegisterVirtualTable");
@@ -558,11 +724,17 @@ int sqlite3_sqlitekitsune_init(sqlite3* db, char** pzErrMsg, const sqlite3_api_r
 	lua_pushcfunction(L, lua_registertable);
 	lua_setglobal(L, "RegisterTable");
 
-	lua_pushcfunction(L, lua_registeraggregate);
+	lua_pushcfunction(L, lua_registersqliteaggregate);
 	lua_setglobal(L, "RegisterAggregate");
+
+	lua_pushcfunction(L, lua_registersqlitefunction);
+	lua_setglobal(L, "RegisterFunction");
 
 	lua_pushcfunction(L, query);
 	lua_setglobal(L, "query");
+
+	lua_pushcfunction(L, scalar);
+	lua_setglobal(L, "scalar");
 
 	sqlite3_create_function(db, "LuaFunction", -1, SQLITE_UTF8, L, executeluafunction, NULL, NULL);
 
@@ -595,8 +767,21 @@ BOOL APIENTRY DllMain(HMODULE hModule,
 	case DLL_PROCESS_DETACH:
 		GetHttpBuffer(0);
 		JsonObjectRef = LUA_NOREF;
-		SqliteDbRef = LUA_NOREF;
-		lua_close(GlobalState);
+		StateRef = LUA_NOREF;
+		lua_close(GlobalState->L);
+
+		if (GlobalState->Registrations) {
+			for (size_t i = 0; i < GlobalState->numbRegistrations; i++)
+			{
+				if (GlobalState->Registrations[i].name) {
+					sqlite3_free(GlobalState->Registrations[i].name);
+					GlobalState->Registrations[i].name = NULL;
+				}
+			}
+			sqlite3_free(GlobalState->Registrations);
+		}
+
+		sqlite3_free(GlobalState);
 		GlobalState = NULL;
 		CoUninitialize();
 		break;

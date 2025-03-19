@@ -19,6 +19,9 @@ typedef struct {
 	RegisteredTableContext* context;
 	int key_ref;
 	int value_ref;
+	int index_ref;
+	int indexop;
+	int indexnth;
 } RegisteredTableCursor;
 
 static int registeredtable_next(sqlite3_vtab_cursor* cursor);
@@ -79,10 +82,11 @@ static int registeredtable_open(sqlite3_vtab* pVtab, sqlite3_vtab_cursor** ppCur
 	cursor->context = context;
 	cursor->key_ref = LUA_NOREF;
 	cursor->value_ref = LUA_NOREF;
+	cursor->index_ref = LUA_NOREF;
 
 	*ppCursor = (sqlite3_vtab_cursor*)cursor;
 
-	return registeredtable_next(*ppCursor);
+	return SQLITE_OK;
 }
 
 static int registeredtable_close(sqlite3_vtab_cursor* pCursor) {
@@ -99,28 +103,97 @@ static int registeredtable_close(sqlite3_vtab_cursor* pCursor) {
 		cursor->value_ref = LUA_NOREF;
 	}
 
+	if (cursor->index_ref != LUA_NOREF) {
+		luaL_unref(L, LUA_REGISTRYINDEX, cursor->index_ref);
+		cursor->index_ref = LUA_NOREF;
+	}
+
 	lua_gc(L, LUA_GCCOLLECT, 0);
 	sqlite3_free(pCursor);
 	return SQLITE_OK;
 }
 
 static int registeredtable_bestindex(sqlite3_vtab* pVTab, sqlite3_index_info* info) {
+
+	for (int i = 0; i < info->nConstraint; i++)
+	{
+		sqlite3_index_info::sqlite3_index_constraint* constrait = &info->aConstraint[i];
+		if (constrait->iColumn == 0 && constrait->usable && constrait->op == SQLITE_INDEX_CONSTRAINT_EQ) {
+			info->idxNum = 1;
+			info->aConstraintUsage[i].argvIndex = 1;
+			info->estimatedCost = 10;
+			info->idxFlags = SQLITE_INDEX_SCAN_UNIQUE;
+			return SQLITE_OK;
+		}
+	}
+
 	return SQLITE_OK;
 }
 
-static int registeredtable_filter(sqlite3_vtab_cursor*, int idxNum, const char* idxStr, int argc, sqlite3_value** argv) {
+static int registeredtable_filter(sqlite3_vtab_cursor* cursor, int idxNum, const char* idxStr, int argc, sqlite3_value** argv) {
+	
+	// PK Unique Key
+	if (idxNum == 1 && argc == 1) {
+		RegisteredTableCursor* luacursor = (RegisteredTableCursor*)cursor;
+		lua_State* L = luacursor->context->table->L;
+
+		luacursor->indexop = idxNum;
+		luacursor->indexnth = 0;
+		lua_pushsqlite3value(L, argv[0]);
+
+		if (luacursor->index_ref == LUA_NOREF) {
+			luacursor->index_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+		}
+		else {
+			lua_rawseti(L, LUA_REGISTRYINDEX, luacursor->index_ref);
+		}
+	}
+
 	return SQLITE_OK;
 }
 
 static int registeredtable_eof(sqlite3_vtab_cursor* cursor) {
 	RegisteredTableCursor* luacursor = (RegisteredTableCursor*)cursor;
-	return luacursor->key_ref == LUA_NOREF;
-}
-
-static int registeredtable_next(sqlite3_vtab_cursor* cursor) {
-	RegisteredTableCursor* luacursor = (RegisteredTableCursor*)cursor;
 	lua_State* L = luacursor->context->table->L;
+	int top = lua_gettop(L);
 	lua_rawgeti(L, LUA_REGISTRYINDEX, luacursor->context->table->table_ref);
+
+	if (luacursor->index_ref != LUA_NOREF && luacursor->indexop == 1) {
+
+		if (luacursor->indexnth > 0) {
+			lua_settop(L, top);
+			return 1;
+		}
+		else {
+			luacursor->indexnth++;
+		}
+
+		lua_rawgeti(L, LUA_REGISTRYINDEX, luacursor->index_ref);
+
+		if (lua_rawget(L, -2)) {
+			if (luacursor->value_ref == LUA_NOREF) {
+				luacursor->value_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+			}
+			else {
+				lua_rawseti(L, LUA_REGISTRYINDEX, luacursor->value_ref);
+			}
+
+			lua_rawgeti(L, LUA_REGISTRYINDEX, luacursor->index_ref);
+
+			if (luacursor->key_ref == LUA_NOREF) {
+				luacursor->key_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+			}
+			else {
+				lua_rawseti(L, LUA_REGISTRYINDEX, luacursor->key_ref);
+			}
+
+			lua_settop(L, top);
+			return 0;
+		}
+
+		lua_settop(L, top);
+		return 1;
+	}
 
 	if (luacursor->key_ref == LUA_NOREF) {
 		lua_pushnil(L);
@@ -157,8 +230,12 @@ static int registeredtable_next(sqlite3_vtab_cursor* cursor) {
 		}
 	}
 
-	lua_pop(L, 1);
+	lua_settop(L, top);
 
+	return luacursor->key_ref == LUA_NOREF;
+}
+
+static int registeredtable_next(sqlite3_vtab_cursor* cursor) {
 	return SQLITE_OK;
 }
 
@@ -181,7 +258,7 @@ static int registeredtable_column(sqlite3_vtab_cursor* cursor, sqlite3_context* 
 			lua_tosqlite3value(L, -1, context);
 		}
 	}
-	
+
 	lua_pop(L, 1);
 
 	return SQLITE_OK;
@@ -262,7 +339,7 @@ static int registeredtable_update(sqlite3_vtab* vtab, int argc, sqlite3_value** 
 		lua_gettable(L, (argc + 2) * -1);
 
 		if (lua_isnil(L, -1)) {
-			lua_pushvalue(L, (argc+1) * -1);
+			lua_pushvalue(L, (argc + 1) * -1);
 			lua_pop(L, 2);
 			size_t len;
 			const char* errorkey = luaL_tolstring(L, (argc - 2) * -1, &len);
@@ -288,7 +365,7 @@ static int registeredtable_update(sqlite3_vtab* vtab, int argc, sqlite3_value** 
 			lua_settop(L, top);
 			return SQLITE_OK;
 		}
-		else 
+		else
 		{
 			int realargs = argc - 3;
 			for (size_t i = 0; i < realargs; i++)
@@ -374,7 +451,7 @@ static void destroytable(void* pClientData) {
 	}
 }
 
-int sqlite3_registertable(lua_State* L, sqlite3* db) {
+int sqlite3_registertable(lua_State* L, ResState* state) {
 
 	if (lua_type(L, 2) != LUA_TTABLE) {
 		luaL_error(L, "Second argument is not a table");
@@ -386,6 +463,25 @@ int sqlite3_registertable(lua_State* L, sqlite3* db) {
 	}
 
 	const char* name = luaL_checkstring(L, 1);
+
+	ResRegistration* reg = GetRegistration(state, name);
+
+	if (reg && reg->type != RES_TYPE_TABLE) {
+		luaL_error(L, "%s is already a registered sqlite resource", name);
+		return 0;
+	}
+	else if (reg && reg->type == RES_TYPE_TABLE) {
+		RegisteredTable* existing = (RegisteredTable*)reg->ptr;
+
+		if (existing->table_ref != LUA_NOREF) {
+			luaL_unref(L, LUA_REGISTRYINDEX, existing->table_ref);
+		}
+
+		lua_pushvalue(L, 3);
+		existing->table_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+
+		return 0;
+	}
 
 	RegisteredTable* data = (RegisteredTable*)sqlite3_malloc(sizeof(RegisteredTable));
 	if (!data) {
@@ -465,6 +561,10 @@ int sqlite3_registertable(lua_State* L, sqlite3* db) {
 	data->table_ref = luaL_ref(L, LUA_REGISTRYINDEX);
 	data->L = L;
 	lua_pop(L, 1);
-	sqlite3_create_module_v2(db, name, &registertableModule, data, destroytable);
+	sqlite3_create_module_v2(state->db, name, &registertableModule, data, destroytable);
+	reg = AddRegistration(state, name, RES_TYPE_TABLE);
+	if (reg) {
+		reg->ptr = data;
+	}
 	return 0;
 }

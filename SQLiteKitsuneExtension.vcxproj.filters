@@ -489,6 +489,9 @@
     <ClCompile Include="sha1.c">
       <Filter>Kitsune\LuaSHA1\Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="sqliteextension\luawindow.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="SQLite\sqlite3.h">

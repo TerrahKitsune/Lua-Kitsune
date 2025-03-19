@@ -342,7 +342,7 @@ int GetAllInFolderWide(lua_State* L) {
 				lua_settable(L, -3);
 
 				lua_pushstring(L, "Size");
-				lua_pushinteger(L, FindFileData.nFileSizeLow);
+				lua_pushinteger(L, ((DWORD64)FindFileData.nFileSizeHigh << 32) | FindFileData.nFileSizeLow);
 				lua_settable(L, -3);
 
 				lua_pushstring(L, "Creation");
@@ -404,7 +404,7 @@ int GetAllInFolder(lua_State* L) {
 				lua_settable(L, -3);
 
 				lua_pushstring(L, "Size");
-				lua_pushinteger(L, FindFileData.nFileSizeLow);
+				lua_pushinteger(L, ((DWORD64)FindFileData.nFileSizeHigh << 32) | FindFileData.nFileSizeLow);
 				lua_settable(L, -3);
 
 				lua_pushstring(L, "Creation");

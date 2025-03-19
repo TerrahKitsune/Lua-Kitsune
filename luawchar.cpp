@@ -227,6 +227,11 @@ int FromUtf8(lua_State* L) {
 		return 0;
 	}
 
+	if (lua_isnone(L, -1)) {
+		lua_pushnil(L);
+		return 1;
+	}
+
 	size_t len;
 	const char* data = luaL_tolstring(L, -1, &len);
 	lua_pop(L, 1);
@@ -299,6 +304,11 @@ int FromAnsi(lua_State* L) {
 
 	if (lua_gettop(L) < 1) {
 		return 0;
+	}
+
+	if (lua_isnone(L, -1)) {
+		lua_pushnil(L);
+		return 1;
 	}
 
 	size_t len;

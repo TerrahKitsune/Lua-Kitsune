@@ -59,6 +59,9 @@ local function update(pk, data)
 end
 
 local testTable = {};
+RegisterFunction("CRC64", function(data) if not data then return nil; end return string.format('%016x', CRC64(data)); end);
+print(query("select CRC64('abc');"));
+print(scalar("select CRC64('abc');"));
 RegisterTable("TestTable", {"Id", "Value"}, testTable);
 RegisterAggregate("TestAgg", function(isfinished, context) 
 
@@ -72,11 +75,10 @@ for n=1, 10 do
     query([[INSERT INTO TestTable ("Id", "Value")VALUES(@id, @uuid);]], {id=n,uuid=UUID()});
 end
 
-query([[Update TestTable set "Value"=@uuid WHERE "Id"=@id;]], {id=10,uuid="bla"});
+query([[Update TestTable set "Value"=@uuid WHERE "Id" IN (@id, 15, 2);]], {id=10,uuid="bla"});
 query([[Update TestTable set "Id"=@uuid WHERE "Id"=@id;]], {id=10,uuid=15});
 query([[Delete from TestTable WHERE "Id"=@id;]], {id=1});
 print(j:Encode(query("select TestAgg(Id) as cnt from TestTable;")));
 
-for k,v in pairs(testTable) do testTable[k]=nil; end
 
 return Wchar.FromAnsi("test");

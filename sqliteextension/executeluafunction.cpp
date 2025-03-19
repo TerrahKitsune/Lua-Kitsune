@@ -266,7 +266,7 @@ static void destroyfunction(void* pClientData) {
 	}
 }
 
-int sqlite3_createfunction(lua_State* L, sqlite3* db) {
+int sqlite3_createfunction(lua_State* L, ResState* state) {
 
 	if (lua_type(L, 2) != LUA_TTABLE) {
 		luaL_error(L, "Second argument is not a table");
@@ -278,6 +278,15 @@ int sqlite3_createfunction(lua_State* L, sqlite3* db) {
 	}
 
 	const char* name = luaL_checkstring(L, 1);
+
+	if (GetRegistration(state, name)) {
+		luaL_error(L, "%s is already a registered sqlite resource", name);
+		return 0;
+	}
+	else if(!AddRegistration(state, name, RES_TYPE_VTABLE)){
+		luaL_error(L, "Out of memory");
+		return 0;
+	}
 
 	ExecuteLuaFunction* data = (ExecuteLuaFunction*)sqlite3_malloc(sizeof(ExecuteLuaFunction));
 	if (!data) {
@@ -374,6 +383,6 @@ int sqlite3_createfunction(lua_State* L, sqlite3* db) {
 	}
 
 	lua_pop(L, 1);
-	sqlite3_create_module_v2(db, name, &executeluastringModule, data, destroyfunction);
+	sqlite3_create_module_v2(state->db, name, &executeluastringModule, data, destroyfunction);
 	return 0;
 }

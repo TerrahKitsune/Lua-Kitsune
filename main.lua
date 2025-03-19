@@ -151,7 +151,10 @@ print(sha);
 assert(sqlite:Query([[SELECT load_extension("C:/Users/Terrah/Documents/GitHub/Lua-Kitsune/x64/Debug/SQLiteKitsune.dll");]]));
 assert(sqlite:Query([[SELECT LuaFunction('dofile', 'C:/Users/Terrah/Documents/GitHub/Lua-Kitsune/sqlitemain.lua');]]));
 
-local f=io.open("test.torrent", "rb");
-local raw=f:read("*all");
-f:close();
---print(j:Encode(BencodeDecode(raw)));
+--FileSystem.SetCurrentDirectory("C:\\Users\\Terrah\\Desktop\\files");
+--dofile("filehash.lua");
+
+assert(sqlite:Query("SELECT * FROM TestTable;"));
+while sqlite:Fetch() do
+	print(j:Encode(sqlite:GetRow()));
+end
