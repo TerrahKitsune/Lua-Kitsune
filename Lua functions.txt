@@ -1996,6 +1996,10 @@ SQLite:
 	-returns true,"OK" on success, false and an error message on failure
 	bool, txt SQLite:Query(querystring, preparedstatements)
 
+	-Closes the current statement.
+	-Useful for unlocking the database in case not all rows are read
+	nil SQLite:Finish()
+
 	-Advance the recordset to the next row, returns false if there are no more rows
 	bool SQLite:Fetch()
 

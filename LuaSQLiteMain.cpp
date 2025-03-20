@@ -2,6 +2,7 @@
 #include "LuaSQLite.h"
 
 static const struct luaL_Reg lasqlitefunctions[] = {
+	{ "Finish" , SQLiteFinish },
 	{ "Open", SQLiteConnect },
 	{ "Close", SQLite_GC },
 	{ "Query", SQLiteExecute },	

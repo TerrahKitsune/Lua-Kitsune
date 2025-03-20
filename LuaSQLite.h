@@ -30,6 +30,7 @@ int SQLiteSetBusyHandler(lua_State *L);
 int SQLiteSetUseWidechar(lua_State* L);
 int SQLiteRegisterFunction(lua_State* L);
 int SQLiteRegisterAggregateFunction(lua_State* L);
+int SQLiteFinish(lua_State* L);
 
 int SQLite_ToString(lua_State *L);
 int SQLite_GC(lua_State *L);

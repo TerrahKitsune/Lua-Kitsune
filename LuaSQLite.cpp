@@ -4,6 +4,13 @@
 #include "luawchar.h"
 #include "stream.h"
 
+void FinalizeStmt(LuaSQLite*state) {
+	if (state->stmt) {
+		sqlite3_finalize(state->stmt);
+		state->stmt = NULL;
+	}
+}
+
 LuaSQLite* luaL_checksqlite(lua_State* L, int index) {
 
 	LuaSQLite* luasqlite = (LuaSQLite*)luaL_checkudata(L, index, LUASQLITE);
@@ -65,8 +72,10 @@ int SQLiteSetUseWidechar(lua_State* L) {
 int SQLiteGetRow(lua_State* L) {
 
 	LuaSQLite* luasqlite = (LuaSQLite*)luaL_checksqlite(L, 1);
-	if (luasqlite->db == NULL)
+	if (luasqlite->db == NULL) {
 		luaL_error(L, "SQLite instance has been closed");
+		return 1;
+	}
 
 	if (luasqlite->stmt == NULL) {
 		lua_pop(L, lua_gettop(L));
@@ -131,22 +140,26 @@ int SQLiteFetch(lua_State* L) {
 			lua_pushboolean(L, true);
 		}
 		else {
-			sqlite3_finalize(luasqlite->stmt);
-			luasqlite->stmt = NULL;
+			FinalizeStmt(luasqlite);
 			luasqlite->status = SQLITE_OK;
 			lua_pop(L, 1);
 			lua_pushboolean(L, false);
 		}
 	}
 	else {
-		sqlite3_finalize(luasqlite->stmt);
-		luasqlite->stmt = NULL;
+		FinalizeStmt(luasqlite);
 		luasqlite->status = SQLITE_OK;
 		lua_pop(L, 1);
 		lua_pushboolean(L, false);
 	}
 
 	return 1;
+}
+
+int SQLiteFinish(lua_State* L) {
+	LuaSQLite* luasqlite = (LuaSQLite*)luaL_checksqlite(L, 1);
+	FinalizeStmt(luasqlite);
+	return 0;
 }
 
 int SQLiteExecute(lua_State* L) {
@@ -164,16 +177,14 @@ int SQLiteExecute(lua_State* L) {
 	LuaWChar* wchar;
 	LuaStream* stream;
 
-	if (luasqlite->stmt) {
-		sqlite3_finalize(luasqlite->stmt);
-		luasqlite->stmt = NULL;
-	}
+	FinalizeStmt(luasqlite);
 
 	int err = sqlite3_prepare_v2(luasqlite->db, query, -1, &luasqlite->stmt, 0);
 	if (err) {
 		lua_pop(L, lua_gettop(L));
 		lua_pushboolean(L, false);
 		lua_pushstring(L, sqlite3_errmsg(luasqlite->db));
+		FinalizeStmt(luasqlite);
 		return 2;
 	}
 	else if (lua_istable(L, 3)) {
@@ -184,6 +195,7 @@ int SQLiteExecute(lua_State* L) {
 				lua_pop(L, lua_gettop(L));
 				lua_pushboolean(L, false);
 				lua_pushstring(L, "Parameters contain a nameless parameter!");
+				FinalizeStmt(luasqlite);
 				return 2;
 			}
 
@@ -242,6 +254,7 @@ int SQLiteExecute(lua_State* L) {
 				lua_pop(L, lua_gettop(L));
 				lua_pushboolean(L, false);
 				lua_pushstring(L, "Parameters contain a nameless parameter!");
+				FinalizeStmt(luasqlite);
 				return 2;
 			}
 
@@ -306,6 +319,7 @@ int SQLiteExecute(lua_State* L) {
 	if (luasqlite->status == SQLITE_OK) {
 		lua_pushboolean(L, true);
 		lua_pushstring(L, "OK");
+		FinalizeStmt(luasqlite);
 	}
 	else if (luasqlite->status == SQLITE_ROW) {
 		lua_pushboolean(L, true);
@@ -314,10 +328,12 @@ int SQLiteExecute(lua_State* L) {
 	else if (luasqlite->status == SQLITE_DONE) {
 		lua_pushboolean(L, true);
 		lua_pushstring(L, "DONE");
+		FinalizeStmt(luasqlite);
 	}
 	else {
 		lua_pushboolean(L, false);
 		lua_pushstring(L, sqlite3_errmsg(luasqlite->db));
+		FinalizeStmt(luasqlite);
 	}
 
 	return 2;
