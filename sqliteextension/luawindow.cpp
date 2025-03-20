@@ -39,6 +39,8 @@ static void DestroyContext(void* ptr) {
 
 int sqlite3_registerwindow(lua_State* L, ResState* state) {
 
+	luaL_error(L, "WIP, not available.");
+
 	const char* name = luaL_checkstring(L, 1);
 	luaL_checktype(L, -1, LUA_TFUNCTION);
 

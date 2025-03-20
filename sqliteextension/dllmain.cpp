@@ -232,7 +232,7 @@ int querysqlite(lua_State* L, bool isScalar) {
 	int status = sqlite3_step(stmt);
 
 	lua_pop(L, lua_gettop(L));
-	
+
 	if (status == SQLITE_OK) {
 
 		if (isScalar) {
@@ -314,11 +314,11 @@ int querysqlite(lua_State* L, bool isScalar) {
 		lua_pushboolean(L, false);
 		lua_pushstring(L, sqlite3_errmsg(db));
 		sqlite3_finalize(stmt);
-		
+
 		if (isScalar) {
 			lua_error(L);
 		}
-		
+
 		return 2;
 	}
 
@@ -521,11 +521,24 @@ static void executeluafunction(sqlite3_context* context, int argc, sqlite3_value
 		lua_pushsqlite3value(L, argv[i]);
 	}
 
+	lua_createtable(L, argc, 0);
+
+	for (int i = 1; i < argc; i++)
+	{
+		lua_pushvalue(L, (argc - i + 1) * -1);
+		lua_rawseti(L, -2, i);
+	}
+
+	lua_setglobal(L, "ARGS");
+
 	if (lua_pcall(L, argc - 1, 1, NULL)) {
 		sqlite3_result_error(context, lua_tostring(L, -1), -1);
 		lua_pop(L, 1);
 		return;
 	}
+
+	lua_pushnil(L);
+	lua_setglobal(L, "ARGS");
 
 	lua_tosqlite3value(L, -1, context);
 	lua_pop(L, 1);
@@ -637,7 +650,7 @@ int lua_registerext(lua_State* L, bool isAggregate) {
 	}
 	else if (res && res->type == type) {
 		AggregateData* existing = (AggregateData*)res->ptr;
-		
+
 		if (existing->context_ref != LUA_NOREF) {
 			luaL_unref(L, LUA_REGISTRYINDEX, existing->context_ref);
 			existing->context_ref = LUA_NOREF;

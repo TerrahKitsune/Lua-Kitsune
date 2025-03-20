@@ -58,10 +58,15 @@ local function update(pk, data)
     end
 end
 
+function DumpArgs()
+    return ARGS;
+end
+
 local testTable = {};
 RegisterFunction("CRC64", function(data) if not data then return nil; end return string.format('%016x', CRC64(data)); end);
 print(query("select CRC64('abc');"));
 print(scalar("select CRC64('abc');"));
+print(scalar("select LuaFunction('DumpArgs', 'a', 1, 'b', 2, 'c', 3);"));
 RegisterTable("TestTable", {"Id", "Value"}, testTable);
 RegisterAggregate("TestAgg", function(isfinished, context) 
 

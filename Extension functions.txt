@@ -4,6 +4,9 @@ sqlite functions:
 -Executes a function found in the global lua table
 -function: string.format, CRC64, etc
 -args: arguments passed to the lua function
+-ARGS set on the lua global containing all parameters that was pushed to this function as an array (table)
+-ARGS is only valid during this function call and is set to nil after
+-Example: LuaFunction("dostring", "return ARGS") would execute lua script that returns the pushed args
 array LuaFunction(function, args...)
 
 -Registers an aggregate function
@@ -28,6 +31,9 @@ nil RegisterAggregate(name, function)
 nil RegisterFunction(name, function)
 
 lua functions:
+
+-Executes a string as a lua function and returns 1 result
+any dostring(str)
 
 -Registers a virtual table by name that contains fields
 -Name of the virtual table
