@@ -49,7 +49,7 @@ int DecodeInt(const char* data, size_t len, int pos, lua_State* L) {
 	}
 
 	memcpy(buffer, &data[pos], end - pos);
-	int result = atoi(buffer);
+	long long result = atoll(buffer);
 	gff_free(buffer);
 
 	lua_pushinteger(L, result);
