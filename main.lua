@@ -128,7 +128,7 @@ end
 CreateGCPrint();
 collectgarbage();
 
-SetTitle(_VERSION);
+SetTitle("Kitsune: ".._VERSION);
 
 local function HexToString(hexString)
     local str = ""
@@ -156,7 +156,29 @@ assert(sqlite:Query([[SELECT LuaFunction('dofile', 'C:/Users/Terrah/Documents/Gi
 --FileSystem.SetCurrentDirectory("C:\\Users\\Terrah\\Desktop\\files");
 --dofile("filehash.lua");
 
-assert(sqlite:Query("SELECT * FROM TestTable;"));
-while sqlite:Fetch() do
-	print(j:Encode(sqlite:GetRow()));
+local redis = assert(Redis.Open("10.9.23.123"));
+print(j:Encode(redis:Command("AUTH", "hej123")));
+print(j:Encode(redis:Command("TYPE", "Lua:Test")));
+
+local redisstr = redis:GetString("Lua:Test");
+print("set", redisstr:Set(UUID()));
+print("getset", redisstr:GetOrSet(UUID()));
+print("print",redisstr);
+local test = redisstr .. "|123";
+print("concat", test);
+print("len",#redisstr);
+
+redisstr = redis:GetString("Lua:DoesntExist");
+print(redisstr);
+print("getset", redisstr:GetOrSet(UUID()));
+
+redisstr = redis:GetString("Lua:Test");
+redisstr[1] = 37;
+print(redisstr);
+for n=1, #redisstr do
+	print(n, redisstr[n]);
+end
+
+for k, v in ipairs(redisstr) do
+	print(k,v);
 end

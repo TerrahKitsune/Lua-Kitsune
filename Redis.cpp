@@ -5,9 +5,6 @@
 #include <stdlib.h> 
 #include <windows.h> 
 
-#pragma comment(lib, "hiredis/hiredis.lib")
-#pragma comment(lib, "hiredis/hiredis_ssl.lib")
-
 void CleanReply(LuaRedis* luaRedis) {
 
 	if (luaRedis) {
@@ -268,28 +265,43 @@ int RedisPoll(lua_State* L) {
 	return PushReply(L, luaRedis->reply);
 }
 
-int RedisCommand(lua_State* L) {
+LuaRedis* RedisCommandInternal(lua_State* L) {
 
-	LuaRedis* luaRedis = lua_toredis(L, 1);
+	int idx = 0;
+	for (int i = lua_gettop(L); i > 0; i--)
+	{
+		if (luaL_testudata(L, i, REDIS)) {
+
+			idx = i;
+			break;
+		}
+	}
+
+	if (idx < 1) {
+		luaL_error(L, "parameter is not a %s", REDIS);
+		return NULL;
+	}
+
+	LuaRedis* luaRedis = lua_toredis(L, idx);
 	size_t paramLen = 0;
 	const char* command;
 
 	if (!luaRedis->context) {
 		luaL_error(L, "Redis not connected");
-		return 0;
+		return NULL;
 	}
 	else if (!luaRedis->isAlive) {
 		luaL_error(L, "Context is disposed");
-		return 0;
+		return NULL;
 	}
 	else if (luaRedis->thread != INVALID_HANDLE_VALUE) {
 		luaL_error(L, "Cannot run redis commands on context that is polling");
-		return 0;
+		return NULL;
 	}
 
 	CleanReply(luaRedis);
 
-	int top = lua_gettop(L) - 1;
+	int top = lua_gettop(L) - idx;
 
 	if (top > 0)
 	{
@@ -298,17 +310,17 @@ int RedisCommand(lua_State* L) {
 
 		if (!luaRedis->argv) {
 			luaL_error(L, "Out of memory");
-			return 0;
+			return NULL;
 		}
 
 		for (int n = 0; n < top; n++) {
 
-			command = lua_tolstring(L, n + 2, &paramLen);
+			command = lua_tolstring(L, n + idx + 1, &paramLen);
 			luaRedis->argv[n] = (char*)gff_malloc(paramLen);
 
 			if (!luaRedis->argv[n]) {
 				luaL_error(L, "Out of memory");
-				return 0;
+				return NULL;
 			}
 
 			luaRedis->argvlen[n] = paramLen;
@@ -331,10 +343,41 @@ int RedisCommand(lua_State* L) {
 		return 0;
 	}
 
+	return luaRedis;
+}
+
+int RedisCommand(lua_State* L) {
+	LuaRedis* luaRedis = RedisCommandInternal(L);
+	
 	int result = PushReply(L, luaRedis->reply);
 	CleanReply(luaRedis);
 
-	return result;
+	return 1;
+}
+
+int RedisGetString(lua_State*L) {
+	
+	luaL_checkudata(L, -2, REDIS);
+	lua_pushvalue(L, -2);
+	lua_pushstring(L, "TYPE");
+	lua_pushvalue(L, -3);
+
+	LuaRedis* luaRedis = RedisCommandInternal(L);
+	lua_pop(L, 3);
+
+	if (luaRedis->reply->str && (strcmp(luaRedis->reply->str, "none") == 0 || strcmp(luaRedis->reply->str, "string") == 0)) {
+		CleanReply(luaRedis);
+		size_t len;
+		const char* key = luaL_tolstring(L, -1, &len);
+		lua_pop(L, 1);
+		RedisPushStringInternal(L, -2, key, len);
+	}
+	else {
+		CleanReply(luaRedis);
+		lua_pushnil(L);
+	}
+
+	return 1;
 }
 
 LuaRedis* lua_pushredis(lua_State* L) {
@@ -354,8 +397,9 @@ LuaRedis* lua_pushredis(lua_State* L) {
 
 LuaRedis* lua_toredis(lua_State* L, int index) {
 	LuaRedis* redis = (LuaRedis*)luaL_checkudata(L, index, REDIS);
-	if (redis == NULL)
+	if (redis == NULL) {
 		luaL_error(L, "parameter is not a %s", REDIS);
+	}
 	return redis;
 }
 
@@ -395,8 +439,8 @@ int redis_gc(lua_State* L) {
 }
 
 int redis_tostring(lua_State* L) {
-	char tim[100];
-	sprintf(tim, "Redis: 0x%08X", lua_toredis(L, 1));
-	lua_pushfstring(L, tim);
+	char tim[200];
+	sprintf(tim, "Redis: 0x%016X", lua_toredis(L, 1));
+	lua_pushstring(L, tim);
 	return 1;
 }

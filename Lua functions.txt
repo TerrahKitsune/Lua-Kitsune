@@ -450,6 +450,26 @@ Redis:
 	-Make this context is subscribed before calling poll, a context that has started polling cannot run other redis commands.
 	channel, message Redis:Poll()
 
+	-Get a redis string or nil if the existing key isn't a string
+	RedisString Redis:GetString(key)
+
+	RedisString: 
+	len, tostring, concat works
+	
+	RedisString[n] returns the byte at that range.
+	RedisString[n] = 1; would set the nth byte to 1, this will pad the string with 0 if offset is longer.
+
+	-Sets the redis string to a new value
+	-this overwrites existing keys
+	-keeps existing ttl
+	-returns the previous value if any (string empty if it didn't change or existed)
+	string RedisString:Set(newValue)
+
+	-Get the redis string if it does not exist set the newValue and return it
+	string RedisString:GetOrSet(newValue)
+
+	length RedisString:len()
+
 CSV:
 
 	-Creates a new csv instance

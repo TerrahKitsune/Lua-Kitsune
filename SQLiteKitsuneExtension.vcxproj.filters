@@ -486,6 +486,9 @@
     <ClCompile Include="Lua\lzio.c">
       <Filter>Lua</Filter>
     </ClCompile>
+    <ClCompile Include="RedisString.cpp">
+      <Filter>Kitsune\LuaRedis\Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="SQLite\sqlite3.h">
@@ -763,6 +766,9 @@
     </ClInclude>
     <ClInclude Include="Lua\lzio.h">
       <Filter>Lua</Filter>
+    </ClInclude>
+    <ClInclude Include="RedisString.h">
+      <Filter>Kitsune\LuaRedis\Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
