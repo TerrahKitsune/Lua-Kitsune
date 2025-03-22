@@ -650,9 +650,11 @@ int StartCoroutineHttp(lua_State* L) {
 
 	lua_pushcfunction(T, HttpStartRequest);
 
+	int nresults;
+
 	lua_pushvalue(L, -2);
 	lua_xmove(L, T, 1);
-	lua_resume(T, L, 1);
+	lua_resume(T, L, 1, &nresults);
 
 	lua_pushvalue(L, -2);
 	return 2;

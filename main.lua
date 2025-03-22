@@ -128,6 +128,8 @@ end
 CreateGCPrint();
 collectgarbage();
 
+SetTitle(_VERSION);
+
 local function HexToString(hexString)
     local str = ""
     for i = 1, #hexString, 2 do

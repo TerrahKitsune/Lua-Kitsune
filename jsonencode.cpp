@@ -303,9 +303,11 @@ void json_encodetable(lua_State* L, JsonContext* C, int* depth) {
 void json_getnextthread(lua_State* L, JsonContext* C) {
 
 	lua_rawgeti(L, LUA_REGISTRYINDEX, C->refThreadInput);
+	
+	int nresults;
 
 	lua_State* T = lua_tothread(L, -1);
-	int result = lua_resume(T, L, 0);
+	int result = lua_resume(T, L, 0, &nresults);
 
 	if (result == LUA_YIELD) {
 		lua_pop(L, 1);

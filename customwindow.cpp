@@ -791,13 +791,15 @@ int CreateLuaCustomWindow(lua_State* L) {
 	window->custom = custom;
 	window->custom->type = WINDOW_TYPE_CUSTOM;
 
+	int nresults;
+
 	if (messageLoopThread == LUA_REFNIL) 
 	{
 		lua_State* T = lua_newthread(L);
 		lua_pushvalue(L, -1);
 		messageLoopThread = luaL_ref(L, LUA_REGISTRYINDEX);
 		lua_pushcfunction(T, lua_customwindowloop);
-		lua_resume(T, L, 0);
+		lua_resume(T, L, 0, &nresults);
 	}
 	else {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, messageLoopThread);

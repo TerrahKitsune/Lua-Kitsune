@@ -30,7 +30,8 @@ int lua_jsoniterator(lua_State *L) {
 	lua_pushcfunction(T, lua_yielder);
 	lua_pushvalue(L, 1);
 	lua_xmove(L, T, 1);
-	lua_resume(T, L, 1);
+	int nresults;
+	lua_resume(T, L, 1, &nresults);
 
 	return 1;
 }

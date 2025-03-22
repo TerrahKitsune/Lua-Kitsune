@@ -126,7 +126,6 @@
     <ClCompile Include="Lua\lapi.c" />
     <ClCompile Include="Lua\lauxlib.c" />
     <ClCompile Include="Lua\lbaselib.c" />
-    <ClCompile Include="Lua\lbitlib.c" />
     <ClCompile Include="Lua\lcode.c" />
     <ClCompile Include="Lua\lcorolib.c" />
     <ClCompile Include="Lua\lctype.c" />
@@ -152,7 +151,6 @@
     <ClCompile Include="Lua\ltable.c" />
     <ClCompile Include="Lua\ltablib.c" />
     <ClCompile Include="Lua\ltm.c" />
-    <ClCompile Include="Lua\lua.c" />
     <ClCompile Include="Lua\lundump.c" />
     <ClCompile Include="Lua\lutf8lib.c" />
     <ClCompile Include="Lua\lvm.c" />
@@ -232,11 +230,13 @@
     <ClInclude Include="Lua\ldo.h" />
     <ClInclude Include="Lua\lfunc.h" />
     <ClInclude Include="Lua\lgc.h" />
+    <ClInclude Include="Lua\ljumptab.h" />
     <ClInclude Include="Lua\llex.h" />
     <ClInclude Include="Lua\llimits.h" />
     <ClInclude Include="Lua\lmem.h" />
     <ClInclude Include="Lua\lobject.h" />
     <ClInclude Include="Lua\lopcodes.h" />
+    <ClInclude Include="Lua\lopnames.h" />
     <ClInclude Include="Lua\lparser.h" />
     <ClInclude Include="Lua\lprefix.h" />
     <ClInclude Include="Lua\lstate.h" />
@@ -279,6 +279,7 @@
     <ClInclude Include="wcharmain.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="Lua\Makefile" />
     <None Include="packages.config" />
     <None Include="sqlitemain.lua" />
   </ItemGroup>
