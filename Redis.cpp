@@ -205,7 +205,7 @@ unsigned __stdcall threadPollFunc(void* data) {
 			EnterCriticalSection(&luaRedis->CriticalSection);
 		}
 
-		luaRedis->pollReply = pollReply;	
+		luaRedis->pollReply = pollReply;
 		LeaveCriticalSection(&luaRedis->CriticalSection);
 		pollReply = NULL;
 	}
@@ -238,7 +238,7 @@ int RedisPushPollReply(lua_State* L, redisReply* reply) {
 int RedisPoll(lua_State* L) {
 
 	LuaRedis* luaRedis = lua_toredis(L, 1);
-	
+
 	if (!luaRedis->isAlive) {
 		luaL_error(L, "Context is disposed");
 		return 0;
@@ -348,15 +348,122 @@ LuaRedis* RedisCommandInternal(lua_State* L) {
 
 int RedisCommand(lua_State* L) {
 	LuaRedis* luaRedis = RedisCommandInternal(L);
-	
+
 	int result = PushReply(L, luaRedis->reply);
 	CleanReply(luaRedis);
 
 	return 1;
 }
 
-int RedisGetString(lua_State*L) {
-	
+int RedisGetKey(lua_State* L) {
+
+	size_t len;
+	const char* str = luaL_checklstring(L, 2, &len);
+	if (len == 0) {
+		luaL_error(L, "Key cannot be string empty");
+		return 0;
+	}
+	lua_createrediskey(L, 1, str, len);
+	return 1;
+}
+
+int RedisGetKeyIterator(lua_State* L) {
+
+	int idx = 0;
+	for (int i = lua_gettop(L); i > 0; i--)
+	{
+		if (luaL_testudata(L, i, REDIS)) {
+
+			idx = i;
+			break;
+		}
+	}
+
+	if (idx == 0) {
+		return 0;
+	}
+
+	LuaRedis* luaRedis = lua_toredis(L, idx);
+
+	if (lua_isnil(L, -1)) {
+
+		luaRedis->cursor = 0;
+
+		if (luaRedis->ref != LUA_NOREF) {
+			luaL_unref(L, LUA_REGISTRYINDEX, luaRedis->ref);
+			luaRedis->ref = LUA_NOREF;
+		}
+	}
+	else if (luaRedis->ref != LUA_NOREF) {
+		lua_rawgeti(L, LUA_REGISTRYINDEX, luaRedis->ref);
+		int len = lua_rawlen(L, -1);
+		if (luaRedis->nth >= len) {
+			luaL_unref(L, LUA_REGISTRYINDEX, luaRedis->ref);
+			luaRedis->ref = LUA_NOREF;
+
+			// If cursor is 0 but we had a chunk that means iteration is over.
+			if (luaRedis->cursor == 0) {
+				return 0;
+			}
+		}
+	}
+
+	lua_settop(L, idx);
+
+	if (luaRedis->ref == LUA_NOREF) {
+
+		lua_pushliteral(L, "SCAN");
+		lua_pushinteger(L, luaRedis->cursor);
+		lua_pushliteral(L, "MATCH");
+		lua_pushliteral(L, "*");
+		lua_pushliteral(L, "COUNT");
+		lua_pushinteger(L, 1000);
+		luaRedis = RedisCommandInternal(L);
+		lua_pop(L, 6);
+
+		if (luaRedis->reply->elements != 2) {
+			CleanReply(luaRedis);
+			return 0;
+		}
+
+		luaRedis->cursor = atoll(luaRedis->reply->element[0]->str);
+
+		lua_createtable(L, luaRedis->reply->element[1]->elements, 0);
+		for (size_t i = 0; i < luaRedis->reply->element[1]->elements; i++)
+		{
+			redisReply* reply = luaRedis->reply->element[1]->element[i];
+			lua_pushlstring(L, reply->str, reply->len);
+			lua_rawseti(L, -2, i + 1);
+		}
+
+		luaRedis->ref = luaL_ref(L, LUA_REGISTRYINDEX);
+		luaRedis->nth = 0;
+		CleanReply(luaRedis);
+	}
+
+	lua_rawgeti(L, LUA_REGISTRYINDEX, luaRedis->ref);
+	lua_rawgeti(L, -1, ++luaRedis->nth);
+
+	if (lua_isnil(L, -1)) {
+		luaRedis->cursor = 0;
+
+		if (luaRedis->ref != LUA_NOREF) {
+			luaL_unref(L, LUA_REGISTRYINDEX, luaRedis->ref);
+			luaRedis->ref = LUA_NOREF;
+		}
+
+		return 0;
+	}
+
+	size_t len;
+	const char* str = lua_tolstring(L, -1, &len);
+	lua_createrediskey(L, idx, str, len);
+
+	return 1;
+}
+
+int RedisGetString(lua_State* L) {
+
 	luaL_checkudata(L, -2, REDIS);
 	lua_pushvalue(L, -2);
 	lua_pushstring(L, "TYPE");
@@ -391,6 +498,7 @@ LuaRedis* lua_pushredis(lua_State* L) {
 	memset(redis, 0, sizeof(LuaRedis));
 	redis->thread = INVALID_HANDLE_VALUE;
 	redis->isAlive = true;
+	redis->ref = LUA_NOREF;
 
 	return redis;
 }
@@ -409,8 +517,13 @@ int redis_gc(lua_State* L) {
 
 	CleanReply(redis);
 
+	if (redis->ref != LUA_NOREF) {
+		luaL_unref(L, LUA_REGISTRYINDEX, redis->ref);
+		redis->ref = LUA_NOREF;
+	}
+
 	if (redis->thread != INVALID_HANDLE_VALUE) {
-		
+
 		redis->isAlive = false;
 
 		redisCommand(redis->context, "QUIT");

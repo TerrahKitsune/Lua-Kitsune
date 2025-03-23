@@ -412,6 +412,12 @@ Macro:
 
 Redis:
 
+	the redis object can be used as an iterator to iterate all keys example listing all keys:
+	for key in redis do
+		print(key);
+	end
+
+
 	-Opens a connection to redis returning a redis object
 	-Send AUTH command using Command after connecting if authentication is required
 	-useTls = default false, if true redis will attempt to create an ssl context and use that
@@ -452,6 +458,23 @@ Redis:
 
 	-Get a redis string or nil if the existing key isn't a string
 	RedisString Redis:GetString(key)
+
+	RedisKey:
+
+	-Deletes the key
+	bool RedisKey:Delete();
+
+	-returns the type as a string
+	-"none" if the key does not exist
+	string RedisKey:Type();
+
+	-Gets the TTL (time to live) in miliseconds
+	-Returns nil if the key is not valid
+	-Returns -1 is the key persistant
+	int RedisKey:GetTTL();
+
+	-Sets the TTL for the key, if ms is 0 or less it will instead remove the TTL persisting the key
+	bool RedisKey:SetTTL(ms);
 
 	RedisString: 
 	len, tostring, concat works

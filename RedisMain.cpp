@@ -1,16 +1,19 @@
 #include "Redis.h"
 #include "RedisMain.h"
 #include "RedisString.h"
+#include "RedisKey.h"
 
 static const struct luaL_Reg redisfunctions[] = {
 	{ "Command", RedisCommand },
 	{ "GetString", RedisGetString },
+	{ "GetKey", RedisGetKey },
 	{ "Poll", RedisPoll },
 	{ "Open", RedisOpen },
 	{ NULL, NULL }
 };
 
 static const luaL_Reg redismeta[] = {
+	{ "__call", RedisGetKeyIterator },
 	{ "__gc",  redis_gc },
 	{ "__tostring",  redis_tostring },
 	{ NULL, NULL }
@@ -34,6 +37,9 @@ int luaopen_redis(lua_State* L) {
 	lua_rawset(L, -3);
 
 	internal_open_redisstring(L);
+	lua_pop(L, 2);
+
+	internal_luaopen_rediskey(L);
 	lua_pop(L, 2);
 
 	return 1;

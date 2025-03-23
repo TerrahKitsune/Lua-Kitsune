@@ -170,6 +170,8 @@ local test = redisstr .. "|123";
 print("concat", test);
 print("len",#redisstr);
 
+print(j:Encode({Test=redisstr}));
+
 redisstr = redis:GetString("Lua:DoesntExist");
 print("getset", redisstr:GetOrSet(UUID()));
 print("Delete", redisstr:Delete());
@@ -177,12 +179,22 @@ print("Delete", redisstr:Delete());
 redisstr = redis:GetString("Lua:Test");
 redisstr[1] = 37;
 print(redisstr);
-for n=1, #redisstr do
-	print(n, redisstr[n]);
-end
-
-for k, v in ipairs(redisstr) do
-	print(k,v);
-end
 
 print("TTL SET", redisstr:SetTTL(10000));
+
+local key = redis:GetKey("Lua:NotString");
+print("Key", key);
+print("Type", key:Type());
+
+key = redis:GetKey("Lua:ASDASD");
+print("Key", key);
+print("Type", key:Type());
+print("Delete", key:Delete());
+
+print(j:Encode(redis:Command("SCAN", "0", "MATCH", "*", "COUNT", "1000")));
+
+local n=0;
+for k in redis do
+	n = n + 1;
+	print(n, k, k:Type());
+end
