@@ -459,6 +459,14 @@ Redis:
 	RedisString[n] returns the byte at that range.
 	RedisString[n] = 1; would set the nth byte to 1, this will pad the string with 0 if offset is longer.
 
+	-Gets the TTL (time to live) in miliseconds
+	-Returns nil if the key is not valid
+	-Returns -1 is the key persistant
+	int RedisString:GetTTL();
+
+	-Sets the TTL for the key, if ms is 0 or less it will instead remove the TTL persisting the key
+	bool RedisString:SetTTL(ms);
+
 	-Sets the redis string to a new value
 	-this overwrites existing keys
 	-keeps existing ttl
@@ -467,6 +475,10 @@ Redis:
 
 	-Get the redis string if it does not exist set the newValue and return it
 	string RedisString:GetOrSet(newValue)
+
+	-Deletes the key and returns the value that was deleted
+	-Returns nil if there was none
+	string RedisString:Delete()
 
 	length RedisString:len()
 

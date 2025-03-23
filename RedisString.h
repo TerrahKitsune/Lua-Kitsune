@@ -1,11 +1,10 @@
 #pragma once
 #include "lua_main_incl.h"
 #include "Redis.h"
+#include "RedisKey.h"
 
 typedef struct LuaRedisString {
-	int redis_ref;
-	char* key;
-	size_t keylen;
+	LuaRedisKey key;
 } LuaRedisString;
 
 int redisstring_gc(lua_State* L);
@@ -17,13 +16,19 @@ int redisstring_getorset(lua_State* L);
 int redisstring_at(lua_State* L);
 int redisstring_setat(lua_State* L);
 int redisstring_pairs(lua_State* L);
+int redisstring_getttl(lua_State* L);
+int redisstring_setttl(lua_State* L);
+int redisstring_delete(lua_State* L);
 
 static const struct luaL_Reg redisstringfunctions[] = {
 	{ "At", redisstring_at },
 	{ "len", redisstring_len },
 	{ "Set", redisstring_set },
+	{ "Delete", redisstring_delete },
 	{ "GetOrSet", redisstring_getorset },
 	{ "GetSet", redisstring_getorset },
+	{ "SetTTL", redisstring_setttl },
+	{ "GetTTL", redisstring_getttl },
 	{ NULL, NULL }
 };
 

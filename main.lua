@@ -161,6 +161,8 @@ print(j:Encode(redis:Command("AUTH", "hej123")));
 print(j:Encode(redis:Command("TYPE", "Lua:Test")));
 
 local redisstr = redis:GetString("Lua:Test");
+print("TTL", redisstr:GetTTL());
+print("TTL SET", redisstr:SetTTL(10000));
 print("set", redisstr:Set(UUID()));
 print("getset", redisstr:GetOrSet(UUID()));
 print("print",redisstr);
@@ -169,8 +171,8 @@ print("concat", test);
 print("len",#redisstr);
 
 redisstr = redis:GetString("Lua:DoesntExist");
-print(redisstr);
 print("getset", redisstr:GetOrSet(UUID()));
+print("Delete", redisstr:Delete());
 
 redisstr = redis:GetString("Lua:Test");
 redisstr[1] = 37;
@@ -182,3 +184,5 @@ end
 for k, v in ipairs(redisstr) do
 	print(k,v);
 end
+
+print("TTL SET", redisstr:SetTTL(10000));

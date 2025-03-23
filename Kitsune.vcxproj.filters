@@ -864,6 +864,9 @@
     <ClCompile Include="RedisString.cpp">
       <Filter>LuaRedis\Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="RedisKey.cpp">
+      <Filter>LuaRedis\Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="lua_main_incl.h">
@@ -1350,6 +1353,9 @@
       <Filter>Lua</Filter>
     </ClInclude>
     <ClInclude Include="RedisString.h">
+      <Filter>LuaRedis\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="RedisKey.h">
       <Filter>LuaRedis\Header Files</Filter>
     </ClInclude>
   </ItemGroup>

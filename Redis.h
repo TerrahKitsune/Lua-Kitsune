@@ -12,6 +12,12 @@ static const char* REDISSTRING = "REDISSTRING";
 #pragma comment(lib, "hiredis/hiredis.lib")
 #pragma comment(lib, "hiredis/hiredis_ssl.lib")
 
+typedef struct LuaRedisKey {
+	int redis_ref;
+	char* key;
+	size_t keylen;
+} LuaRedisKey;
+
 typedef struct LuaRedis {
 
 	redisSSLContext* ssl;
