@@ -140,7 +140,7 @@ local function HexToString(hexString)
 end
 
 FileSystem.SetCurrentDirectory("C:\\Users\\Terrah\\Desktop");
-local j = Json.Create();
+local j = Json.Create(true);
 
 print(string.format("0x%016X", CRC64("Hello!")));
 local sqlite = SQLite.Open();
@@ -160,41 +160,21 @@ local redis = assert(Redis.Open("10.9.23.123"));
 print(j:Encode(redis:Command("AUTH", "hej123")));
 print(j:Encode(redis:Command("TYPE", "Lua:Test")));
 
-local redisstr = redis:GetString("Lua:Test");
-print("TTL", redisstr:GetTTL());
-print("TTL SET", redisstr:SetTTL(10000));
-print("set", redisstr:Set(UUID()));
-print("getset", redisstr:GetOrSet(UUID()));
-print("print",redisstr);
-local test = redisstr .. "|123";
-print("concat", test);
-print("len",#redisstr);
+local hashset = redis:GetHashset("Lua:Hashset");
+print(hashset);
+print(hashset());
+hashset["Test"] = UUID();
+print("hashset", hashset["Test"]);
 
-print(j:Encode({Test=redisstr}));
-
-redisstr = redis:GetString("Lua:DoesntExist");
-print("getset", redisstr:GetOrSet(UUID()));
-print("Delete", redisstr:Delete());
-
-redisstr = redis:GetString("Lua:Test");
-redisstr[1] = 37;
-print(redisstr);
-
-print("TTL SET", redisstr:SetTTL(10000));
-
-local key = redis:GetKey("Lua:NotString");
-print("Key", key);
-print("Type", key:Type());
-
-key = redis:GetKey("Lua:ASDASD");
-print("Key", key);
-print("Type", key:Type());
-print("Delete", key:Delete());
-
-print(j:Encode(redis:Command("SCAN", "0", "MATCH", "*", "COUNT", "1000")));
-
-local n=0;
-for k in redis do
-	n = n + 1;
-	print(n, k, k:Type());
+for n=1, 1000 do
+	hashset[n] = UUID();
 end
+
+for k,v in pairs(hashset) do
+
+	print(k,v);
+end
+
+print(j:Encode(hashset));
+
+hashset():SetTTL(10000);

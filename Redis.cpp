@@ -414,19 +414,17 @@ int RedisGetKeyIterator(lua_State* L) {
 
 		lua_pushliteral(L, "SCAN");
 		lua_pushinteger(L, luaRedis->cursor);
-		lua_pushliteral(L, "MATCH");
-		lua_pushliteral(L, "*");
 		lua_pushliteral(L, "COUNT");
 		lua_pushinteger(L, 1000);
 		luaRedis = RedisCommandInternal(L);
-		lua_pop(L, 6);
+		lua_pop(L, 4);
 
 		if (luaRedis->reply->elements != 2) {
 			CleanReply(luaRedis);
 			return 0;
 		}
 
-		luaRedis->cursor = atoll(luaRedis->reply->element[0]->str);
+		luaRedis->cursor = strtoull(luaRedis->reply->element[0]->str, NULL, 10);
 
 		lua_createtable(L, luaRedis->reply->element[1]->elements, 0);
 		for (size_t i = 0; i < luaRedis->reply->element[1]->elements; i++)
@@ -458,6 +456,31 @@ int RedisGetKeyIterator(lua_State* L) {
 	size_t len;
 	const char* str = lua_tolstring(L, -1, &len);
 	lua_createrediskey(L, idx, str, len);
+
+	return 1;
+}
+
+int RedisGetHashset(lua_State* L) {
+
+	luaL_checkudata(L, -2, REDIS);
+	lua_pushvalue(L, -2);
+	lua_pushstring(L, "TYPE");
+	lua_pushvalue(L, -3);
+
+	LuaRedis* luaRedis = RedisCommandInternal(L);
+	lua_pop(L, 3);
+
+	if (luaRedis->reply->str && (strcmp(luaRedis->reply->str, "none") == 0 || strcmp(luaRedis->reply->str, "hash") == 0)) {
+		CleanReply(luaRedis);
+		size_t len;
+		const char* key = luaL_tolstring(L, -1, &len);
+		lua_pop(L, 1);
+		push_redisvalue(L, -2, REDIS_VALUE_TYPE_HASHSET, key, len);
+	}
+	else {
+		CleanReply(luaRedis);
+		lua_pushnil(L);
+	}
 
 	return 1;
 }

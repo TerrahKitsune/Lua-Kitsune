@@ -59,11 +59,11 @@ int lua_jsonsetnullvalue(lua_State* L) {
 
 		lua_pop(L, lua_gettop(L));
 
-		if (json->refNullValue != LUA_REFNIL) {
+		if (json->refNullValue != LUA_NOREF) {
 
 			lua_rawgeti(L, LUA_REGISTRYINDEX, json->refNullValue);
 			luaL_unref(L, LUA_REGISTRYINDEX, json->refNullValue);
-			json->refNullValue = LUA_REFNIL;
+			json->refNullValue = LUA_NOREF;
 		}
 		else {
 			
@@ -78,7 +78,7 @@ int lua_jsonsetnullvalue(lua_State* L) {
 
 		lua_pop(L, lua_gettop(L));
 
-		if (json->refNullValue != LUA_REFNIL) {
+		if (json->refNullValue != LUA_NOREF) {
 
 			lua_rawgeti(L, LUA_REGISTRYINDEX, json->refNullValue);
 			luaL_unref(L, LUA_REGISTRYINDEX, json->refNullValue);
@@ -238,16 +238,18 @@ int lua_jsoncreate(lua_State *L) {
 JsonContext * lua_pushjson(lua_State *L) {
 
 	JsonContext * luajson = (JsonContext*)lua_newuserdata(L, sizeof(JsonContext));
-	if (luajson == NULL)
+	if (luajson == NULL) {
 		luaL_error(L, "Unable to push json");
+		return NULL;
+	}
 	luaL_getmetatable(L, LUAJSON);
 	lua_setmetatable(L, -2);
 	memset(luajson, 0, sizeof(JsonContext));
 
-	luajson->refWriteFunction = LUA_REFNIL;
-	luajson->refReadFunction = LUA_REFNIL;
-	luajson->refThreadInput = LUA_REFNIL;
-	luajson->refNullValue = LUA_REFNIL;
+	luajson->refWriteFunction = LUA_NOREF;
+	luajson->refReadFunction = LUA_NOREF;
+	luajson->refThreadInput = LUA_NOREF;
+	luajson->refNullValue = LUA_NOREF;
 
 	return luajson;
 }
@@ -265,10 +267,10 @@ int json_gc(lua_State *L) {
 
 	json_bail(L, json, NULL);
 
-	if (json->refNullValue != LUA_REFNIL) {
+	if (json->refNullValue != LUA_NOREF) {
 
 		luaL_unref(L, LUA_REGISTRYINDEX, json->refNullValue);
-		json->refNullValue = LUA_REFNIL;
+		json->refNullValue = LUA_NOREF;
 	}
 
 	return 0;

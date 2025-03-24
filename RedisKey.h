@@ -6,6 +6,7 @@ void lua_pushredisref(lua_State* L, LuaRedisKey* key);
 void CleanRedisKey(lua_State* L, LuaRedisKey* key);
 int lua_pushredisttl(lua_State* L, LuaRedisKey* key);
 int lua_setredisttl(lua_State* L, LuaRedisKey* key, lua_Integer expireTime);
+LuaRedisKey* lua_torediskey(lua_State* L, int idx);
 
 int rediskey_gc(lua_State* L);
 int rediskey_tostring(lua_State* L);

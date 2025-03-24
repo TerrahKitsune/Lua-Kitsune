@@ -4,6 +4,7 @@
 static const char* REDIS = "REDIS";
 static const char* REDISSTRING = "REDISSTRING";
 static const char* REDISKEY = "REDISKEY";
+static const char* REDISVALUE = "REDISVALUE";
 #include <process.h>
 
 #pragma comment (lib, "crypt32")
@@ -31,15 +32,18 @@ typedef struct LuaRedis {
 	CRITICAL_SECTION CriticalSection;
 	redisReply* pollReply;
 	bool isAlive;
-	long long cursor;
+	unsigned long long cursor;
 	int ref;
 	int nth;
 } LuaRedis;
+
+#define REDIS_VALUE_TYPE_HASHSET 1
 
 void CleanReply(LuaRedis* luaRedis);
 LuaRedis* RedisCommandInternal(lua_State* L);
 int RedisPushStringInternal(lua_State* L, int redisIdx, const char* key, size_t keylength);
 LuaRedisKey* lua_createrediskey(lua_State* L, int redisIdx, const char* key, size_t keylen);
+int push_redisvalue(lua_State* L, int redisIdx, int type, const char* key, size_t keylen);
 
 LuaRedis* lua_pushredis(lua_State* L);
 LuaRedis* lua_toredis(lua_State* L, int index);
@@ -50,6 +54,7 @@ int RedisPoll(lua_State* L);
 int RedisGetString(lua_State* L);
 int RedisGetKey(lua_State* L);
 int RedisGetKeyIterator(lua_State* L);
+int RedisGetHashset(lua_State* L);
 
 int redis_gc(lua_State* L);
 int redis_tostring(lua_State* L);

@@ -218,7 +218,7 @@ char json_readnext(lua_State* L, JsonContext* context) {
 		return context->prevFileChar[1];
 	}
 
-	if (context->refReadFunction != LUA_REFNIL && (!context->readFileBuffer || context->readCursor >= context->readSize)) {
+	if (context->refReadFunction != LUA_NOREF && (!context->readFileBuffer || context->readCursor >= context->readSize)) {
 
 		if (!context->readFileBuffer) {
 			context->readFileBuffer = (char*)gff_malloc(JSONFILEREADBUFFERSIZE);

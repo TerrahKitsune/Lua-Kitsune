@@ -2,7 +2,7 @@
 
 void json_pushnullornil(lua_State* L, JsonContext* context) {
 
-	if (context->refNullValue == LUA_REFNIL) {
+	if (context->refNullValue == LUA_NOREF) {
 		lua_pushnil(L);
 	}
 	else {
@@ -12,7 +12,7 @@ void json_pushnullornil(lua_State* L, JsonContext* context) {
 
 bool json_isnull(lua_State* L, JsonContext* context) {
 
-	if (context->refNullValue == LUA_REFNIL) {
+	if (context->refNullValue == LUA_NOREF) {
 
 		return false;
 	}
@@ -40,44 +40,51 @@ void json_bail(lua_State *L, JsonContext* context, const char * err) {
 
 	if (context->readFile) {
 		fclose(context->readFile);
+		context->readFile = NULL;
 	}
 
 	if (context->buffer) {
 		gff_free(context->buffer);
+		context->buffer = NULL;
 	}
 
 	if (context->fileName) {
 		gff_free(context->fileName);
+		context->fileName = NULL;
 	}
 
 	if (context->antiRecursion) {
 		gff_free(context->antiRecursion);
+		context->antiRecursion = NULL;
 	}
 
 	if (context->readFileBuffer) {
 		gff_free(context->readFileBuffer);
+		context->readFileBuffer = NULL;
 	}
 
-	if (context->refWriteFunction != LUA_REFNIL) {
+	if (context->refWriteFunction != LUA_NOREF) {
 		luaL_unref(L, LUA_REGISTRYINDEX, context->refWriteFunction);
 	}
 
-	if (context->refReadFunction != LUA_REFNIL) {
+	if (context->refReadFunction != LUA_NOREF) {
 		luaL_unref(L, LUA_REGISTRYINDEX, context->refReadFunction);
 	}
 
-	if (context->refThreadInput != LUA_REFNIL) {
+	if (context->refThreadInput != LUA_NOREF) {
 		luaL_unref(L, LUA_REGISTRYINDEX, context->refThreadInput);
 	}
 
 	int temp = context->refNullValue;
+	int pretty = context->pretty;
 
 	memset(context, 0, sizeof(JsonContext));
 
-	context->refWriteFunction = LUA_REFNIL;
-	context->refReadFunction = LUA_REFNIL;
-	context->refThreadInput = LUA_REFNIL;
+	context->refWriteFunction = LUA_NOREF;
+	context->refReadFunction = LUA_NOREF;
+	context->refThreadInput = LUA_NOREF;
 	context->refNullValue = temp;
+	context->pretty = pretty;
 
 	if (err) {
 		luaL_error(L, err);
@@ -128,7 +135,7 @@ void json_append(const char * data, size_t len, lua_State *L, JsonContext* conte
 		context->bufferLength += (len * sizeof(char));
 		context->buffer[context->bufferLength] = '\0';
 
-		if (context->refWriteFunction != LUA_REFNIL && context->bufferLength > 0 && (isEnd || context->bufferLength >= JSONFILEREADBUFFERSIZE)) {
+		if (context->refWriteFunction != LUA_NOREF && context->bufferLength > 0 && (isEnd || context->bufferLength >= JSONFILEREADBUFFERSIZE)) {
 
 			lua_rawgeti(L, LUA_REGISTRYINDEX, context->refWriteFunction);
 			lua_pushlstring(L, context->buffer, context->bufferLength);

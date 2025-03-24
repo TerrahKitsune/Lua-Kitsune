@@ -160,9 +160,59 @@ void json_pad(char padding, int numbpadding, lua_State* L, JsonContext* C) {
 	}
 }
 
+int json_lua_pairs(lua_State* L) {
+
+	if (lua_isnil(L, -1) && lua_isnil(L, -2)) {
+
+		lua_pop(L, 2);
+
+		lua_getglobal(L, "pairs");
+		lua_pushvalue(L, -2);
+
+		if (lua_pcall(L, 1, 3, NULL)) {
+			lua_error(L);
+			return 0;
+		}
+
+		lua_pushvalue(L, -3);
+		lua_rotate(L, -2, -1);
+		lua_rotate(L, -3, -1);
+		lua_rotate(L, -2, -1);
+
+		if (lua_pcall(L, 2, 2, NULL)) {
+			lua_error(L);
+			return 0;
+		}
+
+		return 3;
+	}
+	else if (!lua_isfunction(L, -2)) {
+		return 0;
+	}
+
+	lua_pushvalue(L, -2);
+	lua_pushvalue(L, -4);
+	lua_pushvalue(L, -3);
+
+	if (lua_pcall(L, 2, 2, NULL)) {
+		lua_error(L);
+		return 0;
+	}
+
+	lua_remove(L, -3);
+
+	if (lua_isnil(L, -1) && lua_isnil(L, -2)) {
+
+		lua_pop(L, 3);
+		return 0;
+	}
+
+	return 3;
+}
+
 void json_encodetable(lua_State* L, JsonContext* C, int* depth) {
 
-	if (C->refThreadInput != LUA_REFNIL) {
+	if (C->refThreadInput != LUA_NOREF) {
 		json_encodethread(L, C, depth);
 		return;
 	}
@@ -191,23 +241,23 @@ void json_encodetable(lua_State* L, JsonContext* C, int* depth) {
 	}
 
 	size_t pos = 0;
-	int objlen = 0;
+	int any = 0;
 
 	lua_pushnil(L);
-	while (lua_next(L, -2) != 0) {
+	lua_pushnil(L);
+	if (json_lua_pairs(L) != 0) {
 
-		objlen++;
-
-		lua_pop(L, 1);
+		any = 1;
+		lua_pop(L, 3);
 	}
 
 	int count = 0;
 
 	// Object
-	if (objlen == size && size <= 0) {
+	if (any == 0 && size <= 0) {
 		json_append("[]", 2, L, C);
 	}
-	else if (objlen != size) {
+	else if (size <= 0) {
 
 		json_append("{", 1, L, C);
 
@@ -216,8 +266,22 @@ void json_encodetable(lua_State* L, JsonContext* C, int* depth) {
 			json_append("\n", 1, L, C);
 		}
 
+		int first = 1;
 		lua_pushnil(L);
-		while (lua_next(L, -2) != 0) {
+		lua_pushnil(L);
+		while (json_lua_pairs(L) != 0) {
+
+			if (!first) {
+				if (depth) {
+					json_append(",\n", 2, L, C);
+				}
+				else {
+					json_append(",", 1, L, C);
+				}
+			}
+			else {
+				first = 0;
+			}
 
 			if (depth) {
 				json_pad('\t', *depth, L, C);
@@ -233,15 +297,6 @@ void json_encodetable(lua_State* L, JsonContext* C, int* depth) {
 				json_append(":", 1, L, C);
 			}
 			json_encodevalue(L, C, depth);
-
-			if (++count < objlen) {
-				if (depth) {
-					json_append(",\n", 2, L, C);
-				}
-				else {
-					json_append(",", 1, L, C);
-				}
-			}
 
 			lua_pop(L, 1);
 		}
@@ -274,7 +329,7 @@ void json_encodetable(lua_State* L, JsonContext* C, int* depth) {
 
 			lua_rawgeti(L, -1, i);
 			json_encodevalue(L, C, depth);
-			if (++count < objlen) {
+			if (++count < size) {
 				if (depth) {
 					json_append(",\n", 2, L, C);
 				}
@@ -303,7 +358,7 @@ void json_encodetable(lua_State* L, JsonContext* C, int* depth) {
 void json_getnextthread(lua_State* L, JsonContext* C) {
 
 	lua_rawgeti(L, LUA_REGISTRYINDEX, C->refThreadInput);
-	
+
 	int nresults;
 
 	lua_State* T = lua_tothread(L, -1);

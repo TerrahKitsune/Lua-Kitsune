@@ -459,6 +459,19 @@ Redis:
 	-Get a redis string or nil if the existing key isn't a string
 	RedisString Redis:GetString(key)
 
+	-Returns a redis value representing a hashset or nil if the key already exists and is the wrong type
+	RedisValue Redis:GetHashset(key)
+
+	RedisValue: Redis values are treaded as tables for sets, hashes, lists, etc
+	
+	calling a redis value will return a RedisKey and the type:
+	RedisKey, Type RedisValue()
+
+	for hashsets (type = 1)
+	value = RedisValue["Key"]
+	RedisValue["Key"] = 123
+	for k, v in pairs(RedisValue) print(k,v); end
+
 	RedisKey:
 
 	-Deletes the key
@@ -2140,7 +2153,8 @@ Json:
 	-nan (0/0) is considered null
 	-empty objects are []
 	-Create a json instance
-	Json Json.Create()
+	-if pretty is true it'll indent the jsonstring, default = false
+	Json Json.Create(opt pretty)
 
 	-Sets a value that will represent null when decoding or encoding.
 	-Default this is nil and keys will be skipped.

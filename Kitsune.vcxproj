@@ -208,6 +208,7 @@
     <ClCompile Include="RedisKey.cpp" />
     <ClCompile Include="RedisMain.cpp" />
     <ClCompile Include="RedisString.cpp" />
+    <ClCompile Include="RedisValue.cpp" />
     <ClCompile Include="sha1.c" />
     <ClCompile Include="SHA1Main.cpp" />
     <ClCompile Include="sha256.c" />
@@ -373,6 +374,7 @@
     <ClInclude Include="RedisKey.h" />
     <ClInclude Include="RedisMain.h" />
     <ClInclude Include="RedisString.h" />
+    <ClInclude Include="RedisValue.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="sha1.h" />
     <ClInclude Include="SHA1Main.h" />
