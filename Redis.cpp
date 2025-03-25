@@ -460,6 +460,31 @@ int RedisGetKeyIterator(lua_State* L) {
 	return 1;
 }
 
+int RedisGetList(lua_State* L) {
+
+	luaL_checkudata(L, -2, REDIS);
+	lua_pushvalue(L, -2);
+	lua_pushstring(L, "TYPE");
+	lua_pushvalue(L, -3);
+
+	LuaRedis* luaRedis = RedisCommandInternal(L);
+	lua_pop(L, 3);
+
+	if (luaRedis->reply->str && (strcmp(luaRedis->reply->str, "none") == 0 || strcmp(luaRedis->reply->str, "list") == 0)) {
+		CleanReply(luaRedis);
+		size_t len;
+		const char* key = luaL_tolstring(L, -1, &len);
+		lua_pop(L, 1);
+		push_redisvalue(L, -2, REDIS_VALUE_TYPE_LIST, key, len);
+	}
+	else {
+		CleanReply(luaRedis);
+		lua_pushnil(L);
+	}
+
+	return 1;
+}
+
 int RedisGetHashset(lua_State* L) {
 
 	luaL_checkudata(L, -2, REDIS);

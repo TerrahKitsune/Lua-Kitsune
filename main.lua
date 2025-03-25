@@ -160,21 +160,39 @@ local redis = assert(Redis.Open("10.9.23.123"));
 print(j:Encode(redis:Command("AUTH", "hej123")));
 print(j:Encode(redis:Command("TYPE", "Lua:Test")));
 
-local hashset = redis:GetHashset("Lua:Hashset");
-print(hashset);
-print(hashset());
-hashset["Test"] = UUID();
-print("hashset", hashset["Test"]);
+local list = redis:GetList("Lua:List");
 
-for n=1, 1000 do
-	hashset[n] = UUID();
+print(list);
+print(j:Encode(list()));
+
+if #list < 3 then
+	list[0] = "One";
+	list[0] = "Two";
+	list[0] = "Three";
 end
 
-for k,v in pairs(hashset) do
-
-	print(k,v);
+for n=1, #list do
+	list[n] = UUID();
 end
 
-print(j:Encode(hashset));
+list[(#list+1)*-1] = "First";
+list[0] = "Last";
 
-hashset():SetTTL(10000);
+for n=1, #list do
+	print(n, list[n]);
+end
+
+for n=1, #list do
+	print(n*-1, list[n*-1]);
+end
+
+for k,v in pairs(list) do
+	print("pairs "..k, v);
+end
+
+print(j:Encode(list));
+
+for n=1, #list-1 do
+	print("POP",list[0]);
+end
+

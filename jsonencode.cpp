@@ -327,7 +327,7 @@ void json_encodetable(lua_State* L, JsonContext* C, int* depth) {
 				json_pad('\t', *depth, L, C);
 			}
 
-			lua_rawgeti(L, -1, i);
+			lua_geti(L, -1, i);
 			json_encodevalue(L, C, depth);
 			if (++count < size) {
 				if (depth) {

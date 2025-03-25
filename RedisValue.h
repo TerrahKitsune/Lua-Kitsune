@@ -7,12 +7,14 @@ int redisvalue_index(lua_State* L);
 int redisvalue_newindex(lua_State* L);
 int redisvalue_call(lua_State* L);
 int redisvalue_pairs(lua_State* L);
+int redisvalue_len(lua_State* L);
 
 static const struct luaL_Reg redisvaluefunctions[] = {
 	{ NULL, NULL }
 };
 
 static const luaL_Reg redisvaluemeta[] = {
+	{ "__len", redisvalue_len },
 	{ "__pairs", redisvalue_pairs },
 	{ "__gc",  redisvalue_gc },
 	{ "__tostring",  redisvalue_tostring },

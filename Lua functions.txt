@@ -462,15 +462,40 @@ Redis:
 	-Returns a redis value representing a hashset or nil if the key already exists and is the wrong type
 	RedisValue Redis:GetHashset(key)
 
-	RedisValue: Redis values are treaded as tables for sets, hashes, lists, etc
+	RedisValue: 
+	
+	Redis values are treaded as tables for sets, hashes, lists, etc
 	
 	calling a redis value will return a RedisKey and the type:
 	RedisKey, Type RedisValue()
 
-	for hashsets (type = 1)
+	for hashsets (type = 1):
+
+	-Get a key, nil if it does not exist
 	value = RedisValue["Key"]
+
+	-Set a key
 	RedisValue["Key"] = 123
+
+	-Iterate the hashset returning key-values
 	for k, v in pairs(RedisValue) print(k,v); end
+	
+	for lists (type = 2):
+
+	-Get the length of the list
+	#RedisValue = length
+
+	-where index can be negative to invert the list
+	-if index is 0 it will instead pop the first element of the list and return it 
+	value = RedisValue[index] 
+
+	-Sets a value at index, index can be negative, 
+	-if index is 0 or bigger than the length it adds it to the end of the list
+	-if the index is negative and inverted it adds it at the first eg: list[(#list+1)*-1] = value
+	RedisValue[index] = value
+
+	-Iterate the list returning the index and value
+	for idx, v in pairs(RedisValue) print(idx,v); end
 
 	RedisKey:
 

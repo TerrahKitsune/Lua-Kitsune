@@ -38,6 +38,7 @@ typedef struct LuaRedis {
 } LuaRedis;
 
 #define REDIS_VALUE_TYPE_HASHSET 1
+#define REDIS_VALUE_TYPE_LIST 2
 
 void CleanReply(LuaRedis* luaRedis);
 LuaRedis* RedisCommandInternal(lua_State* L);
@@ -55,6 +56,7 @@ int RedisGetString(lua_State* L);
 int RedisGetKey(lua_State* L);
 int RedisGetKeyIterator(lua_State* L);
 int RedisGetHashset(lua_State* L);
+int RedisGetList(lua_State* L);
 
 int redis_gc(lua_State* L);
 int redis_tostring(lua_State* L);

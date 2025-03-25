@@ -8,6 +8,7 @@ static const struct luaL_Reg redisfunctions[] = {
 	{ "Command", RedisCommand },
 	{ "GetString", RedisGetString },
 	{ "GetHashset", RedisGetHashset },
+	{ "GetList", RedisGetList },
 	{ "GetKey", RedisGetKey },
 	{ "Poll", RedisPoll },
 	{ "Open", RedisOpen },
