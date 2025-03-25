@@ -171,11 +171,13 @@ if #list < 3 then
 	list[0] = "Three";
 end
 
+print(j:Encode(list));
+
 for n=1, #list do
 	list[n] = UUID();
 end
 
-list[(#list+1)*-1] = "First";
+list[(#list+1)*-1] = {Test = "First"};
 list[0] = "Last";
 
 for n=1, #list do
@@ -190,9 +192,8 @@ for k,v in pairs(list) do
 	print("pairs "..k, v);
 end
 
-print(j:Encode(list));
-
 for n=1, #list-1 do
 	print("POP",list[0]);
 end
 
+list():SetTTL(100000);

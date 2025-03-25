@@ -1,6 +1,8 @@
 #include "RedisValue.h"
 #include "RedisKey.h"
 
+int JsonRef = LUA_NOREF;
+
 static LuaRedisKey* InternalGetRedisKey(lua_State* L, int index) {
 
 	lua_pushvalue(L, index);
@@ -19,6 +21,51 @@ static int InternalGetRedisType(lua_State* L, int index) {
 	int type = lua_tointeger(L, -1);
 	lua_pop(L, 2);
 	return type;
+}
+
+static int InternalPushValue(lua_State* L, int index) {
+
+	if (lua_istable(L, index)) {
+		if (JsonRef == LUA_NOREF) {
+			lua_getglobal(L, "Json");
+			lua_pushliteral(L, "Create");
+			lua_gettable(L, -2);
+			if (lua_pcall(L, 0, 1, NULL)) {
+				lua_error(L);
+				return 0;
+			}
+			JsonRef = luaL_ref(L, LUA_REGISTRYINDEX);
+			lua_pop(L, 1);
+		}
+
+		lua_pushvalue(L, index);
+		lua_rawgeti(L, LUA_REGISTRYINDEX, JsonRef);
+		lua_pushliteral(L, "Encode");
+		lua_gettable(L, -2);
+		lua_pushvalue(L, -2);
+		lua_pushvalue(L, -4);
+
+		if (lua_pcall(L, 2, 1, NULL)) {
+			lua_error(L);
+			return 0;
+		}
+
+		lua_rotate(L, -2, -1);
+		lua_rotate(L, -3, -1);
+		lua_pop(L, 2);
+	}
+	else if (lua_isstring(L, index)) {
+		lua_pushvalue(L, index);
+	}
+	else if (lua_isnil(L, index)) {
+		lua_pushnil(L);
+	}
+	else {
+		size_t len;
+		luaL_tolstring(L, index, &len);
+	}
+
+	return 1;
 }
 
 int redisvalue_len(lua_State* L) {
@@ -275,7 +322,7 @@ int redisvalue_newindex(lua_State* L) {
 		lua_pushliteral(L, "HSET");
 		lua_pushrediskey(L, key);
 		lua_pushvalue(L, 2);
-		lua_pushvalue(L, 3);
+		InternalPushValue(L, 3);
 		CleanReply(RedisCommandInternal(L));
 		lua_pop(L, 5);
 	}
@@ -296,7 +343,7 @@ int redisvalue_newindex(lua_State* L) {
 				lua_pushliteral(L, "LPUSH");
 			}
 			lua_pushrediskey(L, key);
-			lua_pushvalue(L, 3);
+			InternalPushValue(L, 3);
 			CleanReply(RedisCommandInternal(L));
 			lua_pop(L, 4);
 		}
@@ -305,7 +352,7 @@ int redisvalue_newindex(lua_State* L) {
 			lua_pushliteral(L, "LSET");
 			lua_pushrediskey(L, key);
 			lua_pushinteger(L, realIdx);
-			lua_pushvalue(L, 3);		
+			InternalPushValue(L, 3);
 			CleanReply(RedisCommandInternal(L));
 			lua_pop(L, 5);
 		}

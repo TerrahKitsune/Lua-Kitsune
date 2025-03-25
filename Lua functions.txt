@@ -464,9 +464,10 @@ Redis:
 
 	RedisValue: 
 	
-	Redis values are treaded as tables for sets, hashes, lists, etc
-	
-	calling a redis value will return a RedisKey and the type:
+	-Redis values are treaded as tables for sets, hashes, lists, etc
+	-RedisValues are converted into strings and tables as json serilized
+
+	-calling a redis value will return a RedisKey and the type:
 	RedisKey, Type RedisValue()
 
 	for hashsets (type = 1):
