@@ -498,6 +498,24 @@ Redis:
 	-Iterate the list returning the index and value
 	for idx, v in pairs(RedisValue) print(idx,v); end
 
+	for set (type = 3):
+
+	#RedisValue = number elements in set
+
+	-For positive integer it'll scan and iterate and return a set value (should only be used for iteration)
+	-For index 0 it will return a random set member
+	-For index -1 it will remove (pop) a set member and return it
+	-For a string example: set["abc"] it will return a bool if it exists or not
+	value = RedisValue[index] 
+
+	-Adds key to the set if bool is not false or nil
+	-if the bool is false or nil it removes the member instead
+	RedisValue[key] = bool
+
+	-Iterates the set returning the set members
+	-Key is just the order of the scan and should not be relied on
+	for _, member in pairs(RedisValue) print(idx,v); end
+
 	RedisKey:
 
 	-Deletes the key

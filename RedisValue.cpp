@@ -85,6 +85,23 @@ int redisvalue_len(lua_State* L) {
 		lua_pushinteger(L, redis->reply->integer);
 		CleanReply(redis);
 	}
+	else if (type == REDIS_VALUE_TYPE_SET) {
+
+		LuaRedisKey* key = InternalGetRedisKey(L, 1);
+
+		lua_pushliteral(L, "set");
+		lua_pushnil(L);
+		lua_rawset(L, 1);
+
+		lua_pushredisref(L, key);
+		lua_pushliteral(L, "SCARD");
+		lua_pushrediskey(L, key);
+		LuaRedis* redis = RedisCommandInternal(L);
+		lua_pop(L, 3);
+
+		lua_pushinteger(L, redis->reply->integer);
+		CleanReply(redis);
+	}
 	else {
 		lua_pushinteger(L, 0);
 	}
@@ -174,7 +191,7 @@ int redisvalue_iter(lua_State* L) {
 
 		return 2;
 	}
-	else if (type == REDIS_VALUE_TYPE_LIST) {
+	else if (type == REDIS_VALUE_TYPE_LIST || type == REDIS_VALUE_TYPE_SET) {
 
 		if (lua_isnil(L, -1)) {
 			lua_pop(L, 1);
@@ -303,6 +320,118 @@ int redisvalue_index(lua_State* L) {
 			CleanReply(redis);
 		}
 	}
+	else if (type == REDIS_VALUE_TYPE_SET) {
+
+		if (lua_isinteger(L, -1)) {
+
+			int setidx = lua_tointeger(L, -1);
+
+			if (setidx < -1) {
+				luaL_error(L, "Index for sets cannot be negative");
+				return 0;
+			}
+			else if (setidx <= 0) {
+
+				lua_pushredisref(L, key);
+				if (setidx == 0) {
+					lua_pushliteral(L, "SRANDMEMBER");
+				}
+				else {
+					lua_pushliteral(L, "SPOP");
+				}
+				lua_pushrediskey(L, key);
+				LuaRedis* redis = RedisCommandInternal(L);
+				lua_pop(L, 3);
+
+				if (redis->reply->type == REDIS_REPLY_NIL) {
+					lua_pushnil(L);
+				}
+				else {
+					lua_pushlstring(L, redis->reply->str, redis->reply->len);
+				}
+
+				return 1;
+			}
+
+			lua_pushliteral(L, "set");
+			lua_rawget(L, -3);
+
+			int len = 0;
+
+			if (lua_istable(L, -1)) {
+				len = lua_rawlen(L, -1);
+			}
+
+			if (setidx == 1 || len <= 0) {
+				lua_pop(L, 1);
+				lua_newtable(L);
+				lua_pushredisref(L, key);
+				lua_pushliteral(L, "SSCAN");
+				lua_pushrediskey(L, key);
+				lua_pushliteral(L, "0");
+				lua_pushliteral(L, "COUNT");
+				lua_pushliteral(L, "100");
+				LuaRedis* redis = RedisCommandInternal(L);
+				len = 0;
+				while (true) {
+
+					if (redis->reply->elements != 2) {
+						luaL_error(L, "Failed to scan set");
+						return 0;
+					}
+
+					for (size_t i = 0; i < redis->reply->element[1]->elements; i++)
+					{
+						lua_pushlstring(L, redis->reply->element[1]->element[i]->str, redis->reply->element[1]->element[i]->len);
+						lua_rawseti(L, -8, ++len);
+					}
+
+					if (strcmp(redis->reply->element[0]->str, "0") == 0) {
+						CleanReply(redis);
+						lua_pop(L, 6);
+
+						lua_pushliteral(L, "set");
+						lua_pushvalue(L, -2);
+						lua_rawset(L, -5);
+
+						break;
+					}
+					else {
+						lua_pushlstring(L, redis->reply->element[0]->str, redis->reply->element[0]->len);
+						lua_rotate(L, -4, -1);
+						lua_pop(L, 1);
+						lua_rotate(L, -3, 1);
+						redis = RedisCommandInternal(L);
+					}
+				}
+			}
+
+			lua_rawgeti(L, -1, setidx);
+			lua_remove(L, -2);
+			if (setidx >= len) {
+				lua_pushliteral(L, "set");
+				lua_pushnil(L);
+				lua_rawset(L, -5);
+			}
+			return 1;
+		}
+		else if (!lua_isstring(L, -1)) {
+			luaL_error(L, "Set key must be a string");
+			return 0;
+		}
+		else {
+			lua_pushredisref(L, key);
+			lua_pushliteral(L, "SISMEMBER");
+			lua_pushrediskey(L, key);
+			lua_pushvalue(L, -4);
+			LuaRedis* redis = RedisCommandInternal(L);
+			lua_pop(L, 4);
+			lua_pushboolean(L, redis->reply->integer);
+			CleanReply(redis);
+
+			return 1;
+		}
+	}
 	else {
 		luaL_error(L, "Cannot index redisvalue with type %d", type);
 		return 0;
@@ -325,6 +454,22 @@ int redisvalue_newindex(lua_State* L) {
 		InternalPushValue(L, 3);
 		CleanReply(RedisCommandInternal(L));
 		lua_pop(L, 5);
+	}
+	else if (type == REDIS_VALUE_TYPE_SET) {
+
+		lua_pushredisref(L, key);
+
+		if (lua_isnil(L, 3) || (lua_isboolean(L, 3) && !lua_toboolean(L, 3))) {
+			lua_pushliteral(L, "SREM");
+		}
+		else {			
+			lua_pushliteral(L, "SADD");
+		}	
+
+		lua_pushrediskey(L, key);
+		lua_pushvalue(L, 2);
+		CleanReply(RedisCommandInternal(L));
+		lua_pop(L, 4);
 	}
 	else if (type == REDIS_VALUE_TYPE_LIST) {
 
@@ -390,6 +535,9 @@ int redisvalue_tostring(lua_State* L) {
 	}
 	else if (type == REDIS_VALUE_TYPE_LIST) {
 		lua_pushfstring(L, "RedisValue: list (%s)", key->key);
+	}
+	else if (type == REDIS_VALUE_TYPE_SET) {
+		lua_pushfstring(L, "RedisValue: set (%s)", key->key);
 	}
 	else {
 		lua_pushfstring(L, "RedisValue: none (%s)", key->key);
