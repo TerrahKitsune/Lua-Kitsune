@@ -5,11 +5,18 @@ int redisstream_tostring(lua_State* L);
 int redisstream_gc(lua_State* L);
 int redisstream_call(lua_State* L);
 
+int redisstream_add(lua_State* L);
+int redisstream_read(lua_State* L);
+int redisstream_trim(lua_State* L);
+
 typedef struct LuaRedisStream {
 	LuaRedisKey key;
 } LuaRedisStream;
 
 static const struct luaL_Reg redisstreamfunctions[] = {
+	{ "Add", redisstream_add },
+	{ "Read", redisstream_read },
+	{ "Trim", redisstream_trim },
 	{ NULL, NULL }
 };
 

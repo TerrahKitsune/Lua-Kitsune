@@ -23,7 +23,7 @@ static int InternalGetRedisType(lua_State* L, int index) {
 	return type;
 }
 
-static int InternalPushValue(lua_State* L, int index) {
+int InternalPushValue(lua_State* L, int index) {
 
 	if (lua_istable(L, index)) {
 		if (JsonRef == LUA_NOREF) {

@@ -462,6 +462,36 @@ Redis:
 	-Returns a redis value representing a hashset or nil if the key already exists and is the wrong type
 	RedisValue Redis:GetHashset(key)
 
+	-Return a redis value representing a list
+	RedisValue Redis:GetList(key)
+
+	-Return a redis value representing a set
+	RedisValue Redis:GetSet(key)
+
+	-Return a redis value representing a sortedset zset
+	RedisValue Redis:GetSortedSet(key)
+
+	-Returns a redis stream
+	RedisStream Redis:GetStream(key)
+
+	RedisStream: 
+
+		-Adds a message to the redis stream and returns the id
+		-the message should be a table where the keys = columns and the values = the data
+		id RedisStream:Add({key=value})
+
+		-Returns the next (or first) set of data
+		-If id is nil it returns the first, if an id is given it returns the next
+		-blocktime represents how long the call will wait before returning if there is no valid entries
+		-does not block by default
+		-returns nil if there is no data
+		id, data RedisStream:Read(opt id, opt blocktime)
+
+		-Trims the redis stream down to the size of a given int if an int was given
+		-if an Id was given then it will instead trim the stream to that id
+		-returns the amount of rows deleted
+		int RedisStream:Trim(int or id)
+
 	RedisValue: 
 	
 	-Redis values are treaded as tables for sets, hashes, lists, etc

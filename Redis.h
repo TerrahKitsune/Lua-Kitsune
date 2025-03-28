@@ -50,6 +50,7 @@ int RedisPushStringInternal(lua_State* L, int redisIdx, const char* key, size_t 
 int RedisPushStreamInternal(lua_State* L, int redisIdx, const char* key, size_t keylength);
 LuaRedisKey* lua_createrediskey(lua_State* L, int redisIdx, const char* key, size_t keylen);
 int push_redisvalue(lua_State* L, int redisIdx, int type, const char* key, size_t keylen);
+int InternalPushValue(lua_State* L, int index);
 
 LuaRedis* lua_pushredis(lua_State* L);
 LuaRedis* lua_toredis(lua_State* L, int index);
