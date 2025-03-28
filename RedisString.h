@@ -19,6 +19,7 @@ int redisstring_pairs(lua_State* L);
 int redisstring_getttl(lua_State* L);
 int redisstring_setttl(lua_State* L);
 int redisstring_delete(lua_State* L);
+int redisstring_call(lua_State* L);
 
 static const struct luaL_Reg redisstringfunctions[] = {
 	{ "At", redisstring_at },
@@ -33,6 +34,7 @@ static const struct luaL_Reg redisstringfunctions[] = {
 };
 
 static const luaL_Reg redisstringmeta[] = {
+	{ "__call", redisstring_call },
 	{ "__pairs", redisstring_pairs },
 	{ "__len",  redisstring_len },
 	{ "__gc",  redisstring_gc },

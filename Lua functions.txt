@@ -516,6 +516,21 @@ Redis:
 	-Key is just the order of the scan and should not be relied on
 	for _, member in pairs(RedisValue) print(idx,v); end
 
+	for sortedset (zset) (type = 4):
+
+	-If index is a string it returns the score for the member (or nil)
+	-If index is an int it returns the member at that index (1 indxed for lua)
+	-value[1] = returns the lowest score member
+	value = RedisValue[index]
+
+	-Sets the members score to a new value
+	-if the member does not exist it is added
+	-if the score is nil it is removed
+	RedisValue[key] = score
+
+	-Iterate the sortedset in order lowest -> highest
+	for member, score in pairs(RedisValue) print(member,score); end
+
 	RedisKey:
 
 	-Deletes the key

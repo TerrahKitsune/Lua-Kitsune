@@ -460,6 +460,56 @@ int RedisGetKeyIterator(lua_State* L) {
 	return 1;
 }
 
+int RedisGetStream(lua_State* L) {
+
+	luaL_checkudata(L, -2, REDIS);
+	lua_pushvalue(L, -2);
+	lua_pushstring(L, "TYPE");
+	lua_pushvalue(L, -3);
+
+	LuaRedis* luaRedis = RedisCommandInternal(L);
+	lua_pop(L, 3);
+
+	if (luaRedis->reply->str && (strcmp(luaRedis->reply->str, "none") == 0 || strcmp(luaRedis->reply->str, "stream") == 0)) {
+		CleanReply(luaRedis);
+		size_t len;
+		const char* key = luaL_tolstring(L, -1, &len);
+		lua_pop(L, 1);
+		RedisPushStreamInternal(L, -2, key, len);
+	}
+	else {
+		CleanReply(luaRedis);
+		lua_pushnil(L);
+	}
+
+	return 1;
+}
+
+int RedisGetSortedSet(lua_State* L) {
+
+	luaL_checkudata(L, -2, REDIS);
+	lua_pushvalue(L, -2);
+	lua_pushstring(L, "TYPE");
+	lua_pushvalue(L, -3);
+
+	LuaRedis* luaRedis = RedisCommandInternal(L);
+	lua_pop(L, 3);
+
+	if (luaRedis->reply->str && (strcmp(luaRedis->reply->str, "none") == 0 || strcmp(luaRedis->reply->str, "zset") == 0)) {
+		CleanReply(luaRedis);
+		size_t len;
+		const char* key = luaL_tolstring(L, -1, &len);
+		lua_pop(L, 1);
+		push_redisvalue(L, -2, REDIS_VALUE_TYPE_SORTEDSET, key, len);
+	}
+	else {
+		CleanReply(luaRedis);
+		lua_pushnil(L);
+	}
+
+	return 1;
+}
+
 int RedisGetSet(lua_State* L) {
 
 	luaL_checkudata(L, -2, REDIS);

@@ -495,6 +495,9 @@
     <ClCompile Include="RedisValue.cpp">
       <Filter>Kitsune\LuaRedis\Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="RedisStream.cpp">
+      <Filter>Kitsune\LuaRedis\Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="SQLite\sqlite3.h">
@@ -780,6 +783,9 @@
       <Filter>Kitsune\LuaRedis\Header Files</Filter>
     </ClInclude>
     <ClInclude Include="RedisValue.h">
+      <Filter>Kitsune\LuaRedis\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="RedisStream.h">
       <Filter>Kitsune\LuaRedis\Header Files</Filter>
     </ClInclude>
   </ItemGroup>

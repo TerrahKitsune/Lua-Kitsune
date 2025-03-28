@@ -140,7 +140,7 @@ int redisvalue_iter(lua_State* L) {
 			LuaRedisKey* key = InternalGetRedisKey(L, 1);
 
 			lua_pushredisref(L, key);
-			lua_pushliteral(L, "HSCAN");
+			lua_pushliteral(L, "HSCAN");		
 			lua_pushrediskey(L, key);
 			lua_pushstring(L, cursor);
 			lua_pushliteral(L, "COUNT");
@@ -197,8 +197,8 @@ int redisvalue_iter(lua_State* L) {
 			lua_pop(L, 1);
 			lua_pushinteger(L, 0);
 		}
-		
-		lua_Integer idx = lua_tointeger(L, -1)+1;
+
+		lua_Integer idx = lua_tointeger(L, -1) + 1;
 		lua_pop(L, 1);
 		lua_pushinteger(L, idx);
 		redisvalue_index(L);
@@ -206,6 +206,63 @@ int redisvalue_iter(lua_State* L) {
 		if (lua_isnil(L, -1)) {
 			lua_pop(L, 2);
 			return 0;
+		}
+
+		return 2;
+	}
+	else if (type == REDIS_VALUE_TYPE_SORTEDSET) {
+
+		lua_pop(L, 1);
+		lua_pushvalue(L, lua_upvalueindex(2));
+		if (lua_isnil(L, -1)) {
+			lua_pop(L, 1);
+			lua_pushinteger(L, 0);
+		}
+
+		LuaRedisKey* key = InternalGetRedisKey(L, 1);
+		lua_pushredisref(L, key);
+		lua_pushliteral(L, "ZRANGE");
+		lua_pushrediskey(L, key);
+		lua_pushvalue(L, -4);
+		lua_pushvalue(L, -5);
+		lua_pushliteral(L, "WITHSCORES");
+		LuaRedis* redis = RedisCommandInternal(L);
+		lua_pop(L, 6);
+
+		lua_Integer i = lua_tointeger(L, -1)+1;
+		lua_pop(L, 1);
+		lua_pushinteger(L, i);
+		lua_replace(L, lua_upvalueindex(2));
+
+		if (redis->reply->elements == 2) {
+			for (size_t i = 0; i < 2; i++)
+			{
+				if (redis->reply->element[i]->type == REDIS_REPLY_INTEGER) {
+					lua_pushinteger(L, redis->reply->element[i]->integer);
+				}
+				else if (redis->reply->element[i]->type == REDIS_REPLY_STRING) {
+					lua_pushlstring(L, redis->reply->element[i]->str, redis->reply->element[i]->len);
+				}
+				else {
+					lua_pushnil(L);
+				}
+			}
+		}
+		else {
+			lua_pushnil(L);
+			lua_pushnil(L);
+		}
+
+		CleanReply(redis);
+
+		if (lua_isnil(L, -1)) {
+			lua_pop(L, 2);
+			return 0;
+		}
+		else{
+			lua_Integer score = atoll(lua_tostring(L, -1));
+			lua_pop(L, 1);
+			lua_pushinteger(L, score);
 		}
 
 		return 2;
@@ -282,6 +339,57 @@ int redisvalue_index(lua_State* L) {
 			lua_pushlstring(L, redis->reply->str, redis->reply->len);
 		}
 		CleanReply(redis);
+	}
+	else if (type == REDIS_VALUE_TYPE_SORTEDSET) {
+
+		int top = lua_gettop(L);
+
+		if (lua_isinteger(L, 2)) {
+			lua_pushredisref(L, key);
+			lua_pushliteral(L, "ZRANGE");
+			lua_pushrediskey(L, key);
+			lua_Integer idx = lua_tointeger(L, 2);
+			lua_pushinteger(L, idx - 1);
+			lua_pushinteger(L, idx - 1);
+		}
+		else if (lua_isstring(L, 2)) {
+			lua_pushredisref(L, key);
+			lua_pushliteral(L, "ZMSCORE");
+			lua_pushrediskey(L, key);
+			lua_pushvalue(L, 2);
+		}
+		else {
+			luaL_error(L, "Invalid key type for sorted set");
+			return 0;
+		}
+
+		LuaRedis* redis = RedisCommandInternal(L);
+		lua_settop(L, top);
+
+		redisReply* reply = redis->reply;
+
+		if (redis->reply->type == REDIS_REPLY_ARRAY) {
+
+			if (redis->reply->elements <= 0) {
+				reply = NULL;
+			}
+			else {
+				reply = redis->reply->element[0];
+			}
+		}
+
+		if (!reply || reply->type == REDIS_REPLY_NIL) {
+			lua_pushnil(L);
+		}
+		else if (reply->type == REDIS_REPLY_INTEGER) {
+			lua_pushinteger(L, reply->integer);
+		}
+		else {
+			lua_pushlstring(L, reply->str, reply->len);
+		}
+
+		CleanReply(redis);
+		return 1;
 	}
 	else if (type == REDIS_VALUE_TYPE_LIST) {
 
@@ -455,6 +563,28 @@ int redisvalue_newindex(lua_State* L) {
 		CleanReply(RedisCommandInternal(L));
 		lua_pop(L, 5);
 	}
+	else if (type == REDIS_VALUE_TYPE_SORTEDSET) {
+
+		if (lua_isinteger(L, 3)) {
+			lua_pushredisref(L, key);
+			lua_pushliteral(L, "ZADD");
+			lua_pushrediskey(L, key);
+			lua_pushvalue(L, 3);
+			lua_pushvalue(L, 2);
+			CleanReply(RedisCommandInternal(L));
+			lua_pop(L, 5);
+		}
+		else {
+			lua_pushredisref(L, key);
+			lua_pushliteral(L, "ZREM");
+			lua_pushrediskey(L, key);
+			lua_pushvalue(L, 2);
+			CleanReply(RedisCommandInternal(L));
+			lua_pop(L, 4);
+		}
+
+		return 0;
+	}
 	else if (type == REDIS_VALUE_TYPE_SET) {
 
 		lua_pushredisref(L, key);
@@ -462,9 +592,9 @@ int redisvalue_newindex(lua_State* L) {
 		if (lua_isnil(L, 3) || (lua_isboolean(L, 3) && !lua_toboolean(L, 3))) {
 			lua_pushliteral(L, "SREM");
 		}
-		else {			
+		else {
 			lua_pushliteral(L, "SADD");
-		}	
+		}
 
 		lua_pushrediskey(L, key);
 		lua_pushvalue(L, 2);
@@ -539,8 +669,11 @@ int redisvalue_tostring(lua_State* L) {
 	else if (type == REDIS_VALUE_TYPE_SET) {
 		lua_pushfstring(L, "RedisValue: set (%s)", key->key);
 	}
+	else if (type == REDIS_VALUE_TYPE_SORTEDSET) {
+		lua_pushfstring(L, "RedisValue: sortedset (%s)", key->key);
+	}
 	else {
-		lua_pushfstring(L, "RedisValue: none (%s)", key->key);
+		lua_pushfstring(L, "RedisValue: unknown (%s)", key->key);
 	}
 
 	return 1;

@@ -271,6 +271,15 @@ int redisstring_concat(lua_State* L) {
 	return 1;
 }
 
+int redisstring_call(lua_State* L) {
+
+	LuaRedisString* redis = (LuaRedisString*)luaL_checkudata(L, -1, REDISSTRING);
+	lua_pushredisref(L, &redis->key);
+	lua_createrediskey(L, -1, redis->key.key, redis->key.keylen);
+
+	return 1;
+}
+
 int redisstring_gc(lua_State* L) {
 
 	if (buffer) {

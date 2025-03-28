@@ -3,12 +3,15 @@
 #include "RedisString.h"
 #include "RedisKey.h"
 #include "RedisValue.h"
+#include "RedisStream.h"
 
 static const struct luaL_Reg redisfunctions[] = {
 	{ "Command", RedisCommand },
 	{ "GetString", RedisGetString },
 	{ "GetHashset", RedisGetHashset },
 	{ "GetList", RedisGetList },
+	{ "GetSortedSet", RedisGetSortedSet },
+	{ "GetStream", RedisGetStream },
 	{ "GetSet", RedisGetSet },
 	{ "GetKey", RedisGetKey },
 	{ "Poll", RedisPoll },
@@ -47,6 +50,9 @@ int luaopen_redis(lua_State* L) {
 	lua_pop(L, 2);
 
 	internal_luaopen_redisvalue(L);
+	lua_pop(L, 2);
+
+	internal_luaopen_redisstream(L);
 	lua_pop(L, 2);
 
 	return 1;
