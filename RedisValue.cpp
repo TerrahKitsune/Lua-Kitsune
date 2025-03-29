@@ -183,6 +183,9 @@ int redisvalue_iter(lua_State* L) {
 		lua_Integer nth = lua_tointeger(L, -1) + 1;
 		lua_pop(L, 1);
 		lua_rawgeti(L, -1, nth);
+		if (lua_isnil(L, -1)) {
+			return 0;
+		}
 		lua_rawgeti(L, -1, 1);
 		lua_rawgeti(L, -2, 2);
 
@@ -555,13 +558,25 @@ int redisvalue_newindex(lua_State* L) {
 
 	if (type == REDIS_VALUE_TYPE_HASHSET) {
 
-		lua_pushredisref(L, key);
-		lua_pushliteral(L, "HSET");
-		lua_pushrediskey(L, key);
-		lua_pushvalue(L, 2);
-		InternalPushValue(L, 3);
-		CleanReply(RedisCommandInternal(L));
-		lua_pop(L, 5);
+		if (lua_isnil(L, 3)) {
+			lua_pushredisref(L, key);
+			lua_pushliteral(L, "HDEL");
+			lua_pushrediskey(L, key);
+			lua_pushvalue(L, 2);
+			CleanReply(RedisCommandInternal(L));
+			lua_pop(L, 4);
+		}
+		else {
+			lua_pushredisref(L, key);
+			lua_pushliteral(L, "HSET");
+			lua_pushrediskey(L, key);
+			lua_pushvalue(L, 2);
+			InternalPushValue(L, 3);
+			CleanReply(RedisCommandInternal(L));
+			lua_pop(L, 5);
+		}
+
+		return 0;
 	}
 	else if (type == REDIS_VALUE_TYPE_SORTEDSET) {
 
