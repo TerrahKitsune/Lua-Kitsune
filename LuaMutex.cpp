@@ -44,6 +44,18 @@ int LuaLockMutex(lua_State* L) {
 
 	DWORD result = WaitForSingleObject(mutex->mutex, (DWORD)timeout);
 
+	if (result == WAIT_ABANDONED) {
+		mutex->istaken = false;
+		result = ReleaseMutex(mutex->mutex);
+		if (!result) {
+			lua_pop(L, lua_gettop(L));
+			lua_pushboolean(L, mutex->istaken);
+
+			return 1;
+		}
+		result = WaitForSingleObject(mutex->mutex, (DWORD)timeout);
+	}
+
 	mutex->istaken = result == WAIT_OBJECT_0;
 
 	lua_pop(L, lua_gettop(L));

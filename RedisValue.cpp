@@ -138,23 +138,40 @@ int redisvalue_iter(lua_State* L) {
 		if (lua_isnil(L, -1)) {
 
 			LuaRedisKey* key = InternalGetRedisKey(L, 1);
+			LuaRedis* redis;
 
-			lua_pushredisref(L, key);
-			lua_pushliteral(L, "HSCAN");		
-			lua_pushrediskey(L, key);
-			lua_pushstring(L, cursor);
-			lua_pushliteral(L, "COUNT");
-			lua_pushinteger(L, 1);
-			LuaRedis* redis = RedisCommandInternal(L);
-			lua_pop(L, 6);
+			while (true) {
 
-			if (redis->reply->elements != 2 || redis->reply->element[1]->elements % 2 != 0) {
-				CleanReply(redis);
-				return 0;
+				lua_pushredisref(L, key);
+				lua_pushliteral(L, "HSCAN");
+				lua_pushrediskey(L, key);
+				lua_pushstring(L, cursor);
+				lua_pushliteral(L, "COUNT");
+				lua_pushinteger(L, 1);
+				redis = RedisCommandInternal(L);
+				lua_pop(L, 6);
+
+				if (redis->reply->elements != 2 || redis->reply->element[1]->elements % 2 != 0) {
+					CleanReply(redis);
+					return 0;
+				}
+
+				lua_pushlstring(L, redis->reply->element[0]->str, redis->reply->element[0]->len);
+				lua_replace(L, lua_upvalueindex(1));
+			
+				if (redis->reply->element[1]->elements > 0) {
+					break;
+				}
+				else {
+					CleanReply(redis);
+					cursor = lua_tostring(L, lua_upvalueindex(1));
+
+					if (strcmp(cursor, "0") == 0) {
+						CleanReply(redis);
+						return 0;
+					}
+				}
 			}
-
-			lua_pushlstring(L, redis->reply->element[0]->str, redis->reply->element[0]->len);
-			lua_replace(L, lua_upvalueindex(1));
 
 			lua_createtable(L, 0, 0);
 
