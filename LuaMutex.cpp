@@ -98,8 +98,10 @@ int LuaGetMutexInfo(lua_State* L) {
 LuaMutex* lua_pushmutex(lua_State* L) {
 
 	LuaMutex* mutex = (LuaMutex*)lua_newuserdata(L, sizeof(LuaMutex));
-	if (mutex == NULL)
+	if (mutex == NULL) {
 		luaL_error(L, "Unable to push mutex");
+		return NULL;
+	}
 	luaL_getmetatable(L, LUAMUTEX);
 	lua_setmetatable(L, -2);
 
@@ -110,8 +112,10 @@ LuaMutex* lua_pushmutex(lua_State* L) {
 
 LuaMutex* lua_tomutex(lua_State* L, int index) {
 	LuaMutex* mutex = (LuaMutex*)luaL_checkudata(L, index, LUAMUTEX);
-	if (mutex == NULL)
+	if (mutex == NULL) {
 		luaL_error(L, "parameter is not a %s", LUAMUTEX);
+		return NULL;
+	}
 	return mutex;
 }
 

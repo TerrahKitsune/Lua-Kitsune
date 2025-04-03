@@ -156,6 +156,9 @@ assert(sqlite:Query([[SELECT LuaFunction('dofile', 'C:/Users/Terrah/Documents/Gi
 --FileSystem.SetCurrentDirectory("C:\\Users\\Terrah\\Desktop\\files");
 --dofile("filehash.lua");
 
+print(j:Encode({}));
+if true then return; end
+
 local redis = assert(Redis.Open("10.9.23.123"));
 print(j:Encode(redis:Command("AUTH", "hej123")));
 print(j:Encode(redis:Command("TYPE", "Lua:Test")));

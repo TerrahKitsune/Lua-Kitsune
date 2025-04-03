@@ -246,8 +246,9 @@ void json_encodetable(lua_State* L, JsonContext* C, int* depth) {
 	lua_pushnil(L);
 	lua_pushnil(L);
 	if (json_lua_pairs(L) != 0) {
-
-		any = 1;
+		if (!lua_isnil(L, -1) || !lua_isnil(L, -2)) {
+			any = 1;
+		}
 		lua_pop(L, 3);
 	}
 
