@@ -124,7 +124,7 @@ int ReadEntry(lua_State* L) {
 
 	LuaArchive* arc = lua_toarchive(L, 1);
 	int buffer = luaL_optinteger(L, 2, 1024);
-	size_t size;
+	long long size;
 
 	if (arc->buff) {
 		gff_free(arc->buff);
@@ -150,7 +150,11 @@ int ReadEntry(lua_State* L) {
 		lua_pushlstring(L, (const char*)arc->buff, size);
 	}
 	else {
-		lua_pushnil(L);
+		gff_free(arc->buff);
+		arc->buff = NULL;
+		const char* error = archive_error_string(arc->a);
+		luaL_error(L, error);
+		return 0;
 	}
 
 	gff_free(arc->buff);
@@ -176,7 +180,7 @@ int SetReadEntry(lua_State* L) {
 		arc->entry = NULL;
 	}
 
-	int r;
+	long long r;
 	int nth = 0;
 
 	arc->a = archive_read_new();
