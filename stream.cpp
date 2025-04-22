@@ -1599,7 +1599,6 @@ int luastream_gc(lua_State* L) {
 	if (pipe->hSharedMemory) {
 		UnmapViewOfFile(pipe->data);
 		CloseHandle(pipe->hSharedMemory);
-		pipe->hSharedMemory = NULL;
 	}
 	else if (pipe->data) {
 		gff_free(pipe->data);
@@ -1614,8 +1613,10 @@ int luastream_gc(lua_State* L) {
 
 	if (pipe->allocfunc != LUA_NOREF) {
 		luaL_unref(L, LUA_REGISTRYINDEX, pipe->allocfunc);
-		pipe->allocfunc = LUA_NOREF;
 	}
+
+	memset(pipe, 0, sizeof(LuaStream));
+	pipe->allocfunc = LUA_NOREF;
 
 	return 0;
 }
