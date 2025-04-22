@@ -53,6 +53,7 @@ lua_State* OpenLuaState(lua_Alloc memoryAllocator) {
 	OpenSSL_add_all_algorithms();
 
 	lua_State* L = lua_newstate(memoryAllocator, NULL);
+	lua_gc(L, LUA_GCGEN, 20, 100);
 	luaL_openlibs(L);
 
 	luaopen_archive(L);

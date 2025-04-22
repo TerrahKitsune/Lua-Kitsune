@@ -501,6 +501,7 @@ int main(int argc, char *argv[]) {
 	StartCounter();
 	hook = -1;
 	lua_State *L = lua_newstate(l_alloc, NULL);
+	lua_gc(L, LUA_GCGEN, 20, 100);
 	luaL_openlibs(L);
 
 #ifdef _DEBUG

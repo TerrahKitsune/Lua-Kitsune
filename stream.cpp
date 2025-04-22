@@ -1211,7 +1211,7 @@ int Decompress(lua_State* L) {
 }
 
 int NewStreamFromString(lua_State* L) {
-	
+
 	size_t len;
 	const char* data;
 
@@ -1519,13 +1519,13 @@ int NewSharedMemoryStream(lua_State* L) {
 
 Cleanup:
 
-	if (pEveryoneSID) 
+	if (pEveryoneSID)
 		FreeSid(pEveryoneSID);
-	if (pCurrentUserSID) 
+	if (pCurrentUserSID)
 		FreeSid(pCurrentUserSID);
-	if (pAcl) 
+	if (pAcl)
 		LocalFree(pAcl);
-	if (psd) 
+	if (psd)
 		LocalFree(psd);
 
 	return 2;
@@ -1551,8 +1551,8 @@ LuaStream* lua_pushluastream(lua_State* L) {
 
 LuaStream* lua_pushluastream(lua_State* L, const BYTE* data, size_t len) {
 	LuaStream* stream = lua_pushluastream(L);
-	stream->data = (BYTE*)gff_malloc(len+1);
-	
+	stream->data = (BYTE*)gff_malloc(len + 1);
+
 	if (!stream->data) {
 		luaL_error(L, "Unable to push stream");
 		return NULL;
@@ -1560,7 +1560,7 @@ LuaStream* lua_pushluastream(lua_State* L, const BYTE* data, size_t len) {
 
 	memcpy(stream->data, data, len);
 	stream->data[len] = '\0';
-	stream->alloc = len;
+	stream->alloc = len + 1;
 	stream->len = len;
 
 	return stream;
@@ -1621,8 +1621,5 @@ int luastream_gc(lua_State* L) {
 }
 
 int luastream_tostring(lua_State* L) {
-	char tim[100];
-	sprintf(tim, "Stream: 0x%08X", lua_toluastream(L, 1));
-	lua_pushfstring(L, tim);
-	return 1;
+	return ReadLuaStream(L);
 }

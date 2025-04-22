@@ -159,6 +159,7 @@ int SQLiteFetch(lua_State* L) {
 int SQLiteFinish(lua_State* L) {
 	LuaSQLite* luasqlite = (LuaSQLite*)luaL_checksqlite(L, 1);
 	FinalizeStmt(luasqlite);
+	lua_gc(L, LUA_GCCOLLECT);
 	return 0;
 }
 

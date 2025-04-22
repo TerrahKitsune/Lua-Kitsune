@@ -153,8 +153,8 @@ print(sha);
 assert(sqlite:Query([[SELECT load_extension("C:/Users/Terrah/Documents/GitHub/Lua-Kitsune/x64/Debug/SQLiteKitsune.dll");]]));
 assert(sqlite:Query([[SELECT LuaFunction('dofile', 'C:/Users/Terrah/Documents/GitHub/Lua-Kitsune/sqlitemain.lua');]]));
 
---FileSystem.SetCurrentDirectory("C:\\Users\\Terrah\\Desktop\\files");
---dofile("filehash.lua");
+FileSystem.SetCurrentDirectory("A:/Archive");
+dofile("compress_images.lua");
 
 print(j:Encode({}));
 if true then return; end
