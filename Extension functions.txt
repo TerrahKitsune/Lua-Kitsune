@@ -1,3 +1,4 @@
+The plugin will automatically attempt executing a file called "extension.lua" in the same directory as the database file
 
 sqlite functions:
 
@@ -31,6 +32,8 @@ nil RegisterAggregate(name, function)
 nil RegisterFunction(name, function)
 
 lua functions:
+
+FILE = the sqlite file or empty if it is a memory database
 
 -Executes a string as a lua function and returns 1 result
 any dostring(str)

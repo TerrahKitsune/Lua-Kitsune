@@ -751,6 +751,80 @@ int sqlite3_sqlitekitsune_init(sqlite3* db, char** pzErrMsg, const sqlite3_api_r
 
 	sqlite3_create_function(db, "LuaFunction", -1, SQLITE_UTF8, L, executeluafunction, NULL, NULL);
 
+	const char* file = sqlite3_db_filename(db, NULL);
+
+	if (file) {
+
+		lua_pushstring(L, file);
+		lua_setglobal(L, "FILE");
+
+		char* path = (char*)sqlite3_malloc(MAX_PATH + 1);
+		if (!path) {
+			return SQLITE_NOMEM;
+		}
+
+		int idxLast = -1;
+
+		for (size_t i = 0; i < strlen(file); i++)
+		{
+			if (file[i] == '/') {
+				path[i] = '\\';
+			}
+			else {
+				path[i] = file[i];
+			}
+
+			if (path[i] == '\\') {
+				idxLast = i;
+			}
+		}
+
+		const char* luafile = "extension.lua";
+
+		if (idxLast == -1) {
+			strcpy(path, luafile);
+		}
+		else {
+			path[idxLast + 1] = '\0';
+			if (strlen(path) > MAX_PATH - strlen(luafile)) {
+				sqlite3_free(path);
+				return SQLITE_OK;
+			}
+			else {
+				strcat(path, luafile);
+			}
+		}
+
+		FILE* f = fopen(path, "rb");
+
+		if (f) {
+
+			fseek(f, 0, SEEK_END);
+			long len = ftell(f);
+			fclose(f);
+
+			if (len > 0) {
+				lua_getglobal(L, "dofile");
+				lua_pushstring(L, path);
+				if (lua_pcall(L, 1, 0, NULL)) {
+					const char* err = lua_tostring(L, -1);
+					*pzErrMsg = (char*)sqlite3_malloc(strlen(err) + 1);
+					strcpy(*pzErrMsg, err);
+					sqlite3_free(path);
+					lua_pop(L, lua_gettop(L));
+					return SQLITE_ERROR;
+				}
+			}
+		}
+
+		sqlite3_free(path);
+	}
+	else {
+		lua_pushliteral(L, "");
+		lua_setglobal(L, "FILE");
+	}
+
+	lua_pop(L, lua_gettop(L));
 	return SQLITE_OK;
 }
 

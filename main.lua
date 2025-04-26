@@ -143,7 +143,7 @@ FileSystem.SetCurrentDirectory("C:\\Users\\Terrah\\Desktop");
 local j = Json.Create(true);
 
 print(string.format("0x%016X", CRC64("Hello!")));
-local sqlite = SQLite.Open();
+local sqlite = SQLite.Open("D:/test.db");
 
 local sha = SHA1.New();
 sha:Update("Hello!");
@@ -153,8 +153,8 @@ print(sha);
 assert(sqlite:Query([[SELECT load_extension("C:/Users/Terrah/Documents/GitHub/Lua-Kitsune/x64/Debug/SQLiteKitsune.dll");]]));
 assert(sqlite:Query([[SELECT LuaFunction('dofile', 'C:/Users/Terrah/Documents/GitHub/Lua-Kitsune/sqlitemain.lua');]]));
 
-FileSystem.SetCurrentDirectory("A:/Archive");
-dofile("compress_images.lua");
+--FileSystem.SetCurrentDirectory("A:/Archive");
+--dofile("compress_images.lua");
 
 print(j:Encode({}));
 if true then return; end
