@@ -617,15 +617,30 @@ int lua_CopyFile(lua_State* L) {
 
 int lua_MoveFile(lua_State* L) {
 
-	const char* src = luaL_checkstring(L, 1);
-	const char* dst = luaL_checkstring(L, 2);
+	LuaWChar* wsrc = (LuaWChar*)luaL_testudata(L, 1, LUAWCHAR);
+	LuaWChar* wdst = (LuaWChar*)luaL_testudata(L, 2, LUAWCHAR);
 
-	BOOL ret = MoveFile(src, dst);
+	if (wsrc && wdst) {
+		BOOL ret = MoveFileW(wsrc->str, wdst->str);
 
-	lua_pop(L, lua_gettop(L));
-	lua_pushboolean(L, ret);
+		lua_pop(L, lua_gettop(L));
+		lua_pushboolean(L, ret);
+	}
+	else if (wsrc || wdst) {
+		luaL_error(L, "Both source and destination must be wide strings or both must be narrow strings.");
+		return 0;
+	}
+	else {
+		const char* src = luaL_checkstring(L, 1);
+		const char* dst = luaL_checkstring(L, 2);
 
-	return 1;
+		BOOL ret = MoveFile(src, dst);
+
+		lua_pop(L, lua_gettop(L));
+		lua_pushboolean(L, ret);
+
+		return 1;
+	}
 }
 
 int lua_DeleteFile(lua_State* L) {

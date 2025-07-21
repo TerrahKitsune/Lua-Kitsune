@@ -139,56 +139,10 @@ local function HexToString(hexString)
     return str
 end
 
-FileSystem.SetCurrentDirectory("C:\\Users\\Terrah\\Desktop");
-local j = Json.Create(true);
-
-print(string.format("0x%016X", CRC64("Hello!")));
-local sqlite = SQLite.Open("D:/test.db");
-
-local sha = SHA1.New();
-sha:Update("Hello!");
-sha = sha:Finish();
-print(sha);
+local test = Wchar.FromAnsi("hello");
+test = Wchar.FromAnsi(test);
+print(test);
+if true then return; end
 
 assert(sqlite:Query([[SELECT load_extension("C:/Users/Terrah/Documents/GitHub/Lua-Kitsune/x64/Debug/SQLiteKitsune.dll");]]));
 assert(sqlite:Query([[SELECT LuaFunction('dofile', 'C:/Users/Terrah/Documents/GitHub/Lua-Kitsune/sqlitemain.lua');]]));
-
---FileSystem.SetCurrentDirectory("A:/Archive");
---dofile("compress_images.lua");
-
-print(j:Encode({}));
-if true then return; end
-
-local redis = assert(Redis.Open("10.9.23.123"));
-print(j:Encode(redis:Command("AUTH", "hej123")));
-print(j:Encode(redis:Command("TYPE", "Lua:Test")));
-
-local val = redis:GetStream("Lua:Stream");
-val():SetTTL(0);
-print(val);
-print(val());
-print("add", val:Add({Msg = UUID(), Value=UUID()}));
-
-for i=1, 10000 do
-	val:Add({Msg=i, Value=UUID()});
-end
-
-
-local contents={};
-local id, value;
-while true do
-	id, value = val:Read(id);
-	if id then
-		value.Id = id;
-		table.insert(contents, value);
-	else
-		break;
-	end
-end
-
-print(#contents);
-for n=1, #contents do
-	print(n, j:Encode(contents[n]));
-end
-
-print("Trim", val:Trim(10));

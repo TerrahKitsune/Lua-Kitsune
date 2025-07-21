@@ -226,9 +226,11 @@ int FromUtf8(lua_State* L) {
 	if (lua_gettop(L) < 1) {
 		return 0;
 	}
-
-	if (lua_isnone(L, -1)) {
+	else if (lua_isnone(L, -1)) {
 		lua_pushnil(L);
+		return 1;
+	}
+	else if (lua_iswchar(L, -1)) {
 		return 1;
 	}
 
@@ -305,9 +307,11 @@ int FromAnsi(lua_State* L) {
 	if (lua_gettop(L) < 1) {
 		return 0;
 	}
-
-	if (lua_isnone(L, -1)) {
+	else if (lua_isnone(L, -1)) {
 		lua_pushnil(L);
+		return 1;
+	}
+	else if (lua_iswchar(L, -1)) {
 		return 1;
 	}
 

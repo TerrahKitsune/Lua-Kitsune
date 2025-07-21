@@ -2314,6 +2314,7 @@ Wchar:
 
 	-Creates a wchar string from an ansi string
 	-uses mbstowcs
+	-does nothing if the string is already a wchar
 	Wchar Wchar.FromAnsi(str)
 
 	-Converts an array of integers or a string (such as created by ToWide) into a wchar or a single int to be interpeted as a codepoint
@@ -2322,6 +2323,7 @@ Wchar:
 
 	-Convert a utf8 string into a widechar
 	-uses MultiByteToWideChar with utf8 codepage
+	-does nothing if the string is already a wchar
 	Wchar Wchar.FromUtf8()
 
 	-https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/setlocale-wsetlocale?view=msvc-170
@@ -2416,6 +2418,7 @@ FileSystem:
 	bool FileSystem.Copy(source, destination, bool overwrite)
 
 	-Moves file source to destination
+	-Works with Wchar (both source and destination must be wchars or narrow)
 	-true on success
 	bool FileSystem.Move(source, destination)
 
