@@ -791,10 +791,10 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="sqlitemain.lua" />
-    <None Include="packages.config" />
     <None Include="Lua\Makefile">
       <Filter>Lua</Filter>
     </None>
+    <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="Extension functions.txt" />

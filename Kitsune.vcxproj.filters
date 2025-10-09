@@ -1389,9 +1389,9 @@
     <Manifest Include="kitsune.exe.manifest" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="packages.config" />
     <None Include="Lua\Makefile">
       <Filter>Lua</Filter>
     </None>
+    <None Include="packages.config" />
   </ItemGroup>
 </Project>
