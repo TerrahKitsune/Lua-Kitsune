@@ -721,6 +721,9 @@ Kafka:
 	-kafka message object is described below
 	kafkamessage Kafka:Consume(topicobject)
 
+	-commits a kafka message
+	bool, error Kafka:Commit(kafkamessage)
+
 	-Get the current commited offset (-1001 = none recorded)
 	int Kafka:GetCommitted(topic, partition)
 

@@ -62,28 +62,11 @@ function DumpArgs()
     return ARGS;
 end
 
-local testTable = {};
-RegisterFunction("CRC64", function(data) if not data then return nil; end return string.format('%016x', CRC64(data)); end);
-print(query("select CRC64('abc');"));
-print(scalar("select CRC64('abc');"));
-print(scalar("select LuaFunction('DumpArgs', 'a', 1, 'b', 2, 'c', 3);"));
-RegisterTable("TestTable", {"Id", "Value"}, testTable);
-RegisterAggregate("TestAgg", function(isfinished, context) 
-
-    context.cnt = context.cnt or 0;   
-    if isfinished then return context.cnt; end
-    context.cnt = context.cnt + 1;
-end);
-
 RegisterVirtualTable("Testx", {"Id", "Value"}, reader, update);
-for n=1, 10 do
-    query([[INSERT INTO TestTable ("Id", "Value")VALUES(@id, @uuid);]], {id=n,uuid=UUID()});
+for n=1, 100 do
+    query("insert into Testx values (@id, @data);", {id=n, data=UUID()});
 end
-
-query([[Update TestTable set "Value"=@uuid WHERE "Id" IN (@id, 15, 2);]], {id=10,uuid="bla"});
-query([[Update TestTable set "Id"=@uuid WHERE "Id"=@id;]], {id=10,uuid=15});
-query([[Delete from TestTable WHERE "Id"=@id;]], {id=1});
-print(j:Encode(query("select TestAgg(Id) as cnt from TestTable;")));
-
+print(Json.Create(true):Encode(query("select * from Testx;")));
+print(Json.Create(true):Encode(query("select * from Testx where Id=50;")));
 
 return Wchar.FromAnsi("test");

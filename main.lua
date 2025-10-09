@@ -139,10 +139,7 @@ local function HexToString(hexString)
     return str
 end
 
-local test = Wchar.FromAnsi("hello");
-test = Wchar.FromAnsi(test);
-print(test);
-if true then return; end
+local sqlite = SQLite.Open();
 
 assert(sqlite:Query([[SELECT load_extension("C:/Users/Terrah/Documents/GitHub/Lua-Kitsune/x64/Debug/SQLiteKitsune.dll");]]));
 assert(sqlite:Query([[SELECT LuaFunction('dofile', 'C:/Users/Terrah/Documents/GitHub/Lua-Kitsune/sqlitemain.lua');]]));
