@@ -260,7 +260,7 @@ int	RenameWide(lua_State* L) {
 
 	size_t len;
 	LuaWChar* src = lua_towchar(L, 1);
-	LuaWChar* dst = lua_towchar(L, 1);
+	LuaWChar* dst = lua_towchar(L, 2);
 
 	lua_pushboolean(L, _wrename(src->str, dst->str) == 0);
 
@@ -625,6 +625,7 @@ int lua_MoveFile(lua_State* L) {
 
 		lua_pop(L, lua_gettop(L));
 		lua_pushboolean(L, ret);
+		return 1;
 	}
 	else if (wsrc || wdst) {
 		luaL_error(L, "Both source and destination must be wide strings or both must be narrow strings.");

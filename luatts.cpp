@@ -1,7 +1,25 @@
 #include "luatts.h"
 #include <process.h>
 #include "luawchar.h"
-#include "sphelper.h"
+#include <Shlwapi.h>
+#pragma comment(lib, "Shlwapi.lib")
+
+// Helper function to enumerate voices without using CComPtr or sphelper.h
+static HRESULT EnumVoices(IEnumSpObjectTokens** ppEnum) {
+	ISpObjectTokenCategory* pCategory = NULL;
+	HRESULT hr = CoCreateInstance(CLSID_SpObjectTokenCategory, NULL, CLSCTX_ALL, 
+		IID_ISpObjectTokenCategory, (void**)&pCategory);
+	
+	if (SUCCEEDED(hr)) {
+		hr = pCategory->SetId(SPCAT_VOICES, FALSE);
+		if (SUCCEEDED(hr)) {
+			hr = pCategory->EnumTokens(NULL, NULL, ppEnum);
+		}
+		pCategory->Release();
+	}
+	
+	return hr;
+}
 
 DWORD WINAPI ThreadFunc(LPVOID arg) {
 
@@ -173,10 +191,10 @@ int SetVoice(lua_State* L) {
 	}
 	else {
 
-		CComPtr<IEnumSpObjectTokens> cpEnum;
-		HRESULT hr = SpEnumTokens(SPCAT_VOICES, NULL, NULL, &cpEnum);
-		CComPtr<ISpObjectToken> cpVoiceToken;
-		CComPtr<ISpDataKey> cpSpAttributesKey;
+		IEnumSpObjectTokens* cpEnum = NULL;
+		HRESULT hr = EnumVoices(&cpEnum);
+		ISpObjectToken* cpVoiceToken = NULL;
+		ISpDataKey* cpSpAttributesKey = NULL;
 		wchar_t* data;
 
 		while (cpEnum->Next(1, &cpVoiceToken, NULL) == S_OK)
@@ -190,18 +208,23 @@ int SetVoice(lua_State* L) {
 				if (StrCmpW(data, wchar->str) == 0) {
 					tts->pVoice->SetVoice(cpVoiceToken);
 					CoTaskMemFree(data);
-					cpSpAttributesKey.Release();
+					cpSpAttributesKey->Release();
+					cpVoiceToken->Release();
+					cpEnum->Release();
 
 					lua_pushboolean(L, true);
 					return 1;
 				}
 
 				CoTaskMemFree(data);
-				cpSpAttributesKey.Release();
+				cpSpAttributesKey->Release();
 			}
 
-			cpVoiceToken.Release();
+			cpVoiceToken->Release();
+			cpVoiceToken = NULL;
 		}
+		
+		if (cpEnum) cpEnum->Release();
 	}
 
 	lua_pushboolean(L, false);
@@ -210,10 +233,10 @@ int SetVoice(lua_State* L) {
 
 int GetVoices(lua_State* L) {
 
-	CComPtr<IEnumSpObjectTokens> cpEnum;
-	HRESULT hr = SpEnumTokens(SPCAT_VOICES, NULL, NULL, &cpEnum);
-	CComPtr<ISpObjectToken> cpVoiceToken;
-	CComPtr<ISpDataKey> cpSpAttributesKey;
+	IEnumSpObjectTokens* cpEnum = NULL;
+	HRESULT hr = EnumVoices(&cpEnum);
+	ISpObjectToken* cpVoiceToken = NULL;
+	ISpDataKey* cpSpAttributesKey = NULL;
 	wchar_t* data;
 
 	lua_createtable(L, 0, 0);
@@ -239,11 +262,14 @@ int GetVoices(lua_State* L) {
 			lua_settable(L, -3);
 
 			lua_rawseti(L, -2, ++n);
-			cpSpAttributesKey.Release();
+			cpSpAttributesKey->Release();
 		}
 
-		cpVoiceToken.Release();
+		cpVoiceToken->Release();
+		cpVoiceToken = NULL;
 	}
+
+	if (cpEnum) cpEnum->Release();
 
 	return 1;
 }

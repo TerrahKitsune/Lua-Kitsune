@@ -2,11 +2,6 @@
 #include "lua_main_incl.h"
 #include <Windows.h>
 static const char* TTS = "TTS";
-#define _ATL_APARTMENT_THREADED
-
-#include <atlbase.h>
-extern CComModule _Module;
-#include <atlcom.h>
 
 #include <sapi.h>
 #pragma comment(lib, "sapi.lib")

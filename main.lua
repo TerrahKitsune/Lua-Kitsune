@@ -1,4 +1,11 @@
-﻿local _exit=Exit;Exit=function(ret) GetKey(); return ret; end
+﻿if not REAL then 
+	REAL=true;
+else
+	print("Recursive");
+	return;
+end
+
+local _exit=Exit;Exit=function(ret) GetKey(); return ret; end
 
 function TablePrint(tbl, depth)
 
