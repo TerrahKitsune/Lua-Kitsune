@@ -119,7 +119,7 @@ int GetKafkaMessageData(lua_State* L) {
 
 		size_t count = rd_kafka_header_cnt(headers);
 
-		lua_createtable(L, 0, count);
+		lua_createtable(L, 0, (int)count);
 
 		const char* name;
 		const char* data;
@@ -179,7 +179,7 @@ int kafkamsg_gc(lua_State* L) {
 
 int kafkamsg_tostring(lua_State* L) {
 	char tim[100];
-	sprintf(tim, "Kafka Message: 0x%08X", lua_tokafkamsg(L, 1));
+	sprintf(tim, "Kafka Message: %p", (void*)lua_tokafkamsg(L, 1));
 	lua_pushfstring(L, tim);
 	return 1;
 }

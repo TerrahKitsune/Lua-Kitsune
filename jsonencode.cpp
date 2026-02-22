@@ -224,7 +224,7 @@ void json_encodetable(lua_State* L, JsonContext* C, int* depth) {
 	int size = (int)lua_tointeger(L, -1);
 	lua_pop(L, 1);
 
-	unsigned int id = table_crc32((const unsigned char*)rawid, len);
+	unsigned int id = table_crc32((const unsigned char*)rawid, (int)len);
 
 	if (json_existsinantirecursion(id, C)) {
 		json_bail(L, C, "Recursion detected");

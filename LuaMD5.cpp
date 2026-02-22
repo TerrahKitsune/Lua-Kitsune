@@ -56,20 +56,20 @@ int UpdateMD5(lua_State *L){
 	if (type == LUA_TUSERDATA && luaL_testudata(L, -1, LUAWCHAR)) {
 		LuaWChar* wchar = lua_towchar(L, -1);
 		if (wchar && wchar->str) {
-			MD5Update(&luamd5->MD5, (unsigned char*)wchar->str, wchar->len * sizeof(wchar_t));
+			MD5Update(&luamd5->MD5, (unsigned char*)wchar->str, (unsigned int)(wchar->len * sizeof(wchar_t)));
 		}
 	}
 	else if (type == LUA_TUSERDATA && luaL_testudata(L, -1, STREAM)) {
 		LuaStream* stream = lua_toluastream(L, -1);
 		if (stream && stream->data) {
-			MD5Update(&luamd5->MD5, (unsigned char*)stream->data, stream->len);
+			MD5Update(&luamd5->MD5, (unsigned char*)stream->data, (unsigned int)stream->len);
 		}
 	}
 	else if (type == LUA_TSTRING) {
 		size_t len;
 		const char* data = lua_tolstring(L, 2, &len);
 		if (data) {
-			MD5Update(&luamd5->MD5, (unsigned char*)data, len);
+			MD5Update(&luamd5->MD5, (unsigned char*)data, (unsigned int)len);
 		}
 	}
 	else {
@@ -77,7 +77,7 @@ int UpdateMD5(lua_State *L){
 		const char* data = luaL_tolstring(L, 2, &len);
 		lua_pop(L, 1);
 		if (data) {
-			MD5Update(&luamd5->MD5, (unsigned char*)data, len);
+			MD5Update(&luamd5->MD5, (unsigned char*)data, (unsigned int)len);
 		}		
 	}
 	
@@ -118,7 +118,7 @@ int md5_gc(lua_State *L){
 int md5_tostring(lua_State *L){
 
 	char md5s[100];
-	sprintf(md5s, "MD5: 0x%08X", lua_tomd5(L, 1));
+	sprintf(md5s, "MD5: %p", (void*)lua_tomd5(L, 1));
 	lua_pushfstring(L, md5s);
 	return 1;
 }

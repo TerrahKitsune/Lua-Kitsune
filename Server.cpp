@@ -120,7 +120,7 @@ size_t ServerReceive(Server * srv, SOCKET socket, char * buffer, size_t buffersi
 		return 0;
 	}
 	
-	int result = recv(socket, buffer, buffersize, 0);
+	int result = recv(socket, buffer, (int)buffersize, 0);
 
 	if (result <= 0) {
 
@@ -166,7 +166,7 @@ size_t ServerSend(Server * srv, SOCKET socket, char * buffer, size_t buffersize,
 		return 0;
 	}
 
-	int result = send(socket, buffer, buffersize, 0);
+	int result = send(socket, buffer, (int)buffersize, 0);
 
 	if (result <= 0) {
 

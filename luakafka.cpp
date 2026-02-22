@@ -25,12 +25,12 @@ static void logger(const rd_kafka_t* rk, int level, const char* fac, const char*
 
 	if (KafkaLogFile) {
 
-		fprintf(KafkaLogFile, "[%s] [%08X] [%d] [%s]: %s\n", timestamp, (unsigned int)rk, level, fac, buf);
+		fprintf(KafkaLogFile, "[%s] [%p] [%d] [%s]: %s\n", timestamp, (const void*)rk, level, fac, buf);
 		fflush(KafkaLogFile);
 	}
 
 	size_t len = strlen(lasterror);
-	_snprintf(&lasterror[len], kafka_last_error_buffer_len - len - 1, "[%s] [%08X] [%d] [%s]: %s\n", timestamp, (unsigned int)rk, level, fac, buf);
+	_snprintf(&lasterror[len], kafka_last_error_buffer_len - len - 1, "[%s] [%p] [%d] [%s]: %s\n", timestamp, (const void*)rk, level, fac, buf);
 }
 
 int GetLastLogs(lua_State* L) {
@@ -554,7 +554,7 @@ int GetConfig(lua_State* L) {
 	}
 
 	lua_pop(L, lua_gettop(L));
-	lua_createtable(L, 0, reslen);
+	lua_createtable(L, 0, (int)reslen);
 
 	for (size_t i = 0; i < reslen; i++)
 	{
@@ -1114,7 +1114,7 @@ int AlterConfig(lua_State* L) {
 	const rd_kafka_ConfigEntry_t** entries = rd_kafka_ConfigResource_configs(configs[0], &reslen);
 
 	lua_pop(L, lua_gettop(L));
-	lua_createtable(L, 0, len);
+	lua_createtable(L, 0, (int)len);
 
 	for (size_t i = 0; i < reslen; i++)
 	{
@@ -1531,7 +1531,7 @@ int kafka_gc(lua_State* L) {
 
 int kafka_tostring(lua_State* L) {
 	char tim[100];
-	sprintf(tim, "Kafka: 0x%08X", lua_tokafka(L, 1));
+	sprintf(tim, "Kafka: %p", (void*)lua_tokafka(L, 1));
 	lua_pushfstring(L, tim);
 	return 1;
 }

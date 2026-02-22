@@ -33,7 +33,7 @@ ResRegistration* GetRegistration(ResState* state, const char* name) {
 
 ResRegistration* AddRegistration(ResState* state, const char* name, int type) {
 
-	ResRegistration* temp = (ResRegistration*)sqlite3_realloc(state->Registrations, sizeof(ResRegistration) * (state->numbRegistrations + 1));
+	ResRegistration* temp = (ResRegistration*)sqlite3_realloc(state->Registrations, (int)(sizeof(ResRegistration) * (state->numbRegistrations + 1)));
 	if (!temp) {
 		return NULL;
 	}
@@ -46,7 +46,7 @@ ResRegistration* AddRegistration(ResState* state, const char* name, int type) {
 
 	current->ptr = NULL;
 	current->type = type;
-	current->name = (char*)sqlite3_malloc(sizeof(char) * (strlen(name) + 1));
+	current->name = (char*)sqlite3_malloc((int)(sizeof(char) * (strlen(name) + 1)));
 
 	if (!current->name) {
 		return NULL;
@@ -60,7 +60,7 @@ ResRegistration* AddRegistration(ResState* state, const char* name, int type) {
 }
 
 static void* l_alloc(void* ud, void* ptr, size_t osize, size_t nsize) {
-	return sqlite3_realloc(ptr, nsize);
+	return sqlite3_realloc(ptr, (int)nsize);
 }
 
 int querysqlite(lua_State* L, bool isScalar) {
@@ -133,14 +133,14 @@ int querysqlite(lua_State* L, bool isScalar) {
 				break;
 			case LUA_TSTRING:
 				data = lua_tolstring(L, -1, &len);
-				sqlite3_bind_text(stmt, ++cnt, data, len, SQLITE_STATIC);
+				sqlite3_bind_text(stmt, ++cnt, data, (int)len, SQLITE_STATIC);
 				break;
 			case LUA_TUSERDATA:
 
 				if (luaL_testudata(L, -1, LUAWCHAR)) {
 					wchar = lua_towchar(L, -1);
 					if (wchar->str) {
-						sqlite3_bind_text16(stmt, ++cnt, wchar->str, wchar->len * sizeof(wchar_t), SQLITE_STATIC);
+						sqlite3_bind_text16(stmt, ++cnt, wchar->str, (int)(wchar->len * sizeof(wchar_t)), SQLITE_STATIC);
 						break;
 					}
 				}
@@ -202,14 +202,14 @@ int querysqlite(lua_State* L, bool isScalar) {
 				break;
 			case LUA_TSTRING:
 				data = lua_tolstring(L, -1, &len);
-				sqlite3_bind_text(stmt, ++cnt, data, len, SQLITE_STATIC);
+				sqlite3_bind_text(stmt, ++cnt, data, (int)len, SQLITE_STATIC);
 				break;
 			case LUA_TUSERDATA:
 
 				if (luaL_testudata(L, -1, LUAWCHAR)) {
 					wchar = lua_towchar(L, -1);
 					if (wchar->str) {
-						sqlite3_bind_text16(stmt, ++cnt, wchar->str, wchar->len * sizeof(wchar_t), SQLITE_STATIC);
+						sqlite3_bind_text16(stmt, ++cnt, wchar->str, (int)(wchar->len * sizeof(wchar_t)), SQLITE_STATIC);
 						break;
 					}
 				}
@@ -464,7 +464,7 @@ static void executeluafunction(sqlite3_context* context, int argc, sqlite3_value
 	const char* function = (const char*)sqlite3_value_text(argv[0]);
 	if (strstr(function, ".")) {
 
-		char* buf = (char*)sqlite3_malloc(strlen(function) + 1);
+		char* buf = (char*)sqlite3_malloc((int)(strlen(function) + 1));
 		if (!buf) {
 			sqlite3_result_error(context, "Out of memory", -1);
 			return;
@@ -477,7 +477,7 @@ static void executeluafunction(sqlite3_context* context, int argc, sqlite3_value
 		for (size_t i = 0; function[i]; i++)
 		{
 			if (function[i] == '.') {
-				len = &function[i] - start;
+				len = (int)(&function[i] - start);
 				strncpy(buf, start, len);
 				buf[len] = '\0';
 				start = &function[i + 1];
@@ -775,7 +775,7 @@ int sqlite3_sqlitekitsune_init(sqlite3* db, char** pzErrMsg, const sqlite3_api_r
 			}
 
 			if (path[i] == '\\') {
-				idxLast = i;
+				idxLast = (int)i;
 			}
 		}
 
@@ -808,7 +808,7 @@ int sqlite3_sqlitekitsune_init(sqlite3* db, char** pzErrMsg, const sqlite3_api_r
 				lua_pushstring(L, path);
 				if (lua_pcall(L, 1, 0, NULL)) {
 					const char* err = lua_tostring(L, -1);
-					*pzErrMsg = (char*)sqlite3_malloc(strlen(err) + 1);
+					*pzErrMsg = (char*)sqlite3_malloc((int)(strlen(err) + 1));
 					strcpy(*pzErrMsg, err);
 					sqlite3_free(path);
 					lua_pop(L, lua_gettop(L));

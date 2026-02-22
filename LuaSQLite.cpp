@@ -220,14 +220,14 @@ int SQLiteExecute(lua_State* L) {
 				break;
 			case LUA_TSTRING:
 				data = lua_tolstring(L, -1, &len);
-				sqlite3_bind_text(luasqlite->stmt, ++cnt, data, len, SQLITE_STATIC);
+				sqlite3_bind_text(luasqlite->stmt, ++cnt, data, (int)len, SQLITE_STATIC);
 				break;
 			case LUA_TUSERDATA:
 
 				if (luaL_testudata(L, -1, LUAWCHAR)) {
 					wchar = lua_towchar(L, -1);
 					if (wchar->str) {
-						sqlite3_bind_text16(luasqlite->stmt, ++cnt, wchar->str, wchar->len * sizeof(wchar_t), SQLITE_STATIC);
+						sqlite3_bind_text16(luasqlite->stmt, ++cnt, wchar->str, (int)(wchar->len * sizeof(wchar_t)), SQLITE_STATIC);
 						break;
 					}
 				}
@@ -285,14 +285,14 @@ int SQLiteExecute(lua_State* L) {
 				break;
 			case LUA_TSTRING:
 				data = lua_tolstring(L, -1, &len);
-				sqlite3_bind_text(luasqlite->stmt, ++cnt, data, len, SQLITE_STATIC);
+				sqlite3_bind_text(luasqlite->stmt, ++cnt, data, (int)len, SQLITE_STATIC);
 				break;
 			case LUA_TUSERDATA:
 
 				if (luaL_testudata(L, -1, LUAWCHAR)) {
 					wchar = lua_towchar(L, -1);
 					if (wchar->str) {
-						sqlite3_bind_text16(luasqlite->stmt, ++cnt, wchar->str, wchar->len * sizeof(wchar_t), SQLITE_STATIC);
+						sqlite3_bind_text16(luasqlite->stmt, ++cnt, wchar->str, (int)(wchar->len * sizeof(wchar_t)), SQLITE_STATIC);
 						break;
 					}
 				}
@@ -419,7 +419,7 @@ void SqliteLuaFunction(sqlite3_context* context, int argc, sqlite3_value** argv)
 
 		lua_pop(L, 2);
 
-		sqlite3_result_text(context, script, len, SQLITE_TRANSIENT);
+		sqlite3_result_text(context, script, (int)len, SQLITE_TRANSIENT);
 	}
 	else {
 		sqlite3_result_null(context);
@@ -493,7 +493,7 @@ void SqlitePCallFunction(bool isFinish, LuaSQLiteFunction* function, sqlite3_con
 	}
 	else if (type == LUA_TSTRING) {
 		result = lua_tolstring(L, -1, &len);
-		sqlite3_result_text(context, result, len, SQLITE_TRANSIENT);
+		sqlite3_result_text(context, result, (int)len, SQLITE_TRANSIENT);
 		lua_pop(L, 1);
 		return;
 	}
@@ -505,14 +505,14 @@ void SqlitePCallFunction(bool isFinish, LuaSQLiteFunction* function, sqlite3_con
 	else if (type == LUA_TUSERDATA) {
 		if (lua_iswchar(L, -1)) {
 			LuaWChar* wchar = lua_towchar(L, -1);
-			sqlite3_result_text16(context, wchar->str, wchar->len * sizeof(wchar_t), SQLITE_TRANSIENT);
+			sqlite3_result_text16(context, wchar->str, (int)(wchar->len * sizeof(wchar_t)), SQLITE_TRANSIENT);
 			lua_pop(L, 1);
 			return;
 		}
 		else if (lua_isstream(L, -1)) {
 			LuaStream* stream = lua_toluastream(L, -1);
 			if (stream->data) {
-				sqlite3_result_blob(context, stream->data, stream->len, SQLITE_TRANSIENT);
+				sqlite3_result_blob(context, stream->data, (int)stream->len, SQLITE_TRANSIENT);
 			}
 			else {
 				sqlite3_result_null(context);
@@ -526,7 +526,7 @@ void SqlitePCallFunction(bool isFinish, LuaSQLiteFunction* function, sqlite3_con
 
 	lua_pop(L, 2);
 
-	sqlite3_result_text(context, result, len, SQLITE_TRANSIENT);
+	sqlite3_result_text(context, result, (int)len, SQLITE_TRANSIENT);
 }
 
 void DoPcallFunction(sqlite3_context* context, int argc, sqlite3_value** argv) {
@@ -552,7 +552,7 @@ int RegisterFunction(lua_State* L, bool isAggregate) {
 	luaL_checktype(L, -1, LUA_TNUMBER);
 
 	const char* name = lua_tostring(L, -2);
-	int args = lua_tointeger(L, -1);
+	int args = (int)lua_tointeger(L, -1);
 
 	if (args < 0) {
 		luaL_error(L, "SQLite function args can't be negative");
@@ -758,7 +758,7 @@ int SQLite_ToString(lua_State* L) {
 
 	LuaSQLite* sq = luaL_checksqlite(L, 1);
 	char sqlite[_MAX_PATH + 20];
-	sprintf(sqlite, "SQLite: 0x%08X File: %s", (int)sq, sq->file);
+	sprintf(sqlite, "SQLite: %p File: %s", (void*)sq, sq->file);
 
 	lua_pushstring(L, sqlite);
 	return 1;

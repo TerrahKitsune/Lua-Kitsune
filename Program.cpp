@@ -312,7 +312,7 @@ static int L_GetMemory(lua_State *L) {
 
 static int L_ShellExecute(lua_State *L) {
 
-	int ok = (int)ShellExecute(NULL, "open", luaL_checkstring(L, 1), luaL_checkstring(L, 2), NULL, SW_SHOW);
+	INT_PTR ok = (INT_PTR)ShellExecute(NULL, "open", luaL_checkstring(L, 1), luaL_checkstring(L, 2), NULL, SW_SHOW);
 	lua_pop(L, lua_gettop(L));
 	lua_pushboolean(L, ok > 32);
 	return 1;

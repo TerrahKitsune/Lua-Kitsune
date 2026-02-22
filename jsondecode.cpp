@@ -17,7 +17,7 @@ int json_lua_arrayiterator(lua_State* L, int status, lua_KContext ctx) {
 	}
 	else if (next == ']') {
 		lua_pop(L, 1);
-		unsigned int raw = json_popfromantirecursion(context);
+		uintptr_t raw = json_popfromantirecursion(context);
 		if (raw == 0) {
 			json_bail(L, context, NULL);
 			lua_settop(L, 0);
@@ -43,7 +43,7 @@ int json_lua_arrayiterator(lua_State* L, int status, lua_KContext ctx) {
 		lua_pushstring(L, "object");
 		lua_settable(L, -3);
 
-		json_addtoantirecursion((unsigned int)&json_lua_arrayiterator, context);
+		json_addtoantirecursion((uintptr_t)&json_lua_objectiterator, context);
 		lua_yieldk(L, 2, ctx, json_lua_objectiterator);
 	}
 	else if (next == '[') {
@@ -55,7 +55,7 @@ int json_lua_arrayiterator(lua_State* L, int status, lua_KContext ctx) {
 		lua_pushstring(L, "array");
 		lua_settable(L, -3);
 
-		json_addtoantirecursion((unsigned int)&json_lua_arrayiterator, context);
+		json_addtoantirecursion((uintptr_t)&json_lua_arrayiterator, context);
 		lua_yieldk(L, 2, ctx, json_lua_arrayiterator);
 	}
 	else {
@@ -82,7 +82,7 @@ int json_lua_objectiterator(lua_State* L, int status, lua_KContext ctx) {
 	}
 	else if (next == '}') {
 
-		unsigned int raw = json_popfromantirecursion(context);
+		uintptr_t raw = json_popfromantirecursion(context);
 		if (raw == 0) {
 			json_bail(L, context, NULL);
 			lua_settop(L, 0);
@@ -117,7 +117,7 @@ int json_lua_objectiterator(lua_State* L, int status, lua_KContext ctx) {
 		lua_pushstring(L, "object");
 		lua_settable(L, -3);
 
-		json_addtoantirecursion((unsigned int)&json_lua_objectiterator, context);
+		json_addtoantirecursion((uintptr_t)&json_lua_objectiterator, context);
 		lua_yieldk(L, 2, ctx, json_lua_objectiterator);
 	}
 	else if (next == '[') {
@@ -130,7 +130,7 @@ int json_lua_objectiterator(lua_State* L, int status, lua_KContext ctx) {
 		lua_pushstring(L, "array");
 		lua_settable(L, -3);
 
-		json_addtoantirecursion((unsigned int)&json_lua_objectiterator, context);
+		json_addtoantirecursion((uintptr_t)&json_lua_objectiterator, context);
 		lua_yieldk(L, 2, ctx, json_lua_arrayiterator);
 	}
 	else {
@@ -321,7 +321,7 @@ void json_stepback(JsonContext* context) {
 void json_unexpected(char c, lua_State* L, JsonContext* context) {
 
 	char buf[100];
-	sprintf(buf, "Unexpected character %c on line %u position %u", c, context->readLine, context->readPosition);
+	sprintf(buf, "Unexpected character %c on line %zu position %zu", c, context->readLine, context->readPosition);
 	json_bail(L, context, buf);
 	return;
 }
@@ -478,8 +478,8 @@ void json_decodestring(lua_State* L, JsonContext* context) {
 
 			if (InsensitiveStrncmp(context->buffer, "false", 5)) {
 
-				lua_pushboolean(L, 0);
-				return;
+			 lua_pushboolean(L, 0);
+			 return;
 			}
 		}
 	}

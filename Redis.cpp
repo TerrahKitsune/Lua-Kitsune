@@ -59,7 +59,7 @@ int PushReply(lua_State* L, redisReply* reply) {
 	}
 	else if (reply->type == REDIS_REPLY_ARRAY) {
 
-		lua_createtable(L, reply->elements, 0);
+		lua_createtable(L, (int)reply->elements, 0);
 
 		for (int n = 0; n < reply->elements; n++) {
 			PushReply(L, reply->element[n]);
@@ -81,10 +81,10 @@ int PushReply(lua_State* L, redisReply* reply) {
 int RedisOpen(lua_State* L) {
 
 	const char* host = luaL_checkstring(L, 1);
-	int port = luaL_optinteger(L, 2, 5257);
+	int port = (int)luaL_optinteger(L, 2, 5257);
 	const char* data;
 	BOOL useTls = lua_toboolean(L, 3);
-	long timeout = luaL_optinteger(L, 4, 10);
+	long timeout = (long)luaL_optinteger(L, 4, 10);
 
 	LuaRedis* redis = lua_pushredis(L);
 	redisSSLContextError ssl_error = REDIS_SSL_CTX_NONE;
@@ -144,7 +144,7 @@ int RedisOpen(lua_State* L) {
 
 			lua_pushstring(L, "verifymode");
 			lua_gettable(L, -2);
-			sslOptions.verify_mode = luaL_optinteger(L, -1, sslOptions.verify_mode);
+			sslOptions.verify_mode = (int)luaL_optinteger(L, -1, sslOptions.verify_mode);
 			lua_pop(L, 2);
 		}
 
@@ -188,7 +188,6 @@ unsigned __stdcall threadPollFunc(void* data) {
 
 	LuaRedis* luaRedis = (LuaRedis*)data;
 	redisReply* pollReply = NULL;
-	bool hasReply;
 
 	while (luaRedis->isAlive) {
 
@@ -396,7 +395,7 @@ int RedisGetKeyIterator(lua_State* L) {
 	}
 	else if (luaRedis->ref != LUA_NOREF) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, luaRedis->ref);
-		int len = lua_rawlen(L, -1);
+		int len = (int)lua_rawlen(L, -1);
 		if (luaRedis->nth >= len) {
 			luaL_unref(L, LUA_REGISTRYINDEX, luaRedis->ref);
 			luaRedis->ref = LUA_NOREF;
@@ -426,7 +425,7 @@ int RedisGetKeyIterator(lua_State* L) {
 
 		luaRedis->cursor = strtoull(luaRedis->reply->element[0]->str, NULL, 10);
 
-		lua_createtable(L, luaRedis->reply->element[1]->elements, 0);
+		lua_createtable(L, (int)luaRedis->reply->element[1]->elements, 0);
 		for (size_t i = 0; i < luaRedis->reply->element[1]->elements; i++)
 		{
 			redisReply* reply = luaRedis->reply->element[1]->element[i];
@@ -676,7 +675,7 @@ int redis_gc(lua_State* L) {
 
 int redis_tostring(lua_State* L) {
 	char tim[200];
-	sprintf(tim, "Redis: 0x%016X", lua_toredis(L, 1));
+	sprintf(tim, "Redis: %p", (void*)lua_toredis(L, 1));
 	lua_pushstring(L, tim);
 	return 1;
 }

@@ -127,7 +127,7 @@ int redisstream_read(lua_State* L) {
 	LuaRedisStream* redisStream = lua_toredisstream(L, 1);
 	size_t len;
 	const char * id = luaL_optlstring(L, 2, "0-0", &len);
-	int blocking = luaL_optinteger(L, 3, 0);
+	int blocking = (int)luaL_optinteger(L, 3, 0);
 	int expectedTop = lua_gettop(L);
 
 	lua_pushredisref(L, &redisStream->key);
@@ -178,7 +178,7 @@ int redisstream_read(lua_State* L) {
 		return 0;
 	}
 
-	lua_createtable(L, reply->elements, 0);
+	lua_createtable(L, (int)reply->elements, 0);
 	for (size_t i = 0; i < reply->elements; i+=2)
 	{
 		lua_pushlstring(L, reply->element[i]->str, reply->element[i]->len);

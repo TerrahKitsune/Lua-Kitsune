@@ -85,7 +85,7 @@ int WritePipe(lua_State *L) {
 	const char * data = luaL_checklstring(L, 2, &len);
 	DWORD written;
 
-	if (WriteFile(pipe->Pipe, data, len, &written, NULL)) {
+	if (WriteFile(pipe->Pipe, data, (DWORD)len, &written, NULL)) {
 		lua_pop(L, lua_gettop(L));
 		lua_pushinteger(L, written);
 		return 1;
@@ -254,7 +254,7 @@ int namedpipe_gc(lua_State *L) {
 
 int namedpipe_tostring(lua_State *L) {
 	char tim[100];
-	sprintf(tim, "Namedpipe: 0x%08X", lua_tonamedpipe(L, 1));
+	sprintf(tim, "Namedpipe: %p", (void*)lua_tonamedpipe(L, 1));
 	lua_pushfstring(L, tim);
 	return 1;
 }

@@ -23,7 +23,7 @@ int LuaFtpChannelSend(lua_State* L) {
 
 	do {
 
-		result = send(ftp->s, data, len - sent, 0);
+		result = send(ftp->s, data, (int)(len - sent), 0);
 
 		if (result == 0) {
 
@@ -82,7 +82,7 @@ int LuaFtpChannelRecv(lua_State* L) {
 		return 0;
 	}
 
-	int result = recv(ftp->s, ftp->buffer, ftp->buffersize, 0);
+	int result = recv(ftp->s, ftp->buffer, (int)ftp->buffersize, 0);
 
 	lua_pop(L, lua_gettop(L));
 
@@ -182,7 +182,7 @@ int luaftpchannel_tostring(lua_State* L) {
 	LuaFTPChannel* ftp = lua_toluaftpchannel(L, 1);
 
 	char tim[1024];
-	sprintf(tim, "FTPCHANNEL: 0x%08X %s:%d", ftp, ftp->ip, ftp->port);
+	sprintf(tim, "FTPCHANNEL: %p %s:%d", (void*)ftp, ftp->ip, ftp->port);
 	lua_pushfstring(L, tim);
 	return 1;
 }

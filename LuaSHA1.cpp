@@ -34,20 +34,20 @@ int UpdateSHA1(lua_State* L) {
 	if (type == LUA_TUSERDATA && luaL_testudata(L, -1, LUAWCHAR)) {
 		LuaWChar* wchar = lua_towchar(L, -1);
 		if (wchar && wchar->str) {
-			SHA1Update(&luasha1->ctx, (unsigned char*)wchar->str, wchar->len * sizeof(wchar_t));
+			SHA1Update(&luasha1->ctx, (unsigned char*)wchar->str, (uint32_t)(wchar->len * sizeof(wchar_t)));
 		}
 	}
 	else if (type == LUA_TUSERDATA && luaL_testudata(L, -1, STREAM)) {
 		LuaStream* stream = lua_toluastream(L, -1);
 		if (stream && stream->data) {
-			SHA1Update(&luasha1->ctx, (unsigned char*)stream->data, stream->len);
+			SHA1Update(&luasha1->ctx, (unsigned char*)stream->data, (uint32_t)stream->len);
 		}
 	}
 	else if (type == LUA_TSTRING) {
 		size_t len;
 		const char* data = lua_tolstring(L, 2, &len);
 		if (data) {
-			SHA1Update(&luasha1->ctx, (unsigned char*)data, len);
+			SHA1Update(&luasha1->ctx, (unsigned char*)data, (uint32_t)len);
 		}
 	}
 	else {
@@ -55,7 +55,7 @@ int UpdateSHA1(lua_State* L) {
 		const char* data = luaL_tolstring(L, 2, &len);
 		lua_pop(L, 1);
 		if (data) {
-			SHA1Update(&luasha1->ctx, (unsigned char*)data, len);
+			SHA1Update(&luasha1->ctx, (unsigned char*)data, (uint32_t)len);
 		}
 	}
 
@@ -123,7 +123,7 @@ int sha1_gc(lua_State* L) {
 int sha1_tostring(lua_State* L) {
 
 	char sha1[100];
-	sprintf(sha1, "SHA1: 0x%016X", lua_tosha1(L, 1));
+	sprintf(sha1, "SHA1: %p", (void*)lua_tosha1(L, 1));
 	lua_pushfstring(L, sha1);
 	return 1;
 }

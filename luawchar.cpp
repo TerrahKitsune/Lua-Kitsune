@@ -143,7 +143,7 @@ int ToBytes(lua_State* L) {
 
 	LuaWChar* wchar = lua_towchar(L, 1);
 
-	lua_createtable(L, wchar->len, 0);
+	lua_createtable(L, (int)wchar->len, 0);
 
 	for (size_t i = 0; i < wchar->len; i++)
 	{
@@ -247,7 +247,7 @@ int FromUtf8(lua_State* L) {
 		return 0;
 	}
 
-	wchar->len = MultiByteToWideChar(CP_UTF8, 0, data, len, wchar->str, len);
+	wchar->len = MultiByteToWideChar(CP_UTF8, 0, data, (int)len, wchar->str, (int)len);
 
 	return 1;
 }
@@ -387,7 +387,7 @@ int ToUtf8(lua_State* L) {
 		return 0;
 	}
 
-	int convertedSize = WideCharToMultiByte(CP_UTF8, 0, wchar->str, wchar->len, (LPSTR)utf8String, bufferlen, NULL, NULL);
+	int convertedSize = WideCharToMultiByte(CP_UTF8, 0, wchar->str, (int)wchar->len, (LPSTR)utf8String, (int)bufferlen, NULL, NULL);
 
 	lua_pushlstring(L, (const char*)utf8String, convertedSize);
 	gff_free(utf8String);
@@ -425,7 +425,7 @@ int WcharFind(lua_State* L) {
 
 	LuaWChar* wchar = lua_towchar(L, 1);
 	LuaWChar* substr = (LuaWChar*)luaL_testudata(L, 2, LUAWCHAR);
-	int offset = max(luaL_optinteger(L, 3, 1), 0) - 1;
+	int offset = (int)max(luaL_optinteger(L, 3, 1), 0) - 1;
 	wchar_t* find;
 
 	if (!substr) {

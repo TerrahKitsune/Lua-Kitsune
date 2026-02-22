@@ -328,7 +328,7 @@ int ODBCBind(lua_State* L) {
 			paramtype = SQL_CHAR;
 
 			data = (SQLPOINTER)odbc->params[odbc->paramnumber];
-			len = wchar->len * sizeof(wchar_t);
+			len = (SQLUINTEGER)(wchar->len * sizeof(wchar_t));
 
 			break;
 		}
@@ -350,7 +350,7 @@ int ODBCBind(lua_State* L) {
 		paramtype = SQL_CHAR;
 
 		data = (SQLPOINTER)odbc->params[odbc->paramnumber];
-		len = rawlen;
+		len = (SQLUINTEGER)rawlen;
 
 		break;
 	}
@@ -1033,7 +1033,7 @@ int odbc_gc(lua_State* L) {
 
 int odbc_tostring(lua_State* L) {
 	char tim[1024];
-	sprintf(tim, "ODBC: 0x%08X", lua_toodbc(L, 1));
+	sprintf(tim, "ODBC: %p", (void*)lua_toodbc(L, 1));
 	lua_pushfstring(L, tim);
 	return 1;
 }

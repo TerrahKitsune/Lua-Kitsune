@@ -32,7 +32,7 @@ int DecodeInt(const char* data, size_t len, int pos, lua_State* L) {
 	for (size_t i = pos; i < len; i++)
 	{
 		if (data[i] == 'e') {
-			end = i;
+			end = (int)i;
 			break;
 		}
 	}
@@ -78,7 +78,7 @@ int DecodeString(const char* data, size_t len, int pos, lua_State* L) {
 	for (size_t i = pos; i < len; i++)
 	{
 		if (data[i] == ':') {
-			end = i;
+			end = (int)i;
 			break;
 		}
 	}

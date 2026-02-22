@@ -72,7 +72,7 @@ int EscapeValue(lua_State* L) {
 		return 0;
 	}
 
-	size_t newlen = mysql_escape_string(escaped, data, len);
+	unsigned long newlen = mysql_escape_string(escaped, data, (unsigned long)len);
 	lua_pushlstring(L, escaped, newlen);
 	gff_free(escaped);
 
@@ -169,7 +169,7 @@ DWORD WINAPI QueryThread(LPVOID param) {
 
 		if (mysqld->busy) {
 
-			if (mysqld->query && mysql_real_query(mysqld->connection, mysqld->query, mysqld->querylen)) {
+			if (mysqld->query && mysql_real_query(mysqld->connection, mysqld->query, (unsigned long)mysqld->querylen)) {
 				SetDone(mysqld, mysql_error(mysqld->connection), NULL);
 				continue;
 			}
@@ -220,8 +220,8 @@ int MySqlGetRow(lua_State* L) {
 	MYSQL_ROW row = mysql_fetch_row(luamysql->result);
 	if (row) {
 		unsigned long* fieldlengths = mysql_fetch_lengths(luamysql->result);
-		lua_createtable(L, numbfields, 0);
-		for (int n = 0; n < numbfields; n++) {
+		lua_createtable(L, (int)numbfields, 0);
+		for (int n = 0; n < (int)numbfields; n++) {
 			lua_pushlstring(L, row[n], fieldlengths[n]);
 			lua_rawseti(L, -2, n + 1);
 		}
@@ -262,9 +262,9 @@ int MySqlGetFields(lua_State* L) {
 	size_t numbfields = mysql_num_fields(luamysql->result);
 	MYSQL_FIELD* fields = mysql_fetch_fields(luamysql->result);
 
-	lua_createtable(L, numbfields, 0);
+	lua_createtable(L, (int)numbfields, 0);
 
-	for (int n = 0; n < numbfields; n++) {
+	for (int n = 0; n < (int)numbfields; n++) {
 
 		lua_newtable(L);
 
@@ -361,14 +361,14 @@ int MySqlGetResult(lua_State* L) {
 	unsigned long* fieldlengths;
 	unsigned long length;
 
-	lua_createtable(L, rows, 0);
+	lua_createtable(L, (int)rows, 0);
 
 	while ((row = mysql_fetch_row(luamysql->result))) {
 
 		fieldlengths = mysql_fetch_lengths(luamysql->result);
-		lua_createtable(L, numbfields, 0);
+		lua_createtable(L, (int)numbfields, 0);
 
-		for (int i = 0; i < numbfields; i++) {
+		for (int i = 0; i < (int)numbfields; i++) {
 			field = &fields[i];
 			fielddata = row[i];
 			length = fieldlengths[i];
@@ -427,8 +427,8 @@ int MySqlConnect(lua_State* L) {
 	const char* user = luaL_checkstring(L, 2);
 	const char* password = luaL_checkstring(L, 3);
 	const char* database = luaL_checkstring(L, 4);
-	int port = luaL_optinteger(L, 5, 3306);
-	unsigned int timeout = luaL_optinteger(L, 6, 10);
+	int port = (int)luaL_optinteger(L, 5, 3306);
+	unsigned int timeout = (unsigned int)luaL_optinteger(L, 6, 10);
 
 	MYSQL* con = mysql_init(NULL);
 	if (!con) {

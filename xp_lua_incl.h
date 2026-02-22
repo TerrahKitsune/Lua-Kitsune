@@ -1,4 +1,6 @@
+#ifndef _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_WARNINGS 1
+#endif
 //build it as a dll
 #define LUA_BUILD_AS_DLL
 //then embed the dll directly

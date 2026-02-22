@@ -232,7 +232,7 @@ int redisstring_concat(lua_State* L) {
 	}
 
 	size_t len1;
-	size_t len2;
+size_t len2;
 
 	const char* first = lua_tolstring(L, -2, &len1);
 	const char* second = lua_tolstring(L, -1, &len2);
@@ -312,7 +312,7 @@ int redisstring_tostring(lua_State* L) {
 	if (redis->reply->type != REDIS_REPLY_STRING) {
 		CleanReply(redis);
 		lua_pop(L, 3);
-		lua_pushliteral(L);
+		lua_pushliteral(L, "");
 		return 1;
 	}
 	else {

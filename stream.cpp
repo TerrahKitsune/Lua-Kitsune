@@ -111,7 +111,7 @@ bool StreamWrite(lua_State* L, LuaStream* stream, BYTE* data, size_t len) {
 
 	memcpy(&stream->data[stream->pos], data, len);
 
-	long mod = (stream->pos + len) - stream->len;
+	long mod = (long)((stream->pos + len) - stream->len);
 
 	if (mod > 0) {
 		stream->len += mod;
@@ -647,17 +647,17 @@ int ReadUntilLuaStream(lua_State* L) {
 	}
 
 	BYTE find = (BYTE)len;
-	len = stream->len;
+	len = (long)stream->len;
 
 	for (size_t i = stream->pos; i < stream->len; i++)
 	{
 		if (stream->data[i] == find) {
-			len = i;
+			len = (long)i;
 			break;
 		}
 	}
 
-	len -= stream->pos;
+	len = (long)((size_t)len - stream->pos);
 
 	if (len <= 0) {
 		lua_pop(L, lua_gettop(L));
@@ -824,7 +824,7 @@ int ReadUtf8(lua_State* L) {
 
 	LuaStream* stream = lua_toluastream(L, 1);
 
-	long avail = stream->len - stream->pos;
+	long avail = (long)(stream->len - stream->pos);
 
 	if (!stream->data || avail <= 0) {
 		lua_pushnil(L);
@@ -933,12 +933,12 @@ int ReadFromFile(lua_State* L) {
 		return 0;
 	}
 
-	if (fseek(f, pos + len, SEEK_SET) != 0) {
+	if (fseek(f, (long)(pos + len), SEEK_SET) != 0) {
 		fclose(f);
 		luaL_error(L, "Unable to seek in file");
 		return 0;
 	}
-	else if (fseek(f, pos, SEEK_SET) != 0) {
+	else if (fseek(f, (long)pos, SEEK_SET) != 0) {
 		fclose(f);
 		luaL_error(L, "Unable to seek in file");
 		return 0;
@@ -1006,7 +1006,7 @@ int WriteToFile(lua_State* L) {
 		}
 	}
 	else {
-		if (fseek(f, pos, SEEK_SET) != 0) {
+		if (fseek(f, (long)pos, SEEK_SET) != 0) {
 			fclose(f);
 			luaL_error(L, "Unable to seek in file");
 			return 0;
@@ -1314,7 +1314,7 @@ int GetSharedMemoryStreamInfo(lua_State* L) {
 		lua_createtable(L, 0, 7);
 
 		lua_pushstring(L, "AllocationBase");
-		lua_pushinteger(L, (DWORD)info.AllocationBase);
+		lua_pushinteger(L, (lua_Integer)(uintptr_t)info.AllocationBase);
 		lua_settable(L, -3);
 
 		lua_pushstring(L, "AllocationProtect");
@@ -1322,7 +1322,7 @@ int GetSharedMemoryStreamInfo(lua_State* L) {
 		lua_settable(L, -3);
 
 		lua_pushstring(L, "BaseAddress");
-		lua_pushinteger(L, (DWORD)info.BaseAddress);
+		lua_pushinteger(L, (lua_Integer)(uintptr_t)info.BaseAddress);
 		lua_settable(L, -3);
 
 		lua_pushstring(L, "Protect");

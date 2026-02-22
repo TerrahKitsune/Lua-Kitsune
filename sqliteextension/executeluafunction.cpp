@@ -301,7 +301,7 @@ int sqlite3_createfunction(lua_State* L, ResState* state) {
 
 	lua_pushvalue(L, 2);
 	lua_len(L, -1);
-	data->numbfields = lua_tointeger(L, -1);
+	data->numbfields = (int)lua_tointeger(L, -1);
 	lua_pop(L, 1);
 
 	if (data->numbfields <= 0) {
@@ -347,7 +347,7 @@ int sqlite3_createfunction(lua_State* L, ResState* state) {
 				}
 			}
 
-			data->fields[i] = (char*)sqlite3_malloc(sizeof(char) * (len + 1));
+			data->fields[i] = (char*)sqlite3_malloc((int)(sizeof(char) * (len + 1)));
 
 			if (data->fields[i] == NULL) {
 				lua_pop(L, 2);

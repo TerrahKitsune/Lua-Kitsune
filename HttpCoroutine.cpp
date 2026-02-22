@@ -12,7 +12,7 @@ int SendHttpRequest(lua_State* L, int status, lua_KContext ctx);
 void PushHttpHeader(lua_State* L) {
 
 	LuaHttp* luahttp = lua_tohttp(L, 1);
-	int headerSize = lua_tointeger(L, 3);
+	int headerSize = (int)lua_tointeger(L, 3);
 
 	lua_createtable(L, 0, 3);
 
@@ -84,7 +84,7 @@ void PushHttpHeader(lua_State* L) {
 
 	offset = 0;
 
-	for (size_t n = 0; n < end - cursor; n++) {
+	for (int n = 0; n < (int)(end - cursor); n++) {
 		if (cursor[n] == ' ') {
 			offset = n;
 			break;
@@ -162,7 +162,7 @@ int PushValue(lua_State* L) {
 	}
 
 	LuaHttp* luahttp = lua_tohttp(L, 1);
-	long contentLength = lua_tointeger(L, 4);
+	long contentLength = (long)lua_tointeger(L, 4);
 
 	if (luahttp->membuffer) {
 		gff_free(luahttp->membuffer);
@@ -228,7 +228,7 @@ int PushValue(lua_State* L) {
 			cursor += 2;
 		}
 
-		long offset = cursor - luahttp->membuffer + 2;
+		long offset = (long)(cursor - luahttp->membuffer + 2);
 		lua_pushlstring(L, cursor, chunksize);
 
 		HttpBuffer* temp = bopen();
@@ -288,9 +288,9 @@ int RecvHttpRequest(lua_State* L, int status, lua_KContext ctx) {
 		lua_pushinteger(L, 0);
 	}
 
-	long headerSize = lua_tointeger(L, 3);
-	long contentLength = lua_tointeger(L, 4);
-	int size = lua_tointeger(L, 5);
+	long headerSize = (long)lua_tointeger(L, 3);
+	long contentLength = (long)lua_tointeger(L, 4);
+	int size = (int)lua_tointeger(L, 5);
 
 	if (headerSize > 0) {
 		lua_pushvalue(L, 2);
@@ -308,7 +308,7 @@ int RecvHttpRequest(lua_State* L, int status, lua_KContext ctx) {
 		result = luahttp->sslconnection == NULL ? recv(luahttp->socket, buffer, BUFFER_SIZE, 0) : SSL_read(luahttp->sslconnection, buffer, BUFFER_SIZE);
 
 		if (result > 0) {
-			result = bwrite(buffer, result, luahttp->buffer);
+			result = (int)bwrite(buffer, result, luahttp->buffer);
 			size += result;
 			lua_pop(L, 1);
 			lua_pushinteger(L, size);
@@ -325,7 +325,7 @@ int RecvHttpRequest(lua_State* L, int status, lua_KContext ctx) {
 				lua_pop(L, 3);
 				lua_pushinteger(L, headerSize);
 				lua_pushinteger(L, contentLength);
-				lua_pushinteger(L, size);
+			lua_pushinteger(L, size);
 
 				PushHttpHeader(L);
 			}
@@ -338,7 +338,7 @@ int RecvHttpRequest(lua_State* L, int status, lua_KContext ctx) {
 				luahttp->buffer = NULL;
 				break;
 			}
-			else if (contentLength > 0 && luahttp->recv >= contentLength + headerSize + 2) {
+			else if (contentLength > 0 && luahttp->recv >= (size_t)(contentLength + headerSize + 2)) {
 				break;
 			}
 
@@ -391,7 +391,7 @@ int SendHttpRequest(lua_State* L, int status, lua_KContext ctx) {
 
 	do {
 
-		size = bread(buffer, BUFFER_SIZE, sendcontent);
+		size = (int)bread(buffer, BUFFER_SIZE, sendcontent);
 
 		if (size == 0) {
 
@@ -400,7 +400,7 @@ int SendHttpRequest(lua_State* L, int status, lua_KContext ctx) {
 			}
 
 			sendcontent = luahttp->content;
-			size = bread(buffer, BUFFER_SIZE, sendcontent);
+			size = (int)bread(buffer, BUFFER_SIZE, sendcontent);
 
 			if (size == 0) {
 				break;
@@ -490,7 +490,7 @@ int ConnectHttpRequest(lua_State* L, int status, lua_KContext ctx) {
 		}
 
 		ssl = SSL_new(ctx);
-		SSL_set_fd(ssl, http->socket);
+		SSL_set_fd(ssl, (int)http->socket);
 		result = SSL_connect(ssl);
 
 		if (result != 1) {

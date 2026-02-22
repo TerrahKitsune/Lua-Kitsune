@@ -18,7 +18,7 @@ static int InternalGetRedisType(lua_State* L, int index) {
 	lua_pushvalue(L, index);
 	lua_pushliteral(L, "Type");
 	lua_rawget(L, -2);
-	int type = lua_tointeger(L, -1);
+	int type = (int)lua_tointeger(L, -1);
 	lua_pop(L, 2);
 	return type;
 }
@@ -452,7 +452,7 @@ int redisvalue_index(lua_State* L) {
 
 		if (lua_isinteger(L, -1)) {
 
-			int setidx = lua_tointeger(L, -1);
+			int setidx = (int)lua_tointeger(L, -1);
 
 			if (setidx < -1) {
 				luaL_error(L, "Index for sets cannot be negative");
@@ -475,7 +475,7 @@ int redisvalue_index(lua_State* L) {
 					lua_pushnil(L);
 				}
 				else {
-					lua_pushlstring(L, redis->reply->str, redis->reply->len);
+					lua_pushlstring(L, redis->reply->element[0]->str, redis->reply->element[0]->len);
 				}
 
 				return 1;
@@ -487,7 +487,7 @@ int redisvalue_index(lua_State* L) {
 			int len = 0;
 
 			if (lua_istable(L, -1)) {
-				len = lua_rawlen(L, -1);
+				len = (int)lua_rawlen(L, -1);
 			}
 
 			if (setidx == 1 || len <= 0) {
@@ -554,7 +554,7 @@ int redisvalue_index(lua_State* L) {
 			lua_pushvalue(L, -4);
 			LuaRedis* redis = RedisCommandInternal(L);
 			lua_pop(L, 4);
-			lua_pushboolean(L, redis->reply->integer);
+			lua_pushboolean(L, (int)redis->reply->integer);
 			CleanReply(redis);
 
 			return 1;
@@ -636,7 +636,7 @@ int redisvalue_newindex(lua_State* L) {
 	else if (type == REDIS_VALUE_TYPE_LIST) {
 
 		redisvalue_len(L);
-		int len = lua_tointeger(L, -1);
+		int len = (int)lua_tointeger(L, -1);
 		lua_pop(L, 1);
 		lua_Integer idx = luaL_checkinteger(L, 2);
 		lua_Integer realIdx = idx > 0 ? idx - 1 : idx;

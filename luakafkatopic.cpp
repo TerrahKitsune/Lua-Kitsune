@@ -94,7 +94,7 @@ int kafkatopic_gc(lua_State* L) {
 
 int kafkatopic_tostring(lua_State* L) {
 	char tim[100];
-	sprintf(tim, "Kafka Topic: 0x%08X", lua_tokafkatopic(L, 1));
+	sprintf(tim, "Kafka Topic: %p", (void*)lua_tokafkatopic(L, 1));
 	lua_pushfstring(L, tim);
 	return 1;
 }

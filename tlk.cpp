@@ -125,7 +125,7 @@ int tlk_create(lua_State *L) {
 
 		if (len > 0) {
 			data.OffsetToString = currentoffset - header.StringEntriesOffset;
-			data.StringSize = len;
+			data.StringSize = (unsigned int)len;
 			data.Flags = TEXT_PRESENT;
 		}
 		else {
@@ -139,7 +139,7 @@ int tlk_create(lua_State *L) {
 
 		if (len > 0) {
 			fseek(f, currentoffset, SEEK_SET);
-			currentoffset += fwrite(str, sizeof(char), len, f);
+			currentoffset += (unsigned int)fwrite(str, sizeof(char), len, f);
 
 			fflush(f);
 		}
@@ -277,7 +277,7 @@ int tlk_defragment(lua_State *L) {
 			}
 
 			//Restore position
-			if (fseek(tlk->file, pos, SEEK_SET) != 0) {
+			if (fseek(tlk->file, (long)pos, SEEK_SET) != 0) {
 				gff_free(buffer);
 				fclose(tmp);
 				lua_pop(L, lua_gettop(L));
@@ -289,7 +289,7 @@ int tlk_defragment(lua_State *L) {
 			pos = ftell(tmp);
 
 			//Seek to data
-			if (fseek(tmp, currentdata, SEEK_SET) != 0) {
+			if (fseek(tmp, (long)currentdata, SEEK_SET) != 0) {
 				gff_free(buffer);
 				fclose(tmp);
 				lua_pop(L, lua_gettop(L));
@@ -307,7 +307,7 @@ int tlk_defragment(lua_State *L) {
 			}
 
 			//Restore position
-			if (fseek(tmp, pos, SEEK_SET) != 0) {
+			if (fseek(tmp, (long)pos, SEEK_SET) != 0) {
 				gff_free(buffer);
 				fclose(tmp);
 				lua_pop(L, lua_gettop(L));
@@ -316,7 +316,7 @@ int tlk_defragment(lua_State *L) {
 			}
 
 			//Corret offsets
-			data.OffsetToString = currentdata - header.StringEntriesOffset;
+			data.OffsetToString = (unsigned int)(currentdata - header.StringEntriesOffset);
 			currentdata += data.StringSize;
 		}
 
@@ -510,13 +510,13 @@ int tlk_setstrref(lua_State *L) {
 		if (len > entry.StringSize || !had) {
 			fseek(tlk->file, 0, SEEK_END);
 			entry.OffsetToString = ftell(tlk->file) - tlk->Header.StringEntriesOffset;
-			entry.StringSize = len;
+			entry.StringSize = (unsigned int)len;
 			fwrite(data, sizeof(char), len, tlk->file);
 			fflush(tlk->file);
 		}
 		else {
 			fseek(tlk->file, tlk->Header.StringEntriesOffset + entry.OffsetToString, SEEK_SET);
-			entry.StringSize = len;
+			entry.StringSize = (unsigned int)len;
 			fwrite(data, sizeof(char), len, tlk->file);
 			fflush(tlk->file);
 		}
@@ -727,7 +727,7 @@ int tlk_gc(lua_State *L) {
 
 int tlk_tostring(lua_State *L) {
 	char tim[100];
-	sprintf(tim, "Tlk: 0x%08X", lua_totlk(L, 1));
+	sprintf(tim, "Tlk: 0x%016llX", (unsigned long long)(uintptr_t)lua_totlk(L, 1));
 	lua_pushfstring(L, tim);
 	return 1;
 }

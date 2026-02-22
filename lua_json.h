@@ -1,5 +1,6 @@
 #pragma once
 #include "lua_main_incl.h"
+#include <stdint.h>
 static const char * LUAJSON = "LUAJSON";
 
 #define JSONANTIRECURSIONINITSIZE 10
@@ -10,7 +11,7 @@ typedef struct JsonContext {
 
 	int pretty;
 	int resultReallocStep;
-	unsigned int * antiRecursion;
+	uintptr_t * antiRecursion;
 	size_t antiRecursionSize;
 
 	int refWriteFunction;

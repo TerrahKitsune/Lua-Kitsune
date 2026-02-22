@@ -90,7 +90,7 @@ int LuaGetMutexInfo(lua_State* L) {
 	lua_pop(L, lua_gettop(L));
 	lua_pushboolean(L, mutex->istaken);
 	lua_pushstring(L, mutex->mutexname);
-	lua_pushinteger(L, (DWORD)mutex->mutex);
+	lua_pushinteger(L, (lua_Integer)(uintptr_t)mutex->mutex);
 
 	return 3;
 }
@@ -142,7 +142,7 @@ int mutex_tostring(lua_State* L) {
 	LuaMutex* mutex = lua_tomutex(L, 1);
 
 	char tim[1024];
-	sprintf(tim, "Mutex: 0x%08X %s", mutex, mutex->mutexname);
+	sprintf(tim, "Mutex: %p %s", (void*)mutex, mutex->mutexname);
 	lua_pushfstring(L, tim);
 	return 1;
 }

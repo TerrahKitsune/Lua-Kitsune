@@ -67,7 +67,7 @@ int lua_jsonsetnullvalue(lua_State* L) {
 		}
 		else {
 			
-			lua_pushnil(L);
+		lua_pushnil(L);
 		}
 
 		return 1;
@@ -278,7 +278,7 @@ int json_gc(lua_State *L) {
 
 int json_tostring(lua_State *L) {
 	char tim[100];
-	sprintf(tim, "JSON: 0x%08X", lua_tojson(L, 1));
+	sprintf(tim, "JSON: %p", (void*)lua_tojson(L, 1));
 	lua_pushfstring(L, tim);
 	return 1;
 }

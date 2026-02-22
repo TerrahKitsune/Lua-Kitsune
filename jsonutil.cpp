@@ -176,28 +176,28 @@ unsigned int table_crc32(const unsigned char* data, int size)
 	return ~r;
 }
 
-bool json_addtoantirecursion(unsigned int id, JsonContext* context) {
+bool json_addtoantirecursion(uintptr_t id, JsonContext* context) {
 
 	int idx = -1;
 	if (context->antiRecursion) {
 		for (size_t i = 0; i < context->antiRecursionSize; i++)
 		{
 			if (context->antiRecursion[i] == 0) {
-				idx = i;
+				idx = (int)i;
 				break;
 			}
 		}
 	}
 
 	if (idx == -1) {
-		void*temp = gff_realloc(context->antiRecursion, (context->antiRecursionSize * sizeof(unsigned int)) + (10 * sizeof(unsigned int)));
+		void*temp = gff_realloc(context->antiRecursion, (context->antiRecursionSize * sizeof(uintptr_t)) + (10 * sizeof(uintptr_t)));
 		if (!temp) {
 			return false;
 		}
 
-		context->antiRecursion = (unsigned int*)temp;
-		idx = context->antiRecursionSize;
-		memset(&context->antiRecursion[context->antiRecursionSize], 0, 10 * sizeof(unsigned int));
+		context->antiRecursion = (uintptr_t*)temp;
+		idx = (int)context->antiRecursionSize;
+		memset(&context->antiRecursion[context->antiRecursionSize], 0, 10 * sizeof(uintptr_t));
 		context->antiRecursionSize += 10;
 	}
 
@@ -206,7 +206,7 @@ bool json_addtoantirecursion(unsigned int id, JsonContext* context) {
 	return true;
 }
 
-bool json_existsinantirecursion(unsigned int id, JsonContext* context) {
+bool json_existsinantirecursion(uintptr_t id, JsonContext* context) {
 
 	if (context->antiRecursion) {
 		for (size_t i = 0; i < context->antiRecursionSize; i++)
@@ -220,7 +220,7 @@ bool json_existsinantirecursion(unsigned int id, JsonContext* context) {
 	return false;
 }
 
-void json_removefromantirecursion(unsigned int id, JsonContext* context) {
+void json_removefromantirecursion(uintptr_t id, JsonContext* context) {
 
 	if (context->antiRecursion) {
 		for (size_t i = 0; i < context->antiRecursionSize; i++)
@@ -233,7 +233,7 @@ void json_removefromantirecursion(unsigned int id, JsonContext* context) {
 	}
 }
 
-unsigned int json_popfromantirecursion(JsonContext* context) {
+uintptr_t json_popfromantirecursion(JsonContext* context) {
 
 	if (context->antiRecursion) {
 		size_t len = 0;
@@ -249,7 +249,7 @@ unsigned int json_popfromantirecursion(JsonContext* context) {
 			return 0;
 		}
 
-		unsigned int result = context->antiRecursion[len - 1];
+		uintptr_t result = context->antiRecursion[len - 1];
 		context->antiRecursion[len - 1] = 0;
 		return result;
 	}

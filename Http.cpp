@@ -21,7 +21,7 @@ static void _dumpbuffer(FILE* f) {
 	rewind(f);
 	do {
 
-		n = fread(b, 1, 1000, f);
+		n = (int)fread(b, 1, 1000, f);
 		b[n] = '\0';
 		puts(b);
 
@@ -426,7 +426,7 @@ int CopyToFile(HttpBuffer* src, HttpBuffer* dst, int size) {
 
 		bwrite(buf, read, dst);
 
-		size -= read;
+		size -= (int)read;
 	}
 
 	return TRUE;
@@ -468,7 +468,7 @@ HttpBuffer* AssembleChunks(HttpBuffer* fp, long headersize) {
 			break;
 		}
 
-		bseek(fp, pos + strlen(cursor) + 2, SEEK_SET);
+		bseek(fp, pos + (long)strlen(cursor) + 2, SEEK_SET);
 
 		if (!CopyToFile(fp, temp, chunksize)) {
 			bclose(temp);
@@ -498,7 +498,7 @@ int SendRecv(LuaHttp* luahttp, SOCKET ConnectSocket, SSL* ssl) {
 
 	do {
 
-		size = bread(buffer, BUFFER_SIZE, sendcontent);
+		size = (int)bread(buffer, BUFFER_SIZE, sendcontent);
 
 		if (size == 0) {
 
@@ -507,7 +507,7 @@ int SendRecv(LuaHttp* luahttp, SOCKET ConnectSocket, SSL* ssl) {
 			}
 
 			sendcontent = luahttp->content;
-			size = bread(buffer, BUFFER_SIZE, sendcontent);
+			size = (int)bread(buffer, BUFFER_SIZE, sendcontent);
 
 			if (size == 0) {
 				break;
@@ -576,7 +576,7 @@ int SendRecv(LuaHttp* luahttp, SOCKET ConnectSocket, SSL* ssl) {
 		result = ssl == NULL ? recv(ConnectSocket, buffer, BUFFER_SIZE, 0) : SSL_read(ssl, buffer, BUFFER_SIZE);
 
 		if (result > 0) {
-			result = bwrite(buffer, result, luahttp->buffer);
+			result = (int)bwrite(buffer, result, luahttp->buffer);
 			size += result;
 			luahttp->recv += result;
 			sleeps = 0;
@@ -602,7 +602,7 @@ int SendRecv(LuaHttp* luahttp, SOCKET ConnectSocket, SSL* ssl) {
 			else if (contentLength == -2 && FileChunkedComplete(luahttp->buffer)) {
 				break;
 			}
-			else if (contentLength > 0 && luahttp->recv >= contentLength + headerSize + 2) {
+			else if (contentLength > 0 && luahttp->recv >= (size_t)(contentLength + headerSize + 2)) {
 				break;
 			}
 			else if (++sleeps >= 100 && FileEndsWithCRLF(luahttp->buffer)) {
@@ -678,7 +678,7 @@ int DoHttps(SOCKET socket, LuaHttp* http) {
 	}
 
 	ssl = SSL_new(ctx);
-	SSL_set_fd(ssl, socket);
+	SSL_set_fd(ssl, (int)socket);
 	result = SSL_connect(ssl);
 
 	if (result != 1) {
@@ -774,7 +774,7 @@ int GetResult(lua_State* L) {
 	}
 
 	luahttp->membuffer[size] = '\0';
-	size = bread(luahttp->membuffer, size, luahttp->buffer);
+	size = (long)bread(luahttp->membuffer, size, luahttp->buffer);
 	char* content = sstrstr(luahttp->membuffer, "\r\n\r\n", size);
 	size_t headerLength = (content - luahttp->membuffer);
 
@@ -833,7 +833,7 @@ int GetResult(lua_State* L) {
 
 	offset = 0;
 
-	for (size_t n = 0; n < end - cursor; n++) {
+	for (int n = 0; n < (int)(end - cursor); n++) {
 		if (cursor[n] == ' ') {
 			offset = n;
 			break;
@@ -1316,7 +1316,7 @@ int luahttp_tostring(lua_State* L) {
 
 	LuaHttp* sq = lua_tohttp(L, 1);
 	char my[500];
-	sprintf(my, "Http: 0x%08X", (unsigned int)sq);
+	sprintf(my, "Http: %p", (void*)sq);
 	lua_pushstring(L, my);
 	return 1;
 }
@@ -1444,7 +1444,7 @@ long btell(HttpBuffer* buf) {
 		return ftell(buf->fp);
 	}
 
-	return buf->pos;
+	return (long)buf->pos;
 }
 
 int bgetc(HttpBuffer* buf) {
@@ -1474,15 +1474,15 @@ int bseek(HttpBuffer* buf, long offset, int origin) {
 		newpos = offset;
 		break;
 	case SEEK_CUR:
-		newpos = buf->pos + offset;
+		newpos = (long)buf->pos + offset;
 		break;
 	case SEEK_END:
-		newpos = buf->len + offset;
+		newpos = (long)buf->len + offset;
 		break;
 	default:
 		return -1;
 	}
-	if (newpos < 0 || newpos > buf->len) {
+	if (newpos < 0 || newpos > (long)buf->len) {
 		return -1;
 	}
 

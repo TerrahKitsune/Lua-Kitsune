@@ -342,7 +342,7 @@ int csv_gc(lua_State* L) {
 
 int csv_tostring(lua_State* L) {
 	char tim[100];
-	sprintf(tim, "Csv: 0x%08X", lua_tocsv(L, 1));
+	sprintf(tim, "Csv: %p", (void*)lua_tocsv(L, 1));
 	lua_pushfstring(L, tim);
 	return 1;
 }

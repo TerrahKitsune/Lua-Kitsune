@@ -54,6 +54,9 @@
       <AdditionalIncludeDirectories>$(SolutionDir)mysql\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)zip;$(SolutionDir)libarchive;$(SolutionDir)libarchive/lzma;$(SolutionDir)Imgui;$(SolutionDir)hiredis;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4703;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <PreprocessorDefinitions>STANDALONEGFF;_CRT_SECURE_NO_WARNINGS;ImTextureID=ImU64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -76,6 +79,9 @@
       <AdditionalIncludeDirectories>$(SolutionDir)mysql\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)zip;$(SolutionDir)libarchive;$(SolutionDir)libarchive/lzma;$(SolutionDir)Imgui;$(SolutionDir)hiredis;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4703;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <PreprocessorDefinitions>STANDALONEGFF;_CRT_SECURE_NO_WARNINGS;ImTextureID=ImU64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>

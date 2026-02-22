@@ -419,7 +419,7 @@ int CRC32(lua_State* L) {
 		crc = ~(DWORD)lua_tonumber(L, 2);
 	}
 
-	crc = crc32((BYTE*)data, size, crc);
+	crc = crc32((BYTE*)data, (int)size, crc);
 
 	lua_pop(L, lua_gettop(L));
 
@@ -586,7 +586,7 @@ static int L_SetConsoleCoords(lua_State* L) {
 	HANDLE hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
 	if (hStdOut == INVALID_HANDLE_VALUE) return 0;
 
-	COORD homeCoords = { x, y };
+	COORD homeCoords = { (SHORT)x, (SHORT)y };
 
 	SetConsoleCursorPosition(hStdOut, homeCoords);
 
@@ -707,7 +707,7 @@ static int L_ConsoleWrite(lua_State* L) {
 	}
 
 	DWORD written;
-	WriteConsole(hStdOut, data, len, &written, NULL);
+	WriteConsole(hStdOut, data, (DWORD)len, &written, NULL);
 
 	lua_pop(L, lua_gettop(L));
 	lua_pushinteger(L, written);
@@ -738,19 +738,19 @@ static int L_ConsolePrint(lua_State* L) {
 			len = 0;
 		}
 
-		WriteConsole(hStdOut, data, len, &written, NULL);
+		WriteConsole(hStdOut, data, (DWORD)len, &written, NULL);
 		total += written;
 
 		if (n < lua_gettop(L)) {
 			data = "\t";
 			len = 1;
-			WriteConsole(hStdOut, data, len, &written, NULL);
+			WriteConsole(hStdOut, data, (DWORD)len, &written, NULL);
 			total += written;
 		}
 		else {
 			data = "\n";
 			len = 1;
-			WriteConsole(hStdOut, data, len, &written, NULL);
+			WriteConsole(hStdOut, data, (DWORD)len, &written, NULL);
 			total += written;
 		}
 	}
@@ -1101,7 +1101,7 @@ static int crc64(lua_State* L) {
 				crc = (crc >> 1) ^ CRC64_POLY;
 			}
 			else {
-				crc >>= 1;
+			 crc >>= 1;
 			}
 		}
 	}

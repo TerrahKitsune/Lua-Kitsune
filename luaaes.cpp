@@ -213,19 +213,19 @@ int luaaes_tostring(lua_State* L) {
 	switch (luaaes->type) {
 
 	case AES_256_ECB:
-		sprintf(tim, "LuaAes: 0x%08X (aes-256-ecb)", luaaes);
+		sprintf(tim, "LuaAes: %p (aes-256-ecb)", (void*)luaaes);
 		break;
 
 	case AES_256_CBC:
-		sprintf(tim, "LuaAes: 0x%08X (aes-256-cbc)", luaaes);
+		sprintf(tim, "LuaAes: %p (aes-256-cbc)", (void*)luaaes);
 		break;
 
 	case AES_256_CTR:
-		sprintf(tim, "LuaAes: 0x%08X (aes-256-ctr)", luaaes);
+		sprintf(tim, "LuaAes: %p (aes-256-ctr)", (void*)luaaes);
 		break;
 
 	default:
-		sprintf(tim, "LuaAes: 0x%08X (invalid)", luaaes);
+		sprintf(tim, "LuaAes: %p (invalid)", (void*)luaaes);
 		break;
 	}
 

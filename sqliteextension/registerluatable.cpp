@@ -308,7 +308,7 @@ static int registeredtable_update(sqlite3_vtab* vtab, int argc, sqlite3_value** 
 
 				for (size_t i = 0; i < realargs; i++)
 				{
-					lua_pushvalue(L, (realargs - i + 1) * -1);
+					lua_pushvalue(L, (int)(realargs - i + 1) * -1);
 					lua_rawseti(L, -2, i + 1);
 				}
 			}
@@ -370,7 +370,7 @@ static int registeredtable_update(sqlite3_vtab* vtab, int argc, sqlite3_value** 
 			int realargs = argc - 3;
 			for (size_t i = 0; i < realargs; i++)
 			{
-				lua_pushvalue(L, (realargs - i + 1) * -1);
+				lua_pushvalue(L, (int)(realargs - i + 1) * -1);
 				lua_rawseti(L, -2, i + 1);
 			}
 
@@ -495,7 +495,7 @@ int sqlite3_registertable(lua_State* L, ResState* state) {
 
 	lua_pushvalue(L, 2);
 	lua_len(L, -1);
-	data->numbfields = lua_tointeger(L, -1);
+	data->numbfields = (int)lua_tointeger(L, -1);
 	lua_pop(L, 1);
 
 	if (data->numbfields <= 0) {
@@ -541,7 +541,7 @@ int sqlite3_registertable(lua_State* L, ResState* state) {
 				}
 			}
 
-			data->fields[i] = (char*)sqlite3_malloc(sizeof(char) * (len + 1));
+			data->fields[i] = (char*)sqlite3_malloc((int)(sizeof(char) * (len + 1)));
 
 			if (data->fields[i] == NULL) {
 				lua_pop(L, 2);

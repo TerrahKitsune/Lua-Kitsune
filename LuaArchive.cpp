@@ -8,7 +8,7 @@ int OpenReadArchive(lua_State* L) {
 	int useWchar = lua_toboolean(L, 2);
 
 	struct archive* a;
-	struct archive_entry* entry;
+	struct archive_entry* entry = NULL;
 	int r;
 
 	a = archive_read_new();
@@ -123,7 +123,7 @@ int ReadArchiveEntries(lua_State* L) {
 int ReadEntry(lua_State* L) {
 
 	LuaArchive* arc = lua_toarchive(L, 1);
-	int buffer = luaL_optinteger(L, 2, 1024);
+	int buffer = (int)luaL_optinteger(L, 2, 1024);
 	long long size;
 
 	if (arc->buff) {
@@ -166,7 +166,7 @@ int ReadEntry(lua_State* L) {
 int SetReadEntry(lua_State* L) {
 
 	LuaArchive* arc = lua_toarchive(L, 1);
-	int target = luaL_checkinteger(L, 2);
+	int target = (int)luaL_checkinteger(L, 2);
 
 	if (!arc || !arc->file || !arc->isRead) {
 
@@ -284,7 +284,7 @@ int archive_gc(lua_State* L) {
 
 int archive_tostring(lua_State* L) {
 	char tim[100];
-	sprintf(tim, "Archive: 0x%08X", lua_toarchive(L, 1));
+	sprintf(tim, "Archive: %p", (void*)lua_toarchive(L, 1));
 	lua_pushfstring(L, tim);
 	return 1;
 }

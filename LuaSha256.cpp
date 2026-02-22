@@ -81,7 +81,7 @@ int sha256_gc(lua_State *L) {
 int sha256_tostring(lua_State *L) {
 
 	char sha256[100];
-	sprintf(sha256, "SHA256: 0x%08X", lua_tosha256(L, 1));
+	sprintf(sha256, "SHA256: %p", (void*)lua_tosha256(L, 1));
 	lua_pushfstring(L, sha256);
 	return 1;
 }

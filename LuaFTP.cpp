@@ -33,7 +33,7 @@ int ftp_recv(SOCKET s, char* buffer, size_t len, time_t timeout) {
 
 		if (result < 0) {
 
-			sprintf(buffer, "%s", "Recv error: %d", WSAGetLastError());
+			sprintf(buffer, "Recv error: %d", WSAGetLastError());
 			return -1;
 		}
 		else if (result == 0) {
@@ -64,7 +64,7 @@ int ftp_send(SOCKET s, const char* buffer, size_t len, time_t timeout) {
 
 	do {
 
-		ret = send(s, &buffer[sent], len - sent, 0);
+		ret = send(s, &buffer[sent], (int)(len - sent), 0);
 
 		if (ret > 0) {
 			sent += ret;
@@ -233,7 +233,7 @@ int LuaLogin(lua_State* L) {
 	}
 
 	size_t msg = LuaAddMessagesToTable(L, ftp->s, ftp->log, FTPTIMEOUT);
-	int result = LuaGetLastMessage(L, ftp->log, msg);
+	int result = LuaGetLastMessage(L, ftp->log, (int)msg);
 
 	if (result != 331) {
 
@@ -255,7 +255,7 @@ int LuaLogin(lua_State* L) {
 	}
 
 	msg = LuaAddMessagesToTable(L, ftp->s, ftp->log, FTPTIMEOUT);
-	result = LuaGetLastMessage(L, ftp->log, msg);
+	result = LuaGetLastMessage(L, ftp->log, (int)msg);
 
 	if (result != 230) {
 
@@ -397,12 +397,12 @@ int LuaPassive(lua_State* L) {
 
 	size_t msg = LuaAddMessagesToTable(L, ftp->s, ftp->log, 0);
 	msg = LuaGetLogSize(L, ftp->log);
-	int result = LuaGetLastMessage(L, ftp->log, msg);
+	int result = LuaGetLastMessage(L, ftp->log, (int)msg);
 
 	if (result != 227) {
 		msg = LuaAddMessagesToTable(L, ftp->s, ftp->log, FTPTIMEOUT);
 		msg = LuaGetLogSize(L, ftp->log);
-		result = LuaGetLastMessage(L, ftp->log, msg);
+		result = LuaGetLastMessage(L, ftp->log, (int)msg);
 	}
 
 	if (result != 227) {
@@ -636,7 +636,7 @@ int luaftp_gc(lua_State* L) {
 
 int luaftp_tostring(lua_State* L) {
 	char tim[1024];
-	sprintf(tim, "FTP: 0x%08X", lua_toluaftp(L, 1));
+	sprintf(tim, "FTP: %p", (void*)lua_toluaftp(L, 1));
 	lua_pushfstring(L, tim);
 	return 1;
 }

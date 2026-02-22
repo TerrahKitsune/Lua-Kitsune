@@ -258,7 +258,6 @@ static LStream* newfile(lua_State* L) {
 
 int	RenameWide(lua_State* L) {
 
-	size_t len;
 	LuaWChar* src = lua_towchar(L, 1);
 	LuaWChar* dst = lua_towchar(L, 2);
 
@@ -491,7 +490,7 @@ int GetFileInfoWide(lua_State* L) {
 					fileHandle,
 					FSCTL_GET_REPARSE_POINT,
 					NULL,
-					0,
+				 0,
 					&Data,
 					sizeof(REPARSE_DATA),
 					&returnedBytes,
@@ -843,7 +842,7 @@ int lua_GetAllAvailableDrives(lua_State* L) {
 	}
 
 	lua_pop(L, lua_gettop(L));
-	lua_createtable(L, cnt, 0);
+	lua_createtable(L, (int)cnt, 0);
 
 	mask = 1;
 

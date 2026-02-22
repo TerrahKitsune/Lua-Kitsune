@@ -9,8 +9,11 @@ static const char* REDISSTREAM = "REDISSTREAM";
 #include <process.h>
 
 #pragma comment (lib, "crypt32")
+#pragma warning(push)
+#pragma warning(disable: 4200)
 #include "hiredis/hiredis.h"
 #include "hiredis/hiredis_ssl.h"
+#pragma warning(pop)
 
 #pragma comment(lib, "hiredis/hiredis.lib")
 #pragma comment(lib, "hiredis/hiredis_ssl.lib")
