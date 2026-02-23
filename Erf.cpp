@@ -22,11 +22,11 @@ static const char * NullTerminatedResRef(const char * resref, int version){
 void * CreateKeyList(size_t len, int version, ERFHeader * header){
 
 	if (version == 1){
-		header->OffsetToResourceList = header->OffsetToKeyList + (len * sizeof(ErfKey));
+		header->OffsetToResourceList = header->OffsetToKeyList + (unsigned int)(len * sizeof(ErfKey));
 		return gff_calloc(len, sizeof(ErfKey));
 	}
 	else{
-		header->OffsetToResourceList = header->OffsetToKeyList + (len * sizeof(ErfKeyV2));
+		header->OffsetToResourceList = header->OffsetToKeyList + (unsigned int)(len * sizeof(ErfKeyV2));
 		return gff_calloc(len, sizeof(ErfKeyV2));
 	}
 }
@@ -73,9 +73,9 @@ void FillKey(void * data, int index, int version, ERFHeader * header, ERFBuildEn
 unsigned int FillResEntry(ErfResList * entry, ERFBuildEntry * file, unsigned int offset){
 
 	entry->OffsetToResource = offset;
-	entry->ResourceSize = file->len;
+	entry->ResourceSize = (unsigned int)file->len;
 
-	return file->len;
+	return (unsigned int)file->len;
 }
 
 bool WriteToFile(FILE * target, FILE * source, size_t len){
@@ -219,10 +219,10 @@ int CreateErf(lua_State *L){
 
 		memcpy(locstr->String, desc, desclen);
 		locstr->LanguageID = 0;
-		locstr->StringSize = desclen + 1;
+		locstr->StringSize = (unsigned int)(desclen + 1);
 
 		erf.Header->LanguageCount = 1;
-		erf.Header->LocalizedStringSize = sizeof(ErfLocString) + desclen + 1;
+		erf.Header->LocalizedStringSize = (unsigned int)(sizeof(ErfLocString) + desclen + 1);
 		erf.Header->OffsetToLocalizedString = sizeof(ERFHeader);
 		erf.Header->OffsetToKeyList = erf.Header->OffsetToLocalizedString + erf.Header->LocalizedStringSize;
 
@@ -421,7 +421,7 @@ int ExtractErf(lua_State *L){
 	unsigned int bread;
 	while (total < node.ResourceSize){
 
-		bread = fread(buffer, 1, min(node.ResourceSize - total, 100), file);
+		bread = (unsigned int)fread(buffer, 1, min(node.ResourceSize - total, 100), file);
 		if (bread <= 0){
 			fclose(file);
 			fclose(target);
@@ -811,7 +811,7 @@ int erf_tostring(lua_State *L){
 
 	ERF * luaerf = lua_toerf(L, 1);
 	char tim[1024];
-	sprintf(tim, "Erf: 0x%08X File: %s", luaerf, luaerf->File);
+	sprintf(tim, "Erf: %p File: %s", (void*)luaerf, luaerf->File);
 	lua_pushfstring(L, tim);
 	return 1;
 }

@@ -131,7 +131,7 @@ int lua_setpixels(lua_State *L) {
 			return 2;
 		}
 
-		inpad = (n / img->Width)*padding;
+		inpad = (int)(n / img->Width)*padding;
 		rgb = &Image[n];
 
 		rgb = (RGBTRIPLE*)((BYTE*)rgb + inpad);
@@ -205,11 +205,11 @@ int lua_getpixels(lua_State *L) {
 	int padding = pitch - (img->Width * (BInfoHeader->biBitCount / 8));
 	int inpad;
 
-	lua_createtable(L, len, 0);
+	lua_createtable(L, (int)len, 0);
 
 	for (size_t n = 0; n < len; n++) {
 
-		inpad = (n / img->Width)*padding;
+		inpad = (int)((n / img->Width)*padding);
 
 		rgb = &Image[n];//(RGBTRIPLE*)(Image + ((sizeof(RGBTRIPLE) * n) + inpad));
 
@@ -426,8 +426,8 @@ int lua_crop(lua_State *L) {
 
 	for (coord_y = 0; coord_y < h; coord_y++) {
 
-		inpad = (coord_y*padding_in);
-		outpad = ((coord_y + hoffset)*padding_out);
+		inpad = (int)(coord_y*padding_in);
+		outpad = (int)((coord_y + hoffset)*padding_out);
 
 		for (coord_x = 0; coord_x < w; coord_x++) {
 
@@ -887,7 +887,7 @@ int lua_savetofile(lua_State *L) {
 		return 1;
 	}
 
-	if (WriteFile(FH, img->Data, img->DataSize, &Junk, 0) && Junk == img->DataSize) {
+	if (WriteFile(FH, img->Data, (DWORD)img->DataSize, &Junk, 0) && Junk == img->DataSize) {
 
 		lua_pop(L, lua_gettop(L));
 		lua_pushboolean(L, true);
@@ -934,7 +934,7 @@ int image_gc(lua_State *L) {
 
 int image_tostring(lua_State *L) {
 	char tim[100];
-	sprintf(tim, "Image: 0x%08X", lua_toimage(L, 1));
+	sprintf(tim, "Image: %p", (void*) lua_toimage(L, 1));
 	lua_pushfstring(L, tim);
 	return 1;
 }

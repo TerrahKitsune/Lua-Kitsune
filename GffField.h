@@ -10,6 +10,8 @@ typedef struct GffField {
 	unsigned int DataOrDataOffset;
 } GffField;
 
+#pragma warning(push)
+#pragma warning(disable: 4200)
 typedef struct CExoString {
 	unsigned int Length;
 	char data[];
@@ -37,6 +39,7 @@ typedef struct StructList {
 	unsigned int Length;
 	unsigned int StructIndecies[];
 } StructList;
+#pragma warning(pop)
 
 //Pushes the label followed by a table containing the field info to the stack
 void PushField(lua_State *L, Gff * gff, unsigned int fieldindex);

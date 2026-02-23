@@ -425,7 +425,7 @@ int luafileasync_gc(lua_State* L) {
 int luafileasync_tostring(lua_State* L) {
 
 	char tim[1024];
-	sprintf(tim, "FILEASYNC: 0x%08X", lua_toluafileasync(L, 1));
+	sprintf(tim, "FILEASYNC: %p", (void*) lua_toluafileasync(L, 1));
 	lua_pushfstring(L, tim);
 	return 1;
 }

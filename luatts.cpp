@@ -33,7 +33,7 @@ DWORD WINAPI ThreadFunc(LPVOID arg) {
 	while (tts->alive) {
 
 		if (waitResult != WAIT_TIMEOUT && waitResult != WAIT_OBJECT_0) {
-			printf("Thread %08X encountered an error: %lu\n", (DWORD)tts, GetLastError());
+			printf("Thread %p encountered an error: %lu\n", (void*)tts, GetLastError());
 		}
 
 		if (tts->speaking && tts->textToSpeak) {
@@ -125,7 +125,7 @@ int GetVolume(lua_State* L) {
 int SetRate(lua_State* L) {
 
 	LuaTTS* tts = lua_totts(L, 1);
-	if (SUCCEEDED(tts->pVoice->SetRate(luaL_checkinteger(L, 2)))) {
+	if (SUCCEEDED(tts->pVoice->SetRate((long)luaL_checkinteger(L, 2)))) {
 		lua_pushboolean(L, true);
 	}
 	else {
@@ -170,7 +170,7 @@ int Speak(lua_State* L) {
 			return 0;
 		}
 
-		tts->flags = luaL_optinteger(L, 3, SPF_IS_XML);
+		tts->flags = (DWORD)luaL_optinteger(L, 3, SPF_IS_XML);
 		memcpy(tts->textToSpeak, wchar->str, wchar->len * sizeof(wchar_t));
 		tts->speaking = true;
 		SetEvent(tts->hEvent);
@@ -362,7 +362,7 @@ int tts_gc(lua_State* L) {
 
 int tts_tostring(lua_State* L) {
 	char tim[100];
-	sprintf(tim, "TTS: 0x%08X", lua_totts(L, 1));
+	sprintf(tim, "TTS: %p", (void*)lua_totts(L, 1));
 	lua_pushfstring(L, tim);
 	return 1;
 }

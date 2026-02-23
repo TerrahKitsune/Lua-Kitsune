@@ -36,7 +36,7 @@ int VhdCreate(lua_State* L) {
 	vhd->footer.Features = 0;
 	vhd->footer.FileFormatVersion = 0x00010000;
 	vhd->footer.DataOffset = sizeof(VhdFooter);
-	vhd->footer.TimeStamp = get_seconds_since_2000();
+	vhd->footer.TimeStamp = (UINT32)get_seconds_since_2000();
 	memcpy(&vhd->footer.CreatorApplication, "vs  ", 4);
 	vhd->footer.CreatorVersion = 0x00010000;
 	vhd->footer.CreatorHostOS = 0x5769326B;
@@ -55,7 +55,7 @@ int VhdCreate(lua_State* L) {
 	vhd->header.DataOffset = 0xFFFFFFFF;
 	vhd->header.TableOffset = sizeof(VhdFooter) + sizeof(VhdHeader);
 	vhd->header.HeaderVersion = 0x00010000;
-	vhd->header.MaxTableEntries = ((size + VHD_BLOCK_SIZE - 1) / VHD_BLOCK_SIZE);
+	vhd->header.MaxTableEntries = (UINT32)((size + VHD_BLOCK_SIZE - 1) / VHD_BLOCK_SIZE);
 	vhd->header.BlockSize = VHD_BLOCK_SIZE;
 	vhd->header.Checksum = 0;
 	memset(&vhd->header.ParentUniqueID, 0, 16);
@@ -129,7 +129,7 @@ int vhd_gc(lua_State* L) {
 
 int vhd_tostring(lua_State* L) {
 	char tim[100];
-	sprintf(tim, "VHD: 0x%08X", lua_tovhd(L, 1));
+	sprintf(tim, "VHD: %p", (void*) lua_tovhd(L, 1));
 	lua_pushfstring(L, tim);
 	return 1;
 }

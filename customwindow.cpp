@@ -351,7 +351,7 @@ int DoCustomComboBoxEvent(lua_State* L, LuaWindow* parent, HWND hwnd, UINT Msg, 
 		}
 	}
 
-	return DefWindowProcW(hwnd, Msg, wParam, lParam);;
+	return 0;
 }
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT Msg, WPARAM wParam, LPARAM lParam)
@@ -402,9 +402,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT Msg, WPARAM wParam, LPARAM lParam)
 	{
 	case WM_LUA_SETCONTENT:
 
-		lua_rawgeti(L, LUA_REGISTRYINDEX, lParam);
+		lua_rawgeti(L, LUA_REGISTRYINDEX, (int)lParam);
 		wchar = lua_towchar(L, -1);
-		luaL_unref(L, LUA_REGISTRYINDEX, lParam);
+		luaL_unref(L, LUA_REGISTRYINDEX, (int)lParam);
 		SetWindowTextW((HWND)wParam, wchar->str);
 		lua_pop(L, 1);
 
@@ -412,30 +412,30 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT Msg, WPARAM wParam, LPARAM lParam)
 
 	case WM_LUA_MOVE:
 
-		lua_rawgeti(L, LUA_REGISTRYINDEX, lParam);
+		lua_rawgeti(L, LUA_REGISTRYINDEX, (int)lParam);
 
 		lua_pushstring(L, "X");
 		lua_gettable(L, -2);
-		x = lua_tointeger(L, -1);
+		x = (int)lua_tointeger(L, -1);
 		lua_pop(L, 1);
 
 		lua_pushstring(L, "Y");
 		lua_gettable(L, -2);
-		y = lua_tointeger(L, -1);
+		y = (int)lua_tointeger(L, -1);
 		lua_pop(L, 1);
 
 		lua_pushstring(L, "Height");
 		lua_gettable(L, -2);
-		h = lua_tointeger(L, -1);
+		h = (int)lua_tointeger(L, -1);
 		lua_pop(L, 1);
 
 		lua_pushstring(L, "Width");
 		lua_gettable(L, -2);
-		w = lua_tointeger(L, -1);
+		w = (int)lua_tointeger(L, -1);
 		lua_pop(L, 1);
 
 		result = SetWindowPos((HWND)wParam, HWND_TOP, x, y, w, h, 0);
-		luaL_unref(L, LUA_REGISTRYINDEX, lParam);
+		luaL_unref(L, LUA_REGISTRYINDEX, (int)lParam);
 		lua_pop(L, 1);
 		break;
 
@@ -541,7 +541,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT Msg, WPARAM wParam, LPARAM lParam)
 		break;
 
 	default:
-		return DefWindowProcW(hwnd, Msg, wParam, lParam);
+		return (int)DefWindowProcW(hwnd, Msg, wParam, lParam);
 	}
 
 	return 0;
@@ -565,7 +565,7 @@ int LuaGetContent(lua_State* L) {
 		return 0;
 	}
 
-	int ret = GetWindowTextW(window->handle, data, len + 1);
+	int ret = GetWindowTextW(window->handle, data, (int)(len + 1));
 
 	lua_pushwchar(L, data);
 

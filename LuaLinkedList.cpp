@@ -474,7 +474,7 @@ int linkedlist_gc(lua_State* L) {
 
 int linkedlist_tostring(lua_State* L) {
 	char tim[100];
-	sprintf(tim, "LinkedList: 0x%08X", lua_tolinkedlist(L, 1));
+	sprintf(tim, "LinkedList: %p", (void*) lua_tolinkedlist(L, 1));
 	lua_pushfstring(L, tim);
 	return 1;
 }

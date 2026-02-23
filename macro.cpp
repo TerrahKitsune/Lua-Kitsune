@@ -55,7 +55,7 @@ int CreateMacro(lua_State* L) {
 			lua_pushstring(L, "Type");
 			lua_gettable(L, -2);
 			if (lua_isnumber(L, -1)) {
-				macro->inputs[i].type = lua_tointeger(L, -1);
+				macro->inputs[i].type = (DWORD)lua_tointeger(L, -1);
 			}
 			else {
 				luaL_error(L, "Invalid Type in macro input");
@@ -68,35 +68,35 @@ int CreateMacro(lua_State* L) {
 				lua_pushstring(L, "Key");
 				lua_gettable(L, -2);
 				if (lua_isnumber(L, -1)) {
-					macro->inputs[i].ki.wVk = lua_tointeger(L, -1);
+					macro->inputs[i].ki.wVk = (WORD)lua_tointeger(L, -1);
 				}
 				lua_pop(L, 1);
 
 				lua_pushstring(L, "Flags");
 				lua_gettable(L, -2);
 				if (lua_isnumber(L, -1)) {
-					macro->inputs[i].ki.dwFlags = lua_tointeger(L, -1);
+					macro->inputs[i].ki.dwFlags = (DWORD)lua_tointeger(L, -1);
 				}
 				lua_pop(L, 1);
 
 				lua_pushstring(L, "ExtraInfo");
 				lua_gettable(L, -2);
 				if (lua_isnumber(L, -1)) {
-					macro->inputs[i].ki.dwExtraInfo = lua_tointeger(L, -1);
+					macro->inputs[i].ki.dwExtraInfo = (ULONG_PTR)lua_tointeger(L, -1);
 				}
 				lua_pop(L, 1);
 
 				lua_pushstring(L, "Time");
 				lua_gettable(L, -2);
 				if (lua_isnumber(L, -1)) {
-					macro->inputs[i].ki.time = lua_tointeger(L, -1);
+					macro->inputs[i].ki.time = (DWORD)lua_tointeger(L, -1);
 				}
 				lua_pop(L, 1);
 
 				lua_pushstring(L, "Scan");
 				lua_gettable(L, -2);
 				if (lua_isnumber(L, -1)) {
-					macro->inputs[i].ki.wScan = lua_tointeger(L, -1);
+					macro->inputs[i].ki.wScan = (WORD)lua_tointeger(L, -1);
 				}
 				lua_pop(L, 1);
 			}
@@ -105,14 +105,14 @@ int CreateMacro(lua_State* L) {
 				lua_pushstring(L, "ExtraInfo");
 				lua_gettable(L, -2);
 				if (lua_isnumber(L, -1)) {
-					macro->inputs[i].mi.dwExtraInfo = lua_tointeger(L, -1);
+					macro->inputs[i].mi.dwExtraInfo = (ULONG_PTR)lua_tointeger(L, -1);
 				}
 				lua_pop(L, 1);
 
 				lua_pushstring(L, "Flags");
 				lua_gettable(L, -2);
 				if (lua_isnumber(L, -1)) {
-					macro->inputs[i].mi.dwFlags = lua_tointeger(L, -1);
+					macro->inputs[i].mi.dwFlags = (DWORD)lua_tointeger(L, -1);
 				}
 				lua_pop(L, 1);
 
@@ -133,14 +133,14 @@ int CreateMacro(lua_State* L) {
 				lua_pushstring(L, "Data");
 				lua_gettable(L, -2);
 				if (lua_isnumber(L, -1)) {
-					macro->inputs[i].mi.mouseData = lua_tointeger(L, -1);
+					macro->inputs[i].mi.mouseData = (DWORD)lua_tointeger(L, -1);
 				}
 				lua_pop(L, 1);
 
 				lua_pushstring(L, "Time");
 				lua_gettable(L, -2);
 				if (lua_isnumber(L, -1)) {
-					macro->inputs[i].mi.time = lua_tointeger(L, -1);
+					macro->inputs[i].mi.time = (DWORD)lua_tointeger(L, -1);
 				}
 				lua_pop(L, 1);
 			}
@@ -174,7 +174,7 @@ int ScreenToMouse(lua_State* L) {
 int SendMacro(lua_State* L) {
 
 	LuaMacro* macro = lua_tomacro(L, 1);
-	lua_pushinteger(L, (lua_Integer)SendInput(macro->length, macro->inputs, sizeof(INPUT)));
+	lua_pushinteger(L, (lua_Integer)SendInput((UINT)macro->length, macro->inputs, sizeof(INPUT)));
 	return 1;
 }
 
@@ -182,7 +182,7 @@ int GetInputs(lua_State* L) {
 
 	LuaMacro* macro = lua_tomacro(L, 1);
 
-	lua_createtable(L, macro->length, 0);
+	lua_createtable(L, (int)macro->length, 0);
 
 	for (size_t i = 0; i < macro->length; i++)
 	{
@@ -208,7 +208,7 @@ int GetInputs(lua_State* L) {
 
 			lua_pushstring(L, "Scan");
 			lua_pushinteger(L, macro->inputs[i].ki.wScan);
-			lua_settable(L, -3);
+		 lua_settable(L, -3);
 
 			lua_pushstring(L, "Key");
 			lua_pushinteger(L, macro->inputs[i].ki.wVk);
@@ -293,7 +293,7 @@ int macro_gc(lua_State* L) {
 
 int macro_tostring(lua_State* L) {
 	char tim[100];
-	sprintf(tim, "Macro: 0x%08X", lua_tomacro(L, 1));
+	sprintf(tim, "Macro: %p", (void*)lua_tomacro(L, 1));
 	lua_pushfstring(L, tim);
 	return 1;
 }

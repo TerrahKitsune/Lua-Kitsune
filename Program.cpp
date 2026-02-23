@@ -1,7 +1,9 @@
 #ifdef _DEBUG
 #define _CRTDBG_MAP_ALLOC
 #endif
+#ifndef _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_WARNINGS
+#endif
 
 #include "mem.h"
 #include "lua_main_incl.h" 

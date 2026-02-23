@@ -53,7 +53,7 @@ int LuaSocketReadData(lua_State* L) {
 	}
 
 	lua_pop(L, lua_gettop(L));
-	int d = recv(socket->s, socket->buf, buffersize, 0);
+	int d = recv(socket->s, socket->buf, (int)buffersize, 0);
 
 	if (d > 0) {
 		lua_pushlstring(L, socket->buf, d);
@@ -77,7 +77,7 @@ int LuaSocketWrite(lua_State* L) {
 	size_t len;
 	const char* data = luaL_checklstring(L, 2, &len);
 
-	int n = send(socket->s, data, len, 0);
+	int n = send(socket->s, data, (int)len, 0);
 	lua_pop(L, lua_gettop(L));
 	lua_pushinteger(L, n);
 
@@ -393,7 +393,7 @@ int luasocket_gc(lua_State* L) {
 
 int luasocket_tostring(lua_State* L) {
 	char tim[100];
-	sprintf(tim, "Socket: 0x%08X", lua_toluasocket(L, 1));
+	sprintf(tim, "Socket: %p", (void*) lua_toluasocket(L, 1));
 	lua_pushfstring(L, tim);
 	return 1;
 }

@@ -9,7 +9,7 @@ int MainLoopQuit(lua_State* L) {
 
 	LuaImgui* imgui = lua_toimgui(L, 1);
 
-	PostQuitMessage(luaL_optinteger(L, 2, 0));
+	PostQuitMessage((int)luaL_optinteger(L, 2, 0));
 	return 0;
 }
 
@@ -231,7 +231,7 @@ static void LoadAllFonts(ImGuiIO& io, const char* folder) {
 
 				strcpy(path, folder);
 				strcat(path, fdFile.cFileName);
-				io.Fonts->AddFontFromFileTTF(path, size);
+				io.Fonts->AddFontFromFileTTF(path, (float)size);
 			}
 		}
 	} while (FindNextFile(hFind, &fdFile));
@@ -244,8 +244,8 @@ int CreateImguiWindow(lua_State* L) {
 	size_t len;
 	const char* title = luaL_checklstring(L, 1, &len);
 	const char* tag = luaL_checkstring(L, 2);
-	int width = luaL_checkinteger(L, 3);
-	int height = luaL_checkinteger(L, 4);
+	int width = (int)luaL_checkinteger(L, 3);
+	int height = (int)luaL_checkinteger(L, 4);
 
 	if (width <= 10 || height <= 10) {
 		luaL_error(L, "Width or height too small");

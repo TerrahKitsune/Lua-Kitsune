@@ -17,11 +17,14 @@ typedef struct ERFHeader {
 	unsigned char Reserved[116];
 } ERFHeader;
 
+#pragma warning(push)
+#pragma warning(disable: 4200)
 typedef struct ErfLocString {
 	unsigned int LanguageID;
 	unsigned int StringSize;
 	char String[];
 }ErfLocString;
+#pragma warning(pop)
 
 typedef struct ErfResList {
 	unsigned int OffsetToResource;

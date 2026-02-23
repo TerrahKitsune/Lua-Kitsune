@@ -1,4 +1,6 @@
+#ifndef _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_WARNINGS
+#endif
 #include "GffStruct.h"
 #include "GffField.h"
 #include <string.h>
@@ -181,7 +183,7 @@ size_t CalculateTopLevelStructSize(lua_State*L, Gff* gff){
 		Bail(gff, L, "FileType field missing from topstruct");
 	}
 	strncpy(gff->Header.FileType, lua_tostring(L, -1), 4);
-	lua_pop(L, 1);
+lua_pop(L, 1);
 
 	lua_pushstring(L, "FileVersion");
 	lua_gettable(L, -2);

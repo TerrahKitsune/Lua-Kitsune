@@ -82,8 +82,8 @@ int DrawBitmap(lua_State* L) {
 
 	LuaCustomDrawing* window = lua_tonwindowdrawing(L, 1);
 	LuaImage* image = lua_toimage(L, 2);
-	int x = luaL_optinteger(L, 3, 0);
-	int y = luaL_optinteger(L, 4, 0);
+	int x = (int)luaL_optinteger(L, 3, 0);
+	int y = (int)luaL_optinteger(L, 4, 0);
 
 	BITMAPFILEHEADER* bmfh = (BITMAPFILEHEADER*)image->Data;
 	BITMAPINFOHEADER* bmih = (BITMAPINFOHEADER*)(image->Data + sizeof(BITMAPFILEHEADER));
@@ -119,7 +119,7 @@ int DrawCustomText(lua_State* L) {
 
 	lua_pop(L, lua_gettop(L));
 
-	lua_pushinteger(L, DrawTextW(*window->hdc, data->str, data->len, &rc, (UINT)luaL_optinteger(L, 5, 0)));
+	lua_pushinteger(L, DrawTextW(*window->hdc, data->str, (int)data->len, &rc, (UINT)luaL_optinteger(L, 5, 0)));
 
 	return 1;
 }
@@ -131,7 +131,7 @@ int DrawCalcTextSize(lua_State* L) {
 
 	SIZE size;
 
-	if (GetTextExtentPoint32W(*window->hdc, data->str, data->len, &size)) {
+	if (GetTextExtentPoint32W(*window->hdc, data->str, (int)data->len, &size)) {
 
 		lua_pushinteger(L, size.cx);
 		lua_pushinteger(L, size.cy);
@@ -253,7 +253,7 @@ int windowdrawing_gc(lua_State* L) {
 
 int windowdrawing_tostring(lua_State* L) {
 	char tim[100];
-	sprintf(tim, "WindowDrawing: 0x%08X", lua_tonwindowdrawing(L, 1));
+	sprintf(tim, "WindowDrawing: %p", (void*) lua_tonwindowdrawing(L, 1));
 	lua_pushfstring(L, tim);
 	return 1;
 }

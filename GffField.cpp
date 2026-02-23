@@ -106,22 +106,21 @@ unsigned int WriteFieldData(lua_State *L, Gff * gff, unsigned int type) {
 		ddata = (unsigned int)lua_tonumber(L, -1);
 		memcpy(ptr, &ddata, sizeof(double));
 		break;
-	case 13:
 	case 10:
 		exostring = (CExoString*)GetDataField(L, gff, gff->Header.FieldDataOffset + gff->Header.FieldDataCount);
 		result = gff->Header.FieldDataCount;
 		string = lua_tolstring(L, -1, &len);
-		exostring->Length = len;
+		exostring->Length = (unsigned int)len;
 		memcpy(exostring->data, string, len);
-		gff->Header.FieldDataCount += (sizeof(CExoString) + len);
+		gff->Header.FieldDataCount += (unsigned int)(sizeof(CExoString) + len);
 		break;
 	case 11:
 		resref = (ResRef*)GetDataField(L, gff, gff->Header.FieldDataOffset + gff->Header.FieldDataCount);
 		result = gff->Header.FieldDataCount;
 		string = lua_tolstring(L, -1, &len);
-		resref->Length = len > RESREF_LENGTH ? RESREF_LENGTH : len;
+		resref->Length = (unsigned char)(len > RESREF_LENGTH ? RESREF_LENGTH : len);
 		memcpy(resref->data, string, len);
-		gff->Header.FieldDataCount += (sizeof(unsigned char) + len);
+		gff->Header.FieldDataCount += (unsigned int)(sizeof(unsigned char) + len);
 		break;
 	case 12:
 
@@ -152,7 +151,7 @@ unsigned int WriteFieldData(lua_State *L, Gff * gff, unsigned int type) {
 				lua_pushstring(L, "String");
 				lua_gettable(L, -2);
 				string = lua_tolstring(L, -1, &len);
-				exolocsubstring->StringLength = len;
+				exolocsubstring->StringLength = (int)len;
 				lua_pop(L, 1);
 
 				memcpy(exolocsubstring->Data, string, len);
@@ -166,7 +165,7 @@ unsigned int WriteFieldData(lua_State *L, Gff * gff, unsigned int type) {
 				lua_pop(L, 1);
 
 				size += sizeof(CExoLocStringSubString) + len;
-				gff->Header.FieldDataCount += sizeof(CExoLocStringSubString) + len;
+				gff->Header.FieldDataCount += (unsigned int)(sizeof(CExoLocStringSubString) + len);
 
 				cnt++;
 			}
@@ -174,7 +173,7 @@ unsigned int WriteFieldData(lua_State *L, Gff * gff, unsigned int type) {
 		}
 
 		exolocstring->StringCount = cnt;
-		exolocstring->TotalSize = size;
+		exolocstring->TotalSize = (unsigned int)size;
 
 		lua_pop(L, 1);
 		break;
@@ -251,7 +250,7 @@ size_t CalculateFieldDataSize(lua_State *L, Gff * gff, int type, const char * la
 			Bail(gff, L, NULL);
 			luaL_error(L, "Field type (%d) invalid on field %s", type, label);
 		}
-		gff->Header.FieldDataCount += size;
+		gff->Header.FieldDataCount += (unsigned int)size;
 		break;
 	case 8:
 		if (!lua_isnumber(L, -1)) {
@@ -260,12 +259,12 @@ size_t CalculateFieldDataSize(lua_State *L, Gff * gff, int type, const char * la
 		}
 		break;
 	case 9:
-		size = sizeof(double);
+	 size = sizeof(double);
 		if (!lua_isnumber(L, -1)) {
 			Bail(gff, L, NULL);
 			luaL_error(L, "Field type (%d) invalid on field %s", type, label);
 		}
-		gff->Header.FieldDataCount += size;
+		gff->Header.FieldDataCount += (unsigned int)size;
 		break;
 	case 10:
 		//void data is the same as exostring
@@ -276,7 +275,7 @@ size_t CalculateFieldDataSize(lua_State *L, Gff * gff, int type, const char * la
 		}
 		lua_tolstring(L, -1, &size);
 		size += sizeof(CExoString);
-		gff->Header.FieldDataCount += size;
+		gff->Header.FieldDataCount += (unsigned int)size;
 		break;
 	case 11:
 		if (!lua_isstring(L, -1)) {
@@ -289,7 +288,7 @@ size_t CalculateFieldDataSize(lua_State *L, Gff * gff, int type, const char * la
 			size = RESREF_LENGTH;
 
 		size++;
-		gff->Header.FieldDataCount += size;
+		gff->Header.FieldDataCount += (unsigned int)size;
 		break;
 	case 12:
 
@@ -324,7 +323,7 @@ size_t CalculateFieldDataSize(lua_State *L, Gff * gff, int type, const char * la
 		}
 
 		lua_pop(L, 1);
-		gff->Header.FieldDataCount += size;
+		gff->Header.FieldDataCount += (unsigned int)size;
 		break;
 	case 14:
 		if (!lua_istable(L, -1)) {
@@ -397,7 +396,7 @@ size_t CalculateFieldSize(lua_State *L, Gff * gff) {
 	lua_pop(L, 1);
 
 	if (StringExist(gff, label, strlen(label)) == -1) {
-		StringAdd(gff, label, strlen(label), gff->stringcount);
+		StringAdd(gff, label, strlen(label), (unsigned int)gff->stringcount);
 		gff->Header.LabelCount++;
 		labelsize = sizeof(GffLabel);
 	}

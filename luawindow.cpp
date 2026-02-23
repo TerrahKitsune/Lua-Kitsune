@@ -432,7 +432,7 @@ int window_gc(lua_State* L) {
 
 int window_tostring(lua_State* L) {
 	char tim[100];
-	sprintf(tim, "Window: 0x%08X", lua_tonwindow(L, 1));
+	sprintf(tim, "Window: %p", (void*) lua_tonwindow(L, 1));
 	lua_pushfstring(L, tim);
 	return 1;
 }

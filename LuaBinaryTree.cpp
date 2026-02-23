@@ -312,7 +312,7 @@ int binarytree_gc(lua_State* L) {
 
 int binarytree_tostring(lua_State* L) {
 	char tim[100];
-	sprintf(tim, "BinaryTree: 0x%08X", lua_tobinarytree(L, 1));
+	sprintf(tim, "BinaryTree: %p", (void*) lua_tobinarytree(L, 1));
 	lua_pushfstring(L, tim);
 	return 1;
 }

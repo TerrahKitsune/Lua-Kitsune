@@ -63,7 +63,7 @@ DWORD WINAPI CliProc(LPVOID lpParam) {
 							break;
 						}
 						else {
-							queue_Enqueue(self->Events, NetEvent_Create(ev->s, NETEVENT_SEND, &ev->data[total], ev->len - total));
+							queue_Enqueue(self->Events, NetEvent_Create(ev->s, NETEVENT_SEND, &ev->data[total], (int)(ev->len - total)));
 							total += read;
 						}
 
@@ -89,7 +89,7 @@ DWORD WINAPI CliProc(LPVOID lpParam) {
 
 		read = ClientReceive(cli, buffer, CLI_BUFFERSIZE, NULL);
 		if (read > 0) {
-			queue_Enqueue(self->Events, NetEvent_Create(cli->s, NETEVENT_RECEIVE, buffer, read));
+			queue_Enqueue(self->Events, NetEvent_Create(cli->s, NETEVENT_RECEIVE, buffer, (int)read));
 		}
 
 		Sleep(1);
@@ -294,7 +294,7 @@ int luaclient_send(lua_State *L) {
 		return 1;
 	}
 
-	queue_Enqueue(thread->Send, NetEvent_Create(INVALID_SOCKET, NETEVENT_SEND, data, datalen));
+	queue_Enqueue(thread->Send, NetEvent_Create(INVALID_SOCKET, NETEVENT_SEND, data, (int)datalen));
 
 	list_Leave(lst);
 	lua_pop(L, lua_gettop(L));
@@ -385,7 +385,7 @@ int luaclient_gc(lua_State *L) {
 
 int luaclient_tostring(lua_State *L) {
 	char tim[100];
-	sprintf(tim, "LuaClient: 0x%08X", lua_toluaclient(L, 1));
+	sprintf(tim, "LuaClient: %p", (void*) lua_toluaclient(L, 1));
 	lua_pushfstring(L, tim);
 	return 1;
 }

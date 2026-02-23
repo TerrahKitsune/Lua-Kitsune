@@ -301,7 +301,7 @@ int luawinservice_gc(lua_State * L) {
 
 int luawinservice_tostring(lua_State * L) {
 	char tim[100];
-	sprintf(tim, "WinService: 0x%08X", lua_toluawinservice(L, 1));
+	sprintf(tim, "WinService: %p", (void*) lua_toluawinservice(L, 1));
 	lua_pushfstring(L, tim);
 	return 1;
 }

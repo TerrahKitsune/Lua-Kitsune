@@ -1,8 +1,13 @@
+#ifndef _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_WARNINGS
+#endif
 #include "GffHeader.h"
 #include <stdlib.h>
 #include <string.h>
+
+#ifndef MIN
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
+#endif
 
 static Gff * currentGff = NULL;
 
@@ -110,7 +115,7 @@ void DebugPrintTracker(Gff * gff, const char * str){
 
 	StructTrackerLinkedList * Traverse = gff->gfftracker;
 	while (Traverse){
-		printf("0x%08X -> ", Traverse->value);
+		printf("%p -> ", (void*)Traverse->value);
 		Traverse = Traverse->next;
 	}
 

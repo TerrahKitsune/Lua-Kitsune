@@ -18,7 +18,7 @@ void DoCustomComboBoxEvent(lua_State* L, LuaWindow* parent, LuaWindow* child, HW
 
 	if (type == CBN_SELCHANGE) {
 
-		int ItemIndex = SendMessageW((HWND)lParam, (UINT)CB_GETCURSEL, (WPARAM)0, (LPARAM)0);
+		int ItemIndex = (int)SendMessageW((HWND)lParam, (UINT)CB_GETCURSEL, (WPARAM)0, (LPARAM)0);
 
 		if (!IsBox(child)) {
 			return;
@@ -43,7 +43,7 @@ void DoCustomListBoxEvent(lua_State* L, LuaWindow* parent, LuaWindow* child, HWN
 
 	if (type == LBN_SELCHANGE) {
 
-		int ItemIndex = SendMessageW((HWND)lParam, (UINT)LB_GETCURSEL, (WPARAM)0, (LPARAM)0);
+		int ItemIndex = (int)SendMessageW((HWND)lParam, (UINT)LB_GETCURSEL, (WPARAM)0, (LPARAM)0);
 
 		if (!IsBox(child)) {
 			return;
@@ -91,7 +91,7 @@ void DoCustomListViewEvent(lua_State* L, LuaWindow* parent, LuaWindow* child, HW
 int SetSelectedIndex(lua_State* L) {
 
 	LuaWindow* window = lua_tonwindow(L, 1);
-	int index = luaL_optinteger(L, 2, 0) - 1;
+	int index = (int)luaL_optinteger(L, 2, 0) - 1;
 
 	if (!IsBox(window)) {
 
@@ -125,13 +125,13 @@ int GetSelectedIndex(lua_State* L) {
 	int ItemIndex = -1;
 
 	if (window->custom->type == WINDOW_TYPE_COMBOBOX) {
-		ItemIndex = SendMessageW(window->handle, (UINT)CB_GETCURSEL, (WPARAM)0, (LPARAM)0);
+		ItemIndex = (int)SendMessageW(window->handle, (UINT)CB_GETCURSEL, (WPARAM)0, (LPARAM)0);
 	}
 	else if (window->custom->type == WINDOW_TYPE_LISTVIEW) {
 		ItemIndex = ListView_GetNextItem(window->handle, -1, LVNI_SELECTED);
 	}
 	else if (window->custom->type == WINDOW_TYPE_LISTBOX) {
-		ItemIndex = SendMessageW(window->handle, (UINT)LB_GETCURSEL, (WPARAM)0, (LPARAM)0);
+		ItemIndex = (int)SendMessageW(window->handle, (UINT)LB_GETCURSEL, (WPARAM)0, (LPARAM)0);
 	}
 
 	lua_pushinteger(L, ItemIndex + 1);
@@ -176,19 +176,19 @@ int GetBoxItems(lua_State* L) {
 	size_t len, items;
 	size_t bufferlen = 0;
 	wchar_t* data = NULL;
-	int column = luaL_optinteger(L, 2, 1) - 1;
+	int column = (int)luaL_optinteger(L, 2, 1) - 1;
 
 	if (window->custom->type == WINDOW_TYPE_COMBOBOX) {
-		items = SendMessageW(window->handle, (UINT)CB_GETCOUNT, (WPARAM)0, (LPARAM)0);
-		lua_createtable(L, items, 0);
+		items = (int)SendMessageW(window->handle, (UINT)CB_GETCOUNT, (WPARAM)0, (LPARAM)0);
+		lua_createtable(L, (int)items, 0);
 	}
 	else if (window->custom->type == WINDOW_TYPE_LISTVIEW) {
 		items = ListView_GetItemCount(window->handle);
-		lua_createtable(L, items, 0);
+		lua_createtable(L, (int)items, 0);
 	}
 	else if (window->custom->type == WINDOW_TYPE_LISTBOX) {
-		items = SendMessageW(window->handle, (UINT)LB_GETCOUNT, (WPARAM)0, (LPARAM)0);
-		lua_createtable(L, items, 0);
+		items = (int)SendMessageW(window->handle, (UINT)LB_GETCOUNT, (WPARAM)0, (LPARAM)0);
+		lua_createtable(L, (int)items, 0);
 	}
 	else {
 		return 0;
@@ -199,7 +199,7 @@ int GetBoxItems(lua_State* L) {
 	for (size_t i = 0; i < items; i++)
 	{
 		if (window->custom->type == WINDOW_TYPE_COMBOBOX) {
-			len = SendMessageW(window->handle, (UINT)CB_GETLBTEXTLEN, (WPARAM)i, (LPARAM)0);
+			len = (int)SendMessageW(window->handle, (UINT)CB_GETLBTEXTLEN, (WPARAM)i, (LPARAM)0);
 		}
 		else if (window->custom->type == WINDOW_TYPE_LISTVIEW) {
 			len = 1024;
@@ -224,16 +224,16 @@ int GetBoxItems(lua_State* L) {
 		}
 
 		if (window->custom->type == WINDOW_TYPE_COMBOBOX) {
-			len = SendMessageW(window->handle, (UINT)CB_GETLBTEXT, (WPARAM)i, (LPARAM)data);
+			len = (int)SendMessageW(window->handle, (UINT)CB_GETLBTEXT, (WPARAM)i, (LPARAM)data);
 		}
 		if (window->custom->type == WINDOW_TYPE_LISTVIEW) {
 			item.iSubItem = column;
 			item.pszText = data;
-			item.cchTextMax = len;
-			len = SendMessageW((window->handle), LVM_GETITEMTEXTW, (WPARAM)(i), (LPARAM)(LV_ITEM*)&item);
+			item.cchTextMax = (int)len;
+			len = (int)SendMessageW((window->handle), LVM_GETITEMTEXTW, (WPARAM)(i), (LPARAM)(LV_ITEM*)&item);
 		}
 
-		lua_pushwchar(L, data, len);
+		lua_pushwchar(L, data, (int)len);
 		lua_rawseti(L, -2, i + 1);
 	}
 
@@ -247,8 +247,8 @@ int GetBoxItems(lua_State* L) {
 int ListviewSetItemText(lua_State* L) {
 
 	LuaWindow* window = lua_tonwindow(L, 1);
-	int row = luaL_checkinteger(L, 2) - 1;
-	int column = luaL_checkinteger(L, 3) - 1;
+	int row = (int)luaL_checkinteger(L, 2) - 1;
+	int column = (int)luaL_checkinteger(L, 3) - 1;
 	LuaWChar* data = lua_stringtowchar(L, 4);
 
 	if (!IsBox(window) || window->custom->type != WINDOW_TYPE_LISTVIEW) {
@@ -262,7 +262,7 @@ int ListviewSetItemText(lua_State* L) {
 	item.iItem = row;
 	item.iSubItem = column;
 	item.pszText = data->str;
-	item.cchTextMax = data->len;
+	item.cchTextMax = (int)data->len;
 
 	SendMessageW(window->handle, LVM_SETITEMTEXTW, row, (LPARAM)&item);
 
@@ -272,8 +272,8 @@ int ListviewSetItemText(lua_State* L) {
 int SetViewlistColumnWidth(lua_State* L) {
 
 	LuaWindow* window = lua_tonwindow(L, 1);
-	int column = luaL_checkinteger(L, 2) - 1;
-	int width = luaL_checkinteger(L, 3);
+	int column = (int)luaL_checkinteger(L, 2) - 1;
+	int width = (int)luaL_checkinteger(L, 3);
 
 	if (!IsBox(window) || window->custom->type != WINDOW_TYPE_LISTVIEW) {
 
@@ -301,16 +301,16 @@ int AddBoxItem(lua_State* L) {
 	int ItemIndex = 0;
 
 	if (window->custom->type == WINDOW_TYPE_COMBOBOX) {
-		len = SendMessageW(window->handle, (UINT)CB_GETCOUNT, (WPARAM)0, (LPARAM)0);
-		ItemIndex = SendMessageW(window->handle, (UINT)CB_GETCURSEL, (WPARAM)0, (LPARAM)0);
+		len = (int)SendMessageW(window->handle, (UINT)CB_GETCOUNT, (WPARAM)0, (LPARAM)0);
+		ItemIndex = (int)SendMessageW(window->handle, (UINT)CB_GETCURSEL, (WPARAM)0, (LPARAM)0);
 		SendMessageW(window->handle, CB_SETCURSEL, (WPARAM)len, (LPARAM)0);
 	}
 	else if (window->custom->type == WINDOW_TYPE_LISTVIEW) {
 		len = ListView_GetItemCount(window->handle);
 	}
 	else {
-		len = SendMessageW(window->handle, (UINT)LB_GETCOUNT, (WPARAM)0, (LPARAM)0);
-		ItemIndex = SendMessageW(window->handle, (UINT)LB_GETCURSEL, (WPARAM)0, (LPARAM)0);
+		len = (int)SendMessageW(window->handle, (UINT)LB_GETCOUNT, (WPARAM)0, (LPARAM)0);
+		ItemIndex = (int)SendMessageW(window->handle, (UINT)LB_GETCURSEL, (WPARAM)0, (LPARAM)0);
 		SendMessageW(window->handle, LB_SETCURSEL, (WPARAM)len, (LPARAM)0);
 	}
 
@@ -340,9 +340,9 @@ int AddBoxItem(lua_State* L) {
 				lua_rawgeti(L, -1, i + 1);
 
 				data = lua_stringtowchar(L, -1);
-				item.iSubItem = i;
+				item.iSubItem = (int)i;
 				item.pszText = data->str;
-				item.cchTextMax = data->len;
+				item.cchTextMax = (int)data->len;
 
 				SendMessageW(window->handle, LVM_SETITEMTEXTW, 0, (LPARAM)&item);
 
@@ -419,10 +419,10 @@ int CreateCustomLuaListView(lua_State* L) {
 	{
 		lua_rawgeti(L, -1, i + 1);
 		data = lua_stringtowchar(L, -1);
-		lvc.iSubItem = i;
+		lvc.iSubItem = (int)i;
 		lvc.pszText = data->str;
-		lvc.cchTextMax = data->len;
-		lvc.cx = luaL_optnumber(L, 4, 0) / len;
+		lvc.cchTextMax = (int)data->len;
+		lvc.cx = (int)(luaL_optnumber(L, 4, 0) / len);
 		lvc.fmt = LVCFMT_LEFT;
 
 		SendMessageW((hwnd), LVM_INSERTCOLUMNW, (WPARAM)(int)(i), (LPARAM)(const LV_COLUMN*)(&lvc));

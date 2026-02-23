@@ -6,7 +6,7 @@
 #define ImTextureID ImU64
 #include "./Imgui/imgui.h"
 
-typedef struct ImguiElement;
+struct ImguiElement;
 
 //--- Interface
 
@@ -94,7 +94,7 @@ extern bool windowExists;
 #define IMGUI_TYPE_LUA 7
 #define IMGUI_TYPE_MAX 7
 
-typedef struct ImguiElement;
+struct ImguiElement;
 typedef void (*ImguiElementFree) (ImguiElement*);
 
 int LuaImGuiInputTextCallback(ImGuiInputTextCallbackData* data);
@@ -236,4 +236,4 @@ int GetAllValues(lua_State* L);
 
 ImguiElement* AddElement(LuaImgui* ui, const char* name, int type);
 ImguiElement* GetElement(LuaImgui* ui, const char* name, int type);
-bool RemoveElement(LuaImgui* ui, const char* name, int type);
+bool RemoveElement(LuaImgui* ui, const char* name, int type);bool RemoveElement(LuaImgui* ui, const char* name, int type);

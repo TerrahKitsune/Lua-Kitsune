@@ -6,6 +6,8 @@
 #define NETEVENT_SEND 3
 #define NETEVENT_RECEIVE 4
 
+#pragma warning(push)
+#pragma warning(disable: 4200)
 typedef struct NetEvent {
 
 	SOCKET s;
@@ -13,5 +15,6 @@ typedef struct NetEvent {
 	int len;
 	char data[];
 }NetEvent;
+#pragma warning(pop)
 
 NetEvent * NetEvent_Create(SOCKET s, int type, const char * data, int len);

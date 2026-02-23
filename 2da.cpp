@@ -410,7 +410,7 @@ int twoda_gc(lua_State *L) {
 
 int twoda_tostring(lua_State *L) {
 	char tim[100];
-	sprintf(tim, "2DA: 0x%08X", lua_totwoda(L, 1));
+	sprintf(tim, "2DA: %p", (void*)lua_totwoda(L, 1));
 	lua_pushfstring(L, tim);
 	return 1;
 }

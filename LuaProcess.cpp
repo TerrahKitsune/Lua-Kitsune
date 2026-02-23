@@ -289,7 +289,7 @@ int WriteToPipe(lua_State *L) {
 		return 1;
 	}
 
-	BOOL success = WriteFile(proc->hChildStd_IN_Wr, data, len, &written, NULL);
+	BOOL success = WriteFile(proc->hChildStd_IN_Wr, data, (DWORD)len, &written, NULL);
 
 	if (!success) {
 		lua_pop(L, lua_gettop(L));
@@ -571,7 +571,7 @@ int GetMemory(lua_State *L) {
 	GetProcessMemoryInfo(proc->processInfo.hProcess, (PROCESS_MEMORY_COUNTERS*)&pmc, sizeof(pmc));
 
 	lua_pop(L, lua_gettop(L));
-	lua_pushnumber(L, pmc.WorkingSetSize);
+	lua_pushnumber(L, (lua_Number)pmc.WorkingSetSize);
 
 	return 1;
 }
@@ -636,7 +636,7 @@ int process_gc(lua_State *L) {
 int process_tostring(lua_State *L) {
 
 	char tim[100];
-	sprintf(tim, "Process: 0x%08X", lua_toprocess(L, 1));
+	sprintf(tim, "Process: %p", (void*) lua_toprocess(L, 1));
 	lua_pushfstring(L, tim);
 	return 1;
 }

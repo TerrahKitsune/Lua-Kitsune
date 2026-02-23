@@ -72,7 +72,7 @@ void Disconnect(LuaServerThread * self, SOCKET client) {
 		if (self->Clients[i].Socket == client) {
 			index = i;
 			srvclient = &self->Clients[i];
-			queue_Enqueue(self->Events, NetEvent_Create(client, NETEVENT_DISCONNECTED, srvclient->Address, strlen(srvclient->Address)));
+			queue_Enqueue(self->Events, NetEvent_Create(client, NETEVENT_DISCONNECTED, srvclient->Address, (int)strlen(srvclient->Address)));
 			break;
 		}
 	}
@@ -118,7 +118,7 @@ DWORD WINAPI SrvProc(LPVOID lpParam) {
 							break;
 						}
 						else {
-							queue_Enqueue(self->Events, NetEvent_Create(ev->s, NETEVENT_SEND, &ev->data[total], ev->len - total));
+							queue_Enqueue(self->Events, NetEvent_Create(ev->s, NETEVENT_SEND, &ev->data[total], (int)(ev->len - total)));
 							total += read;
 						}
 
@@ -155,7 +155,7 @@ DWORD WINAPI SrvProc(LPVOID lpParam) {
 
 					self->NumbClients++;
 
-					queue_Enqueue(self->Events, NetEvent_Create(client, NETEVENT_CONNECTED, srvclient->Address, strlen(srvclient->Address)));
+					queue_Enqueue(self->Events, NetEvent_Create(client, NETEVENT_CONNECTED, srvclient->Address, (int)strlen(srvclient->Address)));
 				}
 				else {
 					ServerDisconnect(srv, client);
@@ -171,7 +171,7 @@ DWORD WINAPI SrvProc(LPVOID lpParam) {
 				disc = 0;
 				read = ServerReceive(srv, client, buffer, SRV_BUFFERSIZE, &disc);
 				if (read > 0) {
-					queue_Enqueue(self->Events, NetEvent_Create(client, NETEVENT_RECEIVE, buffer, read));
+					queue_Enqueue(self->Events, NetEvent_Create(client, NETEVENT_RECEIVE, buffer, (int)read));
 				}
 				else if (disc) {
 					Disconnect(self, client);
@@ -406,7 +406,7 @@ int luaserver_send(lua_State *L) {
 		return 1;
 	}
 
-	queue_Enqueue(thread->Send, NetEvent_Create(s, NETEVENT_SEND, data, datalen));
+	queue_Enqueue(thread->Send, NetEvent_Create(s, NETEVENT_SEND, data, (int)datalen));
 
 	list_Leave(lst);
 	lua_pop(L, lua_gettop(L));
@@ -503,7 +503,7 @@ int luaserver_gc(lua_State *L) {
 
 int luaserver_tostring(lua_State *L) {
 	char tim[100];
-	sprintf(tim, "LuaServer: 0x%08X", lua_toluaserver(L, 1));
+	sprintf(tim, "LuaServer: %p", (void*) lua_toluaserver(L, 1));
 	lua_pushfstring(L, tim);
 	return 1;
 }

@@ -64,7 +64,7 @@ size_t ClientReceive(Client * cli, char * buffer, size_t len, int * disconnected
 	if (!cli || cli->s == INVALID_SOCKET || !buffer || len <= 0)
 		return 0;
 
-	int result = recv(cli->s, buffer, len, NULL);
+	int result = recv(cli->s, buffer, (int)len, NULL);
 	if (result <= 0) {
 
 		cli->LastError = WSAGetLastError();
@@ -89,7 +89,7 @@ size_t ClientSend(Client * cli, char * buffer, size_t len, int * disconnected) {
 	if (!cli || cli->s == INVALID_SOCKET || !buffer || len <= 0)
 		return 0;
 	
-	int result = send(cli->s, buffer, len, NULL);
+	int result = send(cli->s, buffer, (int)len, NULL);
 	if (result <= 0) {
 
 		cli->LastError = WSAGetLastError();

@@ -50,7 +50,7 @@ int list_Add(List * list, void * data) {
 		list->alloc += 10;
 	}
 
-	int n = list->len;
+	int n = (int)list->len;
 	list->len++;
 
 	list->data[n] = data;
