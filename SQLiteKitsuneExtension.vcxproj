@@ -182,7 +182,6 @@
     <ClCompile Include="sqliteextension\dlllua.cpp" />
     <ClCompile Include="sqliteextension\dllmain.cpp" />
     <ClCompile Include="sqliteextension\executeluafunction.cpp" />
-    <ClCompile Include="sqliteextension\luawindow.cpp" />
     <ClCompile Include="sqliteextension\registerluatable.cpp" />
     <ClCompile Include="SQLite\sqlite3.c" />
     <ClCompile Include="stream.cpp" />

@@ -1,4 +1,4 @@
-# Lua Environment API Reference
+﻿# Lua Environment API Reference
 
 A comprehensive reference for all available functions in the Lua environment.
 
@@ -9,7 +9,6 @@ A comprehensive reference for all available functions in the Lua environment.
 - [Global Functions](#global-functions)
 - [Console](#console)
 - [Mutex](#mutex)
-- [Window](#window)
 - [Macro](#macro)
 - [Redis](#redis)
 - [CSV](#csv)
@@ -90,8 +89,8 @@ Retrieves the last error code as a message and code.
 
 ```lua
 nil CLS()
-fore, background GetTextColor()
-nil SetTextColor(fore, background)
+background, foreground GetTextColor()
+nil SetTextColor(background, foreground)
 int GetKey()
 bool HasKeyDown()
 nil Put(text)
@@ -115,7 +114,7 @@ Returns memory in bytes used by Lua.
 ### Application Control
 
 ```lua
-Exit()
+Exit(opt code)
 ```
 Called when GFF.exe shuts down; can also be called to shut down prematurely.
 
@@ -123,6 +122,8 @@ Called when GFF.exe shuts down; can also be called to shut down prematurely.
 
 ```lua
 string GetRegistryValue(key, subkey, entry)
+-- or on failure:
+nil, errorMessage GetRegistryValue(key, subkey, entry)
 ```
 
 **Key constants:**
@@ -150,6 +151,7 @@ Compares two strings ignoring case.
 int setenv(var, value, override)
 string (or nil) getenv(var)
 ```
+`getenv` returns an empty string when a variable is unset.
 
 ### Table Functions
 
@@ -171,9 +173,10 @@ SetTitle(newtitle)
 
 ```lua
 string or array Dns(name, full default false)
-string GetComputerName()
+string or nil GetComputerName()
 ```
-- `Dns`: Resolve DNS. If `full=true`, returns array with IPv6 and IPv4
+- `Dns`: If `full=true`, returns an array of objects with fields `Type` (`"IPV4"`/`"IPV6"`) and `IP`
+- If `full=false`, returns first IPv4 address or `nil`
 - `GetComputerName`: Retrieve fully qualified computer name
 
 ### Memory Status
@@ -263,6 +266,8 @@ nil Console.SetTitle(newtitle)
 
 ```lua
 Mutex Mutex.Open(name)
+-- or on failure:
+nil, errorCode Mutex.Open(name)
 bool Mutex:Lock(opt timeout)
 nil Mutex:Unlock()
 islocked, name, internalid Mutex:Info()
@@ -270,138 +275,10 @@ islocked, name, internalid Mutex:Info()
 
 | Function | Description |
 |----------|-------------|
-| `Open` | Opens/creates a global named mutex |
-| `Lock` | Lock mutex (waits infinitely if no timeout). Returns `true` on success |
+| `Open` | Opens/creates a named mutex (returns `nil, errorCode` on failure) |
+| `Lock` | Lock mutex (waits infinitely if no timeout). Returns `true` on success/already-held |
 | `Unlock` | Unlocks the mutex |
 | `Info` | Get mutex information |
-
----
-
-## Window
-
-### Opening Windows
-
-```lua
-array Window.Open(opt processId)
-```
-Opens all windows (or only those for a specific process). Returns array of Window objects.
-
-### Window Properties
-
-```lua
-int Window:GetID()
-Window Window:GetWindow(type)
-Window Window:GetParent()
-bool Window:GetIsFocused()
-bool Window:GetIsVisible()
-bool Window:GetIsEnabled()
-string Window:GetText()
-processId, threadId Window:GetProcessId()
-info Window:GetInfo()
-window, client Window:Size()
-string Window:GetContent()
-void Window:SetContent(newcontent)
-```
-
-**GetInfo returns:**
-- `AtomWindowType`, `XWindowBorders`, `YWindowBorders`
-- `ExStyle`, `Style`, `WindowStatus`, `CreatorVersion`
-- `Client` and `Window` objects with `Bottom`, `Left`, `Right`, `Top`
-
-**Size returns:**
-- `Window` and `Client` objects with `Bottom`, `Left`, `Right`, `Top`, `Width`, `Height`
-
-### Creating Custom Windows
-
-```lua
-Window, Coroutine Window.Create(parentwindow, classname, title, x, y, width, height, style, eventhandler)
-```
-
-**Parameters:**
-- `classname`: Unique class name for the window
-- `title`: Window title
-- `x, y`: Spawn coordinates
-- `width, height`: Window dimensions
-- `style`: [Window Styles](https://docs.microsoft.com/en-us/windows/win32/winmsg/window-styles) (default: `0xcf0000` for resizable)
-- `eventhandler`: `function(eventData) end` (may be nil)
-
-**Message object properties:** `Message` (uMsg), `WParam`, `LParam`, `ID`
-
-### Window Controls
-
-```lua
-Window Window:CreateButton(caption, x, y, width, height, function(buttonWindow, parentWindow) end)
-Window Window:CreateTextBox(content, x, y, width, height, opt multiline, opt enablescroll, function(buttonWindow, parentWindow) end)
-Window Window:CreateStaticText(content, x, y, width, height, opt align)
-Window Window:CreateComboBox(x, y, width, height, function(buttonWindow, parentWindow, index) end)
-Window Window:CreateListBox(x, y, width, height, function(buttonWindow, parentWindow, index) end)
-Window Window:CreateListView(x, y, width, height, columns, function(buttonWindow, parentWindow, index) end)
-Window Window:CreateProgressbar(x, y, width, height, opt min, opt max, opt step)
-```
-
-**Text alignment for CreateStaticText:** 0=left, 1=center, 2=right
-
-### ListView Functions
-
-```lua
-nil Window:SetListViewText(row, column, text)
-nil Window:SetListViewColumnWidth(column, width)
-```
-
-### Progressbar Functions
-
-```lua
-nil Window:StepProgressbar(opt advancement)
-int Window:GetProgressbarStep()
-```
-
-### ComboBox/ListBox Functions
-
-```lua
-nil Window:AddBoxItem(string)
-nil Window:RemoveBoxItem(index)
-array Window:GetBoxItems(opt column)
-```
-
-### Window Management
-
-```lua
-bool Window:CheckHasMessage()
-nil Window:Show(bool)
-nil Window:Move(X, Y, Width, Height)
-nil Window:Enable(bool)
-coroutine Window:GetThread()
-nil Window:SetDrawFunction(function(draw) end)
-```
-
-### Draw Object
-
-Used within `SetDrawFunction`:
-
-```lua
-int Draw:Text(text, x, y, flags)
-width, height Draw:CalcTextSize(string)
-int Draw:SetTextColor(int)
-int Draw:SetBackgroundColor(int)
-int Draw:SetBackgroundMode(mode)
-int Draw:Pixel(x, y, opt COLORREF)
-nil Draw:Bitmap(Image, x, y)
-int Draw:RgbToHex(r, g, b)
-r, g, b Draw:HexToRgb(COLORREF)
-```
-
-**Background modes:** `OPAQUE = 2`, `TRANSPARENT = 1`
-
-**Example:**
-```lua
-Window:SetDrawFunction(function(draw)
-    local offset = draw:Text("Hello world")
-    draw:SetTextColor(draw:RgbToHex(255, 0, 255))
-    draw:SetBackgroundColor(0)
-    draw:SetBackgroundMode(2)
-    offset = draw:Text("Purple text on black background", 0, offset)
-end)
-```
 
 ---
 
@@ -1045,7 +922,19 @@ nil Imgui:SetValue(tag, type, value)
 array Imgui:GetAllValues()
 bool Imgui:Tick()
 nil Imgui:Close()
+nil Imgui:Quit(opt code)
 info Imgui:Info()
+nil Imgui:Clear()
+```
+
+### Helpers
+
+```lua
+table Imgui.GetEnums()
+nil Imgui.SetClipboardText(text)
+string Imgui.GetClipboardText()
+r, g, b Imgui.Vec4ToRGB(vector4)
+vec4 Imgui.RGBToVec4(r, g, b)
 ```
 
 ### ImguiDraw Functions
@@ -1054,10 +943,12 @@ info Imgui:Info()
 ```lua
 nil ImguiDraw:SameLine(opt offsetstartx, opt spacing)
 vec2 ImguiDraw:GetCursorPos()
+vec2 ImguiDraw:GetCursorStartPos()
 nil ImguiDraw:Indent(opt w)
 nil ImguiDraw:Unindent(opt w)
 nil ImguiDraw:BeginGroup() / nil ImguiDraw:EndGroup()
 nil ImguiDraw:PushStyleVar(flag, value)
+nil ImguiDraw:PopStyleVar(opt count)
 vec2 ImguiDraw:GetWindowSize()
 nil ImguiDraw:SetNextItemWidth(width)
 ```
@@ -1100,6 +991,8 @@ nil ImguiDraw:EndChild()
 bool ImguiDraw:BeginMainMenuBar() / nil ImguiDraw:EndMainMenuBar()
 bool ImguiDraw:BeginMenu(title, disabled) / nil ImguiDraw:EndMenu()
 bool ImguiDraw:MenuItem(title)
+bool ImguiDraw:BeginTabBar(id, flags) / nil ImguiDraw:EndTabBar()
+bool ImguiDraw:BeginTabItem(label, opt tag, flags) / nil ImguiDraw:EndTabItem()
 ```
 
 **Tables:**
@@ -1114,10 +1007,12 @@ nil ImguiDraw:TableNextRow(opt flags, opt row_min_height)
 
 **Utilities:**
 ```lua
-r, g, b ImguiDraw.Vec4ToRGB(vector4)
-vec4 ImguiDraw.RGBToVec4(r, g, b)
 nil ImguiDraw:Separator()
 nil ImguiDraw:ShowDemoWindow(opt tag)
+bool ImguiDraw:IsItemHovered(opt flags)
+-- Current implementation does not return a Lua boolean:
+nil ImguiDraw:IsItemClicked(opt mousebutton)
+nil ImguiDraw:IsMouseDoubleClicked(opt mousebutton)
 ```
 
 ---

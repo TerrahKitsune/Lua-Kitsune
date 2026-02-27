@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "lua_main_incl.h"
 #include <Windows.h>
 static const char * IMAGE = "IMAGE";
@@ -21,7 +21,6 @@ LuaImage * lua_toimage(lua_State *L, int index);
 
 int lua_savetofile(lua_State *L);
 int lua_screenshot(lua_State *L);
-int lua_screenshotwindow(lua_State* L);
 int lua_getpixels(lua_State *L);
 int lua_setpixels(lua_State *L);
 int lua_loadfromfile(lua_State *L);
@@ -34,4 +33,4 @@ int lua_getpixel(lua_State *L);
 int lua_setpixel(lua_State *L);
 
 int image_gc(lua_State *L);
-int image_tostring(lua_State *L);
+int image_tostring(lua_State *L);int image_tostring(lua_State *L);

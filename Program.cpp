@@ -1,17 +1,23 @@
-#ifdef _DEBUG
+﻿#ifdef _DEBUG
 #define _CRTDBG_MAP_ALLOC
 #endif
 #ifndef _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 
+// WinSock2 must be included before windows.h or any headers that include it
+#include <WinSock2.h>
+#include <Windows.h>
+
+// OpenSSL headers
+#include "openssl/err.h"
+#include "openssl/evp.h"
+#include "openssl/ssl.h"
+
 #include "mem.h"
 #include "lua_main_incl.h" 
-#include "networking.h"
 #include <conio.h>
 #include "GFFMain.h"
-#include <windows.h>
-#include "objbase.h"
 #include "TimerMain.h"
 #include "MySQLMain.h"
 #include "lua_misc.h"
@@ -21,7 +27,6 @@
 #include "MD5Main.h"
 #include "HttpMain.h"
 #include "ProcessMain.h"
-#include "Http.h"
 #include "Shellapi.h"
 #include "LuaClientMain.h"
 #include "LuaServerMain.h"
@@ -46,14 +51,12 @@
 #include "keybifmain.h"
 #include "LuaBinaryTreeMain.h"
 #include "MacroMain.h"
-#include "WindowMain.h"
 #include "wcharmain.h"
 #include "LuaCsvMain.h"
 #include <crtdbg.h>
 #include <cassert>
 #include "LuaArchiveMain.h"
 #include "LuaImguiMain.h"
-#include "VhdMain.h"
 #include "RedisMain.h"
 #include "LuaTTSMain.h"
 #include "SHA1Main.h"
@@ -147,8 +150,11 @@ static int L_kbhit(lua_State *L) {
 	if (_isatty(_fileno(stdin))) {
 		lua_pushboolean(L, _kbhit());
 	}
+	else if (feof(stdin)) {
+		lua_pushboolean(L, 1);
+	}
 	else {
-		lua_pushboolean(L, !feof(stdin));
+		lua_pushboolean(L, 0);
 	}
 
 	return 1;
@@ -399,9 +405,13 @@ static int L_GetReg(lua_State *L) {
 
 	DWORD max = 1048576;
 	char * buffer = (char*)gff_malloc(max);
-	if (!buffer)
+	if (!buffer) {
 		luaL_error(L, "Unable to allocate memory for readbuffer in GetReg");
+		return 0;
+	}
+
 	memset(buffer, 0, max);
+
 	LSTATUS status = RegGetValue(key, luaL_checkstring(L, 2), luaL_checkstring(L, 3), RRF_RT_ANY, nullptr, buffer, &max);
 	if (status == ERROR_SUCCESS) {
 		lua_pop(L, lua_gettop(L));
@@ -580,8 +590,6 @@ int main(int argc, char *argv[]) {
 	lua_setglobal(L, "BinaryTree");
 	luaopen_macro(L);
 	lua_setglobal(L, "Macro");
-	luaopen_window(L);
-	lua_setglobal(L, "Window");
 	luaopen_wchar(L);
 	lua_setglobal(L, "Wchar");
 	luaopen_csv(L);
@@ -590,8 +598,6 @@ int main(int argc, char *argv[]) {
 	lua_setglobal(L, "Archive");
 	luaopen_imgui(L);
 	lua_setglobal(L, "Imgui");
-	luaopen_vhd(L);
-	lua_setglobal(L, "Vhd");
 	luaopen_redis(L);
 	lua_setglobal(L, "Redis");
 	luaopen_tts(L);
@@ -661,7 +667,7 @@ int main(int argc, char *argv[]) {
 		if (luaL_loadfile(L, file) != 0) {
 			puts(lua_tostring(L, 1));
 			lua_pop(L, 1);
-			_getch();
+			(void)_getch();
 		}
 		else if (lua_pcall(L, 0, 10, NULL) != 0) {
 			puts(lua_tostring(L, 1));
@@ -709,20 +715,29 @@ int main(int argc, char *argv[]) {
 	}
 	else {
 
-		char buf[65536];
-		SetConsoleTitle("GFF");
+		const size_t bufsize = 65536;
+		char* buf = (char*)gff_malloc(bufsize);
+		if (!buf) {
+			fprintf(stderr, "Failed to allocate input buffer\n");
+			ret = -1;
+		}
+		else {
+			SetConsoleTitle("GFF");
 
-		while (ReadStdIn(buf, sizeof(buf)) != NULL) {
+			while (ReadStdIn(buf, bufsize) != NULL) {
 
-			int error = luaL_loadbuffer(L, buf, strlen(buf), "line") ||
-				lua_pcall(L, 0, 0, 0);
-			if (error) {
-				fprintf(stderr, "%s\n", lua_tostring(L, -1));
-				fflush(stderr);
-				lua_pop(L, 1);
+				int error = luaL_loadbuffer(L, buf, strlen(buf), "line") ||
+					lua_pcall(L, 0, 0, 0);
+				if (error) {
+					fprintf(stderr, "%s\n", lua_tostring(L, -1));
+					fflush(stderr);
+					lua_pop(L, 1);
+				}
+
+				lua_pop(L, lua_gettop(L));
 			}
 
-			lua_pop(L, lua_gettop(L));
+			gff_free(buf);
 		}
 	}
 

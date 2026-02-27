@@ -301,13 +301,10 @@
     <Filter Include="Macro\Source Files">
       <UniqueIdentifier>{fb10a103-0140-4978-a73d-6e3fb45b65fc}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Windows">
       <UniqueIdentifier>{f768c589-1409-4dbd-a1da-c751af32ede3}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Windows\Header Files">
       <UniqueIdentifier>{95239f79-4dac-442a-b933-4e52bbe1adde}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Windows\Source Files">
       <UniqueIdentifier>{5b5ea10e-5262-4243-8a92-dde4fe5a8c06}</UniqueIdentifier>
     </Filter>
     <Filter Include="LuaWchar">
@@ -384,6 +381,9 @@
     </Filter>
     <Filter Include="LuaSHA1\Source Files">
       <UniqueIdentifier>{1f0f5f4b-8350-4ae9-9c61-bacfaf063fc4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="_Tests">
+      <UniqueIdentifier>{615e3036-5eb2-4245-9114-67685df43186}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -648,22 +648,16 @@
     <ClCompile Include="macro.cpp">
       <Filter>Macro\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="WindowMain.cpp">
       <Filter>Windows</Filter>
     </ClCompile>
-    <ClCompile Include="luawindow.cpp">
       <Filter>Windows\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="customwindow.cpp">
       <Filter>Windows\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="customdrawing.cpp">
       <Filter>Windows\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="custombutton.cpp">
       <Filter>Windows\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="customtextbox.cpp">
       <Filter>Windows\Source Files</Filter>
     </ClCompile>
     <ClCompile Include="wcharmain.cpp">
@@ -672,10 +666,8 @@
     <ClCompile Include="luawchar.cpp">
       <Filter>LuaWchar\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="customcombobox.cpp">
       <Filter>Windows\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="customprogressbar.cpp">
       <Filter>Windows\Source Files</Filter>
     </ClCompile>
     <ClCompile Include="luacsv.cpp">
@@ -728,12 +720,6 @@
     </ClCompile>
     <ClCompile Include="LuaImguiEnums.cpp">
       <Filter>Imgui\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="vhd.cpp">
-      <Filter>LuaVhd\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="VhdMain.cpp">
-      <Filter>LuaVhd</Filter>
     </ClCompile>
     <ClCompile Include="RedisMain.cpp">
       <Filter>LuaRedis</Filter>
@@ -1145,22 +1131,16 @@
     <ClInclude Include="macro.h">
       <Filter>Macro\Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="WindowMain.h">
       <Filter>Windows</Filter>
     </ClInclude>
-    <ClInclude Include="luawindow.h">
       <Filter>Windows\Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="customwindow.h">
       <Filter>Windows\Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="customdrawing.h">
       <Filter>Windows\Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="custombutton.h">
       <Filter>Windows\Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="customtextbox.h">
       <Filter>Windows\Header Files</Filter>
     </ClInclude>
     <ClInclude Include="wcharmain.h">
@@ -1169,10 +1149,8 @@
     <ClInclude Include="luawchar.h">
       <Filter>LuaWchar\Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="customcombobox.h">
       <Filter>Windows\Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="customprogressbar.h">
       <Filter>Windows\Header Files</Filter>
     </ClInclude>
     <ClInclude Include="luacsv.h">
@@ -1225,12 +1203,6 @@
     </ClInclude>
     <ClInclude Include="Imgui\imgui_impl_dx12.h">
       <Filter>Imgui\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="vhd.h">
-      <Filter>LuaVhd\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="VhdMain.h">
-      <Filter>LuaVhd</Filter>
     </ClInclude>
     <ClInclude Include="RedisMain.h">
       <Filter>LuaRedis</Filter>
@@ -1393,5 +1365,139 @@
       <Filter>Lua</Filter>
     </None>
     <None Include="packages.config" />
+    <None Include="tests\utils.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\run_all.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="Lua functions.md" />
+    <None Include="tests\aes.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\archive.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\base64.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\binarytree.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\client.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\console.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\csv.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\env.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\erf.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\fileasync.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\filesystem.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\ftp.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\gff.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\hashing.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\helpers.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\http.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\image.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\imgui.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\json.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\kafka.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\keybif.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\linkedlist.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\macro.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\mutex.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\mysql.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\odbc.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\zip.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\pipe.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\process.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\redis.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\server.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\services.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\socket.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\sound.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\sqlite.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\stream.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\timer.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\tlk.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\tts.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\twoda.lua">
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\wchar.lua">
+      <Filter>_Tests</Filter>
+    </None>
+      <Filter>_Tests</Filter>
+    </None>
+    <None Include="tests\imgui_simple.lua" />
+    <None Include=".github\copilot-instructions.md" />
   </ItemGroup>
 </Project>
