@@ -94,11 +94,13 @@ int MainloopImguiWindow(lua_State* L) {
 
 	imgui->isInRender = true;
 	int result = lua_pcall(L, 1, 0, NULL);
+	imgui->isInRender = false;
+
+	// Check if the window was destroyed from the Lua code
 	if (imgui->hWnd == INVALID_HANDLE_VALUE) {
 		lua_pushboolean(L, FALSE);
 		return 1;
 	}
-	imgui->isInRender = false;
 
 	if (result) {
 		const char* err = lua_tostring(L, -1);
