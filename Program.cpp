@@ -39,7 +39,6 @@
 #include "ODBCMain.h"
 #include "WinServicesMain.h"
 #include "luasocketmain.h"
-#include "lualinkedlistmain.h"
 #include "luakafkamain.h"
 #include "Sha256Main.h"
 #include "LuaFTPMain.h"
@@ -49,7 +48,6 @@
 #include "luajsonmain.h"
 #include "base64.h"
 #include "keybifmain.h"
-#include "LuaBinaryTreeMain.h"
 #include "MacroMain.h"
 #include "wcharmain.h"
 #include "LuaCsvMain.h"
@@ -566,8 +564,6 @@ int main(int argc, char *argv[]) {
 	lua_setglobal(L, "Services");
 	luaopen_socket(L);
 	lua_setglobal(L, "Socket");
-	luaopen_linkedlist(L);
-	lua_setglobal(L, "LinkedList");
 	luaopen_kafka(L);
 	lua_setglobal(L, "Kafka");
 	luaopen_sha256(L);
@@ -586,8 +582,6 @@ int main(int argc, char *argv[]) {
 	lua_setglobal(L, "Base64");
 	luaopen_keybif(L);
 	lua_setglobal(L, "KeyBif");
-	luaopen_binarytree(L);
-	lua_setglobal(L, "BinaryTree");
 	luaopen_macro(L);
 	lua_setglobal(L, "Macro");
 	luaopen_wchar(L);

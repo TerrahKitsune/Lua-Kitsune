@@ -21,8 +21,6 @@ A comprehensive reference for all available functions in the Lua environment.
 - [Stream](#stream)
 - [TTS](#tts)
 - [Env](#env)
-- [BinaryTree](#binarytree)
-- [LinkedList](#linkedlist)
 - [Zip](#zip)
 - [Server](#server)
 - [Client](#client)
@@ -690,49 +688,6 @@ table Env.Create(name)
 table Env.Get(name)
 table Env.GetOrCreate(name)
 table Env.Meta()
-```
-
----
-
-## BinaryTree
-
-```lua
-BinaryTree BinaryTree.Create()
-int BinaryTree:Count()
-bool BinaryTree:Add(key, value)
-bool BinaryTree:Delete(key)
-value BinaryTree:Iterate(func, opt order)
-value BinaryTree:Get(key)
-```
-
-**Iteration order:** 0=pre-order (default), 1=in-order, 2=post-order
-
----
-
-## LinkedList
-
-```lua
-LinkedList LinkedList.New()
-int LinkedList:AddFirst(data)
-int LinkedList:AddLast(data)
-nil LinkedList:Clear()
-iterator LinkedList:Forward()
-iterator LinkedList:Backward()
-data LinkedList:GetFromIndex(index)
-data LinkedList:GetFromKey(key)
-data LinkedList:Remove(index)
-int LinkedList:Insert(index, data)
-number LinkedList:Count()
-int LinkedList:IndexFromKey(key)
-int LinkedList:KeyFromIndex(index)
-int LinkedList:AddBefore(key, data)
-int LinkedList:AddAfter(key, data)
-```
-
-**Iterator usage:**
-```lua
-for index, value, key in LinkedList:Forward() do ... end
-for index, value, key in LinkedList:Backward() do ... end
 ```
 
 ---

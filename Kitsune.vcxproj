@@ -111,7 +111,6 @@
     <ClCompile Include="LuaArchive.cpp" />
     <ClCompile Include="LuaArchiveMain.cpp" />
     <ClCompile Include="base64.cpp" />
-    <ClCompile Include="BinaryTree.cpp" />
     <ClCompile Include="Client.cpp" />
     <ClCompile Include="Erf.cpp" />
     <ClCompile Include="ERFMain.cpp" />
@@ -132,10 +131,8 @@
     <ClCompile Include="keybif.cpp" />
     <ClCompile Include="KeyBifMain.cpp" />
     <ClCompile Include="keyfile.cpp" />
-    <ClCompile Include="LinkedList.cpp" />
     <ClCompile Include="luaaes.cpp" />
     <ClCompile Include="LuaAesMain.cpp" />
-    <ClCompile Include="LuaBinaryTree.cpp" />
     <ClCompile Include="luacsv.cpp" />
     <ClCompile Include="LuaCsvMain.cpp" />
     <ClCompile Include="LuaFTP.cpp" />
@@ -151,8 +148,6 @@
     <ClCompile Include="luakafkamain.cpp" />
     <ClCompile Include="luakafkamessage.cpp" />
     <ClCompile Include="luakafkatopic.cpp" />
-    <ClCompile Include="LuaLinkedList.cpp" />
-    <ClCompile Include="LuaLinkedListMain.cpp" />
     <ClCompile Include="LuaMutex.cpp" />
     <ClCompile Include="LuaMutexMain.cpp" />
     <ClCompile Include="LuaSHA1.cpp" />
@@ -213,7 +208,6 @@
     <ClCompile Include="SHA1Main.cpp" />
     <ClCompile Include="sha256.c" />
     <ClCompile Include="Sha256Main.cpp" />
-    <ClCompile Include="LuaBinaryTreeMain.cpp" />
     <ClCompile Include="stream.cpp" />
     <ClCompile Include="StreamMain.cpp" />
     <ClCompile Include="wcharmain.cpp" />
@@ -273,7 +267,6 @@
     <ClInclude Include="LuaArchive.h" />
     <ClInclude Include="LuaArchiveMain.h" />
     <ClInclude Include="base64.h" />
-    <ClInclude Include="BinaryTree.h" />
     <ClInclude Include="Client.h" />
     <ClInclude Include="Erf.h" />
     <ClInclude Include="ERFMain.h" />
@@ -294,11 +287,8 @@
     <ClInclude Include="keybif.h" />
     <ClInclude Include="KeyBifMain.h" />
     <ClInclude Include="keyfile.h" />
-    <ClInclude Include="LinkedList.h" />
     <ClInclude Include="luaaes.h" />
     <ClInclude Include="LuaAesMain.h" />
-    <ClInclude Include="LuaBinaryTree.h" />
-    <ClInclude Include="LuaBinaryTreeMain.h" />
     <ClInclude Include="luacsv.h" />
     <ClInclude Include="LuaCsvMain.h" />
     <ClInclude Include="LuaFTP.h" />
@@ -312,8 +302,6 @@
     <ClInclude Include="luakafkamain.h" />
     <ClInclude Include="luakafkamessage.h" />
     <ClInclude Include="luakafkatopic.h" />
-    <ClInclude Include="LuaLinkedList.h" />
-    <ClInclude Include="LuaLinkedListMain.h" />
     <ClInclude Include="LuaMutex.h" />
     <ClInclude Include="LuaMutexMain.h" />
     <ClInclude Include="LuaSHA1.h" />
@@ -432,7 +420,6 @@
     <None Include="tests\aes.lua" />
     <None Include="tests\archive.lua" />
     <None Include="tests\base64.lua" />
-    <None Include="tests\binarytree.lua" />
     <None Include="tests\client.lua" />
     <None Include="tests\console.lua" />
     <None Include="tests\csv.lua" />
@@ -451,7 +438,6 @@
     <None Include="tests\json.lua" />
     <None Include="tests\kafka.lua" />
     <None Include="tests\keybif.lua" />
-    <None Include="tests\linkedlist.lua" />
     <None Include="tests\macro.lua" />
     <None Include="tests\mutex.lua" />
     <None Include="tests\mysql.lua" />
