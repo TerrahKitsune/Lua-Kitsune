@@ -301,12 +301,6 @@
     <Filter Include="Macro\Source Files">
       <UniqueIdentifier>{fb10a103-0140-4978-a73d-6e3fb45b65fc}</UniqueIdentifier>
     </Filter>
-      <UniqueIdentifier>{f768c589-1409-4dbd-a1da-c751af32ede3}</UniqueIdentifier>
-    </Filter>
-      <UniqueIdentifier>{95239f79-4dac-442a-b933-4e52bbe1adde}</UniqueIdentifier>
-    </Filter>
-      <UniqueIdentifier>{5b5ea10e-5262-4243-8a92-dde4fe5a8c06}</UniqueIdentifier>
-    </Filter>
     <Filter Include="LuaWchar">
       <UniqueIdentifier>{3cce908f-8005-4bb8-8ea7-41325772c947}</UniqueIdentifier>
     </Filter>
@@ -648,27 +642,11 @@
     <ClCompile Include="macro.cpp">
       <Filter>Macro\Source Files</Filter>
     </ClCompile>
-      <Filter>Windows</Filter>
-    </ClCompile>
-      <Filter>Windows\Source Files</Filter>
-    </ClCompile>
-      <Filter>Windows\Source Files</Filter>
-    </ClCompile>
-      <Filter>Windows\Source Files</Filter>
-    </ClCompile>
-      <Filter>Windows\Source Files</Filter>
-    </ClCompile>
-      <Filter>Windows\Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="wcharmain.cpp">
       <Filter>LuaWchar</Filter>
     </ClCompile>
     <ClCompile Include="luawchar.cpp">
       <Filter>LuaWchar\Source Files</Filter>
-    </ClCompile>
-      <Filter>Windows\Source Files</Filter>
-    </ClCompile>
-      <Filter>Windows\Source Files</Filter>
     </ClCompile>
     <ClCompile Include="luacsv.cpp">
       <Filter>LuaCSV\Source Files</Filter>
@@ -1131,27 +1109,11 @@
     <ClInclude Include="macro.h">
       <Filter>Macro\Header Files</Filter>
     </ClInclude>
-      <Filter>Windows</Filter>
-    </ClInclude>
-      <Filter>Windows\Header Files</Filter>
-    </ClInclude>
-      <Filter>Windows\Header Files</Filter>
-    </ClInclude>
-      <Filter>Windows\Header Files</Filter>
-    </ClInclude>
-      <Filter>Windows\Header Files</Filter>
-    </ClInclude>
-      <Filter>Windows\Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="wcharmain.h">
       <Filter>LuaWchar</Filter>
     </ClInclude>
     <ClInclude Include="luawchar.h">
       <Filter>LuaWchar\Header Files</Filter>
-    </ClInclude>
-      <Filter>Windows\Header Files</Filter>
-    </ClInclude>
-      <Filter>Windows\Header Files</Filter>
     </ClInclude>
     <ClInclude Include="luacsv.h">
       <Filter>LuaCSV\Header Files</Filter>
@@ -1493,8 +1455,6 @@
       <Filter>_Tests</Filter>
     </None>
     <None Include="tests\wchar.lua">
-      <Filter>_Tests</Filter>
-    </None>
       <Filter>_Tests</Filter>
     </None>
     <None Include="tests\imgui_simple.lua" />
