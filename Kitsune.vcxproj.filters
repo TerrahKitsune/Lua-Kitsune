@@ -184,15 +184,6 @@
     <Filter Include="LuaWindowsServices\Source Files">
       <UniqueIdentifier>{f683ebd4-05ab-4408-af2a-12e600c91fc3}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaSocket">
-      <UniqueIdentifier>{f4efa851-4aff-4f16-9437-4931eaeca6b5}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaSocket\Header Files">
-      <UniqueIdentifier>{07414259-f2a5-456b-9627-472b8d5e520b}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaSocket\Source Files">
-      <UniqueIdentifier>{5477ed92-0c67-4705-bd27-adb88132c976}</UniqueIdentifier>
-    </Filter>
     <Filter Include="LuaKafka">
       <UniqueIdentifier>{e4f30f39-2b06-4efd-b027-6e6db5fd5b77}</UniqueIdentifier>
     </Filter>
@@ -1204,7 +1195,6 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <Text Include="Lua functions.txt" />
     <Text Include="main.lua" />
   </ItemGroup>
   <ItemGroup>
@@ -1345,5 +1335,6 @@
     </None>
     <None Include="tests\imgui_simple.lua" />
     <None Include=".github\copilot-instructions.md" />
+    <None Include="Extension functions.md" />
   </ItemGroup>
 </Project>

@@ -1,4 +1,4 @@
-#include "LuaImgui.h"
+﻿#include "LuaImgui.h"
 #include "Imgui/imgui_internal.h"
 
 LuaImgui* g_currentImgui = NULL;
@@ -81,6 +81,9 @@ int MainloopImguiWindow(lua_State* L) {
 		return 1;
 	}
 
+	// Set the correct ImGui context for this window
+	ImGui::SetCurrentContext(imgui->imguiContext);
+
 	// Start the Dear ImGui frame
 	ImGui_ImplDX12_NewFrame();
 	ImGui_ImplWin32_NewFrame();
@@ -91,6 +94,10 @@ int MainloopImguiWindow(lua_State* L) {
 
 	imgui->isInRender = true;
 	int result = lua_pcall(L, 1, 0, NULL);
+	if (imgui->hWnd == INVALID_HANDLE_VALUE) {
+		lua_pushboolean(L, FALSE);
+		return 1;
+	}
 	imgui->isInRender = false;
 
 	if (result) {
@@ -295,7 +302,7 @@ int CreateImguiWindow(lua_State* L) {
 	UpdateWindow(hwnd);
 
 	IMGUI_CHECKVERSION();
-	ImGui::CreateContext();
+	ui->imguiContext = ImGui::CreateContext();
 	ImGui::StyleColorsDark();
 
 	ImGui_ImplWin32_Init(hwnd);

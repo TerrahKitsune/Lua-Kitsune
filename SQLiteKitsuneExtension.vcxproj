@@ -293,9 +293,6 @@
     <None Include="packages.config" />
     <None Include="sqlitemain.lua" />
   </ItemGroup>
-  <ItemGroup>
-    <Text Include="Extension functions.txt" />
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
     <Import Project="packages\librdkafka.redist.2.12.0\build\native\librdkafka.redist.targets" Condition="Exists('packages\librdkafka.redist.2.12.0\build\native\librdkafka.redist.targets')" />

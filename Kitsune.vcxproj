@@ -391,9 +391,6 @@
     </Text>
   </ItemGroup>
   <ItemGroup>
-    <Text Include="Lua functions.txt" />
-  </ItemGroup>
-  <ItemGroup>
     <ResourceCompile Include="Kitsune.rc" />
   </ItemGroup>
   <ItemGroup>
@@ -404,6 +401,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include=".github\copilot-instructions.md" />
+    <None Include="Extension functions.md" />
     <None Include="Lua functions.md" />
     <None Include="Lua\Makefile" />
     <None Include="packages.config" />

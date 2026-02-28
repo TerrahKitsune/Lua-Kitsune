@@ -1,4 +1,4 @@
-#include "LuaImgui.h"
+﻿#include "LuaImgui.h"
 
 int LuaImguiSetClipboardText(lua_State* L) {
 
@@ -2931,9 +2931,18 @@ int imgui_gc(lua_State* L) {
 
 		WaitForLastSubmittedFrame(imgui);
 
+		// Set context before shutting down ImGui
+		if (imgui->imguiContext) {
+			ImGui::SetCurrentContext(imgui->imguiContext);
+		}
+
 		ImGui_ImplDX12_Shutdown();
 		ImGui_ImplWin32_Shutdown();
-		ImGui::DestroyContext();
+
+		if (imgui->imguiContext) {
+			ImGui::DestroyContext(imgui->imguiContext);
+			imgui->imguiContext = NULL;
+		}
 
 		CleanupDeviceD3D(imgui);
 		DestroyWindow(imgui->hWnd);

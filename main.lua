@@ -136,10 +136,9 @@ CreateGCPrint();
 collectgarbage();
 
 SetTitle("Kitsune: ".._VERSION);
-print(CRC64("123"));
 
 dofile("tests/run_all.lua");
-dofile("tests/run_all.lua");
+dofile("tests/imgui_simple.lua");
 if true then return; end
 
 local function HexToString(hexString)

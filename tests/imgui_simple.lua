@@ -5,7 +5,10 @@ local WINDOW_OPEN_TAG = "demo.window.open"
 local ENABLE_TAG = "demo.enable"
 local VOLUME_TAG = "demo.volume"
 
-local ui = Imgui.Create("Lua-Kitsune Imgui Demo", BG_TAG, 900, 600, function(draw)
+local ui
+ui = Imgui.Create("Lua-Kitsune Imgui Demo", BG_TAG, 900, 600, function(draw)
+    if not ui then return end -- Guard against nil ui during initialization
+    
     draw:SetNextWindowSize({ x = 420, y = 260 }, 4) -- ImGuiCond_FirstUseEver
 
     if draw:Begin("Simple UI", WINDOW_OPEN_TAG, 0) then

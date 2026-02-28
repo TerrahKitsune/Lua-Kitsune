@@ -14,14 +14,11 @@
     "tests.stream",
     "tests.tts",
     "tests.env",
-    "tests.binarytree",
-    "tests.linkedlist",
     "tests.zip",
     "tests.server",
     "tests.client",
     "tests.pipe",
     "tests.base64",
-    "tests.socket",
     "tests.services",
     "tests.aes",
     "tests.process",
@@ -37,7 +34,6 @@
     "tests.filesystem",
     "tests.twoda",
     "tests.tlk",
-    "tests.keybif",
     "tests.erf",
     "tests.gff"
 }

@@ -387,9 +387,6 @@
     <ClCompile Include="sha1.c">
       <Filter>Kitsune\LuaSHA1\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="sqliteextension\luawindow.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="Lua\lapi.c">
       <Filter>Lua</Filter>
     </ClCompile>
@@ -795,8 +792,5 @@
       <Filter>Lua</Filter>
     </None>
     <None Include="packages.config" />
-  </ItemGroup>
-  <ItemGroup>
-    <Text Include="Extension functions.txt" />
   </ItemGroup>
 </Project>

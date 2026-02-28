@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "lua_main_incl.h"
 #include <Windows.h>
 #include <assert.h>
@@ -55,6 +55,7 @@ typedef struct LuaImgui {
 
 	//--- Interface	end
 
+	ImGuiContext* imguiContext = NULL;
 	bool isInRender;
 	int renderFuncRef;
 	char* backgroundTag;
