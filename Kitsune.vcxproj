@@ -128,9 +128,6 @@
     <ClCompile Include="jsonencode.cpp" />
     <ClCompile Include="jsonutil.cpp" />
     <ClCompile Include="kafkahelpers.cpp" />
-    <ClCompile Include="keybif.cpp" />
-    <ClCompile Include="KeyBifMain.cpp" />
-    <ClCompile Include="keyfile.cpp" />
     <ClCompile Include="luaaes.cpp" />
     <ClCompile Include="LuaAesMain.cpp" />
     <ClCompile Include="luacsv.cpp" />
@@ -152,8 +149,6 @@
     <ClCompile Include="LuaMutexMain.cpp" />
     <ClCompile Include="LuaSHA1.cpp" />
     <ClCompile Include="LuaSha256.cpp" />
-    <ClCompile Include="luasocket.cpp" />
-    <ClCompile Include="luasocketmain.cpp" />
     <ClCompile Include="luatts.cpp" />
     <ClCompile Include="LuaTTSMain.cpp" />
     <ClCompile Include="luawchar.cpp" />
@@ -284,9 +279,6 @@
     <ClInclude Include="jsonencode.h" />
     <ClInclude Include="jsonutil.h" />
     <ClInclude Include="kafkahelpers.h" />
-    <ClInclude Include="keybif.h" />
-    <ClInclude Include="KeyBifMain.h" />
-    <ClInclude Include="keyfile.h" />
     <ClInclude Include="luaaes.h" />
     <ClInclude Include="LuaAesMain.h" />
     <ClInclude Include="luacsv.h" />
@@ -306,8 +298,6 @@
     <ClInclude Include="LuaMutexMain.h" />
     <ClInclude Include="LuaSHA1.h" />
     <ClInclude Include="LuaSha256.h" />
-    <ClInclude Include="luasocket.h" />
-    <ClInclude Include="luasocketmain.h" />
     <ClInclude Include="luatts.h" />
     <ClInclude Include="LuaTTSMain.h" />
     <ClInclude Include="luawchar.h" />
@@ -437,7 +427,6 @@
     <None Include="tests\imgui_simple.lua" />
     <None Include="tests\json.lua" />
     <None Include="tests\kafka.lua" />
-    <None Include="tests\keybif.lua" />
     <None Include="tests\macro.lua" />
     <None Include="tests\mutex.lua" />
     <None Include="tests\mysql.lua" />
@@ -448,7 +437,6 @@
     <None Include="tests\run_all.lua" />
     <None Include="tests\server.lua" />
     <None Include="tests\services.lua" />
-    <None Include="tests\socket.lua" />
     <None Include="tests\sound.lua" />
     <None Include="tests\sqlite.lua" />
     <None Include="tests\stream.lua" />

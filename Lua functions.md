@@ -26,7 +26,6 @@ A comprehensive reference for all available functions in the Lua environment.
 - [Client](#client)
 - [Pipe](#pipe)
 - [Base64](#base64)
-- [Socket](#socket)
 - [Services](#services)
 - [Aes](#aes)
 - [Process](#process)
@@ -42,7 +41,6 @@ A comprehensive reference for all available functions in the Lua environment.
 - [FileSystem](#filesystem)
 - [TWODA (2da)](#twoda)
 - [TLK](#tlk)
-- [KeyBif](#keybif)
 - [ERF](#erf)
 - [GFF](#gff)
 ---
@@ -767,34 +765,6 @@ base64string Base64.Encode(string)
 string Base64.Decode(base64string)
 string Base64.GetEncodeTable()
 void Base64.SetEncodeTable(encodetablestring)
-```
-
----
-
-## Socket
-
-### Connection
-
-```lua
-Socket Socket.Connect(address, port, family, sockettype, protocol)
-Socket Socket.Listen(port, family, sockettype, protocol)
-```
-
-**Parameters:**
-- `family`: 2=IPv4, 23=IPv6
-- `sockettype`: 1=stream, 2=datagram, 3=raw, 4=rdm, 5=seqpacket
-- `protocol`: 6=TCP, 17=UDP
-
-### Operations
-
-```lua
-bool, bool, bool, bool Socket:Select()
-bool/nil Socket:HasData()
-string Socket:Read()
-int Socket:Write(data)
-Socket Socket:Accept()
-address, port, socketid Socket:Info()
-nil Socket:Close()
 ```
 
 ---
