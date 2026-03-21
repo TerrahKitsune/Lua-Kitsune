@@ -4,6 +4,44 @@
 
 static void PushPostgresValue(lua_State* L, const char* val, int len, Oid type);
 
+static int JsonRef = LUA_NOREF;
+
+static void PushAsParamString(lua_State* L, int index) {
+
+	if (index < 0) index = lua_gettop(L) + index + 1;
+
+	if (lua_istable(L, index)) {
+
+		if (JsonRef == LUA_NOREF) {
+			lua_getglobal(L, "Json");
+			lua_pushliteral(L, "Create");
+			lua_gettable(L, -2);
+			if (lua_pcall(L, 0, 1, 0)) {
+				lua_error(L);
+				return;
+			}
+			JsonRef = luaL_ref(L, LUA_REGISTRYINDEX);
+			lua_pop(L, 1);
+		}
+
+		lua_rawgeti(L, LUA_REGISTRYINDEX, JsonRef);
+		lua_pushliteral(L, "Encode");
+		lua_gettable(L, -2);
+		lua_pushvalue(L, -2);
+		lua_pushvalue(L, index);
+
+		if (lua_pcall(L, 2, 1, 0)) {
+			lua_error(L);
+			return;
+		}
+
+		lua_remove(L, -2);
+	}
+	else {
+		luaL_tolstring(L, index, NULL);
+	}
+}
+
 LuaPostgres* lua_topostgres(lua_State* L, int index) {
 
 	LuaPostgres* pg = (LuaPostgres*)luaL_checkudata(L, index, LUAPOSTGRES);
@@ -255,8 +293,10 @@ int PostgresQuery(lua_State* L) {
 					lua_pop(L, 1);
 				}
 				else {
+					PushAsParamString(L, -1);
+
 					size_t plen;
-					const char* pval = luaL_tolstring(L, -1, &plen);
+					const char* pval = lua_tolstring(L, -1, &plen);
 
 					pg->paramValues[i] = (char*)gff_malloc(plen + 1);
 					if (!pg->paramValues[i]) {

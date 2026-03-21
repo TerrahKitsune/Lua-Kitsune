@@ -7,7 +7,7 @@ local skip = helpers.skip
 
 local pgConfig = {
     enabled = true,
-    conninfo = "host=10.9.23.252 user=postgres password=a dbname=postgres connect_timeout=5"
+    conninfo = "host=10.9.23.252 user=postgres password=hej123 dbname=postgres connect_timeout=5"
 }
 
 run("Postgres table exists", function()
@@ -154,6 +154,27 @@ run("Postgres Query with nil param (SQL NULL)", function()
     assert(ok, "Query failed: " .. tostring(err))
     local more, ferr = pg:Fetch()
     assert(not ferr, "INSERT with nulls error: " .. tostring(ferr))
+end)
+
+run("Postgres Query with table param is JSON-encoded", function()
+    local ok, err = pg:Query(
+        "INSERT INTO kitsune_test (name, num) VALUES ($1, $2)",
+        {{key = "value", count = 7}, 777}
+    )
+    assert(ok, "Query failed: " .. tostring(err))
+    local more, ferr = pg:Fetch()
+    assert(not ferr, "INSERT with table param error: " .. tostring(ferr))
+
+    pg:Query("SELECT name FROM kitsune_test WHERE num = $1", {777})
+    assert(pg:Fetch(), "expected a row")
+    local name = pg:GetRow("name")
+    assert(type(name) == "string", "expected string from JSON-encoded table, got: " .. type(name))
+    assert(name:sub(1, 1) == "{", "expected JSON object string, got: " .. name)
+    local decoded = Json.Create():Decode(name)
+    assert(decoded ~= nil, "expected valid JSON, got: " .. tostring(name))
+    assert(decoded.key == "value", "expected key='value', got: " .. tostring(decoded and decoded.key))
+    assert(decoded.count == 7, "expected count=7, got: " .. tostring(decoded and decoded.count))
+    pg:Finish()
 end)
 
 -- NULL columns
