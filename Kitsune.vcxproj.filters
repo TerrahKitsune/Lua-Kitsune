@@ -1355,5 +1355,8 @@
     <None Include="tests\postgres.lua">
       <Filter>_Tests</Filter>
     </None>
+    <None Include="rewrite_postgres.py" />
+    <None Include="write_tests.py" />
+    <None Include="update_docs.py" />
   </ItemGroup>
 </Project>

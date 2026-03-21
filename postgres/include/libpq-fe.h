@@ -77,6 +77,7 @@ extern char*          PQgetvalue(const PGresult* res, int row_number, int column
 extern int            PQgetisnull(const PGresult* res, int row_number, int column_number);
 extern int            PQgetlength(const PGresult* res, int row_number, int column_number);
 extern char*          PQfname(const PGresult* res, int field_num);
+extern int            PQfnumber(const PGresult* res, const char* field_name);
 extern Oid            PQftype(const PGresult* res, int field_num);
 
 extern char*          PQescapeLiteral(PGconn* conn, const char* str, size_t length);

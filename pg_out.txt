@@ -4,25 +4,25 @@
 [PASS]	Postgres.IsBusy returns false when idle
 [PASS]	Postgres.Query CREATE TABLE
 [PASS]	Postgres.Query INSERT
-[PASS]	Postgres.Query SELECT all rows
-[PASS]	Postgres.GetResultRow iterates rows
-[PASS]	Postgres.GetResultFields returns field metadata
-[PASS]	Postgres.QueryParams parameterized query
-[PASS]	Postgres.QueryParams with multiple params
-[PASS]	Postgres.QueryParams with nil param (NULL)
-[PASS]	Postgres non-SELECT command returns empty table
-[PASS]	Postgres empty SELECT returns empty table
-[PASS]	Postgres GetResult clears result on second call
-[PASS]	Postgres GetResultRow clears result when exhausted
-[PASS]	Postgres sequential queries clear previous result
-[PASS]	Postgres QueryParams with number param
+[PASS]	Postgres Fetch iterates rows with named columns
+[PASS]	Postgres GetRow with column index
+[PASS]	Postgres GetRow with field name
+[PASS]	Postgres Fetch loop collects all rows
+[PASS]	Postgres Query with params table
+[PASS]	Postgres Query with multiple params
+[PASS]	Postgres Query with number param
+[PASS]	Postgres Query with nil param (SQL NULL)
+[PASS]	Postgres NULL columns are nil in GetRow
+[PASS]	Postgres non-SELECT Fetch returns false
+[PASS]	Postgres empty SELECT Fetch returns false
+[PASS]	Postgres Finish discards result mid-iteration
 [PASS]	Postgres INSERT RETURNING returns rows
-[PASS]	Postgres GetResultFields with GetResultRow
-[PASS]	Postgres transaction BEGIN COMMIT
-[PASS]	Postgres IsBusy is false after GetResult
+[PASS]	Postgres sequential queries
+[PASS]	Postgres bad query Fetch returns false and errmsg
+[PASS]	Postgres IsBusy is false after Fetch
+[PASS]	Postgres transaction BEGIN ROLLBACK
 [PASS]	Postgres.EscapeValue escapes a string
-[PASS]	Postgres returns error on bad query
 [PASS]	Postgres.Query DROP TABLE cleanup
 [PASS]	Postgres.Close cleans up
 Script returned 0 results
-447.417500
+429.518500

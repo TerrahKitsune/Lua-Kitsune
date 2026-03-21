@@ -1001,16 +1001,15 @@ MySQL:Close()
 
 ## Postgres
 
-Connects to a PostgreSQL database using libpq. Queries are dispatched asynchronously on a background thread.
+Connects to a PostgreSQL database using libpq. Queries are dispatched asynchronously on a background thread and results are iterated with the same `Fetch` / `GetRow` pattern as [SQLite](#sqlite).
 
 ```lua
 Postgres Postgres.Connect(conninfo)
-bool, txt Postgres:Query(query)
-bool, txt Postgres:QueryParams(query, param1, param2, ...)
+bool, txt Postgres:Query(query, opt params)
+bool, txt Postgres:Fetch()
+table Postgres:GetRow(opt index_or_field)
+nil Postgres:Finish()
 bool Postgres:IsBusy()
-array Postgres:GetResultRow()
-array Postgres:GetResultFields()
-array Postgres:GetResult()
 string Postgres:EscapeValue(value)
 Postgres:Close()
 ```
@@ -1018,18 +1017,15 @@ Postgres:Close()
 | Function | Description |
 |----------|-------------|
 | `Connect` | Connect using a libpq connection string (e.g. `"host=localhost user=postgres password=secret dbname=mydb connect_timeout=5"`) |
-| `Query` | Dispatch an async SQL query. Returns `true` on dispatch, or `false, "Busy"` if a query is already running |
-| `QueryParams` | Dispatch a parameterized query using `$1`, `$2`, ... placeholders. Additional arguments are the parameter values; pass `nil` for SQL NULL |
+| `Query` | Dispatch an async SQL query. Returns `true` on dispatch, or `false, "Busy"` if a query is already running. Pass an optional array table as `params` for parameterized queries |
+| `Fetch` | Block until the query completes on the first call, then advance to the next row. Returns `true` if a row is available, `false` when done, or `false, errorMessage` on execution error |
+| `GetRow` | Return the current row as a hash table keyed by column name, a single column value when `index` (1-based integer) is given, or a single column value when `field` (string column name) is given. `NULL` columns are absent (`nil`) in the returned table |
+| `Finish` | Discard the current result and reset the cursor |
 | `IsBusy` | Returns `true` while a query is in progress |
-| `GetResult` | Block until query completes, return all rows as a table of tables. Returns `nil, errorMessage` on failure. Non-SELECT commands (INSERT, CREATE, UPDATE, etc.) return an empty table `{}` on success |
-| `GetResultRow` | Return the next row as an array and advance the cursor. Returns `nil` when all rows are consumed (clears the result). Returns `nil, errorMessage` on error |
-| `GetResultFields` | Return field metadata as an array of `{name, type}` tables where `type` is the PostgreSQL type OID. Call before `GetResult` or `GetResultRow` |
 | `EscapeValue` | Escape a string using `PQescapeLiteral`. The result includes surrounding single quotes (e.g. `'O''Reilly'`) |
 | `Close` | Close the connection and free all resources |
 
 ### Connection String
-
-The `conninfo` parameter is a standard libpq keyword/value connection string:
 
 ```
 "host=127.0.0.1 port=5432 user=postgres password=secret dbname=mydb connect_timeout=5"
@@ -1037,16 +1033,31 @@ The `conninfo` parameter is a standard libpq keyword/value connection string:
 
 ### Parameterized Queries
 
-Use `$1`, `$2`, ... placeholders and pass values as extra arguments to `QueryParams`. All values are sent as text; PostgreSQL performs implicit casting based on the column type.
+Pass an array table as the second argument to `Query`. The parameter count is determined automatically by scanning the SQL for `$1`, `$2`, ... placeholders. Missing or `nil` entries in the table are sent as SQL `NULL`.
 
 ```lua
-pg:QueryParams("SELECT * FROM users WHERE id = $1 AND active = $2", 42, "true")
-pg:QueryParams("INSERT INTO t (a, b, c) VALUES ($1, $2, $3)", "hello", nil, 3.14)
+pg:Query("SELECT * FROM users WHERE id = $1", {42})
+pg:Query("INSERT INTO t (a, b, c) VALUES ($1, $2, $3)", {"hello", nil, 3.14})
+```
+
+### Usage Pattern
+
+```lua
+local pg = Postgres.Connect("host=localhost user=postgres password=secret dbname=mydb")
+
+pg:Query("SELECT id, name FROM users WHERE active = $1", {true})
+while pg:Fetch() do
+    local row = pg:GetRow()   -- {id=1, name="Alice"}
+    local id  = pg:GetRow(1)  -- first column value only
+end
+
+-- Non-SELECT commands: Fetch() returns false immediately on success
+local ok = pg:Query("DELETE FROM sessions WHERE expired = true")
+local more, err = pg:Fetch()
+assert(not err, err)
 ```
 
 ### PostgreSQL Type OID Mapping
-
-`GetResult` and `GetResultRow` convert column values to Lua types based on the PostgreSQL OID:
 
 | OID | PostgreSQL type | Lua type |
 |-----|-----------------|----------|
@@ -1058,7 +1069,6 @@ pg:QueryParams("INSERT INTO t (a, b, c) VALUES ($1, $2, $3)", "hello", nil, 3.14
 | 701 | FLOAT8 (double precision) | number |
 | 1700 | NUMERIC | number |
 | all others | TEXT, VARCHAR, DATE, JSON, etc. | string |
-
 ---
 
 ## Timer
