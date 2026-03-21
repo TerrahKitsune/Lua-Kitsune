@@ -20,6 +20,7 @@
 #include "GFFMain.h"
 #include "TimerMain.h"
 #include "MySQLMain.h"
+#include "PostgresMain.h"
 #include "lua_misc.h"
 #include "LuaFileSystemMain.h"
 #include "LuaSQLiteMain.h"
@@ -530,6 +531,8 @@ int main(int argc, char *argv[]) {
 	lua_setglobal(L, "Timer");
 	luaopen_mysql(L);
 	lua_setglobal(L, "MySQL");
+	luaopen_postgres(L);
+	lua_setglobal(L, "Postgres");
 	luaopen_filesystem(L);
 	lua_setglobal(L, "FileSystem");
 	luaopen_sqlite(L);

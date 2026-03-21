@@ -1,0 +1,28 @@
+[PASS]	Postgres table exists
+[PASS]	Postgres.Connect returns instance
+[PASS]	Postgres tostring
+[PASS]	Postgres.IsBusy returns false when idle
+[PASS]	Postgres.Query CREATE TABLE
+[PASS]	Postgres.Query INSERT
+[PASS]	Postgres.Query SELECT all rows
+[PASS]	Postgres.GetResultRow iterates rows
+[PASS]	Postgres.GetResultFields returns field metadata
+[PASS]	Postgres.QueryParams parameterized query
+[PASS]	Postgres.QueryParams with multiple params
+[PASS]	Postgres.QueryParams with nil param (NULL)
+[PASS]	Postgres non-SELECT command returns empty table
+[PASS]	Postgres empty SELECT returns empty table
+[PASS]	Postgres GetResult clears result on second call
+[PASS]	Postgres GetResultRow clears result when exhausted
+[PASS]	Postgres sequential queries clear previous result
+[PASS]	Postgres QueryParams with number param
+[PASS]	Postgres INSERT RETURNING returns rows
+[PASS]	Postgres GetResultFields with GetResultRow
+[PASS]	Postgres transaction BEGIN COMMIT
+[PASS]	Postgres IsBusy is false after GetResult
+[PASS]	Postgres.EscapeValue escapes a string
+[PASS]	Postgres returns error on bad query
+[PASS]	Postgres.Query DROP TABLE cleanup
+[PASS]	Postgres.Close cleans up
+Script returned 0 results
+447.417500

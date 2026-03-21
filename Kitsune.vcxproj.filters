@@ -759,6 +759,12 @@
     <ClCompile Include="RedisStream.cpp">
       <Filter>LuaRedis\Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="LuaPostgres.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="PostgresMain.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="lua_main_incl.h">
@@ -1193,6 +1199,15 @@
     <ClInclude Include="RedisStream.h">
       <Filter>LuaRedis\Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="postgres\include\libpq-fe.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaPostgres.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="PostgresMain.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Text Include="main.lua" />
@@ -1336,5 +1351,9 @@
     <None Include="tests\imgui_simple.lua" />
     <None Include=".github\copilot-instructions.md" />
     <None Include="Extension functions.md" />
+    <None Include="fix_indent.py" />
+    <None Include="tests\postgres.lua">
+      <Filter>_Tests</Filter>
+    </None>
   </ItemGroup>
 </Project>

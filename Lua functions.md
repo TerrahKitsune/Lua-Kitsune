@@ -33,6 +33,7 @@ A comprehensive reference for all available functions in the Lua environment.
 - [HTTP](#http)
 - [Hashing (SHA256, MD5, SHA1)](#hashing)
 - [MySQL](#mysql)
+- [Postgres](#postgres)
 - [Timer](#timer)
 - [SQLite](#sqlite)
 - [Image](#image)
@@ -995,6 +996,68 @@ array MySQL:GetResultFields()
 array MySQL:GetResult()
 MySQL:Close()
 ```
+
+---
+
+## Postgres
+
+Connects to a PostgreSQL database using libpq. Queries are dispatched asynchronously on a background thread.
+
+```lua
+Postgres Postgres.Connect(conninfo)
+bool, txt Postgres:Query(query)
+bool, txt Postgres:QueryParams(query, param1, param2, ...)
+bool Postgres:IsBusy()
+array Postgres:GetResultRow()
+array Postgres:GetResultFields()
+array Postgres:GetResult()
+string Postgres:EscapeValue(value)
+Postgres:Close()
+```
+
+| Function | Description |
+|----------|-------------|
+| `Connect` | Connect using a libpq connection string (e.g. `"host=localhost user=postgres password=secret dbname=mydb connect_timeout=5"`) |
+| `Query` | Dispatch an async SQL query. Returns `true` on dispatch, or `false, "Busy"` if a query is already running |
+| `QueryParams` | Dispatch a parameterized query using `$1`, `$2`, ... placeholders. Additional arguments are the parameter values; pass `nil` for SQL NULL |
+| `IsBusy` | Returns `true` while a query is in progress |
+| `GetResult` | Block until query completes, return all rows as a table of tables. Returns `nil, errorMessage` on failure. Non-SELECT commands (INSERT, CREATE, UPDATE, etc.) return an empty table `{}` on success |
+| `GetResultRow` | Return the next row as an array and advance the cursor. Returns `nil` when all rows are consumed (clears the result). Returns `nil, errorMessage` on error |
+| `GetResultFields` | Return field metadata as an array of `{name, type}` tables where `type` is the PostgreSQL type OID. Call before `GetResult` or `GetResultRow` |
+| `EscapeValue` | Escape a string using `PQescapeLiteral`. The result includes surrounding single quotes (e.g. `'O''Reilly'`) |
+| `Close` | Close the connection and free all resources |
+
+### Connection String
+
+The `conninfo` parameter is a standard libpq keyword/value connection string:
+
+```
+"host=127.0.0.1 port=5432 user=postgres password=secret dbname=mydb connect_timeout=5"
+```
+
+### Parameterized Queries
+
+Use `$1`, `$2`, ... placeholders and pass values as extra arguments to `QueryParams`. All values are sent as text; PostgreSQL performs implicit casting based on the column type.
+
+```lua
+pg:QueryParams("SELECT * FROM users WHERE id = $1 AND active = $2", 42, "true")
+pg:QueryParams("INSERT INTO t (a, b, c) VALUES ($1, $2, $3)", "hello", nil, 3.14)
+```
+
+### PostgreSQL Type OID Mapping
+
+`GetResult` and `GetResultRow` convert column values to Lua types based on the PostgreSQL OID:
+
+| OID | PostgreSQL type | Lua type |
+|-----|-----------------|----------|
+| 16 | BOOL | boolean |
+| 20 | INT8 (bigint) | integer |
+| 21 | INT2 (smallint) | integer |
+| 23 | INT4 (integer) | integer |
+| 700 | FLOAT4 (real) | number |
+| 701 | FLOAT8 (double precision) | number |
+| 1700 | NUMERIC | number |
+| all others | TEXT, VARCHAR, DATE, JSON, etc. | string |
 
 ---
 

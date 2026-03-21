@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
@@ -51,7 +51,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(SolutionDir)mysql\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)zip;$(SolutionDir)libarchive;$(SolutionDir)libarchive/lzma;$(SolutionDir)Imgui;$(SolutionDir)hiredis;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)mysql\include;$(SolutionDir)postgres\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)zip;$(SolutionDir)libarchive;$(SolutionDir)libarchive/lzma;$(SolutionDir)Imgui;$(SolutionDir)hiredis;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4703;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <PreprocessorDefinitions>STANDALONEGFF;_CRT_SECURE_NO_WARNINGS;ImTextureID=ImU64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
@@ -76,7 +76,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(SolutionDir)mysql\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)zip;$(SolutionDir)libarchive;$(SolutionDir)libarchive/lzma;$(SolutionDir)Imgui;$(SolutionDir)hiredis;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)mysql\include;$(SolutionDir)postgres\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)zip;$(SolutionDir)libarchive;$(SolutionDir)libarchive/lzma;$(SolutionDir)Imgui;$(SolutionDir)hiredis;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4703;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <PreprocessorDefinitions>STANDALONEGFF;_CRT_SECURE_NO_WARNINGS;ImTextureID=ImU64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
@@ -221,10 +221,12 @@
     <ClCompile Include="LuaSQLite.cpp" />
     <ClCompile Include="LuaSQLiteMain.cpp" />
     <ClCompile Include="LuaMySQL.cpp" />
+    <ClCompile Include="LuaPostgres.cpp" />
     <ClCompile Include="lua_misc.cpp" />
     <ClCompile Include="md5.c" />
     <ClCompile Include="MD5Main.cpp" />
     <ClCompile Include="MySQLMain.cpp" />
+    <ClCompile Include="PostgresMain.cpp" />
     <ClCompile Include="NetEvent.cpp" />
     <ClCompile Include="networking.cpp" />
     <ClCompile Include="ProcessMain.cpp" />
@@ -338,6 +340,7 @@
     <ClInclude Include="NamedPipeMain.h" />
     <ClInclude Include="odbc.h" />
     <ClInclude Include="ODBCMain.h" />
+    <ClInclude Include="postgres\include\libpq-fe.h" />
     <ClInclude Include="Redis.h" />
     <ClInclude Include="RedisKey.h" />
     <ClInclude Include="RedisMain.h" />
@@ -368,10 +371,12 @@
     <ClInclude Include="LuaSQLiteMain.h" />
     <ClInclude Include="lua_main_incl.h" />
     <ClInclude Include="LuaMySQL.h" />
+    <ClInclude Include="LuaPostgres.h" />
     <ClInclude Include="lua_misc.h" />
     <ClInclude Include="md5.h" />
     <ClInclude Include="MD5Main.h" />
     <ClInclude Include="MySQLMain.h" />
+    <ClInclude Include="PostgresMain.h" />
     <ClInclude Include="NetEvent.h" />
     <ClInclude Include="networking.h" />
     <ClInclude Include="ProcessMain.h" />
@@ -402,6 +407,7 @@
   <ItemGroup>
     <None Include=".github\copilot-instructions.md" />
     <None Include="Extension functions.md" />
+    <None Include="fix_indent.py" />
     <None Include="Lua functions.md" />
     <None Include="Lua\Makefile" />
     <None Include="packages.config" />
@@ -430,6 +436,7 @@
     <None Include="tests\mysql.lua" />
     <None Include="tests\odbc.lua" />
     <None Include="tests\pipe.lua" />
+    <None Include="tests\postgres.lua" />
     <None Include="tests\process.lua" />
     <None Include="tests\redis.lua" />
     <None Include="tests\run_all.lua" />

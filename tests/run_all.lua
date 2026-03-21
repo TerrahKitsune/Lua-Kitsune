@@ -26,6 +26,7 @@
     "tests.http",
     "tests.hashing",
     "tests.mysql",
+    "tests.postgres",
     "tests.timer",
     "tests.sqlite",
     "tests.image",
