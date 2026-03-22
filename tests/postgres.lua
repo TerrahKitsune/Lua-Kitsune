@@ -5,10 +5,7 @@ local assert_table = helpers.assert_table
 local run = helpers.run
 local skip = helpers.skip
 
-local pgConfig = {
-    enabled = true,
-    conninfo = "host=10.9.23.252 user=postgres password=hej123 dbname=postgres connect_timeout=5"
-}
+local pgConfig = require("tests.config").postgres
 
 run("Postgres table exists", function()
     assert_table(Postgres, "Postgres")
@@ -174,6 +171,20 @@ run("Postgres Query with table param is JSON-encoded", function()
     assert(decoded ~= nil, "expected valid JSON, got: " .. tostring(name))
     assert(decoded.key == "value", "expected key='value', got: " .. tostring(decoded and decoded.key))
     assert(decoded.count == 7, "expected count=7, got: " .. tostring(decoded and decoded.count))
+    pg:Finish()
+end)
+
+run("Postgres Query with wchar param is UTF-8 encoded", function()
+    local wstr = Wchar.FromUtf8("héllo wörld")
+    local ok, err = pg:Query("INSERT INTO kitsune_test (name, num) VALUES ($1, $2)", {wstr, 888})
+    assert(ok, "Query failed: " .. tostring(err))
+    local more, ferr = pg:Fetch()
+    assert(not ferr, "INSERT with wchar param error: " .. tostring(ferr))
+
+    pg:Query("SELECT name FROM kitsune_test WHERE num = $1", {888})
+    assert(pg:Fetch(), "expected a row after wchar INSERT")
+    local name = pg:GetRow("name")
+    assert(name == "héllo wörld", "expected wchar param to round-trip as UTF-8, got: " .. tostring(name))
     pg:Finish()
 end)
 
