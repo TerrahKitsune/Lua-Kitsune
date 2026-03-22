@@ -986,31 +986,83 @@ hexstring, 20bytes SHA1:Finish()
 
 ## MySQL
 
+Connects to a MySQL/MariaDB database. Queries are dispatched asynchronously on a background thread and results are iterated with the same `Fetch` / `GetRow` pattern as [SQLite](#sqlite) and [Postgres](#postgres). The connection is always configured with `utf8mb4` encoding automatically.
+
 ```lua
-MySQL MySQL.Connect(address, user, password, database, opt port, opt timeout)
-string MySQL.EscapeValue(value)
-bool, txt MySQL:Query(query)
-bool MySQL:IsBusy()
-array MySQL:GetResultRow()
-array MySQL:GetResultFields()
-array MySQL:GetResult()
+MySQL  MySQL.Connect(host, user, password, database, opt port, opt timeout)
+bool, txt  MySQL:Query(query, opt params)
+bool, txt  MySQL:Fetch()
+table|value  MySQL:GetRow(opt index_or_field)
+nil  MySQL:Finish()
+bool  MySQL:IsBusy()
+string  MySQL:EscapeValue(value)
 MySQL:Close()
 ```
+
+| Function | Description |
+|----------|-------------|
+| `Connect` | Connect to MySQL. `port` defaults to `3306`, `timeout` defaults to `10` seconds |
+| `Query` | Dispatch an async SQL query. Returns `true` on dispatch, or `false, "Busy"` if a query is already running. Pass an optional array table as `params` for parameterized queries |
+| `Fetch` | Block until the query completes on the first call, then advance to the next row. Returns `true` if a row is available, `false` when done, or `false, errorMessage` on execution error |
+| `GetRow` | Return the current row as a hash table keyed by column name, a single column value when `index` (1-based integer) is given, or a single column value when `field` (string column name) is given. `NULL` columns are `nil` |
+| `Finish` | Discard the current result and reset the cursor |
+| `IsBusy` | Returns `true` while a query is in progress |
+| `EscapeValue` | Escape a string using `mysql_real_escape_string`. Returns the escaped string **without** surrounding quotes |
+| `Close` | Close the connection and free all resources |
+
+### Parameterized Queries
+
+Pass an array table as the second argument to `Query`. The parameter count is determined automatically by scanning the SQL for `?` placeholders. Missing or `nil` entries in the table are sent as SQL `NULL`. `table` values are JSON-encoded. `Wchar` values are UTF-8 encoded.
+
+```lua
+mysql:Query("SELECT * FROM users WHERE id = ?", {42})
+mysql:Query("INSERT INTO t (a, b, c) VALUES (?, ?, ?)", {"hello", nil, 3.14})
+```
+
+### Usage Pattern
+
+```lua
+local db = MySQL.Connect("127.0.0.1", "user", "pass", "mydb")
+
+db:Query("SELECT id, name FROM users WHERE active = ?", {1})
+while db:Fetch() do
+    local row = db:GetRow()   -- {id=1, name="Alice"}
+    local id  = db:GetRow(1)  -- first column value only
+    local name = db:GetRow("name")  -- column by name
+end
+
+-- Non-SELECT commands: Fetch() returns false immediately on success
+local ok = db:Query("DELETE FROM sessions WHERE expired = 1")
+local more, err = db:Fetch()
+assert(not err, err)
+```
+
+### MySQL Type Mapping
+
+| MySQL type | Lua type |
+|------------|----------|
+| TINYINT, SMALLINT, MEDIUMINT, INT, BIGINT | integer |
+| FLOAT, DOUBLE, DECIMAL | number |
+| TINYBLOB, BLOB, MEDIUMBLOB, LONGBLOB | LuaStream |
+| TINYINT(1) (`BOOLEAN`) | integer `1` / `0` |
+| all others | string |
+
+> **Note:** MySQL does not have a native boolean type. `TINYINT(1)` columns return `1` or `0` as integers, not Lua `true`/`false`.
 
 ---
 
 ## Postgres
 
-Connects to a PostgreSQL database using libpq. Queries are dispatched asynchronously on a background thread and results are iterated with the same `Fetch` / `GetRow` pattern as [SQLite](#sqlite).
+Connects to a PostgreSQL database using libpq. Queries are dispatched asynchronously on a background thread and results are iterated with the same `Fetch` / `GetRow` pattern as [SQLite](#sqlite) and [MySQL](#mysql). The connection is always configured with `UTF8` client encoding automatically.
 
 ```lua
-Postgres Postgres.Connect(conninfo)
-bool, txt Postgres:Query(query, opt params)
-bool, txt Postgres:Fetch()
-table Postgres:GetRow(opt index_or_field)
-nil Postgres:Finish()
-bool Postgres:IsBusy()
-string Postgres:EscapeValue(value)
+Postgres  Postgres.Connect(conninfo)
+bool, txt  Postgres:Query(query, opt params)
+bool, txt  Postgres:Fetch()
+table|value  Postgres:GetRow(opt index_or_field)
+nil  Postgres:Finish()
+bool  Postgres:IsBusy()
+string  Postgres:EscapeValue(value)
 Postgres:Close()
 ```
 
@@ -1019,10 +1071,10 @@ Postgres:Close()
 | `Connect` | Connect using a libpq connection string (e.g. `"host=localhost user=postgres password=secret dbname=mydb connect_timeout=5"`) |
 | `Query` | Dispatch an async SQL query. Returns `true` on dispatch, or `false, "Busy"` if a query is already running. Pass an optional array table as `params` for parameterized queries |
 | `Fetch` | Block until the query completes on the first call, then advance to the next row. Returns `true` if a row is available, `false` when done, or `false, errorMessage` on execution error |
-| `GetRow` | Return the current row as a hash table keyed by column name, a single column value when `index` (1-based integer) is given, or a single column value when `field` (string column name) is given. `NULL` columns are absent (`nil`) in the returned table |
+| `GetRow` | Return the current row as a hash table keyed by column name, a single column value when `index` (1-based integer) is given, or a single column value when `field` (string column name) is given. `NULL` columns are `nil` |
 | `Finish` | Discard the current result and reset the cursor |
 | `IsBusy` | Returns `true` while a query is in progress |
-| `EscapeValue` | Escape a string using `PQescapeLiteral`. The result includes surrounding single quotes (e.g. `'O''Reilly'`) |
+| `EscapeValue` | Escape a string using `PQescapeLiteral`. The result **includes** surrounding single quotes (e.g. `'O''Reilly'`) |
 | `Close` | Close the connection and free all resources |
 
 ### Connection String
@@ -1033,7 +1085,7 @@ Postgres:Close()
 
 ### Parameterized Queries
 
-Pass an array table as the second argument to `Query`. The parameter count is determined automatically by scanning the SQL for `$1`, `$2`, ... placeholders. Missing or `nil` entries in the table are sent as SQL `NULL`.
+Pass an array table as the second argument to `Query`. The parameter count is determined automatically by scanning the SQL for the highest `$N` placeholder (`$1`, `$2`, ...). Missing or `nil` entries in the table are sent as SQL `NULL`. `table` values are JSON-encoded. `Wchar` values are UTF-8 encoded.
 
 ```lua
 pg:Query("SELECT * FROM users WHERE id = $1", {42})
@@ -1047,11 +1099,11 @@ local pg = Postgres.Connect("host=localhost user=postgres password=secret dbname
 
 pg:Query("SELECT id, name FROM users WHERE active = $1", {true})
 while pg:Fetch() do
-    local row = pg:GetRow()   -- {id=1, name="Alice"}
-    local id  = pg:GetRow(1)  -- first column value only
+    local row = pg:GetRow()        -- {id=1, name="Alice"}
+    local id  = pg:GetRow(1)       -- first column value only
+    local name = pg:GetRow("name") -- column by name
 end
 
--- Non-SELECT commands: Fetch() returns false immediately on success
 local ok = pg:Query("DELETE FROM sessions WHERE expired = true")
 local more, err = pg:Fetch()
 assert(not err, err)
@@ -1127,32 +1179,84 @@ void Image:Close()
 ## Json
 
 ```lua
-Json Json.Create(opt pretty)
-nil/value Json:SetNullValue(value)
-jsonstring Json:Encode(table)
-table Json:Decode(jsonstring)
-void Json:EncodeToFile(filename, table)
-table Json:DecodeFromFile(filename)
-void Json:EncodeToFunction(func, table)
-table Json:DecodeFromFunction(func)
-void Json:Dispose()
+Json     Json.Create(opt pretty)
+value    Json:SetNullValue(opt value)
+string   Json:Encode(table_or_coroutine)
+table    Json:Decode(jsonstring)
+nil      Json:EncodeToFile(filename, table_or_coroutine)
+table    Json:DecodeFromFile(filename)
+nil      Json:EncodeToFunction(func, table_or_coroutine)
+table    Json:DecodeFromFunction(func)
+nil      Json:Dispose()
 coroutine Json:Iterator(function)
 ```
+
+| Function | Description |
+|----------|-------------|
+| `Create` | Create a new Json instance. Pass `true` for pretty-printed output |
+| `SetNullValue` | Get/set the null sentinel. When a sentinel is set, encoding a value that equals the sentinel produces JSON `null`, and decoding JSON `null` returns the sentinel instead of `nil`. Calling with no argument or `nil` clears the sentinel. **Always returns the previous value** (or `nil` if none was set) |
+| `Encode` | Encode a Lua table or coroutine to a JSON string |
+| `Decode` | Decode a JSON string to a Lua table |
+| `EncodeToFile` | Write JSON directly to a file |
+| `DecodeFromFile` | Read and decode JSON from a file |
+| `EncodeToFunction` | Stream JSON output to a callback function |
+| `DecodeFromFunction` | Read JSON input from a callback function |
+| `Dispose` | Explicitly free the Json context |
+| `Iterator` | Iterate a large JSON document incrementally via a coroutine |
+
+### Null Sentinel
+
+By default JSON `null` decodes to Lua `nil` (which cannot be stored in a table). Use `SetNullValue` to map `null` to a distinguishable sentinel:
+
+```lua
+local json = Json.Create()
+json:SetNullValue("__NULL__")
+
+local encoded = json:Encode({value = "__NULL__"})  -- {"value":null}
+local decoded = json:Decode(encoded)
+print(decoded.value)  -- "__NULL__"
+
+-- Clear the sentinel; returns the old value
+local old = json:SetNullValue(nil)  -- old == "__NULL__"
+```
+
+### Type Mapping
+
+| Lua type | JSON type |
+|----------|-----------|
+| `nil` | `null` (omitted from tables) |
+| sentinel value | `null` |
+| `boolean` | `true` / `false` |
+| integer | number (no decimal point) |
+| float | number (trailing zeros trimmed, e.g. `3.5` not `3.500…`) |
+| `string` | string |
+| `Wchar` | string (UTF-8 encoded) |
+| `LuaStream` | string (raw bytes) |
+| `table` | object `{}` or array `[]` depending on keys |
+| `NaN` | `null` |
+| `±Infinity` | `1e+9999` / `-1e+9999` |
+
+### Notes
+
+- **Circular references** are detected automatically. Encoding a table that directly or indirectly references itself raises an error: `Recursion detected`
+- **Table iteration** uses Lua's `pairs()`, so `__pairs` metamethods **are** respected during encoding. Custom iterators set via `__pairs` control what gets serialized
+- **UTF-8 strings** pass through the encoder unescaped. Only control characters (U+0000–U+001F) are hex-escaped as `\uXXXX`; all other bytes including multi-byte UTF-8 sequences appear literally in the output
 
 ### Coroutine Example
 
 ```lua
-jsonstring = Json:Encode(coroutine.create(function()
-    coroutine.yield(nil, {})  -- Root element
-    coroutine.yield("MyTable", {})  -- Object
+local json = Json.Create()
+local s = json:Encode(coroutine.create(function()
+    coroutine.yield(nil, {})        -- root object
+    coroutine.yield("MyTable", {})  -- nested array
     for n = 1, 10 do
         coroutine.yield(n, "Hello")
     end
-    coroutine.yield(nil, nil)  -- Step out
+    coroutine.yield(nil, nil)       -- close array
     coroutine.yield("Cake", "Is good")
-    coroutine.yield(nil, nil)  -- Finish
+    coroutine.yield(nil, nil)       -- finish
 end))
--- Result: {"MyTable":["Hello",...], "Cake":"Is good"}
+-- Result: {"MyTable":["Hello","Hello",...], "Cake":"Is good"}
 ```
 
 ---

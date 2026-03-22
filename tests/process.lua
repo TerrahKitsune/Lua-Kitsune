@@ -3,14 +3,14 @@ local assert_table = helpers.assert_table
 local run = helpers.run
 local skip = helpers.skip
 
-local enableProcessTests = false
+local processConfig = require("tests.config").process
 
 run("Process table exists", function()
     assert_table(Process, "Process")
 end)
 
-if not enableProcessTests then
-    skip("Process suite", "set enableProcessTests = true to run process tests")
+if not processConfig.enabled then
+    skip("Process suite", "set config.process.enabled = true to run process tests")
     return
 end
 

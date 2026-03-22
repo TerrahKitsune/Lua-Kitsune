@@ -12,7 +12,7 @@ run("MySQL table exists", function()
 end)
 
 if not mysqlConfig.enabled then
-    skip("MySQL suite", "set mysqlConfig.enabled = true to run MySQL tests")
+    skip("MySQL suite", "set config.mysql.enabled = true to run MySQL tests")
     return
 end
 

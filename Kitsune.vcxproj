@@ -431,6 +431,7 @@
     <None Include="tests\imgui.lua" />
     <None Include="tests\imgui_simple.lua" />
     <None Include="tests\json.lua" />
+    <None Include="tests\json_edge.lua" />
     <None Include="tests\kafka.lua" />
     <None Include="tests\macro.lua" />
     <None Include="tests\mutex.lua" />

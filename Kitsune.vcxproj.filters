@@ -1367,5 +1367,6 @@
     <None Include="rewrite_postgres.py" />
     <None Include="write_tests.py" />
     <None Include="update_docs.py" />
+    <None Include="tests\json_edge.lua" />
   </ItemGroup>
 </Project>

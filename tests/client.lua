@@ -3,18 +3,14 @@ local assert_table = helpers.assert_table
 local run = helpers.run
 local skip = helpers.skip
 
-local clientConfig = {
-    enabled = false,
-    host = "127.0.0.1",
-    port = 5050
-}
+local clientConfig = require("tests.config").client
 
 run("Client table exists", function()
     assert_table(Client, "Client")
 end)
 
 if not clientConfig.enabled then
-    skip("Client suite", "set clientConfig.enabled = true to run client tests")
+    skip("Client suite", "set config.client.enabled = true to run client tests")
     return
 end
 

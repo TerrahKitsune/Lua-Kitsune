@@ -1,14 +1,14 @@
-#include "MySQLMain.h"
+﻿#include "MySQLMain.h"
 #include "LuaMySQL.h"
 
 static const struct luaL_Reg mysqlfunctions[] = {
 
 	{ "IsBusy", MySqlIsBusy },
-	{ "GetResultRow", MySqlGetRow },
-	{ "GetResult", MySqlGetResult },
-	{ "EscapeValue", EscapeValue },
+	{ "Fetch", MySqlFetch },
+	{ "GetRow", MySqlGetRow },
+	{ "Finish", MySqlFinish },
+	{ "EscapeValue", MySqlEscapeValue },
 	{ "Query", MySqlQuery },
-	{ "GetResultFields", MySqlGetFields },
 	{ "Connect", MySqlConnect },
 	{ "Close", luamysql_gc },
 	{ NULL, NULL }

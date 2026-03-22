@@ -3,17 +3,14 @@ local assert_table = helpers.assert_table
 local run = helpers.run
 local skip = helpers.skip
 
-local odbcConfig = {
-    enabled = false,
-    connectionString = ""
-}
+local odbcConfig = require("tests.config").odbc
 
 run("ODBC table exists", function()
     assert_table(ODBC, "ODBC")
 end)
 
 if not odbcConfig.enabled then
-    skip("ODBC suite", "set odbcConfig.enabled = true to run ODBC tests")
+    skip("ODBC suite", "set config.odbc.enabled = true to run ODBC tests")
     return
 end
 

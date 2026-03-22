@@ -1,4 +1,4 @@
-#include "jsondecode.h"
+﻿#include "jsondecode.h"
 #include "jsonutil.h"
 
 int json_lua_objectiterator(lua_State* L, int status, lua_KContext ctx);
@@ -140,8 +140,6 @@ int json_lua_objectiterator(lua_State* L, int status, lua_KContext ctx) {
 		lua_yieldk(L, 2, ctx, json_lua_objectiterator);
 	}
 
-	json_bail(L, context, NULL);
-
 	return 0;
 }
 
@@ -190,16 +188,14 @@ void json_advancewhitespace(lua_State* L, JsonContext* context) {
 	char next = json_readnext(L, context);
 	while (true) {
 
-		switch (next)
-		{
-		case 10:
-		case 13:
+		switch (next) {
+		case '\n':
 			context->readLine++;
 			context->readPosition = 0;
 			break;
-		case 32:
-		case 9:
-			context->readPosition++;
+		case '\r':
+		case ' ':
+		case '\t':
 			break;
 		default:
 			json_stepback(context);
@@ -277,6 +273,9 @@ char json_readnext(lua_State* L, JsonContext* context) {
 			context->read = context->readFileBuffer;
 			context->readSize = len;
 		}
+		else {
+			lua_pop(L, 1);
+		}
 	}
 	else if (context->readFile && (!context->readFileBuffer || context->readCursor >= JSONFILEREADBUFFERSIZE)) {
 
@@ -326,34 +325,67 @@ void json_unexpected(char c, lua_State* L, JsonContext* context) {
 	return;
 }
 
-void json_decodecharacter(lua_State* L, JsonContext* context) {
+static int json_cp_to_utf8(unsigned int cp, char utf8[4]) {
+
+	if (cp <= 0x7F) {
+		utf8[0] = (char)cp;
+		return 1;
+	}
+	if (cp <= 0x7FF) {
+		utf8[0] = (char)(0xC0 | (cp >> 6));
+		utf8[1] = (char)(0x80 | (cp & 0x3F));
+		return 2;
+	}
+	if (cp <= 0xFFFF) {
+		utf8[0] = (char)(0xE0 | (cp >> 12));
+		utf8[1] = (char)(0x80 | ((cp >> 6) & 0x3F));
+		utf8[2] = (char)(0x80 | (cp & 0x3F));
+		return 3;
+	}
+	utf8[0] = (char)(0xF0 | (cp >> 18));
+	utf8[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
+	utf8[2] = (char)(0x80 | ((cp >> 6) & 0x3F));
+	utf8[3] = (char)(0x80 | (cp & 0x3F));
+	return 4;
+}
+
+static unsigned int json_read_hex4(lua_State* L, JsonContext* context) {
 
 	char hex[5] = { 0 };
-	char result[2] = { 0 };
-
-	for (size_t i = 0; i < 4; i++)
-	{
-		hex[i] = tolower(json_readnext(L, context));
-
-		if (!isxdigit(hex[i])) {
+	for (size_t i = 0; i < 4; i++) {
+		hex[i] = (char)tolower(json_readnext(L, context));
+		if (!isxdigit((unsigned char)hex[i])) {
 			json_unexpected(hex[i], L, context);
-			return;
+			return 0;
+		}
+	}
+	unsigned int cp = 0;
+	sscanf(hex, "%04x", &cp);
+	return cp;
+}
+
+void json_decodecharacter(lua_State* L, JsonContext* context) {
+
+	unsigned int cp = json_read_hex4(L, context);
+
+	// Decode surrogate pairs: high surrogate \uD800-\uDBFF must be followed by low \uDC00-\uDFFF
+	if (cp >= 0xD800 && cp <= 0xDBFF) {
+		char a = json_readnext(L, context);
+		char b = json_readnext(L, context);
+		if (a == '\\' && b == 'u') {
+			unsigned int low = json_read_hex4(L, context);
+			if (low >= 0xDC00 && low <= 0xDFFF) {
+				cp = 0x10000 + ((cp - 0xD800) << 10) + (low - 0xDC00);
+			}
+		}
+		else {
+			json_stepback(context);
 		}
 	}
 
-	int first;
-	int second;
-	sscanf(hex, "%02x%02x", &first, &second);
-
-	result[0] = (char)first;
-	result[1] = (char)second;
-
-	if (result[0] && result[1]) {
-		json_append(result, 2, L, context);
-	}
-	else {
-		json_append(&result[1], 1, L, context);
-	}
+	char utf8[4];
+	int bytes = json_cp_to_utf8(cp, utf8);
+	json_append(utf8, bytes, L, context);
 }
 
 int InsensitiveStrncmp(const char* s1, const char* s2, size_t n) {
@@ -400,45 +432,42 @@ void json_decodestring(lua_State* L, JsonContext* context) {
 			isEscaping = false;
 
 			switch (next) {
-			case '/':
-				next = '/';
-				break;
-			case '\\':
-				next = '\\';
-				break;
-			case 'a':
-				next = 0x07;
-				break;
-			case 'e':
-				next = 0x1B;
-				break;
-			case 'b':
-				next = 0x08;
-				break;
-			case 'v':
-				next = 0x0B;
-				break;
-			case '0':
-				next = 0x00;
-				break;
-			case 'f':
-				next = 0x0C;
-				break;
-			case 'n':
-				next = 0x0A;
-				break;
-			case 'r':
-				next = 0x0D;
-				break;
-			case 't':
-				next = 0x09;
-				break;
-			case 'u':
-				json_decodecharacter(L, context);
-				continue;
-			default:
-				break;
-			}
+				case '/':
+				case '\\':
+					break;
+				case 'a':
+					next = 0x07;
+					break;
+				case 'e':
+					next = 0x1B;
+					break;
+				case 'b':
+					next = 0x08;
+					break;
+				case 'v':
+					next = 0x0B;
+					break;
+				case '0':
+					next = 0x00;
+					break;
+				case 'f':
+					next = 0x0C;
+					break;
+				case 'n':
+					next = 0x0A;
+					break;
+				case 'r':
+					next = 0x0D;
+					break;
+				case 't':
+					next = 0x09;
+					break;
+				case 'u':
+					json_decodecharacter(L, context);
+					continue;
+				default:
+					break;
+				}
 		}
 		else if (next == '\\') {
 			isEscaping = true;
@@ -446,7 +475,8 @@ void json_decodestring(lua_State* L, JsonContext* context) {
 		}
 		else if (context->quoteSymbol == '\0') {
 
-			if (next == ' ' || next == ',' || next == '}' || next == ']') {
+			if (next == ' ' || next == ',' || next == '}' || next == ']' ||
+				next == '\n' || next == '\r' || next == '\t') {
 				json_stepback(context);
 				break;
 			}
@@ -470,7 +500,7 @@ void json_decodestring(lua_State* L, JsonContext* context) {
 			}
 			else if (InsensitiveStrncmp(context->buffer, "null", 4)) {
 
-				lua_pushnil(L);
+				json_pushnullornil(L, context);
 				return;
 			}
 		}
@@ -478,8 +508,8 @@ void json_decodestring(lua_State* L, JsonContext* context) {
 
 			if (InsensitiveStrncmp(context->buffer, "false", 5)) {
 
-			 lua_pushboolean(L, 0);
-			 return;
+				lua_pushboolean(L, 0);
+				return;
 			}
 		}
 	}
@@ -600,7 +630,6 @@ void json_decodenumber(lua_State* L, JsonContext* context) {
 
 void json_decodevalue(lua_State* L, JsonContext* context) {
 
-	size_t symbolStart = context->readCursor;
 	char next = json_readnext(L, context);
 	
 	if (next == '{' || next == '[') {

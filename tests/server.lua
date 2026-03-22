@@ -3,17 +3,14 @@ local assert_table = helpers.assert_table
 local run = helpers.run
 local skip = helpers.skip
 
-local serverConfig = {
-    enabled = false,
-    port = 5050
-}
+local serverConfig = require("tests.config").server
 
 run("Server table exists", function()
     assert_table(Server, "Server")
 end)
 
 if not serverConfig.enabled then
-    skip("Server suite", "set serverConfig.enabled = true to run server tests")
+    skip("Server suite", "set config.server.enabled = true to run server tests")
     return
 end
 

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "lua_main_incl.h"
 #include <stdint.h>
 static const char * LUAJSON = "LUAJSON";
@@ -18,8 +18,6 @@ typedef struct JsonContext {
 	int refReadFunction;
 	int refThreadInput;
 	int refNullValue;
-
-	int arrayKey;
 
 	FILE * bufferFile;
 	char * fileName;

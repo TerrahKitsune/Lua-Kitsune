@@ -1,4 +1,4 @@
-#include "lua_json.h"
+﻿#include "lua_json.h"
 #include "jsonutil.h"
 #include "jsonencode.h"
 #include "jsondecode.h"
@@ -217,7 +217,7 @@ int lua_jsonencodetabletofile(lua_State *L) {
 		depth = &n;
 	}
 
-	json_encodevalue(L, json, &n);
+	json_encodevalue(L, json, depth);
 
 	json_bail(L, json, NULL);
 

@@ -3,14 +3,14 @@ local assert_table = helpers.assert_table
 local run = helpers.run
 local skip = helpers.skip
 
-local enableServiceTests = false
+local servicesConfig = require("tests.config").services
 
 run("Services table exists", function()
     assert_table(Services, "Services")
 end)
 
-if not enableServiceTests then
-    skip("Services suite", "set enableServiceTests = true to enumerate services")
+if not servicesConfig.enabled then
+    skip("Services suite", "set config.services.enabled = true to enumerate services")
     return
 end
 

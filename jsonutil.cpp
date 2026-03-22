@@ -1,4 +1,4 @@
-#include "jsonutil.h"
+﻿#include "jsonutil.h"
 
 void json_pushnullornil(lua_State* L, JsonContext* context) {
 
@@ -65,26 +65,34 @@ void json_bail(lua_State *L, JsonContext* context, const char * err) {
 
 	if (context->refWriteFunction != LUA_NOREF) {
 		luaL_unref(L, LUA_REGISTRYINDEX, context->refWriteFunction);
+		context->refWriteFunction = LUA_NOREF;
 	}
 
 	if (context->refReadFunction != LUA_NOREF) {
 		luaL_unref(L, LUA_REGISTRYINDEX, context->refReadFunction);
+		context->refReadFunction = LUA_NOREF;
 	}
 
 	if (context->refThreadInput != LUA_NOREF) {
 		luaL_unref(L, LUA_REGISTRYINDEX, context->refThreadInput);
+		context->refThreadInput = LUA_NOREF;
 	}
 
-	int temp = context->refNullValue;
-	int pretty = context->pretty;
-
-	memset(context, 0, sizeof(JsonContext));
-
-	context->refWriteFunction = LUA_NOREF;
-	context->refReadFunction = LUA_NOREF;
-	context->refThreadInput = LUA_NOREF;
-	context->refNullValue = temp;
-	context->pretty = pretty;
+	context->bufferFile = NULL;
+	context->bufferLength = 0;
+	context->bufferSize = 0;
+	context->resultReallocStep = 0;
+	context->read = NULL;
+	context->readSize = 0;
+	context->readCursor = 0;
+	context->readLine = 0;
+	context->readPosition = 0;
+	context->quoteSymbol = 0;
+	context->prevFileChar[0] = 0;
+	context->prevFileChar[1] = 0;
+	context->antiRecursionSize = 0;
+	context->readFileBufferSize = 0;
+	// refNullValue and pretty are intentionally preserved
 
 	if (err) {
 		luaL_error(L, err);
@@ -154,26 +162,6 @@ void json_append(const char * data, size_t len, lua_State *L, JsonContext* conte
 			}
 		}
 	}
-}
-
-unsigned int table_crc32(const unsigned char* data, int size)
-{
-	unsigned int r = 0xFFFFFFFF;
-	const unsigned char* end = data + size;
-	unsigned int t;
-
-	while (data < end)
-	{
-		r ^= *data++;
-
-		for (int i = 0; i < 8; i++)
-		{
-			t = ~((r & 1) - 1);
-			r = (r >> 1) ^ (0xEDB88320 & t);
-		}
-	}
-
-	return ~r;
 }
 
 bool json_addtoantirecursion(uintptr_t id, JsonContext* context) {

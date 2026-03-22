@@ -1,4 +1,5 @@
 ﻿#include "LuaPostgres.h"
+#include "luawchar.h"
 #pragma comment(lib, "postgres/lib/libpq.lib")
 
 
@@ -35,6 +36,11 @@ static void PushAsParamString(lua_State* L, int index) {
 			return;
 		}
 
+		lua_remove(L, -2);
+	}
+	else if (lua_iswchar(L, index)) {
+		lua_pushvalue(L, index);
+		ToUtf8(L);
 		lua_remove(L, -2);
 	}
 	else {
@@ -189,6 +195,8 @@ int PostgresConnect(lua_State* L) {
 		lua_error(L);
 		return 0;
 	}
+
+	PQsetClientEncoding(pg->connection, "UTF8");
 
 	pg->alive = true;
 

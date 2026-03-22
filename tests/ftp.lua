@@ -3,20 +3,14 @@ local assert_table = helpers.assert_table
 local run = helpers.run
 local skip = helpers.skip
 
-local ftpConfig = {
-    enabled = false,
-    host = "127.0.0.1",
-    port = 21,
-    user = "",
-    password = ""
-}
+local ftpConfig = require("tests.config").ftp
 
 run("FTP table exists", function()
     assert_table(FTP, "FTP")
 end)
 
 if not ftpConfig.enabled then
-    skip("FTP suite", "set ftpConfig.enabled = true to run FTP tests")
+    skip("FTP suite", "set config.ftp.enabled = true to run FTP tests")
     return
 end
 

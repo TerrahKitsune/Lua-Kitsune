@@ -1,4 +1,4 @@
-#include "jsonencode.h"
+﻿#include "jsonencode.h"
 #include "jsonutil.h"
 #include "math.h"
 #include "stream.h"
@@ -18,7 +18,7 @@ void json_encodenumber(lua_State* L, JsonContext* context) {
 		}
 		else {
 			sprintf(number, "%.16f", numb);
-			for (size_t n = strlen(number) - 1; n > 0; n++) {
+			for (size_t n = strlen(number) - 1; n > 0; n--) {
 				if (number[n] == '0') {
 					number[n] = '\0';
 				}
@@ -66,9 +66,11 @@ void json_encodevalue(lua_State* L, JsonContext* context, int* depth) {
 	case LUA_TNUMBER:
 		json_encodenumber(L, context);
 		break;
-	case LUA_TBOOLEAN:
-		json_append(lua_toboolean(L, -1) > 0 ? "true" : "false", lua_toboolean(L, -1) > 0 ? 4 : 5, L, context);
+	case LUA_TBOOLEAN: {
+		int b = lua_toboolean(L, -1);
+		json_append(b ? "true" : "false", b ? 4 : 5, L, context);
 		break;
+	}
 	default:
 		if (lua_isnoneornil(L, -1)) {
 			json_append("null", 4, L, context);
@@ -108,8 +110,7 @@ void json_encodestring(lua_State* L, JsonContext* C) {
 		str = luaL_tolstring(L, -1, &len);
 		lua_pop(L, 1);
 	}
-	char hex[7] = { 0 };
-	int data = 0;
+	char hex[7];
 
 	json_append("\"", 1, L, C);
 	for (size_t i = 0; i < len; i++)
@@ -132,11 +133,10 @@ void json_encodestring(lua_State* L, JsonContext* C) {
 			break;
 		default:
 
-			if (str[i] < 32 || str[1] > 127) {
-				memcpy(&data, &str[i], 1);
-				sprintf(hex, "\\u%04x", data);
-				json_append(hex, 6, L, C);
-			}
+			if ((unsigned char)str[i] < 32) {
+					sprintf(hex, "\\u%04x", (unsigned char)str[i]);
+					json_append(hex, 6, L, C);
+				}
 			else {
 				json_append(&str[i], 1, L, C);
 			}
@@ -148,19 +148,14 @@ void json_encodestring(lua_State* L, JsonContext* C) {
 	json_append("\"", 1, L, C);
 }
 
-void json_pad(char padding, int numbpadding, lua_State* L, JsonContext* C) {
+static void json_pad(int count, lua_State* L, JsonContext* C) {
 
-	if (numbpadding <= 0) {
-		return;
-	}
-
-	for (int i = 0; i < numbpadding; i++)
-	{
+	for (int i = 0; i < count; i++) {
 		json_append("\t", 1, L, C);
 	}
 }
 
-int json_lua_pairs(lua_State* L) {
+static int json_lua_pairs(lua_State* L) {
 
 	if (lua_isnil(L, -1) && lua_isnil(L, -2)) {
 
@@ -202,7 +197,6 @@ int json_lua_pairs(lua_State* L) {
 	lua_remove(L, -3);
 
 	if (lua_isnil(L, -1) && lua_isnil(L, -2)) {
-
 		lua_pop(L, 3);
 		return 0;
 	}
@@ -217,14 +211,8 @@ void json_encodetable(lua_State* L, JsonContext* C, int* depth) {
 		return;
 	}
 
-	size_t len;
-	const char* rawid = luaL_tolstring(L, -1, &len);
-	lua_pop(L, 1);
-	lua_len(L, -1);
-	int size = (int)lua_tointeger(L, -1);
-	lua_pop(L, 1);
-
-	unsigned int id = table_crc32((const unsigned char*)rawid, (int)len);
+	int tbl = lua_absindex(L, -1);
+	uintptr_t id = (uintptr_t)lua_topointer(L, tbl);
 
 	if (json_existsinantirecursion(id, C)) {
 		json_bail(L, C, "Recursion detected");
@@ -240,9 +228,11 @@ void json_encodetable(lua_State* L, JsonContext* C, int* depth) {
 		}
 	}
 
-	size_t pos = 0;
-	int any = 0;
+	lua_len(L, tbl);
+	int size = (int)lua_tointeger(L, -1);
+	lua_pop(L, 1);
 
+	int any = 0;
 	lua_pushnil(L);
 	lua_pushnil(L);
 	if (json_lua_pairs(L) != 0) {
@@ -252,20 +242,15 @@ void json_encodetable(lua_State* L, JsonContext* C, int* depth) {
 		lua_pop(L, 3);
 	}
 
-	int count = 0;
-
-	// Object
+	// Empty table
 	if (any == 0 && size <= 0) {
 		json_append("[]", 2, L, C);
 	}
+	// Object
 	else if (size <= 0) {
 
 		json_append("{", 1, L, C);
-
-		if (depth) {
-			(*depth)++;
-			json_append("\n", 1, L, C);
-		}
+		if (depth) { (*depth)++; json_append("\n", 1, L, C); }
 
 		int first = 1;
 		lua_pushnil(L);
@@ -273,84 +258,43 @@ void json_encodetable(lua_State* L, JsonContext* C, int* depth) {
 		while (json_lua_pairs(L) != 0) {
 
 			if (!first) {
-				if (depth) {
-					json_append(",\n", 2, L, C);
-				}
-				else {
-					json_append(",", 1, L, C);
-				}
+				json_append(depth ? ",\n" : ",", depth ? 2 : 1, L, C);
 			}
 			else {
 				first = 0;
 			}
 
-			if (depth) {
-				json_pad('\t', *depth, L, C);
-			}
+			if (depth) json_pad(*depth, L, C);
 
 			lua_pushvalue(L, -2);
 			json_encodestring(L, C);
 			lua_pop(L, 1);
-			if (depth) {
-				json_append(": ", 2, L, C);
-			}
-			else {
-				json_append(":", 1, L, C);
-			}
+			json_append(depth ? ": " : ":", depth ? 2 : 1, L, C);
 			json_encodevalue(L, C, depth);
-
 			lua_pop(L, 1);
 		}
 
-		if (depth) {
-			(*depth)--;
-			json_append("\n", 1, L, C);
-			json_pad('\t', *depth, L, C);
-			json_append("}", 1, L, C);
-		}
-		else {
-			json_append("}", 1, L, C);
-		}
+		if (depth) { (*depth)--; json_append("\n", 1, L, C); json_pad(*depth, L, C); }
+		json_append("}", 1, L, C);
 	}
 	// Array
 	else {
 
 		json_append("[", 1, L, C);
+		if (depth) { (*depth)++; json_append("\n", 1, L, C); }
 
-		if (depth) {
-			(*depth)++;
-			json_append("\n", 1, L, C);
-		}
-
-		for (int i = 1; i <= size; i++)
-		{
-			if (depth) {
-				json_pad('\t', *depth, L, C);
-			}
-
-			lua_geti(L, -1, i);
+		for (int i = 1; i <= size; i++) {
+			if (depth) json_pad(*depth, L, C);
+			lua_geti(L, tbl, i);
 			json_encodevalue(L, C, depth);
-			if (++count < size) {
-				if (depth) {
-					json_append(",\n", 2, L, C);
-				}
-				else {
-					json_append(",", 1, L, C);
-				}
+			if (i < size) {
+				json_append(depth ? ",\n" : ",", depth ? 2 : 1, L, C);
 			}
-
 			lua_pop(L, 1);
 		}
 
-		if (depth) {
-			(*depth)--;
-			json_append("\n", 1, L, C);
-			json_pad('\t', *depth, L, C);
-			json_append("]", 1, L, C);
-		}
-		else {
-			json_append("]", 1, L, C);
-		}
+		if (depth) { (*depth)--; json_append("\n", 1, L, C); json_pad(*depth, L, C); }
+		json_append("]", 1, L, C);
 	}
 
 	json_removefromantirecursion(id, C);
@@ -388,72 +332,31 @@ void json_getnextthread(lua_State* L, JsonContext* C) {
 void json_encodethread(lua_State* L, JsonContext* C, int* depth) {
 
 	char firstType = '\0';
-
 	int count = 0;
 	json_getnextthread(L, C);
+
 	while (!lua_isnil(L, -1) || !lua_isnil(L, -2)) {
 
 		if (firstType == '\0') {
-
-			if (lua_type(L, -2) == LUA_TSTRING) {
-				firstType = '{';
-			}
-			else {
-				firstType = '[';
-			}
-
-			json_append(&firstType, 1, L, C);
-
-			if (depth) {
-				(*depth)++;
-				json_append("\n", 1, L, C);
-			}
-
-			firstType = firstType == '{' ? '}' : ']';
+			firstType = (lua_type(L, -2) == LUA_TSTRING) ? '}' : ']';
+			char open = (firstType == '}') ? '{' : '[';
+			json_append(&open, 1, L, C);
+			if (depth) { (*depth)++; json_append("\n", 1, L, C); }
 		}
 
+		if (count++ > 0) {
+			json_append(depth ? ",\n" : ",", depth ? 2 : 1, L, C);
+		}
+		if (depth) json_pad(*depth, L, C);
+
 		if (firstType == ']') {
-
-			if (count++ > 0) {
-				if (depth) {
-					json_append(",\n", 2, L, C);
-				}
-				else {
-					json_append(",", 1, L, C);
-				}
-			}
-
-			if (depth) {
-				json_pad('\t', *depth, L, C);
-			}
-
 			json_encodevalue(L, C, depth);
 		}
 		else {
-
-			if (count++ > 0) {
-				if (depth) {
-					json_append(",\n", 2, L, C);
-				}
-				else {
-					json_append(",", 1, L, C);
-				}
-			}
-
-			if (depth) {
-				json_pad('\t', *depth, L, C);
-			}
-
 			lua_pushvalue(L, -2);
 			json_encodestring(L, C);
 			lua_pop(L, 1);
-			if (depth) {
-				json_append(": ", 2, L, C);
-			}
-			else {
-				json_append(":", 1, L, C);
-			}
-
+			json_append(depth ? ": " : ":", depth ? 2 : 1, L, C);
 			json_encodevalue(L, C, depth);
 		}
 
@@ -468,13 +371,6 @@ void json_encodethread(lua_State* L, JsonContext* C, int* depth) {
 		return;
 	}
 
-	if (depth) {
-		(*depth)--;
-		json_append("\n", 1, L, C);
-		json_pad('\t', *depth, L, C);
-		json_append(&firstType, 1, L, C);
-	}
-	else {
-		json_append(&firstType, 1, L, C);
-	}
+	if (depth) { (*depth)--; json_append("\n", 1, L, C); json_pad(*depth, L, C); }
+	json_append(&firstType, 1, L, C);
 }

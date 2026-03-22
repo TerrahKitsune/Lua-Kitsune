@@ -63,6 +63,7 @@ extern PGconn*        PQconnectdb(const char* conninfo);
 extern void           PQfinish(PGconn* conn);
 extern ConnStatusType PQstatus(const PGconn* conn);
 extern char*          PQerrorMessage(const PGconn* conn);
+extern int            PQsetClientEncoding(PGconn* conn, const char* encoding);
 
 extern PGresult*      PQexec(PGconn* conn, const char* query);
 extern PGresult*      PQexecParams(PGconn* conn, const char* command, int nParams, const Oid* paramTypes, const char* const* paramValues, const int* paramLengths, const int* paramFormats, int resultFormat);

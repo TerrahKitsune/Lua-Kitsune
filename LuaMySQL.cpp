@@ -1,4 +1,4 @@
-#include "LuaMySQL.h"
+﻿#include "LuaMySQL.h"
 #include "stream.h"
 #include "luawchar.h"
 #pragma comment(lib, "mysql/libmysql.lib")
@@ -31,39 +31,79 @@ LuaMySQL* lua_pushmysql(lua_State* L) {
 	return luamysql;
 }
 
-int EscapeValue(lua_State* L) {
-	size_t len;
-	const char* data;
+static int JsonRef = LUA_NOREF;
 
-	if (lua_isstring(L, -1)) {
-		data = lua_tolstring(L, -1, &len);
-	}
-	else if (lua_isstream(L, -1)) {
-		LuaStream* stream = lua_toluastream(L, -1);
-		if (stream) {
-			len = stream->len;
-			data = (const char*)stream->data;
+static void PushAsParamString(lua_State* L, int index) {
+
+	if (index < 0) index = lua_gettop(L) + index + 1;
+
+	if (lua_istable(L, index)) {
+
+		if (JsonRef == LUA_NOREF) {
+			lua_getglobal(L, "Json");
+			lua_pushliteral(L, "Create");
+			lua_gettable(L, -2);
+			if (lua_pcall(L, 0, 1, 0)) {
+				lua_error(L);
+				return;
+			}
+			JsonRef = luaL_ref(L, LUA_REGISTRYINDEX);
+			lua_pop(L, 1);
 		}
-		else {
-			len = 0;
-			data = NULL;
+
+		lua_rawgeti(L, LUA_REGISTRYINDEX, JsonRef);
+		lua_pushliteral(L, "Encode");
+		lua_gettable(L, -2);
+		lua_pushvalue(L, -2);
+		lua_pushvalue(L, index);
+
+		if (lua_pcall(L, 2, 1, 0)) {
+			lua_error(L);
+			return;
 		}
+
+		lua_remove(L, -2);
 	}
-	else if (lua_iswchar(L, -1)) {
+	else if (lua_iswchar(L, index)) {
+		lua_pushvalue(L, index);
 		ToUtf8(L);
-		lua_copy(L, -1, -2);
-		lua_pop(L, 1);
-		data = lua_tolstring(L, -1, &len);
+		lua_remove(L, -2);
 	}
 	else {
-		data = luaL_tolstring(L, -1, &len);
-		lua_pop(L, 1);
+		luaL_tolstring(L, index, NULL);
+	}
+}
+
+static void FreeParams(LuaMySQL* luamysql) {
+
+	if (luamysql->paramValues) {
+		for (int i = 0; i < luamysql->nParams; i++) {
+			if (luamysql->paramValues[i]) {
+				gff_free(luamysql->paramValues[i]);
+			}
+		}
+		gff_free(luamysql->paramValues);
+		luamysql->paramValues = NULL;
 	}
 
-	if (len == 0 || !data) {
+	if (luamysql->paramLengths) {
+		gff_free(luamysql->paramLengths);
+		luamysql->paramLengths = NULL;
+	}
 
-		lua_pushstring(L, "");
-		return 1;
+	luamysql->nParams = 0;
+	luamysql->isParamQuery = false;
+}
+
+int MySqlEscapeValue(lua_State* L) {
+
+	LuaMySQL* luamysql = lua_tomysql(L, 1);
+	size_t len;
+	const char* str = luaL_checklstring(L, 2, &len);
+
+	if (!luamysql->connection) {
+		luaL_error(L, "Connection is closed");
+		return 0;
 	}
 
 	char* escaped = (char*)gff_malloc((2 * len) + 1);
@@ -72,7 +112,7 @@ int EscapeValue(lua_State* L) {
 		return 0;
 	}
 
-	unsigned long newlen = mysql_escape_string(escaped, data, (unsigned long)len);
+	unsigned long newlen = mysql_real_escape_string(luamysql->connection, escaped, str, (unsigned long)len);
 	lua_pushlstring(L, escaped, newlen);
 	gff_free(escaped);
 
@@ -117,7 +157,11 @@ int MySqlQuery(lua_State* L) {
 		luamysql->querylen = 0;
 	}
 
-	luamysql->query = (char*)gff_malloc(qlen);
+	FreeParams(luamysql);
+	luamysql->currentRow = NULL;
+	luamysql->currentRowLengths = NULL;
+
+	luamysql->query = (char*)gff_malloc(qlen + 1);
 
 	if (!luamysql->query) {
 		luaL_error(L, "Out of memory");
@@ -125,7 +169,63 @@ int MySqlQuery(lua_State* L) {
 	}
 
 	memcpy(luamysql->query, query, qlen);
+	luamysql->query[qlen] = '\0';
 	luamysql->querylen = qlen;
+
+	if (lua_istable(L, 3)) {
+
+		int nParams = 0;
+		for (size_t k = 0; k < qlen; k++) {
+			if (query[k] == '?') nParams++;
+		}
+
+		if (nParams > 0) {
+
+			luamysql->paramValues = (char**)gff_malloc(sizeof(char*) * nParams);
+			luamysql->paramLengths = (int*)gff_malloc(sizeof(int) * nParams);
+
+			if (!luamysql->paramValues || !luamysql->paramLengths) {
+				luaL_error(L, "Out of memory");
+				return 0;
+			}
+
+			memset(luamysql->paramValues, 0, sizeof(char*) * nParams);
+			memset(luamysql->paramLengths, 0, sizeof(int) * nParams);
+			luamysql->nParams = nParams;
+
+			for (int i = 0; i < nParams; i++) {
+
+				lua_rawgeti(L, 3, i + 1);
+
+				if (lua_isnil(L, -1)) {
+					luamysql->paramValues[i] = NULL;
+					luamysql->paramLengths[i] = 0;
+					lua_pop(L, 1);
+				}
+				else {
+					PushAsParamString(L, -1);
+
+					size_t plen;
+					const char* pval = lua_tolstring(L, -1, &plen);
+
+					luamysql->paramValues[i] = (char*)gff_malloc(plen + 1);
+					if (!luamysql->paramValues[i]) {
+						lua_pop(L, 2);
+						luaL_error(L, "Out of memory");
+						return 0;
+					}
+
+					memcpy(luamysql->paramValues[i], pval, plen);
+					luamysql->paramValues[i][plen] = '\0';
+					luamysql->paramLengths[i] = (int)plen;
+					lua_pop(L, 2);
+				}
+			}
+
+			luamysql->isParamQuery = true;
+		}
+	}
+
 	luamysql->busy = true;
 	SetEvent(luamysql->interrupt);
 
@@ -133,13 +233,16 @@ int MySqlQuery(lua_State* L) {
 	return 1;
 }
 
-void SetDone(LuaMySQL* mysqld, const char* error, MYSQL_RES* result) {
+static void SetDone(LuaMySQL* mysqld, const char* error, MYSQL_RES* result) {
 
 	if (mysqld->query) {
 		gff_free(mysqld->query);
 	}
 	mysqld->query = NULL;
 	mysqld->querylen = 0;
+	FreeParams(mysqld);
+	mysqld->currentRow = NULL;
+	mysqld->currentRowLengths = NULL;
 	mysqld->busy = false;
 
 	if (mysqld->result) {
@@ -159,6 +262,12 @@ void SetDone(LuaMySQL* mysqld, const char* error, MYSQL_RES* result) {
 			strcpy(mysqld->error, error);
 		}
 	}
+	else {
+		if (mysqld->error) {
+			gff_free(mysqld->error);
+			mysqld->error = NULL;
+		}
+	}
 }
 
 DWORD WINAPI QueryThread(LPVOID param) {
@@ -169,15 +278,71 @@ DWORD WINAPI QueryThread(LPVOID param) {
 
 		if (mysqld->busy) {
 
-			if (mysqld->query && mysql_real_query(mysqld->connection, mysqld->query, (unsigned long)mysqld->querylen)) {
+			int queryResult = 0;
+
+			if (mysqld->isParamQuery) {
+
+				size_t totalLen = mysqld->querylen;
+				for (int i = 0; i < mysqld->nParams; i++) {
+					if (mysqld->paramValues[i]) {
+						totalLen += (size_t)mysqld->paramLengths[i] * 2 + 2;
+					}
+					else {
+						totalLen += 4;
+					}
+				}
+
+				char* builtQuery = (char*)gff_malloc(totalLen + 1);
+				if (!builtQuery) {
+					SetDone(mysqld, "Out of memory", NULL);
+					continue;
+				}
+
+				size_t queryPos = 0, outPos = 0;
+				int paramIdx = 0;
+				while (queryPos < mysqld->querylen) {
+					if (mysqld->query[queryPos] == '?' && paramIdx < mysqld->nParams) {
+						if (mysqld->paramValues[paramIdx]) {
+							char* escapeBuf = (char*)gff_malloc((size_t)mysqld->paramLengths[paramIdx] * 2 + 1);
+							if (escapeBuf) {
+								unsigned long elen = mysql_real_escape_string(mysqld->connection, escapeBuf,
+									mysqld->paramValues[paramIdx], (unsigned long)mysqld->paramLengths[paramIdx]);
+								builtQuery[outPos++] = '\'';
+								memcpy(builtQuery + outPos, escapeBuf, elen);
+								outPos += elen;
+								builtQuery[outPos++] = '\'';
+								gff_free(escapeBuf);
+							}
+						}
+						else {
+							memcpy(builtQuery + outPos, "NULL", 4);
+							outPos += 4;
+						}
+						paramIdx++;
+						queryPos++;
+					}
+					else {
+						builtQuery[outPos++] = mysqld->query[queryPos++];
+					}
+				}
+				builtQuery[outPos] = '\0';
+
+				queryResult = mysql_real_query(mysqld->connection, builtQuery, (unsigned long)outPos);
+				gff_free(builtQuery);
+			}
+			else {
+				queryResult = mysqld->query ? mysql_real_query(mysqld->connection, mysqld->query, (unsigned long)mysqld->querylen) : 0;
+			}
+
+			if (queryResult) {
 				SetDone(mysqld, mysql_error(mysqld->connection), NULL);
 				continue;
 			}
 
 			result = mysql_store_result(mysqld->connection);
-
 			if (!result) {
-				SetDone(mysqld, mysql_error(mysqld->connection), NULL);
+				const char* err = mysql_error(mysqld->connection);
+				SetDone(mysqld, (err && err[0] != '\0') ? err : NULL, NULL);
 			}
 			else {
 				SetDone(mysqld, NULL, result);
@@ -191,6 +356,77 @@ DWORD WINAPI QueryThread(LPVOID param) {
 	return 0;
 }
 
+static void PushMySQLValue(lua_State* L, const char* data, unsigned long length, enum_field_types type) {
+	char* endptr;
+	switch (type) {
+	case MYSQL_TYPE_NULL:
+		lua_pushnil(L);
+		break;
+	case MYSQL_TYPE_DECIMAL:
+	case MYSQL_TYPE_FLOAT:
+	case MYSQL_TYPE_BIT:
+	case MYSQL_TYPE_NEWDECIMAL:
+	case MYSQL_TYPE_DOUBLE:
+		lua_pushnumber(L, strtod(data, &endptr));
+		break;
+	case MYSQL_TYPE_SHORT:
+	case MYSQL_TYPE_LONGLONG:
+	case MYSQL_TYPE_TINY:
+	case MYSQL_TYPE_LONG:
+	case MYSQL_TYPE_INT24:
+		lua_pushinteger(L, strtoll(data, &endptr, 10));
+		break;
+	case MYSQL_TYPE_TINY_BLOB:
+	case MYSQL_TYPE_MEDIUM_BLOB:
+	case MYSQL_TYPE_LONG_BLOB:
+	case MYSQL_TYPE_BLOB:
+		lua_pushluastream(L, (BYTE*)data, length);
+		break;
+	default:
+		lua_pushlstring(L, data, length);
+		break;
+	}
+}
+
+int MySqlFetch(lua_State* L) {
+
+	LuaMySQL* luamysql = lua_tomysql(L, 1);
+
+	if (!luamysql || !luamysql->alive) {
+		luaL_error(L, "Connection is closed");
+		return 0;
+	}
+
+	while (luamysql->busy) {
+		Sleep(1);
+	}
+
+	if (luamysql->error) {
+		lua_pushboolean(L, false);
+		lua_pushstring(L, luamysql->error);
+		return 2;
+	}
+
+	if (!luamysql->result) {
+		lua_pushboolean(L, false);
+		return 1;
+	}
+
+	luamysql->currentRow = mysql_fetch_row(luamysql->result);
+	if (luamysql->currentRow) {
+		luamysql->currentRowLengths = mysql_fetch_lengths(luamysql->result);
+		lua_pushboolean(L, true);
+	}
+	else {
+		luamysql->currentRowLengths = NULL;
+		mysql_free_result(luamysql->result);
+		luamysql->result = NULL;
+		lua_pushboolean(L, false);
+	}
+
+	return 1;
+}
+
 int MySqlGetRow(lua_State* L) {
 
 	LuaMySQL* luamysql = lua_tomysql(L, 1);
@@ -200,225 +436,92 @@ int MySqlGetRow(lua_State* L) {
 		return 0;
 	}
 
-	while (luamysql->busy) {
-		Sleep(1);
-	}
-
-	if (luamysql->error) {
+	if (!luamysql->result || !luamysql->currentRow) {
 		lua_pushnil(L);
-		lua_pushstring(L, luamysql->error);
-		return 2;
+		return 1;
 	}
 
-	if (!luamysql->result) {
-		lua_pushnil(L);
-		lua_pushstring(L, "no result");
-		return 2;
-	}
-
-	size_t numbfields = mysql_num_fields(luamysql->result);
-	MYSQL_ROW row = mysql_fetch_row(luamysql->result);
-	if (row) {
-		unsigned long* fieldlengths = mysql_fetch_lengths(luamysql->result);
-		lua_createtable(L, (int)numbfields, 0);
-		for (int n = 0; n < (int)numbfields; n++) {
-			lua_pushlstring(L, row[n], fieldlengths[n]);
-			lua_rawseti(L, -2, n + 1);
-		}
-	}
-	else {
-		lua_pushnil(L);
-		mysql_free_result(luamysql->result);
-		luamysql->result = NULL;
-	}
-
-	return 1;
-}
-
-int MySqlGetFields(lua_State* L) {
-	LuaMySQL* luamysql = lua_tomysql(L, 1);
-
-	if (!luamysql || !luamysql->alive) {
-		luaL_error(L, "Connection is closed");
-		return 0;
-	}
-
-	while (luamysql->busy) {
-		Sleep(1);
-	}
-
-	if (luamysql->error) {
-		lua_pushnil(L);
-		lua_pushstring(L, luamysql->error);
-		return 2;
-	}
-
-	if (!luamysql->result) {
-		lua_pushnil(L);
-		lua_pushstring(L, "no result");
-		return 2;
-	}
-
-	size_t numbfields = mysql_num_fields(luamysql->result);
+	int nfields = (int)mysql_num_fields(luamysql->result);
 	MYSQL_FIELD* fields = mysql_fetch_fields(luamysql->result);
 
-	lua_createtable(L, (int)numbfields, 0);
+	if (lua_type(L, 2) == LUA_TSTRING) {
 
-	for (int n = 0; n < (int)numbfields; n++) {
-
-		lua_newtable(L);
-
-		lua_pushstring(L, "catalog");
-		lua_pushlstring(L, fields[n].catalog, fields[n].catalog_length);
-		lua_settable(L, -3);
-
-		lua_pushstring(L, "charsetnr");
-		lua_pushinteger(L, fields[n].charsetnr);
-		lua_settable(L, -3);
-
-		lua_pushstring(L, "charsetnr");
-		lua_pushlstring(L, fields[n].db, fields[n].db_length);
-		lua_settable(L, -3);
-
-		lua_pushstring(L, "decimals");
-		lua_pushinteger(L, fields[n].decimals);
-		lua_settable(L, -3);
-
-		lua_pushstring(L, "def");
-		lua_pushlstring(L, fields[n].def, fields[n].def_length);
-		lua_settable(L, -3);
-
-		lua_pushstring(L, "flags");
-		lua_pushinteger(L, fields[n].flags);
-		lua_settable(L, -3);
-
-		lua_pushstring(L, "length");
-		lua_pushinteger(L, fields[n].length);
-		lua_settable(L, -3);
-
-		lua_pushstring(L, "maxlength");
-		lua_pushinteger(L, fields[n].max_length);
-		lua_settable(L, -3);
-
-		lua_pushstring(L, "name");
-		lua_pushlstring(L, fields[n].name, fields[n].name_length);
-		lua_settable(L, -3);
-
-		lua_pushstring(L, "orgname");
-		lua_pushlstring(L, fields[n].org_name, fields[n].org_name_length);
-		lua_settable(L, -3);
-
-		lua_pushstring(L, "orgtable");
-		lua_pushlstring(L, fields[n].org_table, fields[n].org_table_length);
-		lua_settable(L, -3);
-
-		lua_pushstring(L, "table");
-		lua_pushlstring(L, fields[n].table, fields[n].table_length);
-		lua_settable(L, -3);
-
-		lua_pushstring(L, "type");
-		lua_pushinteger(L, fields[n].type);
-		lua_settable(L, -3);
-
-		lua_rawseti(L, -2, n + 1);
-	}
-
-	return 1;
-}
-
-int MySqlGetResult(lua_State* L) {
-	LuaMySQL* luamysql = lua_tomysql(L, 1);
-
-	if (!luamysql || !luamysql->alive) {
-		luaL_error(L, "Connection is closed");
-		return 0;
-	}
-
-	while (luamysql->busy) {
-		Sleep(1);
-	}
-
-	if (luamysql->error) {
-		lua_pushnil(L);
-		lua_pushstring(L, luamysql->error);
-		return 2;
-	}
-
-	if (!luamysql->result) {
-		lua_pushnil(L);
-		lua_pushstring(L, "no result");
-		return 2;
-	}
-
-	size_t rows = mysql_num_rows(luamysql->result);
-	size_t numbfields = mysql_num_fields(luamysql->result);
-	MYSQL_ROW row;
-	MYSQL_FIELD* fields = mysql_fetch_fields(luamysql->result);
-	int nth = 1;
-	char* endptr;
-	MYSQL_FIELD* field;
-	const char* fielddata;
-	unsigned long* fieldlengths;
-	unsigned long length;
-
-	lua_createtable(L, (int)rows, 0);
-
-	while ((row = mysql_fetch_row(luamysql->result))) {
-
-		fieldlengths = mysql_fetch_lengths(luamysql->result);
-		lua_createtable(L, (int)numbfields, 0);
-
-		for (int i = 0; i < (int)numbfields; i++) {
-			field = &fields[i];
-			fielddata = row[i];
-			length = fieldlengths[i];
-
-			if (row[i]) {
-				switch (field->type) {
-				case MYSQL_TYPE_NULL:
+		const char* fname = lua_tostring(L, 2);
+		for (int i = 0; i < nfields; i++) {
+			if (strcmp(fields[i].name, fname) == 0) {
+				if (!luamysql->currentRow[i]) {
 					lua_pushnil(L);
-					break;
-				case MYSQL_TYPE_DECIMAL:
-				case MYSQL_TYPE_FLOAT:
-				case MYSQL_TYPE_BIT:
-				case MYSQL_TYPE_NEWDECIMAL:
-				case MYSQL_TYPE_DOUBLE:
-					lua_pushnumber(L, strtod(fielddata, &endptr));
-					break;
-				case MYSQL_TYPE_SHORT:
-				case MYSQL_TYPE_LONGLONG:
-				case MYSQL_TYPE_TINY:
-				case MYSQL_TYPE_LONG:
-				case MYSQL_TYPE_INT24:
-					lua_pushinteger(L, strtoll(fielddata, &endptr, 10));
-					break;
-				case MYSQL_TYPE_TINY_BLOB:
-				case MYSQL_TYPE_MEDIUM_BLOB:
-				case MYSQL_TYPE_LONG_BLOB:
-				case MYSQL_TYPE_BLOB:
-					lua_pushluastream(L, (BYTE*)fielddata, length);
-					break;
-				default:
-					lua_pushlstring(L, fielddata, length);
-					break;
 				}
+				else {
+					PushMySQLValue(L, luamysql->currentRow[i], luamysql->currentRowLengths[i], fields[i].type);
+				}
+				return 1;
 			}
-			else {
-				lua_pushnil(L);
-			}
+		}
+		lua_pushnil(L);
+		return 1;
+	}
 
-			lua_rawseti(L, -2, i + 1);
+	int idx = (int)luaL_optinteger(L, 2, -1);
+
+	if (idx > 0) {
+
+		idx--;
+		if (idx >= nfields) {
+			lua_pushnil(L);
+			return 1;
 		}
 
-		lua_rawseti(L, -2, nth++);
+		if (!luamysql->currentRow[idx]) {
+			lua_pushnil(L);
+		}
+		else {
+			PushMySQLValue(L, luamysql->currentRow[idx], luamysql->currentRowLengths[idx], fields[idx].type);
+		}
+		return 1;
 	}
+
+	lua_createtable(L, 0, nfields);
+
+	for (int i = 0; i < nfields; i++) {
+
+		lua_pushstring(L, fields[i].name);
+
+		if (!luamysql->currentRow[i]) {
+			lua_pushnil(L);
+		}
+		else {
+			PushMySQLValue(L, luamysql->currentRow[i], luamysql->currentRowLengths[i], fields[i].type);
+		}
+
+		lua_settable(L, -3);
+	}
+
+	return 1;
+}
+
+int MySqlFinish(lua_State* L) {
+
+	LuaMySQL* luamysql = lua_tomysql(L, 1);
+
+	while (luamysql->busy) {
+		Sleep(1);
+	}
+
+	luamysql->currentRow = NULL;
+	luamysql->currentRowLengths = NULL;
 
 	if (luamysql->result) {
 		mysql_free_result(luamysql->result);
 		luamysql->result = NULL;
 	}
 
-	return 1;
+	if (luamysql->error) {
+		gff_free(luamysql->error);
+		luamysql->error = NULL;
+	}
+
+	return 0;
 }
 
 int MySqlConnect(lua_State* L) {
@@ -437,6 +540,7 @@ int MySqlConnect(lua_State* L) {
 	}
 
 	mysql_options(con, MYSQL_OPT_CONNECT_TIMEOUT, &timeout);
+	mysql_options(con, MYSQL_SET_CHARSET_NAME, "utf8mb4");
 
 	if (!mysql_real_connect(con, host, user, password, database, port, NULL, 0)) {
 		lua_pushfstring(L, "Failed to connect: %s", mysql_error(con));
@@ -489,6 +593,9 @@ int luamysql_gc(lua_State* L) {
 		luamysql->result = NULL;
 	}
 
+	luamysql->currentRow = NULL;
+	luamysql->currentRowLengths = NULL;
+
 	if (luamysql->connection) {
 		mysql_close(luamysql->connection);
 		luamysql->connection = NULL;
@@ -504,6 +611,8 @@ int luamysql_gc(lua_State* L) {
 		gff_free(luamysql->error);
 		luamysql->error = NULL;
 	}
+
+	FreeParams(luamysql);
 
 	return 0;
 }

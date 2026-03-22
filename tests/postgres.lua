@@ -12,7 +12,7 @@ run("Postgres table exists", function()
 end)
 
 if not pgConfig.enabled then
-    skip("Postgres suite", "set pgConfig.enabled = true to run Postgres tests")
+    skip("Postgres suite", "set config.postgres.enabled = true to run Postgres tests")
     return
 end
 
