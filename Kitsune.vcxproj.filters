@@ -334,6 +334,15 @@
     <Filter Include="_Tests">
       <UniqueIdentifier>{615e3036-5eb2-4245-9114-67685df43186}</UniqueIdentifier>
     </Filter>
+    <Filter Include="LuaPostgres">
+      <UniqueIdentifier>{e1a2b3c4-d5e6-7f89-0a1b-2c3d4e5f6a7b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaPostgres\Header Files">
+      <UniqueIdentifier>{f2b3c4d5-e6f7-8901-2b3c-4d5e6f7a8b9c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaPostgres\Source Files">
+      <UniqueIdentifier>{a3c4d5e6-f7a8-9012-3c4d-5e6f7a8b9c0d}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Program.cpp">
@@ -760,10 +769,10 @@
       <Filter>LuaRedis\Source Files</Filter>
     </ClCompile>
     <ClCompile Include="LuaPostgres.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>LuaPostgres\Source Files</Filter>
     </ClCompile>
     <ClCompile Include="PostgresMain.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>LuaPostgres</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -1200,13 +1209,13 @@
       <Filter>LuaRedis\Header Files</Filter>
     </ClInclude>
     <ClInclude Include="postgres\include\libpq-fe.h">
-      <Filter>Header Files</Filter>
+      <Filter>LuaPostgres\Header Files</Filter>
     </ClInclude>
     <ClInclude Include="LuaPostgres.h">
-      <Filter>Header Files</Filter>
+      <Filter>LuaPostgres\Header Files</Filter>
     </ClInclude>
     <ClInclude Include="PostgresMain.h">
-      <Filter>Header Files</Filter>
+      <Filter>LuaPostgres</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
