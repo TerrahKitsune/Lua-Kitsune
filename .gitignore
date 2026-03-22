@@ -3,6 +3,9 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/master/VisualStudio.gitignore
 
+# Local test credentials - tracked once as a safe template then ignored
+tests/config.lua
+
 # User-specific files
 *.rsuser
 *.suo
