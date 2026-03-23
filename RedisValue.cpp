@@ -1,7 +1,7 @@
-#include "RedisValue.h"
+﻿#include "RedisValue.h"
 #include "RedisKey.h"
 
-int JsonRef = LUA_NOREF;
+static int JsonRef = LUA_NOREF;
 
 static LuaRedisKey* InternalGetRedisKey(lua_State* L, int index) {
 
@@ -475,7 +475,7 @@ int redisvalue_index(lua_State* L) {
 					lua_pushnil(L);
 				}
 				else {
-					lua_pushlstring(L, redis->reply->element[0]->str, redis->reply->element[0]->len);
+					lua_pushlstring(L, redis->reply->str, redis->reply->len);
 				}
 
 				return 1;
@@ -595,9 +595,9 @@ int redisvalue_newindex(lua_State* L) {
 
 		return 0;
 	}
-	else if (type == REDIS_VALUE_TYPE_SORTEDSET) {
+	if (type == REDIS_VALUE_TYPE_SORTEDSET) {
 
-		if (lua_isinteger(L, 3)) {
+		if (lua_isnumber(L, 3)) {
 			lua_pushredisref(L, key);
 			lua_pushliteral(L, "ZADD");
 			lua_pushrediskey(L, key);

@@ -1,5 +1,13 @@
 ﻿local helpers = require("tests.helpers")
 local run = helpers.run
+local skip = helpers.skip
+
+local streamConfig = require("tests.config").stream
+
+if not streamConfig.enabled then
+    skip("Stream suite", "set config.stream.enabled = true to run stream tests")
+    return
+end
 
 local testDataDir = "tests/TestData"
 

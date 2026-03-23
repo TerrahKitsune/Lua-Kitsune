@@ -1,7 +1,5 @@
-#include "Redis.h"
+﻿#include "Redis.h"
 #include "RedisString.h"
-
-void* buffer = NULL;
 
 int RedisPushStringInternal(lua_State* L, int redisIdx, const char* key, size_t keylength) {
 
@@ -53,10 +51,13 @@ int redisstring_getorset(lua_State* L) {
 	LuaRedis* redis = RedisCommandInternal(L);
 	lua_pop(L, 7);
 
+	if (redis->reply->type == REDIS_REPLY_STRING) {
+		lua_pushlstring(L, redis->reply->str, redis->reply->len);
+	}
+	else {
+		lua_pushvalue(L, 2);
+	}
 	CleanReply(redis);
-
-	lua_pushvalue(L, 1);
-	redisstring_tostring(L);
 
 	return 1;
 }
@@ -74,7 +75,12 @@ int redisstring_set(lua_State* L) {
 	LuaRedis* redis = RedisCommandInternal(L);
 	lua_pop(L, 6);
 
-	lua_pushlstring(L, redis->reply->str, redis->reply->len);
+	if (redis->reply->type == REDIS_REPLY_NIL) {
+		lua_pushnil(L);
+	}
+	else {
+		lua_pushlstring(L, redis->reply->str, redis->reply->len);
+	}
 	CleanReply(redis);
 
 	return 1;
@@ -100,7 +106,8 @@ int redisstring_setat(lua_State* L) {
 	lua_pushstring(L, "SETRANGE");
 	lua_pushrediskey(L, &redisString->key);
 	lua_pushinteger(L, idx - 1);
-	lua_pushlstring(L, (const char*)&data, 1);
+	char byte_val = (char)(unsigned char)data;
+	lua_pushlstring(L, &byte_val, 1);
 	LuaRedis* redis = RedisCommandInternal(L);
 	lua_pop(L, 5);
 
@@ -243,11 +250,6 @@ size_t len2;
 		return 0;
 	}
 
-	if (buffer) {
-		gff_free(buffer);
-		buffer = NULL;
-	}
-
 	char* concat = (char*)gff_malloc(len1 + len2);
 	if (!concat) {
 		lua_pop(L, 2);
@@ -255,18 +257,12 @@ size_t len2;
 		return 0;
 	}
 
-	buffer = concat;
-
 	memcpy(concat, first, len1);
 	memcpy(&concat[len1], second, len2);
 	lua_pop(L, 2);
 
 	lua_pushlstring(L, concat, len1 + len2);
-
-	if (buffer) {
-		gff_free(buffer);
-		buffer = NULL;
-	}
+	gff_free(concat);
 
 	return 1;
 }
@@ -281,11 +277,6 @@ int redisstring_call(lua_State* L) {
 }
 
 int redisstring_gc(lua_State* L) {
-
-	if (buffer) {
-		gff_free(buffer);
-		buffer = NULL;
-	}
 
 	LuaRedisString* redisString = lua_toredisstring(L, -1);
 

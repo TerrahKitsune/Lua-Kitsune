@@ -6,16 +6,16 @@ return {
 
     -- ── Databases ────────────────────────────────────────────────────────
     mysql = {
-        enabled = false,
-        host = "127.0.0.1",
+        enabled = true,
+        host = "10.9.23.252",
         port = 3306,
-        user = "root",
-        password = "",
+        user = "kitsune",
+        password = "Pizza123!",
         database = "kitsune"
     },
     postgres = {
-        enabled = false,
-        conninfo = "host=127.0.0.1 user=postgres password= dbname=postgres connect_timeout=5"
+        enabled = true,
+        conninfo = "host=10.9.23.252 user=postgres password=hej123 dbname=postgres connect_timeout=5"
     },
     odbc = {
         enabled = false,
@@ -24,11 +24,12 @@ return {
 
     -- ── Messaging / brokers ──────────────────────────────────────────────
     redis = {
-        enabled = false,
-        host = "127.0.0.1",
+        enabled = true,
+        host = "10.9.23.252",
         port = 6379,
         useTls = false,
         timeout = 10,
+        password = "hej123",
         sslOptions = nil
     },
     kafka = {
@@ -72,4 +73,27 @@ return {
     macro    = { enabled = false },
     process  = { enabled = false },
     services = { enabled = false },
+
+    -- ── Always-on (no external dependencies) ─────────────────────────────
+    utils      = { enabled = true },
+    aes        = { enabled = true },
+    archive    = { enabled = true },
+    base64     = { enabled = true },
+    console    = { enabled = true },
+    csv        = { enabled = true },
+    env        = { enabled = true },
+    erf        = { enabled = true },
+    fileasync  = { enabled = true },
+    filesystem = { enabled = true },
+    gff        = { enabled = true },
+    hashing    = { enabled = true },
+    json       = { enabled = true },
+    mutex      = { enabled = true },
+    sqlite     = { enabled = true },
+    stream     = { enabled = true },
+    timer      = { enabled = true },
+    tlk        = { enabled = true },
+    twoda      = { enabled = true },
+    wchar      = { enabled = true },
+    zip        = { enabled = true },
 }

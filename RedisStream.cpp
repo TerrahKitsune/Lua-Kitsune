@@ -1,4 +1,4 @@
-#include "RedisStream.h"
+﻿#include "RedisStream.h"
 #include "RedisKey.h"
 
 static int JsonRef = LUA_NOREF;
@@ -119,6 +119,7 @@ int redisstream_trim(lua_State* L) {
 	lua_pop(L, 5);
 
 	lua_pushinteger(L, redis->reply->integer);
+	CleanReply(redis);
 	return 1;
 }
 

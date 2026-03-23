@@ -416,6 +416,7 @@
     <None Include="tests\archive.lua" />
     <None Include="tests\base64.lua" />
     <None Include="tests\client.lua" />
+    <None Include="tests\config.lua" />
     <None Include="tests\console.lua" />
     <None Include="tests\csv.lua" />
     <None Include="tests\env.lua" />
@@ -431,7 +432,6 @@
     <None Include="tests\imgui.lua" />
     <None Include="tests\imgui_simple.lua" />
     <None Include="tests\json.lua" />
-    <None Include="tests\json_edge.lua" />
     <None Include="tests\kafka.lua" />
     <None Include="tests\macro.lua" />
     <None Include="tests\mutex.lua" />

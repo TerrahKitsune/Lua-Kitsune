@@ -1,5 +1,13 @@
 ﻿local helpers = require("tests.helpers")
 local run = helpers.run
+local skip = helpers.skip
+
+local fileasyncConfig = require("tests.config").fileasync
+
+if not fileasyncConfig.enabled then
+    skip("Fileasync suite", "set config.fileasync.enabled = true to run file async tests")
+    return
+end
 
 local testDataDir = "tests/TestData"
 

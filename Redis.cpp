@@ -1,9 +1,45 @@
-#include "Redis.h"
+﻿#include "Redis.h"
 #include <string.h>
 #include <fcntl.h>
 #include <errno.h>
 #include <stdlib.h> 
 #include <windows.h> 
+
+static void RedisDispose(lua_State* L, LuaRedis* redis) {
+
+	CleanReply(redis);
+
+	if (redis->ref != LUA_NOREF) {
+		luaL_unref(L, LUA_REGISTRYINDEX, redis->ref);
+		redis->ref = LUA_NOREF;
+	}
+
+	if (redis->thread != INVALID_HANDLE_VALUE) {
+		redis->isAlive = false;
+		redisCommand(redis->context, "QUIT");
+		WaitForSingleObject(redis->thread, INFINITE);
+		CloseHandle(redis->thread);
+		DeleteCriticalSection(&redis->CriticalSection);
+	}
+
+	if (redis->pollReply) {
+		freeReplyObject(redis->pollReply);
+		redis->pollReply = NULL;
+	}
+
+	if (redis->context) {
+		redisFree(redis->context);
+		redis->context = NULL;
+	}
+
+	if (redis->ssl) {
+		redisFreeSSLContext(redis->ssl);
+		redis->ssl = NULL;
+	}
+
+	memset(redis, 0, sizeof(LuaRedis));
+	redis->thread = INVALID_HANDLE_VALUE;
+}
 
 void CleanReply(LuaRedis* luaRedis) {
 
@@ -57,11 +93,14 @@ int PushReply(lua_State* L, redisReply* reply) {
 
 		lua_pushinteger(L, reply->integer);
 	}
-	else if (reply->type == REDIS_REPLY_ARRAY) {
+	else if (reply->type == REDIS_REPLY_ARRAY ||
+			 reply->type == REDIS_REPLY_MAP   ||
+			 reply->type == REDIS_REPLY_SET   ||
+			 reply->type == REDIS_REPLY_PUSH) {
 
 		lua_createtable(L, (int)reply->elements, 0);
 
-		for (int n = 0; n < reply->elements; n++) {
+		for (int n = 0; n < (int)reply->elements; n++) {
 			PushReply(L, reply->element[n]);
 			lua_rawseti(L, -2, n + 1);
 		}
@@ -85,6 +124,7 @@ int RedisOpen(lua_State* L) {
 	const char* data;
 	BOOL useTls = lua_toboolean(L, 3);
 	long timeout = (long)luaL_optinteger(L, 4, 10);
+	const char* password = luaL_optstring(L, 6, NULL);
 
 	LuaRedis* redis = lua_pushredis(L);
 	redisSSLContextError ssl_error = REDIS_SSL_CTX_NONE;
@@ -151,6 +191,7 @@ int RedisOpen(lua_State* L) {
 		redis->ssl = redisCreateSSLContextWithOptions(&sslOptions, &ssl_error);
 
 		if (!redis->ssl || ssl_error != REDIS_SSL_CTX_NONE) {
+			RedisDispose(L, redis);
 			luaL_error(L, "SSL Context error: %s", redisSSLContextGetError(ssl_error));
 			return 0;
 		}
@@ -165,7 +206,11 @@ int RedisOpen(lua_State* L) {
 
 	if (redis->context == NULL || redis->context->err) {
 		if (redis->context) {
-			luaL_error(L, "Connection error: %s", redis->context->errstr);
+			char buf[256];
+			strncpy(buf, redis->context->errstr, sizeof(buf) - 1);
+			buf[sizeof(buf) - 1] = '\0';
+			RedisDispose(L, redis);
+			luaL_error(L, "Connection error: %s", buf);
 		}
 		else {
 			luaL_error(L, "Connection error: can't allocate redis context");
@@ -176,9 +221,33 @@ int RedisOpen(lua_State* L) {
 	if (redis->ssl) {
 
 		if (redisInitiateSSLWithContext(redis->context, redis->ssl) != REDIS_OK) {
-			luaL_error(L, "Error: %s", redis->context->errstr);
+			char buf[256];
+			strncpy(buf, redis->context->errstr, sizeof(buf) - 1);
+			buf[sizeof(buf) - 1] = '\0';
+			RedisDispose(L, redis);
+			luaL_error(L, "Error: %s", buf);
 			return 0;
 		}
+	}
+
+	if (password) {
+
+		redisReply* reply = (redisReply*)redisCommand(redis->context, "AUTH %s", password);
+		if (!reply) {
+			RedisDispose(L, redis);
+			luaL_error(L, "AUTH error: no reply from server");
+			return 0;
+		}
+		if (reply->type == REDIS_REPLY_ERROR) {
+			char buf[256];
+			strncpy(buf, reply->str, sizeof(buf) - 1);
+			buf[sizeof(buf) - 1] = '\0';
+			freeReplyObject(reply);
+			RedisDispose(L, redis);
+			luaL_error(L, "AUTH failed: %s", buf);
+			return 0;
+		}
+		freeReplyObject(reply);
 	}
 
 	return 1;
@@ -248,6 +317,7 @@ int RedisPoll(lua_State* L) {
 		luaRedis->thread = (HANDLE)_beginthreadex(NULL, 0, &threadPollFunc, luaRedis, 0, NULL);
 	}
 	else if (WaitForSingleObject(luaRedis->thread, 0) != WAIT_TIMEOUT) {
+		CloseHandle(luaRedis->thread);
 		luaRedis->thread = (HANDLE)_beginthreadex(NULL, 0, &threadPollFunc, luaRedis, 0, NULL);
 	}
 
@@ -307,7 +377,7 @@ LuaRedis* RedisCommandInternal(lua_State* L) {
 		luaRedis->argv = (char**)gff_calloc(top, sizeof(char*));
 		luaRedis->argvlen = (size_t*)gff_calloc(top, sizeof(size_t));
 
-		if (!luaRedis->argv) {
+		if (!luaRedis->argv || !luaRedis->argvlen) {
 			luaL_error(L, "Out of memory");
 			return NULL;
 		}
@@ -324,9 +394,8 @@ LuaRedis* RedisCommandInternal(lua_State* L) {
 
 			luaRedis->argvlen[n] = paramLen;
 			memcpy(luaRedis->argv[n], command, paramLen);
+			luaRedis->argc++;
 		}
-
-		luaRedis->argc = top;
 	}
 
 	luaRedis->reply = (redisReply*)redisCommandArgv(luaRedis->context, luaRedis->argc, (const char**)luaRedis->argv, luaRedis->argvlen);
@@ -334,12 +403,12 @@ LuaRedis* RedisCommandInternal(lua_State* L) {
 	if (!luaRedis->reply) {
 
 		luaL_error(L, "Redis connection failed: %s", luaRedis->context->errstr);
-		return 0;
+		return NULL;
 	}
 	else if (luaRedis->reply->type == REDIS_REPLY_ERROR) {
 
 		luaL_error(L, "Redis error: %s", luaRedis->reply->str);
-		return 0;
+		return NULL;
 	}
 
 	return luaRedis;
@@ -635,41 +704,7 @@ LuaRedis* lua_toredis(lua_State* L, int index) {
 
 int redis_gc(lua_State* L) {
 
-	LuaRedis* redis = lua_toredis(L, 1);
-
-	CleanReply(redis);
-
-	if (redis->ref != LUA_NOREF) {
-		luaL_unref(L, LUA_REGISTRYINDEX, redis->ref);
-		redis->ref = LUA_NOREF;
-	}
-
-	if (redis->thread != INVALID_HANDLE_VALUE) {
-
-		redis->isAlive = false;
-
-		redisCommand(redis->context, "QUIT");
-
-		WaitForSingleObject(redis->thread, INFINITE);
-		CloseHandle(redis->thread);
-		DeleteCriticalSection(&redis->CriticalSection);
-	}
-
-	if (redis->pollReply) {
-		freeReplyObject(redis->pollReply);
-	}
-
-	if (redis->context) {
-		redisFree(redis->context);
-	}
-
-	if (redis->ssl) {
-		redisFreeSSLContext(redis->ssl);
-	}
-
-	memset(redis, 0, sizeof(LuaRedis));
-	redis->thread = INVALID_HANDLE_VALUE;
-
+	RedisDispose(L, lua_toredis(L, 1));
 	return 0;
 }
 

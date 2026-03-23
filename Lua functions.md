@@ -305,7 +305,7 @@ inputs Macro:GetInputs()
 ### Connection
 
 ```lua
-Redis Redis.Open(host, port, opt useTls, opt timeout, opt sslOptions)
+Redis Redis.Open(host, port, opt useTls, opt timeout, opt sslOptions, opt password)
 ```
 
 **SSL Options:**

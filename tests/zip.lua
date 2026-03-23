@@ -2,6 +2,13 @@
 local run = helpers.run
 local skip = helpers.skip
 
+local zipConfig = require("tests.config").zip
+
+if not zipConfig.enabled then
+    skip("Zip suite", "set config.zip.enabled = true to run Zip tests")
+    return
+end
+
 local testDataDir = "tests/TestData"
 
 if type(Zip) ~= "table" then

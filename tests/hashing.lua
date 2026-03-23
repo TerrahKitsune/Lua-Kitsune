@@ -1,5 +1,13 @@
 ﻿local helpers = require("tests.helpers")
 local run = helpers.run
+local skip = helpers.skip
+
+local hashingConfig = require("tests.config").hashing
+
+if not hashingConfig.enabled then
+    skip("Hashing suite", "set config.hashing.enabled = true to run hashing tests")
+    return
+end
 
 local function read_file(path)
     local file = io.open(path, "rb")

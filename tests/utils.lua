@@ -4,6 +4,14 @@ local assert_boolean = helpers.assert_boolean
 local assert_table = helpers.assert_table
 local assert_string_or_wchar = helpers.assert_string_or_wchar
 local run = helpers.run
+local skip = helpers.skip
+
+local utilsConfig = require("tests.config").utils
+
+if not utilsConfig.enabled then
+    skip("Utils suite", "set config.utils.enabled = true to run utils tests")
+    return
+end
 
 run("GetIsAdmin returns boolean", function()
     assert_boolean(GetIsAdmin(), "GetIsAdmin")

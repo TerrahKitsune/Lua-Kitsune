@@ -1,5 +1,13 @@
 ﻿local helpers = require("tests.helpers")
 local run = helpers.run
+local skip = helpers.skip
+
+local jsonConfig = require("tests.config").json
+
+if not jsonConfig.enabled then
+    skip("Json suite", "set config.json.enabled = true to run JSON tests")
+    return
+end
 
 local testDataDir = "tests/TestData"
 
