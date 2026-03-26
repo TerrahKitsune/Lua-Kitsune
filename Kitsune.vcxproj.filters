@@ -1360,13 +1360,9 @@
     <None Include="tests\imgui_simple.lua" />
     <None Include=".github\copilot-instructions.md" />
     <None Include="Extension functions.md" />
-    <None Include="fix_indent.py" />
     <None Include="tests\postgres.lua">
       <Filter>_Tests</Filter>
     </None>
-    <None Include="rewrite_postgres.py" />
-    <None Include="write_tests.py" />
-    <None Include="update_docs.py" />
     <None Include="tests\config.lua">
       <Filter>_Tests</Filter>
     </None>

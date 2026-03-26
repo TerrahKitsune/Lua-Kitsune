@@ -407,11 +407,9 @@
   <ItemGroup>
     <None Include=".github\copilot-instructions.md" />
     <None Include="Extension functions.md" />
-    <None Include="fix_indent.py" />
     <None Include="Lua functions.md" />
     <None Include="Lua\Makefile" />
     <None Include="packages.config" />
-    <None Include="rewrite_postgres.py" />
     <None Include="tests\aes.lua" />
     <None Include="tests\archive.lua" />
     <None Include="tests\base64.lua" />
@@ -454,8 +452,6 @@
     <None Include="tests\utils.lua" />
     <None Include="tests\wchar.lua" />
     <None Include="tests\zip.lua" />
-    <None Include="update_docs.py" />
-    <None Include="write_tests.py" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
