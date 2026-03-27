@@ -1,0 +1,44 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <NativeOutputDir>$(ProjectDir)..\Lua-Kitsune\x64\$(Configuration)\</NativeOutputDir>
+    <NativeRootDir>$(ProjectDir)..\Lua-Kitsune\</NativeRootDir>
+  </PropertyGroup>
+
+  <!--
+    Copies all native DLLs into the test output directory so the test runner
+    can resolve KitsuneEngine.dll and its dependencies at runtime.
+    KitsuneNet's BuildNativeEngine target ensures they are built first.
+    Includes both x64\$(Configuration)\ and the repo root (hiredis, libmysql).
+  -->
+  <Target Name="CopyNativeDlls" BeforeTargets="Build">
+    <ItemGroup>
+      <_NativeDlls Include="$(NativeOutputDir)*.dll" Condition="Exists('$(NativeOutputDir)')" />
+      <_NativeDlls Include="$(NativeRootDir)*.dll" Condition="Exists('$(NativeRootDir)')" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_NativeDlls)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
+  </Target>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Shouldly" Version="4.2.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\KitsuneNet\KitsuneNet.csproj" />
+  </ItemGroup>
+
+</Project>

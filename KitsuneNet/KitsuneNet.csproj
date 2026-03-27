@@ -1,0 +1,31 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <NativeVcxProj>$(ProjectDir)..\Kitsune.vcxproj</NativeVcxProj>
+    <NativeOutputDir>$(ProjectDir)..\x64\$(Configuration)\</NativeOutputDir>
+    <NativeRootDir>$(ProjectDir)..\</NativeRootDir>
+  </PropertyGroup>
+
+  <!--
+    Builds KitsuneEngine.vcxproj (x64, matching configuration) then copies
+    KitsuneEngine.dll and all its native dependencies into this project's output.
+    DLLs are sourced from both x64\$(Configuration)\ and the repo root, because
+    some dependencies (hiredis.dll, hiredis_ssl.dll, libmysql.dll) live in the
+    repo root rather than the per-configuration build output.
+  -->
+  <Target Name="BuildNativeEngine" BeforeTargets="Build">
+    <MSBuild Projects="$(NativeVcxProj)" Properties="Configuration=$(Configuration);Platform=x64" />
+    <ItemGroup>
+      <_NativeDlls Include="$(NativeOutputDir)*.dll" />
+      <_NativeDlls Include="$(NativeRootDir)*.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_NativeDlls)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

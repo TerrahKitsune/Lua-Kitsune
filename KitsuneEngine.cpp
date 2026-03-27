@@ -242,7 +242,8 @@ static void* l_alloc(void* ud, void* ptr, size_t osize, size_t nsize) {
 // Exported API
 // ============================================================
 
-static KitsuneState* g_state = nullptr;
+static KitsuneState* g_state    = nullptr;
+static bool          g_coOwned  = false;
 
 extern "C" {
 
@@ -250,14 +251,18 @@ KITSUNE_API lua_State* KitsuneInit() {
 	if (g_state)
 		return g_state->L;
 
-	if (FAILED(CoInitialize(NULL)))
+	// RPC_E_CHANGED_MODE means COM was already initialised by the host (e.g. .NET's
+	// MTA thread pool).  We can still use COM; we just must not call CoUninitialize.
+	HRESULT cohr = CoInitialize(NULL);
+	if (FAILED(cohr) && cohr != RPC_E_CHANGED_MODE)
 		return NULL;
+	g_coOwned = SUCCEEDED(cohr);
 
 	InitMemoryManager();
 
 	WSADATA wsa;
 	if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
-		CoUninitialize();
+		if (g_coOwned) CoUninitialize();
 		return NULL;
 	}
 
@@ -278,7 +283,7 @@ KITSUNE_API lua_State* KitsuneInit() {
 		EVP_cleanup();
 		WSACleanup();
 		EndMemoryManager();
-		CoUninitialize();
+		if (g_coOwned) CoUninitialize();
 		return NULL;
 	}
 	InitializeCriticalSection(&state->accessLock);
@@ -296,7 +301,7 @@ KITSUNE_API lua_State* KitsuneInit() {
 		EVP_cleanup();
 		WSACleanup();
 		EndMemoryManager();
-		CoUninitialize();
+		if (g_coOwned) CoUninitialize();
 		return NULL;
 	}
 
@@ -363,6 +368,9 @@ KITSUNE_API lua_State* KitsuneInit() {
 	lua_pushcfunction(L, L_cls);           lua_setglobal(L, "CLS");
 
 	luaopen_misc(L);
+
+	lua_newtable(L);
+	lua_setglobal(L, "Vars");
 
 	lua_sethook(L, L_Ticker, LUA_MASKCOUNT, 1000);
 	g_state = state;
@@ -434,6 +442,7 @@ KITSUNE_API int KitsuneExecuteString(const char* script, int argc, const char** 
 	}
 	lua_setglobal(L, "ARGS");
 	SetError(state, NULL);
+	SetResult(state, NULL, 0);
 	int error = luaL_loadbuffer(L, script, strlen(script), "string") ||
 				lua_pcall(L, 0, 1, 0);
 	if (error) {
@@ -443,6 +452,12 @@ KITSUNE_API int KitsuneExecuteString(const char* script, int argc, const char** 
 		InterlockedExchange(&state->running, 0);
 		ServicePauseRequests(state);
 		return -1;
+	}
+	if (lua_gettop(L) > 0 && !lua_isnil(L, -1)) {
+		size_t len;
+		const char* s = luaL_tolstring(L, -1, &len);
+		SetResult(state, s, len);
+		lua_pop(L, 1);
 	}
 	lua_settop(L, 0);
 	ServicePauseRequests(state);
@@ -510,11 +525,19 @@ KITSUNE_API bool KitsuneSetVariable(const char* name, const char* value, size_t 
 	KitsuneState* state = g_state;
 	if (!state || !state->L || !name) return false;
 	AcquireLuaAccess(state);
+	lua_getglobal(state->L, "Vars");
+	if (!lua_istable(state->L, -1)) {
+		lua_pop(state->L, 1);
+		lua_newtable(state->L);
+		lua_pushvalue(state->L, -1);
+		lua_setglobal(state->L, "Vars");
+	}
 	if (value)
 		lua_pushlstring(state->L, value, length);
 	else
 		lua_pushnil(state->L);
-	lua_setglobal(state->L, name);
+	lua_setfield(state->L, -2, name);
+	lua_pop(state->L, 1);
 	ReleaseLuaAccess(state);
 	return true;
 }
@@ -524,22 +547,24 @@ KITSUNE_API size_t KitsuneGetVariable(const char* name, char* buffer, size_t buf
 	if (!state || !state->L || !name) return 0;
 	AcquireLuaAccess(state);
 
-	lua_getglobal(state->L, name);      // [-0, +1] pushes value
-
 	size_t result = 0;
-	if (!lua_isnil(state->L, -1)) {
-		size_t len;
-		const char* s = luaL_tolstring(state->L, -1, &len);  // [-0, +1] pushes string rep
-		result = len;
-		if (buffer && bufferSize > 0) {
-			size_t copy = len < bufferSize - 1 ? len : bufferSize - 1;
-			memcpy(buffer, s, copy);
-			buffer[copy] = '\0';
+	lua_getglobal(state->L, "Vars");    // +1: Vars (or nil)
+	if (lua_istable(state->L, -1)) {
+		lua_getfield(state->L, -1, name);   // +1: Vars[name]
+		if (!lua_isnil(state->L, -1)) {
+			size_t len;
+			const char* s = luaL_tolstring(state->L, -1, &len);  // +1: string rep
+			result = len;
+			if (buffer && bufferSize > 0) {
+				size_t copy = len < bufferSize - 1 ? len : bufferSize - 1;
+				memcpy(buffer, s, copy);
+				buffer[copy] = '\0';
+			}
+			lua_pop(state->L, 1);               // pop string rep
 		}
-		lua_pop(state->L, 1);           // pop luaL_tolstring result
+		lua_pop(state->L, 1);               // pop Vars[name]
 	}
-
-	lua_pop(state->L, 1);               // pop original value
+	lua_pop(state->L, 1);               // pop Vars
 	ReleaseLuaAccess(state);
 	return result;
 }
@@ -570,7 +595,7 @@ KITSUNE_API void KitsuneCleanup() {
 	EVP_cleanup();
 	WSACleanup();
 	EndMemoryManager();
-	CoUninitialize();
+	if (g_coOwned) { CoUninitialize(); g_coOwned = false; }
 }
 
 } // extern "C"
