@@ -15,19 +15,31 @@ namespace KitsuneNet
         private static extern IntPtr KitsuneInit();
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-        private static extern int KitsuneExecuteFile(string path, int argc, string[]? argv);
+        private static extern int KitsuneExecuteFile(string path, int argc, string[]? argv,
+            [MarshalAs(UnmanagedType.I1)] bool fireAndForget);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-        private static extern int KitsuneExecuteString(string script, int argc, string[]? argv);
+        private static extern int KitsuneExecuteString(string script, int argc, string[]? argv,
+            [MarshalAs(UnmanagedType.I1)] bool fireAndForget);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern IntPtr KitsuneGetError();
+        private static extern IntPtr KitsuneGetError(int id);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool KitsuneHasResult(int id, out nuint len);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern nuint KitsuneGetResult(int id, byte[]? buffer, nuint bufferSize);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern int KitsuneIsRunning();
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern void KitsuneInterrupt();
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern void KitsuneWait();
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
         [return: MarshalAs(UnmanagedType.I1)]
@@ -37,54 +49,193 @@ namespace KitsuneNet
         private static extern nuint KitsuneGetVariable(string name, byte[] buffer, nuint bufferSize);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern nuint KitsuneHasResult();
-
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern nuint KitsuneGetResult(byte[] buffer, nuint bufferSize);
+        private static extern int KitsuneGetActiveIds(int[]? buffer, int bufferSize);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern void KitsuneCleanup();
 
         #endregion
 
-        /// <summary>
-        /// Initialises the engine. Throws if <c>KitsuneInit</c> returns NULL.
-        /// </summary>
+        /// <summary>Initialises the engine. Throws if <c>KitsuneInit</c> returns NULL.</summary>
         public KitsuneEngine()
         {
             if (KitsuneInit() == IntPtr.Zero)
-                throw new InvalidOperationException(GetError() ?? "KitsuneInit failed");
+                throw new InvalidOperationException("KitsuneInit failed");
         }
 
-        /// <summary>Executes a Lua script file and returns the exit code.</summary>
-        public int ExecuteFile(string path, params string[]? args)
+        // -- Execution ------------------------------------------------------------
+
+        /// <summary>
+        /// Starts a Lua script file as a coroutine and returns its ID.
+        /// When <paramref name="fireAndForget"/> is <c>true</c> the slot is freed automatically on
+        /// completion; do not call <see cref="GetResult"/> or <see cref="ReleaseCoroutine"/> for that ID.
+        /// </summary>
+        public int ExecuteFile(string path, bool fireAndForget = false, params string[]? args)
         {
             string[] argv = args ?? [];
-            return KitsuneExecuteFile(path, argv.Length, argv);
+            return KitsuneExecuteFile(path, argv.Length, argv, fireAndForget);
         }
 
-        /// <summary>Executes a Lua script string and returns the exit code.</summary>
-        public int ExecuteString(string script, params string[]? args)
+        /// <summary>
+        /// Starts a Lua script string as a coroutine and returns its ID.
+        /// When <paramref name="fireAndForget"/> is <c>true</c> the slot is freed automatically on
+        /// completion; do not call <see cref="GetResult"/> or <see cref="ReleaseCoroutine"/> for that ID.
+        /// </summary>
+        public int ExecuteString(string script, bool fireAndForget = false, params string[]? args)
         {
             string[] argv = args ?? [];
-            return KitsuneExecuteString(script, argv.Length, argv);
+            return KitsuneExecuteString(script, argv.Length, argv, fireAndForget);
         }
 
-        /// <summary>Returns the last error message, or <c>null</c> if none.</summary>
-        public string? GetError()
+        /// <summary>
+        /// Starts a Lua script file as a coroutine and asynchronously waits for it to complete.
+        /// </summary>
+        /// <returns>The UTF-8 result string, or <c>null</c> if the script returned nil or nothing.</returns>
+        /// <exception cref="InvalidOperationException">Thrown if the coroutine could not be started.</exception>
+        /// <exception cref="LuaException">Thrown if the Lua script raised a runtime or syntax error.</exception>
+        public async Task<string?> ExecuteFileAsync(string path, CancellationToken cancellationToken = default, params string[]? args)
         {
-            IntPtr ptr = KitsuneGetError();
+            int id = ExecuteFile(path, args: args);
+            if (id < 0)
+                throw new InvalidOperationException($"Failed to start Lua coroutine for file '{path}'.");
+            try
+            {
+                await WaitAsync(id, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                // Release the slot immediately if the coroutine already finished during cancellation;
+                // otherwise the slot stays live until the engine is disposed.
+                if (HasResult(id))
+                    ReleaseCoroutine(id);
+                throw;
+            }
+            string? error = GetError(id);
+            string? result = GetResultString(id);
+            if (error is not null)
+                throw new LuaException(error);
+            return result;
+        }
+
+        /// <summary>
+        /// Starts a Lua script string as a coroutine and asynchronously waits for it to complete.
+        /// </summary>
+        /// <returns>The UTF-8 result string, or <c>null</c> if the script returned nil or nothing.</returns>
+        /// <exception cref="InvalidOperationException">Thrown if the coroutine could not be started.</exception>
+        /// <exception cref="LuaException">Thrown if the Lua script raised a runtime or syntax error.</exception>
+        public async Task<string?> ExecuteStringAsync(string script, CancellationToken cancellationToken = default, params string[]? args)
+        {
+            int id = ExecuteString(script, args: args);
+            if (id < 0)
+                throw new InvalidOperationException("Failed to start Lua coroutine.");
+            try
+            {
+                await WaitAsync(id, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                // Release the slot immediately if the coroutine already finished during cancellation;
+                // otherwise the slot stays live until the engine is disposed.
+                if (HasResult(id))
+                    ReleaseCoroutine(id);
+                throw;
+            }
+            string? error = GetError(id);
+            string? result = GetResultString(id);
+            if (error is not null)
+                throw new LuaException(error);
+            return result;
+        }
+
+        // -- Per-coroutine queries ------------------------------------------------
+
+        /// <summary>
+        /// Returns <c>true</c> once the coroutine has finished (success or error).
+        /// <paramref name="len"/> is set to the byte length of the pending result (0 = no result).
+        /// </summary>
+        public bool HasResult(int id, out nuint len) => KitsuneHasResult(id, out len);
+
+        /// <summary>Returns <c>true</c> once the coroutine has finished (success or error).</summary>
+        public bool HasResult(int id) => KitsuneHasResult(id, out _);
+
+        /// <summary>
+        /// Returns the error string for a finished coroutine, or <c>null</c> if none.
+        /// Valid until <see cref="GetResult"/> or <see cref="ReleaseCoroutine"/> releases the slot.
+        /// </summary>
+        public string? GetError(int id)
+        {
+            IntPtr ptr = KitsuneGetError(id);
             return ptr == IntPtr.Zero ? null : Marshal.PtrToStringAnsi(ptr);
         }
 
-        /// <summary>Returns <c>true</c> if the engine is currently executing a script.</summary>
+        /// <summary>
+        /// Returns the result of a finished coroutine as raw bytes, or <c>null</c> if there is no result.
+        /// Consumes the result and releases the slot. Always call this (or <see cref="ReleaseCoroutine"/>)
+        /// after <see cref="HasResult"/> returns <c>true</c> to free the slot.
+        /// </summary>
+        public byte[]? GetResult(int id)
+        {
+            if (!KitsuneHasResult(id, out nuint len))
+                return null;
+            if (len == 0)
+            {
+                KitsuneGetResult(id, null, 0);
+                return null;
+            }
+            byte[] buffer = new byte[(int)len + 1];
+            nuint actual = KitsuneGetResult(id, buffer, (nuint)buffer.Length);
+            return actual == 0 ? null : buffer[..(int)actual];
+        }
+
+        /// <summary>
+        /// Returns the result of a finished coroutine as a UTF-8 string, or <c>null</c> if there is no result.
+        /// Consumes the result and releases the slot.
+        /// </summary>
+        public string? GetResultString(int id)
+        {
+            byte[]? result = GetResult(id);
+            return result is null ? null : Encoding.UTF8.GetString(result);
+        }
+
+        /// <summary>
+        /// Releases the slot for a finished coroutine without reading its result.
+        /// Equivalent to calling <see cref="GetResult"/> and ignoring the return value.
+        /// </summary>
+        public void ReleaseCoroutine(int id) => KitsuneGetResult(id, null, 0);
+
+        // -- Global control -------------------------------------------------------
+
+        /// <summary>
+        /// Returns the ID of the first coroutine that is still running, or 0 if none are active.
+        /// </summary>
+        public int RunningCoroutineId => KitsuneIsRunning();
+
+        /// <summary>Returns <c>true</c> if any coroutine is currently running.</summary>
         public bool IsRunning => KitsuneIsRunning() != 0;
 
-        /// <summary>Signals the running script to stop at the next instruction boundary.</summary>
+        /// <summary>Signals all running coroutines to stop at the next instruction boundary.</summary>
         public void Interrupt() => KitsuneInterrupt();
 
-        /// <summary>Blocks until the engine is no longer running, or the token is cancelled.</summary>
-        public void Wait(CancellationToken cancellationToken = default)
+        /// <summary>
+        /// Returns the IDs of all coroutines that are currently alive — either still running
+        /// or finished but not yet released via <see cref="GetResult"/> or <see cref="ReleaseCoroutine"/>.
+        /// </summary>
+        public int[] GetActiveIds()
+        {
+            int count = KitsuneGetActiveIds(null, 0);
+            if (count == 0) return [];
+            int[] ids = new int[count];
+            KitsuneGetActiveIds(ids, ids.Length);
+            return ids;
+        }
+
+        /// <summary>Blocks until all coroutines have finished.</summary>
+        public void Wait() => KitsuneWait();
+
+        /// <summary>
+        /// Blocks until all coroutines have finished, or <paramref name="cancellationToken"/> is cancelled.
+        /// </summary>
+        public void Wait(CancellationToken cancellationToken)
         {
             while (IsRunning)
             {
@@ -93,19 +244,59 @@ namespace KitsuneNet
             }
         }
 
-        /// <summary>Sets a pending global variable from a UTF-8 string.</summary>
+        /// <summary>
+        /// Blocks until the specified coroutine has finished, or <paramref name="cancellationToken"/> is cancelled.
+        /// </summary>
+        public void Wait(int id, CancellationToken cancellationToken = default)
+        {
+            while (!HasResult(id))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                Thread.Sleep(1);
+            }
+        }
+
+        /// <summary>
+        /// Asynchronously waits until all coroutines have finished,
+        /// or <paramref name="cancellationToken"/> is cancelled.
+        /// </summary>
+        public async Task WaitAsync(CancellationToken cancellationToken = default)
+        {
+            while (IsRunning)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await Task.Delay(1, cancellationToken);
+            }
+        }
+
+        /// <summary>
+        /// Asynchronously waits until the specified coroutine has finished,
+        /// or <paramref name="cancellationToken"/> is cancelled.
+        /// </summary>
+        public async Task WaitAsync(int id, CancellationToken cancellationToken = default)
+        {
+            while (!HasResult(id))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await Task.Delay(1, cancellationToken);
+            }
+        }
+
+        // -- Variable bridge ------------------------------------------------------
+
+        /// <summary>Sets a global variable in the Vars table from a UTF-8 string.</summary>
         public bool SetVariable(string name, string value)
         {
             byte[] bytes = Encoding.UTF8.GetBytes(value);
             return KitsuneSetVariable(name, bytes, (nuint)bytes.Length);
         }
 
-        /// <summary>Sets a pending global variable from raw bytes.</summary>
+        /// <summary>Sets a global variable in the Vars table from raw bytes.</summary>
         public bool SetVariable(string name, byte[] value) =>
             KitsuneSetVariable(name, value, (nuint)value.Length);
 
         /// <summary>
-        /// Returns a global variable as a UTF-8 string, or <c>null</c> if not found.
+        /// Returns a Vars global as a UTF-8 string, or <c>null</c> if not found.
         /// Uses a two-call pattern to handle values larger than the initial buffer.
         /// </summary>
         public string? GetVariable(string name)
@@ -122,7 +313,7 @@ namespace KitsuneNet
         }
 
         /// <summary>
-        /// Returns a global variable as raw bytes, or <c>null</c> if not found.
+        /// Returns a Vars global as raw bytes, or <c>null</c> if not found.
         /// Uses a two-call pattern to handle values larger than the initial buffer.
         /// </summary>
         public byte[]? GetVariableBytes(string name)
@@ -138,36 +329,6 @@ namespace KitsuneNet
             return buffer[..(int)actual];
         }
 
-        /// <summary>
-        /// Returns the byte length of the pending result without consuming it,
-        /// or 0 if no result is available.
-        /// </summary>
-        public bool HasResult() => KitsuneHasResult() != 0;
-
-        /// <summary>
-        /// Waits for a result and returns it as raw bytes, or <c>null</c> if none available.
-        /// Consumes the result.
-        /// </summary>
-        public byte[]? GetResult()
-        {
-            nuint len = KitsuneHasResult();
-            if (len == 0)
-                return null;
-            byte[] buffer = new byte[(int)len + 1];
-            nuint actual = KitsuneGetResult(buffer, (nuint)buffer.Length);
-            return actual == 0 ? null : buffer[..(int)actual];
-        }
-
-        /// <summary>
-        /// Waits for a result and returns it as a UTF-8 string, or <c>null</c> if none available.
-        /// Consumes the result.
-        /// </summary>
-        public string? GetResultString()
-        {
-            byte[]? result = GetResult();
-            return result is null ? null : Encoding.UTF8.GetString(result);
-        }
-
         public void Dispose()
         {
             if (!_disposed)
@@ -176,5 +337,11 @@ namespace KitsuneNet
                 _disposed = true;
             }
         }
+    }
+
+    /// <summary>Thrown when a Lua script raises a runtime or syntax error.</summary>
+    public sealed class LuaException : Exception
+    {
+        public LuaException(string message) : base(message) { }
     }
 }

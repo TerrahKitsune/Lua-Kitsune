@@ -110,6 +110,7 @@
     <None Include="Extension functions.md" />
     <None Include="KitsuneEngine.vcxproj" />
     <None Include="KitsuneEngine.vcxproj.filters" />
+    <None Include="KitsuneEngine\KitsuneEngine.vcxproj" />
     <None Include="Lua functions.md" />
     <None Include="Lua\Makefile" />
     <None Include="tests\aes.lua" />

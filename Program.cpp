@@ -26,23 +26,37 @@ int main(int argc, char *argv[]) {
 		return -1;
 	}
 
-	int ret = 0;
-
 	const char* file = argc > 1 ? argv[1] : "main.lua";
-	ret = KitsuneExecuteFile(file, argc, (const char**)argv);
+	int id = KitsuneExecuteFile(file, argc, (const char**)argv);
 
-	const char* err = KitsuneGetError();
+	if (id < 0) {
+		fprintf(stderr, "Failed to start %s\n", file);
+		KitsuneCleanup();
+		return -1;
+	}
+
+	// Block until the coroutine finishes and get the result length.
+	size_t resultLen = 0;
+	while (!KitsuneHasResult(id, &resultLen))
+		Sleep(1);
+
+	const char* err = KitsuneGetError(id);
 	if (err)
 		fprintf(stderr, "%s\n", err);
 
-	size_t resultLen = KitsuneHasResult();
+	int ret = err ? 1 : 0;
+
 	if (resultLen > 0) {
 		char* result = (char*)malloc(resultLen + 1);
 		if (result) {
-			KitsuneGetResult(result, resultLen + 1);
+			KitsuneGetResult(id, result, resultLen + 1);  // also releases the slot
 			printf("%.*s\n", (int)resultLen, result);
 			free(result);
+		} else {
+			KitsuneGetResult(id, nullptr, 0);  // release the slot even on malloc failure
 		}
+	} else {
+		KitsuneGetResult(id, nullptr, 0);  // always release the slot
 	}
 
 	KitsuneCleanup();

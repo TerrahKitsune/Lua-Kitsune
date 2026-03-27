@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
@@ -58,6 +58,9 @@
       <LargeAddressAware>true</LargeAddressAware>
       <IgnoreSpecificDefaultLibraries>msvcrt.lib;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
     </Link>
+    <PostBuildEvent>
+      <Command>xcopy /Y "$(OutDir)$(TargetName).dll" "$(SolutionDir)KitsuneNet.Tests\bin\$(Configuration)\net10.0\" &amp;&amp; xcopy /Y "$(OutDir)$(TargetName).pdb" "$(SolutionDir)KitsuneNet.Tests\bin\$(Configuration)\net10.0\"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -80,6 +83,9 @@
       <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
       <LargeAddressAware>true</LargeAddressAware>
     </Link>
+    <PostBuildEvent>
+      <Command>xcopy /Y "$(OutDir)$(TargetName).dll" "$(SolutionDir)KitsuneNet.Tests\bin\$(Configuration)\net10.0\" &amp;&amp; xcopy /Y "$(OutDir)$(TargetName).pdb" "$(SolutionDir)KitsuneNet.Tests\bin\$(Configuration)\net10.0\"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="2da.cpp" />
