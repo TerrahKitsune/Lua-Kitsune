@@ -1,28 +1,25 @@
 ﻿#include "RedisStream.h"
 #include "RedisKey.h"
 
-static int JsonRef = LUA_NOREF;
+static int        JsonRef      = LUA_NOREF;
+static lua_State* JsonRefState = NULL;
 
 int RedisPushStreamInternal(lua_State* L, int redisIdx, const char* key, size_t keylength) {
 
 	luaL_checkudata(L, redisIdx, REDIS);
-	lua_pushvalue(L, redisIdx);
-	int ref = luaL_ref(L, LUA_REGISTRYINDEX);
+	redisIdx = lua_absindex(L, redisIdx);
 
 	LuaRedisStream* redisStream = (LuaRedisStream*)lua_newuserdata(L, sizeof(LuaRedisStream));
-	if (redisStream == NULL) {
-		luaL_error(L, "Unable to push redisstream");
-		return NULL;
-	}
 	luaL_getmetatable(L, REDISSTREAM);
 	lua_setmetatable(L, -2);
 	memset(redisStream, 0, sizeof(LuaRedisStream));
-	redisStream->key.redis_ref = ref;
+
+	lua_pushvalue(L, redisIdx);
+	redisStream->key.redis_ref = luaL_ref(L, LUA_REGISTRYINDEX);
 
 	redisStream->key.key = (char*)gff_malloc(keylength + 1);
 	if (!redisStream->key.key) {
 		luaL_error(L, "Out of memory");
-		return 0;
 	}
 
 	redisStream->key.key[keylength] = '\0';

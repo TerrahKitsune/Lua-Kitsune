@@ -24,6 +24,7 @@ local function run(name, func)
         print("[PASS]", name)
     else
         print("[FAIL]", name, err)
+        error(string.format("[FAIL] %s: %s", name, err), 2)
     end
 end
 

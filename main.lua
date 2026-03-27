@@ -5,8 +5,6 @@ else
 	return;
 end
 
-local _exit=Exit;Exit=function(ret) GetKey(); return ret; end
-
 function TablePrint(tbl, depth)
 
 	if(not tbl and depth) then
@@ -61,10 +59,11 @@ function PrintPixel(px)
 end
 
 function DumpToFile(file, tbl)
-	local f = io.open(file, "w");
-	f:write(JSON:encode_pretty(tbl));
-	f:flush();
-	f:close();
+	local json = Json.Create()
+	local f = io.open(file, "w")
+	f:write(json:EncodePretty(tbl))
+	f:flush()
+	f:close()
 end
 
 local statusTimer = Timer.New();
@@ -139,7 +138,7 @@ SetTitle("Kitsune: ".._VERSION);
 
 dofile("tests/run_all.lua");
 dofile("tests/imgui_simple.lua");
-if true then return; end
+if true then return VERSION; end
 
 local function HexToString(hexString)
     local str = ""
@@ -154,3 +153,5 @@ local sqlite = SQLite.Open();
 
 assert(sqlite:Query([[SELECT load_extension("C:/Users/Terrah/Documents/GitHub/Lua-Kitsune/x64/Debug/SQLiteKitsune.dll");]]));
 assert(sqlite:Query([[SELECT LuaFunction('dofile', 'C:/Users/Terrah/Documents/GitHub/Lua-Kitsune/sqlitemain.lua');]]));
+
+return VERSION;

@@ -21,8 +21,8 @@ int LuaImguiIsMouseDoubleClicked(lua_State* L) {
 		return 0;
 	}
 
-	ImGui::IsMouseDoubleClicked((ImGuiMouseButton)luaL_optinteger(L, 2, -1));
-	return 0;
+	lua_pushboolean(L, ImGui::IsMouseDoubleClicked((ImGuiMouseButton)luaL_optinteger(L, 2, 0)) == true);
+	return 1;
 }
 
 int LuaImguiIsItemClicked(lua_State* L) {
@@ -34,8 +34,8 @@ int LuaImguiIsItemClicked(lua_State* L) {
 		return 0;
 	}
 
-	ImGui::IsItemClicked((ImGuiMouseButton)luaL_optinteger(L, 2, 0));
-	return 0;
+	lua_pushboolean(L, ImGui::IsItemClicked((ImGuiMouseButton)luaL_optinteger(L, 2, 0)) == true);
+	return 1;
 }
 
 int LuaImguiSetKeyboardFocusHere(lua_State* L) {

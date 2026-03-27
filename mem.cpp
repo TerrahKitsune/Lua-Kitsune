@@ -1,4 +1,4 @@
-#include "mem.h"
+﻿#include "mem.h"
 #include <stdlib.h>
 #include "MemoryManager.h"
 #include "string.h"
@@ -62,7 +62,7 @@ void gff_free(void * ptr) {
 	return MemoryStateDealloc(memState, ptr);
 }
 
-#elseifdef USEHEAPALLOC
+#elif defined(USEHEAPALLOC)
 
 size_t EndMemoryManager() {
 	return 0;
@@ -97,7 +97,8 @@ void * gff_realloc(void * ptr, size_t size) {
 }
 
 void gff_free(void * ptr) {
-	assert(HeapFree(GetProcessHeap(), 0, ptr));
+	if (ptr)
+		assert(HeapFree(GetProcessHeap(), 0, ptr));
 }
 
 #else

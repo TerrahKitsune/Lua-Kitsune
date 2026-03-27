@@ -219,7 +219,8 @@ bool GetKeyState(key)
 | `c` | Table with special characters 0-31 (e.g., `c.LF = '\n'`) |
 | `ResList` | Key-value table for ERF container extensions |
 | `LAST_TEMP_FILE` | Set by `io.tmpfile()` with created filename |
-| `ARGS[]` | Array of command-line parameters |
+| `ARGS[1]` | The script file being run (or `"cmd"` in REPL mode) |
+| `ARGS[2..n]` | Additional command-line parameters passed after the script name |
 
 ---
 

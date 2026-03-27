@@ -31,7 +31,8 @@ LuaMySQL* lua_pushmysql(lua_State* L) {
 	return luamysql;
 }
 
-static int JsonRef = LUA_NOREF;
+static int        JsonRef      = LUA_NOREF;
+static lua_State* JsonRefState = NULL;
 
 static void PushAsParamString(lua_State* L, int index) {
 
@@ -39,7 +40,9 @@ static void PushAsParamString(lua_State* L, int index) {
 
 	if (lua_istable(L, index)) {
 
-		if (JsonRef == LUA_NOREF) {
+		if (JsonRef == LUA_NOREF || JsonRefState != L) {
+			JsonRef      = LUA_NOREF;
+			JsonRefState = L;
 			lua_getglobal(L, "Json");
 			lua_pushliteral(L, "Create");
 			lua_gettable(L, -2);

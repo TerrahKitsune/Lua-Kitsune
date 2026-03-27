@@ -41,6 +41,12 @@ end)
 
 -- Setup
 
+run("Postgres.Query DROP TABLE pre-cleanup", function()
+    pg:Query("DROP TABLE IF EXISTS kitsune_test")
+    local more, ferr = pg:Fetch()
+    assert(not ferr, "DROP TABLE error: " .. tostring(ferr))
+end)
+
 run("Postgres.Query CREATE TABLE", function()
     local ok, err = pg:Query("CREATE TABLE IF NOT EXISTS kitsune_test (id SERIAL PRIMARY KEY, name TEXT, value DOUBLE PRECISION, flag BOOLEAN, num INT)")
     assert(ok, "Query failed: " .. tostring(err))
