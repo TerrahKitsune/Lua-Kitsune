@@ -1,4 +1,4 @@
-﻿#ifdef _DEBUG
+#ifdef _DEBUG
 #define _CRTDBG_MAP_ALLOC
 #endif
 
@@ -57,7 +57,10 @@
 // ── Per-coroutine slot ────────────────────────────────────────────────────────
 struct KitsuneCoroutine {
 	int           id;
-	int           threadRef;    // LUA_REGISTRYINDEX anchor; use GetCoroutineThread to obtain lua_State*
+	int           threadRef;    // LUA_REGISTRYINDEX anchor; keeps the thread alive for GC
+	lua_State*    thread;       // cached lua_State*; valid iff threadRef != LUA_NOREF.
+	                            // Must be NULLed whenever threadRef is unref'd.
+	                            // Written only under AcquireLuaAccess; read only by the scheduler.
 	int           argsRef;      // LUA_REGISTRYINDEX anchor for the ARGS table; retrieved by GetArgs()
 	volatile LONG fireAndForget;
 	volatile LONG done;         // 0 = still running / yielded, 1 = finished
@@ -65,6 +68,7 @@ struct KitsuneCoroutine {
 	char*         error;
 	char*         result;
 	size_t        resultLen;
+	double        sleepUntil;   // GetCounter deadline (ms) before which the coroutine must not be resumed; 0 = not sleeping
 };
 
 #define KITSUNE_MAX_COROUTINES 256
@@ -157,13 +161,15 @@ static KitsuneCoroutine* FindSlot(KitsuneState* state, int id) {
 // accessLock is held on return; caller MUST call ReleaseLuaAccess.
 static void AcquireLuaAccess(KitsuneState* state) {
 	EnterCriticalSection(&state->accessLock);
-	// When coroutines are running the Ticker parks them; when idle the scheduler
-	// services the pause at the start of its next loop iteration (step 1).
-	// Either way, setting pauseFlag=1 and waking the scheduler is sufficient.
+	// Set pauseFlag and wake the scheduler, then unconditionally wait for it to
+	// acknowledge. The scheduler signals pausedEvent at the top of its loop
+	// (step 1) and the Ticker does the same mid-resume; always waiting prevents
+	// a phantom signal (produced when runningCount==0 but the scheduler still
+	// reaches step 1) from being consumed by a later call where runningCount>0,
+	// which would let this thread race with the scheduler on state->L.
 	InterlockedExchange(&state->pauseFlag, 1);
 	SetEvent(state->workEvent);  // wake the scheduler if it is sleeping in step 5
-	if (InterlockedAdd(&state->runningCount, 0))
-		WaitForSingleObject(state->pausedEvent, INFINITE);
+	WaitForSingleObject(state->pausedEvent, INFINITE);
 }
 
 static void ReleaseLuaAccess(KitsuneState* state) {
@@ -200,13 +206,11 @@ static void Ticker(lua_State *L, lua_Debug *ar) {
 		lua_yield(L, 0);
 }
 
-// Retrieve the coroutine's lua_State* from the registry.
+// Retrieve the coroutine's cached lua_State*.
 // Only call while the scheduler owns Lua access (i.e. not from external threads).
 static lua_State* GetCoroutineThread(KitsuneState* state, KitsuneCoroutine* slot) {
-	lua_rawgeti(state->L, LUA_REGISTRYINDEX, slot->threadRef);
-	lua_State* T = lua_tothread(state->L, -1);
-	lua_pop(state->L, 1);
-	return T;
+	(void)state;
+	return slot->thread;
 }
 
 static void FinishCoroutine(KitsuneState* state, KitsuneCoroutine* slot, lua_State* T, int rc, int nresults) {
@@ -249,9 +253,12 @@ static DWORD WINAPI SchedulerProc(LPVOID param) {
 				KitsuneCoroutine* slot = state->slots[i];
 				if (slot->id != 0 && !InterlockedAdd(&slot->done, 0)) {
 					SetSlotError(slot, "interrupted");
-					lua_settop(GetCoroutineThread(state, slot), 0);
+					lua_State* T = GetCoroutineThread(state, slot);
+					if (T) lua_settop(T, 0);
 					InterlockedExchange(&slot->done, 1);
 					InterlockedDecrement(&state->runningCount);
+					if (InterlockedAdd(&slot->fireAndForget, 0))
+						InterlockedExchange(&slot->released, 1);
 				}
 			}
 		} else {
@@ -259,9 +266,23 @@ static DWORD WINAPI SchedulerProc(LPVOID param) {
 			for (int i = 0; i < state->slotCount; i++) {
 				KitsuneCoroutine* slot = state->slots[i];
 				if (slot->id == 0 || InterlockedAdd(&slot->done, 0)) continue;
+				// Skip coroutines that are waiting out a Sleep() call.
+				if (slot->sleepUntil > 0.0) {
+					if (GetCounter(state) < slot->sleepUntil)
+						continue;
+					slot->sleepUntil = 0.0;
+				}
 				anyActive = true;
 
 				lua_State* T = GetCoroutineThread(state, slot);
+				if (!T) {
+					SetSlotError(slot, "internal: coroutine thread unavailable");
+					InterlockedExchange(&slot->done, 1);
+					InterlockedDecrement(&state->runningCount);
+					if (InterlockedAdd(&slot->fireAndForget, 0))
+						InterlockedExchange(&slot->released, 1);
+					continue;
+				}
 
 				// Refresh ARGS for this coroutine before resuming so the global
 				// always reflects the currently running coroutine's arguments.
@@ -293,6 +314,7 @@ static DWORD WINAPI SchedulerProc(LPVOID param) {
 				if (slot->id != 0 && InterlockedAdd(&slot->done, 0) && InterlockedAdd(&slot->released, 0)) {
 					if (slot->argsRef   != LUA_NOREF) luaL_unref(state->L, LUA_REGISTRYINDEX, slot->argsRef);
 					if (slot->threadRef != LUA_NOREF) luaL_unref(state->L, LUA_REGISTRYINDEX, slot->threadRef);
+					slot->thread = NULL;  // invariant: null before memset so the pointer is never stale
 					gff_free(slot->error);
 					gff_free(slot->result);
 					memset(slot, 0, sizeof(KitsuneCoroutine));  // id = 0 marks the slot as reusable
@@ -302,8 +324,19 @@ static DWORD WINAPI SchedulerProc(LPVOID param) {
 		}
 
 		// ── Step 5: Sleep when there is nothing active ────────────────────────
-		if (!anyActive)
-			WaitForSingleObject(state->workEvent, 10);
+		if (!anyActive) {
+			// Use a short wait when coroutines are mid-Sleep() so their deadlines
+			// are checked promptly; fall back to 10ms when the engine is truly idle.
+			bool hasSleeping = false;
+			for (int i = 0; i < state->slotCount; i++) {
+				KitsuneCoroutine* slot = state->slots[i];
+				if (slot->id != 0 && !InterlockedAdd(&slot->done, 0) && slot->sleepUntil > 0.0) {
+					hasSleeping = true;
+					break;
+				}
+			}
+			WaitForSingleObject(state->workEvent, hasSleeping ? 1 : 10);
+		}
 	}
 
 	return 0;
@@ -315,6 +348,36 @@ static int L_GetRuntime(lua_State *L) {
 	KitsuneState* state = (KitsuneState*)ud;
 	lua_pushnumber(L, GetCounter(state));
 	return 1;
+}
+
+static int L_SleepContinuation(lua_State* L, int status, lua_KContext ctx) {
+	(void)status; (void)ctx;
+	return 0;
+}
+
+// Sleep(ms) — yields the calling coroutine for at least ms milliseconds without blocking any OS thread.
+// The scheduler uses the GetCounter clock to skip this coroutine until its deadline has passed.
+// If called outside a scheduler-managed coroutine, falls back to a blocking Win32 Sleep.
+static int L_Sleep(lua_State* L) {
+	lua_Number ms = luaL_optnumber(L, 1, 0);
+
+	void* ud;
+	lua_getallocf(L, &ud);
+	KitsuneState* state = (KitsuneState*)ud;
+	int id = (int)InterlockedAdd(&state->currentCoroutineId, 0);
+	KitsuneCoroutine* slot = FindSlot(state, id);  // NULL when id==0 (not inside scheduler's lua_resume)
+
+	if (slot) {
+		// Scheduler-managed coroutine: record the wake-up deadline and yield cooperatively.
+		if (ms > 0.0)
+			slot->sleepUntil = GetCounter(state) + (double)ms;
+		return lua_yieldk(L, 0, 0, L_SleepContinuation);
+	}
+
+	// Not called from a scheduler-managed coroutine — fall back to a blocking OS sleep.
+	if (ms > 0.0)
+		::Sleep((DWORD)(ms < (lua_Number)MAXDWORD ? (DWORD)ms : MAXDWORD));
+	return 0;
 }
 
 static void* l_alloc(void* ud, void* ptr, size_t osize, size_t nsize) {
@@ -457,6 +520,8 @@ KITSUNE_API lua_State* KitsuneInit() {
 	lua_pushcfunction(L, L_cls);           lua_setglobal(L, "CLS");
 
 	luaopen_misc(L);
+	lua_pushcfunction(L, L_Sleep);
+	lua_setglobal(L, "Sleep");
 
 	lua_newtable(L);
 	lua_setglobal(L, "Vars");
@@ -518,6 +583,7 @@ static int StartCoroutine(KitsuneState* state, bool isFile,
 
 	// Create the coroutine thread and anchor it so the GC cannot collect it.
 	lua_State* T    = lua_newthread(state->L);
+	slot->thread    = T;
 	slot->threadRef = luaL_ref(state->L, LUA_REGISTRYINDEX);
 	lua_sethook(T, Ticker, LUA_MASKCOUNT, 1000);
 
@@ -554,6 +620,7 @@ static int StartCoroutine(KitsuneState* state, bool isFile,
 		lua_settop(T, 0);
 		luaL_unref(state->L, LUA_REGISTRYINDEX, slot->argsRef);   slot->argsRef   = LUA_NOREF;
 		luaL_unref(state->L, LUA_REGISTRYINDEX, slot->threadRef); slot->threadRef = LUA_NOREF;
+		slot->thread = NULL;  // invariant: thread is only valid while threadRef != LUA_NOREF
 		InterlockedExchange(&slot->done, 1);
 		if (InterlockedAdd(&slot->fireAndForget, 0))
 			InterlockedExchange(&slot->released, 1);
@@ -688,7 +755,7 @@ KITSUNE_API int KitsuneGetActiveIds(int* buffer, int bufferSize) {
 	return count;
 }
 
-KITSUNE_API bool KitsuneSetVariable(const char* name, const char* value, size_t length) {
+KITSUNE_API bool KitsuneSetString(const char* name, const char* value, size_t length) {
 	KitsuneState* state = g_state;
 	if (!state || !state->L || !name) return false;
 	AcquireLuaAccess(state);
@@ -703,6 +770,46 @@ KITSUNE_API bool KitsuneSetVariable(const char* name, const char* value, size_t 
 		lua_pushlstring(state->L, value, length);
 	else
 		lua_pushnil(state->L);
+	lua_setfield(state->L, -2, name);
+	lua_pop(state->L, 1);
+	ReleaseLuaAccess(state);
+	return true;
+}
+
+KITSUNE_API bool KitsuneSetBool(const char* name, bool value) {
+	KitsuneState* state = g_state;
+	if (!state || !state->L || !name) return false;
+	AcquireLuaAccess(state);
+	lua_getglobal(state->L, "Vars");
+	if (!lua_istable(state->L, -1)) {
+		lua_pop(state->L, 1);
+		lua_newtable(state->L);
+		lua_pushvalue(state->L, -1);
+		lua_setglobal(state->L, "Vars");
+	}
+	lua_pushboolean(state->L, value ? 1 : 0);
+	lua_setfield(state->L, -2, name);
+	lua_pop(state->L, 1);
+	ReleaseLuaAccess(state);
+	return true;
+}
+
+KITSUNE_API bool KitsuneSetNumber(const char* name, double value) {
+	KitsuneState* state = g_state;
+	if (!state || !state->L || !name) return false;
+	AcquireLuaAccess(state);
+	lua_getglobal(state->L, "Vars");
+	if (!lua_istable(state->L, -1)) {
+		lua_pop(state->L, 1);
+		lua_newtable(state->L);
+		lua_pushvalue(state->L, -1);
+		lua_setglobal(state->L, "Vars");
+	}
+	lua_Integer intVal = (lua_Integer)value;
+	if (value >= (double)LUA_MININTEGER && value <= (double)LUA_MAXINTEGER && (double)intVal == value)
+		lua_pushinteger(state->L, intVal);
+	else
+		lua_pushnumber(state->L, value);
 	lua_setfield(state->L, -2, name);
 	lua_pop(state->L, 1);
 	ReleaseLuaAccess(state);
@@ -743,6 +850,10 @@ KITSUNE_API void KitsuneCleanup() {
 	if (state) {
 		// Signal the scheduler to exit and wait for it to finish.
 		if (state->schedulerThread) {
+			// Interrupt any running coroutines first so the scheduler is not stuck inside
+			// lua_resume waiting for a script to yield; the Ticker will call luaL_error at
+			// the next instruction boundary, unblocking the scheduler promptly.
+			InterlockedExchange(&state->interrupt, 1);
 			InterlockedExchange(&state->schedulerStop, 1);
 			SetEvent(state->resumeEvent);   // unblock scheduler if it is in the pause handler
 			SetEvent(state->workEvent);     // wake scheduler if it is sleeping

@@ -50,8 +50,12 @@ extern "C" {
 	KITSUNE_API int  KitsuneGetActiveIds(int* buffer, int bufferSize);
 
 	// ── Variable bridge ───────────────────────────────────────────────────────
-	// Sets a global variable in the Vars table. Thread-safe.
-	KITSUNE_API bool   KitsuneSetVariable(const char* name, const char* value, size_t length);
+	// Sets a string variable in the Vars table. Thread-safe.
+	KITSUNE_API bool   KitsuneSetString(const char* name, const char* value, size_t length);
+	// Sets a boolean variable in the Vars table. Thread-safe.
+	KITSUNE_API bool   KitsuneSetBool(const char* name, bool value);
+	// Sets a numeric (double) variable in the Vars table. Thread-safe.
+	KITSUNE_API bool   KitsuneSetNumber(const char* name, double value);
 	// Fills buffer with the string representation of a Vars global. Returns the actual string length
 	// (may exceed bufferSize-1 if truncated). Returns 0 for nil/not found. Thread-safe.
 	KITSUNE_API size_t KitsuneGetVariable(const char* name, char* buffer, size_t bufferSize);

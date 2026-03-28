@@ -1,4 +1,4 @@
-#include "networking.h"
+﻿#include "networking.h"
 #include "lua_misc.h"
 #include <objbase.h>
 #include <time.h>
@@ -141,20 +141,6 @@ int lua_GetClipboard(lua_State* L) {
 	CloseClipboard();
 
 	return 1;
-}
-
-int lua_sleep(lua_State* L) {
-
-	int zzz = (int)luaL_optinteger(L, 1, 1);
-
-	if (zzz <= 0)
-		zzz = 1;
-	else if (zzz > 1000)
-		zzz = 1000;
-
-	Sleep(zzz);
-	lua_pop(L, 1);
-	return 0;
 }
 
 static int GetLastErrorAsMessage(lua_State* L)
@@ -1368,9 +1354,6 @@ int luaopen_misc(lua_State* L) {
 
 	lua_pushcfunction(L, lua_uuid);
 	lua_setglobal(L, "UUID");
-
-	lua_pushcfunction(L, lua_sleep);
-	lua_setglobal(L, "Sleep");
 
 	lua_pushcfunction(L, Time);
 	lua_setglobal(L, "Time");

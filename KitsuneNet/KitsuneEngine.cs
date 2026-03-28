@@ -43,7 +43,15 @@ namespace KitsuneNet
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
         [return: MarshalAs(UnmanagedType.I1)]
-        private static extern bool KitsuneSetVariable(string name, byte[] value, nuint length);
+        private static extern bool KitsuneSetString(string name, byte[] value, nuint length);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool KitsuneSetBool(string name, [MarshalAs(UnmanagedType.I1)] bool value);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool KitsuneSetNumber(string name, double value);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
         private static extern nuint KitsuneGetVariable(string name, byte[] buffer, nuint bufferSize);
@@ -284,16 +292,22 @@ namespace KitsuneNet
 
         // -- Variable bridge ------------------------------------------------------
 
-        /// <summary>Sets a global variable in the Vars table from a UTF-8 string.</summary>
-        public bool SetVariable(string name, string value)
+        /// <summary>Sets a string variable in the Vars table from a UTF-8 string.</summary>
+        public bool SetString(string name, string value)
         {
             byte[] bytes = Encoding.UTF8.GetBytes(value);
-            return KitsuneSetVariable(name, bytes, (nuint)bytes.Length);
+            return KitsuneSetString(name, bytes, (nuint)bytes.Length);
         }
 
-        /// <summary>Sets a global variable in the Vars table from raw bytes.</summary>
-        public bool SetVariable(string name, byte[] value) =>
-            KitsuneSetVariable(name, value, (nuint)value.Length);
+        /// <summary>Sets a string variable in the Vars table from raw bytes.</summary>
+        public bool SetString(string name, byte[] value) =>
+            KitsuneSetString(name, value, (nuint)value.Length);
+
+        /// <summary>Sets a boolean variable in the Vars table.</summary>
+        public bool SetBool(string name, bool value) => KitsuneSetBool(name, value);
+
+        /// <summary>Sets a numeric variable in the Vars table.</summary>
+        public bool SetNumber(string name, double value) => KitsuneSetNumber(name, value);
 
         /// <summary>
         /// Returns a Vars global as a UTF-8 string, or <c>null</c> if not found.
