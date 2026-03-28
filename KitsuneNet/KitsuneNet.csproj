@@ -13,7 +13,7 @@
   </PropertyGroup>
 
   <!--
-    Builds KitsuneEngine.vcxproj (x64, matching configuration) then copies
+    Builds Kitsune.vcxproj (x64, matching configuration) then copies
     KitsuneEngine.dll and all its native dependencies into this project's output.
     DLLs are sourced from both x64\$(Configuration)\ and the repo root, because
     some dependencies (hiredis.dll, hiredis_ssl.dll, libmysql.dll) live in the

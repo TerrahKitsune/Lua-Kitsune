@@ -88,6 +88,26 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
+        [Fact]
+        public void ExecuteString_WithArgs_ArgsAreVisible()
+        {
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("return ARGS[1] .. ':' .. ARGS[2]", args: ["hello", "world"]);
+            engine.Wait(id);
+            engine.GetResultString(id).ShouldBe("hello:world");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void ExecuteString_IDGlobal_MatchesCoroutineId()
+        {
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("return tostring(ID)");
+            engine.Wait(id);
+            engine.GetResultString(id).ShouldBe(id.ToString());
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
         // -- GetResult / HasResult ------------------------------------------------
 
         [Fact]
@@ -114,6 +134,53 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
+        public void GetError_SuccessfulCoroutine_ReturnsNull()
+        {
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("return 'ok'");
+            engine.Wait(id);
+            engine.GetError(id).ShouldBeNull();  // no error was raised
+            engine.Cancel(id);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void GetResultVariable_NumberReturn_IsTypedAsNumber()
+        {
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("return 42.5");
+            engine.Wait(id);
+            LuaValue result = engine.GetResultVariable(id);
+            result.Type.ShouldBe(LuaType.Number);
+            result.Number.ShouldBe(42.5);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void GetResultVariable_BoolReturn_IsTypedAsBool()
+        {
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("return true");
+            engine.Wait(id);
+            LuaValue result = engine.GetResultVariable(id);
+            result.Type.ShouldBe(LuaType.Boolean);
+            result.Boolean.ShouldBeTrue();
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void GetResultVariable_TableReturn_IsTypedAsTable()
+        {
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("return {}");
+            engine.Wait(id);
+            LuaValue result = engine.GetResultVariable(id);
+            result.Type.ShouldBe(LuaType.Table);
+            result.Bytes.ShouldBeNull();
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
         public void HasResult_ReturnsFalse_WhileRunning_TrueWhenFinished()
         {
             using KitsuneEngine engine = new();
@@ -125,6 +192,27 @@ namespace KitsuneNet.Tests
             len.ShouldBe((nuint)4); // "done" is 4 bytes
             engine.Cancel(id);
             engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void HasResult_NonStringResult_LenIsZero()
+        {
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("return 42");
+            SpinUntilHasResult(engine, id);
+            engine.HasResult(id, out nuint len).ShouldBeTrue();
+            len.ShouldBe((nuint)0);  // len is only non-zero for string results
+            engine.Cancel(id);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void HasResult_NonExistentId_ReturnsFalse()
+        {
+            using KitsuneEngine engine = new();
+            engine.HasResult(99999).ShouldBeFalse();
+            engine.HasResult(99999, out nuint len).ShouldBeFalse();
+            len.ShouldBe((nuint)0);
         }
 
         // -- SetString / SetBool / SetNumber / GetVariable -------------------------
@@ -147,6 +235,19 @@ namespace KitsuneNet.Tests
             string? result = await engine.ExecuteStringAsync("return Vars.bytesVar");
             result.ShouldBe("bytes value");
             engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void SetString_BinaryDataWithNonUtf8Bytes_PreservesExactBytes()
+        {
+            // 0xFF and 0xFE are never valid in UTF-8; a round-trip through
+            // Encoding.UTF8.GetString would silently replace them with U+FFFD.
+            using KitsuneEngine engine = new();
+            byte[] binary = [0x01, 0xFF, 0x00, 0xFE, 0x7F];
+            engine.SetString("bin", binary);
+            byte[]? result = engine.GetStringBytes("bin");
+            result.ShouldNotBeNull();
+            result.ShouldBe(binary);
         }
 
         [Fact]
@@ -303,7 +404,287 @@ namespace KitsuneNet.Tests
             engine.GetVariableType("nonExistentVar_XYZ").ShouldBe(LuaType.None);
         }
 
+        [Fact]
+        public void SetVariable_None_RemovesKey()
+        {
+            using KitsuneEngine engine = new();
+            engine.SetVariable("removeMe", (LuaValue)"exists");
+            engine.GetVariableType("removeMe").ShouldBe(LuaType.String);
+            engine.SetVariable("removeMe", LuaValue.None);
+            engine.GetVariableType("removeMe").ShouldBe(LuaType.None);
+        }
+
+        [Fact]
+        public void SetVariable_Overwrite_ChangesType()
+        {
+            using KitsuneEngine engine = new();
+            engine.SetString("v", "hello");
+            engine.GetVariableType("v").ShouldBe(LuaType.String);
+            engine.SetNumber("v", 42.0);
+            engine.GetVariableType("v").ShouldBe(LuaType.Number);
+            engine.GetNumber("v").ShouldBe(42.0);
+            engine.GetString("v").ShouldBeNull();  // no longer a string
+        }
+
+        [Fact]
+        public void GetAll_EmptyVars_ReturnsEmptyArray()
+        {
+            using KitsuneEngine engine = new();
+            engine.GetAll().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void GetAll_ReturnsAllSetVariables()
+        {
+            using KitsuneEngine engine = new();
+            engine.SetString("foo", "bar");
+            engine.SetNumber("count", 42.0);
+            engine.SetBool("flag", true);
+
+            var all = engine.GetAll();
+
+            all.Count.ShouldBe(3);
+            all.ShouldContain(kvp => kvp.Key.String == "foo"   && kvp.Value.String  == "bar");
+            all.ShouldContain(kvp => kvp.Key.String == "count" && kvp.Value.Number  == 42.0);
+            all.ShouldContain(kvp => kvp.Key.String == "flag"  && kvp.Value.Boolean == true);
+        }
+
+        [Fact]
+        public void GetAll_KeysAreStrings_ValuesAreTyped()
+        {
+            using KitsuneEngine engine = new();
+            engine.SetString("s", "hello");
+            engine.SetNumber("n", 3.14);
+            engine.SetBool("b", false);
+
+            var all = engine.GetAll();
+
+            all.ShouldAllBe(kvp => kvp.Key.Type == LuaType.String);
+            all.ShouldContain(kvp => kvp.Value.Type == LuaType.String);
+            all.ShouldContain(kvp => kvp.Value.Type == LuaType.Number);
+            all.ShouldContain(kvp => kvp.Value.Type == LuaType.Boolean);
+        }
+
+        [Fact]
+        public void GetAll_AfterSetTable_ReturnsSubtableContents()
+        {
+            using KitsuneEngine engine = new();
+            engine.SetString("rootOnly", "root");
+            engine.SetTable("sub").ShouldBeTrue();
+            engine.SetString("subA", "1");
+            engine.SetNumber("subB", 2.0);
+
+            var all = engine.GetAll();
+
+            all.Count.ShouldBe(2);
+            all.ShouldContain(kvp => kvp.Key.String == "subA" && kvp.Value.String == "1");
+            all.ShouldContain(kvp => kvp.Key.String == "subB" && kvp.Value.Number == 2.0);
+            all.ShouldNotContain(kvp => kvp.Key.String == "rootOnly");
+
+            engine.SetTable(null);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void GetVariable_TableType_ReturnsLuaTypeTable()
+        {
+            using KitsuneEngine engine = new();
+            engine.ExecuteString("Vars.tableVar = {}", fireAndForget: true);
+            engine.Wait();
+            LuaValue v = engine.GetVariable("tableVar");
+            v.Type.ShouldBe(LuaType.Table);
+            v.Bytes.ShouldBeNull();
+        }
+
+        // -- SetTable -------------------------------------------------------------
+
+        [Fact]
+        public void SetTable_AdvancesIntoSubtable_VariablesIsolatedFromRoot()
+        {
+            using KitsuneEngine engine = new();
+            engine.SetString("rootKey", "rootValue");
+
+            engine.SetTable("sub").ShouldBeTrue();
+            engine.SetString("subKey", "subValue");
+            engine.GetString("rootKey").ShouldBeNull();  // root keys not visible in subtable
+            engine.GetString("subKey").ShouldBe("subValue");
+
+            engine.SetTable(null);
+            engine.GetString("rootKey").ShouldBe("rootValue");  // root restored
+            engine.GetString("subKey").ShouldBeNull();           // sub key not at root
+        }
+
+        [Fact]
+        public void SetTable_Null_ResetsToRoot()
+        {
+            using KitsuneEngine engine = new();
+            engine.SetString("before", "yes");
+            engine.SetTable("sub").ShouldBeTrue();
+            engine.SetTable(null).ShouldBeTrue();
+            engine.GetString("before").ShouldBe("yes");
+        }
+
+        [Fact]
+        public void SetTable_CreatesSubtableWhenMissing()
+        {
+            using KitsuneEngine engine = new();
+            engine.SetTable("brand_new").ShouldBeTrue();  // key absent  → creates table
+            engine.SetString("x", "1");
+            engine.SetTable(null).ShouldBeTrue();
+            engine.SetTable("brand_new").ShouldBeTrue();  // key present → navigates in
+            engine.GetString("x").ShouldBe("1");
+            engine.SetTable(null).ShouldBeTrue();
+        }
+
+        [Fact]
+        public void SetTable_NestedNavigation_WorksCorrectly()
+        {
+            using KitsuneEngine engine = new();
+            engine.SetTable("a").ShouldBeTrue();
+            engine.SetTable("b").ShouldBeTrue();
+            engine.SetString("deep", "value");
+            engine.SetTable(null).ShouldBeTrue();
+            engine.SetTable("a").ShouldBeTrue();
+            engine.SetTable("b").ShouldBeTrue();
+            engine.GetString("deep").ShouldBe("value");
+            engine.SetTable(null).ShouldBeTrue();
+        }
+
+        [Fact]
+        public void SetTable_NonTableKey_ReturnsFalse()
+        {
+            using KitsuneEngine engine = new();
+            engine.SetString("notATable", "value");
+            engine.SetTable("notATable").ShouldBeFalse();
+            // Target should remain unchanged after a failed SetTable
+            engine.GetString("notATable").ShouldBe("value");
+        }
+
+        [Fact]
+        public void SetTable_ExistingNonEmptyTable_ReturnsTrue()
+        {
+            using KitsuneEngine engine = new();
+            // Populate a subtable via Lua so it is definitely non-empty before we navigate in.
+            engine.ExecuteString("Vars.config = { host = 'localhost', port = 5432 }", fireAndForget: true);
+            engine.Wait();
+            engine.SetTable("config").ShouldBeTrue();
+            engine.GetString("host").ShouldBe("localhost");
+            engine.SetTable(null).ShouldBeTrue();
+        }
+
+        [Fact]
+        public async Task SetTable_CSharpWrite_LuaReadsViaSameNestedTable()
+        {
+            // C# writes through SetTable → Lua reads through Vars.sub.key — same table object.
+            using KitsuneEngine engine = new();
+            engine.SetTable("db").ShouldBeTrue();
+            engine.SetString("host", "localhost");
+            engine.SetNumber("port", 5432);
+            engine.SetTable(null).ShouldBeTrue();
+
+            string? result = await engine.ExecuteStringAsync(
+                "return Vars.db.host .. ':' .. tostring(Vars.db.port)");
+            result.ShouldBe("localhost:5432");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void SetTable_LuaWrite_CSharpReadsViaSameNestedTable()
+        {
+            // Lua writes through Vars.sub.key → C# reads via SetTable — same table object.
+            using KitsuneEngine engine = new();
+            engine.ExecuteString(
+                "Vars.cfg = {}; Vars.cfg.timeout = 30; Vars.cfg.retry = true",
+                fireAndForget: true);
+            engine.Wait();
+
+            engine.SetTable("cfg").ShouldBeTrue();
+            engine.GetNumber("timeout").ShouldBe(30.0);
+            engine.GetBool("retry").ShouldBe(true);
+            engine.SetTable(null).ShouldBeTrue();
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
         // -- ExecuteFile ----------------------------------------------------------
+
+        [Fact]
+        public void ExecuteFile_CreatesFileRunsAndCleansUp()
+        {
+            string path = Path.GetTempFileName();
+            try
+            {
+                File.WriteAllText(path, "return 'file result'");
+                using KitsuneEngine engine = new();
+                int id = engine.ExecuteFile(path);
+                engine.Wait(id);
+                engine.GetResultString(id).ShouldBe("file result");
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void ExecuteFile_ArgsOneIsFilePath()
+        {
+            string path = Path.GetTempFileName();
+            try
+            {
+                File.WriteAllText(path, "return ARGS[1]");  // ARGS[1] = the file path itself
+                using KitsuneEngine engine = new();
+                int id = engine.ExecuteFile(path);
+                engine.Wait(id);
+                engine.GetResultString(id).ShouldBe(path);
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void ExecuteFile_RuntimeError_CanGetError()
+        {
+            string path = Path.GetTempFileName();
+            try
+            {
+                File.WriteAllText(path, "error('file error')");
+                using KitsuneEngine engine = new();
+                int id = engine.ExecuteFile(path);
+                engine.Wait(id);
+                engine.GetError(id).ShouldNotBeNull();
+                engine.GetError(id)!.ShouldContain("file error");
+                engine.Cancel(id);
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void ExecuteFile_WithArgs_ArgsContainPathAndExtraArgs()
+        {
+            string path = Path.GetTempFileName();
+            try
+            {
+                // ARGS[1] = file path; ARGS[2+] = extra args passed to ExecuteFile
+                File.WriteAllText(path, "return ARGS[2] .. ':' .. ARGS[3]");
+                using KitsuneEngine engine = new();
+                int id = engine.ExecuteFile(path, args: ["first", "second"]);
+                engine.Wait(id);
+                engine.GetResultString(id).ShouldBe("first:second");
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
 
         [Fact]
         public async Task ExecuteFileAsync_ReturnsResult()
@@ -375,6 +756,25 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
+        public void RunningCoroutineId_DuringExecution_MatchesStartedId()
+        {
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("while true do end");
+            try
+            {
+                SpinUntilRunning(engine);
+                engine.RunningCoroutineId.ShouldBe(id);
+            }
+            finally
+            {
+                engine.Interrupt();
+                engine.Wait();
+                engine.Cancel(id);
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+        }
+
+        [Fact]
         public void Interrupt_StopsScript()
         {
             using KitsuneEngine engine = new();
@@ -384,6 +784,22 @@ namespace KitsuneNet.Tests
             engine.Wait();
             engine.IsRunning.ShouldBeFalse();
             engine.Cancel(id);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void ExecuteString_AfterInterruptAndWait_WorksNormally()
+        {
+            // The scheduler clears the interrupt flag once runningCount hits 0.
+            // Verifies the engine is fully reusable after an interrupt + wait cycle.
+            using KitsuneEngine engine = new();
+            engine.ExecuteString("while true do end", fireAndForget: true);
+            SpinUntilRunning(engine);
+            engine.Interrupt();
+            engine.Wait();
+            int id = engine.ExecuteString("return 'after interrupt'");
+            engine.Wait(id);
+            engine.GetResultString(id).ShouldBe("after interrupt");
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
@@ -461,7 +877,7 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public void ConcurrentCoroutines_WaitedFromParallelThreads_AllComplete()
+        public async Task ConcurrentCoroutines_WaitedFromParallelThreads_AllComplete()
         {
             // Exercises thread-safety of the slot layer: multiple threads poll HasResult
             // simultaneously for distinct coroutine IDs via the sync Wait(id) path.
@@ -470,7 +886,7 @@ namespace KitsuneNet.Tests
             int[] ids = Enumerable.Range(0, count)
                 .Select(i => engine.ExecuteString($"return 'parallel_{i}'"))
                 .ToArray();
-            Task.WhenAll(ids.Select(id => Task.Run(() => engine.Wait(id)))).Wait();
+            await Task.WhenAll(ids.Select(id => Task.Run(() => engine.Wait(id))));
             for (int i = 0; i < count; i++)
                 engine.GetResultString(ids[i]).ShouldBe($"parallel_{i}");
             engine.GetActiveIds().ShouldBeEmpty();
@@ -749,6 +1165,28 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
+        [Fact]
+        public async Task ExecuteFunction_WithTypedNumberArgs_PassedAsNumbers()
+        {
+            using KitsuneEngine engine = new();
+            await engine.ExecuteStringAsync("function typedAdd(a, b) return tostring(a + b) end");
+            string? result = await engine.ExecuteFunctionAsync("typedAdd",
+                args: [LuaValue.FromNumber(6), LuaValue.FromNumber(7)]);
+            result.ShouldBe("13");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task ExecuteFunction_WithTypedBoolArg_PassedAsBool()
+        {
+            using KitsuneEngine engine = new();
+            await engine.ExecuteStringAsync("function checkBool(b) return tostring(b) end");
+            string? result = await engine.ExecuteFunctionAsync("checkBool",
+                args: [LuaValue.FromBool(true)]);
+            result.ShouldBe("true");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
         // -- Cancel ---------------------------------------------------------------
 
         [Fact]
@@ -791,6 +1229,193 @@ namespace KitsuneNet.Tests
             engine.Cancel(cancelId);
             string? kept = await keepTask;
             kept.ShouldBe("kept");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        // -- GetRuntime -----------------------------------------------------------
+
+        [Fact]
+        public void GetRuntime_WhileRunning_ReturnsPositiveValue()
+        {
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("Sleep(500)");
+            SpinUntilRunning(engine);
+            Thread.Sleep(5);  // ensure at least a few ms have elapsed
+            engine.GetRuntime(id).ShouldBeGreaterThan(0);
+            engine.Cancel(id);
+            DateTime deadline = DateTime.UtcNow.AddSeconds(5);
+            while (engine.GetActiveIds().Contains(id) && DateTime.UtcNow < deadline)
+                Thread.Sleep(1);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void GetRuntime_AfterCoroutineReleased_ReturnsZero()
+        {
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("return 'done'");
+            engine.Wait(id);
+            engine.GetResult(id);  // consumes result and sets released=1
+            // Spin until the scheduler's step 4 compacts the slot (zeroes id) — at most one scheduler pass (~10ms)
+            DateTime deadline = DateTime.UtcNow.AddSeconds(5);
+            while (engine.GetRuntime(id) != 0.0 && DateTime.UtcNow < deadline)
+                Thread.Sleep(1);
+            engine.GetRuntime(id).ShouldBe(0.0);  // slot compacted; ID not found returns 0
+        }
+
+        // -- Stress tests ---------------------------------------------------------
+
+        [Fact]
+        public async Task Stress_HighThroughput_SequentialBatches_AllCorrect()
+        {
+            // 1000 coroutines in batches of 100 — verifies high-throughput execution
+            // produces the correct result for every single coroutine with no data loss.
+            using KitsuneEngine engine = new();
+            const int total     = 1000;
+            const int batchSize =  100;
+
+            for (int batch = 0; batch < total / batchSize; batch++)
+            {
+                int offset = batch * batchSize;
+                Task<string?>[] tasks = Enumerable.Range(0, batchSize)
+                    .Select(j => engine.ExecuteStringAsync($"return tostring({offset + j})"))
+                    .ToArray();
+                string?[] batchResults = await Task.WhenAll(tasks);
+                for (int j = 0; j < batchSize; j++)
+                    batchResults[j].ShouldBe((offset + j).ToString());
+            }
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task Stress_SlotRecycling_SustainedLoadBeyondSlotLimit()
+        {
+            // Submits 4× the 256-slot limit through a semaphore-throttled pipeline
+            // (max 64 concurrent) so slots are continuously recycled while new ones
+            // are being admitted — verifies every result is correct under recycling pressure.
+            using KitsuneEngine engine = new();
+            const int total         = 1000;
+            const int maxConcurrent =   64;
+            var results = new string?[total];
+
+            using var sem = new SemaphoreSlim(maxConcurrent, maxConcurrent);
+            Task[] tasks = Enumerable.Range(0, total).Select(async i =>
+            {
+                await sem.WaitAsync();
+                try   { results[i] = await engine.ExecuteStringAsync($"return tostring({i})"); }
+                finally { sem.Release(); }
+            }).ToArray();
+
+            await Task.WhenAll(tasks);
+
+            for (int i = 0; i < total; i++)
+                results[i].ShouldBe(i.ToString());
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task Stress_ConcurrentVariableBridge_NoCorruptionOrDeadlock()
+        {
+            // 8 threads simultaneously hammer SetNumber/GetNumber on a shared key
+            // while 10 Lua coroutines read the same Vars table — verifies
+            // AcquireLuaAccess serialises every access with no deadlock, null reads,
+            // or scheduler starvation under real write/write/read contention.
+            using KitsuneEngine engine = new();
+            const int threads      =   8;
+            const int opsPerThread = 200;
+            int completedOps = 0;
+
+            // Lua coroutines that read Vars under scheduler pressure.
+            for (int i = 0; i < 10; i++)
+                engine.ExecuteString(
+                    "local n = 0; for _ = 1, 5000 do n = n + (Vars.counter or 0) end",
+                    fireAndForget: true);
+
+            Task[] writers = Enumerable.Range(0, threads).Select(t => Task.Run(() =>
+            {
+                for (int i = 0; i < opsPerThread; i++)
+                {
+                    engine.SetNumber("counter", t * 1000.0 + i);
+                    // Another thread may have overwritten the key between set and get,
+                    // but every writer only ever writes a number, so the read must
+                    // never be null regardless of which thread's value we observe.
+                    engine.GetNumber("counter").ShouldNotBeNull();
+                    Interlocked.Increment(ref completedOps);
+                }
+            })).ToArray();
+
+            await Task.WhenAll(writers);
+            engine.Interrupt();
+            engine.Wait();
+
+            completedOps.ShouldBe(threads * opsPerThread);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task Stress_ConcurrentFunctionExecution_AllReturnCorrectResults()
+        {
+            // Defines 50 distinct functions then calls them all concurrently via
+            // ExecuteFunctionAsync — stresses the function-call async path under load.
+            using KitsuneEngine engine = new();
+            const int count = 50;
+
+            for (int i = 0; i < count; i++)
+                engine.ExecuteString($"function stress_fn_{i}(x) return tostring(x * {i}) end",
+                    fireAndForget: true);
+            engine.Wait();
+
+            Task<string?>[] tasks = Enumerable.Range(0, count)
+                .Select(i => engine.ExecuteFunctionAsync($"stress_fn_{i}",
+                    args: [LuaValue.FromNumber(42)]))
+                .ToArray();
+            string?[] results = await Task.WhenAll(tasks);
+
+            for (int i = 0; i < count; i++)
+                results[i].ShouldBe((42 * i).ToString());
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task Stress_AsyncCoroutinesWritingVars_CSharpReadsAllBack()
+        {
+            // 30 concurrent async coroutines each write a unique Vars key while running —
+            // verifies that async execution and variable bridge writes are both correct
+            // under simultaneous scheduler pressure.
+            using KitsuneEngine engine = new();
+            const int count = 30;
+
+            Task<string?>[] tasks = Enumerable.Range(0, count)
+                .Select(i => engine.ExecuteStringAsync(
+                    $"Vars.slot_{i} = {i}; return tostring({i})"))
+                .ToArray();
+            string?[] results = await Task.WhenAll(tasks);
+
+            for (int i = 0; i < count; i++)
+            {
+                results[i].ShouldBe(i.ToString());
+                engine.GetNumber($"slot_{i}").ShouldBe((double)i);
+            }
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task Stress_WaitAsync_ConcurrentPollers_AllComplete()
+        {
+            // Starts 30 coroutines synchronously then waits for each via WaitAsync(id)
+            // in parallel — directly stresses the async wait path rather than going
+            // through ExecuteStringAsync which uses it internally.
+            using KitsuneEngine engine = new();
+            const int count = 30;
+
+            int[] ids = Enumerable.Range(0, count)
+                .Select(i => engine.ExecuteString($"return tostring({i})"))
+                .ToArray();
+
+            await Task.WhenAll(ids.Select(id => engine.WaitAsync(id)));
+
+            for (int i = 0; i < count; i++)
+                engine.GetResultString(ids[i]).ShouldBe(i.ToString());
             engine.GetActiveIds().ShouldBeEmpty();
         }
 

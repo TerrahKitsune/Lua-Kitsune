@@ -79,6 +79,24 @@ namespace KitsuneNet
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern void KitsuneCleanup();
 
+        [StructLayout(LayoutKind.Sequential)]
+        private struct NativeKeyValueNode
+        {
+            public KitsuneVariable Key;    // 24 bytes
+            public KitsuneVariable Value;  // 24 bytes
+            public IntPtr          Next;   //  8 bytes
+        }
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr KitsuneGetAll();
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern void KitsuneKeyValuePairListFree(IntPtr node);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool KitsuneSetTable(string? key);
+
         #endregion
 
         /// <summary>Initialises the engine. Throws if <c>KitsuneInit</c> returns false.</summary>
@@ -134,15 +152,39 @@ namespace KitsuneNet
         {
             if (ptr == IntPtr.Zero) return LuaValue.None;
             var nv = Marshal.PtrToStructure<KitsuneVariable>(ptr);
-            LuaValue result = (LuaType)nv.Type switch
+            LuaType t = (LuaType)nv.Type;
+            LuaValue result = t switch
             {
                 LuaType.Number  => LuaValue.FromNumber(nv.Number),
                 LuaType.Boolean => LuaValue.FromBool(nv.BoolByte != 0),
                 LuaType.String when nv.Data != IntPtr.Zero => CopyBytes(nv.Data, (int)nv.Length),
-                _ => LuaValue.None,
+                LuaType.None    => LuaValue.None,
+                _               => new LuaValue { Type = t },  // Nil/Table/Function/Userdata/Thread/LightUserdata
             };
             KitsuneVariableFree(ptr);
             return result;
+
+            static LuaValue CopyBytes(IntPtr src, int length)
+            {
+                byte[] bytes = new byte[length];
+                if (length > 0) Marshal.Copy(src, bytes, 0, length);
+                return LuaValue.FromBytes(bytes);
+            }
+        }
+
+        // Converts a by-value KitsuneVariable (already marshaled into managed memory) to a LuaValue.
+        // Does NOT free any native memory — use this for embedded struct members, not heap pointers.
+        private static LuaValue NativeVariableToLuaValue(KitsuneVariable nv)
+        {
+            LuaType t = (LuaType)nv.Type;
+            return t switch
+            {
+                LuaType.Number  => LuaValue.FromNumber(nv.Number),
+                LuaType.Boolean => LuaValue.FromBool(nv.BoolByte != 0),
+                LuaType.String when nv.Data != IntPtr.Zero => CopyBytes(nv.Data, (int)nv.Length),
+                LuaType.None    => LuaValue.None,
+                _               => new LuaValue { Type = t },
+            };
 
             static LuaValue CopyBytes(IntPtr src, int length)
             {
@@ -384,7 +426,7 @@ namespace KitsuneNet
 
         // Convenience shims for common types
         public bool    SetString(string name, string value)  => SetVariable(name, value);
-        public bool    SetString(string name, byte[] value)  => SetVariable(name, Encoding.UTF8.GetString(value));
+        public bool    SetString(string name, byte[] value)  => SetVariable(name, LuaValue.FromBytes(value));
         public bool    SetBool(string name, bool value)      => SetVariable(name, value);
         public bool    SetNumber(string name, double value)  => SetVariable(name, value);
         public string? GetString(string name)      { var v = GetVariable(name); return v.Type == LuaType.String  ? v.String : null; }
@@ -392,6 +434,37 @@ namespace KitsuneNet
         public double? GetNumber(string name)      { var v = GetVariable(name); return v.Type == LuaType.Number  ? v.Number  : null; }
         public bool?   GetBool(string name)        { var v = GetVariable(name); return v.Type == LuaType.Boolean ? v.Boolean : null; }
         public LuaType GetVariableType(string name) => GetVariable(name).Type;
+
+        /// <summary>
+        /// Returns all entries in the Vars bridge table as a list of key-value pairs.
+        /// Returns an empty list when Vars is empty.
+        /// </summary>
+        public IReadOnlyCollection<KeyValuePair<LuaValue, LuaValue>> GetAll()
+        {
+            IntPtr head = KitsuneGetAll();
+            if (head == IntPtr.Zero) 
+                return Array.Empty<KeyValuePair<LuaValue, LuaValue>>();
+            var result = new List<KeyValuePair<LuaValue, LuaValue>>();
+            IntPtr current = head;
+            while (current != IntPtr.Zero)
+            {
+                var node = Marshal.PtrToStructure<NativeKeyValueNode>(current);
+                result.Add(new KeyValuePair<LuaValue, LuaValue>(
+                    NativeVariableToLuaValue(node.Key),
+                    NativeVariableToLuaValue(node.Value)));
+                current = node.Next;
+            }
+            KitsuneKeyValuePairListFree(head);
+            return result.AsReadOnly();
+        }
+
+        /// <summary>
+        /// Advances the variable bridge target into the subtable at <paramref name="key"/> within
+        /// the current target. If the key does not exist, a new empty table is created there.
+        /// Returns <c>false</c> if the key exists but is not a table.
+        /// Pass <c>null</c> to reset the target back to the root <c>Vars</c> table.
+        /// </summary>
+        public bool SetTable(string? key) => KitsuneSetTable(key);
 
         public void Dispose()
         {
@@ -413,13 +486,25 @@ namespace KitsuneNet
     public enum LuaType
     {
         /// <summary>No value / key not set (LUA_TNONE).</summary>
-        None    = -1,
+        None          = -1,
+        /// <summary>Explicit nil (LUA_TNIL).</summary>
+        Nil           =  0,
         /// <summary>Boolean (LUA_TBOOLEAN).</summary>
-        Boolean =  1,
+        Boolean       =  1,
+        /// <summary>Light userdata — a raw pointer not managed by Lua (LUA_TLIGHTUSERDATA).</summary>
+        LightUserdata =  2,
         /// <summary>Number — integer or float (LUA_TNUMBER).</summary>
-        Number  =  3,
+        Number        =  3,
         /// <summary>String (LUA_TSTRING).</summary>
-        String  =  4,
+        String        =  4,
+        /// <summary>Table (LUA_TTABLE). Value is not bridgeable; <see cref="LuaValue.Bytes"/> will be null.</summary>
+        Table         =  5,
+        /// <summary>Function (LUA_TFUNCTION). Value is not bridgeable; <see cref="LuaValue.Bytes"/> will be null.</summary>
+        Function      =  6,
+        /// <summary>Full userdata (LUA_TUSERDATA). Value is not bridgeable; <see cref="LuaValue.Bytes"/> will be null.</summary>
+        Userdata      =  7,
+        /// <summary>Coroutine thread (LUA_TTHREAD). Value is not bridgeable; <see cref="LuaValue.Bytes"/> will be null.</summary>
+        Thread        =  8,
     }
 
     /// <summary>A typed value exchanged with the Lua engine.</summary>
@@ -437,10 +522,16 @@ namespace KitsuneNet
         /// <summary>Returns the most useful string representation of the value.</summary>
         public override string ToString() => Type switch
         {
-            LuaType.String  => String ?? string.Empty,
-            LuaType.Number  => Number.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            LuaType.Boolean => Boolean.ToString(),
-            _               => string.Empty,
+            LuaType.String        => String ?? string.Empty,
+            LuaType.Number        => Number.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            LuaType.Boolean       => Boolean.ToString(),
+            LuaType.Nil           => "nil",
+            LuaType.Table         => "table",
+            LuaType.Function      => "function",
+            LuaType.Userdata      => "userdata",
+            LuaType.Thread        => "thread",
+            LuaType.LightUserdata => "lightuserdata",
+            _                     => string.Empty,
         };
 
         /// <summary>No value / not set.</summary>

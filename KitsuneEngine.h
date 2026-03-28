@@ -10,19 +10,31 @@
 #define KITSUNE_VERSION "1.0.0"
 
 // KitsuneVariable type constants — match Lua's LUA_T* values for direct comparison.
-#define KITSUNE_TNONE    (-1)
-#define KITSUNE_TBOOLEAN  (1)
-#define KITSUNE_TNUMBER   (3)
-#define KITSUNE_TSTRING   (4)
+#define KITSUNE_TNONE          (-1)
+#define KITSUNE_TNIL            (0)
+#define KITSUNE_TBOOLEAN        (1)
+#define KITSUNE_TLIGHTUSERDATA  (2)
+#define KITSUNE_TNUMBER         (3)
+#define KITSUNE_TSTRING         (4)
+#define KITSUNE_TTABLE          (5)
+#define KITSUNE_TFUNCTION       (6)
+#define KITSUNE_TUSERDATA       (7)
+#define KITSUNE_TTHREAD         (8)
 
 struct KitsuneVariable {
-	int            type;     // LUA_TNONE=-1, LUA_TBOOLEAN=1, LUA_TNUMBER=3, LUA_TSTRING=4
-	size_t         length;
+	int            type;     // see KITSUNE_T* constants above; KITSUNE_TUSERDATA is converted via __tostring when available
+	size_t         length;   // byte count for KITSUNE_TSTRING; 0 for all other types
 	union {
-		double         number;
-		bool           boolean;
-		unsigned char* data;  // strings only: C++ allocates on Get; caller-owns on Set
+		double         number;   // KITSUNE_TNUMBER
+		bool           boolean;  // KITSUNE_TBOOLEAN
+		unsigned char* data;     // KITSUNE_TSTRING: heap-allocated by engine on Get; caller-owned on Set
 	};
+};
+
+struct KitsuneKeyValuePairNode {
+	KitsuneVariable key;
+	KitsuneVariable value;
+	KitsuneKeyValuePairNode* Next;
 };
 
 extern "C" {
@@ -35,10 +47,10 @@ extern "C" {
 	KITSUNE_API void KitsuneVariableFree(KitsuneVariable* var);
 
 	// ── Execution ─────────────────────────────────────────────────────────────
-	// Both functions start execution as a Lua coroutine managed by the scheduler.
+	// All three functions start execution as a Lua coroutine managed by the scheduler.
 	// Returns a positive coroutine ID on success, or -1 on failure.
 	// When fireAndForget is true the slot is freed automatically on completion;
-	// do not call KitsuneCoroutineDone / KitsuneGetResult / KitsuneReleaseCoroutine for that id.
+	// do not call KitsuneHasResult / KitsuneGetResult for that id.
 	KITSUNE_API int KitsuneExecuteFile(const char* path, int argc, KitsuneVariable* argv, bool fireAndForget = false);
 	KITSUNE_API int KitsuneExecuteString(const char* script, int argc, KitsuneVariable* argv, bool fireAndForget = false);
 	KITSUNE_API int KitsuneExecuteFunction(const char* functionName, int argc, KitsuneVariable* argv, bool fireAndForget = false);
@@ -79,7 +91,14 @@ extern "C" {
 	// Returns the current value of a Vars global as a heap-allocated typed variable.
 	// Call KitsuneVariableFree on the result when done. Returns NULL if not found. Thread-safe.
 	KITSUNE_API KitsuneVariable* KitsuneGetVariable(const char* name);
-
+	// Returns all Vars entries as a heap-allocated singly-linked list of key-value pairs.
+	// Call KitsuneKeyValuePairListFree on the result when done. Returns NULL if Vars is empty. Thread-safe.
+	KITSUNE_API KitsuneKeyValuePairNode* KitsuneGetAll();
+	// Frees a linked list returned by KitsuneGetAll. Safe on NULL.
+	KITSUNE_API void KitsuneKeyValuePairListFree(KitsuneKeyValuePairNode* node);
+	// Sets the new vars target to a table within the current table, if null then resets it back to Vars (root).
+	// If the table does not exist then it is created, if it is not a table then it returns false. Thread-safe.
+	KITSUNE_API bool KitsuneSetTable(const char* key);
 	// Destroy the Lua state and clean up the engine.
 	KITSUNE_API void KitsuneCleanup();
 }
