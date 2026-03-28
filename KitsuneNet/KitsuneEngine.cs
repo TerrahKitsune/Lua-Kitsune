@@ -12,7 +12,8 @@ namespace KitsuneNet
         #region P/Invoke
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern IntPtr KitsuneInit();
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool KitsuneInit();
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
         private static extern int KitsuneExecuteFile(string path, int argc, string[]? argv,
@@ -20,6 +21,10 @@ namespace KitsuneNet
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
         private static extern int KitsuneExecuteString(string script, int argc, string[]? argv,
+            [MarshalAs(UnmanagedType.I1)] bool fireAndForget);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        private static extern int KitsuneExecuteFunction(string functionName, int argc, string[]? argv,
             [MarshalAs(UnmanagedType.I1)] bool fireAndForget);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
@@ -31,6 +36,12 @@ namespace KitsuneNet
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern nuint KitsuneGetResult(int id, byte[]? buffer, nuint bufferSize);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern void KitsuneCancel(int id);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern double KitsuneGetRuntime(int id);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern int KitsuneIsRunning();
@@ -54,7 +65,18 @@ namespace KitsuneNet
         private static extern bool KitsuneSetNumber(string name, double value);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-        private static extern nuint KitsuneGetVariable(string name, byte[] buffer, nuint bufferSize);
+        private static extern nuint KitsuneGetString(string name, byte[] buffer, nuint bufferSize);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool KitsuneGetNumber(string name, out double value);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool KitsuneGetBool(string name, [MarshalAs(UnmanagedType.I1)] out bool value);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        private static extern int KitsuneGetVariableType(string name);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern int KitsuneGetActiveIds(int[]? buffer, int bufferSize);
@@ -64,19 +86,19 @@ namespace KitsuneNet
 
         #endregion
 
-        /// <summary>Initialises the engine. Throws if <c>KitsuneInit</c> returns NULL.</summary>
+        /// <summary>Initialises the engine. Throws if <c>KitsuneInit</c> returns false.</summary>
         public KitsuneEngine()
         {
-            if (KitsuneInit() == IntPtr.Zero)
+            if (!KitsuneInit())
                 throw new InvalidOperationException("KitsuneInit failed");
         }
 
         // -- Execution ------------------------------------------------------------
 
         /// <summary>
-        /// Starts a Lua script file as a coroutine and returns its ID.
+        /// Starts a Lua script file as a coroutine and returns its ID, or -1 on failure.
         /// When <paramref name="fireAndForget"/> is <c>true</c> the slot is freed automatically on
-        /// completion; do not call <see cref="GetResult"/> or <see cref="ReleaseCoroutine"/> for that ID.
+        /// completion; use <see cref="ExecuteFileAsync"/> when a result is needed.
         /// </summary>
         public int ExecuteFile(string path, bool fireAndForget = false, params string[]? args)
         {
@@ -85,9 +107,9 @@ namespace KitsuneNet
         }
 
         /// <summary>
-        /// Starts a Lua script string as a coroutine and returns its ID.
+        /// Starts a Lua script string as a coroutine and returns its ID, or -1 on failure.
         /// When <paramref name="fireAndForget"/> is <c>true</c> the slot is freed automatically on
-        /// completion; do not call <see cref="GetResult"/> or <see cref="ReleaseCoroutine"/> for that ID.
+        /// completion; use <see cref="ExecuteStringAsync"/> when a result is needed.
         /// </summary>
         public int ExecuteString(string script, bool fireAndForget = false, params string[]? args)
         {
@@ -103,26 +125,32 @@ namespace KitsuneNet
         /// <exception cref="LuaException">Thrown if the Lua script raised a runtime or syntax error.</exception>
         public async Task<string?> ExecuteFileAsync(string path, CancellationToken cancellationToken = default, params string[]? args)
         {
-            int id = ExecuteFile(path, args: args);
+            string[] argv = args ?? [];
+            int id = KitsuneExecuteFile(path, argv.Length, argv, false);
             if (id < 0)
+            {
                 throw new InvalidOperationException($"Failed to start Lua coroutine for file '{path}'.");
+            }
+
             try
             {
                 await WaitAsync(id, cancellationToken);
             }
             catch (OperationCanceledException)
             {
-                // Release the slot immediately if the coroutine already finished during cancellation;
-                // otherwise the slot stays live until the engine is disposed.
-                if (HasResult(id))
-                    ReleaseCoroutine(id);
+                Cancel(id);
                 throw;
             }
+
             string? error = GetError(id);
-            string? result = GetResultString(id);
-            if (error is not null)
+
+            if (!string.IsNullOrEmpty(error))
+            {
+                Cancel(id);
                 throw new LuaException(error);
-            return result;
+            }
+
+            return GetResultString(id);
         }
 
         /// <summary>
@@ -133,29 +161,84 @@ namespace KitsuneNet
         /// <exception cref="LuaException">Thrown if the Lua script raised a runtime or syntax error.</exception>
         public async Task<string?> ExecuteStringAsync(string script, CancellationToken cancellationToken = default, params string[]? args)
         {
-            int id = ExecuteString(script, args: args);
+            string[] argv = args ?? [];
+            int id = KitsuneExecuteString(script, argv.Length, argv, false);
             if (id < 0)
+            {
                 throw new InvalidOperationException("Failed to start Lua coroutine.");
+            }
+
             try
             {
                 await WaitAsync(id, cancellationToken);
             }
             catch (OperationCanceledException)
             {
-                // Release the slot immediately if the coroutine already finished during cancellation;
-                // otherwise the slot stays live until the engine is disposed.
-                if (HasResult(id))
-                    ReleaseCoroutine(id);
+                Cancel(id);
                 throw;
             }
+
             string? error = GetError(id);
-            string? result = GetResultString(id);
-            if (error is not null)
+
+            if (!string.IsNullOrEmpty(error))
+            {
+                Cancel(id);
                 throw new LuaException(error);
-            return result;
+            }
+
+            return GetResultString(id);
         }
 
-        // -- Per-coroutine queries ------------------------------------------------
+        /// <summary>
+        /// Calls a global Lua function as a coroutine and returns its ID, or -1 on failure.
+        /// The ARGS global is not set; arguments are passed directly to the function.
+        /// When <paramref name="fireAndForget"/> is <c>true</c> the slot is freed automatically on
+        /// completion; use <see cref="ExecuteFunctionAsync"/> when a result is needed.
+        /// </summary>
+        public int ExecuteFunction(string functionName, bool fireAndForget = false, params string[]? args)
+        {
+            string[] argv = args ?? [];
+            return KitsuneExecuteFunction(functionName, argv.Length, argv, fireAndForget);
+        }
+
+        /// <summary>
+        /// Calls a global Lua function as a coroutine and asynchronously waits for it to complete.
+        /// </summary>
+        /// <returns>The UTF-8 result string, or <c>null</c> if the function returned nil or nothing.</returns>
+        /// <exception cref="InvalidOperationException">Thrown if the coroutine could not be started.</exception>
+        /// <exception cref="LuaException">Thrown if the Lua function raised a runtime error.</exception>
+        public async Task<string?> ExecuteFunctionAsync(string functionName, CancellationToken cancellationToken = default, params string[]? args)
+        {
+            string[] argv = args ?? [];
+            int id = KitsuneExecuteFunction(functionName, argv.Length, argv, false);
+
+            if (id < 0)
+            {
+                throw new InvalidOperationException($"Failed to start Lua coroutine for function '{functionName}'.");
+            }
+
+            try
+            {
+                await WaitAsync(id, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                Cancel(id);
+                throw;
+            }
+
+            string? error = GetError(id);
+
+            if (!string.IsNullOrEmpty(error))
+            {
+                Cancel(id);
+                throw new LuaException(error);
+            }
+
+            return GetResultString(id);
+        }
+
+        // -- Per-coroutine queries
 
         /// <summary>
         /// Returns <c>true</c> once the coroutine has finished (success or error).
@@ -206,10 +289,17 @@ namespace KitsuneNet
         }
 
         /// <summary>
-        /// Releases the slot for a finished coroutine without reading its result.
-        /// Equivalent to calling <see cref="GetResult"/> and ignoring the return value.
+        /// Signals the coroutine to stop at the next instruction boundary and releases its slot automatically.
+        /// If the coroutine is already finished but not yet released, releases it immediately.
+        /// After calling <see cref="Cancel"/> do not call <see cref="GetResult"/> or <see cref="ReleaseCoroutine"/> for that ID.
         /// </summary>
-        public void ReleaseCoroutine(int id) => KitsuneGetResult(id, null, 0);
+        public void Cancel(int id) => KitsuneCancel(id);
+
+        /// <summary>
+        /// Returns how long the coroutine has been alive in milliseconds, measured from when it was created.
+        /// Returns 0 if the ID is not found.
+        /// </summary>
+        public double GetRuntime(int id) => KitsuneGetRuntime(id);
 
         // -- Global control -------------------------------------------------------
 
@@ -309,39 +399,52 @@ namespace KitsuneNet
         /// <summary>Sets a numeric variable in the Vars table.</summary>
         public bool SetNumber(string name, double value) => KitsuneSetNumber(name, value);
 
-        /// <summary>
-        /// Returns a Vars global as a UTF-8 string, or <c>null</c> if not found.
-        /// Uses a two-call pattern to handle values larger than the initial buffer.
-        /// </summary>
-        public string? GetVariable(string name)
+        /// <summary>Returns the string value of a Vars global as a UTF-8 string, or <c>null</c> if not found or not a string.</summary>
+        public string? GetString(string name)
         {
             byte[] initial = new byte[256];
-            nuint actual = KitsuneGetVariable(name, initial, (nuint)initial.Length);
+            nuint actual = KitsuneGetString(name, initial, (nuint)initial.Length);
             if (actual == 0)
                 return null;
             if (actual < (nuint)initial.Length)
                 return Encoding.UTF8.GetString(initial, 0, (int)actual);
             byte[] buffer = new byte[(int)actual + 1];
-            KitsuneGetVariable(name, buffer, (nuint)buffer.Length);
+            KitsuneGetString(name, buffer, (nuint)buffer.Length);
             return Encoding.UTF8.GetString(buffer, 0, (int)actual);
         }
 
-        /// <summary>
-        /// Returns a Vars global as raw bytes, or <c>null</c> if not found.
-        /// Uses a two-call pattern to handle values larger than the initial buffer.
-        /// </summary>
-        public byte[]? GetVariableBytes(string name)
+        /// <summary>Returns the string value of a Vars global as raw bytes, or <c>null</c> if not found or not a string.</summary>
+        public byte[]? GetStringBytes(string name)
         {
             byte[] initial = new byte[256];
-            nuint actual = KitsuneGetVariable(name, initial, (nuint)initial.Length);
+            nuint actual = KitsuneGetString(name, initial, (nuint)initial.Length);
             if (actual == 0)
                 return null;
             if (actual < (nuint)initial.Length)
                 return initial[..(int)actual];
             byte[] buffer = new byte[(int)actual + 1];
-            KitsuneGetVariable(name, buffer, (nuint)buffer.Length);
+            KitsuneGetString(name, buffer, (nuint)buffer.Length);
             return buffer[..(int)actual];
         }
+
+        /// <summary>Returns the number value of a Vars global, or <c>null</c> if not found or not a number.</summary>
+        public double? GetNumber(string name)
+        {
+            if (!KitsuneGetNumber(name, out double value))
+                return null;
+            return value;
+        }
+
+        /// <summary>Returns the boolean value of a Vars global, or <c>null</c> if not found or not a boolean.</summary>
+        public bool? GetBool(string name)
+        {
+            if (!KitsuneGetBool(name, out bool value))
+                return null;
+            return value;
+        }
+
+        /// <summary>Returns the <see cref="LuaType"/> of a Vars global, or <see cref="LuaType.Nil"/> if nil or not set.</summary>
+        public LuaType GetVariableType(string name) => (LuaType)KitsuneGetVariableType(name);
 
         public void Dispose()
         {
@@ -357,5 +460,21 @@ namespace KitsuneNet
     public sealed class LuaException : Exception
     {
         public LuaException(string message) : base(message) { }
+    }
+
+    /// <summary>
+    /// Lua value types as returned by <see cref="KitsuneEngine.GetVariableType"/>.
+    /// Values match Lua's internal type constants.
+    /// </summary>
+    public enum LuaType
+    {
+        /// <summary>The variable is nil or not set.</summary>
+        Nil     = -1,
+        /// <summary>The variable holds a boolean.</summary>
+        Boolean =  1,
+        /// <summary>The variable holds a number (integer or float).</summary>
+        Number  =  3,
+        /// <summary>The variable holds a string.</summary>
+        String  =  4,
     }
 }

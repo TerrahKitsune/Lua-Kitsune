@@ -1,4 +1,4 @@
-#ifdef _DEBUG
+﻿#ifdef _DEBUG
 #define _CRTDBG_MAP_ALLOC
 #endif
 
@@ -65,10 +65,13 @@ struct KitsuneCoroutine {
 	volatile LONG fireAndForget;
 	volatile LONG done;         // 0 = still running / yielded, 1 = finished
 	volatile LONG released;     // 1 = slot should be freed; scheduler zeros it on next compaction
+	volatile LONG interrupted;   // set to 1 by KitsuneCancel; observed by the scheduler before resuming this coroutine
 	char*         error;
 	char*         result;
 	size_t        resultLen;
 	double        sleepUntil;   // GetCounter deadline (ms) before which the coroutine must not be resumed; 0 = not sleeping
+	double        startTime;    // GetCounter value recorded when the coroutine was created
+	int           initialNArgs; // number of args already on the thread stack for the first lua_resume; 0 for file/string coroutines
 };
 
 #define KITSUNE_MAX_COROUTINES 256
@@ -191,6 +194,17 @@ static void Ticker(lua_State *L, lua_Debug *ar) {
 		return;
 	}
 
+	// Per-coroutine cancel: check whether this specific coroutine has been cancelled.
+	// currentCoroutineId is set by the scheduler immediately before lua_resume.
+	int cancelId = (int)InterlockedAdd(&state->currentCoroutineId, 0);
+	if (cancelId) {
+		KitsuneCoroutine* curSlot = FindSlot(state, cancelId);
+		if (curSlot && InterlockedAdd(&curSlot->interrupted, 0)) {
+			luaL_error(L, "cancelled");
+			return;
+		}
+	}
+
 	if (InterlockedAdd(&state->pauseFlag, 0)) {
 		SetEvent(state->pausedEvent);
 		WaitForSingleObject(state->resumeEvent, INFINITE);
@@ -266,6 +280,16 @@ static DWORD WINAPI SchedulerProc(LPVOID param) {
 			for (int i = 0; i < state->slotCount; i++) {
 				KitsuneCoroutine* slot = state->slots[i];
 				if (slot->id == 0 || InterlockedAdd(&slot->done, 0)) continue;
+				// Per-coroutine cancel: terminate before the next resume (or wake from sleep).
+				if (InterlockedAdd(&slot->interrupted, 0)) {
+					SetSlotError(slot, "cancelled");
+					lua_State* Tc = GetCoroutineThread(state, slot);
+					if (Tc) lua_settop(Tc, 0);
+					InterlockedExchange(&slot->done, 1);
+					InterlockedDecrement(&state->runningCount);
+					InterlockedExchange(&slot->released, 1);
+					continue;
+				}
 				// Skip coroutines that are waiting out a Sleep() call.
 				if (slot->sleepUntil > 0.0) {
 					if (GetCounter(state) < slot->sleepUntil)
@@ -291,9 +315,13 @@ static DWORD WINAPI SchedulerProc(LPVOID param) {
 					lua_setglobal(T, "ARGS");
 				}
 
+				lua_pushinteger(T, slot->id);
+				lua_setglobal(T, "ID");
+
 				int nresults = 0;
+				int nstart = (lua_status(T) == LUA_OK) ? slot->initialNArgs : 0;
 				InterlockedExchange(&state->currentCoroutineId, (LONG)slot->id);
-				int rc = lua_resume(T, state->L, 0, &nresults);
+				int rc = lua_resume(T, state->L, nstart, &nresults);
 				InterlockedExchange(&state->currentCoroutineId, 0);
 				if (rc == LUA_YIELD)
 					lua_pop(T, nresults);  // discard yielded values only; lua_settop(T,0) would corrupt locals
@@ -346,6 +374,18 @@ static int L_GetRuntime(lua_State *L) {
 	void* ud;
 	lua_getallocf(L, &ud);
 	KitsuneState* state = (KitsuneState*)ud;
+
+	// If called from within a scheduler-managed coroutine, return that coroutine's runtime.
+	int id = (int)InterlockedAdd(&state->currentCoroutineId, 0);
+	if (id) {
+		KitsuneCoroutine* slot = FindSlot(state, id);
+		if (slot) {
+			lua_pushnumber(L, GetCounter(state) - slot->startTime);
+			return 1;
+		}
+	}
+
+	// Otherwise return the engine's total runtime since KitsuneInit.
 	lua_pushnumber(L, GetCounter(state));
 	return 1;
 }
@@ -398,15 +438,15 @@ static bool          g_coOwned  = false;
 
 extern "C" {
 
-KITSUNE_API lua_State* KitsuneInit() {
+KITSUNE_API bool KitsuneInit() {
 	if (g_state)
-		return g_state->L;
+		return true;
 
 	// RPC_E_CHANGED_MODE means COM was already initialised by the host (e.g. .NET's
 	// MTA thread pool).  We can still use COM; we just must not call CoUninitialize.
 	HRESULT cohr = CoInitialize(NULL);
 	if (FAILED(cohr) && cohr != RPC_E_CHANGED_MODE)
-		return NULL;
+		return false;
 	g_coOwned = SUCCEEDED(cohr);
 
 	InitMemoryManager();
@@ -414,7 +454,7 @@ KITSUNE_API lua_State* KitsuneInit() {
 	WSADATA wsa;
 	if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
 		if (g_coOwned) CoUninitialize();
-		return NULL;
+		return false;
 	}
 
 	SSL_load_error_strings();
@@ -436,7 +476,7 @@ KITSUNE_API lua_State* KitsuneInit() {
 		WSACleanup();
 		EndMemoryManager();
 		if (g_coOwned) CoUninitialize();
-		return NULL;
+		return false;
 	}
 	InitializeCriticalSection(&state->accessLock);
 	InitializeCriticalSection(&state->slotsLock);
@@ -455,7 +495,7 @@ KITSUNE_API lua_State* KitsuneInit() {
 		WSACleanup();
 		EndMemoryManager();
 		if (g_coOwned) CoUninitialize();
-		return NULL;
+		return false;
 	}
 
 	lua_State* L = state->L;
@@ -543,11 +583,11 @@ KITSUNE_API lua_State* KitsuneInit() {
 		WSACleanup();
 		EndMemoryManager();
 		if (g_coOwned) CoUninitialize();
-		return NULL;
+		return false;
 	}
 
 	g_state = state;
-	return state->L;
+	return true;
 }
 
 // ── Start a coroutine directly: acquire Lua access, create the thread, hand it to the scheduler ─
@@ -628,6 +668,8 @@ static int StartCoroutine(KitsuneState* state, bool isFile,
 		InterlockedIncrement(&state->runningCount);
 	}
 
+	slot->startTime = GetCounter(state);
+
 	// Expose the slot by assigning its ID; add it to the array if newly allocated.
 	EnterCriticalSection(&state->slotsLock);
 	slot->id = id;
@@ -646,6 +688,81 @@ KITSUNE_API int KitsuneExecuteFile(const char* path, int argc, const char** argv
 
 KITSUNE_API int KitsuneExecuteString(const char* script, int argc, const char** argv, bool fireAndForget) {
 	return StartCoroutine(g_state, false, script, argc, argv, fireAndForget);
+}
+
+static int StartCoroutineFunction(KitsuneState* state, const char* functionName,
+								  int argc, const char** argv, bool fireAndForget) {
+	if (!state || !functionName) return -1;
+
+	AcquireLuaAccess(state);
+
+	KitsuneCoroutine* slot = NULL;
+	bool isNewSlot = false;
+	for (int i = 0; i < state->slotCount; i++) {
+		if (state->slots[i]->id == 0) { slot = state->slots[i]; break; }
+	}
+	if (!slot) {
+		if (state->slotCount >= KITSUNE_MAX_COROUTINES) {
+			ReleaseLuaAccess(state);
+			return -1;
+		}
+		slot = (KitsuneCoroutine*)gff_malloc(sizeof(KitsuneCoroutine));
+		if (!slot) { ReleaseLuaAccess(state); return -1; }
+		memset(slot, 0, sizeof(KitsuneCoroutine));
+		isNewSlot = true;
+	}
+
+	slot->threadRef     = LUA_NOREF;
+	slot->argsRef       = LUA_NOREF;  // no ARGS table – args are passed directly to the function
+	slot->fireAndForget = fireAndForget ? 1 : 0;
+
+	lua_State* T    = lua_newthread(state->L);
+	slot->thread    = T;
+	slot->threadRef = luaL_ref(state->L, LUA_REGISTRYINDEX);
+	lua_sethook(T, Ticker, LUA_MASKCOUNT, 1000);
+
+	// Push the global function onto the coroutine thread's stack.
+	lua_getglobal(T, functionName);
+
+	int id = (int)InterlockedIncrement(&state->nextId);
+
+	if (!lua_isfunction(T, -1)) {
+		lua_pop(T, 1);
+		SetSlotError(slot, "function not found");
+		luaL_unref(state->L, LUA_REGISTRYINDEX, slot->threadRef);
+		slot->threadRef = LUA_NOREF;
+		slot->thread = NULL;
+		InterlockedExchange(&slot->done, 1);
+		if (InterlockedAdd(&slot->fireAndForget, 0))
+			InterlockedExchange(&slot->released, 1);
+	} else {
+		// Push argv as direct Lua arguments; initialNArgs tells the scheduler how
+		// many to pass on the first lua_resume call.
+		for (int n = 0; n < argc; n++) {
+			if (argv && argv[n])
+				lua_pushstring(T, argv[n]);
+			else
+				lua_pushnil(T);
+		}
+		slot->initialNArgs = argc;
+		InterlockedIncrement(&state->runningCount);
+	}
+
+	slot->startTime = GetCounter(state);
+
+	EnterCriticalSection(&state->slotsLock);
+	slot->id = id;
+	if (isNewSlot)
+		state->slots[state->slotCount++] = slot;
+	LeaveCriticalSection(&state->slotsLock);
+
+	ReleaseLuaAccess(state);
+	SetEvent(state->workEvent);
+	return id;
+}
+
+KITSUNE_API int KitsuneExecuteFunction(const char* functionName, int argc, const char** argv, bool fireAndForget) {
+	return StartCoroutineFunction(g_state, functionName, argc, argv, fireAndForget);
 }
 
 KITSUNE_API const char* KitsuneGetError(int id) {
@@ -701,6 +818,32 @@ KITSUNE_API size_t KitsuneGetResult(int id, char* buffer, size_t bufferSize) {
 
 	gff_free(result);
 	return len;
+}
+
+KITSUNE_API void KitsuneCancel(int id) {
+	KitsuneState* state = g_state;
+	if (!state) return;
+	EnterCriticalSection(&state->slotsLock);
+	KitsuneCoroutine* slot = FindSlot(state, id);
+	if (slot) {
+		InterlockedExchange(&slot->fireAndForget, 1);
+		if (InterlockedAdd(&slot->done, 0))
+			InterlockedExchange(&slot->released, 1);  // already finished, release directly
+		else
+			InterlockedExchange(&slot->interrupted, 1);  // still running, signal per-coroutine cancel
+	}
+	LeaveCriticalSection(&state->slotsLock);
+	SetEvent(state->workEvent);  // wake the scheduler to process the cancel promptly
+}
+
+KITSUNE_API double KitsuneGetRuntime(int id) {
+	KitsuneState* state = g_state;
+	if (!state) return 0.0;
+	EnterCriticalSection(&state->slotsLock);
+	KitsuneCoroutine* slot = FindSlot(state, id);
+	double runtime = slot ? GetCounter(state) - slot->startTime : 0.0;
+	LeaveCriticalSection(&state->slotsLock);
+	return runtime;
 }
 
 KITSUNE_API int KitsuneIsRunning() {
@@ -816,31 +959,88 @@ KITSUNE_API bool KitsuneSetNumber(const char* name, double value) {
 	return true;
 }
 
-KITSUNE_API size_t KitsuneGetVariable(const char* name, char* buffer, size_t bufferSize) {
+KITSUNE_API size_t KitsuneGetString(const char* name, char* buffer, size_t bufferSize) {
 	KitsuneState* state = g_state;
 	if (!state || !state->L || !name) return 0;
 	AcquireLuaAccess(state);
 
 	size_t result = 0;
-	lua_getglobal(state->L, "Vars");    // +1: Vars (or nil)
+	lua_getglobal(state->L, "Vars");
 	if (lua_istable(state->L, -1)) {
-		lua_getfield(state->L, -1, name);   // +1: Vars[name]
-		if (!lua_isnil(state->L, -1)) {
+		lua_getfield(state->L, -1, name);
+		if (lua_type(state->L, -1) == LUA_TSTRING) {
 			size_t len;
-			const char* s = luaL_tolstring(state->L, -1, &len);  // +1: string rep
+			const char* s = lua_tolstring(state->L, -1, &len);
 			result = len;
-			if (buffer && bufferSize > 0) {
+			if (buffer && bufferSize > 0 && s) {
 				size_t copy = len < bufferSize - 1 ? len : bufferSize - 1;
 				memcpy(buffer, s, copy);
 				buffer[copy] = '\0';
 			}
-			lua_pop(state->L, 1);               // pop string rep
 		}
-		lua_pop(state->L, 1);               // pop Vars[name]
+		lua_pop(state->L, 1);   // pop Vars[name]
 	}
-	lua_pop(state->L, 1);               // pop Vars
+	lua_pop(state->L, 1);       // pop Vars
 	ReleaseLuaAccess(state);
 	return result;
+}
+
+KITSUNE_API bool KitsuneGetNumber(const char* name, double* value) {
+	KitsuneState* state = g_state;
+	if (!state || !state->L || !name) return false;
+	AcquireLuaAccess(state);
+
+	bool result = false;
+	lua_getglobal(state->L, "Vars");
+	if (lua_istable(state->L, -1)) {
+		lua_getfield(state->L, -1, name);
+		if (lua_type(state->L, -1) == LUA_TNUMBER) {
+			if (value) *value = lua_tonumber(state->L, -1);
+			result = true;
+		}
+		lua_pop(state->L, 1);
+	}
+	lua_pop(state->L, 1);
+	ReleaseLuaAccess(state);
+	return result;
+}
+
+KITSUNE_API bool KitsuneGetBool(const char* name, bool* value) {
+	KitsuneState* state = g_state;
+	if (!state || !state->L || !name) return false;
+	AcquireLuaAccess(state);
+
+	bool result = false;
+	lua_getglobal(state->L, "Vars");
+	if (lua_istable(state->L, -1)) {
+		lua_getfield(state->L, -1, name);
+		if (lua_type(state->L, -1) == LUA_TBOOLEAN) {
+			if (value) *value = lua_toboolean(state->L, -1) != 0;
+			result = true;
+		}
+		lua_pop(state->L, 1);
+	}
+	lua_pop(state->L, 1);
+	ReleaseLuaAccess(state);
+	return result;
+}
+
+KITSUNE_API int KitsuneGetVariableType(const char* name) {
+	KitsuneState* state = g_state;
+	if (!state || !state->L || !name) return LUA_TNONE;
+	AcquireLuaAccess(state);
+
+	int type = LUA_TNONE;
+	lua_getglobal(state->L, "Vars");
+	if (lua_istable(state->L, -1)) {
+		lua_getfield(state->L, -1, name);
+		int t = lua_type(state->L, -1);
+		type = (t == LUA_TNIL) ? LUA_TNONE : t;
+		lua_pop(state->L, 1);
+	}
+	lua_pop(state->L, 1);
+	ReleaseLuaAccess(state);
+	return type;
 }
 
 KITSUNE_API void KitsuneCleanup() {
