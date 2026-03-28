@@ -300,7 +300,7 @@ namespace KitsuneNet.Tests
         public void GetVariableType_Unset_ReturnsNil()
         {
             using KitsuneEngine engine = new();
-            engine.GetVariableType("nonExistentVar_XYZ").ShouldBe(LuaType.Nil);
+            engine.GetVariableType("nonExistentVar_XYZ").ShouldBe(LuaType.None);
         }
 
         // -- ExecuteFile ----------------------------------------------------------

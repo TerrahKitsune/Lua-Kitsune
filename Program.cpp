@@ -27,7 +27,20 @@ int main(int argc, char *argv[]) {
 	}
 
 	const char* file = argc > 1 ? argv[1] : "main.lua";
-	int id = KitsuneExecuteFile(file, argc, (const char**)argv);
+
+	// Convert extra command-line args (argv[2..]) to KitsuneVariable array.
+	int extraArgc = argc > 2 ? argc - 2 : 0;
+	KitsuneVariable* vars = nullptr;
+	if (extraArgc > 0) {
+		vars = new KitsuneVariable[extraArgc]();
+		for (int i = 0; i < extraArgc; i++) {
+			vars[i].type   = KITSUNE_TSTRING;
+			vars[i].length = strlen(argv[i + 2]);
+			vars[i].data   = (unsigned char*)argv[i + 2];
+		}
+	}
+	int id = KitsuneExecuteFile(file, extraArgc, vars);
+	delete[] vars;
 
 	if (id < 0) {
 		fprintf(stderr, "Failed to start %s\n", file);
@@ -35,9 +48,8 @@ int main(int argc, char *argv[]) {
 		return -1;
 	}
 
-	// Block until the coroutine finishes and get the result length.
-	size_t resultLen = 0;
-	while (!KitsuneHasResult(id, &resultLen))
+	// Block until the coroutine finishes.
+	while (!KitsuneHasResult(id, nullptr))
 		Sleep(1);
 
 	const char* err = KitsuneGetError(id);
@@ -46,17 +58,11 @@ int main(int argc, char *argv[]) {
 
 	int ret = err ? 1 : 0;
 
-	if (resultLen > 0) {
-		char* result = (char*)malloc(resultLen + 1);
-		if (result) {
-			KitsuneGetResult(id, result, resultLen + 1);  // also releases the slot
-			printf("%.*s\n", (int)resultLen, result);
-			free(result);
-		} else {
-			KitsuneGetResult(id, nullptr, 0);  // release the slot even on malloc failure
-		}
-	} else {
-		KitsuneGetResult(id, nullptr, 0);  // always release the slot
+	KitsuneVariable* result = KitsuneGetResult(id);
+	if (result) {
+		if (result->type == KITSUNE_TSTRING && result->data && result->length > 0)
+			printf("%.*s\n", (int)result->length, (char*)result->data);
+		KitsuneVariableFree(result);
 	}
 
 	KitsuneCleanup();
