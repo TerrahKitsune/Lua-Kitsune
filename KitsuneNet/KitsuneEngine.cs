@@ -8,6 +8,7 @@ namespace KitsuneNet
         private const string DllName = "KitsuneEngine";
 
         private bool _disposed;
+        private List<GCHandle>? _functionHandles;
 
         #region P/Invoke
 
@@ -19,7 +20,17 @@ namespace KitsuneNet
             [FieldOffset(8)]  public nuint  Length;
             [FieldOffset(16)] public IntPtr Data;
             [FieldOffset(16)] public double Number;
+            [FieldOffset(16)] public long   Integer;
             [FieldOffset(16)] public byte   BoolByte;
+        }
+
+        // Mirrors KeyValuePairKitsuneVariableNode: Key(24) + Value(24) + Next ptr(8) = 56 bytes.
+        [StructLayout(LayoutKind.Sequential)]
+        private struct NativeKVNode
+        {
+            public KitsuneVariable Key;
+            public KitsuneVariable Value;
+            public IntPtr          Next;
         }
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
@@ -61,6 +72,9 @@ namespace KitsuneNet
         private static extern double KitsuneGetRuntime(int id);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern int KitsuneGetStatus(int id);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         [return: MarshalAs(UnmanagedType.I1)]
         private static extern bool KitsuneIsRunning();
 
@@ -92,6 +106,10 @@ namespace KitsuneNet
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern void KitsuneGetAll([In] string? path, GetAllCallback callback, IntPtr userdata);
 
+        // func is a delegate* unmanaged[Cdecl] cast to nint; userdata is a GCHandle address.
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        private static extern void KitsuneRegisterFunction(string name, nint func, nint userdata);
+
         #endregion
 
         /// <summary>Initialises the engine. Throws if <c>KitsuneInit</c> returns false.</summary>
@@ -113,27 +131,7 @@ namespace KitsuneNet
             var native = new KitsuneVariable[args.Length];
             var ptrs   = new List<IntPtr>(args.Length);
             for (int i = 0; i < args.Length; i++)
-            {
-                native[i].Type = (int)args[i].Type;
-                switch (args[i].Type)
-                {
-                    case LuaType.Number:
-                        native[i].Number = args[i].Number;
-                        break;
-                    case LuaType.Boolean:
-                        native[i].BoolByte = args[i].Boolean ? (byte)1 : (byte)0;
-                        break;
-                    case LuaType.String when args[i].Bytes is not null:
-                        byte[] bytes = args[i].Bytes!;
-                        IntPtr p = Marshal.AllocHGlobal(bytes.Length + 1);
-                        Marshal.Copy(bytes, 0, p, bytes.Length);
-                        Marshal.WriteByte(p, bytes.Length, 0);
-                        ptrs.Add(p);
-                        native[i].Data   = p;
-                        native[i].Length = (nuint)bytes.Length;
-                        break;
-                }
-            }
+                FillNativeVariable(ref native[i], args[i], ptrs);
             return (native, [.. ptrs]);
         }
 
@@ -151,10 +149,12 @@ namespace KitsuneNet
             LuaValue result = t switch
             {
                 LuaType.Number  => LuaValue.FromNumber(nv.Number),
+                LuaType.Integer => LuaValue.FromInt64(nv.Integer),
                 LuaType.Boolean => LuaValue.FromBool(nv.BoolByte != 0),
                 LuaType.String when nv.Data != IntPtr.Zero => CopyBytes(nv.Data, (int)nv.Length),
+                LuaType.Table  => ReadNativeTable(nv.Data),
                 LuaType.None    => LuaValue.None,
-                _               => new LuaValue { Type = t },  // Nil/Table/Function/Userdata/Thread/LightUserdata
+                _               => new LuaValue { Type = t },  // Nil/Function/Userdata/Thread/LightUserdata
             };
             KitsuneVariableFree(ptr);
             return result;
@@ -175,8 +175,10 @@ namespace KitsuneNet
             return t switch
             {
                 LuaType.Number  => LuaValue.FromNumber(nv.Number),
+                LuaType.Integer => LuaValue.FromInt64(nv.Integer),
                 LuaType.Boolean => LuaValue.FromBool(nv.BoolByte != 0),
                 LuaType.String when nv.Data != IntPtr.Zero => CopyBytes(nv.Data, (int)nv.Length),
+                LuaType.Table  => ReadNativeTable(nv.Data),
                 LuaType.None    => LuaValue.None,
                 _               => new LuaValue { Type = t },
             };
@@ -186,6 +188,72 @@ namespace KitsuneNet
                 byte[] bytes = new byte[length];
                 if (length > 0) Marshal.Copy(src, bytes, 0, length);
                 return LuaValue.FromBytes(bytes);
+            }
+        }
+
+        // Walks a native KeyValuePairKitsuneVariableNode linked list and converts it to a LuaValue table.
+        // NativeVariableToLuaValue is called recursively for each entry, so nested tables are handled.
+        private static LuaValue ReadNativeTable(IntPtr headPtr)
+        {
+            if (headPtr == IntPtr.Zero) return new LuaValue { Type = LuaType.Table };
+            var entries = new List<KeyValuePair<LuaValue, LuaValue>>();
+            IntPtr node = headPtr;
+            while (node != IntPtr.Zero)
+            {
+                var n = Marshal.PtrToStructure<NativeKVNode>(node);
+                entries.Add(new KeyValuePair<LuaValue, LuaValue>(
+                    NativeVariableToLuaValue(n.Key),
+                    NativeVariableToLuaValue(n.Value)));
+                node = n.Next;
+            }
+            return LuaValue.FromTable(entries.AsReadOnly());
+        }
+
+        // Builds a native linked list from a managed table. Every allocation is added to ptrs for cleanup.
+        private static IntPtr BuildNativeTable(
+            IReadOnlyList<KeyValuePair<LuaValue, LuaValue>> entries, List<IntPtr> ptrs)
+        {
+            if (entries.Count == 0) return IntPtr.Zero;
+            int nodeSize = Marshal.SizeOf<NativeKVNode>();
+            var nodes = new IntPtr[entries.Count];
+            for (int i = 0; i < entries.Count; i++)
+            {
+                nodes[i] = Marshal.AllocHGlobal(nodeSize);
+                ptrs.Add(nodes[i]);
+            }
+            for (int i = 0; i < entries.Count; i++)
+            {
+                var n = default(NativeKVNode);
+                FillNativeVariable(ref n.Key,   entries[i].Key,   ptrs);
+                FillNativeVariable(ref n.Value, entries[i].Value, ptrs);
+                n.Next = i + 1 < entries.Count ? nodes[i + 1] : IntPtr.Zero;
+                Marshal.StructureToPtr(n, nodes[i], false);
+            }
+            return nodes[0];
+        }
+
+        // Fills a single KitsuneVariable struct for native pass-through; string and table data are
+        // heap-allocated and added to ptrs so FreeNativeArgs cleans them up after the call returns.
+        private static void FillNativeVariable(ref KitsuneVariable nv, LuaValue v, List<IntPtr> ptrs)
+        {
+            nv.Type = (int)v.Type;
+            switch (v.Type)
+            {
+                case LuaType.Number:  nv.Number   = v.Number;  break;
+                case LuaType.Integer: nv.Integer  = v.Int64;   break;
+                case LuaType.Boolean: nv.BoolByte = v.Boolean ? (byte)1 : (byte)0; break;
+                case LuaType.String when v.Bytes is { Length: > 0 } bytes:
+                    IntPtr p = Marshal.AllocHGlobal(bytes.Length + 1);
+                    Marshal.Copy(bytes, 0, p, bytes.Length);
+                    Marshal.WriteByte(p, bytes.Length, 0);
+                    ptrs.Add(p);
+                    nv.Data   = p;
+                    nv.Length = (nuint)bytes.Length;
+                    break;
+                case LuaType.Table when v.Table is not null:
+                    nv.Data   = BuildNativeTable(v.Table, ptrs);
+                    nv.Length = (nuint)v.Table.Count;
+                    break;
             }
         }
 
@@ -300,11 +368,20 @@ namespace KitsuneNet
             /// <summary>Signals the coroutine to stop and releases its slot.</summary>
             public void Cancel(int id) => KitsuneCancel(id);
 
+        /// <summary>Releases the slot of a finished coroutine without consuming its result.
+        /// Use after reading the error with <see cref="GetError"/> when you do not need the result.
+        /// No-op for running coroutines — use <see cref="Cancel"/> for those. Thread-safe.
+        /// </summary>
+        public void ReleaseResult(int id) => KitsuneReleaseResult(id);
+
         /// <summary>
         /// Returns how long the coroutine has been alive in milliseconds, measured from when it was created.
         /// Returns 0 if the ID is not found.
         /// </summary>
         public double GetRuntime(int id) => KitsuneGetRuntime(id);
+
+        /// <summary>Returns the current status of the coroutine. Thread-safe.</summary>
+        public CoroutineStatus GetStatus(int id) => (CoroutineStatus)KitsuneGetStatus(id);
 
         // -- Global control -------------------------------------------------------
 
@@ -321,7 +398,7 @@ namespace KitsuneNet
 
         /// <summary>
         /// Returns the IDs of all coroutines that are currently alive — either still running
-        /// or finished but not yet released via <see cref="GetResult"/> or <see cref="ReleaseCoroutine"/>.
+        /// or finished but not yet released via <see cref="GetResult"/> or <see cref="ReleaseResult"/>.
         /// </summary>
         public int[] GetActiveIds()
         {
@@ -387,10 +464,10 @@ namespace KitsuneNet
 
         // -- Variable bridge ------------------------------------------------------
 
-        /// <summary>Sets a Vars global from a typed value. Pass <see cref="LuaValue.None"/> to remove the key.</summary>
+        /// <summary>Sets a Lua global from a typed value using a dot-separated path. Pass <see cref="LuaValue.None"/> to remove the key.</summary>
         public bool SetVariable(string name, LuaValue value)
         {
-            IntPtr strPtr = IntPtr.Zero;
+            var ptrs = new List<IntPtr>();
             try
             {
                 var nv = new KitsuneVariable { Type = (int)value.Type };
@@ -399,46 +476,56 @@ namespace KitsuneNet
                     case LuaType.Number:
                         nv.Number = value.Number;
                         break;
+                    case LuaType.Integer:
+                        nv.Integer = value.Int64;
+                        break;
                     case LuaType.Boolean:
                         nv.BoolByte = value.Boolean ? (byte)1 : (byte)0;
                         break;
                     case LuaType.String when value.Bytes is not null:
                         byte[] bytes = value.Bytes;
-                        strPtr = Marshal.AllocHGlobal(bytes.Length + 1);
+                        IntPtr strPtr = Marshal.AllocHGlobal(bytes.Length + 1);
                         Marshal.Copy(bytes, 0, strPtr, bytes.Length);
                         Marshal.WriteByte(strPtr, bytes.Length, 0);
+                        ptrs.Add(strPtr);
                         nv.Data   = strPtr;
                         nv.Length = (nuint)bytes.Length;
+                        break;
+                    case LuaType.Table when value.Table is not null:
+                        nv.Data   = BuildNativeTable(value.Table, ptrs);
+                        nv.Length = (nuint)value.Table.Count;
                         break;
                 }
                 return KitsuneSetVariable(name, ref nv);
             }
             finally
             {
-                if (strPtr != IntPtr.Zero) Marshal.FreeHGlobal(strPtr);
+                FreeNativeArgs([.. ptrs]);
             }
         }
 
-        /// <summary>Returns the current value of a Vars global, or <see cref="LuaValue.None"/> if not found.</summary>
+        /// <summary>Returns the Lua global at the given dot-separated path, or <see cref="LuaValue.None"/> if not found.</summary>
         public LuaValue GetVariable(string name) => NativePtrToLuaValue(KitsuneGetVariable(name));
 
-        // Convenience shims for common types
+        // Convenience shims for common types (path is dot-separated, e.g. "foo" or "foo.bar")
         public bool    SetString(string name, string value)  => SetVariable(name, value);
         public bool    SetString(string name, byte[] value)  => SetVariable(name, LuaValue.FromBytes(value));
         public bool    SetBool(string name, bool value)      => SetVariable(name, value);
         public bool    SetNumber(string name, double value)  => SetVariable(name, value);
+        public bool    SetInt64(string name, long value)     => SetVariable(name, LuaValue.FromInt64(value));
         public string? GetString(string name)      { var v = GetVariable(name); return v.Type == LuaType.String  ? v.String : null; }
-        public byte[]? GetStringBytes(string name) { var v = GetVariable(name); return v.Type == LuaType.String ? v.Bytes : null; }
-        public double? GetNumber(string name)      { var v = GetVariable(name); return v.Type == LuaType.Number  ? v.Number  : null; }
+        public byte[]? GetStringBytes(string name) { var v = GetVariable(name); return v.Type == LuaType.String  ? v.Bytes  : null; }
+        public double? GetNumber(string name)      { var v = GetVariable(name); return v.Type == LuaType.Number  ? v.Number : v.Type == LuaType.Integer ? (double)v.Int64 : null; }
+        public long?   GetInt64(string name)       { var v = GetVariable(name); return v.Type == LuaType.Integer ? v.Int64  : v.Type == LuaType.Number  ? (long)v.Number  : null; }
         public bool?   GetBool(string name)        { var v = GetVariable(name); return v.Type == LuaType.Boolean ? v.Boolean : null; }
         public LuaType GetVariableType(string name) => GetVariable(name).Type;
 
         /// <summary>
         /// Returns all entries at the given dot-separated path as a list of key-value pairs.
-        /// Pass <c>null</c> or <c>""</c> to iterate the root Vars table.
-        /// Returns an empty list when the path is empty or does not contain a table.
+        /// Pass <c>null</c> or <c>""</c> to iterate the Lua global environment (<c>_G</c>) itself.
+        /// Returns an empty list when the path does not exist or does not contain a table.
         /// </summary>
-        public IReadOnlyCollection<KeyValuePair<LuaValue, LuaValue>> GetAll(string? path = null)
+        public IReadOnlyList<KeyValuePair<LuaValue, LuaValue>> GetAll(string? path = null)
         {
             var result = new List<KeyValuePair<LuaValue, LuaValue>>();
             GetAllCallback cb = (key, value, _) =>
@@ -455,11 +542,111 @@ namespace KitsuneNet
             return result.AsReadOnly();
         }
 
+        // -- RegisterFunction ----------------------------------------------------
+
+        /// <summary>
+        /// Registers a C# function as a Lua global callable by <paramref name="name"/>.
+        /// <paramref name="name"/> may be a dot-separated path (e.g. <c>"Ns.Foo"</c>);
+        /// intermediate tables are created automatically.
+        /// The function receives the Lua call arguments and returns a single <see cref="LuaValue"/>,
+        /// or <see cref="LuaValue.None"/> to return nothing. Throw a <see cref="LuaException"/> to
+        /// raise a Lua error with a specific message; any other exception raises the exception message.
+        /// </summary>
+        public unsafe void RegisterFunction(string name, LuaFunction func)
+        {
+            _functionHandles ??= new();
+            var handle = GCHandle.Alloc(func);
+            _functionHandles.Add(handle);
+            var fp = (nint)(delegate* unmanaged[Cdecl]<int, KitsuneVariable*, nint, void*, int>)&LuaFunctionTrampoline;
+            KitsuneRegisterFunction(name, fp, (nint)GCHandle.ToIntPtr(handle));
+        }
+
+        // Called from native code for every function registered via RegisterFunction.
+        // One trampoline handles all registrations; the GCHandle in userdata identifies the target.
+        [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+        private static unsafe int LuaFunctionTrampoline(
+            int argc, KitsuneVariable* argv, nint resultSetterPtr, void* userdata)
+        {
+            try
+            {
+                var handle = GCHandle.FromIntPtr((nint)userdata);
+                var func = (LuaFunction)handle.Target!;
+
+                var args = new LuaValue[argc];
+                for (int i = 0; i < argc; i++)
+                    args[i] = NativeVariableToLuaValue(argv[i]);
+
+                LuaValue result = func(Array.AsReadOnly(args));
+                if (result.Type != LuaType.None)
+                    InvokeResultSetter(resultSetterPtr, result);
+                return 1;
+            }
+            catch (Exception ex)
+            {
+                try { InvokeResultSetterError(resultSetterPtr, ex.Message); }
+                catch { /* OOM during error marshal: fall through, engine raises generic error */ }
+                return 0;
+            }
+        }
+
+        // Calls the native resultSetter with a typed value.
+        private static unsafe void InvokeResultSetter(nint resultSetterPtr, LuaValue result)
+        {
+            var setter = (delegate* unmanaged[Cdecl]<KitsuneVariable*, int>)resultSetterPtr;
+            IntPtr strPtr = IntPtr.Zero;
+            try
+            {
+                KitsuneVariable nv = new() { Type = (int)result.Type };
+                if (result.Type == LuaType.String && result.Bytes is { Length: > 0 } bytes)
+                {
+                    strPtr = Marshal.AllocHGlobal(bytes.Length + 1);
+                    Marshal.Copy(bytes, 0, strPtr, bytes.Length);
+                    Marshal.WriteByte(strPtr, bytes.Length, 0);
+                    nv.Length = (nuint)bytes.Length;
+                    nv.Data   = strPtr;
+                }
+                else if (result.Type == LuaType.Number)   nv.Number   = result.Number;
+                else if (result.Type == LuaType.Integer)  nv.Integer  = result.Int64;
+                else if (result.Type == LuaType.Boolean)  nv.BoolByte = result.Boolean ? (byte)1 : (byte)0;
+                setter(&nv);
+            }
+            finally
+            {
+                if (strPtr != IntPtr.Zero) Marshal.FreeHGlobal(strPtr);
+            }
+        }
+
+        // Calls the native resultSetter with KITSUNE_TERROR to raise a Lua error.
+        private static unsafe void InvokeResultSetterError(nint resultSetterPtr, string message)
+        {
+            var setter = (delegate* unmanaged[Cdecl]<KitsuneVariable*, int>)resultSetterPtr;
+            byte[] msgBytes = Encoding.UTF8.GetBytes(message);
+            IntPtr msgPtr = Marshal.AllocHGlobal(msgBytes.Length + 1);
+            try
+            {
+                Marshal.Copy(msgBytes, 0, msgPtr, msgBytes.Length);
+                Marshal.WriteByte(msgPtr, msgBytes.Length, 0);
+                KitsuneVariable errVar = new() { Type = -2, Length = (nuint)msgBytes.Length };  // KITSUNE_TERROR
+                errVar.Data = msgPtr;
+                setter(&errVar);
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(msgPtr);
+            }
+        }
+
         public void Dispose()
         {
             if (!_disposed)
             {
                 KitsuneCleanup();
+                if (_functionHandles is not null)
+                {
+                    foreach (var h in _functionHandles)
+                        if (h.IsAllocated) h.Free();
+                    _functionHandles.Clear();
+                }
                 _disposed = true;
             }
         }
@@ -469,6 +656,37 @@ namespace KitsuneNet
     public sealed class LuaException : Exception
     {
         public LuaException(string message) : base(message) { }
+    }
+
+    /// <summary>
+    /// A C# function that can be registered and called from Lua as <c>Kitsune.Name(...)</c>.
+    /// </summary>
+    /// <param name="args">The Lua call arguments. Valid only for the duration of the call.</param>
+    /// <returns>
+    /// The value to return to Lua, or <see cref="LuaValue.None"/> to return nothing.
+    /// Throw <see cref="LuaException"/> (or any exception) to raise a Lua error.
+    /// </returns>
+    public delegate LuaValue LuaFunction(IReadOnlyList<LuaValue> args);
+
+    /// <summary>Status of a coroutine managed by the engine.</summary>
+    public enum CoroutineStatus
+    {
+        /// <summary>ID not found — never existed, already released, or fully compacted.</summary>
+        None      = 0,
+        /// <summary>Alive and queued; waiting to be resumed by the scheduler.</summary>
+        Idle      = 1,
+        /// <summary>Alive but suspended for a <c>Sleep()</c> deadline.</summary>
+        Sleeping  = 2,
+        /// <summary>Currently executing inside <c>lua_resume</c>.</summary>
+        Running   = 3,
+        /// <summary>Finished successfully; result not yet consumed.</summary>
+        Done      = 4,
+        /// <summary>Finished with a runtime or Lua error. Call <see cref="KitsuneEngine.GetError"/> to read the message.</summary>
+        Faulted   = 5,
+        /// <summary>Stopped by an explicit <see cref="KitsuneEngine.Cancel"/> call.</summary>
+        Cancelled = 6,
+        /// <summary><see cref="KitsuneEngine.Cancel"/> was called; awaiting the next scheduler cycle to process the interruption.</summary>
+        Cancelling = 7,
     }
 
     /// <summary>Lua value types. Values match Lua's internal LUA_T* constants.</summary>
@@ -494,6 +712,8 @@ namespace KitsuneNet
         Userdata      =  7,
         /// <summary>Coroutine thread (LUA_TTHREAD). Value is not bridgeable; <see cref="LuaValue.Bytes"/> will be null.</summary>
         Thread        =  8,
+        /// <summary>Lua 5.3+ integer subtype. Value is stored in <see cref="LuaValue.Int64"/>; never a float.</summary>
+        Integer       = -3,
     }
 
     /// <summary>A typed value exchanged with the Lua engine.</summary>
@@ -501,21 +721,35 @@ namespace KitsuneNet
     {
         public LuaType Type    { get; init; }
         public double  Number  { get; init; }
+        public long    Int64   { get; init; }
         public bool    Boolean { get; init; }
         /// <summary>Raw bytes for <see cref="LuaType.String"/> values. Not guaranteed to be valid UTF-8.</summary>
         public byte[]? Bytes   { get; init; }
+        /// <summary>Entries for <see cref="LuaType.Table"/> values. Null for empty tables or non-table types.</summary>
+        public IReadOnlyList<KeyValuePair<LuaValue, LuaValue>>? Table { get; init; }
 
         /// <summary>Decodes <see cref="Bytes"/> as UTF-8. Returns <c>null</c> when <see cref="Bytes"/> is null.</summary>
         public string? String => Bytes is null ? null : Encoding.UTF8.GetString(Bytes);
+
+        /// <summary>Returns the numeric value as <c>double</c>, bridging both
+        /// <see cref="LuaType.Number"/> (float) and <see cref="LuaType.Integer"/> subtypes.
+        /// Zero for all other types.</summary>
+        public double AsDouble => Type == LuaType.Integer ? (double)Int64 : Number;
+
+        /// <summary>Returns the numeric value as <c>long</c>, bridging both
+        /// <see cref="LuaType.Integer"/> and <see cref="LuaType.Number"/> (float) subtypes.
+        /// Zero for all other types.</summary>
+        public long AsInt64 => Type == LuaType.Integer ? Int64 : (long)Number;
 
         /// <summary>Returns the most useful string representation of the value.</summary>
         public override string ToString() => Type switch
         {
             LuaType.String        => String ?? string.Empty,
             LuaType.Number        => Number.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            LuaType.Integer       => Int64.ToString(),
             LuaType.Boolean       => Boolean.ToString(),
             LuaType.Nil           => "nil",
-            LuaType.Table         => "table",
+            LuaType.Table         => Table is not null ? $"table({Table.Count})" : "table",
             LuaType.Function      => "function",
             LuaType.Userdata      => "userdata",
             LuaType.Thread        => "thread",
@@ -528,12 +762,16 @@ namespace KitsuneNet
 
         public static LuaValue FromNumber(double v)  => new() { Type = LuaType.Number,  Number  = v };
         public static LuaValue FromBool(bool v)      => new() { Type = LuaType.Boolean, Boolean = v };
+        public static LuaValue FromInt64(long v)     => new() { Type = LuaType.Integer, Int64   = v };
         /// <summary>Creates a string value by UTF-8 encoding <paramref name="v"/>.</summary>
         public static LuaValue FromString(string? v) =>
             v is null ? None : new() { Type = LuaType.String, Bytes = Encoding.UTF8.GetBytes(v) };
         /// <summary>Creates a string value from a raw byte array with no encoding applied.</summary>
         public static LuaValue FromBytes(byte[]? v) =>
             v is null ? None : new() { Type = LuaType.String, Bytes = v };
+        /// <summary>Creates a table value from a list of key-value entries.</summary>
+        public static LuaValue FromTable(IReadOnlyList<KeyValuePair<LuaValue, LuaValue>> entries) =>
+            new() { Type = LuaType.Table, Table = entries };
 
         public static implicit operator LuaValue(double v)  => FromNumber(v);
         public static implicit operator LuaValue(bool v)    => FromBool(v);

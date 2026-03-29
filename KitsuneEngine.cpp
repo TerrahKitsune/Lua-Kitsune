@@ -2,6 +2,8 @@
 #define _CRTDBG_MAP_ALLOC
 #endif
 
+#include <cassert>  // assert() is a no-op in release builds (NDEBUG defined by MSVC /MD /MT)
+
 // WinSock2 must be included before windows.h or any headers that include it
 #include <WinSock2.h>
 #include <Windows.h>
@@ -74,6 +76,8 @@ struct KitsuneCoroutine {
 };
 
 #define KITSUNE_MAX_COROUTINES 256
+// Maximum depth for recursive Lua-table → linked-list conversion; prevents stack overflow on deeply nested or circular tables.
+#define KITSUNE_MAX_TABLE_DEPTH 32
 
 // ── Engine state ──────────────────────────────────────────────────────────────
 struct KitsuneState {
@@ -92,10 +96,10 @@ struct KitsuneState {
 
 	// ── SetVariable/GetVariable serialisation ────────────────────────────────
 	CRITICAL_SECTION accessLock; // serialises concurrent external callers
-	int              varsRef;    // registry ref for the current Vars target; updated by KitsuneSetTable
 
 	// ── Scheduler thread ─────────────────────────────────────────────────────
 	HANDLE        schedulerThread;
+	volatile DWORD schedulerThreadId; // OS thread ID set at scheduler startup; guards are scoped to this thread only
 	volatile LONG schedulerStop; // set to 1 by KitsuneCleanup
 	HANDLE        workEvent;     // signaled when a new coroutine is ready to run
 
@@ -139,17 +143,149 @@ static void SetSlotError(KitsuneCoroutine* slot, const char* msg) {
 	}
 }
 
+// Forward declaration — defined after FillKitsuneVariableFromStack to allow mutual recursion for nested tables.
+static KeyValuePairKitsuneVariableNode* TableToLinkedList(lua_State* L, int idx, int depth);
+
+// Recursively frees a KeyValuePairKitsuneVariableNode linked list produced by TableToLinkedList.
+static void FreeKVNode(KeyValuePairKitsuneVariableNode* node) {
+	while (node) {
+		if ((node->key.type == LUA_TSTRING || node->key.type == KITSUNE_TERROR) && node->key.data)
+			gff_free(node->key.data);
+		else if (node->key.type == LUA_TTABLE && node->key.table)
+			FreeKVNode(node->key.table);
+		if ((node->value.type == LUA_TSTRING || node->value.type == KITSUNE_TERROR) && node->value.data)
+			gff_free(node->value.data);
+		else if (node->value.type == LUA_TTABLE && node->value.table)
+			FreeKVNode(node->value.table);
+		KeyValuePairKitsuneVariableNode* next = node->next;
+		gff_free(node);
+		node = next;
+	}
+}
+
+// Frees the heap data owned by a KitsuneVariable (string bytes or table linked list).
+// Nulls the data pointer after freeing to prevent double-free. Does NOT free var itself.
+static void FreeVariableData(KitsuneVariable* var) {
+	if (!var) return;
+	if ((var->type == LUA_TSTRING || var->type == KITSUNE_TERROR) && var->data) {
+		gff_free(var->data);
+		var->data = NULL;
+	} else if (var->type == LUA_TTABLE && var->table) {
+		FreeKVNode(var->table);
+		var->table = NULL;
+	}
+}
+
+// Fills a KitsuneVariable from the Lua stack at the given index.
+// When shallow=true (default), tables are left opaque (type=KITSUNE_TTABLE, table=NULL).
+// When shallow=false, KITSUNE_TTABLE values are converted to a linked list via TableToLinkedList
+// at KITSUNE_MAX_TABLE_DEPTH. Do NOT pass shallow=false inside TableToLinkedList itself —
+// that path controls depth explicitly via its own recursion. Caller owns any allocated data.
+static void FillKitsuneVariableFromStack(lua_State* L, int idx, KitsuneVariable* out, bool shallow = true) {
+	memset(out, 0, sizeof(KitsuneVariable));
+	int abs_idx = lua_absindex(L, idx);
+	int t = lua_type(L, abs_idx);
+	switch (t) {
+	case LUA_TNUMBER:
+		if (lua_isinteger(L, abs_idx)) {
+			out->type = KITSUNE_TINTEGER;
+			out->integer = (long long)lua_tointeger(L, abs_idx);
+		}
+		else {
+			out->type = LUA_TNUMBER;
+			out->number = lua_tonumber(L, abs_idx);
+		}
+		break;
+	case LUA_TBOOLEAN:
+		out->type = LUA_TBOOLEAN;
+		out->boolean = lua_toboolean(L, abs_idx) != 0;
+		break;
+	case LUA_TSTRING: {
+		size_t len;
+		const char* s = lua_tolstring(L, abs_idx, &len);
+		if (s) {
+			out->data = (unsigned char*)gff_malloc(len + 1);
+			if (out->data) {
+				memcpy(out->data, s, len + 1);
+				out->length = len;
+				out->type = LUA_TSTRING;
+			} else {
+				out->type = LUA_TNONE;  // OOM sentinel: lua_type() never returns LUA_TNONE for valid indices
+			}
+		}
+		break;
+	}
+	case LUA_TUSERDATA: {
+		// Attempt __tostring via protected call; stack balance is preserved by lua_absindex.
+		if (luaL_getmetafield(L, abs_idx, "__tostring") != LUA_TNIL) {
+			lua_pushvalue(L, abs_idx);  // copy of userdata as the argument
+			if (lua_pcall(L, 1, 1, 0) == LUA_OK && lua_type(L, -1) == LUA_TSTRING) {
+				size_t len;
+				const char* s = lua_tolstring(L, -1, &len);
+				if (s) {
+					out->data = (unsigned char*)gff_malloc(len + 1);
+					if (out->data) {
+						memcpy(out->data, s, len + 1);
+						out->length = len;
+						out->type = LUA_TSTRING;
+					}
+				}
+			}
+			lua_pop(L, 1);  // pop pcall result or error
+		}
+		if (out->type != LUA_TSTRING)
+			out->type = LUA_TUSERDATA;
+		break;
+	}
+	case LUA_TTABLE:
+		out->type = LUA_TTABLE;
+		if (!shallow)
+			out->table = TableToLinkedList(L, abs_idx, KITSUNE_MAX_TABLE_DEPTH);
+		break;
+	default:
+		out->type = t;  // preserve actual type (function, thread, etc.); data/table remain NULL
+		break;
+	}
+}
+
+// Converts a Lua table at stack index idx into a heap-allocated KeyValuePairKitsuneVariableNode
+// linked list. Nested tables are recursed up to depth levels deep.
+static KeyValuePairKitsuneVariableNode* TableToLinkedList(lua_State* L, int idx, int depth) {
+	if (depth <= 0) return NULL;
+	KeyValuePairKitsuneVariableNode* head = NULL;
+	KeyValuePairKitsuneVariableNode** tail = &head;
+	int abs_idx = lua_absindex(L, idx);
+	lua_pushnil(L);  // first key
+	while (lua_next(L, abs_idx)) {
+		KeyValuePairKitsuneVariableNode* node = (KeyValuePairKitsuneVariableNode*)gff_malloc(sizeof(KeyValuePairKitsuneVariableNode));
+		if (!node) { lua_pop(L, 2); break; }  // OOM: abort iteration with partial list
+		memset(node, 0, sizeof(KeyValuePairKitsuneVariableNode));
+		FillKitsuneVariableFromStack(L, -2, &node->key);
+		if (lua_type(L, -1) == LUA_TTABLE) {
+			// Recurse directly rather than through FillKitsuneVariableFromStack so the depth
+			// limit is honoured across all levels instead of resetting to MAX each time.
+			node->value.type = LUA_TTABLE;
+			node->value.table = TableToLinkedList(L, -1, depth - 1);
+		} else {
+			FillKitsuneVariableFromStack(L, -1, &node->value);
+		}
+		node->next = NULL;
+		*tail = node;
+		tail = &node->next;
+		lua_pop(L, 1);  // pop value, keep key for next lua_next
+	}
+	return head;
+}
+
 static void PushKitsuneVariable(lua_State* L, const KitsuneVariable* v) {
 	if (!v) { lua_pushnil(L); return; }
 	switch (v->type) {
-	case LUA_TNUMBER: {
-		lua_Integer iv = (lua_Integer)v->number;
-		if ((double)iv == v->number && v->number >= (double)LUA_MININTEGER && v->number <= (double)LUA_MAXINTEGER)
-			lua_pushinteger(L, iv);
-		else
-			lua_pushnumber(L, v->number);
+	case LUA_TNUMBER:
+		lua_pushnumber(L, v->number);
 		break;
-	}
+	case KITSUNE_TINTEGER:
+		lua_pushinteger(L, (lua_Integer)v->integer);
+		break;
 	case LUA_TBOOLEAN:
 		lua_pushboolean(L, v->boolean ? 1 : 0);
 		break;
@@ -159,8 +295,18 @@ static void PushKitsuneVariable(lua_State* L, const KitsuneVariable* v) {
 		else
 			lua_pushstring(L, "");
 		break;
-	case LUA_TTABLE:  // KITSUNE_TTABLE on Set: create an empty table at the given path
+	case LUA_TTABLE:
 		lua_newtable(L);
+		if (v->table) {
+			// Populate the Lua table from the linked list; keys and values are pushed recursively.
+			const KeyValuePairKitsuneVariableNode* node = v->table;
+			while (node) {
+				PushKitsuneVariable(L, &node->key);
+				PushKitsuneVariable(L, &node->value);
+				lua_settable(L, -3);
+				node = node->next;
+			}
+		}
 		break;
 	default:
 		lua_pushnil(L);
@@ -169,39 +315,13 @@ static void PushKitsuneVariable(lua_State* L, const KitsuneVariable* v) {
 }
 
 static void SetSlotResult(KitsuneCoroutine* slot, lua_State* T, int idx) {
-	if (slot->result.type == LUA_TSTRING && slot->result.data) {
-		gff_free(slot->result.data);
-		slot->result.data = NULL;
-	}
+	FreeVariableData(&slot->result);
 	memset(&slot->result, 0, sizeof(slot->result));
 	slot->result.type = LUA_TNONE;
 	int t = lua_type(T, idx);
 	switch (t) {
-	case LUA_TNUMBER:
-		slot->result.type = LUA_TNUMBER;
-		slot->result.number = lua_tonumber(T, idx);
-		break;
-	case LUA_TBOOLEAN:
-		slot->result.type = LUA_TBOOLEAN;
-		slot->result.boolean = lua_toboolean(T, idx) != 0;
-		break;
-	case LUA_TSTRING: {
-		size_t len;
-		const char* s = lua_tolstring(T, idx, &len);
-		if (s) {
-			slot->result.data = (unsigned char*)gff_malloc(len + 1);
-			if (slot->result.data) {
-				memcpy(slot->result.data, s, len + 1);
-				slot->result.length = len;
-				slot->result.type = LUA_TSTRING;
-			}
-		}
-		break;
-	}
 	case LUA_TUSERDATA: {
-		// Attempt to stringify via __tostring metamethod using a protected call on the main state.
-		// Running on the main state ensures any error in __tostring is caught by lua_pcall
-		// rather than propagating through the coroutine thread's unguarded execution context.
+		// Specialised: __tostring must run on the main state, not the coroutine thread, for pcall safety.
 		void* ud; lua_getallocf(T, &ud);
 		lua_State* mainL = ((KitsuneState*)ud)->L;
 		lua_pushvalue(T, idx);      // copy the userdata onto T's top
@@ -228,8 +348,17 @@ static void SetSlotResult(KitsuneCoroutine* slot, lua_State* T, int idx) {
 			slot->result.type = LUA_TUSERDATA;
 		break;
 	}
+	case LUA_TTABLE: {
+		slot->result.type = LUA_TTABLE;
+		slot->result.table = TableToLinkedList(T, idx, KITSUNE_MAX_TABLE_DEPTH);
+		slot->result.length = 0;
+		break;
+	}
 	default:
-		slot->result.type = t;  // preserve actual type; data remains null for non-bridgeable values
+		// Handles numbers, booleans, strings, and any non-bridgeable type uniformly.
+		FillKitsuneVariableFromStack(T, idx, &slot->result);
+		if (slot->result.type == LUA_TNONE)
+			SetSlotError(slot, "out of memory");  // string result lost; surface as error rather than silent TNONE
 		break;
 	}
 }
@@ -344,6 +473,9 @@ static void FinishCoroutine(KitsuneState* state, KitsuneCoroutine* slot, lua_Sta
 
 static DWORD WINAPI SchedulerProc(LPVOID param) {
 	KitsuneState* state = (KitsuneState*)param;
+	InterlockedExchange((volatile LONG*)&state->schedulerThreadId, (LONG)GetCurrentThreadId());
+
+	bool prevAnyActive = false;  // tracks whether the previous iteration had active coroutines
 
 	while (!InterlockedAdd(&state->schedulerStop, 0)) {
 		// ── Step 1: Service pause requests BEFORE touching state->L ──────────────
@@ -353,7 +485,8 @@ static DWORD WINAPI SchedulerProc(LPVOID param) {
 			SetEvent(state->pausedEvent);
 			WaitForSingleObject(state->resumeEvent, INFINITE);
 		}
-		if (InterlockedAdd(&state->schedulerStop, 0)) break;  // KitsuneCleanup called while paused
+		if (InterlockedAdd(&state->schedulerStop, 0))
+			break;  // KitsuneCleanup called while paused
 
 		bool anyActive = false;
 
@@ -363,6 +496,7 @@ static DWORD WINAPI SchedulerProc(LPVOID param) {
 				KitsuneCoroutine* slot = state->slots[i];
 				if (slot->id != 0 && !InterlockedAdd(&slot->done, 0)) {
 					SetSlotError(slot, "interrupted");
+					slot->result.type = LUA_TNONE;
 					lua_State* T = GetCoroutineThread(state, slot);
 					if (T) lua_settop(T, 0);
 					InterlockedExchange(&slot->done, 1);
@@ -391,6 +525,7 @@ static DWORD WINAPI SchedulerProc(LPVOID param) {
 				// Per-coroutine cancel: terminate before the next resume (or wake from sleep).
 				if (InterlockedAdd(&slot->interrupted, 0)) {
 					SetSlotError(slot, "cancelled");
+					slot->result.type = LUA_TNONE;
 					lua_State* Tc = GetCoroutineThread(state, slot);
 					if (Tc) lua_settop(Tc, 0);
 					InterlockedExchange(&slot->done, 1);
@@ -409,6 +544,7 @@ static DWORD WINAPI SchedulerProc(LPVOID param) {
 				lua_State* T = GetCoroutineThread(state, slot);
 				if (!T) {
 					SetSlotError(slot, "internal: coroutine thread unavailable");
+					slot->result.type = LUA_TNONE;
 					InterlockedExchange(&slot->done, 1);
 					InterlockedDecrement(&state->runningCount);
 					if (InterlockedAdd(&slot->fireAndForget, 0))
@@ -455,13 +591,12 @@ static DWORD WINAPI SchedulerProc(LPVOID param) {
 			for (int i = 0; i < state->slotCount; i++) {
 				KitsuneCoroutine* slot = state->slots[i];
 				if (slot->id != 0 && InterlockedAdd(&slot->done, 0) && InterlockedAdd(&slot->released, 0)) {
-					pendingArgs[pendingCount]    = slot->argsRef;
+					pendingArgs[pendingCount] = slot->argsRef;
 					pendingThreads[pendingCount] = slot->threadRef;
 					pendingCount++;
 					slot->thread = NULL;  // invariant: null before memset so the pointer is never stale
 					gff_free(slot->error);
-					if (slot->result.type == LUA_TSTRING && slot->result.data)
-						gff_free(slot->result.data);
+					FreeVariableData(&slot->result);
 					memset(slot, 0, sizeof(KitsuneCoroutine));  // id = 0 marks the slot as reusable
 				}
 			}
@@ -469,12 +604,20 @@ static DWORD WINAPI SchedulerProc(LPVOID param) {
 
 			// Phase 2 (outside slotsLock): release Lua registry references.
 			for (int i = 0; i < pendingCount; i++) {
-				if (pendingArgs[i]    != LUA_NOREF) luaL_unref(state->L, LUA_REGISTRYINDEX, pendingArgs[i]);
+				if (pendingArgs[i] != LUA_NOREF) luaL_unref(state->L, LUA_REGISTRYINDEX, pendingArgs[i]);
 				if (pendingThreads[i] != LUA_NOREF) luaL_unref(state->L, LUA_REGISTRYINDEX, pendingThreads[i]);
 			}
 		}
 
-		// ── Step 5: Sleep when there is nothing active ────────────────────────
+		// ── Step 5: GC on active→idle transition, then sleep ─────────────────
+		// Run a full collection cycle when the last coroutine finishes so that all
+		// memory allocated during execution is reclaimed before the scheduler idles.
+		// prevAnyActive ensures this fires exactly once per work batch, not every
+		// idle iteration, and only after Step 4 has released thread registry refs.
+		if (prevAnyActive && !anyActive && InterlockedAdd(&state->runningCount, 0) == 0)
+			lua_gc(state->L, LUA_GCCOLLECT, 0);
+		prevAnyActive = anyActive;
+
 		if (!anyActive) {
 			// Use a short wait when coroutines are mid-Sleep() so their deadlines
 			// are checked promptly; fall back to 10ms when the engine is truly idle.
@@ -590,7 +733,6 @@ extern "C" {
 
 		KitsuneState* state = (KitsuneState*)gff_malloc(sizeof(KitsuneState));
 		memset(state, 0, sizeof(KitsuneState));
-		state->varsRef = LUA_NOREF;
 		state->pausedEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
 		state->resumeEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
 		state->workEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
@@ -690,11 +832,6 @@ extern "C" {
 		luaopen_misc(L);
 		lua_pushcfunction(L, L_Sleep);
 		lua_setglobal(L, "Sleep");
-
-		lua_newtable(L);
-		lua_pushvalue(L, -1);  // duplicate: one for the registry anchor, one for the global
-		state->varsRef = luaL_ref(L, LUA_REGISTRYINDEX);
-		lua_setglobal(L, "Vars");
 
 		// Coroutine threads each receive their own hook; no hook is set on the main state.
 		state->schedulerThread = CreateThread(NULL, 0, SchedulerProc, state, 0, NULL);
@@ -810,14 +947,17 @@ extern "C" {
 	}
 
 	KITSUNE_API int KitsuneExecuteFile(const char* path, int argc, const KitsuneVariable* argv, bool fireAndForget) {
-		if (g_state && g_state->DelegateState) return -1;
+		if (g_state && GetCurrentThreadId() == g_state->schedulerThreadId && g_state->DelegateState) return -1;
 		return StartCoroutine(g_state, true, path, argc, argv, fireAndForget);
 	}
 
 	KITSUNE_API int KitsuneExecuteString(const char* script, int argc, const KitsuneVariable* argv, bool fireAndForget) {
-		if (g_state && g_state->DelegateState) return -1;
+		if (g_state && GetCurrentThreadId() == g_state->schedulerThreadId && g_state->DelegateState) return -1;
 		return StartCoroutine(g_state, false, script, argc, argv, fireAndForget);
 	}
+
+	// Forward declaration: PushGlobalAtPath is defined after the coroutine-start helpers.
+	static bool PushGlobalAtPath(lua_State* L, const char* path);
 
 	static int StartCoroutineFunction(KitsuneState* state, const char* functionName,
 		int argc, const KitsuneVariable* argv, bool fireAndForget) {
@@ -847,8 +987,12 @@ extern "C" {
 
 		lua_State* T = CreateCoroutineThread(state, slot);
 
-		// Push the global function onto the coroutine thread's stack.
-		lua_getglobal(T, functionName);
+		// Resolve the function via dot-path navigation on the main state, then move it to T.
+		// PushGlobalAtPath handles both "Foo" and "Ns.Foo" uniformly, matching SetVariable behaviour.
+		if (PushGlobalAtPath(state->L, functionName))
+			lua_xmove(state->L, T, 1);  // move the resolved value (function or nil) to T
+		else
+			lua_pushnil(T);  // invalid path; !lua_isfunction below triggers "function not found"
 
 		int id = (int)InterlockedIncrement(&state->nextId);
 
@@ -884,7 +1028,7 @@ extern "C" {
 	}
 
 	KITSUNE_API int KitsuneExecuteFunction(const char* functionName, int argc, const KitsuneVariable* argv, bool fireAndForget) {
-		if (g_state && g_state->DelegateState) return -1;
+		if (g_state && GetCurrentThreadId() == g_state->schedulerThreadId && g_state->DelegateState) return -1;
 		return StartCoroutineFunction(g_state, functionName, argc, argv, fireAndForget);
 	}
 
@@ -939,9 +1083,9 @@ extern "C" {
 		}
 		memset(out, 0, sizeof(KitsuneVariable));
 
-		// Transfer string data ownership directly; zero the slot's pointer to prevent double-free.
-		if (slot->result.type == LUA_TSTRING && slot->result.data) {
-			out->type = LUA_TSTRING;
+		// Transfer owned data (string or table linked list) atomically to prevent double-free.
+		if ((slot->result.type == LUA_TSTRING || slot->result.type == LUA_TTABLE) && slot->result.data) {
+			out->type = slot->result.type;
 			out->length = slot->result.length;
 			out->data = (unsigned char*)InterlockedExchangePointer((PVOID*)&slot->result.data, NULL);
 			slot->result.length = 0;
@@ -980,6 +1124,34 @@ extern "C" {
 		double runtime = slot ? GetCounter(state) - slot->startTime : 0.0;
 		LeaveCriticalSection(&state->slotsLock);
 		return runtime;
+	}
+
+	KITSUNE_API int KitsuneGetStatus(int id) {
+		KitsuneState* state = g_state;
+		if (!state) return KITSUNE_STATUS_NONE;
+		EnterCriticalSection(&state->slotsLock);
+		KitsuneCoroutine* slot = FindSlot(state, id);
+		int status = KITSUNE_STATUS_NONE;
+		if (slot) {
+			if (InterlockedAdd(&slot->done, 0)) {
+				if (InterlockedAdd(&slot->interrupted, 0))
+					status = KITSUNE_STATUS_CANCELLED;  // stopped by KitsuneCancel(id)
+				else if (slot->error)
+					status = KITSUNE_STATUS_FAULTED;    // runtime or Lua error
+				else
+					status = KITSUNE_STATUS_DONE;       // completed successfully
+			} else if (InterlockedAdd(&slot->interrupted, 0)) {
+				status = KITSUNE_STATUS_CANCELLING; // interrupted=1 set; scheduler hasn't processed it yet
+			} else if ((int)InterlockedAdd(&state->currentCoroutineId, 0) == id) {
+				status = KITSUNE_STATUS_RUNNING;
+			} else if (slot->sleepUntil > 0.0 && GetCounter(state) < slot->sleepUntil) {
+				status = KITSUNE_STATUS_SLEEPING;
+			} else {
+				status = KITSUNE_STATUS_IDLE;
+			}
+		}
+		LeaveCriticalSection(&state->slotsLock);
+		return status;
 	}
 
 	KITSUNE_API bool KitsuneIsRunning() {
@@ -1056,66 +1228,9 @@ extern "C" {
 		return count;
 	}
 
-	// Fills a KitsuneVariable from the Lua stack at the given index.
-	// Handles string, number, boolean, and userdata (__tostring). Caller owns any allocated data.
-	static void FillKitsuneVariableFromStack(lua_State* L, int idx, KitsuneVariable* out) {
-		memset(out, 0, sizeof(KitsuneVariable));
-		int abs_idx = lua_absindex(L, idx);
-		int t = lua_type(L, abs_idx);
-		switch (t) {
-		case LUA_TNUMBER:
-			out->type = LUA_TNUMBER;
-			out->number = lua_tonumber(L, abs_idx);
-			break;
-		case LUA_TBOOLEAN:
-			out->type = LUA_TBOOLEAN;
-			out->boolean = lua_toboolean(L, abs_idx) != 0;
-			break;
-		case LUA_TSTRING: {
-			size_t len;
-			const char* s = lua_tolstring(L, abs_idx, &len);
-			if (s) {
-				out->data = (unsigned char*)gff_malloc(len + 1);
-				if (out->data) {
-					memcpy(out->data, s, len + 1);
-					out->length = len;
-					out->type = LUA_TSTRING;
-				}
-			}
-			break;
-		}
-		case LUA_TUSERDATA: {
-			// Attempt __tostring via protected call; stack balance is preserved by lua_absindex.
-			if (luaL_getmetafield(L, abs_idx, "__tostring") != LUA_TNIL) {
-				lua_pushvalue(L, abs_idx);  // copy of userdata as the argument
-				if (lua_pcall(L, 1, 1, 0) == LUA_OK && lua_type(L, -1) == LUA_TSTRING) {
-					size_t len;
-					const char* s = lua_tolstring(L, -1, &len);
-					if (s) {
-						out->data = (unsigned char*)gff_malloc(len + 1);
-						if (out->data) {
-							memcpy(out->data, s, len + 1);
-							out->length = len;
-							out->type = LUA_TSTRING;
-						}
-					}
-				}
-				lua_pop(L, 1);  // pop pcall result or error
-			}
-			if (out->type != LUA_TSTRING)
-				out->type = LUA_TUSERDATA;
-			break;
-		}
-		default:
-			out->type = t;  // preserve actual type; data remains null for non-bridgeable values
-			break;
-		}
-	}
-
 	KITSUNE_API void KitsuneVariableFree(KitsuneVariable* var) {
 		if (!var) return;
-		if ((var->type == LUA_TSTRING || var->type == KITSUNE_TERROR) && var->data)
-			gff_free(var->data);
+		FreeVariableData(var);
 		gff_free(var);
 	}
 
@@ -1123,8 +1238,11 @@ extern "C" {
 	// Returns the final key component on success; the parent table remains on top.
 	// Returns NULL on failure; the stack is fully restored (the initial push is undone).
 	// createMissing=true: auto-create missing intermediate tables.
+	// PRECONDITION: the root table must be on top of L when this function is called.
+	//               startTop = gettop-1 saves the restore depth so any failure undoes that one push.
 	static const char* NavigateToParent(lua_State* L, const char* path, bool createMissing) {
-		int startTop = lua_gettop(L) - 1;  // depth before the initial table was pushed
+		assert(lua_gettop(L) >= 1 && lua_istable(L, -1));  // root table must be on top
+		int startTop = lua_gettop(L) - 1;  // depth before the root table was pushed; restore target on failure
 		const char* p = path;
 		for (;;) {
 			const char* dot = strchr(p, '.');
@@ -1139,7 +1257,8 @@ extern "C" {
 				lua_pushlstring(L, p, len);
 				lua_pushvalue(L, -2);   // dup subtable
 				lua_settable(L, -4);    // parent[key] = subtable, pops key + dup
-			} else if (!lua_istable(L, -1)) {
+			}
+			else if (!lua_istable(L, -1)) {
 				lua_settop(L, startTop);
 				return NULL;
 			}
@@ -1148,14 +1267,34 @@ extern "C" {
 		}
 	}
 
+	// Navigate from the Lua global environment into the parent table of the final key in a dot-path.
+	// Equivalent to pushing _G then calling NavigateToParent. See NavigateToParent for full semantics.
+	static const char* NavigateGlobalParent(lua_State* L, const char* path, bool createMissing) {
+		if (!path || !*path) return NULL;
+		lua_rawgeti(L, LUA_REGISTRYINDEX, LUA_RIDX_GLOBALS);
+		return NavigateToParent(L, path, createMissing);
+	}
+
+	// Push the value at the dot-separated path from the Lua global environment.
+	// If path is NULL or "", pushes _G itself. Returns true on success (value or _G on top).
+	// Returns false if navigation fails for a non-empty path (stack fully restored).
+	static bool PushGlobalAtPath(lua_State* L, const char* path) {
+		lua_rawgeti(L, LUA_REGISTRYINDEX, LUA_RIDX_GLOBALS);
+		if (!path || !*path) return true;
+		const char* finalKey = NavigateToParent(L, path, false);
+		if (!finalKey) return false;
+		lua_getfield(L, -1, finalKey);
+		lua_remove(L, -2);  // remove parent, keep value
+		return true;
+	}
+
 	KITSUNE_API bool KitsuneSetVariable(const char* path, const KitsuneVariable* var) {
 		KitsuneState* state = g_state;
 		if (!state || !state->L || !path || !*path) return false;
-		if (state->DelegateState) return false;  // called from within a registered function; would deadlock
+		if (GetCurrentThreadId() == state->schedulerThreadId && state->DelegateState) return false;  // scheduler thread re-entering from within a registered function; would deadlock
 		AcquireLuaAccess(state);
 		bool ok = false;
-		lua_rawgeti(state->L, LUA_REGISTRYINDEX, state->varsRef);
-		const char* finalKey = NavigateToParent(state->L, path, true);
+		const char* finalKey = NavigateGlobalParent(state->L, path, true);
 		if (finalKey) {
 			if (!var || var->type == LUA_TNONE)
 				lua_pushnil(state->L);
@@ -1172,12 +1311,11 @@ extern "C" {
 	KITSUNE_API KitsuneVariable* KitsuneGetVariable(const char* path) {
 		KitsuneState* state = g_state;
 		if (!state || !state->L || !path || !*path) return NULL;
-		if (state->DelegateState) return NULL;  // called from within a registered function; would deadlock
+		if (GetCurrentThreadId() == state->schedulerThreadId && state->DelegateState) return NULL;  // scheduler thread re-entering from within a registered function; would deadlock
 
 		AcquireLuaAccess(state);
 		KitsuneVariable* out = NULL;
-		lua_rawgeti(state->L, LUA_REGISTRYINDEX, state->varsRef);
-		const char* finalKey = NavigateToParent(state->L, path, false);
+		const char* finalKey = NavigateGlobalParent(state->L, path, false);
 		if (finalKey) {
 			if (lua_istable(state->L, -1)) {
 				lua_getfield(state->L, -1, finalKey);
@@ -1185,56 +1323,13 @@ extern "C" {
 				if (t != LUA_TNIL && t != LUA_TNONE) {
 					out = (KitsuneVariable*)gff_malloc(sizeof(KitsuneVariable));
 					if (out) {
-						memset(out, 0, sizeof(KitsuneVariable));
-						switch (t) {
-						case LUA_TNUMBER:
-							out->type = LUA_TNUMBER;
-							out->number = lua_tonumber(state->L, -1);
-							break;
-						case LUA_TBOOLEAN:
-							out->type = LUA_TBOOLEAN;
-							out->boolean = lua_toboolean(state->L, -1) != 0;
-							break;
-						case LUA_TSTRING: {
-							size_t len;
-							const char* s = lua_tolstring(state->L, -1, &len);
-							if (s) {
-								out->data = (unsigned char*)gff_malloc(len + 1);
-								if (out->data) {
-									memcpy(out->data, s, len + 1);
-									out->length = len;
-									out->type = LUA_TSTRING;
-								}
-							}
-							break;
-						}
-						case LUA_TUSERDATA: {
-							// Attempt to stringify via __tostring metamethod using a protected call.
-							// lua_pushvalue copies the userdata so the original at -1 is preserved for
-							// the outer lua_pop after the switch regardless of pcall outcome.
-							if (luaL_getmetafield(state->L, -1, "__tostring") != LUA_TNIL) {
-								lua_pushvalue(state->L, -2);  // copy of userdata as argument
-								if (lua_pcall(state->L, 1, 1, 0) == LUA_OK && lua_type(state->L, -1) == LUA_TSTRING) {
-									size_t len;
-									const char* s = lua_tolstring(state->L, -1, &len);
-									if (s) {
-										out->data = (unsigned char*)gff_malloc(len + 1);
-										if (out->data) {
-											memcpy(out->data, s, len + 1);
-											out->length = len;
-											out->type = LUA_TSTRING;
-										}
-									}
-								}
-								lua_pop(state->L, 1);  // pop pcall result or error
-							}
-							if (out->type != LUA_TSTRING)
-								out->type = LUA_TUSERDATA;
-							break;
-						}
-						default:
-							out->type = t;
-							break;
+						// FillKitsuneVariableFromStack handles scalars and userdata (__tostring);
+						// tables are left opaque (table = NULL) — the variable bridge is shallow.
+						FillKitsuneVariableFromStack(state->L, -1, out);
+						if (out->type == LUA_TNONE) {
+							// String allocation failed; return NULL rather than a misleading LUA_TNIL.
+							gff_free(out);
+							out = NULL;
 						}
 					}
 				}
@@ -1246,44 +1341,56 @@ extern "C" {
 		return out;
 	}
 
+	// Context passed as a light-userdata closure upvalue to GetAllIteratorBody.
+	struct KitsuneGetAllCtx { kitsune_KeyValuePairCallback callback; void* userdata; };
+
+	// Protected body for KitsuneGetAll: receives the table at index 1, iterates it via
+	// lua_next, and invokes the callback for each key-value pair.
+	// Running inside lua_pcall means any error from lua_next (e.g. invalid key, OOM)
+	// is caught and returned to the caller — ReleaseLuaAccess is always reached.
+	static int GetAllIteratorBody(lua_State* L) {
+		KitsuneGetAllCtx* ctx = (KitsuneGetAllCtx*)lua_touserdata(L, lua_upvalueindex(1));
+		lua_pushnil(L);  // first key
+		while (lua_next(L, 1)) {
+			// Stack: [table, key, value]
+			KitsuneVariable k = {}, v = {};
+			FillKitsuneVariableFromStack(L, -2, &k);
+			FillKitsuneVariableFromStack(L, -1, &v);
+			if (k.type == LUA_TNONE || v.type == LUA_TNONE) {
+				// OOM filling key or value: release any allocated data and abort iteration.
+				FreeVariableData(&k);
+				FreeVariableData(&v);
+				luaL_error(L, "out of memory");
+			}
+			ctx->callback(&k, &v, ctx->userdata);
+			FreeVariableData(&k);
+			FreeVariableData(&v);
+			lua_pop(L, 1);  // pop value, keep key for next lua_next
+		}
+		return 0;
+	}
+
 	KITSUNE_API void KitsuneGetAll(const char* path, kitsune_KeyValuePairCallback callback, void* userdata) {
 		KitsuneState* state = g_state;
 		if (!state || !state->L || !callback) return;
-		if (state->DelegateState) return;  // called from within a registered function; would deadlock
+		if (GetCurrentThreadId() == state->schedulerThreadId && state->DelegateState) return;  // scheduler thread re-entering from within a registered function; would deadlock
 
 		AcquireLuaAccess(state);
 
-		lua_rawgeti(state->L, LUA_REGISTRYINDEX, state->varsRef);
-
-		// If a path is given, navigate into the specified subtable.
-		if (path && *path) {
-			const char* finalKey = NavigateToParent(state->L, path, false);
-			if (finalKey) {
-				lua_getfield(state->L, -1, finalKey);
-				lua_remove(state->L, -2);  // remove parent, keep target
-				if (!lua_istable(state->L, -1)) {
-					lua_pop(state->L, 1);
-					ReleaseLuaAccess(state);
-					return;
-				}
-			} else {
-				ReleaseLuaAccess(state);
-				return;
-			}
+		if (!PushGlobalAtPath(state->L, path)) {
+			ReleaseLuaAccess(state);
+			return;
 		}
 
 		if (lua_istable(state->L, -1)) {
-			lua_pushnil(state->L);  // initial key for lua_next
-			while (lua_next(state->L, -2)) {
-				// Stack: [..., table, key, value]
-				KitsuneVariable k = {}, v = {};
-				FillKitsuneVariableFromStack(state->L, -2, &k);
-				FillKitsuneVariableFromStack(state->L, -1, &v);
-				callback(&k, &v, userdata);
-				if (k.type == LUA_TSTRING && k.data) gff_free(k.data);
-				if (v.type == LUA_TSTRING && v.data) gff_free(v.data);
-				lua_pop(state->L, 1);  // pop value, keep key for next iteration
-			}
+			// Wrap iteration in lua_pcall so any error from lua_next (bad key, OOM, etc.)
+			// is caught here rather than longjmp-ing past ReleaseLuaAccess below.
+			KitsuneGetAllCtx ctx = { callback, userdata };
+			lua_pushlightuserdata(state->L, &ctx);        // upvalue 1 for the closure
+			lua_pushcclosure(state->L, GetAllIteratorBody, 1);
+			lua_pushvalue(state->L, -2);                  // dup the table as the sole argument
+			if (lua_pcall(state->L, 1, 0, 0) != LUA_OK)
+				lua_pop(state->L, 1);  // discard error message; stack is now [..., table]
 		}
 		lua_pop(state->L, 1);  // pop table
 		ReleaseLuaAccess(state);
@@ -1337,7 +1444,20 @@ extern "C" {
 		state->DelegateState = L;
 
 		for (int i = 0; i < argc; i++)
-			FillKitsuneVariableFromStack(L, i + 1, &args[i]);
+			FillKitsuneVariableFromStack(L, i + 1, &args[i], /*shallow=*/false);
+
+		// FillKitsuneVariableFromStack signals string allocation failure via LUA_TNONE.
+		for (int i = 0; i < argc; i++) {
+			if (args[i].type == LUA_TNONE) {
+				for (int j = 0; j < argc; j++)
+					FreeVariableData(&args[j]);
+				gff_free(args);
+				state->DelegateState = prevDelegateState;
+				lua_pushstring(L, "out of memory");
+				lua_error(L);
+				return 0;  // unreachable
+			}
+		}
 
 		// Clear the stack so LuaResultSetter pushes results onto a clean base.
 		lua_settop(L, 0);
@@ -1346,10 +1466,8 @@ extern "C" {
 		state->DelegateState = prevDelegateState;  // restore; handles nesting correctly
 
 		// Free args before any potential lua_error so we never leak them on the error path.
-		for (int i = 0; i < argc; i++) {
-			if (args[i].type == LUA_TSTRING && args[i].data)
-				gff_free(args[i].data);
-		}
+		for (int i = 0; i < argc; i++)
+			FreeVariableData(&args[i]);
 		gff_free(args);
 
 		// Raise a deferred error that was stored by LuaResultSetter for KITSUNE_TERROR.
@@ -1372,24 +1490,18 @@ extern "C" {
 
 	KITSUNE_API void KitsuneRegisterFunction(const char* name, kitsune_CFunction func, void* userdata) {
 		KitsuneState* state = g_state;
-		if (!state || !state->L || !name || !func) return;
-		if (state->DelegateState) return;  // called from within a registered function; would deadlock
+		if (!state || !state->L || !name || !*name || !func) return;
+		if (GetCurrentThreadId() == state->schedulerThreadId && state->DelegateState) return;  // scheduler thread re-entering from within a registered function; would deadlock
 		AcquireLuaAccess(state);
 
-		// Get or create the Kitsune table so functions are called as Kitsune.Name().
-		lua_getglobal(state->L, "Kitsune");
-		if (!lua_istable(state->L, -1)) {
-			lua_pop(state->L, 1);
-			lua_newtable(state->L);
-			lua_pushvalue(state->L, -1);  // dup: one for setglobal, one stays on stack
-			lua_setglobal(state->L, "Kitsune");
+		const char* finalKey = NavigateGlobalParent(state->L, name, true);
+		if (finalKey) {
+			lua_pushlightuserdata(state->L, (void*)func);
+			lua_pushlightuserdata(state->L, userdata);
+			lua_pushcclosure(state->L, LuaCFunctionWrapper, 2);
+			lua_setfield(state->L, -2, finalKey);  // parent[finalKey] = closure
+			lua_pop(state->L, 1);  // pop parent table
 		}
-		// Stack: [Kitsune table]
-		lua_pushlightuserdata(state->L, (void*)func);
-		lua_pushlightuserdata(state->L, userdata);
-		lua_pushcclosure(state->L, LuaCFunctionWrapper, 2);
-		lua_setfield(state->L, -2, name);  // Kitsune[name] = closure
-		lua_pop(state->L, 1);  // pop the Kitsune table
 
 		ReleaseLuaAccess(state);
 	}
@@ -1417,12 +1529,13 @@ extern "C" {
 				KitsuneCoroutine* slot = state->slots[i];
 				if (slot->id != 0) {
 					if (state->L) {
-						if (slot->argsRef != LUA_NOREF) luaL_unref(state->L, LUA_REGISTRYINDEX, slot->argsRef);
-						if (slot->threadRef != LUA_NOREF) luaL_unref(state->L, LUA_REGISTRYINDEX, slot->threadRef);
+						if (slot->argsRef != LUA_NOREF)
+							luaL_unref(state->L, LUA_REGISTRYINDEX, slot->argsRef);
+						if (slot->threadRef != LUA_NOREF)
+							luaL_unref(state->L, LUA_REGISTRYINDEX, slot->threadRef);
 					}
 					gff_free(slot->error);
-					if (slot->result.type == LUA_TSTRING && slot->result.data)
-						gff_free(slot->result.data);
+					FreeVariableData(&slot->result);
 				}
 				gff_free(slot);
 			}
@@ -1432,10 +1545,6 @@ extern "C" {
 				if (state->lastCallError) {
 					gff_free(state->lastCallError);
 					state->lastCallError = nullptr;
-				}
-				if (state->varsRef != LUA_NOREF) {
-					luaL_unref(state->L, LUA_REGISTRYINDEX, state->varsRef);
-					state->varsRef = LUA_NOREF;
 				}
 				GetHttpBuffer(0);
 				luaserver_KillAll(state->L);
@@ -1456,7 +1565,10 @@ extern "C" {
 		EVP_cleanup();
 		WSACleanup();
 		EndMemoryManager();
-		if (g_coOwned) { CoUninitialize(); g_coOwned = false; }
+		if (g_coOwned) {
+			CoUninitialize();
+			g_coOwned = false;
+		}
 	}
 
 } // extern "C"
