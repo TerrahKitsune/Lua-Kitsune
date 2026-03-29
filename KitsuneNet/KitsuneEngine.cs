@@ -42,7 +42,7 @@ namespace KitsuneNet
             [MarshalAs(UnmanagedType.I1)] bool fireAndForget);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern IntPtr KitsuneGetError(int id);
+        private static extern nuint KitsuneGetError(int id, byte[]? buf, nuint bufSize);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         [return: MarshalAs(UnmanagedType.I1)]
@@ -55,10 +55,17 @@ namespace KitsuneNet
         private static extern void KitsuneCancel(int id);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern void KitsuneReleaseResult(int id);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern double KitsuneGetRuntime(int id);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern int KitsuneIsRunning();
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool KitsuneIsRunning();
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern int KitsuneGetRunningId();
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern void KitsuneInterrupt();
@@ -79,23 +86,11 @@ namespace KitsuneNet
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern void KitsuneCleanup();
 
-        [StructLayout(LayoutKind.Sequential)]
-        private struct NativeKeyValueNode
-        {
-            public KitsuneVariable Key;    // 24 bytes
-            public KitsuneVariable Value;  // 24 bytes
-            public IntPtr          Next;   //  8 bytes
-        }
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate void GetAllCallback(IntPtr key, IntPtr value, IntPtr userdata);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern IntPtr KitsuneGetAll();
-
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern void KitsuneKeyValuePairListFree(IntPtr node);
-
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-        [return: MarshalAs(UnmanagedType.I1)]
-        private static extern bool KitsuneSetTable(string? key);
+        private static extern void KitsuneGetAll([In] string? path, GetAllCallback callback, IntPtr userdata);
 
         #endregion
 
@@ -269,8 +264,11 @@ namespace KitsuneNet
             /// <summary>Returns the error string for a finished coroutine, or <c>null</c> if none.</summary>
             public string? GetError(int id)
             {
-                IntPtr ptr = KitsuneGetError(id);
-                return ptr == IntPtr.Zero ? null : Marshal.PtrToStringAnsi(ptr);
+                nuint len = KitsuneGetError(id, null, 0);
+                if (len == 0) return null;
+                byte[] buf = new byte[(int)len + 1];
+                KitsuneGetError(id, buf, (nuint)buf.Length);
+                return Encoding.UTF8.GetString(buf, 0, (int)len);
             }
 
             /// <summary>Returns the typed result and releases the slot.</summary>
@@ -312,11 +310,11 @@ namespace KitsuneNet
 
         /// <summary>
         /// Returns the ID of the first coroutine that is still running, or 0 if none are active.
-        /// </summary>
-        public int RunningCoroutineId => KitsuneIsRunning();
+        /// <summary>Returns <c>true</c> if any coroutine is currently running or yielded.</summary>
+        public bool IsRunning => KitsuneIsRunning();
 
-        /// <summary>Returns <c>true</c> if any coroutine is currently running.</summary>
-        public bool IsRunning => KitsuneIsRunning() != 0;
+        /// <summary>Returns the ID of the first coroutine that is still running, or 0 if none are active.</summary>
+        public int RunningCoroutineId => KitsuneGetRunningId();
 
         /// <summary>Signals all running coroutines to stop at the next instruction boundary.</summary>
         public void Interrupt() => KitsuneInterrupt();
@@ -436,35 +434,26 @@ namespace KitsuneNet
         public LuaType GetVariableType(string name) => GetVariable(name).Type;
 
         /// <summary>
-        /// Returns all entries in the Vars bridge table as a list of key-value pairs.
-        /// Returns an empty list when Vars is empty.
+        /// Returns all entries at the given dot-separated path as a list of key-value pairs.
+        /// Pass <c>null</c> or <c>""</c> to iterate the root Vars table.
+        /// Returns an empty list when the path is empty or does not contain a table.
         /// </summary>
-        public IReadOnlyCollection<KeyValuePair<LuaValue, LuaValue>> GetAll()
+        public IReadOnlyCollection<KeyValuePair<LuaValue, LuaValue>> GetAll(string? path = null)
         {
-            IntPtr head = KitsuneGetAll();
-            if (head == IntPtr.Zero) 
-                return Array.Empty<KeyValuePair<LuaValue, LuaValue>>();
             var result = new List<KeyValuePair<LuaValue, LuaValue>>();
-            IntPtr current = head;
-            while (current != IntPtr.Zero)
+            GetAllCallback cb = (key, value, _) =>
             {
-                var node = Marshal.PtrToStructure<NativeKeyValueNode>(current);
+                if (key == IntPtr.Zero || value == IntPtr.Zero) return;
+                var k = Marshal.PtrToStructure<KitsuneVariable>(key);
+                var v = Marshal.PtrToStructure<KitsuneVariable>(value);
                 result.Add(new KeyValuePair<LuaValue, LuaValue>(
-                    NativeVariableToLuaValue(node.Key),
-                    NativeVariableToLuaValue(node.Value)));
-                current = node.Next;
-            }
-            KitsuneKeyValuePairListFree(head);
+                    NativeVariableToLuaValue(k),
+                    NativeVariableToLuaValue(v)));
+            };
+            KitsuneGetAll(path, cb, IntPtr.Zero);
+            GC.KeepAlive(cb);  // prevent GC from collecting the delegate before the call returns
             return result.AsReadOnly();
         }
-
-        /// <summary>
-        /// Advances the variable bridge target into the subtable at <paramref name="key"/> within
-        /// the current target. If the key does not exist, a new empty table is created there.
-        /// Returns <c>false</c> if the key exists but is not a table.
-        /// Pass <c>null</c> to reset the target back to the root <c>Vars</c> table.
-        /// </summary>
-        public bool SetTable(string? key) => KitsuneSetTable(key);
 
         public void Dispose()
         {

@@ -9,7 +9,11 @@
 
 #define KITSUNE_VERSION "1.0.0"
 
-// KitsuneVariable type constants — match Lua's LUA_T* values for direct comparison.
+// KitsuneVariable type constants — values 0–8 match Lua's LUA_T* constants for direct comparison.
+// KITSUNE_TNONE (-1) matches LUA_TNONE. KITSUNE_TERROR (-2) is a Kitsune extension not present
+// in Lua; it is used exclusively with kitsune_ResultSetter to signal a Lua error from a
+// registered C function and will never appear in a KitsuneVariable returned by the engine.
+#define KITSUNE_TERROR         (-2)
 #define KITSUNE_TNONE          (-1)
 #define KITSUNE_TNIL            (0)
 #define KITSUNE_TBOOLEAN        (1)
@@ -22,7 +26,8 @@
 #define KITSUNE_TTHREAD         (8)
 
 struct KitsuneVariable {
-	int            type;     // see KITSUNE_T* constants above; KITSUNE_TUSERDATA is converted via __tostring when available
+	int            type;     // see KITSUNE_T* constants above; KITSUNE_TUSERDATA is converted via __tostring when available;
+							 // pass KITSUNE_TTABLE on Set to create an empty table at the given path
 	size_t         length;   // byte count for KITSUNE_TSTRING; 0 for all other types
 	union {
 		double         number;   // KITSUNE_TNUMBER
@@ -31,11 +36,29 @@ struct KitsuneVariable {
 	};
 };
 
-struct KitsuneKeyValuePairNode {
-	KitsuneVariable key;
-	KitsuneVariable value;
-	KitsuneKeyValuePairNode* Next;
-};
+// Called once per key-value entry during a KitsuneGetAll traversal.
+// key and value are temporary copies valid only for the duration of this call.
+// Copy any data you need before returning; do not store the data pointers beyond the callback.
+// userdata is the opaque pointer passed to KitsuneGetAll.
+// CONSTRAINT: do not call any Kitsune API that calls AcquireLuaAccess from within this callback
+// (the same deadlock constraint as kitsune_CFunction — see above).
+typedef void (*kitsune_KeyValuePairCallback)(const KitsuneVariable* key, const KitsuneVariable* value, void* userdata);
+
+// Callback passed to kitsune_CFunction to return a value to Lua.
+// Pass a KitsuneVariable with any type to return a value; pass KITSUNE_TERROR with an optional
+// error message in data to raise a Lua error. Returns non-zero if the value was stored, 0 if
+// the store failed (e.g. allocation error for KITSUNE_TERROR). The caller retains ownership of
+// the KitsuneVariable and any data it points to for the duration of the call.
+typedef int (*kitsune_ResultSetter) (const KitsuneVariable* result);
+
+// Signature for C functions registered via RegisterFunction.
+// argc/argv are the Lua call arguments; call resultSetter to return a result or raise an error.
+// Return > 0 on success, <= 0 to raise a generic "delegate function error" in Lua.
+// CONSTRAINTS: do NOT call KitsuneSetVariable, KitsuneGetVariable, KitsuneExecuteString/File/Function,
+// KitsuneGetAll, or KitsuneRegisterFunction from within this callback — the scheduler
+// thread owns the Lua state for the duration of the call, so any function that calls
+// AcquireLuaAccess will deadlock permanently. lua_State* is intentionally not exposed.
+typedef int (*kitsune_CFunction) (int argc, KitsuneVariable* argv, const kitsune_ResultSetter resultSetter, void* userdata);
 
 extern "C" {
 	// Initialise the engine and create the Lua state. If already initialised, returns true immediately.
@@ -46,35 +69,59 @@ extern "C" {
 	// (frees the string data if present, then the struct pointer itself). Safe on NULL.
 	KITSUNE_API void KitsuneVariableFree(KitsuneVariable* var);
 
+	// Registers a C function callable from Lua as Kitsune.Name(...).
+	// The Kitsune global table is created on first registration.
+	// See kitsune_CFunction for the full list of constraints on what may be called from within func.
+	KITSUNE_API void KitsuneRegisterFunction(const char* name, kitsune_CFunction func, void* userdata = nullptr);
+
 	// ── Execution ─────────────────────────────────────────────────────────────
 	// All three functions start execution as a Lua coroutine managed by the scheduler.
 	// Returns a positive coroutine ID on success, or -1 on failure.
+	// KitsuneExecuteFunction still returns a positive ID when the named function does not exist;
+	// in that case KitsuneHasResult will return true immediately with error "function not found".
 	// When fireAndForget is true the slot is freed automatically on completion;
 	// do not call KitsuneHasResult / KitsuneGetResult for that id.
-	KITSUNE_API int KitsuneExecuteFile(const char* path, int argc, KitsuneVariable* argv, bool fireAndForget = false);
-	KITSUNE_API int KitsuneExecuteString(const char* script, int argc, KitsuneVariable* argv, bool fireAndForget = false);
-	KITSUNE_API int KitsuneExecuteFunction(const char* functionName, int argc, KitsuneVariable* argv, bool fireAndForget = false);
+	KITSUNE_API int KitsuneExecuteFile(const char* path, int argc, const KitsuneVariable* argv, bool fireAndForget = false);
+	KITSUNE_API int KitsuneExecuteString(const char* script, int argc, const KitsuneVariable* argv, bool fireAndForget = false);
+	KITSUNE_API int KitsuneExecuteFunction(const char* functionName, int argc, const KitsuneVariable* argv, bool fireAndForget = false);
 
 	// ── Per-coroutine queries (id = value returned by KitsuneExecuteFile/String) ──
 	// Returns true once the coroutine has finished (success or error).
-	// If len is not NULL it is filled with the byte length of the pending result (0 = no result).
+	// If len is not NULL it is set to the byte length of the string result, or 0 if the result
+	// is absent or is not a string type (number, boolean, table, etc. all yield len == 0).
 	// Thread-safe.
 	KITSUNE_API bool        KitsuneHasResult(int id, size_t* len = nullptr);
-	// Returns the error string for this coroutine, or NULL if none. Only valid after KitsuneHasResult.
-	// The pointer is invalidated when KitsuneGetResult releases the slot. Thread-safe.
-	KITSUNE_API const char* KitsuneGetError(int id);
-	// Returns the typed result and releases the slot. Returns NULL on failure.
+	// Returns the byte length of the error string for this coroutine (excluding null terminator),
+	// or 0 if there is no error or the id is not found. If buf is non-NULL and bufSize > 0 the
+	// error is copied into buf (always null-terminated, truncated to bufSize-1 bytes if needed).
+	// Pass buf=NULL / bufSize=0 to query the required size before allocating.
+	// Only call after KitsuneHasResult returns true. Invalid after KitsuneCancel. Thread-safe.
+	KITSUNE_API size_t KitsuneGetError(int id, char* buf, size_t bufSize);
+	// Returns the typed result and releases the slot. Returns NULL if the id is not found,
+	// the coroutine is not yet done, or memory allocation fails. A coroutine that returned
+	// nothing (no return statement, or finished with error) yields a non-NULL variable with
+	// type == KITSUNE_TNONE — use KitsuneGetError to distinguish the two cases.
 	// Call KitsuneVariableFree on the result when done. Thread-safe.
 	KITSUNE_API KitsuneVariable*      KitsuneGetResult(int id);
-	// If the coroutine is still running, signals it to stop and releases the slot immediately. Thread-safe.
+	// Releases the slot of a finished coroutine without consuming its result value.
+	// Use when you have already read the error via KitsuneGetError and do not need the result.
+	// No-op if the coroutine is not yet done; use KitsuneCancel for running coroutines. Thread-safe.
+	KITSUNE_API void        KitsuneReleaseResult(int id);
+	// Signals the coroutine to stop and marks its slot for release. If the coroutine is still
+	// running, it is interrupted at the next instruction boundary; if it has already finished,
+	// the slot is released immediately. Slot compaction is asynchronous — the scheduler performs
+	// it on the next cycle. After KitsuneCancel the id is invalid: do not call KitsuneGetError,
+	// KitsuneGetResult, or KitsuneHasResult for it. Thread-safe.
 	KITSUNE_API void		KitsuneCancel(int id);
 	// Returns how long the coroutine has been alive in milliseconds, measured from when it was created.
 	// Returns 0.0 if the id is not found. Thread-safe.
 	KITSUNE_API double		KitsuneGetRuntime(int id);
 
 	// ── Global control ────────────────────────────────────────────────────────
+	// Returns true if any coroutine is currently running or yielded. Thread-safe.
+	KITSUNE_API bool KitsuneIsRunning();
 	// Returns the ID of the first coroutine that is still running, or 0 if none are active. Thread-safe.
-	KITSUNE_API int  KitsuneIsRunning();
+	KITSUNE_API int  KitsuneGetRunningId();
 	// Signals all running coroutines to stop at the next instruction boundary. Thread-safe.
 	KITSUNE_API void KitsuneInterrupt();
 	// Blocks the calling thread until all coroutines have finished. Thread-safe.
@@ -85,20 +132,19 @@ extern "C" {
 	KITSUNE_API int  KitsuneGetActiveIds(int* buffer, int bufferSize);
 
 	// ── Variable bridge ───────────────────────────────────────────────────────
-	// Sets a Vars global. Pass NULL or type == KITSUNE_TNONE to remove the key.
-	// String data in var is only read for the duration of the call. Thread-safe.
-	KITSUNE_API bool             KitsuneSetVariable(const char* name, const KitsuneVariable* var);
-	// Returns the current value of a Vars global as a heap-allocated typed variable.
-	// Call KitsuneVariableFree on the result when done. Returns NULL if not found. Thread-safe.
-	KITSUNE_API KitsuneVariable* KitsuneGetVariable(const char* name);
-	// Returns all Vars entries as a heap-allocated singly-linked list of key-value pairs.
-	// Call KitsuneKeyValuePairListFree on the result when done. Returns NULL if Vars is empty. Thread-safe.
-	KITSUNE_API KitsuneKeyValuePairNode* KitsuneGetAll();
-	// Frees a linked list returned by KitsuneGetAll. Safe on NULL.
-	KITSUNE_API void KitsuneKeyValuePairListFree(KitsuneKeyValuePairNode* node);
-	// Sets the new vars target to a table within the current table, if null then resets it back to Vars (root).
-	// If the table does not exist then it is created, if it is not a table then it returns false. Thread-safe.
-	KITSUNE_API bool KitsuneSetTable(const char* key);
+	// Sets a Vars entry at the given dot-separated path (e.g. "foo" or "foo.bar.baz").
+	// Intermediate tables are created automatically. Pass NULL or KITSUNE_TNONE to remove the key.
+	// Pass type==KITSUNE_TTABLE to create an empty table. Key components must not contain '.'.
+	// String data is only read for the duration of the call. Thread-safe.
+	KITSUNE_API bool             KitsuneSetVariable(const char* path, const KitsuneVariable* var);
+	// Returns the Vars entry at the given dot-separated path as a heap-allocated typed variable.
+	// Returns NULL if not found or if any intermediate component is not a table.
+	// Call KitsuneVariableFree on the result when done. Thread-safe.
+	KITSUNE_API KitsuneVariable* KitsuneGetVariable(const char* path);
+	// Iterates all entries at the given dot-separated path, invoking callback once per key-value pair.
+	// Pass NULL or "" for path to iterate the root Vars table.
+	// key and value are temporary — valid only for the duration of each call. Thread-safe.
+	KITSUNE_API void KitsuneGetAll(const char* path, kitsune_KeyValuePairCallback callback, void* userdata);
 	// Destroy the Lua state and clean up the engine.
 	KITSUNE_API void KitsuneCleanup();
 }

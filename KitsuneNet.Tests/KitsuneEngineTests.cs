@@ -466,23 +466,19 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public void GetAll_AfterSetTable_ReturnsSubtableContents()
+        public void GetAll_WithPath_ReturnsSubtableContents()
         {
             using KitsuneEngine engine = new();
             engine.SetString("rootOnly", "root");
-            engine.SetTable("sub").ShouldBeTrue();
-            engine.SetString("subA", "1");
-            engine.SetNumber("subB", 2.0);
+            engine.SetString("sub.subA", "1");
+            engine.SetNumber("sub.subB", 2.0);
 
-            var all = engine.GetAll();
+            var all = engine.GetAll("sub");
 
             all.Count.ShouldBe(2);
             all.ShouldContain(kvp => kvp.Key.String == "subA" && kvp.Value.String == "1");
             all.ShouldContain(kvp => kvp.Key.String == "subB" && kvp.Value.Number == 2.0);
             all.ShouldNotContain(kvp => kvp.Key.String == "rootOnly");
-
-            engine.SetTable(null);
-            engine.GetActiveIds().ShouldBeEmpty();
         }
 
         [Fact]
@@ -496,91 +492,59 @@ namespace KitsuneNet.Tests
             v.Bytes.ShouldBeNull();
         }
 
-        // -- SetTable -------------------------------------------------------------
+        // -- Variable bridge path notation ----------------------------------------
 
         [Fact]
-        public void SetTable_AdvancesIntoSubtable_VariablesIsolatedFromRoot()
+        public void SetVariable_DotPath_WritesToSubtable()
         {
             using KitsuneEngine engine = new();
-            engine.SetString("rootKey", "rootValue");
+            engine.SetString("root", "rootValue");
+            engine.SetString("sub.key", "subValue");
 
-            engine.SetTable("sub").ShouldBeTrue();
-            engine.SetString("subKey", "subValue");
-            engine.GetString("rootKey").ShouldBeNull();  // root keys not visible in subtable
-            engine.GetString("subKey").ShouldBe("subValue");
-
-            engine.SetTable(null);
-            engine.GetString("rootKey").ShouldBe("rootValue");  // root restored
-            engine.GetString("subKey").ShouldBeNull();           // sub key not at root
+            engine.GetString("root").ShouldBe("rootValue");
+            engine.GetString("sub.key").ShouldBe("subValue");
+            engine.GetString("key").ShouldBeNull();   // not visible at root
         }
 
         [Fact]
-        public void SetTable_Null_ResetsToRoot()
+        public void SetVariable_DotPath_CreatesIntermediateTables()
         {
             using KitsuneEngine engine = new();
-            engine.SetString("before", "yes");
-            engine.SetTable("sub").ShouldBeTrue();
-            engine.SetTable(null).ShouldBeTrue();
-            engine.GetString("before").ShouldBe("yes");
+            engine.SetString("a.b.c", "deep");
+            engine.GetString("a.b.c").ShouldBe("deep");
         }
 
         [Fact]
-        public void SetTable_CreatesSubtableWhenMissing()
+        public void SetVariable_DeepDotPath_WritesToNestedTable()
         {
             using KitsuneEngine engine = new();
-            engine.SetTable("brand_new").ShouldBeTrue();  // key absent  → creates table
-            engine.SetString("x", "1");
-            engine.SetTable(null).ShouldBeTrue();
-            engine.SetTable("brand_new").ShouldBeTrue();  // key present → navigates in
-            engine.GetString("x").ShouldBe("1");
-            engine.SetTable(null).ShouldBeTrue();
+            engine.SetString("a.b.deep", "value");
+            engine.GetString("a.b.deep").ShouldBe("value");
         }
 
         [Fact]
-        public void SetTable_NestedNavigation_WorksCorrectly()
-        {
-            using KitsuneEngine engine = new();
-            engine.SetTable("a").ShouldBeTrue();
-            engine.SetTable("b").ShouldBeTrue();
-            engine.SetString("deep", "value");
-            engine.SetTable(null).ShouldBeTrue();
-            engine.SetTable("a").ShouldBeTrue();
-            engine.SetTable("b").ShouldBeTrue();
-            engine.GetString("deep").ShouldBe("value");
-            engine.SetTable(null).ShouldBeTrue();
-        }
-
-        [Fact]
-        public void SetTable_NonTableKey_ReturnsFalse()
+        public void SetVariable_DotPath_ThroughNonTableReturnsFalse()
         {
             using KitsuneEngine engine = new();
             engine.SetString("notATable", "value");
-            engine.SetTable("notATable").ShouldBeFalse();
-            // Target should remain unchanged after a failed SetTable
-            engine.GetString("notATable").ShouldBe("value");
+            engine.SetString("notATable.key", "x").ShouldBeFalse();
+            engine.GetString("notATable").ShouldBe("value");  // unchanged
         }
 
         [Fact]
-        public void SetTable_ExistingNonEmptyTable_ReturnsTrue()
+        public void SetVariable_TableType_CreatesEmptyTable()
         {
             using KitsuneEngine engine = new();
-            // Populate a subtable via Lua so it is definitely non-empty before we navigate in.
-            engine.ExecuteString("Vars.config = { host = 'localhost', port = 5432 }", fireAndForget: true);
-            engine.Wait();
-            engine.SetTable("config").ShouldBeTrue();
-            engine.GetString("host").ShouldBe("localhost");
-            engine.SetTable(null).ShouldBeTrue();
+            engine.SetVariable("myTable", new LuaValue { Type = LuaType.Table });
+            engine.GetVariableType("myTable").ShouldBe(LuaType.Table);
         }
 
         [Fact]
-        public async Task SetTable_CSharpWrite_LuaReadsViaSameNestedTable()
+        public async Task SetVariable_DotPath_CSharpWriteLuaRead()
         {
-            // C# writes through SetTable → Lua reads through Vars.sub.key — same table object.
             using KitsuneEngine engine = new();
-            engine.SetTable("db").ShouldBeTrue();
-            engine.SetString("host", "localhost");
-            engine.SetNumber("port", 5432);
-            engine.SetTable(null).ShouldBeTrue();
+            engine.SetString("db.host", "localhost");
+            engine.SetNumber("db.port", 5432);
 
             string? result = await engine.ExecuteStringAsync(
                 "return Vars.db.host .. ':' .. tostring(Vars.db.port)");
@@ -589,19 +553,16 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public void SetTable_LuaWrite_CSharpReadsViaSameNestedTable()
+        public void GetVariable_DotPath_LuaWriteCSharpRead()
         {
-            // Lua writes through Vars.sub.key → C# reads via SetTable — same table object.
             using KitsuneEngine engine = new();
             engine.ExecuteString(
                 "Vars.cfg = {}; Vars.cfg.timeout = 30; Vars.cfg.retry = true",
                 fireAndForget: true);
             engine.Wait();
 
-            engine.SetTable("cfg").ShouldBeTrue();
-            engine.GetNumber("timeout").ShouldBe(30.0);
-            engine.GetBool("retry").ShouldBe(true);
-            engine.SetTable(null).ShouldBeTrue();
+            engine.GetNumber("cfg.timeout").ShouldBe(30.0);
+            engine.GetBool("cfg.retry").ShouldBe(true);
             engine.GetActiveIds().ShouldBeEmpty();
         }
 

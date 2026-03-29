@@ -10,7 +10,60 @@
 #include <cstdio>
 #include "KitsuneEngine.h"
 
-int main(int argc, char *argv[]) {
+#ifdef _DEBUG
+int Test(int argc, KitsuneVariable* argv, const kitsune_ResultSetter resultSetter, void* userdata) {
+
+	for (int n = 0; n < argc; n++) {
+		if (argv[n].type == KITSUNE_TSTRING && argv[n].data && argv[n].length > 0)
+			printf("arg %d: %.*s\n", n, (int)argv[n].length, (char*)argv[n].data);
+		else if (argv[n].type == KITSUNE_TNUMBER)
+			printf("arg %d: %f\n", n, argv[n].number);
+		else if(argv[n].type == KITSUNE_TBOOLEAN)
+			printf("arg %d: %s\n", n, argv[n].boolean ? "true" : "false");
+		else
+			printf("arg %d: (type %d)\n", n, argv[n].type);
+	}
+
+	const char* testResult = "This is a test result";
+
+	KitsuneVariable* result = (KitsuneVariable*)malloc(sizeof(KitsuneVariable));
+	if (!result) {
+		return 0;
+	}
+
+	result->type = KITSUNE_TSTRING;
+	result->length = strlen(testResult);
+	result->data = (unsigned char*)malloc(result->length + 1);
+	strcpy((char*)result->data, testResult);
+
+	resultSetter(result);
+
+	if (result->data) {
+		free(result->data);
+	}
+	free(result);
+
+	return 1;
+}
+#endif
+
+static volatile LONG g_exitSignaled = 0;
+
+BOOL WINAPI ConsoleCtrlHandler(DWORD ctrlType) {
+	switch (ctrlType) {
+	case CTRL_C_EVENT:
+	case CTRL_BREAK_EVENT:
+	case CTRL_CLOSE_EVENT:
+	case CTRL_LOGOFF_EVENT:
+	case CTRL_SHUTDOWN_EVENT:
+		InterlockedExchange(&g_exitSignaled, 1);
+		KitsuneInterrupt();
+		return TRUE;
+	}
+	return FALSE;
+}
+
+int main(int argc, char* argv[]) {
 
 #ifdef _DEBUG
 	_CrtMemState sOld;
@@ -26,6 +79,8 @@ int main(int argc, char *argv[]) {
 		return -1;
 	}
 
+	SetConsoleCtrlHandler(ConsoleCtrlHandler, TRUE);
+
 	const char* file = argc > 1 ? argv[1] : "main.lua";
 
 	// Convert extra command-line args (argv[2..]) to KitsuneVariable array.
@@ -34,11 +89,16 @@ int main(int argc, char *argv[]) {
 	if (extraArgc > 0) {
 		vars = new KitsuneVariable[extraArgc]();
 		for (int i = 0; i < extraArgc; i++) {
-			vars[i].type   = KITSUNE_TSTRING;
+			vars[i].type = KITSUNE_TSTRING;
 			vars[i].length = strlen(argv[i + 2]);
-			vars[i].data   = (unsigned char*)argv[i + 2];
+			vars[i].data = (unsigned char*)argv[i + 2];
 		}
 	}
+
+#ifdef _DEBUG
+	KitsuneRegisterFunction("Test", Test);
+#endif
+
 	int id = KitsuneExecuteFile(file, extraArgc, vars);
 	delete[] vars;
 
@@ -48,20 +108,34 @@ int main(int argc, char *argv[]) {
 		return -1;
 	}
 
-	// Block until the coroutine finishes.
-	while (!KitsuneHasResult(id, nullptr))
+	// Block until the coroutine finishes or an exit signal is received.
+	while (!KitsuneHasResult(id, nullptr) && !InterlockedAdd(&g_exitSignaled, 0))
 		Sleep(1);
 
-	const char* err = KitsuneGetError(id);
-	if (err)
-		fprintf(stderr, "%s\n", err);
+	// If the signal fired before the coroutine reported done, wait for the
+	// interrupt to propagate so KitsuneGetError / KitsuneGetResult are valid.
+	if (!KitsuneHasResult(id, nullptr))
+		KitsuneWait();
 
-	int ret = err ? 1 : 0;
+	size_t errLen = KitsuneGetError(id, nullptr, 0);
+	int ret = errLen > 0 ? 1 : 0;
+	if (errLen > 0) {
+		char* errBuf = new char[errLen + 1];
+		KitsuneGetError(id, errBuf, errLen + 1);
+		fprintf(stderr, "%s\n", errBuf);
+		delete[] errBuf;
+	}
 
 	KitsuneVariable* result = KitsuneGetResult(id);
 	if (result) {
 		if (result->type == KITSUNE_TSTRING && result->data && result->length > 0)
 			printf("%.*s\n", (int)result->length, (char*)result->data);
+		else if (result->type == KITSUNE_TNUMBER)
+			printf("%f\n", result->number);
+		else if (result->type == KITSUNE_TBOOLEAN)
+			printf("%s\n", result->boolean ? "true" : "false");
+		else if(result->type != KITSUNE_TNIL || result->type != KITSUNE_TNONE)
+			printf("(type %d)\n", result->type);
 		KitsuneVariableFree(result);
 	}
 

@@ -136,6 +136,8 @@ collectgarbage();
 
 SetTitle("Kitsune: ".._VERSION);
 
+print(Kitsune.Test(1, "a", 3.14));
+
 dofile("tests/run_all.lua");
 dofile("tests/imgui_simple.lua");
 if true then return VERSION; end
