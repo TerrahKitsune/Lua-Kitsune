@@ -20,6 +20,13 @@ namespace KitsuneNet.Tests
             return await engine.ExecuteStringAsync(lua);
         }
 
+        private static async Task<string?> RunWithSession(string lua)
+        {
+            using KitsuneEngine engine = new();
+            engine.RegisterSession();
+            return await engine.ExecuteStringAsync(lua);
+        }
+
         // -- UUID -----------------------------------------------------------------
 
         [Fact]
@@ -296,21 +303,21 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task GetScreenSize_ReturnsTwoNumbers()
         {
-            string? r = await Run("local w,h = GetScreenSize(); return tostring(type(w)=='number' and type(h)=='number')");
+            string? r = await RunWithSession("local w,h = Session.Display.GetScreenSize(); return tostring(type(w)=='number' and type(h)=='number')");
             r.ShouldBe("true");
         }
 
         [Fact]
         public async Task GetCursorPosition_ReturnsTwoNumbers()
         {
-            string? r = await Run("local x,y = GetCursorPosition(); return tostring(type(x)=='number' and type(y)=='number')");
+            string? r = await RunWithSession("local x,y = Session.Display.GetCursorPosition(); return tostring(type(x)=='number' and type(y)=='number')");
             r.ShouldBe("true");
         }
 
         [Fact]
         public async Task GetCursorPointPosition_ReturnsTwoNumbers()
         {
-            string? r = await Run("local x,y = GetCursorPointPosition(); return tostring(type(x)=='number' and type(y)=='number')");
+            string? r = await RunWithSession("local x,y = Session.Display.GetCursorPoint(); return tostring(type(x)=='number' and type(y)=='number')");
             r.ShouldBe("true");
         }
 
@@ -396,9 +403,9 @@ namespace KitsuneNet.Tests
             // Clipboard access from a background scheduler thread can silently fail
             // on Windows (clipboard requires UI thread ownership). Skip if set or
             // read-back doesn't round-trip correctly.
-            string? r = await Run(@"
-                if not SetClipboard('kitsune_clip_test_xyz') then return 'skip' end
-                local got = GetClipboard()
+            string? r = await RunWithSession(@"
+                if not Session.Clipboard.Set('kitsune_clip_test_xyz') then return 'skip' end
+                local got = Session.Clipboard.Get()
                 if got ~= 'kitsune_clip_test_xyz' then return 'skip' end
                 return got
             ");
@@ -410,14 +417,14 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task GetKeyState_ReturnsBoolean()
         {
-            string? r = await Run("return type(GetKeyState(0x87))");  // VK_F24
+            string? r = await RunWithSession("return type(Session.Console.GetKeyState(0x87))");  // VK_F24
             r.ShouldBe("boolean");
         }
 
         [Fact]
         public async Task HasKeyDown_ReturnsBool()
         {
-            string? r = await Run("return type(HasKeyDown())");
+            string? r = await RunWithSession("return type(Session.Console.HasKeyDown())");
             r.ShouldBe("boolean");
         }
 
@@ -465,7 +472,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Put_DoesNotThrow()
         {
-            string? r = await Run("Put('kitsune_test'); return 'ok'");
+            string? r = await RunWithSession("Session.Console.Put('kitsune_test'); return 'ok'");
             r.ShouldBe("ok");
         }
 
@@ -473,8 +480,8 @@ namespace KitsuneNet.Tests
         public async Task GetTextColor_ReturnsTwoValuesOrNilWhenNoConsole()
         {
             // Returns two integers when a console is attached; nil,nil in headless environments.
-            string? r = await Run(@"
-                local bg, fg = GetTextColor()
+            string? r = await RunWithSession(@"
+                local bg, fg = Session.Console.GetColor()
                 local bgOk = type(bg)=='number' or bg==nil
                 local fgOk = type(fg)=='number' or fg==nil
                 return tostring(bgOk and fgOk)

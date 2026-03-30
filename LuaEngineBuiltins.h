@@ -14,3 +14,4 @@ int L_ShellExecute(lua_State* L);
 int L_GetReg(lua_State* L);
 int L_ToggleConsole(lua_State* L);
 int L_SetTitle(lua_State* L);
+int luaopen_session(lua_State* L);

@@ -100,6 +100,9 @@ namespace KitsuneNet
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern void KitsuneCleanup();
 
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern void KitsuneRegisterSession();
+
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate void GetAllCallback(IntPtr key, IntPtr value, IntPtr userdata);
 
@@ -589,6 +592,15 @@ namespace KitsuneNet
             GC.KeepAlive(cb);  // prevent GC from collecting the delegate before the call returns
             return result.AsReadOnly();
         }
+
+        // -- RegisterSession / RegisterFunction -----------------------------------
+
+        /// <summary>
+        /// Registers the <c>Session</c> table (<c>Session.Console</c>, <c>Session.Clipboard</c>)
+        /// into the Lua global environment. Call once from the host after construction to enable
+        /// interactive session functions. Safe to call multiple times (re-registers the table).
+        /// </summary>
+        public void RegisterSession() => KitsuneRegisterSession();
 
         // -- RegisterFunction ----------------------------------------------------
 

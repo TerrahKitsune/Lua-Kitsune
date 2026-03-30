@@ -10,12 +10,13 @@ if not consoleConfig.enabled then
     return
 end
 
-run("Console table exists", function()
-    assert_table(Console, "Console")
+run("Session.Console table exists", function()
+    assert_table(Session, "Session")
+    assert_table(Session.Console, "Session.Console")
 end)
 
-run("Console functions exposed", function()
-    assert(type(Console.Create) == "function", "Console.Create missing")
-    assert(type(Console.Destroy) == "function", "Console.Destroy missing")
-    assert(type(Console.Attach) == "function", "Console.Attach missing")
+run("Session.Console functions exposed", function()
+    assert(type(Session.Console.Create) == "function", "Session.Console.Create missing")
+    assert(type(Session.Console.Destroy) == "function", "Session.Console.Destroy missing")
+    assert(type(Session.Console.Attach) == "function", "Session.Console.Attach missing")
 end)

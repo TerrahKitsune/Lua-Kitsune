@@ -2399,7 +2399,7 @@ namespace KitsuneNet.Tests
         public async Task Userdata_DifferentType_TypeNameMatchesMetatable()
         {
             // Verifies the __name lookup is not hard-coded: CSV.Create() carries a
-            // different metatable name ("LUACSV") from Stream.Create() ("STREAM").
+            // different metatable name ("LUACSV") from Json.Create() ("LUAJSON").
             using KitsuneEngine engine = new();
             LuaValue? received = null;
             engine.RegisterFunction("CaptureCsv", args => { received = args[0]; return LuaValue.None; });
