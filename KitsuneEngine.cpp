@@ -45,6 +45,7 @@
 #include "base64.h"
 #include "MacroMain.h"
 #include "wcharmain.h"
+#include "luawchar.h"
 #include "LuaCsvMain.h"
 #include "LuaArchiveMain.h"
 #include "LuaImguiMain.h"
@@ -149,11 +150,11 @@ static KeyValuePairKitsuneVariableNode* TableToLinkedList(lua_State* L, int idx,
 // Recursively frees a KeyValuePairKitsuneVariableNode linked list produced by TableToLinkedList.
 static void FreeKVNode(KeyValuePairKitsuneVariableNode* node) {
 	while (node) {
-		if ((node->key.type == LUA_TSTRING || node->key.type == KITSUNE_TERROR) && node->key.data)
+		if ((node->key.type == LUA_TSTRING || node->key.type == KITSUNE_TCHAR16 || node->key.type == KITSUNE_TERROR || node->key.type == LUA_TUSERDATA) && node->key.data)
 			gff_free(node->key.data);
 		else if (node->key.type == LUA_TTABLE && node->key.table)
 			FreeKVNode(node->key.table);
-		if ((node->value.type == LUA_TSTRING || node->value.type == KITSUNE_TERROR) && node->value.data)
+		if ((node->value.type == LUA_TSTRING || node->value.type == KITSUNE_TCHAR16 || node->value.type == KITSUNE_TERROR || node->value.type == LUA_TUSERDATA) && node->value.data)
 			gff_free(node->value.data);
 		else if (node->value.type == LUA_TTABLE && node->value.table)
 			FreeKVNode(node->value.table);
@@ -167,13 +168,41 @@ static void FreeKVNode(KeyValuePairKitsuneVariableNode* node) {
 // Nulls the data pointer after freeing to prevent double-free. Does NOT free var itself.
 static void FreeVariableData(KitsuneVariable* var) {
 	if (!var) return;
-	if ((var->type == LUA_TSTRING || var->type == KITSUNE_TERROR) && var->data) {
+	if ((var->type == LUA_TSTRING || var->type == KITSUNE_TERROR || var->type == LUA_TUSERDATA) && var->data) {
 		gff_free(var->data);
 		var->data = NULL;
+	} else if (var->type == KITSUNE_TCHAR16 && var->char16data) {
+		gff_free(var->char16data);
+		var->char16data = NULL;
 	} else if (var->type == LUA_TTABLE && var->table) {
 		FreeKVNode(var->table);
 		var->table = NULL;
 	}
+}
+
+// ── char16_t / wchar_t boundary helpers ─────────────────────────────────────────────────────
+// All casting between the public ABI type (char16_t, stored in KitsuneVariable) and the
+// internal Lua representation (wchar_t, used by LuaWChar) is confined here.
+// On Windows, wchar_t is 2 bytes (UTF-16 LE), so both helpers are zero-cost operations.
+// A future non-Windows port replaces these two functions with real UTF-32 <-> UTF-16
+// converters and adds the appropriate #ifdef guard — nothing outside these helpers changes.
+
+// Allocates a char16_t* copy of a wchar_t* src (len code units, excluding null terminator).
+// The caller owns the result; free with gff_free.
+static char16_t* AllocChar16FromWchar(const wchar_t* src, size_t len) {
+	char16_t* dst = (char16_t*)gff_malloc((len + 1) * sizeof(char16_t));
+	if (dst) {
+		memcpy(dst, src, len * sizeof(char16_t));
+		dst[len] = u'\0';
+	}
+	return dst;
+}
+
+// Returns a wchar_t* view of a char16_t* for passing to Lua APIs.
+// On Windows this is a no-op reinterpret cast. A future non-Windows port that stores UTF-32
+// internally must allocate and convert here (and update callers to free the result).
+static inline const wchar_t* Char16AsWchar(const char16_t* p) {
+	return reinterpret_cast<const wchar_t*>(p);
 }
 
 // Fills a KitsuneVariable from the Lua stack at the given index.
@@ -216,25 +245,36 @@ static void FillKitsuneVariableFromStack(lua_State* L, int idx, KitsuneVariable*
 		break;
 	}
 	case LUA_TUSERDATA: {
-		// Attempt __tostring via protected call; stack balance is preserved by lua_absindex.
-		if (luaL_getmetafield(L, abs_idx, "__tostring") != LUA_TNIL) {
-			lua_pushvalue(L, abs_idx);  // copy of userdata as the argument
-			if (lua_pcall(L, 1, 1, 0) == LUA_OK && lua_type(L, -1) == LUA_TSTRING) {
-				size_t len;
-				const char* s = lua_tolstring(L, -1, &len);
-				if (s) {
-					out->data = (unsigned char*)gff_malloc(len + 1);
+		// Wchar is bridged as KITSUNE_TCHAR16: the internal wchar_t* is converted to char16_t*
+		// at the boundary via AllocChar16FromWchar so the native object can be reconstructed on push.
+		if (lua_iswchar(L, abs_idx)) {
+			LuaWChar* wch = (LuaWChar*)lua_touserdata(L, abs_idx);
+			if (wch && wch->str && wch->len > 0) {
+				out->char16data = AllocChar16FromWchar(wch->str, wch->len);
+				if (out->char16data)
+					out->length = wch->len;
+			}
+			out->type = KITSUNE_TCHAR16;
+			break;
+		}
+		// All other userdata types: read __name from the metatable and store it as a string.
+		// __tostring is intentionally not called (may execute arbitrary Lua code).
+		if (lua_getmetatable(L, abs_idx)) {
+			lua_getfield(L, -1, "__name");
+			if (lua_type(L, -1) == LUA_TSTRING) {
+				size_t typeNameLen;
+				const char* typeName = lua_tolstring(L, -1, &typeNameLen);
+				if (typeName && typeNameLen > 0) {
+					out->data = (unsigned char*)gff_malloc(typeNameLen + 1);
 					if (out->data) {
-						memcpy(out->data, s, len + 1);
-						out->length = len;
-						out->type = LUA_TSTRING;
+						memcpy(out->data, typeName, typeNameLen + 1);
+						out->length = typeNameLen;
 					}
 				}
 			}
-			lua_pop(L, 1);  // pop pcall result or error
+			lua_pop(L, 2);  // pop __name and metatable
 		}
-		if (out->type != LUA_TSTRING)
-			out->type = LUA_TUSERDATA;
+		out->type = LUA_TUSERDATA;
 		break;
 	}
 	case LUA_TTABLE:
@@ -295,6 +335,10 @@ static void PushKitsuneVariable(lua_State* L, const KitsuneVariable* v) {
 		else
 			lua_pushstring(L, "");
 		break;
+	case KITSUNE_TCHAR16:
+		// Cast char16_t* back to wchar_t* at the boundary via Char16AsWchar.
+		lua_pushwchar(L, v->char16data ? Char16AsWchar(v->char16data) : L"", v->length);
+		break;
 	case LUA_TTABLE:
 		lua_newtable(L);
 		if (v->table) {
@@ -321,31 +365,36 @@ static void SetSlotResult(KitsuneCoroutine* slot, lua_State* T, int idx) {
 	int t = lua_type(T, idx);
 	switch (t) {
 	case LUA_TUSERDATA: {
-		// Specialised: __tostring must run on the main state, not the coroutine thread, for pcall safety.
-		void* ud; lua_getallocf(T, &ud);
-		lua_State* mainL = ((KitsuneState*)ud)->L;
-		lua_pushvalue(T, idx);      // copy the userdata onto T's top
-		lua_xmove(T, mainL, 1);    // move that copy to the main state
-		if (luaL_getmetafield(mainL, -1, "__tostring") != LUA_TNIL) {
-			// mainL: [..., userdata_copy, __tostring]
-			lua_pushvalue(mainL, -2);  // push another copy as the argument
-			if (lua_pcall(mainL, 1, 1, 0) == LUA_OK && lua_type(mainL, -1) == LUA_TSTRING) {
-				size_t len;
-				const char* s = lua_tolstring(mainL, -1, &len);
-				if (s) {
-					slot->result.data = (unsigned char*)gff_malloc(len + 1);
+		// Wchar is bridged as KITSUNE_TCHAR16: the internal wchar_t* is converted to char16_t*
+		// at the boundary via AllocChar16FromWchar so the native object can be reconstructed on push.
+		if (lua_iswchar(T, idx)) {
+			LuaWChar* wch = (LuaWChar*)lua_touserdata(T, idx);
+			if (wch && wch->str && wch->len > 0) {
+				slot->result.char16data = AllocChar16FromWchar(wch->str, wch->len);
+				if (slot->result.char16data)
+					slot->result.length = wch->len;
+			}
+			slot->result.type = KITSUNE_TCHAR16;
+			break;
+		}
+		// All other userdata types: read __name from the metatable and store it as a string.
+		// __tostring is intentionally not called (may execute arbitrary Lua code).
+		if (lua_getmetatable(T, idx)) {
+			lua_getfield(T, -1, "__name");
+			if (lua_type(T, -1) == LUA_TSTRING) {
+				size_t typeNameLen;
+				const char* typeName = lua_tolstring(T, -1, &typeNameLen);
+				if (typeName && typeNameLen > 0) {
+					slot->result.data = (unsigned char*)gff_malloc(typeNameLen + 1);
 					if (slot->result.data) {
-						memcpy(slot->result.data, s, len + 1);
-						slot->result.length = len;
-						slot->result.type = LUA_TSTRING;
+						memcpy(slot->result.data, typeName, typeNameLen + 1);
+						slot->result.length = typeNameLen;
 					}
 				}
 			}
-			lua_pop(mainL, 1);  // pop pcall result or error
+			lua_pop(T, 2);  // pop __name and metatable
 		}
-		lua_pop(mainL, 1);  // pop userdata_copy
-		if (slot->result.type != LUA_TSTRING)
-			slot->result.type = LUA_TUSERDATA;
+		slot->result.type = LUA_TUSERDATA;
 		break;
 	}
 	case LUA_TTABLE: {
@@ -1084,7 +1133,7 @@ extern "C" {
 		memset(out, 0, sizeof(KitsuneVariable));
 
 		// Transfer owned data (string or table linked list) atomically to prevent double-free.
-		if ((slot->result.type == LUA_TSTRING || slot->result.type == LUA_TTABLE) && slot->result.data) {
+		if ((slot->result.type == LUA_TSTRING || slot->result.type == KITSUNE_TCHAR16 || slot->result.type == LUA_TUSERDATA || slot->result.type == LUA_TTABLE) && slot->result.data) {
 			out->type = slot->result.type;
 			out->length = slot->result.length;
 			out->data = (unsigned char*)InterlockedExchangePointer((PVOID*)&slot->result.data, NULL);

@@ -152,6 +152,8 @@ namespace KitsuneNet
                 LuaType.Integer => LuaValue.FromInt64(nv.Integer),
                 LuaType.Boolean => LuaValue.FromBool(nv.BoolByte != 0),
                 LuaType.String when nv.Data != IntPtr.Zero => CopyBytes(nv.Data, (int)nv.Length),
+                LuaType.Wchar  when nv.Data != IntPtr.Zero => CopyWchar(nv.Data, (int)nv.Length),
+                LuaType.Userdata when nv.Data != IntPtr.Zero && nv.Length > 0 => CopyBytes(nv.Data, (int)nv.Length) with { Type = LuaType.Userdata },
                 LuaType.Table  => ReadNativeTable(nv.Data),
                 LuaType.None    => LuaValue.None,
                 _               => new LuaValue { Type = t },  // Nil/Function/Userdata/Thread/LightUserdata
@@ -164,6 +166,15 @@ namespace KitsuneNet
                 byte[] bytes = new byte[length];
                 if (length > 0) Marshal.Copy(src, bytes, 0, length);
                 return LuaValue.FromBytes(bytes);
+            }
+
+            // length is the char16_t count; each char16_t is 2 bytes (UTF-16 LE on Windows).
+            static LuaValue CopyWchar(IntPtr src, int wcharCount)
+            {
+                int byteCount = wcharCount * 2;
+                byte[] bytes = new byte[byteCount];
+                if (byteCount > 0) Marshal.Copy(src, bytes, 0, byteCount);
+                return new LuaValue { Type = LuaType.Wchar, Bytes = bytes };
             }
         }
 
@@ -178,6 +189,8 @@ namespace KitsuneNet
                 LuaType.Integer => LuaValue.FromInt64(nv.Integer),
                 LuaType.Boolean => LuaValue.FromBool(nv.BoolByte != 0),
                 LuaType.String when nv.Data != IntPtr.Zero => CopyBytes(nv.Data, (int)nv.Length),
+                LuaType.Wchar  when nv.Data != IntPtr.Zero => CopyWchar(nv.Data, (int)nv.Length),
+                LuaType.Userdata when nv.Data != IntPtr.Zero && nv.Length > 0 => CopyBytes(nv.Data, (int)nv.Length) with { Type = LuaType.Userdata },
                 LuaType.Table  => ReadNativeTable(nv.Data),
                 LuaType.None    => LuaValue.None,
                 _               => new LuaValue { Type = t },
@@ -188,6 +201,15 @@ namespace KitsuneNet
                 byte[] bytes = new byte[length];
                 if (length > 0) Marshal.Copy(src, bytes, 0, length);
                 return LuaValue.FromBytes(bytes);
+            }
+
+            // length is the char16_t count; each char16_t is 2 bytes (UTF-16 LE on Windows).
+            static LuaValue CopyWchar(IntPtr src, int wcharCount)
+            {
+                int byteCount = wcharCount * 2;
+                byte[] bytes = new byte[byteCount];
+                if (byteCount > 0) Marshal.Copy(src, bytes, 0, byteCount);
+                return new LuaValue { Type = LuaType.Wchar, Bytes = bytes };
             }
         }
 
@@ -242,13 +264,30 @@ namespace KitsuneNet
                 case LuaType.Number:  nv.Number   = v.Number;  break;
                 case LuaType.Integer: nv.Integer  = v.Int64;   break;
                 case LuaType.Boolean: nv.BoolByte = v.Boolean ? (byte)1 : (byte)0; break;
-                case LuaType.String when v.Bytes is { Length: > 0 } bytes:
-                    IntPtr p = Marshal.AllocHGlobal(bytes.Length + 1);
-                    Marshal.Copy(bytes, 0, p, bytes.Length);
-                    Marshal.WriteByte(p, bytes.Length, 0);
-                    ptrs.Add(p);
-                    nv.Data   = p;
-                    nv.Length = (nuint)bytes.Length;
+                case LuaType.String:
+                    if (v.Bytes is { Length: > 0 })
+                    {
+                        byte[] bytes = v.Bytes;
+                        IntPtr p = Marshal.AllocHGlobal(bytes.Length + 1);
+                        Marshal.Copy(bytes, 0, p, bytes.Length);
+                        Marshal.WriteByte(p, bytes.Length, 0);
+                        ptrs.Add(p);
+                        nv.Data   = p;
+                        nv.Length = (nuint)bytes.Length;
+                    }
+                    break;
+                case LuaType.Wchar:
+                    if (v.Bytes is { Length: > 0 })
+                    {
+                        // Bytes stores UTF-16 LE; Length = number of char16_t code units (2 bytes each).
+                        byte[] wbytes = v.Bytes;
+                        IntPtr p = Marshal.AllocHGlobal(wbytes.Length + 2);  // +2 for null char16_t
+                        Marshal.Copy(wbytes, 0, p, wbytes.Length);
+                        Marshal.WriteInt16(p, wbytes.Length, 0);
+                        ptrs.Add(p);
+                        nv.Data   = p;
+                        nv.Length = (nuint)(wbytes.Length / 2);
+                    }
                     break;
                 case LuaType.Table when v.Table is not null:
                     nv.Data   = BuildNativeTable(v.Table, ptrs);
@@ -342,11 +381,11 @@ namespace KitsuneNet
             /// <summary>Returns the typed result and releases the slot.</summary>
             public LuaValue GetResultVariable(int id) => NativePtrToLuaValue(KitsuneGetResult(id));
 
-            /// <summary>Returns the result as a UTF-8 string, or <c>null</c> if nil/none. Releases the slot.</summary>
+            /// <summary>Returns the result as a UTF-8/Unicode string, or <c>null</c> if nil/none. Releases the slot.</summary>
             public string? GetResultString(int id)
             {
                 LuaValue v = GetResultVariable(id);
-                return v.Type == LuaType.String ? v.String : null;
+                return (v.Type == LuaType.String || v.Type == LuaType.Wchar) ? v.String : null;
             }
 
             /// <summary>Returns the result as raw bytes, or <c>null</c> if nil/none. Releases the slot.</summary>
@@ -491,6 +530,15 @@ namespace KitsuneNet
                         nv.Data   = strPtr;
                         nv.Length = (nuint)bytes.Length;
                         break;
+                    case LuaType.Wchar when value.Bytes is not null:
+                        byte[] wbytes = value.Bytes;
+                        IntPtr wPtr = Marshal.AllocHGlobal(wbytes.Length + 2);  // +2 for null char16_t
+                        Marshal.Copy(wbytes, 0, wPtr, wbytes.Length);
+                        Marshal.WriteInt16(wPtr, wbytes.Length, 0);
+                        ptrs.Add(wPtr);
+                        nv.Data   = wPtr;
+                        nv.Length = (nuint)(wbytes.Length / 2);
+                        break;
                     case LuaType.Table when value.Table is not null:
                         nv.Data   = BuildNativeTable(value.Table, ptrs);
                         nv.Length = (nuint)value.Table.Count;
@@ -605,6 +653,15 @@ namespace KitsuneNet
                     nv.Length = (nuint)bytes.Length;
                     nv.Data   = strPtr;
                 }
+                else if (result.Type == LuaType.Wchar && result.Bytes is { Length: > 0 } wbytes)
+                {
+                    // Bytes stores UTF-16 LE; send as char16_t* with length = char16_t count.
+                    strPtr = Marshal.AllocHGlobal(wbytes.Length + 2);
+                    Marshal.Copy(wbytes, 0, strPtr, wbytes.Length);
+                    Marshal.WriteInt16(strPtr, wbytes.Length, 0);
+                    nv.Length = (nuint)(wbytes.Length / 2);
+                    nv.Data   = strPtr;
+                }
                 else if (result.Type == LuaType.Number)   nv.Number   = result.Number;
                 else if (result.Type == LuaType.Integer)  nv.Integer  = result.Int64;
                 else if (result.Type == LuaType.Boolean)  nv.BoolByte = result.Boolean ? (byte)1 : (byte)0;
@@ -714,6 +771,9 @@ namespace KitsuneNet
         Thread        =  8,
         /// <summary>Lua 5.3+ integer subtype. Value is stored in <see cref="LuaValue.Int64"/>; never a float.</summary>
         Integer       = -3,
+        /// <summary>Kitsune Wchar userdata. UTF-8 bytes are stored in <see cref="LuaValue.Bytes"/>;
+        /// <see cref="LuaValue.String"/> decodes them. Pushes a Lua Wchar object back into the state.</summary>
+        Wchar         = -4,
     }
 
     /// <summary>A typed value exchanged with the Lua engine.</summary>
@@ -728,8 +788,11 @@ namespace KitsuneNet
         /// <summary>Entries for <see cref="LuaType.Table"/> values. Null for empty tables or non-table types.</summary>
         public IReadOnlyList<KeyValuePair<LuaValue, LuaValue>>? Table { get; init; }
 
-        /// <summary>Decodes <see cref="Bytes"/> as UTF-8. Returns <c>null</c> when <see cref="Bytes"/> is null.</summary>
-        public string? String => Bytes is null ? null : Encoding.UTF8.GetString(Bytes);
+        /// <summary>Decodes <see cref="Bytes"/> as UTF-8 for strings, or UTF-16 LE for Wchar values.
+        /// Returns <c>null</c> when <see cref="Bytes"/> is null.</summary>
+        public string? String => Type == LuaType.Wchar
+            ? (Bytes is null ? null : Encoding.Unicode.GetString(Bytes))
+            : (Bytes is null ? null : Encoding.UTF8.GetString(Bytes));
 
         /// <summary>Returns the numeric value as <c>double</c>, bridging both
         /// <see cref="LuaType.Number"/> (float) and <see cref="LuaType.Integer"/> subtypes.
@@ -745,6 +808,7 @@ namespace KitsuneNet
         public override string ToString() => Type switch
         {
             LuaType.String        => String ?? string.Empty,
+            LuaType.Wchar         => String ?? string.Empty,
             LuaType.Number        => Number.ToString(System.Globalization.CultureInfo.InvariantCulture),
             LuaType.Integer       => Int64.ToString(),
             LuaType.Boolean       => Boolean.ToString(),
@@ -769,6 +833,10 @@ namespace KitsuneNet
         /// <summary>Creates a string value from a raw byte array with no encoding applied.</summary>
         public static LuaValue FromBytes(byte[]? v) =>
             v is null ? None : new() { Type = LuaType.String, Bytes = v };
+        /// <summary>Creates a Wchar value. When set on a Lua global the engine pushes a Lua Wchar object.
+        /// The UTF-16 LE encoded text is stored in <see cref="Bytes"/>; <see cref="String"/> decodes it back.</summary>
+        public static LuaValue FromWchar(string? v) =>
+            v is null ? None : new() { Type = LuaType.Wchar, Bytes = Encoding.Unicode.GetBytes(v) };
         /// <summary>Creates a table value from a list of key-value entries.</summary>
         public static LuaValue FromTable(IReadOnlyList<KeyValuePair<LuaValue, LuaValue>> entries) =>
             new() { Type = LuaType.Table, Table = entries };

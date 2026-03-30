@@ -1,4 +1,4 @@
-#include "luacsv.h"
+﻿#include "luacsv.h"
 #include <string.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -57,10 +57,11 @@ wchar_t SkipForwards(LuaCsv* csv) {
 
 	wchar_t next = GetNext(csv, true);
 	while (next == L' ' || next == L'\t') {
-		next = GetNext(csv);
+		GetNext(csv);               // consume the whitespace
+		next = GetNext(csv, true);  // peek at what follows
 	}
 
-	return next;
+	return next;  // first non-whitespace (peeked but not consumed)
 }
 
 bool ResizeBuffer(LuaCsv* csv) {
@@ -92,7 +93,7 @@ bool WriteToBuffer(LuaCsv* csv, wchar_t wc) {
 }
 
 void ClearBuffer(LuaCsv* csv, bool dealloc) {
-	
+
 	csv->len = 0;
 
 	if (dealloc && csv->buffer) {
@@ -108,8 +109,10 @@ void ClearBuffer(LuaCsv* csv, bool dealloc) {
 		csv->file = NULL;
 	}
 
-csv->data = NULL;
-csv->pos = 0;
+	if (dealloc) {
+		csv->data = NULL;
+		csv->pos = 0;
+	}
 }
 
 bool IsEndline(LuaCsv* csv) {
@@ -118,15 +121,10 @@ bool IsEndline(LuaCsv* csv) {
 		return true;
 	}
 	else if (csv->last == L'\r') {
-
-		wchar_t next = GetNext(csv, true);
-
-		if (next == L'\n') {
-			return GetNext(csv) == L'\n';
+		if (GetNext(csv, true) == L'\n') {
+			GetNext(csv);  // consume the \n in \r\n
 		}
-		else {
-			return false;
-		}
+		return true;  // bare \r is also an endline
 	}
 	else {
 		return false;
@@ -150,7 +148,8 @@ void DecodeComments(LuaCsv* csv, lua_State* L) {
 	}
 
 	int nth = 0;
-	next = GetNext(csv);
+	GetNext(csv);        // consume the '*' marker (SkipForwards only peeked it)
+	next = GetNext(csv); // read first char of comment text
 
 	while (true) {
 
@@ -171,6 +170,9 @@ void DecodeComments(LuaCsv* csv, lua_State* L) {
 		if (next != L'*') {
 			break;
 		}
+
+		GetNext(csv);        // consume the '*' of the next comment line
+		next = GetNext(csv); // read first char of that line's text
 	}
 }
 
@@ -216,11 +218,14 @@ bool ReadCsvFieldIntoBuffer(LuaCsv* csv) {
 		else if (wc == csv->delimiter) {
 			return true;
 		}
-		else if (IsEndline(csv) || IsAtEnd(csv)) {
-			break;
+		else if (IsEndline(csv)) {
+			break;  // endline character: do not write it, field is done
 		}
 		else {
 			WriteToBuffer(csv, wc);
+			if (IsAtEnd(csv)) {
+				break;  // just wrote the last character; stream is exhausted
+			}
 		}
 	}
 
@@ -303,10 +308,24 @@ int DecodeString(lua_State* L) {
 
 	ClearBuffer(csv, true);
 
-	csv->data = lua_stringtowchar(L, 2);
+	// Ensure the source data stays alive on the Lua stack throughout Decode.
+	// lua_stringtowchar pops its Wchar; any Lua allocation in Decode can trigger
+	// GC, freeing csv->data->str.  Pushing an anchored Wchar prevents that.
+	if (lua_iswchar(L, 2)) {
+		lua_pushvalue(L, 2);   // push copy; anchors arg2 Wchar at stack top
+	}
+	else {
+		lua_pushvalue(L, 2);
+		FromUtf8(L);           // pushes Wchar; copy of arg2 is one level below
+		lua_remove(L, -2);     // remove copy; Wchar now at top, rooted
+	}
+	csv->data = lua_towchar(L, -1);
 	csv->pos = 0;
 
-	Decode(csv, L);
+	Decode(csv, L);         // result table is now at top; Wchar is one below
+
+	csv->data = NULL;
+	lua_remove(L, -2);      // remove the anchored Wchar; result table stays on top
 
 	ClearBuffer(csv, true);
 
@@ -341,8 +360,6 @@ int csv_gc(lua_State* L) {
 }
 
 int csv_tostring(lua_State* L) {
-	char tim[100];
-	sprintf(tim, "Csv: %p", (void*)lua_tocsv(L, 1));
-	lua_pushfstring(L, tim);
+	lua_pushfstring(L, "Csv: %p", (void*)lua_tocsv(L, 1));
 	return 1;
 }

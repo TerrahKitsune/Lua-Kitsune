@@ -1,4 +1,4 @@
-#include "luawchar.h"
+﻿#include "luawchar.h"
 #include <string.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -22,7 +22,8 @@ LuaWChar* lua_pushwchar(lua_State* L, const wchar_t* str, size_t len) {
 		return 0;
 	}
 
-	memcpy(wchar->str, str, len * sizeof(wchar_t));
+	if (str && len > 0)
+		memcpy(wchar->str, str, len * sizeof(wchar_t));
 
 	wchar->len = len;
 
@@ -46,7 +47,7 @@ bool FillLuaWCharWithCodePoint(LuaWChar* luaStr, int codePoint) {
 	
 	int wcharCount = GetWCharCountForCodePoint(codePoint);
 
-	if (wcharCount != -1) {
+	if (wcharCount > 0) {
 		
 		luaStr->str = (wchar_t*)gff_calloc(wcharCount + 1, sizeof(wchar_t));
 
@@ -161,7 +162,7 @@ int FromToLower(lua_State* L) {
 
 	result->str = (WCHAR*)gff_calloc(wchar->len + 1, sizeof(WCHAR));
 
-	if (!wchar->str) {
+	if (!result->str) {
 		luaL_error(L, "out of memory");
 		return 0;
 	}
@@ -183,7 +184,7 @@ int FromToUpper(lua_State* L) {
 
 	result->str = (WCHAR*)gff_calloc(wchar->len + 1, sizeof(WCHAR));
 
-	if (!wchar->str) {
+	if (!result->str) {
 		luaL_error(L, "out of memory");
 		return 0;
 	}
@@ -330,6 +331,11 @@ int FromAnsi(lua_State* L) {
 
 	wchar->len = mbstowcs(wchar->str, data, len);
 
+	if (wchar->len == (size_t)-1) {
+		wchar->len = 0;
+		wchar->str[0] = L'\0';
+	}
+
 	return 1;
 }
 
@@ -430,7 +436,7 @@ int WcharFind(lua_State* L) {
 
 	if (!substr) {
 		lua_pushvalue(L, 2);
-		FromAnsi(L);
+		FromUtf8(L);
 		substr = lua_towchar(L, -1);
 		lua_pop(L, 2);
 	}
@@ -468,7 +474,7 @@ LuaWChar* lua_stringtowchar(lua_State* L, int index) {
 	}
 
 	lua_pushvalue(L, index);
-	FromAnsi(L);
+	FromUtf8(L);
 
 	wchar = lua_towchar(L, -1);
 	lua_pop(L, 2);
@@ -551,6 +557,9 @@ int wchar_eq(lua_State* L) {
 		if (b->len != a->len) {
 			lua_pushboolean(L, false);
 		}
+		else if (a->len == 0) {
+			lua_pushboolean(L, true);
+		}
 		else {
 			lua_pushboolean(L, wcsncmp(a->str, b->str, a->len) == 0);
 		}
@@ -595,24 +604,31 @@ int wchar_concat(lua_State* L) {
 
 		result = lua_pushwchar(L);
 
-		result->str = (wchar_t*)gff_calloc(a->len + len + 1, sizeof(wchar_t));
+		int wcharsNeeded = (len > 0) ? MultiByteToWideChar(CP_UTF8, 0, data, (int)len, NULL, 0) : 0;
+		if (wcharsNeeded < 0) wcharsNeeded = 0;
+
+		result->str = (wchar_t*)gff_calloc(a->len + (size_t)wcharsNeeded + 1, sizeof(wchar_t));
 
 		if (!result->str) {
 			luaL_error(L, "out of memory");
 			return 0;
 		}
 
-		size_t lenmbstowcs;
+		int actualLen = 0;
 
 		if (swapidx) {
-			lenmbstowcs = mbstowcs(result->str, data, len);
-			memcpy(&result->str[len], a->str, a->len * sizeof(wchar_t));
+			if (wcharsNeeded > 0)
+				actualLen = MultiByteToWideChar(CP_UTF8, 0, data, (int)len, result->str, wcharsNeeded);
+			if (a->str && a->len > 0)
+				memcpy(&result->str[actualLen], a->str, a->len * sizeof(wchar_t));
 		}
 		else {
-			memcpy(result->str, a->str, a->len * sizeof(wchar_t));
-			lenmbstowcs = mbstowcs(&result->str[a->len], data, len);
+			if (a->str && a->len > 0)
+				memcpy(result->str, a->str, a->len * sizeof(wchar_t));
+			if (wcharsNeeded > 0)
+				actualLen = MultiByteToWideChar(CP_UTF8, 0, data, (int)len, &result->str[a->len], wcharsNeeded);
 		}
-		result->len = a->len + lenmbstowcs;
+		result->len = a->len + (size_t)actualLen;
 	}
 
 	return 1;

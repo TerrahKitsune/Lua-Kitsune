@@ -12,9 +12,9 @@
 // KitsuneVariable type constants — values 0–8 match Lua's LUA_T* constants for direct comparison.
 // KITSUNE_TNONE (-1) matches LUA_TNONE. KITSUNE_TERROR (-2) is a Kitsune extension not present
 // in Lua; it is used exclusively with kitsune_ResultSetter to signal a Lua error from a
-// registered C function and will never appear in a KitsuneVariable returned by the engine.
+#define KITSUNE_TCHAR16        (-4) // Kitsune extension: UTF-16 string type; data is a char16_t* and length is in char16_t code units (excluding null terminator). Not a value returned by lua_type().
 #define KITSUNE_TINTEGER       (-3) // Kitsune extension: Lua 5.3+ integer subtype (lua_isinteger); not a value returned by lua_type()
-#define KITSUNE_TERROR         (-2)
+#define KITSUNE_TERROR         (-2) // registered C function and will never appear in a KitsuneVariable returned by the engine.
 #define KITSUNE_TNONE          (-1)
 #define KITSUNE_TNIL            (0)
 #define KITSUNE_TBOOLEAN        (1)
@@ -40,13 +40,15 @@
 struct KeyValuePairKitsuneVariableNode;
 
 struct KitsuneVariable {
-	int type; // see KITSUNE_T* constants above; KITSUNE_TUSERDATA is converted via __tostring when available;
-	size_t length; // byte count for KITSUNE_TSTRING; entry count for KITSUNE_TTABLE; 0 for all other types
+	int type; // see KITSUNE_T* constants above
+	size_t length; // byte count for KITSUNE_TSTRING and KITSUNE_TUSERDATA __name; char16_t count for KITSUNE_TCHAR16; entry count for KITSUNE_TTABLE; 0 for all other types
 	union {
 		double number;                         // KITSUNE_TNUMBER
 		long long integer;                     // KITSUNE_TINTEGER
 		bool boolean;                          // KITSUNE_TBOOLEAN
-		unsigned char* data;                   // KITSUNE_TSTRING: heap-allocated by engine on Get; caller-owned on Set
+		unsigned char* data;                   // KITSUNE_TSTRING: heap-allocated UTF-8 bytes; caller-owned on Set
+											   // KITSUNE_TUSERDATA: heap-allocated UTF-8 __name from metatable (NULL if no __name); length = byte count
+		char16_t* char16data;                  // KITSUNE_TCHAR16: heap-allocated char16_t string; length = number of char16_t code units (excl. null terminator)
 		KeyValuePairKitsuneVariableNode* table; // KITSUNE_TTABLE: head of linked list (NULL = empty table)
 	};
 };

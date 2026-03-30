@@ -5,6 +5,10 @@ using Xunit;
 
 namespace KitsuneNet.Tests
 {
+    // KitsuneEngine.dll uses a process-wide global state: all KitsuneEngine instances
+    // in the same process share the same native scheduler and Lua state. Both test
+    // classes must therefore run sequentially rather than in parallel.
+    [Collection("KitsuneSequential")]
     public sealed class KitsuneEngineTests
     {
         // -- Init / Dispose -------------------------------------------------------
@@ -2101,6 +2105,310 @@ namespace KitsuneNet.Tests
 
             string? result = await engine.ExecuteFunctionAsync("getDeep", args: [outer]);
             result.ShouldBe("deep value");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        // -- Lua coroutine interop -------------------------------------------------
+
+        [Fact]
+        public async Task Coroutine_SubCoroutine_YieldAndResume_WorksCorrectly()
+        {
+            // coroutine.create/resume/yield inside a Kitsune-managed coroutine must work;
+            // the Ticker hook is only installed on the Kitsune thread, not on sub-threads
+            // created by user Lua code, so sub-coroutines run without interference.
+            using KitsuneEngine engine = new();
+            string? result = await engine.ExecuteStringAsync(@"
+                local co = coroutine.create(function()
+                    coroutine.yield(10)
+                    return 20
+                end)
+                local ok1, v1 = coroutine.resume(co)
+                local ok2, v2 = coroutine.resume(co)
+                return tostring(v1) .. ':' .. tostring(v2)
+            ");
+            result.ShouldBe("10:20");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task Coroutine_Wrap_Generator_ProducesCorrectSequence()
+        {
+            // coroutine.wrap (the generator idiom) must work inside a Kitsune coroutine.
+            using KitsuneEngine engine = new();
+            string? result = await engine.ExecuteStringAsync(@"
+                local gen = coroutine.wrap(function()
+                    coroutine.yield(1)
+                    coroutine.yield(2)
+                    coroutine.yield(3)
+                end)
+                return tostring(gen()) .. ':' .. tostring(gen()) .. ':' .. tostring(gen())
+            ");
+            result.ShouldBe("1:2:3");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task Coroutine_DirectYield_FromKitsuneCoroutine_ResumesNormally()
+        {
+            // coroutine.yield() called directly from a Kitsune-managed coroutine yields to
+            // the scheduler, which re-resumes it with zero args on the next pass.
+            // The state after the yield must be unchanged; the resume must complete normally.
+            using KitsuneEngine engine = new();
+            string? result = await engine.ExecuteStringAsync(@"
+                local x = 1
+                coroutine.yield()
+                x = x + 1
+                return tostring(x)
+            ");
+            result.ShouldBe("2");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task Coroutine_InfiniteGenerator_ProducesCorrectValues()
+        {
+            // An infinite generator (sub-coroutine that never returns) must behave
+            // correctly when its parent Kitsune coroutine calls it a fixed number of times.
+            using KitsuneEngine engine = new();
+            string? result = await engine.ExecuteStringAsync(@"
+                local function counter(start)
+                    return coroutine.wrap(function()
+                        local n = start
+                        while true do coroutine.yield(n); n = n + 1 end
+                    end)
+                end
+                local c = counter(5)
+                return tostring(c()) .. ':' .. tostring(c()) .. ':' .. tostring(c())
+            ");
+            result.ShouldBe("5:6:7");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task Coroutine_ConcurrentKitsuneCoroutines_EachWithOwnSubCoroutine_AreIndependent()
+        {
+            // Multiple concurrent Kitsune coroutines each owning their own sub-coroutine;
+            // sub-coroutine state must not bleed between Kitsune-managed threads.
+            using KitsuneEngine engine = new();
+            Task<string?>[] tasks = Enumerable.Range(1, 5).Select(i =>
+                engine.ExecuteStringAsync($@"
+                    local co = coroutine.create(function()
+                        coroutine.yield({i} * 10)
+                        return {i} * 100
+                    end)
+                    local _, v1 = coroutine.resume(co)
+                    local _, v2 = coroutine.resume(co)
+                    return tostring(v1) .. ':' .. tostring(v2)
+                ")).ToArray();
+            string?[] results = await Task.WhenAll(tasks);
+            for (int i = 0; i < 5; i++)
+                results[i].ShouldBe($"{(i + 1) * 10}:{(i + 1) * 100}");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task Coroutine_YieldWithValue_ValueIsDiscardedByScheduler()
+        {
+            // The scheduler calls lua_pop(T, nresults) on LUA_YIELD, so any value passed
+            // to coroutine.yield() is silently discarded. The result comes from return, not yield.
+            using KitsuneEngine engine = new();
+            string? result = await engine.ExecuteStringAsync("coroutine.yield('hello')");
+            result.ShouldBeNull();  // no return statement → result is nil/none
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task Coroutine_YieldWithValue_ResumeReceivesNil()
+        {
+            // The scheduler always resumes with 0 args (nstart=0 after a yield),
+            // so coroutine.yield() always returns nil inside a Kitsune-managed coroutine.
+            using KitsuneEngine engine = new();
+            string? result = await engine.ExecuteStringAsync(@"
+                local v = coroutine.yield('discarded')
+                return tostring(v)
+            ");
+            result.ShouldBe("nil");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task Coroutine_YieldIsNotReturn_ResultComesFromReturnOnly()
+        {
+            // Reinforces that yield value != result; only return sets the coroutine result.
+            using KitsuneEngine engine = new();
+            string? result = await engine.ExecuteStringAsync(@"
+                coroutine.yield('not the result')
+                return 'the real result'
+            ");
+            result.ShouldBe("the real result");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        // -- Wchar bridge ---------------------------------------------------------
+
+        [Fact]
+        public async Task Wchar_ReturnedFromScript_HasWcharType()
+        {
+            // A Lua Wchar returned by a coroutine is surfaced as LuaType.Wchar, not LuaType.String.
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("return Wchar.FromUtf8('hello wchar')");
+            engine.Wait(id);
+            LuaValue v = engine.GetResultVariable(id);
+            v.Type.ShouldBe(LuaType.Wchar);
+            v.String.ShouldBe("hello wchar");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task Wchar_ReturnedFromScript_StringAccessible()
+        {
+            // GetResultString decodes the UTF-8 bytes regardless of String vs Wchar type.
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("return Wchar.FromUtf8('kitsune wchar')");
+            engine.Wait(id);
+            engine.GetResultString(id).ShouldBe("kitsune wchar");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task Wchar_SetVariable_PushesWcharIntoLua()
+        {
+            // Setting a Wchar variable pushes a Lua Wchar object; Lua can call Wchar methods on it.
+            using KitsuneEngine engine = new();
+            engine.SetVariable("wv", LuaValue.FromWchar("hello"));
+            string? result = await engine.ExecuteStringAsync(
+                "return tostring(type(wv) == 'userdata' and wv:ToUtf8() == 'hello')");
+            result.ShouldBe("true");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task Wchar_SetVariable_LuaCanCallWcharMethods()
+        {
+            using KitsuneEngine engine = new();
+            engine.SetVariable("greeting", LuaValue.FromWchar("Hello World"));
+            string? result = await engine.ExecuteStringAsync(
+                "return greeting:ToUpper():ToUtf8()");
+            result.ShouldBe("HELLO WORLD");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task Wchar_GetVariable_FromLuaWcharGlobal_ReturnsWcharType()
+        {
+            using KitsuneEngine engine = new();
+            engine.ExecuteString("myWchar = Wchar.FromUtf8('bridge test')", fireAndForget: true);
+            engine.Wait();
+            LuaValue v = engine.GetVariable("myWchar");
+            v.Type.ShouldBe(LuaType.Wchar);
+            v.String.ShouldBe("bridge test");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task Wchar_RoundTrip_SetAndGet_PreservesContent()
+        {
+            using KitsuneEngine engine = new();
+            engine.SetVariable("wRound", LuaValue.FromWchar("round trip \u00e9"));  // é is non-ASCII
+            LuaValue back = engine.GetVariable("wRound");
+            back.Type.ShouldBe(LuaType.Wchar);
+            back.String.ShouldBe("round trip \u00e9");
+        }
+
+        [Fact]
+        public async Task Wchar_InTable_ReturnedWithWcharType()
+        {
+            // A Wchar inside a returned table is also tagged as LuaType.Wchar.
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("return { w = Wchar.FromUtf8('in table') }");
+            engine.Wait(id);
+            LuaValue result = engine.GetResultVariable(id);
+            result.Type.ShouldBe(LuaType.Table);
+            result.Table.ShouldNotBeNull();
+            var entry = result.Table!.Single(kvp => kvp.Key.String == "w");
+            entry.Value.Type.ShouldBe(LuaType.Wchar);
+            entry.Value.String.ShouldBe("in table");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task Wchar_RegisterFunction_WcharArgReceivedAsWcharType()
+        {
+            // A Wchar passed to a registered C# function arrives with LuaType.Wchar.
+            using KitsuneEngine engine = new();
+            LuaValue? received = null;
+            engine.RegisterFunction("CaptureWchar", args => { received = args[0]; return LuaValue.None; });
+            int id = engine.ExecuteString("CaptureWchar(Wchar.FromUtf8('from lua'))");
+            engine.Wait(id);
+            received.ShouldNotBeNull();
+            received!.Value.Type.ShouldBe(LuaType.Wchar);
+            received.Value.String.ShouldBe("from lua");
+            engine.ReleaseResult(id);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task Wchar_RegisterFunction_ReturnWchar_LuaReceivesWcharObject()
+        {
+            // A C# function returning LuaType.Wchar pushes a Lua Wchar object; Lua can call methods on it.
+            using KitsuneEngine engine = new();
+            engine.RegisterFunction("MakeWchar", _ => LuaValue.FromWchar("from csharp"));
+            string? result = await engine.ExecuteStringAsync(
+                "local w = MakeWchar(); return tostring(type(w)=='userdata' and w:ToUpper():ToUtf8())");
+            result.ShouldBe("FROM CSHARP");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        // -- Userdata __name bridge ------------------------------------------------
+
+        [Fact]
+        public async Task Userdata_RegisterFunction_ArgHasTypeNameInBytes()
+        {
+            // An unrecognised userdata passed as an argument to a registered C# function
+            // arrives with Type == Userdata and Bytes holding the metatable __name.
+            // Json is used because it is in-memory and has no external dependencies.
+            using KitsuneEngine engine = new();
+            LuaValue? received = null;
+            engine.RegisterFunction("CaptureJson", args => { received = args[0]; return LuaValue.None; });
+            int id = engine.ExecuteString("CaptureJson(Json.Create())");
+            engine.Wait(id);
+            received.ShouldNotBeNull();
+            received!.Value.Type.ShouldBe(LuaType.Userdata);
+            received.Value.Bytes.ShouldNotBeNull();
+            received.Value.String.ShouldBe("LUAJSON");
+            engine.ReleaseResult(id);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void Userdata_CoroutineResult_TypeNameInBytes()
+        {
+            // An unrecognised userdata returned from a coroutine arrives via GetResultVariable
+            // with Type == Userdata and Bytes holding the metatable __name.
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("return Json.Create()");
+            engine.Wait(id);
+            LuaValue v = engine.GetResultVariable(id);
+            v.Type.ShouldBe(LuaType.Userdata);
+            v.Bytes.ShouldNotBeNull();
+            v.String.ShouldBe("LUAJSON");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task Userdata_DifferentType_TypeNameMatchesMetatable()
+        {
+            // Verifies the __name lookup is not hard-coded: CSV.Create() carries a
+            // different metatable name ("LUACSV") from Stream.Create() ("STREAM").
+            using KitsuneEngine engine = new();
+            LuaValue? received = null;
+            engine.RegisterFunction("CaptureCsv", args => { received = args[0]; return LuaValue.None; });
+            int id = engine.ExecuteString("CaptureCsv(CSV.Create())");
+            engine.Wait(id);
+            received.ShouldNotBeNull();
+            received!.Value.Type.ShouldBe(LuaType.Userdata);
+            received.Value.String.ShouldBe("LUACSV");
+            engine.ReleaseResult(id);
             engine.GetActiveIds().ShouldBeEmpty();
         }
     }
