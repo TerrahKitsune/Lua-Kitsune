@@ -1069,8 +1069,7 @@ namespace KitsuneNet.Tests
         {
             // Count rows with ipairs to avoid # unreliability on non-sequence tables.
             string? r = await Run(@"
-                local csv = CSV.Create()
-                local t = csv:DecodeString('a,b,c\n1,2,3')
+                local t = CSV.Decode('a,b,c\n1,2,3')
                 local count = 0
                 for _ in ipairs(t.Rows) do count = count + 1 end
                 return tostring(count == 2)
@@ -1082,8 +1081,7 @@ namespace KitsuneNet.Tests
         public async Task CSV_DecodeString_RowValues_AccessibleAsWchar()
         {
             string? r = await Run(@"
-                local csv = CSV.Create()
-                local t = csv:DecodeString('hello,world')
+                local t = CSV.Decode('hello,world')
                 return tostring(t.Rows[1][1])
             ");
             r.ShouldBe("hello");
@@ -1093,8 +1091,7 @@ namespace KitsuneNet.Tests
         public async Task CSV_DecodeString_MultipleColumnsPerRow()
         {
             string? r = await Run(@"
-                local csv = CSV.Create()
-                local t = csv:DecodeString('a,b,c')
+                local t = CSV.Decode('a,b,c')
                 local row = t.Rows[1]
                 return tostring(tostring(row[1]) .. ':' .. tostring(row[2]) .. ':' .. tostring(row[3]))
             ");
@@ -1105,8 +1102,7 @@ namespace KitsuneNet.Tests
         public async Task CSV_DecodeString_MultipleRows_CorrectCount()
         {
             string? r = await Run(@"
-                local csv = CSV.Create()
-                local t = csv:DecodeString('r1c1,r1c2\nr2c1,r2c2\nr3c1,r3c2')
+                local t = CSV.Decode('r1c1,r1c2\nr2c1,r2c2\nr3c1,r3c2')
                 local count = 0
                 for _ in ipairs(t.Rows) do count = count + 1 end
                 return tostring(count == 3)
@@ -1118,8 +1114,7 @@ namespace KitsuneNet.Tests
         public async Task CSV_DecodeString_QuotedField_StripsQuotes()
         {
             string? r = await Run(@"
-                local csv = CSV.Create()
-                local t = csv:DecodeString('""hello"",""world""')
+                local t = CSV.Decode('""hello"",""world""')
                 return tostring(tostring(t.Rows[1][1]) == 'hello' and tostring(t.Rows[1][2]) == 'world')
             ");
             r.ShouldBe("true");
@@ -1130,8 +1125,7 @@ namespace KitsuneNet.Tests
         {
             // A comma inside quotes must not split the field.
             string? r = await Run(@"
-                local csv = CSV.Create()
-                local t = csv:DecodeString('""hello, world"",end')
+                local t = CSV.Decode('""hello, world"",end')
                 return tostring(tostring(t.Rows[1][1]) == 'hello, world')
             ");
             r.ShouldBe("true");
@@ -1142,8 +1136,7 @@ namespace KitsuneNet.Tests
         {
             // RFC 4180 escaped quote: "" inside a quoted field → single ".
             string? r = await Run(@"
-                local csv = CSV.Create()
-                local t = csv:DecodeString('""say """"hi"""""",end')
+                local t = CSV.Decode('""say """"hi"""""",end')
                 return tostring(tostring(t.Rows[1][1]) == 'say ""hi""')
             ");
             r.ShouldBe("true");
@@ -1155,8 +1148,7 @@ namespace KitsuneNet.Tests
             // Verifies the SkipForwards fix: previously the first non-space character
             // was silently consumed and lost, producing "ello" instead of "hello".
             string? r = await Run(@"
-                local csv = CSV.Create()
-                local t = csv:DecodeString(' hello, world')
+                local t = CSV.Decode(' hello, world')
                 return tostring(tostring(t.Rows[1][1]) == 'hello' and tostring(t.Rows[1][2]) == 'world')
             ");
             r.ShouldBe("true");
@@ -1167,8 +1159,7 @@ namespace KitsuneNet.Tests
         {
             // a,,b produces three fields; the middle one is empty.
             string? r = await Run(@"
-                local csv = CSV.Create()
-                local t = csv:DecodeString('a,,b')
+                local t = CSV.Decode('a,,b')
                 local row = t.Rows[1]
                 return tostring(tostring(row[1]) == 'a' and tostring(row[2]) == '' and tostring(row[3]) == 'b')
             ");
@@ -1180,8 +1171,7 @@ namespace KitsuneNet.Tests
         {
             // The returned table always has a Comments key even when there are none.
             string? r = await Run(@"
-                local csv = CSV.Create()
-                local t = csv:DecodeString('a,b')
+                local t = CSV.Decode('a,b')
                 return tostring(type(t.Comments) == 'table')
             ");
             r.ShouldBe("true");
@@ -1192,8 +1182,7 @@ namespace KitsuneNet.Tests
         {
             // Lines starting with * are treated as comments and placed in t.Comments.
             string? r = await Run(@"
-                local csv = CSV.Create()
-                local t = csv:DecodeString('* this is a comment\na,b')
+                local t = CSV.Decode('* this is a comment\na,b')
                 local commentCount = 0
                 for _ in ipairs(t.Comments) do commentCount = commentCount + 1 end
                 local rowCount = 0
@@ -1207,13 +1196,347 @@ namespace KitsuneNet.Tests
         public async Task CSV_DecodeString_MultipleCommentLines_AllExtracted()
         {
             string? r = await Run(@"
-                local csv = CSV.Create()
-                local t = csv:DecodeString('* line one\n* line two\na,b')
+                local t = CSV.Decode('* line one\n* line two\na,b')
                 local count = 0
                 for _ in ipairs(t.Comments) do count = count + 1 end
                 return tostring(count == 2)
             ");
             r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task CSV_DecodeString_CustomDelimiter_SplitsOnSemicolon()
+        {
+            string? r = await Run(@"
+                local t = CSV.Decode('a;b;c', ';')
+                local row = t.Rows[1]
+                return tostring(tostring(row[1]) == 'a' and tostring(row[2]) == 'b' and tostring(row[3]) == 'c')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task CSV_DecodeString_CrLfLineEnding_ParsedAsOneRow()
+        {
+            // \r\n (Windows CRLF) must produce the same row count as \n alone.
+            string? r = await Run(@"
+                local t = CSV.Decode('a,b\r\nc,d')
+                local count = 0
+                for _ in ipairs(t.Rows) do count = count + 1 end
+                return tostring(count == 2 and tostring(t.Rows[1][1]) == 'a' and tostring(t.Rows[2][1]) == 'c')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task CSV_DecodeString_WcharInput_ParsedCorrectly()
+        {
+            // Exercises the lua_iswchar branch in DecodeString; all other tests pass
+            // plain Lua strings which take the FromUtf8 conversion path instead.
+            string? r = await Run(@"
+                local t = CSV.Decode(Wchar.FromUtf8('x,y,z'))
+                return tostring(tostring(t.Rows[1][1]) == 'x' and tostring(t.Rows[1][3]) == 'z')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task CSV_Encode_SimpleTable_ProducesCorrectString()
+        {
+            string? r = await Run("return CSV.Encode({{'a', 'b'}, {'c', 'd'}})");
+            r.ShouldBe("a,b\nc,d");
+        }
+
+        [Fact]
+        public async Task CSV_Encode_FieldWithDelimiter_IsQuotedAndRoundTrips()
+        {
+            // A field containing the delimiter must be quoted; decoding must recover the original value.
+            string? r = await Run(@"
+                local encoded = CSV.Encode({{'hello, world', 'end'}})
+                local decoded = CSV.Decode(encoded)
+                return tostring(tostring(decoded.Rows[1][1]) == 'hello, world' and tostring(decoded.Rows[1][2]) == 'end')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task CSV_Encode_WcharField_ConvertedToUtf8()
+        {
+            // Wchar fields must be converted via __tostring (UTF-8) during encoding.
+            string? r = await Run(@"
+                local rows = {{Wchar.FromUtf8('hello'), Wchar.FromUtf8('world')}}
+                local encoded = CSV.Encode(rows)
+                local decoded = CSV.Decode(encoded)
+                return tostring(tostring(decoded.Rows[1][1]) == 'hello' and tostring(decoded.Rows[1][2]) == 'world')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task CSV_Encode_CustomDelimiter_UsedInOutput()
+        {
+            string? r = await Run(@"
+                local encoded = CSV.Encode({{'a', 'b', 'c'}}, ';')
+                local decoded = CSV.Decode(encoded, ';')
+                return tostring(tostring(decoded.Rows[1][1]) == 'a' and tostring(decoded.Rows[1][3]) == 'c')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task CSV_Encode_LeadingSpaceField_RoundTrips()
+        {
+            // SkipForwards strips leading whitespace on decode. Encode must quote
+            // fields whose value starts with a space or tab so the whitespace lands
+            // inside the quotes and is preserved across a decode round-trip.
+            string? r = await Run(@"
+                local tab = '\9'
+                local rows = {{' leading space', 'normal', tab .. 'leading tab'}}
+                local encoded = CSV.Encode(rows)
+                local decoded = CSV.Decode(encoded)
+                local r1 = tostring(decoded.Rows[1][1])
+                local r2 = tostring(decoded.Rows[1][2])
+                local r3 = tostring(decoded.Rows[1][3])
+                return tostring(r1 == ' leading space' and r2 == 'normal' and r3 == tab .. 'leading tab')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task CSV_Encode_FieldWithEmbeddedQuote_RoundTrips()
+        {
+            // RFC 4180: a " inside a quoted field is escaped as ""; Encode must produce
+            // that and Decode must recover the original single ".
+            string? r = await Run(@"
+                local rows = {{'say ""hi""', 'end'}}
+                local encoded = CSV.Encode(rows)
+                local decoded = CSV.Decode(encoded)
+                return tostring(tostring(decoded.Rows[1][1]) == 'say ""hi""' and tostring(decoded.Rows[1][2]) == 'end')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task CSV_Encode_FieldWithEmbeddedNewline_IsQuoted()
+        {
+            // A field containing \n must be quoted so the newline is not treated as a
+            // row separator on decode.
+            string? r = await Run(@"
+                local rows = {{'line1\nline2', 'after'}}
+                local encoded = CSV.Encode(rows)
+                local decoded = CSV.Decode(encoded)
+                return tostring(tostring(decoded.Rows[1][1]) == 'line1\nline2' and tostring(decoded.Rows[1][2]) == 'after')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task CSV_Decode_BooleanTrue_TriggersAutoDetect()
+        {
+            // ParseDelimiter accepts boolean true as the auto-detect signal, identical
+            // to passing the string "auto".
+            string? r = await Run(@"
+                local t = CSV.Decode('a;b;c\n1;2;3', true)
+                return tostring(tostring(t.Rows[1][1]) == 'a' and tostring(t.Rows[2][3]) == '3')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task CSV_Decode_IntegerCodepointDelimiter_UsedCorrectly()
+        {
+            // ParseDelimiter accepts an integer codepoint (59 = ';').
+            string? r = await Run(@"
+                local t = CSV.Decode('a;b;c', 59)
+                return tostring(tostring(t.Rows[1][1]) == 'a' and tostring(t.Rows[1][3]) == 'c')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task CSV_New_NoArgs_Encode_FallsBackToComma()
+        {
+            // CSV.New() binds "auto" as the delimiter. Encode with "auto" has no
+            // meaningful input to sniff from, so it must fall back to comma.
+            string? r = await Run("return CSV.New():Encode({{'a', 'b', 'c'}})");
+            r.ShouldBe("a,b,c");
+        }
+
+        [Fact]
+        public async Task CSV_Decode_AutoDetect_CommaInput_DetectsCorrectly()
+        {
+            string? r = await Run(@"
+                local t = CSV.Decode('a,b,c\n1,2,3', 'auto')
+                return tostring(tostring(t.Rows[1][1]) == 'a' and tostring(t.Rows[1][3]) == 'c' and tostring(t.Rows[2][1]) == '1')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task CSV_Decode_AutoDetect_SemicolonInput_DetectsCorrectly()
+        {
+            string? r = await Run(@"
+                local t = CSV.Decode('a;b;c\n1;2;3', 'auto')
+                return tostring(tostring(t.Rows[1][1]) == 'a' and tostring(t.Rows[1][3]) == 'c' and tostring(t.Rows[2][2]) == '2')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task CSV_Decode_AutoDetect_TabInput_DetectsCorrectly()
+        {
+            string? r = await Run(@"
+                local t = CSV.Decode('a\tb\tc\n1\t2\t3', 'auto')
+                return tostring(tostring(t.Rows[1][1]) == 'a' and tostring(t.Rows[1][3]) == 'c')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task CSV_New_NoArgs_AutoDetectsSemicolon()
+        {
+            // CSV.New() with no delimiter should sniff each Decode call independently.
+            string? r = await Run(@"
+                local csv = CSV.New()
+                local t = csv:Decode('a;b;c\n1;2;3')
+                return tostring(tostring(t.Rows[1][1]) == 'a' and tostring(t.Rows[1][3]) == 'c' and tostring(t.Rows[2][2]) == '2')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task CSV_New_WithSemicolon_UsesSpecifiedDelimiter()
+        {
+            string? r = await Run(@"
+                local csv = CSV.New(';')
+                local t = csv:Decode('a;b;c')
+                return tostring(tostring(t.Rows[1][1]) == 'a' and tostring(t.Rows[1][3]) == 'c')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task CSV_New_Encode_UsesSpecifiedDelimiter()
+        {
+            string? r = await Run("return CSV.New(';'):Encode({{'a', 'b', 'c'}})");
+            r.ShouldBe("a;b;c");
+        }
+
+        [Fact]
+        public async Task CSV_DecodeFromFunction_AutoDetect_DetectsSemicolon()
+        {
+            string? r = await Run(@"
+                local sent = false
+                local rows = {}
+                for row in CSV.DecodeFromFunction(function()
+                    if sent then return nil end
+                    sent = true
+                    return 'a;b;c\n1;2;3'
+                end, 'auto') do
+                    table.insert(rows, tostring(row[1]) .. ':' .. tostring(row[3]))
+                end
+                return table.concat(rows, '|')
+            ");
+            r.ShouldBe("a:c|1:3");
+        }
+
+        [Fact]
+        public async Task CSV_New_NoArgs_DecodeFromFunction_AutoDetects()
+        {
+            string? r = await Run(@"
+                local csv = CSV.New()
+                local sent = false
+                local rows = {}
+                for row in csv:DecodeFromFunction(function()
+                    if sent then return nil end
+                    sent = true
+                    return 'x|y|z'
+                end) do
+                    table.insert(rows, tostring(row[1]) .. ':' .. tostring(row[3]))
+                end
+                return table.concat(rows, '|')
+            ");
+            r.ShouldBe("x:z");
+        }
+
+        [Fact]
+        public async Task CSV_DecodeFromFunction_ChunkedStringInput_YieldsAllRows()
+        {
+            // Chunks deliberately cross field and row boundaries to verify the
+            // stream refill logic handles mid-field and mid-row chunk splits.
+            string? r = await Run(@"
+                local data = 'a,b,c\n1,2,3\n4,5,6'
+                local pos  = 1
+                local rows = {}
+                for row in CSV.DecodeFromFunction(function()
+                    if pos > #data then return nil end
+                    local chunk = data:sub(pos, pos + 3)
+                    pos = pos + 4
+                    return chunk
+                end) do
+                    table.insert(rows, tostring(row[1]) .. ':' .. tostring(row[2]) .. ':' .. tostring(row[3]))
+                end
+                return table.concat(rows, '|')
+            ");
+            r.ShouldBe("a:b:c|1:2:3|4:5:6");
+        }
+
+        [Fact]
+        public async Task CSV_DecodeFromFunction_WcharChunks_ConvertedTransparently()
+        {
+            // Supplier returns Wchar userdata objects; they must be converted to UTF-8
+            // and parsed identically to plain-string chunks.
+            string? r = await Run(@"
+                local chunks = { Wchar.FromUtf8('x,y'), Wchar.FromUtf8('\nz,w') }
+                local i = 0
+                local rows = {}
+                for row in CSV.DecodeFromFunction(function()
+                    i = i + 1
+                    return chunks[i]
+                end) do
+                    table.insert(rows, tostring(row[1]) .. ':' .. tostring(row[2]))
+                end
+                return table.concat(rows, '|')
+            ");
+            r.ShouldBe("x:y|z:w");
+        }
+
+        [Fact]
+        public async Task CSV_DecodeFromFunction_NilTerminates_FinalRowWithoutNewline()
+        {
+            // The last row has no trailing newline; the nil from the supplier must
+            // flush the in-progress row cleanly.
+            string? r = await Run(@"
+                local sent = false
+                local rows = {}
+                for row in CSV.DecodeFromFunction(function()
+                    if sent then return nil end
+                    sent = true
+                    return 'hello,world'
+                end) do
+                    table.insert(rows, tostring(row[1]) .. ':' .. tostring(row[2]))
+                end
+                return table.concat(rows, '|')
+            ");
+            r.ShouldBe("hello:world");
+        }
+
+        [Fact]
+        public async Task CSV_DecodeFromFunction_CustomDelimiter_Respected()
+        {
+            string? r = await Run(@"
+                local sent = false
+                local rows = {}
+                for row in CSV.DecodeFromFunction(function()
+                    if sent then return nil end
+                    sent = true
+                    return 'a;b;c'
+                end, ';') do
+                    table.insert(rows, tostring(row[1]) .. ':' .. tostring(row[2]) .. ':' .. tostring(row[3]))
+                end
+                return table.concat(rows, '|')
+            ");
+            r.ShouldBe("a:b:c");
         }
 
         // -- Mutex ----------------------------------------------------------------

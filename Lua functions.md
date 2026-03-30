@@ -390,12 +390,143 @@ end
 ## CSV
 
 ```lua
-csv CSV.Create()
-table csv:DecodeString(string)
-table csv:DecodeFile(fileName)
+table   CSV.Decode(str_or_wchar [, delimiter])
+string  CSV.Encode(rows [, delimiter])
+iter    CSV.DecodeFromFunction(fn [, delimiter])
+object  CSV.New([delimiter])
 ```
 
-Returns table with `Comments` (array of strings) and `Rows` (array of rows). Strings are Wchars.
+| Function | Description |
+|----------|-------------|
+| `Decode` | Decode a complete CSV string or Wchar into a result table |
+| `Encode` | Encode an array-of-arrays into a UTF-8 CSV string |
+| `DecodeFromFunction` | Return a generic-`for` iterator that streams rows from a supplier function |
+| `New` | Return a CSV object with a bound delimiter (or auto-detect when omitted) |
+
+The optional `delimiter` argument accepts:
+- A single-character string: `","` `";"` `"|"` `"\t"`
+- An integer codepoint: `string.byte(";")` → `59`
+- The string `"auto"` or boolean `true` to trigger automatic delimiter detection
+- Omitting it (or passing `nil`) defaults to `","` for the direct functions, and `"auto"` for `CSV.New()`
+
+### CSV.Decode
+
+```lua
+table CSV.Decode(str_or_wchar [, delimiter])
+```
+
+Decodes a complete CSV string or Wchar object. Returns a table with two keys:
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `Comments` | array of Wchar | Lines beginning with `*` at the top of the file, with the leading `*` stripped |
+| `Rows` | array of arrays | Each inner array is one row; each field is a Wchar object |
+
+Leading spaces and tabs before each field are stripped. Quoted fields follow RFC 4180: `""` inside a quoted field becomes a literal `"`.
+
+```lua
+local t = CSV.Decode("* header\na,b,c\n1,2,3")
+-- t.Comments[1] == " header"
+-- t.Rows[1][1]  == "a"
+-- t.Rows[2][3]  == "3"
+
+local t = CSV.Decode("a;b;c\n1;2;3", "auto")  -- sniffer detects ";"
+local t = CSV.Decode("a;b;c", ";")             -- explicit delimiter
+```
+
+### CSV.Encode
+
+```lua
+string CSV.Encode(rows [, delimiter])
+```
+
+Encodes an array-of-arrays into a UTF-8 CSV string. Each field is converted via `tostring`, so Wchar fields are converted to UTF-8 automatically. Fields containing the delimiter, a double-quote, a newline, or **leading whitespace** are wrapped in double-quotes with inner quotes escaped as `""` (RFC 4180). Rows are joined with `\n`.
+
+```lua
+local s = CSV.Encode({{"hello", "world"}, {"foo", "bar"}})
+-- s == "hello,world\nfoo,bar"
+
+local s = CSV.Encode({{"value with, comma"}})
+-- s == '"value with, comma"'
+
+local s = CSV.Encode({{"a", "b"}}, ";")  -- semicolon delimiter
+-- s == "a;b"
+```
+
+### CSV.DecodeFromFunction
+
+```lua
+iterator CSV.DecodeFromFunction(fn [, delimiter])
+```
+
+Returns a generic `for` iterator. On each iteration the supplier function `fn` is called with no arguments and should return a chunk of CSV data as a plain string or Wchar object. The iterator stops when `fn` returns `nil`, `false`, or an empty string. Each iteration yields one row as a sequential table of Wchar fields.
+
+The parser handles chunk boundaries that fall in the middle of a field or row transparently — no alignment of chunks to row boundaries is required.
+
+When `delimiter` is `"auto"` or omitted on a `CSV.New()` object, the sniffer runs once on the first chunk and is not called again.
+
+```lua
+-- Stream a large file in 4 KB chunks
+local f = io.open("data.csv", "r")
+for row in CSV.DecodeFromFunction(function() return f:read(4096) end) do
+    print(tostring(row[1]), tostring(row[2]))
+end
+f:close()
+
+-- Auto-detect delimiter from the stream
+for row in CSV.DecodeFromFunction(mySupplierFn, "auto") do ... end
+```
+
+> **Note:** Comment lines (starting with `*`) are not detected in streaming mode and appear as regular rows.
+
+### CSV.New
+
+```lua
+object CSV.New([delimiter])
+```
+
+Returns a lightweight CSV object with `Decode`, `Encode`, and `DecodeFromFunction` methods that all use the bound delimiter. Omitting `delimiter` (or passing `nil`) binds `"auto"` so every `Decode` / `DecodeFromFunction` call sniffs the delimiter from its input independently.
+
+```lua
+-- Auto-detect: each Decode call sniffs its own input
+local csv = CSV.New()
+local t1 = csv:Decode("a,b,c\n1,2,3")  -- detects ","
+local t2 = csv:Decode("a;b;c\n1;2;3")  -- detects ";"
+
+-- Fixed delimiter for a known format
+local sc = CSV.New(";")
+local t  = sc:Decode("a;b;c")
+local s  = sc:Encode({{"a", "b", "c"}})  -- "a;b;c"
+for row in sc:DecodeFromFunction(fn) do ... end
+```
+
+> `Encode` on a `CSV.New()` (auto-detect) object uses `","` as the output delimiter since auto-detection has no meaning when producing output. Use `CSV.New(";")` if you need a specific delimiter for both reading and writing.
+
+### Delimiter auto-detection (sniffer)
+
+Candidates tried in preference order: `,` `\t` `;` `|`
+
+The sniffer scans up to the first 5 lines, counts each candidate's occurrences per line (quoted fields are ignored), and picks the candidate whose count is most consistent across lines. Falls back to `,` when no candidate appears consistently (e.g. single-column data or empty input).
+
+---
+
+### Edge cases and defined behaviours
+
+| Situation | Behaviour |
+|-----------|-----------|
+| **Empty input** | `CSV.Decode("")` produces `{Rows={[""]}}` — one row with one empty field |
+| **Trailing newline** | A single trailing `\n` does **not** create an extra row (the newline is consumed as the end-of-row sentinel) |
+| **Double trailing newline** | `"a,b\n\n"` produces a second empty row `[""]` |
+| **Leading whitespace in unquoted fields** | Spaces and tabs before a field value are stripped during decode. `Encode` quotes fields with leading whitespace to preserve round-trip fidelity |
+| **Trailing whitespace in unquoted fields** | Preserved as-is; only *leading* whitespace is stripped |
+| **Unquoted field containing `"`** | Treated leniently: the `"` turns on quote-mode mid-field. `hel"lo"world` → `helloworld` |
+| **Multi-character delimiter** | Only the first character is used; `CSV.Decode(s, "||")` behaves as `|` |
+| **Non-ASCII delimiter** | Matched at the byte level in `Encode`; works correctly for all printable ASCII delimiters (`,` `;` `|` `\t` etc.) |
+| **`"` as delimiter** | Not supported; the parser uses `"` as the quoting character |
+| **Wchar delimiter argument** | Not accepted by the direct functions; pass a single-character string or integer codepoint instead (or use `CSV.New()`) |
+| **`*` comment mid-file** | Only lines at the very start of the input are checked for `*`; a `*` anywhere else is a regular field character |
+| **Sniffer on single-line input** | Any consistently-occurring candidate wins; for a tie or no candidates, falls back to `,` |
+| **`CSV.New()` Encode delimiter** | Uses `,` — auto-detect has no meaning for output. Bind an explicit delimiter (`CSV.New(";")`) if you need a specific character for both reading and writing |
 
 ---
 
