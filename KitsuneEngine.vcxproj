@@ -123,7 +123,6 @@
     <ClCompile Include="oldjsonencode.cpp" />
     <ClCompile Include="oldjsonutil.cpp" />
     <ClCompile Include="oldlua_json.cpp" />
-    <ClCompile Include="oldluajsonmain.cpp" />
     <ClCompile Include="kafkahelpers.cpp" />
     <ClCompile Include="luaaes.cpp" />
     <ClCompile Include="LuaAesMain.cpp" />
@@ -279,7 +278,6 @@
     <ClInclude Include="oldjsonencode.h" />
     <ClInclude Include="oldjsonutil.h" />
     <ClInclude Include="oldlua_json.h" />
-    <ClInclude Include="oldluajsonmain.h" />
     <ClInclude Include="kafkahelpers.h" />
     <ClInclude Include="luaaes.h" />
     <ClInclude Include="LuaAesMain.h" />

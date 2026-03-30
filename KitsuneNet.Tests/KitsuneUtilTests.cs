@@ -566,7 +566,6 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Json_Encode_ProducesValidJson()
         {
-            // Encode a simple table and verify the round-trip via Decode.
             string? r = await Run(@"
                 local j = Json.Create()
                 local t = j:Decode(j:Encode({x=1, y='hello', z=true}))
@@ -589,12 +588,12 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Json_NullSentinel_RoundTrips()
         {
+            // The new engine uses Json.Null (lightuserdata) for JSON null.
+            // Encoding Json.Null produces "null"; decoding "null" returns Json.Null.
             string? r = await Run(@"
-                local j = Json.Create()
-                j:SetNullValue('__NULL__')
-                local enc = j:Encode({v='__NULL__'})
-                local dec = j:Decode(enc)
-                return tostring(dec.v == '__NULL__' and enc:find('null') ~= nil)
+                local enc = Json.Encode({v=Json.Null})
+                local dec = Json.Decode(enc)
+                return tostring(dec.v == Json.Null and enc:find('null') ~= nil)
             ");
             r.ShouldBe("true");
         }
@@ -607,6 +606,101 @@ namespace KitsuneNet.Tests
                 local orig = {a={b={c=42}}}
                 local t = j:Decode(j:Encode(orig))
                 return tostring(t.a.b.c == 42)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_StaticDecode_ReturnsTable()
+        {
+            string? r = await Run(@"
+                local t = Json.Decode('{""a"":1,""b"":""hello""}')
+                return tostring(t.a == 1 and t.b == 'hello')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_StaticEncode_ProducesString()
+        {
+            string? r = await Run(@"
+                local s = Json.Encode({1, 2, 3})
+                local t = Json.Decode(s)
+                return tostring(t[1]==1 and t[2]==2 and t[3]==3)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_PrettyEncode_ContainsNewlines()
+        {
+            string? r = await Run(@"
+                local s = Json.Encode({a=1}, true)
+                return tostring(s:find('\n') ~= nil)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_Null_IsDistinctFromNil()
+        {
+            string? r = await Run("return tostring(Json.Null ~= nil)");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_Null_SameReferenceEveryTime()
+        {
+            string? r = await Run("return tostring(Json.Null == Json.Null)");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_DecodeNull_ReturnsJsonNull()
+        {
+            string? r = await Run("return tostring(Json.Decode('null') == Json.Null)");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_EncodeNull_ProducesNullLiteral()
+        {
+            string? r = await Run("return Json.Encode(Json.Null)");
+            r.ShouldBe("null");
+        }
+
+        [Fact]
+        public async Task Json_DecodeEscapes_HandledCorrectly()
+        {
+            // Verify \n \t \" round-trip through the new decoder
+            string? r = await Run(@"
+                local s = Json.Encode('line1\nline2\ttab""quote""')
+                local v = Json.Decode(s)
+                return tostring(v == 'line1\nline2\ttab""quote""')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_CreateAlias_WorksIdenticallyToNew()
+        {
+            // Json.Create is the backward-compat alias for Json.New
+            string? r = await Run(@"
+                local j = Json.Create()
+                local t = j:Decode('[1,2,3]')
+                return tostring(t[3] == 3)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_RecursionDetected_ThrowsError()
+        {
+            string? r = await Run(@"
+                local t = {}
+                t.self = t
+                local ok, err = pcall(Json.Encode, t)
+                return tostring(not ok and err:find('recursion') ~= nil)
             ");
             r.ShouldBe("true");
         }

@@ -1,1 +1,53 @@
-#pragma once
+﻿#pragma once
+#include "lua_main_incl.h"
+#include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <math.h>
+#include <stdint.h>
+
+#define LUAJSON "LUAJSON"
+
+typedef struct LuaJson {
+    int    pretty;      // 0 = compact, 1 = pretty-printed (2 spaces per level)
+
+    // Encode output buffer (grows as needed)
+    char*  out;
+    size_t outLen;
+    size_t outCap;
+
+    // Anti-recursion stack (table pointer addresses while encoding)
+    uintptr_t* rec;
+    size_t     recLen;
+    size_t     recCap;
+
+    // Decode input (GC-rooted by the caller for the duration of the call)
+    const char* src;
+    size_t      srcLen;
+    size_t      srcPos;
+
+    // Single-char pushback for the decoder (LIFO, max 8 chars)
+    char unget[8];
+    int  ungetLen;
+
+    // Error position tracking for decode errors
+    size_t errLine;
+    size_t errCol;
+} LuaJson;
+
+// Returns the unique pointer address used as the JSON null sentinel.
+// lua_pushlightuserdata(L, lua_json_null()) produces the Json.Null value.
+void*    lua_json_null(void);
+
+LuaJson* lua_json_push(lua_State* L);           // push a fresh GC-managed instance
+LuaJson* lua_json_check(lua_State* L, int idx); // check + return instance at idx
+
+int lua_json_gc(lua_State* L);
+int lua_json_tostring(lua_State* L);
+int lua_json_new(lua_State* L);                 // Json.New([pretty])
+
+int lua_json_static_decode(lua_State* L);       // Json.Decode(str)
+int lua_json_static_encode(lua_State* L);       // Json.Encode(table [, pretty])
+
+int lua_json_decode(lua_State* L);              // json:Decode(str)
+int lua_json_encode(lua_State* L);              // json:Encode(table)
