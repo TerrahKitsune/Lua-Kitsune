@@ -1,5 +1,5 @@
-#pragma once
-#include "lua_json.h"
+﻿#pragma once
+#include "oldlua_json.h"
 #include <stdlib.h> 
 #include <string.h>
 #include <ctype.h>

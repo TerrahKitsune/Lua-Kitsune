@@ -1,5 +1,5 @@
-﻿#include "jsonencode.h"
-#include "jsonutil.h"
+﻿#include "oldjsonencode.h"
+#include "oldjsonutil.h"
 #include "math.h"
 #include "stream.h"
 #include "luawchar.h"

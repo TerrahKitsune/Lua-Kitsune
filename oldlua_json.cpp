@@ -1,7 +1,7 @@
-﻿#include "lua_json.h"
-#include "jsonutil.h"
-#include "jsonencode.h"
-#include "jsondecode.h"
+﻿#include "oldlua_json.h"
+#include "oldjsonutil.h"
+#include "oldjsonencode.h"
+#include "oldjsondecode.h"
 
 void lua_jsonprepasthread(lua_State*L, JsonContext *json, int idx) {
 

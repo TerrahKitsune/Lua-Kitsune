@@ -1,5 +1,5 @@
-﻿#include "jsondecode.h"
-#include "jsonutil.h"
+﻿#include "oldjsondecode.h"
+#include "oldjsonutil.h"
 
 int json_lua_objectiterator(lua_State* L, int status, lua_KContext ctx);
 int json_lua_arrayiterator(lua_State* L, int status, lua_KContext ctx);

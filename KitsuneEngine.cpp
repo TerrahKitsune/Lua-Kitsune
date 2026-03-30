@@ -45,7 +45,7 @@
 #include "FileAsyncMain.h"
 #include "LuaMutexMain.h"
 #include "LuaAesMain.h"
-#include "luajsonmain.h"
+#include "oldluajsonmain.h"
 #include "base64.h"
 #include "MacroMain.h"
 #include "wcharmain.h"

@@ -1,11 +1,11 @@
-#include <windows.h>
+﻿#include <windows.h>
 #include "objbase.h"
 #include "dlllua.h"
 #include "../LuaArchiveMain.h"
 #include "../mem.h"
 #include "../StreamMain.h"
 #include "../wcharmain.h"
-#include "../luajsonmain.h"
+#include "../oldluajsonmain.h"
 #include "../LuaAesMain.h"
 #include "../LuaCsvMain.h"
 #include "../LuaFileSystemMain.h"

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
@@ -117,9 +117,13 @@
     <ClCompile Include="Http.cpp" />
     <ClCompile Include="HttpMain.cpp" />
     <ClCompile Include="image.cpp" />
-    <ClCompile Include="jsondecode.cpp" />
-    <ClCompile Include="jsonencode.cpp" />
-    <ClCompile Include="jsonutil.cpp" />
+    <ClCompile Include="luajson.cpp" />
+    <ClCompile Include="luajsonmain.cpp" />
+    <ClCompile Include="oldjsondecode.cpp" />
+    <ClCompile Include="oldjsonencode.cpp" />
+    <ClCompile Include="oldjsonutil.cpp" />
+    <ClCompile Include="oldlua_json.cpp" />
+    <ClCompile Include="oldluajsonmain.cpp" />
     <ClCompile Include="kafkahelpers.cpp" />
     <ClCompile Include="luaaes.cpp" />
     <ClCompile Include="LuaAesMain.cpp" />
@@ -134,7 +138,6 @@
     <ClCompile Include="LuaImguiEnums.cpp" />
     <ClCompile Include="LuaImguiInterface.cpp" />
     <ClCompile Include="LuaImguiMain.cpp" />
-    <ClCompile Include="luajsonmain.cpp" />
     <ClCompile Include="luakafka.cpp" />
     <ClCompile Include="luakafkamain.cpp" />
     <ClCompile Include="luakafkamessage.cpp" />
@@ -178,7 +181,6 @@
     <ClCompile Include="Lua\lutf8lib.c" />
     <ClCompile Include="Lua\lvm.c" />
     <ClCompile Include="Lua\lzio.c" />
-    <ClCompile Include="lua_json.cpp" />
     <ClCompile Include="lua_misc.cpp" />
     <ClCompile Include="macro.cpp" />
     <ClCompile Include="MacroMain.cpp" />
@@ -271,9 +273,13 @@
     <ClInclude Include="Http.h" />
     <ClInclude Include="HttpMain.h" />
     <ClInclude Include="image.h" />
-    <ClInclude Include="jsondecode.h" />
-    <ClInclude Include="jsonencode.h" />
-    <ClInclude Include="jsonutil.h" />
+    <ClInclude Include="luajson.h" />
+    <ClInclude Include="luajsonmain.h" />
+    <ClInclude Include="oldjsondecode.h" />
+    <ClInclude Include="oldjsonencode.h" />
+    <ClInclude Include="oldjsonutil.h" />
+    <ClInclude Include="oldlua_json.h" />
+    <ClInclude Include="oldluajsonmain.h" />
     <ClInclude Include="kafkahelpers.h" />
     <ClInclude Include="luaaes.h" />
     <ClInclude Include="LuaAesMain.h" />
@@ -286,7 +292,6 @@
     <ClInclude Include="LuaImageMain.h" />
     <ClInclude Include="LuaImgui.h" />
     <ClInclude Include="LuaImguiMain.h" />
-    <ClInclude Include="luajsonmain.h" />
     <ClInclude Include="luakafka.h" />
     <ClInclude Include="luakafkamain.h" />
     <ClInclude Include="luakafkamessage.h" />
@@ -326,7 +331,6 @@
     <ClInclude Include="Lua\lundump.h" />
     <ClInclude Include="Lua\lvm.h" />
     <ClInclude Include="Lua\lzio.h" />
-    <ClInclude Include="lua_json.h" />
     <ClInclude Include="lua_main_incl.h" />
     <ClInclude Include="lua_misc.h" />
     <ClInclude Include="macro.h" />

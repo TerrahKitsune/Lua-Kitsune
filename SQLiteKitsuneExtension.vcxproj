@@ -97,9 +97,6 @@
     <ClCompile Include="Http.cpp" />
     <ClCompile Include="HttpCoroutine.cpp" />
     <ClCompile Include="HttpMain.cpp" />
-    <ClCompile Include="jsondecode.cpp" />
-    <ClCompile Include="jsonencode.cpp" />
-    <ClCompile Include="jsonutil.cpp" />
     <ClCompile Include="kafkahelpers.cpp" />
     <ClCompile Include="luaaes.cpp" />
     <ClCompile Include="LuaAesMain.cpp" />
@@ -112,7 +109,6 @@
     <ClCompile Include="LuaFTP.cpp" />
     <ClCompile Include="LuaFTPChannel.cpp" />
     <ClCompile Include="LuaFTPMain.cpp" />
-    <ClCompile Include="luajsonmain.cpp" />
     <ClCompile Include="luakafka.cpp" />
     <ClCompile Include="luakafkamain.cpp" />
     <ClCompile Include="luakafkamessage.cpp" />
@@ -158,7 +154,6 @@
     <ClCompile Include="Lua\lutf8lib.c" />
     <ClCompile Include="Lua\lvm.c" />
     <ClCompile Include="Lua\lzio.c" />
-    <ClCompile Include="lua_json.cpp" />
     <ClCompile Include="lua_misc.cpp" />
     <ClCompile Include="md5.c" />
     <ClCompile Include="MD5Main.cpp" />
@@ -179,6 +174,11 @@
     <ClCompile Include="SHA1Main.cpp" />
     <ClCompile Include="sha256.c" />
     <ClCompile Include="Sha256Main.cpp" />
+    <ClCompile Include="oldjsondecode.cpp" />
+    <ClCompile Include="oldjsonencode.cpp" />
+    <ClCompile Include="oldjsonutil.cpp" />
+    <ClCompile Include="oldlua_json.cpp" />
+    <ClCompile Include="oldluajsonmain.cpp" />
     <ClCompile Include="sqliteextension\dlllua.cpp" />
     <ClCompile Include="sqliteextension\dllmain.cpp" />
     <ClCompile Include="sqliteextension\executeluafunction.cpp" />
@@ -197,9 +197,6 @@
     <ClInclude Include="Bencode.h" />
     <ClInclude Include="Http.h" />
     <ClInclude Include="HttpMain.h" />
-    <ClInclude Include="jsondecode.h" />
-    <ClInclude Include="jsonencode.h" />
-    <ClInclude Include="jsonutil.h" />
     <ClInclude Include="kafkahelpers.h" />
     <ClInclude Include="libarchive\archive.h" />
     <ClInclude Include="libarchive\archive_entry.h" />
@@ -214,7 +211,6 @@
     <ClInclude Include="LuaFTP.h" />
     <ClInclude Include="LuaFTPChannel.h" />
     <ClInclude Include="LuaFTPMain.h" />
-    <ClInclude Include="luajsonmain.h" />
     <ClInclude Include="luakafka.h" />
     <ClInclude Include="luakafkamain.h" />
     <ClInclude Include="luakafkamessage.h" />
@@ -256,7 +252,6 @@
     <ClInclude Include="Lua\lundump.h" />
     <ClInclude Include="Lua\lvm.h" />
     <ClInclude Include="Lua\lzio.h" />
-    <ClInclude Include="lua_json.h" />
     <ClInclude Include="lua_main_incl.h" />
     <ClInclude Include="lua_misc.h" />
     <ClInclude Include="md5.h" />
