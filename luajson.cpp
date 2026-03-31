@@ -32,6 +32,10 @@ int lua_json_gc(lua_State* L) {
 		gff_free(j->rec);
 		j->rec = NULL;
 	}
+	if (j->chunkBuf) {
+		gff_free(j->chunkBuf);
+		j->chunkBuf = NULL;
+	}
 	return 0;
 }
 
@@ -287,8 +291,39 @@ static void enc_value(LuaJson* j, lua_State* L, int depth) {
 static char jread_next(LuaJson* j) {
 	if (j->ungetLen > 0)
 		return j->unget[--j->ungetLen];
-	if (j->srcPos >= j->srcLen)
-		return '\0';
+	while (j->srcPos >= j->srcLen) {
+		if (!j->chunkFnIdx)
+			return '\0';
+		lua_State*  L  = j->chunkL;
+		lua_pushvalue(L, j->chunkFnIdx);
+		lua_call_nohook(L, 0, 1);
+		if (lua_type(L, -1) != LUA_TSTRING) {
+			lua_pop(L, 1);
+			j->chunkFnIdx = 0;
+			return '\0';
+		}
+		size_t      clen;
+		const char* cs = lua_tolstring(L, -1, &clen);
+		if (clen == 0) {
+			lua_pop(L, 1);
+			j->chunkFnIdx = 0;
+			return '\0';
+		}
+		if (clen > j->chunkBufCap) {
+			char* p = (char*)gff_realloc(j->chunkBuf, clen);
+			if (!p) {
+				lua_pop(L, 1);
+				luaL_error(L, "Json: out of memory");
+			}
+			j->chunkBuf    = p;
+			j->chunkBufCap = clen;
+		}
+		memcpy(j->chunkBuf, cs, clen);
+		lua_pop(L, 1);
+		j->src    = j->chunkBuf;
+		j->srcLen = clen;
+		j->srcPos = 0;
+	}
 	char c = j->src[j->srcPos++];
 	if (c == '\n') {
 		j->errLine++;
@@ -555,15 +590,34 @@ int lua_json_decode(lua_State* L) {
 	size_t      len;
 	const char* s;
 	LuaJson     tmp;
+	int         fn_arg;
+
 	if (j) {
-		s = luaL_checklstring(L, 2, &len);
+		fn_arg = 2;
 	} else {
 		memset(&tmp, 0, sizeof(tmp));
-		j = &tmp;
-		s = luaL_checklstring(L, 1, &len);
+		j      = &tmp;
+		fn_arg = 1;
 	}
-	dec_reset(j, s, len);
+
+	if (lua_isfunction(L, fn_arg)) {
+		dec_reset(j, NULL, 0);
+		j->chunkFnIdx = fn_arg;
+		j->chunkL     = L;
+	} else {
+		s = luaL_checklstring(L, fn_arg, &len);
+		dec_reset(j, s, len);
+	}
+
 	dec_value(j, L);
+
+	j->chunkFnIdx = 0;
+	j->chunkL     = NULL;
+	if (j == &tmp && tmp.chunkBuf) {
+		gff_free(tmp.chunkBuf);
+		tmp.chunkBuf    = NULL;
+		tmp.chunkBufCap = 0;
+	}
 	return 1;
 }
 

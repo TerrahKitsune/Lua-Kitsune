@@ -1,5 +1,6 @@
-#include "MainLoop.h"
+﻿#include "MainLoop.h"
 #include <windows.h>
+#include "lua_main_incl.h"
 
 int hook = -1;
 lua_State * external_lua = NULL;
@@ -20,7 +21,7 @@ void __cdecl lua_hook_sleep(DWORD duration) {
 	lua_pushinteger(L, duration);
 
 	//function(duration) return true/false; end
-	if (lua_pcall(L, 1, 1, NULL) != 0) {
+	if (lua_pcall_nohook(L, 1, 1, NULL) != 0) {
 		Sleep(duration);
 		return;
 	}

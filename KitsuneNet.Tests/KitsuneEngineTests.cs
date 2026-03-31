@@ -2398,17 +2398,115 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Userdata_DifferentType_TypeNameMatchesMetatable()
         {
-            // Verifies the __name lookup is not hard-coded: CSV.Create() carries a
-            // different metatable name ("LUACSV") from Json.Create() ("LUAJSON").
+            // Verifies the __name lookup is not hard-coded: Stream.Create() carries a
+            // different metatable name ("STREAM") from Json.Create() ("LUAJSON").
             using KitsuneEngine engine = new();
             LuaValue? received = null;
-            engine.RegisterFunction("CaptureCsv", args => { received = args[0]; return LuaValue.None; });
-            int id = engine.ExecuteString("CaptureCsv(CSV.Create())");
+            engine.RegisterFunction("CaptureStream", args => { received = args[0]; return LuaValue.None; });
+            int id = engine.ExecuteString("CaptureStream(Stream.Create())");
             engine.Wait(id);
             received.ShouldNotBeNull();
             received!.Value.Type.ShouldBe(LuaType.Userdata);
-            received.Value.String.ShouldBe("LUACSV");
+            received.Value.Bytes.ShouldNotBeNull();
+            received.Value.String.ShouldBe("STREAM");
             engine.ReleaseResult(id);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        // -- Nohook / yield safety ------------------------------------------------
+
+        [Fact]
+        public void NohookCallback_ErrorCaughtByPcall_HookRestoredAndCancelStillWorks()
+        {
+            // Regression: lua_call_nohook previously used lua_call whose longjmp error
+            // path bypassed the lua_sethook restore.  If Lua code caught that error with
+            // pcall/xpcall the coroutine continued running hookless — the Ticker never
+            // fired again, making Cancel and Interrupt permanently ineffective.
+            // Fix: lua_call_nohook now wraps with lua_pcall, restores the hook, then
+            // re-raises via lua_error so the hook is always restored before any unwind.
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString(@"
+                -- CSV.DecodeFromFunction calls the supplier via lua_call_nohook only
+                -- when the iterator is advanced (iter()).  Calling iter() inside the
+                -- pcall triggers the supplier error through lua_call_nohook; the hook
+                -- must be restored before re-raising so the outer pcall leaves the
+                -- coroutine fully hooked.
+                local ok, err = pcall(function()
+                    local iter = CSV.DecodeFromFunction(function() error('supplier error') end)
+                    iter()   -- advances the iterator → calls supplier → errors via lua_call_nohook
+                end)
+                -- If the hook was lost the Ticker never fires and Cancel hangs here forever.
+                while true do end
+            ");
+            SpinUntilRunning(engine);
+            engine.Cancel(id);
+            DateTime deadline = DateTime.UtcNow.AddSeconds(5);
+            while (engine.GetActiveIds().Contains(id) && DateTime.UtcNow < deadline)
+                Thread.Sleep(1);
+            engine.GetActiveIds().ShouldNotContain(id,
+                "Cancel timed out — Ticker hook may have been lost after pcall caught the nohook callback error");
+        }
+
+        [Fact]
+        public async Task NohookCallback_SleepInsideSupplier_CompletesWithoutCrash()
+        {
+            // Regression: L_Sleep called lua_yieldk unconditionally. Inside a nohook
+            // callback the internal lua_pcall creates a luaD_callnoyield boundary, so
+            // lua_isyieldable(L) == false. L_Sleep now falls back to a blocking OS sleep
+            // rather than lua_yieldk, which would raise
+            // "attempt to yield across a C-call boundary".
+            using KitsuneEngine engine = new();
+            string? result = await engine.ExecuteStringAsync(@"
+                local count = 0
+                local iter = CSV.DecodeFromFunction(function()
+                    count = count + 1
+                    if count > 2 then return nil end
+                    Sleep(1)   -- inside lua_call_nohook: must use blocking sleep, not lua_yieldk
+                    return 'a,b\n'
+                end)
+                local rows = 0
+                local row = iter()
+                while row do rows = rows + 1; row = iter() end
+                return tostring(rows)
+            ");
+            result.ShouldBe("2");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task MetamethodFromCCode_WithConcurrentCoroutines_NoCrash()
+        {
+            // Regression: the Ticker called lua_yield unconditionally. When a C library
+            // function (tostring -> luaB_tostring -> luaL_tolstring -> luaL_callmeta ->
+            // lua_pcall) dispatches __tostring via a luaD_callnoyield boundary, a
+            // lua_yield inside the metamethod raises "attempt to yield across a C-call
+            // boundary". The Ticker now guards with lua_isyieldable(L) and silently skips
+            // the yield when a non-yieldable boundary is on the call stack.
+            using KitsuneEngine engine = new();
+
+            // Keeps runningCount > 1 so the Ticker's yield branch is active.
+            Task<string?> bgTask = engine.ExecuteStringAsync(
+                "local n = 0; for _ = 1, 1000000 do n = n + 1 end; return tostring(n)");
+
+            // Repeatedly calls tostring() on a table with __tostring. tostring() is
+            // luaB_tostring (C), which dispatches __tostring via lua_pcall — a
+            // non-yieldable boundary. The Ticker must not crash when it fires inside.
+            Task<string?> fgTask = engine.ExecuteStringAsync(@"
+                local obj = setmetatable({}, {
+                    __tostring = function()
+                        local s = 0
+                        for i = 1, 500 do s = s + i end
+                        return 'obj:' .. tostring(s)
+                    end
+                })
+                local r = ''
+                for _ = 1, 200 do r = tostring(obj) end
+                return r
+            ");
+
+            string?[] results = await Task.WhenAll(bgTask, fgTask);
+            results[0].ShouldBe("1000000");
+            results[1].ShouldBe("obj:125250");  // sum(1..500) = 125250
             engine.GetActiveIds().ShouldBeEmpty();
         }
     }

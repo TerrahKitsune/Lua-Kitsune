@@ -5,6 +5,9 @@ else
 	return;
 end
 
+GetKey = Session.Console.GetKey;
+SetTitle = Session.Console.SetTitle;
+
 function TablePrint(tbl, depth)
 
 	if(not tbl and depth) then
@@ -136,10 +139,28 @@ collectgarbage();
 
 SetTitle("Kitsune: ".._VERSION);
 
-print(Kitsune.Test(1, "a", 3.14));
+print(Test(1, "a", 3.14));
 
-dofile("tests/run_all.lua");
-dofile("tests/imgui_simple.lua");
+local test=[[{
+  "NullableGuid": {
+    "HasValue": false,
+    "Value": "SomeGuidBlablabla"
+  },
+  "OtherProperties": null,
+  "TestArray": [
+    {"Id": 1, "Name": "Cake"},
+    {"Id": 2, "Name": "Also Cake"}
+  ]
+}]]
+
+local j = Json.Create(true):Decode(test);
+
+print(Json.Create(true):Encode(j));
+
+GetKey();
+
+--dofile("tests/run_all.lua");
+--dofile("tests/imgui_simple.lua");
 if true then return VERSION; end
 
 local function HexToString(hexString)

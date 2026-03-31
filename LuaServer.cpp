@@ -1,4 +1,4 @@
-#include "LuaServer.h"
+﻿#include "LuaServer.h"
 #include "Server.h"
 #include "NetEvent.h"
 
@@ -244,7 +244,7 @@ int luaserver_start(lua_State *L) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, SRV_FUNC_INDEX);
 		lua_pushvalue(L, -2);
 
-		if (lua_pcall(L, 1, 0, NULL) != 0) {
+		if (lua_pcall_nohook(L, 1, 0, NULL) != 0) {
 			thread->IsAlive = false;
 
 			lua_pushnil(L);

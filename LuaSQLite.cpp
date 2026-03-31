@@ -1,4 +1,4 @@
-#include "LuaSQLite.h"
+﻿#include "LuaSQLite.h"
 #include <string.h>
 #include <stdlib.h>
 #include "luawchar.h"
@@ -261,7 +261,7 @@ int SQLiteExecute(lua_State* L) {
 			lua_pushvalue(L, 3);
 			lua_pushstring(L, &name[1]);
 
-			if (lua_pcall(L, 1, 1, 0) != 0) {
+			if (lua_pcall_nohook(L, 1, 1, 0) != 0) {
 				lua_error(L);
 				return 0;
 			}
@@ -359,7 +359,7 @@ static int BusyHandler(void* d, int retries) {
 	else {
 		lua_pushvalue(L, 1);
 		lua_pushinteger(L, retries);
-		if (lua_pcall(L, 2, 1, NULL)) {
+		if (lua_pcall_nohook(L, 2, 1, NULL)) {
 			return 0;
 		}
 		bool ok = lua_toboolean(L, -1) > 0;
@@ -401,7 +401,7 @@ void SqliteLuaFunction(sqlite3_context* context, int argc, sqlite3_value** argv)
 			return;
 		}
 
-		if (lua_pcall(L, 0, 1, 0) != LUA_OK) {
+		if (lua_pcall_nohook(L, 0, 1, 0) != LUA_OK) {
 			script = lua_tostring(L, -1);
 			lua_pop(L, 1);
 			sqlite3_result_error(context, script, -1);
@@ -468,7 +468,7 @@ void SqlitePCallFunction(bool isFinish, LuaSQLiteFunction* function, sqlite3_con
 		}
 	}
 
-	if (lua_pcall(L, argc, returns, 0) != LUA_OK) {
+	if (lua_pcall_nohook(L, argc, returns, 0) != LUA_OK) {
 		result = lua_tostring(L, -1);
 		lua_pop(L, 1);
 		sqlite3_result_error(context, result, -1);

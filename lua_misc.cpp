@@ -225,7 +225,7 @@ int TableFirst(lua_State* L) {
 		lua_pushvalue(L, 4);
 		lua_pushvalue(L, 5);
 
-		if (lua_pcall(L, 2, 1, 0) != 0) {
+		if (lua_pcall_nohook(L, 2, 1, 0) != 0) {
 			luaL_error(L, lua_tostring(L, -1));
 			return 0;
 		}
@@ -263,7 +263,7 @@ int TableSelect(lua_State* L) {
 		lua_pushvalue(L, 5);
 		lua_pushvalue(L, 6);
 
-		if (lua_pcall(L, 2, 1, 0) != 0) {
+		if (lua_pcall_nohook(L, 2, 1, 0) != 0) {
 			luaL_error(L, lua_tostring(L, -1));
 			return 0;
 		}

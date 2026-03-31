@@ -1,4 +1,4 @@
-#include "stream.h"
+﻿#include "stream.h"
 #include <string.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -25,7 +25,7 @@ size_t AllocAddSize(lua_State* L, LuaStream* stream, size_t requestedsize) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, stream->allocfunc);
 		lua_pushinteger(L, requestedsize);
 
-		if (lua_pcall(L, 1, 1, NULL) != 0) {
+		if (lua_pcall_nohook(L, 1, 1, NULL) != 0) {
 
 			lua_error(L);
 			return 0;

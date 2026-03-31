@@ -7,7 +7,7 @@ A comprehensive reference for all available functions in the Lua environment.
 ## Table of Contents
 
 - [Global Functions](#global-functions)
-- [Console](#console)
+- [Session](#session)
 - [Mutex](#mutex)
 - [Macro](#macro)
 - [Redis](#redis)
@@ -82,15 +82,9 @@ string, code GetLastError(opt lasterrorcode)
 ```
 Retrieves the last error code as a message and code.
 
-### Console Output
+### Shell
 
 ```lua
-nil CLS()
-background, foreground GetTextColor()
-nil SetTextColor(background, foreground)
-int GetKey()
-bool HasKeyDown()
-nil Put(text)
 bool ShellExecute(file, parameter)
 ```
 
@@ -159,13 +153,6 @@ array table.select(table, function(key, value) ... end)
 - `table.first`: Returns first non-nil result from delegate
 - `table.select`: Returns all non-nil values as an array
 
-### Console Window
-
-```lua
-ToggleConsole(bool)
-SetTitle(newtitle)
-```
-
 ### DNS & Network
 
 ```lua
@@ -193,24 +180,12 @@ int GlobalMemoryStatus(opt type)
 | 5 | Total KB of virtual memory |
 | 6 | Free KB of virtual memory |
 
-### Screen & Cursor
-
-```lua
-x, y GetScreenSize()
-x, y GetCursorPointPosition()
-x, y, monitor GetCursorPosition()
-```
-
 ### Miscellaneous
 
 ```lua
 table BencodeDecode(binarystring)
 bool GetIsAdmin()
-bool SetClipboard(data)
-string GetClipboard()
-bool GetKeyState(key)
 ```
-- `GetKeyState`: [Virtual Key Codes Reference](https://docs.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes)
 
 ### Global Variables
 
@@ -224,39 +199,77 @@ bool GetKeyState(key)
 
 ---
 
-## Console
+## Session
+
+The `Session` global table groups interactive environment functions into three subtables.
+
+### Session.Console
 
 ```lua
-bool Console.Create()
-bool Console.Destroy()
-bool Console.Attach(opt processId)
-cursorx, cursory, sizex, sizey, maxsizex, maxsizey Console.GetInfo()
-nil Console.SetCursorPosition(x, y)
-nil Console.Clear()
-charactersprinted Console.Print(...)
-key Console.ReadKey()
-characterswritten Console.Write(data)
-nil Console.SetColor(Background, Foreground)
-Background, Foreground Console.GetColor()
-nil Console.SetVisible(toggle)
-nil Console.SetTitle(newtitle)
+bool   Session.Console.Create()
+bool   Session.Console.Destroy()
+bool   Session.Console.Attach(opt processId)
+cursorx, cursory, sizex, sizey, maxsizex, maxsizey Session.Console.GetInfo()
+nil    Session.Console.SetCursorPosition(x, y)
+nil    Session.Console.Clear()
+nil    Session.Console.Put(text)
+characterswritten Session.Console.Write(data)
+charactersprinted Session.Console.Print(...)
+key    Session.Console.ReadKey()
+int    Session.Console.GetKey()
+bool   Session.Console.HasKeyDown()
+bool   Session.Console.GetKeyState(key)
+nil    Session.Console.SetColor(Background, Foreground)
+Background, Foreground Session.Console.GetColor()
+nil    Session.Console.SetVisible(toggle)
+nil    Session.Console.SetTitle(newtitle)
 ```
 
 | Function | Description |
 |----------|-------------|
 | `Create` | Creates a new console if none exists |
 | `Destroy` | Deallocates the console |
-| `Attach` | Attaches to existing console (parent if no processId) |
-| `GetInfo` | Get console window position and sizes |
+| `Attach` | Attaches to existing console (parent process if no `processId` given) |
+| `GetInfo` | Get console cursor position and window/buffer sizes |
 | `SetCursorPosition` | Move cursor to new location |
 | `Clear` | Empty the console |
-| `Print` | Print to console (like default print) |
-| `ReadKey` | Read key press, returns `nil` if none pressed |
-| `Write` | Write data to console |
+| `Put` | Write text character-by-character, translating CR to newline and handling backspace |
+| `Write` | Write data directly to the console via `WriteConsole`; returns characters written |
+| `Print` | Print tab-separated values followed by a newline (like `print` but to the console handle) |
+| `ReadKey` | Returns the next key code, or `nil` if no key is currently pressed |
+| `GetKey` | Block until a key is pressed and return its character code |
+| `HasKeyDown` | Returns `true` if a key is currently pressed |
+| `GetKeyState` | Check an async key state — [Virtual Key Codes](https://docs.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes) |
 | `SetColor` | Set background and foreground colors |
-| `GetColor` | Get current colors |
-| `SetVisible` | Toggle console visibility |
-| `SetTitle` | Set console window title |
+| `GetColor` | Get current background and foreground colors |
+| `SetVisible` | Show or hide the console window |
+| `SetTitle` | Set the console window title |
+
+### Session.Display
+
+```lua
+x, y          Session.Display.GetScreenSize()
+x, y          Session.Display.GetCursorPoint()
+x, y, monitor Session.Display.GetCursorPosition()
+```
+
+| Function | Description |
+|----------|-------------|
+| `GetScreenSize` | Returns the width and height of the primary screen in pixels |
+| `GetCursorPoint` | Returns the raw cursor position as absolute screen coordinates |
+| `GetCursorPosition` | Returns cursor coordinates relative to the monitor it is on, plus a 1-based monitor index |
+
+### Session.Clipboard
+
+```lua
+bool   Session.Clipboard.Set(data)
+string Session.Clipboard.Get()
+```
+
+| Function | Description |
+|----------|-------------|
+| `Set` | Write `data` to the system clipboard. Pass an empty string or `nil` to clear it. Returns `true` on success |
+| `Get` | Read the current clipboard content as a UTF-8 string, or `nil` if empty or unavailable |
 
 ---
 

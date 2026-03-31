@@ -536,7 +536,11 @@ static void Ticker(lua_State* L, lua_Debug* ar) {
 
 	// Yield to let the scheduler run other coroutines before returning here.
 	// Only yield when the scheduler initiated this resume and there are other coroutines waiting.
-	if (InterlockedAdd(&state->runningCount, 0) > 1 && InterlockedAdd(&state->currentCoroutineId, 0))
+	// lua_isyieldable guards against metamethods triggered by C functions: luaT_callTM uses
+	// luaD_callnoyield (non-yieldable) when L->ci is a C frame, so lua_yield would raise
+	// "attempt to yield across a C-call boundary".  Skipping the yield here is safe — the
+	// coroutine will be preempted at the next hook firing that lands in a yieldable Lua frame.
+	if (InterlockedAdd(&state->runningCount, 0) > 1 && InterlockedAdd(&state->currentCoroutineId, 0) && lua_isyieldable(L))
 		lua_yield(L, 0);
 }
 
@@ -786,14 +790,17 @@ static int L_Sleep(lua_State* L) {
 	int id = (int)InterlockedAdd(&state->currentCoroutineId, 0);
 	KitsuneCoroutine* slot = FindSlot(state, id);  // NULL when id==0 (not inside scheduler's lua_resume)
 
-	if (slot) {
-		// Scheduler-managed coroutine: record the wake-up deadline and yield cooperatively.
+	if (slot && lua_isyieldable(L)) {
+		// Scheduler-managed coroutine with a yieldable call stack: yield cooperatively.
 		if (ms > 0.0)
 			slot->sleepUntil = GetCounter(state) + (double)ms;
 		return lua_yieldk(L, 0, 0, L_SleepContinuation);
 	}
 
-	// Not called from a scheduler-managed coroutine — fall back to a blocking OS sleep.
+	// Fall back to a blocking OS sleep when: (a) not a scheduler-managed coroutine,
+	// or (b) lua_isyieldable(L) is false — we are inside a luaD_callnoyield boundary
+	// (lua_pcall_nohook, lua_call_nohook, or a metamethod triggered from C code)
+	// and lua_yieldk would raise "attempt to yield across a C-call boundary".
 	if (ms > 0.0)
 		::Sleep((DWORD)(ms < (lua_Number)MAXDWORD ? (DWORD)ms : MAXDWORD));
 	return 0;

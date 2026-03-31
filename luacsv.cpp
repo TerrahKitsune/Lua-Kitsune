@@ -12,7 +12,7 @@ static void RefillStreamBuffer(LuaCsv* csv) {
 	lua_State* L = csv->streamL;
 
 	lua_rawgeti(L, LUA_REGISTRYINDEX, csv->streamFuncRef);
-	lua_call(L, 0, 1);  // errors propagate to the Lua caller naturally
+	lua_call_nohook(L, 0, 1);  // errors propagate to the Lua caller naturally
 
 	// LuaWChar userdata → convert to UTF-8 string, then fall through to the string path
 	if (lua_iswchar(L, -1)) {
@@ -532,7 +532,7 @@ static int LuaCsvObjectDecode(lua_State* L) {
 	lua_pushcfunction(L, LuaDecodeCsv);
 	lua_pushvalue(L, 2);                    // str (arg 2; arg 1 is self)
 	lua_pushvalue(L, lua_upvalueindex(1));  // bound delimiter
-	lua_call(L, 2, 1);
+	lua_call_nohook(L, 2, 1);
 	return 1;
 }
 
@@ -541,7 +541,7 @@ static int LuaCsvObjectEncode(lua_State* L) {
 	lua_pushcfunction(L, LuaEncodeCsv);
 	lua_pushvalue(L, 2);                    // rows
 	lua_pushvalue(L, lua_upvalueindex(1));  // bound delimiter ("auto" → comma)
-	lua_call(L, 2, 1);
+	lua_call_nohook(L, 2, 1);
 	return 1;
 }
 
@@ -550,7 +550,7 @@ static int LuaCsvObjectDecodeFromFunction(lua_State* L) {
 	lua_pushcfunction(L, LuaDecodeFromFunction);
 	lua_pushvalue(L, 2);                    // fn
 	lua_pushvalue(L, lua_upvalueindex(1));  // bound delimiter
-	lua_call(L, 2, 1);
+	lua_call_nohook(L, 2, 1);
 	return 1;
 }
 

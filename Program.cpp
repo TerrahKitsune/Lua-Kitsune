@@ -78,6 +78,9 @@ int main(int argc, char* argv[]) {
 		fprintf(stderr, "KitsuneInit failed\n");
 		return -1;
 	}
+	else {
+		KitsuneRegisterSession();
+	}
 
 	SetConsoleCtrlHandler(ConsoleCtrlHandler, TRUE);
 

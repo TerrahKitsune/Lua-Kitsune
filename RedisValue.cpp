@@ -33,7 +33,7 @@ int InternalPushValue(lua_State* L, int index) {
 			lua_getglobal(L, "Json");
 			lua_pushliteral(L, "Create");
 			lua_gettable(L, -2);
-			if (lua_pcall(L, 0, 1, NULL)) {
+			if (lua_pcall_nohook(L, 0, 1, NULL)) {
 				lua_error(L);
 				return 0;
 			}
@@ -48,7 +48,7 @@ int InternalPushValue(lua_State* L, int index) {
 		lua_pushvalue(L, -2);
 		lua_pushvalue(L, -4);
 
-		if (lua_pcall(L, 2, 1, NULL)) {
+		if (lua_pcall_nohook(L, 2, 1, NULL)) {
 			lua_error(L);
 			return 0;
 		}

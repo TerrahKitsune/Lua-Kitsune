@@ -33,6 +33,15 @@ typedef struct LuaJson {
     // Error position tracking for decode errors
     size_t errLine;
     size_t errCol;
+
+    // Chunked decode: when chunkFnIdx != 0 the function at that absolute Lua
+    // stack index is called (0 args, 1 result) each time the buffer runs dry.
+    // It must return a non-empty string for each chunk, or nil/empty to signal
+    // end of input.  chunkBuf is an owned copy of the most-recent chunk.
+    int        chunkFnIdx;
+    lua_State* chunkL;
+    char*      chunkBuf;
+    size_t     chunkBufCap;
 } LuaJson;
 
 // Returns the unique pointer address used as the JSON null sentinel.
@@ -48,6 +57,10 @@ int lua_json_new(lua_State* L);                 // Json.New([pretty])
 
 // Both functions handle the static and instance calling conventions:
 //   Json.Decode(str)             /  json:Decode(str)
+//   Json.Decode(fn)              /  json:Decode(fn)   -- fn() returns chunks
 //   Json.Encode(value [,pretty]) /  json:Encode(value)
+// For the chunked form fn is called repeatedly with no arguments.
+// It must return a non-empty string for each chunk; returning nil or an empty
+// string signals end of input.
 int lua_json_decode(lua_State* L);
 int lua_json_encode(lua_State* L);

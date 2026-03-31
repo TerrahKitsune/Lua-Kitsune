@@ -93,7 +93,7 @@ int MainloopImguiWindow(lua_State* L) {
 	lua_pushvalue(L, 1);
 
 	imgui->isInRender = true;
-	int result = lua_pcall(L, 1, 0, NULL);
+	int result = lua_pcall_nohook(L, 1, 0, NULL);
 	imgui->isInRender = false;
 
 	// Check if the window was destroyed from the Lua code

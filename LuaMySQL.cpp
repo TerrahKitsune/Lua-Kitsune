@@ -46,7 +46,7 @@ static void PushAsParamString(lua_State* L, int index) {
 			lua_getglobal(L, "Json");
 			lua_pushliteral(L, "Create");
 			lua_gettable(L, -2);
-			if (lua_pcall(L, 0, 1, 0)) {
+			if (lua_pcall_nohook(L, 0, 1, 0)) {
 				lua_error(L);
 				return;
 			}
@@ -60,7 +60,7 @@ static void PushAsParamString(lua_State* L, int index) {
 		lua_pushvalue(L, -2);
 		lua_pushvalue(L, index);
 
-		if (lua_pcall(L, 2, 1, 0)) {
+		if (lua_pcall_nohook(L, 2, 1, 0)) {
 			lua_error(L);
 			return;
 		}
