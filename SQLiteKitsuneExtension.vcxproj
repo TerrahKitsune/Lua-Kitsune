@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
@@ -182,6 +182,7 @@
     <ClCompile Include="sqliteextension\registerluatable.cpp" />
     <ClCompile Include="SQLite\sqlite3.c" />
     <ClCompile Include="stream.cpp" />
+    <ClCompile Include="stream_inmemory.cpp" />
     <ClCompile Include="StreamMain.cpp" />
     <ClCompile Include="Timer.cpp" />
     <ClCompile Include="TimerMain.cpp" />

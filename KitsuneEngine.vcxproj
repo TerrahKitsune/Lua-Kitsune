@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
@@ -196,6 +196,7 @@
     <ClCompile Include="sha256.c" />
     <ClCompile Include="Sha256Main.cpp" />
     <ClCompile Include="stream.cpp" />
+    <ClCompile Include="stream_inmemory.cpp" />
     <ClCompile Include="StreamMain.cpp" />
     <ClCompile Include="wcharmain.cpp" />
     <ClCompile Include="WinServices.cpp" />
@@ -345,6 +346,7 @@
     <ClInclude Include="Sha256Main.h" />
     <ClInclude Include="stream.h" />
     <ClInclude Include="StreamMain.h" />
+    <ClInclude Include="stream_inmemory.h" />
     <ClInclude Include="wcharmain.h" />
     <ClInclude Include="WinServices.h" />
     <ClInclude Include="WinServicesMain.h" />

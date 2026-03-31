@@ -12,6 +12,7 @@
 // KitsuneVariable type constants — values 0–8 match Lua's LUA_T* constants for direct comparison.
 // KITSUNE_TNONE (-1) matches LUA_TNONE. KITSUNE_TERROR (-2) is a Kitsune extension not present
 // in Lua; it is used exclusively with kitsune_ResultSetter to signal a Lua error from a
+#define KITSUNE_TJSON          (-5) // Kitsune extension: JSON string type; data is a UTF-8 char* and length is in bytes (excluding null terminator). Not a value returned by lua_type().
 #define KITSUNE_TCHAR16        (-4) // Kitsune extension: UTF-16 string type; data is a char16_t* and length is in char16_t code units (excluding null terminator). Not a value returned by lua_type().
 #define KITSUNE_TINTEGER       (-3) // Kitsune extension: Lua 5.3+ integer subtype (lua_isinteger); not a value returned by lua_type()
 #define KITSUNE_TERROR         (-2) // registered C function and will never appear in a KitsuneVariable returned by the engine.
@@ -33,8 +34,7 @@
 #define KITSUNE_STATUS_RUNNING   (3)  // currently executing inside lua_resume
 #define KITSUNE_STATUS_DONE      (4)  // finished successfully; result not yet consumed
 #define KITSUNE_STATUS_FAULTED   (5)  // finished with a runtime or Lua error; call KitsuneGetError
-#define KITSUNE_STATUS_CANCELLED (6)  // stopped by an explicit KitsuneCancel(id) call
-#define KITSUNE_STATUS_CANCELLING (7) // KitsuneCancel called; awaiting the next scheduler cycle to process
+#define KITSUNE_STATUS_CANCELLED (6)  // stopped by an explicit KitsuneCancel(id) call, or cancel is pending
 
 // Forward declaration required so KitsuneVariable can hold a pointer to the node in its union.
 struct KeyValuePairKitsuneVariableNode;

@@ -1,6 +1,7 @@
 ﻿using KitsuneNet;
 using Shouldly;
 using System.Text;
+using System.Text.Json.Nodes;
 using Xunit;
 
 namespace KitsuneNet.Tests
@@ -1509,26 +1510,21 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public void GetStatus_AfterCancelOnSleepingCoroutine_ReturnsCancelling()
+        public void GetStatus_AfterCancelOnSleepingCoroutine_ReturnsCancelled()
         {
-            // Cancelling: KitsuneCancel sets interrupted=1 synchronously, but the scheduler
-            // processes it on its next cycle. Using a sleeping coroutine maximises the
-            // window — the scheduler was in WaitForSingleObject and needs one full cycle
-            // (wakeup + Step1 + Step2) before it can set done=1.
+            // Once KitsuneCancel sets interrupted=1, GetStatus returns Cancelled regardless
+            // of whether the scheduler has finished processing the cancel yet. There is no
+            // longer a separate Cancelling state — callers act the same way in both cases.
             using KitsuneEngine engine = new();
             int id = engine.ExecuteString("Sleep(60000)");
             DateTime readyDeadline = DateTime.UtcNow.AddSeconds(5);
             while (engine.GetStatus(id) != CoroutineStatus.Sleeping && DateTime.UtcNow < readyDeadline)
                 Thread.Sleep(1);
+            engine.GetStatus(id).ShouldBe(CoroutineStatus.Sleeping);
 
             engine.Cancel(id);
 
-            // Spin until the status changes from Sleeping — must be Cancelling before done=1 is set.
-            DateTime deadline = DateTime.UtcNow.AddSeconds(5);
-            CoroutineStatus status;
-            do status = engine.GetStatus(id);
-            while (status == CoroutineStatus.Sleeping && DateTime.UtcNow < deadline);
-            status.ShouldBe(CoroutineStatus.Cancelling);
+            engine.GetStatus(id).ShouldBe(CoroutineStatus.Cancelled);
 
             engine.Wait();
             engine.GetActiveIds().ShouldBeEmpty();
@@ -1719,9 +1715,336 @@ namespace KitsuneNet.Tests
             for (int i = 0; i < count; i++)
                 engine.GetResultString(ids[i]).ShouldBe(i.ToString());
             engine.GetActiveIds().ShouldBeEmpty();
-        }
+            }
 
-        // -- Helpers --------------------------------------------------------------
+            // -- Stream ---------------------------------------------------------------
+
+            [Fact]
+            public async Task Stream_Create_WriteAndRead_RoundTrip()
+            {
+                using KitsuneEngine engine = new();
+                string? result = await engine.ExecuteStringAsync(@"
+                    local s = Stream.Create()
+                    s:Write('hello stream')
+                    s:Seek(0)
+                    return s:Read()
+                ");
+                result.ShouldBe("hello stream");
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+
+            [Fact]
+            public async Task Stream_Seek_AllowsMultipleReads()
+            {
+                using KitsuneEngine engine = new();
+                string? result = await engine.ExecuteStringAsync(@"
+                    local s = Stream.Create()
+                    s:Write('reread')
+                    s:Seek(0)
+                    local first = s:Read()
+                    s:Seek(0)
+                    local second = s:Read()
+                    return tostring(first == second)
+                ");
+                result.ShouldBe("true");
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+
+            [Fact]
+            public async Task Stream_Len_ReflectsWrittenBytes()
+            {
+                using KitsuneEngine engine = new();
+                string? result = await engine.ExecuteStringAsync(@"
+                    local s = Stream.Create()
+                    s:Write('abc')
+                    local len = s:len()
+                    return tostring(len)
+                ");
+                result.ShouldBe("3");
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+
+            [Fact]
+            public async Task Stream_Pos_AdvancesAfterRead()
+            {
+                using KitsuneEngine engine = new();
+                string? result = await engine.ExecuteStringAsync(@"
+                    local s = Stream.Create()
+                    s:Write('abcde')
+                    s:Seek(0)
+                    s:Read(2)
+                    return tostring(s:pos())
+                ");
+                result.ShouldBe("2");
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+
+            [Fact]
+            public async Task Stream_Read_PartialLength_ThenRemainder()
+            {
+                using KitsuneEngine engine = new();
+                string? result = await engine.ExecuteStringAsync(@"
+                    local s = Stream.FromString('hello world')
+                    s:Seek(0)
+                    local first = s:Read(5)
+                    local rest  = s:Read()
+                    return first .. ':' .. rest
+                ");
+                result.ShouldBe("hello: world");
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+
+            [Fact]
+            public async Task Stream_WriteByte_ReadByte_RoundTrip()
+            {
+                using KitsuneEngine engine = new();
+                string? result = await engine.ExecuteStringAsync(@"
+                    local s = Stream.Create()
+                    s:WriteByte(42)
+                    s:WriteByte(255)
+                    s:Seek(0)
+                    return tostring(s:ReadByte()) .. ':' .. tostring(s:ReadByte())
+                ");
+                result.ShouldBe("42:255");
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+
+            [Fact]
+            public async Task Stream_ReadByte_AtEnd_ReturnsNegativeOne()
+            {
+                using KitsuneEngine engine = new();
+                string? result = await engine.ExecuteStringAsync(@"
+                    local s = Stream.Create()
+                    s:WriteByte(1)
+                    s:Seek(0)
+                    s:ReadByte()
+                    return tostring(s:ReadByte())
+                ");
+                result.ShouldBe("-1");
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+
+            [Fact]
+            public async Task Stream_PeekByte_DoesNotAdvancePos()
+            {
+                using KitsuneEngine engine = new();
+                string? result = await engine.ExecuteStringAsync(@"
+                    local s = Stream.FromString('ABC')
+                    s:Seek(0)
+                    local peeked = s:PeekByte()
+                    return tostring(peeked) .. ':' .. tostring(s:pos())
+                ");
+                result.ShouldBe("65:0");  // 'A' == 65, pos unchanged
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+
+            [Fact]
+            public async Task Stream_WriteInt_ReadInt_RoundTrip()
+            {
+                using KitsuneEngine engine = new();
+                string? result = await engine.ExecuteStringAsync(@"
+                    local s = Stream.Create()
+                    s:WriteInt(123456789)
+                    s:Seek(0)
+                    return tostring(s:ReadInt())
+                ");
+                result.ShouldBe("123456789");
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+
+            [Fact]
+            public async Task Stream_WriteFloat_ReadFloat_RoundTrip()
+            {
+                using KitsuneEngine engine = new();
+                string? result = await engine.ExecuteStringAsync(@"
+                    local s = Stream.Create()
+                    s:WriteFloat(1.5)
+                    s:Seek(0)
+                    return tostring(s:ReadFloat())
+                ");
+                result.ShouldBe("1.5");  // 1.5 is exactly representable as float
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+
+            [Fact]
+            public async Task Stream_MultipleNumericTypes_InSequence()
+            {
+                using KitsuneEngine engine = new();
+                string? result = await engine.ExecuteStringAsync(@"
+                    local s = Stream.Create()
+                    s:WriteShort(100)
+                    s:WriteInt(200)
+                    s:WriteLong(300)
+                    s:Seek(0)
+                    return tostring(s:ReadShort()) .. ':' .. tostring(s:ReadInt()) .. ':' .. tostring(s:ReadLong())
+                ");
+                result.ShouldBe("100:200:300");
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+
+            [Fact]
+            public async Task Stream_Write_FromAnotherStream_CopiesFromPos()
+            {
+                using KitsuneEngine engine = new();
+                string? result = await engine.ExecuteStringAsync(@"
+                    local src = Stream.FromString('world')
+                    src:Seek(0)
+                    local dst = Stream.Create()
+                    dst:Write('hello ')
+                    dst:Write(src)      -- copies src from src:pos() onward
+                    dst:Seek(0)
+                    return dst:Read()
+                ");
+                result.ShouldBe("hello world");
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+
+            [Fact]
+            public async Task Stream_Buffer_AppendsWithoutMovingPos()
+            {
+                using KitsuneEngine engine = new();
+                string? result = await engine.ExecuteStringAsync(@"
+                    local s = Stream.Create()
+                    s:Write('first')
+                    s:Seek(0)
+                    s:Buffer('appended')   -- writes to end, pos stays at 0
+                    local posBefore = s:pos()
+                    local all = s:Read()
+                    return tostring(posBefore) .. ':' .. all
+                ");
+                result.ShouldBe("0:firstappended");
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+
+            [Fact]
+            public async Task Stream_Shrink_RemovesConsumedBytes()
+            {
+                using KitsuneEngine engine = new();
+                string? result = await engine.ExecuteStringAsync(@"
+                    local s = Stream.Create()
+                    s:Write('consumed remaining')
+                    s:Seek(0)
+                    s:Read(9)    -- consume 'consumed '
+                    s:Shrink()   -- drop consumed bytes, reset pos to 0
+                    return s:Read()
+                ");
+                result.ShouldBe("remaining");
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+
+            [Fact]
+            public async Task Stream_IndexOf_ReturnsBytePosition()
+            {
+                using KitsuneEngine engine = new();
+                string? result = await engine.ExecuteStringAsync(@"
+                    local s = Stream.FromString('hello world')
+                    s:Seek(0)
+                    return tostring(s:IndexOf(string.byte(' ')))
+                ");
+                result.ShouldBe("5");  // space at 0-based index 5
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+
+            [Fact]
+            public async Task Stream_ReadUntil_ReadsUpToDelimiter()
+            {
+                using KitsuneEngine engine = new();
+                string? result = await engine.ExecuteStringAsync(@"
+                    local s = Stream.FromString('hello world')
+                    s:Seek(0)
+                    return s:ReadUntil(string.byte(' '))
+                ");
+                result.ShouldBe("hello");
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+
+            [Fact]
+            public async Task Stream_FromString_HasCorrectInitialContent()
+            {
+                using KitsuneEngine engine = new();
+                string? result = await engine.ExecuteStringAsync(@"
+                    local s = Stream.FromString('preset content')
+                    s:Seek(0)
+                    return s:Read()
+                ");
+                result.ShouldBe("preset content");
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+
+            [Fact]
+            public async Task Stream_SaveAndOpen_FileRoundTrip()
+            {
+                string path = Path.GetTempFileName();
+                try
+                {
+                    using KitsuneEngine engine = new();
+                    engine.SetString("streamPath", path);
+                    string? result = await engine.ExecuteStringAsync(@"
+                        local s = Stream.Create()
+                        s:Write('saved to file')
+                        s:Save(streamPath)
+                        local s2 = Stream.Open(streamPath)
+                        s2:Seek(0)
+                        return s2:Read()
+                    ");
+                    result.ShouldBe("saved to file");
+                    engine.GetActiveIds().ShouldBeEmpty();
+                }
+                finally
+                {
+                    File.Delete(path);
+                }
+            }
+
+            [Fact]
+            public async Task Stream_Compress_Decompress_RoundTrip()
+            {
+                using KitsuneEngine engine = new();
+                string? result = await engine.ExecuteStringAsync(@"
+                    local original = string.rep('compress this ', 10)
+                    local s = Stream.Create()
+                    s:Write(original)
+                    local compressed   = s:Compress()
+                    local decompressed = compressed:Decompress()
+                    decompressed:Seek(0)
+                    return decompressed:Read()
+                ");
+                result.ShouldBe(string.Concat(Enumerable.Repeat("compress this ", 10)));
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+
+            [Fact]
+            public async Task Stream_CapConstants_AreAccessibleAsNumbers()
+            {
+                using KitsuneEngine engine = new();
+                string? result = await engine.ExecuteStringAsync(@"
+                    return tostring(
+                        type(Stream.CAP_READ)  == 'number' and
+                        type(Stream.CAP_WRITE) == 'number' and
+                        type(Stream.CAP_SEEK)  == 'number' and
+                        type(Stream.CAP_PEEK)  == 'number')
+                ");
+                result.ShouldBe("true");
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+
+            [Fact]
+            public async Task Stream_OpConstants_AreAccessibleAsNumbers()
+            {
+                using KitsuneEngine engine = new();
+                string? result = await engine.ExecuteStringAsync(@"
+                    return tostring(
+                        type(Stream.OP_OPEN)  == 'number' and
+                        type(Stream.OP_CLOSE) == 'number' and
+                        type(Stream.OP_READ)  == 'number' and
+                        type(Stream.OP_WRITE) == 'number' and
+                        type(Stream.OP_SEEK)  == 'number')
+                ");
+                result.ShouldBe("true");
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+
+            // -- Helpers --------------------------------------------------------------
 
         private static void SpinUntilRunning(KitsuneEngine engine, int timeoutMs = 2000)
         {
@@ -2507,6 +2830,186 @@ namespace KitsuneNet.Tests
             string?[] results = await Task.WhenAll(bgTask, fgTask);
             results[0].ShouldBe("1000000");
             results[1].ShouldBe("obj:125250");  // sum(1..500) = 125250
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        // -- Json bridge ----------------------------------------------------------
+
+        [Fact]
+        public void Json_FromJson_Null_ReturnsNone()
+        {
+            // null JsonNode produces LuaValue.None — nothing is pushed to Lua.
+            LuaValue.FromJson(null).Type.ShouldBe(LuaType.None);
+        }
+
+        [Fact]
+        public async Task Json_SetVariable_ObjectNode_LuaReadsFields()
+        {
+            // A C# JsonNode set via SetVariable arrives in Lua as a table decoded
+            // by the bridge Json instance; all fields are accessible by name.
+            using KitsuneEngine engine = new();
+            engine.SetVariable("jv", LuaValue.FromJson(JsonNode.Parse("""{"name":"alice","score":99}""")));
+            string? result = await engine.ExecuteStringAsync(
+                "return jv.name .. ':' .. tostring(jv.score)");
+            result.ShouldBe("alice:99");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task Json_SetVariable_NestedObject_LuaReadsDeeply()
+        {
+            // Nested JSON objects become nested Lua tables; deep path access works.
+            using KitsuneEngine engine = new();
+            engine.SetVariable("jv", LuaValue.FromJson(JsonNode.Parse("""{"outer":{"inner":"deep"}}""")));
+            string? result = await engine.ExecuteStringAsync("return jv.outer.inner");
+            result.ShouldBe("deep");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task Json_SetVariable_ArrayNode_LuaUsesOneBasedKeys()
+        {
+            // Json:Decode maps JSON arrays to Lua tables with 1-based integer keys.
+            using KitsuneEngine engine = new();
+            engine.SetVariable("jv", LuaValue.FromJson(JsonNode.Parse("[10,20,30]")));
+            string? result = await engine.ExecuteStringAsync(
+                "return tostring(jv[1]) .. ':' .. tostring(jv[2]) .. ':' .. tostring(jv[3])");
+            result.ShouldBe("10:20:30");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void Json_ExecuteStringArg_LuaReadsFields()
+        {
+            // A JsonNode passed as an ARGS element is accessible as a table in the script.
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString(
+                "return tostring(ARGS[1].x + ARGS[1].y)",
+                args: [LuaValue.FromJson(JsonNode.Parse("""{"x":7,"y":8}"""))]);
+            engine.Wait(id);
+            engine.GetResultString(id).ShouldBe("15");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void Json_TableResult_AsJsonNode_ProducesJsonObject()
+        {
+            // Lua returns a string-keyed table; AsJsonNode() converts the LuaType.Table
+            // linked list to a JsonObject — no native-side JSON encoding involved.
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("return {name='bob', score=42}");
+            engine.Wait(id);
+            LuaValue result = engine.GetResultVariable(id);
+            result.Type.ShouldBe(LuaType.Table);
+            JsonNode? node = result.AsJsonNode();
+            node.ShouldBeAssignableTo<JsonObject>();
+            ((JsonObject)node!)["name"]!.GetValue<string>().ShouldBe("bob");
+            ((JsonObject)node)["score"]!.GetValue<long>().ShouldBe(42L);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void Json_TableResult_AsJsonNode_SequentialIntKeys_ProducesJsonArray()
+        {
+            // Lua returns a sequential table; AsJsonNode() detects 1-based integer keys
+            // and produces a JsonArray with elements in order.
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("return {10, 20, 30}");
+            engine.Wait(id);
+            LuaValue result = engine.GetResultVariable(id);
+            result.Type.ShouldBe(LuaType.Table);
+            JsonNode? node = result.AsJsonNode();
+            node.ShouldBeAssignableTo<JsonArray>();
+            var arr = (JsonArray)node!;
+            arr.Count.ShouldBe(3);
+            arr[0]!.GetValue<long>().ShouldBe(10L);
+            arr[1]!.GetValue<long>().ShouldBe(20L);
+            arr[2]!.GetValue<long>().ShouldBe(30L);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void Json_AsJsonNode_OnScalarLuaValues()
+        {
+            // AsJsonNode() wraps scalar LuaValues in the appropriate JsonValue.
+            LuaValue.FromInt64(42).AsJsonNode()!.GetValue<long>().ShouldBe(42L);
+            LuaValue.FromNumber(3.14).AsJsonNode()!.GetValue<double>().ShouldBe(3.14);
+            LuaValue.FromBool(true).AsJsonNode()!.GetValue<bool>().ShouldBeTrue();
+            LuaValue.FromString("hello").AsJsonNode()!.GetValue<string>().ShouldBe("hello");
+            LuaValue.None.AsJsonNode().ShouldBeNull();
+            new LuaValue { Type = LuaType.Nil }.AsJsonNode().ShouldBeNull();
+        }
+
+        [Fact]
+        public void Json_AsJsonNode_OnJsonType_ReturnsSameNode()
+        {
+            // When Type == Json, AsJsonNode() returns the stored node directly — no re-parse.
+            var node = JsonNode.Parse("""{"direct":true}""")!;
+            LuaValue v = LuaValue.FromJson(node);
+            v.Type.ShouldBe(LuaType.Json);
+            ReferenceEquals(v.AsJsonNode(), node).ShouldBeTrue();
+        }
+
+        [Fact]
+        public void Json_ImplicitOperator_WorksFromJsonNode()
+        {
+            // The implicit operator allows a JsonNode to be assigned to LuaValue directly.
+            LuaValue v = JsonNode.Parse("""{"k":1}""");
+            v.Type.ShouldBe(LuaType.Json);
+            v.JsonNode.ShouldNotBeNull();
+        }
+
+        [Fact]
+        public async Task Json_RegisterFunction_TableArgConvertedToJsonNode()
+        {
+            // When Lua passes a table (originally decoded from a JsonNode) to a C# registered
+            // function, it arrives as LuaType.Table; AsJsonNode() converts it correctly.
+            using KitsuneEngine engine = new();
+            JsonNode? captured = null;
+            engine.RegisterFunction("CaptureJson", args =>
+            {
+                captured = args[0].AsJsonNode();
+                return LuaValue.None;
+            });
+            engine.SetVariable("jv", LuaValue.FromJson(JsonNode.Parse("""{"a":1,"b":2}""")));
+            int id = engine.ExecuteString("CaptureJson(jv)");
+            engine.Wait(id);
+            captured.ShouldNotBeNull();
+            captured.ShouldBeAssignableTo<JsonObject>();
+            ((JsonObject)captured!)["a"]!.GetValue<long>().ShouldBe(1L);
+            ((JsonObject)captured)["b"]!.GetValue<long>().ShouldBe(2L);
+            engine.ReleaseResult(id);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task Json_RegisterFunction_ReturnsJsonNode_LuaReadsAsTable()
+        {
+            // A C# function returning LuaValue.FromJson produces a Lua table in the caller.
+            using KitsuneEngine engine = new();
+            engine.RegisterFunction("MakeJson", _ =>
+                LuaValue.FromJson(JsonNode.Parse("""{"status":"ok","code":200}""")));
+            string? result = await engine.ExecuteStringAsync(
+                "local t = MakeJson(); return t.status .. ':' .. tostring(t.code)");
+            result.ShouldBe("ok:200");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task Json_MultipleRoundTrips_NoCrashOrLeak()
+        {
+            // 50 iterations of JsonNode → bridge Json decode → Lua reads → result.
+            // The bridge Json instance in the Lua registry is reused each time;
+            // correct results on every iteration confirm no corruption or resource leak.
+            using KitsuneEngine engine = new();
+            for (int i = 0; i < 50; i++)
+            {
+                engine.SetVariable("j", LuaValue.FromJson(
+                    JsonNode.Parse($"{{\"n\":{i},\"s\":\"{i}\"}}")));
+                string? result = await engine.ExecuteStringAsync(
+                    "return j.s .. ':' .. tostring(j.n)");
+                result.ShouldBe($"{i}:{i}", $"round-trip failed at iteration {i}");
+            }
             engine.GetActiveIds().ShouldBeEmpty();
         }
     }

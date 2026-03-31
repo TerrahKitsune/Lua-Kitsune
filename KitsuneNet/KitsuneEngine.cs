@@ -1,5 +1,7 @@
 ﻿using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace KitsuneNet
 {
@@ -148,7 +150,7 @@ namespace KitsuneNet
         {
             if (ptr == IntPtr.Zero) return LuaValue.None;
             var nv = Marshal.PtrToStructure<KitsuneVariable>(ptr);
-            LuaType t = (LuaType)nv.Type;
+                LuaType t = (LuaType)nv.Type;
             LuaValue result = t switch
             {
                 LuaType.Number  => LuaValue.FromNumber(nv.Number),
@@ -157,6 +159,7 @@ namespace KitsuneNet
                 LuaType.String when nv.Data != IntPtr.Zero => CopyBytes(nv.Data, (int)nv.Length),
                 LuaType.Wchar  when nv.Data != IntPtr.Zero => CopyWchar(nv.Data, (int)nv.Length),
                 LuaType.Userdata when nv.Data != IntPtr.Zero && nv.Length > 0 => CopyBytes(nv.Data, (int)nv.Length) with { Type = LuaType.Userdata },
+                LuaType.Json   when nv.Data != IntPtr.Zero && nv.Length > 0 => ParseJsonBytes(nv.Data, (int)nv.Length),
                 LuaType.Table  => ReadNativeTable(nv.Data),
                 LuaType.None    => LuaValue.None,
                 _               => new LuaValue { Type = t },  // Nil/Function/Userdata/Thread/LightUserdata
@@ -179,6 +182,14 @@ namespace KitsuneNet
                 if (byteCount > 0) Marshal.Copy(src, bytes, 0, byteCount);
                 return new LuaValue { Type = LuaType.Wchar, Bytes = bytes };
             }
+
+            static LuaValue ParseJsonBytes(IntPtr src, int length)
+            {
+                byte[] bytes = new byte[length];
+                Marshal.Copy(src, bytes, 0, length);
+                try   { return new LuaValue { Type = LuaType.Json, JsonNode = JsonNode.Parse(bytes) }; }
+                catch { return LuaValue.FromBytes(bytes); }  // malformed JSON falls back to raw string
+            }
         }
 
         // Converts a by-value KitsuneVariable (already marshaled into managed memory) to a LuaValue.
@@ -194,6 +205,7 @@ namespace KitsuneNet
                 LuaType.String when nv.Data != IntPtr.Zero => CopyBytes(nv.Data, (int)nv.Length),
                 LuaType.Wchar  when nv.Data != IntPtr.Zero => CopyWchar(nv.Data, (int)nv.Length),
                 LuaType.Userdata when nv.Data != IntPtr.Zero && nv.Length > 0 => CopyBytes(nv.Data, (int)nv.Length) with { Type = LuaType.Userdata },
+                LuaType.Json   when nv.Data != IntPtr.Zero && nv.Length > 0 => ParseJsonBytes(nv.Data, (int)nv.Length),
                 LuaType.Table  => ReadNativeTable(nv.Data),
                 LuaType.None    => LuaValue.None,
                 _               => new LuaValue { Type = t },
@@ -213,6 +225,14 @@ namespace KitsuneNet
                 byte[] bytes = new byte[byteCount];
                 if (byteCount > 0) Marshal.Copy(src, bytes, 0, byteCount);
                 return new LuaValue { Type = LuaType.Wchar, Bytes = bytes };
+            }
+
+            static LuaValue ParseJsonBytes(IntPtr src, int length)
+            {
+                byte[] bytes = new byte[length];
+                Marshal.Copy(src, bytes, 0, length);
+                try   { return new LuaValue { Type = LuaType.Json, JsonNode = JsonNode.Parse(bytes) }; }
+                catch { return LuaValue.FromBytes(bytes); }
             }
         }
 
@@ -296,6 +316,16 @@ namespace KitsuneNet
                     nv.Data   = BuildNativeTable(v.Table, ptrs);
                     nv.Length = (nuint)v.Table.Count;
                     break;
+                case LuaType.Json when v.JsonNode is not null: {
+                    byte[] json = JsonSerializer.SerializeToUtf8Bytes(v.JsonNode);
+                    IntPtr p = Marshal.AllocHGlobal(json.Length + 1);
+                    Marshal.Copy(json, 0, p, json.Length);
+                    Marshal.WriteByte(p, json.Length, 0);
+                    ptrs.Add(p);
+                    nv.Data   = p;
+                    nv.Length = (nuint)json.Length;
+                    break;
+                }
             }
         }
 
@@ -546,6 +576,16 @@ namespace KitsuneNet
                         nv.Data   = BuildNativeTable(value.Table, ptrs);
                         nv.Length = (nuint)value.Table.Count;
                         break;
+                    case LuaType.Json when value.JsonNode is not null: {
+                        byte[] json = Encoding.UTF8.GetBytes(value.JsonNode.ToJsonString());
+                        IntPtr p = Marshal.AllocHGlobal(json.Length + 1);
+                        Marshal.Copy(json, 0, p, json.Length);
+                        Marshal.WriteByte(p, json.Length, 0);
+                        ptrs.Add(p);
+                        nv.Data   = p;
+                        nv.Length = (nuint)json.Length;
+                        break;
+                    }
                 }
                 return KitsuneSetVariable(name, ref nv);
             }
@@ -677,6 +717,15 @@ namespace KitsuneNet
                 else if (result.Type == LuaType.Number)   nv.Number   = result.Number;
                 else if (result.Type == LuaType.Integer)  nv.Integer  = result.Int64;
                 else if (result.Type == LuaType.Boolean)  nv.BoolByte = result.Boolean ? (byte)1 : (byte)0;
+                else if (result.Type == LuaType.Json && result.JsonNode is not null)
+                {
+                    byte[] json = Encoding.UTF8.GetBytes(result.JsonNode.ToJsonString());
+                    strPtr = Marshal.AllocHGlobal(json.Length + 1);
+                    Marshal.Copy(json, 0, strPtr, json.Length);
+                    Marshal.WriteByte(strPtr, json.Length, 0);
+                    nv.Length = (nuint)json.Length;
+                    nv.Data   = strPtr;
+                }
                 setter(&nv);
             }
             finally
@@ -752,10 +801,9 @@ namespace KitsuneNet
         Done      = 4,
         /// <summary>Finished with a runtime or Lua error. Call <see cref="KitsuneEngine.GetError"/> to read the message.</summary>
         Faulted   = 5,
-        /// <summary>Stopped by an explicit <see cref="KitsuneEngine.Cancel"/> call.</summary>
+        /// <summary>Stopped by an explicit <see cref="KitsuneEngine.Cancel"/> call, or cancel is pending
+        /// but the scheduler has not yet processed it — callers can treat both the same way.</summary>
         Cancelled = 6,
-        /// <summary><see cref="KitsuneEngine.Cancel"/> was called; awaiting the next scheduler cycle to process the interruption.</summary>
-        Cancelling = 7,
     }
 
     /// <summary>Lua value types. Values match Lua's internal LUA_T* constants.</summary>
@@ -786,6 +834,12 @@ namespace KitsuneNet
         /// <summary>Kitsune Wchar userdata. UTF-8 bytes are stored in <see cref="LuaValue.Bytes"/>;
         /// <see cref="LuaValue.String"/> decodes them. Pushes a Lua Wchar object back into the state.</summary>
         Wchar         = -4,
+        /// <summary>JSON value bridged via the engine's Json instance. C# holds a
+        /// <see cref="System.Text.Json.Nodes.JsonNode"/>; Lua receives/sends a table decoded/encoded
+        /// by <c>Json:Decode</c> / <c>Json:Encode</c>. Only meaningful as input (C# → Lua);
+        /// Lua → C# tables still arrive as <see cref="Table"/> and can be converted with
+        /// <see cref="LuaValue.AsJsonNode"/>.</summary>
+        Json          = -5,
     }
 
     /// <summary>A typed value exchanged with the Lua engine.</summary>
@@ -799,6 +853,8 @@ namespace KitsuneNet
         public byte[]? Bytes   { get; init; }
         /// <summary>Entries for <see cref="LuaType.Table"/> values. Null for empty tables or non-table types.</summary>
         public IReadOnlyList<KeyValuePair<LuaValue, LuaValue>>? Table { get; init; }
+        /// <summary>Parsed JSON node for <see cref="LuaType.Json"/> values. Null for all other types.</summary>
+        public JsonNode? JsonNode { get; init; }
 
         /// <summary>Decodes <see cref="Bytes"/> as UTF-8 for strings, or UTF-16 LE for Wchar values.
         /// Returns <c>null</c> when <see cref="Bytes"/> is null.</summary>
@@ -826,12 +882,66 @@ namespace KitsuneNet
             LuaType.Boolean       => Boolean.ToString(),
             LuaType.Nil           => "nil",
             LuaType.Table         => Table is not null ? $"table({Table.Count})" : "table",
+            LuaType.Json          => JsonNode?.ToJsonString() ?? "null",
             LuaType.Function      => "function",
             LuaType.Userdata      => "userdata",
             LuaType.Thread        => "thread",
             LuaType.LightUserdata => "lightuserdata",
             _                     => string.Empty,
         };
+
+        /// <summary>
+        /// Converts this value to a <see cref="JsonNode"/>.
+        /// <list type="bullet">
+        /// <item><see cref="LuaType.Json"/>: returns the already-parsed node directly.</item>
+        /// <item><see cref="LuaType.Table"/>: walks the linked list; sequential integer keys
+        ///   (1, 2, … n) produce a <see cref="JsonArray"/>; all other keys produce a
+        ///   <see cref="JsonObject"/> keyed by the string representation of each key.</item>
+        /// <item>Scalar types: wrapped in the appropriate <see cref="JsonValue"/>.</item>
+        /// <item><see cref="LuaType.Nil"/> / <see cref="LuaType.None"/>: returns <c>null</c>.</item>
+        /// </list>
+        /// </summary>
+        public JsonNode? AsJsonNode()
+        {
+            if (Type == LuaType.Json)
+                return JsonNode;
+            if (Type == LuaType.Table)
+                return TableToJsonNode(this);
+            return Type switch
+            {
+                LuaType.String  => JsonValue.Create(String),
+                LuaType.Number  => JsonValue.Create(Number),
+                LuaType.Integer => JsonValue.Create(Int64),
+                LuaType.Boolean => JsonValue.Create(Boolean),
+                _               => null,
+            };
+        }
+
+        private static JsonNode? TableToJsonNode(LuaValue v)
+        {
+            if (v.Table is null || v.Table.Count == 0)
+                return new JsonObject();
+
+            // Detect Lua array: all keys are integers and form a sequence 1..n
+            bool isArray = v.Table.All(kvp => kvp.Key.Type == LuaType.Integer);
+            if (isArray)
+            {
+                var sorted = v.Table.OrderBy(kvp => kvp.Key.AsInt64).ToList();
+                bool sequential = sorted.Select((kvp, i) => kvp.Key.AsInt64 == i + 1).All(b => b);
+                if (sequential)
+                {
+                    var arr = new JsonArray();
+                    foreach (var kvp in sorted)
+                        arr.Add(kvp.Value.AsJsonNode());
+                    return arr;
+                }
+            }
+
+            var obj = new JsonObject();
+            foreach (var kvp in v.Table)
+                obj[kvp.Key.String ?? kvp.Key.ToString()] = kvp.Value.AsJsonNode();
+            return obj;
+        }
 
         /// <summary>No value / not set.</summary>
         public static LuaValue None => new() { Type = LuaType.None };
@@ -852,10 +962,16 @@ namespace KitsuneNet
         /// <summary>Creates a table value from a list of key-value entries.</summary>
         public static LuaValue FromTable(IReadOnlyList<KeyValuePair<LuaValue, LuaValue>> entries) =>
             new() { Type = LuaType.Table, Table = entries };
+        /// <summary>Creates a JSON value that is decoded to a Lua table when pushed into the engine.
+        /// On the C# side the node is stored directly; no serialisation occurs until the value is
+        /// marshalled across the bridge.</summary>
+        public static LuaValue FromJson(JsonNode? node) =>
+            node is null ? None : new() { Type = LuaType.Json, JsonNode = node };
 
-        public static implicit operator LuaValue(double v)  => FromNumber(v);
-        public static implicit operator LuaValue(bool v)    => FromBool(v);
-        public static implicit operator LuaValue(string? v) => FromString(v);
-        public static implicit operator LuaValue(byte[]? v) => FromBytes(v);
+        public static implicit operator LuaValue(double v)    => FromNumber(v);
+        public static implicit operator LuaValue(bool v)      => FromBool(v);
+        public static implicit operator LuaValue(string? v)   => FromString(v);
+        public static implicit operator LuaValue(byte[]? v)   => FromBytes(v);
+        public static implicit operator LuaValue(JsonNode? v) => FromJson(v);
     }
 }

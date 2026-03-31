@@ -198,11 +198,11 @@ static KeyValuePairKitsuneVariableNode* TableToLinkedList(lua_State* L, int idx,
 // Recursively frees a KeyValuePairKitsuneVariableNode linked list produced by TableToLinkedList.
 static void FreeKVNode(KeyValuePairKitsuneVariableNode* node) {
 	while (node) {
-		if ((node->key.type == LUA_TSTRING || node->key.type == KITSUNE_TCHAR16 || node->key.type == KITSUNE_TERROR || node->key.type == LUA_TUSERDATA) && node->key.data)
+		if ((node->key.type == LUA_TSTRING || node->key.type == KITSUNE_TJSON || node->key.type == KITSUNE_TCHAR16 || node->key.type == KITSUNE_TERROR || node->key.type == LUA_TUSERDATA) && node->key.data)
 			gff_free(node->key.data);
 		else if (node->key.type == LUA_TTABLE && node->key.table)
 			FreeKVNode(node->key.table);
-		if ((node->value.type == LUA_TSTRING || node->value.type == KITSUNE_TCHAR16 || node->value.type == KITSUNE_TERROR || node->value.type == LUA_TUSERDATA) && node->value.data)
+		if ((node->value.type == LUA_TSTRING || node->value.type == KITSUNE_TJSON || node->value.type == KITSUNE_TCHAR16 || node->value.type == KITSUNE_TERROR || node->value.type == LUA_TUSERDATA) && node->value.data)
 			gff_free(node->value.data);
 		else if (node->value.type == LUA_TTABLE && node->value.table)
 			FreeKVNode(node->value.table);
@@ -216,7 +216,7 @@ static void FreeKVNode(KeyValuePairKitsuneVariableNode* node) {
 // Nulls the data pointer after freeing to prevent double-free. Does NOT free var itself.
 static void FreeVariableData(KitsuneVariable* var) {
 	if (!var) return;
-	if ((var->type == LUA_TSTRING || var->type == KITSUNE_TERROR || var->type == LUA_TUSERDATA) && var->data) {
+	if ((var->type == LUA_TSTRING || var->type == KITSUNE_TJSON || var->type == KITSUNE_TERROR || var->type == LUA_TUSERDATA) && var->data) {
 		gff_free(var->data);
 		var->data = NULL;
 	}
@@ -397,6 +397,38 @@ static void PushKitsuneVariable(lua_State* L, const KitsuneVariable* v) {
 		// Cast char16_t* back to wchar_t* at the boundary via Char16AsWchar.
 		lua_pushwchar(L, v->char16data ? Char16AsWchar(v->char16data) : L"", v->length);
 		break;
+	case KITSUNE_TJSON: {
+		// Decode JSON string → Lua table via Json.Decode(str) (static call; no instance needed).
+		// Using the static form avoids __index dispatch on the userdata and is handled by
+		// lua_json_decode's built-in static/instance detection (j = &tmp when arg 1 is not a LUAJSON).
+		if (v->data && v->length > 0) {
+			lua_getglobal(L, "Json");
+			if (lua_istable(L, -1)) {
+				lua_getfield(L, -1, "Decode");
+				lua_remove(L, -2);  // remove Json table
+				if (lua_isfunction(L, -1)) {
+					lua_pushlstring(L, (const char*)v->data, v->length);
+					int rc = lua_pcall_nohook(L, 1, 1, 0);  // Json.Decode(str)
+					if (rc != LUA_OK) {
+						lua_pop(L, 1);
+						lua_pushnil(L);
+					}
+				}
+				else {
+					lua_pop(L, 1);
+					lua_pushnil(L);
+				}
+			}
+			else {
+				lua_pop(L, 1);
+				lua_pushnil(L);
+			}
+		}
+		else {
+			lua_newtable(L);  // empty JSON object → empty table
+		}
+		break;
+	}
 	case LUA_TTABLE:
 		lua_newtable(L);
 		if (v->table) {
@@ -1245,7 +1277,7 @@ extern "C" {
 					status = KITSUNE_STATUS_DONE;       // completed successfully
 			}
 			else if (InterlockedAdd(&slot->interrupted, 0)) {
-				status = KITSUNE_STATUS_CANCELLING; // interrupted=1 set; scheduler hasn't processed it yet
+				status = KITSUNE_STATUS_CANCELLED; // KitsuneCancel was called; done=0 means still in-flight
 			}
 			else if ((int)InterlockedAdd(&state->currentCoroutineId, 0) == id) {
 				status = KITSUNE_STATUS_RUNNING;

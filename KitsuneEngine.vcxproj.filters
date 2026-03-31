@@ -761,6 +761,9 @@
     <ClCompile Include="luajsonmain.cpp">
       <Filter>LuaJson</Filter>
     </ClCompile>
+    <ClCompile Include="stream_inmemory.cpp">
+      <Filter>LuaStream\Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="KitsuneEngine.h">
@@ -1200,6 +1203,9 @@
     </ClInclude>
     <ClInclude Include="luajsonmain.h">
       <Filter>LuaJson</Filter>
+    </ClInclude>
+    <ClInclude Include="stream_inmemory.h">
+      <Filter>LuaStream\Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
