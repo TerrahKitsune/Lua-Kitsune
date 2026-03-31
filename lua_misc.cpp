@@ -8,7 +8,6 @@
 #include <windowsx.h>
 #include <mmsystem.h>
 #include <conio.h>
-#include "oldlua_json.h"
 #include "luawchar.h"
 #include "Bencode.h"
 #include <intrin.h>

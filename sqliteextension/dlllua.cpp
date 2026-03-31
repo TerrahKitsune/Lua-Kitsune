@@ -5,7 +5,7 @@
 #include "../mem.h"
 #include "../StreamMain.h"
 #include "../wcharmain.h"
-#include "../oldluajsonmain.h"
+#include "../luajsonmain.h"
 #include "../LuaAesMain.h"
 #include "../LuaCsvMain.h"
 #include "../LuaFileSystemMain.h"

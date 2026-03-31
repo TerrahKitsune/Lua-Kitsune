@@ -79,7 +79,8 @@ static wchar_t GetNext(LuaCsv* csv, bool peek = false) {
 		// String mode: exhausted data returns L'\0', never falls into streaming branch.
 		if (csv->pos < (int)csv->data->len) {
 			last = csv->data->str[csv->pos];
-			if (!peek) csv->pos++;
+			if (!peek)
+				csv->pos++;
 		} else {
 			last = L'\0';
 		}
@@ -88,7 +89,8 @@ static wchar_t GetNext(LuaCsv* csv, bool peek = false) {
 			RefillStreamBuffer(csv);
 		if (csv->streamPos < (int)csv->streamLen) {
 			last = csv->streamBuf[csv->streamPos];
-			if (!peek) csv->streamPos++;
+			if (!peek)
+				csv->streamPos++;
 		} else {
 			last = L'\0';  // stream exhausted — signals IsEndline to finish the last row
 		}
@@ -110,7 +112,8 @@ static wchar_t SkipForwards(LuaCsv* csv) {
 
 static bool ResizeBuffer(LuaCsv* csv) {
 	void* temp = gff_realloc(csv->buffer, (csv->alloc + 1024 + 1) * sizeof(wchar_t));
-	if (!temp) return false;
+	if (!temp)
+		return false;
 	csv->buffer = (wchar_t*)temp;
 	csv->alloc += 1024;
 	return true;
@@ -118,7 +121,8 @@ static bool ResizeBuffer(LuaCsv* csv) {
 
 static bool WriteToBuffer(LuaCsv* csv, wchar_t wc) {
 	if (!csv->buffer || csv->len >= csv->alloc) {
-		if (!ResizeBuffer(csv)) return false;
+		if (!ResizeBuffer(csv))
+			return false;
 	}
 	csv->buffer[csv->len++] = wc;
 	csv->buffer[csv->len]   = L'\0';
@@ -127,7 +131,8 @@ static bool WriteToBuffer(LuaCsv* csv, wchar_t wc) {
 
 static void ClearBuffer(LuaCsv* csv) {
 	csv->len = 0;
-	if (csv->buffer) csv->buffer[0] = L'\0';
+	if (csv->buffer)
+		csv->buffer[0] = L'\0';
 }
 
 static void FreeBuffer(LuaCsv* csv) {
@@ -142,7 +147,8 @@ static void FreeBuffer(LuaCsv* csv) {
 static bool IsEndline(LuaCsv* csv) {
 	if (csv->last == L'\n' || csv->last == L'\0') return true;
 	if (csv->last == L'\r') {
-		if (GetNext(csv, true) == L'\n') GetNext(csv);  // consume \n in \r\n
+		if (GetNext(csv, true) == L'\n')
+			GetNext(csv);  // consume \n in \r\n
 		return true;
 	}
 	return false;
@@ -156,7 +162,8 @@ static void PushAndClearBuffer(LuaCsv* csv, lua_State* L) {
 static void DecodeComments(LuaCsv* csv, lua_State* L) {
 	wchar_t next = SkipForwards(csv);
 	lua_createtable(L, 0, 0);
-	if (next != L'*') return;
+	if (next != L'*')
+		return;
 
 	int nth = 0;
 	GetNext(csv);         // consume the '*' marker (SkipForwards only peeked it)
@@ -284,7 +291,10 @@ static wchar_t SniffDelimiter(const wchar_t* data, size_t len) {
 
 	for (size_t i = 0; i < len && nLines < maxLines; i++) {
 		wchar_t ch = data[i];
-		if (ch == L'"') { inQuote = !inQuote; continue; }
+		if (ch == L'"') {
+			inQuote = !inQuote;
+			continue;
+		}
 		if (inQuote) continue;
 		if (ch == L'\r') {
 			if (i + 1 < len && data[i + 1] == L'\n') i++;
@@ -403,14 +413,19 @@ int LuaEncodeCsv(lua_State* L) {
 
 	lua_Integer rowCount = luaL_len(L, 1);
 	for (lua_Integer r = 1; r <= rowCount; r++) {
-		if (r > 1) luaL_addchar(&b, '\n');
+		if (r > 1)
+			luaL_addchar(&b, '\n');
 
 		lua_rawgeti(L, 1, r);
-		if (!lua_istable(L, -1)) { lua_pop(L, 1); continue; }
+		if (!lua_istable(L, -1)) {
+			lua_pop(L, 1);
+			continue;
+		}
 
 		lua_Integer colCount = luaL_len(L, -1);
 		for (lua_Integer c = 1; c <= colCount; c++) {
-			if (c > 1) luaL_addchar(&b, delimiter);
+			if (c > 1)
+				luaL_addchar(&b, delimiter);
 
 			lua_rawgeti(L, -1, c);  // push field value
 
@@ -421,7 +436,8 @@ int LuaEncodeCsv(lua_State* L) {
 			if (FieldNeedsQuoting(field, fieldLen, delimiter)) {
 				luaL_addchar(&b, '"');
 				for (size_t i = 0; i < fieldLen; i++) {
-					if (field[i] == '"') luaL_addchar(&b, '"');  // RFC 4180 escape
+					if (field[i] == '"')
+						luaL_addchar(&b, '"');  // RFC 4180 escape
 					luaL_addchar(&b, field[i]);
 				}
 				luaL_addchar(&b, '"');

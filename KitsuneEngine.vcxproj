@@ -119,10 +119,6 @@
     <ClCompile Include="image.cpp" />
     <ClCompile Include="luajson.cpp" />
     <ClCompile Include="luajsonmain.cpp" />
-    <ClCompile Include="oldjsondecode.cpp" />
-    <ClCompile Include="oldjsonencode.cpp" />
-    <ClCompile Include="oldjsonutil.cpp" />
-    <ClCompile Include="oldlua_json.cpp" />
     <ClCompile Include="kafkahelpers.cpp" />
     <ClCompile Include="luaaes.cpp" />
     <ClCompile Include="LuaAesMain.cpp" />
@@ -274,10 +270,6 @@
     <ClInclude Include="image.h" />
     <ClInclude Include="luajson.h" />
     <ClInclude Include="luajsonmain.h" />
-    <ClInclude Include="oldjsondecode.h" />
-    <ClInclude Include="oldjsonencode.h" />
-    <ClInclude Include="oldjsonutil.h" />
-    <ClInclude Include="oldlua_json.h" />
     <ClInclude Include="kafkahelpers.h" />
     <ClInclude Include="luaaes.h" />
     <ClInclude Include="LuaAesMain.h" />

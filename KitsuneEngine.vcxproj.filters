@@ -336,9 +336,6 @@
     <Filter Include="LuaPostgres\Source Files">
       <UniqueIdentifier>{a3c4d5e6-f7a8-9012-3c4d-5e6f7a8b9c0d}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaJson\Old">
-      <UniqueIdentifier>{d1008e7d-5683-44fb-ab19-d598720ff215}</UniqueIdentifier>
-    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="KitsuneEngine.cpp">
@@ -757,21 +754,6 @@
     </ClCompile>
     <ClCompile Include="LuaEngineBuiltins.cpp">
       <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="oldjsondecode.cpp">
-      <Filter>LuaJson\Old</Filter>
-    </ClCompile>
-    <ClCompile Include="oldjsonencode.cpp">
-      <Filter>LuaJson\Old</Filter>
-    </ClCompile>
-    <ClCompile Include="oldjsonutil.cpp">
-      <Filter>LuaJson\Old</Filter>
-    </ClCompile>
-    <ClCompile Include="oldlua_json.cpp">
-      <Filter>LuaJson\Old</Filter>
-    </ClCompile>
-    <ClCompile Include="oldluajsonmain.cpp">
-      <Filter>LuaJson\Old</Filter>
     </ClCompile>
     <ClCompile Include="luajson.cpp">
       <Filter>LuaJson\Source Files</Filter>
@@ -1212,21 +1194,6 @@
     </ClInclude>
     <ClInclude Include="LuaEngineBuiltins.h">
       <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="oldluajsonmain.h">
-      <Filter>LuaJson\Old</Filter>
-    </ClInclude>
-    <ClInclude Include="oldjsondecode.h">
-      <Filter>LuaJson\Old</Filter>
-    </ClInclude>
-    <ClInclude Include="oldjsonencode.h">
-      <Filter>LuaJson\Old</Filter>
-    </ClInclude>
-    <ClInclude Include="oldjsonutil.h">
-      <Filter>LuaJson\Old</Filter>
-    </ClInclude>
-    <ClInclude Include="oldlua_json.h">
-      <Filter>LuaJson\Old</Filter>
     </ClInclude>
     <ClInclude Include="luajson.h">
       <Filter>LuaJson\Header Files</Filter>

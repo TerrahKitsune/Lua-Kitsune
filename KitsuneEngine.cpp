@@ -45,7 +45,7 @@
 #include "FileAsyncMain.h"
 #include "LuaMutexMain.h"
 #include "LuaAesMain.h"
-#include "oldluajsonmain.h"
+#include "luajsonmain.h"
 #include "base64.h"
 #include "MacroMain.h"
 #include "wcharmain.h"
@@ -349,7 +349,10 @@ static KeyValuePairKitsuneVariableNode* TableToLinkedList(lua_State* L, int idx,
 	lua_pushnil(L);  // first key
 	while (lua_next(L, abs_idx)) {
 		KeyValuePairKitsuneVariableNode* node = (KeyValuePairKitsuneVariableNode*)gff_malloc(sizeof(KeyValuePairKitsuneVariableNode));
-		if (!node) { lua_pop(L, 2); break; }  // OOM: abort iteration with partial list
+		if (!node) {
+			lua_pop(L, 2);
+			break;  // OOM: abort iteration with partial list
+		}
 		memset(node, 0, sizeof(KeyValuePairKitsuneVariableNode));
 		FillKitsuneVariableFromStack(L, -2, &node->key);
 		if (lua_type(L, -1) == LUA_TTABLE) {
@@ -370,7 +373,10 @@ static KeyValuePairKitsuneVariableNode* TableToLinkedList(lua_State* L, int idx,
 }
 
 static void PushKitsuneVariable(lua_State* L, const KitsuneVariable* v) {
-	if (!v) { lua_pushnil(L); return; }
+	if (!v) {
+		lua_pushnil(L);
+		return;
+	}
 	switch (v->type) {
 	case LUA_TNUMBER:
 		lua_pushnumber(L, v->number);
@@ -599,7 +605,8 @@ static DWORD WINAPI SchedulerProc(LPVOID param) {
 					SetSlotError(slot, "interrupted");
 					slot->result.type = LUA_TNONE;
 					lua_State* T = GetCoroutineThread(state, slot);
-					if (T) lua_settop(T, 0);
+					if (T)
+						lua_settop(T, 0);
 					InterlockedExchange(&slot->done, 1);
 					InterlockedDecrement(&state->runningCount);
 					if (InterlockedAdd(&slot->fireAndForget, 0))
@@ -619,16 +626,19 @@ static DWORD WINAPI SchedulerProc(LPVOID param) {
 					state->pausedEvent.Set();
 					state->resumeEvent.Wait();
 				}
-				if (InterlockedAdd(&state->schedulerStop, 0)) break;
+				if (InterlockedAdd(&state->schedulerStop, 0))
+					break;
 
 				KitsuneCoroutine* slot = state->slots[i];
-				if (slot->id == 0 || InterlockedAdd(&slot->done, 0)) continue;
+				if (slot->id == 0 || InterlockedAdd(&slot->done, 0))
+					continue;
 				// Per-coroutine cancel: terminate before the next resume (or wake from sleep).
 				if (InterlockedAdd(&slot->interrupted, 0)) {
 					SetSlotError(slot, "cancelled");
 					slot->result.type = LUA_TNONE;
 					lua_State* Tc = GetCoroutineThread(state, slot);
-					if (Tc) lua_settop(Tc, 0);
+					if (Tc)
+						lua_settop(Tc, 0);
 					InterlockedExchange(&slot->done, 1);
 					InterlockedDecrement(&state->runningCount);
 					InterlockedExchange(&slot->released, 1);
@@ -705,8 +715,10 @@ static DWORD WINAPI SchedulerProc(LPVOID param) {
 
 			// Phase 2 (outside slotsLock): release Lua registry references.
 			for (int i = 0; i < pendingCount; i++) {
-				if (pendingArgs[i] != LUA_NOREF) luaL_unref(state->L, LUA_REGISTRYINDEX, pendingArgs[i]);
-				if (pendingThreads[i] != LUA_NOREF) luaL_unref(state->L, LUA_REGISTRYINDEX, pendingThreads[i]);
+				if (pendingArgs[i] != LUA_NOREF)
+					luaL_unref(state->L, LUA_REGISTRYINDEX, pendingArgs[i]);
+				if (pendingThreads[i] != LUA_NOREF)
+					luaL_unref(state->L, LUA_REGISTRYINDEX, pendingThreads[i]);
 			}
 		}
 
@@ -945,7 +957,10 @@ extern "C" {
 		KitsuneCoroutine* slot = NULL;
 		bool isNewSlot = false;
 		for (int i = 0; i < state->slotCount; i++) {
-			if (state->slots[i]->id == 0) { slot = state->slots[i]; break; }
+			if (state->slots[i]->id == 0) {
+				slot = state->slots[i];
+				break;
+			}
 		}
 		if (!slot) {
 			if (state->slotCount >= KITSUNE_MAX_COROUTINES) {
@@ -953,7 +968,10 @@ extern "C" {
 				return -1;
 			}
 			slot = new (std::nothrow) KitsuneCoroutine{};
-			if (!slot) { ReleaseLuaAccess(state); return -1; }
+			if (!slot) {
+				ReleaseLuaAccess(state);
+				return -1;
+			}
 			isNewSlot = true;
 		}
 
@@ -1041,7 +1059,10 @@ extern "C" {
 		KitsuneCoroutine* slot = NULL;
 		bool isNewSlot = false;
 		for (int i = 0; i < state->slotCount; i++) {
-			if (state->slots[i]->id == 0) { slot = state->slots[i]; break; }
+			if (state->slots[i]->id == 0) {
+				slot = state->slots[i];
+				break;
+			}
 		}
 		if (!slot) {
 			if (state->slotCount >= KITSUNE_MAX_COROUTINES) {
@@ -1049,7 +1070,10 @@ extern "C" {
 				return -1;
 			}
 			slot = new (std::nothrow) KitsuneCoroutine{};
-			if (!slot) { ReleaseLuaAccess(state); return -1; }
+			if (!slot) {
+				ReleaseLuaAccess(state);
+				return -1;
+			}
 			isNewSlot = true;
 		}
 
@@ -1327,7 +1351,10 @@ extern "C" {
 			lua_pushlstring(L, p, len);
 			lua_gettable(L, -2);
 			if (lua_isnil(L, -1)) {
-				if (!createMissing) { lua_settop(L, startTop); return NULL; }
+				if (!createMissing) {
+					lua_settop(L, startTop);
+					return NULL;
+				}
 				lua_pop(L, 1);
 				lua_newtable(L);
 				lua_pushlstring(L, p, len);

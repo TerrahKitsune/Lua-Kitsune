@@ -1503,7 +1503,7 @@ namespace KitsuneNet.Tests
             int id = engine.ExecuteString("error('test error')");
             engine.Wait();
             engine.GetStatus(id).ShouldBe(CoroutineStatus.Faulted);
-            engine.GetError(id).ShouldContain("test error");
+            (engine.GetError(id) ?? "").ShouldContain("test error");
             engine.ReleaseResult(id);
             engine.GetActiveIds().ShouldBeEmpty();
         }

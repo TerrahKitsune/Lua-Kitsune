@@ -562,6 +562,11 @@ namespace KitsuneNet.Tests
         }
 
         // -- Json -----------------------------------------------------------------
+        // Instance methods (Json.Create / Json.New) mirror the old API exactly.
+        // Static methods (Json.Encode / Json.Decode) are the new convenience layer.
+        // Json.Null is the fixed lightuserdata sentinel for JSON null values.
+
+        // ── Instance round-trips ─────────────────────────────────────────────
 
         [Fact]
         public async Task Json_Encode_ProducesValidJson()
@@ -586,19 +591,6 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task Json_NullSentinel_RoundTrips()
-        {
-            // The new engine uses Json.Null (lightuserdata) for JSON null.
-            // Encoding Json.Null produces "null"; decoding "null" returns Json.Null.
-            string? r = await Run(@"
-                local enc = Json.Encode({v=Json.Null})
-                local dec = Json.Decode(enc)
-                return tostring(dec.v == Json.Null and enc:find('null') ~= nil)
-            ");
-            r.ShouldBe("true");
-        }
-
-        [Fact]
         public async Task Json_NestedTable_EncodesAndDecodes()
         {
             string? r = await Run(@"
@@ -611,32 +603,251 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task Json_StaticDecode_ReturnsTable()
+        public async Task Json_AllBasicTypes_RoundTrip()
         {
+            // Mirrors the "Json encode/decode" test from tests/json.lua.
+            // Verifies every basic Lua type survives an encode/decode cycle.
             string? r = await Run(@"
-                local t = Json.Decode('{""a"":1,""b"":""hello""}')
-                return tostring(t.a == 1 and t.b == 'hello')
+                local j = Json.Create()
+                local orig = {
+                    s   = 'hello',
+                    n   = 42,
+                    f   = 3.14,
+                    bt  = true,
+                    bf  = false,
+                    arr = {1, 2, 3},
+                    obj = {nested = 'value'},
+                }
+                local t = j:Decode(j:Encode(orig))
+                return tostring(
+                    t.s == 'hello'   and
+                    t.n == 42        and
+                    t.f == 3.14      and
+                    t.bt == true     and
+                    t.bf == false    and
+                    #t.arr == 3      and t.arr[2] == 2 and
+                    t.obj.nested == 'value'
+                )
             ");
             r.ShouldBe("true");
         }
 
         [Fact]
-        public async Task Json_StaticEncode_ProducesString()
+        public async Task Json_InstanceReuse_MultipleCalls()
+        {
+            // The same instance must work correctly when used for multiple
+            // encode/decode calls in sequence (enc_reset / dec_reset).
+            string? r = await Run(@"
+                local j = Json.Create()
+                local s1 = j:Encode({a=1})
+                local s2 = j:Encode({b=2})
+                local t1 = j:Decode(s1)
+                local t2 = j:Decode(s2)
+                return tostring(t1.a==1 and t2.b==2 and t1.b==nil and t2.a==nil)
+            ");
+            r.ShouldBe("true");
+        }
+
+        // ── Number encoding ──────────────────────────────────────────────────
+
+        [Fact]
+        public async Task Json_Integer_EncodedWithoutDecimal()
+        {
+            // Integers must round-trip as integers (no ".0" suffix).
+            string? r = await Run(@"
+                local s = Json.Encode(42)
+                local v = Json.Decode(s)
+                return tostring(s == '42' and math.type(v) == 'integer')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_Float_Preserved_OnRoundTrip()
         {
             string? r = await Run(@"
-                local s = Json.Encode({1, 2, 3})
+                local v = Json.Decode(Json.Encode(3.14))
+                return tostring(math.type(v) == 'float' and v == 3.14)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_NaN_EncodesAsNull()
+        {
+            string? r = await Run("return Json.Encode(0/0)");
+            r.ShouldBe("null");
+        }
+
+        [Fact]
+        public async Task Json_PositiveInfinity_EncodesAsSpecialLiteral()
+        {
+            string? r = await Run("return Json.Encode(math.huge)");
+            r.ShouldBe("1e+9999");
+        }
+
+        // ── Boolean / nil encoding ───────────────────────────────────────────
+
+        [Fact]
+        public async Task Json_Boolean_True_EncodesCorrectly()
+        {
+            string? r = await Run("return Json.Encode(true)");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_Boolean_False_EncodesCorrectly()
+        {
+            string? r = await Run("return Json.Encode(false)");
+            r.ShouldBe("false");
+        }
+
+        [Fact]
+        public async Task Json_Nil_EncodesAsNull()
+        {
+            string? r = await Run("return Json.Encode(nil)");
+            r.ShouldBe("null");
+        }
+
+        // ── Array vs object detection ────────────────────────────────────────
+
+        [Fact]
+        public async Task Json_SequenceTable_EncodesAsArray()
+        {
+            // A table with consecutive integer keys 1..n encodes as a JSON array.
+            string? r = await Run(@"
+                local s = Json.Encode({10, 20, 30})
                 local t = Json.Decode(s)
-                return tostring(t[1]==1 and t[2]==2 and t[3]==3)
+                return tostring(s == '[10,20,30]' and t[1]==10 and t[2]==20 and t[3]==30)
             ");
             r.ShouldBe("true");
         }
 
         [Fact]
-        public async Task Json_PrettyEncode_ContainsNewlines()
+        public async Task Json_EmptyTable_EncodesAsArray()
+        {
+            // A truly empty table has no keys at all, so it encodes as [] (empty JSON array).
+            // A table with only string keys (e.g. {foo="bar"}) still encodes as a JSON object.
+            string? r = await Run("return Json.Encode({})");
+            r.ShouldBe("[]");
+        }
+
+        [Fact]
+        public async Task Json_StringKeyTable_EncodesAsObject()
         {
             string? r = await Run(@"
-                local s = Json.Encode({a=1}, true)
-                return tostring(s:find('\n') ~= nil)
+                local t = Json.Decode(Json.Encode({hello='world'}))
+                return t.hello
+            ");
+            r.ShouldBe("world");
+        }
+
+        [Fact]
+        public async Task Json_New_WithTrue_ProducesPrettyOutput()
+        {
+            // Json.New(true) must create a pretty-printing instance.
+            string? r = await Run(@"
+                local j = Json.New(true)
+                return tostring(j:Encode({a=1}):find('\n') ~= nil)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_New_WithFalse_ProducesCompactOutput()
+        {
+            // Json.New(false) must create a compact instance.
+            string? r = await Run(@"
+                local j = Json.New(false)
+                return tostring(j:Encode({a=1}):find('\n') == nil)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_New_NoArg_ProducesCompactOutput()
+        {
+            string? r = await Run(@"
+                local j = Json.New()
+                return tostring(j:Encode({a=1}):find('\n') == nil)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_New_CalledOnInstance_ProducesCompactOutput()
+        {
+            // Regression: before the fix, calling New() on an existing instance passed
+            // the instance (truthy userdata) as arg 1, making lua_toboolean return 1
+            // and silently creating a pretty-printing instance instead of compact.
+            string? r = await Run(@"
+                local j1 = Json.New()      -- compact
+                local j2 = j1:New()        -- must also be compact, not pretty
+                return tostring(j2:Encode({a=1}):find('\n') == nil)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_MixedTable_EncodesAsObject_IntegerKeysBecomesStrings()
+        {
+            // Lua can't distinguish "array" from "object" for mixed tables.
+            // Option A: encode as object — no data is lost, but integer keys become
+            // string keys in the JSON object, changing their type on decode.
+            // This is the safest default: silent data loss (Option B) is worse.
+            string? r = await Run(@"
+                local t   = {[1]='a', b=2}
+                local s   = Json.Encode(t)
+                local dec = Json.Decode(s)
+                return tostring(dec['1'] == 'a' and dec.b == 2 and dec[1] == nil)
+            ");
+            r.ShouldBe("true");
+        }
+
+        // ── String escaping ──────────────────────────────────────────────────
+
+        [Fact]
+        public async Task Json_DecodeEscapes_HandledCorrectly()
+        {
+            string? r = await Run(@"
+                local s = Json.Encode('line1\nline2\ttab""quote""')
+                local v = Json.Decode(s)
+                return tostring(v == 'line1\nline2\ttab""quote""')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_UnicodeEscape_DecodedCorrectly()
+        {
+            // \u0041 is 'A', \u00E9 is 'é' (U+00E9)
+            string? r = await Run(@"
+                local a  = Json.Decode('""\\u0041""')
+                local e  = Json.Decode('""\\u00E9""')
+                return tostring(a == 'A' and e == '\xC3\xA9')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_StringWithBackslash_RoundTrips()
+        {
+            string? r = await Run(@"
+                local s = 'path\\to\\file'
+                return tostring(Json.Decode(Json.Encode(s)) == s)
+            ");
+            r.ShouldBe("true");
+        }
+
+        // ── Null sentinel ────────────────────────────────────────────────────
+
+        [Fact]
+        public async Task Json_NullSentinel_RoundTrips()
+        {
+            string? r = await Run(@"
+                local enc = Json.Encode({v=Json.Null})
+                local dec = Json.Decode(enc)
+                return tostring(dec.v == Json.Null and enc:find('null') ~= nil)
             ");
             r.ShouldBe("true");
         }
@@ -670,13 +881,44 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task Json_DecodeEscapes_HandledCorrectly()
+        public async Task Json_NullInArray_RoundTrips()
         {
-            // Verify \n \t \" round-trip through the new decoder
             string? r = await Run(@"
-                local s = Json.Encode('line1\nline2\ttab""quote""')
-                local v = Json.Decode(s)
-                return tostring(v == 'line1\nline2\ttab""quote""')
+                local t = Json.Decode('[1,null,3]')
+                return tostring(t[1]==1 and t[2]==Json.Null and t[3]==3)
+            ");
+            r.ShouldBe("true");
+        }
+
+        // ── Static API ───────────────────────────────────────────────────────
+
+        [Fact]
+        public async Task Json_StaticDecode_ReturnsTable()
+        {
+            string? r = await Run(@"
+                local t = Json.Decode('{""a"":1,""b"":""hello""}')
+                return tostring(t.a == 1 and t.b == 'hello')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_StaticEncode_ProducesString()
+        {
+            string? r = await Run(@"
+                local s = Json.Encode({1, 2, 3})
+                local t = Json.Decode(s)
+                return tostring(t[1]==1 and t[2]==2 and t[3]==3)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_PrettyEncode_ContainsNewlines()
+        {
+            string? r = await Run(@"
+                local s = Json.Encode({a=1}, true)
+                return tostring(s:find('\n') ~= nil)
             ");
             r.ShouldBe("true");
         }
@@ -684,7 +926,6 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Json_CreateAlias_WorksIdenticallyToNew()
         {
-            // Json.Create is the backward-compat alias for Json.New
             string? r = await Run(@"
                 local j = Json.Create()
                 local t = j:Decode('[1,2,3]')

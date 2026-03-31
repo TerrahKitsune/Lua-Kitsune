@@ -46,8 +46,8 @@ int lua_json_gc(lua_State* L);
 int lua_json_tostring(lua_State* L);
 int lua_json_new(lua_State* L);                 // Json.New([pretty])
 
-int lua_json_static_decode(lua_State* L);       // Json.Decode(str)
-int lua_json_static_encode(lua_State* L);       // Json.Encode(table [, pretty])
-
-int lua_json_decode(lua_State* L);              // json:Decode(str)
-int lua_json_encode(lua_State* L);              // json:Encode(table)
+// Both functions handle the static and instance calling conventions:
+//   Json.Decode(str)             /  json:Decode(str)
+//   Json.Encode(value [,pretty]) /  json:Encode(value)
+int lua_json_decode(lua_State* L);
+int lua_json_encode(lua_State* L);

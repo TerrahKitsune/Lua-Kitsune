@@ -55,12 +55,6 @@
     <None Include="Extension functions.md">
       <Filter>Documentation</Filter>
     </None>
-    <None Include="KitsuneEngine.vcxproj">
-      <Filter>Documentation</Filter>
-    </None>
-    <None Include="KitsuneEngine.vcxproj.filters">
-      <Filter>Documentation</Filter>
-    </None>
     <None Include="Lua functions.md">
       <Filter>Documentation</Filter>
     </None>

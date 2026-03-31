@@ -75,11 +75,15 @@ int L_cls(lua_State *L) {
 	DWORD count, cellCount;
 	COORD homeCoords = { 0, 0 };
 	hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
-	if (hStdOut == INVALID_HANDLE_VALUE) return 0;
-	if (!GetConsoleScreenBufferInfo(hStdOut, &csbi)) return 0;
+	if (hStdOut == INVALID_HANDLE_VALUE)
+		return 0;
+	if (!GetConsoleScreenBufferInfo(hStdOut, &csbi))
+		return 0;
 	cellCount = csbi.dwSize.X * csbi.dwSize.Y;
-	if (!FillConsoleOutputCharacter(hStdOut, (TCHAR)' ', cellCount, homeCoords, &count)) return 0;
-	if (!FillConsoleOutputAttribute(hStdOut, csbi.wAttributes, cellCount, homeCoords, &count)) return 0;
+	if (!FillConsoleOutputCharacter(hStdOut, (TCHAR)' ', cellCount, homeCoords, &count))
+		return 0;
+	if (!FillConsoleOutputAttribute(hStdOut, csbi.wAttributes, cellCount, homeCoords, &count))
+		return 0;
 	SetConsoleCursorPosition(hStdOut, homeCoords);
 	return 0;
 }
@@ -89,9 +93,12 @@ int L_put(lua_State *L) {
 	const char* text = luaL_tolstring(L, 1, &len);
 	if (len > 0) {
 		for (unsigned int n = 0; n < len; n++) {
-			if (text[n] == 13) printf("\n");
-			else if (text[n] == 8) printf("\b \b");
-			else printf("%c", text[n]);
+			if (text[n] == 13)
+				printf("\n");
+			else if (text[n] == 8)
+				printf("\b \b");
+			else
+				printf("%c", text[n]);
 		}
 	}
 	lua_pop(L, 1);
@@ -162,8 +169,10 @@ int L_GetReg(lua_State *L) {
 int L_ToggleConsole(lua_State *L) {
 	bool toggle = lua_toboolean(L, 1) > 0;
 	HWND console = GetConsoleWindow();
-	if (toggle) ShowWindow(console, SW_RESTORE);
-	else ShowWindow(console, SW_HIDE);
+	if (toggle)
+		ShowWindow(console, SW_RESTORE);
+	else
+		ShowWindow(console, SW_HIDE);
 	lua_pop(L, 1);
 	return 0;
 }
@@ -180,30 +189,57 @@ int L_SetTitle(lua_State *L) {
 static int lua_SetClipboard(lua_State *L) {
 	size_t len;
 	const char* data = lua_tolstring(L, -1, &len);
-	if (!OpenClipboard(NULL)) { lua_pushboolean(L, false); return 1; }
+	if (!OpenClipboard(NULL)) {
+		lua_pushboolean(L, false);
+		return 1;
+	}
 	if (!data || len == 0) {
 		lua_pushboolean(L, EmptyClipboard() ? true : false);
 		CloseClipboard();
 		return 1;
 	}
 	HGLOBAL hGlobal = GlobalAlloc(GMEM_MOVEABLE, len + 1);
-	if (hGlobal == NULL) { CloseClipboard(); lua_pushboolean(L, false); return 1; }
+	if (hGlobal == NULL) {
+		CloseClipboard();
+		lua_pushboolean(L, false);
+		return 1;
+	}
 	char* pGlobal = (char*)GlobalLock(hGlobal);
-	if (pGlobal == NULL) { GlobalFree(hGlobal); CloseClipboard(); lua_pushboolean(L, false); return 1; }
+	if (pGlobal == NULL) {
+		GlobalFree(hGlobal);
+		CloseClipboard();
+		lua_pushboolean(L, false);
+		return 1;
+	}
 	memcpy(pGlobal, data, len);
 	GlobalUnlock(hGlobal);
-	if (SetClipboardData(CF_TEXT, hGlobal) == NULL) { GlobalFree(hGlobal); lua_pushboolean(L, false); }
-	else { lua_pushboolean(L, true); }
+	if (SetClipboardData(CF_TEXT, hGlobal) == NULL) {
+		GlobalFree(hGlobal);
+		lua_pushboolean(L, false);
+	} else {
+		lua_pushboolean(L, true);
+	}
 	CloseClipboard();
 	return 1;
 }
 
 static int lua_GetClipboard(lua_State *L) {
-	if (!OpenClipboard(NULL)) { lua_pushnil(L); return 1; }
+	if (!OpenClipboard(NULL)) {
+		lua_pushnil(L);
+		return 1;
+	}
 	HANDLE hData = GetClipboardData(CF_UNICODETEXT);
-	if (hData == NULL) { CloseClipboard(); lua_pushnil(L); return 1; }
+	if (hData == NULL) {
+		CloseClipboard();
+		lua_pushnil(L);
+		return 1;
+	}
 	wchar_t* pszText = (wchar_t*)GlobalLock(hData);
-	if (pszText == NULL) { CloseClipboard(); lua_pushnil(L); return 1; }
+	if (pszText == NULL) {
+		CloseClipboard();
+		lua_pushnil(L);
+		return 1;
+	}
 	lua_pushwchar(L, pszText);
 	GlobalUnlock(hData);
 	CloseClipboard();
@@ -214,7 +250,8 @@ static int L_SetConsoleCoords(lua_State *L) {
 	int x = (int)luaL_checkinteger(L, 1);
 	int y = (int)luaL_checkinteger(L, 2);
 	HANDLE hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
-	if (hStdOut == INVALID_HANDLE_VALUE) return 0;
+	if (hStdOut == INVALID_HANDLE_VALUE)
+		return 0;
 	COORD homeCoords = { (SHORT)x, (SHORT)y };
 	SetConsoleCursorPosition(hStdOut, homeCoords);
 	return 0;
@@ -224,8 +261,12 @@ static int L_GetConsoleCoords(lua_State *L) {
 	HANDLE hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
 	CONSOLE_SCREEN_BUFFER_INFO info;
 	lua_pop(L, lua_gettop(L));
-	if (hStdOut == INVALID_HANDLE_VALUE) return 0;
-	if (!GetConsoleScreenBufferInfo(hStdOut, &info)) { lua_pushnil(L); return 1; }
+	if (hStdOut == INVALID_HANDLE_VALUE)
+		return 0;
+	if (!GetConsoleScreenBufferInfo(hStdOut, &info)) {
+		lua_pushnil(L);
+		return 1;
+	}
 	lua_pushinteger(L, info.dwCursorPosition.X);
 	lua_pushinteger(L, info.dwCursorPosition.Y);
 	lua_pushinteger(L, info.dwSize.X);
@@ -251,11 +292,15 @@ static int L_ConsoleDestroy(lua_State *L) {
 
 static int L_ConsoleWrite(lua_State *L) {
 	HANDLE hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
-	if (hStdOut == INVALID_HANDLE_VALUE) return 0;
+	if (hStdOut == INVALID_HANDLE_VALUE)
+		return 0;
 	size_t len;
 	const char* data;
-	if (lua_isstring(L, 1)) { data = lua_tolstring(L, 1, &len); }
-	else { data = luaL_tolstring(L, 1, &len); }
+	if (lua_isstring(L, 1)) {
+		data = lua_tolstring(L, 1, &len);
+	} else {
+		data = luaL_tolstring(L, 1, &len);
+	}
 	DWORD written;
 	WriteConsole(hStdOut, data, (DWORD)len, &written, NULL);
 	lua_pop(L, lua_gettop(L));
@@ -265,18 +310,27 @@ static int L_ConsoleWrite(lua_State *L) {
 
 static int L_ConsolePrint(lua_State *L) {
 	HANDLE hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
-	if (hStdOut == INVALID_HANDLE_VALUE) return 0;
+	if (hStdOut == INVALID_HANDLE_VALUE)
+		return 0;
 	DWORD written, total = 0;
 	size_t len;
 	const char* data;
 	for (int n = 1; n <= lua_gettop(L); n++) {
 		data = luaL_tolstring(L, n, &len);
 		lua_pop(L, 1);
-		if (!data) { data = ""; len = 0; }
+		if (!data) {
+			data = "";
+			len  = 0;
+		}
 		WriteConsole(hStdOut, data, (DWORD)len, &written, NULL);
 		total += written;
-		if (n < lua_gettop(L)) { data = "\t"; len = 1; }
-		else { data = "\n"; len = 1; }
+		if (n < lua_gettop(L)) {
+			data = "\t";
+			len  = 1;
+		} else {
+			data = "\n";
+			len  = 1;
+		}
 		WriteConsole(hStdOut, data, (DWORD)len, &written, NULL);
 		total += written;
 	}
@@ -287,13 +341,20 @@ static int L_ConsolePrint(lua_State *L) {
 
 static int L_ConsoleReadKey(lua_State *L) {
 	HANDLE hStdIn = GetStdHandle(STD_INPUT_HANDLE);
-	if (hStdIn == INVALID_HANDLE_VALUE) return 0;
+	if (hStdIn == INVALID_HANDLE_VALUE)
+		return 0;
 	lua_pop(L, lua_gettop(L));
 	bool keydown = false;
-	if (is_stdin_tty()) { keydown = _kbhit() > 0; }
-	else { keydown = !feof(stdin); }
-	if (keydown) { lua_pushinteger(L, _getch()); }
-	else { lua_pushnil(L); }
+	if (is_stdin_tty()) {
+		keydown = _kbhit() > 0;
+	} else {
+		keydown = !feof(stdin);
+	}
+	if (keydown) {
+		lua_pushinteger(L, _getch());
+	} else {
+		lua_pushnil(L);
+	}
 	return 1;
 }
 
@@ -316,13 +377,15 @@ typedef struct { int count; HMONITOR search; int idx; } DisplayEnumData;
 static BOOL CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC, LPRECT, LPARAM dwData) {
 	DisplayEnumData* cb = (DisplayEnumData*)dwData;
 	cb->count++;
-	if (cb->search == hMonitor) cb->idx = cb->count;
+	if (cb->search == hMonitor)
+		cb->idx = cb->count;
 	return TRUE;
 }
 
 static int GetMonitorIdx(HMONITOR hMonitor) {
 	DisplayEnumData data = { 0, hMonitor, 0 };
-	if (EnumDisplayMonitors(NULL, NULL, MonitorEnumProc, (LPARAM)&data)) return data.idx;
+	if (EnumDisplayMonitors(NULL, NULL, MonitorEnumProc, (LPARAM)&data))
+		return data.idx;
 	return 0;
 }
 

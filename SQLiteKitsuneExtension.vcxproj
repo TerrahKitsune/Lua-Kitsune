@@ -171,14 +171,11 @@
     <ClCompile Include="RedisString.cpp" />
     <ClCompile Include="RedisValue.cpp" />
     <ClCompile Include="sha1.c" />
+    <ClCompile Include="luajson.cpp" />
+    <ClCompile Include="luajsonmain.cpp" />
     <ClCompile Include="SHA1Main.cpp" />
     <ClCompile Include="sha256.c" />
     <ClCompile Include="Sha256Main.cpp" />
-    <ClCompile Include="oldjsondecode.cpp" />
-    <ClCompile Include="oldjsonencode.cpp" />
-    <ClCompile Include="oldjsonutil.cpp" />
-    <ClCompile Include="oldlua_json.cpp" />
-    <ClCompile Include="oldluajsonmain.cpp" />
     <ClCompile Include="sqliteextension\dlllua.cpp" />
     <ClCompile Include="sqliteextension\dllmain.cpp" />
     <ClCompile Include="sqliteextension\executeluafunction.cpp" />
