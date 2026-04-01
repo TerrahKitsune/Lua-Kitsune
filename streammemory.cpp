@@ -88,6 +88,8 @@ static int pushinmemory_backend(lua_State* L) {
 		lua_setfield(L, -2, "len");
 		lua_pushinteger(L, (lua_Integer)stream->alloc);
 		lua_setfield(L, -2, "alloc");
+		lua_pushstring(L, "memory");
+		lua_setfield(L, -2, "type");
 		return 1;
 	}
 

@@ -1,6 +1,7 @@
 ﻿#include "luacsv.h"
 #include <string.h>
 #include "luawchar.h"
+#include "stream.h"
 
 // Calls the chunk-supplier function stored in csv->streamFuncRef.
 // If the supplier returns a LuaWChar userdata it is converted to a UTF-8 string first,
@@ -347,35 +348,66 @@ static wchar_t ParseDelimiter(lua_State* L, int idx) {
 	return L',';
 }
 
-// CSV.Decode(str_or_wchar [, delimiter])
-int LuaDecodeCsv(lua_State* L) {
-	LuaCsv csv = {};
-	csv.delimiter = ParseDelimiter(L, 2);
+// Variant for CSV.New(): returns L'\0' (auto) when no argument is provided so a
+// freshly-created instance auto-detects by default rather than defaulting to comma.
+static wchar_t ParseInstanceDelimiter(lua_State* L, int idx) {
+	if (lua_gettop(L) < idx || lua_isnil(L, idx))
+		return L'\0';
+	if (lua_isboolean(L, idx))
+		return lua_toboolean(L, idx) ? L'\0' : L',';
+	if (lua_type(L, idx) == LUA_TSTRING) {
+		size_t dlen;
+		const char* ds = lua_tolstring(L, idx, &dlen);
+		if (dlen == 4 && memcmp(ds, "auto", 4) == 0) return L'\0';
+		if (dlen > 0) return (wchar_t)(unsigned char)ds[0];
+	} else if (lua_isinteger(L, idx)) {
+		return (wchar_t)lua_tointeger(L, idx);
+	}
+	return L'\0';
+}
 
-	// Anchor the source Wchar on the stack so GC cannot collect it during Decode.
+// Internal decode: str_or_wchar at L[1], csv->delimiter pre-set.
+// Resets transient parse fields; preserves csv->buffer allocation for reuse.
+// Saves and restores csv->delimiter so auto-detect re-fires on every call.
+static int DecodeCsvWith(lua_State* L, LuaCsv* csv) {
+	csv->pos  = 0;
+	csv->last = L'\0';
+	csv->len  = 0;
+	if (csv->buffer) csv->buffer[0] = L'\0';
+
+	wchar_t savedDelim = csv->delimiter;
+
 	if (lua_iswchar(L, 1)) {
 		lua_pushvalue(L, 1);
 	} else {
 		lua_pushvalue(L, 1);
-		FromUtf8(L);       // convert plain string to Wchar; copy of arg1 is one level below
-		lua_remove(L, -2); // remove copy; Wchar is now at top, rooted
+		FromUtf8(L);
+		lua_remove(L, -2);
 	}
-	csv.data = lua_towchar(L, -1);
-	csv.pos  = 0;
+	csv->data = lua_towchar(L, -1);
+	csv->pos  = 0;
 
-	// Auto-detect: sniff delimiter from the data before parsing.
-	if (csv.delimiter == L'\0')
-		csv.delimiter = (csv.data && csv.data->len > 0)
-			? SniffDelimiter(csv.data->str, csv.data->len)
+	if (csv->delimiter == L'\0')
+		csv->delimiter = (csv->data && csv->data->len > 0)
+			? SniffDelimiter(csv->data->str, csv->data->len)
 			: L',';
 
-	Decode(&csv, L);  // result table at top; anchored Wchar one below
+	Decode(csv, L);
 
-	csv.data = NULL;
-	lua_remove(L, -2);  // remove anchored Wchar; result table stays on top
-
-	FreeBuffer(&csv);
+	csv->data      = NULL;
+	csv->delimiter = savedDelim;
+	lua_remove(L, -2);
 	return 1;
+}
+
+// CSV.Decode entry point: parses delimiter from the stack, runs DecodeCsvWith on
+// a temporary local state, then frees the transient buffer.
+int LuaDecodeCsv(lua_State* L) {
+	LuaCsv csv = {};
+	csv.delimiter = ParseDelimiter(L, 2);
+	int r = DecodeCsvWith(L, &csv);
+	FreeBuffer(&csv);
+	return r;
 }
 
 // CSV.Encode(rows [, delimiter])
@@ -391,23 +423,8 @@ static bool FieldNeedsQuoting(const char* s, size_t len, char delimiter) {
 	return false;
 }
 
-int LuaEncodeCsv(lua_State* L) {
+static int EncodeCsvWithDelimiter(lua_State* L, char delimiter) {
 	luaL_checktype(L, 1, LUA_TTABLE);
-
-	// Parse delimiter as a single-byte char for the output encoding.
-	// "auto" / L'\0' sentinel has no meaning for output; map to comma.
-	char delimiter = ',';
-	if (lua_gettop(L) >= 2 && !lua_isnil(L, 2)) {
-		if (lua_type(L, 2) == LUA_TSTRING) {
-			size_t dlen;
-			const char* ds = lua_tolstring(L, 2, &dlen);
-			if (dlen == 4 && memcmp(ds, "auto", 4) == 0) { /* keep comma */ }
-			else if (dlen > 0) delimiter = ds[0];
-		} else if (lua_isinteger(L, 2)) {
-			delimiter = (char)lua_tointeger(L, 2);
-		}
-	}
-
 	luaL_Buffer b;
 	luaL_buffinit(L, &b);
 
@@ -427,9 +444,8 @@ int LuaEncodeCsv(lua_State* L) {
 			if (c > 1)
 				luaL_addchar(&b, delimiter);
 
-			lua_rawgeti(L, -1, c);  // push field value
+			lua_rawgeti(L, -1, c);
 
-			// luaL_tolstring invokes __tostring so Wchar fields are converted to UTF-8.
 			size_t fieldLen;
 			const char* field = luaL_tolstring(L, -1, &fieldLen);
 
@@ -437,7 +453,7 @@ int LuaEncodeCsv(lua_State* L) {
 				luaL_addchar(&b, '"');
 				for (size_t i = 0; i < fieldLen; i++) {
 					if (field[i] == '"')
-						luaL_addchar(&b, '"');  // RFC 4180 escape
+						luaL_addchar(&b, '"');
 					luaL_addchar(&b, field[i]);
 				}
 				luaL_addchar(&b, '"');
@@ -445,13 +461,28 @@ int LuaEncodeCsv(lua_State* L) {
 				luaL_addlstring(&b, field, fieldLen);
 			}
 
-			lua_pop(L, 2);  // pop string result and original field value
+			lua_pop(L, 2);
 		}
-		lua_pop(L, 1);  // pop row
+		lua_pop(L, 1);
 	}
 
 	luaL_pushresult(&b);
 	return 1;
+}
+
+int LuaEncodeCsv(lua_State* L) {
+	char delimiter = ',';
+	if (lua_gettop(L) >= 2 && !lua_isnil(L, 2)) {
+		if (lua_type(L, 2) == LUA_TSTRING) {
+			size_t dlen;
+			const char* ds = lua_tolstring(L, 2, &dlen);
+			if (dlen == 4 && memcmp(ds, "auto", 4) == 0) { /* keep comma */ }
+			else if (dlen > 0) delimiter = ds[0];
+		} else if (lua_isinteger(L, 2)) {
+			delimiter = (char)lua_tointeger(L, 2);
+		}
+	}
+	return EncodeCsvWithDelimiter(L, delimiter);
 }
 
 // ── Streaming iterator ────────────────────────────────────────────────────────
@@ -474,11 +505,8 @@ static int LuaCsvStreamStateGc(lua_State* L) {
 // Iterator closure: upvalue 1 is the LuaCsv userdata.
 static int CsvStreamIterator(lua_State* L) {
 	LuaCsv* csv = (LuaCsv*)lua_touserdata(L, lua_upvalueindex(1));
-	csv->streamL = L;  // refresh to current thread on every call
+	csv->streamL = L;
 
-	// Auto-detect: on the very first call the delimiter sentinel is still L'\0'.
-	// Buffer the first chunk and sniff it; subsequent calls skip this block because
-	// csv->delimiter will have been set to a real character.
 	if (csv->delimiter == L'\0') {
 		if (csv->streamPos >= (int)csv->streamLen && !csv->streamDone)
 			RefillStreamBuffer(csv);
@@ -488,19 +516,47 @@ static int CsvStreamIterator(lua_State* L) {
 	}
 
 	if (!DecodeOneRow(csv, L))
-		return 0;  // returns nil → generic for-loop ends
-	return 1;      // returns the row table
+		return 0;
+	return 1;
 }
 
-// CSV.DecodeFromFunction(fn [, delimiter]) → iterator
-// fn is called with no arguments; it should return a UTF-8 string, a Wchar object,
-// or nil/false/"" to signal end-of-stream.  Each iteration yields one row table.
-int LuaDecodeFromFunction(lua_State* L) {
-	luaL_checktype(L, 1, LUA_TFUNCTION);
-	wchar_t delim = ParseDelimiter(L, 2);
+// C closure used when a LuaStream is passed to DecodeFromFunction.
+// Upvalue 1 is the stream userdata itself (not a raw pointer) so the closure
+// holds a GC-visible reference to the stream for the iterator's entire lifetime.
+// Reads 4 KiB per call; returns nil on EOF.
+static int csv_stream_chunk_reader(lua_State* L) {
+	LuaStream* st = (LuaStream*)lua_touserdata(L, lua_upvalueindex(1));
+	lua_rawgeti(L, LUA_REGISTRYINDEX, st->backendRef);
+	lua_pushinteger(L, STREAM_OP_READ);
+	lua_pushinteger(L, 4096);
+	lua_call_nohook(L, 2, 1);
+	if (lua_type(L, -1) == LUA_TSTRING) {
+		size_t len;
+		lua_tolstring(L, -1, &len);
+		if (len == 0) {
+			lua_pop(L, 1);
+			lua_pushnil(L);
+		}
+	}
+	return 1;
+}
 
-	// Allocate the stream state as a Lua full userdata so it is collected
-	// automatically (via __gc) when the iterator closure is garbage-collected.
+// If L[1] is a readable LuaStream, replaces it with a chunk-reader closure.
+static void WrapStreamIfNeeded(lua_State* L) {
+	if (!lua_isstream(L, 1))
+		return;
+	LuaStream* st = lua_toluastream(L, 1);
+	if (!(st->Caps & STREAM_CAP_READ))
+		luaL_argerror(L, 1, "stream is not readable");
+	lua_pushvalue(L, 1);
+	lua_pushcclosure(L, csv_stream_chunk_reader, 1);
+	lua_insert(L, 1);
+	lua_remove(L, 2);
+}
+
+// Creates the iterator LuaCsv userdata and returns the iterator closure.
+// fn/stream must be at L[1]; delim is the already-resolved delimiter.
+static int CreateCsvIterator(lua_State* L, wchar_t delim) {
 	LuaCsv* csv = (LuaCsv*)lua_newuserdata(L, sizeof(LuaCsv));
 	memset(csv, 0, sizeof(LuaCsv));
 	csv->delimiter     = delim;
@@ -512,69 +568,78 @@ int LuaDecodeFromFunction(lua_State* L) {
 	}
 	lua_setmetatable(L, -2);
 
-	// Anchor the supplier function in the registry so the GC cannot collect it
-	// while the iterator closure is still alive.
 	lua_pushvalue(L, 1);
 	csv->streamFuncRef = luaL_ref(L, LUA_REGISTRYINDEX);
 
-	// The userdata is on top; make it the sole upvalue of the iterator closure.
 	lua_pushcclosure(L, CsvStreamIterator, 1);
 	return 1;
 }
 
-// ── CSV.New factory ───────────────────────────────────────────────────────────
-// Each method is a C closure whose sole upvalue is the delimiter value (a Lua
-// string, integer, or the string "auto").  The methods delegate directly to the
-// existing LuaDecodeCsv / LuaEncodeCsv / LuaDecodeFromFunction functions.
+int LuaDecodeFromFunction(lua_State* L) {
+	WrapStreamIfNeeded(L);
+	luaL_checktype(L, 1, LUA_TFUNCTION);
+	return CreateCsvIterator(L, ParseDelimiter(L, 2));
+}
 
-// csv:Decode(str)  →  CSV.Decode(str, delimiter)
-static int LuaCsvObjectDecode(lua_State* L) {
-	lua_pushcfunction(L, LuaDecodeCsv);
-	lua_pushvalue(L, 2);                    // str (arg 2; arg 1 is self)
-	lua_pushvalue(L, lua_upvalueindex(1));  // bound delimiter
-	lua_call_nohook(L, 2, 1);
+// ── CSV instance API ──────────────────────────────────────────────────────────
+
+int lua_csv_gc(lua_State* L) {
+	LuaCsv* csv = (LuaCsv*)luaL_checkudata(L, 1, LUACSV);
+	FreeBuffer(csv);
+	if (csv->streamBuf) {
+		gff_free(csv->streamBuf);
+		csv->streamBuf = NULL;
+	}
+	return 0;
+}
+
+int lua_csv_tostring(lua_State* L) {
+	LuaCsv* csv = (LuaCsv*)luaL_checkudata(L, 1, LUACSV);
+	if (csv->delimiter == L'\0')
+		lua_pushstring(L, "CSV(auto)");
+	else {
+		char buf[32];
+		snprintf(buf, sizeof(buf), "CSV('%c')", (char)csv->delimiter);
+		lua_pushstring(L, buf);
+	}
 	return 1;
 }
 
-// csv:Encode(rows)  →  CSV.Encode(rows, delimiter)
-static int LuaCsvObjectEncode(lua_State* L) {
-	lua_pushcfunction(L, LuaEncodeCsv);
-	lua_pushvalue(L, 2);                    // rows
-	lua_pushvalue(L, lua_upvalueindex(1));  // bound delimiter ("auto" → comma)
-	lua_call_nohook(L, 2, 1);
+// CSV.New([delim]) / CSV.Create([delim])
+// When called as csv:New([delim]), the instance at arg 1 is ignored.
+int lua_csv_new(lua_State* L) {
+	int delimIdx = luaL_testudata(L, 1, LUACSV) ? 2 : 1;
+	LuaCsv* csv = (LuaCsv*)lua_newuserdata(L, sizeof(LuaCsv));
+	memset(csv, 0, sizeof(LuaCsv));
+	csv->delimiter     = ParseInstanceDelimiter(L, delimIdx);
+	csv->streamFuncRef = LUA_NOREF;
+	luaL_getmetatable(L, LUACSV);
+	lua_setmetatable(L, -2);
 	return 1;
 }
 
-// csv:DecodeFromFunction(fn)  →  CSV.DecodeFromFunction(fn, delimiter)
-static int LuaCsvObjectDecodeFromFunction(lua_State* L) {
-	lua_pushcfunction(L, LuaDecodeFromFunction);
-	lua_pushvalue(L, 2);                    // fn
-	lua_pushvalue(L, lua_upvalueindex(1));  // bound delimiter
-	lua_call_nohook(L, 2, 1);
-	return 1;
+// csv:Decode(str_or_wchar)
+int lua_csv_decode(lua_State* L) {
+	LuaCsv* csv = (LuaCsv*)luaL_checkudata(L, 1, LUACSV);
+	lua_remove(L, 1);       // str → arg 1
+	return DecodeCsvWith(L, csv);
 }
 
-// CSV.New([delimiter]) → {Decode, Encode, DecodeFromFunction}
-// Omitting delimiter (or passing nil) binds "auto" so every Decode call sniffs.
-int LuaCsvNew(lua_State* L) {
-	bool hasDelim = lua_gettop(L) >= 1 && !lua_isnil(L, 1);
-
-	lua_newtable(L);  // result table
-
-	// Decode
-	if (hasDelim) lua_pushvalue(L, 1); else lua_pushstring(L, "auto");
-	lua_pushcclosure(L, LuaCsvObjectDecode, 1);
-	lua_setfield(L, -2, "Decode");
-
-	// Encode
-	if (hasDelim) lua_pushvalue(L, 1); else lua_pushstring(L, "auto");
-	lua_pushcclosure(L, LuaCsvObjectEncode, 1);
-	lua_setfield(L, -2, "Encode");
-
-	// DecodeFromFunction
-	if (hasDelim) lua_pushvalue(L, 1); else lua_pushstring(L, "auto");
-	lua_pushcclosure(L, LuaCsvObjectDecodeFromFunction, 1);
-	lua_setfield(L, -2, "DecodeFromFunction");
-
-	return 1;
+// csv:Encode(rows)
+int lua_csv_encode(lua_State* L) {
+	LuaCsv* csv = (LuaCsv*)luaL_checkudata(L, 1, LUACSV);
+	char delimiter = (csv->delimiter == L'\0') ? ',' : (char)csv->delimiter;
+	lua_remove(L, 1);       // rows → arg 1
+	return EncodeCsvWithDelimiter(L, delimiter);
 }
+
+// csv:DecodeFromFunction(fn_or_stream)
+int lua_csv_decode_from_function(lua_State* L) {
+	LuaCsv* csv = (LuaCsv*)luaL_checkudata(L, 1, LUACSV);
+	wchar_t delim = csv->delimiter;
+	lua_remove(L, 1);       // fn/stream → arg 1
+	WrapStreamIfNeeded(L);
+	luaL_checktype(L, 1, LUA_TFUNCTION);
+	return CreateCsvIterator(L, delim);
+}
+

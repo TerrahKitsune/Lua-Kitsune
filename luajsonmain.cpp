@@ -2,11 +2,13 @@
 #include "luajsonmain.h"
 
 static const struct luaL_Reg json_functions[] = {
-	{ "New",     lua_json_new    },  // Json.New([pretty])
-	{ "Create",  lua_json_new    },  // backward-compat alias
-	{ "Decode",  lua_json_decode },  // Json.Decode(str)  or  json:Decode(str)
-	{ "Encode",  lua_json_encode },  // Json.Encode(value [, pretty])  or  json:Encode(value)
-	{ "Dispose", lua_json_gc     },  // json:Dispose()
+	{ "New",              lua_json_new               },  // Json.New([pretty])
+	{ "Create",           lua_json_new               },  // backward-compat alias
+	{ "Decode",           lua_json_decode            },  // json:Decode(str | fn)
+	{ "Encode",           lua_json_encode            },  // json:Encode(value)
+	{ "EncodeIntoStream", lua_json_encode_into_stream },  // json:EncodeIntoStream(stream, value)
+	{ "DecodeIntoStream", lua_json_decode_into_stream },  // json:DecodeIntoStream(stream)
+	{ "Dispose",          lua_json_gc                },  // json:Dispose()
 	{ NULL, NULL }
 };
 

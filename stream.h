@@ -39,6 +39,7 @@ int        lua_isstream(lua_State* L, int index);
 
 // ── Stream construction ───────────────────────────────────────────────────────
 int NewStream(lua_State* L);
+int OpenFile(lua_State* L);
 
 // ── Stream info ───────────────────────────────────────────────────────────────
 int StreamPos(lua_State* L);

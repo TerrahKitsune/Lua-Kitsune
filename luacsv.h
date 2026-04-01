@@ -3,7 +3,12 @@
 #include <Windows.h>
 #include "luawchar.h"
 
-// Internal parser state; not exposed to Lua.
+#define LUACSV "LUACSV"  // metatable name for CSV instance userdata
+
+// Internal parser state; doubles as the Lua-visible instance userdata.
+// When used as a LUACSV instance, only 'delimiter' is persistent across calls;
+// all other fields are re-initialised at the start of each operation.
+// delimiter == L'\0' means auto-detect on every call.
 typedef struct LuaCsv {
     // ── String-mode source (data != NULL) ────────────────────────────────────
     int       pos;
@@ -24,22 +29,29 @@ typedef struct LuaCsv {
     bool       streamDone;     // supplier returned nil/false/empty — no more data
 } LuaCsv;
 
-// CSV.Decode(str_or_wchar [, delimiter])
-//   Returns {Comments={...}, Rows={{field,...},...}}; fields are Wchar objects.
-//   Pass "auto" (or boolean true) as delimiter to let the parser sniff it.
-int LuaDecodeCsv(lua_State* L);
+// ── Instance entry points ─────────────────────────────────────────────────────
+// All operations require a LuaCsvInst userdata at arg 1.
 
-// CSV.Encode(rows [, delimiter])
+// CSV.New([delim]) / CSV.Create([delim])  →  LuaCsvInst userdata.
+//   Omitting delimiter (or passing nil / "auto") enables auto-detection per call.
+//   When called as csv:New([delim]), the existing instance at arg 1 is ignored.
+int lua_csv_new(lua_State* L);
+
+// csv:Decode(str_or_wchar)
+//   Returns {Comments={...}, Rows={{field,...},...}}; fields are Wchar objects.
+int lua_csv_decode(lua_State* L);
+
+// csv:Encode(rows)
 //   rows: array-of-arrays; each field is converted via tostring.
 //   Returns a UTF-8 CSV string.
-int LuaEncodeCsv(lua_State* L);
+int lua_csv_encode(lua_State* L);
 
-// CSV.DecodeFromFunction(fn [, delimiter]) → iterator
-//   Calls fn() repeatedly for chunks (string, Wchar, or nil/false/"" to stop).
+// csv:DecodeFromFunction(fn_or_stream)
+//   fn:     called with no arguments; returns a string/Wchar chunk, or nil/false/"" to stop.
+//   stream: read in 4 KiB chunks; the iterator keeps the stream alive until GC.
 //   Each iteration of the returned iterator yields one row as a Wchar-field table.
-int LuaDecodeFromFunction(lua_State* L);
+int lua_csv_decode_from_function(lua_State* L);
 
-// CSV.New([delimiter]) → {Decode, Encode, DecodeFromFunction}
-//   Returns a lightweight CSV object with the delimiter bound to all three methods.
-//   Omitting delimiter (or passing nil) enables auto-detection on each Decode call.
-int LuaCsvNew(lua_State* L);
+// Metamethods registered on the LUACSV metatable.
+int lua_csv_gc(lua_State* L);
+int lua_csv_tostring(lua_State* L);

@@ -196,6 +196,7 @@
     <ClCompile Include="sha256.c" />
     <ClCompile Include="Sha256Main.cpp" />
     <ClCompile Include="stream.cpp" />
+    <ClCompile Include="streamfile.cpp" />
     <ClCompile Include="streammemory.cpp" />
     <ClCompile Include="StreamMain.cpp" />
     <ClCompile Include="wcharmain.cpp" />
@@ -345,6 +346,7 @@
     <ClInclude Include="sha256.h" />
     <ClInclude Include="Sha256Main.h" />
     <ClInclude Include="stream.h" />
+    <ClInclude Include="streamfile.h" />
     <ClInclude Include="StreamMain.h" />
     <ClInclude Include="streammemory.h" />
     <ClInclude Include="wcharmain.h" />

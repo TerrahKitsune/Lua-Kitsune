@@ -84,12 +84,10 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="Program.cpp" />
-  </ItemGroup>
+    <ClCompile Include="Program.cpp" />  </ItemGroup>
   <ItemGroup>
     <ClInclude Include="KitsuneEngine.h" />
-    <ClInclude Include="resource.h" />
-  </ItemGroup>
+    <ClInclude Include="resource.h" />  </ItemGroup>
   <ItemGroup>
     <Text Include="main.lua">
       <FileType>Document</FileType>

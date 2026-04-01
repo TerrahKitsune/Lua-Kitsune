@@ -730,12 +730,96 @@ data Archive:Read(opt buffer)
 ### Creation
 
 ```lua
-Stream Stream.Create(opt initialsize/allocfunc)
+Stream Stream.Create(opt string)
+Stream Stream.Create(backendfunction)
 Stream Stream.FromString(string)
 Stream Stream.Open(filename)
 table Stream.GetSharedMemoryStreamInfo(name)
 Stream Stream.CreateSharedMemoryStream(name, size)
 Stream Stream.OpenSharedMemoryStream(name, opt readonly)
+```
+
+- **No argument** — creates a new empty in-memory stream.
+- **String argument** — creates an in-memory stream pre-loaded with the string contents, with the position reset to 0.
+- **Function argument** — creates a stream backed by the provided Lua function. The function is called with an opcode as its first argument and must handle all `STREAM_OP_*` operations it wishes to support. It must return the capability bitmask when called with `STREAM_OP_OPEN` (0).
+
+### Custom Backend Functions
+
+A backend function is called as `backend(opcode, arg)` whenever the stream engine needs to perform an operation. The function must handle at minimum `STREAM_OP_OPEN` and `STREAM_OP_CLOSE`; all other opcodes only need to be handled if the corresponding capability flag is advertised.
+
+**Opcodes:**
+| Value | Constant | Arg | Expected return |
+|-------|----------|-----|-----------------|
+| 0 | `STREAM_OP_OPEN` | — | Integer capability bitmask (`STREAM_CAP_*`) |
+| 1 | `STREAM_OP_CLOSE` | — | `true` or `false [, errmsg]` |
+| 2 | `STREAM_OP_READ` | `len` (0 = read all remaining) | String of up to `len` bytes, or `false [, errmsg]` on error / end of stream |
+| 3 | `STREAM_OP_WRITE` | `data` (string) | `true` or `false [, errmsg]` |
+| 5 | `STREAM_OP_CURPOS` | — | Integer: current byte position |
+| 6 | `STREAM_OP_LEN` | — | Integer: total byte length |
+| 7 | `STREAM_OP_SETPOS` | `pos` (integer) | `true` or `false [, errmsg]` |
+| 8 | `STREAM_OP_INFO` | — | Any value — returned as `backendInfo` from `GetInfo()` |
+
+**Capability flags advertised via `STREAM_OP_OPEN`:**
+| Value | Constant | Enables |
+|-------|----------|---------|
+| 1 | `STREAM_CAP_READ` | `Read`, `ReadByte`, `ReadUtf8`, typed reads, `Compress`/`Decompress` source |
+| 2 | `STREAM_CAP_WRITE` | `Write`, `WriteByte`, `WriteUtf8`, typed writes, `Compress`/`Decompress` destination |
+| 4 | `STREAM_CAP_SEEK` | `Seek`, `pos`, `SetByte` with position |
+| 8 | `STREAM_CAP_PEEK` | `PeekByte` |
+
+**Example — read/write in-memory backend:**
+
+```lua
+local function makeStream()
+    local OPEN, CLOSE, READ, WRITE = 0, 1, 2, 3
+    local CURPOS, LEN, SETPOS, INFO = 5, 6, 7, 8
+    local CAP_READ, CAP_WRITE, CAP_SEEK, CAP_PEEK = 1, 2, 4, 8
+
+    local buf = ''
+    local pos = 0
+
+    return Stream.Create(function(op, arg)
+        if op == OPEN then
+            return CAP_READ + CAP_WRITE + CAP_SEEK + CAP_PEEK
+
+        elseif op == CLOSE then
+            buf = nil
+            return true
+
+        elseif op == READ then
+            if pos >= #buf then return '' end
+            local n = (arg == 0) and (#buf - pos) or arg
+            local chunk = buf:sub(pos + 1, pos + n)
+            pos = pos + #chunk
+            return chunk
+
+        elseif op == WRITE then
+            -- overwrite at current position, extend if needed
+            buf = buf:sub(1, pos) .. arg .. buf:sub(pos + #arg + 1)
+            pos = pos + #arg
+            return true
+
+        elseif op == CURPOS then
+            return pos
+
+        elseif op == LEN then
+            return #buf
+
+        elseif op == SETPOS then
+            pos = math.max(0, math.min(arg, #buf))
+            return true
+
+        elseif op == INFO then
+            return { pos = pos, len = #buf, type = 'lua' }
+        end
+    end)
+end
+
+local s = makeStream()
+s:Write('hello world')
+s:Seek(6)
+print(s:Read())   -- "world"
+print(s:pos())    -- 11
 ```
 
 ### File Operations
@@ -775,6 +859,16 @@ void Stream:Seek(opt pos)
 `GetInfo()` returns two values:
 - `capsTable` — `{ Caps = number }` where `Caps` is the capability bitmask (`STREAM_CAP_*` flags)
 - `backendInfo` — backend-defined; for in-memory streams: `{ pos, len, alloc }`
+
+**`STREAM_CAP_*` flags:**
+| Value | Constant | Description |
+|-------|----------|-------------|
+| 1 | `STREAM_CAP_READ` | Stream supports read operations |
+| 2 | `STREAM_CAP_WRITE` | Stream supports write operations |
+| 4 | `STREAM_CAP_SEEK` | Stream supports seeking (`Seek`, `pos`) |
+| 8 | `STREAM_CAP_PEEK` | Stream supports `PeekByte` |
+
+In-memory streams created with `Stream.Create()` have all four flags set (`Caps = 15`).
 
 ### Compression
 

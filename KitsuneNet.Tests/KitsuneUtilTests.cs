@@ -562,8 +562,7 @@ namespace KitsuneNet.Tests
         }
 
         // -- Json -----------------------------------------------------------------
-        // Instance methods (Json.Create / Json.New) mirror the old API exactly.
-        // Static methods (Json.Encode / Json.Decode) are the new convenience layer.
+        // All operations require an instance (Json.New() or Json.Create()).
         // Json.Null is the fixed lightuserdata sentinel for JSON null values.
 
         // ── Instance round-trips ─────────────────────────────────────────────
@@ -655,8 +654,9 @@ namespace KitsuneNet.Tests
         {
             // Integers must round-trip as integers (no ".0" suffix).
             string? r = await Run(@"
-                local s = Json.Encode(42)
-                local v = Json.Decode(s)
+                local j = Json.New()
+                local s = j:Encode(42)
+                local v = j:Decode(s)
                 return tostring(s == '42' and math.type(v) == 'integer')
             ");
             r.ShouldBe("true");
@@ -666,7 +666,8 @@ namespace KitsuneNet.Tests
         public async Task Json_Float_Preserved_OnRoundTrip()
         {
             string? r = await Run(@"
-                local v = Json.Decode(Json.Encode(3.14))
+                local j = Json.New()
+                local v = j:Decode(j:Encode(3.14))
                 return tostring(math.type(v) == 'float' and v == 3.14)
             ");
             r.ShouldBe("true");
@@ -675,14 +676,14 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Json_NaN_EncodesAsNull()
         {
-            string? r = await Run("return Json.Encode(0/0)");
+            string? r = await Run("return Json.New():Encode(0/0)");
             r.ShouldBe("null");
         }
 
         [Fact]
         public async Task Json_PositiveInfinity_EncodesAsSpecialLiteral()
         {
-            string? r = await Run("return Json.Encode(math.huge)");
+            string? r = await Run("return Json.New():Encode(math.huge)");
             r.ShouldBe("1e+9999");
         }
 
@@ -691,21 +692,21 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Json_Boolean_True_EncodesCorrectly()
         {
-            string? r = await Run("return Json.Encode(true)");
+            string? r = await Run("return Json.New():Encode(true)");
             r.ShouldBe("true");
         }
 
         [Fact]
         public async Task Json_Boolean_False_EncodesCorrectly()
         {
-            string? r = await Run("return Json.Encode(false)");
+            string? r = await Run("return Json.New():Encode(false)");
             r.ShouldBe("false");
         }
 
         [Fact]
         public async Task Json_Nil_EncodesAsNull()
         {
-            string? r = await Run("return Json.Encode(nil)");
+            string? r = await Run("return Json.New():Encode(nil)");
             r.ShouldBe("null");
         }
 
@@ -716,8 +717,9 @@ namespace KitsuneNet.Tests
         {
             // A table with consecutive integer keys 1..n encodes as a JSON array.
             string? r = await Run(@"
-                local s = Json.Encode({10, 20, 30})
-                local t = Json.Decode(s)
+                local j = Json.New()
+                local s = j:Encode({10, 20, 30})
+                local t = j:Decode(s)
                 return tostring(s == '[10,20,30]' and t[1]==10 and t[2]==20 and t[3]==30)
             ");
             r.ShouldBe("true");
@@ -728,7 +730,7 @@ namespace KitsuneNet.Tests
         {
             // A truly empty table has no keys at all, so it encodes as [] (empty JSON array).
             // A table with only string keys (e.g. {foo="bar"}) still encodes as a JSON object.
-            string? r = await Run("return Json.Encode({})");
+            string? r = await Run("return Json.New():Encode({})");
             r.ShouldBe("[]");
         }
 
@@ -736,7 +738,8 @@ namespace KitsuneNet.Tests
         public async Task Json_StringKeyTable_EncodesAsObject()
         {
             string? r = await Run(@"
-                local t = Json.Decode(Json.Encode({hello='world'}))
+                local j = Json.New()
+                local t = j:Decode(j:Encode({hello='world'}))
                 return t.hello
             ");
             r.ShouldBe("world");
@@ -796,9 +799,10 @@ namespace KitsuneNet.Tests
             // string keys in the JSON object, changing their type on decode.
             // This is the safest default: silent data loss (Option B) is worse.
             string? r = await Run(@"
+                local j   = Json.New()
                 local t   = {[1]='a', b=2}
-                local s   = Json.Encode(t)
-                local dec = Json.Decode(s)
+                local s   = j:Encode(t)
+                local dec = j:Decode(s)
                 return tostring(dec['1'] == 'a' and dec.b == 2 and dec[1] == nil)
             ");
             r.ShouldBe("true");
@@ -810,8 +814,9 @@ namespace KitsuneNet.Tests
         public async Task Json_DecodeEscapes_HandledCorrectly()
         {
             string? r = await Run(@"
-                local s = Json.Encode('line1\nline2\ttab""quote""')
-                local v = Json.Decode(s)
+                local j = Json.New()
+                local s = j:Encode('line1\nline2\ttab""quote""')
+                local v = j:Decode(s)
                 return tostring(v == 'line1\nline2\ttab""quote""')
             ");
             r.ShouldBe("true");
@@ -822,8 +827,9 @@ namespace KitsuneNet.Tests
         {
             // \u0041 is 'A', \u00E9 is 'é' (U+00E9)
             string? r = await Run(@"
-                local a  = Json.Decode('""\\u0041""')
-                local e  = Json.Decode('""\\u00E9""')
+                local j  = Json.New()
+                local a  = j:Decode('""\\u0041""')
+                local e  = j:Decode('""\\u00E9""')
                 return tostring(a == 'A' and e == '\xC3\xA9')
             ");
             r.ShouldBe("true");
@@ -833,8 +839,9 @@ namespace KitsuneNet.Tests
         public async Task Json_StringWithBackslash_RoundTrips()
         {
             string? r = await Run(@"
+                local j = Json.New()
                 local s = 'path\\to\\file'
-                return tostring(Json.Decode(Json.Encode(s)) == s)
+                return tostring(j:Decode(j:Encode(s)) == s)
             ");
             r.ShouldBe("true");
         }
@@ -845,8 +852,9 @@ namespace KitsuneNet.Tests
         public async Task Json_NullSentinel_RoundTrips()
         {
             string? r = await Run(@"
-                local enc = Json.Encode({v=Json.Null})
-                local dec = Json.Decode(enc)
+                local j   = Json.New()
+                local enc = j:Encode({v=Json.Null})
+                local dec = j:Decode(enc)
                 return tostring(dec.v == Json.Null and enc:find('null') ~= nil)
             ");
             r.ShouldBe("true");
@@ -869,14 +877,14 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Json_DecodeNull_ReturnsJsonNull()
         {
-            string? r = await Run("return tostring(Json.Decode('null') == Json.Null)");
+            string? r = await Run("return tostring(Json.New():Decode('null') == Json.Null)");
             r.ShouldBe("true");
         }
 
         [Fact]
         public async Task Json_EncodeNull_ProducesNullLiteral()
         {
-            string? r = await Run("return Json.Encode(Json.Null)");
+            string? r = await Run("return Json.New():Encode(Json.Null)");
             r.ShouldBe("null");
         }
 
@@ -884,30 +892,33 @@ namespace KitsuneNet.Tests
         public async Task Json_NullInArray_RoundTrips()
         {
             string? r = await Run(@"
-                local t = Json.Decode('[1,null,3]')
+                local j = Json.New()
+                local t = j:Decode('[1,null,3]')
                 return tostring(t[1]==1 and t[2]==Json.Null and t[3]==3)
             ");
             r.ShouldBe("true");
         }
 
-        // ── Static API ───────────────────────────────────────────────────────
+        // ── Encode / Decode ──────────────────────────────────────────────────
 
         [Fact]
-        public async Task Json_StaticDecode_ReturnsTable()
+        public async Task Json_Decode_ReturnsTable()
         {
             string? r = await Run(@"
-                local t = Json.Decode('{""a"":1,""b"":""hello""}')
+                local j = Json.New()
+                local t = j:Decode('{""a"":1,""b"":""hello""}')
                 return tostring(t.a == 1 and t.b == 'hello')
             ");
             r.ShouldBe("true");
         }
 
         [Fact]
-        public async Task Json_StaticEncode_ProducesString()
+        public async Task Json_Encode_ProducesString()
         {
             string? r = await Run(@"
-                local s = Json.Encode({1, 2, 3})
-                local t = Json.Decode(s)
+                local j = Json.New()
+                local s = j:Encode({1, 2, 3})
+                local t = j:Decode(s)
                 return tostring(t[1]==1 and t[2]==2 and t[3]==3)
             ");
             r.ShouldBe("true");
@@ -917,7 +928,8 @@ namespace KitsuneNet.Tests
         public async Task Json_PrettyEncode_ContainsNewlines()
         {
             string? r = await Run(@"
-                local s = Json.Encode({a=1}, true)
+                local j = Json.New(true)
+                local s = j:Encode({a=1})
                 return tostring(s:find('\n') ~= nil)
             ");
             r.ShouldBe("true");
@@ -938,10 +950,199 @@ namespace KitsuneNet.Tests
         public async Task Json_RecursionDetected_ThrowsError()
         {
             string? r = await Run(@"
+                local j = Json.New()
                 local t = {}
                 t.self = t
-                local ok, err = pcall(Json.Encode, t)
+                local ok, err = pcall(function() j:Encode(t) end)
                 return tostring(not ok and err:find('recursion') ~= nil)
+            ");
+            r.ShouldBe("true");
+        }
+
+        // ── Stream I/O ──────────────────────────────────────────────────────────
+
+        [Fact]
+        public async Task Json_EncodeIntoStream_StreamContainsValidJson()
+        {
+            string? r = await Run(@"
+                local j = Json.New()
+                local s = Stream.Create()
+                j:EncodeIntoStream(s, {a=1, b=2})
+                s:Seek(0)
+                local t = j:Decode(s:Read())
+                return tostring(t.a == 1 and t.b == 2)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_EncodeIntoStream_ReturnsTrueOnSuccess()
+        {
+            string? r = await Run(@"
+                local j  = Json.New()
+                local s  = Stream.Create()
+                local ok = j:EncodeIntoStream(s, 42)
+                return tostring(ok == true)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_DecodeIntoStream_RoundTrip()
+        {
+            string? r = await Run(@"
+                local j = Json.New()
+                local s = Stream.Create()
+                j:EncodeIntoStream(s, {x=99, y='hello', z=true})
+                s:Seek(0)
+                local t = j:DecodeIntoStream(s)
+                return tostring(t.x == 99 and t.y == 'hello' and t.z == true)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_EncodeIntoStream_PrettyFlag_Respected()
+        {
+            string? r = await Run(@"
+                local j = Json.New(true)
+                local s = Stream.Create()
+                j:EncodeIntoStream(s, {a=1})
+                s:Seek(0)
+                return tostring(s:Read():find('\n') ~= nil)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_EncodeIntoStream_NonWritableStream_ReturnsFalse()
+        {
+            string? r = await Run(@"
+                local j = Json.New()
+                local OPEN, CLOSE, CAP_READ = 0, 1, 1
+                local s = Stream.Create(function(op)
+                    if op == OPEN  then return CAP_READ end
+                    if op == CLOSE then return true end
+                end)
+                local ok, err = j:EncodeIntoStream(s, 'test')
+                return tostring(ok == false and type(err) == 'string')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_DecodeIntoStream_NonReadableStream_ReturnsNilAndError()
+        {
+            string? r = await Run(@"
+                local j = Json.New()
+                local OPEN, CLOSE, CAP_WRITE = 0, 1, 2
+                local s = Stream.Create(function(op)
+                    if op == OPEN  then return CAP_WRITE end
+                    if op == CLOSE then return true end
+                end)
+                local val, err = j:DecodeIntoStream(s)
+                return tostring(val == nil and type(err) == 'string')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_EncodeDecodeIntoStream_LargePayload_AllValuesCorrect()
+        {
+            // 1000 integers produce ~3900 bytes of JSON, forcing multiple streaming
+            // flushes through jbuf_grow (512-byte initial buffer) during encode, and
+            // a multi-chunk read sequence (4 KiB chunks) during decode.
+            string? r = await Run(@"
+                local j    = Json.New()
+                local data = {}
+                for i = 1, 1000 do data[i] = i end
+                local s = Stream.Create()
+                j:EncodeIntoStream(s, data)
+                s:Seek(0)
+                local t = j:DecodeIntoStream(s)
+                return tostring(#t == 1000 and t[1] == 1 and t[500] == 500 and t[1000] == 1000)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_EncodeIntoStream_NullSentinel_RoundTrips()
+        {
+            string? r = await Run(@"
+                local j = Json.New()
+                local s = Stream.Create()
+                j:EncodeIntoStream(s, {v = Json.Null})
+                s:Seek(0)
+                local t = j:DecodeIntoStream(s)
+                return tostring(t.v == Json.Null)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_DecodeIntoStream_ReadsFromCurrentPosition()
+        {
+            // Encode two values back-to-back; seek to the boundary and verify
+            // DecodeIntoStream picks up only the second value.
+            string? r = await Run(@"
+                local j = Json.New()
+                local s = Stream.Create()
+                j:EncodeIntoStream(s, 'first')
+                local split = s:pos()
+                j:EncodeIntoStream(s, 'second')
+                s:Seek(split)
+                local v = j:DecodeIntoStream(s)
+                return tostring(v == 'second')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_EncodeIntoStream_AdvancesStreamPosition()
+        {
+            string? r = await Run(@"
+                local j = Json.New()
+                local s = Stream.Create()
+                j:EncodeIntoStream(s, 42)
+                return tostring(s:pos() == 2)   -- '42' is 2 bytes
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_DecodeIntoStream_PackedObjects_DecodesSequentially()
+        {
+            // Three JSON objects written end-to-end with no separator; each
+            // DecodeIntoStream call must return exactly one object and leave
+            // the stream positioned at the start of the next one.
+            string? r = await Run(@"
+                local j = Json.New()
+                local s = Stream.Create()
+                j:EncodeIntoStream(s, {n=1})
+                j:EncodeIntoStream(s, {n=2})
+                j:EncodeIntoStream(s, {n=3})
+                s:Seek(0)
+                local a = j:DecodeIntoStream(s)
+                local b = j:DecodeIntoStream(s)
+                local c = j:DecodeIntoStream(s)
+                return tostring(a.n==1 and b.n==2 and c.n==3)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_DecodeIntoStream_PackedWithWhitespace_DecodesSequentially()
+        {
+            // Whitespace and newlines between JSON values must be treated as
+            // insignificant separators, matching the behaviour for regular Decode.
+            string? r = await Run(@"
+                local j = Json.New()
+                local s = Stream.Create()
+                s:Write('{""a"":1}' .. '\n\n' .. '{""b"":2}')
+                s:Seek(0)
+                local t1 = j:DecodeIntoStream(s)
+                local t2 = j:DecodeIntoStream(s)
+                return tostring(t1.a == 1 and t2.b == 2)
             ");
             r.ShouldBe("true");
         }
@@ -1351,6 +1552,108 @@ namespace KitsuneNet.Tests
         // -- Stream (in-memory) ---------------------------------------------------
 
         [Fact]
+        public async Task Stream_Create_FromString_LoadsDataAtPositionZero()
+        {
+            string? r = await Run(@"
+                local s = Stream.Create('hello stream')
+                return s:Read()
+            ");
+            r.ShouldBe("hello stream");
+        }
+
+        [Fact]
+        public async Task Stream_Create_FromString_PosIsZeroAfterCreate()
+        {
+            string? r = await Run(@"
+                local s = Stream.Create('hello')
+                return tostring(s:pos() == 0 and s:len() == 5)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_Create_WithBackendFunction_CallsOpenForCaps()
+        {
+            string? r = await Run(@"
+                local OPEN, CLOSE, READ, WRITE = 0, 1, 2, 3
+                local STREAM_CAP_READ = 1
+                local s = Stream.Create(function(op, ...)
+                    if op == OPEN then return STREAM_CAP_READ end
+                    if op == READ then return 'backend data' end
+                    if op == CLOSE then return true end
+                end)
+                local caps, _ = s:GetInfo()
+                return tostring(caps.Caps == STREAM_CAP_READ)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_Create_WithBackendFunction_ReadDelegatesToFunction()
+        {
+            string? r = await Run(@"
+                local OPEN, CLOSE, READ = 0, 1, 2
+                local STREAM_CAP_READ = 1
+                local s = Stream.Create(function(op, ...)
+                    if op == OPEN then return STREAM_CAP_READ end
+                    if op == READ then return 'from backend' end
+                    if op == CLOSE then return true end
+                end)
+                return s:Read()
+            ");
+            r.ShouldBe("from backend");
+        }
+
+        [Fact]
+        public async Task Stream_CustomBackend_DocExample_WorksCorrectly()
+        {
+            string? r = await Run(@"
+                local function makeStream()
+                    local OPEN, CLOSE, READ, WRITE = 0, 1, 2, 3
+                    local CURPOS, LEN, SETPOS, INFO = 5, 6, 7, 8
+                    local CAP_READ, CAP_WRITE, CAP_SEEK, CAP_PEEK = 1, 2, 4, 8
+                    local buf = ''
+                    local pos = 0
+                    return Stream.Create(function(op, arg)
+                        if op == OPEN then
+                            return CAP_READ + CAP_WRITE + CAP_SEEK + CAP_PEEK
+                        elseif op == CLOSE then
+                            buf = nil
+                            return true
+                        elseif op == READ then
+                            if pos >= #buf then return '' end
+                            local n = (arg == 0) and (#buf - pos) or arg
+                            local chunk = buf:sub(pos + 1, pos + n)
+                            pos = pos + #chunk
+                            return chunk
+                        elseif op == WRITE then
+                            buf = buf:sub(1, pos) .. arg .. buf:sub(pos + #arg + 1)
+                            pos = pos + #arg
+                            return true
+                        elseif op == CURPOS then
+                            return pos
+                        elseif op == LEN then
+                            return #buf
+                        elseif op == SETPOS then
+                            pos = math.max(0, math.min(arg, #buf))
+                            return true
+                        elseif op == INFO then
+                            return { pos = pos, len = #buf, type = 'lua' }
+                        end
+                    end)
+                end
+                local s = makeStream()
+                s:Write('hello world')
+                s:Seek(6)
+                local read = s:Read()
+                local p = s:pos()
+                local _, info = s:GetInfo()
+                return tostring(read == 'world' and p == 11 and info.len == 11)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
         public async Task Stream_WriteAndRead_RoundTrip()
         {
             string? r = await Run(@"
@@ -1551,6 +1854,270 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
+        // -- Stream backend error propagation -------------------------------------
+
+        [Fact]
+        public async Task Stream_BackendReadError_PropagatesViaPcall()
+        {
+            // lua_call_nohook on READ dispatch means a backend error bubbles up.
+            string? r = await Run(@"
+                local OPEN, CLOSE, READ = 0, 1, 2
+                local ok, err = pcall(function()
+                    local s = Stream.Create(function(op)
+                        if op == OPEN then return 1 end
+                        if op == CLOSE then return true end
+                        if op == READ then error('backend read error') end
+                    end)
+                    s:Read()
+                end)
+                return tostring(not ok and type(err) == 'string' and err:find('backend read error') ~= nil)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_BackendWriteError_PropagatesViaPcall()
+        {
+            // lua_call_nohook on WRITE dispatch means a backend error bubbles up.
+            string? r = await Run(@"
+                local OPEN, CLOSE, WRITE = 0, 1, 3
+                local ok, err = pcall(function()
+                    local s = Stream.Create(function(op)
+                        if op == OPEN then return 2 end
+                        if op == CLOSE then return true end
+                        if op == WRITE then error('backend write error') end
+                    end)
+                    s:Write('hello')
+                end)
+                return tostring(not ok and type(err) == 'string' and err:find('backend write error') ~= nil)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_BackendSeekError_PropagatesViaPcall()
+        {
+            // lua_call_nohook on SETPOS dispatch means a backend error bubbles up.
+            string? r = await Run(@"
+                local OPEN, CLOSE, SETPOS = 0, 1, 7
+                local ok, err = pcall(function()
+                    local s = Stream.Create(function(op)
+                        if op == OPEN then return 4 end
+                        if op == CLOSE then return true end
+                        if op == SETPOS then error('backend seek error') end
+                    end)
+                    s:Seek(5)
+                end)
+                return tostring(not ok and type(err) == 'string' and err:find('backend seek error') ~= nil)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_BackendOpen_NonNumber_GivesCleanError()
+        {
+            // NewStream uses lua_pcall_nohook on OPEN with explicit recovery:
+            // a non-number return produces "Backend function failed to open".
+            string? r = await Run(@"
+                local ok, err = pcall(Stream.Create, function(op) return 'not_a_number' end)
+                return tostring(not ok and err:find('Backend function failed to open') ~= nil)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_BackendOpen_ZeroCaps_GivesCleanError()
+        {
+            // Returning 0 caps (no operations supported) is treated as failure.
+            string? r = await Run(@"
+                local ok, err = pcall(Stream.Create, function(op) return 0 end)
+                return tostring(not ok and err:find('Backend function failed to open') ~= nil)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_BackendOpen_Throws_GivesCleanError()
+        {
+            // A throw during OPEN is caught by the protected call in NewStream and
+            // reported as "Backend function failed to open" (original message is lost
+            // intentionally; the non-number return check fires on the error object).
+            string? r = await Run(@"
+                local ok, err = pcall(Stream.Create, function(op) error('boom') end)
+                return tostring(not ok and err:find('Backend function failed to open') ~= nil)
+            ");
+            r.ShouldBe("true");
+        }
+
+        // -- Stream.Open (file backend) -------------------------------------------
+
+        [Fact]
+        public async Task Stream_Open_WriteRead_RoundTrip()
+        {
+            string? r = await Run(@"
+                local path = os.getenv('TEMP') .. '\\kitsune_stream_rw.bin'
+                local w = Stream.Open(path, 'wb')
+                w:Write('hello file stream')
+                w:Close()
+                local r = Stream.Open(path, 'rb')
+                local data = r:Read()
+                r:Close()
+                os.remove(path)
+                return data
+            ");
+            r.ShouldBe("hello file stream");
+        }
+
+        [Fact]
+        public async Task Stream_Open_Info_ContainsNameAndType()
+        {
+            string? r = await Run(@"
+                local path = os.getenv('TEMP') .. '\\kitsune_stream_info.bin'
+                local w = Stream.Open(path, 'wb')
+                local _, info = w:GetInfo()
+                w:Close()
+                os.remove(path)
+                return tostring(info.name == path and info.type == 'file')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_Open_Seek_UpdatesPosition()
+        {
+            string? r = await Run(@"
+                local path = os.getenv('TEMP') .. '\\kitsune_stream_seek.bin'
+                local w = Stream.Open(path, 'wb')
+                w:Write('ABCDEF')
+                w:Seek(2)
+                local p = w:pos()
+                w:Close()
+                os.remove(path)
+                return tostring(p)
+            ");
+            r.ShouldBe("2");
+        }
+
+        [Fact]
+        public async Task Stream_Open_NonexistentFile_RaisesError()
+        {
+            string? r = await Run(@"
+                local ok, err = pcall(Stream.Open, 'C:\\nonexistent_kitsune_xyz_abc.bin', 'rb')
+                return tostring(not ok and err:find('Stream.Open') ~= nil)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_Open_ReadMode_BlocksWrite()
+        {
+            string? r = await Run(@"
+                local path = os.getenv('TEMP') .. '\\kitsune_stream_caps.bin'
+                local w = Stream.Open(path, 'wb')
+                w:Write('x')
+                w:Close()
+                local s = Stream.Open(path, 'rb')
+                local result = s:Write('y')
+                s:Close()
+                os.remove(path)
+                return tostring(result == false or result == nil or result == 0)
+            ");
+            r.ShouldBe("true");
+        }
+
+        // -- Stream (module API) --------------------------------------------------
+
+        [Fact]
+        public async Task Stream_Seek_AllowsMultipleReads()
+        {
+            string? r = await Run(@"
+                local s = Stream.Create()
+                s:Write('reread')
+                s:Seek(0)
+                local first = s:Read()
+                s:Seek(0)
+                local second = s:Read()
+                return tostring(first == second)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_Len_ReflectsWrittenBytes()
+        {
+            string? r = await Run(@"
+                local s = Stream.Create()
+                s:Write('abc')
+                return tostring(s:len())
+            ");
+            r.ShouldBe("3");
+        }
+
+        [Fact]
+        public async Task Stream_Pos_AdvancesAfterRead()
+        {
+            string? r = await Run(@"
+                local s = Stream.Create()
+                s:Write('abcde')
+                s:Seek(0)
+                s:Read(2)
+                return tostring(s:pos())
+            ");
+            r.ShouldBe("2");
+        }
+
+        [Fact]
+        public async Task Stream_Read_PartialLength_ThenRemainder()
+        {
+            string? r = await Run(@"
+                local s = Stream.Create('hello world')
+                s:Seek(0)
+                local first = s:Read(5)
+                local rest  = s:Read()
+                return first .. ':' .. rest
+            ");
+            r.ShouldBe("hello: world");
+        }
+
+        [Fact]
+        public async Task Stream_ReadByte_AtEnd_ReturnsNegativeOne()
+        {
+            string? r = await Run(@"
+                local s = Stream.Create()
+                s:WriteByte(1)
+                s:Seek(0)
+                s:ReadByte()
+                return tostring(s:ReadByte())
+            ");
+            r.ShouldBe("-1");
+        }
+
+        [Fact]
+        public async Task Stream_PeekByte_ReturnsValueAndLeavesPos()
+        {
+            string? r = await Run(@"
+                local s = Stream.Create('ABC')
+                s:Seek(0)
+                local peeked = s:PeekByte()
+                return tostring(peeked) .. ':' .. tostring(s:pos())
+            ");
+            r.ShouldBe("65:0");  // 'A' == 65, pos unchanged
+        }
+
+        [Fact]
+        public async Task Stream_MultipleNumericTypes_InSequence()
+        {
+            string? r = await Run(@"
+                local s = Stream.Create()
+                s:WriteShort(100)
+                s:WriteInt(200)
+                s:WriteLong(300)
+                s:Seek(0)
+                return tostring(s:ReadShort()) .. ':' .. tostring(s:ReadInt()) .. ':' .. tostring(s:ReadLong())
+            ");
+            r.ShouldBe("100:200:300");
+        }
+
         // -- CSV ------------------------------------------------------------------
 
         [Fact]
@@ -1558,7 +2125,7 @@ namespace KitsuneNet.Tests
         {
             // Count rows with ipairs to avoid # unreliability on non-sequence tables.
             string? r = await Run(@"
-                local t = CSV.Decode('a,b,c\n1,2,3')
+                local t = CSV.New():Decode('a,b,c\n1,2,3')
                 local count = 0
                 for _ in ipairs(t.Rows) do count = count + 1 end
                 return tostring(count == 2)
@@ -1570,7 +2137,7 @@ namespace KitsuneNet.Tests
         public async Task CSV_DecodeString_RowValues_AccessibleAsWchar()
         {
             string? r = await Run(@"
-                local t = CSV.Decode('hello,world')
+                local t = CSV.New():Decode('hello,world')
                 return tostring(t.Rows[1][1])
             ");
             r.ShouldBe("hello");
@@ -1580,7 +2147,7 @@ namespace KitsuneNet.Tests
         public async Task CSV_DecodeString_MultipleColumnsPerRow()
         {
             string? r = await Run(@"
-                local t = CSV.Decode('a,b,c')
+                local t = CSV.New():Decode('a,b,c')
                 local row = t.Rows[1]
                 return tostring(tostring(row[1]) .. ':' .. tostring(row[2]) .. ':' .. tostring(row[3]))
             ");
@@ -1591,7 +2158,7 @@ namespace KitsuneNet.Tests
         public async Task CSV_DecodeString_MultipleRows_CorrectCount()
         {
             string? r = await Run(@"
-                local t = CSV.Decode('r1c1,r1c2\nr2c1,r2c2\nr3c1,r3c2')
+                local t = CSV.New():Decode('r1c1,r1c2\nr2c1,r2c2\nr3c1,r3c2')
                 local count = 0
                 for _ in ipairs(t.Rows) do count = count + 1 end
                 return tostring(count == 3)
@@ -1603,7 +2170,7 @@ namespace KitsuneNet.Tests
         public async Task CSV_DecodeString_QuotedField_StripsQuotes()
         {
             string? r = await Run(@"
-                local t = CSV.Decode('""hello"",""world""')
+                local t = CSV.New():Decode('""hello"",""world""')
                 return tostring(tostring(t.Rows[1][1]) == 'hello' and tostring(t.Rows[1][2]) == 'world')
             ");
             r.ShouldBe("true");
@@ -1614,7 +2181,7 @@ namespace KitsuneNet.Tests
         {
             // A comma inside quotes must not split the field.
             string? r = await Run(@"
-                local t = CSV.Decode('""hello, world"",end')
+                local t = CSV.New():Decode('""hello, world"",end')
                 return tostring(tostring(t.Rows[1][1]) == 'hello, world')
             ");
             r.ShouldBe("true");
@@ -1625,7 +2192,7 @@ namespace KitsuneNet.Tests
         {
             // RFC 4180 escaped quote: "" inside a quoted field → single ".
             string? r = await Run(@"
-                local t = CSV.Decode('""say """"hi"""""",end')
+                local t = CSV.New():Decode('""say """"hi"""""",end')
                 return tostring(tostring(t.Rows[1][1]) == 'say ""hi""')
             ");
             r.ShouldBe("true");
@@ -1637,7 +2204,7 @@ namespace KitsuneNet.Tests
             // Verifies the SkipForwards fix: previously the first non-space character
             // was silently consumed and lost, producing "ello" instead of "hello".
             string? r = await Run(@"
-                local t = CSV.Decode(' hello, world')
+                local t = CSV.New():Decode(' hello, world')
                 return tostring(tostring(t.Rows[1][1]) == 'hello' and tostring(t.Rows[1][2]) == 'world')
             ");
             r.ShouldBe("true");
@@ -1648,7 +2215,7 @@ namespace KitsuneNet.Tests
         {
             // a,,b produces three fields; the middle one is empty.
             string? r = await Run(@"
-                local t = CSV.Decode('a,,b')
+                local t = CSV.New():Decode('a,,b')
                 local row = t.Rows[1]
                 return tostring(tostring(row[1]) == 'a' and tostring(row[2]) == '' and tostring(row[3]) == 'b')
             ");
@@ -1660,7 +2227,7 @@ namespace KitsuneNet.Tests
         {
             // The returned table always has a Comments key even when there are none.
             string? r = await Run(@"
-                local t = CSV.Decode('a,b')
+                local t = CSV.New():Decode('a,b')
                 return tostring(type(t.Comments) == 'table')
             ");
             r.ShouldBe("true");
@@ -1671,7 +2238,7 @@ namespace KitsuneNet.Tests
         {
             // Lines starting with * are treated as comments and placed in t.Comments.
             string? r = await Run(@"
-                local t = CSV.Decode('* this is a comment\na,b')
+                local t = CSV.New():Decode('* this is a comment\na,b')
                 local commentCount = 0
                 for _ in ipairs(t.Comments) do commentCount = commentCount + 1 end
                 local rowCount = 0
@@ -1685,7 +2252,7 @@ namespace KitsuneNet.Tests
         public async Task CSV_DecodeString_MultipleCommentLines_AllExtracted()
         {
             string? r = await Run(@"
-                local t = CSV.Decode('* line one\n* line two\na,b')
+                local t = CSV.New():Decode('* line one\n* line two\na,b')
                 local count = 0
                 for _ in ipairs(t.Comments) do count = count + 1 end
                 return tostring(count == 2)
@@ -1697,7 +2264,7 @@ namespace KitsuneNet.Tests
         public async Task CSV_DecodeString_CustomDelimiter_SplitsOnSemicolon()
         {
             string? r = await Run(@"
-                local t = CSV.Decode('a;b;c', ';')
+                local t = CSV.New(';'):Decode('a;b;c')
                 local row = t.Rows[1]
                 return tostring(tostring(row[1]) == 'a' and tostring(row[2]) == 'b' and tostring(row[3]) == 'c')
             ");
@@ -1709,7 +2276,7 @@ namespace KitsuneNet.Tests
         {
             // \r\n (Windows CRLF) must produce the same row count as \n alone.
             string? r = await Run(@"
-                local t = CSV.Decode('a,b\r\nc,d')
+                local t = CSV.New():Decode('a,b\r\nc,d')
                 local count = 0
                 for _ in ipairs(t.Rows) do count = count + 1 end
                 return tostring(count == 2 and tostring(t.Rows[1][1]) == 'a' and tostring(t.Rows[2][1]) == 'c')
@@ -1723,7 +2290,7 @@ namespace KitsuneNet.Tests
             // Exercises the lua_iswchar branch in DecodeString; all other tests pass
             // plain Lua strings which take the FromUtf8 conversion path instead.
             string? r = await Run(@"
-                local t = CSV.Decode(Wchar.FromUtf8('x,y,z'))
+                local t = CSV.New():Decode(Wchar.FromUtf8('x,y,z'))
                 return tostring(tostring(t.Rows[1][1]) == 'x' and tostring(t.Rows[1][3]) == 'z')
             ");
             r.ShouldBe("true");
@@ -1732,7 +2299,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task CSV_Encode_SimpleTable_ProducesCorrectString()
         {
-            string? r = await Run("return CSV.Encode({{'a', 'b'}, {'c', 'd'}})");
+            string? r = await Run("return CSV.New():Encode({{'a', 'b'}, {'c', 'd'}})");
             r.ShouldBe("a,b\nc,d");
         }
 
@@ -1741,8 +2308,9 @@ namespace KitsuneNet.Tests
         {
             // A field containing the delimiter must be quoted; decoding must recover the original value.
             string? r = await Run(@"
-                local encoded = CSV.Encode({{'hello, world', 'end'}})
-                local decoded = CSV.Decode(encoded)
+                local csv = CSV.New()
+                local encoded = csv:Encode({{'hello, world', 'end'}})
+                local decoded = csv:Decode(encoded)
                 return tostring(tostring(decoded.Rows[1][1]) == 'hello, world' and tostring(decoded.Rows[1][2]) == 'end')
             ");
             r.ShouldBe("true");
@@ -1753,9 +2321,10 @@ namespace KitsuneNet.Tests
         {
             // Wchar fields must be converted via __tostring (UTF-8) during encoding.
             string? r = await Run(@"
+                local csv = CSV.New()
                 local rows = {{Wchar.FromUtf8('hello'), Wchar.FromUtf8('world')}}
-                local encoded = CSV.Encode(rows)
-                local decoded = CSV.Decode(encoded)
+                local encoded = csv:Encode(rows)
+                local decoded = csv:Decode(encoded)
                 return tostring(tostring(decoded.Rows[1][1]) == 'hello' and tostring(decoded.Rows[1][2]) == 'world')
             ");
             r.ShouldBe("true");
@@ -1765,8 +2334,9 @@ namespace KitsuneNet.Tests
         public async Task CSV_Encode_CustomDelimiter_UsedInOutput()
         {
             string? r = await Run(@"
-                local encoded = CSV.Encode({{'a', 'b', 'c'}}, ';')
-                local decoded = CSV.Decode(encoded, ';')
+                local csv = CSV.New(';')
+                local encoded = csv:Encode({{'a', 'b', 'c'}})
+                local decoded = csv:Decode(encoded)
                 return tostring(tostring(decoded.Rows[1][1]) == 'a' and tostring(decoded.Rows[1][3]) == 'c')
             ");
             r.ShouldBe("true");
@@ -1779,10 +2349,11 @@ namespace KitsuneNet.Tests
             // fields whose value starts with a space or tab so the whitespace lands
             // inside the quotes and is preserved across a decode round-trip.
             string? r = await Run(@"
+                local csv = CSV.New()
                 local tab = '\9'
                 local rows = {{' leading space', 'normal', tab .. 'leading tab'}}
-                local encoded = CSV.Encode(rows)
-                local decoded = CSV.Decode(encoded)
+                local encoded = csv:Encode(rows)
+                local decoded = csv:Decode(encoded)
                 local r1 = tostring(decoded.Rows[1][1])
                 local r2 = tostring(decoded.Rows[1][2])
                 local r3 = tostring(decoded.Rows[1][3])
@@ -1797,9 +2368,10 @@ namespace KitsuneNet.Tests
             // RFC 4180: a " inside a quoted field is escaped as ""; Encode must produce
             // that and Decode must recover the original single ".
             string? r = await Run(@"
+                local csv = CSV.New()
                 local rows = {{'say ""hi""', 'end'}}
-                local encoded = CSV.Encode(rows)
-                local decoded = CSV.Decode(encoded)
+                local encoded = csv:Encode(rows)
+                local decoded = csv:Decode(encoded)
                 return tostring(tostring(decoded.Rows[1][1]) == 'say ""hi""' and tostring(decoded.Rows[1][2]) == 'end')
             ");
             r.ShouldBe("true");
@@ -1811,9 +2383,10 @@ namespace KitsuneNet.Tests
             // A field containing \n must be quoted so the newline is not treated as a
             // row separator on decode.
             string? r = await Run(@"
+                local csv = CSV.New()
                 local rows = {{'line1\nline2', 'after'}}
-                local encoded = CSV.Encode(rows)
-                local decoded = CSV.Decode(encoded)
+                local encoded = csv:Encode(rows)
+                local decoded = csv:Decode(encoded)
                 return tostring(tostring(decoded.Rows[1][1]) == 'line1\nline2' and tostring(decoded.Rows[1][2]) == 'after')
             ");
             r.ShouldBe("true");
@@ -1825,7 +2398,7 @@ namespace KitsuneNet.Tests
             // ParseDelimiter accepts boolean true as the auto-detect signal, identical
             // to passing the string "auto".
             string? r = await Run(@"
-                local t = CSV.Decode('a;b;c\n1;2;3', true)
+                local t = CSV.New(true):Decode('a;b;c\n1;2;3')
                 return tostring(tostring(t.Rows[1][1]) == 'a' and tostring(t.Rows[2][3]) == '3')
             ");
             r.ShouldBe("true");
@@ -1836,7 +2409,7 @@ namespace KitsuneNet.Tests
         {
             // ParseDelimiter accepts an integer codepoint (59 = ';').
             string? r = await Run(@"
-                local t = CSV.Decode('a;b;c', 59)
+                local t = CSV.New(59):Decode('a;b;c')
                 return tostring(tostring(t.Rows[1][1]) == 'a' and tostring(t.Rows[1][3]) == 'c')
             ");
             r.ShouldBe("true");
@@ -1855,7 +2428,7 @@ namespace KitsuneNet.Tests
         public async Task CSV_Decode_AutoDetect_CommaInput_DetectsCorrectly()
         {
             string? r = await Run(@"
-                local t = CSV.Decode('a,b,c\n1,2,3', 'auto')
+                local t = CSV.New():Decode('a,b,c\n1,2,3')
                 return tostring(tostring(t.Rows[1][1]) == 'a' and tostring(t.Rows[1][3]) == 'c' and tostring(t.Rows[2][1]) == '1')
             ");
             r.ShouldBe("true");
@@ -1865,7 +2438,7 @@ namespace KitsuneNet.Tests
         public async Task CSV_Decode_AutoDetect_SemicolonInput_DetectsCorrectly()
         {
             string? r = await Run(@"
-                local t = CSV.Decode('a;b;c\n1;2;3', 'auto')
+                local t = CSV.New():Decode('a;b;c\n1;2;3')
                 return tostring(tostring(t.Rows[1][1]) == 'a' and tostring(t.Rows[1][3]) == 'c' and tostring(t.Rows[2][2]) == '2')
             ");
             r.ShouldBe("true");
@@ -1875,7 +2448,7 @@ namespace KitsuneNet.Tests
         public async Task CSV_Decode_AutoDetect_TabInput_DetectsCorrectly()
         {
             string? r = await Run(@"
-                local t = CSV.Decode('a\tb\tc\n1\t2\t3', 'auto')
+                local t = CSV.New():Decode('a\tb\tc\n1\t2\t3')
                 return tostring(tostring(t.Rows[1][1]) == 'a' and tostring(t.Rows[1][3]) == 'c')
             ");
             r.ShouldBe("true");
@@ -1917,11 +2490,11 @@ namespace KitsuneNet.Tests
             string? r = await Run(@"
                 local sent = false
                 local rows = {}
-                for row in CSV.DecodeFromFunction(function()
+                for row in CSV.New():DecodeFromFunction(function()
                     if sent then return nil end
                     sent = true
                     return 'a;b;c\n1;2;3'
-                end, 'auto') do
+                end) do
                     table.insert(rows, tostring(row[1]) .. ':' .. tostring(row[3]))
                 end
                 return table.concat(rows, '|')
@@ -1957,7 +2530,7 @@ namespace KitsuneNet.Tests
                 local data = 'a,b,c\n1,2,3\n4,5,6'
                 local pos  = 1
                 local rows = {}
-                for row in CSV.DecodeFromFunction(function()
+                for row in CSV.New():DecodeFromFunction(function()
                     if pos > #data then return nil end
                     local chunk = data:sub(pos, pos + 3)
                     pos = pos + 4
@@ -1979,7 +2552,7 @@ namespace KitsuneNet.Tests
                 local chunks = { Wchar.FromUtf8('x,y'), Wchar.FromUtf8('\nz,w') }
                 local i = 0
                 local rows = {}
-                for row in CSV.DecodeFromFunction(function()
+                for row in CSV.New():DecodeFromFunction(function()
                     i = i + 1
                     return chunks[i]
                 end) do
@@ -1998,7 +2571,7 @@ namespace KitsuneNet.Tests
             string? r = await Run(@"
                 local sent = false
                 local rows = {}
-                for row in CSV.DecodeFromFunction(function()
+                for row in CSV.New():DecodeFromFunction(function()
                     if sent then return nil end
                     sent = true
                     return 'hello,world'
@@ -2016,16 +2589,61 @@ namespace KitsuneNet.Tests
             string? r = await Run(@"
                 local sent = false
                 local rows = {}
-                for row in CSV.DecodeFromFunction(function()
+                for row in CSV.New(';'):DecodeFromFunction(function()
                     if sent then return nil end
                     sent = true
                     return 'a;b;c'
-                end, ';') do
+                end) do
                     table.insert(rows, tostring(row[1]) .. ':' .. tostring(row[2]) .. ':' .. tostring(row[3]))
                 end
                 return table.concat(rows, '|')
             ");
             r.ShouldBe("a:b:c");
+        }
+
+        [Fact]
+        public async Task CSV_DecodeFromFunction_Stream_ParsesRows()
+        {
+            // A LuaStream can be passed directly instead of a supplier function;
+            // data is pulled in 4 KiB chunks so no full read-into-memory occurs.
+            string? r = await Run(@"
+                local s = Stream.Create('a,b,c\n1,2,3\n4,5,6')
+                local rows = {}
+                for row in CSV.New():DecodeFromFunction(s) do
+                    table.insert(rows, tostring(row[1]) .. ':' .. tostring(row[2]) .. ':' .. tostring(row[3]))
+                end
+                return table.concat(rows, '|')
+            ");
+            r.ShouldBe("a:b:c|1:2:3|4:5:6");
+        }
+
+        [Fact]
+        public async Task CSV_DecodeFromFunction_Stream_CustomDelimiter_Respected()
+        {
+            string? r = await Run(@"
+                local s = Stream.Create('a;b;c\n1;2;3')
+                local rows = {}
+                for row in CSV.New(';'):DecodeFromFunction(s) do
+                    table.insert(rows, tostring(row[1]) .. ':' .. tostring(row[3]))
+                end
+                return table.concat(rows, '|')
+            ");
+            r.ShouldBe("a:c|1:3");
+        }
+
+        [Fact]
+        public async Task CSV_DecodeFromFunction_Stream_KeepsStreamAliveWithoutExplicitVariable()
+        {
+            // The stream is passed inline with no variable holding it; the iterator
+            // closure must keep it alive through GC so all rows are produced.
+            string? r = await Run(@"
+                local rows = {}
+                for row in CSV.New():DecodeFromFunction(Stream.Create('x,y\nz,w')) do
+                    table.insert(rows, tostring(row[1]) .. ':' .. tostring(row[2]))
+                end
+                return table.concat(rows, '|')
+            ");
+            r.ShouldBe("x:y|z:w");
         }
 
         // -- Mutex ----------------------------------------------------------------
@@ -2112,6 +2730,361 @@ namespace KitsuneNet.Tests
                 e1.val = 'shared'
                 local e2 = Env.GetOrCreate('SharedEnvUtil')
                 return tostring(e2.val == 'shared')
+            ");
+            r.ShouldBe("true");
+        }
+
+        // -- CSV instance extras --------------------------------------------------
+
+        [Fact]
+        public async Task CSV_Create_AliasWorksIdenticallyToNew()
+        {
+            // CSV.Create is a registered alias for CSV.New; must return a working instance.
+            string? r = await Run(@"
+                local csv = CSV.Create(';')
+                local t = csv:Decode('a;b;c')
+                return tostring(tostring(t.Rows[1][1]) == 'a' and tostring(t.Rows[1][3]) == 'c')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task CSV_Tostring_AutoInstance()
+        {
+            // __tostring on a no-delimiter instance reports "CSV(auto)".
+            string? r = await Run("return tostring(CSV.New())");
+            r.ShouldBe("CSV(auto)");
+        }
+
+        [Fact]
+        public async Task CSV_Tostring_FixedDelimiterInstance()
+        {
+            // __tostring on a fixed-delimiter instance reports the character.
+            string? r = await Run("return tostring(CSV.New(';'))");
+            r.ShouldBe("CSV(';')");
+        }
+
+        [Fact]
+        public async Task CSV_New_CalledOnInstance_CreatesNewIndependentInstance()
+        {
+            // csv:New(delim) must ignore the existing instance and return a fresh one
+            // with its own delimiter — not a reference to the original.
+            string? r = await Run(@"
+                local a = CSV.New(';')
+                local b = a:New(',')
+                -- Decode the same input with both: 'a' splits on ';', 'b' does not.
+                local ta = a:Decode('x;y;z')
+                local tb = b:Decode('x;y;z')
+                return tostring(
+                    #ta.Rows[1] == 3 and          -- a splits correctly on ';'
+                    tostring(ta.Rows[1][2]) == 'y' and
+                    #tb.Rows[1] == 1              -- b looks for ',' so treats input as one field
+                )
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task CSV_InstanceReuse_MultipleDecodeCalls_BothCorrect()
+        {
+            // The same instance must produce correct results across successive Decode calls.
+            // DecodeCsvWith resets pos/last/len but preserves the buffer allocation.
+            string? r = await Run(@"
+                local csv = CSV.New()
+                local t1 = csv:Decode('a,b,c')
+                local t2 = csv:Decode('1,2,3')
+                return tostring(
+                    tostring(t1.Rows[1][1]) == 'a' and tostring(t1.Rows[1][3]) == 'c' and
+                    tostring(t2.Rows[1][1]) == '1' and tostring(t2.Rows[1][3]) == '3'
+                )
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task CSV_AutoDetect_ReSniffsDelimiterOnEachDecode()
+        {
+            // An auto-detect instance must sniff fresh on every Decode call;
+            // the sniffed delimiter from call 1 must not bleed into call 2.
+            string? r = await Run(@"
+                local csv = CSV.New()
+                local t1 = csv:Decode('a,b,c')   -- sniffs comma
+                local t2 = csv:Decode('x;y;z')   -- must sniff semicolon, not reuse comma
+                return tostring(
+                    tostring(t1.Rows[1][2]) == 'b' and
+                    tostring(t2.Rows[1][2]) == 'y'
+                )
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task CSV_DecodeFromFunction_NonReadableStream_RaisesError()
+        {
+            // Passing a write-only stream must produce a clean Lua error, not a crash.
+            string? r = await Run(@"
+                local OPEN, CLOSE, CAP_WRITE = 0, 1, 2
+                local s = Stream.Create(function(op)
+                    if op == OPEN  then return CAP_WRITE end
+                    if op == CLOSE then return true end
+                end)
+                local ok, err = pcall(function()
+                    CSV.New():DecodeFromFunction(s)
+                end)
+                return tostring(not ok and type(err) == 'string')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task CSV_InstanceReuse_EncodeAfterDecode_BothCorrect()
+        {
+            // Encode after Decode on the same instance must work; the buffer fields
+            // used by Decode do not interfere with LuaL_Buffer used by Encode.
+            string? r = await Run(@"
+                local csv = CSV.New(';')
+                local t   = csv:Decode('a;b;c')
+                local enc = csv:Encode({{tostring(t.Rows[1][1]), tostring(t.Rows[1][3])}})
+                return enc
+            ");
+            r.ShouldBe("a;c");
+        }
+
+        [Fact]
+        public async Task CSV_DecodeFromFunction_InstanceAutoDetectDoesNotBleedIntoSecondIterator()
+        {
+            // Two separate DecodeFromFunction iterators created from the same auto-detect
+            // instance must each detect their own delimiter independently.
+            string? r = await Run(@"
+                local csv = CSV.New()
+                local rows1 = {}
+                local done1 = false
+                for row in csv:DecodeFromFunction(function()
+                    if done1 then return nil end
+                    done1 = true
+                    return 'a,b'
+                end) do
+                    table.insert(rows1, tostring(row[2]))
+                end
+                local rows2 = {}
+                local done2 = false
+                for row in csv:DecodeFromFunction(function()
+                    if done2 then return nil end
+                    done2 = true
+                    return 'x;y'
+                end) do
+                    table.insert(rows2, tostring(row[2]))
+                end
+                return rows1[1] .. '|' .. rows2[1]
+            ");
+            r.ShouldBe("b|y");
+        }
+
+        // -- Json extras ----------------------------------------------------------
+
+        [Fact]
+        public async Task Json_NegativeInfinity_EncodesAsSpecialLiteral()
+        {
+            string? r = await Run("return Json.New():Encode(-math.huge)");
+            r.ShouldBe("-1e+9999");
+        }
+
+        [Fact]
+        public async Task Json_Tostring_ReturnsNonEmptyString()
+        {
+            // __tostring on a Json instance returns a pointer-format string.
+            string? r = await Run("return tostring(type(tostring(Json.New())) == 'string' and #tostring(Json.New()) > 0)");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_Dispose_CanBeCalledExplicitly()
+        {
+            // Json.Dispose() is an explicit GC; calling it must not crash and the
+            // instance should still be a valid Lua value afterwards.
+            string? r = await Run(@"
+                local j = Json.New()
+                j:Dispose()
+                return 'ok'
+            ");
+            r.ShouldBe("ok");
+        }
+
+        [Fact]
+        public async Task Json_Decode_ChunkedFunction_ParsesValues()
+        {
+            // json:Decode(fn) calls fn() repeatedly to get input chunks; returning
+            // nil or "" signals end of input.  Tests the chunkFnIdx code path.
+            string? r = await Run(@"
+                local j      = Json.New()
+                local chunks = { '[1,', '2,', '3]' }
+                local i      = 0
+                local t = j:Decode(function()
+                    i = i + 1
+                    return chunks[i]
+                end)
+                return tostring(type(t) == 'table' and t[1] == 1 and t[2] == 2 and t[3] == 3)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_Decode_ChunkedFunction_MultipleValues()
+        {
+            // Each Decode(fn) call drains exactly one JSON value; the fn is fresh
+            // each call so this tests that chunkFnIdx is properly reset.
+            string? r = await Run(@"
+                local j   = Json.New()
+                local src = '[1,2,3]'
+                local pos = 1
+                local v = j:Decode(function()
+                    if pos > #src then return nil end
+                    local chunk = src:sub(pos, pos + 1)
+                    pos = pos + 2
+                    return chunk
+                end)
+                return tostring(type(v) == 'table' and v[1] == 1 and v[3] == 3)
+            ");
+            r.ShouldBe("true");
+        }
+
+        // -- Stream extras --------------------------------------------------------
+
+        [Fact]
+        public async Task Stream_WriteDouble_ReadDouble_RoundTrip()
+        {
+            string? r = await Run(@"
+                local s = Stream.Create()
+                s:WriteDouble(3.141592653589793)
+                s:Seek(0)
+                local v = s:ReadDouble()
+                return tostring(math.abs(v - 3.141592653589793) < 1e-12)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_UnsignedNumericTypes_RoundTrip()
+        {
+            // WriteUnsignedShort / WriteUnsignedInt / WriteUnsignedLong — each must
+            // round-trip without sign-extension or truncation.
+            string? r = await Run(@"
+                local s = Stream.Create()
+                s:WriteUnsignedShort(60000)
+                s:WriteUnsignedInt(3000000000)
+                s:WriteUnsignedLong(9000000000)
+                s:Seek(0)
+                return tostring(s:ReadUnsignedShort()) .. ':'
+                    .. tostring(s:ReadUnsignedInt()) .. ':'
+                    .. tostring(s:ReadUnsignedLong())
+            ");
+            r.ShouldBe("60000:3000000000:9000000000");
+        }
+
+        [Fact]
+        public async Task Stream_WriteUtf8_WriteAndReadBack()
+        {
+            // WriteUtf8 converts Latin-1 bytes to UTF-8; the raw bytes can be
+            // Read back as a regular Lua string.
+            string? r = await Run(@"
+                local s = Stream.Create()
+                s:WriteUtf8('hello')
+                s:Seek(0)
+                return s:Read()
+            ");
+            r.ShouldBe("hello");
+        }
+
+        [Fact]
+        public async Task Stream_WriteUtf8_EmbeddedNullByte_WritesFullString()
+        {
+            // Previously the loop used while(*in) which stops at embedded '\0',
+            // silently dropping everything after it.  The fix uses the len from
+            // luaL_checklstring so all bytes are encoded and written.
+            string? r = await Run(@"
+                local s = Stream.Create()
+                s:WriteUtf8('a\0b')   -- 3 bytes: 'a', null, 'b'
+                local _, info = s:GetInfo()
+                return tostring(info.len == 3)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_ReadUtf8_ReturnsBytesAndCodepoint()
+        {
+            // ReadUtf8 reads exactly one UTF-8 codepoint and returns
+            // (raw_bytes_string, codepoint_integer).
+            string? r = await Run(@"
+                local s = Stream.Create()
+                s:Write('A')           -- single ASCII codepoint (U+0041)
+                s:Seek(0)
+                local bytes, cp = s:ReadUtf8()
+                return tostring(bytes == 'A' and cp == 65)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_SetByte_AtPosition_ModifiesWithoutMovingCursor()
+        {
+            // SetByte(value, pos) writes one byte at pos, restores cursor, then
+            // a Read from the original position sees the patched byte.
+            string? r = await Run(@"
+                local s = Stream.Create()
+                s:Write('ABCD')
+                s:SetByte(88, 1)   -- patch index 1 ('B') with 'X' (88)
+                s:Seek(0)
+                return s:Read()    -- should read 'AXCD'
+            ");
+            r.ShouldBe("AXCD");
+        }
+
+        [Fact]
+        public async Task Stream_Tostring_ReadableAndSeekable_ReadsContent()
+        {
+            // __tostring reads the stream only when it has both CAP_READ and CAP_SEEK
+            // (memory streams have both).
+            string? r = await Run(@"
+                local s = Stream.Create('hello')
+                s:Seek(0)
+                return tostring(s)
+            ");
+            r.ShouldBe("hello");
+        }
+
+        [Fact]
+        public async Task Stream_Tostring_NonReadableStream_ReturnsFallbackString()
+        {
+            // A write-only stream lacks CAP_READ; __tostring must return a pointer
+            // string rather than attempting to read the stream.
+            string? r = await Run(@"
+                local OPEN, CLOSE, CAP_WRITE = 0, 1, 2
+                local s = Stream.Create(function(op)
+                    if op == OPEN  then return CAP_WRITE end
+                    if op == CLOSE then return true end
+                end)
+                local str = tostring(s)
+                return tostring(type(str) == 'string' and #str > 0 and str ~= '')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_Tostring_ReadableButNotSeekable_ReturnsFallbackString()
+        {
+            // A read-only stream without CAP_SEEK must also fall back to the pointer
+            // string — reading without being able to seek would silently consume data.
+            string? r = await Run(@"
+                local OPEN, CLOSE, READ, CAP_READ = 0, 1, 2, 1
+                local s = Stream.Create(function(op, len)
+                    if op == OPEN  then return CAP_READ end
+                    if op == CLOSE then return true end
+                    if op == READ  then return 'canary' end
+                end)
+                local str = tostring(s)
+                -- must be a non-empty string that is NOT the backend's read data
+                return tostring(type(str) == 'string' and #str > 0 and str ~= 'canary')
             ");
             r.ShouldBe("true");
         }

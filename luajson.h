@@ -8,6 +8,9 @@
 
 #define LUAJSON "LUAJSON"
 
+// Forward declaration — full definition in stream.h, used only for streaming encode.
+struct LuaStream;
+
 typedef struct LuaJson {
     int    pretty;      // 0 = compact, 1 = pretty-printed (2 spaces per level)
 
@@ -42,6 +45,10 @@ typedef struct LuaJson {
     lua_State* chunkL;
     char*      chunkBuf;
     size_t     chunkBufCap;
+
+    // Streaming encode: when non-NULL, jbuf_grow flushes the output buffer to
+    // this stream before allocating more memory, keeping usage bounded.
+    struct LuaStream* encStream;
 } LuaJson;
 
 // Returns the unique pointer address used as the JSON null sentinel.
@@ -64,3 +71,5 @@ int lua_json_new(lua_State* L);                 // Json.New([pretty])
 // string signals end of input.
 int lua_json_decode(lua_State* L);
 int lua_json_encode(lua_State* L);
+int lua_json_encode_into_stream(lua_State* L);
+int lua_json_decode_into_stream(lua_State* L);

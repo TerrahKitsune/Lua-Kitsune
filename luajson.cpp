@@ -1,4 +1,5 @@
 ﻿#include "luajson.h"
+#include "stream.h"
 
 // Unique address used as the JSON null sentinel.
 // Both encoder and decoder reference this directly — no registry lookup needed.
@@ -58,6 +59,17 @@ int lua_json_new(lua_State* L) {
 static void jbuf_grow(LuaJson* j, lua_State* L, size_t need) {
 	if (j->outLen + need <= j->outCap)
 		return;
+	// Streaming mode: flush what we have to the stream before growing so
+	// the output buffer never exceeds more than one buffer-worth of memory.
+	if (j->encStream && j->outLen > 0) {
+		lua_rawgeti(L, LUA_REGISTRYINDEX, j->encStream->backendRef);
+		lua_pushinteger(L, STREAM_OP_WRITE);
+		lua_pushlstring(L, j->out, j->outLen);
+		lua_call_nohook(L, 2, 0);
+		j->outLen = 0;
+		if (need <= j->outCap)
+			return;
+	}
 	size_t cap = j->outCap ? j->outCap * 2 : 512;
 	while (cap < j->outLen + need)
 		cap *= 2;
@@ -564,8 +576,9 @@ static void dec_value(LuaJson* j, lua_State* L) {
 // =============================================================================
 
 static void enc_reset(LuaJson* j) {
-	j->outLen = 0;
-	j->recLen = 0;
+	j->outLen    = 0;
+	j->recLen    = 0;
+	j->encStream = NULL;
 }
 
 static void dec_reset(LuaJson* j, const char* src, size_t len) {
@@ -578,34 +591,22 @@ static void dec_reset(LuaJson* j, const char* src, size_t len) {
 }
 
 // =============================================================================
-// Instance method entry points — also handle the static calling convention:
-//   json:Decode(str)               arg 1 = LuaJson instance, arg 2 = str
-//   Json.Decode(str)               arg 1 = str  (stack-local state, no heap needed)
-//   json:Encode(value)             arg 1 = LuaJson instance, arg 2 = value
-//   Json.Encode(value [, pretty])  arg 1 = value  (GC-managed temp instance)
+// Instance method entry points (instance required as arg 1):
+//   json:Decode(str | fn)  arg 2 = string or chunk-reader function
+//   json:Encode(value)     arg 2 = Lua value to encode
 // =============================================================================
 
 int lua_json_decode(lua_State* L) {
-	LuaJson*    j = (LuaJson*)luaL_testudata(L, 1, LUAJSON);
+	LuaJson*    j = lua_json_check(L, 1);
 	size_t      len;
 	const char* s;
-	LuaJson     tmp;
-	int         fn_arg;
 
-	if (j) {
-		fn_arg = 2;
-	} else {
-		memset(&tmp, 0, sizeof(tmp));
-		j      = &tmp;
-		fn_arg = 1;
-	}
-
-	if (lua_isfunction(L, fn_arg)) {
+	if (lua_isfunction(L, 2)) {
 		dec_reset(j, NULL, 0);
-		j->chunkFnIdx = fn_arg;
+		j->chunkFnIdx = 2;
 		j->chunkL     = L;
 	} else {
-		s = luaL_checklstring(L, fn_arg, &len);
+		s = luaL_checklstring(L, 2, &len);
 		dec_reset(j, s, len);
 	}
 
@@ -613,32 +614,132 @@ int lua_json_decode(lua_State* L) {
 
 	j->chunkFnIdx = 0;
 	j->chunkL     = NULL;
-	if (j == &tmp && tmp.chunkBuf) {
-		gff_free(tmp.chunkBuf);
-		tmp.chunkBuf    = NULL;
-		tmp.chunkBufCap = 0;
-	}
 	return 1;
 }
 
 int lua_json_encode(lua_State* L) {
-	LuaJson* j = (LuaJson*)luaL_testudata(L, 1, LUAJSON);
-	int value_idx;
-	if (j) {
-		value_idx = 2;
-	} else {
-		int pretty  = lua_toboolean(L, 2);
-		lua_settop(L, 1);                    // [value(1)]
-		j           = lua_json_push(L);      // [value(1), j(2)]
-		j->pretty   = pretty;
-		lua_insert(L, 1);                    // [j(1), value(2)]
-		value_idx   = 2;
-	}
-	luaL_checkany(L, value_idx);
+	LuaJson* j = lua_json_check(L, 1);
+	luaL_checkany(L, 2);
 	enc_reset(j);
-	lua_pushvalue(L, value_idx);
+	lua_pushvalue(L, 2);
 	enc_value(j, L, 0);
 	lua_pop(L, 1);
 	lua_pushlstring(L, j->out ? j->out : "", j->outLen);
+	return 1;
+}
+
+// =============================================================================
+// Stream I/O
+// =============================================================================
+
+// C closure used by DecodeIntoStream: called repeatedly by the chunked decoder.
+// Upvalue 1: LuaStream* (lightuserdata).
+// Returns a non-empty string for each 4 KiB chunk, or nil on EOF.
+static int json_stream_chunk_reader(lua_State* L) {
+	LuaStream* st = (LuaStream*)lua_touserdata(L, lua_upvalueindex(1));
+	lua_rawgeti(L, LUA_REGISTRYINDEX, st->backendRef);
+	lua_pushinteger(L, STREAM_OP_READ);
+	lua_pushinteger(L, 4096);
+	lua_call_nohook(L, 2, 1);
+	// Normalise empty string to nil so the chunked decoder stops cleanly.
+	if (lua_type(L, -1) == LUA_TSTRING) {
+		size_t len;
+		lua_tolstring(L, -1, &len);
+		if (len == 0) {
+			lua_pop(L, 1);
+			lua_pushnil(L);
+		}
+	}
+	return 1;
+}
+
+// json:EncodeIntoStream(stream, value)
+// Encodes a Lua value as JSON and writes the result directly into a stream.
+int lua_json_encode_into_stream(lua_State* L) {
+	LuaJson*   j  = lua_json_check(L, 1);
+	int streamIdx = 2;
+	int valueIdx  = 3;
+
+	if (!lua_isstream(L, streamIdx))
+		return luaL_argerror(L, streamIdx, "stream expected");
+
+	LuaStream* st = lua_toluastream(L, streamIdx);
+	if (!(st->Caps & STREAM_CAP_WRITE)) {
+		lua_pushboolean(L, false);
+		lua_pushstring(L, "stream is not writable");
+		return 2;
+	}
+
+	enc_reset(j);        // also clears any stale encStream from a previous error
+	j->encStream = st;
+
+	lua_pushvalue(L, valueIdx);
+	enc_value(j, L, 0);
+	lua_pop(L, 1);
+
+	// Flush bytes still buffered after the last grow boundary.
+	if (j->outLen > 0) {
+		lua_rawgeti(L, LUA_REGISTRYINDEX, st->backendRef);
+		lua_pushinteger(L, STREAM_OP_WRITE);
+		lua_pushlstring(L, j->out, j->outLen);
+		lua_call_nohook(L, 2, 1);
+		j->outLen = 0;
+	} else {
+		lua_pushboolean(L, true);
+	}
+
+	j->encStream = NULL;
+	return 1;
+}
+
+// json:DecodeIntoStream(stream)
+// Decodes JSON from a stream incrementally, pulling 4 KiB at a time.
+int lua_json_decode_into_stream(lua_State* L) {
+	LuaJson*   j  = lua_json_check(L, 1);
+	int streamIdx = 2;
+
+	if (!lua_isstream(L, streamIdx))
+		return luaL_argerror(L, streamIdx, "stream expected");
+
+	LuaStream* st = lua_toluastream(L, streamIdx);
+	if (!(st->Caps & STREAM_CAP_READ)) {
+		lua_pushnil(L);
+		lua_pushstring(L, "stream is not readable");
+		return 2;
+	}
+
+	// Push a chunk-reader closure and wire it into the instance's decode state.
+	lua_pushlightuserdata(L, st);
+	lua_pushcclosure(L, json_stream_chunk_reader, 1);
+	int fnIdx = lua_gettop(L);
+
+	dec_reset(j, NULL, 0);
+	j->chunkFnIdx = fnIdx;
+	j->chunkL     = L;
+
+	dec_value(j, L);
+
+	j->chunkFnIdx = 0;
+	j->chunkL     = NULL;
+
+	// The chunk reader fetches 4 KiB at a time, so it may have read bytes that
+	// belong to the NEXT value in the stream. Seek the backend back by however
+	// many bytes were pre-fetched but not consumed by the decoder, so that
+	// consecutive DecodeIntoStream calls on a packed stream each get one value.
+	if (st->Caps & STREAM_CAP_SEEK) {
+		size_t unconsumed = (j->srcLen - j->srcPos) + (size_t)j->ungetLen;
+		if (unconsumed > 0) {
+			lua_rawgeti(L, LUA_REGISTRYINDEX, st->backendRef);
+			lua_pushinteger(L, STREAM_OP_CURPOS);
+			lua_call_nohook(L, 1, 1);
+			lua_Integer curPos = lua_tointeger(L, -1);
+			lua_pop(L, 1);
+			lua_rawgeti(L, LUA_REGISTRYINDEX, st->backendRef);
+			lua_pushinteger(L, STREAM_OP_SETPOS);
+			lua_pushinteger(L, curPos - (lua_Integer)unconsumed);
+			lua_call_nohook(L, 2, 0);
+		}
+	}
+
 	return 1;
 }

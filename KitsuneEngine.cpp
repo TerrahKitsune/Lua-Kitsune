@@ -46,6 +46,7 @@
 #include "LuaMutexMain.h"
 #include "LuaAesMain.h"
 #include "luajsonmain.h"
+#include "luajson.h"
 #include "base64.h"
 #include "MacroMain.h"
 #include "wcharmain.h"
@@ -60,6 +61,9 @@
 
 #include "KitsuneEngine.h"
 #include "LuaEngineBuiltins.h"
+
+// Unique address used as the Lua registry key for the shared bridge LuaJson instance.
+static char g_bridge_json_key;
 
 // ── Win32 auto-reset event RAII wrapper ─────────────────────────────────────
 // On a future non-Windows port, replace this struct with a POSIX equivalent
@@ -398,28 +402,12 @@ static void PushKitsuneVariable(lua_State* L, const KitsuneVariable* v) {
 		lua_pushwchar(L, v->char16data ? Char16AsWchar(v->char16data) : L"", v->length);
 		break;
 	case KITSUNE_TJSON: {
-		// Decode JSON string → Lua table via Json.Decode(str) (static call; no instance needed).
-		// Using the static form avoids __index dispatch on the userdata and is handled by
-		// lua_json_decode's built-in static/instance detection (j = &tmp when arg 1 is not a LUAJSON).
+		// Decode JSON using the shared bridge instance (avoids GC churn per call).
 		if (v->data && v->length > 0) {
-			lua_getglobal(L, "Json");
-			if (lua_istable(L, -1)) {
-				lua_getfield(L, -1, "Decode");
-				lua_remove(L, -2);  // remove Json table
-				if (lua_isfunction(L, -1)) {
-					lua_pushlstring(L, (const char*)v->data, v->length);
-					int rc = lua_pcall_nohook(L, 1, 1, 0);  // Json.Decode(str)
-					if (rc != LUA_OK) {
-						lua_pop(L, 1);
-						lua_pushnil(L);
-					}
-				}
-				else {
-					lua_pop(L, 1);
-					lua_pushnil(L);
-				}
-			}
-			else {
+			lua_pushcfunction(L, lua_json_decode);
+			lua_rawgetp(L, LUA_REGISTRYINDEX, &g_bridge_json_key);
+			lua_pushlstring(L, (const char*)v->data, v->length);
+			if (lua_pcall_nohook(L, 2, 1, 0) != LUA_OK) {
 				lua_pop(L, 1);
 				lua_pushnil(L);
 			}
@@ -944,6 +932,10 @@ extern "C" {
 		luaopen_mutex(L);        lua_setglobal(L, "Mutex");
 		luaopen_luaaes(L);       lua_setglobal(L, "Aes");
 		luaopen_json(L);         lua_setglobal(L, "Json");
+		// Store a single LuaJson instance in the registry for the C bridge to reuse
+		// when decoding KITSUNE_TJSON values — avoids one GC allocation per bridge call.
+		lua_json_push(L);
+		lua_rawsetp(L, LUA_REGISTRYINDEX, &g_bridge_json_key);
 		luaopen_base64(L);       lua_setglobal(L, "Base64");
 		luaopen_macro(L);        lua_setglobal(L, "Macro");
 		luaopen_wchar(L);        lua_setglobal(L, "Wchar");
