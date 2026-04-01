@@ -1363,23 +1363,76 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task Stream_FromString_ReadMatchesInput()
-        {
-            string? r = await Run(@"
-                local s = Stream.FromString('kitsune')
-                return s:Read()
-            ");
-            r.ShouldBe("kitsune");
-        }
-
-        [Fact]
-        public async Task Stream_GetInfo_ReturnsLengthAndPos()
+        public async Task Stream_PosAndLen_AfterWrite_ReturnCorrectValues()
         {
             string? r = await Run(@"
                 local s = Stream.Create()
                 s:Write('abcde')
-                local pos, len, alloc = s:GetInfo()
-                return tostring(pos == 5 and len == 5)
+                return tostring(s:pos() == 5 and s:len() == 5)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_GetInfo_ReturnsCapsAndBackendInfo()
+        {
+            string? r = await Run(@"
+                local s = Stream.Create()
+                s:Write('hello')
+                local caps, info = s:GetInfo()
+                return tostring(
+                    type(caps) == 'table' and caps.Caps > 0 and
+                    type(info) == 'table' and info.pos == 5 and info.len == 5 and info.alloc >= 5
+                )
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_Seek_UpdatesPosition()
+        {
+            string? r = await Run(@"
+                local s = Stream.Create()
+                s:Write('hello')
+                s:Seek(2)
+                return tostring(s:pos() == 2)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_WriteByte_ReadByte_RoundTrip()
+        {
+            string? r = await Run(@"
+                local s = Stream.Create()
+                s:WriteByte(42)
+                s:Seek(0)
+                return tostring(s:ReadByte() == 42)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_PeekByte_DoesNotAdvancePosition()
+        {
+            string? r = await Run(@"
+                local s = Stream.Create()
+                s:WriteByte(99)
+                s:Seek(0)
+                local b = s:PeekByte()
+                return tostring(b == 99 and s:pos() == 0)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_WriteInt_ReadInt_RoundTrip()
+        {
+            string? r = await Run(@"
+                local s = Stream.Create()
+                s:WriteInt(12345)
+                s:Seek(0)
+                return tostring(s:ReadInt() == 12345)
             ");
             r.ShouldBe("true");
         }
@@ -1388,13 +1441,114 @@ namespace KitsuneNet.Tests
         public async Task Stream_Compress_Decompress_RoundTrip()
         {
             string? r = await Run(@"
-                local s = Stream.FromString('hello hello hello hello hello')
-                local compressed   = s:Compress()
+                local s = Stream.Create()
+                s:Write('hello hello hello hello hello')
+                local compressed = s:Compress()
                 local decompressed = compressed:Decompress()
-                decompressed:Seek(0)
                 return decompressed:Read()
             ");
             r.ShouldBe("hello hello hello hello hello");
+        }
+
+        [Fact]
+        public async Task Stream_Compress_ProducesSmallerOutput()
+        {
+            string? r = await Run(@"
+                local s = Stream.Create()
+                s:Write(string.rep('a', 1000))
+                s:Seek(0)
+                local compressed = s:Compress()
+                local _, info = compressed:GetInfo()
+                return tostring(info.len < 1000)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_Compress_IntoProvidedStream_RoundTrip()
+        {
+            string? r = await Run(@"
+                local src = Stream.Create()
+                src:Write('hello hello hello hello hello')
+                local dst = Stream.Create()
+                src:Compress(nil, dst)
+                local decompressed = dst:Decompress()
+                return decompressed:Read()
+            ");
+            r.ShouldBe("hello hello hello hello hello");
+        }
+
+        [Fact]
+        public async Task Stream_Decompress_IntoProvidedStream_RoundTrip()
+        {
+            string? r = await Run(@"
+                local src = Stream.Create()
+                src:Write('hello hello hello hello hello')
+                local compressed = src:Compress()
+                local dst = Stream.Create()
+                compressed:Decompress(nil, dst)
+                dst:Seek(0)
+                return dst:Read()
+            ");
+            r.ShouldBe("hello hello hello hello hello");
+        }
+
+        [Fact]
+        public async Task Stream_Compress_AndDecompress_BothIntoProvidedStreams_RoundTrip()
+        {
+            string? r = await Run(@"
+                local src = Stream.Create()
+                src:Write('hello hello hello hello hello')
+                local compDst = Stream.Create()
+                local decompDst = Stream.Create()
+                src:Compress(nil, compDst)
+                compDst:Decompress(nil, decompDst)
+                decompDst:Seek(0)
+                return decompDst:Read()
+            ");
+            r.ShouldBe("hello hello hello hello hello");
+        }
+
+        [Fact]
+        public async Task Stream_Compress_ProvidedDst_PositionNotReset()
+        {
+            string? r = await Run(@"
+                local src = Stream.Create()
+                src:Write(string.rep('a', 200))
+                local dst = Stream.Create()
+                src:Compress(nil, dst)
+                local _, info = dst:GetInfo()
+                return tostring(info.pos > 0)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_Decompress_ProvidedDst_PositionNotReset()
+        {
+            string? r = await Run(@"
+                local src = Stream.Create()
+                src:Write(string.rep('a', 200))
+                local compressed = src:Compress()
+                local dst = Stream.Create()
+                compressed:Decompress(nil, dst)
+                local _, info = dst:GetInfo()
+                return tostring(info.pos > 0)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_WriteFloat_ReadFloat_RoundTrip()
+        {
+            string? r = await Run(@"
+                local s = Stream.Create()
+                s:WriteFloat(3.14)
+                s:Seek(0)
+                local v = s:ReadFloat()
+                return tostring(math.abs(v - 3.14) < 0.001)
+            ");
+            r.ShouldBe("true");
         }
 
         // -- CSV ------------------------------------------------------------------

@@ -54,7 +54,7 @@
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>Cabinet.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <LargeAddressAware>true</LargeAddressAware>
       <IgnoreSpecificDefaultLibraries>msvcrt.lib;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
     </Link>
@@ -80,7 +80,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>Cabinet.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <LargeAddressAware>true</LargeAddressAware>
     </Link>
     <PostBuildEvent>
@@ -196,7 +196,7 @@
     <ClCompile Include="sha256.c" />
     <ClCompile Include="Sha256Main.cpp" />
     <ClCompile Include="stream.cpp" />
-    <ClCompile Include="stream_inmemory.cpp" />
+    <ClCompile Include="streammemory.cpp" />
     <ClCompile Include="StreamMain.cpp" />
     <ClCompile Include="wcharmain.cpp" />
     <ClCompile Include="WinServices.cpp" />
@@ -346,7 +346,7 @@
     <ClInclude Include="Sha256Main.h" />
     <ClInclude Include="stream.h" />
     <ClInclude Include="StreamMain.h" />
-    <ClInclude Include="stream_inmemory.h" />
+    <ClInclude Include="streammemory.h" />
     <ClInclude Include="wcharmain.h" />
     <ClInclude Include="WinServices.h" />
     <ClInclude Include="WinServicesMain.h" />

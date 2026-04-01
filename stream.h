@@ -18,16 +18,18 @@ static const char* STREAM = "STREAM";
 #define STREAM_OP_CLOSE   1   // ()     -> true | false [, msg] (called from __gc)
 #define STREAM_OP_READ    2   // (len)  -> string | false [, msg]
 #define STREAM_OP_WRITE   3   // (data) -> true   | false [, msg]
-#define STREAM_OP_SEEK    4   // (pos)  -> true   | false [, msg]
+#define STREAM_OP_CURPOS  5   // ()     -> integer pos current position
+#define STREAM_OP_LEN     6   // ()     -> integer len total length
+#define STREAM_OP_SETPOS  7   // (pos)  -> true   | false [, msg]
+#define STREAM_OP_INFO    8   // ()     -> any    backend-defined info table (called from GetInfo)
 
 typedef struct LuaStream {
 	int     backendRef;  // LUA_NOREF = heap stream; else registry ref to the backend function
-	BYTE*   data;        // addressable buffer for heap streams; NULL for non-addressable backends
-	size_t  len;         // number of valid bytes in the buffer
-	size_t  pos;         // current read/write cursor
-	size_t  alloc;       // allocated buffer capacity (0 = fixed / non-resizable)
-	BYTE    caps;        // STREAM_CAP_* bitmask, set once at construction
+	BYTE	Caps;        // Capability flags (STREAM_CAP_*)
 } LuaStream;
+
+static const size_t MIN_STREAM_SIZE  = 1024;
+static const BYTE   HEAP_STREAM_CAPS = STREAM_CAP_READ | STREAM_CAP_WRITE | STREAM_CAP_SEEK | STREAM_CAP_PEEK;
 
 // ── Constructor helpers ───────────────────────────────────────────────────────
 LuaStream* lua_pushluastream(lua_State* L);
@@ -37,21 +39,15 @@ int        lua_isstream(lua_State* L, int index);
 
 // ── Stream construction ───────────────────────────────────────────────────────
 int NewStream(lua_State* L);
-int NewStreamFromString(lua_State* L);
-int OpenFileToStream(lua_State* L);
 
 // ── Stream info ───────────────────────────────────────────────────────────────
 int StreamPos(lua_State* L);
 int StreamLen(lua_State* L);
-int StreamShrink(lua_State* L);
 int StreamSetPos(lua_State* L);
-int SetLength(lua_State* L);
 int GetStreamInfo(lua_State* L);
-int StreamIndexOf(lua_State* L);
 
 // ── Read operations ───────────────────────────────────────────────────────────
 int ReadLuaStream(lua_State* L);
-int ReadUntilLuaStream(lua_State* L);
 int ReadStreamByte(lua_State* L);
 int PeekStreamByte(lua_State* L);
 int ReadUtf8(lua_State* L);
@@ -68,7 +64,6 @@ int ReadUnsignedLong(lua_State* L);
 int WriteLuaValue(lua_State* L);
 int WriteStreamByte(lua_State* L);
 int SetStreamByte(lua_State* L);
-int StreamBuffer(lua_State* L);
 int WriteUtf8(lua_State* L);
 int WriteFloat(lua_State* L);
 int WriteDouble(lua_State* L);
@@ -79,28 +74,10 @@ int WriteUInt(lua_State* L);
 int WriteLong(lua_State* L);
 int WriteUnsignedLong(lua_State* L);
 
-// ── File I/O ──────────────────────────────────────────────────────────────────
-int ReadFromFile(lua_State* L);
-int WriteToFile(lua_State* L);
-int DumpToFile(lua_State* L);
-
 // ── Compression ───────────────────────────────────────────────────────────────
-int Compress(lua_State* L);
-int Decompress(lua_State* L);
-
-// ── Shared memory info (query only — no stream creation) ─────────────────────
-int GetSharedMemoryStreamInfo(lua_State* L);
+int CompressStream(lua_State* L);
+int DecompressStream(lua_State* L);
 
 // ── Metamethods ───────────────────────────────────────────────────────────────
 int luastream_gc(lua_State* L);
 int luastream_tostring(lua_State* L);
-
-// ── Internal heap backend ─────────────────────────────────────────────────────
-// Registry key under which the shared heap-backend closure is stored.
-// luaopen_stream registers it; all heap stream constructors ref it via backendRef.
-#define HEAP_BACKEND_KEY "KitsuneStreamHeapBackend"
-
-// Handles OP_OPEN (returns HEAP_STREAM_CAPS) for heap streams.
-// All other ops are no-ops because __gc frees data directly and
-// READ/WRITE/SEEK use the data pointer rather than calling the backend.
-int heap_backend(lua_State* L);

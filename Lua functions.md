@@ -765,19 +765,25 @@ pos Stream:IndexOf(string or byte)
 ### Stream Info
 
 ```lua
-position, length, allocated Stream:GetInfo()
+capsTable, backendInfo Stream:GetInfo()
 void Stream:SetLength(newlength)
 length Stream:len()
 pos Stream:pos()
 void Stream:Seek(opt pos)
 ```
 
+`GetInfo()` returns two values:
+- `capsTable` — `{ Caps = number }` where `Caps` is the capability bitmask (`STREAM_CAP_*` flags)
+- `backendInfo` — backend-defined; for in-memory streams: `{ pos, len, alloc }`
+
 ### Compression
 
 ```lua
-Stream Stream:Compress(opt algorithm)
-Stream Stream:Decompress(opt algorithm)
+Stream Stream:Compress(opt algorithm, opt deststream)
+Stream Stream:Decompress(opt algorithm, opt deststream)
 ```
+
+Both functions read the source stream from position 0 in 64 KB chunks and write the result into the destination. If `deststream` is omitted or `nil`, a new stream is created and returned seeked to position 0. If `deststream` is provided it is written to at its current position and returned as-is (no automatic seek).
 
 **Algorithms:**
 | Value | Algorithm |

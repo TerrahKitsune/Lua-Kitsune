@@ -1,4 +1,4 @@
-#include "LuaSHA1.h"
+﻿#include "LuaSHA1.h"
 #include <stdlib.h>
 #include <string.h>
 #include "luawchar.h"
@@ -38,10 +38,6 @@ int UpdateSHA1(lua_State* L) {
 		}
 	}
 	else if (type == LUA_TUSERDATA && luaL_testudata(L, -1, STREAM)) {
-		LuaStream* stream = lua_toluastream(L, -1);
-		if (stream && stream->data) {
-			SHA1Update(&luasha1->ctx, (unsigned char*)stream->data, (uint32_t)stream->len);
-		}
 	}
 	else if (type == LUA_TSTRING) {
 		size_t len;

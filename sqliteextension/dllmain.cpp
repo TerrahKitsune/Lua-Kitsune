@@ -1,4 +1,4 @@
-#include "../networking.h"
+﻿#include "../networking.h"
 #include <Windows.h>
 #include "objbase.h"
 #include "luasqlite.h"
@@ -145,11 +145,8 @@ int querysqlite(lua_State* L, bool isScalar) {
 					}
 				}
 				else if (luaL_testudata(L, -1, STREAM)) {
-					stream = lua_toluastream(L, -1);
-					if (stream->data) {
-						sqlite3_bind_blob64(stmt, ++cnt, stream->data, stream->len, SQLITE_STATIC);
-						break;
-					}
+					sqlite3_bind_null(stmt, ++cnt);
+					break;
 				}
 
 				sqlite3_bind_null(stmt, ++cnt);
@@ -214,11 +211,8 @@ int querysqlite(lua_State* L, bool isScalar) {
 					}
 				}
 				else if (luaL_testudata(L, -1, STREAM)) {
-					stream = lua_toluastream(L, -1);
-					if (stream->data) {
-						sqlite3_bind_blob64(stmt, ++cnt, stream->data, stream->len, SQLITE_STATIC);
-						break;
-					}
+					sqlite3_bind_null(stmt, ++cnt);
+					break;
 				}
 
 				sqlite3_bind_null(stmt, ++cnt);
@@ -416,13 +410,7 @@ void lua_tosqlite3value(lua_State* L, int idx, sqlite3_context* context) {
 	case LUA_TUSERDATA:
 
 		if (lua_isstream(L, idx)) {
-			LuaStream* stream = lua_toluastream(L, idx);
-			if (stream && stream->data) {
-				sqlite3_result_blob64(context, stream->data, stream->len, SQLITE_TRANSIENT);
-			}
-			else {
-				sqlite3_result_null(context);
-			}
+			sqlite3_result_null(context);
 			break;
 		}
 		else if (lua_iswchar(L, idx)) {

@@ -761,7 +761,7 @@
     <ClCompile Include="luajsonmain.cpp">
       <Filter>LuaJson</Filter>
     </ClCompile>
-    <ClCompile Include="stream_inmemory.cpp">
+    <ClCompile Include="streammemory.cpp">
       <Filter>LuaStream\Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -1204,7 +1204,7 @@
     <ClInclude Include="luajsonmain.h">
       <Filter>LuaJson</Filter>
     </ClInclude>
-    <ClInclude Include="stream_inmemory.h">
+    <ClInclude Include="streammemory.h">
       <Filter>LuaStream\Header Files</Filter>
     </ClInclude>
   </ItemGroup>

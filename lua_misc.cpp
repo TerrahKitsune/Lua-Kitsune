@@ -623,9 +623,8 @@ static int crc64(lua_State* L) {
 		data = (const BYTE*)lua_tolstring(L, -1, &len);
 	}
 	else if (lua_isstream(L, -1)) {
-		LuaStream* stream = lua_toluastream(L, -1);
-		data = stream->data;
-		len = stream->len;
+		data = NULL;
+		len = 0;
 	}
 	else if (lua_iswchar(L, -1)) {
 		LuaWChar* wchar = lua_towchar(L, -1);

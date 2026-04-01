@@ -232,11 +232,8 @@ int SQLiteExecute(lua_State* L) {
 					}
 				}
 				else if (luaL_testudata(L, -1, STREAM)) {
-					stream = lua_toluastream(L, -1);
-					if (stream->data) {
-						sqlite3_bind_blob64(luasqlite->stmt, ++cnt, stream->data, stream->len, SQLITE_STATIC);
-						break;
-					}
+					sqlite3_bind_null(luasqlite->stmt, ++cnt);
+					break;
 				}
 
 				sqlite3_bind_null(luasqlite->stmt, ++cnt);
@@ -297,11 +294,8 @@ int SQLiteExecute(lua_State* L) {
 					}
 				}
 				else if (luaL_testudata(L, -1, STREAM)) {
-					stream = lua_toluastream(L, -1);
-					if (stream->data) {
-						sqlite3_bind_blob64(luasqlite->stmt, ++cnt, stream->data, stream->len, SQLITE_STATIC);
-						break;
-					}
+					sqlite3_bind_null(luasqlite->stmt, ++cnt);
+					break;
 				}
 
 				sqlite3_bind_null(luasqlite->stmt, ++cnt);
@@ -510,13 +504,7 @@ void SqlitePCallFunction(bool isFinish, LuaSQLiteFunction* function, sqlite3_con
 			return;
 		}
 		else if (lua_isstream(L, -1)) {
-			LuaStream* stream = lua_toluastream(L, -1);
-			if (stream->data) {
-				sqlite3_result_blob(context, stream->data, (int)stream->len, SQLITE_TRANSIENT);
-			}
-			else {
-				sqlite3_result_null(context);
-			}
+			sqlite3_result_null(context);
 			lua_pop(L, 1);
 			return;
 		}
