@@ -7,43 +7,78 @@
 #include "streammemory.h"
 #include "streamfile.h"
 
+// Forward declarations for the centralized dispatch helpers defined later.
+static bool        StreamWrite(lua_State* L, LuaStream* s, const BYTE* data, size_t len);
+static bool        StreamSetPosC(lua_State* L, LuaStream* s, lua_Integer pos);
+static lua_Integer StreamCurPosC(lua_State* L, LuaStream* s);
+static lua_Integer StreamGetLenC(lua_State* L, LuaStream* s);
+
 LuaStream* lua_pushluastream(lua_State* L) {
 	LuaStream* stream = (LuaStream*)lua_newuserdata(L, sizeof(LuaStream));
 	luaL_getmetatable(L, STREAM);
 	lua_setmetatable(L, -2);
 	memset(stream, 0, sizeof(LuaStream));
 	stream->backendRef = LUA_NOREF;
-	lua_pushinmemory_backend(L);
-	stream->backendRef = luaL_ref(L, LUA_REGISTRYINDEX);
-	lua_rawgeti(L, LUA_REGISTRYINDEX, stream->backendRef);
-	lua_pushinteger(L, STREAM_OP_OPEN);
-	lua_call_nohook(L, 1, 1);
-	stream->Caps = (BYTE)lua_tointeger(L, -1);
-	lua_pop(L, 1);
+	lua_setup_inmemory_stream(L, stream);
 	return stream;
 }
 
 LuaStream* lua_pushluastream(lua_State* L, const BYTE* data, size_t len) {
 	LuaStream* stream = lua_pushluastream(L);
 	if (data && len > 0) {
-		lua_rawgeti(L, LUA_REGISTRYINDEX, stream->backendRef);
-		lua_pushinteger(L, STREAM_OP_WRITE);
-		lua_pushlstring(L, (const char*)data, len);
-		lua_call_nohook(L, 2, 0);
-		lua_rawgeti(L, LUA_REGISTRYINDEX, stream->backendRef);
-		lua_pushinteger(L, STREAM_OP_SETPOS);
-		lua_pushinteger(L, 0);
-		lua_call_nohook(L, 2, 0);
+		StreamWrite(L, stream, data, len);
+		StreamSetPosC(L, stream, 0);
 	}
 	return stream;
 }
 
 static bool StreamWrite(lua_State* L, LuaStream* s, const BYTE* data, size_t len) {
+	if (s->vtbl)
+		return s->vtbl->write(s->native, data, len);
 	lua_rawgeti(L, LUA_REGISTRYINDEX, s->backendRef);
 	lua_pushinteger(L, STREAM_OP_WRITE);
 	lua_pushlstring(L, (const char*)data, len);
 	lua_call_nohook(L, 2, 1);
 	bool result = lua_toboolean(L, -1) != 0;
+	lua_pop(L, 1);
+	return result;
+}
+
+// ── Centralized C-level helpers for pos/len/setpos ────────────────────────────
+// These never push to the Lua stack — they return C values directly.
+// All Lua API functions and internal operations route through these so call
+// sites stay clean regardless of whether the stream uses a vtable or Lua fn.
+
+static lua_Integer StreamCurPosC(lua_State* L, LuaStream* s) {
+	if (s->vtbl)
+		return s->vtbl->curpos(s->native);
+	lua_rawgeti(L, LUA_REGISTRYINDEX, s->backendRef);
+	lua_pushinteger(L, STREAM_OP_CURPOS);
+	lua_call_nohook(L, 1, 1);
+	lua_Integer result = lua_tointeger(L, -1);
+	lua_pop(L, 1);
+	return result;
+}
+
+static bool StreamSetPosC(lua_State* L, LuaStream* s, lua_Integer pos) {
+	if (s->vtbl)
+		return s->vtbl->setpos(s->native, pos);
+	lua_rawgeti(L, LUA_REGISTRYINDEX, s->backendRef);
+	lua_pushinteger(L, STREAM_OP_SETPOS);
+	lua_pushinteger(L, pos);
+	lua_call_nohook(L, 2, 1);
+	bool result = lua_toboolean(L, -1) != 0;
+	lua_pop(L, 1);
+	return result;
+}
+
+static lua_Integer StreamGetLenC(lua_State* L, LuaStream* s) {
+	if (s->vtbl)
+		return s->vtbl->getlen(s->native);
+	lua_rawgeti(L, LUA_REGISTRYINDEX, s->backendRef);
+	lua_pushinteger(L, STREAM_OP_LEN);
+	lua_call_nohook(L, 1, 1);
+	lua_Integer result = lua_tointeger(L, -1);
 	lua_pop(L, 1);
 	return result;
 }
@@ -64,16 +99,15 @@ LuaStream* lua_toluastream(lua_State* L, int index) {
 }
 
 int luastream_gc(lua_State* L) {
-
 	LuaStream* stream = lua_toluastream(L, 1);
-
-	if (stream->backendRef != LUA_NOREF) {
+	if (stream->vtbl) {
+		stream->vtbl->close(stream->native);
+	} else if (stream->backendRef != LUA_NOREF) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, stream->backendRef);
 		lua_pushinteger(L, STREAM_OP_CLOSE);
 		lua_pcall_nohook(L, 1, 0, 0);
 		luaL_unref(L, LUA_REGISTRYINDEX, stream->backendRef);
 	}
-
 	memset(stream, 0, sizeof(LuaStream));
 	stream->backendRef = LUA_NOREF;
 	return 0;
@@ -81,7 +115,7 @@ int luastream_gc(lua_State* L) {
 
 int luastream_tostring(lua_State* L) {
 	LuaStream* s = lua_toluastream(L, 1);
-	if ((s->Caps & STREAM_CAP_READ) && (s->Caps & STREAM_CAP_SEEK))
+	if ((s->Caps & STREAM_CAP_READ) && (s->Caps & STREAM_CAP_SEEK) && lua_is_inmemory_stream(s))
 		return ReadLuaStream(L);
 	lua_pushfstring(L, "Stream(%p)", s);
 	return 1;
@@ -139,13 +173,7 @@ int StreamPos(lua_State* L) {
 		lua_pushnil(L);
 		return 1;
 	}
-	lua_rawgeti(L, LUA_REGISTRYINDEX, stream->backendRef);
-	lua_pushinteger(L, STREAM_OP_CURPOS);
-	lua_call_nohook(L, 1, 1);
-	if (lua_type(L, -1) != LUA_TNUMBER) {
-		lua_pop(L, 1);
-		lua_pushnil(L);
-	}
+	lua_pushinteger(L, StreamCurPosC(L, stream));
 	return 1;
 }
 
@@ -155,13 +183,7 @@ int StreamLen(lua_State* L) {
 		lua_pushnil(L);
 		return 1;
 	}
-	lua_rawgeti(L, LUA_REGISTRYINDEX, stream->backendRef);
-	lua_pushinteger(L, STREAM_OP_LEN);
-	lua_call_nohook(L, 1, 1);
-	if (lua_type(L, -1) != LUA_TNUMBER) {
-		lua_pop(L, 1);
-		lua_pushnil(L);
-	}
+	lua_pushinteger(L, StreamGetLenC(L, stream));
 	return 1;
 }
 
@@ -170,9 +192,13 @@ int GetStreamInfo(lua_State* L) {
 	lua_createtable(L, 0, 1);
 	lua_pushinteger(L, s->Caps);
 	lua_setfield(L, -2, "Caps");
-	lua_rawgeti(L, LUA_REGISTRYINDEX, s->backendRef);
-	lua_pushinteger(L, STREAM_OP_INFO);
-	lua_call_nohook(L, 1, 1);
+	if (s->vtbl) {
+		s->vtbl->info(s->native, L);
+	} else {
+		lua_rawgeti(L, LUA_REGISTRYINDEX, s->backendRef);
+		lua_pushinteger(L, STREAM_OP_INFO);
+		lua_call_nohook(L, 1, 1);
+	}
 	return 2;
 }
 
@@ -183,20 +209,43 @@ int StreamSetPos(lua_State* L) {
 		return 1;
 	}
 	lua_Integer pos = luaL_checkinteger(L, 2);
-	lua_rawgeti(L, LUA_REGISTRYINDEX, stream->backendRef);
-	lua_pushinteger(L, STREAM_OP_SETPOS);
-	lua_pushinteger(L, pos);
-	lua_call_nohook(L, 2, 1);
+	lua_pushboolean(L, StreamSetPosC(L, stream, pos));
 	return 1;
 }
 
 static const BYTE* StreamRead(lua_State* L, LuaStream* s, size_t len, size_t* outLen) {
-
+	if (s->vtbl)
+		return s->vtbl->read(s->native, L, len, outLen);
 	lua_rawgeti(L, LUA_REGISTRYINDEX, s->backendRef);
 	lua_pushinteger(L, STREAM_OP_READ);
 	lua_pushinteger(L, len);
 	lua_call_nohook(L, 2, 1);
 	return (const BYTE*)lua_tolstring(L, -1, outLen);
+}
+
+int lua_stream_read_chunk(lua_State* L, LuaStream* s, size_t len) {
+	size_t outLen = 0;
+	StreamRead(L, s, len, &outLen);
+	// Normalise non-string or empty-string results to nil so streaming consumers
+	// get a clean EOF signal regardless of which backend produced them.
+	if (lua_type(L, -1) != LUA_TSTRING || outLen == 0) {
+		lua_pop(L, 1);
+		lua_pushnil(L);
+	}
+	return 1;
+}
+
+int lua_stream_write_bytes(lua_State* L, LuaStream* s, const char* data, size_t len) {
+	lua_pushboolean(L, StreamWrite(L, s, (const BYTE*)data, len));
+	return 1;
+}
+
+lua_Integer lua_stream_curpos(lua_State* L, LuaStream* s) {
+	return StreamCurPosC(L, s);
+}
+
+bool lua_stream_setpos(lua_State* L, LuaStream* s, lua_Integer pos) {
+	return StreamSetPosC(L, s, pos);
 }
 
 int ReadLuaStream(lua_State* L) {
@@ -234,22 +283,14 @@ int ReadStreamByte(lua_State* L) {
 
 int PeekStreamByte(lua_State* L) {
 	LuaStream* s = lua_toluastream(L, 1);
-	if (!(s->Caps & STREAM_CAP_PEEK)) {
+	if (!(s->Caps & STREAM_CAP_READ) || !(s->Caps & STREAM_CAP_SEEK)) {
 		lua_pushinteger(L, -1);
 		return 1;
 	}
-	lua_rawgeti(L, LUA_REGISTRYINDEX, s->backendRef);
-	lua_pushinteger(L, STREAM_OP_CURPOS);
-	lua_call_nohook(L, 1, 1);
-	lua_Integer savedPos = lua_tointeger(L, -1);
-	lua_pop(L, 1);
-	lua_Integer peekPos = luaL_optinteger(L, 2, savedPos);
-	if (peekPos != savedPos) {
-		lua_rawgeti(L, LUA_REGISTRYINDEX, s->backendRef);
-		lua_pushinteger(L, STREAM_OP_SETPOS);
-		lua_pushinteger(L, peekPos);
-		lua_call_nohook(L, 2, 0);
-	}
+	lua_Integer savedPos = StreamCurPosC(L, s);
+	lua_Integer peekPos  = luaL_optinteger(L, 2, savedPos);
+	if (peekPos != savedPos)
+		StreamSetPosC(L, s, peekPos);
 	size_t outLen = 0;
 	const BYTE* r = StreamRead(L, s, 1, &outLen);
 	int result;
@@ -260,10 +301,7 @@ int PeekStreamByte(lua_State* L) {
 		result = (int)(unsigned char)*r;
 		lua_pop(L, 1);
 	}
-	lua_rawgeti(L, LUA_REGISTRYINDEX, s->backendRef);
-	lua_pushinteger(L, STREAM_OP_SETPOS);
-	lua_pushinteger(L, savedPos);
-	lua_call_nohook(L, 2, 0);
+	StreamSetPosC(L, s, savedPos);
 	lua_pushinteger(L, result);
 	return 1;
 }
@@ -276,16 +314,15 @@ int ReadFloat(lua_State* L) {
 	}
 	size_t outLen = 0;
 	const BYTE* r = StreamRead(L, s, sizeof(float), &outLen);
-
 	if (!r || outLen != sizeof(float)) {
+		lua_pop(L, 1);
 		lua_pushnil(L);
 		return 1;
 	}
-
 	float v;
 	memcpy(&v, r, sizeof(float));
+	lua_pop(L, 1);
 	lua_pushnumber(L, (lua_Number)v);
-
 	return 1;
 }
 
@@ -297,16 +334,15 @@ int ReadDouble(lua_State* L) {
 	}
 	size_t outLen = 0;
 	const BYTE* r = StreamRead(L, s, sizeof(double), &outLen);
-
 	if (!r || outLen != sizeof(double)) {
+		lua_pop(L, 1);
 		lua_pushnil(L);
 		return 1;
 	}
-
 	double v;
 	memcpy(&v, r, sizeof(double));
+	lua_pop(L, 1);
 	lua_pushnumber(L, (lua_Number)v);
-
 	return 1;
 }
 
@@ -318,16 +354,15 @@ int ReadShort(lua_State* L) {
 	}
 	size_t outLen = 0;
 	const BYTE* r = StreamRead(L, s, sizeof(short), &outLen);
-
 	if (!r || outLen != sizeof(short)) {
+		lua_pop(L, 1);
 		lua_pushnil(L);
 		return 1;
 	}
-
 	short v;
 	memcpy(&v, r, sizeof(short));
+	lua_pop(L, 1);
 	lua_pushinteger(L, (lua_Integer)v);
-
 	return 1;
 }
 
@@ -339,16 +374,15 @@ int ReadUShort(lua_State* L) {
 	}
 	size_t outLen = 0;
 	const BYTE* r = StreamRead(L, s, sizeof(unsigned short), &outLen);
-
 	if (!r || outLen != sizeof(unsigned short)) {
+		lua_pop(L, 1);
 		lua_pushnil(L);
 		return 1;
 	}
-
 	unsigned short v;
 	memcpy(&v, r, sizeof(unsigned short));
+	lua_pop(L, 1);
 	lua_pushinteger(L, (lua_Integer)v);
-
 	return 1;
 }
 
@@ -360,16 +394,15 @@ int ReadInt(lua_State* L) {
 	}
 	size_t outLen = 0;
 	const BYTE* r = StreamRead(L, s, sizeof(int), &outLen);
-
 	if (!r || outLen != sizeof(int)) {
+		lua_pop(L, 1);
 		lua_pushnil(L);
 		return 1;
 	}
-
 	int v;
 	memcpy(&v, r, sizeof(int));
+	lua_pop(L, 1);
 	lua_pushinteger(L, (lua_Integer)v);
-
 	return 1;
 }
 
@@ -381,16 +414,15 @@ int ReadUInt(lua_State* L) {
 	}
 	size_t outLen = 0;
 	const BYTE* r = StreamRead(L, s, sizeof(unsigned int), &outLen);
-
 	if (!r || outLen != sizeof(unsigned int)) {
+		lua_pop(L, 1);
 		lua_pushnil(L);
 		return 1;
 	}
-
 	unsigned int v;
 	memcpy(&v, r, sizeof(unsigned int));
+	lua_pop(L, 1);
 	lua_pushinteger(L, (lua_Integer)v);
-
 	return 1;
 }
 
@@ -409,6 +441,7 @@ int ReadLong(lua_State* L) {
 	}
 	long long v;
 	memcpy(&v, r, sizeof(long long));
+	lua_pop(L, 1);
 	lua_pushinteger(L, (lua_Integer)v);
 	return 1;
 }
@@ -428,6 +461,7 @@ int ReadUnsignedLong(lua_State* L) {
 	}
 	unsigned long long v;
 	memcpy(&v, r, sizeof(unsigned long long));
+	lua_pop(L, 1);
 	lua_pushinteger(L, (lua_Integer)v);
 	return 1;
 }
@@ -501,21 +535,11 @@ int SetStreamByte(lua_State* L) {
 	if (!lua_isnoneornil(L, 3)) {
 		if (!(s->Caps & STREAM_CAP_WRITE) || !(s->Caps & STREAM_CAP_SEEK))
 			return 0;
-		lua_Integer pos = luaL_checkinteger(L, 3);
-		lua_rawgeti(L, LUA_REGISTRYINDEX, s->backendRef);
-		lua_pushinteger(L, STREAM_OP_CURPOS);
-		lua_call_nohook(L, 1, 1);
-		lua_Integer savedPos = lua_tointeger(L, -1);
-		lua_pop(L, 1);
-		lua_rawgeti(L, LUA_REGISTRYINDEX, s->backendRef);
-		lua_pushinteger(L, STREAM_OP_SETPOS);
-		lua_pushinteger(L, pos);
-		lua_call_nohook(L, 2, 0);
+		lua_Integer pos      = luaL_checkinteger(L, 3);
+		lua_Integer savedPos = StreamCurPosC(L, s);
+		StreamSetPosC(L, s, pos);
 		StreamWrite(L, s, &value, 1);
-		lua_rawgeti(L, LUA_REGISTRYINDEX, s->backendRef);
-		lua_pushinteger(L, STREAM_OP_SETPOS);
-		lua_pushinteger(L, savedPos);
-		lua_call_nohook(L, 2, 0);
+		StreamSetPosC(L, s, savedPos);
 	} else {
 		if (!(s->Caps & STREAM_CAP_WRITE))
 			return 0;
@@ -688,10 +712,7 @@ int CompressStream(lua_State* L) {
 		return 2;
 	}
 	DWORD algorithm = (DWORD)luaL_optinteger(L, 2, COMPRESS_ALGORITHM_MSZIP);
-	lua_rawgeti(L, LUA_REGISTRYINDEX, src->backendRef);
-	lua_pushinteger(L, STREAM_OP_SETPOS);
-	lua_pushinteger(L, 0);
-	lua_call_nohook(L, 2, 0);
+	StreamSetPosC(L, src, 0);
 	bool ownDst = !lua_isstream(L, 3);
 	if (ownDst) {
 		lua_pushluastream(L);
@@ -753,12 +774,8 @@ int CompressStream(lua_State* L) {
 		gff_free(buf);
 	}
 	CloseCompressor(compressor);
-	if (ownDst) {
-		lua_rawgeti(L, LUA_REGISTRYINDEX, dst->backendRef);
-		lua_pushinteger(L, STREAM_OP_SETPOS);
-		lua_pushinteger(L, 0);
-		lua_call_nohook(L, 2, 0);
-	}
+	if (ownDst)
+		StreamSetPosC(L, dst, 0);
 	return 1;
 }
 
@@ -770,10 +787,7 @@ int DecompressStream(lua_State* L) {
 		return 2;
 	}
 	DWORD algorithm = (DWORD)luaL_optinteger(L, 2, COMPRESS_ALGORITHM_MSZIP);
-	lua_rawgeti(L, LUA_REGISTRYINDEX, src->backendRef);
-	lua_pushinteger(L, STREAM_OP_SETPOS);
-	lua_pushinteger(L, 0);
-	lua_call_nohook(L, 2, 0);
+	StreamSetPosC(L, src, 0);
 	bool ownDst = !lua_isstream(L, 3);
 	if (ownDst) {
 		lua_pushluastream(L);
@@ -846,11 +860,7 @@ int DecompressStream(lua_State* L) {
 		gff_free(buf);
 	}
 	CloseDecompressor(decompressor);
-	if (ownDst) {
-		lua_rawgeti(L, LUA_REGISTRYINDEX, dst->backendRef);
-		lua_pushinteger(L, STREAM_OP_SETPOS);
-		lua_pushinteger(L, 0);
-		lua_call_nohook(L, 2, 0);
-	}
+	if (ownDst)
+		StreamSetPosC(L, dst, 0);
 	return 1;
 }

@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#include <io.h>
 
 struct InFileStream {
 	FILE* file;
@@ -39,128 +40,115 @@ static BYTE mode_to_caps(const char* mode) {
 		caps |= STREAM_CAP_READ;
 	if (has_write)
 		caps |= STREAM_CAP_WRITE;
-	if (!has_append) {
+	if (!has_append)
 		caps |= STREAM_CAP_SEEK;
-		if (has_read)
-			caps |= STREAM_CAP_PEEK;
-	}
 	return caps;
 }
 
-static int pushfile_backend(lua_State* L) {
-	int type = (int)lua_tointeger(L, 1);
-	InFileStream* stream = (InFileStream*)lua_touserdata(L, lua_upvalueindex(1));
+// ── vtable implementations ────────────────────────────────────────────────────
 
-	if (!stream || !stream->file) {
+static const BYTE* file_read(void* native, lua_State* L, size_t len, size_t* outLen) {
+	InFileStream* f = (InFileStream*)native;
+	if (!f->file) {
 		lua_pushboolean(L, false);
-		return 1;
+		if (outLen)
+			*outLen = 0;
+		return NULL;
 	}
-
-	switch (type) {
-	case STREAM_OP_OPEN:
-		lua_pushinteger(L, stream->caps);
-		return 1;
-
-	case STREAM_OP_CLOSE:
-		fclose(stream->file);
-		stream->file = NULL;
-		gff_free(stream);
-		lua_pushboolean(L, true);
-		return 1;
-
-	case STREAM_OP_READ: {
-		size_t requested = (size_t)luaL_optinteger(L, 2, 0);
-		if (requested == 0) {
-			long cur = ftell(stream->file);
-			fseek(stream->file, 0, SEEK_END);
-			long end = ftell(stream->file);
-			fseek(stream->file, cur, SEEK_SET);
-			if (end <= cur) {
-				lua_pushlstring(L, NULL, 0);
-				return 1;
-			}
-			requested = (size_t)(end - cur);
-		}
-		BYTE* buf = (BYTE*)gff_malloc(requested);
-		if (!buf) {
-			lua_pushboolean(L, false);
-			lua_pushstring(L, "out of memory");
-			return 2;
-		}
-		size_t got = fread(buf, 1, requested, stream->file);
-		if (got == 0) {
-			gff_free(buf);
+	if (len == 0) {
+		long    cur      = ftell(f->file);
+		__int64 fileSize = _filelengthi64(_fileno(f->file));
+		if (fileSize < 0 || fileSize <= (__int64)cur) {
 			lua_pushlstring(L, NULL, 0);
-			return 1;
+			if (outLen)
+				*outLen = 0;
+			return NULL;
 		}
-		lua_pushlstring(L, (const char*)buf, got);
-		gff_free(buf);
-		return 1;
+		len = (size_t)(fileSize - (__int64)cur);
 	}
-
-	case STREAM_OP_WRITE: {
-		size_t len;
-		const char* data = lua_tolstring(L, 2, &len);
-		if (!data || len == 0) {
-			lua_pushboolean(L, true);
-			return 1;
-		}
-		size_t written = fwrite(data, 1, len, stream->file);
-		lua_pushboolean(L, written == len);
-		return 1;
-	}
-
-	case STREAM_OP_SETPOS: {
-		lua_Integer pos = luaL_checkinteger(L, 2);
-		if (pos < 0)
-			pos = 0;
-		lua_pushboolean(L, fseek(stream->file, (long)pos, SEEK_SET) == 0);
-		return 1;
-	}
-
-	case STREAM_OP_CURPOS: {
-		long pos = ftell(stream->file);
-		if (pos < 0) {
-			lua_pushnil(L);
-		} else {
-			lua_pushinteger(L, (lua_Integer)pos);
-		}
-		return 1;
-	}
-
-	case STREAM_OP_LEN: {
-		long cur = ftell(stream->file);
-		fseek(stream->file, 0, SEEK_END);
-		long end = ftell(stream->file);
-		fseek(stream->file, cur, SEEK_SET);
-		lua_pushinteger(L, (lua_Integer)end);
-		return 1;
-	}
-
-	case STREAM_OP_INFO: {
-		long cur = ftell(stream->file);
-		fseek(stream->file, 0, SEEK_END);
-		long end = ftell(stream->file);
-		fseek(stream->file, cur, SEEK_SET);
-		lua_createtable(L, 0, 5);
-		lua_pushinteger(L, (lua_Integer)cur);
-		lua_setfield(L, -2, "pos");
-		lua_pushinteger(L, (lua_Integer)end);
-		lua_setfield(L, -2, "len");
-		lua_pushstring(L, stream->mode);
-		lua_setfield(L, -2, "mode");
-		lua_pushstring(L, stream->filename);
-		lua_setfield(L, -2, "name");
-		lua_pushstring(L, "file");
-		lua_setfield(L, -2, "type");
-		return 1;
-	}
-
-	default:
+	BYTE* buf = (BYTE*)gff_malloc(len);
+	if (!buf) {
 		lua_pushboolean(L, false);
-		return 1;
+		if (outLen)
+			*outLen = 0;
+		return NULL;
 	}
+	size_t got = fread(buf, 1, len, f->file);
+	if (got == 0) {
+		gff_free(buf);
+		lua_pushlstring(L, NULL, 0);
+		if (outLen)
+			*outLen = 0;
+		return NULL;
+	}
+	lua_pushlstring(L, (const char*)buf, got);
+	gff_free(buf);
+	if (outLen)
+		*outLen = got;
+	return (const BYTE*)lua_tolstring(L, -1, NULL);
 }
+
+static bool file_write(void* native, const BYTE* data, size_t len) {
+	InFileStream* f = (InFileStream*)native;
+	if (!f->file || !data || len == 0)
+		return true;
+	return fwrite(data, 1, len, f->file) == len;
+}
+
+static bool file_setpos(void* native, lua_Integer pos) {
+	InFileStream* f = (InFileStream*)native;
+	if (pos < 0)
+		pos = 0;
+	return fseek(f->file, (long)pos, SEEK_SET) == 0;
+}
+
+static lua_Integer file_curpos(void* native) {
+	long pos = ftell(((InFileStream*)native)->file);
+	return pos < 0 ? 0 : (lua_Integer)pos;
+}
+
+static lua_Integer file_getlen(void* native) {
+	InFileStream* f    = (InFileStream*)native;
+	__int64       size = _filelengthi64(_fileno(f->file));
+	return size < 0 ? 0 : (lua_Integer)size;
+}
+
+static void file_close(void* native) {
+	InFileStream* f = (InFileStream*)native;
+	if (f->file)
+		fclose(f->file);
+	gff_free(f);
+}
+
+static int file_info(void* native, lua_State* L) {
+	InFileStream* f        = (InFileStream*)native;
+	long          cur      = ftell(f->file);
+	__int64       fileSize = _filelengthi64(_fileno(f->file));
+	lua_createtable(L, 0, 5);
+	lua_pushinteger(L, (lua_Integer)cur);
+	lua_setfield(L, -2, "pos");
+	lua_pushinteger(L, fileSize < 0 ? 0 : (lua_Integer)fileSize);
+	lua_setfield(L, -2, "len");
+	lua_pushstring(L, f->mode);
+	lua_setfield(L, -2, "mode");
+	lua_pushstring(L, f->filename);
+	lua_setfield(L, -2, "name");
+	lua_pushstring(L, "file");
+	lua_setfield(L, -2, "type");
+	return 1;
+}
+
+static const LuaStreamVtable g_file_vtbl = {
+	file_read,
+	file_write,
+	file_setpos,
+	file_curpos,
+	file_getlen,
+	file_close,
+	file_info,
+};
+
+// ── Public constructor helper ─────────────────────────────────────────────────
 
 LuaStream* lua_pushfilestream(lua_State* L, const char* filename, const char* mode) {
 	FILE* f = NULL;
@@ -181,7 +169,7 @@ LuaStream* lua_pushfilestream(lua_State* L, const char* filename, const char* mo
 	ZeroMemory(fs, sizeof(InFileStream));
 	fs->file = f;
 	fs->caps = mode_to_caps(mode);
-	strncpy_s(fs->mode, sizeof(fs->mode), mode, _TRUNCATE);
+	strncpy_s(fs->mode,     sizeof(fs->mode),     mode,     _TRUNCATE);
 	strncpy_s(fs->filename, sizeof(fs->filename), filename, _TRUNCATE);
 
 	LuaStream* stream = (LuaStream*)lua_newuserdata(L, sizeof(LuaStream));
@@ -189,16 +177,8 @@ LuaStream* lua_pushfilestream(lua_State* L, const char* filename, const char* mo
 	lua_setmetatable(L, -2);
 	memset(stream, 0, sizeof(LuaStream));
 	stream->backendRef = LUA_NOREF;
-
-	lua_pushlightuserdata(L, fs);
-	lua_pushcclosure(L, pushfile_backend, 1);
-	stream->backendRef = luaL_ref(L, LUA_REGISTRYINDEX);
-
-	lua_rawgeti(L, LUA_REGISTRYINDEX, stream->backendRef);
-	lua_pushinteger(L, STREAM_OP_OPEN);
-	lua_call_nohook(L, 1, 1);
-	stream->Caps = (BYTE)lua_tointeger(L, -1);
-	lua_pop(L, 1);
-
+	stream->vtbl       = &g_file_vtbl;
+	stream->native     = fs;
+	stream->Caps       = fs->caps;
 	return stream;
 }

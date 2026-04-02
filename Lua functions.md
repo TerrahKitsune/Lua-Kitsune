@@ -447,6 +447,8 @@ local t = CSV.Decode("a;b;c\n1;2;3", "auto")  -- sniffer detects ";"
 local t = CSV.Decode("a;b;c", ";")             -- explicit delimiter
 ```
 
+> **Memory note:** `Decode` converts the entire input to an internal wide-character buffer before parsing begins. A UTF-8 string of N bytes requires approximately 2×N bytes of additional heap memory for the conversion. For multi-megabyte files, use `DecodeFromFunction` (or `csv:DecodeFromFunction`) with a `Stream` or a chunked supplier function so that peak memory stays bounded to the chunk size rather than the whole file.
+
 ### CSV.Encode
 
 ```lua
@@ -527,7 +529,7 @@ The sniffer scans up to the first 5 lines, counts each candidate's occurrences p
 
 | Situation | Behaviour |
 |-----------|-----------|
-| **Empty input** | `CSV.Decode("")` produces `{Rows={[""]}}` — one row with one empty field |
+| **Empty input** | `CSV.Decode("")` produces `{Rows={}}` — zero rows, empty `Rows` table |
 | **Trailing newline** | A single trailing `\n` does **not** create an extra row (the newline is consumed as the end-of-row sentinel) |
 | **Double trailing newline** | `"a,b\n\n"` produces a second empty row `[""]` |
 | **Leading whitespace in unquoted fields** | Spaces and tabs before a field value are stripped during decode. `Encode` quotes fields with leading whitespace to preserve round-trip fidelity |

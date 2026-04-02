@@ -62,10 +62,8 @@ static void jbuf_grow(LuaJson* j, lua_State* L, size_t need) {
 	// Streaming mode: flush what we have to the stream before growing so
 	// the output buffer never exceeds more than one buffer-worth of memory.
 	if (j->encStream && j->outLen > 0) {
-		lua_rawgeti(L, LUA_REGISTRYINDEX, j->encStream->backendRef);
-		lua_pushinteger(L, STREAM_OP_WRITE);
-		lua_pushlstring(L, j->out, j->outLen);
-		lua_call_nohook(L, 2, 0);
+		lua_stream_write_bytes(L, j->encStream, j->out, j->outLen);
+		lua_pop(L, 1);  // discard the boolean result
 		j->outLen = 0;
 		if (need <= j->outCap)
 			return;
@@ -185,44 +183,41 @@ static void enc_number(LuaJson* j, lua_State* L) {
 	jbuf_emit(j, L, buf, (size_t)n);
 }
 
-// Returns true if the table at absolute index `tbl` is a sequence (keys 1..n).
-// A truly empty table encodes as [] (empty array).
-static bool is_sequence(lua_State* L, int tbl) {
-	lua_Integer n = (lua_Integer)lua_rawlen(L, tbl);
-	if (n == 0) {
-		// Truly empty table → [] (empty array).
-		// Table with only string/mixed keys → {} (object).
-		lua_pushnil(L);
-		if (lua_next(L, tbl) == 0)
-			return true;  // no keys at all
-		lua_pop(L, 2);  // pop key + value
-		return false;
-	}
-	lua_Integer count = 0;
-	lua_pushnil(L);
-	while (lua_next(L, tbl) != 0) {
-		lua_pop(L, 1);  // pop value, keep key
-		if (!lua_isinteger(L, -1)) {
-			lua_pop(L, 1);
-			return false;
-		}
-		lua_Integer k = lua_tointeger(L, -1);
-		if (k < 1 || k > n) {
-			lua_pop(L, 1);
-			return false;
-		}
-		count++;
-	}
-	return count == n;
-}
-
 // Encodes the table at the top of the stack.
 static void enc_table(LuaJson* j, lua_State* L, int depth) {
 	int tbl = lua_gettop(L);
 	rec_push(j, L, (uintptr_t)lua_topointer(L, tbl));
 
-	if (is_sequence(L, tbl)) {
-		lua_Integer n = (lua_Integer)lua_rawlen(L, tbl);
+	// ── Classify: single scan for sequence vs object ──────────────────────────
+	// Walk all key-value pairs once with lua_next.  Track whether every key is
+	// an integer in [1..n]; exit immediately on the first non-sequence key so
+	// pure-object tables pay O(1) instead of O(n) for the classification step.
+	lua_Integer n     = (lua_Integer)lua_rawlen(L, tbl);
+	lua_Integer count = 0;
+	bool        seq   = true;
+
+	lua_pushnil(L);
+	while (lua_next(L, tbl) != 0) {
+		lua_pop(L, 1);   // discard value; keep key for type check
+		count++;
+		if (seq) {
+			if (!lua_isinteger(L, -1)) {
+				seq = false;
+			} else {
+				lua_Integer k = lua_tointeger(L, -1);
+				if (k < 1 || k > n)
+					seq = false;
+			}
+			if (!seq) {
+				lua_pop(L, 1);   // pop the key that failed
+				break;           // remaining pairs are irrelevant
+			}
+		}
+	}
+	seq = seq && (count == n);
+
+	// ── Encode ────────────────────────────────────────────────────────────────
+	if (seq) {
 		jbuf_emitc(j, L, '[');
 		for (lua_Integer i = 1; i <= n; i++) {
 			if (i > 1)
@@ -242,16 +237,16 @@ static void enc_table(LuaJson* j, lua_State* L, int depth) {
 		while (lua_next(L, tbl) != 0) {
 			if (!first)
 				jbuf_emitc(j, L, ',');
-			enc_indent(j, L, depth + 1);
 			first = false;
-			luaL_tolstring(L, -2, NULL);  // push string form of key
+			enc_indent(j, L, depth + 1);
+			luaL_tolstring(L, -2, NULL);   // push string form of key
 			enc_string(j, L);
-			lua_pop(L, 1);                // pop key string
+			lua_pop(L, 1);                 // pop key string
 			jbuf_emitlit(j, L, ":");
 			if (j->pretty)
 				jbuf_emitc(j, L, ' ');
-			enc_value(j, L, depth + 1);  // encode value at -1
-			lua_pop(L, 1);               // pop value
+			enc_value(j, L, depth + 1);   // encode value at -1
+			lua_pop(L, 1);                 // pop value
 		}
 		if (!first)
 			enc_indent(j, L, depth);
@@ -288,10 +283,10 @@ static void enc_value(LuaJson* j, lua_State* L, int depth) {
 		enc_table(j, L, depth);
 		break;
 	default:
-		// Fallback: use __tostring (handles Wchar, Stream, etc.)
-		luaL_tolstring(L, -1, NULL);  // push string representation
-		enc_string(j, L);
-		lua_pop(L, 1);                // pop the string
+		// Functions, threads, and non-null userdata are not representable in
+		// JSON — emit null so the output stays valid and callers can detect the
+		// gap from the missing value rather than from a garbage pointer string.
+		jbuf_emitlit(j, L, "null");
 		break;
 	}
 }
@@ -346,9 +341,10 @@ static char jread_next(LuaJson* j) {
 	return c;
 }
 
-static void jread_unget(LuaJson* j, char c) {
-	if (j->ungetLen < 8)
-		j->unget[j->ungetLen++] = c;
+static void jread_unget(LuaJson* j, lua_State* L, char c) {
+	if (j->ungetLen >= (int)(sizeof j->unget))
+		luaL_error(L, "Json: unget buffer overflow (internal error)");
+	j->unget[j->ungetLen++] = c;
 }
 
 static char jread_skip(LuaJson* j) {
@@ -437,8 +433,8 @@ static void dec_string(LuaJson* j, lua_State* L) {
 						cp = 0x10000 + ((cp - 0xD800) << 10) + (low - 0xDC00);
 					// Invalid low surrogate: encode high alone, discard low hex
 				} else {
-					jread_unget(j, p2);
-					jread_unget(j, p1);
+					jread_unget(j, L, p2);
+					jread_unget(j, L, p1);
 				}
 			}
 			char utf8[5] = { 0 };
@@ -464,11 +460,12 @@ static void dec_number(LuaJson* j, lua_State* L, char first) {
 		if (c == '.' || c == 'e' || c == 'E')
 			is_float = true;
 		if ((c >= '0' && c <= '9') || c == '.' || c == 'e' || c == 'E' ||
-		    c == '+' || c == '-') {
-			if (n < (int)sizeof(buf) - 1)
-				buf[n++] = c;
+			c == '+' || c == '-') {
+			if (n >= (int)sizeof(buf) - 1)
+				luaL_error(L, "Json: number literal too long at line %zu", j->errLine + 1);
+			buf[n++] = c;
 		} else {
-			jread_unget(j, c);
+			jread_unget(j, L, c);
 			break;
 		}
 	}
@@ -490,7 +487,7 @@ static void dec_object(LuaJson* j, lua_State* L) {
 	char c = jread_skip(j);
 	if (c == '}')
 		return;
-	jread_unget(j, c);
+	jread_unget(j, L, c);
 	for (;;) {
 		c = jread_skip(j);
 		if (c != '"')
@@ -515,7 +512,7 @@ static void dec_array(LuaJson* j, lua_State* L) {
 	char c = jread_skip(j);
 	if (c == ']')
 		return;
-	jread_unget(j, c);
+	jread_unget(j, L, c);
 	int idx = 0;
 	for (;;) {
 		dec_value(j, L);
@@ -637,20 +634,7 @@ int lua_json_encode(lua_State* L) {
 // Returns a non-empty string for each 4 KiB chunk, or nil on EOF.
 static int json_stream_chunk_reader(lua_State* L) {
 	LuaStream* st = (LuaStream*)lua_touserdata(L, lua_upvalueindex(1));
-	lua_rawgeti(L, LUA_REGISTRYINDEX, st->backendRef);
-	lua_pushinteger(L, STREAM_OP_READ);
-	lua_pushinteger(L, 4096);
-	lua_call_nohook(L, 2, 1);
-	// Normalise empty string to nil so the chunked decoder stops cleanly.
-	if (lua_type(L, -1) == LUA_TSTRING) {
-		size_t len;
-		lua_tolstring(L, -1, &len);
-		if (len == 0) {
-			lua_pop(L, 1);
-			lua_pushnil(L);
-		}
-	}
-	return 1;
+	return lua_stream_read_chunk(L, st, 4096);
 }
 
 // json:EncodeIntoStream(stream, value)
@@ -679,10 +663,7 @@ int lua_json_encode_into_stream(lua_State* L) {
 
 	// Flush bytes still buffered after the last grow boundary.
 	if (j->outLen > 0) {
-		lua_rawgeti(L, LUA_REGISTRYINDEX, st->backendRef);
-		lua_pushinteger(L, STREAM_OP_WRITE);
-		lua_pushlstring(L, j->out, j->outLen);
-		lua_call_nohook(L, 2, 1);
+		lua_stream_write_bytes(L, st, j->out, j->outLen);
 		j->outLen = 0;
 	} else {
 		lua_pushboolean(L, true);
@@ -729,15 +710,8 @@ int lua_json_decode_into_stream(lua_State* L) {
 	if (st->Caps & STREAM_CAP_SEEK) {
 		size_t unconsumed = (j->srcLen - j->srcPos) + (size_t)j->ungetLen;
 		if (unconsumed > 0) {
-			lua_rawgeti(L, LUA_REGISTRYINDEX, st->backendRef);
-			lua_pushinteger(L, STREAM_OP_CURPOS);
-			lua_call_nohook(L, 1, 1);
-			lua_Integer curPos = lua_tointeger(L, -1);
-			lua_pop(L, 1);
-			lua_rawgeti(L, LUA_REGISTRYINDEX, st->backendRef);
-			lua_pushinteger(L, STREAM_OP_SETPOS);
-			lua_pushinteger(L, curPos - (lua_Integer)unconsumed);
-			lua_call_nohook(L, 2, 0);
+			lua_Integer curPos = lua_stream_curpos(L, st);
+			lua_stream_setpos(L, st, curPos - (lua_Integer)unconsumed);
 		}
 	}
 

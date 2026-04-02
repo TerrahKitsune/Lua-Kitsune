@@ -681,6 +681,48 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
+        public async Task Json_Function_EncodesAsNull()
+        {
+            string? r = await Run("return Json.New():Encode(function() end)");
+            r.ShouldBe("null");
+        }
+
+        [Fact]
+        public async Task Json_Thread_EncodesAsNull()
+        {
+            string? r = await Run("return Json.New():Encode(coroutine.create(function() end))");
+            r.ShouldBe("null");
+        }
+
+        [Fact]
+        public async Task Json_Userdata_EncodesAsNull()
+        {
+            // A Stream is a full userdata; it is not JSON-serializable.
+            string? r = await Run("return Json.New():Encode(Stream.Create())");
+            r.ShouldBe("null");
+        }
+
+        [Fact]
+        public async Task Json_UnserializableInArray_EncodesAsNull()
+        {
+            // Functions embedded in arrays produce a valid array with null slots.
+            string? r = await Run(@"
+                return Json.New():Encode({ 1, function() end, 3 })
+            ");
+            r.ShouldBe("[1,null,3]");
+        }
+
+        [Fact]
+        public async Task Json_UnserializableInObject_EncodesAsNull()
+        {
+            // Functions as object values produce valid JSON with null values.
+            string? r = await Run(@"
+                return Json.New():Encode({ x = function() end })
+            ");
+            r.ShouldBe("{\"x\":null}");
+        }
+
+        [Fact]
         public async Task Json_PositiveInfinity_EncodesAsSpecialLiteral()
         {
             string? r = await Run("return Json.New():Encode(math.huge)");
@@ -818,6 +860,35 @@ namespace KitsuneNet.Tests
                 local s = j:Encode('line1\nline2\ttab""quote""')
                 local v = j:Decode(s)
                 return tostring(v == 'line1\nline2\ttab""quote""')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_Decode_NumberTooLong_RaisesError()
+        {
+            // buf[64] holds at most 63 significant characters + NUL.
+            // A 64-digit integer literal exceeds that and must raise an error
+            // rather than silently producing a wrong value.
+            string? r = await Run(@"
+                local ok, err = pcall(function()
+                    return Json.New():Decode('1234567890123456789012345678901234567890123456789012345678901234')
+                end)
+                return tostring(not ok and type(err) == 'string')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_Decode_63DigitNumber_ParsesWithoutError()
+        {
+            // 63 digits fit exactly in buf[64] (63 chars + NUL), so the
+            // largest representable literal must succeed (parsed as a float).
+            string? r = await Run(@"
+                local ok, v = pcall(function()
+                    return Json.New():Decode('123456789012345678901234567890123456789012345678901234567890123')
+                end)
+                return tostring(ok and type(v) == 'number')
             ");
             r.ShouldBe("true");
         }
@@ -1611,12 +1682,12 @@ namespace KitsuneNet.Tests
                 local function makeStream()
                     local OPEN, CLOSE, READ, WRITE = 0, 1, 2, 3
                     local CURPOS, LEN, SETPOS, INFO = 5, 6, 7, 8
-                    local CAP_READ, CAP_WRITE, CAP_SEEK, CAP_PEEK = 1, 2, 4, 8
+                    local CAP_READ, CAP_WRITE, CAP_SEEK = 1, 2, 4
                     local buf = ''
                     local pos = 0
                     return Stream.Create(function(op, arg)
                         if op == OPEN then
-                            return CAP_READ + CAP_WRITE + CAP_SEEK + CAP_PEEK
+                            return CAP_READ + CAP_WRITE + CAP_SEEK
                         elseif op == CLOSE then
                             buf = nil
                             return true
@@ -1999,6 +2070,48 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
+        public async Task Stream_Open_Len_ReturnsFileSizeWithoutMovingCursor()
+        {
+            // s:len() on a file stream must return the total file byte count and
+            // must not disturb the read cursor (internally uses _filelengthi64).
+            string? r = await Run(@"
+                local path = os.getenv('TEMP') .. '\\kitsune_stream_len.bin'
+                local w = Stream.Open(path, 'wb')
+                w:Write('ABCDEF')
+                w:Close()
+                local r = Stream.Open(path, 'rb')
+                r:Seek(2)
+                local len = r:len()
+                local pos = r:pos()
+                r:Close()
+                os.remove(path)
+                return tostring(len) .. ':' .. tostring(pos)
+            ");
+            r.ShouldBe("6:2");
+        }
+
+        [Fact]
+        public async Task Stream_Open_Info_LenMatchesFileSize()
+        {
+            // GetInfo().len for a file stream must equal the actual file byte count
+            // and must not change the cursor position.
+            string? r = await Run(@"
+                local path = os.getenv('TEMP') .. '\\kitsune_stream_infolen.bin'
+                local w = Stream.Open(path, 'wb')
+                w:Write('hello')
+                w:Close()
+                local r = Stream.Open(path, 'rb')
+                r:Seek(3)
+                local _, info = r:GetInfo()
+                local pos = r:pos()
+                r:Close()
+                os.remove(path)
+                return tostring(info.len) .. ':' .. tostring(pos)
+            ");
+            r.ShouldBe("5:3");
+        }
+
+        [Fact]
         public async Task Stream_Open_NonexistentFile_RaisesError()
         {
             string? r = await Run(@"
@@ -2134,6 +2247,21 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
+        public async Task CSV_DecodeString_EmptyInput_ZeroRows()
+        {
+            // Decode("") must return an empty Rows table (zero rows).
+            // The old do-while loop produced one spurious empty row; the while
+            // loop introduced in Task 13 correctly produces none.
+            string? r = await Run(@"
+                local t = CSV.New():Decode('')
+                local count = 0
+                for _ in ipairs(t.Rows) do count = count + 1 end
+                return tostring(count == 0)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
         public async Task CSV_DecodeString_RowValues_AccessibleAsWchar()
         {
             string? r = await Run(@"
@@ -2141,6 +2269,35 @@ namespace KitsuneNet.Tests
                 return tostring(t.Rows[1][1])
             ");
             r.ShouldBe("hello");
+        }
+
+        [Fact]
+        public async Task CSV_Decode_AsciiCell_IsPlainString()
+        {
+            // ASCII-only cells must come back as plain Lua strings (not WChar
+            // userdata) so the fast path is active.
+            string? r = await Run(@"
+                local t = CSV.New():Decode('hello,42,2024-01-01')
+                return tostring(
+                    type(t.Rows[1][1]) == 'string' and
+                    type(t.Rows[1][2]) == 'string' and
+                    type(t.Rows[1][3]) == 'string')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task CSV_Decode_NonAsciiCell_IsWchar()
+        {
+            // Cells containing characters above U+007F must still be WChar userdata.
+            string? r = await Run(@"
+                local input = 'caf\xc3\xa9,plain'
+                local t = CSV.New():Decode(input)
+                return tostring(
+                    type(t.Rows[1][1]) == 'userdata' and
+                    type(t.Rows[1][2]) == 'string')
+            ");
+            r.ShouldBe("true");
         }
 
         [Fact]
@@ -2500,6 +2657,32 @@ namespace KitsuneNet.Tests
                 return table.concat(rows, '|')
             ");
             r.ShouldBe("a:c|1:3");
+        }
+
+        [Fact]
+        public async Task CSV_DecodeFromFunction_AutoDetect_AccumulatesChunksForSniff()
+        {
+            // Without Task-14 buffering the sniff would run on only the first
+            // chunk ("hello") which contains no delimiter at all and would fall
+            // back to comma.  With buffering the iterator keeps pulling chunks
+            // until it sees a newline, giving SniffDelimiter enough context to
+            // correctly identify the semicolon delimiter.
+            string? r = await Run(@"
+                local chunks = { 'hello', ';world', '\ngoodbye;world' }
+                local idx = 0
+                local rows = {}
+                for row in CSV.New():DecodeFromFunction(function()
+                    idx = idx + 1
+                    return chunks[idx]
+                end) do
+                    table.insert(rows, row)
+                end
+                return tostring(
+                    #rows == 2 and
+                    tostring(rows[1][1]) == 'hello'  and tostring(rows[1][2]) == 'world' and
+                    tostring(rows[2][1]) == 'goodbye' and tostring(rows[2][2]) == 'world')
+            ");
+            r.ShouldBe("true");
         }
 
         [Fact]
@@ -3043,14 +3226,34 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Stream_Tostring_ReadableAndSeekable_ReadsContent()
         {
-            // __tostring reads the stream only when it has both CAP_READ and CAP_SEEK
-            // (memory streams have both).
+            // __tostring reads and returns the stream content ONLY for in-memory
+            // streams.  File streams and custom backends use the pointer fallback
+            // to avoid side effects and large reads.
             string? r = await Run(@"
                 local s = Stream.Create('hello')
                 s:Seek(0)
                 return tostring(s)
             ");
             r.ShouldBe("hello");
+        }
+
+        [Fact]
+        public async Task Stream_Tostring_FileStream_ReturnsFallbackString()
+        {
+            // A file stream opened with "rb" has CAP_READ + CAP_SEEK, but __tostring
+            // must NOT silently read the file — it must return the pointer fallback.
+            string? r = await Run(@"
+                local path = os.getenv('TEMP') .. '\\kitsune_tostring_test.bin'
+                local w = Stream.Open(path, 'wb')
+                w:Write('secret')
+                w:Close()
+                local r = Stream.Open(path, 'rb')
+                local str = tostring(r)
+                r:Close()
+                os.remove(path)
+                return tostring(type(str) == 'string' and #str > 0 and str ~= 'secret')
+            ");
+            r.ShouldBe("true");
         }
 
         [Fact]
@@ -3087,6 +3290,325 @@ namespace KitsuneNet.Tests
                 return tostring(type(str) == 'string' and #str > 0 and str ~= 'canary')
             ");
             r.ShouldBe("true");
+        }
+
+        // ── Write / Read coverage ─────────────────────────────────────────────────
+
+        [Fact]
+        public async Task Stream_Write_ReturnsWrittenByteCount()
+        {
+            string? r = await Run(@"
+                local s = Stream.Create()
+                return tostring(s:Write('hello'))
+            ");
+            r.ShouldBe("5");
+        }
+
+        [Fact]
+        public async Task Stream_Write_WithLimit_TruncatesOutput()
+        {
+            // Write(value, limit) writes at most 'limit' bytes.
+            string? r = await Run(@"
+                local s = Stream.Create()
+                s:Write('hello world', 5)
+                s:Seek(0)
+                return s:Read()
+            ");
+            r.ShouldBe("hello");
+        }
+
+        [Fact]
+        public async Task Stream_Write_WithBoolean_WritesSingleByte()
+        {
+            string? r = await Run(@"
+                local s = Stream.Create()
+                s:Write(true)
+                s:Write(false)
+                s:Seek(0)
+                return tostring(s:ReadByte()) .. ':' .. tostring(s:ReadByte())
+            ");
+            r.ShouldBe("1:0");
+        }
+
+        [Fact]
+        public async Task Stream_Write_UnsupportedType_ReturnsZero()
+        {
+            string? r = await Run(@"
+                local s = Stream.Create()
+                return tostring(s:Write(nil))
+            ");
+            r.ShouldBe("0");
+        }
+
+        [Fact]
+        public async Task Stream_Read_WithLength_ReadsExactCount()
+        {
+            string? r = await Run(@"
+                local s = Stream.Create('hello world')
+                return s:Read(5)
+            ");
+            r.ShouldBe("hello");
+        }
+
+        // ── SetByte / PeekByte extra forms ────────────────────────────────────────
+
+        [Fact]
+        public async Task Stream_SetByte_WithoutPosition_WritesAtCursorAndAdvances()
+        {
+            // SetByte(value) with no position writes at the current cursor and
+            // advances it, just like WriteByte but without the 0-255 range guard.
+            string? r = await Run(@"
+                local s = Stream.Create('ABC')
+                s:Seek(1)
+                s:SetByte(88)   -- 'X'
+                s:Seek(0)
+                return s:Read()
+            ");
+            r.ShouldBe("AXC");
+        }
+
+        [Fact]
+        public async Task Stream_PeekByte_AtExplicitPosition_LeavesOriginalCursor()
+        {
+            // PeekByte(pos) peeks at 'pos' without disturbing the current cursor.
+            string? r = await Run(@"
+                local s = Stream.Create('ABCD')
+                s:Seek(2)
+                local b = s:PeekByte(0)   -- peek at 'A' (65) while cursor is at 2
+                return tostring(b == 65 and s:pos() == 2)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_PeekByte_RequiresReadAndSeek_NotADistinctFlag()
+        {
+            // PeekStreamByte is now gated on CAP_READ + CAP_SEEK — there is no
+            // separate CAP_PEEK flag.  A backend with both returns a real value;
+            // a backend with only CAP_READ (no seek) returns -1.
+            string? r = await Run(@"
+                local OPEN, CLOSE, READ = 0, 1, 2
+                local CAP_READ = 1
+                local s = Stream.Create(function(op, len)
+                    if op == OPEN  then return CAP_READ end
+                    if op == CLOSE then return true end
+                    if op == READ  then return 'x' end
+                end)
+                local noSeek = s:PeekByte()
+                -- Memory stream has both CAP_READ and CAP_SEEK: peek must work.
+                local m = Stream.Create('AB')
+                local withSeek = m:PeekByte()
+                return tostring(noSeek == -1 and withSeek == 65)
+            ");
+            r.ShouldBe("true");
+        }
+
+        // ── Capability-guard return values ────────────────────────────────────────
+
+        [Fact]
+        public async Task Stream_Seek_NonSeekable_ReturnsFalse()
+        {
+            string? r = await Run(@"
+                local OPEN, CLOSE, CAP_WRITE = 0, 1, 2
+                local s = Stream.Create(function(op)
+                    if op == OPEN  then return CAP_WRITE end
+                    if op == CLOSE then return true end
+                end)
+                return tostring(s:Seek(0))
+            ");
+            r.ShouldBe("false");
+        }
+
+        [Fact]
+        public async Task Stream_Pos_NonSeekable_ReturnsNil()
+        {
+            string? r = await Run(@"
+                local OPEN, CLOSE, CAP_WRITE = 0, 1, 2
+                local s = Stream.Create(function(op)
+                    if op == OPEN  then return CAP_WRITE end
+                    if op == CLOSE then return true end
+                end)
+                return tostring(s:pos())
+            ");
+            r.ShouldBe("nil");
+        }
+
+        [Fact]
+        public async Task Stream_Len_WriteOnly_ReturnsNil()
+        {
+            string? r = await Run(@"
+                local OPEN, CLOSE, CAP_WRITE = 0, 1, 2
+                local s = Stream.Create(function(op)
+                    if op == OPEN  then return CAP_WRITE end
+                    if op == CLOSE then return true end
+                end)
+                return tostring(s:len())
+            ");
+            r.ShouldBe("nil");
+        }
+
+        // ── WriteByte boundary and range ──────────────────────────────────────────
+
+        [Fact]
+        public async Task Stream_WriteByte_OutOfRange_ReturnsFalse()
+        {
+            string? r = await Run(@"
+                local s = Stream.Create()
+                return tostring(s:WriteByte(256)) .. ':' .. tostring(s:WriteByte(-1))
+            ");
+            r.ShouldBe("false:false");
+        }
+
+        [Fact]
+        public async Task Stream_WriteByte_Boundaries_RoundTrip()
+        {
+            string? r = await Run(@"
+                local s = Stream.Create()
+                s:WriteByte(0)
+                s:WriteByte(255)
+                s:Seek(0)
+                return tostring(s:ReadByte()) .. ':' .. tostring(s:ReadByte())
+            ");
+            r.ShouldBe("0:255");
+        }
+
+        // ── Signed short ──────────────────────────────────────────────────────────
+
+        [Fact]
+        public async Task Stream_WriteShort_NegativeValue_RoundTrips()
+        {
+            string? r = await Run(@"
+                local s = Stream.Create()
+                s:WriteShort(-100)
+                s:Seek(0)
+                return tostring(s:ReadShort())
+            ");
+            r.ShouldBe("-100");
+        }
+
+        // ── ReadUtf8 extended coverage ────────────────────────────────────────────
+
+        [Fact]
+        public async Task Stream_ReadUtf8_MultiByte_ReturnsCodepoint()
+        {
+            // U+00E9 (é) encodes as 0xC3 0xA9 in UTF-8.
+            string? r = await Run(@"
+                local s = Stream.Create()
+                s:WriteByte(0xC3)
+                s:WriteByte(0xA9)
+                s:Seek(0)
+                local bytes, cp = s:ReadUtf8()
+                return tostring(#bytes == 2 and cp == 0xE9)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_ReadUtf8_InvalidLeadByte_ReturnsNil()
+        {
+            // 0xFF is not a valid UTF-8 lead byte; ReadUtf8 must return nil.
+            string? r = await Run(@"
+                local s = Stream.Create()
+                s:WriteByte(0xFF)
+                s:Seek(0)
+                return tostring(s:ReadUtf8())
+            ");
+            r.ShouldBe("nil");
+        }
+
+        // ── WriteUtf8 Latin-1 conversion ──────────────────────────────────────────
+
+        [Fact]
+        public async Task Stream_WriteUtf8_HighByte_ConvertedToUtf8Pair()
+        {
+            // WriteUtf8 treats the input string as Latin-1 and re-encodes to UTF-8.
+            // Latin-1 0xE9 (é) must produce the two-byte sequence 0xC3 0xA9.
+            string? r = await Run(@"
+                local s = Stream.Create()
+                s:WriteUtf8('\xE9')
+                local _, info = s:GetInfo()
+                s:Seek(0)
+                local b1 = s:ReadByte()
+                local b2 = s:ReadByte()
+                return tostring(info.len == 2 and b1 == 0xC3 and b2 == 0xA9)
+            ");
+            r.ShouldBe("true");
+        }
+
+        // ── Compress / Decompress error paths ─────────────────────────────────────
+
+        [Fact]
+        public async Task Stream_Compress_NonReadableSource_ReturnsNilAndError()
+        {
+            string? r = await Run(@"
+                local OPEN, CLOSE, CAP_WRITE = 0, 1, 2
+                local s = Stream.Create(function(op)
+                    if op == OPEN  then return CAP_WRITE end
+                    if op == CLOSE then return true end
+                end)
+                local result, err = s:Compress()
+                return tostring(result == nil and type(err) == 'string')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_Decompress_NonReadableSource_ReturnsNilAndError()
+        {
+            string? r = await Run(@"
+                local OPEN, CLOSE, CAP_WRITE = 0, 1, 2
+                local s = Stream.Create(function(op)
+                    if op == OPEN  then return CAP_WRITE end
+                    if op == CLOSE then return true end
+                end)
+                local result, err = s:Decompress()
+                return tostring(result == nil and type(err) == 'string')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_Compress_NonWritableDest_ReturnsNilAndError()
+        {
+            string? r = await Run(@"
+                local src = Stream.Create()
+                src:Write(string.rep('a', 100))
+                local OPEN, CLOSE, CAP_READ = 0, 1, 1
+                local ronly = Stream.Create(function(op, len)
+                    if op == OPEN  then return CAP_READ end
+                    if op == CLOSE then return true end
+                    if op == 2     then return '' end
+                end)
+                local result, err = src:Compress(nil, ronly)
+                return tostring(result == nil and type(err) == 'string')
+            ");
+            r.ShouldBe("true");
+        }
+
+        // ── Misc stream operations ────────────────────────────────────────────────
+
+        [Fact]
+        public async Task Stream_Close_ExplicitCall_DoesNotCrash()
+        {
+            string? r = await Run(@"
+                local s = Stream.Create()
+                s:Write('hello')
+                s:Close()
+                return 'ok'
+            ");
+            r.ShouldBe("ok");
+        }
+
+        [Fact]
+        public async Task Stream_GetInfo_MemoryStream_TypeIsMemory()
+        {
+            string? r = await Run(@"
+                local s = Stream.Create()
+                s:Write('test')
+                local _, info = s:GetInfo()
+                return info.type
+            ");
+            r.ShouldBe("memory");
         }
     }
 }

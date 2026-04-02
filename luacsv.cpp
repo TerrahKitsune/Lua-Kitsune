@@ -62,16 +62,99 @@ static void RefillStreamBuffer(LuaCsv* csv) {
 	lua_pop(L, 1);
 }
 
+// Fetches one chunk from the supplier and APPENDS it to the existing streamBuf
+// content.  Unlike RefillStreamBuffer, does not reset streamPos or streamLen.
+// Used by BufferUntilNewline to accumulate multiple chunks for delimiter sniffing.
+static void AppendStreamBuffer(LuaCsv* csv) {
+	lua_State* L = csv->streamL;
+
+	lua_rawgeti(L, LUA_REGISTRYINDEX, csv->streamFuncRef);
+	lua_call_nohook(L, 0, 1);
+
+	if (lua_iswchar(L, -1)) {
+		luaL_tolstring(L, -1, NULL);
+		lua_remove(L, -2);
+	}
+
+	if (lua_type(L, -1) != LUA_TSTRING) {
+		lua_pop(L, 1);
+		csv->streamDone = true;
+		return;
+	}
+
+	size_t slen;
+	const char* s = lua_tolstring(L, -1, &slen);
+	if (!s || slen == 0) {
+		lua_pop(L, 1);
+		csv->streamDone = true;
+		return;
+	}
+
+	int wlen = MultiByteToWideChar(CP_UTF8, 0, s, (int)slen, NULL, 0);
+	if (wlen <= 0) {
+		lua_pop(L, 1);
+		csv->streamDone = true;
+		return;
+	}
+
+	size_t totalLen = csv->streamLen + (size_t)wlen;
+	if (totalLen > csv->streamAlloc) {
+		wchar_t* nb = (wchar_t*)gff_realloc(csv->streamBuf, (totalLen + 1) * sizeof(wchar_t));
+		if (!nb) {
+			lua_pop(L, 1);
+			luaL_error(L, "Out of memory");
+		}
+		csv->streamBuf   = nb;
+		csv->streamAlloc = totalLen;
+	}
+
+	MultiByteToWideChar(CP_UTF8, 0, s, (int)slen, csv->streamBuf + csv->streamLen, wlen);
+	csv->streamLen       = totalLen;
+	csv->streamBuf[totalLen] = L'\0';
+
+	lua_pop(L, 1);
+}
+
+// Ensures streamBuf contains at least one complete line before returning.
+// Calls RefillStreamBuffer to get the first chunk, then keeps appending chunks
+// via AppendStreamBuffer until a newline or CR is seen or the stream is done.
+// This guarantees SniffDelimiter sees representative data instead of a
+// possibly-incomplete first chunk.
+static void BufferUntilNewline(LuaCsv* csv) {
+	if (csv->streamPos >= (int)csv->streamLen && !csv->streamDone)
+		RefillStreamBuffer(csv);
+
+	while (!csv->streamDone) {
+		bool hasNewline = false;
+		for (size_t i = 0; i < csv->streamLen && !hasNewline; i++) {
+			if (csv->streamBuf[i] == L'\n' || csv->streamBuf[i] == L'\r')
+				hasNewline = true;
+		}
+		if (hasNewline)
+			break;
+		AppendStreamBuffer(csv);
+	}
+}
+
+// Pure state query: true only when all input has been consumed.
+// Does NOT refill the stream buffer.  Call sites that need an up-to-date answer
+// between row boundaries must call EnsureStreamRefilled first.
 static bool IsAtEnd(LuaCsv* csv) {
 	if (csv->data)
 		return csv->pos >= (int)csv->data->len;
-	if (csv->streamFuncRef != LUA_NOREF) {
-		if (csv->streamPos < (int)csv->streamLen) return false;
-		if (csv->streamDone) return true;
-		RefillStreamBuffer(csv);  // peek ahead to confirm exhaustion
-		return csv->streamLen == 0;
-	}
+	if (csv->streamFuncRef != LUA_NOREF)
+		return csv->streamPos >= (int)csv->streamLen && csv->streamDone;
 	return true;
+}
+
+// Fetches the next chunk from the supplier if the current chunk is exhausted
+// and the stream has not yet been marked done.  No-op in string mode and when
+// data is still available in the current buffer.
+static void EnsureStreamRefilled(LuaCsv* csv) {
+	if (csv->streamFuncRef != LUA_NOREF &&
+		csv->streamPos >= (int)csv->streamLen &&
+		!csv->streamDone)
+		RefillStreamBuffer(csv);
 }
 
 static wchar_t GetNext(LuaCsv* csv, bool peek = false) {
@@ -156,7 +239,29 @@ static bool IsEndline(LuaCsv* csv) {
 }
 
 static void PushAndClearBuffer(LuaCsv* csv, lua_State* L) {
-	lua_pushwchar(L, csv->buffer ? csv->buffer : L"", csv->len);
+	const wchar_t* buf = csv->buffer ? csv->buffer : L"";
+	size_t         len = csv->len;
+
+	// Fast path: if every wide char is within the ASCII range push a plain Lua
+	// string instead of constructing a LuaWChar userdata.  This avoids the heap
+	// allocation and GC pressure for the common case of numeric columns, dates,
+	// and short English text — the overwhelming majority of real CSV cells.
+	bool ascii = true;
+	for (size_t i = 0; i < len && ascii; i++) {
+		if ((unsigned int)buf[i] > 127u)
+			ascii = false;
+	}
+
+	if (ascii) {
+		luaL_Buffer b;
+		luaL_buffinit(L, &b);
+		for (size_t i = 0; i < len; i++)
+			luaL_addchar(&b, (char)buf[i]);
+		luaL_pushresult(&b);
+	} else {
+		lua_pushwchar(L, buf, len);
+	}
+
 	ClearBuffer(csv);
 }
 
@@ -236,11 +341,11 @@ static bool ReadCsvFieldIntoBuffer(LuaCsv* csv, lua_State* L) {
 
 static void DecodeRows(LuaCsv* csv, lua_State* L) {
 	int nth = 0;
-	int subnth;
 	lua_createtable(L, 0, 0);
 
-	do {
-		subnth = 0;
+	EnsureStreamRefilled(csv);
+	while (!IsAtEnd(csv)) {
+		int  subnth = 0;
 		lua_createtable(L, 0, 0);
 		bool result = true;
 		while (result) {
@@ -249,7 +354,8 @@ static void DecodeRows(LuaCsv* csv, lua_State* L) {
 			lua_rawseti(L, -2, ++subnth);
 		}
 		lua_rawseti(L, -2, ++nth);
-	} while (!IsAtEnd(csv));
+		EnsureStreamRefilled(csv);
+	}
 }
 
 static void Decode(LuaCsv* csv, lua_State* L) {
@@ -265,6 +371,7 @@ static void Decode(LuaCsv* csv, lua_State* L) {
 // Parses exactly one CSV row into a Lua table pushed on top of the stack.
 // Returns true if a row was successfully parsed, false if the source is exhausted.
 static bool DecodeOneRow(LuaCsv* csv, lua_State* L) {
+	EnsureStreamRefilled(csv);
 	if (IsAtEnd(csv)) return false;
 	lua_createtable(L, 0, 0);
 	int col = 0;
@@ -328,31 +435,23 @@ static wchar_t SniffDelimiter(const wchar_t* data, size_t len) {
 }
 
 // ── Parse delimiter from arg at stack index idx ──────────────────────────────
-// Returns L'\0' as the "auto-detect" sentinel when the caller passes "auto" or
-// boolean true.  The sentinel is resolved to a real delimiter by SniffDelimiter
-// in LuaDecodeCsv / CsvStreamIterator; LuaEncodeCsv maps it to L','.
-static wchar_t ParseDelimiter(lua_State* L, int idx) {
-	if (lua_gettop(L) >= idx && !lua_isnil(L, idx)) {
-		if (lua_isboolean(L, idx)) {
-			return lua_toboolean(L, idx) ? L'\0' : L',';
-		}
-		if (lua_type(L, idx) == LUA_TSTRING) {
-			size_t dlen;
-			const char* ds = lua_tolstring(L, idx, &dlen);
-			if (dlen == 4 && memcmp(ds, "auto", 4) == 0) return L'\0';
-			if (dlen > 0) return (wchar_t)(unsigned char)ds[0];
-		} else if (lua_isinteger(L, idx)) {
-			return (wchar_t)lua_tointeger(L, idx);
-		}
-	}
-	return L',';
-}
-
-// Variant for CSV.New(): returns L'\0' (auto) when no argument is provided so a
-// freshly-created instance auto-detects by default rather than defaulting to comma.
-static wchar_t ParseInstanceDelimiter(lua_State* L, int idx) {
+// Returns `noArgDefault` when the caller passes nothing or nil.
+//   noArgDefault == L'\0'  →  auto-detect mode (used by CSV.New)
+//   noArgDefault == L','   →  explicit comma (used by free-function calls)
+// Explicit values:
+//   "auto" or boolean true  →  L'\0' (auto-detect)
+//   boolean false           →  L','
+//   single-char string      →  that character
+//   integer                 →  Unicode codepoint
+//
+// Note: DecodeCsvWith saves and restores csv->delimiter on each call so that
+// auto-detect re-sniffs every time.  Caching the sniffed result in the struct
+// would save one SniffDelimiter pass per call but would break reuse of a single
+// instance across inputs with different delimiters (tested by
+// CSV_AutoDetect_ReSniffsDelimiterOnEachDecode).
+static wchar_t ParseDelimiter(lua_State* L, int idx, wchar_t noArgDefault) {
 	if (lua_gettop(L) < idx || lua_isnil(L, idx))
-		return L'\0';
+		return noArgDefault;
 	if (lua_isboolean(L, idx))
 		return lua_toboolean(L, idx) ? L'\0' : L',';
 	if (lua_type(L, idx) == LUA_TSTRING) {
@@ -363,12 +462,18 @@ static wchar_t ParseInstanceDelimiter(lua_State* L, int idx) {
 	} else if (lua_isinteger(L, idx)) {
 		return (wchar_t)lua_tointeger(L, idx);
 	}
-	return L'\0';
+	return noArgDefault;
 }
 
 // Internal decode: str_or_wchar at L[1], csv->delimiter pre-set.
 // Resets transient parse fields; preserves csv->buffer allocation for reuse.
 // Saves and restores csv->delimiter so auto-detect re-fires on every call.
+//
+// Memory note: the entire input is converted to a wchar_t buffer before
+// parsing begins — a UTF-8 string of N bytes requires approximately 2×N bytes
+// of additional heap for the wide-char representation.  For multi-megabyte
+// files prefer DecodeFromFunction (or csv:DecodeFromFunction) with a stream or
+// chunked supplier so peak memory stays bounded to the chunk size.
 static int DecodeCsvWith(lua_State* L, LuaCsv* csv) {
 	csv->pos  = 0;
 	csv->last = L'\0';
@@ -404,7 +509,7 @@ static int DecodeCsvWith(lua_State* L, LuaCsv* csv) {
 // a temporary local state, then frees the transient buffer.
 int LuaDecodeCsv(lua_State* L) {
 	LuaCsv csv = {};
-	csv.delimiter = ParseDelimiter(L, 2);
+	csv.delimiter = ParseDelimiter(L, 2, L',');
 	int r = DecodeCsvWith(L, &csv);
 	FreeBuffer(&csv);
 	return r;
@@ -508,8 +613,7 @@ static int CsvStreamIterator(lua_State* L) {
 	csv->streamL = L;
 
 	if (csv->delimiter == L'\0') {
-		if (csv->streamPos >= (int)csv->streamLen && !csv->streamDone)
-			RefillStreamBuffer(csv);
+		BufferUntilNewline(csv);
 		csv->delimiter = (csv->streamLen > 0)
 			? SniffDelimiter(csv->streamBuf, csv->streamLen)
 			: L',';
@@ -526,19 +630,7 @@ static int CsvStreamIterator(lua_State* L) {
 // Reads 4 KiB per call; returns nil on EOF.
 static int csv_stream_chunk_reader(lua_State* L) {
 	LuaStream* st = (LuaStream*)lua_touserdata(L, lua_upvalueindex(1));
-	lua_rawgeti(L, LUA_REGISTRYINDEX, st->backendRef);
-	lua_pushinteger(L, STREAM_OP_READ);
-	lua_pushinteger(L, 4096);
-	lua_call_nohook(L, 2, 1);
-	if (lua_type(L, -1) == LUA_TSTRING) {
-		size_t len;
-		lua_tolstring(L, -1, &len);
-		if (len == 0) {
-			lua_pop(L, 1);
-			lua_pushnil(L);
-		}
-	}
-	return 1;
+	return lua_stream_read_chunk(L, st, 4096);
 }
 
 // If L[1] is a readable LuaStream, replaces it with a chunk-reader closure.
@@ -578,7 +670,7 @@ static int CreateCsvIterator(lua_State* L, wchar_t delim) {
 int LuaDecodeFromFunction(lua_State* L) {
 	WrapStreamIfNeeded(L);
 	luaL_checktype(L, 1, LUA_TFUNCTION);
-	return CreateCsvIterator(L, ParseDelimiter(L, 2));
+	return CreateCsvIterator(L, ParseDelimiter(L, 2, L','));
 }
 
 // ── CSV instance API ──────────────────────────────────────────────────────────
@@ -611,7 +703,7 @@ int lua_csv_new(lua_State* L) {
 	int delimIdx = luaL_testudata(L, 1, LUACSV) ? 2 : 1;
 	LuaCsv* csv = (LuaCsv*)lua_newuserdata(L, sizeof(LuaCsv));
 	memset(csv, 0, sizeof(LuaCsv));
-	csv->delimiter     = ParseInstanceDelimiter(L, delimIdx);
+	csv->delimiter     = ParseDelimiter(L, delimIdx, L'\0');
 	csv->streamFuncRef = LUA_NOREF;
 	luaL_getmetatable(L, LUACSV);
 	lua_setmetatable(L, -2);
