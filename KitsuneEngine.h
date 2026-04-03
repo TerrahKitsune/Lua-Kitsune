@@ -38,12 +38,12 @@
 #define KITSUNE_STATUS_CANCELLED (6)  // stopped by an explicit KitsuneCancel(id) call, or cancel is pending
 
 #define KITSUNE_SHARED_MEMORY_FLAG_LOCKED (1 << 0) // The block is currently being accessed, should be set and unset before and after reading or writing
-#define KITSUNE_SHARED_MEMORY_FLAG_FREED (1 << 1)   // The block is no longer used and can be freed; should be set by the accessor when done with the block (such as from the GC), and checked by the owner before freeing the block. The entire SharedMemoryBlock should not be accessed after setting this flag.
 #define KITSUNE_SHARED_MEMORY_FLAG_READONLY (1 << 2) // The block is read-only and the locked flag can be ignored. The data should not be modified.
 
 struct SharedMemoryBlock {
 	BYTE flags; // Bitfield of KITSUNE_SHARED_MEMORY_FLAG_* values indicating the state and permissions of the block. The accessor should check these flags before reading or writing the block, and set/clear them as appropriate to signal the block's status to the owner and other accessors.	
 	void* userdata; // Opaque pointer for the owner's use; not interpreted by the engine. Can be used to associate the block with an external resource or context. The engine does not read or modify this field, but it is included in the shared memory block for convenience so that the accessor can retrieve it without needing a separate mapping.
+	void (*close)(SharedMemoryBlock* block); // Callback function provided by the owner for the accessor to call when it is done with the block. The accessor must call this function exactly once when finished with the block to allow the owner to free resources or perform cleanup. The owner will never call this function itself; it is the accessor's responsibility to call it. The owner should not free the block until it receives the close callback, so the accessor can safely free the block after calling close. The entire SharedMemoryBlock should not be accessed again after calling.
 	size_t size; // Size of the block in bytes. The data block immediately follows this struct in memory. Does not include the header size. The accessor should use this size when reading or writing the data block to avoid overruns.
 	BYTE data[]; // Continous data block of the specified size. The entire struct is allocated as a single block on the heap, so freeing the struct pointer also frees the data block.
 };

@@ -114,3 +114,14 @@ void lua_setup_inmemory_stream(lua_State* L, LuaStream* stream) {
 bool lua_is_inmemory_stream(const LuaStream* stream) {
 	return stream->vtbl == &g_inmem_vtbl;
 }
+
+unsigned char* lua_copy_inmemory_stream_data(const LuaStream* stream, size_t* outLen) {
+	InMemoryStream* m = (InMemoryStream*)stream->native;
+	*outLen = m->len;
+	if (m->len == 0)
+		return NULL;
+	unsigned char* buf = (unsigned char*)gff_malloc(m->len);
+	if (buf)
+		memcpy(buf, m->data, m->len);
+	return buf;  // NULL with *outLen > 0 signals OOM
+}

@@ -199,6 +199,7 @@
     <ClCompile Include="streamfile.cpp" />
     <ClCompile Include="streammemory.cpp" />
     <ClCompile Include="StreamMain.cpp" />
+    <ClCompile Include="streamshmemory.cpp" />
     <ClCompile Include="wcharmain.cpp" />
     <ClCompile Include="WinServices.cpp" />
     <ClCompile Include="WinServicesMain.cpp" />
@@ -349,6 +350,7 @@
     <ClInclude Include="streamfile.h" />
     <ClInclude Include="StreamMain.h" />
     <ClInclude Include="streammemory.h" />
+    <ClInclude Include="streamshmemory.h" />
     <ClInclude Include="wcharmain.h" />
     <ClInclude Include="WinServices.h" />
     <ClInclude Include="WinServicesMain.h" />

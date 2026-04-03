@@ -6,6 +6,7 @@
 #pragma comment(lib, "Cabinet.lib")
 #include "streammemory.h"
 #include "streamfile.h"
+#include "streamshmemory.h"
 
 // Forward declarations for the centralized dispatch helpers defined later.
 static bool        StreamWrite(lua_State* L, LuaStream* s, const BYTE* data, size_t len);
@@ -128,6 +129,42 @@ int OpenFile(lua_State* L) {
 	return 1;
 }
 
+int OpenSharedMemory(lua_State* L) {
+	lua_Integer size = luaL_checkinteger(L, 1);
+	if (size <= 0)
+		luaL_error(L, "size must be greater than zero");
+	lua_push_sharedmemory_stream_outbound(L, (size_t)size);
+	return 1;
+}
+
+int ToSharedMemory(lua_State* L) {
+	LuaStream* s = lua_toluastream(L, 1);
+	if (!(s->Caps & STREAM_CAP_READ) || !(s->Caps & STREAM_CAP_SEEK))
+		return luaL_error(L, "stream must be readable and seekable");
+
+	bool dispose = lua_toboolean(L, 2) != 0;
+
+	LuaStream* outStream = lua_try_push_sharedmemory_stream_outbound_from_stream(L, s);
+	if (!outStream)
+		return luaL_error(L, "failed to copy stream contents");
+
+	if (dispose) {
+		LuaStream* orig = (LuaStream*)lua_touserdata(L, 1);
+		if (orig->vtbl) {
+			orig->vtbl->close(orig->native);
+		} else if (orig->backendRef != LUA_NOREF) {
+			lua_rawgeti(L, LUA_REGISTRYINDEX, orig->backendRef);
+			lua_pushinteger(L, STREAM_OP_CLOSE);
+			lua_pcall_nohook(L, 1, 0, 0);
+			luaL_unref(L, LUA_REGISTRYINDEX, orig->backendRef);
+		}
+		memset(orig, 0, sizeof(LuaStream));
+		orig->backendRef = LUA_NOREF;
+	}
+
+	return 1;
+}
+
 int NewStream(lua_State* L) {
 	if (lua_type(L, 1) == LUA_TFUNCTION) {
 
@@ -246,6 +283,10 @@ lua_Integer lua_stream_curpos(lua_State* L, LuaStream* s) {
 
 bool lua_stream_setpos(lua_State* L, LuaStream* s, lua_Integer pos) {
 	return StreamSetPosC(L, s, pos);
+}
+
+lua_Integer lua_stream_getlen(lua_State* L, LuaStream* s) {
+	return StreamGetLenC(L, s);
 }
 
 int ReadLuaStream(lua_State* L) {

@@ -37,6 +37,7 @@
 #include "NamedPipeMain.h"
 #include "LuaImageMain.h"
 #include "StreamMain.h"
+#include "streamshmemory.h"
 #include "ODBCMain.h"
 #include "WinServicesMain.h"
 #include "luakafkamain.h"
@@ -231,6 +232,11 @@ static void FreeVariableData(KitsuneVariable* var) {
 	else if (var->type == LUA_TTABLE && var->table) {
 		FreeKVNode(var->table);
 		var->table = NULL;
+	}
+	else if (var->type == KITSUNE_TSTREAM) {
+		// The block is Lua-owned (kept alive by a registry anchor until block->close fires).
+		// Do not free it here; just clear the pointer so the slot is clean.
+		var->stream = NULL;
 	}
 }
 
@@ -430,6 +436,12 @@ static void PushKitsuneVariable(lua_State* L, const KitsuneVariable* v) {
 			}
 		}
 		break;
+	case KITSUNE_TSTREAM:
+		if (v->stream)
+			lua_push_sharedmemory_stream(L, v->stream);
+		else
+			lua_pushnil(L);
+		break;
 	default:
 		lua_pushnil(L);
 		break;
@@ -453,6 +465,34 @@ static void SetSlotResult(KitsuneCoroutine* slot, lua_State* T, int idx) {
 					slot->result.length = wch->len;
 			}
 			slot->result.type = KITSUNE_TCHAR16;
+			break;
+		}
+		// Streams are bridged as KITSUNE_TSTREAM, but only outbound shared-memory streams
+		// (created with Stream.OpenSharedMemory) may cross the boundary.  Any other stream
+		// type is an error: the host cannot meaningfully own a file or in-memory stream.
+		if (lua_isstream(T, idx)) {
+			LuaStream* s = (LuaStream*)lua_touserdata(T, idx);
+			if (lua_is_outbound_sharedmemory_stream(s)) {
+				// Anchor now — the stream is crossing the boundary for the first time.
+				lua_anchor_outbound_sharedmemory_stream(T, s, idx);
+				slot->result.type   = KITSUNE_TSTREAM;
+				slot->result.stream = lua_get_outbound_sharedmemory_block(s);
+			}
+			else if ((s->Caps & STREAM_CAP_READ) && (s->Caps & STREAM_CAP_SEEK)) {
+				// Snapshot the full contents into a new outbound shared-memory block.
+				LuaStream* outStream = lua_try_push_sharedmemory_stream_outbound_from_stream(T, s);
+				if (!outStream) {
+					SetSlotError(slot, "failed to snapshot stream for result");
+					break;
+				}
+				lua_anchor_outbound_sharedmemory_stream(T, outStream, lua_gettop(T));
+				slot->result.type   = KITSUNE_TSTREAM;
+				slot->result.stream = lua_get_outbound_sharedmemory_block(outStream);
+				lua_pop(T, 1);  // pop the anchored userdata
+			}
+			else {
+				SetSlotError(slot, "stream result must be readable and seekable");
+			}
 			break;
 		}
 		// All other userdata types: read __name from the metatable and store it as a string.
@@ -618,6 +658,10 @@ static DWORD WINAPI SchedulerProc(LPVOID param) {
 		}
 		if (InterlockedAdd(&state->schedulerStop, 0))
 			break;  // KitsuneCleanup called while paused
+
+		// Drain any pending shared-memory stream registry unrefs enqueued by host
+		// threads calling block->close.  The scheduler holds exclusive Lua access here.
+		lua_shmem_drain_pending_unrefs(state->L);
 
 		bool anyActive = false;
 
@@ -1677,10 +1721,13 @@ extern "C" {
 
 			if (state->L) {
 				if (state->lastCallError) {
-					gff_free(state->lastCallError);
-					state->lastCallError = nullptr;
-				}
-				GetHttpBuffer(0);
+						gff_free(state->lastCallError);
+						state->lastCallError = nullptr;
+					}
+					// Release any outbound shared-memory stream anchors queued by block->close
+					// calls that arrived after the scheduler exited.
+					lua_shmem_drain_pending_unrefs(state->L);
+					GetHttpBuffer(0);
 				luaserver_KillAll(state->L);
 				lua_gc(state->L, LUA_GCCOLLECT, 0);
 				lua_close(state->L);

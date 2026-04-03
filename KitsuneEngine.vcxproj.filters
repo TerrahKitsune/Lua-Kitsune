@@ -767,6 +767,9 @@
     <ClCompile Include="streamfile.cpp">
       <Filter>LuaStream\Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="streamshmemory.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="KitsuneEngine.h">
@@ -1212,6 +1215,9 @@
     </ClInclude>
     <ClInclude Include="streamfile.h">
       <Filter>LuaStream\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="streamshmemory.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

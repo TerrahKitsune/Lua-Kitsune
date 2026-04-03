@@ -82,9 +82,14 @@ lua_Integer lua_stream_curpos(lua_State* L, LuaStream* s);
 // Sets the cursor position; returns true on success.  Does not touch the Lua stack.
 bool lua_stream_setpos(lua_State* L, LuaStream* s, lua_Integer pos);
 
+// Returns the total data length of a stream without touching the Lua stack.
+lua_Integer lua_stream_getlen(lua_State* L, LuaStream* s);
+
 // ── Stream construction ───────────────────────────────────────────────────────
 int NewStream(lua_State* L);
 int OpenFile(lua_State* L);
+int OpenSharedMemory(lua_State* L);
+int ToSharedMemory(lua_State* L);
 
 // ── Stream info ───────────────────────────────────────────────────────────────
 int StreamPos(lua_State* L);
