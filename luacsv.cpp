@@ -195,11 +195,12 @@ static wchar_t SkipForwards(LuaCsv* csv) {
 }
 
 static bool ResizeBuffer(LuaCsv* csv) {
-	void* temp = gff_realloc(csv->buffer, (csv->alloc + 1024 + 1) * sizeof(wchar_t));
+	size_t newAlloc = csv->alloc == 0 ? 256 : csv->alloc * 2;
+	void* temp = gff_realloc(csv->buffer, (newAlloc + 1) * sizeof(wchar_t));
 	if (!temp)
 		return false;
 	csv->buffer = (wchar_t*)temp;
-	csv->alloc += 1024;
+	csv->alloc  = newAlloc;
 	return true;
 }
 

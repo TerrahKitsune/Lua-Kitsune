@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -9,7 +9,7 @@ namespace KitsuneNet
     {
         private const string DllName = "KitsuneEngine";
 
-        private bool _disposed;
+        private int _disposed;  // 0 = not disposed; 1 = disposed
         private List<GCHandle>? _functionHandles;
 
         #region P/Invoke
@@ -145,51 +145,59 @@ namespace KitsuneNet
             foreach (var p in ptrs) Marshal.FreeHGlobal(p);
         }
 
+        private static LuaValue NativeCopyBytes(IntPtr src, nuint length)
+        {
+            if (length > (nuint)Array.MaxLength)
+                throw new InvalidOperationException($"Native data length {length} exceeds the managed array limit.");
+            int len = (int)length;
+            byte[] bytes = new byte[len];
+            if (len > 0) Marshal.Copy(src, bytes, 0, len);
+            return LuaValue.FromBytes(bytes);
+        }
+
+        // wcharCount is the char16_t count; each char16_t is 2 bytes (UTF-16 LE on Windows).
+        private static LuaValue NativeCopyWchar(IntPtr src, nuint wcharCount)
+        {
+            if (wcharCount > (nuint)(Array.MaxLength / 2))
+                throw new InvalidOperationException($"Native wchar count {wcharCount} exceeds the managed array limit.");
+            int byteCount = (int)wcharCount * 2;
+            byte[] bytes = new byte[byteCount];
+            if (byteCount > 0) Marshal.Copy(src, bytes, 0, byteCount);
+            return new LuaValue { Type = LuaType.Wchar, Bytes = bytes };
+        }
+
+        private static LuaValue NativeParseJson(IntPtr src, nuint length)
+        {
+            if (length > (nuint)Array.MaxLength)
+                throw new InvalidOperationException($"Native data length {length} exceeds the managed array limit.");
+            int len = (int)length;
+            byte[] bytes = new byte[len];
+            Marshal.Copy(src, bytes, 0, len);
+            try   { return new LuaValue { Type = LuaType.Json, JsonNode = JsonNode.Parse(bytes) }; }
+            catch { return LuaValue.FromBytes(bytes); }  // malformed JSON falls back to raw string
+        }
+
         // Reads a heap-allocated KitsuneVariable*, converts it to LuaValue, and frees it.
         private static LuaValue NativePtrToLuaValue(IntPtr ptr)
         {
             if (ptr == IntPtr.Zero) return LuaValue.None;
             var nv = Marshal.PtrToStructure<KitsuneVariable>(ptr);
-                LuaType t = (LuaType)nv.Type;
+            LuaType t = (LuaType)nv.Type;
             LuaValue result = t switch
             {
                 LuaType.Number  => LuaValue.FromNumber(nv.Number),
                 LuaType.Integer => LuaValue.FromInt64(nv.Integer),
                 LuaType.Boolean => LuaValue.FromBool(nv.BoolByte != 0),
-                LuaType.String when nv.Data != IntPtr.Zero => CopyBytes(nv.Data, (int)nv.Length),
-                LuaType.Wchar  when nv.Data != IntPtr.Zero => CopyWchar(nv.Data, (int)nv.Length),
-                LuaType.Userdata when nv.Data != IntPtr.Zero && nv.Length > 0 => CopyBytes(nv.Data, (int)nv.Length) with { Type = LuaType.Userdata },
-                LuaType.Json   when nv.Data != IntPtr.Zero && nv.Length > 0 => ParseJsonBytes(nv.Data, (int)nv.Length),
+                LuaType.String when nv.Data != IntPtr.Zero => NativeCopyBytes(nv.Data, nv.Length),
+                LuaType.Wchar  when nv.Data != IntPtr.Zero => NativeCopyWchar(nv.Data, nv.Length),
+                LuaType.Userdata when nv.Data != IntPtr.Zero && nv.Length > 0 => NativeCopyBytes(nv.Data, nv.Length) with { Type = LuaType.Userdata },
+                LuaType.Json   when nv.Data != IntPtr.Zero && nv.Length > 0 => NativeParseJson(nv.Data, nv.Length),
                 LuaType.Table  => ReadNativeTable(nv.Data),
                 LuaType.None    => LuaValue.None,
                 _               => new LuaValue { Type = t },  // Nil/Function/Userdata/Thread/LightUserdata
             };
             KitsuneVariableFree(ptr);
             return result;
-
-            static LuaValue CopyBytes(IntPtr src, int length)
-            {
-                byte[] bytes = new byte[length];
-                if (length > 0) Marshal.Copy(src, bytes, 0, length);
-                return LuaValue.FromBytes(bytes);
-            }
-
-            // length is the char16_t count; each char16_t is 2 bytes (UTF-16 LE on Windows).
-            static LuaValue CopyWchar(IntPtr src, int wcharCount)
-            {
-                int byteCount = wcharCount * 2;
-                byte[] bytes = new byte[byteCount];
-                if (byteCount > 0) Marshal.Copy(src, bytes, 0, byteCount);
-                return new LuaValue { Type = LuaType.Wchar, Bytes = bytes };
-            }
-
-            static LuaValue ParseJsonBytes(IntPtr src, int length)
-            {
-                byte[] bytes = new byte[length];
-                Marshal.Copy(src, bytes, 0, length);
-                try   { return new LuaValue { Type = LuaType.Json, JsonNode = JsonNode.Parse(bytes) }; }
-                catch { return LuaValue.FromBytes(bytes); }  // malformed JSON falls back to raw string
-            }
         }
 
         // Converts a by-value KitsuneVariable (already marshaled into managed memory) to a LuaValue.
@@ -202,38 +210,14 @@ namespace KitsuneNet
                 LuaType.Number  => LuaValue.FromNumber(nv.Number),
                 LuaType.Integer => LuaValue.FromInt64(nv.Integer),
                 LuaType.Boolean => LuaValue.FromBool(nv.BoolByte != 0),
-                LuaType.String when nv.Data != IntPtr.Zero => CopyBytes(nv.Data, (int)nv.Length),
-                LuaType.Wchar  when nv.Data != IntPtr.Zero => CopyWchar(nv.Data, (int)nv.Length),
-                LuaType.Userdata when nv.Data != IntPtr.Zero && nv.Length > 0 => CopyBytes(nv.Data, (int)nv.Length) with { Type = LuaType.Userdata },
-                LuaType.Json   when nv.Data != IntPtr.Zero && nv.Length > 0 => ParseJsonBytes(nv.Data, (int)nv.Length),
+                LuaType.String when nv.Data != IntPtr.Zero => NativeCopyBytes(nv.Data, nv.Length),
+                LuaType.Wchar  when nv.Data != IntPtr.Zero => NativeCopyWchar(nv.Data, nv.Length),
+                LuaType.Userdata when nv.Data != IntPtr.Zero && nv.Length > 0 => NativeCopyBytes(nv.Data, nv.Length) with { Type = LuaType.Userdata },
+                LuaType.Json   when nv.Data != IntPtr.Zero && nv.Length > 0 => NativeParseJson(nv.Data, nv.Length),
                 LuaType.Table  => ReadNativeTable(nv.Data),
                 LuaType.None    => LuaValue.None,
                 _               => new LuaValue { Type = t },
             };
-
-            static LuaValue CopyBytes(IntPtr src, int length)
-            {
-                byte[] bytes = new byte[length];
-                if (length > 0) Marshal.Copy(src, bytes, 0, length);
-                return LuaValue.FromBytes(bytes);
-            }
-
-            // length is the char16_t count; each char16_t is 2 bytes (UTF-16 LE on Windows).
-            static LuaValue CopyWchar(IntPtr src, int wcharCount)
-            {
-                int byteCount = wcharCount * 2;
-                byte[] bytes = new byte[byteCount];
-                if (byteCount > 0) Marshal.Copy(src, bytes, 0, byteCount);
-                return new LuaValue { Type = LuaType.Wchar, Bytes = bytes };
-            }
-
-            static LuaValue ParseJsonBytes(IntPtr src, int length)
-            {
-                byte[] bytes = new byte[length];
-                Marshal.Copy(src, bytes, 0, length);
-                try   { return new LuaValue { Type = LuaType.Json, JsonNode = JsonNode.Parse(bytes) }; }
-                catch { return LuaValue.FromBytes(bytes); }
-            }
         }
 
         // Walks a native KeyValuePairKitsuneVariableNode linked list and converts it to a LuaValue table.
@@ -288,11 +272,11 @@ namespace KitsuneNet
                 case LuaType.Integer: nv.Integer  = v.Int64;   break;
                 case LuaType.Boolean: nv.BoolByte = v.Boolean ? (byte)1 : (byte)0; break;
                 case LuaType.String:
-                    if (v.Bytes is { Length: > 0 })
+                    if (v.Bytes is not null)
                     {
                         byte[] bytes = v.Bytes;
                         IntPtr p = Marshal.AllocHGlobal(bytes.Length + 1);
-                        Marshal.Copy(bytes, 0, p, bytes.Length);
+                        if (bytes.Length > 0) Marshal.Copy(bytes, 0, p, bytes.Length);
                         Marshal.WriteByte(p, bytes.Length, 0);
                         ptrs.Add(p);
                         nv.Data   = p;
@@ -300,12 +284,12 @@ namespace KitsuneNet
                     }
                     break;
                 case LuaType.Wchar:
-                    if (v.Bytes is { Length: > 0 })
+                    if (v.Bytes is not null)
                     {
                         // Bytes stores UTF-16 LE; Length = number of char16_t code units (2 bytes each).
                         byte[] wbytes = v.Bytes;
                         IntPtr p = Marshal.AllocHGlobal(wbytes.Length + 2);  // +2 for null char16_t
-                        Marshal.Copy(wbytes, 0, p, wbytes.Length);
+                        if (wbytes.Length > 0) Marshal.Copy(wbytes, 0, p, wbytes.Length);
                         Marshal.WriteInt16(p, wbytes.Length, 0);
                         ptrs.Add(p);
                         nv.Data   = p;
@@ -393,52 +377,58 @@ namespace KitsuneNet
             if (!string.IsNullOrEmpty(error)) { Cancel(id); throw new LuaException(error); }
             return GetResultString(id);
         }
-            // -- Per-coroutine queries ------------------------------------------------
+        // -- Per-coroutine queries ------------------------------------------------
 
-            /// <summary>Returns <c>true</c> once the coroutine has finished (success or error).</summary>
-            public bool HasResult(int id, out nuint len) => KitsuneHasResult(id, out len);
+        /// <summary>Returns <c>true</c> once the coroutine has finished (success or error).</summary>
+        public bool HasResult(int id, out nuint len) => KitsuneHasResult(id, out len);
 
-            /// <summary>Returns <c>true</c> once the coroutine has finished (success or error).</summary>
-            public bool HasResult(int id) => KitsuneHasResult(id, out _);
+        /// <summary>Returns <c>true</c> once the coroutine has finished (success or error).</summary>
+        public bool HasResult(int id) => KitsuneHasResult(id, out _);
 
-            /// <summary>Returns the error string for a finished coroutine, or <c>null</c> if none.</summary>
-            public string? GetError(int id)
+        /// <summary>Returns the error string for a finished coroutine, or <c>null</c> if none.</summary>
+        public string? GetError(int id)
+        {
+            nuint len = KitsuneGetError(id, null, 0);
+            if (len == 0) return null;
+            if (len > (nuint)Array.MaxLength)
+                throw new InvalidOperationException($"Error message length {len} exceeds the managed array limit.");
+            int intLen = (int)len;
+            byte[] buf = new byte[intLen + 1];
+            KitsuneGetError(id, buf, (nuint)buf.Length);
+            return Encoding.UTF8.GetString(buf, 0, intLen);
+        }
+
+        /// <summary>Returns the typed result and releases the slot.</summary>
+        public LuaValue GetResultVariable(int id) => NativePtrToLuaValue(KitsuneGetResult(id));
+
+        /// <summary>Returns the result as a UTF-8/Unicode string, or <c>null</c> if nil/none. Releases the slot.</summary>
+        public string? GetResultString(int id)
+        {
+            LuaValue v = GetResultVariable(id);
+            return (v.Type == LuaType.String || v.Type == LuaType.Wchar) ? v.String : null;
+        }
+
+        /// <summary>Returns the result as raw bytes, or <c>null</c> if nil/none. Releases the slot.</summary>
+        public byte[]? GetResult(int id)
+        {
+            IntPtr ptr = KitsuneGetResult(id);
+            if (ptr == IntPtr.Zero) return null;
+            var nv = Marshal.PtrToStructure<KitsuneVariable>(ptr);
+            byte[]? result = null;
+            if (nv.Type == (int)LuaType.String && nv.Data != IntPtr.Zero && nv.Length > 0)
             {
-                nuint len = KitsuneGetError(id, null, 0);
-                if (len == 0) return null;
-                byte[] buf = new byte[(int)len + 1];
-                KitsuneGetError(id, buf, (nuint)buf.Length);
-                return Encoding.UTF8.GetString(buf, 0, (int)len);
+                if (nv.Length > (nuint)Array.MaxLength)
+                    throw new InvalidOperationException($"Result length {nv.Length} exceeds the managed array limit.");
+                int len = (int)nv.Length;
+                result = new byte[len];
+                Marshal.Copy(nv.Data, result, 0, len);
             }
+            KitsuneVariableFree(ptr);
+            return result;
+        }
 
-            /// <summary>Returns the typed result and releases the slot.</summary>
-            public LuaValue GetResultVariable(int id) => NativePtrToLuaValue(KitsuneGetResult(id));
-
-            /// <summary>Returns the result as a UTF-8/Unicode string, or <c>null</c> if nil/none. Releases the slot.</summary>
-            public string? GetResultString(int id)
-            {
-                LuaValue v = GetResultVariable(id);
-                return (v.Type == LuaType.String || v.Type == LuaType.Wchar) ? v.String : null;
-            }
-
-            /// <summary>Returns the result as raw bytes, or <c>null</c> if nil/none. Releases the slot.</summary>
-            public byte[]? GetResult(int id)
-            {
-                IntPtr ptr = KitsuneGetResult(id);
-                if (ptr == IntPtr.Zero) return null;
-                var nv = Marshal.PtrToStructure<KitsuneVariable>(ptr);
-                byte[]? result = null;
-                if (nv.Type == (int)LuaType.String && nv.Data != IntPtr.Zero && nv.Length > 0)
-                {
-                    result = new byte[(int)nv.Length];
-                    Marshal.Copy(nv.Data, result, 0, (int)nv.Length);
-                }
-                KitsuneVariableFree(ptr);
-                return result;
-            }
-
-            /// <summary>Signals the coroutine to stop and releases its slot.</summary>
-            public void Cancel(int id) => KitsuneCancel(id);
+        /// <summary>Signals the coroutine to stop and releases its slot.</summary>
+        public void Cancel(int id) => KitsuneCancel(id);
 
         /// <summary>Releases the slot of a finished coroutine without consuming its result.
         /// Use after reading the error with <see cref="GetError"/> when you do not need the result.
@@ -457,8 +447,6 @@ namespace KitsuneNet
 
         // -- Global control -------------------------------------------------------
 
-        /// <summary>
-        /// Returns the ID of the first coroutine that is still running, or 0 if none are active.
         /// <summary>Returns <c>true</c> if any coroutine is currently running or yielded.</summary>
         public bool IsRunning => KitsuneIsRunning();
 
@@ -542,51 +530,8 @@ namespace KitsuneNet
             var ptrs = new List<IntPtr>();
             try
             {
-                var nv = new KitsuneVariable { Type = (int)value.Type };
-                switch (value.Type)
-                {
-                    case LuaType.Number:
-                        nv.Number = value.Number;
-                        break;
-                    case LuaType.Integer:
-                        nv.Integer = value.Int64;
-                        break;
-                    case LuaType.Boolean:
-                        nv.BoolByte = value.Boolean ? (byte)1 : (byte)0;
-                        break;
-                    case LuaType.String when value.Bytes is not null:
-                        byte[] bytes = value.Bytes;
-                        IntPtr strPtr = Marshal.AllocHGlobal(bytes.Length + 1);
-                        Marshal.Copy(bytes, 0, strPtr, bytes.Length);
-                        Marshal.WriteByte(strPtr, bytes.Length, 0);
-                        ptrs.Add(strPtr);
-                        nv.Data   = strPtr;
-                        nv.Length = (nuint)bytes.Length;
-                        break;
-                    case LuaType.Wchar when value.Bytes is not null:
-                        byte[] wbytes = value.Bytes;
-                        IntPtr wPtr = Marshal.AllocHGlobal(wbytes.Length + 2);  // +2 for null char16_t
-                        Marshal.Copy(wbytes, 0, wPtr, wbytes.Length);
-                        Marshal.WriteInt16(wPtr, wbytes.Length, 0);
-                        ptrs.Add(wPtr);
-                        nv.Data   = wPtr;
-                        nv.Length = (nuint)(wbytes.Length / 2);
-                        break;
-                    case LuaType.Table when value.Table is not null:
-                        nv.Data   = BuildNativeTable(value.Table, ptrs);
-                        nv.Length = (nuint)value.Table.Count;
-                        break;
-                    case LuaType.Json when value.JsonNode is not null: {
-                        byte[] json = Encoding.UTF8.GetBytes(value.JsonNode.ToJsonString());
-                        IntPtr p = Marshal.AllocHGlobal(json.Length + 1);
-                        Marshal.Copy(json, 0, p, json.Length);
-                        Marshal.WriteByte(p, json.Length, 0);
-                        ptrs.Add(p);
-                        nv.Data   = p;
-                        nv.Length = (nuint)json.Length;
-                        break;
-                    }
-                }
+                var nv = default(KitsuneVariable);
+                FillNativeVariable(ref nv, value, ptrs);
                 return KitsuneSetVariable(name, ref nv);
             }
             finally
@@ -693,44 +638,16 @@ namespace KitsuneNet
         private static unsafe void InvokeResultSetter(nint resultSetterPtr, LuaValue result)
         {
             var setter = (delegate* unmanaged[Cdecl]<KitsuneVariable*, int>)resultSetterPtr;
-            IntPtr strPtr = IntPtr.Zero;
+            var ptrs = new List<IntPtr>();
             try
             {
-                KitsuneVariable nv = new() { Type = (int)result.Type };
-                if (result.Type == LuaType.String && result.Bytes is { Length: > 0 } bytes)
-                {
-                    strPtr = Marshal.AllocHGlobal(bytes.Length + 1);
-                    Marshal.Copy(bytes, 0, strPtr, bytes.Length);
-                    Marshal.WriteByte(strPtr, bytes.Length, 0);
-                    nv.Length = (nuint)bytes.Length;
-                    nv.Data   = strPtr;
-                }
-                else if (result.Type == LuaType.Wchar && result.Bytes is { Length: > 0 } wbytes)
-                {
-                    // Bytes stores UTF-16 LE; send as char16_t* with length = char16_t count.
-                    strPtr = Marshal.AllocHGlobal(wbytes.Length + 2);
-                    Marshal.Copy(wbytes, 0, strPtr, wbytes.Length);
-                    Marshal.WriteInt16(strPtr, wbytes.Length, 0);
-                    nv.Length = (nuint)(wbytes.Length / 2);
-                    nv.Data   = strPtr;
-                }
-                else if (result.Type == LuaType.Number)   nv.Number   = result.Number;
-                else if (result.Type == LuaType.Integer)  nv.Integer  = result.Int64;
-                else if (result.Type == LuaType.Boolean)  nv.BoolByte = result.Boolean ? (byte)1 : (byte)0;
-                else if (result.Type == LuaType.Json && result.JsonNode is not null)
-                {
-                    byte[] json = Encoding.UTF8.GetBytes(result.JsonNode.ToJsonString());
-                    strPtr = Marshal.AllocHGlobal(json.Length + 1);
-                    Marshal.Copy(json, 0, strPtr, json.Length);
-                    Marshal.WriteByte(strPtr, json.Length, 0);
-                    nv.Length = (nuint)json.Length;
-                    nv.Data   = strPtr;
-                }
+                var nv = default(KitsuneVariable);
+                FillNativeVariable(ref nv, result, ptrs);
                 setter(&nv);
             }
             finally
             {
-                if (strPtr != IntPtr.Zero) Marshal.FreeHGlobal(strPtr);
+                FreeNativeArgs([.. ptrs]);
             }
         }
 
@@ -756,7 +673,7 @@ namespace KitsuneNet
 
         public void Dispose()
         {
-            if (!_disposed)
+            if (Interlocked.Exchange(ref _disposed, 1) == 0)
             {
                 KitsuneCleanup();
                 if (_functionHandles is not null)
@@ -765,9 +682,65 @@ namespace KitsuneNet
                         if (h.IsAllocated) h.Free();
                     _functionHandles.Clear();
                 }
-                _disposed = true;
             }
         }
+    }
+
+    /// <summary>
+    /// Operation codes passed to a Lua function backend registered with <c>Stream.Create(fn)</c>.
+    /// The function receives <c>(op, arg)</c> and must return the appropriate value for each op.
+    /// </summary>
+    /// <remarks>
+    /// <para>The integer values are part of the public Lua stream-backend protocol.
+    /// Lua scripts that implement custom backends should use these symbolic names
+    /// (or their integer equivalents) rather than hardcoding numbers.</para>
+    /// <para>Example backend skeleton:</para>
+    /// <code>
+    /// local CAP_READ, CAP_WRITE, CAP_SEEK = 1, 2, 4
+    /// return Stream.Create(function(op, arg)
+    ///     if     op == 0 then return CAP_READ + CAP_WRITE + CAP_SEEK  -- Open
+    ///     elseif op == 1 then return true                              -- Close
+    ///     elseif op == 2 then return readBytes(arg)                   -- Read
+    ///     elseif op == 3 then return writeBytes(arg)                  -- Write
+    ///     elseif op == 4 then return currentPosition                  -- CurPos
+    ///     elseif op == 5 then return totalLength                      -- Len
+    ///     elseif op == 6 then pos = arg; return true                  -- SetPos
+    ///     elseif op == 7 then return { type = 'custom' }              -- Info
+    ///     end
+    /// end)
+    /// </code>
+    /// </remarks>
+    public enum StreamBackendOp
+    {
+        /// <summary>Open the stream. Return an integer capability bitmask (see <see cref="StreamCaps"/>).</summary>
+        Open   = 0,
+        /// <summary>Close the stream and release resources. Return <c>true</c> on success.</summary>
+        Close  = 1,
+        /// <summary>Read up to <c>arg</c> bytes (0 = all remaining). Return a string, or an empty string / <c>false</c> on EOF.</summary>
+        Read   = 2,
+        /// <summary>Write the string <c>arg</c>. Return <c>true</c> on success.</summary>
+        Write  = 3,
+        /// <summary>Return the current cursor position as an integer.</summary>
+        CurPos = 4,
+        /// <summary>Return the total length of the stream as an integer.</summary>
+        Len    = 5,
+        /// <summary>Move the cursor to position <c>arg</c>. Return <c>true</c> on success.</summary>
+        SetPos = 6,
+        /// <summary>Return a backend-defined info table (e.g. <c>{ type = "custom" }</c>).</summary>
+        Info   = 7,
+    }
+
+    /// <summary>Capability flags returned by a custom stream backend's <see cref="StreamBackendOp.Open"/> call
+    /// and stored in <c>Stream:GetInfo()</c>'s <c>Caps</c> field.</summary>
+    [Flags]
+    public enum StreamCaps : byte
+    {
+        /// <summary>Stream supports read operations.</summary>
+        Read  = 1,
+        /// <summary>Stream supports write operations.</summary>
+        Write = 2,
+        /// <summary>Stream supports seeking (<c>Stream:Seek</c>, <c>Stream:pos()</c>).</summary>
+        Seek  = 4,
     }
 
     /// <summary>Thrown when a Lua script raises a runtime or syntax error.</summary>

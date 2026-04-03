@@ -868,9 +868,20 @@ void Stream:Seek(opt pos)
 | 1 | `STREAM_CAP_READ` | Stream supports read operations |
 | 2 | `STREAM_CAP_WRITE` | Stream supports write operations |
 | 4 | `STREAM_CAP_SEEK` | Stream supports seeking (`Seek`, `pos`) |
-| 8 | `STREAM_CAP_PEEK` | Stream supports `PeekByte` |
 
-In-memory streams created with `Stream.Create()` have all four flags set (`Caps = 15`).
+In-memory streams created with `Stream.Create()` have all three flags set (`Caps = 7`).
+
+**Custom backend operation codes** (passed as `op` to `Stream.Create(fn)`):
+| Value | Operation | `arg` | Return |
+|-------|-----------|-------|--------|
+| 0 | Open | — | integer `Caps` bitmask |
+| 1 | Close | — | `true` |
+| 2 | Read | byte count (0 = all) | string, or `""` / `false` on EOF |
+| 3 | Write | string data | `true` |
+| 4 | CurPos | — | integer position |
+| 5 | Len | — | integer total length |
+| 6 | SetPos | integer position | `true` |
+| 7 | Info | — | backend-defined table |
 
 ### Compression
 

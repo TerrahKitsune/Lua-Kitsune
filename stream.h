@@ -21,10 +21,10 @@ static const char* STREAM = "STREAM";
 #define STREAM_OP_CLOSE   1   // ()     -> true | false [, msg]
 #define STREAM_OP_READ    2   // (len)  -> string | false [, msg]
 #define STREAM_OP_WRITE   3   // (data) -> true   | false [, msg]
-#define STREAM_OP_CURPOS  5   // ()     -> integer pos
-#define STREAM_OP_LEN     6   // ()     -> integer len
-#define STREAM_OP_SETPOS  7   // (pos)  -> true   | false [, msg]
-#define STREAM_OP_INFO    8   // ()     -> table
+#define STREAM_OP_CURPOS  4   // ()     -> integer pos
+#define STREAM_OP_LEN     5   // ()     -> integer len
+#define STREAM_OP_SETPOS  6   // (pos)  -> true   | false [, msg]
+#define STREAM_OP_INFO    7   // ()     -> table
 
 // ── Native C vtable ───────────────────────────────────────────────────────────
 // Implemented by memory and file backends.  A NULL vtbl means Lua fn backend.

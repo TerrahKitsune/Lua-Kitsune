@@ -149,8 +149,8 @@ int NewStream(lua_State* L) {
 		}
 		stream->Caps = (BYTE)lua_tointeger(L, -1);
 
-		// If its 0 or negative assume it failed as well, since that would be pretty useless
-		if (stream->Caps <= 0) {
+		// If Caps is 0 the backend opened but exposed nothing useful
+		if (stream->Caps == 0) {
 			luaL_error(L, "Backend function failed to open");
 			return 0;
 		}

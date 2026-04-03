@@ -1681,7 +1681,7 @@ namespace KitsuneNet.Tests
             string? r = await Run(@"
                 local function makeStream()
                     local OPEN, CLOSE, READ, WRITE = 0, 1, 2, 3
-                    local CURPOS, LEN, SETPOS, INFO = 5, 6, 7, 8
+                    local CURPOS, LEN, SETPOS, INFO = 4, 5, 6, 7
                     local CAP_READ, CAP_WRITE, CAP_SEEK = 1, 2, 4
                     local buf = ''
                     local pos = 0
@@ -1970,7 +1970,7 @@ namespace KitsuneNet.Tests
         {
             // lua_call_nohook on SETPOS dispatch means a backend error bubbles up.
             string? r = await Run(@"
-                local OPEN, CLOSE, SETPOS = 0, 1, 7
+                local OPEN, CLOSE, SETPOS = 0, 1, 6
                 local ok, err = pcall(function()
                     local s = Stream.Create(function(op)
                         if op == OPEN then return 4 end

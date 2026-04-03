@@ -56,15 +56,15 @@ static const BYTE* file_read(void* native, lua_State* L, size_t len, size_t* out
 		return NULL;
 	}
 	if (len == 0) {
-		long    cur      = ftell(f->file);
+		__int64 cur      = _ftelli64(f->file);
 		__int64 fileSize = _filelengthi64(_fileno(f->file));
-		if (fileSize < 0 || fileSize <= (__int64)cur) {
-			lua_pushlstring(L, NULL, 0);
+		if (fileSize < 0 || fileSize <= cur) {
+			lua_pushlstring(L, "", 0);
 			if (outLen)
 				*outLen = 0;
 			return NULL;
 		}
-		len = (size_t)(fileSize - (__int64)cur);
+		len = (size_t)(fileSize - cur);
 	}
 	BYTE* buf = (BYTE*)gff_malloc(len);
 	if (!buf) {
@@ -76,7 +76,7 @@ static const BYTE* file_read(void* native, lua_State* L, size_t len, size_t* out
 	size_t got = fread(buf, 1, len, f->file);
 	if (got == 0) {
 		gff_free(buf);
-		lua_pushlstring(L, NULL, 0);
+		lua_pushlstring(L, "", 0);
 		if (outLen)
 			*outLen = 0;
 		return NULL;
@@ -99,11 +99,11 @@ static bool file_setpos(void* native, lua_Integer pos) {
 	InFileStream* f = (InFileStream*)native;
 	if (pos < 0)
 		pos = 0;
-	return fseek(f->file, (long)pos, SEEK_SET) == 0;
+	return _fseeki64(f->file, (__int64)pos, SEEK_SET) == 0;
 }
 
 static lua_Integer file_curpos(void* native) {
-	long pos = ftell(((InFileStream*)native)->file);
+	__int64 pos = _ftelli64(((InFileStream*)native)->file);
 	return pos < 0 ? 0 : (lua_Integer)pos;
 }
 
@@ -121,9 +121,9 @@ static void file_close(void* native) {
 }
 
 static int file_info(void* native, lua_State* L) {
-	InFileStream* f        = (InFileStream*)native;
-	long          cur      = ftell(f->file);
-	__int64       fileSize = _filelengthi64(_fileno(f->file));
+	InFileStream* f  = (InFileStream*)native;
+	__int64 cur      = _ftelli64(f->file);
+	__int64 fileSize = _filelengthi64(_fileno(f->file));
 	lua_createtable(L, 0, 5);
 	lua_pushinteger(L, (lua_Integer)cur);
 	lua_setfield(L, -2, "pos");
