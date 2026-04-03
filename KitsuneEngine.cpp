@@ -234,8 +234,9 @@ static void FreeVariableData(KitsuneVariable* var) {
 		var->table = NULL;
 	}
 	else if (var->type == KITSUNE_TSTREAM) {
-		// The block is Lua-owned (kept alive by a registry anchor until block->close fires).
-		// Do not free it here; just clear the pointer so the slot is clean.
+		// Signal the global-list sweeper that this slot's accessor reference is released.
+		if (var->stream)
+			var->stream->flags |= KITSUNE_SHARED_MEMORY_FLAG_ACCESSOR_DISPOSED;
 		var->stream = NULL;
 	}
 }
@@ -437,10 +438,10 @@ static void PushKitsuneVariable(lua_State* L, const KitsuneVariable* v) {
 		}
 		break;
 	case KITSUNE_TSTREAM:
-		if (v->stream)
+		if (v->stream && (v->stream->flags & KITSUNE_SHARED_MEMORY_FLAG_KITSUNE_OWNED))
 			lua_push_sharedmemory_stream(L, v->stream);
 		else
-			lua_pushnil(L);
+			lua_pushnil(L);  // NULL or not created via KitsuneCreateMemoryBlock — push nil
 		break;
 	default:
 		lua_pushnil(L);
@@ -473,10 +474,11 @@ static void SetSlotResult(KitsuneCoroutine* slot, lua_State* T, int idx) {
 		if (lua_isstream(T, idx)) {
 			LuaStream* s = (LuaStream*)lua_touserdata(T, idx);
 			if (lua_is_outbound_sharedmemory_stream(s)) {
-				// Anchor now — the stream is crossing the boundary for the first time.
-				lua_anchor_outbound_sharedmemory_stream(T, s, idx);
+				SharedMemoryBlock* block = lua_get_outbound_sharedmemory_block(s);
 				slot->result.type   = KITSUNE_TSTREAM;
-				slot->result.stream = lua_get_outbound_sharedmemory_block(s);
+				slot->result.stream = block;
+				// Clear ACCESSOR_DISPOSED: the result slot holds the accessor reference for C#.
+				block->flags &= ~KITSUNE_SHARED_MEMORY_FLAG_ACCESSOR_DISPOSED;
 			}
 			else if ((s->Caps & STREAM_CAP_READ) && (s->Caps & STREAM_CAP_SEEK)) {
 				// Snapshot the full contents into a new outbound shared-memory block.
@@ -485,10 +487,11 @@ static void SetSlotResult(KitsuneCoroutine* slot, lua_State* T, int idx) {
 					SetSlotError(slot, "failed to snapshot stream for result");
 					break;
 				}
-				lua_anchor_outbound_sharedmemory_stream(T, outStream, lua_gettop(T));
+				SharedMemoryBlock* block = lua_get_outbound_sharedmemory_block(outStream);
 				slot->result.type   = KITSUNE_TSTREAM;
-				slot->result.stream = lua_get_outbound_sharedmemory_block(outStream);
-				lua_pop(T, 1);  // pop the anchored userdata
+				slot->result.stream = block;
+				block->flags &= ~KITSUNE_SHARED_MEMORY_FLAG_ACCESSOR_DISPOSED;
+				lua_pop(T, 1);  // pop the outbound userdata
 			}
 			else {
 				SetSlotError(slot, "stream result must be readable and seekable");
@@ -659,9 +662,9 @@ static DWORD WINAPI SchedulerProc(LPVOID param) {
 		if (InterlockedAdd(&state->schedulerStop, 0))
 			break;  // KitsuneCleanup called while paused
 
-		// Drain any pending shared-memory stream registry unrefs enqueued by host
-		// threads calling block->close.  The scheduler holds exclusive Lua access here.
-		lua_shmem_drain_pending_unrefs(state->L);
+		// Sweep the global shared-memory block registry: free any block where both
+		// OWNER_DISPOSED and ACCESSOR_DISPOSED flags are set.
+		lua_shmem_sweep_disposed_blocks();
 
 		bool anyActive = false;
 
@@ -1261,6 +1264,10 @@ extern "C" {
 			out->data = (unsigned char*)InterlockedExchangePointer((PVOID*)&slot->result.data, NULL);
 			slot->result.length = 0;
 		}
+		else if (slot->result.type == KITSUNE_TSTREAM && slot->result.stream) {
+			out->type = KITSUNE_TSTREAM;
+			out->stream = (SharedMemoryBlock*)InterlockedExchangePointer((PVOID*)&slot->result.stream, NULL);
+		}
 		else {
 			*out = slot->result;  // inline copy for number / bool / none
 		}
@@ -1405,6 +1412,12 @@ extern "C" {
 
 	KITSUNE_API void KitsuneVariableFree(KitsuneVariable* var) {
 		if (!var) return;
+		// TSTREAM: the block was already transferred to the host by KitsuneGetResult and is owned
+		// by the caller (e.g. a LuaStream in C#).  The host calls block->close when it is done.
+		// Null the pointer before FreeVariableData so the new close-on-free path is not triggered —
+		// that path is only correct for unconsumed slots (KitsuneReleaseResult / fireAndForget).
+		if (var->type == KITSUNE_TSTREAM)
+			var->stream = NULL;
 		FreeVariableData(var);
 		gff_free(var);
 	}
@@ -1470,6 +1483,10 @@ extern "C" {
 		KitsuneState* state = g_state;
 		if (!state || !state->L || !path || !*path) return false;
 		if (GetCurrentThreadId() == state->schedulerThreadId && state->DelegateState) return false;  // scheduler thread re-entering from within a registered function; would deadlock
+		if (var && var->type == KITSUNE_TSTREAM) {
+			if (!var->stream || !(var->stream->flags & KITSUNE_SHARED_MEMORY_FLAG_KITSUNE_OWNED))
+				return false;  // stream block was not created by KitsuneCreateMemoryBlock
+		}
 		AcquireLuaAccess(state);
 		bool ok = false;
 		const char* finalKey = NavigateGlobalParent(state->L, path, true);
@@ -1480,9 +1497,9 @@ extern "C" {
 				PushKitsuneVariable(state->L, var);
 			lua_setfield(state->L, -2, finalKey);
 			lua_pop(state->L, 1);  // pop parent table
-			ok = true;
-		}
-		ReleaseLuaAccess(state);
+				ok = true;
+			}
+			ReleaseLuaAccess(state);
 		return ok;
 	}
 
@@ -1720,19 +1737,20 @@ extern "C" {
 			state->slotCount = 0;
 
 			if (state->L) {
-				if (state->lastCallError) {
-						gff_free(state->lastCallError);
-						state->lastCallError = nullptr;
-					}
-					// Release any outbound shared-memory stream anchors queued by block->close
-					// calls that arrived after the scheduler exited.
-					lua_shmem_drain_pending_unrefs(state->L);
+					if (state->lastCallError) {
+							gff_free(state->lastCallError);
+							state->lastCallError = nullptr;
+						}
 					GetHttpBuffer(0);
-				luaserver_KillAll(state->L);
-				lua_gc(state->L, LUA_GCCOLLECT, 0);
-				lua_close(state->L);
-				state->L = nullptr;
-			}
+					luaserver_KillAll(state->L);
+					lua_gc(state->L, LUA_GCCOLLECT, 0);
+					lua_close(state->L);
+					state->L = nullptr;
+				}
+			// After lua_close all Lua streams are GC'd (OWNER_DISPOSED set).
+			// Sweep the block registry to free completed blocks.
+			// Blocks still held by live C# LuaStream instances remain until C# Dispose.
+			lua_shmem_sweep_disposed_blocks();
 
 			delete state;
 		}
@@ -1754,6 +1772,21 @@ extern "C" {
 		AcquireLuaAccess(state);
 		luaopen_session(state->L);
 		ReleaseLuaAccess(state);
+	}
+
+	KITSUNE_API SharedMemoryBlock* KitsuneCreateMemoryBlock(size_t size) {
+		if (!g_state || size == 0) return NULL;
+
+		SharedMemoryBlock* block = (SharedMemoryBlock*)gff_malloc(sizeof(SharedMemoryBlock) + size);
+		if (!block) return NULL;
+		memset(block, 0, sizeof(SharedMemoryBlock) + size);
+		block->size  = size;
+		// KITSUNE_OWNED: accepted by PushKitsuneVariable.
+		// ACCESSOR_DISPOSED=1: cleared by LuaStream constructor when C# takes ownership.
+		block->flags = KITSUNE_SHARED_MEMORY_FLAG_KITSUNE_OWNED
+					 | KITSUNE_SHARED_MEMORY_FLAG_ACCESSOR_DISPOSED;
+		lua_shmem_list_add(block);
+		return block;
 	}
 
 } // extern "C"

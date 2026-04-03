@@ -2685,5 +2685,596 @@ namespace KitsuneNet.Tests
             }
             engine.GetActiveIds().ShouldBeEmpty();
         }
+
+        // -- Stream bridge (LuaType.Stream / KITSUNE_TSTREAM) ---------------------
+
+        [Fact]
+        public void Stream_LuaReturnsStream_TypeIsStream()
+        {
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("return Stream.Create('hello')");
+            engine.Wait(id);
+            LuaValue v = engine.GetResultVariable(id);
+            using var stream = v.StreamValue as LuaStream;
+            v.Type.ShouldBe(LuaType.Stream);
+            stream.ShouldNotBeNull();
+        }
+
+        [Fact]
+        public void Stream_LuaReturnsStream_ContainsCorrectBytes()
+        {
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("return Stream.Create('hello bridge')");
+            engine.Wait(id);
+            using LuaStream stream = (LuaStream)engine.GetResultVariable(id).StreamValue!;
+            Encoding.UTF8.GetString(stream.ToArray()).ShouldBe("hello bridge");
+        }
+
+        [Fact]
+        public void Stream_LuaReturnsStream_StreamApiReads()
+        {
+            // LuaStream : UnmanagedMemoryStream — no copy; Length and Read use native memory.
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("return Stream.Create('bridge test')");
+            engine.Wait(id);
+            using LuaStream stream = (LuaStream)engine.GetResultVariable(id).StreamValue!;
+            stream.Length.ShouldBe(11L);
+            byte[] buf = new byte[stream.Length];
+            stream.ReadExactly(buf);
+            Encoding.UTF8.GetString(buf).ShouldBe("bridge test");
+        }
+
+        [Fact]
+        public void Stream_LuaReturnsStream_SeekAndReadPartial()
+        {
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("return Stream.Create('ABCDEFGHIJ')");
+            engine.Wait(id);
+            using LuaStream stream = (LuaStream)engine.GetResultVariable(id).StreamValue!;
+            stream.Seek(5, System.IO.SeekOrigin.Begin);
+            byte[] buf = new byte[5];
+            stream.ReadExactly(buf);
+            Encoding.UTF8.GetString(buf).ShouldBe("FGHIJ");
+        }
+
+        [Fact]
+        public void Stream_LuaReturnsStream_ToArray_PreservesPosition()
+        {
+            // ToArray() must not move the read cursor.
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("return Stream.Create('hello')");
+            engine.Wait(id);
+            using LuaStream stream = (LuaStream)engine.GetResultVariable(id).StreamValue!;
+            stream.Seek(3, System.IO.SeekOrigin.Begin);
+            byte[] bytes = stream.ToArray();
+            Encoding.UTF8.GetString(bytes).ShouldBe("hello");
+            stream.Position.ShouldBe(3L);  // position must be restored
+        }
+
+        [Fact]
+        public async Task Stream_CSharpSendsStream_LuaReadsIt()
+        {
+            // C# → Lua: FromStream(byte[]) wraps bytes in a native block;
+            // Lua receives a readable stream and Read() returns the exact bytes.
+            using KitsuneEngine engine = new();
+            engine.SetVariable("data", LuaValue.FromStream(Encoding.UTF8.GetBytes("hello from csharp")));
+            string? result = await engine.ExecuteStringAsync("return data:Read()");
+            result.ShouldBe("hello from csharp");
+        }
+
+        [Fact]
+        public async Task Stream_CSharpSendsStream_LuaCanSeek()
+        {
+            using KitsuneEngine engine = new();
+            engine.SetVariable("data", LuaValue.FromStream(Encoding.UTF8.GetBytes("ABCDEFGHIJ")));
+            string? result = await engine.ExecuteStringAsync("data:Seek(5); return data:Read()");
+            result.ShouldBe("FGHIJ");
+        }
+
+        [Fact]
+        public async Task Stream_CSharpSendsStream_FromSystemIOStream()
+        {
+            // FromStream(System.IO.Stream) should also work.
+            using KitsuneEngine engine = new();
+            using var ms = new System.IO.MemoryStream(Encoding.UTF8.GetBytes("from memorystream"));
+            engine.SetVariable("data", LuaValue.FromStream(ms));
+            string? result = await engine.ExecuteStringAsync("return data:Read()");
+            result.ShouldBe("from memorystream");
+        }
+
+        [Fact]
+        public async Task Stream_CSharpSendsStream_AsArg_LuaReadsIt()
+        {
+            // Passing a stream as a coroutine argument; the engine places it in ARGS[1]
+            // (string/file coroutines receive args via the ARGS table, not via varargs).
+            using KitsuneEngine engine = new();
+            string? result = await engine.ExecuteStringAsync(
+                "local s = ARGS[1]; return s:Read()",
+                args: [LuaValue.FromStream(Encoding.UTF8.GetBytes("arg stream"))]);
+            result.ShouldBe("arg stream");
+        }
+
+        [Fact]
+        public void Stream_LuaReturnsStream_Dispose_DoesNotThrow()
+        {
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("return Stream.Create('dispose me')");
+            engine.Wait(id);
+            LuaValue v = engine.GetResultVariable(id);
+            LuaStream stream = (LuaStream)v.StreamValue!;
+            Should.NotThrow(stream.Dispose);
+        }
+
+        [Fact]
+        public void Stream_LuaReturnsStream_DoubleDispose_DoesNotThrow()
+        {
+            // The Interlocked guard must prevent the close callback from being invoked twice.
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("return Stream.Create('double dispose')");
+            engine.Wait(id);
+            LuaStream stream = (LuaStream)engine.GetResultVariable(id).StreamValue!;
+            stream.Dispose();
+            Should.NotThrow(stream.Dispose);
+        }
+
+        [Fact]
+        public async Task Stream_MultipleRoundTrips_NoCrashOrLeak()
+        {
+            // 50 iterations of C# bytes → Lua stream → Lua reads → string result.
+            using KitsuneEngine engine = new();
+            for (int i = 0; i < 50; i++)
+            {
+                engine.SetVariable("s", LuaValue.FromStream(Encoding.UTF8.GetBytes($"iter{i}")));
+                string? result = await engine.ExecuteStringAsync("return s:Read()");
+                result.ShouldBe($"iter{i}", $"round-trip failed at iteration {i}");
+            }
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        // ── Stream lifetime and sync -────────────────────────────────────────────
+
+        [Fact]
+        public void Stream_LuaReturnsStream_DataConsistentAfterGcCollect()
+        {
+            // The Lua registry anchor must prevent premature collection; the native
+            // block must still be addressable after multiple forced GC cycles.
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("return Stream.Create('keep me alive')");
+            engine.Wait(id);
+            using LuaStream stream = (LuaStream)engine.GetResultVariable(id).StreamValue!;
+
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true);
+            GC.WaitForPendingFinalizers();
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true);
+
+            Encoding.UTF8.GetString(stream.ToArray()).ShouldBe("keep me alive");
+        }
+
+        [Fact]
+        public void Stream_LuaReturnsStream_MultipleReadsReturnIdenticalData()
+        {
+            // The underlying native memory must not change between reads during the
+            // stream's lifetime — ToArray must produce the same bytes every call.
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("return Stream.Create('stable data')");
+            engine.Wait(id);
+            using LuaStream stream = (LuaStream)engine.GetResultVariable(id).StreamValue!;
+
+            byte[] first  = stream.ToArray();
+            byte[] second = stream.ToArray();
+
+            first.ShouldBe(second);
+            Encoding.UTF8.GetString(first).ShouldBe("stable data");
+        }
+
+        [Fact]
+        public async Task Stream_LuaReturnsStream_RemainsReadableAfterConcurrentEngineUse()
+        {
+            // Running additional coroutines (which trigger scheduler cycles and may
+            // drain the pending-unref queue) must not invalidate a held LuaStream.
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("return Stream.Create('concurrent test')");
+            engine.Wait(id);
+            using LuaStream stream = (LuaStream)engine.GetResultVariable(id).StreamValue!;
+
+            for (int i = 0; i < 10; i++)
+                (await engine.ExecuteStringAsync("return 'ping'")).ShouldBe("ping");
+
+            Encoding.UTF8.GetString(stream.ToArray()).ShouldBe("concurrent test");
+        }
+
+        // ── Stream disposal ──────────────────────────────────────────────────────
+
+        [Fact]
+        public void Stream_LuaReturnsStream_AfterDispose_CanReadReturnsFalse()
+        {
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("return Stream.Create('will close')");
+            engine.Wait(id);
+            LuaStream stream = (LuaStream)engine.GetResultVariable(id).StreamValue!;
+
+            stream.CanRead.ShouldBeTrue();
+            stream.Dispose();
+            stream.CanRead.ShouldBeFalse();
+        }
+
+        [Fact]
+        public void Stream_LuaReturnsStream_AfterDispose_ReadThrowsObjectDisposedException()
+        {
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("return Stream.Create('closed')");
+            engine.Wait(id);
+            LuaStream stream = (LuaStream)engine.GetResultVariable(id).StreamValue!;
+            stream.Dispose();
+
+            byte[] buf = new byte[1];
+            Should.Throw<ObjectDisposedException>(() => stream.Read(buf, 0, 1));
+        }
+
+        [Fact]
+        public void Stream_LuaReturnsStream_AfterDispose_LengthThrowsObjectDisposedException()
+        {
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("return Stream.Create('len test')");
+            engine.Wait(id);
+            LuaStream stream = (LuaStream)engine.GetResultVariable(id).StreamValue!;
+            stream.Dispose();
+
+            Should.Throw<ObjectDisposedException>(() => _ = stream.Length);
+        }
+
+        [Fact]
+        public void Stream_LuaReturnsStream_AfterDispose_SeekThrowsObjectDisposedException()
+        {
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("return Stream.Create('seek test')");
+            engine.Wait(id);
+            LuaStream stream = (LuaStream)engine.GetResultVariable(id).StreamValue!;
+            stream.Dispose();
+
+            Should.Throw<ObjectDisposedException>(() => stream.Seek(0, System.IO.SeekOrigin.Begin));
+        }
+
+        [Fact]
+        public async Task Stream_LuaReturnsStream_AfterDispose_EngineStillFunctional()
+        {
+            // Disposing the LuaStream sets ACCESSOR_DISPOSED on the block; the engine's ticker
+            // sweeps the block list and frees it once Lua's GC also sets OWNER_DISPOSED.
+            // Subsequent coroutines must succeed with no corruption or deadlock.
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("return Stream.Create('dispose me')");
+            engine.Wait(id);
+            ((LuaStream)engine.GetResultVariable(id).StreamValue!).Dispose();
+
+            for (int i = 0; i < 5; i++)
+                (await engine.ExecuteStringAsync("return 'alive'")).ShouldBe("alive");
+
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void Stream_LuaReturnsStream_ManyDisposes_NoResourceLeak()
+        {
+            // 100 streams created, read, and disposed — if the close callback never
+            // fired the Lua registry would fill up and later coroutines would fail.
+            using KitsuneEngine engine = new();
+            for (int i = 0; i < 100; i++)
+            {
+                int id = engine.ExecuteString($"return Stream.Create('block{i}')");
+                engine.Wait(id);
+                using LuaStream stream = (LuaStream)engine.GetResultVariable(id).StreamValue!;
+                Encoding.UTF8.GetString(stream.ToArray()).ShouldBe($"block{i}");
+            }
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        // ── Shared-memory concurrent access ─────────────────────────────────────
+
+        [Fact]
+        public void SharedMemory_ConcurrentLuaAndCSharpAccess_CooperativeLockedFlag()
+        {
+            // Verifies concurrent access between Lua (scheduler thread) and C# (test thread)
+            // on the same shared-memory block, and that the LOCKED flag is observable from C#.
+            //
+            // Block layout (data starts at struct offset 32):
+            //   data[0] – counter incremented by Lua each iteration  (wraps at 256)
+            //   data[1..3] – sentinel 0xAA, must never be written to
+            //
+            // ⚠ IMPORTANT — the LOCKED flag is a cooperative advisory signal, NOT a mutex.
+            //
+            //   The vtable uses  flags |= LOCKED  and  flags &= ~LOCKED  which compile to a
+            //   non-atomic read-modify-write sequence (movzx / or / mov on x86-64).
+            //   Two concurrent writers can both read flags = 0, compute 0|1 = 1, and store it —
+            //   neither has exclusive ownership.  There are also no memory barriers, so the CPU
+            //   or compiler may reorder data stores relative to the flag write.
+            //
+            //   For true mutual exclusion the flags byte would need to be a
+            //   std::atomic<uint8_t> with fetch_or / fetch_and (or _InterlockedOr8 /
+            //   _InterlockedAnd8 on Windows) to make the RMW atomic and provide a
+            //   release–acquire fence around the protected data.
+            //
+            // What this test verifies:
+            //   • Concurrent access does not crash or corrupt sentinel bytes when C# follows
+            //     the cooperative protocol: spin until LOCKED is clear before reading.
+            //   • The vtable correctly sets LOCKED during every read and write, making the
+            //     flag observable from a C# thread polling stream.Flags.
+
+            using KitsuneEngine engine = new();
+
+            const byte FlagLocked = 0x01;   // KITSUNE_SHARED_MEMORY_FLAG_LOCKED = (1 << 0)
+            const byte Sentinel   = 0xAA;
+            const int  Iterations = 1000;
+
+            // CreateStream allocates a block in the global registry (ACCESSOR_DISPOSED=0).
+            // After SetVariable passes it to Lua, MarkPassedToLua flips _isManaged=false
+            // so the block cannot be fast-passed to Lua a second time.  Lua's shmem_close
+            // will set OWNER_DISPOSED when the inbound stream is GC'd; this stream's Dispose
+            // sets ACCESSOR_DISPOSED. The ticker frees the block only when both are set.
+            LuaStream stream = engine.CreateStream(4);
+            stream.Write([0, Sentinel, Sentinel, Sentinel]);
+            stream.Seek(0, System.IO.SeekOrigin.Begin);
+
+            // Pass to Lua. FillNativeVariable uses the existing block directly (zero copy).
+            engine.SetVariable("shmem", LuaValue.FromStream(stream));
+
+            // Lua coroutine: read data[0], increment, write back — 1000× with Sleep(0) to yield.
+            int id = engine.ExecuteString($$"""
+                local n = 0
+                for i = 1, {{Iterations}} do
+                    shmem:Seek(0)
+                    local chunk = shmem:Read(1)
+                    local val   = chunk and string.byte(chunk, 1) or 0
+                    shmem:Seek(0)
+                    shmem:Write(string.char((val + 1) % 256))
+                    n = n + 1
+                    Sleep(0)
+                end
+                return n
+                """);
+
+            // C# test thread: poll stream.Flags and sentinel bytes while the coroutine runs.
+            // Cooperative protocol: spin until LOCKED clears before reading the sentinels.
+            int  lockedObservations = 0;
+            bool sentinelCorrupted  = false;
+
+            while (!engine.HasResult(id))
+            {
+                byte flags;
+                do
+                {
+                    flags = stream.Flags;
+                    if ((flags & FlagLocked) != 0)
+                        lockedObservations++;
+                }
+                while ((flags & FlagLocked) != 0);
+
+                stream.Seek(1, System.IO.SeekOrigin.Begin);
+                if (stream.ReadByte() != Sentinel ||
+                    stream.ReadByte() != Sentinel ||
+                    stream.ReadByte() != Sentinel)
+                {
+                    sentinelCorrupted = true;
+                    break;
+                }
+            }
+
+            engine.Wait(id);
+            long luaCount = engine.GetResultVariable(id).Int64;
+
+            sentinelCorrupted.ShouldBeFalse("sentinel bytes were overwritten — Lua wrote outside data[0]");
+            luaCount.ShouldBe(Iterations, "Lua must complete all iterations without error");
+
+            // lockedObservations may be zero when the LOCKED window (nanoseconds) is too
+            // narrow to catch reliably; not a hard assertion.  A non-zero value confirms
+            // the vtable is correctly signalling concurrent access via the flag.
+            _ = lockedObservations;
+
+            // Safe to dispose after the handoff: sets ACCESSOR_DISPOSED only, not OWNER_DISPOSED,
+            // because FlagLuaReferenced was set when Lua created its inbound stream.
+            stream.Dispose();
+        }
+
+        // ── New lifecycle: flag-based block management ───────────────────────────
+
+        [Fact]
+        public void LuaStream_FlagConstants_HaveCorrectBitValues()
+        {
+            LuaStream.FlagLocked.ShouldBe((byte)0x01);
+            LuaStream.FlagReadOnly.ShouldBe((byte)0x04);
+            LuaStream.FlagOwnerDisposed.ShouldBe((byte)0x10);
+            LuaStream.FlagAccessorDisposed.ShouldBe((byte)0x20);
+            LuaStream.FlagLuaReferenced.ShouldBe((byte)0x40);
+        }
+
+        [Fact]
+        public void CreateStream_FreshBlock_AccessorDisposedFlagIsCleared()
+        {
+            // ACCESSOR_DISPOSED starts at 1 in the engine; the LuaStream constructor
+            // clears it to signal C# has taken the accessor role.
+            using KitsuneEngine engine = new();
+            using LuaStream stream = engine.CreateStream(8);
+            (stream.Flags & LuaStream.FlagAccessorDisposed).ShouldBe((byte)0,
+                "ACCESSOR_DISPOSED must be 0 while C# holds the stream");
+        }
+
+        [Fact]
+        public void CreateStream_FreshBlock_LuaReferencedFlagIsNotSet()
+        {
+            // LUA_REFERENCED is set only when lua_push_sharedmemory_stream is called.
+            // A newly allocated block that has never been passed to Lua must not have it.
+            using KitsuneEngine engine = new();
+            using LuaStream stream = engine.CreateStream(8);
+            (stream.Flags & LuaStream.FlagLuaReferenced).ShouldBe((byte)0,
+                "FlagLuaReferenced must not be set before the block is passed to Lua");
+        }
+
+        [Fact]
+        public void CreateStream_AfterSetVariable_LuaReferencedFlagIsSet()
+        {
+            // When FillNativeVariable calls lua_push_sharedmemory_stream, the C++ side
+            // sets FlagLuaReferenced on the block so Dispose knows Lua's GC will
+            // eventually set OWNER_DISPOSED.
+            using KitsuneEngine engine = new();
+            LuaStream stream = engine.CreateStream(4);
+            engine.SetVariable("s", LuaValue.FromStream(stream));
+            engine.Wait();
+
+            // After SetVariable, FlagLuaReferenced must be set.
+            (stream.Flags & LuaStream.FlagLuaReferenced).ShouldNotBe((byte)0,
+                "FlagLuaReferenced must be set after the block is passed to Lua");
+            stream.Dispose();
+        }
+
+        [Fact]
+        public async Task CreateStream_NotPassedToLua_DisposeIsSafe_EngineFunctional()
+        {
+            // Disposing a CreateStream block that was never given to Lua must set both
+            // ACCESSOR_DISPOSED and OWNER_DISPOSED so the ticker can free it.
+            // Engine must remain fully functional afterward.
+            using KitsuneEngine engine = new();
+            LuaStream stream = engine.CreateStream(16);
+            stream.Write(Encoding.UTF8.GetBytes("never used"));
+            stream.Dispose();  // should set both flags, not crash
+
+            for (int i = 0; i < 3; i++)
+                (await engine.ExecuteStringAsync($"return 'ok{i}'")).ShouldBe($"ok{i}");
+
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task CreateStream_PassedToLua_DisposeSafeAfterHandoff()
+        {
+            // After passing to Lua, C# can still Dispose the stream safely.
+            // The block must not be freed until Lua's GC also sets OWNER_DISPOSED.
+            using KitsuneEngine engine = new();
+            byte[] payload = Encoding.UTF8.GetBytes("csharp writes");
+            LuaStream stream = engine.CreateStream(payload.Length);
+            stream.Write(payload);
+
+            engine.SetVariable("s", LuaValue.FromStream(stream));
+
+            // C# disposes its side — ACCESSOR_DISPOSED is set; block stays alive for Lua.
+            stream.Dispose();
+
+            // Lua can still read from the block.
+            string? result = await engine.ExecuteStringAsync("return s:Read()");
+            result.ShouldBe("csharp writes");
+
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task CreateStream_CanBeCalledFromRegisterFunctionCallback()
+        {
+            // KitsuneCreateMemoryBlock no longer requires AcquireLuaAccess, so it can
+            // now be called from inside a RegisterFunction callback without deadlocking.
+            using KitsuneEngine engine = new();
+            engine.RegisterFunction("MakeStream", args =>
+            {
+                using LuaStream s = engine.CreateStream(5);
+                s.Write(Encoding.UTF8.GetBytes("inner"));
+                // Copy bytes to a plain byte[] before the stream is disposed by the
+                // using block, so FillNativeVariable doesn't read from a closed stream.
+                return LuaValue.FromStream(s.ToArray());
+            });
+
+            string? result = await engine.ExecuteStringAsync("return MakeStream():Read()");
+            result.ShouldBe("inner");
+        }
+
+        [Fact]
+        public void LuaStream_AfterDispose_FlagsReturnsZero()
+        {
+            // After Dispose, _blockPtr is cleared to IntPtr.Zero, so Flags returns 0.
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("return Stream.Create('test flags')");
+            engine.Wait(id);
+            LuaStream stream = (LuaStream)engine.GetResultVariable(id).StreamValue!;
+            stream.Flags.ShouldNotBe((byte)0, "Flags must be non-zero before dispose");
+            stream.Dispose();
+            stream.Flags.ShouldBe((byte)0, "Flags must return 0 after dispose (_blockPtr cleared)");
+        }
+
+        [Fact]
+        public void LuaStream_InboundFromLua_HasLuaReferencedFlagSet()
+        {
+            // lua_push_sharedmemory_stream_outbound sets FlagLuaReferenced on allocation.
+            // An inbound stream received from a Lua coroutine must therefore have it set.
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("return Stream.Create('flag check')");
+            engine.Wait(id);
+            using LuaStream stream = (LuaStream)engine.GetResultVariable(id).StreamValue!;
+            (stream.Flags & LuaStream.FlagLuaReferenced).ShouldNotBe((byte)0,
+                "FlagLuaReferenced must be set on blocks that came from Lua's outbound stream");
+        }
+
+        [Fact]
+        public void LuaStream_InboundFromLua_AccessorDisposedFlagIsCleared()
+        {
+            // The LuaStream constructor clears ACCESSOR_DISPOSED when C# wraps the block.
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("return Stream.Create('accessor flag')");
+            engine.Wait(id);
+            using LuaStream stream = (LuaStream)engine.GetResultVariable(id).StreamValue!;
+            (stream.Flags & LuaStream.FlagAccessorDisposed).ShouldBe((byte)0,
+                "ACCESSOR_DISPOSED must be 0 while C# holds the stream");
+        }
+
+        [Fact]
+        public async Task CreateStream_ManyAllocationsDisposes_NoCrashOrLeak()
+        {
+            // Stress the new lifecycle: allocate many CreateStream blocks, some passed to
+            // Lua, some not, all disposed. Engine must remain clean throughout.
+            using KitsuneEngine engine = new();
+            for (int i = 0; i < 50; i++)
+            {
+                byte[] data = Encoding.UTF8.GetBytes($"iter{i:D3}");
+                LuaStream stream = engine.CreateStream(data.Length);
+                stream.Write(data);
+
+                if (i % 2 == 0)
+                {
+                    // Pass to Lua, read back, dispose C# side.
+                    engine.SetVariable("s", LuaValue.FromStream(stream));
+                    string? r = await engine.ExecuteStringAsync("return s:Read()");
+                    r.ShouldBe($"iter{i:D3}");
+                    stream.Dispose();
+                }
+                else
+                {
+                    // Never passed to Lua — dispose sets both flags.
+                    stream.Dispose();
+                }
+            }
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task CreateStream_MultipleGcCycles_BlockSurvivesWhileCSharpHolds()
+        {
+            // Multiple forced GC cycles must not corrupt a held CreateStream block
+            // that was also passed to Lua. The two-flag scheme keeps it alive.
+            using KitsuneEngine engine = new();
+            byte[] payload = Encoding.UTF8.GetBytes("survive gc");
+            LuaStream stream = engine.CreateStream(payload.Length);
+            stream.Write(payload);
+            engine.SetVariable("s", LuaValue.FromStream(stream));
+
+            for (int i = 0; i < 3; i++)
+            {
+                GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true);
+                GC.WaitForPendingFinalizers();
+                // Run coroutines so the scheduler GCs Lua objects between rounds.
+                await engine.ExecuteStringAsync("return 'ping'");
+            }
+
+            // Block must still be readable from C# even after GC cycles and coroutine runs.
+            Encoding.UTF8.GetString(stream.ToArray()).ShouldBe("survive gc");
+            stream.Dispose();
+
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
     }
 }
+

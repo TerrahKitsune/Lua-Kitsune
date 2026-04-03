@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -115,6 +115,24 @@ namespace KitsuneNet
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
         private static extern void KitsuneRegisterFunction(string name, nint func, nint userdata);
 
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr KitsuneCreateMemoryBlock(nuint size);
+
+        // Mirrors the x64 layout of SharedMemoryBlock (see KitsuneEngine.h):
+        //   offset  0: BYTE              flags    (1 byte + 7 padding)
+        //   offset  8: void*             userdata (8 bytes, reserved)
+        //   offset 16: SharedMemoryBlock* next    (8 bytes, intrusive list link — do NOT read/write from C#)
+        //   offset 24: size_t            size     (8 bytes)
+        //   offset 32: BYTE              data[]   (variable — NOT part of this header struct)
+        [StructLayout(LayoutKind.Explicit, Size = 32)]
+        private struct SharedMemoryBlockHeader
+        {
+            [FieldOffset(0)]  public byte   Flags;
+            [FieldOffset(8)]  public IntPtr UserData;
+            [FieldOffset(16)] public IntPtr Next;    // intrusive list pointer — not used by C#
+            [FieldOffset(24)] public nuint  Size;
+        }
+
         #endregion
 
         /// <summary>Initialises the engine. Throws if <c>KitsuneInit</c> returns false.</summary>
@@ -192,6 +210,7 @@ namespace KitsuneNet
                 LuaType.Wchar  when nv.Data != IntPtr.Zero => NativeCopyWchar(nv.Data, nv.Length),
                 LuaType.Userdata when nv.Data != IntPtr.Zero && nv.Length > 0 => NativeCopyBytes(nv.Data, nv.Length) with { Type = LuaType.Userdata },
                 LuaType.Json   when nv.Data != IntPtr.Zero && nv.Length > 0 => NativeParseJson(nv.Data, nv.Length),
+                LuaType.Stream when nv.Data != IntPtr.Zero => NativeWrapSharedMemory(nv.Data),
                 LuaType.Table  => ReadNativeTable(nv.Data),
                 LuaType.None    => LuaValue.None,
                 _               => new LuaValue { Type = t },  // Nil/Function/Userdata/Thread/LightUserdata
@@ -214,6 +233,7 @@ namespace KitsuneNet
                 LuaType.Wchar  when nv.Data != IntPtr.Zero => NativeCopyWchar(nv.Data, nv.Length),
                 LuaType.Userdata when nv.Data != IntPtr.Zero && nv.Length > 0 => NativeCopyBytes(nv.Data, nv.Length) with { Type = LuaType.Userdata },
                 LuaType.Json   when nv.Data != IntPtr.Zero && nv.Length > 0 => NativeParseJson(nv.Data, nv.Length),
+                LuaType.Stream when nv.Data != IntPtr.Zero => NativeWrapSharedMemory(nv.Data),
                 LuaType.Table  => ReadNativeTable(nv.Data),
                 LuaType.None    => LuaValue.None,
                 _               => new LuaValue { Type = t },
@@ -310,7 +330,66 @@ namespace KitsuneNet
                     nv.Length = (nuint)json.Length;
                     break;
                 }
+                case LuaType.Stream when v.StreamValue is not null: {
+                    // Fast path: CreateStream block — pass the existing block directly (zero copy).
+                    // MarkPassedToLua flips _isManaged=false to prevent a second fast-pass of the
+                    // same block. The C++ lua_push_sharedmemory_stream call sets FlagLuaReferenced
+                    // on the block so Dispose knows Lua's GC will eventually set OWNER_DISPOSED.
+                    if (v.StreamValue is LuaStream managedLs) {
+                        IntPtr sharedPtr = managedLs.GetSharedBlockPtr();
+                        if (sharedPtr != IntPtr.Zero) {
+                            managedLs.MarkPassedToLua();  // disable fast path for future calls
+                            nv.Data = sharedPtr;
+                            break;
+                        }
+                    }
+                    // Copy path: allocate a new block and fill it with the stream's bytes.
+                    byte[] data = v.StreamValue switch
+                    {
+                        LuaStream ls              => ls.ToArray(),
+                        System.IO.MemoryStream ms => ms.ToArray(),
+                        _                         => ReadStreamToBytes(v.StreamValue),
+                    };
+                    // Returns NULL on allocation failure; stream arg is silently skipped.
+                    IntPtr block = KitsuneCreateMemoryBlock((nuint)data.Length);
+                    if (block == IntPtr.Zero) break;
+                    if (data.Length > 0)
+                        Marshal.Copy(data, 0, IntPtr.Add(block, 32), data.Length);
+                    nv.Data = block;
+                    // NOT added to ptrs — the block is owned by the global list; freed by ticker.
+                    break;
+                }
             }
+        }
+
+        // Wraps an inbound SharedMemoryBlock* in a LuaStream — zero copy.
+        // The LuaStream clears ACCESSOR_DISPOSED on the block, taking ownership of the accessor
+        // role. Disposing sets ACCESSOR_DISPOSED; the engine's ticker frees the block once Lua
+        // also sets OWNER_DISPOSED via shmem_close.
+        private static LuaValue NativeWrapSharedMemory(IntPtr blockPtr)
+        {
+            if (blockPtr == IntPtr.Zero) return LuaValue.None;
+            var header = Marshal.PtrToStructure<SharedMemoryBlockHeader>(blockPtr);
+            if (header.Size > (nuint)long.MaxValue)
+                throw new InvalidOperationException($"Stream block size {header.Size} exceeds the addressable range.");
+            return new LuaValue { Type = LuaType.Stream, StreamValue = new LuaStream(blockPtr, (long)header.Size) };
+        }
+
+        // Reads a System.IO.Stream into a byte array, seeking from the start when possible.
+        private static byte[] ReadStreamToBytes(System.IO.Stream stream)
+        {
+            if (stream.CanSeek)
+            {
+                long saved = stream.Position;
+                stream.Position = 0;
+                byte[] buf = new byte[checked((int)stream.Length)];
+                stream.ReadExactly(buf);
+                stream.Position = saved;
+                return buf;
+            }
+            using var ms = new System.IO.MemoryStream();
+            stream.CopyTo(ms);
+            return ms.ToArray();
         }
 
         // -- Execution ------------------------------------------------------------
@@ -542,6 +621,33 @@ namespace KitsuneNet
 
         /// <summary>Returns the Lua global at the given dot-separated path, or <see cref="LuaValue.None"/> if not found.</summary>
         public LuaValue GetVariable(string name) => NativePtrToLuaValue(KitsuneGetVariable(name));
+
+        /// <summary>
+        /// Allocates a shared-memory <see cref="LuaStream"/> of <paramref name="size"/> bytes
+        /// backed by <c>KitsuneCreateMemoryBlock</c>.  The block is tracked by the engine's
+        /// global registry and freed automatically once both C# and Lua are done with it.
+        /// <para>
+        /// Write to the stream before passing it to Lua via <see cref="SetVariable"/> or as a
+        /// coroutine argument.  After the handoff the stream remains valid for concurrent
+        /// read/write access while Lua holds its inbound stream.  Calling
+        /// <see cref="LuaStream.Dispose"/> after the handoff is safe and simply signals C#'s
+        /// side is done; the block is freed by the engine's ticker when Lua's GC also disposes.
+        /// </para>
+        /// <para>
+        /// If the stream is never passed to Lua, disposing it frees the block immediately
+        /// (on the next ticker cycle).
+        /// </para>
+        /// </summary>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="size"/> is zero or negative.</exception>
+        /// <exception cref="OutOfMemoryException">Thrown when the native allocation fails.</exception>
+        public unsafe LuaStream CreateStream(int size)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(size);
+            IntPtr block = KitsuneCreateMemoryBlock((nuint)size);
+            if (block == IntPtr.Zero) throw new OutOfMemoryException("KitsuneCreateMemoryBlock failed.");
+            var header = Marshal.PtrToStructure<SharedMemoryBlockHeader>(block);
+            return new LuaStream(block, (long)header.Size, managed: true);
+        }
 
         // Convenience shims for common types (path is dot-separated, e.g. "foo" or "foo.bar")
         public bool    SetString(string name, string value)  => SetVariable(name, value);
@@ -813,6 +919,13 @@ namespace KitsuneNet
         /// Lua → C# tables still arrive as <see cref="Table"/> and can be converted with
         /// <see cref="LuaValue.AsJsonNode"/>.</summary>
         Json          = -5,
+        /// <summary>Shared-memory stream block (KITSUNE_TSTREAM = -6).
+        /// When received from the engine the value's <see cref="LuaValue.StreamValue"/> is a
+        /// <see cref="LuaStream"/> that directly addresses the native block with zero copy;
+        /// <see cref="LuaStream.Dispose"/> calls the block's close callback to release the
+        /// Lua registry anchor. Use <see cref="LuaValue.FromStream(byte[])"/> or
+        /// <see cref="LuaValue.FromStream(System.IO.Stream)"/> to send a stream to Lua.</summary>
+        Stream        = -6,
     }
 
     /// <summary>A typed value exchanged with the Lua engine.</summary>
@@ -828,6 +941,15 @@ namespace KitsuneNet
         public IReadOnlyList<KeyValuePair<LuaValue, LuaValue>>? Table { get; init; }
         /// <summary>Parsed JSON node for <see cref="LuaType.Json"/> values. Null for all other types.</summary>
         public JsonNode? JsonNode { get; init; }
+        /// <summary>Stream for <see cref="LuaType.Stream"/> values.
+        /// Inbound (Lua → C#): a <see cref="LuaStream"/> wrapping native block memory directly.
+        /// Read-only when <c>KITSUNE_SHARED_MEMORY_FLAG_READONLY</c> is set on the block;
+        /// read-write otherwise.  <see cref="LuaStream.Dispose"/> calls the block's close callback
+        /// to release the Lua registry anchor.
+        /// Outbound (C# → Lua): any <see cref="System.IO.Stream"/> whose bytes are copied into
+        /// a native block; a <see cref="System.IO.MemoryStream"/> or <see cref="LuaStream"/>
+        /// avoids a double-copy. Null for all other types.</summary>
+        public System.IO.Stream? StreamValue { get; init; }
 
         /// <summary>Decodes <see cref="Bytes"/> as UTF-8 for strings, or UTF-16 LE for Wchar values.
         /// Returns <c>null</c> when <see cref="Bytes"/> is null.</summary>
@@ -856,6 +978,7 @@ namespace KitsuneNet
             LuaType.Nil           => "nil",
             LuaType.Table         => Table is not null ? $"table({Table.Count})" : "table",
             LuaType.Json          => JsonNode?.ToJsonString() ?? "null",
+            LuaType.Stream        => StreamValue?.ToString() ?? "stream(null)",
             LuaType.Function      => "function",
             LuaType.Userdata      => "userdata",
             LuaType.Thread        => "thread",
@@ -940,11 +1063,247 @@ namespace KitsuneNet
         /// marshalled across the bridge.</summary>
         public static LuaValue FromJson(JsonNode? node) =>
             node is null ? None : new() { Type = LuaType.Json, JsonNode = node };
+        /// <summary>Creates a stream value from a raw byte array. The bytes are copied into
+        /// a native <c>SharedMemoryBlock</c> when passed across the bridge.</summary>
+        public static LuaValue FromStream(byte[] data)
+            => new() { Type = LuaType.Stream, StreamValue = new System.IO.MemoryStream(data, writable: false) };
+        /// <summary>Creates a stream value from any <see cref="System.IO.Stream"/>.
+        /// The stream is read from its current position (or from the beginning when seekable)
+        /// and the bytes are copied into a native block when passed across the bridge.</summary>
+        public static LuaValue FromStream(System.IO.Stream stream)
+            => new() { Type = LuaType.Stream, StreamValue = stream };
 
         public static implicit operator LuaValue(double v)    => FromNumber(v);
         public static implicit operator LuaValue(bool v)      => FromBool(v);
         public static implicit operator LuaValue(string? v)   => FromString(v);
         public static implicit operator LuaValue(byte[]? v)   => FromBytes(v);
         public static implicit operator LuaValue(JsonNode? v) => FromJson(v);
+    }
+
+    /// <summary>
+    /// A <see cref="System.IO.Stream"/> that directly addresses a native
+    /// <c>SharedMemoryBlock</c> without copying.
+    /// <para>
+    /// <b>Inbound (Lua → C#):</b> created by <see cref="KitsuneEngine"/> when a Lua coroutine
+    /// returns a stream result.  Whether the stream is read-only or read-write is determined
+    /// by <c>KITSUNE_SHARED_MEMORY_FLAG_READONLY</c> in the block's <c>flags</c> field.
+    /// <see cref="Dispose"/> calls the block's close callback to release the Lua registry anchor
+    /// and free the native memory.
+    /// </para>
+    /// <para>
+    /// <b>Managed (C# → Lua):</b> created via <see cref="KitsuneEngine.CreateStream"/>.
+    /// Always read-write.  Once passed to Lua via <see cref="LuaValue.FromStream(System.IO.Stream)"/>
+    /// and <see cref="KitsuneEngine.SetVariable"/> (or as a coroutine argument), Lua takes
+    /// ownership of the underlying block.  Do <em>not</em> call <see cref="Dispose"/> after the
+    /// handoff — the close callback is cleared automatically and the engine's finalisation
+    /// frees the block when Lua's GC collects the stream.
+    /// </para>
+    /// <para>
+    /// All read and write operations set and clear <see cref="FlagLocked"/> on the block's
+    /// <c>flags</c> byte around each access (skipped for read-only blocks).
+    /// This is a cooperative advisory signal — see <see cref="FlagLocked"/> for the full caveat.
+    /// </para>
+    /// </summary>
+    /// <summary>
+    /// A <see cref="System.IO.Stream"/> that directly addresses a native
+    /// <c>SharedMemoryBlock</c> without copying.
+    /// <para>
+    /// <b>Inbound (Lua → C#):</b> created by <see cref="KitsuneEngine"/> when a Lua coroutine
+    /// returns a stream result.  <see cref="Dispose"/> sets <see cref="FlagAccessorDisposed"/> on
+    /// the block; the engine's ticker frees it once Lua's GC also sets <see cref="FlagOwnerDisposed"/>.
+    /// </para>
+    /// <para>
+    /// <b>Managed (C# → Lua):</b> created via <see cref="KitsuneEngine.CreateStream"/>.
+    /// Always read-write.  Pass to Lua via <see cref="KitsuneEngine.SetVariable"/> or as a
+    /// coroutine argument.  C# may continue accessing the stream after the handoff for concurrent
+    /// shared-memory use; call <see cref="Dispose"/> when done.  If never passed to Lua,
+    /// <see cref="Dispose"/> frees the block on the next ticker cycle.
+    /// </para>
+    /// <para>
+    /// All read and write operations set and clear <see cref="FlagLocked"/> on the block's
+    /// <c>flags</c> byte around each access (skipped for read-only blocks).
+    /// This is a cooperative advisory signal — see <see cref="FlagLocked"/> for the full caveat.
+    /// </para>
+    /// </summary>
+    public sealed class LuaStream : System.IO.UnmanagedMemoryStream
+    {
+        // ── Flag constants (mirror KitsuneEngine.h KITSUNE_SHARED_MEMORY_FLAG_*) ──
+        /// <summary>Cooperative advisory lock bit.  Set by an accessor (including this class)
+        /// before each read or write, cleared immediately after.
+        /// Other accessors should spin until this bit is clear before accessing the data.
+        /// <para>⚠ Not a true mutex: the underlying byte RMW is non-atomic on x86-64
+        /// (movzx / or / mov), so two concurrent writers can both believe they hold the lock.
+        /// For hard mutual exclusion use a real synchronisation primitive alongside this signal.
+        /// </para></summary>
+        public const byte FlagLocked          = 0x01;  // (1 << 0)
+        /// <summary>Marks the block as read-only.  Write operations are rejected and
+        /// <see cref="FlagLocked"/> is never set on reads.</summary>
+        public const byte FlagReadOnly        = 0x04;  // (1 << 2)
+        /// <summary>Set by the engine's ticker once all Lua streams referencing this block
+        /// have been GC'd.  Once set, the block's data must not be accessed.</summary>
+        public const byte FlagOwnerDisposed   = 0x10;  // (1 << 4)
+        /// <summary>Cleared by the <see cref="LuaStream"/> constructor when C# takes ownership;
+        /// set by <see cref="Dispose"/> when C# is done.  The ticker frees the block once both
+        /// <see cref="FlagOwnerDisposed"/> and this flag are set.</summary>
+        public const byte FlagAccessorDisposed = 0x20; // (1 << 5)
+        /// <summary>Set by <c>lua_push_sharedmemory_stream</c> when any Lua stream is created
+        /// from this block.  Used by <see cref="Dispose"/> to determine whether Lua's GC will
+        /// eventually set <see cref="FlagOwnerDisposed"/>.</summary>
+        public const byte FlagLuaReferenced   = 0x40;  // (1 << 6)
+
+        private IntPtr    _blockPtr;
+        private int       _disposed;
+        private bool      _isManaged;  // true for CreateStream blocks until passed to Lua
+
+        // Unified constructor.  Clears ACCESSOR_DISPOSED on the block, taking the accessor role.
+        // managed=true for CreateStream blocks (always read-write).
+        // managed=false for inbound blocks (access mode derived from READONLY flag).
+        internal unsafe LuaStream(IntPtr blockPtr, long size, bool managed = false) : base()
+        {
+            _blockPtr  = blockPtr;
+            _isManaged = managed;
+            byte flags = Marshal.ReadByte(blockPtr, 0);
+            // Signal that C# is now the active accessor.
+            Marshal.WriteByte(blockPtr, 0, (byte)(flags & ~FlagAccessorDisposed));
+            bool readOnly = !managed && (flags & FlagReadOnly) != 0;
+            Initialize((byte*)((nint)blockPtr + 32), size, size,
+                readOnly ? System.IO.FileAccess.Read : System.IO.FileAccess.ReadWrite);
+        }
+
+        /// <summary>
+        /// Reads the <c>flags</c> byte of the underlying <c>SharedMemoryBlock</c> header.
+        /// Check against <see cref="FlagLocked"/>, <see cref="FlagReadOnly"/>, etc.
+        /// Returns 0 if the block pointer has been cleared (after <see cref="Dispose"/>).
+        /// </summary>
+        public byte Flags => _blockPtr != IntPtr.Zero ? Marshal.ReadByte(_blockPtr, 0) : (byte)0;
+
+        // Called by FillNativeVariable when a CreateStream block is about to cross into Lua.
+        // Flips _isManaged to false so subsequent SetVariable calls go through the copy path
+        // (prevents a second fast-pass of the same block to Lua).
+        internal void MarkPassedToLua() => _isManaged = false;
+
+        // Returns the block pointer only for CreateStream blocks that have not yet been passed to
+        // Lua, enabling the zero-copy fast path in FillNativeVariable.  Inbound blocks always
+        // return IntPtr.Zero (copy path) to prevent multiple Lua streams pointing at the same block.
+        internal IntPtr GetSharedBlockPtr() => _isManaged ? _blockPtr : IntPtr.Zero;
+
+        // ── LOCKED-flag helpers ───────────────────────────────────────────────────
+        // Sets FlagLocked before an access and clears it after (skipped on read-only blocks).
+        // Non-atomic: see FlagLocked caveat above.
+        private void AcquireLock()
+        {
+            if (CanWrite && _blockPtr != IntPtr.Zero)
+                Marshal.WriteByte(_blockPtr, 0, (byte)(Marshal.ReadByte(_blockPtr, 0) | FlagLocked));
+        }
+
+        private void ReleaseLock()
+        {
+            if (CanWrite && _blockPtr != IntPtr.Zero)
+                Marshal.WriteByte(_blockPtr, 0, (byte)(Marshal.ReadByte(_blockPtr, 0) & ~FlagLocked));
+        }
+
+        // ── Read overrides ────────────────────────────────────────────────────────
+        /// <inheritdoc/>
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            AcquireLock();
+            try   { return base.Read(buffer, offset, count); }
+            finally { ReleaseLock(); }
+        }
+
+        /// <inheritdoc/>
+        public override int Read(Span<byte> destination)
+        {
+            AcquireLock();
+            try   { return base.Read(destination); }
+            finally { ReleaseLock(); }
+        }
+
+        /// <inheritdoc/>
+        public override int ReadByte()
+        {
+            AcquireLock();
+            try   { return base.ReadByte(); }
+            finally { ReleaseLock(); }
+        }
+
+        // ── Write overrides ───────────────────────────────────────────────────────
+        /// <inheritdoc/>
+        public override void Write(byte[] buffer, int offset, int count)
+        {
+            AcquireLock();
+            try   { base.Write(buffer, offset, count); }
+            finally { ReleaseLock(); }
+        }
+
+        /// <inheritdoc/>
+        public override void Write(ReadOnlySpan<byte> source)
+        {
+            AcquireLock();
+            try   { base.Write(source); }
+            finally { ReleaseLock(); }
+        }
+
+        /// <inheritdoc/>
+        public override void WriteByte(byte value)
+        {
+            AcquireLock();
+            try   { base.WriteByte(value); }
+            finally { ReleaseLock(); }
+        }
+
+        /// <summary>
+        /// Returns a managed copy of the stream's full contents without changing
+        /// the current read position.
+        /// </summary>
+        public byte[] ToArray()
+        {
+            long saved = Position;
+            try
+            {
+                Position = 0;
+                byte[] data = new byte[Length];
+                _ = Read(data, 0, data.Length);
+                return data;
+            }
+            finally
+            {
+                Position = saved;
+            }
+        }
+
+        /// <inheritdoc/>
+        public override string ToString() => $"LuaStream({Length} bytes)";
+
+        /// <summary>
+        /// Sets <see cref="FlagAccessorDisposed"/> on the underlying block to signal C# is done,
+        /// then closes the managed stream view.  The engine's ticker frees the block once Lua's
+        /// GC also sets <see cref="FlagOwnerDisposed"/>.  If the stream was created via
+        /// <see cref="KitsuneEngine.CreateStream"/> but never passed to Lua, both flags are set
+        /// so the ticker can free the block on its next cycle.
+        /// </summary>
+        protected override void Dispose(bool disposing)
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) == 0)
+            {
+                base.Dispose(disposing);  // closes managed stream view; does NOT touch native memory
+                if (_blockPtr != IntPtr.Zero)
+                {
+                    byte flags = Marshal.ReadByte(_blockPtr, 0);
+                    byte toSet = FlagAccessorDisposed;
+                    // If Lua never created a stream from this block, nobody will set OWNER_DISPOSED;
+                    // set it here so the ticker can free the block on its next cycle.
+                    if ((flags & FlagLuaReferenced) == 0)
+                        toSet |= FlagOwnerDisposed;
+                    Marshal.WriteByte(_blockPtr, 0, (byte)(flags | toSet));
+                    _blockPtr = IntPtr.Zero;
+                }
+            }
+        }
+
+        // Finalizer: safety net in case Dispose was never called explicitly.
+        // The block is still live (ACCESSOR_DISPOSED=0 prevents the ticker from freeing it),
+        // so reading _blockPtr here is safe.
+        ~LuaStream() => Dispose(false);
     }
 }

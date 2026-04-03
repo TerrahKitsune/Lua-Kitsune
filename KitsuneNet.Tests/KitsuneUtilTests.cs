@@ -3610,5 +3610,200 @@ namespace KitsuneNet.Tests
             ");
             r.ShouldBe("memory");
         }
+
+        // -- SharedMemory (ToSharedMemory / OpenSharedMemory) ---------------------
+
+        [Fact]
+        public async Task SharedMemory_OpenSharedMemory_InfoType_IsSharedMemoryOut()
+        {
+            string? r = await Run(@"
+                local s = Stream.OpenSharedMemory(64)
+                local _, info = s:GetInfo()
+                return info.type
+            ");
+            r.ShouldBe("sharedmemory_out");
+        }
+
+        [Fact]
+        public async Task SharedMemory_OpenSharedMemory_SizeMatchesRequested()
+        {
+            string? r = await Run(@"
+                local s = Stream.OpenSharedMemory(128)
+                local _, info = s:GetInfo()
+                return tostring(info.size == 128)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task SharedMemory_OpenSharedMemory_IsReadWriteAndSeekable()
+        {
+            string? r = await Run(@"
+                local CAP_READ, CAP_WRITE, CAP_SEEK = 1, 2, 4
+                local s = Stream.OpenSharedMemory(16)
+                local caps, _ = s:GetInfo()
+                return tostring(
+                    (caps.Caps & CAP_READ)  ~= 0 and
+                    (caps.Caps & CAP_WRITE) ~= 0 and
+                    (caps.Caps & CAP_SEEK)  ~= 0
+                )
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task SharedMemory_OpenSharedMemory_WriteAndRead_RoundTrip()
+        {
+            // Size the block exactly to the payload so Read() returns only the written bytes.
+            string? r = await Run(@"
+                local payload = 'hello shmem'
+                local s = Stream.OpenSharedMemory(#payload)
+                s:Write(payload)
+                s:Seek(0)
+                return s:Read()
+            ");
+            r.ShouldBe("hello shmem");
+        }
+
+        [Fact]
+        public async Task SharedMemory_OpenSharedMemory_ZeroSize_RaisesError()
+        {
+            string? r = await Run(@"
+                local ok, err = pcall(Stream.OpenSharedMemory, 0)
+                return tostring(not ok and type(err) == 'string')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task SharedMemory_ToSharedMemory_PreservesStreamContents()
+        {
+            string? r = await Run(@"
+                local src = Stream.Create()
+                src:Write('snapshot data')
+                local snap = src:ToSharedMemory()
+                snap:Seek(0)
+                return snap:Read()
+            ");
+            r.ShouldBe("snapshot data");
+        }
+
+        [Fact]
+        public async Task SharedMemory_ToSharedMemory_InfoType_IsSharedMemoryOut()
+        {
+            string? r = await Run(@"
+                local src = Stream.Create()
+                src:Write('test')
+                local snap = src:ToSharedMemory()
+                local _, info = snap:GetInfo()
+                return info.type
+            ");
+            r.ShouldBe("sharedmemory_out");
+        }
+
+        [Fact]
+        public async Task SharedMemory_ToSharedMemory_SizeMatchesSourceLength()
+        {
+            string? r = await Run(@"
+                local src = Stream.Create()
+                src:Write('hello')
+                local snap = src:ToSharedMemory()
+                local _, info = snap:GetInfo()
+                return tostring(info.size == 5)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task SharedMemory_ToSharedMemory_IsIndependentOfSource()
+        {
+            // ToSharedMemory produces a deep copy; mutating the source afterward
+            // must not alter the snapshot.
+            string? r = await Run(@"
+                local src = Stream.Create()
+                src:Write('original')
+                local snap = src:ToSharedMemory()
+                src:Seek(0)
+                src:Write('modified')
+                snap:Seek(0)
+                return snap:Read()
+            ");
+            r.ShouldBe("original");
+        }
+
+        [Fact]
+        public async Task SharedMemory_ToSharedMemory_CapturesFromPositionZero()
+        {
+            // ToSharedMemory internally seeks the source to 0 before snapshotting,
+            // so the full content is captured regardless of the current cursor.
+            string? r = await Run(@"
+                local src = Stream.Create()
+                src:Write('full content')
+                src:Seek(5)
+                local snap = src:ToSharedMemory()
+                snap:Seek(0)
+                return snap:Read()
+            ");
+            r.ShouldBe("full content");
+        }
+
+        [Fact]
+        public async Task SharedMemory_ToSharedMemory_WithDispose_OriginalIsZeroed()
+        {
+            // After ToSharedMemory(true) the original stream is disposed: its Caps
+            // are zeroed, so pos() returns nil (no STREAM_CAP_SEEK).
+            string? r = await Run(@"
+                local src = Stream.Create()
+                src:Write('bye')
+                local snap = src:ToSharedMemory(true)
+                return tostring(src:pos() == nil)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task SharedMemory_ToSharedMemory_WithDispose_SnapshotContentsIntact()
+        {
+            string? r = await Run(@"
+                local src = Stream.Create()
+                src:Write('preserve me')
+                local snap = src:ToSharedMemory(true)
+                snap:Seek(0)
+                return snap:Read()
+            ");
+            r.ShouldBe("preserve me");
+        }
+
+        [Fact]
+        public async Task SharedMemory_ToSharedMemory_NonReadableStream_RaisesError()
+        {
+            string? r = await Run(@"
+                local OPEN, CLOSE, CAP_WRITE = 0, 1, 2
+                local s = Stream.Create(function(op)
+                    if op == OPEN  then return CAP_WRITE end
+                    if op == CLOSE then return true end
+                end)
+                local ok, err = pcall(function() s:ToSharedMemory() end)
+                return tostring(not ok and type(err) == 'string')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task SharedMemory_ToSharedMemory_NonSeekableStream_RaisesError()
+        {
+            // A read-only backend without CAP_SEEK must also be rejected.
+            string? r = await Run(@"
+                local OPEN, CLOSE, READ, CAP_READ = 0, 1, 2, 1
+                local s = Stream.Create(function(op, len)
+                    if op == OPEN  then return CAP_READ end
+                    if op == CLOSE then return true end
+                    if op == READ  then return 'data' end
+                end)
+                local ok, err = pcall(function() s:ToSharedMemory() end)
+                return tostring(not ok and type(err) == 'string')
+            ");
+            r.ShouldBe("true");
+        }
     }
 }

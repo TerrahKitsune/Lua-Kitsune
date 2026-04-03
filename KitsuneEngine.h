@@ -12,7 +12,10 @@
 // KitsuneVariable type constants — values 0–8 match Lua's LUA_T* constants for direct comparison.
 // KITSUNE_TNONE (-1) matches LUA_TNONE. KITSUNE_TERROR (-2) is a Kitsune extension not present
 // in Lua; it is used exclusively with kitsune_ResultSetter to signal a Lua error from a
-#define KITSUNE_TSTREAM        (-6) // Kitsune extension: pointer to a SharedMemoryBlock to act as a stream
+#define KITSUNE_TSTREAM        (-6) // Kitsune extension: pointer to a SharedMemoryBlock that Lua always owns.
+									// The block MUST have been obtained via KitsuneCreateMemoryBlock.
+									// Passing a block not created by KitsuneCreateMemoryBlock is an error
+									// and will push nil to Lua.
 #define KITSUNE_TJSON          (-5) // Kitsune extension: JSON string type; data is a UTF-8 char* and length is in bytes (excluding null terminator). Not a value returned by lua_type().
 #define KITSUNE_TCHAR16        (-4) // Kitsune extension: UTF-16 string type; data is a char16_t* and length is in char16_t code units (excluding null terminator). Not a value returned by lua_type().
 #define KITSUNE_TINTEGER       (-3) // Kitsune extension: Lua 5.3+ integer subtype (lua_isinteger); not a value returned by lua_type()
@@ -37,14 +40,23 @@
 #define KITSUNE_STATUS_FAULTED   (5)  // finished with a runtime or Lua error; call KitsuneGetError
 #define KITSUNE_STATUS_CANCELLED (6)  // stopped by an explicit KitsuneCancel(id) call, or cancel is pending
 
-#define KITSUNE_SHARED_MEMORY_FLAG_LOCKED (1 << 0) // The block is currently being accessed, should be set and unset before and after reading or writing
-#define KITSUNE_SHARED_MEMORY_FLAG_READONLY (1 << 2) // The block is read-only and the locked flag can be ignored. The data should not be modified.
+#define KITSUNE_SHARED_MEMORY_FLAG_LOCKED (1 << 0) // Set by an accessor while it is reading or writing the block to signal concurrent usage.
+														// Other accessors should check this flag and wait or retry before accessing the block.
+														// The Lua stream vtable sets and clears this flag automatically around each read/write.
+#define KITSUNE_SHARED_MEMORY_FLAG_READONLY (1 << 2) // The block is read-only; write operations are rejected by the stream vtable.
+#define KITSUNE_SHARED_MEMORY_FLAG_KITSUNE_OWNED    (1 << 3) // Set by KitsuneCreateMemoryBlock; required for a block to be accepted as KITSUNE_TSTREAM.
+#define KITSUNE_SHARED_MEMORY_FLAG_OWNER_DISPOSED    (1 << 4) // Set when all Lua streams referencing this block have been GC'd. Once set, never cleared.
+#define KITSUNE_SHARED_MEMORY_FLAG_ACCESSOR_DISPOSED (1 << 5) // Cleared when C# takes ownership (LuaStream constructor); set when C# disposes. Starts at 1 (no accessor).
+#define KITSUNE_SHARED_MEMORY_FLAG_LUA_REFERENCED    (1 << 6) // Set when any Lua stream is created from this block. Once set, never cleared.
 
 struct SharedMemoryBlock {
-	BYTE flags; // Bitfield of KITSUNE_SHARED_MEMORY_FLAG_* values indicating the state and permissions of the block. The accessor should check these flags before reading or writing the block, and set/clear them as appropriate to signal the block's status to the owner and other accessors.	
-	void* userdata; // Opaque pointer for the owner's use; not interpreted by the engine. Can be used to associate the block with an external resource or context. The engine does not read or modify this field, but it is included in the shared memory block for convenience so that the accessor can retrieve it without needing a separate mapping.
-	void (*close)(SharedMemoryBlock* block); // Callback function provided by the owner for the accessor to call when it is done with the block. The accessor must call this function exactly once when finished with the block to allow the owner to free resources or perform cleanup. The owner will never call this function itself; it is the accessor's responsibility to call it. The owner should not free the block until it receives the close callback, so the accessor can safely free the block after calling close. The entire SharedMemoryBlock should not be accessed again after calling.
-	size_t size; // Size of the block in bytes. The data block immediately follows this struct in memory. Does not include the header size. The accessor should use this size when reading or writing the data block to avoid overruns.
+	BYTE flags; // Bitfield of KITSUNE_SHARED_MEMORY_FLAG_* values.
+				// KITSUNE_SHARED_MEMORY_FLAG_LOCKED:        set by an accessor during a read or write; other accessors should wait.
+				// KITSUNE_SHARED_MEMORY_FLAG_READONLY:      data must not be modified; write operations are rejected.
+				// KITSUNE_SHARED_MEMORY_FLAG_KITSUNE_OWNED: block was created by KitsuneCreateMemoryBlock.
+	void* userdata;          // Reserved; not used by the engine.
+	SharedMemoryBlock* next; // Intrusive linked-list link for the global block registry. Written only under g_shmem_lock.
+	size_t size;             // Size of the data region in bytes. The data block immediately follows the header in memory.
 	BYTE data[]; // Continous data block of the specified size. The entire struct is allocated as a single block on the heap, so freeing the struct pointer also frees the data block.
 };
 
@@ -113,6 +125,17 @@ extern "C" {
 	// name is a dot-separated path (e.g. "Foo" or "Ns.Foo"); intermediate tables are created.
 	// See kitsune_CFunction for the full list of constraints on what may be called from within func.
 	KITSUNE_API void KitsuneRegisterFunction(const char* name, kitsune_CFunction func, void* userdata = nullptr);
+
+	// Allocates a Lua-owned memory block of the given size, anchors it in the Lua registry,
+	// and returns a pointer to the block for the host to read from or write into.
+	// block->data[] is zero-initialised and its length is block->size.
+	// The block MUST be released exactly once by one of:
+	//   a) Passing it to Lua as KITSUNE_TSTREAM — Lua takes ownership and calls block->close on GC.
+	//   b) Calling block->close(block) directly — releases the Lua anchor and frees the block.
+	// Do NOT call free() or any other allocator on the block.
+	// Cannot be called from the Lua scheduler thread inside a registered function (will return NULL).
+	// Returns NULL on failure.
+	KITSUNE_API SharedMemoryBlock* KitsuneCreateMemoryBlock(size_t size);
 
 	// ── Execution ─────────────────────────────────────────────────────────────
 	// All three functions start execution as a Lua coroutine managed by the scheduler.
