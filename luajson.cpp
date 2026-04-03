@@ -1,5 +1,6 @@
 ﻿#include "luajson.h"
 #include "stream.h"
+#include "luawchar.h"
 
 // Unique address used as the JSON null sentinel.
 // Both encoder and decoder reference this directly — no registry lookup needed.
@@ -281,6 +282,32 @@ static void enc_value(LuaJson* j, lua_State* L, int depth) {
 		break;
 	case LUA_TTABLE:
 		enc_table(j, L, depth);
+		break;
+	case LUA_TUSERDATA:
+		if (lua_iswchar(L, -1)) {
+			// Convert to UTF-8 via the existing Wchar helper, then encode as a JSON string.
+			ToUtf8(L);            // pushes a UTF-8 Lua string
+			enc_string(j, L);
+			lua_pop(L, 1);
+			break;
+		}
+		if (lua_isstream(L, -1)) {
+			LuaStream* s = lua_toluastream(L, -1);
+			if (s && (s->Caps & STREAM_CAP_READ) && (s->Caps & STREAM_CAP_SEEK)) {
+				lua_Integer saved = lua_stream_curpos(L, s);
+				lua_stream_setpos(L, s, 0);
+				lua_stream_read_chunk(L, s, 0);  // pushes Lua string or nil on empty/error
+				if (lua_type(L, -1) == LUA_TSTRING)
+					enc_string(j, L);
+				else
+					jbuf_emitlit(j, L, "null");
+				lua_pop(L, 1);
+				lua_stream_setpos(L, s, saved);
+				break;
+			}
+		}
+		// Non-stream userdata falls through to null.
+		jbuf_emitlit(j, L, "null");
 		break;
 	default:
 		// Functions, threads, and non-null userdata are not representable in

@@ -1,4 +1,5 @@
 ﻿#include "stream.h"
+#include "luawchar.h"
 #include <string.h>
 #include <stdlib.h>
 #include <windows.h>
@@ -507,6 +508,47 @@ int ReadUnsignedLong(lua_State* L) {
 	return 1;
 }
 
+int ReadWchar(lua_State* L) {
+	LuaStream* s = lua_toluastream(L, 1);
+	if (!(s->Caps & STREAM_CAP_READ)) {
+		lua_pushnil(L);
+		return 1;
+	}
+	size_t byteCount;
+	if (lua_isnoneornil(L, 2)) {
+		byteCount = 0;  // 0 = read all remaining (StreamRead convention)
+	}
+	else {
+		lua_Integer n = luaL_checkinteger(L, 2);
+		if (n <= 0) {
+			lua_pushnil(L);
+			return 1;
+		}
+		byteCount = (size_t)n * sizeof(wchar_t);
+	}
+	size_t outLen = 0;
+	const BYTE* r = StreamRead(L, s, byteCount, &outLen);
+	if (!r || outLen < sizeof(wchar_t)) {
+		lua_pop(L, 1);
+		lua_pushnil(L);
+		return 1;
+	}
+	size_t charCount = outLen / sizeof(wchar_t);
+	// Allocate the LuaWChar userdata while the read string is still on the stack (r points into it).
+	LuaWChar* wch = lua_pushwchar(L);
+	wch->str = (wchar_t*)gff_malloc((charCount + 1) * sizeof(wchar_t));
+	if (!wch->str) {
+		lua_pop(L, 2);  // pop wchar userdata and the string from StreamRead
+		lua_pushnil(L);
+		return 1;
+	}
+	memcpy(wch->str, r, charCount * sizeof(wchar_t));
+	wch->str[charCount] = L'\0';
+	wch->len = charCount;
+	lua_remove(L, -2);  // remove the string from StreamRead; leave the wchar on top
+	return 1;
+}
+
 int ReadUtf8(lua_State* L) {
 	LuaStream* s = lua_toluastream(L, 1);
 	if (!(s->Caps & STREAM_CAP_READ)) {
@@ -701,6 +743,15 @@ int WriteLuaValue(lua_State* L) {
 		break;
 	case LUA_TSTRING:
 		raw = (const BYTE*)lua_tolstring(L, 2, &len);
+		break;
+	case LUA_TUSERDATA:
+		if (lua_iswchar(L, 2)) {
+			LuaWChar* wch = (LuaWChar*)lua_touserdata(L, 2);
+			if (wch && wch->str && wch->len > 0) {
+				raw = (const BYTE*)wch->str;
+				len = wch->len * sizeof(wchar_t);
+			}
+		}
 		break;
 	default:
 		break;

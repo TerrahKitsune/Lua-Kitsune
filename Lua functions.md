@@ -734,16 +734,14 @@ data Archive:Read(opt buffer)
 ```lua
 Stream Stream.Create(opt string)
 Stream Stream.Create(backendfunction)
-Stream Stream.FromString(string)
 Stream Stream.Open(filename)
-table Stream.GetSharedMemoryStreamInfo(name)
-Stream Stream.CreateSharedMemoryStream(name, size)
-Stream Stream.OpenSharedMemoryStream(name, opt readonly)
+Stream Stream.OpenSharedMemory(size)
 ```
 
 - **No argument** — creates a new empty in-memory stream.
 - **String argument** — creates an in-memory stream pre-loaded with the string contents, with the position reset to 0.
 - **Function argument** — creates a stream backed by the provided Lua function. The function is called with an opcode as its first argument and must handle all `STREAM_OP_*` operations it wishes to support. It must return the capability bitmask when called with `STREAM_OP_OPEN` (0).
+- **`OpenSharedMemory(size)`** — creates a new outbound shared-memory stream of the given byte size. The block is owned by Lua's GC; pass it to a C# host via `KITSUNE_TSTREAM`.
 
 ### Custom Backend Functions
 
@@ -839,14 +837,20 @@ bool, err Stream:WriteByte(byte)
 byte Stream:ReadByte()
 byte Stream:PeekByte(opt pos)
 void Stream:SetByte(byte, position)
-int Stream:Write(obj, opt size)
+int Stream:Write(string or Wchar, opt size)
+bool Stream:WriteUtf8(str)
 string, int Stream:ReadUtf8()
+Wchar Stream:ReadWchar(opt n)
 int Stream:Buffer(str)
 void Stream:Shrink()
 string Stream:Read(opt length)
 string Stream:ReadUntil(opt tofind)
 pos Stream:IndexOf(string or byte)
 ```
+
+- **`Write`** accepts a `string`, `Wchar`, `number`, or `boolean`. A `Wchar` is written as raw UTF-16 LE bytes (2 bytes per code unit); use `WriteUtf8` instead to write its UTF-8 encoding. The optional `size` argument limits the number of bytes written. Returns the number of bytes written, or `0` on failure.
+- **`WriteUtf8`** converts a Lua string from Latin-1/byte values to proper UTF-8 before writing.
+- **`ReadWchar`** reads `n` UTF-16 LE code units (each 2 bytes) from the current position and returns a `Wchar`. If `n` is omitted or `nil`, reads all remaining bytes. Returns `nil` if the stream is not readable or there are no complete code units available.
 
 ### Stream Info
 
@@ -914,6 +918,7 @@ bool Stream:WriteInt() / int Stream:ReadInt()
 bool Stream:WriteUnsignedInt() / int Stream:ReadUnsignedInt()
 bool Stream:WriteLong() / int Stream:ReadLong()
 bool Stream:WriteUnsignedLong() / int Stream:ReadUnsignedLong()
+Wchar Stream:ReadWchar(opt n)
 ```
 
 ---
@@ -1488,8 +1493,8 @@ local old = json:SetNullValue(nil)  -- old == "__NULL__"
 | integer | number (no decimal point) |
 | float | number (trailing zeros trimmed, e.g. `3.5` not `3.500…`) |
 | `string` | string |
-| `Wchar` | string (UTF-8 encoded) |
-| `LuaStream` | string (raw bytes) |
+| `Wchar` | string (UTF-8 encoded via `ToUtf8`) |
+| `LuaStream` | string (all bytes read from offset 0; stream position is preserved after encoding; `null` if not both readable and seekable) |
 | `table` | object `{}` or array `[]` depending on keys |
 | `NaN` | `null` |
 | `±Infinity` | `1e+9999` / `-1e+9999` |
@@ -1499,6 +1504,8 @@ local old = json:SetNullValue(nil)  -- old == "__NULL__"
 - **Circular references** are detected automatically. Encoding a table that directly or indirectly references itself raises an error: `Recursion detected`
 - **Table iteration** uses Lua's `pairs()`, so `__pairs` metamethods **are** respected during encoding. Custom iterators set via `__pairs` control what gets serialized
 - **UTF-8 strings** pass through the encoder unescaped. Only control characters (U+0000–U+001F) are hex-escaped as `\uXXXX`; all other bytes including multi-byte UTF-8 sequences appear literally in the output
+- **`Wchar` values** are converted to UTF-8 via `ToUtf8` before encoding; the resulting bytes are then JSON-escaped the same way as regular strings
+- **`LuaStream` values** are rewound to offset 0 and all bytes are read into a JSON string; the stream's original position is restored afterwards. A stream that is not both readable and seekable encodes as `null`
 
 ### Coroutine Example
 

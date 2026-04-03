@@ -1218,6 +1218,176 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
+        // ── Encode stream / Wchar as JSON value ──────────────────────────────────
+
+        [Fact]
+        public async Task Json_Encode_Stream_ReadableSeekable_ProducesJsonString()
+        {
+            // A readable+seekable in-memory stream encodes as a JSON string of its bytes.
+            // enc_value rewinds to position 0 before reading, so the result is always the
+            // full content regardless of where the cursor sits at the time of the call.
+            string? r = await Run(@"
+                local j = Json.New()
+                local s = Stream.Create('hello')
+                return j:Encode(s)
+            ");
+            r.ShouldBe("\"hello\"");
+        }
+
+        [Fact]
+        public async Task Json_Encode_Stream_EmptyStream_ProducesNull()
+        {
+            // An empty stream has no bytes; lua_stream_read_chunk returns nil → null.
+            string? r = await Run(@"
+                local j = Json.New()
+                local s = Stream.Create()
+                return j:Encode(s)
+            ");
+            r.ShouldBe("null");
+        }
+
+        [Fact]
+        public async Task Json_Encode_Stream_PreservesReadPosition()
+        {
+            // The caller's stream position must be restored after encoding.
+            string? r = await Run(@"
+                local j = Json.New()
+                local s = Stream.Create('ABCDE')
+                s:Seek(3)
+                j:Encode(s)
+                return tostring(s:pos() == 3)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_Encode_Stream_QuoteInContent_EscapedCorrectly()
+        {
+            // A double-quote byte inside the stream must be JSON-escaped as \".
+            string? r = await Run(@"
+                local j = Json.New()
+                local s = Stream.Create('a""b')
+                return j:Encode(s)
+            ");
+            r.ShouldBe("\"a\\\"b\"");
+        }
+
+        [Fact]
+        public async Task Json_Encode_Stream_AsTableValue_RoundTripsAsString()
+        {
+            // A stream used as a table value encodes as a JSON string;
+            // after decode, the value is a Lua string (JSON has no stream type).
+            string? r = await Run(@"
+                local j = Json.New()
+                local s = Stream.Create('hi')
+                local t = j:Decode(j:Encode({data = s}))
+                return t.data
+            ");
+            r.ShouldBe("hi");
+        }
+
+        [Fact]
+        public async Task Json_EncodeIntoStream_StreamValue_WritesJsonString()
+        {
+            // When the VALUE being encoded is itself a stream, EncodeIntoStream must
+            // write the stream's contents as a JSON string to the destination stream.
+            string? r = await Run(@"
+                local j   = Json.New()
+                local src = Stream.Create('world')
+                local dst = Stream.Create()
+                j:EncodeIntoStream(dst, src)
+                dst:Seek(0)
+                return dst:Read()
+            ");
+            r.ShouldBe("\"world\"");
+        }
+
+        [Fact]
+        public async Task Json_Encode_Wchar_AsciiContent_ProducesJsonString()
+        {
+            // ASCII Wchar must produce the same JSON string as the equivalent Lua string.
+            string? r = await Run(@"
+                local j = Json.New()
+                local w = Wchar.FromUtf8('hello')
+                return j:Encode(w)
+            ");
+            r.ShouldBe("\"hello\"");
+        }
+
+        [Fact]
+        public async Task Json_Encode_Wchar_NonAscii_RoundTripsCorrectly()
+        {
+            // é = U+00E9, UTF-8: 0xC3 0xA9.  Use Lua hex escapes so the bytes are
+            // unambiguous ASCII in the script source and survive ANSI marshaling.
+            string? r = await Run(@"
+                local j = Json.New()
+                local w = Wchar.FromUtf8('\xC3\xa9')
+                return j:Decode(j:Encode(w))
+            ");
+            r.ShouldBe("é");
+        }
+
+        [Fact]
+        public async Task Json_Encode_Wchar_Empty_ProducesEmptyJsonString()
+        {
+            string? r = await Run(@"
+                local j = Json.New()
+                local w = Wchar.FromUtf8('')
+                return j:Encode(w)
+            ");
+            r.ShouldBe("\"\"");
+        }
+
+        [Fact]
+        public async Task Json_Encode_Wchar_SpecialChars_EscapedCorrectly()
+        {
+            // Double-quotes inside the Wchar content must be JSON-escaped as \".
+            string? r = await Run(@"
+                local j = Json.New()
+                local w = Wchar.FromUtf8('say ""hi""')
+                return j:Encode(w)
+            ");
+            r.ShouldBe("\"say \\\"hi\\\"\"");
+        }
+
+        [Fact]
+        public async Task Json_Encode_Wchar_NewlineAndTab_EscapedAndRoundTrip()
+        {
+            // Control characters must be JSON-escaped and survive a full decode round-trip.
+            string? r = await Run(@"
+                local j = Json.New()
+                local w = Wchar.FromUtf8('a' .. '\n' .. 'b')
+                return j:Decode(j:Encode(w))
+            ");
+            r.ShouldBe("a\nb");
+        }
+
+        [Fact]
+        public async Task Json_Encode_Wchar_AsTableValue_RoundTripsAsString()
+        {
+            // After encode→decode, the decoded value is a Lua string (not a Wchar),
+            // since JSON has no wchar type.
+            string? r = await Run(@"
+                local j = Json.New()
+                local w = Wchar.FromUtf8('world')
+                local t = j:Decode(j:Encode({msg = w}))
+                return t.msg
+            ");
+            r.ShouldBe("world");
+        }
+
+        [Fact]
+        public async Task Json_Encode_UnknownUserdata_ProducesNull()
+        {
+            // Any userdata that is neither a Wchar nor a stream must encode as null.
+            // Json.New() returns a LuaJson userdata, which is not stream/wchar.
+            string? r = await Run(@"
+                local j = Json.New()
+                return j:Encode(Json.New())
+            ");
+            r.ShouldBe("null");
+        }
+
         // -- Wchar ----------------------------------------------------------------
 
         [Fact]
@@ -1505,7 +1675,185 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        // -- Timer ----------------------------------------------------------------
+        // ── Stream Wchar read/write ───────────────────────────────────────────────
+
+        [Fact]
+        public async Task Stream_WriteWchar_ReadWchar_AsciiRoundTrip()
+        {
+            // Write a Wchar into a stream and read it back as a Wchar.
+            string? r = await Run(@"
+                local w = Wchar.FromUtf8('hello')
+                local s = Stream.Create()
+                s:Write(w)
+                s:Seek(0)
+                local w2 = s:ReadWchar(5)
+                return w2:ToUtf8()
+            ");
+            r.ShouldBe("hello");
+        }
+
+        [Fact]
+        public async Task Stream_WriteWchar_ReturnsCorrectByteCount()
+        {
+            // Write returns the number of bytes written (2 bytes per wchar_t code unit).
+            string? r = await Run(@"
+                local w = Wchar.FromUtf8('hi')
+                local s = Stream.Create()
+                local written = s:Write(w)
+                return tostring(written == 4)   -- 2 code units * 2 bytes each
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_WriteWchar_AdvancesPosition()
+        {
+            string? r = await Run(@"
+                local w = Wchar.FromUtf8('abc')
+                local s = Stream.Create()
+                s:Write(w)
+                return tostring(s:pos() == 6)   -- 3 code units * 2 bytes each
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_ReadWchar_PartialRead_ReturnsRequestedCount()
+        {
+            // Write a 5-char Wchar then read back only 3 code units.
+            string? r = await Run(@"
+                local w = Wchar.FromUtf8('hello')
+                local s = Stream.Create()
+                s:Write(w)
+                s:Seek(0)
+                local w2 = s:ReadWchar(3)
+                return tostring(w2:len() == 3 and w2:ToUtf8() == 'hel')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_ReadWchar_PastEnd_ReturnsNil()
+        {
+            // Requesting more code units than are available returns nil.
+            string? r = await Run(@"
+                local s = Stream.Create()
+                return tostring(s:ReadWchar(1) == nil)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_WriteWchar_MultipleAppend_ReadBackFull()
+        {
+            // Two Wchar writes must be contiguous; one ReadWchar retrieves them all.
+            string? r = await Run(@"
+                local s = Stream.Create()
+                s:Write(Wchar.FromUtf8('foo'))
+                s:Write(Wchar.FromUtf8('bar'))
+                s:Seek(0)
+                local w = s:ReadWchar(6)
+                return w:ToUtf8()
+            ");
+            r.ShouldBe("foobar");
+        }
+
+        [Fact]
+        public async Task Stream_ReadWchar_NoLength_ReadsRemaining()
+        {
+            // ReadWchar() with no argument reads all remaining code units to end of stream.
+            string? r = await Run(@"
+                local s = Stream.Create()
+                s:Write(Wchar.FromUtf8('hello'))
+                s:Seek(0)
+                local w = s:ReadWchar()
+                return w:ToUtf8()
+            ");
+            r.ShouldBe("hello");
+        }
+
+        [Fact]
+        public async Task Stream_ReadWchar_NoLength_FromMidStream_ReadsRemainder()
+        {
+            // ReadWchar() from mid-stream must only return code units from the current position.
+            string? r = await Run(@"
+                local s = Stream.Create()
+                s:Write(Wchar.FromUtf8('abcde'))
+                s:Seek(4)   -- skip first 2 code units (4 bytes each)
+                local w = s:ReadWchar()
+                return tostring(w:len() == 3 and w:ToUtf8() == 'cde')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_ReadWchar_NoArg_EmptyStream_ReturnsNil()
+        {
+            // ReadWchar() with no argument on an empty stream must return nil, not error.
+            string? r = await Run(@"
+                local s = Stream.Create()
+                return tostring(s:ReadWchar() == nil)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_ReadWchar_ExplicitNilArg_ReadAll()
+        {
+            // Passing nil explicitly must behave identically to omitting the argument.
+            string? r = await Run(@"
+                local s = Stream.Create()
+                s:Write(Wchar.FromUtf8('test'))
+                s:Seek(0)
+                local w = s:ReadWchar(nil)
+                return tostring(w ~= nil and w:ToUtf8() == 'test')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_ReadWchar_ResultIsWcharUserdata()
+        {
+            // The return value must be a Wchar userdata, not a plain Lua string.
+            string? r = await Run(@"
+                local s = Stream.Create()
+                s:Write(Wchar.FromUtf8('x'))
+                s:Seek(0)
+                local w = s:ReadWchar(1)
+                return tostring(type(w) == 'userdata' and w:len() == 1)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_WriteWchar_NonWritable_ReturnsZero()
+        {
+            // Writing a Wchar to a read-only function-backend stream must return 0.
+            // Caps: READ=1, WRITE=2, SEEK=4 — return 1 for read-only.
+            string? r = await Run(@"
+                local s = Stream.Create(function(op, ...)
+                    if op == READ then return 'x' end
+                    return 1   -- caps: READ only (no WRITE bit)
+                end)
+                local w = Wchar.FromUtf8('hi')
+                return tostring(s:Write(w) == 0)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_ReadWchar_WriteOnly_ReturnsNil()
+        {
+            // ReadWchar on a write-only stream must return nil.
+            string? r = await Run(@"
+                local s = Stream.Create(function(op, ...)
+                    if op == WRITE then return true end
+                    return 2   -- caps: WRITE only
+                end)
+                return tostring(s:ReadWchar(1) == nil)
+            ");
+            r.ShouldBe("true");
+        }
 
         [Fact]
         public async Task Timer_InitialState_NotRunning()
