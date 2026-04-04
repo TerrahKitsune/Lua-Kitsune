@@ -37,7 +37,7 @@ namespace KitsuneNet
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         [return: MarshalAs(UnmanagedType.I1)]
-        private static extern bool KitsuneInit();
+        private static extern bool KitsuneInit(IntPtr initFunc);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern void KitsuneVariableFree(IntPtr var);
@@ -138,7 +138,7 @@ namespace KitsuneNet
         /// <summary>Initialises the engine. Throws if <c>KitsuneInit</c> returns false.</summary>
         public KitsuneEngine()
         {
-            if (!KitsuneInit())
+            if (!KitsuneInit(IntPtr.Zero))
                 throw new InvalidOperationException("KitsuneInit failed");
         }
 

@@ -28,28 +28,21 @@
 #include "lua_main_incl.h"
 
 #ifndef KITSUNE_BAREBONES
-#include "GFFMain.h"
-#include "MySQLMain.h"#include "MySQLMain.h"
+#include "MySQLMain.h"
 #include "PostgresMain.h"
-#include "ERFMain.h"
 #include "HttpMain.h"
 #include "ProcessMain.h"
 #include "LuaClientMain.h"
 #include "LuaServerMain.h"
-#include "TlkMain.h"
-#include "2DAMain.h"
 #include "NamedPipeMain.h"
 #include "LuaImageMain.h"
 #include "ODBCMain.h"
-#include "WinServicesMain.h"
 #include "luakafkamain.h"
 #include "LuaFTPMain.h"
 #include "FileAsyncMain.h"
 #include "MacroMain.h"
 #include "LuaArchiveMain.h"
-#include "LuaImguiMain.h"
 #include "RedisMain.h"
-#include "LuaTTSMain.h"
 #include "LuaServer.h"
 #endif
 
@@ -908,7 +901,7 @@ static bool          g_coOwned = false;
 
 extern "C" {
 
-	KITSUNE_API bool KitsuneInit() {
+	KITSUNE_API bool KitsuneInit(kitsune_Init initFunc) {
 		if (g_state)
 			return true;
 
@@ -967,29 +960,25 @@ extern "C" {
 		lua_pushstring(L, KITSUNE_VERSION);
 		lua_setglobal(L, "VERSION");
 
+
+
 		#ifndef KITSUNE_BAREBONES
-		luaopen_gff(L);          lua_setglobal(L, "GFF");
-		luaopen_mysql(L);        lua_setglobal(L, "MySQL");		luaopen_mysql(L);        lua_setglobal(L, "MySQL");
-		luaopen_postgres(L);     lua_setglobal(L, "Postgres");
-		luaopen_erf(L);          lua_setglobal(L, "ERF");
+
+		luaopen_mysql(L);        lua_setglobal(L, "MySQL");		
+		luaopen_postgres(L);     lua_setglobal(L, "Postgres");	
 		luaopen_http(L);         lua_setglobal(L, "Http");
 		luaopen_process(L);      lua_setglobal(L, "Process");
 		luaopen_luaserver(L);    lua_setglobal(L, "Server");
-		luaopen_luaclient(L);    lua_setglobal(L, "Client");
-		luaopen_tlk(L);          lua_setglobal(L, "TLK");
-		luaopen_twoda(L);        lua_setglobal(L, "TWODA");
+		luaopen_luaclient(L);    lua_setglobal(L, "Client");	
 		luaopen_namedpipe(L);    lua_setglobal(L, "Pipe");
 		luaopen_image(L);        lua_setglobal(L, "Image");
-		luaopen_odbc(L);         lua_setglobal(L, "ODBC");
-		luaopen_winservice(L);   lua_setglobal(L, "Services");
+		luaopen_odbc(L);         lua_setglobal(L, "ODBC");	
 		luaopen_kafka(L);        lua_setglobal(L, "Kafka");
 		luaopen_ftp(L);          lua_setglobal(L, "FTP");
 		luaopen_fileasync(L);    lua_setglobal(L, "FileAsync");
 		luaopen_macro(L);        lua_setglobal(L, "Macro");
-		luaopen_archive(L);      lua_setglobal(L, "Archive");
-		luaopen_imgui(L);        lua_setglobal(L, "Imgui");
+		luaopen_archive(L);      lua_setglobal(L, "Archive");	
 		luaopen_redis(L);        lua_setglobal(L, "Redis");
-		luaopen_tts(L);          lua_setglobal(L, "TTS");
 #endif
 		luaopen_luaaes(L);       lua_setglobal(L, "Aes");
 		luaopen_sqlite(L);       lua_setglobal(L, "SQLite");
@@ -1019,6 +1008,9 @@ extern "C" {
 		luaopen_misc(L);
 		lua_pushcfunction(L, L_Sleep);
 		lua_setglobal(L, "Sleep");
+
+		if (initFunc)
+			initFunc(L);
 
 		// Coroutine threads each receive their own hook; no hook is set on the main state.
 		state->schedulerThread = std::thread(SchedulerProc, state);

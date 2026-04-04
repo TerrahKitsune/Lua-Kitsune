@@ -386,15 +386,6 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        // -- ResList global variable ----------------------------------------------
-
-        [WindowsOnlyFact]
-        public async Task ResList_IsTable()
-        {
-            string? r = await Run("return type(ResList)");
-            r.ShouldBe("table");
-        }
-
         // -- Clipboard ------------------------------------------------------------
 
         [Fact]

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
@@ -45,7 +45,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(SolutionDir)mysql\include;$(SolutionDir)postgres\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)zip;$(SolutionDir)libarchive;$(SolutionDir)libarchive/lzma;$(SolutionDir)Imgui;$(SolutionDir)hiredis;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)mysql\include;$(SolutionDir)postgres\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)zip;$(SolutionDir)libarchive;$(SolutionDir)libarchive/lzma;$(SolutionDir)hiredis;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4703;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <PreprocessorDefinitions>KITSUNE_ENGINE_EXPORTS;STANDALONEGFF;_CRT_SECURE_NO_WARNINGS;ImTextureID=ImU64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
@@ -69,7 +69,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(SolutionDir)mysql\include;$(SolutionDir)postgres\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)zip;$(SolutionDir)libarchive;$(SolutionDir)libarchive/lzma;$(SolutionDir)Imgui;$(SolutionDir)hiredis;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)mysql\include;$(SolutionDir)postgres\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)zip;$(SolutionDir)libarchive;$(SolutionDir)libarchive/lzma;$(SolutionDir)hiredis;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4703;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <PreprocessorDefinitions>KITSUNE_ENGINE_EXPORTS;STANDALONEGFF;_CRT_SECURE_NO_WARNINGS;ImTextureID=ImU64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
@@ -88,32 +88,16 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="2da.cpp" />
-    <ClCompile Include="2DAMain.cpp" />
     <ClCompile Include="aes.c" />
     <ClCompile Include="Bencode.cpp" />
     <ClCompile Include="HttpCoroutine.cpp" />
-    <ClCompile Include="Imgui\imgui.cpp" />
-    <ClCompile Include="Imgui\imgui_demo.cpp" />
-    <ClCompile Include="Imgui\imgui_draw.cpp" />
-    <ClCompile Include="Imgui\imgui_impl_dx12.cpp" />
-    <ClCompile Include="Imgui\imgui_impl_win32.cpp" />
-    <ClCompile Include="Imgui\imgui_tables.cpp" />
-    <ClCompile Include="Imgui\imgui_widgets.cpp" />
     <ClCompile Include="KitsuneEngine.cpp" />
     <ClCompile Include="LuaArchive.cpp" />
     <ClCompile Include="LuaArchiveMain.cpp" />
     <ClCompile Include="base64.cpp" />
     <ClCompile Include="Client.cpp" />
-    <ClCompile Include="Erf.cpp" />
-    <ClCompile Include="ERFMain.cpp" />
     <ClCompile Include="FileAsync.cpp" />
     <ClCompile Include="FileAsyncMain.cpp" />
-    <ClCompile Include="GffField.cpp" />
-    <ClCompile Include="GffHeader.cpp" />
-    <ClCompile Include="GffLabel.cpp" />
-    <ClCompile Include="GFFMain.cpp" />
-    <ClCompile Include="GffStruct.cpp" />
     <ClCompile Include="Http.cpp" />
     <ClCompile Include="HttpMain.cpp" />
     <ClCompile Include="image.cpp" />
@@ -129,10 +113,6 @@
     <ClCompile Include="LuaFTPChannel.cpp" />
     <ClCompile Include="LuaFTPMain.cpp" />
     <ClCompile Include="LuaImageMain.cpp" />
-    <ClCompile Include="LuaImgui.cpp" />
-    <ClCompile Include="LuaImguiEnums.cpp" />
-    <ClCompile Include="LuaImguiInterface.cpp" />
-    <ClCompile Include="LuaImguiMain.cpp" />
     <ClCompile Include="luakafka.cpp" />
     <ClCompile Include="luakafkamain.cpp" />
     <ClCompile Include="luakafkamessage.cpp" />
@@ -141,8 +121,6 @@
     <ClCompile Include="LuaMutexMain.cpp" />
     <ClCompile Include="LuaSHA1.cpp" />
     <ClCompile Include="LuaSha256.cpp" />
-    <ClCompile Include="luatts.cpp" />
-    <ClCompile Include="LuaTTSMain.cpp" />
     <ClCompile Include="luawchar.cpp" />
     <ClCompile Include="Lua\lapi.c" />
     <ClCompile Include="Lua\lauxlib.c" />
@@ -202,14 +180,11 @@
     <ClCompile Include="StreamMain.cpp" />
     <ClCompile Include="streamshmemory.cpp" />
     <ClCompile Include="wcharmain.cpp" />
-    <ClCompile Include="WinServices.cpp" />
-    <ClCompile Include="WinServicesMain.cpp" />
     <ClCompile Include="List.cpp" />
     <ClCompile Include="LuaClient.cpp" />
     <ClCompile Include="LuaClientMain.cpp" />
     <ClCompile Include="LuaFileSystem.cpp" />
     <ClCompile Include="LuaFileSystemMain.cpp" />
-    <ClCompile Include="LuaGff.cpp" />
     <ClCompile Include="LuaMD5.cpp" />
     <ClCompile Include="LuaProcess.cpp" />
     <ClCompile Include="LuaServer.cpp" />
@@ -226,17 +201,12 @@
     <ClCompile Include="networking.cpp" />
     <ClCompile Include="ProcessMain.cpp" />
     <ClCompile Include="Queue.cpp" />
-    <ClCompile Include="ResourceTypes.cpp" />
     <ClCompile Include="Server.cpp" />
     <ClCompile Include="SQLite\sqlite3.c" />
     <ClCompile Include="Timer.cpp" />
     <ClCompile Include="TimerMain.cpp" />
-    <ClCompile Include="tlk.cpp" />
-    <ClCompile Include="TlkMain.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="2da.h" />
-    <ClInclude Include="2DAMain.h" />
     <ClInclude Include="aes.h" />
     <ClInclude Include="aes.hpp" />
     <ClInclude Include="Bencode.h" />
@@ -245,14 +215,6 @@
     <ClInclude Include="hiredis\hiredis_ssl.h" />
     <ClInclude Include="hiredis\read.h" />
     <ClInclude Include="hiredis\sds.h" />
-    <ClInclude Include="Imgui\imconfig.h" />
-    <ClInclude Include="Imgui\imgui.h" />
-    <ClInclude Include="Imgui\imgui_impl_dx12.h" />
-    <ClInclude Include="Imgui\imgui_impl_win32.h" />
-    <ClInclude Include="Imgui\imgui_internal.h" />
-    <ClInclude Include="Imgui\imstb_rectpack.h" />
-    <ClInclude Include="Imgui\imstb_textedit.h" />
-    <ClInclude Include="Imgui\imstb_truetype.h" />
     <ClInclude Include="KitsuneEngine.h" />
     <ClInclude Include="libarchive\archive.h" />
     <ClInclude Include="libarchive\archive_entry.h" />
@@ -260,15 +222,8 @@
     <ClInclude Include="LuaArchiveMain.h" />
     <ClInclude Include="base64.h" />
     <ClInclude Include="Client.h" />
-    <ClInclude Include="Erf.h" />
-    <ClInclude Include="ERFMain.h" />
     <ClInclude Include="FileAsync.h" />
     <ClInclude Include="FileAsyncMain.h" />
-    <ClInclude Include="GffField.h" />
-    <ClInclude Include="GffHeader.h" />
-    <ClInclude Include="GffLabel.h" />
-    <ClInclude Include="GFFMain.h" />
-    <ClInclude Include="GffStruct.h" />
     <ClInclude Include="Http.h" />
     <ClInclude Include="HttpMain.h" />
     <ClInclude Include="image.h" />
@@ -284,8 +239,6 @@
     <ClInclude Include="LuaFTPChannel.h" />
     <ClInclude Include="LuaFTPMain.h" />
     <ClInclude Include="LuaImageMain.h" />
-    <ClInclude Include="LuaImgui.h" />
-    <ClInclude Include="LuaImguiMain.h" />
     <ClInclude Include="luakafka.h" />
     <ClInclude Include="luakafkamain.h" />
     <ClInclude Include="luakafkamessage.h" />
@@ -294,8 +247,6 @@
     <ClInclude Include="LuaMutexMain.h" />
     <ClInclude Include="LuaSHA1.h" />
     <ClInclude Include="LuaSha256.h" />
-    <ClInclude Include="luatts.h" />
-    <ClInclude Include="LuaTTSMain.h" />
     <ClInclude Include="luawchar.h" />
     <ClInclude Include="Lua\lapi.h" />
     <ClInclude Include="Lua\lauxlib.h" />
@@ -355,14 +306,11 @@
     <ClInclude Include="streammemory.h" />
     <ClInclude Include="streamshmemory.h" />
     <ClInclude Include="wcharmain.h" />
-    <ClInclude Include="WinServices.h" />
-    <ClInclude Include="WinServicesMain.h" />
     <ClInclude Include="List.h" />
     <ClInclude Include="LuaClient.h" />
     <ClInclude Include="LuaClientMain.h" />
     <ClInclude Include="LuaFileSystem.h" />
     <ClInclude Include="LuaFileSystemMain.h" />
-    <ClInclude Include="LuaGff.h" />
     <ClInclude Include="LuaMD5.h" />
     <ClInclude Include="LuaProcess.h" />
     <ClInclude Include="LuaServer.h" />
@@ -379,13 +327,10 @@
     <ClInclude Include="networking.h" />
     <ClInclude Include="ProcessMain.h" />
     <ClInclude Include="Queue.h" />
-    <ClInclude Include="ResourcesTypes.h" />
     <ClInclude Include="Server.h" />
     <ClInclude Include="SQLite\sqlite3.h" />
     <ClInclude Include="Timer.h" />
     <ClInclude Include="TimerMain.h" />
-    <ClInclude Include="tlk.h" />
-    <ClInclude Include="TlkMain.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Lua functions.md" />

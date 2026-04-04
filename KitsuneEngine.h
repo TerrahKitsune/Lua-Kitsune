@@ -57,9 +57,9 @@
 #endif
 struct SharedMemoryBlock {
 	uint8_t flags; // Bitfield of KITSUNE_SHARED_MEMORY_FLAG_* values.
-				// KITSUNE_SHARED_MEMORY_FLAG_LOCKED:        set by an accessor during a read or write; other accessors should wait.
-				// KITSUNE_SHARED_MEMORY_FLAG_READONLY:      data must not be modified; write operations are rejected.
-				// KITSUNE_SHARED_MEMORY_FLAG_KITSUNE_OWNED: block was created by KitsuneCreateMemoryBlock.
+	// KITSUNE_SHARED_MEMORY_FLAG_LOCKED:        set by an accessor during a read or write; other accessors should wait.
+	// KITSUNE_SHARED_MEMORY_FLAG_READONLY:      data must not be modified; write operations are rejected.
+	// KITSUNE_SHARED_MEMORY_FLAG_KITSUNE_OWNED: block was created by KitsuneCreateMemoryBlock.
 	void* userdata;          // Reserved; not used by the engine.
 	SharedMemoryBlock* next; // Intrusive linked-list link for the global block registry. Written only under g_shmem_lock.
 	size_t size;             // Size of the data region in bytes. The data block immediately follows the header in memory.
@@ -80,7 +80,7 @@ struct KitsuneVariable {
 		long long integer;                     // KITSUNE_TINTEGER
 		bool boolean;                          // KITSUNE_TBOOLEAN
 		unsigned char* data;                   // KITSUNE_TSTRING: heap-allocated UTF-8 bytes; caller-owned on Set
-											   // KITSUNE_TUSERDATA: heap-allocated UTF-8 __name from metatable (NULL if no __name); length = byte count
+		// KITSUNE_TUSERDATA: heap-allocated UTF-8 __name from metatable (NULL if no __name); length = byte count
 		char16_t* char16data;                  // KITSUNE_TCHAR16: heap-allocated char16_t string; length = number of char16_t code units (excl. null terminator)
 		KeyValuePairKitsuneVariableNode* table; // KITSUNE_TTABLE: head of linked list (NULL = empty table)
 		SharedMemoryBlock* stream; // KITSUNE_TSTREAM: pointer to a SharedMemoryBlock representing the stream; caller-owned on Set
@@ -121,10 +121,13 @@ typedef int (*kitsune_ResultSetter) (const KitsuneVariable* result);
 // AcquireLuaAccess will deadlock permanently. lua_State* is intentionally not exposed.
 typedef int (*kitsune_CFunction) (int argc, KitsuneVariable* argv, const kitsune_ResultSetter resultSetter, void* userdata);
 
+// Initialisation callback passed to KitsuneInit. L is a pointer to the Lua state after the engine has created it and loaded the standard libraries, but before any scripts have been executed. This is intended for advanced users who need to perform custom setup on the Lua state (e.g. load additional libraries, set up a custom panic handler, etc.) before the engine starts running scripts. The callback must not call any Kitsune API that calls AcquireLuaAccess (see above) — the scheduler thread owns the Lua state for the duration of this call.
+typedef void (*kitsune_Init) (const void* L);
+
 extern "C" {
 	// Initialise the engine and create the Lua state. If already initialised, returns true immediately.
 	// Returns false on failure.
-	KITSUNE_API bool KitsuneInit();
+	KITSUNE_API bool KitsuneInit(kitsune_Init initFunc = nullptr);
 
 	// Frees a KitsuneVariable returned by KitsuneGetResult or KitsuneGetVariable
 	// (frees the string data if present, then the struct pointer itself). Safe on NULL.
