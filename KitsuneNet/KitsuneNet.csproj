@@ -13,20 +13,23 @@
     <NativeRootDir>$(ProjectDir)..\</NativeRootDir>
   </PropertyGroup>
 
-  <!--
-    Builds Kitsune.vcxproj (x64, matching configuration) then copies
-    KitsuneEngine.dll and all its native dependencies into this project's output.
-    DLLs are sourced from both x64\$(Configuration)\ and the repo root, because
-    some dependencies (hiredis.dll, hiredis_ssl.dll, libmysql.dll) live in the
-    repo root rather than the per-configuration build output.
-  -->
-  <Target Name="BuildNativeEngine" BeforeTargets="Build">
+  <!-- Windows only: builds Kitsune.vcxproj and copies the native DLLs. -->
+  <Target Name="BuildNativeEngine" BeforeTargets="Build" Condition="$([MSBuild]::IsOSPlatform('Windows'))">
     <MSBuild Projects="$(NativeVcxProj)" Properties="Configuration=$(Configuration);Platform=x64" />
     <ItemGroup>
       <_NativeDlls Include="$(NativeOutputDir)*.dll" />
       <_NativeDlls Include="$(NativeRootDir)*.dll" />
     </ItemGroup>
     <Copy SourceFiles="@(_NativeDlls)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
+  </Target>
+
+  <!-- Copy libKitsuneEngine.so whenever it exists (Linux build or Windows with pre-built .so).
+       Unconditional so VS remote testing can include it when sending the output to WSL2. -->
+  <Target Name="CopyLinuxNativeSo" BeforeTargets="Build"
+          Condition="Exists('$(NativeRootDir)build-linux/libKitsuneEngine.so')">
+    <Copy SourceFiles="$(NativeRootDir)build-linux/libKitsuneEngine.so"
+          DestinationFolder="$(OutputPath)"
+          SkipUnchangedFiles="true" />
   </Target>
 
 </Project>

@@ -1225,7 +1225,8 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Lua functions.md" />
-    <None Include="LINUX_PORT_PLAN.md" />
+    <None Include="testEnvironments.json" />
+    <None Include="LINUX_PORT_TASKS.md" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />

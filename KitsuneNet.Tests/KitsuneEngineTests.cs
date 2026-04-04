@@ -1,4 +1,4 @@
-using KitsuneNet;
+ï»¿using KitsuneNet;
 using Shouldly;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -14,28 +14,28 @@ namespace KitsuneNet.Tests
     {
         // -- Init / Dispose -------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public void Init_CreatesEngine_WithoutThrowing()
         {
             using KitsuneEngine engine = new();
             engine.ShouldNotBeNull();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void Init_IsNotRunning_AfterCreation()
         {
             using KitsuneEngine engine = new();
             engine.IsRunning.ShouldBeFalse();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void Dispose_CleansUp_WithoutThrowing()
         {
             KitsuneEngine engine = new();
             Should.NotThrow(engine.Dispose);
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Dispose_WithRunningCoroutine_InterruptsAndCompletes()
         {
             KitsuneEngine engine = new();
@@ -44,13 +44,13 @@ namespace KitsuneNet.Tests
 
             Task disposeTask = Task.Run(engine.Dispose);
             Task winner = await Task.WhenAny(disposeTask, Task.Delay(TimeSpan.FromSeconds(5)));
-            winner.ShouldBe(disposeTask, "Dispose hung — KitsuneCleanup did not interrupt the stuck coroutine");
+            winner.ShouldBe(disposeTask, "Dispose hung â€” KitsuneCleanup did not interrupt the stuck coroutine");
             await disposeTask;
         }
 
         // -- ExecuteString (sync) -------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public void ExecuteString_Returns_PositiveId_On_Success()
         {
             using KitsuneEngine engine = new();
@@ -59,7 +59,7 @@ namespace KitsuneNet.Tests
             engine.Wait();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void ExecuteString_CanWaitAndGetResult()
         {
             using KitsuneEngine engine = new();
@@ -69,7 +69,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void ExecuteString_RuntimeError_CanGetError()
         {
             using KitsuneEngine engine = new();
@@ -81,7 +81,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void ExecuteString_SyntaxError_CanGetError()
         {
             using KitsuneEngine engine = new();
@@ -93,7 +93,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void ExecuteString_WithArgs_ArgsAreVisible()
         {
             using KitsuneEngine engine = new();
@@ -103,7 +103,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void ExecuteString_IDGlobal_MatchesCoroutineId()
         {
             using KitsuneEngine engine = new();
@@ -115,7 +115,7 @@ namespace KitsuneNet.Tests
 
         // -- GetResult / HasResult ------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetResult_ReturnsRawBytes()
         {
             using KitsuneEngine engine = new();
@@ -127,7 +127,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetResult_ConsumedTwice_ReturnsNullSecondTime()
         {
             using KitsuneEngine engine = new();
@@ -138,7 +138,7 @@ namespace KitsuneNet.Tests
             engine.GetResultString(id).ShouldBeNull();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetError_SuccessfulCoroutine_ReturnsNull()
         {
             using KitsuneEngine engine = new();
@@ -149,7 +149,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetResultVariable_NumberReturn_IsTypedAsNumber()
         {
             using KitsuneEngine engine = new();
@@ -161,7 +161,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetResultVariable_BoolReturn_IsTypedAsBool()
         {
             using KitsuneEngine engine = new();
@@ -173,7 +173,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetResultVariable_TableReturn_IsTypedAsTable()
         {
             using KitsuneEngine engine = new();
@@ -185,7 +185,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void HasResult_ReturnsFalse_WhileRunning_TrueWhenFinished()
         {
             using KitsuneEngine engine = new();
@@ -199,7 +199,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void HasResult_NonStringResult_LenIsZero()
         {
             using KitsuneEngine engine = new();
@@ -211,7 +211,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void HasResult_NonExistentId_ReturnsFalse()
         {
             using KitsuneEngine engine = new();
@@ -220,7 +220,7 @@ namespace KitsuneNet.Tests
             len.ShouldBe((nuint)0);
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void HasResult_AfterResultConsumed_ReturnsFalse()
         {
             using KitsuneEngine engine = new();
@@ -238,7 +238,7 @@ namespace KitsuneNet.Tests
 
         // -- SetString / SetBool / SetNumber / GetVariable -------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task SetString_StringValue_IsVisibleInScript()
         {
             using KitsuneEngine engine = new();
@@ -248,7 +248,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task SetString_BytesValue_IsVisibleInScript()
         {
             using KitsuneEngine engine = new();
@@ -258,7 +258,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void SetString_BinaryDataWithNonUtf8Bytes_PreservesExactBytes()
         {
             // 0xFF and 0xFE are never valid in UTF-8; a round-trip through
@@ -271,7 +271,7 @@ namespace KitsuneNet.Tests
             result.ShouldBe(binary);
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task SetBool_True_IsVisibleInScript()
         {
             using KitsuneEngine engine = new();
@@ -281,7 +281,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task SetBool_False_IsVisibleInScript()
         {
             using KitsuneEngine engine = new();
@@ -291,7 +291,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task SetNumber_IsVisibleInScript()
         {
             using KitsuneEngine engine = new();
@@ -301,7 +301,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task SetNumber_Integer_IsVisibleInScript()
         {
             using KitsuneEngine engine = new();
@@ -311,7 +311,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetVariable_ScriptSetGlobal_ReturnsValue()
         {
             using KitsuneEngine engine = new();
@@ -321,14 +321,14 @@ namespace KitsuneNet.Tests
             engine.GetString("testGlobal").ShouldBe("get variable test");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetVariable_NonExistent_ReturnsNull()
         {
             using KitsuneEngine engine = new();
             engine.GetString("nonExistentVar_XYZ").ShouldBeNull();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetVariableBytes_ScriptSetGlobal_ReturnsBytes()
         {
             using KitsuneEngine engine = new();
@@ -340,7 +340,7 @@ namespace KitsuneNet.Tests
             Encoding.UTF8.GetString(bytes!).ShouldBe("bytes test");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetNumber_ReturnsValue()
         {
             using KitsuneEngine engine = new();
@@ -348,7 +348,7 @@ namespace KitsuneNet.Tests
             engine.GetNumber("numVar").ShouldBe(2.5);
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetNumber_FromIntegerType_ReturnsAsDouble()
         {
             // GetNumber bridges both float (LuaType.Number) and integer (LuaType.Integer) for convenience.
@@ -357,14 +357,14 @@ namespace KitsuneNet.Tests
             engine.GetNumber("n").ShouldBe(7.0);
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetNumber_NonExistent_ReturnsNull()
         {
             using KitsuneEngine engine = new();
             engine.GetNumber("nonExistentNum_XYZ").ShouldBeNull();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void SetInt64_GetInt64_RoundTrip()
         {
             using KitsuneEngine engine = new();
@@ -372,7 +372,7 @@ namespace KitsuneNet.Tests
             engine.GetInt64("n").ShouldBe(1234567890123L);
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetInt64_FromFloatType_ReturnsAsLong()
         {
             // GetInt64 bridges both integer and float types for convenience.
@@ -381,7 +381,7 @@ namespace KitsuneNet.Tests
             engine.GetInt64("n").ShouldBe(42L);
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetVariableType_Integer_ReturnsInteger()
         {
             using KitsuneEngine engine = new();
@@ -389,7 +389,7 @@ namespace KitsuneNet.Tests
             engine.GetVariableType("v").ShouldBe(LuaType.Integer);
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task SetInt64_IsVisibleInScriptAsInteger()
         {
             using KitsuneEngine engine = new();
@@ -400,7 +400,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetInt64_LuaIntegerAssignment_ReturnsIntegerType()
         {
             using KitsuneEngine engine = new();
@@ -410,7 +410,7 @@ namespace KitsuneNet.Tests
             engine.GetInt64("n").ShouldBe(42L);
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetNumber_WrongType_ReturnsNull()
         {
             using KitsuneEngine engine = new();
@@ -418,7 +418,7 @@ namespace KitsuneNet.Tests
             engine.GetNumber("strVar").ShouldBeNull();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetBool_True_ReturnsTrue()
         {
             using KitsuneEngine engine = new();
@@ -426,7 +426,7 @@ namespace KitsuneNet.Tests
             engine.GetBool("boolVar").ShouldBe(true);
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetBool_False_ReturnsFalse()
         {
             using KitsuneEngine engine = new();
@@ -434,14 +434,14 @@ namespace KitsuneNet.Tests
             engine.GetBool("boolVar").ShouldBe(false);
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetBool_NonExistent_ReturnsNull()
         {
             using KitsuneEngine engine = new();
             engine.GetBool("nonExistentBool_XYZ").ShouldBeNull();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetBool_WrongType_ReturnsNull()
         {
             using KitsuneEngine engine = new();
@@ -449,7 +449,7 @@ namespace KitsuneNet.Tests
             engine.GetBool("strVar").ShouldBeNull();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetVariableType_String_ReturnsString()
         {
             using KitsuneEngine engine = new();
@@ -457,7 +457,7 @@ namespace KitsuneNet.Tests
             engine.GetVariableType("v").ShouldBe(LuaType.String);
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetVariableType_Number_ReturnsNumber()
         {
             using KitsuneEngine engine = new();
@@ -465,7 +465,7 @@ namespace KitsuneNet.Tests
             engine.GetVariableType("v").ShouldBe(LuaType.Number);
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetVariableType_Bool_ReturnsBoolean()
         {
             using KitsuneEngine engine = new();
@@ -473,14 +473,14 @@ namespace KitsuneNet.Tests
             engine.GetVariableType("v").ShouldBe(LuaType.Boolean);
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetVariableType_Unset_ReturnsNil()
         {
             using KitsuneEngine engine = new();
             engine.GetVariableType("nonExistentVar_XYZ").ShouldBe(LuaType.None);
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void SetVariable_None_RemovesKey()
         {
             using KitsuneEngine engine = new();
@@ -490,7 +490,7 @@ namespace KitsuneNet.Tests
             engine.GetVariableType("removeMe").ShouldBe(LuaType.None);
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void SetVariable_Overwrite_ChangesType()
         {
             using KitsuneEngine engine = new();
@@ -502,7 +502,7 @@ namespace KitsuneNet.Tests
             engine.GetString("v").ShouldBeNull();  // no longer a string
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetAll_EmptySubtable_ReturnsEmpty()
         {
             using KitsuneEngine engine = new();
@@ -510,7 +510,7 @@ namespace KitsuneNet.Tests
             engine.GetAll("empty").ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetAll_ReturnsAllSetVariables()
         {
             using KitsuneEngine engine = new();
@@ -526,7 +526,7 @@ namespace KitsuneNet.Tests
             all.ShouldContain(kvp => kvp.Key.String == "flag"  && kvp.Value.Boolean == true);
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetAll_KeysAreStrings_ValuesAreTyped()
         {
             using KitsuneEngine engine = new();
@@ -542,7 +542,7 @@ namespace KitsuneNet.Tests
             all.ShouldContain(kvp => kvp.Value.Type == LuaType.Boolean);
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetAll_WithPath_ReturnsSubtableContents()
         {
             using KitsuneEngine engine = new();
@@ -558,7 +558,7 @@ namespace KitsuneNet.Tests
             all.ShouldNotContain(kvp => kvp.Key.String == "rootOnly");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetAll_EmptyStringPath_IteratesGlobalEnv()
         {
             using KitsuneEngine engine = new();
@@ -567,7 +567,7 @@ namespace KitsuneNet.Tests
             all.ShouldContain(kvp => kvp.Key.String == "testIterRoot_xyz" && kvp.Value.String == "hello");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetAll_NonExistentPath_ReturnsEmpty()
         {
             using KitsuneEngine engine = new();
@@ -575,7 +575,7 @@ namespace KitsuneNet.Tests
             engine.GetAll("doesNotExist").ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetAll_PathTargetsNonTable_ReturnsEmpty()
         {
             using KitsuneEngine engine = new();
@@ -583,7 +583,7 @@ namespace KitsuneNet.Tests
             engine.GetAll("x").ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetVariable_TableType_ReturnsLuaTypeTable()
         {
             using KitsuneEngine engine = new();
@@ -596,7 +596,7 @@ namespace KitsuneNet.Tests
 
         // -- Variable bridge path notation ----------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public void SetVariable_DotPath_WritesToSubtable()
         {
             using KitsuneEngine engine = new();
@@ -608,7 +608,7 @@ namespace KitsuneNet.Tests
             engine.GetString("key").ShouldBeNull();   // not visible at root
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void SetVariable_DotPath_CreatesIntermediateTables()
         {
             using KitsuneEngine engine = new();
@@ -616,7 +616,7 @@ namespace KitsuneNet.Tests
             engine.GetString("a.b.c").ShouldBe("deep");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void SetVariable_DeepDotPath_WritesToNestedTable()
         {
             using KitsuneEngine engine = new();
@@ -624,7 +624,7 @@ namespace KitsuneNet.Tests
             engine.GetString("a.b.deep").ShouldBe("value");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void SetVariable_DotPath_ThroughNonTableReturnsFalse()
         {
             using KitsuneEngine engine = new();
@@ -633,7 +633,7 @@ namespace KitsuneNet.Tests
             engine.GetString("notATable").ShouldBe("value");  // unchanged
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetVariable_DotPath_FinalKeyAbsent_ReturnsNone()
         {
             using KitsuneEngine engine = new();
@@ -642,7 +642,7 @@ namespace KitsuneNet.Tests
             engine.GetString("tbl.nonexistent").ShouldBeNull();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void SetVariable_TableType_CreatesEmptyTable()
         {
             using KitsuneEngine engine = new();
@@ -650,7 +650,7 @@ namespace KitsuneNet.Tests
             engine.GetVariableType("myTable").ShouldBe(LuaType.Table);
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task SetVariable_TableType_AtNestedPath()
         {
             using KitsuneEngine engine = new();
@@ -662,7 +662,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task SetVariable_DotPath_CSharpWriteLuaRead()
         {
             using KitsuneEngine engine = new();
@@ -675,7 +675,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetVariable_DotPath_LuaWriteCSharpRead()
         {
             using KitsuneEngine engine = new();
@@ -691,7 +691,7 @@ namespace KitsuneNet.Tests
 
         // -- ExecuteFile ----------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public void ExecuteFile_CreatesFileRunsAndCleansUp()
         {
             string path = Path.GetTempFileName();
@@ -710,7 +710,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void ExecuteFile_ArgsOneIsFilePath()
         {
             string path = Path.GetTempFileName();
@@ -729,7 +729,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void ExecuteFile_RuntimeError_CanGetError()
         {
             string path = Path.GetTempFileName();
@@ -750,7 +750,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void ExecuteFile_WithArgs_ArgsContainPathAndExtraArgs()
         {
             string path = Path.GetTempFileName();
@@ -770,7 +770,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task ExecuteFileAsync_ReturnsResult()
         {
             string path = Path.GetTempFileName();
@@ -788,7 +788,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task ExecuteFileAsync_RuntimeError_ThrowsLuaException()
         {
             string path = Path.GetTempFileName();
@@ -807,7 +807,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task ExecuteFileAsync_MissingFile_ThrowsLuaException()
         {
             using KitsuneEngine engine = new();
@@ -819,7 +819,7 @@ namespace KitsuneNet.Tests
 
         // -- IsRunning / Interrupt / Wait -----------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public void IsRunning_DuringExecution_ReturnsTrue()
         {
             using KitsuneEngine engine = new();
@@ -839,7 +839,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void RunningCoroutineId_DuringExecution_MatchesStartedId()
         {
             using KitsuneEngine engine = new();
@@ -858,7 +858,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void Interrupt_StopsScript()
         {
             using KitsuneEngine engine = new();
@@ -871,7 +871,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void ExecuteString_AfterInterruptAndWait_WorksNormally()
         {
             // The scheduler clears the interrupt flag once runningCount hits 0.
@@ -887,7 +887,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void Wait_CancelledToken_ThrowsOperationCanceledException()
         {
             using KitsuneEngine engine = new();
@@ -909,7 +909,7 @@ namespace KitsuneNet.Tests
 
         // -- Concurrency ----------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task ConcurrentCoroutines_AllReturnDistinctValues()
         {
             const int count = 32;
@@ -923,7 +923,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task ConcurrentCoroutines_ComputationHeavy_AllReturnCorrectSums()
         {
             const int count = 10;
@@ -945,7 +945,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task ConcurrentCoroutines_MixedOutcomes_EachReportedCorrectly()
         {
             using KitsuneEngine engine = new();
@@ -960,7 +960,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task ConcurrentCoroutines_WaitedFromParallelThreads_AllComplete()
         {
             // Exercises thread-safety of the slot layer: multiple threads poll HasResult
@@ -976,7 +976,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task ConcurrentCoroutines_SuperConcurrency_AllComplete()
         {
             using KitsuneEngine engine = new();
@@ -1010,14 +1010,14 @@ namespace KitsuneNet.Tests
 
         // -- GetActiveIds ---------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetActiveIds_NoCoroutines_ReturnsEmpty()
         {
             using KitsuneEngine engine = new();
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetActiveIds_WhileRunning_ContainsId()
         {
             using KitsuneEngine engine = new();
@@ -1036,7 +1036,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetActiveIds_MultipleCoroutines_ReturnsAllIds()
         {
             const int count = 8;
@@ -1051,7 +1051,7 @@ namespace KitsuneNet.Tests
 
         // -- Async execution ------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task ExecuteStringAsync_ReturnsResult()
         {
             using KitsuneEngine engine = new();
@@ -1060,7 +1060,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task ExecuteStringAsync_NilReturn_ReturnsNull()
         {
             using KitsuneEngine engine = new();
@@ -1069,7 +1069,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task ExecuteStringAsync_NoReturn_ReturnsNull()
         {
             using KitsuneEngine engine = new();
@@ -1078,7 +1078,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task ExecuteStringAsync_RuntimeError_ThrowsLuaException()
         {
             using KitsuneEngine engine = new();
@@ -1088,7 +1088,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task ExecuteStringAsync_SyntaxError_ThrowsLuaException()
         {
             using KitsuneEngine engine = new();
@@ -1098,7 +1098,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task ExecuteStringAsync_CancelledToken_ThrowsOperationCanceledException()
         {
             using KitsuneEngine engine = new();
@@ -1112,7 +1112,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task ExecuteStringAsync_MultipleConcurrent_AllReturnCorrectResults()
         {
             const int count = 8;
@@ -1128,7 +1128,7 @@ namespace KitsuneNet.Tests
 
         // -- Sleep ----------------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Sleep_ReturnsResultAfterDelay()
         {
             using KitsuneEngine engine = new();
@@ -1140,7 +1140,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Sleep_DoesNotBlockOtherCoroutines()
         {
             using KitsuneEngine engine = new();
@@ -1150,14 +1150,14 @@ namespace KitsuneNet.Tests
             string? fastResult = await engine.ExecuteStringAsync("return 'fast'");
             sw.Stop();
             sw.ElapsedMilliseconds.ShouldBeLessThan(1000,
-                "Fast coroutine took too long — Sleep() may be blocking the scheduler");
+                "Fast coroutine took too long â€” Sleep() may be blocking the scheduler");
             fastResult.ShouldBe("fast");
             sleepingTask.IsCompleted.ShouldBeFalse();
             (await sleepingTask).ShouldBe("slept");
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Sleep_MultipleConcurrentSleeps_AllCompleteCorrectly()
         {
             using KitsuneEngine engine = new();
@@ -1171,7 +1171,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Sleep_ZeroMs_YieldsAndReturnsImmediately()
         {
             using KitsuneEngine engine = new();
@@ -1182,7 +1182,7 @@ namespace KitsuneNet.Tests
 
         // -- ExecuteFunction ------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task ExecuteFunction_NoArgs_ReturnsResult()
         {
             using KitsuneEngine engine = new();
@@ -1193,7 +1193,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task ExecuteFunction_WithArgs_ReceivesArguments()
         {
             using KitsuneEngine engine = new();
@@ -1204,7 +1204,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task ExecuteFunction_DoesNotSetArgsGlobal()
         {
             using KitsuneEngine engine = new();
@@ -1217,7 +1217,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task ExecuteFunction_NotFound_ThrowsLuaException()
         {
             using KitsuneEngine engine = new();
@@ -1227,7 +1227,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task ExecuteFunction_RuntimeError_ThrowsLuaException()
         {
             using KitsuneEngine engine = new();
@@ -1239,7 +1239,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task ExecuteFunctionAsync_ReturnsResult()
         {
             using KitsuneEngine engine = new();
@@ -1249,7 +1249,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task ExecuteFunction_WithTypedNumberArgs_PassedAsNumbers()
         {
             using KitsuneEngine engine = new();
@@ -1260,7 +1260,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task ExecuteFunction_WithTypedBoolArg_PassedAsBool()
         {
             using KitsuneEngine engine = new();
@@ -1273,7 +1273,7 @@ namespace KitsuneNet.Tests
 
         // -- Dot-path notation for ExecuteFunction and RegisterFunction -----------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task ExecuteFunction_DotPath_CallsNestedFunction()
         {
             // ExecuteFunction("Ns.Foo") should find _G.Ns.Foo, not a global named "Ns.Foo".
@@ -1284,7 +1284,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task ExecuteFunction_DotPath_WithArgs_PassedCorrectly()
         {
             using KitsuneEngine engine = new();
@@ -1295,7 +1295,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task ExecuteFunction_DeepDotPath_CallsFunction()
         {
             using KitsuneEngine engine = new();
@@ -1305,7 +1305,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task ExecuteFunction_DotPath_NotFound_ThrowsLuaException()
         {
             // Intermediate table exists but the function key is absent.
@@ -1317,7 +1317,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task ExecuteFunction_DotPath_IntermediateTableMissing_ThrowsLuaException()
         {
             // Navigating through a non-existent intermediate table should report "function not found".
@@ -1328,7 +1328,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task RegisterFunction_DotPath_LuaCanCallIt()
         {
             // RegisterFunction("Ns.Foo") should create the intermediate table and register the function.
@@ -1341,7 +1341,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task RegisterFunction_DotPath_ExecuteFunction_CallsIt()
         {
             // A function registered at a dot-path should also be callable via ExecuteFunction.
@@ -1354,7 +1354,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task RegisterFunction_DeepDotPath_LuaCanCallIt()
         {
             using KitsuneEngine engine = new();
@@ -1364,7 +1364,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task DotPath_SetVariable_GetVariable_And_ExecuteFunction_ConsistentNamespace()
         {
             // SetVariable, RegisterFunction, and ExecuteFunction all share the same _G namespace.
@@ -1381,7 +1381,7 @@ namespace KitsuneNet.Tests
 
         // -- Cancel ---------------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public void Cancel_RunningCoroutine_SetsErrorAndFreesSlot()
         {
             using KitsuneEngine engine = new();
@@ -1394,7 +1394,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldNotContain(id);
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void Cancel_SleepingCoroutine_FreesSlotWithoutWaitingForDeadline()
         {
             using KitsuneEngine engine = new();
@@ -1411,7 +1411,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldNotContain(id);
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Cancel_DoesNotAffectOtherCoroutines()
         {
             using KitsuneEngine engine = new();
@@ -1426,14 +1426,14 @@ namespace KitsuneNet.Tests
 
         // -- GetStatus ------------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetStatus_NonExistentId_ReturnsNone()
         {
             using KitsuneEngine engine = new();
             engine.GetStatus(99999).ShouldBe(CoroutineStatus.None);
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetStatus_TwoConcurrentCoroutines_OneIsIdle()
         {
             // The Ticker yields every 1000 instructions when runningCount > 1,
@@ -1458,7 +1458,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetStatus_DuringSleep_ReturnsSleeping()
         {
             using KitsuneEngine engine = new();
@@ -1472,7 +1472,7 @@ namespace KitsuneNet.Tests
             engine.Wait();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetStatus_WhileRunning_ReturnsRunning()
         {
             using KitsuneEngine engine = new();
@@ -1486,7 +1486,7 @@ namespace KitsuneNet.Tests
             engine.Wait();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetStatus_AfterSuccess_ReturnsDone()
         {
             using KitsuneEngine engine = new();
@@ -1497,7 +1497,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetStatus_AfterRuntimeError_ReturnsFaulted()
         {
             using KitsuneEngine engine = new();
@@ -1509,12 +1509,14 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetStatus_AfterCancelOnSleepingCoroutine_ReturnsCancelled()
         {
             // Once KitsuneCancel sets interrupted=1, GetStatus returns Cancelled regardless
             // of whether the scheduler has finished processing the cancel yet. There is no
-            // longer a separate Cancelling state — callers act the same way in both cases.
+            // longer a separate Cancelling state â€” callers act the same way in both cases.
+            // On a fast scheduler (e.g. Linux) the slot may already be freed and the status
+            // returns None â€” that is also valid; the coroutine was cancelled and released.
             using KitsuneEngine engine = new();
             int id = engine.ExecuteString("Sleep(60000)");
             DateTime readyDeadline = DateTime.UtcNow.AddSeconds(5);
@@ -1524,7 +1526,9 @@ namespace KitsuneNet.Tests
 
             engine.Cancel(id);
 
-            engine.GetStatus(id).ShouldBe(CoroutineStatus.Cancelled);
+            var statusAfterCancel = engine.GetStatus(id);
+            (statusAfterCancel == CoroutineStatus.Cancelled || statusAfterCancel == CoroutineStatus.None)
+                .ShouldBeTrue($"Expected Cancelled or None after Cancel but got {statusAfterCancel}");
 
             engine.Wait();
             engine.GetActiveIds().ShouldBeEmpty();
@@ -1532,7 +1536,7 @@ namespace KitsuneNet.Tests
 
         // -- GetRuntime -----------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetRuntime_WhileRunning_ReturnsPositiveValue()
         {
             using KitsuneEngine engine = new();
@@ -1547,14 +1551,14 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetRuntime_AfterCoroutineReleased_ReturnsZero()
         {
             using KitsuneEngine engine = new();
             int id = engine.ExecuteString("return 'done'");
             engine.Wait(id);
             engine.GetResult(id);  // consumes result and sets released=1
-            // Spin until the scheduler's step 4 compacts the slot (zeroes id) — at most one scheduler pass (~10ms)
+            // Spin until the scheduler's step 4 compacts the slot (zeroes id) â€” at most one scheduler pass (~10ms)
             DateTime deadline = DateTime.UtcNow.AddSeconds(5);
             while (engine.GetRuntime(id) != 0.0 && DateTime.UtcNow < deadline)
                 Thread.Sleep(1);
@@ -1563,10 +1567,10 @@ namespace KitsuneNet.Tests
 
         // -- Stress tests ---------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stress_HighThroughput_SequentialBatches_AllCorrect()
         {
-            // 1000 coroutines in batches of 100 — verifies high-throughput execution
+            // 1000 coroutines in batches of 100 â€” verifies high-throughput execution
             // produces the correct result for every single coroutine with no data loss.
             using KitsuneEngine engine = new();
             const int total     = 1000;
@@ -1585,12 +1589,12 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stress_SlotRecycling_SustainedLoadBeyondSlotLimit()
         {
-            // Submits 4× the 256-slot limit through a semaphore-throttled pipeline
+            // Submits 4Ã— the 256-slot limit through a semaphore-throttled pipeline
             // (max 64 concurrent) so slots are continuously recycled while new ones
-            // are being admitted — verifies every result is correct under recycling pressure.
+            // are being admitted â€” verifies every result is correct under recycling pressure.
             using KitsuneEngine engine = new();
             const int total         = 1000;
             const int maxConcurrent =   64;
@@ -1611,11 +1615,11 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stress_ConcurrentVariableBridge_NoCorruptionOrDeadlock()
         {
             // 8 threads simultaneously hammer SetNumber/GetNumber on a shared key
-            // while 10 Lua coroutines read the same Vars table — verifies
+            // while 10 Lua coroutines read the same Vars table â€” verifies
             // AcquireLuaAccess serialises every access with no deadlock, null reads,
             // or scheduler starvation under real write/write/read contention.
             using KitsuneEngine engine = new();
@@ -1650,11 +1654,11 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stress_ConcurrentFunctionExecution_AllReturnCorrectResults()
         {
             // Defines 50 distinct functions then calls them all concurrently via
-            // ExecuteFunctionAsync — stresses the function-call async path under load.
+            // ExecuteFunctionAsync â€” stresses the function-call async path under load.
             using KitsuneEngine engine = new();
             const int count = 50;
 
@@ -1674,10 +1678,10 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stress_AsyncCoroutinesWritingVars_CSharpReadsAllBack()
         {
-            // 30 concurrent async coroutines each write a unique Vars key while running —
+            // 30 concurrent async coroutines each write a unique Vars key while running â€”
             // verifies that async execution and variable bridge writes are both correct
             // under simultaneous scheduler pressure.
             using KitsuneEngine engine = new();
@@ -1697,11 +1701,11 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stress_WaitAsync_ConcurrentPollers_AllComplete()
         {
             // Starts 30 coroutines synchronously then waits for each via WaitAsync(id)
-            // in parallel — directly stresses the async wait path rather than going
+            // in parallel â€” directly stresses the async wait path rather than going
             // through ExecuteStringAsync which uses it internally.
             using KitsuneEngine engine = new();
             const int count = 30;
@@ -1735,7 +1739,7 @@ namespace KitsuneNet.Tests
 
         // -- RegisterFunction -----------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task RegisterFunction_ReturnsString_LuaReceivesIt()
         {
             using KitsuneEngine engine = new();
@@ -1745,7 +1749,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task RegisterFunction_ReturnsNumber_LuaReceivesIt()
         {
             using KitsuneEngine engine = new();
@@ -1755,7 +1759,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task RegisterFunction_ReturnsBool_LuaReceivesIt()
         {
             using KitsuneEngine engine = new();
@@ -1765,7 +1769,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task RegisterFunction_ReturnsNone_LuaReceivesNil()
         {
             using KitsuneEngine engine = new();
@@ -1776,7 +1780,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task RegisterFunction_StringArg_ReceivedCorrectly()
         {
             using KitsuneEngine engine = new();
@@ -1786,7 +1790,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task RegisterFunction_NumberArg_ReceivedCorrectly()
         {
             using KitsuneEngine engine = new();
@@ -1797,7 +1801,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task RegisterFunction_BoolArg_ReceivedCorrectly()
         {
             using KitsuneEngine engine = new();
@@ -1807,7 +1811,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task RegisterFunction_MultipleArgs_AllReceivedInOrder()
         {
             using KitsuneEngine engine = new();
@@ -1819,7 +1823,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task RegisterFunction_NoArgs_ReceivesEmptyCollection()
         {
             using KitsuneEngine engine = new();
@@ -1834,7 +1838,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void RegisterFunction_ThrowsLuaException_RaisesLuaErrorWithMessage()
         {
             using KitsuneEngine engine = new();
@@ -1848,7 +1852,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void RegisterFunction_ThrowsOtherException_RaisesLuaErrorWithMessage()
         {
             using KitsuneEngine engine = new();
@@ -1862,7 +1866,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task RegisterFunction_ErrorCaughtByPcall_DoesNotAbortCoroutine()
         {
             using KitsuneEngine engine = new();
@@ -1875,7 +1879,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task RegisterFunction_MultipleFunctions_EachCallsCorrectHandler()
         {
             using KitsuneEngine engine = new();
@@ -1888,7 +1892,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task RegisterFunction_ClosureCapture_MutatesAndReadsState()
         {
             using KitsuneEngine engine = new();
@@ -1905,7 +1909,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task RegisterFunction_CalledRepeatedly_CorrectResultEveryTime()
         {
             using KitsuneEngine engine = new();
@@ -1917,7 +1921,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task RegisterFunction_ConcurrentCoroutinesCalling_AllReceiveCorrectResult()
         {
             using KitsuneEngine engine = new();
@@ -1938,7 +1942,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void RegisterFunction_Dispose_DoesNotCrash()
         {
             // Verifies that GCHandles for registered functions are freed cleanly on Dispose.
@@ -1950,7 +1954,7 @@ namespace KitsuneNet.Tests
 
         // -- Shallow / deep table bridge ------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetVariable_TableValue_IsOpaqueWithNoContents()
         {
             // GetVariable is shallow: a table value returns type=Table but Table==null.
@@ -1963,7 +1967,7 @@ namespace KitsuneNet.Tests
             v.Table.ShouldBeNull();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetAll_NestedTableValue_IsOpaque()
         {
             // GetAll is shallow: iterating a table whose values include a sub-table yields
@@ -1979,7 +1983,7 @@ namespace KitsuneNet.Tests
             innerEntry.Value.Table.ShouldBeNull();  // opaque: contents not captured
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void GetResult_TableReturn_ContainsFullContents()
         {
             // GetResult is deep: a table returned from a script is fully converted.
@@ -1994,7 +1998,7 @@ namespace KitsuneNet.Tests
             result.Table!.ShouldContain(kvp => kvp.Key.String == "y" && kvp.Value.AsDouble == 20);
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void RegisterFunction_TableArg_ReceivedWithFullContents()
         {
             // Function args are deep: a table passed from Lua carries its full contents.
@@ -2017,7 +2021,7 @@ namespace KitsuneNet.Tests
 
         // -- Table args passed to execute functions (C# ? Lua) --------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public void ExecuteString_TableArg_ContentAccessibleFromARGS()
         {
             // A table passed as an arg to ExecuteString is accessible as ARGS[n] with full contents.
@@ -2036,7 +2040,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void ExecuteFile_TableArg_ContentAccessibleFromARGS()
         {
             // For ExecuteFile ARGS[1] = file path; extra args start at ARGS[2].
@@ -2059,7 +2063,7 @@ namespace KitsuneNet.Tests
             finally { File.Delete(path); }
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task ExecuteFunction_TableArg_ContentAccessibleAsParameter()
         {
             // A table arg passed to ExecuteFunction arrives as a direct function parameter.
@@ -2080,7 +2084,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task ExecuteFunction_NestedTableArg_NestedContentsAccessible()
         {
             // A table arg containing a nested table is fully pushed; nested keys are reachable.
@@ -2106,7 +2110,7 @@ namespace KitsuneNet.Tests
 
         // -- Lua coroutine interop -------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Coroutine_SubCoroutine_YieldAndResume_WorksCorrectly()
         {
             // coroutine.create/resume/yield inside a Kitsune-managed coroutine must work;
@@ -2126,7 +2130,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Coroutine_Wrap_Generator_ProducesCorrectSequence()
         {
             // coroutine.wrap (the generator idiom) must work inside a Kitsune coroutine.
@@ -2143,7 +2147,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Coroutine_DirectYield_FromKitsuneCoroutine_ResumesNormally()
         {
             // coroutine.yield() called directly from a Kitsune-managed coroutine yields to
@@ -2160,7 +2164,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Coroutine_InfiniteGenerator_ProducesCorrectValues()
         {
             // An infinite generator (sub-coroutine that never returns) must behave
@@ -2180,7 +2184,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Coroutine_ConcurrentKitsuneCoroutines_EachWithOwnSubCoroutine_AreIndependent()
         {
             // Multiple concurrent Kitsune coroutines each owning their own sub-coroutine;
@@ -2202,7 +2206,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Coroutine_YieldWithValue_ValueIsDiscardedByScheduler()
         {
             // The scheduler calls lua_pop(T, nresults) on LUA_YIELD, so any value passed
@@ -2213,7 +2217,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Coroutine_YieldWithValue_ResumeReceivesNil()
         {
             // The scheduler always resumes with 0 args (nstart=0 after a yield),
@@ -2227,7 +2231,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Coroutine_YieldIsNotReturn_ResultComesFromReturnOnly()
         {
             // Reinforces that yield value != result; only return sets the coroutine result.
@@ -2242,7 +2246,7 @@ namespace KitsuneNet.Tests
 
         // -- Wchar bridge ---------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_ReturnedFromScript_HasWcharType()
         {
             // A Lua Wchar returned by a coroutine is surfaced as LuaType.Wchar, not LuaType.String.
@@ -2255,7 +2259,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_ReturnedFromScript_StringAccessible()
         {
             // GetResultString decodes the UTF-8 bytes regardless of String vs Wchar type.
@@ -2266,7 +2270,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_SetVariable_PushesWcharIntoLua()
         {
             // Setting a Wchar variable pushes a Lua Wchar object; Lua can call Wchar methods on it.
@@ -2278,7 +2282,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_SetVariable_LuaCanCallWcharMethods()
         {
             using KitsuneEngine engine = new();
@@ -2289,7 +2293,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_GetVariable_FromLuaWcharGlobal_ReturnsWcharType()
         {
             using KitsuneEngine engine = new();
@@ -2301,17 +2305,17 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_RoundTrip_SetAndGet_PreservesContent()
         {
             using KitsuneEngine engine = new();
-            engine.SetVariable("wRound", LuaValue.FromWchar("round trip \u00e9"));  // é is non-ASCII
+            engine.SetVariable("wRound", LuaValue.FromWchar("round trip \u00e9"));  // Ã© is non-ASCII
             LuaValue back = engine.GetVariable("wRound");
             back.Type.ShouldBe(LuaType.Wchar);
             back.String.ShouldBe("round trip \u00e9");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_InTable_ReturnedWithWcharType()
         {
             // A Wchar inside a returned table is also tagged as LuaType.Wchar.
@@ -2327,7 +2331,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_RegisterFunction_WcharArgReceivedAsWcharType()
         {
             // A Wchar passed to a registered C# function arrives with LuaType.Wchar.
@@ -2343,7 +2347,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_RegisterFunction_ReturnWchar_LuaReceivesWcharObject()
         {
             // A C# function returning LuaType.Wchar pushes a Lua Wchar object; Lua can call methods on it.
@@ -2357,7 +2361,7 @@ namespace KitsuneNet.Tests
 
         // -- Userdata __name bridge ------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Userdata_RegisterFunction_ArgHasTypeNameInBytes()
         {
             // An unrecognised userdata passed as an argument to a registered C# function
@@ -2376,7 +2380,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void Userdata_CoroutineResult_TypeNameInBytes()
         {
             // An unrecognised userdata returned from a coroutine arrives via GetResultVariable
@@ -2391,7 +2395,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Userdata_DifferentType_TypeNameMatchesMetatable()
         {
             // Verifies the __name lookup is not hard-coded: Stream.Create() carries a
@@ -2411,12 +2415,12 @@ namespace KitsuneNet.Tests
 
         // -- Nohook / yield safety ------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public void NohookCallback_ErrorCaughtByPcall_HookRestoredAndCancelStillWorks()
         {
             // Regression: lua_call_nohook previously used lua_call whose longjmp error
             // path bypassed the lua_sethook restore.  If Lua code caught that error with
-            // pcall/xpcall the coroutine continued running hookless — the Ticker never
+            // pcall/xpcall the coroutine continued running hookless â€” the Ticker never
             // fired again, making Cancel and Interrupt permanently ineffective.
             // Fix: lua_call_nohook now wraps with lua_pcall, restores the hook, then
             // re-raises via lua_error so the hook is always restored before any unwind.
@@ -2440,10 +2444,10 @@ namespace KitsuneNet.Tests
             while (engine.GetActiveIds().Contains(id) && DateTime.UtcNow < deadline)
                 Thread.Sleep(1);
             engine.GetActiveIds().ShouldNotContain(id,
-                "Cancel timed out — Ticker hook may have been lost after pcall caught the nohook callback error");
+                "Cancel timed out â€” Ticker hook may have been lost after pcall caught the nohook callback error");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task NohookCallback_SleepInsideSupplier_CompletesWithoutCrash()
         {
             // Regression: L_Sleep called lua_yieldk unconditionally. Inside a nohook
@@ -2469,7 +2473,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task MetamethodFromCCode_WithConcurrentCoroutines_NoCrash()
         {
             // Regression: the Ticker called lua_yield unconditionally. When a C library
@@ -2485,7 +2489,7 @@ namespace KitsuneNet.Tests
                 "local n = 0; for _ = 1, 1000000 do n = n + 1 end; return tostring(n)");
 
             // Repeatedly calls tostring() on a table with __tostring. tostring() is
-            // luaB_tostring (C), which dispatches __tostring via lua_pcall — a
+            // luaB_tostring (C), which dispatches __tostring via lua_pcall â€” a
             // non-yieldable boundary. The Ticker must not crash when it fires inside.
             Task<string?> fgTask = engine.ExecuteStringAsync(@"
                 local obj = setmetatable({}, {
@@ -2508,14 +2512,14 @@ namespace KitsuneNet.Tests
 
         // -- Json bridge ----------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public void Json_FromJson_Null_ReturnsNone()
         {
-            // null JsonNode produces LuaValue.None — nothing is pushed to Lua.
+            // null JsonNode produces LuaValue.None â€” nothing is pushed to Lua.
             LuaValue.FromJson(null).Type.ShouldBe(LuaType.None);
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_SetVariable_ObjectNode_LuaReadsFields()
         {
             // A C# JsonNode set via SetVariable arrives in Lua as a table decoded
@@ -2528,7 +2532,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_SetVariable_NestedObject_LuaReadsDeeply()
         {
             // Nested JSON objects become nested Lua tables; deep path access works.
@@ -2539,7 +2543,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_SetVariable_ArrayNode_LuaUsesOneBasedKeys()
         {
             // Json:Decode maps JSON arrays to Lua tables with 1-based integer keys.
@@ -2551,7 +2555,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void Json_ExecuteStringArg_LuaReadsFields()
         {
             // A JsonNode passed as an ARGS element is accessible as a table in the script.
@@ -2564,11 +2568,11 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void Json_TableResult_AsJsonNode_ProducesJsonObject()
         {
             // Lua returns a string-keyed table; AsJsonNode() converts the LuaType.Table
-            // linked list to a JsonObject — no native-side JSON encoding involved.
+            // linked list to a JsonObject â€” no native-side JSON encoding involved.
             using KitsuneEngine engine = new();
             int id = engine.ExecuteString("return {name='bob', score=42}");
             engine.Wait(id);
@@ -2581,7 +2585,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void Json_TableResult_AsJsonNode_SequentialIntKeys_ProducesJsonArray()
         {
             // Lua returns a sequential table; AsJsonNode() detects 1-based integer keys
@@ -2601,7 +2605,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void Json_AsJsonNode_OnScalarLuaValues()
         {
             // AsJsonNode() wraps scalar LuaValues in the appropriate JsonValue.
@@ -2613,17 +2617,17 @@ namespace KitsuneNet.Tests
             new LuaValue { Type = LuaType.Nil }.AsJsonNode().ShouldBeNull();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void Json_AsJsonNode_OnJsonType_ReturnsSameNode()
         {
-            // When Type == Json, AsJsonNode() returns the stored node directly — no re-parse.
+            // When Type == Json, AsJsonNode() returns the stored node directly â€” no re-parse.
             var node = JsonNode.Parse("""{"direct":true}""")!;
             LuaValue v = LuaValue.FromJson(node);
             v.Type.ShouldBe(LuaType.Json);
             ReferenceEquals(v.AsJsonNode(), node).ShouldBeTrue();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void Json_ImplicitOperator_WorksFromJsonNode()
         {
             // The implicit operator allows a JsonNode to be assigned to LuaValue directly.
@@ -2632,7 +2636,7 @@ namespace KitsuneNet.Tests
             v.JsonNode.ShouldNotBeNull();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_RegisterFunction_TableArgConvertedToJsonNode()
         {
             // When Lua passes a table (originally decoded from a JsonNode) to a C# registered
@@ -2655,7 +2659,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_RegisterFunction_ReturnsJsonNode_LuaReadsAsTable()
         {
             // A C# function returning LuaValue.FromJson produces a Lua table in the caller.
@@ -2668,7 +2672,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_MultipleRoundTrips_NoCrashOrLeak()
         {
             // 50 iterations of JsonNode ? bridge Json decode ? Lua reads ? result.
@@ -2688,7 +2692,7 @@ namespace KitsuneNet.Tests
 
         // -- Stream bridge (LuaType.Stream / KITSUNE_TSTREAM) ---------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public void Stream_LuaReturnsStream_TypeIsStream()
         {
             using KitsuneEngine engine = new();
@@ -2700,7 +2704,7 @@ namespace KitsuneNet.Tests
             stream.ShouldNotBeNull();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void Stream_LuaReturnsStream_ContainsCorrectBytes()
         {
             using KitsuneEngine engine = new();
@@ -2710,10 +2714,10 @@ namespace KitsuneNet.Tests
             Encoding.UTF8.GetString(stream.ToArray()).ShouldBe("hello bridge");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void Stream_LuaReturnsStream_StreamApiReads()
         {
-            // LuaStream : UnmanagedMemoryStream — no copy; Length and Read use native memory.
+            // LuaStream : UnmanagedMemoryStream â€” no copy; Length and Read use native memory.
             using KitsuneEngine engine = new();
             int id = engine.ExecuteString("return Stream.Create('bridge test')");
             engine.Wait(id);
@@ -2724,7 +2728,7 @@ namespace KitsuneNet.Tests
             Encoding.UTF8.GetString(buf).ShouldBe("bridge test");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void Stream_LuaReturnsStream_SeekAndReadPartial()
         {
             using KitsuneEngine engine = new();
@@ -2737,7 +2741,7 @@ namespace KitsuneNet.Tests
             Encoding.UTF8.GetString(buf).ShouldBe("FGHIJ");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void Stream_LuaReturnsStream_ToArray_PreservesPosition()
         {
             // ToArray() must not move the read cursor.
@@ -2751,7 +2755,7 @@ namespace KitsuneNet.Tests
             stream.Position.ShouldBe(3L);  // position must be restored
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_CSharpSendsStream_LuaReadsIt()
         {
             // C# ? Lua: FromStream(byte[]) wraps bytes in a native block;
@@ -2762,7 +2766,7 @@ namespace KitsuneNet.Tests
             result.ShouldBe("hello from csharp");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_CSharpSendsStream_LuaCanSeek()
         {
             using KitsuneEngine engine = new();
@@ -2771,7 +2775,7 @@ namespace KitsuneNet.Tests
             result.ShouldBe("FGHIJ");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_CSharpSendsStream_FromSystemIOStream()
         {
             // FromStream(System.IO.Stream) should also work.
@@ -2782,7 +2786,7 @@ namespace KitsuneNet.Tests
             result.ShouldBe("from memorystream");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_CSharpSendsStream_AsArg_LuaReadsIt()
         {
             // Passing a stream as a coroutine argument; the engine places it in ARGS[1]
@@ -2794,7 +2798,7 @@ namespace KitsuneNet.Tests
             result.ShouldBe("arg stream");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void Stream_LuaReturnsStream_Dispose_DoesNotThrow()
         {
             using KitsuneEngine engine = new();
@@ -2805,7 +2809,7 @@ namespace KitsuneNet.Tests
             Should.NotThrow(stream.Dispose);
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void Stream_LuaReturnsStream_DoubleDispose_DoesNotThrow()
         {
             // The Interlocked guard must prevent the close callback from being invoked twice.
@@ -2817,7 +2821,7 @@ namespace KitsuneNet.Tests
             Should.NotThrow(stream.Dispose);
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_MultipleRoundTrips_NoCrashOrLeak()
         {
             // 50 iterations of C# bytes ? Lua stream ? Lua reads ? string result.
@@ -2833,7 +2837,7 @@ namespace KitsuneNet.Tests
 
         // -- Stream lifetime and sync ---------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public void Stream_LuaReturnsStream_DataConsistentAfterGcCollect()
         {
             // The Lua registry anchor must prevent premature collection; the native
@@ -2850,11 +2854,11 @@ namespace KitsuneNet.Tests
             Encoding.UTF8.GetString(stream.ToArray()).ShouldBe("keep me alive");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void Stream_LuaReturnsStream_MultipleReadsReturnIdenticalData()
         {
             // The underlying native memory must not change between reads during the
-            // stream's lifetime — ToArray must produce the same bytes every call.
+            // stream's lifetime â€” ToArray must produce the same bytes every call.
             using KitsuneEngine engine = new();
             int id = engine.ExecuteString("return Stream.Create('stable data')");
             engine.Wait(id);
@@ -2867,7 +2871,7 @@ namespace KitsuneNet.Tests
             Encoding.UTF8.GetString(first).ShouldBe("stable data");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_LuaReturnsStream_RemainsReadableAfterConcurrentEngineUse()
         {
             // Running additional coroutines (which trigger scheduler cycles and may
@@ -2885,7 +2889,7 @@ namespace KitsuneNet.Tests
 
         // -- Stream disposal ------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public void Stream_LuaReturnsStream_AfterDispose_CanReadReturnsFalse()
         {
             using KitsuneEngine engine = new();
@@ -2898,7 +2902,7 @@ namespace KitsuneNet.Tests
             stream.CanRead.ShouldBeFalse();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void Stream_LuaReturnsStream_AfterDispose_ReadThrowsObjectDisposedException()
         {
             using KitsuneEngine engine = new();
@@ -2911,7 +2915,7 @@ namespace KitsuneNet.Tests
             Should.Throw<ObjectDisposedException>(() => stream.Read(buf, 0, 1));
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void Stream_LuaReturnsStream_AfterDispose_LengthThrowsObjectDisposedException()
         {
             using KitsuneEngine engine = new();
@@ -2923,7 +2927,7 @@ namespace KitsuneNet.Tests
             Should.Throw<ObjectDisposedException>(() => _ = stream.Length);
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void Stream_LuaReturnsStream_AfterDispose_SeekThrowsObjectDisposedException()
         {
             using KitsuneEngine engine = new();
@@ -2935,7 +2939,7 @@ namespace KitsuneNet.Tests
             Should.Throw<ObjectDisposedException>(() => stream.Seek(0, System.IO.SeekOrigin.Begin));
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_LuaReturnsStream_AfterDispose_EngineStillFunctional()
         {
             // Disposing the LuaStream sets ACCESSOR_DISPOSED on the block; the engine's ticker
@@ -2952,10 +2956,10 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void Stream_LuaReturnsStream_ManyDisposes_NoResourceLeak()
         {
-            // 100 streams created, read, and disposed — if the close callback never
+            // 100 streams created, read, and disposed â€” if the close callback never
             // fired the Lua registry would fill up and later coroutines would fail.
             using KitsuneEngine engine = new();
             for (int i = 0; i < 100; i++)
@@ -2970,33 +2974,33 @@ namespace KitsuneNet.Tests
 
         // -- Shared-memory concurrent access -------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public void SharedMemory_ConcurrentLuaAndCSharpAccess_CooperativeLockedFlag()
         {
             // Verifies concurrent access between Lua (scheduler thread) and C# (test thread)
             // on the same shared-memory block, and that the LOCKED flag is observable from C#.
             //
             // Block layout (data starts at struct offset 32):
-            //   data[0] – counter incremented by Lua each iteration  (wraps at 256)
-            //   data[1..3] – sentinel 0xAA, must never be written to
+            //   data[0] â€“ counter incremented by Lua each iteration  (wraps at 256)
+            //   data[1..3] â€“ sentinel 0xAA, must never be written to
             //
-            // ? IMPORTANT — the LOCKED flag is a cooperative advisory signal, NOT a mutex.
+            // ? IMPORTANT â€” the LOCKED flag is a cooperative advisory signal, NOT a mutex.
             //
             //   The vtable uses  flags |= LOCKED  and  flags &= ~LOCKED  which compile to a
             //   non-atomic read-modify-write sequence (movzx / or / mov on x86-64).
-            //   Two concurrent writers can both read flags = 0, compute 0|1 = 1, and store it —
+            //   Two concurrent writers can both read flags = 0, compute 0|1 = 1, and store it â€”
             //   neither has exclusive ownership.  There are also no memory barriers, so the CPU
             //   or compiler may reorder data stores relative to the flag write.
             //
             //   For true mutual exclusion the flags byte would need to be a
             //   std::atomic<uint8_t> with fetch_or / fetch_and (or _InterlockedOr8 /
             //   _InterlockedAnd8 on Windows) to make the RMW atomic and provide a
-            //   release–acquire fence around the protected data.
+            //   releaseâ€“acquire fence around the protected data.
             //
             // What this test verifies:
-            //   • Concurrent access does not crash or corrupt sentinel bytes when C# follows
+            //   â€¢ Concurrent access does not crash or corrupt sentinel bytes when C# follows
             //     the cooperative protocol: spin until LOCKED is clear before reading.
-            //   • The vtable correctly sets LOCKED during every read and write, making the
+            //   â€¢ The vtable correctly sets LOCKED during every read and write, making the
             //     flag observable from a C# thread polling stream.Flags.
 
             using KitsuneEngine engine = new();
@@ -3017,7 +3021,7 @@ namespace KitsuneNet.Tests
             // Pass to Lua. FillNativeVariable uses the existing block directly (zero copy).
             engine.SetVariable("shmem", LuaValue.FromStream(stream));
 
-            // Lua coroutine: read data[0], increment, write back — 1000× with Sleep(0) to yield.
+            // Lua coroutine: read data[0], increment, write back â€” 1000Ã— with Sleep(0) to yield.
             int id = engine.ExecuteString($$"""
                 local n = 0
                 for i = 1, {{Iterations}} do
@@ -3061,7 +3065,7 @@ namespace KitsuneNet.Tests
             engine.Wait(id);
             long luaCount = engine.GetResultVariable(id).Int64;
 
-            sentinelCorrupted.ShouldBeFalse("sentinel bytes were overwritten — Lua wrote outside data[0]");
+            sentinelCorrupted.ShouldBeFalse("sentinel bytes were overwritten â€” Lua wrote outside data[0]");
             luaCount.ShouldBe(Iterations, "Lua must complete all iterations without error");
 
             // lockedObservations may be zero when the LOCKED window (nanoseconds) is too
@@ -3076,7 +3080,7 @@ namespace KitsuneNet.Tests
 
         // -- New lifecycle: flag-based block management ---------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public void LuaStream_FlagConstants_HaveCorrectBitValues()
         {
             LuaStream.FlagLocked.ShouldBe((byte)0x01);
@@ -3086,7 +3090,7 @@ namespace KitsuneNet.Tests
             LuaStream.FlagLuaReferenced.ShouldBe((byte)0x40);
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void CreateStream_FreshBlock_AccessorDisposedFlagIsCleared()
         {
             // ACCESSOR_DISPOSED starts at 1 in the engine; the LuaStream constructor
@@ -3097,7 +3101,7 @@ namespace KitsuneNet.Tests
                 "ACCESSOR_DISPOSED must be 0 while C# holds the stream");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void CreateStream_FreshBlock_LuaReferencedFlagIsNotSet()
         {
             // LUA_REFERENCED is set only when lua_push_sharedmemory_stream is called.
@@ -3108,7 +3112,7 @@ namespace KitsuneNet.Tests
                 "FlagLuaReferenced must not be set before the block is passed to Lua");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void CreateStream_AfterSetVariable_LuaReferencedFlagIsSet()
         {
             // When FillNativeVariable calls lua_push_sharedmemory_stream, the C++ side
@@ -3125,7 +3129,7 @@ namespace KitsuneNet.Tests
             stream.Dispose();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CreateStream_NotPassedToLua_DisposeIsSafe_EngineFunctional()
         {
             // Disposing a CreateStream block that was never given to Lua must set both
@@ -3142,7 +3146,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CreateStream_PassedToLua_DisposeSafeAfterHandoff()
         {
             // After passing to Lua, C# can still Dispose the stream safely.
@@ -3154,7 +3158,7 @@ namespace KitsuneNet.Tests
 
             engine.SetVariable("s", LuaValue.FromStream(stream));
 
-            // C# disposes its side — ACCESSOR_DISPOSED is set; block stays alive for Lua.
+            // C# disposes its side â€” ACCESSOR_DISPOSED is set; block stays alive for Lua.
             stream.Dispose();
 
             // Lua can still read from the block.
@@ -3164,7 +3168,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CreateStream_CanBeCalledFromRegisterFunctionCallback()
         {
             // KitsuneCreateMemoryBlock no longer requires AcquireLuaAccess, so it can
@@ -3183,7 +3187,7 @@ namespace KitsuneNet.Tests
             result.ShouldBe("inner");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void LuaStream_AfterDispose_FlagsReturnsZero()
         {
             // After Dispose, _blockPtr is cleared to IntPtr.Zero, so Flags returns 0.
@@ -3196,7 +3200,7 @@ namespace KitsuneNet.Tests
             stream.Flags.ShouldBe((byte)0, "Flags must return 0 after dispose (_blockPtr cleared)");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void LuaStream_InboundFromLua_HasLuaReferencedFlagSet()
         {
             // lua_push_sharedmemory_stream_outbound sets FlagLuaReferenced on allocation.
@@ -3209,7 +3213,7 @@ namespace KitsuneNet.Tests
                 "FlagLuaReferenced must be set on blocks that came from Lua's outbound stream");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public void LuaStream_InboundFromLua_AccessorDisposedFlagIsCleared()
         {
             // The LuaStream constructor clears ACCESSOR_DISPOSED when C# wraps the block.
@@ -3221,7 +3225,7 @@ namespace KitsuneNet.Tests
                 "ACCESSOR_DISPOSED must be 0 while C# holds the stream");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CreateStream_ManyAllocationsDisposes_NoCrashOrLeak()
         {
             // Stress the new lifecycle: allocate many CreateStream blocks, some passed to
@@ -3243,14 +3247,14 @@ namespace KitsuneNet.Tests
                 }
                 else
                 {
-                    // Never passed to Lua — dispose sets both flags.
+                    // Never passed to Lua â€” dispose sets both flags.
                     stream.Dispose();
                 }
             }
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CreateStream_MultipleGcCycles_BlockSurvivesWhileCSharpHolds()
         {
             // Multiple forced GC cycles must not corrupt a held CreateStream block

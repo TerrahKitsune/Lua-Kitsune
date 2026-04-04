@@ -1,6 +1,6 @@
 ﻿#pragma once
 #include "lua_main_incl.h"
-#include <Windows.h>
+#include "platform.h"
 #include "luawchar.h"
 
 #define LUACSV "LUACSV"  // metatable name for CSV instance userdata

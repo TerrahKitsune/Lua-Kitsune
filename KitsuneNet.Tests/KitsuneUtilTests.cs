@@ -29,7 +29,7 @@ namespace KitsuneNet.Tests
 
         // -- UUID -----------------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task UUID_HasStandardFormat()
         {
             string? r = await Run(@"
@@ -41,7 +41,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task UUID_ConsecutiveCalls_AreDistinct()
         {
             string? r = await Run("return tostring(UUID() ~= UUID())");
@@ -50,28 +50,28 @@ namespace KitsuneNet.Tests
 
         // -- CRC32 ----------------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CRC32_ReturnsInteger()
         {
             string? r = await Run("return math.type(CRC32('hello'))");
             r.ShouldBe("integer");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CRC32_IsDeterministic()
         {
             string? r = await Run("return tostring(CRC32('hello') == CRC32('hello'))");
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CRC32_DifferentInputs_ProduceDifferentValues()
         {
             string? r = await Run("return tostring(CRC32('hello') ~= CRC32('world'))");
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CRC32_IncrementalMatchesFull()
         {
             string? r = await Run(@"
@@ -84,21 +84,21 @@ namespace KitsuneNet.Tests
 
         // -- CRC64 ----------------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CRC64_ReturnsNumber()
         {
             string? r = await Run("return type(CRC64('hello'))");
             r.ShouldBe("number");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CRC64_IsDeterministic()
         {
             string? r = await Run("return tostring(CRC64('test') == CRC64('test'))");
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CRC64_DifferentInputs_ProduceDifferentValues()
         {
             string? r = await Run("return tostring(CRC64('hello') ~= CRC64('world'))");
@@ -107,14 +107,14 @@ namespace KitsuneNet.Tests
 
         // -- Time -----------------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Time_ReturnsPositiveInteger()
         {
             string? r = await Run("local t = Time(); return tostring(t > 0 and math.type(t) == 'integer')");
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Time_SecondCall_IsGreaterOrEqual()
         {
             string? r = await Run("local a = Time(); local b = Time(); return tostring(b >= a)");
@@ -123,14 +123,14 @@ namespace KitsuneNet.Tests
 
         // -- Runtime --------------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Runtime_ReturnsNonNegativeNumber()
         {
             string? r = await Run("return tostring(Runtime() >= 0)");
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Runtime_IncreasesAfterSleep()
         {
             string? r = await Run("local a = Runtime(); Sleep(20); return tostring(Runtime() > a)");
@@ -139,7 +139,7 @@ namespace KitsuneNet.Tests
 
         // -- GetMemory ------------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task GetMemory_ReturnsPositiveValue()
         {
             string? r = await Run("return tostring(GetMemory() > 0)");
@@ -148,7 +148,7 @@ namespace KitsuneNet.Tests
 
         // -- GlobalMemoryStatus ---------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task GlobalMemoryStatus_Default_ReturnsPercentageInRange()
         {
             string? r = await Run("local p = GlobalMemoryStatus(); return tostring(type(p) == 'number' and p >= 0 and p <= 100)");
@@ -162,7 +162,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task GlobalMemoryStatus_AllTypes_ReturnNumbers()
         {
             string? r = await Run(@"
@@ -176,21 +176,21 @@ namespace KitsuneNet.Tests
 
         // -- string.equal ---------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task StringEqual_SameString_ReturnsTrue()
         {
             string? r = await Run("return tostring(string.equal('hello', 'hello'))");
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task StringEqual_DifferentCase_ReturnsTrue()
         {
             string? r = await Run("return tostring(string.equal('Hello World', 'hello world'))");
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task StringEqual_DifferentStrings_ReturnsFalse()
         {
             string? r = await Run("return tostring(string.equal('hello', 'world'))");
@@ -199,7 +199,7 @@ namespace KitsuneNet.Tests
 
         // -- setenv / getenv ------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task SetEnv_GetEnv_RoundTrip()
         {
             // getenv returns the value with a trailing null byte (lua_pushlstring includes
@@ -211,7 +211,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("hello_kitsune");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task SetEnv_WithoutOverride_PreservesOriginalValue()
         {
             // In Lua only nil/false are falsy; integer 0 is truthy, so lua_toboolean(0)=1.
@@ -224,7 +224,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("original");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task GetEnv_NonExistentVariable_ReturnsNilOrEmpty()
         {
             string? r = await Run(@"
@@ -238,7 +238,7 @@ namespace KitsuneNet.Tests
 
         // -- table.first ----------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task TableFirst_UniqueMatch_ReturnsKey()
         {
             // Only b maps to 2, so deterministic regardless of iteration order.
@@ -246,14 +246,14 @@ namespace KitsuneNet.Tests
             r.ShouldBe("b");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task TableFirst_UniqueMatch_ReturnsValue()
         {
             string? r = await Run("return tostring(table.first({a=5,b=99,c=5}, function(k,v) if v>50 then return v end end))");
             r.ShouldBe("99");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task TableFirst_NoMatch_ReturnsNil()
         {
             string? r = await Run("return tostring(table.first({a=1,b=2}, function(k,v) if v>100 then return v end end))");
@@ -262,7 +262,7 @@ namespace KitsuneNet.Tests
 
         // -- table.select ---------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task TableSelect_FilterEvenNumbers_ReturnsCorrectValues()
         {
             string? r = await Run(@"
@@ -273,7 +273,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("3:2,4,6");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task TableSelect_NoMatches_ReturnsEmptyTable()
         {
             string? r = await Run("local t = table.select({1,3,5}, function(k,v) if v%2==0 then return v end end); return tostring(type(t)=='table' and #t==0)");
@@ -291,7 +291,7 @@ namespace KitsuneNet.Tests
 
         // -- GetComputerName ------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task GetComputerName_ReturnsNonEmptyString()
         {
             string? r = await Run("local n = GetComputerName(); return tostring(n ~= nil and #n > 0)");
@@ -323,7 +323,7 @@ namespace KitsuneNet.Tests
 
         // -- BencodeDecode --------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task BencodeDecode_StringField_Decoded()
         {
             // BencodeDecode wraps each top-level decoded value in an outer array:
@@ -333,14 +333,14 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task BencodeDecode_IntegerField_Decoded()
         {
             string? r = await Run("local t = BencodeDecode('d3:numi42ee'); return tostring(type(t)=='table' and t[1].num==42)");
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task BencodeDecode_ListField_Decoded()
         {
             string? r = await Run("local t = BencodeDecode('d4:listli1ei2ei3eee'); return tostring(type(t[1].list)=='table' and #t[1].list==3)");
@@ -365,21 +365,21 @@ namespace KitsuneNet.Tests
 
         // -- c global variable ----------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CGlobal_IsTable()
         {
             string? r = await Run("return type(c)");
             r.ShouldBe("table");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CGlobal_LF_MatchesNewline()
         {
             string? r = await Run("return tostring(c.LF == '\\n')");
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CGlobal_HasAtLeast32Entries()
         {
             string? r = await Run("local n=0; for _ in pairs(c) do n=n+1 end; return tostring(n>=32)");
@@ -421,7 +421,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("boolean");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task HasKeyDown_ReturnsBool()
         {
             string? r = await RunWithSession("return type(Session.Console.HasKeyDown())");
@@ -430,14 +430,14 @@ namespace KitsuneNet.Tests
 
         // -- Dns ------------------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Dns_Localhost_ReturnsString()
         {
             string? r = await Run("local ip = Dns('localhost'); return tostring(ip ~= nil and type(ip)=='string')");
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Dns_WithFullFlag_ReturnsTable()
         {
             string? r = await Run("return tostring(type(Dns('localhost', true))=='table')");
@@ -469,7 +469,7 @@ namespace KitsuneNet.Tests
 
         // -- Put / GetTextColor (smoke tests) -------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Put_DoesNotThrow()
         {
             string? r = await RunWithSession("Session.Console.Put('kitsune_test'); return 'ok'");
@@ -491,21 +491,21 @@ namespace KitsuneNet.Tests
 
         // -- Base64 ---------------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Base64_Encode_ReturnsCorrectString()
         {
             string? r = await Run("return Base64.Encode('hello')");
             r.ShouldBe("aGVsbG8=");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Base64_Decode_RoundTrip()
         {
             string? r = await Run("return Base64.Decode(Base64.Encode('kitsune engine'))");
             r.ShouldBe("kitsune engine");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Base64_BinaryRoundTrip_PreservesBytes()
         {
             string? r = await Run("local b = '\\0\\1\\2\\255'; return tostring(Base64.Decode(Base64.Encode(b)) == b)");
@@ -514,7 +514,7 @@ namespace KitsuneNet.Tests
 
         // -- Hashing --------------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task SHA256_OfAbc_MatchesEngineOutput()
         {
             // Pins the engine's specific SHA256 implementation output for 'abc';
@@ -527,7 +527,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task SHA256_IncrementalUpdateMatchesSingle()
         {
             string? r = await Run(@"
@@ -554,7 +554,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("d41d8cd98f00b204e9800998ecf8427e");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task SHA1_KnownVector_ReturnsCorrectHex()
         {
             string? r = await Run("local h = SHA1.New(); h:Update('abc'); return h:Finish()");
@@ -567,7 +567,7 @@ namespace KitsuneNet.Tests
 
         // -- Instance round-trips ---------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_Encode_ProducesValidJson()
         {
             string? r = await Run(@"
@@ -578,7 +578,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_DecodeArray_PreservesOrder()
         {
             string? r = await Run(@"
@@ -589,7 +589,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_NestedTable_EncodesAndDecodes()
         {
             string? r = await Run(@"
@@ -601,7 +601,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_AllBasicTypes_RoundTrip()
         {
             // Mirrors the "Json encode/decode" test from tests/json.lua.
@@ -631,7 +631,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_InstanceReuse_MultipleCalls()
         {
             // The same instance must work correctly when used for multiple
@@ -649,7 +649,7 @@ namespace KitsuneNet.Tests
 
         // -- Number encoding --------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_Integer_EncodedWithoutDecimal()
         {
             // Integers must round-trip as integers (no ".0" suffix).
@@ -662,7 +662,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_Float_Preserved_OnRoundTrip()
         {
             string? r = await Run(@"
@@ -673,28 +673,28 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_NaN_EncodesAsNull()
         {
             string? r = await Run("return Json.New():Encode(0/0)");
             r.ShouldBe("null");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_Function_EncodesAsNull()
         {
             string? r = await Run("return Json.New():Encode(function() end)");
             r.ShouldBe("null");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_Thread_EncodesAsNull()
         {
             string? r = await Run("return Json.New():Encode(coroutine.create(function() end))");
             r.ShouldBe("null");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_Userdata_EncodesAsNull()
         {
             // A Stream is a full userdata; it is not JSON-serializable.
@@ -702,7 +702,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("null");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_UnserializableInArray_EncodesAsNull()
         {
             // Functions embedded in arrays produce a valid array with null slots.
@@ -712,7 +712,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("[1,null,3]");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_UnserializableInObject_EncodesAsNull()
         {
             // Functions as object values produce valid JSON with null values.
@@ -722,7 +722,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("{\"x\":null}");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_PositiveInfinity_EncodesAsSpecialLiteral()
         {
             string? r = await Run("return Json.New():Encode(math.huge)");
@@ -731,21 +731,21 @@ namespace KitsuneNet.Tests
 
         // -- Boolean / nil encoding -------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_Boolean_True_EncodesCorrectly()
         {
             string? r = await Run("return Json.New():Encode(true)");
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_Boolean_False_EncodesCorrectly()
         {
             string? r = await Run("return Json.New():Encode(false)");
             r.ShouldBe("false");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_Nil_EncodesAsNull()
         {
             string? r = await Run("return Json.New():Encode(nil)");
@@ -754,7 +754,7 @@ namespace KitsuneNet.Tests
 
         // -- Array vs object detection ----------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_SequenceTable_EncodesAsArray()
         {
             // A table with consecutive integer keys 1..n encodes as a JSON array.
@@ -767,7 +767,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_EmptyTable_EncodesAsArray()
         {
             // A truly empty table has no keys at all, so it encodes as [] (empty JSON array).
@@ -776,7 +776,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("[]");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_StringKeyTable_EncodesAsObject()
         {
             string? r = await Run(@"
@@ -787,7 +787,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("world");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_New_WithTrue_ProducesPrettyOutput()
         {
             // Json.New(true) must create a pretty-printing instance.
@@ -798,7 +798,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_New_WithFalse_ProducesCompactOutput()
         {
             // Json.New(false) must create a compact instance.
@@ -809,7 +809,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_New_NoArg_ProducesCompactOutput()
         {
             string? r = await Run(@"
@@ -819,7 +819,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_New_CalledOnInstance_ProducesCompactOutput()
         {
             // Regression: before the fix, calling New() on an existing instance passed
@@ -833,7 +833,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_MixedTable_EncodesAsObject_IntegerKeysBecomesStrings()
         {
             // Lua can't distinguish "array" from "object" for mixed tables.
@@ -852,7 +852,7 @@ namespace KitsuneNet.Tests
 
         // -- String escaping --------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_DecodeEscapes_HandledCorrectly()
         {
             string? r = await Run(@"
@@ -864,7 +864,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_Decode_NumberTooLong_RaisesError()
         {
             // buf[64] holds at most 63 significant characters + NUL.
@@ -879,7 +879,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_Decode_63DigitNumber_ParsesWithoutError()
         {
             // 63 digits fit exactly in buf[64] (63 chars + NUL), so the
@@ -893,7 +893,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_UnicodeEscape_DecodedCorrectly()
         {
             // \u0041 is 'A', \u00E9 is 'é' (U+00E9)
@@ -906,7 +906,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_StringWithBackslash_RoundTrips()
         {
             string? r = await Run(@"
@@ -919,7 +919,7 @@ namespace KitsuneNet.Tests
 
         // -- Null sentinel ----------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_NullSentinel_RoundTrips()
         {
             string? r = await Run(@"
@@ -931,35 +931,35 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_Null_IsDistinctFromNil()
         {
             string? r = await Run("return tostring(Json.Null ~= nil)");
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_Null_SameReferenceEveryTime()
         {
             string? r = await Run("return tostring(Json.Null == Json.Null)");
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_DecodeNull_ReturnsJsonNull()
         {
             string? r = await Run("return tostring(Json.New():Decode('null') == Json.Null)");
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_EncodeNull_ProducesNullLiteral()
         {
             string? r = await Run("return Json.New():Encode(Json.Null)");
             r.ShouldBe("null");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_NullInArray_RoundTrips()
         {
             string? r = await Run(@"
@@ -972,7 +972,7 @@ namespace KitsuneNet.Tests
 
         // -- Encode / Decode --------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_Decode_ReturnsTable()
         {
             string? r = await Run(@"
@@ -983,7 +983,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_Encode_ProducesString()
         {
             string? r = await Run(@"
@@ -995,7 +995,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_PrettyEncode_ContainsNewlines()
         {
             string? r = await Run(@"
@@ -1006,7 +1006,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_CreateAlias_WorksIdenticallyToNew()
         {
             string? r = await Run(@"
@@ -1017,7 +1017,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_RecursionDetected_ThrowsError()
         {
             string? r = await Run(@"
@@ -1032,7 +1032,7 @@ namespace KitsuneNet.Tests
 
         // -- Stream I/O ----------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_EncodeIntoStream_StreamContainsValidJson()
         {
             string? r = await Run(@"
@@ -1046,7 +1046,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_EncodeIntoStream_ReturnsTrueOnSuccess()
         {
             string? r = await Run(@"
@@ -1058,7 +1058,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_DecodeIntoStream_RoundTrip()
         {
             string? r = await Run(@"
@@ -1072,7 +1072,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_EncodeIntoStream_PrettyFlag_Respected()
         {
             string? r = await Run(@"
@@ -1085,7 +1085,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_EncodeIntoStream_NonWritableStream_ReturnsFalse()
         {
             string? r = await Run(@"
@@ -1101,7 +1101,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_DecodeIntoStream_NonReadableStream_ReturnsNilAndError()
         {
             string? r = await Run(@"
@@ -1117,7 +1117,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_EncodeDecodeIntoStream_LargePayload_AllValuesCorrect()
         {
             // 1000 integers produce ~3900 bytes of JSON, forcing multiple streaming
@@ -1136,7 +1136,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_EncodeIntoStream_NullSentinel_RoundTrips()
         {
             string? r = await Run(@"
@@ -1150,7 +1150,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_DecodeIntoStream_ReadsFromCurrentPosition()
         {
             // Encode two values back-to-back; seek to the boundary and verify
@@ -1168,7 +1168,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_EncodeIntoStream_AdvancesStreamPosition()
         {
             string? r = await Run(@"
@@ -1180,7 +1180,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_DecodeIntoStream_PackedObjects_DecodesSequentially()
         {
             // Three JSON objects written end-to-end with no separator; each
@@ -1201,7 +1201,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_DecodeIntoStream_PackedWithWhitespace_DecodesSequentially()
         {
             // Whitespace and newlines between JSON values must be treated as
@@ -1220,7 +1220,7 @@ namespace KitsuneNet.Tests
 
         // -- Encode stream / Wchar as JSON value ----------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_Encode_Stream_ReadableSeekable_ProducesJsonString()
         {
             // A readable+seekable in-memory stream encodes as a JSON string of its bytes.
@@ -1234,7 +1234,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("\"hello\"");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_Encode_Stream_EmptyStream_ProducesNull()
         {
             // An empty stream has no bytes; lua_stream_read_chunk returns nil ? null.
@@ -1246,7 +1246,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("null");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_Encode_Stream_PreservesReadPosition()
         {
             // The caller's stream position must be restored after encoding.
@@ -1260,7 +1260,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_Encode_Stream_QuoteInContent_EscapedCorrectly()
         {
             // A double-quote byte inside the stream must be JSON-escaped as \".
@@ -1272,7 +1272,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("\"a\\\"b\"");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_Encode_Stream_AsTableValue_RoundTripsAsString()
         {
             // A stream used as a table value encodes as a JSON string;
@@ -1286,7 +1286,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("hi");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_EncodeIntoStream_StreamValue_WritesJsonString()
         {
             // When the VALUE being encoded is itself a stream, EncodeIntoStream must
@@ -1302,7 +1302,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("\"world\"");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_Encode_Wchar_AsciiContent_ProducesJsonString()
         {
             // ASCII Wchar must produce the same JSON string as the equivalent Lua string.
@@ -1314,7 +1314,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("\"hello\"");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_Encode_Wchar_NonAscii_RoundTripsCorrectly()
         {
             // é = U+00E9, UTF-8: 0xC3 0xA9.  Use Lua hex escapes so the bytes are
@@ -1327,7 +1327,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("é");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_Encode_Wchar_Empty_ProducesEmptyJsonString()
         {
             string? r = await Run(@"
@@ -1338,7 +1338,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("\"\"");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_Encode_Wchar_SpecialChars_EscapedCorrectly()
         {
             // Double-quotes inside the Wchar content must be JSON-escaped as \".
@@ -1350,7 +1350,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("\"say \\\"hi\\\"\"");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_Encode_Wchar_NewlineAndTab_EscapedAndRoundTrip()
         {
             // Control characters must be JSON-escaped and survive a full decode round-trip.
@@ -1362,7 +1362,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("a\nb");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_Encode_Wchar_AsTableValue_RoundTripsAsString()
         {
             // After encode?decode, the decoded value is a Lua string (not a Wchar),
@@ -1376,7 +1376,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("world");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_Encode_UnknownUserdata_ProducesNull()
         {
             // Any userdata that is neither a Wchar nor a stream must encode as null.
@@ -1390,56 +1390,56 @@ namespace KitsuneNet.Tests
 
         // -- Wchar ----------------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_FromUtf8_ToUtf8_RoundTrip()
         {
             string? r = await Run("return Wchar.FromUtf8('hello'):ToUtf8()");
             r.ShouldBe("hello");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_ToUpper_ChangesCase()
         {
             string? r = await Run("return Wchar.FromUtf8('hello world'):ToUpper():ToUtf8()");
             r.ShouldBe("HELLO WORLD");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_ToLower_ChangesCase()
         {
             string? r = await Run("return Wchar.FromUtf8('KITSUNE'):ToLower():ToUtf8()");
             r.ShouldBe("kitsune");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_Substring_ExtractsCorrectly()
         {
             string? r = await Run("return Wchar.FromUtf8('hello world'):Substring(7):ToUtf8()");
             r.ShouldBe("world");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_Length_ReturnsCharCount()
         {
             string? r = await Run("return tostring(#Wchar.FromUtf8('hello'))");
             r.ShouldBe("5");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_Empty_HasZeroLength()
         {
             string? r = await Run("return tostring(#Wchar.FromUtf8('') == 0)");
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_LenMethod_MatchesHashOperator()
         {
             string? r = await Run("local w = Wchar.FromUtf8('hello'); return tostring(w:len() == #w and w:len() == 5)");
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_ToString_ReturnsUtf8String()
         {
             // __tostring metamethod should produce the same result as :ToUtf8().
@@ -1447,35 +1447,35 @@ namespace KitsuneNet.Tests
             r.ShouldBe("kitsune");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_Substring_WithLength_ExtractsSlice()
         {
             string? r = await Run("return Wchar.FromUtf8('hello world'):Substring(1, 5):ToUtf8()");
             r.ShouldBe("hello");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_Substring_OutOfRange_ReturnsNil()
         {
             string? r = await Run("return tostring(Wchar.FromUtf8('hi'):Substring(99))");
             r.ShouldBe("nil");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_Find_ReturnsPosition()
         {
             string? r = await Run("return tostring(Wchar.FromUtf8('hello world'):Find(Wchar.FromUtf8('world')))");
             r.ShouldBe("7");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_Find_NotFound_ReturnsNil()
         {
             string? r = await Run("return tostring(Wchar.FromUtf8('hello'):Find(Wchar.FromUtf8('xyz')))");
             r.ShouldBe("nil");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_Find_WithOffset_StartsFromPosition()
         {
             // 'a' appears at indices 1 and 4 in 'abcabc'; with offset 2 it finds index 4.
@@ -1483,7 +1483,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("4");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_Find_StringPattern_Works()
         {
             // Find also accepts a plain Lua string as the search pattern.
@@ -1491,7 +1491,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("7");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_Find_NonAsciiStringPattern_Works()
         {
             // Verifies WcharFind now uses FromUtf8 (not FromAnsi) for string patterns.
@@ -1503,28 +1503,28 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_Equality_SameContent_IsTrue()
         {
             string? r = await Run("return tostring(Wchar.FromUtf8('hello') == Wchar.FromUtf8('hello'))");
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_Equality_DifferentContent_IsFalse()
         {
             string? r = await Run("return tostring(Wchar.FromUtf8('hello') == Wchar.FromUtf8('world'))");
             r.ShouldBe("false");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_Equality_DifferentLengths_IsFalse()
         {
             string? r = await Run("return tostring(Wchar.FromUtf8('hi') == Wchar.FromUtf8('hello'))");
             r.ShouldBe("false");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_Equality_EmptyWchars_AreEqual()
         {
             // Verifies the wchar_eq fix: wcsncmp is not called when len == 0.
@@ -1532,28 +1532,28 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_Concat_WcharAndWchar_ProducesJoined()
         {
             string? r = await Run("return (Wchar.FromUtf8('hello') .. Wchar.FromUtf8(' world')):ToUtf8()");
             r.ShouldBe("hello world");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_Concat_WcharAndString_ProducesJoined()
         {
             string? r = await Run("return (Wchar.FromUtf8('hello') .. ' world'):ToUtf8()");
             r.ShouldBe("hello world");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_Concat_StringAndWchar_ProducesJoined()
         {
             string? r = await Run("return ('hello ' .. Wchar.FromUtf8('world')):ToUtf8()");
             r.ShouldBe("hello world");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_Concat_NonAsciiStringOperand_ProducesCorrectResult()
         {
             // Verifies wchar_concat uses MultiByteToWideChar(CP_UTF8) for string operands.
@@ -1562,7 +1562,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("caf\u00e9");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_ToBytes_ReturnsCorrectCodeValues()
         {
             // 'A' = 65, 'B' = 66 as wchar_t values.
@@ -1573,7 +1573,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_FromBytes_Table_CreatesCorrectWchar()
         {
             // Reconstruct 'AB' from its wchar_t code values.
@@ -1581,7 +1581,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("AB");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_FromBytes_SingleInteger_CreatesSingleCharWchar()
         {
             // Codepoint 65 = 'A'.
@@ -1589,7 +1589,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("A");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_FromBytes_InvalidCodepoint_ProducesEmptyWchar()
         {
             // 0x200000 exceeds U+10FFFF; verifies the FillLuaWCharWithCodePoint fix
@@ -1598,30 +1598,31 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
-        public async Task Wchar_ToWide_ReturnsRawBytesOfCorrectLength()
+        [Fact]
+        public async Task Wchar_ToBytes_AsciiChar_ProducesOneCodeUnit()
         {
-            // On Windows wchar_t is 2 bytes; 'A' is one wchar_t so ToWide returns 2 bytes.
+            // ToBytes returns a table of char16_t code units (UTF-16 LE, platform-independent).
+            // 'A' is U+0041 — one code unit — so the table has exactly one entry with value 65.
             string? r = await Run(@"
-                local wide = Wchar.FromUtf8('A'):ToWide()
-                return tostring(type(wide) == 'string' and #wide == 2)
+                local units = Wchar.FromUtf8('A'):ToBytes()
+                return tostring(#units == 1 and units[1] == 65)
             ");
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
-        public async Task Wchar_FromBytes_RawString_RoundTrips()
+        [Fact]
+        public async Task Wchar_FromBytes_Table_RoundTrips()
         {
-            // ToWide yields raw wchar_t bytes; FromBytes(string) reconstructs from them.
+            // ToBytes yields a table of char16_t code units; FromBytes(table) reconstructs from them.
             string? r = await Run(@"
                 local w1 = Wchar.FromUtf8('hello')
-                local w2 = Wchar.FromBytes(w1:ToWide())
+                local w2 = Wchar.FromBytes(w1:ToBytes())
                 return tostring(w1 == w2)
             ");
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_Codepoints_ReturnsCorrectTable()
         {
             // 'AB' ? codepoints table {65, 66}.
@@ -1632,7 +1633,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_At_ValidIndex_ReturnsCodepoint()
         {
             // 'B' is at character position 2 (1-indexed) in 'AB'.
@@ -1640,14 +1641,14 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_At_OutOfRange_ReturnsNil()
         {
             string? r = await Run("return tostring(Wchar.FromUtf8('hi'):At(99))");
             r.ShouldBe("nil");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_FromAnsi_ToAnsi_AsciiRoundTrip()
         {
             // ASCII characters are stable across all encodings.
@@ -1655,7 +1656,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("hello");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_NonAsciiUtf8_LengthIsWcharCount()
         {
             // U+00E9 (é) is 2 UTF-8 bytes (\xC3\xA9) but 1 wchar_t; length should be 1.
@@ -1663,7 +1664,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Wchar_ChainedOps_ProduceCorrectResult()
         {
             string? r = await Run(@"
@@ -1677,7 +1678,7 @@ namespace KitsuneNet.Tests
 
         // -- Stream Wchar read/write -----------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_WriteWchar_ReadWchar_AsciiRoundTrip()
         {
             // Write a Wchar into a stream and read it back as a Wchar.
@@ -1692,7 +1693,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("hello");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_WriteWchar_ReturnsCorrectByteCount()
         {
             // Write returns the number of bytes written (2 bytes per wchar_t code unit).
@@ -1705,7 +1706,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_WriteWchar_AdvancesPosition()
         {
             string? r = await Run(@"
@@ -1717,7 +1718,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_ReadWchar_PartialRead_ReturnsRequestedCount()
         {
             // Write a 5-char Wchar then read back only 3 code units.
@@ -1732,7 +1733,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_ReadWchar_PastEnd_ReturnsNil()
         {
             // Requesting more code units than are available returns nil.
@@ -1743,7 +1744,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_WriteWchar_MultipleAppend_ReadBackFull()
         {
             // Two Wchar writes must be contiguous; one ReadWchar retrieves them all.
@@ -1758,7 +1759,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("foobar");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_ReadWchar_NoLength_ReadsRemaining()
         {
             // ReadWchar() with no argument reads all remaining code units to end of stream.
@@ -1772,7 +1773,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("hello");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_ReadWchar_NoLength_FromMidStream_ReadsRemainder()
         {
             // ReadWchar() from mid-stream must only return code units from the current position.
@@ -1786,7 +1787,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_ReadWchar_NoArg_EmptyStream_ReturnsNil()
         {
             // ReadWchar() with no argument on an empty stream must return nil, not error.
@@ -1797,7 +1798,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_ReadWchar_ExplicitNilArg_ReadAll()
         {
             // Passing nil explicitly must behave identically to omitting the argument.
@@ -1811,7 +1812,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_ReadWchar_ResultIsWcharUserdata()
         {
             // The return value must be a Wchar userdata, not a plain Lua string.
@@ -1825,7 +1826,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_WriteWchar_NonWritable_ReturnsZero()
         {
             // Writing a Wchar to a read-only function-backend stream must return 0.
@@ -1841,7 +1842,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_ReadWchar_WriteOnly_ReturnsNil()
         {
             // ReadWchar on a write-only stream must return nil.
@@ -1970,7 +1971,7 @@ namespace KitsuneNet.Tests
 
         // -- Stream (in-memory) ---------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Create_FromString_LoadsDataAtPositionZero()
         {
             string? r = await Run(@"
@@ -1980,7 +1981,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("hello stream");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Create_FromString_PosIsZeroAfterCreate()
         {
             string? r = await Run(@"
@@ -1990,7 +1991,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Create_WithBackendFunction_CallsOpenForCaps()
         {
             string? r = await Run(@"
@@ -2007,7 +2008,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Create_WithBackendFunction_ReadDelegatesToFunction()
         {
             string? r = await Run(@"
@@ -2023,7 +2024,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("from backend");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_CustomBackend_DocExample_WorksCorrectly()
         {
             string? r = await Run(@"
@@ -2072,7 +2073,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_WriteAndRead_RoundTrip()
         {
             string? r = await Run(@"
@@ -2084,7 +2085,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("hello stream");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_PosAndLen_AfterWrite_ReturnCorrectValues()
         {
             string? r = await Run(@"
@@ -2095,7 +2096,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_GetInfo_ReturnsCapsAndBackendInfo()
         {
             string? r = await Run(@"
@@ -2110,7 +2111,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Seek_UpdatesPosition()
         {
             string? r = await Run(@"
@@ -2122,7 +2123,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_WriteByte_ReadByte_RoundTrip()
         {
             string? r = await Run(@"
@@ -2134,7 +2135,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_PeekByte_DoesNotAdvancePosition()
         {
             string? r = await Run(@"
@@ -2147,7 +2148,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_WriteInt_ReadInt_RoundTrip()
         {
             string? r = await Run(@"
@@ -2260,7 +2261,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_WriteFloat_ReadFloat_RoundTrip()
         {
             string? r = await Run(@"
@@ -2275,7 +2276,7 @@ namespace KitsuneNet.Tests
 
         // -- Stream backend error propagation -------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_BackendReadError_PropagatesViaPcall()
         {
             // lua_call_nohook on READ dispatch means a backend error bubbles up.
@@ -2294,7 +2295,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_BackendWriteError_PropagatesViaPcall()
         {
             // lua_call_nohook on WRITE dispatch means a backend error bubbles up.
@@ -2313,7 +2314,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_BackendSeekError_PropagatesViaPcall()
         {
             // lua_call_nohook on SETPOS dispatch means a backend error bubbles up.
@@ -2332,7 +2333,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_BackendOpen_NonNumber_GivesCleanError()
         {
             // NewStream uses lua_pcall_nohook on OPEN with explicit recovery:
@@ -2344,7 +2345,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_BackendOpen_ZeroCaps_GivesCleanError()
         {
             // Returning 0 caps (no operations supported) is treated as failure.
@@ -2355,7 +2356,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_BackendOpen_Throws_GivesCleanError()
         {
             // A throw during OPEN is caught by the protected call in NewStream and
@@ -2459,7 +2460,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("5:3");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Open_NonexistentFile_RaisesError()
         {
             string? r = await Run(@"
@@ -2488,7 +2489,7 @@ namespace KitsuneNet.Tests
 
         // -- Stream (module API) --------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Seek_AllowsMultipleReads()
         {
             string? r = await Run(@"
@@ -2503,7 +2504,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Len_ReflectsWrittenBytes()
         {
             string? r = await Run(@"
@@ -2514,7 +2515,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("3");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Pos_AdvancesAfterRead()
         {
             string? r = await Run(@"
@@ -2527,7 +2528,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("2");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Read_PartialLength_ThenRemainder()
         {
             string? r = await Run(@"
@@ -2540,7 +2541,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("hello: world");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_ReadByte_AtEnd_ReturnsNegativeOne()
         {
             string? r = await Run(@"
@@ -2553,7 +2554,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("-1");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_PeekByte_ReturnsValueAndLeavesPos()
         {
             string? r = await Run(@"
@@ -2565,7 +2566,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("65:0");  // 'A' == 65, pos unchanged
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_MultipleNumericTypes_InSequence()
         {
             string? r = await Run(@"
@@ -2581,7 +2582,7 @@ namespace KitsuneNet.Tests
 
         // -- CSV ------------------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_DecodeString_ParsesRows()
         {
             // Count rows with ipairs to avoid # unreliability on non-sequence tables.
@@ -2594,7 +2595,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_DecodeString_EmptyInput_ZeroRows()
         {
             // Decode("") must return an empty Rows table (zero rows).
@@ -2609,7 +2610,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_DecodeString_RowValues_AccessibleAsWchar()
         {
             string? r = await Run(@"
@@ -2619,7 +2620,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("hello");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_Decode_AsciiCell_IsPlainString()
         {
             // ASCII-only cells must come back as plain Lua strings (not WChar
@@ -2634,7 +2635,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_Decode_NonAsciiCell_IsWchar()
         {
             // Cells containing characters above U+007F must still be WChar userdata.
@@ -2648,7 +2649,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_DecodeString_MultipleColumnsPerRow()
         {
             string? r = await Run(@"
@@ -2659,7 +2660,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("a:b:c");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_DecodeString_MultipleRows_CorrectCount()
         {
             string? r = await Run(@"
@@ -2671,7 +2672,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_DecodeString_QuotedField_StripsQuotes()
         {
             string? r = await Run(@"
@@ -2681,7 +2682,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_DecodeString_QuotedFieldWithEmbeddedDelimiter_PreservesContent()
         {
             // A comma inside quotes must not split the field.
@@ -2692,7 +2693,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_DecodeString_QuotedFieldWithEscapedQuote_ProducesLiteralQuote()
         {
             // RFC 4180 escaped quote: "" inside a quoted field ? single ".
@@ -2703,7 +2704,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_DecodeString_FieldWithLeadingWhitespace_WhitespaceIsStripped()
         {
             // Verifies the SkipForwards fix: previously the first non-space character
@@ -2715,7 +2716,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_DecodeString_EmptyField_PreservesEmptyCell()
         {
             // a,,b produces three fields; the middle one is empty.
@@ -2727,7 +2728,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_DecodeString_ResultHasCommentsKey()
         {
             // The returned table always has a Comments key even when there are none.
@@ -2738,7 +2739,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_DecodeString_CommentLine_IsExtractedAndExcludedFromRows()
         {
             // Lines starting with * are treated as comments and placed in t.Comments.
@@ -2753,7 +2754,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_DecodeString_MultipleCommentLines_AllExtracted()
         {
             string? r = await Run(@"
@@ -2765,7 +2766,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_DecodeString_CustomDelimiter_SplitsOnSemicolon()
         {
             string? r = await Run(@"
@@ -2776,7 +2777,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_DecodeString_CrLfLineEnding_ParsedAsOneRow()
         {
             // \r\n (Windows CRLF) must produce the same row count as \n alone.
@@ -2789,7 +2790,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_DecodeString_WcharInput_ParsedCorrectly()
         {
             // Exercises the lua_iswchar branch in DecodeString; all other tests pass
@@ -2801,14 +2802,14 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_Encode_SimpleTable_ProducesCorrectString()
         {
             string? r = await Run("return CSV.New():Encode({{'a', 'b'}, {'c', 'd'}})");
             r.ShouldBe("a,b\nc,d");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_Encode_FieldWithDelimiter_IsQuotedAndRoundTrips()
         {
             // A field containing the delimiter must be quoted; decoding must recover the original value.
@@ -2821,7 +2822,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_Encode_WcharField_ConvertedToUtf8()
         {
             // Wchar fields must be converted via __tostring (UTF-8) during encoding.
@@ -2835,7 +2836,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_Encode_CustomDelimiter_UsedInOutput()
         {
             string? r = await Run(@"
@@ -2847,7 +2848,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_Encode_LeadingSpaceField_RoundTrips()
         {
             // SkipForwards strips leading whitespace on decode. Encode must quote
@@ -2867,7 +2868,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_Encode_FieldWithEmbeddedQuote_RoundTrips()
         {
             // RFC 4180: a " inside a quoted field is escaped as ""; Encode must produce
@@ -2882,7 +2883,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_Encode_FieldWithEmbeddedNewline_IsQuoted()
         {
             // A field containing \n must be quoted so the newline is not treated as a
@@ -2897,7 +2898,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_Decode_BooleanTrue_TriggersAutoDetect()
         {
             // ParseDelimiter accepts boolean true as the auto-detect signal, identical
@@ -2909,7 +2910,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_Decode_IntegerCodepointDelimiter_UsedCorrectly()
         {
             // ParseDelimiter accepts an integer codepoint (59 = ';').
@@ -2920,7 +2921,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_New_NoArgs_Encode_FallsBackToComma()
         {
             // CSV.New() binds "auto" as the delimiter. Encode with "auto" has no
@@ -2929,7 +2930,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("a,b,c");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_Decode_AutoDetect_CommaInput_DetectsCorrectly()
         {
             string? r = await Run(@"
@@ -2939,7 +2940,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_Decode_AutoDetect_SemicolonInput_DetectsCorrectly()
         {
             string? r = await Run(@"
@@ -2949,7 +2950,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_Decode_AutoDetect_TabInput_DetectsCorrectly()
         {
             string? r = await Run(@"
@@ -2959,7 +2960,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_New_NoArgs_AutoDetectsSemicolon()
         {
             // CSV.New() with no delimiter should sniff each Decode call independently.
@@ -2971,7 +2972,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_New_WithSemicolon_UsesSpecifiedDelimiter()
         {
             string? r = await Run(@"
@@ -2982,14 +2983,14 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_New_Encode_UsesSpecifiedDelimiter()
         {
             string? r = await Run("return CSV.New(';'):Encode({{'a', 'b', 'c'}})");
             r.ShouldBe("a;b;c");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_DecodeFromFunction_AutoDetect_DetectsSemicolon()
         {
             string? r = await Run(@"
@@ -3033,7 +3034,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_New_NoArgs_DecodeFromFunction_AutoDetects()
         {
             string? r = await Run(@"
@@ -3094,7 +3095,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("x:y|z:w");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_DecodeFromFunction_NilTerminates_FinalRowWithoutNewline()
         {
             // The last row has no trailing newline; the nil from the supplier must
@@ -3114,7 +3115,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("hello:world");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_DecodeFromFunction_CustomDelimiter_Respected()
         {
             string? r = await Run(@"
@@ -3132,7 +3133,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("a:b:c");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_DecodeFromFunction_Stream_ParsesRows()
         {
             // A LuaStream can be passed directly instead of a supplier function;
@@ -3148,7 +3149,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("a:b:c|1:2:3|4:5:6");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_DecodeFromFunction_Stream_CustomDelimiter_Respected()
         {
             string? r = await Run(@"
@@ -3162,7 +3163,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("a:c|1:3");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_DecodeFromFunction_Stream_KeepsStreamAliveWithoutExplicitVariable()
         {
             // The stream is passed inline with no variable holding it; the iterator
@@ -3241,7 +3242,7 @@ namespace KitsuneNet.Tests
 
         // -- Env ------------------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Env_Create_StoresAndRetrievesValues()
         {
             string? r = await Run(@"
@@ -3253,7 +3254,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Env_GetOrCreate_ReturnsSameEnv()
         {
             string? r = await Run(@"
@@ -3267,7 +3268,7 @@ namespace KitsuneNet.Tests
 
         // -- CSV instance extras --------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_Create_AliasWorksIdenticallyToNew()
         {
             // CSV.Create is a registered alias for CSV.New; must return a working instance.
@@ -3279,7 +3280,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_Tostring_AutoInstance()
         {
             // __tostring on a no-delimiter instance reports "CSV(auto)".
@@ -3287,7 +3288,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("CSV(auto)");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_Tostring_FixedDelimiterInstance()
         {
             // __tostring on a fixed-delimiter instance reports the character.
@@ -3295,7 +3296,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("CSV(';')");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_New_CalledOnInstance_CreatesNewIndependentInstance()
         {
             // csv:New(delim) must ignore the existing instance and return a fresh one
@@ -3315,7 +3316,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_InstanceReuse_MultipleDecodeCalls_BothCorrect()
         {
             // The same instance must produce correct results across successive Decode calls.
@@ -3332,7 +3333,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_AutoDetect_ReSniffsDelimiterOnEachDecode()
         {
             // An auto-detect instance must sniff fresh on every Decode call;
@@ -3349,7 +3350,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_DecodeFromFunction_NonReadableStream_RaisesError()
         {
             // Passing a write-only stream must produce a clean Lua error, not a crash.
@@ -3367,7 +3368,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_InstanceReuse_EncodeAfterDecode_BothCorrect()
         {
             // Encode after Decode on the same instance must work; the buffer fields
@@ -3381,7 +3382,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("a;c");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_DecodeFromFunction_InstanceAutoDetectDoesNotBleedIntoSecondIterator()
         {
             // Two separate DecodeFromFunction iterators created from the same auto-detect
@@ -3413,14 +3414,14 @@ namespace KitsuneNet.Tests
 
         // -- Json extras ----------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_NegativeInfinity_EncodesAsSpecialLiteral()
         {
             string? r = await Run("return Json.New():Encode(-math.huge)");
             r.ShouldBe("-1e+9999");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_Tostring_ReturnsNonEmptyString()
         {
             // __tostring on a Json instance returns a pointer-format string.
@@ -3428,7 +3429,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_Dispose_CanBeCalledExplicitly()
         {
             // Json.Dispose() is an explicit GC; calling it must not crash and the
@@ -3441,7 +3442,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("ok");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_Decode_ChunkedFunction_ParsesValues()
         {
             // json:Decode(fn) calls fn() repeatedly to get input chunks; returning
@@ -3459,7 +3460,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Json_Decode_ChunkedFunction_MultipleValues()
         {
             // Each Decode(fn) call drains exactly one JSON value; the fn is fresh
@@ -3481,7 +3482,7 @@ namespace KitsuneNet.Tests
 
         // -- Stream extras --------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_WriteDouble_ReadDouble_RoundTrip()
         {
             string? r = await Run(@"
@@ -3494,7 +3495,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_UnsignedNumericTypes_RoundTrip()
         {
             // WriteUnsignedShort / WriteUnsignedInt / WriteUnsignedLong — each must
@@ -3512,7 +3513,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("60000:3000000000:9000000000");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_WriteUtf8_WriteAndReadBack()
         {
             // WriteUtf8 converts Latin-1 bytes to UTF-8; the raw bytes can be
@@ -3526,7 +3527,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("hello");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_WriteUtf8_EmbeddedNullByte_WritesFullString()
         {
             // Previously the loop used while(*in) which stops at embedded '\0',
@@ -3541,7 +3542,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_ReadUtf8_ReturnsBytesAndCodepoint()
         {
             // ReadUtf8 reads exactly one UTF-8 codepoint and returns
@@ -3556,7 +3557,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_SetByte_AtPosition_ModifiesWithoutMovingCursor()
         {
             // SetByte(value, pos) writes one byte at pos, restores cursor, then
@@ -3571,7 +3572,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("AXCD");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Tostring_ReadableAndSeekable_ReadsContent()
         {
             // __tostring reads and returns the stream content ONLY for in-memory
@@ -3604,7 +3605,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Tostring_NonReadableStream_ReturnsFallbackString()
         {
             // A write-only stream lacks CAP_READ; __tostring must return a pointer
@@ -3621,7 +3622,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Tostring_ReadableButNotSeekable_ReturnsFallbackString()
         {
             // A read-only stream without CAP_SEEK must also fall back to the pointer
@@ -3642,7 +3643,7 @@ namespace KitsuneNet.Tests
 
         // -- Write / Read coverage -------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Write_ReturnsWrittenByteCount()
         {
             string? r = await Run(@"
@@ -3652,7 +3653,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("5");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Write_WithLimit_TruncatesOutput()
         {
             // Write(value, limit) writes at most 'limit' bytes.
@@ -3665,7 +3666,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("hello");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Write_WithBoolean_WritesSingleByte()
         {
             string? r = await Run(@"
@@ -3678,7 +3679,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("1:0");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Write_UnsupportedType_ReturnsZero()
         {
             string? r = await Run(@"
@@ -3688,7 +3689,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("0");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Read_WithLength_ReadsExactCount()
         {
             string? r = await Run(@"
@@ -3700,7 +3701,7 @@ namespace KitsuneNet.Tests
 
         // -- SetByte / PeekByte extra forms ----------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_SetByte_WithoutPosition_WritesAtCursorAndAdvances()
         {
             // SetByte(value) with no position writes at the current cursor and
@@ -3715,7 +3716,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("AXC");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_PeekByte_AtExplicitPosition_LeavesOriginalCursor()
         {
             // PeekByte(pos) peeks at 'pos' without disturbing the current cursor.
@@ -3728,7 +3729,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_PeekByte_RequiresReadAndSeek_NotADistinctFlag()
         {
             // PeekStreamByte is now gated on CAP_READ + CAP_SEEK — there is no
@@ -3753,7 +3754,7 @@ namespace KitsuneNet.Tests
 
         // -- Capability-guard return values ----------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Seek_NonSeekable_ReturnsFalse()
         {
             string? r = await Run(@"
@@ -3767,7 +3768,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("false");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Pos_NonSeekable_ReturnsNil()
         {
             string? r = await Run(@"
@@ -3781,7 +3782,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("nil");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Len_WriteOnly_ReturnsNil()
         {
             string? r = await Run(@"
@@ -3797,7 +3798,7 @@ namespace KitsuneNet.Tests
 
         // -- WriteByte boundary and range ------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_WriteByte_OutOfRange_ReturnsFalse()
         {
             string? r = await Run(@"
@@ -3807,7 +3808,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("false:false");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_WriteByte_Boundaries_RoundTrip()
         {
             string? r = await Run(@"
@@ -3822,7 +3823,7 @@ namespace KitsuneNet.Tests
 
         // -- Signed short ----------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_WriteShort_NegativeValue_RoundTrips()
         {
             string? r = await Run(@"
@@ -3836,7 +3837,7 @@ namespace KitsuneNet.Tests
 
         // -- ReadUtf8 extended coverage --------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_ReadUtf8_MultiByte_ReturnsCodepoint()
         {
             // U+00E9 (é) encodes as 0xC3 0xA9 in UTF-8.
@@ -3851,7 +3852,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_ReadUtf8_InvalidLeadByte_ReturnsNil()
         {
             // 0xFF is not a valid UTF-8 lead byte; ReadUtf8 must return nil.
@@ -3866,7 +3867,7 @@ namespace KitsuneNet.Tests
 
         // -- WriteUtf8 Latin-1 conversion ------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_WriteUtf8_HighByte_ConvertedToUtf8Pair()
         {
             // WriteUtf8 treats the input string as Latin-1 and re-encodes to UTF-8.
@@ -3935,7 +3936,7 @@ namespace KitsuneNet.Tests
 
         // -- Misc stream operations ------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Close_ExplicitCall_DoesNotCrash()
         {
             string? r = await Run(@"
@@ -3947,7 +3948,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("ok");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_GetInfo_MemoryStream_TypeIsMemory()
         {
             string? r = await Run(@"
@@ -3961,7 +3962,7 @@ namespace KitsuneNet.Tests
 
         // -- SharedMemory (ToSharedMemory / OpenSharedMemory) ---------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task SharedMemory_OpenSharedMemory_InfoType_IsSharedMemoryOut()
         {
             string? r = await Run(@"
@@ -3972,7 +3973,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("sharedmemory_out");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task SharedMemory_OpenSharedMemory_SizeMatchesRequested()
         {
             string? r = await Run(@"
@@ -3983,7 +3984,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task SharedMemory_OpenSharedMemory_IsReadWriteAndSeekable()
         {
             string? r = await Run(@"
@@ -3999,7 +4000,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task SharedMemory_OpenSharedMemory_WriteAndRead_RoundTrip()
         {
             // Size the block exactly to the payload so Read() returns only the written bytes.
@@ -4013,7 +4014,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("hello shmem");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task SharedMemory_OpenSharedMemory_ZeroSize_RaisesError()
         {
             string? r = await Run(@"
@@ -4023,7 +4024,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task SharedMemory_ToSharedMemory_PreservesStreamContents()
         {
             string? r = await Run(@"
@@ -4036,7 +4037,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("snapshot data");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task SharedMemory_ToSharedMemory_InfoType_IsSharedMemoryOut()
         {
             string? r = await Run(@"
@@ -4049,7 +4050,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("sharedmemory_out");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task SharedMemory_ToSharedMemory_SizeMatchesSourceLength()
         {
             string? r = await Run(@"
@@ -4062,7 +4063,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task SharedMemory_ToSharedMemory_IsIndependentOfSource()
         {
             // ToSharedMemory produces a deep copy; mutating the source afterward
@@ -4079,7 +4080,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("original");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task SharedMemory_ToSharedMemory_CapturesFromPositionZero()
         {
             // ToSharedMemory internally seeks the source to 0 before snapshotting,
@@ -4095,7 +4096,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("full content");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task SharedMemory_ToSharedMemory_WithDispose_OriginalIsZeroed()
         {
             // After ToSharedMemory(true) the original stream is disposed: its Caps
@@ -4109,7 +4110,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task SharedMemory_ToSharedMemory_WithDispose_SnapshotContentsIntact()
         {
             string? r = await Run(@"
@@ -4122,7 +4123,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("preserve me");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task SharedMemory_ToSharedMemory_NonReadableStream_RaisesError()
         {
             string? r = await Run(@"
@@ -4137,7 +4138,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task SharedMemory_ToSharedMemory_NonSeekableStream_RaisesError()
         {
             // A read-only backend without CAP_SEEK must also be rejected.

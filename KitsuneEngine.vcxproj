@@ -386,8 +386,9 @@
     <ClInclude Include="TlkMain.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="LINUX_PORT_PLAN.md" />
+    <None Include="LINUX_PORT_TASKS.md" />
     <None Include="Lua functions.md" />
+    <None Include="testEnvironments.json" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />

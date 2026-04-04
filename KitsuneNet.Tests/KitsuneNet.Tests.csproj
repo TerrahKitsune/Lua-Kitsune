@@ -19,12 +19,21 @@
     KitsuneNet's BuildNativeEngine target ensures they are built first.
     Includes both x64\$(Configuration)\ and the repo root (hiredis, libmysql).
   -->
-  <Target Name="CopyNativeDlls" BeforeTargets="Build">
+  <Target Name="CopyNativeDlls" BeforeTargets="Build" Condition="$([MSBuild]::IsOSPlatform('Windows'))">
     <ItemGroup>
       <_NativeDlls Include="$(NativeOutputDir)*.dll" Condition="Exists('$(NativeOutputDir)')" />
       <_NativeDlls Include="$(NativeRootDir)*.dll" Condition="Exists('$(NativeRootDir)')" />
     </ItemGroup>
     <Copy SourceFiles="@(_NativeDlls)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
+  </Target>
+
+  <!-- Copy libKitsuneEngine.so whenever it exists (Linux build or Windows with pre-built .so).
+       Unconditional so VS remote testing can include it when sending the output to WSL2. -->
+  <Target Name="CopyNativeSo" BeforeTargets="Build"
+          Condition="Exists('$(ProjectDir)../build-linux/libKitsuneEngine.so')">
+    <Copy SourceFiles="$(ProjectDir)../build-linux/libKitsuneEngine.so"
+          DestinationFolder="$(OutputPath)"
+          SkipUnchangedFiles="true" />
   </Target>
 
   <ItemGroup>

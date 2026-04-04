@@ -22,6 +22,9 @@ target_compile_definitions(lua_core PRIVATE
 )
 target_include_directories(lua_core PUBLIC "${CMAKE_SOURCE_DIR}/Lua")
 
+# Lua objects are linked into KitsuneEngine.so — must be position-independent.
+set_target_properties(lua_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 # ── KitsuneEngine shared library ─────────────────────────────────────────────
 # Barebones build: external-dependency modules (MySQL, PostgreSQL, Redis, ImGui,
 # etc.) are compiled out via KITSUNE_BAREBONES.  Only in-memory modules and the
@@ -37,16 +40,19 @@ set(KITSUNE_ENGINE_SOURCES
 	base64.cpp
 	LuaMD5.cpp
 	MD5Main.cpp
+	md5.c
 	LuaSHA1.cpp
 	SHA1Main.cpp
+	sha1.c
+	LuaSha256.cpp
+	Sha256Main.cpp
+	sha256.c
+	Bencode.cpp
+	MemoryManager.cpp
 
 	# ── JSON ───────────────────────────────────────────────────────────────
 	luajson.cpp
 	luajsonmain.cpp
-	jsondecode.cpp
-	jsonencode.cpp
-	jsonutil.cpp
-	lua_json.cpp
 
 	# ── WChar (wide-string type) ────────────────────────────────────────────
 	luawchar.cpp

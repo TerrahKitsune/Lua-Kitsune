@@ -260,13 +260,8 @@ static void FreeVariableData(KitsuneVariable* var) {
 
 // Allocates a char16_t* copy of a wchar_t* src (len code units, excluding null terminator).
 // The caller owns the result; free with gff_free.
-static char16_t* AllocChar16FromWchar(const wchar_t* src, size_t len) {
-	char16_t* dst = (char16_t*)gff_malloc((len + 1) * sizeof(char16_t));
-	if (dst) {
-		memcpy(dst, src, len * sizeof(char16_t));
-		dst[len] = u'\0';
-	}
-	return dst;
+static char16_t* AllocChar16FromWchar(const wchar_t* src, size_t len, size_t* outChar16Len) {
+	return wchar_alloc_as_char16(src, len, outChar16Len);
 }
 
 // Returns a wchar_t* view of a char16_t* for passing to Lua APIs.
@@ -322,9 +317,7 @@ static void FillKitsuneVariableFromStack(lua_State* L, int idx, KitsuneVariable*
 		if (lua_iswchar(L, abs_idx)) {
 			LuaWChar* wch = (LuaWChar*)lua_touserdata(L, abs_idx);
 			if (wch && wch->str && wch->len > 0) {
-				out->char16data = AllocChar16FromWchar(wch->str, wch->len);
-				if (out->char16data)
-					out->length = wch->len;
+				out->char16data = AllocChar16FromWchar(wch->str, wch->len, &out->length);
 			}
 			out->type = KITSUNE_TCHAR16;
 			break;
@@ -415,8 +408,23 @@ static void PushKitsuneVariable(lua_State* L, const KitsuneVariable* v) {
 			lua_pushstring(L, "");
 		break;
 	case KITSUNE_TCHAR16:
-		// Cast char16_t* back to wchar_t* at the boundary via Char16AsWchar.
-		lua_pushwchar(L, v->char16data ? Char16AsWchar(v->char16data) : L"", v->length);
+		// On Windows wchar_t == char16_t (both 2 bytes): reinterpret cast is safe.
+		// On Linux wchar_t is 4 bytes (UTF-32): must decode UTF-16 surrogate pairs.
+		if (v->char16data) {
+#ifdef _WIN32
+			lua_pushwchar(L, Char16AsWchar(v->char16data), v->length);
+#else
+			{
+				size_t wlen = 0;
+				wchar_t* wbuf = char16_alloc_as_wchar(v->char16data, v->length, &wlen);
+				lua_pushwchar(L, wbuf ? wbuf : L"", wlen);
+				gff_free(wbuf);
+			}
+#endif
+		}
+		else {
+			lua_pushwchar(L, L"", 0);
+		}
 		break;
 	case KITSUNE_TJSON: {
 		// Decode JSON using the shared bridge instance (avoids GC churn per call).
@@ -471,9 +479,7 @@ static void SetSlotResult(KitsuneCoroutine* slot, lua_State* T, int idx) {
 		if (lua_iswchar(T, idx)) {
 			LuaWChar* wch = (LuaWChar*)lua_touserdata(T, idx);
 			if (wch && wch->str && wch->len > 0) {
-				slot->result.char16data = AllocChar16FromWchar(wch->str, wch->len);
-				if (slot->result.char16data)
-					slot->result.length = wch->len;
+				slot->result.char16data = AllocChar16FromWchar(wch->str, wch->len, &slot->result.length);
 			}
 			slot->result.type = KITSUNE_TCHAR16;
 			break;

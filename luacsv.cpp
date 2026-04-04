@@ -2,6 +2,34 @@
 #include <string.h>
 #include "luawchar.h"
 #include "stream.h"
+#ifndef _WIN32
+#include <iconv.h>
+// Converts UTF-8 src into *dstBuf (grown via gff_realloc if needed).
+// Returns the number of wchar_t code units written.
+static size_t csv_utf8_to_wchar(const char* src, size_t srcLen,
+	wchar_t** dstBuf, size_t* dstCap) {
+	size_t need = srcLen; // conservative upper bound
+	if (need > *dstCap) {
+		wchar_t* nb = (wchar_t*)gff_realloc(*dstBuf, (need + 1) * sizeof(wchar_t));
+		if (!nb)
+			return 0;
+		*dstBuf = nb;
+		*dstCap = need;
+	}
+	iconv_t cd = iconv_open("WCHAR_T", "UTF-8");
+	if (cd == (iconv_t)-1)
+		return 0;
+	char* in = (char*)src;
+	size_t inLeft = srcLen;
+	char* out = (char*)*dstBuf;
+	size_t outLeft = need * sizeof(wchar_t);
+	iconv(cd, &in, &inLeft, &out, &outLeft);
+	iconv_close(cd);
+	size_t written = (need * sizeof(wchar_t) - outLeft) / sizeof(wchar_t);
+	(*dstBuf)[written] = L'\0';
+	return written;
+}
+#endif
 
 // Calls the chunk-supplier function stored in csv->streamFuncRef.
 // If the supplier returns a LuaWChar userdata it is converted to a UTF-8 string first,
@@ -37,6 +65,7 @@ static void RefillStreamBuffer(LuaCsv* csv) {
 	}
 
 	// Convert UTF-8 → wchar_t
+#ifdef _WIN32
 	int wlen = MultiByteToWideChar(CP_UTF8, 0, s, (int)slen, NULL, 0);
 	if (wlen <= 0) {
 		lua_pop(L, 1);
@@ -58,6 +87,15 @@ static void RefillStreamBuffer(LuaCsv* csv) {
 	MultiByteToWideChar(CP_UTF8, 0, s, (int)slen, csv->streamBuf, wlen);
 	csv->streamBuf[wlen] = L'\0';
 	csv->streamLen       = (size_t)wlen;
+#else
+	size_t wlen = csv_utf8_to_wchar(s, slen, &csv->streamBuf, &csv->streamAlloc);
+	if (wlen == 0 && slen > 0) {
+		lua_pop(L, 1);
+		csv->streamDone = true;
+		return;
+	}
+	csv->streamLen = wlen;
+#endif
 
 	lua_pop(L, 1);
 }
@@ -90,14 +128,15 @@ static void AppendStreamBuffer(LuaCsv* csv) {
 		return;
 	}
 
-	int wlen = MultiByteToWideChar(CP_UTF8, 0, s, (int)slen, NULL, 0);
-	if (wlen <= 0) {
+#ifdef _WIN32
+	int wlenNew = MultiByteToWideChar(CP_UTF8, 0, s, (int)slen, NULL, 0);
+	if (wlenNew <= 0) {
 		lua_pop(L, 1);
 		csv->streamDone = true;
 		return;
 	}
 
-	size_t totalLen = csv->streamLen + (size_t)wlen;
+	size_t totalLen = csv->streamLen + (size_t)wlenNew;
 	if (totalLen > csv->streamAlloc) {
 		wchar_t* nb = (wchar_t*)gff_realloc(csv->streamBuf, (totalLen + 1) * sizeof(wchar_t));
 		if (!nb) {
@@ -108,9 +147,39 @@ static void AppendStreamBuffer(LuaCsv* csv) {
 		csv->streamAlloc = totalLen;
 	}
 
-	MultiByteToWideChar(CP_UTF8, 0, s, (int)slen, csv->streamBuf + csv->streamLen, wlen);
+	MultiByteToWideChar(CP_UTF8, 0, s, (int)slen, csv->streamBuf + csv->streamLen, wlenNew);
 	csv->streamLen       = totalLen;
 	csv->streamBuf[totalLen] = L'\0';
+#else
+	{
+		size_t prevLen = csv->streamLen;
+		// Grow the buffer to hold prevLen + slen wchars (conservative upper bound: UTF-8
+		// bytes >= UTF-32 code units, so slen is a safe upper bound for the new chunk).
+		size_t needed = prevLen + slen;
+		if (needed > csv->streamAlloc) {
+			wchar_t* nb = (wchar_t*)gff_realloc(csv->streamBuf, (needed + 1) * sizeof(wchar_t));
+			if (!nb) { lua_pop(L, 1); luaL_error(L, "Out of memory"); }
+			csv->streamBuf   = nb;
+			csv->streamAlloc = needed;
+		}
+		// Convert directly into the append position so the existing [0..prevLen) data
+		// is never touched.  The earlier csv_utf8_to_wchar pattern was wrong: it wrote
+		// from offset 0, silently corrupting the already-buffered rows.
+		size_t wlenNew = 0;
+		iconv_t cd = iconv_open("WCHAR_T", "UTF-8");
+		if (cd != (iconv_t)-1) {
+			char* in = (char*)s;
+			size_t inLeft = slen;
+			char* out = (char*)(csv->streamBuf + prevLen);
+			size_t outLeft = (csv->streamAlloc - prevLen) * sizeof(wchar_t);
+			iconv(cd, &in, &inLeft, &out, &outLeft);
+			iconv_close(cd);
+			wlenNew = ((csv->streamAlloc - prevLen) * sizeof(wchar_t) - outLeft) / sizeof(wchar_t);
+		}
+		csv->streamLen = prevLen + wlenNew;
+		csv->streamBuf[csv->streamLen] = L'\0';
+	}
+#endif
 
 	lua_pop(L, 1);
 }

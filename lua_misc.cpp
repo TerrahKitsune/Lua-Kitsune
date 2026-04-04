@@ -1,6 +1,7 @@
 ﻿#include "lua_misc.h"
 #include <time.h>
 #include <stdio.h>
+#include <ctype.h>
 #include "platform.h"
 #include "luawchar.h"
 #include "Bencode.h"
@@ -887,9 +888,6 @@ int luaopen_misc(lua_State* L) {
 
 	lua_pushcfunction(L, Time);
 	lua_setglobal(L, "Time");
-
-	lua_pushcfunction(L, GetIsAdmin);
-	lua_setglobal(L, "GetIsAdmin");
 
 	lua_pushcfunction(L, CRC32);
 	lua_setglobal(L, "CRC32");

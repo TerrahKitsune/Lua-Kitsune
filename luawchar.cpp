@@ -1,4 +1,7 @@
 ﻿#include "luawchar.h"
+#include <algorithm>
+#include <wchar.h>
+#include <wctype.h>
 #include <string.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -66,6 +69,8 @@ LuaWChar* lua_pushwchar(lua_State* L, const wchar_t* str, size_t len) {
 }
 
 int GetWCharCountForCodePoint(int codePoint) {
+#ifdef _WIN32
+	// On Windows wchar_t is UTF-16; supplementary code points need a surrogate pair.
 	if (codePoint >= 0 && codePoint <= 0x10FFFF) {
 		if (codePoint <= 0xFFFF) {
 			return 1;
@@ -74,16 +79,19 @@ int GetWCharCountForCodePoint(int codePoint) {
 			return 2;
 		}
 	}
-
 	return 0;
+#else
+	// On Linux wchar_t is UTF-32: every valid code point fits in one wchar_t.
+	return (codePoint >= 0 && codePoint <= 0x10FFFF) ? 1 : 0;
+#endif
 }
 
 bool FillLuaWCharWithCodePoint(LuaWChar* luaStr, int codePoint) {
-	
+
 	int wcharCount = GetWCharCountForCodePoint(codePoint);
 
 	if (wcharCount > 0) {
-		
+
 		luaStr->str = (wchar_t*)gff_calloc(wcharCount + 1, sizeof(wchar_t));
 
 		if (!luaStr->str) {
@@ -92,6 +100,7 @@ bool FillLuaWCharWithCodePoint(LuaWChar* luaStr, int codePoint) {
 
 		luaStr->len = wcharCount;
 
+#ifdef _WIN32
 		if (wcharCount == 1) {
 			luaStr->str[0] = (wchar_t)codePoint;
 		}
@@ -99,6 +108,10 @@ bool FillLuaWCharWithCodePoint(LuaWChar* luaStr, int codePoint) {
 			luaStr->str[0] = (wchar_t)(((codePoint - 0x10000) >> 10) + 0xD800);
 			luaStr->str[1] = (wchar_t)(((codePoint - 0x10000) & 0x3FF) + 0xDC00);
 		}
+#else
+		// On Linux wchar_t is UTF-32: store the full code point in one element.
+		luaStr->str[0] = (wchar_t)codePoint;
+#endif
 
 		return true;
 	}
@@ -115,22 +128,23 @@ int FromBytes(lua_State* L) {
 
 		const char* raw = lua_tolstring(L, 1, &len);
 
-		if ((len % sizeof(wchar_t)) != 0) {
-			luaL_error(L, "%s is not a widecharstring", raw);
+		if ((len % sizeof(char16_t)) != 0) {
+			luaL_error(L, "byte buffer length is not a multiple of 2 (expected char16_t / UTF-16 LE)");
 			return 0;
 		}
 
-		LuaWChar* wchar = lua_pushwchar(L);
+		const char16_t* chars = (const char16_t*)raw;
+		size_t charCount = len / sizeof(char16_t);
 
-		wchar->str = (wchar_t*)gff_calloc(len + 1, sizeof(wchar_t));
-		wchar->len = len / sizeof(wchar_t);
+		LuaWChar* wchar = lua_pushwchar(L);
+		size_t wcharLen = 0;
+		wchar->str = char16_alloc_as_wchar(chars, charCount, &wcharLen);
+		wchar->len = wcharLen;
 
 		if (!wchar->str) {
 			luaL_error(L, "out of memory");
 			return 0;
 		}
-
-		memcpy(wchar->str, raw, len);
 
 		return 1;
 	}
@@ -147,30 +161,32 @@ int FromBytes(lua_State* L) {
 	luaL_checktype(L, 1, LUA_TTABLE);
 	len = lua_rawlen(L, 1);
 	wchar = lua_pushwchar(L);
-	wchar->str = (wchar_t*)gff_calloc(len + 1, sizeof(wchar_t));
-	wchar_t c;
-	lua_Integer b;
 
-	if (!wchar->str) {
+	// Collect table values as char16_t code units, then convert to wchar_t.
+	char16_t* char16buf = (char16_t*)gff_malloc((len + 1) * sizeof(char16_t));
+	if (!char16buf) {
 		luaL_error(L, "out of memory");
 		return 0;
 	}
 
 	lua_pushvalue(L, 1);
-
-	for (size_t i = 0; i < len; i++)
-	{
-		lua_pushinteger(L, i + 1);
+	for (size_t i = 0; i < len; i++) {
+		lua_pushinteger(L, (lua_Integer)(i + 1));
 		lua_gettable(L, -2);
-		b = lua_tointeger(L, -1);
-		memcpy(&c, &b, sizeof(wchar_t));
-		wchar->str[i] = c;
+		char16buf[i] = (char16_t)lua_tointeger(L, -1);
 		lua_pop(L, 1);
 	}
-
 	lua_pop(L, 1);
 
-	wchar->len = len;
+	size_t wcharLen = 0;
+	wchar->str = char16_alloc_as_wchar(char16buf, len, &wcharLen);
+	gff_free(char16buf);
+	wchar->len = wcharLen;
+
+	if (!wchar->str) {
+		luaL_error(L, "out of memory");
+		return 0;
+	}
 
 	return 1;
 }
@@ -179,12 +195,17 @@ int ToBytes(lua_State* L) {
 
 	LuaWChar* wchar = lua_towchar(L, 1);
 
-	lua_createtable(L, (int)wchar->len, 0);
+	size_t char16Len = 0;
+	char16_t* buf = wchar_alloc_as_char16(wchar->str, wchar->len, &char16Len);
 
-	for (size_t i = 0; i < wchar->len; i++)
-	{
-		lua_pushinteger(L, (lua_Integer)wchar->str[i]);
-		lua_rawseti(L, -2, i + 1);
+	lua_createtable(L, (int)char16Len, 0);
+
+	if (buf) {
+		for (size_t i = 0; i < char16Len; i++) {
+			lua_pushinteger(L, (lua_Integer)buf[i]);
+			lua_rawseti(L, -2, (int)i + 1);
+		}
+		gff_free(buf);
 	}
 
 	return 1;
@@ -244,7 +265,7 @@ int FromSubstring(lua_State* L) {
 		lua_pushnil(L);
 	}
 	else {
-		lua_pushwchar(L, &wchar->str[start - 1], min(length, wchar->len - (start - 1)));
+		lua_pushwchar(L, &wchar->str[start - 1], (std::min)(length, wchar->len - (start - 1)));
 	}
 
 	return 1;
@@ -400,20 +421,6 @@ size_t to_narrow(const wchar_t* src, char* dest, size_t dest_len) {
 	return i;
 }
 
-int ToWide(lua_State* L) {
-
-	LuaWChar* wchar = lua_towchar(L, 1);
-
-	if (!wchar->str) {
-		lua_pushstring(L, "");
-	}
-	else {
-		lua_pushlstring(L, (const char*)wchar->str, wchar->len * sizeof(wchar_t));
-	}
-
-	return 1;
-}
-
 char16_t* wchar_alloc_as_char16(const wchar_t* src, size_t len, size_t* outChar16Len) {
 #ifdef _WIN32
 	// On Windows wchar_t is 2 bytes (UTF-16), same layout as char16_t; direct memcpy is valid.
@@ -544,7 +551,7 @@ int WcharFind(lua_State* L) {
 
 	LuaWChar* wchar = lua_towchar(L, 1);
 	LuaWChar* substr = (LuaWChar*)luaL_testudata(L, 2, LUAWCHAR);
-	int offset = (int)max(luaL_optinteger(L, 3, 1), 0) - 1;
+	int offset = (int)(std::max)(luaL_optinteger(L, 3, 1), (lua_Integer)0) - 1;
 	wchar_t* find;
 
 	if (!substr) {

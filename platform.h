@@ -18,7 +18,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>     // memset, memcpy
-#include <unistd.h>     // usleep, sched_yield
+#include <unistd.h>     // usleep
+#include <sched.h>      // sched_yield
 #include <algorithm>    // std::min, std::max
 
 // ── Fundamental type aliases ──────────────────────────────────────────────────
@@ -51,14 +52,6 @@ typedef intptr_t        INT_PTR;
 #define ZeroMemory(ptr, len)      memset((ptr), 0, (len))
 #define CopyMemory(dst, src, len) memcpy((dst), (src), (len))
 #define FillMemory(ptr, len, val) memset((ptr), (val), (len))
-
-// ── min / max (mirrors the Windows.h macros used throughout the codebase) ─────
-#ifndef min
-#define min(a, b) ((a) < (b) ? (a) : (b))
-#endif
-#ifndef max
-#define max(a, b) ((a) > (b) ? (a) : (b))
-#endif
 
 #ifndef MAXDWORD
 #define MAXDWORD 0xFFFFFFFFUL

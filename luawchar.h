@@ -24,7 +24,6 @@ int FromUtf8(lua_State* L);
 int SetLocale(lua_State* L);
 int FromAnsi(lua_State* L);
 int ToAnsi(lua_State* L);
-int ToWide(lua_State* L);
 int FromSubstring(lua_State* L);
 int FromToLower(lua_State* L);
 int FromToUpper(lua_State* L);
