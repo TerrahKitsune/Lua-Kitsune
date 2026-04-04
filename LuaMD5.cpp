@@ -91,7 +91,7 @@ int FinalMD5(lua_State *L){
 
 	char md5string[33];
 	for (int i = 0; i < 16; ++i)
-		sprintf(&md5string[i * 2], "%02x", (unsigned int)luamd5->hash[i]);
+		sprintf(&md5string[i * 2], "%02x", (unsigned int)(unsigned char)luamd5->hash[i]);
 
 	lua_pop(L, 1);
 	lua_pushstring(L,md5string);

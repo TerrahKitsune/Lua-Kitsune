@@ -1,6 +1,11 @@
-#pragma once
+﻿#pragma once
 #include "lua_main_incl.h"
+#ifdef _WIN32
 #include <Windows.h>
+#else
+#include <stdint.h>
+typedef uint32_t DWORD;
+#endif
 #include "aes.hpp"
 static const char * LUAES = "LUAES";
 

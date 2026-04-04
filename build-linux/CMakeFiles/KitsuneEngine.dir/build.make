@@ -447,6 +447,188 @@ CMakeFiles/KitsuneEngine.dir/StreamMain.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/KitsuneEngine.dir/StreamMain.cpp.s"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/StreamMain.cpp -o CMakeFiles/KitsuneEngine.dir/StreamMain.cpp.s
 
+CMakeFiles/KitsuneEngine.dir/miniz.c.o: CMakeFiles/KitsuneEngine.dir/flags.make
+CMakeFiles/KitsuneEngine.dir/miniz.c.o: /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/miniz.c
+CMakeFiles/KitsuneEngine.dir/miniz.c.o: CMakeFiles/KitsuneEngine.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/build-linux/CMakeFiles --progress-num=$(CMAKE_PROGRESS_28) "Building C object CMakeFiles/KitsuneEngine.dir/miniz.c.o"
+	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -MD -MT CMakeFiles/KitsuneEngine.dir/miniz.c.o -MF CMakeFiles/KitsuneEngine.dir/miniz.c.o.d -o CMakeFiles/KitsuneEngine.dir/miniz.c.o -c /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/miniz.c
+
+CMakeFiles/KitsuneEngine.dir/miniz.c.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing C source to CMakeFiles/KitsuneEngine.dir/miniz.c.i"
+	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -E /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/miniz.c > CMakeFiles/KitsuneEngine.dir/miniz.c.i
+
+CMakeFiles/KitsuneEngine.dir/miniz.c.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling C source to assembly CMakeFiles/KitsuneEngine.dir/miniz.c.s"
+	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -S /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/miniz.c -o CMakeFiles/KitsuneEngine.dir/miniz.c.s
+
+CMakeFiles/KitsuneEngine.dir/luaaes.cpp.o: CMakeFiles/KitsuneEngine.dir/flags.make
+CMakeFiles/KitsuneEngine.dir/luaaes.cpp.o: /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/luaaes.cpp
+CMakeFiles/KitsuneEngine.dir/luaaes.cpp.o: CMakeFiles/KitsuneEngine.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/build-linux/CMakeFiles --progress-num=$(CMAKE_PROGRESS_29) "Building CXX object CMakeFiles/KitsuneEngine.dir/luaaes.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/KitsuneEngine.dir/luaaes.cpp.o -MF CMakeFiles/KitsuneEngine.dir/luaaes.cpp.o.d -o CMakeFiles/KitsuneEngine.dir/luaaes.cpp.o -c /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/luaaes.cpp
+
+CMakeFiles/KitsuneEngine.dir/luaaes.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/KitsuneEngine.dir/luaaes.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/luaaes.cpp > CMakeFiles/KitsuneEngine.dir/luaaes.cpp.i
+
+CMakeFiles/KitsuneEngine.dir/luaaes.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/KitsuneEngine.dir/luaaes.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/luaaes.cpp -o CMakeFiles/KitsuneEngine.dir/luaaes.cpp.s
+
+CMakeFiles/KitsuneEngine.dir/LuaAesMain.cpp.o: CMakeFiles/KitsuneEngine.dir/flags.make
+CMakeFiles/KitsuneEngine.dir/LuaAesMain.cpp.o: /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/LuaAesMain.cpp
+CMakeFiles/KitsuneEngine.dir/LuaAesMain.cpp.o: CMakeFiles/KitsuneEngine.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/build-linux/CMakeFiles --progress-num=$(CMAKE_PROGRESS_30) "Building CXX object CMakeFiles/KitsuneEngine.dir/LuaAesMain.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/KitsuneEngine.dir/LuaAesMain.cpp.o -MF CMakeFiles/KitsuneEngine.dir/LuaAesMain.cpp.o.d -o CMakeFiles/KitsuneEngine.dir/LuaAesMain.cpp.o -c /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/LuaAesMain.cpp
+
+CMakeFiles/KitsuneEngine.dir/LuaAesMain.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/KitsuneEngine.dir/LuaAesMain.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/LuaAesMain.cpp > CMakeFiles/KitsuneEngine.dir/LuaAesMain.cpp.i
+
+CMakeFiles/KitsuneEngine.dir/LuaAesMain.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/KitsuneEngine.dir/LuaAesMain.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/LuaAesMain.cpp -o CMakeFiles/KitsuneEngine.dir/LuaAesMain.cpp.s
+
+CMakeFiles/KitsuneEngine.dir/aes.c.o: CMakeFiles/KitsuneEngine.dir/flags.make
+CMakeFiles/KitsuneEngine.dir/aes.c.o: /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/aes.c
+CMakeFiles/KitsuneEngine.dir/aes.c.o: CMakeFiles/KitsuneEngine.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/build-linux/CMakeFiles --progress-num=$(CMAKE_PROGRESS_31) "Building C object CMakeFiles/KitsuneEngine.dir/aes.c.o"
+	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -MD -MT CMakeFiles/KitsuneEngine.dir/aes.c.o -MF CMakeFiles/KitsuneEngine.dir/aes.c.o.d -o CMakeFiles/KitsuneEngine.dir/aes.c.o -c /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/aes.c
+
+CMakeFiles/KitsuneEngine.dir/aes.c.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing C source to CMakeFiles/KitsuneEngine.dir/aes.c.i"
+	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -E /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/aes.c > CMakeFiles/KitsuneEngine.dir/aes.c.i
+
+CMakeFiles/KitsuneEngine.dir/aes.c.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling C source to assembly CMakeFiles/KitsuneEngine.dir/aes.c.s"
+	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -S /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/aes.c -o CMakeFiles/KitsuneEngine.dir/aes.c.s
+
+CMakeFiles/KitsuneEngine.dir/Timer.cpp.o: CMakeFiles/KitsuneEngine.dir/flags.make
+CMakeFiles/KitsuneEngine.dir/Timer.cpp.o: /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/Timer.cpp
+CMakeFiles/KitsuneEngine.dir/Timer.cpp.o: CMakeFiles/KitsuneEngine.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/build-linux/CMakeFiles --progress-num=$(CMAKE_PROGRESS_32) "Building CXX object CMakeFiles/KitsuneEngine.dir/Timer.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/KitsuneEngine.dir/Timer.cpp.o -MF CMakeFiles/KitsuneEngine.dir/Timer.cpp.o.d -o CMakeFiles/KitsuneEngine.dir/Timer.cpp.o -c /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/Timer.cpp
+
+CMakeFiles/KitsuneEngine.dir/Timer.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/KitsuneEngine.dir/Timer.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/Timer.cpp > CMakeFiles/KitsuneEngine.dir/Timer.cpp.i
+
+CMakeFiles/KitsuneEngine.dir/Timer.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/KitsuneEngine.dir/Timer.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/Timer.cpp -o CMakeFiles/KitsuneEngine.dir/Timer.cpp.s
+
+CMakeFiles/KitsuneEngine.dir/TimerMain.cpp.o: CMakeFiles/KitsuneEngine.dir/flags.make
+CMakeFiles/KitsuneEngine.dir/TimerMain.cpp.o: /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/TimerMain.cpp
+CMakeFiles/KitsuneEngine.dir/TimerMain.cpp.o: CMakeFiles/KitsuneEngine.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/build-linux/CMakeFiles --progress-num=$(CMAKE_PROGRESS_33) "Building CXX object CMakeFiles/KitsuneEngine.dir/TimerMain.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/KitsuneEngine.dir/TimerMain.cpp.o -MF CMakeFiles/KitsuneEngine.dir/TimerMain.cpp.o.d -o CMakeFiles/KitsuneEngine.dir/TimerMain.cpp.o -c /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/TimerMain.cpp
+
+CMakeFiles/KitsuneEngine.dir/TimerMain.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/KitsuneEngine.dir/TimerMain.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/TimerMain.cpp > CMakeFiles/KitsuneEngine.dir/TimerMain.cpp.i
+
+CMakeFiles/KitsuneEngine.dir/TimerMain.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/KitsuneEngine.dir/TimerMain.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/TimerMain.cpp -o CMakeFiles/KitsuneEngine.dir/TimerMain.cpp.s
+
+CMakeFiles/KitsuneEngine.dir/LuaFileSystem.cpp.o: CMakeFiles/KitsuneEngine.dir/flags.make
+CMakeFiles/KitsuneEngine.dir/LuaFileSystem.cpp.o: /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/LuaFileSystem.cpp
+CMakeFiles/KitsuneEngine.dir/LuaFileSystem.cpp.o: CMakeFiles/KitsuneEngine.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/build-linux/CMakeFiles --progress-num=$(CMAKE_PROGRESS_34) "Building CXX object CMakeFiles/KitsuneEngine.dir/LuaFileSystem.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/KitsuneEngine.dir/LuaFileSystem.cpp.o -MF CMakeFiles/KitsuneEngine.dir/LuaFileSystem.cpp.o.d -o CMakeFiles/KitsuneEngine.dir/LuaFileSystem.cpp.o -c /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/LuaFileSystem.cpp
+
+CMakeFiles/KitsuneEngine.dir/LuaFileSystem.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/KitsuneEngine.dir/LuaFileSystem.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/LuaFileSystem.cpp > CMakeFiles/KitsuneEngine.dir/LuaFileSystem.cpp.i
+
+CMakeFiles/KitsuneEngine.dir/LuaFileSystem.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/KitsuneEngine.dir/LuaFileSystem.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/LuaFileSystem.cpp -o CMakeFiles/KitsuneEngine.dir/LuaFileSystem.cpp.s
+
+CMakeFiles/KitsuneEngine.dir/LuaFileSystemMain.cpp.o: CMakeFiles/KitsuneEngine.dir/flags.make
+CMakeFiles/KitsuneEngine.dir/LuaFileSystemMain.cpp.o: /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/LuaFileSystemMain.cpp
+CMakeFiles/KitsuneEngine.dir/LuaFileSystemMain.cpp.o: CMakeFiles/KitsuneEngine.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/build-linux/CMakeFiles --progress-num=$(CMAKE_PROGRESS_35) "Building CXX object CMakeFiles/KitsuneEngine.dir/LuaFileSystemMain.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/KitsuneEngine.dir/LuaFileSystemMain.cpp.o -MF CMakeFiles/KitsuneEngine.dir/LuaFileSystemMain.cpp.o.d -o CMakeFiles/KitsuneEngine.dir/LuaFileSystemMain.cpp.o -c /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/LuaFileSystemMain.cpp
+
+CMakeFiles/KitsuneEngine.dir/LuaFileSystemMain.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/KitsuneEngine.dir/LuaFileSystemMain.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/LuaFileSystemMain.cpp > CMakeFiles/KitsuneEngine.dir/LuaFileSystemMain.cpp.i
+
+CMakeFiles/KitsuneEngine.dir/LuaFileSystemMain.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/KitsuneEngine.dir/LuaFileSystemMain.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/LuaFileSystemMain.cpp -o CMakeFiles/KitsuneEngine.dir/LuaFileSystemMain.cpp.s
+
+CMakeFiles/KitsuneEngine.dir/LuaMutex.cpp.o: CMakeFiles/KitsuneEngine.dir/flags.make
+CMakeFiles/KitsuneEngine.dir/LuaMutex.cpp.o: /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/LuaMutex.cpp
+CMakeFiles/KitsuneEngine.dir/LuaMutex.cpp.o: CMakeFiles/KitsuneEngine.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/build-linux/CMakeFiles --progress-num=$(CMAKE_PROGRESS_36) "Building CXX object CMakeFiles/KitsuneEngine.dir/LuaMutex.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/KitsuneEngine.dir/LuaMutex.cpp.o -MF CMakeFiles/KitsuneEngine.dir/LuaMutex.cpp.o.d -o CMakeFiles/KitsuneEngine.dir/LuaMutex.cpp.o -c /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/LuaMutex.cpp
+
+CMakeFiles/KitsuneEngine.dir/LuaMutex.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/KitsuneEngine.dir/LuaMutex.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/LuaMutex.cpp > CMakeFiles/KitsuneEngine.dir/LuaMutex.cpp.i
+
+CMakeFiles/KitsuneEngine.dir/LuaMutex.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/KitsuneEngine.dir/LuaMutex.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/LuaMutex.cpp -o CMakeFiles/KitsuneEngine.dir/LuaMutex.cpp.s
+
+CMakeFiles/KitsuneEngine.dir/LuaMutexMain.cpp.o: CMakeFiles/KitsuneEngine.dir/flags.make
+CMakeFiles/KitsuneEngine.dir/LuaMutexMain.cpp.o: /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/LuaMutexMain.cpp
+CMakeFiles/KitsuneEngine.dir/LuaMutexMain.cpp.o: CMakeFiles/KitsuneEngine.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/build-linux/CMakeFiles --progress-num=$(CMAKE_PROGRESS_37) "Building CXX object CMakeFiles/KitsuneEngine.dir/LuaMutexMain.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/KitsuneEngine.dir/LuaMutexMain.cpp.o -MF CMakeFiles/KitsuneEngine.dir/LuaMutexMain.cpp.o.d -o CMakeFiles/KitsuneEngine.dir/LuaMutexMain.cpp.o -c /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/LuaMutexMain.cpp
+
+CMakeFiles/KitsuneEngine.dir/LuaMutexMain.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/KitsuneEngine.dir/LuaMutexMain.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/LuaMutexMain.cpp > CMakeFiles/KitsuneEngine.dir/LuaMutexMain.cpp.i
+
+CMakeFiles/KitsuneEngine.dir/LuaMutexMain.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/KitsuneEngine.dir/LuaMutexMain.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/LuaMutexMain.cpp -o CMakeFiles/KitsuneEngine.dir/LuaMutexMain.cpp.s
+
+CMakeFiles/KitsuneEngine.dir/LuaSQLite.cpp.o: CMakeFiles/KitsuneEngine.dir/flags.make
+CMakeFiles/KitsuneEngine.dir/LuaSQLite.cpp.o: /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/LuaSQLite.cpp
+CMakeFiles/KitsuneEngine.dir/LuaSQLite.cpp.o: CMakeFiles/KitsuneEngine.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/build-linux/CMakeFiles --progress-num=$(CMAKE_PROGRESS_38) "Building CXX object CMakeFiles/KitsuneEngine.dir/LuaSQLite.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) -DSQLITE_API="__attribute__((visibility(\"hidden\")))" $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/KitsuneEngine.dir/LuaSQLite.cpp.o -MF CMakeFiles/KitsuneEngine.dir/LuaSQLite.cpp.o.d -o CMakeFiles/KitsuneEngine.dir/LuaSQLite.cpp.o -c /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/LuaSQLite.cpp
+
+CMakeFiles/KitsuneEngine.dir/LuaSQLite.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/KitsuneEngine.dir/LuaSQLite.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) -DSQLITE_API="__attribute__((visibility(\"hidden\")))" $(CXX_INCLUDES) $(CXX_FLAGS) -E /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/LuaSQLite.cpp > CMakeFiles/KitsuneEngine.dir/LuaSQLite.cpp.i
+
+CMakeFiles/KitsuneEngine.dir/LuaSQLite.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/KitsuneEngine.dir/LuaSQLite.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) -DSQLITE_API="__attribute__((visibility(\"hidden\")))" $(CXX_INCLUDES) $(CXX_FLAGS) -S /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/LuaSQLite.cpp -o CMakeFiles/KitsuneEngine.dir/LuaSQLite.cpp.s
+
+CMakeFiles/KitsuneEngine.dir/LuaSQLiteMain.cpp.o: CMakeFiles/KitsuneEngine.dir/flags.make
+CMakeFiles/KitsuneEngine.dir/LuaSQLiteMain.cpp.o: /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/LuaSQLiteMain.cpp
+CMakeFiles/KitsuneEngine.dir/LuaSQLiteMain.cpp.o: CMakeFiles/KitsuneEngine.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/build-linux/CMakeFiles --progress-num=$(CMAKE_PROGRESS_39) "Building CXX object CMakeFiles/KitsuneEngine.dir/LuaSQLiteMain.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) -DSQLITE_API="__attribute__((visibility(\"hidden\")))" $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/KitsuneEngine.dir/LuaSQLiteMain.cpp.o -MF CMakeFiles/KitsuneEngine.dir/LuaSQLiteMain.cpp.o.d -o CMakeFiles/KitsuneEngine.dir/LuaSQLiteMain.cpp.o -c /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/LuaSQLiteMain.cpp
+
+CMakeFiles/KitsuneEngine.dir/LuaSQLiteMain.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/KitsuneEngine.dir/LuaSQLiteMain.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) -DSQLITE_API="__attribute__((visibility(\"hidden\")))" $(CXX_INCLUDES) $(CXX_FLAGS) -E /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/LuaSQLiteMain.cpp > CMakeFiles/KitsuneEngine.dir/LuaSQLiteMain.cpp.i
+
+CMakeFiles/KitsuneEngine.dir/LuaSQLiteMain.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/KitsuneEngine.dir/LuaSQLiteMain.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) -DSQLITE_API="__attribute__((visibility(\"hidden\")))" $(CXX_INCLUDES) $(CXX_FLAGS) -S /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/LuaSQLiteMain.cpp -o CMakeFiles/KitsuneEngine.dir/LuaSQLiteMain.cpp.s
+
+CMakeFiles/KitsuneEngine.dir/SQLite/sqlite3.c.o: CMakeFiles/KitsuneEngine.dir/flags.make
+CMakeFiles/KitsuneEngine.dir/SQLite/sqlite3.c.o: /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/SQLite/sqlite3.c
+CMakeFiles/KitsuneEngine.dir/SQLite/sqlite3.c.o: CMakeFiles/KitsuneEngine.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/build-linux/CMakeFiles --progress-num=$(CMAKE_PROGRESS_40) "Building C object CMakeFiles/KitsuneEngine.dir/SQLite/sqlite3.c.o"
+	/usr/bin/cc $(C_DEFINES) -DSQLITE_API="__attribute__((visibility(\"hidden\")))" $(C_INCLUDES) $(C_FLAGS) -MD -MT CMakeFiles/KitsuneEngine.dir/SQLite/sqlite3.c.o -MF CMakeFiles/KitsuneEngine.dir/SQLite/sqlite3.c.o.d -o CMakeFiles/KitsuneEngine.dir/SQLite/sqlite3.c.o -c /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/SQLite/sqlite3.c
+
+CMakeFiles/KitsuneEngine.dir/SQLite/sqlite3.c.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing C source to CMakeFiles/KitsuneEngine.dir/SQLite/sqlite3.c.i"
+	/usr/bin/cc $(C_DEFINES) -DSQLITE_API="__attribute__((visibility(\"hidden\")))" $(C_INCLUDES) $(C_FLAGS) -E /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/SQLite/sqlite3.c > CMakeFiles/KitsuneEngine.dir/SQLite/sqlite3.c.i
+
+CMakeFiles/KitsuneEngine.dir/SQLite/sqlite3.c.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling C source to assembly CMakeFiles/KitsuneEngine.dir/SQLite/sqlite3.c.s"
+	/usr/bin/cc $(C_DEFINES) -DSQLITE_API="__attribute__((visibility(\"hidden\")))" $(C_INCLUDES) $(C_FLAGS) -S /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/SQLite/sqlite3.c -o CMakeFiles/KitsuneEngine.dir/SQLite/sqlite3.c.s
+
 # Object files for target KitsuneEngine
 KitsuneEngine_OBJECTS = \
 "CMakeFiles/KitsuneEngine.dir/KitsuneEngine.cpp.o" \
@@ -475,7 +657,20 @@ KitsuneEngine_OBJECTS = \
 "CMakeFiles/KitsuneEngine.dir/streamshmemory.cpp.o" \
 "CMakeFiles/KitsuneEngine.dir/streammemory.cpp.o" \
 "CMakeFiles/KitsuneEngine.dir/streamfile.cpp.o" \
-"CMakeFiles/KitsuneEngine.dir/StreamMain.cpp.o"
+"CMakeFiles/KitsuneEngine.dir/StreamMain.cpp.o" \
+"CMakeFiles/KitsuneEngine.dir/miniz.c.o" \
+"CMakeFiles/KitsuneEngine.dir/luaaes.cpp.o" \
+"CMakeFiles/KitsuneEngine.dir/LuaAesMain.cpp.o" \
+"CMakeFiles/KitsuneEngine.dir/aes.c.o" \
+"CMakeFiles/KitsuneEngine.dir/Timer.cpp.o" \
+"CMakeFiles/KitsuneEngine.dir/TimerMain.cpp.o" \
+"CMakeFiles/KitsuneEngine.dir/LuaFileSystem.cpp.o" \
+"CMakeFiles/KitsuneEngine.dir/LuaFileSystemMain.cpp.o" \
+"CMakeFiles/KitsuneEngine.dir/LuaMutex.cpp.o" \
+"CMakeFiles/KitsuneEngine.dir/LuaMutexMain.cpp.o" \
+"CMakeFiles/KitsuneEngine.dir/LuaSQLite.cpp.o" \
+"CMakeFiles/KitsuneEngine.dir/LuaSQLiteMain.cpp.o" \
+"CMakeFiles/KitsuneEngine.dir/SQLite/sqlite3.c.o"
 
 # External object files for target KitsuneEngine
 KitsuneEngine_EXTERNAL_OBJECTS =
@@ -507,10 +702,23 @@ libKitsuneEngine.so: CMakeFiles/KitsuneEngine.dir/streamshmemory.cpp.o
 libKitsuneEngine.so: CMakeFiles/KitsuneEngine.dir/streammemory.cpp.o
 libKitsuneEngine.so: CMakeFiles/KitsuneEngine.dir/streamfile.cpp.o
 libKitsuneEngine.so: CMakeFiles/KitsuneEngine.dir/StreamMain.cpp.o
+libKitsuneEngine.so: CMakeFiles/KitsuneEngine.dir/miniz.c.o
+libKitsuneEngine.so: CMakeFiles/KitsuneEngine.dir/luaaes.cpp.o
+libKitsuneEngine.so: CMakeFiles/KitsuneEngine.dir/LuaAesMain.cpp.o
+libKitsuneEngine.so: CMakeFiles/KitsuneEngine.dir/aes.c.o
+libKitsuneEngine.so: CMakeFiles/KitsuneEngine.dir/Timer.cpp.o
+libKitsuneEngine.so: CMakeFiles/KitsuneEngine.dir/TimerMain.cpp.o
+libKitsuneEngine.so: CMakeFiles/KitsuneEngine.dir/LuaFileSystem.cpp.o
+libKitsuneEngine.so: CMakeFiles/KitsuneEngine.dir/LuaFileSystemMain.cpp.o
+libKitsuneEngine.so: CMakeFiles/KitsuneEngine.dir/LuaMutex.cpp.o
+libKitsuneEngine.so: CMakeFiles/KitsuneEngine.dir/LuaMutexMain.cpp.o
+libKitsuneEngine.so: CMakeFiles/KitsuneEngine.dir/LuaSQLite.cpp.o
+libKitsuneEngine.so: CMakeFiles/KitsuneEngine.dir/LuaSQLiteMain.cpp.o
+libKitsuneEngine.so: CMakeFiles/KitsuneEngine.dir/SQLite/sqlite3.c.o
 libKitsuneEngine.so: CMakeFiles/KitsuneEngine.dir/build.make
 libKitsuneEngine.so: liblua_core.a
 libKitsuneEngine.so: CMakeFiles/KitsuneEngine.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/build-linux/CMakeFiles --progress-num=$(CMAKE_PROGRESS_28) "Linking CXX shared library libKitsuneEngine.so"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/build-linux/CMakeFiles --progress-num=$(CMAKE_PROGRESS_41) "Linking CXX shared library libKitsuneEngine.so"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/KitsuneEngine.dir/link.txt --verbose=$(VERBOSE)
 
 # Rule to build all files generated by this target.

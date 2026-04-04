@@ -1,4 +1,4 @@
-using KitsuneNet;
+ï»¿using KitsuneNet;
 using Shouldly;
 using Xunit;
 
@@ -155,7 +155,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task GlobalMemoryStatus_TotalPhysical_ReturnsPositive()
         {
             string? r = await Run("return tostring(GlobalMemoryStatus(1) > 0)");
@@ -282,7 +282,7 @@ namespace KitsuneNet.Tests
 
         // -- GetIsAdmin -----------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task GetIsAdmin_ReturnsBool()
         {
             string? r = await Run("return type(GetIsAdmin())");
@@ -300,21 +300,21 @@ namespace KitsuneNet.Tests
 
         // -- GetScreenSize / GetCursorPosition ------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task GetScreenSize_ReturnsTwoNumbers()
         {
             string? r = await RunWithSession("local w,h = Session.Display.GetScreenSize(); return tostring(type(w)=='number' and type(h)=='number')");
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task GetCursorPosition_ReturnsTwoNumbers()
         {
             string? r = await RunWithSession("local x,y = Session.Display.GetCursorPosition(); return tostring(type(x)=='number' and type(y)=='number')");
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task GetCursorPointPosition_ReturnsTwoNumbers()
         {
             string? r = await RunWithSession("local x,y = Session.Display.GetCursorPoint(); return tostring(type(x)=='number' and type(y)=='number')");
@@ -349,14 +349,14 @@ namespace KitsuneNet.Tests
 
         // -- GetLastError ---------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task GetLastError_WithCode2_ReturnsNonEmptyMessageAndCode()
         {
             string? r = await Run("local m,c = GetLastError(2); return tostring(type(m)=='string' and #m>0 and type(c)=='number')");
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task GetLastError_NoArgs_ReturnsString()
         {
             string? r = await Run("return type((GetLastError()))");
@@ -397,7 +397,7 @@ namespace KitsuneNet.Tests
 
         // -- Clipboard ------------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Clipboard_SetAndGet_RoundTrip()
         {
             // Clipboard access from a background scheduler thread can silently fail
@@ -414,7 +414,7 @@ namespace KitsuneNet.Tests
 
         // -- GetKeyState / HasKeyDown ---------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task GetKeyState_ReturnsBoolean()
         {
             string? r = await RunWithSession("return type(Session.Console.GetKeyState(0x87))");  // VK_F24
@@ -476,7 +476,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("ok");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task GetTextColor_ReturnsTwoValuesOrNilWhenNoConsole()
         {
             // Returns two integers when a console is attached; nil,nil in headless environments.
@@ -538,7 +538,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task MD5_KnownVector_ReturnsCorrectHex()
         {
             string? r = await Run(@"
@@ -547,7 +547,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("900150983cd24fb0d6963f7d28e17f72");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task MD5_EmptyInput_ReturnsKnownHash()
         {
             string? r = await Run("local h = MD5.New(); h:Update(''); return h:Finish()");
@@ -837,7 +837,7 @@ namespace KitsuneNet.Tests
         public async Task Json_MixedTable_EncodesAsObject_IntegerKeysBecomesStrings()
         {
             // Lua can't distinguish "array" from "object" for mixed tables.
-            // Option A: encode as object — no data is lost, but integer keys become
+            // Option A: encode as object â€” no data is lost, but integer keys become
             // string keys in the JSON object, changing their type on decode.
             // This is the safest default: silent data loss (Option B) is worse.
             string? r = await Run(@"
@@ -896,7 +896,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Json_UnicodeEscape_DecodedCorrectly()
         {
-            // \u0041 is 'A', \u00E9 is 'é' (U+00E9)
+            // \u0041 is 'A', \u00E9 is 'Ã©' (U+00E9)
             string? r = await Run(@"
                 local j  = Json.New()
                 local a  = j:Decode('""\\u0041""')
@@ -1317,14 +1317,14 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Json_Encode_Wchar_NonAscii_RoundTripsCorrectly()
         {
-            // é = U+00E9, UTF-8: 0xC3 0xA9.  Use Lua hex escapes so the bytes are
+            // Ã© = U+00E9, UTF-8: 0xC3 0xA9.  Use Lua hex escapes so the bytes are
             // unambiguous ASCII in the script source and survive ANSI marshaling.
             string? r = await Run(@"
                 local j = Json.New()
                 local w = Wchar.FromUtf8('\xC3\xa9')
                 return j:Decode(j:Encode(w))
             ");
-            r.ShouldBe("é");
+            r.ShouldBe("Ã©");
         }
 
         [Fact]
@@ -1495,7 +1495,7 @@ namespace KitsuneNet.Tests
         public async Task Wchar_Find_NonAsciiStringPattern_Works()
         {
             // Verifies WcharFind now uses FromUtf8 (not FromAnsi) for string patterns.
-            // \xC3\xA9 are the raw UTF-8 bytes for U+00E9 (é).
+            // \xC3\xA9 are the raw UTF-8 bytes for U+00E9 (Ã©).
             string? r = await Run(@"
                 local hay = Wchar.FromUtf8('caf\xC3\xA9 au lait')
                 return tostring(hay:Find('\xC3\xA9') ~= nil)
@@ -1557,7 +1557,7 @@ namespace KitsuneNet.Tests
         public async Task Wchar_Concat_NonAsciiStringOperand_ProducesCorrectResult()
         {
             // Verifies wchar_concat uses MultiByteToWideChar(CP_UTF8) for string operands.
-            // \xC3\xA9 = UTF-8 for U+00E9 (é); previous code used mbstowcs (ANSI).
+            // \xC3\xA9 = UTF-8 for U+00E9 (Ã©); previous code used mbstowcs (ANSI).
             string? r = await Run(@"return (Wchar.FromUtf8('caf') .. '\xC3\xA9'):ToUtf8()");
             r.ShouldBe("caf\u00e9");
         }
@@ -1602,7 +1602,7 @@ namespace KitsuneNet.Tests
         public async Task Wchar_ToBytes_AsciiChar_ProducesOneCodeUnit()
         {
             // ToBytes returns a table of char16_t code units (UTF-16 LE, platform-independent).
-            // 'A' is U+0041 — one code unit — so the table has exactly one entry with value 65.
+            // 'A' is U+0041 â€” one code unit â€” so the table has exactly one entry with value 65.
             string? r = await Run(@"
                 local units = Wchar.FromUtf8('A'):ToBytes()
                 return tostring(#units == 1 and units[1] == 65)
@@ -1659,7 +1659,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Wchar_NonAsciiUtf8_LengthIsWcharCount()
         {
-            // U+00E9 (é) is 2 UTF-8 bytes (\xC3\xA9) but 1 wchar_t; length should be 1.
+            // U+00E9 (Ã©) is 2 UTF-8 bytes (\xC3\xA9) but 1 wchar_t; length should be 1.
             string? r = await Run(@"return tostring(#Wchar.FromUtf8('\xC3\xA9') == 1)");
             r.ShouldBe("true");
         }
@@ -1830,7 +1830,7 @@ namespace KitsuneNet.Tests
         public async Task Stream_WriteWchar_NonWritable_ReturnsZero()
         {
             // Writing a Wchar to a read-only function-backend stream must return 0.
-            // Caps: READ=1, WRITE=2, SEEK=4 — return 1 for read-only.
+            // Caps: READ=1, WRITE=2, SEEK=4 â€” return 1 for read-only.
             string? r = await Run(@"
                 local s = Stream.Create(function(op, ...)
                     if op == READ then return 'x' end
@@ -1856,28 +1856,28 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Timer_InitialState_NotRunning()
         {
             string? r = await Run("local t = Timer.New(); return tostring(t:IsRunning() == false)");
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Timer_AfterStart_IsRunning()
         {
             string? r = await Run("local t = Timer.New(); t:Start(); return tostring(t:IsRunning())");
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Timer_ElapsedAfterSleep_IsPositive()
         {
             string? r = await Run("local t = Timer.New(); t:Start(); Sleep(20); return tostring(t:Elapsed() > 0)");
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Timer_StopAndReset_ElapsedIsZero()
         {
             string? r = await Run(@"
@@ -1889,7 +1889,7 @@ namespace KitsuneNet.Tests
 
         // -- Aes ------------------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Aes_EncryptDecrypt_RoundTrip()
         {
             // Use two fresh instances with the same key and default zero IV.
@@ -1903,7 +1903,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Aes_EncryptedData_DiffersFromPlaintext()
         {
             string? r = await Run(@"
@@ -1917,7 +1917,7 @@ namespace KitsuneNet.Tests
 
         // -- SQLite (in-memory) ---------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task SQLite_InMemory_CreateInsertSelect()
         {
             string? r = await Run(@"
@@ -1937,7 +1937,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("1:alice,2:bob");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task SQLite_GetRow_ByIndex_ReturnsValue()
         {
             string? r = await Run(@"
@@ -1953,7 +1953,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("test_val");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task SQLite_RegisterFunction_CallableFromQuery()
         {
             // SQLite returns numeric results as floats (7.0, not 7).
@@ -1967,6 +1967,157 @@ namespace KitsuneNet.Tests
                 return tostring(val)
             ");
             r.ShouldBe("7.0");
+        }
+
+        [Fact]
+        public async Task SQLite_NullValue_IsNilInLua()
+        {
+            string? r = await Run(@"
+                local db = SQLite.Open()
+                db:Query('CREATE TABLE t (v TEXT)'); db:Fetch()
+                db:Query('INSERT INTO t VALUES (NULL)'); db:Fetch()
+                db:Query('SELECT v FROM t')
+                db:Fetch()
+                local val = db:GetRow(1)
+                db:Close()
+                return tostring(val)
+            ");
+            r.ShouldBe("nil");
+        }
+
+        [Fact]
+        public async Task SQLite_IntegerColumn_RoundTrips()
+        {
+            string? r = await Run(@"
+                local db = SQLite.Open()
+                db:Query('CREATE TABLE t (n INTEGER)'); db:Fetch()
+                db:Query('INSERT INTO t VALUES (42)'); db:Fetch()
+                db:Query('SELECT n FROM t')
+                db:Fetch()
+                local row = db:GetRow()
+                db:Close()
+                return tostring(row.n)
+            ");
+            r.ShouldBe("42");
+        }
+
+        [Fact]
+        public async Task SQLite_FloatColumn_RoundTrips()
+        {
+            string? r = await Run(@"
+                local db = SQLite.Open()
+                db:Query('CREATE TABLE t (f REAL)'); db:Fetch()
+                db:Query('INSERT INTO t VALUES (3.14)'); db:Fetch()
+                db:Query('SELECT f FROM t')
+                db:Fetch()
+                local row = db:GetRow()
+                db:Close()
+                return tostring(math.abs(row.f - 3.14) < 0.0001)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task SQLite_MultipleRows_FetchAll()
+        {
+            string? r = await Run(@"
+                local db = SQLite.Open()
+                db:Query('CREATE TABLE t (n INTEGER)'); db:Fetch()
+                for i = 1, 5 do
+                    db:Query('INSERT INTO t VALUES (' .. i .. ')'); db:Fetch()
+                end
+                db:Query('SELECT n FROM t ORDER BY n')
+                local sum = 0
+                while db:Fetch() do
+                    sum = sum + db:GetRow(1)
+                end
+                db:Close()
+                return tostring(sum)
+            ");
+            r.ShouldBe("15");
+        }
+
+        [Fact]
+        public async Task SQLite_ParameterizedQuery_TableBind()
+        {
+            string? r = await Run(@"
+                local db = SQLite.Open()
+                db:Query('CREATE TABLE t (id INTEGER, name TEXT)'); db:Fetch()
+                db:Query('INSERT INTO t VALUES (:id, :name)', {id=7, name='kitsune'}); db:Fetch()
+                db:Query('SELECT name FROM t WHERE id = 7')
+                db:Fetch()
+                local val = db:GetRow(1)
+                db:Close()
+                return tostring(val)
+            ");
+            r.ShouldBe("kitsune");
+        }
+
+        [Fact]
+        public async Task SQLite_InvalidQuery_ReturnsFalseAndError()
+        {
+            string? r = await Run(@"
+                local db = SQLite.Open()
+                local ok, err = db:Query('THIS IS NOT SQL')
+                db:Close()
+                return tostring(ok == false and type(err) == 'string' and #err > 0)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task SQLite_AggregateFunction_SumCustom()
+        {
+            string? r = await Run(@"
+                local db = SQLite.Open()
+                db:Query('CREATE TABLE t (n INTEGER)'); db:Fetch()
+                for i = 1, 4 do
+                    db:Query('INSERT INTO t VALUES (' .. i .. ')'); db:Fetch()
+                end
+                local acc = 0
+                db:RegisterAggregateFunction(function(isFinish, v)
+                    if isFinish then return acc end
+                    acc = acc + v
+                end, 'mysum', 1)
+                db:Query('SELECT mysum(n) FROM t')
+                db:Fetch()
+                local val = db:GetRow(1)
+                db:Close()
+                return tostring(val)
+            ");
+            r.ShouldBe("10.0");
+        }
+
+        [Fact]
+        public async Task SQLite_Close_ThenQueryRaisesError()
+        {
+            string? r = await Run(@"
+                local db = SQLite.Open()
+                db:Close()
+                local ok, err = pcall(function() db:Query('SELECT 1') end)
+                return tostring(not ok and type(err) == 'string')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task SQLite_InstanceReuse_MultipleQueries()
+        {
+            string? r = await Run(@"
+                local db = SQLite.Open()
+                db:Query('CREATE TABLE t (v TEXT)'); db:Fetch()
+                db:Query([[INSERT INTO t VALUES ('first')]]); db:Fetch()
+                db:Query([[INSERT INTO t VALUES ('second')]]); db:Fetch()
+                db:Query('SELECT COUNT(*) FROM t')
+                db:Fetch()
+                local count = db:GetRow(1)
+                db:Query('SELECT v FROM t ORDER BY rowid LIMIT 1')
+                db:Fetch()
+                local first = db:GetRow(1)
+                db:Close()
+                return tostring(count) .. ':' .. tostring(first)
+            ");
+            r.ShouldBe("2:first");
         }
 
         // -- Stream (in-memory) ---------------------------------------------------
@@ -2160,7 +2311,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Compress_Decompress_RoundTrip()
         {
             string? r = await Run(@"
@@ -2173,7 +2324,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("hello hello hello hello hello");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Compress_ProducesSmallerOutput()
         {
             string? r = await Run(@"
@@ -2187,7 +2338,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Compress_IntoProvidedStream_RoundTrip()
         {
             string? r = await Run(@"
@@ -2201,7 +2352,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("hello hello hello hello hello");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Decompress_IntoProvidedStream_RoundTrip()
         {
             string? r = await Run(@"
@@ -2216,7 +2367,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("hello hello hello hello hello");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Compress_AndDecompress_BothIntoProvidedStreams_RoundTrip()
         {
             string? r = await Run(@"
@@ -2232,7 +2383,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("hello hello hello hello hello");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Compress_ProvidedDst_PositionNotReset()
         {
             string? r = await Run(@"
@@ -2246,7 +2397,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Decompress_ProvidedDst_PositionNotReset()
         {
             string? r = await Run(@"
@@ -2371,11 +2522,12 @@ namespace KitsuneNet.Tests
 
         // -- Stream.Open (file backend) -------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Open_WriteRead_RoundTrip()
         {
             string? r = await Run(@"
-                local path = os.getenv('TEMP') .. '\\kitsune_stream_rw.bin'
+                local _tmp = (os.getenv('TEMP') or os.getenv('TMPDIR') or '/tmp') .. package.config:sub(1,1)
+                local path = _tmp .. 'kitsune_stream_rw.bin'
                 local w = Stream.Open(path, 'wb')
                 w:Write('hello file stream')
                 w:Close()
@@ -2388,11 +2540,12 @@ namespace KitsuneNet.Tests
             r.ShouldBe("hello file stream");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Open_Info_ContainsNameAndType()
         {
             string? r = await Run(@"
-                local path = os.getenv('TEMP') .. '\\kitsune_stream_info.bin'
+                local _tmp = (os.getenv('TEMP') or os.getenv('TMPDIR') or '/tmp') .. package.config:sub(1,1)
+                local path = _tmp .. 'kitsune_stream_info.bin'
                 local w = Stream.Open(path, 'wb')
                 local _, info = w:GetInfo()
                 w:Close()
@@ -2402,11 +2555,12 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Open_Seek_UpdatesPosition()
         {
             string? r = await Run(@"
-                local path = os.getenv('TEMP') .. '\\kitsune_stream_seek.bin'
+                local _tmp = (os.getenv('TEMP') or os.getenv('TMPDIR') or '/tmp') .. package.config:sub(1,1)
+                local path = _tmp .. 'kitsune_stream_seek.bin'
                 local w = Stream.Open(path, 'wb')
                 w:Write('ABCDEF')
                 w:Seek(2)
@@ -2418,13 +2572,14 @@ namespace KitsuneNet.Tests
             r.ShouldBe("2");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Open_Len_ReturnsFileSizeWithoutMovingCursor()
         {
             // s:len() on a file stream must return the total file byte count and
-            // must not disturb the read cursor (internally uses _filelengthi64).
+            // must not disturb the read cursor.
             string? r = await Run(@"
-                local path = os.getenv('TEMP') .. '\\kitsune_stream_len.bin'
+                local _tmp = (os.getenv('TEMP') or os.getenv('TMPDIR') or '/tmp') .. package.config:sub(1,1)
+                local path = _tmp .. 'kitsune_stream_len.bin'
                 local w = Stream.Open(path, 'wb')
                 w:Write('ABCDEF')
                 w:Close()
@@ -2439,13 +2594,14 @@ namespace KitsuneNet.Tests
             r.ShouldBe("6:2");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Open_Info_LenMatchesFileSize()
         {
             // GetInfo().len for a file stream must equal the actual file byte count
             // and must not change the cursor position.
             string? r = await Run(@"
-                local path = os.getenv('TEMP') .. '\\kitsune_stream_infolen.bin'
+                local _tmp = (os.getenv('TEMP') or os.getenv('TMPDIR') or '/tmp') .. package.config:sub(1,1)
+                local path = _tmp .. 'kitsune_stream_infolen.bin'
                 local w = Stream.Open(path, 'wb')
                 w:Write('hello')
                 w:Close()
@@ -2464,17 +2620,18 @@ namespace KitsuneNet.Tests
         public async Task Stream_Open_NonexistentFile_RaisesError()
         {
             string? r = await Run(@"
-                local ok, err = pcall(Stream.Open, 'C:\\nonexistent_kitsune_xyz_abc.bin', 'rb')
+                local ok, err = pcall(Stream.Open, 'nonexistent_kitsune_xyz_abc_1234567890.bin', 'rb')
                 return tostring(not ok and err:find('Stream.Open') ~= nil)
             ");
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Open_ReadMode_BlocksWrite()
         {
             string? r = await Run(@"
-                local path = os.getenv('TEMP') .. '\\kitsune_stream_caps.bin'
+                local _tmp = (os.getenv('TEMP') or os.getenv('TMPDIR') or '/tmp') .. package.config:sub(1,1)
+                local path = _tmp .. 'kitsune_stream_caps.bin'
                 local w = Stream.Open(path, 'wb')
                 w:Write('x')
                 w:Close()
@@ -3008,7 +3165,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("a:c|1:3");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_DecodeFromFunction_AutoDetect_AccumulatesChunksForSniff()
         {
             // Without Task-14 buffering the sniff would run on only the first
@@ -3053,7 +3210,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("x:z");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_DecodeFromFunction_ChunkedStringInput_YieldsAllRows()
         {
             // Chunks deliberately cross field and row boundaries to verify the
@@ -3075,7 +3232,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("a:b:c|1:2:3|4:5:6");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task CSV_DecodeFromFunction_WcharChunks_ConvertedTransparently()
         {
             // Supplier returns Wchar userdata objects; they must be converted to UTF-8
@@ -3180,7 +3337,7 @@ namespace KitsuneNet.Tests
 
         // -- Mutex ----------------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Mutex_Open_LockAndUnlock_Succeeds()
         {
             string? r = await Run(@"
@@ -3192,7 +3349,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Mutex_Info_ReturnsNameAndLockedState()
         {
             string? r = await Run(@"
@@ -3207,28 +3364,38 @@ namespace KitsuneNet.Tests
 
         // -- FileSystem -----------------------------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task FileSystem_CurrentDirectory_ReturnsNonEmptyString()
         {
             string? r = await Run("return tostring(#FileSystem.CurrentDirectory() > 0)");
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task FileSystem_GetTempFileName_ReturnsValidPath()
         {
             string? r = await Run("local p = FileSystem.GetTempFileName(); return tostring(type(p)=='string' and #p>0)");
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task FileSystem_GetDrives_ReturnsList()
         {
             string? r = await Run("local d = FileSystem.GetDrives(); return tostring(type(d)=='table' and #d>=1)");
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
+        public async Task FileSystem_GetDrives_EntryHasDriveField()
+        {
+            string? r = await Run(@"
+                local d = FileSystem.GetDrives()
+                return tostring(type(d[1].Drive) == 'string' and #d[1].Drive > 0)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
         public async Task FileSystem_CreateAndDeleteDirectory_Succeeds()
         {
             string? r = await Run(@"
@@ -3236,6 +3403,341 @@ namespace KitsuneNet.Tests
                 local ok1 = FileSystem.CreateDirectory(dir)
                 local ok2 = FileSystem.RemoveDirectory(dir)
                 return tostring(ok1 and ok2)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task FileSystem_CreateAndDeleteDirectory_WithWchar_Succeeds()
+        {
+            string? r = await Run(@"
+                local dir = Wchar.FromUtf8(FileSystem.GetTempFileName() .. '_kitsune_wchar_testdir')
+                local ok1 = FileSystem.CreateDirectory(dir)
+                local ok2 = FileSystem.RemoveDirectory(dir)
+                return tostring(ok1 and ok2)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task FileSystem_Open_WriteAndRead_RoundTrip()
+        {
+            string? r = await Run(@"
+                local path = FileSystem.GetTempFileName() .. '_kitsune_open.txt'
+                local f = FileSystem.Open(path, 'wb')
+                f:write('hello kitsune')
+                f:close()
+                local g = FileSystem.Open(path, 'rb')
+                local data = g:read('*a')
+                g:close()
+                FileSystem.Delete(path)
+                return data
+            ");
+            r.ShouldBe("hello kitsune");
+        }
+
+        [Fact]
+        public async Task FileSystem_Open_WithWcharPath_WriteAndRead_RoundTrip()
+        {
+            string? r = await Run(@"
+                local path = FileSystem.GetTempFileName() .. '_kitsune_wchar_open.txt'
+                local wpath = Wchar.FromUtf8(path)
+                local f = FileSystem.Open(wpath, 'wb')
+                f:write('hello wchar')
+                f:close()
+                local g = FileSystem.Open(wpath, 'rb')
+                local data = g:read('*a')
+                g:close()
+                FileSystem.Delete(wpath)
+                return data
+            ");
+            r.ShouldBe("hello wchar");
+        }
+
+        [Fact]
+        public async Task FileSystem_GetFileInfo_ReturnsValidTable()
+        {
+            string? r = await Run(@"
+                local path = FileSystem.GetTempFileName() .. '_kitsune_info.txt'
+                local f = FileSystem.Open(path, 'wb')
+                f:write('abc')
+                f:close()
+                local info = FileSystem.GetFileInfo(path)
+                FileSystem.Delete(path)
+                return tostring(type(info) == 'table' and info.Size == 3 and info.isFolder == false)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task FileSystem_GetFileInfo_WithWchar_ReturnsValidTable()
+        {
+            string? r = await Run(@"
+                local path = FileSystem.GetTempFileName() .. '_kitsune_winfo.txt'
+                local f = FileSystem.Open(path, 'wb')
+                f:write('xyz')
+                f:close()
+                local info = FileSystem.GetFileInfo(Wchar.FromUtf8(path))
+                FileSystem.Delete(path)
+                return tostring(type(info) == 'table' and info.Size == 3)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task FileSystem_GetFileInfo_MissingPath_ReturnsNil()
+        {
+            string? r = await Run(@"
+                local info = FileSystem.GetFileInfo(FileSystem.GetTempFileName() .. '_no_such_file_xyz')
+                return tostring(info == nil)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task FileSystem_Copy_CreatesDestination()
+        {
+            string? r = await Run(@"
+                local src = FileSystem.GetTempFileName() .. '_kitsune_src.txt'
+                local dst = FileSystem.GetTempFileName() .. '_kitsune_dst.txt'
+                local f = FileSystem.Open(src, 'wb'); f:write('copy me'); f:close()
+                local ok = FileSystem.Copy(src, dst, true)
+                local exists = FileSystem.GetFileInfo(dst) ~= nil
+                FileSystem.Delete(src)
+                FileSystem.Delete(dst)
+                return tostring(ok and exists)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task FileSystem_Copy_WithWcharPaths_CreatesDestination()
+        {
+            string? r = await Run(@"
+                local src = FileSystem.GetTempFileName() .. '_kitsune_wsrc.txt'
+                local dst = FileSystem.GetTempFileName() .. '_kitsune_wdst.txt'
+                local f = FileSystem.Open(src, 'wb'); f:write('wchar copy'); f:close()
+                local ok = FileSystem.Copy(Wchar.FromUtf8(src), Wchar.FromUtf8(dst), true)
+                local exists = FileSystem.GetFileInfo(dst) ~= nil
+                FileSystem.Delete(src)
+                FileSystem.Delete(dst)
+                return tostring(ok and exists)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task FileSystem_Move_SourceGoneDestinationExists()
+        {
+            string? r = await Run(@"
+                local src = FileSystem.GetTempFileName() .. '_kitsune_msrc.txt'
+                local dst = FileSystem.GetTempFileName() .. '_kitsune_mdst.txt'
+                local f = FileSystem.Open(src, 'wb'); f:write('move me'); f:close()
+                local ok = FileSystem.Move(src, dst)
+                local srcGone = FileSystem.GetFileInfo(src) == nil
+                local dstExists = FileSystem.GetFileInfo(dst) ~= nil
+                FileSystem.Delete(dst)
+                return tostring(ok and srcGone and dstExists)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task FileSystem_Rename_SourceGoneDestinationExists()
+        {
+            string? r = await Run(@"
+                local src = FileSystem.GetTempFileName() .. '_kitsune_rsrc.txt'
+                local dst = FileSystem.GetTempFileName() .. '_kitsune_rdst.txt'
+                local f = FileSystem.Open(src, 'wb'); f:write('rename me'); f:close()
+                local ok = FileSystem.Rename(src, dst)
+                local srcGone = FileSystem.GetFileInfo(src) == nil
+                local dstExists = FileSystem.GetFileInfo(dst) ~= nil
+                FileSystem.Delete(dst)
+                return tostring(ok and srcGone and dstExists)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task FileSystem_Rename_WithWcharPaths()
+        {
+            string? r = await Run(@"
+                local src = FileSystem.GetTempFileName() .. '_kitsune_wrsrc.txt'
+                local dst = FileSystem.GetTempFileName() .. '_kitsune_wrdst.txt'
+                local f = FileSystem.Open(src, 'wb'); f:write('wchar rename'); f:close()
+                local ok = FileSystem.Rename(Wchar.FromUtf8(src), Wchar.FromUtf8(dst))
+                local srcGone = FileSystem.GetFileInfo(src) == nil
+                local dstExists = FileSystem.GetFileInfo(dst) ~= nil
+                FileSystem.Delete(dst)
+                return tostring(ok and srcGone and dstExists)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task FileSystem_Delete_RemovesFile()
+        {
+            string? r = await Run(@"
+                local path = FileSystem.GetTempFileName() .. '_kitsune_del.txt'
+                local f = FileSystem.Open(path, 'wb'); f:write('delete me'); f:close()
+                local ok = FileSystem.Delete(path)
+                local gone = FileSystem.GetFileInfo(path) == nil
+                return tostring(ok and gone)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task FileSystem_Delete_WithWcharPath_RemovesFile()
+        {
+            string? r = await Run(@"
+                local path = FileSystem.GetTempFileName() .. '_kitsune_wdel.txt'
+                local f = FileSystem.Open(path, 'wb'); f:write('wchar delete'); f:close()
+                local ok = FileSystem.Delete(Wchar.FromUtf8(path))
+                local gone = FileSystem.GetFileInfo(path) == nil
+                return tostring(ok and gone)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task FileSystem_GetFiles_ReturnsOnlyFiles()
+        {
+            string? r = await Run(@"
+                local sep = package.config:sub(1,1)
+                local base = FileSystem.GetTempFileName() .. '_kitsune_ls'
+                FileSystem.CreateDirectory(base)
+                FileSystem.CreateDirectory(base .. sep .. 'subdir')
+                local f1 = FileSystem.Open(base .. sep .. 'a.txt', 'wb'); f1:write('a'); f1:close()
+                local f2 = FileSystem.Open(base .. sep .. 'b.txt', 'wb'); f2:write('b'); f2:close()
+                local files = FileSystem.GetFiles(base)
+                FileSystem.Delete(base .. sep .. 'a.txt')
+                FileSystem.Delete(base .. sep .. 'b.txt')
+                FileSystem.RemoveDirectory(base .. sep .. 'subdir')
+                FileSystem.RemoveDirectory(base)
+                return tostring(#files == 2)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task FileSystem_GetFiles_WithWcharPath_ReturnsOnlyFiles()
+        {
+            string? r = await Run(@"
+                local sep = package.config:sub(1,1)
+                local base = FileSystem.GetTempFileName() .. '_kitsune_wls'
+                FileSystem.CreateDirectory(base)
+                local f1 = FileSystem.Open(base .. sep .. 'x.txt', 'wb'); f1:write('x'); f1:close()
+                local files = FileSystem.GetFiles(Wchar.FromUtf8(base))
+                FileSystem.Delete(base .. sep .. 'x.txt')
+                FileSystem.RemoveDirectory(base)
+                return tostring(#files == 1)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task FileSystem_GetDirectories_ReturnsOnlyDirs()
+        {
+            string? r = await Run(@"
+                local sep = package.config:sub(1,1)
+                local base = FileSystem.GetTempFileName() .. '_kitsune_dirs'
+                FileSystem.CreateDirectory(base)
+                FileSystem.CreateDirectory(base .. sep .. 'sub1')
+                FileSystem.CreateDirectory(base .. sep .. 'sub2')
+                local f = FileSystem.Open(base .. sep .. 'file.txt', 'wb'); f:write('f'); f:close()
+                local dirs = FileSystem.GetDirectories(base)
+                FileSystem.Delete(base .. sep .. 'file.txt')
+                FileSystem.RemoveDirectory(base .. sep .. 'sub1')
+                FileSystem.RemoveDirectory(base .. sep .. 'sub2')
+                FileSystem.RemoveDirectory(base)
+                return tostring(#dirs == 2)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task FileSystem_GetAll_ReturnsMixedEntries()
+        {
+            string? r = await Run(@"
+                local sep = package.config:sub(1,1)
+                local base = FileSystem.GetTempFileName() .. '_kitsune_all'
+                FileSystem.CreateDirectory(base)
+                FileSystem.CreateDirectory(base .. sep .. 'subdir')
+                local f = FileSystem.Open(base .. sep .. 'file.txt', 'wb'); f:write('f'); f:close()
+                local all = FileSystem.GetAll(base)
+                FileSystem.Delete(base .. sep .. 'file.txt')
+                FileSystem.RemoveDirectory(base .. sep .. 'subdir')
+                FileSystem.RemoveDirectory(base)
+                return tostring(#all == 2)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task FileSystem_GetAll_EntriesHaveExpectedFields()
+        {
+            string? r = await Run(@"
+                local sep = package.config:sub(1,1)
+                local base = FileSystem.GetTempFileName() .. '_kitsune_fields'
+                FileSystem.CreateDirectory(base)
+                local f = FileSystem.Open(base .. sep .. 'f.txt', 'wb'); f:write('abc'); f:close()
+                local all = FileSystem.GetAll(base)
+                local entry = all[1]
+                FileSystem.Delete(base .. sep .. 'f.txt')
+                FileSystem.RemoveDirectory(base)
+                return tostring(
+                    entry ~= nil and
+                    type(entry.FileName) ~= 'nil' and
+                    type(entry.isFolder) == 'boolean' and
+                    type(entry.Size) == 'number'
+                )
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task FileSystem_GetAll_WithWcharPath_ReturnsMixedEntries()
+        {
+            string? r = await Run(@"
+                local sep = package.config:sub(1,1)
+                local base = FileSystem.GetTempFileName() .. '_kitsune_wall'
+                FileSystem.CreateDirectory(base)
+                local f = FileSystem.Open(base .. sep .. 'y.txt', 'wb'); f:write('y'); f:close()
+                local all = FileSystem.GetAll(Wchar.FromUtf8(base))
+                FileSystem.Delete(base .. sep .. 'y.txt')
+                FileSystem.RemoveDirectory(base)
+                return tostring(#all == 1)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task FileSystem_SetCurrentDirectory_ChangesDirectory()
+        {
+            string? r = await Run(@"
+                local orig = FileSystem.CurrentDirectory()
+                local tmp  = FileSystem.GetTempFileName() .. '_kitsune_chdir'
+                FileSystem.CreateDirectory(tmp)
+                local ok = FileSystem.SetCurrentDirectory(tmp)
+                FileSystem.SetCurrentDirectory(orig)
+                FileSystem.RemoveDirectory(tmp)
+                return tostring(ok == true)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task FileSystem_SetCurrentDirectory_WithWcharPath_ChangesDirectory()
+        {
+            string? r = await Run(@"
+                local orig = FileSystem.CurrentDirectory()
+                local tmp  = FileSystem.GetTempFileName() .. '_kitsune_wchdir'
+                FileSystem.CreateDirectory(tmp)
+                local ok = FileSystem.SetCurrentDirectory(Wchar.FromUtf8(tmp))
+                FileSystem.SetCurrentDirectory(orig)
+                FileSystem.RemoveDirectory(tmp)
+                return tostring(ok == true)
             ");
             r.ShouldBe("true");
         }
@@ -3300,7 +3802,7 @@ namespace KitsuneNet.Tests
         public async Task CSV_New_CalledOnInstance_CreatesNewIndependentInstance()
         {
             // csv:New(delim) must ignore the existing instance and return a fresh one
-            // with its own delimiter — not a reference to the original.
+            // with its own delimiter â€” not a reference to the original.
             string? r = await Run(@"
                 local a = CSV.New(';')
                 local b = a:New(',')
@@ -3498,7 +4000,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Stream_UnsignedNumericTypes_RoundTrip()
         {
-            // WriteUnsignedShort / WriteUnsignedInt / WriteUnsignedLong — each must
+            // WriteUnsignedShort / WriteUnsignedInt / WriteUnsignedLong â€” each must
             // round-trip without sign-extension or truncation.
             string? r = await Run(@"
                 local s = Stream.Create()
@@ -3586,13 +4088,14 @@ namespace KitsuneNet.Tests
             r.ShouldBe("hello");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Tostring_FileStream_ReturnsFallbackString()
         {
             // A file stream opened with "rb" has CAP_READ + CAP_SEEK, but __tostring
-            // must NOT silently read the file — it must return the pointer fallback.
+            // must NOT silently read the file â€” it must return the pointer fallback.
             string? r = await Run(@"
-                local path = os.getenv('TEMP') .. '\\kitsune_tostring_test.bin'
+                local _tmp = (os.getenv('TEMP') or os.getenv('TMPDIR') or '/tmp') .. package.config:sub(1,1)
+                local path = _tmp .. 'kitsune_tostring_test.bin'
                 local w = Stream.Open(path, 'wb')
                 w:Write('secret')
                 w:Close()
@@ -3626,7 +4129,7 @@ namespace KitsuneNet.Tests
         public async Task Stream_Tostring_ReadableButNotSeekable_ReturnsFallbackString()
         {
             // A read-only stream without CAP_SEEK must also fall back to the pointer
-            // string — reading without being able to seek would silently consume data.
+            // string â€” reading without being able to seek would silently consume data.
             string? r = await Run(@"
                 local OPEN, CLOSE, READ, CAP_READ = 0, 1, 2, 1
                 local s = Stream.Create(function(op, len)
@@ -3732,7 +4235,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Stream_PeekByte_RequiresReadAndSeek_NotADistinctFlag()
         {
-            // PeekStreamByte is now gated on CAP_READ + CAP_SEEK — there is no
+            // PeekStreamByte is now gated on CAP_READ + CAP_SEEK â€” there is no
             // separate CAP_PEEK flag.  A backend with both returns a real value;
             // a backend with only CAP_READ (no seek) returns -1.
             string? r = await Run(@"
@@ -3840,7 +4343,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Stream_ReadUtf8_MultiByte_ReturnsCodepoint()
         {
-            // U+00E9 (é) encodes as 0xC3 0xA9 in UTF-8.
+            // U+00E9 (Ã©) encodes as 0xC3 0xA9 in UTF-8.
             string? r = await Run(@"
                 local s = Stream.Create()
                 s:WriteByte(0xC3)
@@ -3871,7 +4374,7 @@ namespace KitsuneNet.Tests
         public async Task Stream_WriteUtf8_HighByte_ConvertedToUtf8Pair()
         {
             // WriteUtf8 treats the input string as Latin-1 and re-encodes to UTF-8.
-            // Latin-1 0xE9 (é) must produce the two-byte sequence 0xC3 0xA9.
+            // Latin-1 0xE9 (Ã©) must produce the two-byte sequence 0xC3 0xA9.
             string? r = await Run(@"
                 local s = Stream.Create()
                 s:WriteUtf8('\xE9')
@@ -3886,7 +4389,7 @@ namespace KitsuneNet.Tests
 
         // -- Compress / Decompress error paths -------------------------------------
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Compress_NonReadableSource_ReturnsNilAndError()
         {
             string? r = await Run(@"
@@ -3901,7 +4404,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Decompress_NonReadableSource_ReturnsNilAndError()
         {
             string? r = await Run(@"
@@ -3916,7 +4419,7 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        [WindowsOnlyFact]
+        [Fact]
         public async Task Stream_Compress_NonWritableDest_ReturnsNilAndError()
         {
             string? r = await Run(@"

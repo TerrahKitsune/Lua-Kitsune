@@ -1,6 +1,6 @@
-#pragma once
+﻿#pragma once
 #include "lua_main_incl.h"
-#include "SQLite\sqlite3.h"
+#include "SQLite/sqlite3.h"
 static const char * LUASQLITE = "SQLite";
 
 typedef struct LuaSQLiteFunction {

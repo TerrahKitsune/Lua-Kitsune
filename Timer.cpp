@@ -1,9 +1,18 @@
-#include "Timer.h"
+﻿#include "Timer.h"
 #include <string.h>
-#include <windows.h>
+#include <chrono>
+
+// Single cross-platform time source: steady_clock nanoseconds.
+// On Windows this is backed by QueryPerformanceCounter; on Linux by CLOCK_MONOTONIC.
+static inline int64_t timer_now_ns() {
+	return (int64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(
+		std::chrono::steady_clock::now().time_since_epoch()
+	).count();
+}
+
+static const double TIMER_NS_PER_MS = 1000000.0;
 
 Timer * lua_totimer(lua_State *L, int index) {
-
 	Timer * timer = (Timer*)lua_touserdata(L, index);
 	if (timer == NULL)
 		luaL_error(L, "paramter is not a %s", TIMER);
@@ -11,7 +20,6 @@ Timer * lua_totimer(lua_State *L, int index) {
 }
 
 Timer * luaL_checktimer(lua_State *L, int index) {
-
 	Timer * timer = (Timer*)luaL_checkudata(L, index, TIMER);
 	if (timer == NULL)
 		luaL_error(L, "paramter is not a %s", TIMER);
@@ -19,7 +27,6 @@ Timer * luaL_checktimer(lua_State *L, int index) {
 }
 
 Timer * lua_pushtimer(lua_State *L) {
-
 	Timer * timer = (Timer*)lua_newuserdata(L, sizeof(Timer));
 	if (timer == NULL)
 		luaL_error(L, "Unable to create timer");
@@ -35,7 +42,6 @@ int TimerNew(lua_State *L) {
 }
 
 int TimerIsRunning(lua_State *L) {
-
 	Timer * timer = luaL_checktimer(L, 1);
 	int started = timer->CounterStart > 0 && timer->CounterStop <= 0;
 	lua_pop(L, 1);
@@ -44,17 +50,11 @@ int TimerIsRunning(lua_State *L) {
 }
 
 int TimerReset(lua_State *L) {
-
 	Timer * timer = luaL_checktimer(L, 1);
-
-	LARGE_INTEGER li;
-	if (!QueryPerformanceFrequency(&li))
-		luaL_error(L, "QueryPerformanceFrequency failed!");
-
 	timer->CounterStart = 0;
-	timer->CounterStop = 0;
-	timer->StoredTime = 0;
-
+	timer->CounterStop  = 0;
+	timer->StoredTime   = 0;
+	timer->PCFreq       = 0;
 	lua_pop(L, 1);
 	return 0;
 }
@@ -62,62 +62,44 @@ int TimerReset(lua_State *L) {
 int TimerStart(lua_State *L) {
 	Timer * timer = luaL_checktimer(L, 1);
 
-	LARGE_INTEGER li;
-	if (!QueryPerformanceFrequency(&li))
-		luaL_error(L, "QueryPerformanceFrequency failed!");
-
-	if (timer->CounterStart > 0){
-		timer->StoredTime += (double((timer->CounterStop <= 0 ? li.QuadPart : timer->CounterStop) - timer->CounterStart) / timer->PCFreq);
+	if (timer->CounterStart > 0) {
+		int64_t end = (timer->CounterStop > 0) ? timer->CounterStop : timer_now_ns();
+		timer->StoredTime += (double)(end - timer->CounterStart) / TIMER_NS_PER_MS;
 	}
 
-	timer->PCFreq = double(li.QuadPart) / 1000.0;
-
-	QueryPerformanceCounter(&li);
-	timer->CounterStart = li.QuadPart;
-	
-	timer->CounterStop = 0;
+	timer->PCFreq       = TIMER_NS_PER_MS;
+	timer->CounterStart = timer_now_ns();
+	timer->CounterStop  = 0;
 
 	lua_pop(L, 1);
-
 	return 0;
 }
 
 int TimerStop(lua_State *L) {
-
 	Timer * timer = luaL_checktimer(L, 1);
 
-	if (timer->CounterStop <= 0) {
-		LARGE_INTEGER li;
-		QueryPerformanceCounter(&li);
-		timer->CounterStop = li.QuadPart;
-	}
+	if (timer->CounterStop <= 0)
+		timer->CounterStop = timer_now_ns();
 
 	lua_pop(L, 1);
-	lua_pushnumber(L, double(timer->CounterStop - timer->CounterStart) / timer->PCFreq);
-
+	lua_pushnumber(L, (double)(timer->CounterStop - timer->CounterStart) / TIMER_NS_PER_MS);
 	return 1;
 }
 
 int TimerGetElapsed(lua_State *L) {
-
 	Timer * timer = luaL_checktimer(L, 1);
 
-	if (timer->CounterStart <= 0){
+	if (timer->CounterStart <= 0) {
 		lua_pop(L, 1);
 		lua_pushnumber(L, 0);
 	}
 	else if (timer->CounterStop <= 0) {
-		LARGE_INTEGER li;
-		if (!QueryPerformanceCounter(&li))
-			luaL_error(L, "QueryPerformanceFrequency failed!");
-
-
 		lua_pop(L, 1);
-		lua_pushnumber(L, timer->StoredTime + (double(li.QuadPart - timer->CounterStart) / timer->PCFreq));
+		lua_pushnumber(L, timer->StoredTime + (double)(timer_now_ns() - timer->CounterStart) / TIMER_NS_PER_MS);
 	}
 	else {
 		lua_pop(L, 1);
-		lua_pushnumber(L, timer->StoredTime + (double(timer->CounterStop - timer->CounterStart) / timer->PCFreq));
+		lua_pushnumber(L, timer->StoredTime + (double)(timer->CounterStop - timer->CounterStart) / TIMER_NS_PER_MS);
 	}
 	return 1;
 }
@@ -127,7 +109,6 @@ int Timer_gc(lua_State *L) {
 }
 
 int Timer_tostring(lua_State *L) {
-
 	char tim[100];
 	sprintf(tim, "Timer: 0x%016llX", (unsigned long long)(uintptr_t)lua_totimer(L, 1));
 	lua_pushfstring(L, tim);

@@ -971,6 +971,30 @@ Lua/lzio.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/lua_core.dir/build.make CMakeFiles/lua_core.dir/Lua/lzio.c.s
 .PHONY : Lua/lzio.c.s
 
+LuaAesMain.o: LuaAesMain.cpp.o
+.PHONY : LuaAesMain.o
+
+# target to build an object file
+LuaAesMain.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/LuaAesMain.cpp.o
+.PHONY : LuaAesMain.cpp.o
+
+LuaAesMain.i: LuaAesMain.cpp.i
+.PHONY : LuaAesMain.i
+
+# target to preprocess a source file
+LuaAesMain.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/LuaAesMain.cpp.i
+.PHONY : LuaAesMain.cpp.i
+
+LuaAesMain.s: LuaAesMain.cpp.s
+.PHONY : LuaAesMain.s
+
+# target to generate assembly for a file
+LuaAesMain.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/LuaAesMain.cpp.s
+.PHONY : LuaAesMain.cpp.s
+
 LuaCsvMain.o: LuaCsvMain.cpp.o
 .PHONY : LuaCsvMain.o
 
@@ -1019,6 +1043,54 @@ LuaEngineBuiltins.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/LuaEngineBuiltins.cpp.s
 .PHONY : LuaEngineBuiltins.cpp.s
 
+LuaFileSystem.o: LuaFileSystem.cpp.o
+.PHONY : LuaFileSystem.o
+
+# target to build an object file
+LuaFileSystem.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/LuaFileSystem.cpp.o
+.PHONY : LuaFileSystem.cpp.o
+
+LuaFileSystem.i: LuaFileSystem.cpp.i
+.PHONY : LuaFileSystem.i
+
+# target to preprocess a source file
+LuaFileSystem.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/LuaFileSystem.cpp.i
+.PHONY : LuaFileSystem.cpp.i
+
+LuaFileSystem.s: LuaFileSystem.cpp.s
+.PHONY : LuaFileSystem.s
+
+# target to generate assembly for a file
+LuaFileSystem.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/LuaFileSystem.cpp.s
+.PHONY : LuaFileSystem.cpp.s
+
+LuaFileSystemMain.o: LuaFileSystemMain.cpp.o
+.PHONY : LuaFileSystemMain.o
+
+# target to build an object file
+LuaFileSystemMain.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/LuaFileSystemMain.cpp.o
+.PHONY : LuaFileSystemMain.cpp.o
+
+LuaFileSystemMain.i: LuaFileSystemMain.cpp.i
+.PHONY : LuaFileSystemMain.i
+
+# target to preprocess a source file
+LuaFileSystemMain.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/LuaFileSystemMain.cpp.i
+.PHONY : LuaFileSystemMain.cpp.i
+
+LuaFileSystemMain.s: LuaFileSystemMain.cpp.s
+.PHONY : LuaFileSystemMain.s
+
+# target to generate assembly for a file
+LuaFileSystemMain.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/LuaFileSystemMain.cpp.s
+.PHONY : LuaFileSystemMain.cpp.s
+
 LuaMD5.o: LuaMD5.cpp.o
 .PHONY : LuaMD5.o
 
@@ -1043,6 +1115,54 @@ LuaMD5.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/LuaMD5.cpp.s
 .PHONY : LuaMD5.cpp.s
 
+LuaMutex.o: LuaMutex.cpp.o
+.PHONY : LuaMutex.o
+
+# target to build an object file
+LuaMutex.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/LuaMutex.cpp.o
+.PHONY : LuaMutex.cpp.o
+
+LuaMutex.i: LuaMutex.cpp.i
+.PHONY : LuaMutex.i
+
+# target to preprocess a source file
+LuaMutex.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/LuaMutex.cpp.i
+.PHONY : LuaMutex.cpp.i
+
+LuaMutex.s: LuaMutex.cpp.s
+.PHONY : LuaMutex.s
+
+# target to generate assembly for a file
+LuaMutex.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/LuaMutex.cpp.s
+.PHONY : LuaMutex.cpp.s
+
+LuaMutexMain.o: LuaMutexMain.cpp.o
+.PHONY : LuaMutexMain.o
+
+# target to build an object file
+LuaMutexMain.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/LuaMutexMain.cpp.o
+.PHONY : LuaMutexMain.cpp.o
+
+LuaMutexMain.i: LuaMutexMain.cpp.i
+.PHONY : LuaMutexMain.i
+
+# target to preprocess a source file
+LuaMutexMain.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/LuaMutexMain.cpp.i
+.PHONY : LuaMutexMain.cpp.i
+
+LuaMutexMain.s: LuaMutexMain.cpp.s
+.PHONY : LuaMutexMain.s
+
+# target to generate assembly for a file
+LuaMutexMain.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/LuaMutexMain.cpp.s
+.PHONY : LuaMutexMain.cpp.s
+
 LuaSHA1.o: LuaSHA1.cpp.o
 .PHONY : LuaSHA1.o
 
@@ -1066,6 +1186,54 @@ LuaSHA1.s: LuaSHA1.cpp.s
 LuaSHA1.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/LuaSHA1.cpp.s
 .PHONY : LuaSHA1.cpp.s
+
+LuaSQLite.o: LuaSQLite.cpp.o
+.PHONY : LuaSQLite.o
+
+# target to build an object file
+LuaSQLite.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/LuaSQLite.cpp.o
+.PHONY : LuaSQLite.cpp.o
+
+LuaSQLite.i: LuaSQLite.cpp.i
+.PHONY : LuaSQLite.i
+
+# target to preprocess a source file
+LuaSQLite.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/LuaSQLite.cpp.i
+.PHONY : LuaSQLite.cpp.i
+
+LuaSQLite.s: LuaSQLite.cpp.s
+.PHONY : LuaSQLite.s
+
+# target to generate assembly for a file
+LuaSQLite.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/LuaSQLite.cpp.s
+.PHONY : LuaSQLite.cpp.s
+
+LuaSQLiteMain.o: LuaSQLiteMain.cpp.o
+.PHONY : LuaSQLiteMain.o
+
+# target to build an object file
+LuaSQLiteMain.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/LuaSQLiteMain.cpp.o
+.PHONY : LuaSQLiteMain.cpp.o
+
+LuaSQLiteMain.i: LuaSQLiteMain.cpp.i
+.PHONY : LuaSQLiteMain.i
+
+# target to preprocess a source file
+LuaSQLiteMain.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/LuaSQLiteMain.cpp.i
+.PHONY : LuaSQLiteMain.cpp.i
+
+LuaSQLiteMain.s: LuaSQLiteMain.cpp.s
+.PHONY : LuaSQLiteMain.s
+
+# target to generate assembly for a file
+LuaSQLiteMain.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/LuaSQLiteMain.cpp.s
+.PHONY : LuaSQLiteMain.cpp.s
 
 LuaSha256.o: LuaSha256.cpp.o
 .PHONY : LuaSha256.o
@@ -1187,6 +1355,30 @@ SHA1Main.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/SHA1Main.cpp.s
 .PHONY : SHA1Main.cpp.s
 
+SQLite/sqlite3.o: SQLite/sqlite3.c.o
+.PHONY : SQLite/sqlite3.o
+
+# target to build an object file
+SQLite/sqlite3.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/SQLite/sqlite3.c.o
+.PHONY : SQLite/sqlite3.c.o
+
+SQLite/sqlite3.i: SQLite/sqlite3.c.i
+.PHONY : SQLite/sqlite3.i
+
+# target to preprocess a source file
+SQLite/sqlite3.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/SQLite/sqlite3.c.i
+.PHONY : SQLite/sqlite3.c.i
+
+SQLite/sqlite3.s: SQLite/sqlite3.c.s
+.PHONY : SQLite/sqlite3.s
+
+# target to generate assembly for a file
+SQLite/sqlite3.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/SQLite/sqlite3.c.s
+.PHONY : SQLite/sqlite3.c.s
+
 Sha256Main.o: Sha256Main.cpp.o
 .PHONY : Sha256Main.o
 
@@ -1235,6 +1427,78 @@ StreamMain.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/StreamMain.cpp.s
 .PHONY : StreamMain.cpp.s
 
+Timer.o: Timer.cpp.o
+.PHONY : Timer.o
+
+# target to build an object file
+Timer.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/Timer.cpp.o
+.PHONY : Timer.cpp.o
+
+Timer.i: Timer.cpp.i
+.PHONY : Timer.i
+
+# target to preprocess a source file
+Timer.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/Timer.cpp.i
+.PHONY : Timer.cpp.i
+
+Timer.s: Timer.cpp.s
+.PHONY : Timer.s
+
+# target to generate assembly for a file
+Timer.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/Timer.cpp.s
+.PHONY : Timer.cpp.s
+
+TimerMain.o: TimerMain.cpp.o
+.PHONY : TimerMain.o
+
+# target to build an object file
+TimerMain.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/TimerMain.cpp.o
+.PHONY : TimerMain.cpp.o
+
+TimerMain.i: TimerMain.cpp.i
+.PHONY : TimerMain.i
+
+# target to preprocess a source file
+TimerMain.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/TimerMain.cpp.i
+.PHONY : TimerMain.cpp.i
+
+TimerMain.s: TimerMain.cpp.s
+.PHONY : TimerMain.s
+
+# target to generate assembly for a file
+TimerMain.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/TimerMain.cpp.s
+.PHONY : TimerMain.cpp.s
+
+aes.o: aes.c.o
+.PHONY : aes.o
+
+# target to build an object file
+aes.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/aes.c.o
+.PHONY : aes.c.o
+
+aes.i: aes.c.i
+.PHONY : aes.i
+
+# target to preprocess a source file
+aes.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/aes.c.i
+.PHONY : aes.c.i
+
+aes.s: aes.c.s
+.PHONY : aes.s
+
+# target to generate assembly for a file
+aes.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/aes.c.s
+.PHONY : aes.c.s
+
 base64.o: base64.cpp.o
 .PHONY : base64.o
 
@@ -1282,6 +1546,30 @@ lua_misc.s: lua_misc.cpp.s
 lua_misc.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/lua_misc.cpp.s
 .PHONY : lua_misc.cpp.s
+
+luaaes.o: luaaes.cpp.o
+.PHONY : luaaes.o
+
+# target to build an object file
+luaaes.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/luaaes.cpp.o
+.PHONY : luaaes.cpp.o
+
+luaaes.i: luaaes.cpp.i
+.PHONY : luaaes.i
+
+# target to preprocess a source file
+luaaes.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/luaaes.cpp.i
+.PHONY : luaaes.cpp.i
+
+luaaes.s: luaaes.cpp.s
+.PHONY : luaaes.s
+
+# target to generate assembly for a file
+luaaes.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/luaaes.cpp.s
+.PHONY : luaaes.cpp.s
 
 luacsv.o: luacsv.cpp.o
 .PHONY : luacsv.o
@@ -1426,6 +1714,30 @@ mem.s: mem.cpp.s
 mem.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/mem.cpp.s
 .PHONY : mem.cpp.s
+
+miniz.o: miniz.c.o
+.PHONY : miniz.o
+
+# target to build an object file
+miniz.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/miniz.c.o
+.PHONY : miniz.c.o
+
+miniz.i: miniz.c.i
+.PHONY : miniz.i
+
+# target to preprocess a source file
+miniz.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/miniz.c.i
+.PHONY : miniz.c.i
+
+miniz.s: miniz.c.s
+.PHONY : miniz.s
+
+# target to generate assembly for a file
+miniz.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/miniz.c.s
+.PHONY : miniz.c.s
 
 sha1.o: sha1.c.o
 .PHONY : sha1.o
@@ -1708,18 +2020,39 @@ help:
 	@echo "... Lua/lzio.o"
 	@echo "... Lua/lzio.i"
 	@echo "... Lua/lzio.s"
+	@echo "... LuaAesMain.o"
+	@echo "... LuaAesMain.i"
+	@echo "... LuaAesMain.s"
 	@echo "... LuaCsvMain.o"
 	@echo "... LuaCsvMain.i"
 	@echo "... LuaCsvMain.s"
 	@echo "... LuaEngineBuiltins.o"
 	@echo "... LuaEngineBuiltins.i"
 	@echo "... LuaEngineBuiltins.s"
+	@echo "... LuaFileSystem.o"
+	@echo "... LuaFileSystem.i"
+	@echo "... LuaFileSystem.s"
+	@echo "... LuaFileSystemMain.o"
+	@echo "... LuaFileSystemMain.i"
+	@echo "... LuaFileSystemMain.s"
 	@echo "... LuaMD5.o"
 	@echo "... LuaMD5.i"
 	@echo "... LuaMD5.s"
+	@echo "... LuaMutex.o"
+	@echo "... LuaMutex.i"
+	@echo "... LuaMutex.s"
+	@echo "... LuaMutexMain.o"
+	@echo "... LuaMutexMain.i"
+	@echo "... LuaMutexMain.s"
 	@echo "... LuaSHA1.o"
 	@echo "... LuaSHA1.i"
 	@echo "... LuaSHA1.s"
+	@echo "... LuaSQLite.o"
+	@echo "... LuaSQLite.i"
+	@echo "... LuaSQLite.s"
+	@echo "... LuaSQLiteMain.o"
+	@echo "... LuaSQLiteMain.i"
+	@echo "... LuaSQLiteMain.s"
 	@echo "... LuaSha256.o"
 	@echo "... LuaSha256.i"
 	@echo "... LuaSha256.s"
@@ -1735,18 +2068,33 @@ help:
 	@echo "... SHA1Main.o"
 	@echo "... SHA1Main.i"
 	@echo "... SHA1Main.s"
+	@echo "... SQLite/sqlite3.o"
+	@echo "... SQLite/sqlite3.i"
+	@echo "... SQLite/sqlite3.s"
 	@echo "... Sha256Main.o"
 	@echo "... Sha256Main.i"
 	@echo "... Sha256Main.s"
 	@echo "... StreamMain.o"
 	@echo "... StreamMain.i"
 	@echo "... StreamMain.s"
+	@echo "... Timer.o"
+	@echo "... Timer.i"
+	@echo "... Timer.s"
+	@echo "... TimerMain.o"
+	@echo "... TimerMain.i"
+	@echo "... TimerMain.s"
+	@echo "... aes.o"
+	@echo "... aes.i"
+	@echo "... aes.s"
 	@echo "... base64.o"
 	@echo "... base64.i"
 	@echo "... base64.s"
 	@echo "... lua_misc.o"
 	@echo "... lua_misc.i"
 	@echo "... lua_misc.s"
+	@echo "... luaaes.o"
+	@echo "... luaaes.i"
+	@echo "... luaaes.s"
 	@echo "... luacsv.o"
 	@echo "... luacsv.i"
 	@echo "... luacsv.s"
@@ -1765,6 +2113,9 @@ help:
 	@echo "... mem.o"
 	@echo "... mem.i"
 	@echo "... mem.s"
+	@echo "... miniz.o"
+	@echo "... miniz.i"
+	@echo "... miniz.s"
 	@echo "... sha1.o"
 	@echo "... sha1.i"
 	@echo "... sha1.s"

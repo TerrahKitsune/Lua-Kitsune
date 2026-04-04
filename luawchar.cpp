@@ -767,3 +767,33 @@ int wchar_concat(lua_State* L) {
 
 	return 1;
 }
+
+// ── lua_topathutf8 ────────────────────────────────────────────────────────────
+// Accepts either a plain Lua string or a LuaWChar at stack index idx and returns
+// a pointer to a static 4 KiB buffer containing the UTF-8 encoded path.
+// This lets every FileSystem function accept both string and Wchar inputs uniformly.
+
+static char _topathutf8_buf[4096];
+
+const char* lua_topathutf8(lua_State* L, int idx) {
+	LuaWChar* w = (LuaWChar*)luaL_testudata(L, idx, LUAWCHAR);
+	if (w && w->str && w->len > 0) {
+#ifdef _WIN32
+		int n = WideCharToMultiByte(CP_UTF8, 0, w->str, (int)w->len,
+			_topathutf8_buf, (int)sizeof(_topathutf8_buf) - 1, NULL, NULL);
+		if (n < 0)
+			n = 0;
+		_topathutf8_buf[n] = '\0';
+#else
+		size_t n = wchar_to_utf8(w->str, w->len, _topathutf8_buf, sizeof(_topathutf8_buf) - 1);
+		_topathutf8_buf[n] = '\0';
+#endif
+		return _topathutf8_buf;
+	}
+	size_t len;
+	const char* s = luaL_checklstring(L, idx, &len);
+	if (len >= sizeof(_topathutf8_buf))
+		luaL_error(L, "path too long");
+	memcpy(_topathutf8_buf, s, len + 1);
+	return _topathutf8_buf;
+}

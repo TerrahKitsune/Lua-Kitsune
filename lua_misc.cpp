@@ -22,6 +22,7 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <errno.h>
 #ifdef __x86_64__
 #include <cpuid.h>
 #endif
@@ -120,6 +121,21 @@ int GetIsAdmin(lua_State* L) {
 
 	lua_pushboolean(L, isAdmin);
 
+	return 1;
+}
+#else
+static int GetLastErrorAsMessage(lua_State* L) {
+	int code = (int)luaL_optinteger(L, 1, errno);
+	lua_pop(L, lua_gettop(L));
+	char buf[256];
+	strerror_r(code, buf, sizeof(buf));
+	lua_pushstring(L, buf);
+	lua_pushinteger(L, code);
+	return 2;
+}
+
+static int GetIsAdmin(lua_State* L) {
+	lua_pushboolean(L, geteuid() == 0);
 	return 1;
 }
 #endif
@@ -619,12 +635,41 @@ int L_GetGlobalMemoryStatus(lua_State* L) {
 	return 1;
 }
 
-int L_DebugBreak(lua_State* L) {
-	DebugBreak();
-	return 0;
-}
+static int L_DebugBreak(lua_State* L) { return 0; }
 #else
-static int L_GetGlobalMemoryStatus(lua_State* L) { lua_pushinteger(L, 0); return 1; }
+static int L_GetGlobalMemoryStatus(lua_State* L) {
+	int type = (int)luaL_optinteger(L, 1, 0);
+	// Parse /proc/meminfo for portable memory statistics.
+	// Fields are reported in kB; multiply by 1024 then divide by DIV (1024) = value in kB.
+	unsigned long long memTotal = 0, memAvail = 0, swapTotal = 0, swapFree = 0;
+	FILE* f = fopen("/proc/meminfo", "r");
+	if (f) {
+		char line[128];
+		while (fgets(line, sizeof(line), f)) {
+			unsigned long long val = 0;
+			if (sscanf(line, "MemTotal: %llu", &val) == 1)        memTotal  = val;
+			else if (sscanf(line, "MemAvailable: %llu", &val) == 1) memAvail  = val;
+			else if (sscanf(line, "SwapTotal: %llu", &val) == 1)  swapTotal = val;
+			else if (sscanf(line, "SwapFree: %llu", &val) == 1)   swapFree  = val;
+		}
+		fclose(f);
+	}
+	// Compute memory load (0-100) as used physical / total physical.
+	unsigned long long memUsed = (memTotal > memAvail) ? memTotal - memAvail : 0;
+	int load = (memTotal > 0) ? (int)((memUsed * 100) / memTotal) : 0;
+	// Values stored in kB; map to the same unit Windows uses (DIV=1024 → MB).
+	switch (type) {
+	case 1: lua_pushinteger(L, (lua_Integer)(memTotal  / DIV)); break;
+	case 2: lua_pushinteger(L, (lua_Integer)(memAvail  / DIV)); break;
+	case 3: lua_pushinteger(L, (lua_Integer)(swapTotal / DIV)); break;
+	case 4: lua_pushinteger(L, (lua_Integer)(swapFree  / DIV)); break;
+	case 5: lua_pushinteger(L, (lua_Integer)(memTotal  / DIV)); break;  // virtual ≈ total on Linux
+	case 6: lua_pushinteger(L, (lua_Integer)(memAvail  / DIV)); break;  // virtual avail ≈ avail
+	default: lua_pushinteger(L, load); break;
+	}
+	return 1;
+}
+
 static int L_DebugBreak(lua_State* L) { return 0; }
 #endif
 
@@ -875,13 +920,11 @@ int luaopen_misc(lua_State* L) {
 	lua_pushcfunction(L, L_GetComputerName);
 	lua_setglobal(L, "GetComputerName");
 
-#ifdef _WIN32
 	lua_pushcfunction(L, GetLastErrorAsMessage);
 	lua_setglobal(L, "GetLastError");
 
 	lua_pushcfunction(L, GetIsAdmin);
 	lua_setglobal(L, "GetIsAdmin");
-#endif
 
 	lua_pushcfunction(L, lua_uuid);
 	lua_setglobal(L, "UUID");

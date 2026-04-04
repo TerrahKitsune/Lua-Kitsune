@@ -114,4 +114,12 @@ CMakeFiles/KitsuneEngine.dir/LuaEngineBuiltins.cpp.o: \
  /usr/include/x86_64-linux-gnu/bits/types/cookie_io_functions_t.h \
  /usr/include/x86_64-linux-gnu/bits/stdio_lim.h \
  /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/mem.h \
- /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/luawchar.h
+ /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/luawchar.h \
+ /usr/include/x86_64-linux-gnu/sys/ioctl.h \
+ /usr/include/x86_64-linux-gnu/bits/ioctls.h \
+ /usr/include/x86_64-linux-gnu/asm/ioctls.h \
+ /usr/include/asm-generic/ioctls.h /usr/include/linux/ioctl.h \
+ /usr/include/x86_64-linux-gnu/asm/ioctl.h \
+ /usr/include/asm-generic/ioctl.h \
+ /usr/include/x86_64-linux-gnu/bits/ioctl-types.h \
+ /usr/include/x86_64-linux-gnu/sys/ttydefaults.h

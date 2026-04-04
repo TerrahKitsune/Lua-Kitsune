@@ -890,22 +890,42 @@ In-memory streams created with `Stream.Create()` have all three flags set (`Caps
 ### Compression
 
 ```lua
-Stream Stream:Compress(opt algorithm, opt deststream)
-Stream Stream:Decompress(opt algorithm, opt deststream)
+Stream          Stream:Compress(opt level, opt deststream)
+Stream          Stream:Decompress(opt level, opt deststream)
+nil, errmsg     Stream:Compress(...)   -- on failure
+nil, errmsg     Stream:Decompress(...) -- on failure
 ```
 
-Both functions read the source stream from position 0 in 64 KB chunks and write the result into the destination. If `deststream` is omitted or `nil`, a new stream is created and returned seeked to position 0. If `deststream` is provided it is written to at its current position and returned as-is (no automatic seek).
+Both functions work on **Windows and Linux**.
 
-**Algorithms:**
-| Value | Algorithm |
-|-------|-----------|
-| 0 | COMPRESS_ALGORITHM_INVALID |
-| 1 | COMPRESS_ALGORITHM_NULL |
-| 2 | COMPRESS_ALGORITHM_MSZIP (default) |
-| 3 | COMPRESS_ALGORITHM_XPRESS |
-| 4 | COMPRESS_ALGORITHM_XPRESS_HUFF |
-| 5 | COMPRESS_ALGORITHM_LZMS |
-| 6 | COMPRESS_ALGORITHM_MAX |
+Both read the source stream from position **0** in 64 KB chunks and write the result to the destination.
+- If `deststream` is omitted or `nil`, a new in-memory stream is created, written to, rewound to position 0, and returned.
+- If `deststream` is provided it is written to **at its current position** and returned as-is (no automatic seek).
+- On failure (non-readable source, non-writable destination, or internal error) both return `nil, errmsg`.
+
+**Compression level** (`level` argument to `Compress`):
+
+| Value | Meaning |
+|-------|---------|
+| -1 | Default — equivalent to level 6 (omitting the argument uses this) |
+| 0 | No compression — data is stored uncompressed |
+| 1 | Fastest / best speed |
+| 2–8 | Intermediate levels |
+| 9 | Maximum compression / slowest |
+
+The `level` argument to `Decompress` is accepted for API consistency but is silently ignored — decompression always recovers the original data regardless of the level used to compress it.
+
+**Wire format** (produced by `Compress`, consumed by `Decompress`):
+
+A sequence of one or more chunks followed by an end-of-stream sentinel:
+
+```
+[ uint32_le  uncompressedSize ]
+[ uint32_le  compressedSize   ]
+[ compressedSize bytes        ]   ← zlib-format: 2-byte header + deflate + 4-byte Adler32
+```
+
+The sentinel is a pair of zero-valued `uint32` fields (`uncompressedSize == 0`). Each chunk corresponds to one 64 KB (65 536 byte) block of input, except the last chunk which may be smaller.
 
 ### Typed Read/Write
 
@@ -1568,47 +1588,96 @@ int Wchar:Find(substring, opt offset)
 
 ## FileSystem
 
-### File/Directory Operations
+All path arguments accept either a plain Lua `string` (UTF-8) or a `Wchar` object.
+On Windows the W-API is used internally so non-ASCII filenames are handled correctly.
+On Linux the POSIX UTF-8 API is used directly — no wide-char handling is needed.
+
+### File and Directory Operations
 
 ```lua
-Array FileSystem.GetFiles(path, opt filter)
-Array FileSystem.GetDirectories(path, opt filter)
-FileInfo FileSystem.GetFileInfo(file)
-FileInfo FileSystem.GetFileInfoWide(file)
-Array FileSystem.GetAll(path)
-Array FileSystem.GetAllWide(widepath)
-file FileSystem.OpenFileWide(widefilename, widemode)
-bool FileSystem.RenameWide(src, dst)
-bool FileSystem.SetAttributes(filename, attributemask)
-bool FileSystem.Copy(source, destination, overwrite)
-bool FileSystem.Move(source, destination)
-bool FileSystem.Delete(source)
-bool FileSystem.CreateDirectory(path)
-bool FileSystem.RemoveDirectory(path)
-bool FileSystem.Rename(source, destination)
+Array   FileSystem.GetAll(path)
+Array   FileSystem.GetFiles(path)
+Array   FileSystem.GetDirectories(path)
+FileInfo FileSystem.GetFileInfo(path)
+file    FileSystem.Open(path, mode)
+bool    FileSystem.Copy(source, destination, overwrite)
+bool    FileSystem.Move(source, destination)
+bool    FileSystem.Delete(source)
+bool    FileSystem.CreateDirectory(path)
+bool    FileSystem.RemoveDirectory(path)
+bool    FileSystem.Rename(source, destination)
+bool    FileSystem.SetAttributes(path, attributemask)
 ```
 
-### Paths
+| Function | Description |
+|----------|-------------|
+| `GetAll` | Returns an array of `FileInfo` tables for every entry (files **and** directories) in `path` |
+| `GetFiles` | Returns an array of filenames (strings/Wchar) for all regular files in `path` |
+| `GetDirectories` | Returns an array of directory names for all subdirectories in `path` |
+| `GetFileInfo` | Returns a `FileInfo` table for `path`, or `nil` if the path does not exist |
+| `Open` | Open a file and return a Lua `io` file handle. `mode` follows standard C `fopen` conventions: `"rb"`, `"wb"`, `"r"`, `"w"`, etc. |
+| `Copy` | Copy `source` to `destination`. Pass `true` for `overwrite` to allow replacing an existing file |
+| `Move` | Move (rename across directories) `source` to `destination` |
+| `Delete` | Delete a file or empty directory |
+| `CreateDirectory` | Create a directory at `path`. Returns `true` on success |
+| `RemoveDirectory` | Remove an **empty** directory at `path`. Returns `true` on success |
+| `Rename` | Rename `source` to `destination` (same filesystem) |
+| `SetAttributes` | *(Windows only)* Set Win32 file attribute flags |
+
+### FileInfo table
+
+Returned by `GetFileInfo` and `GetAll`:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `FileName` | string or Wchar | Entry name (without path) |
+| `isFolder` | boolean | `true` when the entry is a directory |
+| `Size` | number | File size in bytes (`0` for directories) |
+| `Creation` | number | Creation time as Unix timestamp |
+| `Access` | number | Last access time as Unix timestamp |
+| `Write` | number | Last write time as Unix timestamp |
+| `Link` | string | *(optional)* Symlink target path, present only when the entry is a symbolic link |
+| `AlternateFileName` | string or Wchar | *(Windows only)* 8.3 short name |
+| `Attributes` | number | *(Windows only)* Win32 `FILE_ATTRIBUTE_*` bitmask |
+
+### Path and Directory Utilities
 
 ```lua
-WChar FileSystem.GetSpecialFolder(csidl)
-string FileSystem.CurrentDirectory()
-WChar FileSystem.CurrentDirectoryWide()
-bool FileSystem.SetCurrentDirectory(dir)
-string FileSystem.GetTempFileName(opt pathonly)
-array FileSystem.GetDrives(opt drive)
+string  FileSystem.CurrentDirectory()
+bool    FileSystem.SetCurrentDirectory(path)
+string  FileSystem.GetTempFileName()
+Array   FileSystem.GetDrives(opt drive)
+Wchar   FileSystem.GetSpecialFolder(csidl)   -- Windows only
 ```
 
-### CSIDL Constants
+| Function | Description |
+|----------|-------------|
+| `CurrentDirectory` | Returns the process current working directory as a plain UTF-8 string |
+| `SetCurrentDirectory` | Changes the current working directory. Returns `true` on success |
+| `GetTempFileName` | Creates a temporary file and returns its path as a string |
+| `GetDrives` | Returns an array of drive tables (see below). Pass a single drive letter string to query one drive only |
+| `GetSpecialFolder` | *(Windows only)* Returns a `Wchar` path for a CSIDL folder constant |
+
+### Drive table (from `GetDrives`)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `Drive` | string | Drive letter (`"C"`) on Windows, `"/"` on Linux |
+| `Type` | number | *(Windows only)* `GetDriveType` value |
+| `TotalNumberOfBytes` | number | Total capacity in bytes |
+| `TotalNumberOfFreeBytes` | number | Free bytes |
+| `FreeBytesAvailableToCaller` | number | Free bytes available to the current user |
+
+### CSIDL Constants (Windows)
 
 | Value | Folder |
 |-------|--------|
-| 0x0000 | Desktop |
-| 0x0005 | My Documents |
-| 0x000d | My Music |
-| 0x000e | My Videos |
-| 0x0010 | Desktop Directory |
-| 0x001a | AppData |
+| `0x0000` | Desktop |
+| `0x0005` | My Documents |
+| `0x000d` | My Music |
+| `0x000e` | My Videos |
+| `0x0010` | Desktop Directory |
+| `0x001a` | AppData |
 
 ---
 

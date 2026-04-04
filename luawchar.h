@@ -51,3 +51,10 @@ char16_t* wchar_alloc_as_char16(const wchar_t* src, size_t len, size_t* outChar1
 // Sets *outWcharLen to the number of wchar_t code units written.
 // Returns NULL on OOM.
 wchar_t* char16_alloc_as_wchar(const char16_t* src, size_t charCount, size_t* outWcharLen);
+
+// ── Unified path helper ───────────────────────────────────────────────────────
+// Returns the Lua argument at idx as a UTF-8 C string stored in a static 4 KiB
+// buffer.  Accepts either a plain Lua string (passed through as-is) or a LuaWChar
+// userdata (converted to UTF-8 with WideCharToMultiByte / iconv).
+// Not re-entrant — caller must consume the value before the next call.
+const char* lua_topathutf8(lua_State* L, int idx);

@@ -3,10 +3,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include "platform.h"
-#ifdef _WIN32
-#include <compressapi.h>
-#pragma comment(lib, "Cabinet.lib")
-#endif
+#include "miniz.h"
 #include "streammemory.h"
 #include "streamfile.h"
 #include "streamshmemory.h"
@@ -806,8 +803,18 @@ int WriteUtf8(lua_State* L) {
 	return 1;
 }
 
-#ifdef _WIN32
-static const DWORD STREAM_COMPRESS_CHUNK = 65536u;
+// ── Compress / Decompress ─────────────────────────────────────────────────────
+// Unified implementation using miniz (cross-platform, no system dependency).
+//
+// Wire format — a stream of zero or more chunks, each:
+//   [uint32_le uncompressedSize][uint32_le compressedSize][compressedBytes]
+// An empty uncompressedSize or compressedSize field signals end-of-stream.
+// compressedBytes are zlib-format (deflate + 2-byte header + 4-byte Adler32).
+//
+// The second Lua argument is now a compression level (0–9, default MZ_DEFAULT_COMPRESSION).
+// The Windows COMPRESS_ALGORITHM_* integer is no longer accepted.
+
+static const size_t STREAM_COMPRESS_CHUNK = 65536u;
 
 int CompressStream(lua_State* L) {
 	LuaStream* src = lua_toluastream(L, 1);
@@ -816,7 +823,7 @@ int CompressStream(lua_State* L) {
 		lua_pushstring(L, "stream is not readable");
 		return 2;
 	}
-	DWORD algorithm = (DWORD)luaL_optinteger(L, 2, COMPRESS_ALGORITHM_MSZIP);
+	int level = (int)luaL_optinteger(L, 2, MZ_DEFAULT_COMPRESSION);
 	StreamSetPosC(L, src, 0);
 	bool ownDst = !lua_isstream(L, 3);
 	if (ownDst) {
@@ -831,13 +838,6 @@ int CompressStream(lua_State* L) {
 		lua_pushstring(L, "destination stream is not writable");
 		return 2;
 	}
-	COMPRESSOR_HANDLE compressor = NULL;
-	if (!CreateCompressor(algorithm, NULL, &compressor)) {
-		lua_pop(L, 1);
-		luaL_error(L, "CreateCompressor failed (%d)", (int)GetLastError());
-		return 0;
-	}
-	bool first = true;
 	for (;;) {
 		size_t chunkLen = 0;
 		const BYTE* chunk = StreamRead(L, src, STREAM_COMPRESS_CHUNK, &chunkLen);
@@ -845,40 +845,28 @@ int CompressStream(lua_State* L) {
 			lua_pop(L, 1);
 			break;
 		}
-		if (!first && !ResetCompressor(compressor)) {
-			lua_pop(L, 1);
-			CloseCompressor(compressor);
-			lua_pop(L, 1);
-			luaL_error(L, "ResetCompressor failed (%d)", (int)GetLastError());
-			return 0;
-		}
-		first = false;
-		SIZE_T compressedSize = 0;
-		Compress(compressor, chunk, chunkLen, NULL, 0, &compressedSize);
-		BYTE* buf = (BYTE*)gff_malloc(compressedSize);
+		mz_ulong bound = mz_compressBound((mz_ulong)chunkLen);
+		BYTE* buf = (BYTE*)gff_malloc((size_t)bound);
 		if (!buf) {
 			lua_pop(L, 1);
-			CloseCompressor(compressor);
 			lua_pop(L, 1);
 			luaL_error(L, "out of memory");
 			return 0;
 		}
-		SIZE_T finalSize = 0;
-		BOOL ok = Compress(compressor, chunk, chunkLen, buf, compressedSize, &finalSize);
+		mz_ulong finalSize = bound;
+		int rc = mz_compress2(buf, &finalSize, chunk, (mz_ulong)chunkLen, level);
 		lua_pop(L, 1);
-		if (!ok) {
+		if (rc != MZ_OK) {
 			gff_free(buf);
-			CloseCompressor(compressor);
 			lua_pop(L, 1);
-			luaL_error(L, "Compress failed (%d)", (int)GetLastError());
+			luaL_error(L, "compression failed (%d)", rc);
 			return 0;
 		}
-		DWORD hdr[2] = { (DWORD)chunkLen, (DWORD)finalSize };
+		uint32_t hdr[2] = { (uint32_t)chunkLen, (uint32_t)finalSize };
 		StreamWrite(L, dst, (const BYTE*)hdr, sizeof(hdr));
 		StreamWrite(L, dst, buf, (size_t)finalSize);
 		gff_free(buf);
 	}
-	CloseCompressor(compressor);
 	if (ownDst)
 		StreamSetPosC(L, dst, 0);
 	return 1;
@@ -891,7 +879,7 @@ int DecompressStream(lua_State* L) {
 		lua_pushstring(L, "stream is not readable");
 		return 2;
 	}
-	DWORD algorithm = (DWORD)luaL_optinteger(L, 2, COMPRESS_ALGORITHM_MSZIP);
+	luaL_optinteger(L, 2, 0);  // level argument accepted but ignored for decompress
 	StreamSetPosC(L, src, 0);
 	bool ownDst = !lua_isstream(L, 3);
 	if (ownDst) {
@@ -906,23 +894,16 @@ int DecompressStream(lua_State* L) {
 		lua_pushstring(L, "destination stream is not writable");
 		return 2;
 	}
-	DECOMPRESSOR_HANDLE decompressor = NULL;
-	if (!CreateDecompressor(algorithm, NULL, &decompressor)) {
-		lua_pop(L, 1);
-		luaL_error(L, "CreateDecompressor failed (%d)", (int)GetLastError());
-		return 0;
-	}
-	bool first = true;
 	for (;;) {
 		size_t hdrLen = 0;
-		const BYTE* hdrData = StreamRead(L, src, sizeof(DWORD) * 2, &hdrLen);
-		if (!hdrData || hdrLen < sizeof(DWORD) * 2) {
+		const BYTE* hdrData = StreamRead(L, src, sizeof(uint32_t) * 2, &hdrLen);
+		if (!hdrData || hdrLen < sizeof(uint32_t) * 2) {
 			lua_pop(L, 1);
 			break;
 		}
-		DWORD uncompressedSize, compressedSize;
-		memcpy(&uncompressedSize, hdrData, sizeof(DWORD));
-		memcpy(&compressedSize, hdrData + sizeof(DWORD), sizeof(DWORD));
+		uint32_t uncompressedSize, compressedSize;
+		memcpy(&uncompressedSize, hdrData, sizeof(uint32_t));
+		memcpy(&compressedSize,   hdrData + sizeof(uint32_t), sizeof(uint32_t));
 		lua_pop(L, 1);
 		if (uncompressedSize == 0 || compressedSize == 0)
 			break;
@@ -930,52 +911,30 @@ int DecompressStream(lua_State* L) {
 		const BYTE* compData = StreamRead(L, src, (size_t)compressedSize, &compLen);
 		if (!compData || compLen != (size_t)compressedSize) {
 			lua_pop(L, 1);
-			CloseDecompressor(decompressor);
 			lua_pop(L, 1);
 			luaL_error(L, "truncated compressed stream");
 			return 0;
 		}
-		if (!first && !ResetDecompressor(decompressor)) {
-			lua_pop(L, 1);
-			CloseDecompressor(decompressor);
-			lua_pop(L, 1);
-			luaL_error(L, "ResetDecompressor failed (%d)", (int)GetLastError());
-			return 0;
-		}
-		first = false;
 		BYTE* buf = (BYTE*)gff_malloc((size_t)uncompressedSize);
 		if (!buf) {
 			lua_pop(L, 1);
-			CloseDecompressor(decompressor);
 			lua_pop(L, 1);
 			luaL_error(L, "out of memory");
 			return 0;
 		}
-		SIZE_T finalSize = 0;
-		BOOL ok = Decompress(decompressor, compData, (SIZE_T)compressedSize, buf, (SIZE_T)uncompressedSize, &finalSize);
+		mz_ulong destLen = (mz_ulong)uncompressedSize;
+		int rc = mz_uncompress(buf, &destLen, compData, (mz_ulong)compressedSize);
 		lua_pop(L, 1);
-		if (!ok) {
+		if (rc != MZ_OK) {
 			gff_free(buf);
-			CloseDecompressor(decompressor);
 			lua_pop(L, 1);
-			luaL_error(L, "Decompress failed (%d)", (int)GetLastError());
+			luaL_error(L, "decompression failed (%d)", rc);
 			return 0;
 		}
-		StreamWrite(L, dst, buf, (size_t)finalSize);
+		StreamWrite(L, dst, buf, (size_t)destLen);
 		gff_free(buf);
 	}
-	CloseDecompressor(decompressor);
 	if (ownDst)
 		StreamSetPosC(L, dst, 0);
 	return 1;
 }
-#else
-int CompressStream(lua_State* L) {
-	luaL_error(L, "Stream.Compress is not supported on this platform");
-	return 0;
-}
-int DecompressStream(lua_State* L) {
-	luaL_error(L, "Stream.Decompress is not supported on this platform");
-	return 0;
-}
-#endif

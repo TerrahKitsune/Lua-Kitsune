@@ -1,9 +1,8 @@
-#include "luaaes.h"
+﻿#include "luaaes.h"
 #include <string.h>
 #include <fcntl.h>
 #include <errno.h>
-#include <stdlib.h> 
-#include <windows.h> 
+#include <stdlib.h>
 
 int LuaCreateContext(lua_State* L) {
 
@@ -23,7 +22,7 @@ int LuaCreateContext(lua_State* L) {
 		return 0;
 	}
 	else {
-		ZeroMemory(key, AES_KEYLEN);
+		memset(key, 0, AES_KEYLEN);
 		memcpy(key, keystr, keylen);
 	}
 
@@ -34,7 +33,7 @@ int LuaCreateContext(lua_State* L) {
 			return 0;
 		}
 		else {
-			ZeroMemory(iv, AES_BLOCKLEN);
+			memset(iv, 0, AES_BLOCKLEN);
 			memcpy(iv, ivstr, ivlen);
 		}
 
@@ -90,7 +89,7 @@ int LuaAesEncrypt(lua_State* L) {
 	}
 
 	memcpy(cbcbuf, data, len);
-	memset(&cbcbuf[len], (BYTE)(datalen - len), datalen - len);
+	memset(&cbcbuf[len], (uint8_t)(datalen - len), datalen - len);
 
 	for (size_t i = 0; i < (datalen / AES_BLOCKLEN); i++)
 	{
@@ -158,7 +157,7 @@ int LuaAesDecrypt(lua_State* L) {
 		}
 	}
 
-	BYTE paddingbyte = cbcbuf[len - 1];
+	uint8_t paddingbyte = cbcbuf[len - 1];
 
 	if (paddingbyte <= 0 || paddingbyte > AES_BLOCKLEN) {
 		gff_free(cbcbuf);

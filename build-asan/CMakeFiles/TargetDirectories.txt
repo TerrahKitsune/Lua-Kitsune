@@ -1,0 +1,5 @@
+/mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/build-asan/CMakeFiles/lua_core.dir
+/mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/build-asan/CMakeFiles/KitsuneEngine.dir
+/mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/build-asan/CMakeFiles/kitsune.dir
+/mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/build-asan/CMakeFiles/edit_cache.dir
+/mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/build-asan/CMakeFiles/rebuild_cache.dir

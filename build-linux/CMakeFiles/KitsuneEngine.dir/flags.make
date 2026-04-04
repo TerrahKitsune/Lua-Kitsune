@@ -15,3 +15,9 @@ CXX_INCLUDES = -I/mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune -I/mnt/c/Users
 
 CXX_FLAGS = -g -std=gnu++17 -fPIC -fvisibility=default -Wall -Wno-unused-function -Wno-unused-variable
 
+# Custom defines: CMakeFiles/KitsuneEngine.dir/LuaSQLite.cpp.o_DEFINES = SQLITE_API=__attribute__((visibility("hidden")))
+
+# Custom defines: CMakeFiles/KitsuneEngine.dir/LuaSQLiteMain.cpp.o_DEFINES = SQLITE_API=__attribute__((visibility("hidden")))
+
+# Custom defines: CMakeFiles/KitsuneEngine.dir/SQLite/sqlite3.c.o_DEFINES = SQLITE_API=__attribute__((visibility("hidden")))
+

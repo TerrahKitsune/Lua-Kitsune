@@ -29,11 +29,8 @@
 
 #ifndef KITSUNE_BAREBONES
 #include "GFFMain.h"
-#include "TimerMain.h"
-#include "MySQLMain.h"
+#include "MySQLMain.h"#include "MySQLMain.h"
 #include "PostgresMain.h"
-#include "LuaFileSystemMain.h"
-#include "LuaSQLiteMain.h"
 #include "ERFMain.h"
 #include "HttpMain.h"
 #include "ProcessMain.h"
@@ -48,8 +45,6 @@
 #include "luakafkamain.h"
 #include "LuaFTPMain.h"
 #include "FileAsyncMain.h"
-#include "LuaMutexMain.h"
-#include "LuaAesMain.h"
 #include "MacroMain.h"
 #include "LuaArchiveMain.h"
 #include "LuaImguiMain.h"
@@ -58,8 +53,14 @@
 #include "LuaServer.h"
 #endif
 
+#include "LuaMutexMain.h"
+
 #include "lua_misc.h"
 #include "MD5Main.h"
+#include "LuaAesMain.h"
+#include "LuaSQLiteMain.h"
+#include "TimerMain.h"
+#include "LuaFileSystemMain.h"
 #include "StreamMain.h"
 #include "streamshmemory.h"
 #include "Sha256Main.h"
@@ -968,11 +969,8 @@ extern "C" {
 
 		#ifndef KITSUNE_BAREBONES
 		luaopen_gff(L);          lua_setglobal(L, "GFF");
-		luaopen_timer(L);        lua_setglobal(L, "Timer");
-		luaopen_mysql(L);        lua_setglobal(L, "MySQL");
+		luaopen_mysql(L);        lua_setglobal(L, "MySQL");		luaopen_mysql(L);        lua_setglobal(L, "MySQL");
 		luaopen_postgres(L);     lua_setglobal(L, "Postgres");
-		luaopen_filesystem(L);   lua_setglobal(L, "FileSystem");
-		luaopen_sqlite(L);       lua_setglobal(L, "SQLite");
 		luaopen_erf(L);          lua_setglobal(L, "ERF");
 		luaopen_http(L);         lua_setglobal(L, "Http");
 		luaopen_process(L);      lua_setglobal(L, "Process");
@@ -987,17 +985,20 @@ extern "C" {
 		luaopen_kafka(L);        lua_setglobal(L, "Kafka");
 		luaopen_ftp(L);          lua_setglobal(L, "FTP");
 		luaopen_fileasync(L);    lua_setglobal(L, "FileAsync");
-		luaopen_mutex(L);        lua_setglobal(L, "Mutex");
-		luaopen_luaaes(L);       lua_setglobal(L, "Aes");
 		luaopen_macro(L);        lua_setglobal(L, "Macro");
 		luaopen_archive(L);      lua_setglobal(L, "Archive");
 		luaopen_imgui(L);        lua_setglobal(L, "Imgui");
 		luaopen_redis(L);        lua_setglobal(L, "Redis");
 		luaopen_tts(L);          lua_setglobal(L, "TTS");
 #endif
+		luaopen_luaaes(L);       lua_setglobal(L, "Aes");
+		luaopen_sqlite(L);       lua_setglobal(L, "SQLite");
+		luaopen_timer(L);        lua_setglobal(L, "Timer");
+		luaopen_filesystem(L);   lua_setglobal(L, "FileSystem");
 		luaopen_md5(L);          lua_setglobal(L, "MD5");
 		luaopen_stream(L);       lua_setglobal(L, "Stream");
 		luaopen_sha256(L);       lua_setglobal(L, "SHA256");
+		luaopen_mutex(L);        lua_setglobal(L, "Mutex");
 		luaopen_json(L);         lua_setglobal(L, "Json");
 		// Store a single LuaJson instance in the registry for the C bridge to reuse
 		// when decoding KITSUNE_TJSON values — avoids one GC allocation per bridge call.

@@ -196,6 +196,7 @@
     <ClCompile Include="sha256.c" />
     <ClCompile Include="Sha256Main.cpp" />
     <ClCompile Include="stream.cpp" />
+    <ClCompile Include="miniz.c" />
     <ClCompile Include="streamfile.cpp" />
     <ClCompile Include="streammemory.cpp" />
     <ClCompile Include="StreamMain.cpp" />
@@ -348,6 +349,7 @@
     <ClInclude Include="sha256.h" />
     <ClInclude Include="Sha256Main.h" />
     <ClInclude Include="stream.h" />
+    <ClInclude Include="miniz.h" />
     <ClInclude Include="streamfile.h" />
     <ClInclude Include="StreamMain.h" />
     <ClInclude Include="streammemory.h" />
@@ -386,7 +388,6 @@
     <ClInclude Include="TlkMain.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="LINUX_PORT_TASKS.md" />
     <None Include="Lua functions.md" />
     <None Include="testEnvironments.json" />
   </ItemGroup>

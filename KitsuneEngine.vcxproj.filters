@@ -770,6 +770,9 @@
     <ClCompile Include="streamshmemory.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="miniz.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="KitsuneEngine.h">
@@ -1222,11 +1225,13 @@
     <ClInclude Include="platform.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="miniz.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="Lua functions.md" />
     <None Include="testEnvironments.json" />
-    <None Include="LINUX_PORT_TASKS.md" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />

@@ -158,6 +158,7 @@
     <ClCompile Include="md5.c" />
     <ClCompile Include="MD5Main.cpp" />
     <ClCompile Include="mem.cpp" />
+    <ClCompile Include="miniz.c" />
     <ClCompile Include="MySQLMain.cpp" />
     <ClCompile Include="namedpipe.cpp" />
     <ClCompile Include="NamedPipeMain.cpp" />
@@ -257,6 +258,7 @@
     <ClInclude Include="md5.h" />
     <ClInclude Include="MD5Main.h" />
     <ClInclude Include="mem.h" />
+    <ClInclude Include="miniz.h" />
     <ClInclude Include="MySQLMain.h" />
     <ClInclude Include="namedpipe.h" />
     <ClInclude Include="NamedPipeMain.h" />
@@ -299,4 +301,3 @@
     <Error Condition="!Exists('packages\librdkafka.redist.2.12.0\build\native\librdkafka.redist.targets')" Text="$([System.String]::Format('$(ErrorText)', 'packages\librdkafka.redist.2.12.0\build\native\librdkafka.redist.targets'))" />
   </Target>
 </Project>
-

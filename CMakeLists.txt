@@ -68,7 +68,44 @@ set(KITSUNE_ENGINE_SOURCES
 	streammemory.cpp
 	streamfile.cpp
 	StreamMain.cpp
+
+	# ── Compression (miniz, bundled — same library on all platforms) ──────────────────
+	miniz.c
+
+	# ── AES encryption ────────────────────────────────────────────────────────────────
+	luaaes.cpp
+	LuaAesMain.cpp
+	aes.c
+
+	# ── Timer (std::chrono::steady_clock — same on all platforms) ──────────────────────
+	Timer.cpp
+	TimerMain.cpp
+
+	# ── FileSystem ─────────────────────────────────────────────────────────────────────
+	LuaFileSystem.cpp
+	LuaFileSystemMain.cpp
+
+	# ── Mutex (POSIX named semaphores on Linux) ────────────────────────────────────────
+	LuaMutex.cpp
+	LuaMutexMain.cpp
+
+	# ── SQLite (bundled amalgamation) ─────────────────────────────────────────────────
+	LuaSQLite.cpp
+	LuaSQLiteMain.cpp
+	SQLite/sqlite3.c
 )
+
+# On Linux, hide all bundled SQLite symbols from the global dynamic-symbol table so
+# they cannot clash with any system libsqlite3 that dotnet or a test dependency loads.
+# PLT resolution to the wrong SQLite copy would cause allocator mismatches and
+# "free(): invalid pointer" crashes.  SQLITE_API is checked in sqlite3.h and is
+# only set there if it is not already defined, so defining it here wins cleanly.
+if(NOT WIN32)
+	set(_sqlite_hidden "SQLITE_API=__attribute__((visibility(\"hidden\")))")
+	set_source_files_properties(
+		SQLite/sqlite3.c LuaSQLite.cpp LuaSQLiteMain.cpp
+		PROPERTIES COMPILE_DEFINITIONS "${_sqlite_hidden}")
+endif()
 
 add_library(KitsuneEngine SHARED ${KITSUNE_ENGINE_SOURCES})
 

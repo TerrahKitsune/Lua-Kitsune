@@ -1,6 +1,10 @@
 ﻿#include "LuaSQLite.h"
 #include <string.h>
 #include <stdlib.h>
+#ifndef _MAX_PATH
+#include <limits.h>
+#define _MAX_PATH PATH_MAX
+#endif
 #include "luawchar.h"
 #include "stream.h"
 
@@ -687,9 +691,15 @@ int SQLiteConnect(lua_State* L) {
 	sqlite3_exec(luasqlite->db, "PRAGMA synchronous=NORMAL;", 0, 0, 0);
 
 	luasqlite->file = file;
+#ifdef _WIN32
 	luasqlite->useWidechar = true;
+#else
+	luasqlite->useWidechar = false;
+#endif
 
+#ifdef SQLITE_ENABLE_LOAD_EXTENSION
 	sqlite3_enable_load_extension(luasqlite->db, 1);
+#endif
 	sqlite3_create_function(luasqlite->db, "Lua", 1, SQLITE_UTF8, L, SqliteLuaFunction, NULL, NULL);
 
 	return 1;
