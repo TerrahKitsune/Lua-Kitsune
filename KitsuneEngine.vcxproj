@@ -334,6 +334,7 @@
     <ClInclude Include="NamedPipeMain.h" />
     <ClInclude Include="odbc.h" />
     <ClInclude Include="ODBCMain.h" />
+    <ClInclude Include="platform.h" />
     <ClInclude Include="postgres\include\libpq-fe.h" />
     <ClInclude Include="Redis.h" />
     <ClInclude Include="RedisKey.h" />
@@ -385,7 +386,11 @@
     <ClInclude Include="TlkMain.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="LINUX_PORT_PLAN.md" />
     <None Include="Lua functions.md" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="CMakeLists.txt" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

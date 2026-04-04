@@ -1,6 +1,6 @@
 ﻿#pragma once
 #include "lua_main_incl.h"
-#include <Windows.h>
+#include "platform.h"
 static const char* LUAWCHAR = "WCHAR";
 
 typedef struct LuaWChar {

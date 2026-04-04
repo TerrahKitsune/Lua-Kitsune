@@ -2,10 +2,45 @@
 #include <string.h>
 #include <fcntl.h>
 #include <errno.h>
-#include <stdlib.h> 
-#include <windows.h> 
+#include <stdlib.h>
+#include "platform.h"
 #include <locale.h>
 #include <cstdarg>
+#ifndef _WIN32
+#include <iconv.h>
+#endif
+
+#ifndef _WIN32
+// Portable UTF-8 <-> wchar_t conversion helpers using POSIX iconv.
+static size_t utf8_to_wchar(const char* src, size_t srcLen, wchar_t* dst, size_t dstCap) {
+	if (srcLen == 0 || !dst || dstCap == 0) return 0;
+	iconv_t cd = iconv_open("WCHAR_T", "UTF-8");
+	if (cd == (iconv_t)-1) return 0;
+	char* in = (char*)src;
+	size_t inLeft = srcLen;
+	char* out = (char*)dst;
+	size_t outLeft = dstCap * sizeof(wchar_t);
+	iconv(cd, &in, &inLeft, &out, &outLeft);
+	iconv_close(cd);
+	size_t written = (dstCap * sizeof(wchar_t) - outLeft) / sizeof(wchar_t);
+	if (written < dstCap) dst[written] = L'\0';
+	return written;
+}
+static size_t wchar_to_utf8(const wchar_t* src, size_t srcLen, char* dst, size_t dstCap) {
+	if (srcLen == 0 || !dst || dstCap == 0) return 0;
+	iconv_t cd = iconv_open("UTF-8", "WCHAR_T");
+	if (cd == (iconv_t)-1) return 0;
+	char* in = (char*)src;
+	size_t inLeft = srcLen * sizeof(wchar_t);
+	char* out = dst;
+	size_t outLeft = dstCap;
+	iconv(cd, &in, &inLeft, &out, &outLeft);
+	iconv_close(cd);
+	size_t written = dstCap - outLeft;
+	if (written < dstCap) dst[written] = '\0';
+	return written;
+}
+#endif
 
 LuaWChar* lua_pushwchar(lua_State* L, const wchar_t* str) {
 	return lua_pushwchar(L, str, wcslen(str));
@@ -15,7 +50,7 @@ LuaWChar* lua_pushwchar(lua_State* L, const wchar_t* str, size_t len) {
 
 	LuaWChar* wchar = lua_pushwchar(L);
 
-	wchar->str = (WCHAR*)gff_calloc(len + 1, sizeof(WCHAR));
+	wchar->str = (wchar_t*)gff_calloc(len + 1, sizeof(wchar_t));
 
 	if (!wchar->str) {
 		luaL_error(L, "out of memory");
@@ -160,7 +195,7 @@ int FromToLower(lua_State* L) {
 	LuaWChar* wchar = lua_towchar(L, 1);
 	LuaWChar* result = lua_pushwchar(L);
 
-	result->str = (WCHAR*)gff_calloc(wchar->len + 1, sizeof(WCHAR));
+	result->str = (wchar_t*)gff_calloc(wchar->len + 1, sizeof(wchar_t));
 
 	if (!result->str) {
 		luaL_error(L, "out of memory");
@@ -182,7 +217,7 @@ int FromToUpper(lua_State* L) {
 	LuaWChar* wchar = lua_towchar(L, 1);
 	LuaWChar* result = lua_pushwchar(L);
 
-	result->str = (WCHAR*)gff_calloc(wchar->len + 1, sizeof(WCHAR));
+	result->str = (wchar_t*)gff_calloc(wchar->len + 1, sizeof(wchar_t));
 
 	if (!result->str) {
 		luaL_error(L, "out of memory");
@@ -241,14 +276,18 @@ int FromUtf8(lua_State* L) {
 
 	LuaWChar* wchar = lua_pushwchar(L);
 
-	wchar->str = (WCHAR*)gff_calloc(len + 1, sizeof(WCHAR));
+	wchar->str = (wchar_t*)gff_calloc(len + 1, sizeof(wchar_t));
 
 	if (!wchar->str) {
 		luaL_error(L, "out of memory");
 		return 0;
 	}
 
+#ifdef _WIN32
 	wchar->len = MultiByteToWideChar(CP_UTF8, 0, data, (int)len, wchar->str, (int)len);
+#else
+	wchar->len = utf8_to_wchar(data, len, wchar->str, len);
+#endif
 
 	return 1;
 }
@@ -322,7 +361,7 @@ int FromAnsi(lua_State* L) {
 
 	LuaWChar* wchar = lua_pushwchar(L);
 
-	wchar->str = (WCHAR*)gff_calloc(len + 1, sizeof(WCHAR));
+	wchar->str = (wchar_t*)gff_calloc(len + 1, sizeof(wchar_t));
 
 	if (!wchar->str) {
 		luaL_error(L, "out of memory");
@@ -463,7 +502,11 @@ int ToUtf8(lua_State* L) {
 		return 0;
 	}
 
-	int convertedSize = WideCharToMultiByte(CP_UTF8, 0, wchar->str, (int)wchar->len, (LPSTR)utf8String, (int)bufferlen, NULL, NULL);
+	#ifdef _WIN32
+		int convertedSize = WideCharToMultiByte(CP_UTF8, 0, wchar->str, (int)wchar->len, (char*)utf8String, (int)bufferlen, NULL, NULL);
+	#else
+		int convertedSize = (int)wchar_to_utf8(wchar->str, wchar->len, (char*)utf8String, bufferlen);
+	#endif
 
 	lua_pushlstring(L, (const char*)utf8String, convertedSize);
 	gff_free(utf8String);
@@ -598,7 +641,7 @@ int wchar_gc(lua_State* L) {
 		gff_free(wchar->str);
 	}
 
-	ZeroMemory(wchar, sizeof(LuaWChar));
+	memset(wchar, 0, sizeof(LuaWChar));
 
 	return 0;
 }
@@ -674,7 +717,11 @@ int wchar_concat(lua_State* L) {
 
 		result = lua_pushwchar(L);
 
-		int wcharsNeeded = (len > 0) ? MultiByteToWideChar(CP_UTF8, 0, data, (int)len, NULL, 0) : 0;
+		#ifdef _WIN32
+				int wcharsNeeded = (len > 0) ? MultiByteToWideChar(CP_UTF8, 0, data, (int)len, NULL, 0) : 0;
+		#else
+				int wcharsNeeded = (int)len;  // conservative upper bound: at most as many wchar_t as UTF-8 bytes
+		#endif
 		if (wcharsNeeded < 0) wcharsNeeded = 0;
 
 		result->str = (wchar_t*)gff_calloc(a->len + (size_t)wcharsNeeded + 1, sizeof(wchar_t));
@@ -687,16 +734,26 @@ int wchar_concat(lua_State* L) {
 		int actualLen = 0;
 
 		if (swapidx) {
-			if (wcharsNeeded > 0)
+			if (wcharsNeeded > 0) {
+#ifdef _WIN32
 				actualLen = MultiByteToWideChar(CP_UTF8, 0, data, (int)len, result->str, wcharsNeeded);
+#else
+				actualLen = (int)utf8_to_wchar(data, len, result->str, wcharsNeeded);
+#endif
+			}
 			if (a->str && a->len > 0)
 				memcpy(&result->str[actualLen], a->str, a->len * sizeof(wchar_t));
 		}
 		else {
 			if (a->str && a->len > 0)
 				memcpy(result->str, a->str, a->len * sizeof(wchar_t));
-			if (wcharsNeeded > 0)
+			if (wcharsNeeded > 0) {
+#ifdef _WIN32
 				actualLen = MultiByteToWideChar(CP_UTF8, 0, data, (int)len, &result->str[a->len], wcharsNeeded);
+#else
+				actualLen = (int)utf8_to_wchar(data, len, &result->str[a->len], wcharsNeeded);
+#endif
+			}
 		}
 		result->len = a->len + (size_t)actualLen;
 	}

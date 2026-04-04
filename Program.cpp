@@ -1,13 +1,19 @@
-﻿#ifdef _DEBUG
+﻿#if defined(_WIN32) && defined(_DEBUG)
 #define _CRTDBG_MAP_ALLOC
 #endif
 #ifndef _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 
-#include <Windows.h>
-#include <crtdbg.h>
+#include <atomic>
+#include <chrono>
+#include <csignal>
 #include <cstdio>
+#include <thread>
+#include "platform.h"
+#if defined(_WIN32) && defined(_DEBUG)
+#include <crtdbg.h>
+#endif
 #include "KitsuneEngine.h"
 
 #ifdef _DEBUG
@@ -47,8 +53,9 @@ int Test(int argc, KitsuneVariable* argv, const kitsune_ResultSetter resultSette
 }
 #endif
 
-static volatile LONG g_exitSignaled = 0;
+static std::atomic<long> g_exitSignaled{0};
 
+#ifdef _WIN32
 BOOL WINAPI ConsoleCtrlHandler(DWORD ctrlType) {
 	switch (ctrlType) {
 	case CTRL_C_EVENT:
@@ -56,23 +63,31 @@ BOOL WINAPI ConsoleCtrlHandler(DWORD ctrlType) {
 	case CTRL_CLOSE_EVENT:
 	case CTRL_LOGOFF_EVENT:
 	case CTRL_SHUTDOWN_EVENT:
-		InterlockedExchange(&g_exitSignaled, 1);
+		g_exitSignaled.store(1);
 		KitsuneInterrupt();
 		return TRUE;
 	}
 	return FALSE;
 }
+#else
+static void SigIntHandler(int) {
+	g_exitSignaled.store(1);
+	KitsuneInterrupt();
+}
+#endif
 
 int main(int argc, char* argv[]) {
 
-#ifdef _DEBUG
+#if defined(_WIN32) && defined(_DEBUG)
 	_CrtMemState sOld;
 	_CrtMemState sNew;
 	_CrtMemState sDiff;
 	_CrtMemCheckpoint(&sOld);
 #endif
 
-	SetConsoleOutputCP(65001);
+	#ifdef _WIN32
+		SetConsoleOutputCP(65001);
+	#endif
 
 	if (!KitsuneInit()) {
 		fprintf(stderr, "KitsuneInit failed\n");
@@ -82,7 +97,12 @@ int main(int argc, char* argv[]) {
 		KitsuneRegisterSession();
 	}
 
-	SetConsoleCtrlHandler(ConsoleCtrlHandler, TRUE);
+	#ifdef _WIN32
+		SetConsoleCtrlHandler(ConsoleCtrlHandler, TRUE);
+	#else
+		signal(SIGINT, SigIntHandler);
+		signal(SIGTERM, SigIntHandler);
+	#endif
 
 	const char* file = argc > 1 ? argv[1] : "main.lua";
 
@@ -112,8 +132,8 @@ int main(int argc, char* argv[]) {
 	}
 
 	// Block until the coroutine finishes or an exit signal is received.
-	while (!KitsuneHasResult(id, nullptr) && !InterlockedAdd(&g_exitSignaled, 0))
-		Sleep(1);
+	while (!KitsuneHasResult(id, nullptr) && !g_exitSignaled.load())
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
 	// If the signal fired before the coroutine reported done, wait for the
 	// interrupt to propagate so KitsuneGetError / KitsuneGetResult are valid.
@@ -144,7 +164,7 @@ int main(int argc, char* argv[]) {
 
 	KitsuneCleanup();
 
-#ifdef _DEBUG
+#if defined(_WIN32) && defined(_DEBUG)
 	_CrtMemCheckpoint(&sNew);
 	if (_CrtMemDifference(&sDiff, &sOld, &sNew)) {
 		OutputDebugString("-----------_CrtMemDumpStatistics ---------");

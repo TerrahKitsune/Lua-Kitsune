@@ -1219,8 +1219,15 @@
     <ClInclude Include="streamshmemory.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="platform.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="Lua functions.md" />
+    <None Include="LINUX_PORT_PLAN.md" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="CMakeLists.txt" />
   </ItemGroup>
 </Project>

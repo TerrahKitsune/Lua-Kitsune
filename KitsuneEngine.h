@@ -1,10 +1,12 @@
 ﻿#pragma once
-#include <Windows.h>
+#include "platform.h"
 
+#ifdef _WIN32
 #ifdef KITSUNE_ENGINE_EXPORTS
 #define KITSUNE_API __declspec(dllexport)
 #else
 #define KITSUNE_API __declspec(dllimport)
+#endif
 #endif
 
 #define KITSUNE_VERSION "1.0.0"
@@ -49,19 +51,23 @@
 #define KITSUNE_SHARED_MEMORY_FLAG_ACCESSOR_DISPOSED (1 << 5) // Cleared when C# takes ownership (LuaStream constructor); set when C# disposes. Starts at 1 (no accessor).
 #define KITSUNE_SHARED_MEMORY_FLAG_LUA_REFERENCED    (1 << 6) // Set when any Lua stream is created from this block. Once set, never cleared.
 
+#ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable: 4200) // nonstandard extension: zero-sized array; intentional flexible array member
+#endif
 struct SharedMemoryBlock {
-	BYTE flags; // Bitfield of KITSUNE_SHARED_MEMORY_FLAG_* values.
+	uint8_t flags; // Bitfield of KITSUNE_SHARED_MEMORY_FLAG_* values.
 				// KITSUNE_SHARED_MEMORY_FLAG_LOCKED:        set by an accessor during a read or write; other accessors should wait.
 				// KITSUNE_SHARED_MEMORY_FLAG_READONLY:      data must not be modified; write operations are rejected.
 				// KITSUNE_SHARED_MEMORY_FLAG_KITSUNE_OWNED: block was created by KitsuneCreateMemoryBlock.
 	void* userdata;          // Reserved; not used by the engine.
 	SharedMemoryBlock* next; // Intrusive linked-list link for the global block registry. Written only under g_shmem_lock.
 	size_t size;             // Size of the data region in bytes. The data block immediately follows the header in memory.
-	BYTE data[]; // Continous data block of the specified size. The entire struct is allocated as a single block on the heap, so freeing the struct pointer also frees the data block.
+	uint8_t data[]; // Continous data block of the specified size. The entire struct is allocated as a single block on the heap, so freeing the struct pointer also frees the data block.
 };
+#ifdef _MSC_VER
 #pragma warning(pop)
+#endif
 
 // Forward declaration required so KitsuneVariable can hold a pointer to the node in its union.
 struct KeyValuePairKitsuneVariableNode;

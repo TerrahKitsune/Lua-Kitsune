@@ -2,9 +2,11 @@
 #include "luawchar.h"
 #include <string.h>
 #include <stdlib.h>
-#include <windows.h>
+#include "platform.h"
+#ifdef _WIN32
 #include <compressapi.h>
 #pragma comment(lib, "Cabinet.lib")
+#endif
 #include "streammemory.h"
 #include "streamfile.h"
 #include "streamshmemory.h"
@@ -804,6 +806,7 @@ int WriteUtf8(lua_State* L) {
 	return 1;
 }
 
+#ifdef _WIN32
 static const DWORD STREAM_COMPRESS_CHUNK = 65536u;
 
 int CompressStream(lua_State* L) {
@@ -966,3 +969,13 @@ int DecompressStream(lua_State* L) {
 		StreamSetPosC(L, dst, 0);
 	return 1;
 }
+#else
+int CompressStream(lua_State* L) {
+	luaL_error(L, "Stream.Compress is not supported on this platform");
+	return 0;
+}
+int DecompressStream(lua_State* L) {
+	luaL_error(L, "Stream.Decompress is not supported on this platform");
+	return 0;
+}
+#endif

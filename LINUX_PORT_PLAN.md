@@ -200,16 +200,16 @@ Note: `wchar_alloc_as_char16` / `char16_alloc_as_wchar` already have `#ifdef _WI
 
 | Task | Status | Notes |
 |------|--------|-------|
-| 1 - `platform.h` | Not started | |
-| 2 - `CMakeLists.txt` + `xp_lua_incl.h` | Not started | |
-| 3 - `KITSUNE_BAREBONES` guards | Not started | |
-| 4 - `KitsuneEngine.h` + `DllMain` | Not started | |
-| 5 - `Interlocked*` -> `std::atomic` | Not started | |
-| 6 - `WinEvent` -> `condition_variable` | Not started | |
-| 7 - `CreateThread` -> `std::thread` | Not started | |
-| 8 - `Program.cpp` | Not started | |
-| 9 - `luawchar.cpp` / `luawchar.h` | Not started | |
-| 10 - First clean Linux build | Not started | |
+| 1 - `platform.h` | Done | |
+| 2 - `CMakeLists.txt` + `xp_lua_incl.h` | Done | |
+| 3 - `KITSUNE_BAREBONES` guards | Done | |
+| 4 - `KitsuneEngine.h` + `DllMain` | Done | |
+| 5 - `Interlocked*` -> `std::atomic` | Done | |
+| 6 - `WinEvent` -> `condition_variable` | Done | |
+| 7 - `CreateThread` -> `std::thread` | Done | |
+| 8 - `Program.cpp` | Done | |
+| 9 - `luawchar.cpp` / `luawchar.h` | Done | |
+| 10 - First clean Linux build | In progress | Pre-flight fixes applied; CMake run needed |
 
 ---
 

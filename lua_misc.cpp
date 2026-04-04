@@ -1,26 +1,37 @@
-﻿#include "networking.h"
-#include "lua_misc.h"
-#include <objbase.h>
+﻿#include "lua_misc.h"
 #include <time.h>
-#include <io.h>
 #include <stdio.h>
-#include <windows.h>
+#include "platform.h"
+#include "luawchar.h"
+#include "Bencode.h"
+#include "stream.h"
+#ifdef _WIN32
+#include "networking.h"
+#include <objbase.h>
+#include <io.h>
 #include <windowsx.h>
 #include <mmsystem.h>
 #include <conio.h>
-#include "luawchar.h"
-#include "Bencode.h"
 #include <intrin.h>
-#include "stream.h"
-#include "luawchar.h"
-
+#ifdef _MSC_VER
 #pragma comment (lib , "winmm.lib")
+#endif
+#else
+#include <sys/socket.h>
+#include <netdb.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#ifdef __x86_64__
+#include <cpuid.h>
+#endif
+#endif
 
 #define DIV 1024
 
 static int env_table = -1;
 static int env_original = -1;
 
+#ifdef _WIN32
 int lua_uuid(lua_State* L) {
 
 	GUID guid;
@@ -51,7 +62,28 @@ int lua_uuid(lua_State* L) {
 
 	return 2;
 }
+#else
+int lua_uuid(lua_State* L) {
+	uint8_t bytes[16];
+	FILE* f = fopen("/dev/urandom", "rb");
+	if (!f) { lua_pushnil(L); lua_pushnil(L); return 2; }
+	fread(bytes, 1, 16, f);
+	fclose(f);
+	bytes[6] = (bytes[6] & 0x0F) | 0x40;
+	bytes[8] = (bytes[8] & 0x3F) | 0x80;
+	char buf[37];
+	snprintf(buf, sizeof(buf),
+		"%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+		bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5],
+		bytes[6], bytes[7], bytes[8], bytes[9], bytes[10], bytes[11],
+		bytes[12], bytes[13], bytes[14], bytes[15]);
+	lua_pushstring(L, buf);
+	lua_pushlstring(L, (const char*)bytes, 16);
+	return 2;
+}
+#endif
 
+#ifdef _WIN32
 static int GetLastErrorAsMessage(lua_State* L)
 {
 	DWORD lasterror = (DWORD)luaL_optinteger(L, 1, GetLastError());
@@ -89,7 +121,9 @@ int GetIsAdmin(lua_State* L) {
 
 	return 1;
 }
+#endif
 
+#ifdef _WIN32
 int Time(lua_State* L) {
 
 	//https://gist.github.com/e-yes/278302
@@ -110,6 +144,14 @@ int Time(lua_State* L) {
 
 	return 1;
 }
+#else
+int Time(lua_State* L) {
+	struct timespec ts;
+	clock_gettime(CLOCK_REALTIME, &ts);
+	lua_pushinteger(L, (lua_Integer)ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
+	return 1;
+}
+#endif
 
 int NewEnvironment(lua_State* L) {
 
@@ -284,10 +326,10 @@ int TableSelect(lua_State* L) {
 	return 1;
 }
 
-DWORD crc32(byte* data, int size, DWORD crc)
+DWORD crc32(uint8_t* data, int size, DWORD crc)
 {
 	DWORD r = crc;
-	byte* end = data + size;
+	uint8_t* end = data + size;
 	DWORD t;
 
 	while (data < end)
@@ -323,6 +365,7 @@ int CRC32(lua_State* L) {
 	return 1;
 }
 
+#ifdef _WIN32
 int luabeep(lua_State* L) {
 
 	DWORD freq = (DWORD)luaL_checkinteger(L, 1);
@@ -373,8 +416,14 @@ int luasoundcommand(lua_State* L) {
 
 	return 2;
 }
+#else
+static int luabeep(lua_State* L) { lua_pop(L, lua_gettop(L)); lua_pushboolean(L, 0); return 1; }
+static int luasound(lua_State* L) { lua_pop(L, lua_gettop(L)); lua_pushboolean(L, 0); return 1; }
+static int luasoundcommand(lua_State* L) { lua_pop(L, lua_gettop(L)); lua_pushinteger(L, -1); lua_pushstring(L, ""); return 2; }
+#endif
 
-int setenv(const char* name, const char* value, int overwrite)
+#ifdef _WIN32
+static int setenv_win(const char* name, const char* value, int overwrite)
 {
 	int errcode = 0;
 	if (!overwrite) {
@@ -384,6 +433,7 @@ int setenv(const char* name, const char* value, int overwrite)
 	}
 	return _putenv_s(name, value);
 }
+#endif
 
 int luasetenv(lua_State* L) {
 
@@ -393,7 +443,11 @@ int luasetenv(lua_State* L) {
 
 	lua_pop(L, lua_gettop(L));
 
+#ifdef _WIN32
+	lua_pushinteger(L, setenv_win(var, value, allowOverwrite));
+#else
 	lua_pushinteger(L, setenv(var, value, allowOverwrite));
+#endif
 
 	return 1;
 }
@@ -402,39 +456,28 @@ int luagetenv(lua_State* L) {
 
 	const char* var = luaL_checkstring(L, 1);
 
+	lua_pop(L, lua_gettop(L));
+
+#ifdef _WIN32
 	size_t len;
 	int error = getenv_s(&len, NULL, 0, var);
 
-	lua_pop(L, lua_gettop(L));
-
-	if (error) {
-		lua_pushnil(L);
-		return 1;
-	}
-	else if (len <= 0) {
-		lua_pushstring(L, "");
-		return 1;
-	}
+	if (error) { lua_pushnil(L); return 1; }
+	if (len <= 0) { lua_pushstring(L, ""); return 1; }
 
 	char* data = (char*)gff_calloc(sizeof(char), len + 1);
-
-	if (!data) {
-		lua_pushnil(L);
-		return 1;
-	}
+	if (!data) { lua_pushnil(L); return 1; }
 
 	error = getenv_s(&len, data, len, var);
-
-	if (error) {
-
-		gff_free(data);
-		lua_pushnil(L);
-		return 1;
-	}
+	if (error) { gff_free(data); lua_pushnil(L); return 1; }
 
 	lua_pushlstring(L, data, len);
-
 	gff_free(data);
+#else
+	const char* value = getenv(var);
+	if (!value) { lua_pushnil(L); return 1; }
+	lua_pushstring(L, value);
+#endif
 
 	return 1;
 }
@@ -523,6 +566,7 @@ static int L_GetHost(lua_State* L) {
 	return 1;
 }
 
+#ifdef _WIN32
 static int L_GetComputerName(lua_State* L) {
 
 	char data[MAX_COMPUTERNAME_LENGTH + 1];
@@ -531,17 +575,27 @@ static int L_GetComputerName(lua_State* L) {
 	lua_pop(L, lua_gettop(L));
 
 	if (GetComputerNameEx(ComputerNameDnsFullyQualified, data, &len)) {
-
 		lua_pushlstring(L, data, len);
 	}
 	else {
-
 		lua_pushnil(L);
 	}
 
 	return 1;
 }
+#else
+static int L_GetComputerName(lua_State* L) {
+	char data[256];
+	lua_pop(L, lua_gettop(L));
+	if (gethostname(data, sizeof(data)) == 0)
+		lua_pushstring(L, data);
+	else
+		lua_pushnil(L);
+	return 1;
+}
+#endif
 
+#ifdef _WIN32
 int L_GetGlobalMemoryStatus(lua_State* L) {
 
 	int type = (int)luaL_optinteger(L, 1, 0);
@@ -552,63 +606,49 @@ int L_GetGlobalMemoryStatus(lua_State* L) {
 
 	switch (type)
 	{
-	case 1:
-		lua_pushinteger(L, statex.ullTotalPhys / DIV);
-		break;
-
-	case 2:
-		lua_pushinteger(L, statex.ullAvailPhys / DIV);
-		break;
-
-	case 3:
-		lua_pushinteger(L, statex.ullTotalPageFile / DIV);
-		break;
-
-	case 4:
-		lua_pushinteger(L, statex.ullAvailPageFile / DIV);
-		break;
-
-	case 5:
-		lua_pushinteger(L, statex.ullTotalVirtual / DIV);
-		break;
-
-	case 6:
-		lua_pushinteger(L, statex.ullAvailVirtual / DIV);
-		break;
-
-	default:
-		lua_pushinteger(L, statex.dwMemoryLoad);
-		break;
+	case 1: lua_pushinteger(L, statex.ullTotalPhys / DIV); break;
+	case 2: lua_pushinteger(L, statex.ullAvailPhys / DIV); break;
+	case 3: lua_pushinteger(L, statex.ullTotalPageFile / DIV); break;
+	case 4: lua_pushinteger(L, statex.ullAvailPageFile / DIV); break;
+	case 5: lua_pushinteger(L, statex.ullTotalVirtual / DIV); break;
+	case 6: lua_pushinteger(L, statex.ullAvailVirtual / DIV); break;
+	default: lua_pushinteger(L, statex.dwMemoryLoad); break;
 	}
 
 	return 1;
 }
 
 int L_DebugBreak(lua_State* L) {
-
 	DebugBreak();
-
 	return 0;
 }
+#else
+static int L_GetGlobalMemoryStatus(lua_State* L) { lua_pushinteger(L, 0); return 1; }
+static int L_DebugBreak(lua_State* L) { return 0; }
+#endif
 
 static const char* cpuId(void)
 {
-	int cpuInfo[4] = { 0 };
-
-	// CPUID function 0: Get Vendor ID (s1, s2)
-	__cpuid(cpuInfo, 0);
-	unsigned long s1 = cpuInfo[3]; // EDX
-	unsigned long s2 = cpuInfo[0]; // EAX
-
-	// CPUID function 1: Get Processor Features (s3, s4)
-	__cpuid(cpuInfo, 1);
-	unsigned long s3 = cpuInfo[3]; // EDX
-	unsigned long s4 = cpuInfo[2]; // ECX
-
-	// Store as a formatted string
 	static char buf[100];
+#ifdef _WIN32
+	int cpuInfo[4] = { 0 };
+	__cpuid(cpuInfo, 0);
+	unsigned long s1 = cpuInfo[3];
+	unsigned long s2 = cpuInfo[0];
+	__cpuid(cpuInfo, 1);
+	unsigned long s3 = cpuInfo[3];
+	unsigned long s4 = cpuInfo[2];
 	snprintf(buf, sizeof(buf), "%08lX%08lX%08lX%08lX", s1, s2, s3, s4);
-
+#elif defined(__x86_64__) || defined(__i386__)
+	unsigned int eax = 0, ebx = 0, ecx = 0, edx = 0;
+	__get_cpuid(0, &eax, &ebx, &ecx, &edx);
+	unsigned int s1 = edx, s2 = eax;
+	__get_cpuid(1, &eax, &ebx, &ecx, &edx);
+	unsigned int s3 = edx, s4 = ecx;
+	snprintf(buf, sizeof(buf), "%08X%08X%08X%08X", s1, s2, s3, s4);
+#else
+	snprintf(buf, sizeof(buf), "0000000000000000");
+#endif
 	return buf;
 }
 
@@ -834,8 +874,13 @@ int luaopen_misc(lua_State* L) {
 	lua_pushcfunction(L, L_GetComputerName);
 	lua_setglobal(L, "GetComputerName");
 
+#ifdef _WIN32
 	lua_pushcfunction(L, GetLastErrorAsMessage);
 	lua_setglobal(L, "GetLastError");
+
+	lua_pushcfunction(L, GetIsAdmin);
+	lua_setglobal(L, "GetIsAdmin");
+#endif
 
 	lua_pushcfunction(L, lua_uuid);
 	lua_setglobal(L, "UUID");

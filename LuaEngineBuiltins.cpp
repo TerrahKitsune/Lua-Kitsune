@@ -2,11 +2,13 @@
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 
-#include <Windows.h>
+#include "platform.h"
 #include "lua_main_incl.h"
+#ifdef _WIN32
 #include <conio.h>
 #include <io.h>
 #include "Shellapi.h"
+#endif
 #include "mem.h"
 #include "luawchar.h"
 
@@ -23,7 +25,11 @@ static inline bool is_stdin_tty() { return isatty(fileno(stdin)) != 0; }
 
 int L_kbhit(lua_State *L) {
 	if (is_stdin_tty()) {
+#ifdef _WIN32
 		lua_pushboolean(L, _kbhit());
+#else
+		lua_pushboolean(L, 0);
+#endif
 	} else if (feof(stdin)) {
 		lua_pushboolean(L, 1);
 	} else {
@@ -34,7 +40,11 @@ int L_kbhit(lua_State *L) {
 
 int L_getch(lua_State *L) {
 	if (is_stdin_tty()) {
+#ifdef _WIN32
 		lua_pushinteger(L, _getch());
+#else
+		lua_pushinteger(L, -1);
+#endif
 	} else {
 		char data;
 		if (fread(&data, sizeof(char), 1, stdin) == 1) {
@@ -46,6 +56,7 @@ int L_getch(lua_State *L) {
 	return 1;
 }
 
+#ifdef _WIN32
 int L_GetTextColor(lua_State *L) {
 	WORD data;
 	CONSOLE_SCREEN_BUFFER_INFO csbi;
@@ -87,6 +98,7 @@ int L_cls(lua_State *L) {
 	SetConsoleCursorPosition(hStdOut, homeCoords);
 	return 0;
 }
+#endif // _WIN32
 
 int L_put(lua_State *L) {
 	size_t len;
@@ -114,13 +126,16 @@ int L_GetMemory(lua_State *L) {
 	return 1;
 }
 
+#ifdef _WIN32
 int L_ShellExecute(lua_State *L) {
 	INT_PTR ok = (INT_PTR)ShellExecute(NULL, "open", luaL_checkstring(L, 1), luaL_checkstring(L, 2), NULL, SW_SHOW);
 	lua_pop(L, lua_gettop(L));
 	lua_pushboolean(L, ok > 32);
 	return 1;
 }
+#endif // _WIN32
 
+#ifdef _WIN32
 int L_GetReg(lua_State *L) {
 	HKEY key = HKEY_LOCAL_MACHINE;
 	switch (lua_tointeger(L, 1)) {
@@ -165,7 +180,9 @@ int L_GetReg(lua_State *L) {
 	}
 	return 1;
 }
+#endif // _WIN32
 
+#ifdef _WIN32
 int L_ToggleConsole(lua_State *L) {
 	bool toggle = lua_toboolean(L, 1) > 0;
 	HWND console = GetConsoleWindow();
@@ -420,6 +437,7 @@ static int L_GetScreenSize(lua_State *L) {
 	lua_pushinteger(L, GetSystemMetrics(SM_CYSCREEN));
 	return 2;
 }
+#endif // _WIN32
 
 int luaopen_session(lua_State *L) {
 	lua_newtable(L);
@@ -427,11 +445,12 @@ int luaopen_session(lua_State *L) {
 	// Session.Console
 	lua_newtable(L);
 	lua_pushcfunction(L, L_put);                  lua_setfield(L, -2, "Put");
+	lua_pushcfunction(L, L_getch);                lua_setfield(L, -2, "GetKey");
+	lua_pushcfunction(L, L_kbhit);                lua_setfield(L, -2, "HasKeyDown");
+#ifdef _WIN32
 	lua_pushcfunction(L, L_ConsoleWrite);         lua_setfield(L, -2, "Write");
 	lua_pushcfunction(L, L_ConsolePrint);         lua_setfield(L, -2, "Print");
 	lua_pushcfunction(L, L_ConsoleReadKey);       lua_setfield(L, -2, "ReadKey");
-	lua_pushcfunction(L, L_getch);                lua_setfield(L, -2, "GetKey");
-	lua_pushcfunction(L, L_kbhit);                lua_setfield(L, -2, "HasKeyDown");
 	lua_pushcfunction(L, L_GetKeyState);          lua_setfield(L, -2, "GetKeyState");
 	lua_pushcfunction(L, L_SetTextColor);         lua_setfield(L, -2, "SetColor");
 	lua_pushcfunction(L, L_GetTextColor);         lua_setfield(L, -2, "GetColor");
@@ -443,19 +462,24 @@ int luaopen_session(lua_State *L) {
 	lua_pushcfunction(L, L_cls);                  lua_setfield(L, -2, "Clear");
 	lua_pushcfunction(L, L_GetConsoleCoords);     lua_setfield(L, -2, "GetInfo");
 	lua_pushcfunction(L, L_SetConsoleCoords);     lua_setfield(L, -2, "SetCursorPosition");
+#endif
 	lua_setfield(L, -2, "Console");
 
 	// Session.Display
 	lua_newtable(L);
+#ifdef _WIN32
 	lua_pushcfunction(L, L_GetScreenSize);        lua_setfield(L, -2, "GetScreenSize");
 	lua_pushcfunction(L, L_GetCursorPosition);    lua_setfield(L, -2, "GetCursorPosition");
 	lua_pushcfunction(L, L_GetCursorPoint);       lua_setfield(L, -2, "GetCursorPoint");
+#endif
 	lua_setfield(L, -2, "Display");
 
 	// Session.Clipboard
 	lua_newtable(L);
+#ifdef _WIN32
 	lua_pushcfunction(L, lua_SetClipboard);       lua_setfield(L, -2, "Set");
 	lua_pushcfunction(L, lua_GetClipboard);       lua_setfield(L, -2, "Get");
+#endif
 	lua_setfield(L, -2, "Clipboard");
 
 	lua_setglobal(L, "Session");

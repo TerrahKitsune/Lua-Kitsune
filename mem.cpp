@@ -4,7 +4,7 @@
 #include "string.h"
 #include <assert.h>
 #include <math.h>
-#include <windows.h>
+#include "platform.h"
 
 #ifdef USEMEMORYMANAGER
 
