@@ -370,7 +370,7 @@ namespace KitsuneNet
         {
             if (blockPtr == IntPtr.Zero) return LuaValue.None;
             var header = Marshal.PtrToStructure<SharedMemoryBlockHeader>(blockPtr);
-            if (header.Size > (nuint)long.MaxValue)
+            if ((ulong)header.Size > (ulong)long.MaxValue)
                 throw new InvalidOperationException($"Stream block size {header.Size} exceeds the addressable range.");
             return new LuaValue { Type = LuaType.Stream, StreamValue = new LuaStream(blockPtr, (long)header.Size) };
         }

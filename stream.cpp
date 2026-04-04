@@ -524,28 +524,27 @@ int ReadWchar(lua_State* L) {
 			lua_pushnil(L);
 			return 1;
 		}
-		byteCount = (size_t)n * sizeof(wchar_t);
+		byteCount = (size_t)n * sizeof(char16_t);  // always 2 bytes per unit on every platform
 	}
 	size_t outLen = 0;
 	const BYTE* r = StreamRead(L, s, byteCount, &outLen);
-	if (!r || outLen < sizeof(wchar_t)) {
+	if (!r || outLen < sizeof(char16_t)) {
 		lua_pop(L, 1);
 		lua_pushnil(L);
 		return 1;
 	}
-	size_t charCount = outLen / sizeof(wchar_t);
-	// Allocate the LuaWChar userdata while the read string is still on the stack (r points into it).
-	LuaWChar* wch = lua_pushwchar(L);
-	wch->str = (wchar_t*)gff_malloc((charCount + 1) * sizeof(wchar_t));
-	if (!wch->str) {
-		lua_pop(L, 2);  // pop wchar userdata and the string from StreamRead
+	size_t char16Count = outLen / sizeof(char16_t);
+	// Convert char16_t stream data to wchar_t* while r is still valid (points into StreamRead string).
+	size_t wcharLen = 0;
+	wchar_t* wstr = char16_alloc_as_wchar((const char16_t*)r, char16Count, &wcharLen);
+	lua_pop(L, 1);  // pop the string from StreamRead; r is no longer valid
+	if (!wstr) {
 		lua_pushnil(L);
 		return 1;
 	}
-	memcpy(wch->str, r, charCount * sizeof(wchar_t));
-	wch->str[charCount] = L'\0';
-	wch->len = charCount;
-	lua_remove(L, -2);  // remove the string from StreamRead; leave the wchar on top
+	LuaWChar* wch = lua_pushwchar(L);
+	wch->str = wstr;
+	wch->len = wcharLen;
 	return 1;
 }
 
@@ -748,8 +747,19 @@ int WriteLuaValue(lua_State* L) {
 		if (lua_iswchar(L, 2)) {
 			LuaWChar* wch = (LuaWChar*)lua_touserdata(L, 2);
 			if (wch && wch->str && wch->len > 0) {
-				raw = (const BYTE*)wch->str;
-				len = wch->len * sizeof(wchar_t);
+				size_t char16Count = 0;
+				char16_t* buf = wchar_alloc_as_char16(wch->str, wch->len, &char16Count);
+				if (!buf) {
+					lua_pushinteger(L, 0);
+					return 1;
+				}
+				size_t byteLen = char16Count * sizeof(char16_t);
+				if (limit > 0 && limit < byteLen)
+					byteLen = limit;
+				bool ok = StreamWrite(L, stream, (const BYTE*)buf, byteLen);
+				gff_free(buf);
+				lua_pushinteger(L, ok ? (lua_Integer)byteLen : 0);
+				return 1;
 			}
 		}
 		break;

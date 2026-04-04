@@ -175,7 +175,6 @@ int SQLiteExecute(lua_State* L) {
 	const char* data;
 	const char* name;
 	LuaWChar* wchar;
-	LuaStream* stream;
 
 	FinalizeStmt(luasqlite);
 

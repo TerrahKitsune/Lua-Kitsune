@@ -49,6 +49,8 @@
 #define KITSUNE_SHARED_MEMORY_FLAG_ACCESSOR_DISPOSED (1 << 5) // Cleared when C# takes ownership (LuaStream constructor); set when C# disposes. Starts at 1 (no accessor).
 #define KITSUNE_SHARED_MEMORY_FLAG_LUA_REFERENCED    (1 << 6) // Set when any Lua stream is created from this block. Once set, never cleared.
 
+#pragma warning(push)
+#pragma warning(disable: 4200) // nonstandard extension: zero-sized array; intentional flexible array member
 struct SharedMemoryBlock {
 	BYTE flags; // Bitfield of KITSUNE_SHARED_MEMORY_FLAG_* values.
 				// KITSUNE_SHARED_MEMORY_FLAG_LOCKED:        set by an accessor during a read or write; other accessors should wait.
@@ -59,6 +61,7 @@ struct SharedMemoryBlock {
 	size_t size;             // Size of the data region in bytes. The data block immediately follows the header in memory.
 	BYTE data[]; // Continous data block of the specified size. The entire struct is allocated as a single block on the heap, so freeing the struct pointer also frees the data block.
 };
+#pragma warning(pop)
 
 // Forward declaration required so KitsuneVariable can hold a pointer to the node in its union.
 struct KeyValuePairKitsuneVariableNode;

@@ -86,7 +86,6 @@ int querysqlite(lua_State* L, bool isScalar) {
 	const char* data;
 	const char* name;
 	LuaWChar* wchar;
-	LuaStream* stream;
 
 	int err = sqlite3_prepare_v2(db, query, -1, &stmt, 0);
 	if (err) {

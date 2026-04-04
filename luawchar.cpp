@@ -375,6 +375,76 @@ int ToWide(lua_State* L) {
 	return 1;
 }
 
+char16_t* wchar_alloc_as_char16(const wchar_t* src, size_t len, size_t* outChar16Len) {
+#ifdef _WIN32
+	// On Windows wchar_t is 2 bytes (UTF-16), same layout as char16_t; direct memcpy is valid.
+	char16_t* dst = (char16_t*)gff_malloc((len + 1) * sizeof(char16_t));
+	if (!dst) {
+		if (outChar16Len) *outChar16Len = 0;
+		return NULL;
+	}
+	memcpy(dst, src, len * sizeof(char16_t));
+	dst[len] = u'\0';
+	if (outChar16Len) *outChar16Len = len;
+	return dst;
+#else
+	// On Linux wchar_t is 4 bytes (UTF-32); encode each code point as UTF-16.
+	// Worst case: every code point is supplementary, producing 2 char16_t per wchar_t.
+	char16_t* dst = (char16_t*)gff_malloc((len * 2 + 1) * sizeof(char16_t));
+	if (!dst) {
+		if (outChar16Len) *outChar16Len = 0;
+		return NULL;
+	}
+	size_t out = 0;
+	for (size_t i = 0; i < len; i++) {
+		unsigned int cp = (unsigned int)src[i];
+		if (cp <= 0xFFFF) {
+			dst[out++] = (char16_t)cp;
+		}
+		else if (cp <= 0x10FFFF) {
+			cp -= 0x10000;
+			dst[out++] = (char16_t)(0xD800 + (cp >> 10));
+			dst[out++] = (char16_t)(0xDC00 + (cp & 0x3FF));
+		}
+	}
+	dst[out] = u'\0';
+	if (outChar16Len) *outChar16Len = out;
+	return dst;
+#endif
+}
+
+wchar_t* char16_alloc_as_wchar(const char16_t* src, size_t charCount, size_t* outWcharLen) {
+	wchar_t* dst = (wchar_t*)gff_malloc((charCount + 1) * sizeof(wchar_t));
+	if (!dst) {
+		if (outWcharLen) *outWcharLen = 0;
+		return NULL;
+	}
+#ifdef _WIN32
+	// On Windows wchar_t is 2 bytes (UTF-16), same layout as char16_t; direct memcpy is valid.
+	memcpy(dst, src, charCount * sizeof(wchar_t));
+	dst[charCount] = L'\0';
+	if (outWcharLen) *outWcharLen = charCount;
+#else
+	// On Linux wchar_t is 4 bytes (UTF-32); decode UTF-16 surrogate pairs.
+	size_t out = 0;
+	for (size_t i = 0; i < charCount; i++) {
+		unsigned int unit = (unsigned int)src[i];
+		if (unit >= 0xD800 && unit <= 0xDBFF && i + 1 < charCount) {
+			unsigned int trail = (unsigned int)src[i + 1];
+			if (trail >= 0xDC00 && trail <= 0xDFFF) {
+				dst[out++] = (wchar_t)(((unit - 0xD800) << 10) + (trail - 0xDC00) + 0x10000);
+				i++;
+				continue;
+			}
+		}
+		dst[out++] = (wchar_t)unit;
+	}
+	dst[out] = L'\0';
+	if (outWcharLen) *outWcharLen = out;
+#endif
+	return dst;
+}
+
 int ToUtf8(lua_State* L) {
 
 	LuaWChar* wchar = lua_towchar(L, -1);
