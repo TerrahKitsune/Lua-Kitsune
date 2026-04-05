@@ -102,7 +102,6 @@
     <ClCompile Include="FileAsyncMain.cpp" />
     <ClCompile Include="Http.cpp" />
     <ClCompile Include="HttpMain.cpp" />
-    <ClCompile Include="image.cpp" />
     <ClCompile Include="luajson.cpp" />
     <ClCompile Include="luajsonmain.cpp" />
     <ClCompile Include="kafkahelpers.cpp" />
@@ -114,13 +113,14 @@
     <ClCompile Include="LuaFTP.cpp" />
     <ClCompile Include="LuaFTPChannel.cpp" />
     <ClCompile Include="LuaFTPMain.cpp" />
-    <ClCompile Include="LuaImageMain.cpp" />
     <ClCompile Include="luakafka.cpp" />
     <ClCompile Include="luakafkamain.cpp" />
     <ClCompile Include="luakafkamessage.cpp" />
     <ClCompile Include="luakafkatopic.cpp" />
     <ClCompile Include="LuaMutex.cpp" />
     <ClCompile Include="LuaMutexMain.cpp" />
+    <ClCompile Include="LuaPostgres.cpp" />
+    <ClCompile Include="LuaProcess.cpp" />
     <ClCompile Include="LuaSHA1.cpp" />
     <ClCompile Include="LuaSha256.cpp" />
     <ClCompile Include="luawchar.cpp" />
@@ -161,10 +161,6 @@
     <ClCompile Include="MacroMain.cpp" />
     <ClCompile Include="mem.cpp" />
     <ClCompile Include="MemoryManager.cpp" />
-    <ClCompile Include="namedpipe.cpp" />
-    <ClCompile Include="NamedPipeMain.cpp" />
-    <ClCompile Include="odbc.cpp" />
-    <ClCompile Include="ODBCMain.cpp" />
     <ClCompile Include="Redis.cpp" />
     <ClCompile Include="RedisKey.cpp" />
     <ClCompile Include="RedisMain.cpp" />
@@ -188,13 +184,11 @@
     <ClCompile Include="LuaFileSystem.cpp" />
     <ClCompile Include="LuaFileSystemMain.cpp" />
     <ClCompile Include="LuaMD5.cpp" />
-    <ClCompile Include="LuaProcess.cpp" />
     <ClCompile Include="LuaServer.cpp" />
     <ClCompile Include="LuaServerMain.cpp" />
     <ClCompile Include="LuaSQLite.cpp" />
     <ClCompile Include="LuaSQLiteMain.cpp" />
     <ClCompile Include="LuaMySQL.cpp" />
-    <ClCompile Include="LuaPostgres.cpp" />
     <ClCompile Include="md5.c" />
     <ClCompile Include="MD5Main.cpp" />
     <ClCompile Include="MySQLMain.cpp" />
@@ -228,7 +222,6 @@
     <ClInclude Include="FileAsyncMain.h" />
     <ClInclude Include="Http.h" />
     <ClInclude Include="HttpMain.h" />
-    <ClInclude Include="image.h" />
     <ClInclude Include="luajson.h" />
     <ClInclude Include="luajsonmain.h" />
     <ClInclude Include="kafkahelpers.h" />
@@ -240,13 +233,13 @@
     <ClInclude Include="LuaFTP.h" />
     <ClInclude Include="LuaFTPChannel.h" />
     <ClInclude Include="LuaFTPMain.h" />
-    <ClInclude Include="LuaImageMain.h" />
     <ClInclude Include="luakafka.h" />
     <ClInclude Include="luakafkamain.h" />
     <ClInclude Include="luakafkamessage.h" />
     <ClInclude Include="luakafkatopic.h" />
     <ClInclude Include="LuaMutex.h" />
     <ClInclude Include="LuaMutexMain.h" />
+    <ClInclude Include="LuaProcess.h" />
     <ClInclude Include="LuaSHA1.h" />
     <ClInclude Include="LuaSha256.h" />
     <ClInclude Include="luawchar.h" />
@@ -284,10 +277,6 @@
     <ClInclude Include="MacroMain.h" />
     <ClInclude Include="mem.h" />
     <ClInclude Include="MemoryManager.h" />
-    <ClInclude Include="namedpipe.h" />
-    <ClInclude Include="NamedPipeMain.h" />
-    <ClInclude Include="odbc.h" />
-    <ClInclude Include="ODBCMain.h" />
     <ClInclude Include="platform.h" />
     <ClInclude Include="postgres\include\libpq-fe.h" />
     <ClInclude Include="Redis.h" />
@@ -314,7 +303,6 @@
     <ClInclude Include="LuaFileSystem.h" />
     <ClInclude Include="LuaFileSystemMain.h" />
     <ClInclude Include="LuaMD5.h" />
-    <ClInclude Include="LuaProcess.h" />
     <ClInclude Include="LuaServer.h" />
     <ClInclude Include="LuaServerMain.h" />
     <ClInclude Include="LuaSQLite.h" />
@@ -335,8 +323,11 @@
     <ClInclude Include="TimerMain.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="build-linux-and-test.ps1" />
+    <None Include="Http Client Implementation Plan.md" />
     <None Include="Lua functions.md" />
     <None Include="MySQL Implementation Plan.md" />
+    <None Include="Postgres Implementation Plan.md" />
     <None Include="testEnvironments.json" />
   </ItemGroup>
   <ItemGroup>

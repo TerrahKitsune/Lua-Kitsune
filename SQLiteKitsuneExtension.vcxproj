@@ -160,11 +160,7 @@
     <ClCompile Include="mem.cpp" />
     <ClCompile Include="miniz.c" />
     <ClCompile Include="MySQLMain.cpp" />
-    <ClCompile Include="namedpipe.cpp" />
-    <ClCompile Include="NamedPipeMain.cpp" />
     <ClCompile Include="networking.cpp" />
-    <ClCompile Include="odbc.cpp" />
-    <ClCompile Include="ODBCMain.cpp" />
     <ClCompile Include="Redis.cpp" />
     <ClCompile Include="RedisKey.cpp" />
     <ClCompile Include="RedisMain.cpp" />
@@ -260,11 +256,7 @@
     <ClInclude Include="mem.h" />
     <ClInclude Include="miniz.h" />
     <ClInclude Include="MySQLMain.h" />
-    <ClInclude Include="namedpipe.h" />
-    <ClInclude Include="NamedPipeMain.h" />
     <ClInclude Include="networking.h" />
-    <ClInclude Include="odbc.h" />
-    <ClInclude Include="ODBCMain.h" />
     <ClInclude Include="Redis.h" />
     <ClInclude Include="RedisKey.h" />
     <ClInclude Include="RedisMain.h" />

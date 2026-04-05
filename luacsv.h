@@ -27,6 +27,13 @@ typedef struct LuaCsv {
     size_t     streamLen;      // valid wchar_t count in streamBuf
     size_t     streamAlloc;    // allocated capacity of streamBuf
     bool       streamDone;     // supplier returned nil/false/empty — no more data
+    // ── Stream-object source (streamRef != LUA_NOREF) ────────────────────────
+    // A LuaStream* is called via lua_callk rather than lua_call_nohook so that
+    // async streams can yield cooperatively.  Sync streams simply return
+    // immediately without yielding — the lua_callk machinery is transparent.
+    // Delimiter sniffing is also deferred to the first newline seen in the
+    // buffered data, so auto-detect works correctly for both stream types.
+    int        streamRef;      // LUA_REGISTRYINDEX ref to the LuaStream userdata
 } LuaCsv;
 
 // ── Instance entry points ─────────────────────────────────────────────────────

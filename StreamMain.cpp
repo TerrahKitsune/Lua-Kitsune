@@ -18,6 +18,7 @@ static const struct luaL_Reg streamfunctions[] = {
 	{ "Seek",  StreamSetPos },
 	{ "Write",  WriteLuaValue },
 	{ "Read",  ReadLuaStream },
+	{ "ReadAll",  ReadAllStream },
 	{ "WriteFloat",  WriteFloat },
 	{ "ReadFloat",  ReadFloat },
 	{ "WriteDouble",  WriteDouble },
@@ -38,6 +39,8 @@ static const struct luaL_Reg streamfunctions[] = {
 	{ "ReadUtf8",  ReadUtf8 },
 	{ "Compress",  CompressStream },
 	{ "Decompress",  DecompressStream },
+	{ "HasData",  HasDataLuaStream },
+	{ "CreateChunked",  CreateChunkedStream },
 	{ NULL, NULL }
 }; 
 

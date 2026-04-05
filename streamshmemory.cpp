@@ -9,29 +9,22 @@ struct InSharedMemoryStream {
 
 // ── vtable implementations ────────────────────────────────────────────────────
 
-static const BYTE* shmem_read(void* native, lua_State* L, size_t len, size_t* outLen) {
+static int shmem_read(void* native, lua_State* L, size_t len) {
 	InSharedMemoryStream* s = (InSharedMemoryStream*)native;
 	if (!s->block || s->pos >= s->block->size) {
 		lua_pushboolean(L, false);
-		if (outLen)
-			*outLen = 0;
-		return NULL;
+		return 1;
 	}
-	// READONLY blocks skip the LOCKED flag; other accessors are free to read concurrently.
 	bool readonly = (s->block->flags & KITSUNE_SHARED_MEMORY_FLAG_READONLY) != 0;
 	if (!readonly)
 		s->block->flags |= KITSUNE_SHARED_MEMORY_FLAG_LOCKED;
 	size_t avail  = s->block->size - s->pos;
 	size_t toRead = (len == 0 || len > avail) ? avail : len;
-	// lua_pushlstring copies the bytes into the Lua string; LOCKED can be cleared immediately
-	// because the copy is complete before any other thread could observe the flag change.
 	lua_pushlstring(L, (const char*)(s->block->data + s->pos), toRead);
 	s->pos += toRead;
 	if (!readonly)
 		s->block->flags &= ~KITSUNE_SHARED_MEMORY_FLAG_LOCKED;
-	if (outLen)
-		*outLen = toRead;
-	return (const BYTE*)lua_tolstring(L, -1, NULL);
+	return 1;
 }
 
 static bool shmem_write(void* native, const BYTE* data, size_t len) {
@@ -70,7 +63,7 @@ static lua_Integer shmem_getlen(void* native) {
 	return s->block ? (lua_Integer)s->block->size : 0;
 }
 
-static void shmem_close(void* native) {
+static void shmem_close(void* native, lua_State* L) {
 	InSharedMemoryStream* s = (InSharedMemoryStream*)native;
 	if (s->block)
 		s->block->flags |= KITSUNE_SHARED_MEMORY_FLAG_OWNER_DISPOSED;
@@ -175,8 +168,8 @@ void lua_shmem_sweep_disposed_blocks() {
 
 // shmem_out_close: same as shmem_close — set OWNER_DISPOSED and free the native struct.
 // The block itself is freed by lua_shmem_sweep_disposed_blocks once the accessor also disposes.
-static void shmem_out_close(void* native) {
-	shmem_close(native);
+static void shmem_out_close(void* native, lua_State* L) {
+	shmem_close(native, NULL);
 }
 
 static int shmem_out_info(void* native, lua_State* L) {

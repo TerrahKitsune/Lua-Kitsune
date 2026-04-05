@@ -575,20 +575,20 @@ if(KITSUNE_MYSQL)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(MYSQLCLIENT REQUIRED mysqlclient>=8.0)
 
-    list(APPEND KITSUNE_ENGINE_SOURCES LuaMySQL.cpp MySQLMain.cpp)
+    target_sources(KitsuneEngine PRIVATE LuaMySQL.cpp MySQLMain.cpp)
 
-    target_compile_definitions(KitsuneEngine PRIVATE KITSUNE_HAVE_MYSQL)
+    target_compile_definitions(KitsuneEngine PRIVATE KITSUNE_MYSQL)
     target_include_directories(KitsuneEngine PRIVATE ${MYSQLCLIENT_INCLUDE_DIRS})
     target_link_libraries(KitsuneEngine PRIVATE ${MYSQLCLIENT_LINK_LIBRARIES})
 endif()
 ```
 
-Also remove `KITSUNE_BAREBONES` from the Linux build target so the MySQL
-registration in `KitsuneEngine.cpp` is not gated out when `KITSUNE_HAVE_MYSQL`
-is defined. Gate `luaopen_mysql` with:
+`KITSUNE_MYSQL` is the single define used everywhere: on Windows it is pulled in
+via `platform.h` (`#ifdef KITSUNE_ALL → #define KITSUNE_MYSQL`); on Linux CMake
+passes it directly. `KitsuneEngine.cpp` gates the registration with:
 
 ```cpp
-#if !defined(KITSUNE_BAREBONES) || defined(KITSUNE_HAVE_MYSQL)
+#ifdef KITSUNE_MYSQL
     luaopen_mysql(L);  lua_setglobal(L, "MySQL");
 #endif
 ```
@@ -685,10 +685,10 @@ available; all tests are skipped on machines where it is absent.
 - [x] **T13** — Fix `PushMySQLValue` BLOB case (`uint8_t*` instead of `BYTE*`)
 - [x] **T14** — Rewrite `MySQLMain.cpp`: remove `Fetch`/`GetRow`/`Finish` entries, add connection method `__index`
 - [x] **T15** — Update `CMakeLists.txt`: add `KITSUNE_MYSQL` option, pkg-config for mysqlclient >= 8.0
-- [x] **T16** — Update `KitsuneEngine.cpp`: gate `luaopen_mysql` with `KITSUNE_HAVE_MYSQL` for Linux (implemented via CMake generator expression removing `KITSUNE_BAREBONES` when `KITSUNE_MYSQL=ON`)
+- [x] **T16** — Update `KitsuneEngine.cpp`: gate `luaopen_mysql` with `#ifdef KITSUNE_MYSQL`. On Windows the define is emitted by `platform.h` when `KITSUNE_ALL` is set; on Linux CMake passes `-DKITSUNE_MYSQL` directly. No `KITSUNE_BAREBONES` removal needed.
 - [x] **T17** — Add `MySqlFactAttribute.cs` to `KitsuneNet.Tests`; add `KITSUNE_MYSQL_TEST` env-var parsing helper
 - [x] **T17b** — Write coroutine-protocol tests in `MySqlTests.cs` (connect, raw SELECT/INSERT, error, stop-flag, IsBusy, concurrent, busy-guard, GC)
-- [ ] **T18** — Linux build smoke test: `cmake -DKITSUNE_MYSQL=ON .. && make`
+- [x] **T18** — Linux build smoke test: `cmake -DKITSUNE_MYSQL=ON .. && make`. All 32 MySQL tests pass on both Windows and Linux (WSL Ubuntu 24.04).
 - [x] **T19** — Windows build regression: existing `.vcxproj` must compile without changes
 - [x] **T20** — Implement `MySqlNonQuery`, `MySqlScalar`, `MySqlQueryAll` as C functions in `LuaMySQL.cpp` with `lua_yieldk` continuations (`Helper_WaitCont`, `Helper_StreamCont`); add `cancelFnRef`, `helperMode`, `accumTableIdx`, `accumRowIdx` fields to `LuaMySQLQuery`; add `activeQuery` to `LuaMySQL`; update `FreeQuery` to clear `activeQuery`; register all three in `MySQLMain.cpp` function table
 - [x] **T21** — Write helper-method and `cancelFn` tests in `MySqlTests.cs` (`NonQuery`, `Scalar`, `QueryAll`, cancel mid-wait, cancel mid-stream, error propagation, `EscapeValue`, double-`Close`)
@@ -703,10 +703,12 @@ available; all tests are skipped on machines where it is absent.
 | `LuaMySQL.cpp` | Rewrite |
 | `MySQLMain.cpp` | Rewrite |
 | `CMakeLists.txt` | Add `KITSUNE_MYSQL` option block |
-| `KitsuneEngine.cpp` | 1-line guard change around `luaopen_mysql` |
+| `KitsuneEngine.cpp` | `#ifdef KITSUNE_MYSQL` guard around `luaopen_mysql` |
 | `KitsuneNet.Tests/MySqlFactAttribute.cs` | New — skips tests when `KITSUNE_MYSQL_TEST` not set |
 | `KitsuneNet.Tests/MySqlTests.cs` | New — xUnit tests for MySQL coroutine protocol and helpers |
-| `KitsuneEngine.vcxproj` | Drop-in MySQL 8.0 `libmysql.lib` + headers into `mysql/` folder; `#pragma comment` unchanged |
+| `KitsuneNet.Tests/kitsune.runsettings` | New — provides `KITSUNE_MYSQL_TEST` env var for local VS test runs |
+| `KitsuneEngine.vcxproj` | `<LinkIncremental>false</LinkIncremental>` added to Debug `<Link>` — MSVC incremental linker was silently preserving a stale `.rdata` layout for `connfunctions[]` after entries were added, causing new methods to resolve via ILT stubs that bypassed the updated array |
+| `.gitignore` | `build-*/` pattern added; all three build directories (`build-linux/`, `build-barebones/`, `build-asan/`) fully untracked — binaries are rebuilt locally, not committed |
 
 ---
 

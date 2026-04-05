@@ -25,6 +25,7 @@ static const char* STREAM = "STREAM";
 #define STREAM_OP_LEN     5   // ()     -> integer len
 #define STREAM_OP_SETPOS  6   // (pos)  -> true   | false [, msg]
 #define STREAM_OP_INFO    7   // ()     -> table
+#define STREAM_OP_HASDATA 8   // ()     -> integer bytes_ready | false
 
 // ── Native C vtable ───────────────────────────────────────────────────────────
 // Implemented by memory and file backends.  A NULL vtbl means Lua fn backend.
@@ -32,23 +33,29 @@ static const char* STREAM = "STREAM";
 // stateless and stored as a static const.
 //
 // read:   reads up to 'len' bytes (0 = all remaining).
-//         MUST push exactly one Lua value onto the stack (a Lua string on
-//         success, or false on EOF/error) to match the Lua fn calling contract.
-//         Returns a pointer into the pushed string's data, or NULL on EOF/error.
+//         MUST push exactly one Lua value onto the stack: a string on success,
+//         or false on EOF/error.  For async backends this function may call
+//         lua_yieldk — sync backends simply return without yielding.
 // write:  writes 'len' bytes; returns true on success.
 // setpos: moves the cursor; returns true on success.
 // curpos: returns current cursor position.
 // getlen: returns total data length.
 // close:  frees all resources owned by 'native'.
 // info:   pushes a backend-specific info table onto the Lua stack; returns 1.
+//         May call lua_yieldk for async backends (e.g. HTTP response headers).
 typedef struct LuaStreamVtable {
-	const BYTE* (*read)   (void* native, lua_State* L, size_t len, size_t* outLen);
-	bool        (*write)  (void* native, const BYTE* data, size_t len);
-	bool        (*setpos) (void* native, lua_Integer pos);
-	lua_Integer (*curpos) (void* native);
-	lua_Integer (*getlen) (void* native);
-	void        (*close)  (void* native);
-	int         (*info)   (void* native, lua_State* L);
+	int         (*read)    (void* native, lua_State* L, size_t len);
+	bool        (*write)   (void* native, const BYTE* data, size_t len);
+	bool        (*setpos)  (void* native, lua_Integer pos);
+	lua_Integer (*curpos)  (void* native);
+	lua_Integer (*getlen)  (void* native);
+	// L is provided for backends that hold Lua registry refs (e.g. chunked stream).
+	// Existing backends that do not need L simply ignore it.
+	void        (*close)   (void* native, lua_State* L);
+	int         (*info)    (void* native, lua_State* L);
+	// hasdata: non-blocking availability check. 1 = data ready; 0 = not yet.
+	//   Must never yield or call any Lua API that may yield.
+	int         (*hasdata) (void* native);
 } LuaStreamVtable;
 
 typedef struct LuaStream {
@@ -90,6 +97,10 @@ int NewStream(lua_State* L);
 int OpenFile(lua_State* L);
 int OpenSharedMemory(lua_State* L);
 int ToSharedMemory(lua_State* L);
+// Creates a mock STREAM_CAP_READ stream from a Lua table of strings.
+// Each Read() yields once before delivering the next chunk, simulating
+// asynchronous data arrival. Returns nil at EOF. Used for tests.
+int CreateChunkedStream(lua_State* L);
 
 // ── Stream info ───────────────────────────────────────────────────────────────
 int StreamPos(lua_State* L);
@@ -99,8 +110,15 @@ int GetStreamInfo(lua_State* L);
 
 // ── Read operations ───────────────────────────────────────────────────────────
 int ReadLuaStream(lua_State* L);
+// Reads via Read() (yields for async streams) until EOF or limit bytes.
+// Returns a seekable in-memory LuaStream. For small/moderate responses only.
+int ReadAllStream(lua_State* L);
 int ReadStreamByte(lua_State* L);
 int PeekStreamByte(lua_State* L);
+// Non-blocking: returns the number of bytes ready (or true/false for backends
+// with a dedicated hasdata check).  Returns false when no data is immediately
+// available.  Sync streams without vtbl->hasdata return bytes-remaining instead.
+int HasDataLuaStream(lua_State* L);
 int ReadUtf8(lua_State* L);
 int ReadFloat(lua_State* L);
 int ReadDouble(lua_State* L);

@@ -58,13 +58,11 @@ static BYTE mode_to_caps(const char* mode) {
 
 // ── vtable implementations ────────────────────────────────────────────────────
 
-static const BYTE* file_read(void* native, lua_State* L, size_t len, size_t* outLen) {
+static int file_read(void* native, lua_State* L, size_t len) {
 	InFileStream* f = (InFileStream*)native;
 	if (!f->file) {
 		lua_pushboolean(L, false);
-		if (outLen)
-			*outLen = 0;
-		return NULL;
+		return 1;
 	}
 	if (len == 0) {
 #ifdef _WIN32
@@ -75,33 +73,25 @@ static const BYTE* file_read(void* native, lua_State* L, size_t len, size_t* out
 		int64_t fileSize = posix_filelength(fileno(f->file));
 #endif
 		if (fileSize < 0 || fileSize <= cur) {
-			lua_pushlstring(L, "", 0);
-			if (outLen)
-				*outLen = 0;
-			return NULL;
+			lua_pushboolean(L, false);
+			return 1;
 		}
 		len = (size_t)(fileSize - cur);
 	}
 	BYTE* buf = (BYTE*)gff_malloc(len);
 	if (!buf) {
 		lua_pushboolean(L, false);
-		if (outLen)
-			*outLen = 0;
-		return NULL;
+		return 1;
 	}
 	size_t got = fread(buf, 1, len, f->file);
 	if (got == 0) {
 		gff_free(buf);
-		lua_pushlstring(L, "", 0);
-		if (outLen)
-			*outLen = 0;
-		return NULL;
+		lua_pushboolean(L, false);
+		return 1;
 	}
 	lua_pushlstring(L, (const char*)buf, got);
 	gff_free(buf);
-	if (outLen)
-		*outLen = got;
-	return (const BYTE*)lua_tolstring(L, -1, NULL);
+	return 1;
 }
 
 static bool file_write(void* native, const BYTE* data, size_t len) {
@@ -141,7 +131,7 @@ static lua_Integer file_getlen(void* native) {
 	return size < 0 ? 0 : (lua_Integer)size;
 }
 
-static void file_close(void* native) {
+static void file_close(void* native, lua_State* L) {
 	InFileStream* f = (InFileStream*)native;
 	if (f->file)
 		fclose(f->file);

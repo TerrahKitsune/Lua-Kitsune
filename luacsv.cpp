@@ -211,7 +211,7 @@ static void BufferUntilNewline(LuaCsv* csv) {
 static bool IsAtEnd(LuaCsv* csv) {
 	if (csv->data)
 		return csv->pos >= (int)csv->data->len;
-	if (csv->streamFuncRef != LUA_NOREF)
+	if (csv->streamFuncRef != LUA_NOREF || csv->streamRef != LUA_NOREF)
 		return csv->streamPos >= (int)csv->streamLen && csv->streamDone;
 	return true;
 }
@@ -237,8 +237,12 @@ static wchar_t GetNext(LuaCsv* csv, bool peek = false) {
 		} else {
 			last = L'\0';
 		}
-	} else if (csv->streamFuncRef != LUA_NOREF) {
-		if (csv->streamPos >= (int)csv->streamLen && !csv->streamDone)
+	} else if (csv->streamFuncRef != LUA_NOREF || csv->streamRef != LUA_NOREF) {
+		// Fn-backend or stream-object: read from streamBuf.
+		// Fn-backend refills here when the buffer runs out.
+		// Stream-object: the iterator pre-fills before calling DecodeOneRow; no refill here.
+		if (csv->streamFuncRef != LUA_NOREF &&
+			csv->streamPos >= (int)csv->streamLen && !csv->streamDone)
 			RefillStreamBuffer(csv);
 		if (csv->streamPos < (int)csv->streamLen) {
 			last = csv->streamBuf[csv->streamPos];
@@ -484,7 +488,22 @@ static wchar_t SniffDelimiter(const wchar_t* data, size_t len) {
 			if (ch == candidates[c]) counts[c][nLines]++;
 		}
 	}
-	if (nLines < maxLines) nLines++;  // flush last (possibly unterminated) line
+	if (nLines < maxLines) {
+		// Flush the last (possibly unterminated) line — but only when it has at
+		// least one candidate delimiter.  An empty or delimiter-free partial line
+		// (e.g. "al" after "name;age;city\n") would add a zero-count row that
+		// makes the consistency check fail for every valid candidate, causing
+		// auto-detect to fall back to comma on chunked / streaming input.
+		bool partialHasContent = false;
+		for (int c = 0; c < nCand; c++) {
+			if (counts[c][nLines] > 0) {
+				partialHasContent = true;
+				break;
+			}
+		}
+		if (partialHasContent)
+			nLines++;
+	}
 	if (nLines == 0) return L',';
 
 	int bestCand  = 0;  // default to comma
@@ -669,6 +688,10 @@ static int LuaCsvStreamStateGc(lua_State* L) {
 		luaL_unref(L, LUA_REGISTRYINDEX, csv->streamFuncRef);
 		csv->streamFuncRef = LUA_NOREF;
 	}
+	if (csv->streamRef != LUA_NOREF) {
+		luaL_unref(L, LUA_REGISTRYINDEX, csv->streamRef);
+		csv->streamRef = LUA_NOREF;
+	}
 	FreeBuffer(csv);
 	if (csv->streamBuf) {
 		gff_free(csv->streamBuf);
@@ -677,14 +700,99 @@ static int LuaCsvStreamStateGc(lua_State* L) {
 	return 0;
 }
 
+// Appends a UTF-8 string (s, slen) to csv->streamBuf, compacting any
+// already-consumed data to the front first.  Grows the buffer as needed.
+static bool CsvAppendChunkToStreamBuf(LuaCsv* csv, const char* s, size_t slen) {
+	// Compact: move remaining unparsed data to front of streamBuf.
+	size_t remaining = (csv->streamPos < (int)csv->streamLen)
+		? (csv->streamLen - (size_t)csv->streamPos) : 0;
+	if (remaining > 0 && csv->streamPos > 0)
+		memmove(csv->streamBuf, csv->streamBuf + csv->streamPos, remaining * sizeof(wchar_t));
+	csv->streamLen = remaining;
+	csv->streamPos = 0;
+	// Convert and append the new UTF-8 chunk.
+#ifdef _WIN32
+	int wlen = MultiByteToWideChar(CP_UTF8, 0, s, (int)slen, NULL, 0);
+	if (wlen <= 0)
+		return true;  // skip empty/invalid
+	if ((size_t)(wlen) + csv->streamLen > csv->streamAlloc) {
+		size_t need = csv->streamLen + (size_t)wlen;
+		wchar_t* nb = (wchar_t*)gff_realloc(csv->streamBuf, (need + 1) * sizeof(wchar_t));
+		if (!nb)
+			return false;
+		csv->streamBuf   = nb;
+		csv->streamAlloc = need;
+	}
+	MultiByteToWideChar(CP_UTF8, 0, s, (int)slen, csv->streamBuf + csv->streamLen, wlen);
+	csv->streamLen += (size_t)wlen;
+	csv->streamBuf[csv->streamLen] = L'\0';
+#else
+	{
+		// Use iconv directly at the append offset so the compacted [0..remaining)
+		// data is never touched.  The old csv_utf8_to_wchar path wrote from
+		// position 0, silently overwriting the remainder and then writing the
+		// null terminator past the end of the allocation — causing heap corruption
+		// on Linux ("free(): invalid pointer") when multiple chunks were appended.
+		size_t prevLen = csv->streamLen;                // = remaining after compaction
+		size_t needed  = prevLen + slen;                // safe upper bound in wchar_t
+		if (needed > csv->streamAlloc) {
+			wchar_t* nb = (wchar_t*)gff_realloc(csv->streamBuf, (needed + 1) * sizeof(wchar_t));
+			if (!nb)
+				return false;
+			csv->streamBuf   = nb;
+			csv->streamAlloc = needed;
+		}
+		size_t wlenNew = 0;
+		iconv_t cd = iconv_open("WCHAR_T", "UTF-8");
+		if (cd != (iconv_t)-1) {
+			char*  in      = (char*)s;
+			size_t inLeft  = slen;
+			char*  out     = (char*)(csv->streamBuf + prevLen);
+			size_t outLeft = (csv->streamAlloc - prevLen) * sizeof(wchar_t);
+			iconv(cd, &in, &inLeft, &out, &outLeft);
+			iconv_close(cd);
+			wlenNew = ((csv->streamAlloc - prevLen) * sizeof(wchar_t) - outLeft) / sizeof(wchar_t);
+		}
+		csv->streamLen = prevLen + wlenNew;
+		csv->streamBuf[csv->streamLen] = L'\0';
+	}
+#endif
+	return true;
+}
+
+static int CsvStreamContinuation(lua_State* L, int status, lua_KContext ctx);
+
 // Iterator closure: upvalue 1 is the LuaCsv userdata.
 static int CsvStreamIterator(lua_State* L) {
 	LuaCsv* csv = (LuaCsv*)lua_touserdata(L, lua_upvalueindex(1));
 	csv->streamL = L;
 
-	if (csv->delimiter == L'\0') {
+	if (csv->streamRef != LUA_NOREF) {
+		// Stream path — works identically for sync and async streams.
+		// Keep fetching chunks until the buffer holds at least one complete row
+		// boundary (newline or CR) or the stream is done.  The same accumulation
+		// also ensures SniffDelimiter sees a full line when in auto-detect mode.
+		bool hasRow = csv->streamDone;
+		for (size_t i = (size_t)csv->streamPos; i < csv->streamLen && !hasRow; i++) {
+			if (csv->streamBuf[i] == L'\n' || csv->streamBuf[i] == L'\r')
+				hasRow = true;
+		}
+		if (!hasRow) {
+			lua_rawgeti(L, LUA_REGISTRYINDEX, csv->streamRef);
+			lua_getfield(L, -1, "Read");
+			lua_insert(L, -2);
+			lua_callk(L, 1, 1, 0, CsvStreamContinuation);
+			return CsvStreamContinuation(L, LUA_OK, 0);
+		}
+		if (csv->delimiter == L'\0')
+			csv->delimiter = csv->streamLen > (size_t)csv->streamPos
+				? SniffDelimiter(csv->streamBuf + csv->streamPos,
+								  csv->streamLen - (size_t)csv->streamPos)
+				: L',';
+	} else if (csv->streamFuncRef != LUA_NOREF && csv->delimiter == L'\0') {
+		// Fn-backend: accumulate at least one complete line for delimiter sniffing.
 		BufferUntilNewline(csv);
-		csv->delimiter = (csv->streamLen > 0)
+		csv->delimiter = csv->streamLen > 0
 			? SniffDelimiter(csv->streamBuf, csv->streamLen)
 			: L',';
 	}
@@ -694,26 +802,57 @@ static int CsvStreamIterator(lua_State* L) {
 	return 1;
 }
 
-// C closure used when a LuaStream is passed to DecodeFromFunction.
-// Upvalue 1 is the stream userdata itself (not a raw pointer) so the closure
-// holds a GC-visible reference to the stream for the iterator's entire lifetime.
-// Reads 4 KiB per call; returns nil on EOF.
-static int csv_stream_chunk_reader(lua_State* L) {
-	LuaStream* st = (LuaStream*)lua_touserdata(L, lua_upvalueindex(1));
-	return lua_stream_read_chunk(L, st, 4096);
+// Continuation for the stream path — same upvalues as CsvStreamIterator.
+// Called when stream:Read() yields (async) or used as the direct fallthrough
+// when Read() returns synchronously without yielding.
+// Per Lua 5.4: "the continuation function is called with the same thread,
+// with the same stack, and with the same upvalues."
+static int CsvStreamContinuation(lua_State* L, int status, lua_KContext ctx) {
+	LuaCsv* csv = (LuaCsv*)lua_touserdata(L, lua_upvalueindex(1));
+
+	if (lua_type(L, -1) == LUA_TSTRING) {
+		size_t slen = 0;
+		const char* s = lua_tolstring(L, -1, &slen);
+		CsvAppendChunkToStreamBuf(csv, s, slen);
+		lua_pop(L, 1);
+	} else {
+		lua_pop(L, 1);
+		csv->streamDone = true;
+	}
+
+	bool hasRow = csv->streamDone;
+	for (size_t i = (size_t)csv->streamPos; i < csv->streamLen && !hasRow; i++) {
+		if (csv->streamBuf[i] == L'\n' || csv->streamBuf[i] == L'\r')
+			hasRow = true;
+	}
+	if (!hasRow) {
+		lua_rawgeti(L, LUA_REGISTRYINDEX, csv->streamRef);
+		lua_getfield(L, -1, "Read");
+		lua_insert(L, -2);
+		lua_callk(L, 1, 1, 0, CsvStreamContinuation);
+		return CsvStreamContinuation(L, LUA_OK, 0);
+	}
+
+	if (csv->delimiter == L'\0')
+		csv->delimiter = csv->streamLen > (size_t)csv->streamPos
+			? SniffDelimiter(csv->streamBuf + csv->streamPos,
+							  csv->streamLen - (size_t)csv->streamPos)
+			: L',';
+
+	if (!DecodeOneRow(csv, L))
+		return 0;
+	return 1;
 }
 
-// If L[1] is a readable LuaStream, replaces it with a chunk-reader closure.
+// If L[1] is a readable LuaStream, validates it but leaves it as-is.
+// All streams (sync and async) use the lua_callk path in CsvStreamIterator;
+// no closure wrapping is needed.
 static void WrapStreamIfNeeded(lua_State* L) {
 	if (!lua_isstream(L, 1))
 		return;
 	LuaStream* st = lua_toluastream(L, 1);
 	if (!(st->Caps & STREAM_CAP_READ))
 		luaL_argerror(L, 1, "stream is not readable");
-	lua_pushvalue(L, 1);
-	lua_pushcclosure(L, csv_stream_chunk_reader, 1);
-	lua_insert(L, 1);
-	lua_remove(L, 2);
 }
 
 // Creates the iterator LuaCsv userdata and returns the iterator closure.
@@ -721,8 +860,9 @@ static void WrapStreamIfNeeded(lua_State* L) {
 static int CreateCsvIterator(lua_State* L, wchar_t delim) {
 	LuaCsv* csv = (LuaCsv*)lua_newuserdata(L, sizeof(LuaCsv));
 	memset(csv, 0, sizeof(LuaCsv));
-	csv->delimiter     = delim;
+	csv->delimiter    = delim;
 	csv->streamFuncRef = LUA_NOREF;
+	csv->streamRef     = LUA_NOREF;
 
 	if (luaL_newmetatable(L, "LuaCsvStream")) {
 		lua_pushcfunction(L, LuaCsvStreamStateGc);
@@ -730,8 +870,16 @@ static int CreateCsvIterator(lua_State* L, wchar_t delim) {
 	}
 	lua_setmetatable(L, -2);
 
-	lua_pushvalue(L, 1);
-	csv->streamFuncRef = luaL_ref(L, LUA_REGISTRYINDEX);
+	if (lua_isstream(L, 1)) {
+		// Store the stream directly; CsvStreamIterator calls Read() via lua_callk.
+		// This works for both sync streams (Read returns immediately) and async
+		// streams (Read may yield cooperatively).
+		lua_pushvalue(L, 1);
+		csv->streamRef = luaL_ref(L, LUA_REGISTRYINDEX);
+	} else {
+		lua_pushvalue(L, 1);
+		csv->streamFuncRef = luaL_ref(L, LUA_REGISTRYINDEX);
+	}
 
 	lua_pushcclosure(L, CsvStreamIterator, 1);
 	return 1;
@@ -739,7 +887,10 @@ static int CreateCsvIterator(lua_State* L, wchar_t delim) {
 
 int LuaDecodeFromFunction(lua_State* L) {
 	WrapStreamIfNeeded(L);
-	luaL_checktype(L, 1, LUA_TFUNCTION);
+	// L[1] is a function after WrapStreamIfNeeded (sync stream wrapped in closure
+	// or user-supplied function), OR still a LuaStream for async streams.
+	if (!lua_isstream(L, 1))
+		luaL_checktype(L, 1, LUA_TFUNCTION);
 	return CreateCsvIterator(L, ParseDelimiter(L, 2, L','));
 }
 
@@ -775,6 +926,7 @@ int lua_csv_new(lua_State* L) {
 	memset(csv, 0, sizeof(LuaCsv));
 	csv->delimiter     = ParseDelimiter(L, delimIdx, L'\0');
 	csv->streamFuncRef = LUA_NOREF;
+	csv->streamRef     = LUA_NOREF;
 	luaL_getmetatable(L, LUACSV);
 	lua_setmetatable(L, -2);
 	return 1;
@@ -801,7 +953,8 @@ int lua_csv_decode_from_function(lua_State* L) {
 	wchar_t delim = csv->delimiter;
 	lua_remove(L, 1);       // fn/stream → arg 1
 	WrapStreamIfNeeded(L);
-	luaL_checktype(L, 1, LUA_TFUNCTION);
+	if (!lua_isstream(L, 1))
+		luaL_checktype(L, 1, LUA_TFUNCTION);
 	return CreateCsvIterator(L, delim);
 }
 

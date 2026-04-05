@@ -4721,5 +4721,722 @@ namespace KitsuneNet.Tests
             ");
             r.ShouldBe("true");
         }
+
+        // -- Process --------------------------------------------------------------
+
+        [Fact]
+        public async Task Process_All_ReturnsTableWithAtLeastOneEntry()
+        {
+            string? r = await Run(@"
+                local p = Process.All()
+                local n = 0
+                for _ in pairs(p) do n = n + 1 end
+                return tostring(n > 0)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Process_All_KeysAreIntegersValuesAreStrings()
+        {
+            string? r = await Run(@"
+                local p = Process.All()
+                for k, v in pairs(p) do
+                    if type(k) ~= 'number' or type(v) ~= 'string' then return 'false' end
+                end
+                return 'true'
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Process_Open_CurrentProcess_ReturnsNonNil()
+        {
+            string? r = await Run("return tostring(Process.Open() ~= nil)");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Process_GetID_CurrentProcess_ReturnsPositiveInteger()
+        {
+            string? r = await Run(@"
+                local p = Process.Open()
+                local id = p:GetID()
+                return tostring(math.type(id) == 'integer' and id > 0)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Process_GetName_CurrentProcess_ReturnsNonEmptyString()
+        {
+            string? r = await Run(@"
+                local p = Process.Open()
+                local name = p:GetName()
+                return tostring(type(name) == 'string' and #name > 0)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Process_GetRAM_CurrentProcess_ReturnsPositiveNumber()
+        {
+            string? r = await Run(@"
+                local p = Process.Open()
+                return tostring(p:GetRAM() > 0)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Process_Open_InvalidPid_ReturnsNil()
+        {
+            // PID 2147483647 (INT32_MAX) is above both Linux PID_MAX and any real Windows PID.
+            string? r = await Run("return tostring(Process.Open(2147483647) == nil)");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Process_Tostring_ReturnsNonEmptyString()
+        {
+            string? r = await Run(@"
+                local p = Process.Open()
+                local s = tostring(p)
+                return tostring(type(s) == 'string' and #s > 0)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Process_Start_ReturnsHandle()
+        {
+            string? r = await Run(@"
+                local is_win = package.config:sub(1,1) == '\\'
+                local cmd = is_win and 'cmd /c echo hello' or 'echo hello'
+                local proc = Process.Start(nil, cmd, nil, false, false)
+                return tostring(proc ~= nil)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Process_Start_ReadFromPipe_ContainsOutput()
+        {
+            string? r = await Run(@"
+                local is_win = package.config:sub(1,1) == '\\'
+                local cmd = is_win and 'cmd /c echo hello' or 'echo hello'
+                -- noconsole=true so stdout goes to the pipe, not a new console window
+                local proc = Process.Start(nil, cmd, nil, true, true)
+                if proc == nil then return 'skip' end
+                Sleep(200)
+                local out = ''
+                local chunk = proc:ReadFromPipe()
+                while chunk do
+                    out = out .. chunk
+                    chunk = proc:ReadFromPipe()
+                end
+                return tostring(out:find('hello') ~= nil)
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Process_Start_ReadErrorFromPipe_ReturnsNilOrString()
+        {
+            // A clean command produces no stderr; result is nil or empty string.
+            string? r = await Run(@"
+                local is_win = package.config:sub(1,1) == '\\'
+                local cmd = is_win and 'cmd /c echo hello' or 'echo hello'
+                local proc = Process.Start(nil, cmd, nil, false, true)
+                if proc == nil then return 'skip' end
+                Sleep(200)
+                local err = proc:ReadErrorFromPipe()
+                return tostring(err == nil or type(err) == 'string')
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Process_GetExitCode_RunningProcess_ReturnsNil()
+        {
+            string? r = await Run(@"
+                local is_win = package.config:sub(1,1) == '\\'
+                local cmd = is_win and 'cmd /c ping 127.0.0.1 -n 10 >nul 2>&1' or 'sleep 10'
+                local proc = Process.Start(nil, cmd, nil, false, false)
+                if proc == nil then return 'skip' end
+                local code = proc:GetExitCode()
+                proc:Stop()
+                return tostring(code == nil)
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Process_Stop_RunningProcess_ReturnsTrue()
+        {
+            string? r = await Run(@"
+                local is_win = package.config:sub(1,1) == '\\'
+                local cmd = is_win and 'cmd /c ping 127.0.0.1 -n 10 >nul 2>&1' or 'sleep 10'
+                local proc = Process.Start(nil, cmd, nil, false, false)
+                if proc == nil then return 'skip' end
+                return tostring(proc:Stop() == true)
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Process_GetExitCode_CompletedProcess_ReturnsNumber()
+        {
+            string? r = await Run(@"
+                local is_win = package.config:sub(1,1) == '\\'
+                local cmd = is_win and 'cmd /c exit 0' or 'true'
+                local proc = Process.Start(nil, cmd, nil, true, false)
+                if proc == nil then return 'skip' end
+                local code = nil
+                for _ = 1, 30 do
+                    code = proc:GetExitCode()
+                    if code ~= nil then break end
+                    Sleep(50)
+                end
+                return tostring(type(code) == 'number')
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Process_GetExitCode_SameValueOnMultipleCalls()
+        {
+            // The exit status must be cached after the first successful query (Linux
+            // uses a cached waitpid result; Windows re-queries the process handle).
+            string? r = await Run(@"
+                local is_win = package.config:sub(1,1) == '\\'
+                local cmd = is_win and 'cmd /c exit 0' or 'true'
+                local proc = Process.Start(nil, cmd, nil, true, false)
+                if proc == nil then return 'skip' end
+                local c1 = nil
+                for _ = 1, 30 do
+                    c1 = proc:GetExitCode()
+                    if c1 ~= nil then break end
+                    Sleep(50)
+                end
+                local c2 = proc:GetExitCode()
+                return tostring(c1 ~= nil and c1 == c2)
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Process_ReadFromPipe_WithoutRedirect_ReturnsNil()
+        {
+            // A process started without pipe redirect has no stdout fd; must return nil.
+            string? r = await Run(@"
+                local is_win = package.config:sub(1,1) == '\\'
+                local cmd = is_win and 'cmd /c exit 0' or 'true'
+                local proc = Process.Start(nil, cmd, nil, false, false)
+                if proc == nil then return 'skip' end
+                return tostring(proc:ReadFromPipe() == nil)
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Process_WriteToPipe_ReturnsPositiveBytesWritten()
+        {
+            // cat (Linux) / cmd /c more (Windows) block on stdin; write must succeed
+            // and return the byte count before we stop the process.
+            string? r = await Run(@"
+                local is_win = package.config:sub(1,1) == '\\'
+                local cmd = is_win and 'cmd /c more' or 'cat'
+                local proc = Process.Start(nil, cmd, nil, false, 7)
+                if proc == nil then return 'skip' end
+                local written = proc:WriteToPipe('hello\n')
+                proc:Stop()
+                return tostring(type(written) == 'number' and written > 0)
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Process_GetID_StartedProcess_ReturnsPositiveInteger()
+        {
+            string? r = await Run(@"
+                local is_win = package.config:sub(1,1) == '\\'
+                local cmd = is_win and 'cmd /c ping 127.0.0.1 -n 5 >nul 2>&1' or 'sleep 5'
+                local proc = Process.Start(nil, cmd, nil, false, false)
+                if proc == nil then return 'skip' end
+                local id = proc:GetID()
+                proc:Stop()
+                return tostring(math.type(id) == 'integer' and id > 0)
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        // -- Async stream (CreateChunked / HasData / CSV / Compress) --------------
+        // All tests that involve yielding coroutines use the helper below, which
+        // mirrors the coroutine-resume loop that test scripts previously used.
+
+        private const string RunCoroutine = @"
+            local function run(fn)
+                local co = coroutine.create(fn)
+                local ok, err = coroutine.resume(co)
+                while ok and coroutine.status(co) ~= 'dead' do
+                    ok, err = coroutine.resume(co)
+                end
+                if not ok then error(err, 2) end
+            end
+        ";
+
+        [Fact]
+        public async Task Stream_CreateChunked_IsNotNil()
+        {
+            string? r = await Run("return tostring(Stream.CreateChunked({'a','b'}) ~= nil)");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_CreateChunked_PosIsAlwaysNil()
+        {
+            // Async streams have no STREAM_CAP_SEEK; pos() returns nil like all non-seekable streams.
+            string? r = await Run(@"
+                local cs = Stream.CreateChunked({'hello'})
+                return tostring(cs:pos() == nil)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_CreateChunked_LenIsZeroBeforeFirstRead()
+        {
+            string? r = await Run(@"
+                local cs = Stream.CreateChunked({'hello'})
+                return tostring(cs:len() == 0)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_HasData_SyncStream_ReturnsBytesRemaining()
+        {
+            // Sync streams return the number of bytes remaining (falsy false at EOF,
+            // truthy positive integer when data is buffered).
+            string? r = await Run(@"
+                local s = Stream.Create()
+                s:Write('hello')
+                s:Seek(0)
+                local available = s:HasData()   -- 5 bytes remain
+                s:Read()                        -- consume all
+                local atEnd = s:HasData()       -- 0 bytes remain -> false
+                return tostring(available == 5 and atEnd == false)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_HasData_AsyncStream_FalseBeforeYield()
+        {
+            string? r = await Run(@"
+                local cs = Stream.CreateChunked({'data'})
+                return tostring(cs:HasData() == false)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_CreateChunked_DeliversChunksInOrder()
+        {
+            string? r = await Run(RunCoroutine + @"
+                run(function()
+                    local cs = Stream.CreateChunked({'alpha', 'beta', 'gamma'})
+                    local a = cs:Read()
+                    local b = cs:Read()
+                    local c = cs:Read()
+                    assert(a == 'alpha' and b == 'beta' and c == 'gamma',
+                        'chunks out of order: ' .. tostring(a) .. ',' .. tostring(b) .. ',' .. tostring(c))
+                end)
+                return 'ok'
+            ");
+            r.ShouldBe("ok");
+        }
+
+        [Fact]
+        public async Task Stream_CreateChunked_ReturnsNilAfterLastChunk()
+        {
+            string? r = await Run(RunCoroutine + @"
+                run(function()
+                    local cs = Stream.CreateChunked({'only'})
+                    cs:Read()
+                    local eof = cs:Read()
+                    assert(eof == nil, 'expected nil at EOF, got: ' .. tostring(eof))
+                end)
+                return 'ok'
+            ");
+            r.ShouldBe("ok");
+        }
+
+        [Fact]
+        public async Task Stream_CreateChunked_EmptyTable_ImmediateEof()
+        {
+            string? r = await Run(RunCoroutine + @"
+                run(function()
+                    local cs = Stream.CreateChunked({})
+                    local v = cs:Read()
+                    assert(v == nil, 'empty chunked stream should return nil, got: ' .. tostring(v))
+                end)
+                return 'ok'
+            ");
+            r.ShouldBe("ok");
+        }
+
+        [Fact]
+        public async Task Stream_HasData_TrueAfterYield()
+        {
+            // The chunked stream yields once before each chunk.
+            // After the first yield HasData() returns true (pending=true).
+            string? r = await Run(@"
+                local cs = Stream.CreateChunked({'data'})
+                local co = coroutine.create(function() cs:Read() end)
+                coroutine.resume(co)   -- yields once; pending = true
+                return tostring(cs:HasData() == true)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_LenNonZero_AfterYield()
+        {
+            string? r = await Run(@"
+                local cs = Stream.CreateChunked({'data'})
+                local co = coroutine.create(function() cs:Read() end)
+                coroutine.resume(co)
+                return tostring(cs:len() > 0)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task CSV_Read_AsyncStream_SimpleRows()
+        {
+            string? r = await Run(RunCoroutine + @"
+                run(function()
+                    local cs = Stream.CreateChunked({'a,b,c\n', '1,2,3\n', '4,5,6\n'})
+                    local rows = {}
+                    for row in CSV.New():DecodeFromFunction(cs) do rows[#rows + 1] = row end
+                    assert(#rows == 3, 'expected 3 rows, got ' .. #rows)
+                    assert(tostring(rows[1][1]) == 'a' and tostring(rows[1][3]) == 'c', 'header mismatch')
+                    assert(tostring(rows[2][1]) == '1' and tostring(rows[2][3]) == '3', 'row2 mismatch')
+                    assert(tostring(rows[3][1]) == '4' and tostring(rows[3][3]) == '6', 'row3 mismatch')
+                end)
+                return 'ok'
+            ");
+            r.ShouldBe("ok");
+        }
+
+        [Fact]
+        public async Task CSV_Read_AsyncStream_RowSpanningMultipleChunks()
+        {
+            // "hello" and ",world\n" arrive in separate chunks — must be joined.
+            string? r = await Run(RunCoroutine + @"
+                run(function()
+                    local cs = Stream.CreateChunked({'hello', ',world\n', 'foo,bar\n'})
+                    local rows = {}
+                    for row in CSV.New():DecodeFromFunction(cs) do rows[#rows + 1] = row end
+                    assert(#rows == 2, 'expected 2 rows, got ' .. #rows)
+                    assert(tostring(rows[1][1]) == 'hello', 'col1: ' .. tostring(rows[1][1]))
+                    assert(tostring(rows[1][2]) == 'world', 'col2: ' .. tostring(rows[1][2]))
+                    assert(tostring(rows[2][1]) == 'foo' and tostring(rows[2][2]) == 'bar')
+                end)
+                return 'ok'
+            ");
+            r.ShouldBe("ok");
+        }
+
+        [Fact]
+        public async Task Stream_Compress_AsyncSource_RoundTrip()
+        {
+            string? r = await Run(RunCoroutine + @"
+                run(function()
+                    local original = 'the quick brown fox jumps over the lazy dog'
+                    local cs = Stream.CreateChunked({'the quick ', 'brown fox ', 'jumps over ', 'the lazy dog'})
+                    local compressed = Stream.Compress(cs)
+                    assert(compressed ~= nil, 'Compress returned nil')
+                    local decompressed = Stream.Decompress(compressed)
+                    assert(decompressed ~= nil, 'Decompress returned nil')
+                    local result = decompressed:Read()
+                    assert(result == original,
+                        'round-trip mismatch\nexpected: ' .. original .. '\ngot: ' .. tostring(result))
+                end)
+                return 'ok'
+            ");
+            r.ShouldBe("ok");
+        }
+
+        [Fact]
+        public async Task Stream_Decompress_AsyncSource_RoundTrip()
+        {
+            // Compress sync → wrap the compressed bytes in a chunked stream → decompress async.
+            string? r = await Run(RunCoroutine + @"
+                run(function()
+                    local src = Stream.Create()
+                    src:Write('hello compressed world')
+                    src:Seek(0)
+                    local compressed = Stream.Compress(src)
+                    compressed:Seek(0)
+                    local compBytes = compressed:Read()
+                    assert(type(compBytes) == 'string')
+                    local chunks = {}
+                    for i = 1, #compBytes do chunks[i] = compBytes:sub(i, i) end
+                    local asyncComp = Stream.CreateChunked(chunks)
+                    local decompressed = Stream.Decompress(asyncComp)
+                    assert(decompressed ~= nil)
+                    local result = decompressed:Read()
+                    assert(result == 'hello compressed world',
+                        'async decompress mismatch: ' .. tostring(result))
+                end)
+                return 'ok'
+            ");
+            r.ShouldBe("ok");
+        }
+
+        // -- Function-backend socket simulation -----------------------------------
+        // These tests pass a Lua function backend to Stream.Create() to simulate a
+        // network socket that delivers data in small increments.  The READ handler
+        // is called via lua_call_nohook (synchronous — no yielding is possible from
+        // inside it), so Sleep is NOT placed inside the handler.  Instead, "slow
+        // delivery" is simulated by returning at most N bytes per call, forcing each
+        // consumer (CSV, Compress, JSON) to issue multiple reads before it has all
+        // the data it needs.  This exercises the same multi-read code paths that
+        // real network sockets exercise at runtime.
+
+        // Helper Lua prologue shared by all socket-simulation tests.
+        // OPEN=0, CLOSE=1, READ=2, CAP_READ=1
+        private const string SocketPrologue =
+            "local OPEN, CLOSE, READ, CAP_READ = 0, 1, 2, 1\n";
+
+        [Fact]
+        public async Task Stream_FunctionBackendSocket_Read_DeliversAllChunks()
+        {
+            // Baseline: repeated Read() calls assemble the full payload even when
+            // the backend returns data 4 bytes at a time.
+            string? r = await Run(SocketPrologue + @"
+                local payload = 'hello from the socket'
+                local pos = 1
+                local s = Stream.Create(function(op, len)
+                    if op == OPEN  then return CAP_READ end
+                    if op == CLOSE then return true end
+                    if op == READ  then
+                        if pos > #payload then return nil end
+                        local chunk = payload:sub(pos, pos + 3)  -- 4 bytes at a time
+                        pos = pos + 4
+                        return chunk
+                    end
+                end)
+                local buf = ''
+                local chunk = s:Read()
+                while chunk do
+                    buf = buf .. chunk
+                    chunk = s:Read()
+                end
+                return buf
+            ");
+            r.ShouldBe("hello from the socket");
+        }
+
+        [Fact]
+        public async Task CSV_FunctionBackendSocket_ParsesChunkedRows()
+        {
+            // CSV DecodeFromFunction with a function-backend stream that returns
+            // 8 bytes per Read() call.  Rows and field boundaries deliberately
+            // fall inside chunk boundaries so the refill/accumulate logic is exercised.
+            string? r = await Run(SocketPrologue + @"
+                local data = 'col1,col2,col3\nval1,val2,val3\nfoo,bar,baz\n'
+                local pos = 1
+                local s = Stream.Create(function(op, len)
+                    if op == OPEN  then return CAP_READ end
+                    if op == CLOSE then return true end
+                    if op == READ  then
+                        if pos > #data then return nil end
+                        local chunk = data:sub(pos, pos + 7)  -- 8 bytes at a time
+                        pos = pos + 8
+                        return chunk
+                    end
+                end)
+                local rows = {}
+                for row in CSV.New():DecodeFromFunction(s) do
+                    rows[#rows + 1] = tostring(row[1]) .. ':' .. tostring(row[2]) .. ':' .. tostring(row[3])
+                end
+                return table.concat(rows, '|')
+            ");
+            r.ShouldBe("col1:col2:col3|val1:val2:val3|foo:bar:baz");
+        }
+
+        [Fact]
+        public async Task CSV_FunctionBackendSocket_AutoDetectSemicolon_Chunked()
+        {
+            // Auto-detect with chunked delivery: the delimiter must be sniffed after
+            // enough chunks have been accumulated to see a complete line.
+            string? r = await Run(SocketPrologue + @"
+                local data = 'name;age;city\nalice;30;paris\nbob;25;berlin\n'
+                local pos = 1
+                local s = Stream.Create(function(op, len)
+                    if op == OPEN  then return CAP_READ end
+                    if op == CLOSE then return true end
+                    if op == READ  then
+                        if pos > #data then return nil end
+                        local chunk = data:sub(pos, pos + 5)  -- 6 bytes at a time
+                        pos = pos + 6
+                        return chunk
+                    end
+                end)
+                local rows = {}
+                for row in CSV.New():DecodeFromFunction(s) do
+                    rows[#rows + 1] = tostring(row[1]) .. ':' .. tostring(row[3])
+                end
+                return table.concat(rows, '|')
+            ");
+            r.ShouldBe("name:city|alice:paris|bob:berlin");
+        }
+
+        [Fact]
+        public async Task Stream_FunctionBackendSocket_Compress_RoundTrip()
+        {
+            // Compress reads from the stream in up to 64 KiB chunks; the backend
+            // returns 16 bytes per call, so many reads are needed.  The decompressed
+            // output must exactly match the original payload.
+            string? r = await Run(SocketPrologue + @"
+                local payload = string.rep('kitsune socket data! ', 30)
+                local pos = 1
+                local s = Stream.Create(function(op, len)
+                    if op == OPEN  then return CAP_READ end
+                    if op == CLOSE then return true end
+                    if op == READ  then
+                        if pos > #payload then return false end
+                        local chunk = payload:sub(pos, pos + 15)  -- 16 bytes at a time
+                        pos = pos + 16
+                        return chunk
+                    end
+                end)
+                local compressed   = s:Compress()
+                local decompressed = compressed:Decompress()
+                return tostring(decompressed:Read() == payload)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_FunctionBackendSocket_DecodeIntoStream_ParsesChunkedJson()
+        {
+            // DecodeIntoStream calls lua_stream_read_chunk → StreamRead in a loop.
+            // The backend returns 6 bytes per call so the decoder must assemble the
+            // full JSON object across many reads.
+            string? r = await Run(SocketPrologue + @"
+                local jsonStr = '{""name"":""kitsune"",""version"":4,""active"":true}'
+                local pos = 1
+                local s = Stream.Create(function(op, len)
+                    if op == OPEN  then return CAP_READ end
+                    if op == CLOSE then return true end
+                    if op == READ  then
+                        if pos > #jsonStr then return nil end
+                        local chunk = jsonStr:sub(pos, pos + 5)  -- 6 bytes at a time
+                        pos = pos + 6
+                        return chunk
+                    end
+                end)
+                local j = Json.New()
+                local t = j:DecodeIntoStream(s)
+                return tostring(t.name == 'kitsune' and t.version == 4 and t.active == true)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_FunctionBackendSocket_HasData_ReturnsZeroBeforeFirstRead()
+        {
+            // A function backend that has not yet delivered any data reports 0 bytes
+            // remaining via HasData() because len==0 and pos==0 (no curpos/getlen
+            // vtable — the Lua fn backend falls through to STREAM_OP_HASDATA dispatch
+            // which returns nil, treated as falsy by the caller).
+            string? r = await Run(SocketPrologue + @"
+                local s = Stream.Create(function(op, len)
+                    if op == OPEN  then return CAP_READ end
+                    if op == CLOSE then return true end
+                    if op == READ  then return 'data' end
+                end)
+                -- The fn backend has no getlen/curpos vtable; STREAM_OP_HASDATA
+                -- is dispatched and the function returns nil (no handler) which
+                -- is falsy — callers should treat nil as 'no data available yet'.
+                local hd = s:HasData()
+                return tostring(hd == nil or hd == false or hd == 0)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_FunctionBackend_SleepInReadHandler_YieldsCorrectly()
+        {
+            // ReadLuaStream now uses lua_callk for fn backends, so Sleep() inside
+            // the READ handler can yield the coroutine without hitting
+            // "attempt to yield across a C-call boundary".
+            string? r = await Run(RunCoroutine + SocketPrologue + @"
+                run(function()
+                    local data = 'hello world'
+                    local pos = 1
+                    local s = Stream.Create(function(op, len)
+                        if op == OPEN  then return CAP_READ end
+                        if op == CLOSE then return true end
+                        if op == READ  then
+                            if pos > #data then return nil end
+                            Sleep(5)   -- yield to scheduler; must not raise an error
+                            local chunk = data:sub(pos, pos + 3)
+                            pos = pos + 4
+                            return chunk
+                        end
+                    end)
+                    local buf = ''
+                    local chunk = s:Read()
+                    while chunk do
+                        buf = buf .. chunk
+                        chunk = s:Read()
+                    end
+                    assert(buf == data, 'expected [' .. data .. '] got [' .. buf .. ']')
+                end)
+                return 'ok'
+            ");
+            r.ShouldBe("ok");
+        }
+
+        [Fact]
+        public async Task CSV_FunctionBackendSocket_SleepInReadHandler_ParsesRows()
+        {
+            // End-to-end: CSV DecodeFromFunction on a fn-backend stream whose
+            // READ handler calls Sleep between chunks.  Exercises the full
+            // CsvStreamIterator → lua_callk → ReadLuaStream → lua_callk(fn) → Sleep chain.
+            string? r = await Run(RunCoroutine + SocketPrologue + @"
+                run(function()
+                    local data = 'a,b,c\n1,2,3\n4,5,6\n'
+                    local pos = 1
+                    local s = Stream.Create(function(op, len)
+                        if op == OPEN  then return CAP_READ end
+                        if op == CLOSE then return true end
+                        if op == READ  then
+                            if pos > #data then return nil end
+                            Sleep(5)
+                            local chunk = data:sub(pos, pos + 5)  -- 6 bytes at a time
+                            pos = pos + 6
+                            return chunk
+                        end
+                    end)
+                    local rows = {}
+                    for row in CSV.New():DecodeFromFunction(s) do
+                        rows[#rows + 1] = tostring(row[1]) .. ':' .. tostring(row[2]) .. ':' .. tostring(row[3])
+                    end
+                    assert(#rows == 3, 'expected 3 rows got ' .. #rows)
+                    assert(rows[1] == 'a:b:c',   rows[1])
+                    assert(rows[2] == '1:2:3',   rows[2])
+                    assert(rows[3] == '4:5:6',   rows[3])
+                end)
+                return 'ok'
+            ");
+            r.ShouldBe("ok");
+        }
     }
 }

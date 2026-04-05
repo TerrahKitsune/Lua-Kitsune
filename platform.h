@@ -4,7 +4,12 @@
 // Define KITSUNE_ALL before including platform.h to enable every optional module.
 // Individual flags can also be set independently (e.g. -DKITSUNE_MYSQL).
 #ifdef KITSUNE_ALL
-#	define KITSUNE_MYSQL
+#	ifndef KITSUNE_MYSQL
+#		define KITSUNE_MYSQL
+#	endif
+#	ifndef KITSUNE_POSTGRES
+#		define KITSUNE_POSTGRES
+#	endif
 #endif
 
 #ifdef _WIN32
@@ -26,6 +31,7 @@
 #include <stdlib.h>
 #include <string.h>     // memset, memcpy
 #include <unistd.h>     // usleep
+#include <signal.h>     // signal(), SIGPIPE
 #include <sched.h>      // sched_yield
 #include <algorithm>    // std::min, std::max
 

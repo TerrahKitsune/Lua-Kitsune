@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="Source Files">
@@ -144,15 +144,6 @@
     <Filter Include="NamedPipes\Source Files">
       <UniqueIdentifier>{f46a46ad-45d7-4598-95fa-e909b47a1e1d}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaImage">
-      <UniqueIdentifier>{60a4a8f7-98b4-48e5-9e10-7c739c70d239}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaImage\Header Files">
-      <UniqueIdentifier>{a496c177-8d4c-4a83-b0be-39db090529d8}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaImage\Source Files">
-      <UniqueIdentifier>{c5bb357b-5495-44fd-a868-9524bb024628}</UniqueIdentifier>
-    </Filter>
     <Filter Include="LuaStream">
       <UniqueIdentifier>{434db58b-05c4-45f3-acd1-f35be75015db}</UniqueIdentifier>
     </Filter>
@@ -161,15 +152,6 @@
     </Filter>
     <Filter Include="LuaStream\Source Files">
       <UniqueIdentifier>{8fb4bfcd-53c0-4139-8dcd-d2882af0022e}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaODBC">
-      <UniqueIdentifier>{94a5dc90-d80c-4f2e-a07a-bab0c70df501}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaODBC\Header Files">
-      <UniqueIdentifier>{4183e17b-5bd5-4ffb-b491-615b2d8af7f5}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaODBC\Source Files">
-      <UniqueIdentifier>{8a1b9a3f-bd96-4318-a49e-dc9cac77fb73}</UniqueIdentifier>
     </Filter>
     <Filter Include="LuaWindowsServices">
       <UniqueIdentifier>{44ec272f-79d6-40fd-85e3-4b3e0a5791d4}</UniqueIdentifier>
@@ -383,9 +365,6 @@
     <ClCompile Include="ProcessMain.cpp">
       <Filter>LuaProcess</Filter>
     </ClCompile>
-    <ClCompile Include="LuaProcess.cpp">
-      <Filter>LuaProcess\Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="LuaServerMain.cpp">
       <Filter>LuaService\Server</Filter>
     </ClCompile>
@@ -413,29 +392,11 @@
     <ClCompile Include="Client.cpp">
       <Filter>LuaService\Client\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="NamedPipeMain.cpp">
-      <Filter>NamedPipes</Filter>
-    </ClCompile>
-    <ClCompile Include="namedpipe.cpp">
-      <Filter>NamedPipes\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaImageMain.cpp">
-      <Filter>LuaImage</Filter>
-    </ClCompile>
-    <ClCompile Include="image.cpp">
-      <Filter>LuaImage\Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="stream.cpp">
       <Filter>LuaStream\Source Files</Filter>
     </ClCompile>
     <ClCompile Include="StreamMain.cpp">
       <Filter>LuaStream</Filter>
-    </ClCompile>
-    <ClCompile Include="ODBCMain.cpp">
-      <Filter>LuaODBC</Filter>
-    </ClCompile>
-    <ClCompile Include="odbc.cpp">
-      <Filter>LuaODBC\Source Files</Filter>
     </ClCompile>
     <ClCompile Include="luakafka.cpp">
       <Filter>LuaKafka\Source Files</Filter>
@@ -662,9 +623,6 @@
     <ClCompile Include="RedisStream.cpp">
       <Filter>LuaRedis\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="LuaPostgres.cpp">
-      <Filter>LuaPostgres\Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="PostgresMain.cpp">
       <Filter>LuaPostgres</Filter>
     </ClCompile>
@@ -687,6 +645,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="miniz.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaPostgres.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaProcess.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -739,9 +703,6 @@
     <ClInclude Include="ProcessMain.h">
       <Filter>LuaProcess</Filter>
     </ClInclude>
-    <ClInclude Include="LuaProcess.h">
-      <Filter>LuaProcess\Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="networking.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -775,29 +736,11 @@
     <ClInclude Include="resource.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="NamedPipeMain.h">
-      <Filter>NamedPipes</Filter>
-    </ClInclude>
-    <ClInclude Include="namedpipe.h">
-      <Filter>NamedPipes\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="LuaImageMain.h">
-      <Filter>LuaImage</Filter>
-    </ClInclude>
-    <ClInclude Include="image.h">
-      <Filter>LuaImage\Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="stream.h">
       <Filter>LuaStream\Header Files</Filter>
     </ClInclude>
     <ClInclude Include="StreamMain.h">
       <Filter>LuaStream</Filter>
-    </ClInclude>
-    <ClInclude Include="ODBCMain.h">
-      <Filter>LuaODBC</Filter>
-    </ClInclude>
-    <ClInclude Include="odbc.h">
-      <Filter>LuaODBC\Header Files</Filter>
     </ClInclude>
     <ClInclude Include="luakafka.h">
       <Filter>LuaKafka\Header Files</Filter>
@@ -1063,11 +1006,17 @@
     <ClInclude Include="miniz.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="LuaProcess.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="Lua functions.md" />
     <None Include="testEnvironments.json" />
     <None Include="MySQL Implementation Plan.md" />
+    <None Include="Postgres Implementation Plan.md" />
+    <None Include="build-linux-and-test.ps1" />
+    <None Include="Http Client Implementation Plan.md" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />

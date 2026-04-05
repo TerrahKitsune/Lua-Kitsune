@@ -93,6 +93,10 @@ set(KITSUNE_ENGINE_SOURCES
 	LuaSQLite.cpp
 	LuaSQLiteMain.cpp
 	SQLite/sqlite3.c
+
+	# ── Process management (cross-platform: POSIX fork/exec on Linux) ─────────────────
+	LuaProcess.cpp
+	ProcessMain.cpp
 )
 
 # On Linux, hide all bundled SQLite symbols from the global dynamic-symbol table so
@@ -109,6 +113,18 @@ endif()
 
 add_library(KitsuneEngine SHARED ${KITSUNE_ENGINE_SOURCES})
 
+# ── KITSUNE_ALL umbrella option ───────────────────────────────────────────────
+# Mirrors the Windows KITSUNE_ALL preprocessor flag: enables every optional
+# module in a single switch and passes -DKITSUNE_ALL to the compiler so that
+# platform.h's cascade activates identically to the Windows vcxproj build.
+option(KITSUNE_ALL "Enable all optional modules (MySQL, PostgreSQL, …)" OFF)
+
+if(KITSUNE_ALL)
+	set(KITSUNE_MYSQL    ON CACHE BOOL "Enabled by KITSUNE_ALL" FORCE)
+	set(KITSUNE_POSTGRES ON CACHE BOOL "Enabled by KITSUNE_ALL" FORCE)
+	target_compile_definitions(KitsuneEngine PRIVATE KITSUNE_ALL)
+endif()
+
 # ── Optional MySQL support ────────────────────────────────────────────────────
 option(KITSUNE_MYSQL "Build with MySQL support (requires libmysqlclient >= 8.0)" OFF)
 
@@ -121,6 +137,30 @@ if(KITSUNE_MYSQL)
 	target_compile_definitions(KitsuneEngine PRIVATE KITSUNE_MYSQL)
 	target_include_directories(KitsuneEngine PRIVATE ${MYSQLCLIENT_INCLUDE_DIRS})
 	target_link_libraries(KitsuneEngine PRIVATE ${MYSQLCLIENT_LINK_LIBRARIES})
+endif()
+
+# ── Optional HTTP + WebSocket support (libcurl) ───────────────────────────────
+option(KITSUNE_HTTP "Build with HTTP/WebSocket support (requires libcurl >= 7.86.0 with --enable-websockets)" OFF)
+
+if(KITSUNE_HTTP)
+	find_package(CURL 7.86.0 REQUIRED)
+	target_sources(KitsuneEngine PRIVATE HttpCurl.cpp)
+	target_compile_definitions(KitsuneEngine PRIVATE KITSUNE_HTTP)
+	target_link_libraries(KitsuneEngine PRIVATE CURL::libcurl)
+endif()
+
+# ── Optional PostgreSQL support ───────────────────────────────────────────────
+option(KITSUNE_POSTGRES "Build with PostgreSQL support (requires libpq)" OFF)
+
+if(KITSUNE_POSTGRES)
+	find_package(PkgConfig REQUIRED)
+	pkg_check_modules(LIBPQ REQUIRED libpq)
+
+	target_sources(KitsuneEngine PRIVATE LuaPostgres.cpp PostgresMain.cpp)
+
+	target_compile_definitions(KitsuneEngine PRIVATE KITSUNE_POSTGRES)
+	target_include_directories(KitsuneEngine PRIVATE ${LIBPQ_INCLUDE_DIRS})
+	target_link_libraries(KitsuneEngine PRIVATE ${LIBPQ_LINK_LIBRARIES})
 endif()
 
 target_compile_definitions(KitsuneEngine PRIVATE

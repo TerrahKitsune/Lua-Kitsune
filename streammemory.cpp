@@ -10,21 +10,17 @@ struct InMemoryStream {
 
 // ── vtable implementations ────────────────────────────────────────────────────
 
-static const BYTE* inmem_read(void* native, lua_State* L, size_t len, size_t* outLen) {
+static int inmem_read(void* native, lua_State* L, size_t len) {
 	InMemoryStream* m = (InMemoryStream*)native;
 	if (!m->data || m->pos >= m->len) {
 		lua_pushboolean(L, false);
-		if (outLen)
-			*outLen = 0;
-		return NULL;
+		return 1;
 	}
 	size_t avail  = m->len - m->pos;
 	size_t toRead = (len == 0 || len > avail) ? avail : len;
 	lua_pushlstring(L, (const char*)(m->data + m->pos), toRead);
 	m->pos += toRead;
-	if (outLen)
-		*outLen = toRead;
-	return (const BYTE*)lua_tolstring(L, -1, NULL);
+	return 1;
 }
 
 static bool inmem_write(void* native, const BYTE* data, size_t len) {
@@ -66,7 +62,7 @@ static lua_Integer inmem_getlen(void* native) {
 	return (lua_Integer)((InMemoryStream*)native)->len;
 }
 
-static void inmem_close(void* native) {
+static void inmem_close(void* native, lua_State* L) {
 	InMemoryStream* m = (InMemoryStream*)native;
 	if (m->data)
 		gff_free(m->data);

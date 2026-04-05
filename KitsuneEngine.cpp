@@ -17,11 +17,8 @@
 #endif
 #include "platform.h"
 
-#ifdef _WIN32
-// OpenSSL headers — used by HTTP / TLS modules
-#include "openssl/err.h"
-#include "openssl/evp.h"
-#include "openssl/ssl.h"
+#ifdef KITSUNE_HTTP
+#include "HttpCurl.h"
 #endif
 
 #include "mem.h"
@@ -30,22 +27,18 @@
 #ifdef KITSUNE_MYSQL
 #include "MySQLMain.h"
 #endif
-#ifdef _WIN32
+#ifdef KITSUNE_POSTGRES
 #include "PostgresMain.h"
-#include "HttpMain.h"
+#endif
 #include "ProcessMain.h"
-#include "LuaClientMain.h"
-#include "LuaServerMain.h"
-#include "NamedPipeMain.h"
-#include "LuaImageMain.h"
-#include "ODBCMain.h"
+
+#ifdef _WIN32
 #include "luakafkamain.h"
 #include "LuaFTPMain.h"
 #include "FileAsyncMain.h"
 #include "MacroMain.h"
 #include "LuaArchiveMain.h"
 #include "RedisMain.h"
-#include "LuaServer.h"
 #endif
 
 #include "LuaMutexMain.h"
@@ -920,19 +913,22 @@ extern "C" {
 
 		InitMemoryManager();
 
-#ifdef _WIN32
+#ifndef _WIN32
+		// Prevent SIGPIPE from terminating the process when a child exits while we
+		// are still writing to its stdin pipe; write() will return -1/EPIPE instead.
+		signal(SIGPIPE, SIG_IGN);
+#endif
+
+		#ifdef _WIN32
 		WSADATA wsa;
 		if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
-			ERR_free_strings();
-			EVP_cleanup();
 			EndMemoryManager();
 			if (g_coOwned) CoUninitialize();
 			return false;
 		}
-
-		SSL_load_error_strings();
-		SSL_library_init();
-		OpenSSL_add_all_algorithms();
+#endif
+#ifdef KITSUNE_HTTP
+		curl_global_init(CURL_GLOBAL_DEFAULT);
 #endif
 
 		KitsuneState* state = new KitsuneState{};
@@ -943,8 +939,6 @@ extern "C" {
 		if (!state->L) {
 			delete state;
 #ifdef _WIN32
-			ERR_free_strings();
-			EVP_cleanup();
 			WSACleanup();
 			if (g_coOwned) CoUninitialize();
 #endif
@@ -969,15 +963,14 @@ extern "C" {
 		#ifdef KITSUNE_MYSQL
 		luaopen_mysql(L);        lua_setglobal(L, "MySQL");
 #endif
-#ifdef _WIN32
+#ifdef KITSUNE_POSTGRES
 		luaopen_postgres(L);     lua_setglobal(L, "Postgres");
+#endif
+		
+#ifdef KITSUNE_HTTP
 		luaopen_http(L);         lua_setglobal(L, "Http");
-		luaopen_process(L);      lua_setglobal(L, "Process");
-		luaopen_luaserver(L);    lua_setglobal(L, "Server");
-		luaopen_luaclient(L);    lua_setglobal(L, "Client");
-		luaopen_namedpipe(L);    lua_setglobal(L, "Pipe");
-		luaopen_image(L);        lua_setglobal(L, "Image");
-		luaopen_odbc(L);         lua_setglobal(L, "ODBC");
+#endif
+#ifdef _WIN32
 		luaopen_kafka(L);        lua_setglobal(L, "Kafka");
 		luaopen_ftp(L);          lua_setglobal(L, "FTP");
 		luaopen_fileasync(L);    lua_setglobal(L, "FileAsync");
@@ -985,6 +978,7 @@ extern "C" {
 		luaopen_archive(L);      lua_setglobal(L, "Archive");
 		luaopen_redis(L);        lua_setglobal(L, "Redis");
 #endif
+		luaopen_process(L);      lua_setglobal(L, "Process");
 		luaopen_luaaes(L);       lua_setglobal(L, "Aes");
 		luaopen_sqlite(L);       lua_setglobal(L, "SQLite");
 		luaopen_timer(L);        lua_setglobal(L, "Timer");
@@ -1019,15 +1013,9 @@ extern "C" {
 		// Coroutine threads each receive their own hook; no hook is set on the main state.
 		state->schedulerThread = std::thread(SchedulerProc, state);
 		if (!state->schedulerThread.joinable()) {
-#ifdef _WIN32
-			GetHttpBuffer(0);
-			luaserver_KillAll(state->L);
-#endif
 			lua_close(state->L);
 			delete state;
 #ifdef _WIN32
-			ERR_free_strings();
-			EVP_cleanup();
 			WSACleanup();
 			if (g_coOwned) CoUninitialize();
 #endif
@@ -1770,18 +1758,14 @@ extern "C" {
 			state->slotCount = 0;
 
 			if (state->L) {
-								if (state->lastCallError) {
-										gff_free(state->lastCallError);
-										state->lastCallError = nullptr;
-									}
-					#ifdef _WIN32
-									GetHttpBuffer(0);
-									luaserver_KillAll(state->L);
-					#endif
-									lua_gc(state->L, LUA_GCCOLLECT, 0);
-					lua_close(state->L);
-					state->L = nullptr;
-				}
+							if (state->lastCallError) {
+									gff_free(state->lastCallError);
+									state->lastCallError = nullptr;
+								}
+						lua_gc(state->L, LUA_GCCOLLECT, 0);
+				lua_close(state->L);
+				state->L = nullptr;
+			}
 			// After lua_close all Lua streams are GC'd (OWNER_DISPOSED set).
 			// Sweep the block registry to free completed blocks.
 			// Blocks still held by live C# LuaStream instances remain until C# Dispose.
@@ -1790,9 +1774,10 @@ extern "C" {
 			delete state;
 		}
 
+		#ifdef KITSUNE_HTTP
+		curl_global_cleanup();
+#endif
 		#ifdef _WIN32
-		ERR_free_strings();
-		EVP_cleanup();
 		WSACleanup();
 #endif
 		EndMemoryManager();

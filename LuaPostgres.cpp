@@ -1,22 +1,97 @@
-﻿#include "LuaPostgres.h"
-#include "luawchar.h"
+﻿#ifdef _WIN32
+#include <WinSock2.h>
 #pragma comment(lib, "postgres/lib/libpq.lib")
+#endif
+#include "platform.h"
+#include "LuaPostgres.h"
+#include "luawchar.h"
 
+// ── Platform helper: set socket non-blocking ──────────────────────────────────
+#ifdef _WIN32
+static void set_fd_nonblocking(int fd) {
+	u_long one = 1;
+	ioctlsocket((SOCKET)(uintptr_t)fd, FIONBIO, &one);
+}
+#else
+#include <fcntl.h>
+static void set_fd_nonblocking(int fd) {
+	int flags = fcntl(fd, F_GETFL, 0);
+	if (flags >= 0)
+		fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+}
+#endif
 
-static void PushPostgresValue(lua_State* L, const char* val, int len, Oid type);
+// ── OID constants ─────────────────────────────────────────────────────────────
+// The Windows bundled libpq-fe.h stub defines these directly.
+// The system libpq-fe.h on Linux omits them (they live in server/catalog/pg_type_d.h
+// which requires postgresql-server-dev, not just libpq-dev).  Individual guards
+// mean each constant is protected independently regardless of partial definitions.
+#ifndef BOOLOID
+#  define BOOLOID      16
+#endif
+#ifndef BYTEAOID
+#  define BYTEAOID     17
+#endif
+#ifndef INT8OID
+#  define INT8OID      20
+#endif
+#ifndef INT2OID
+#  define INT2OID      21
+#endif
+#ifndef INT4OID
+#  define INT4OID      23
+#endif
+#ifndef FLOAT4OID
+#  define FLOAT4OID   700
+#endif
+#ifndef FLOAT8OID
+#  define FLOAT8OID   701
+#endif
+#ifndef NUMERICOID
+#  define NUMERICOID 1700
+#endif
 
-static int        JsonRef      = LUA_NOREF;
-static lua_State* JsonRefState = NULL;
+// ── Helper mode constants ─────────────────────────────────────────────────────
+#define PG_HELPER_RAW      0
+#define PG_HELPER_NONQUERY 1
+#define PG_HELPER_SCALAR   2
+#define PG_HELPER_QUERYALL 3
 
+// ── LuaPostgresQuery ──────────────────────────────────────────────────────────
+typedef struct LuaPostgresQuery {
+	LuaPostgres* conn;
+	int          connRef;
+	char**       paramValues;
+	int*         paramLengths;
+	int          nParams;
+	char*        sql;
+	PGresult*    result;
+	char*        error;
+	int          cancelFnRef;
+	int          helperMode;
+	int          accumTableIdx; // QueryAll: absolute stack index of row table
+	int          accumRowIdx;   // stream cursor (0-based); QueryAll uses rawlen instead
+} LuaPostgresQuery;
+
+// ── JSON ref for PushAsParamString ────────────────────────────────────────────
+static int        s_JsonRef      = LUA_NOREF;
+static lua_State* s_JsonRefState = NULL;
+
+// ── Forward declarations ──────────────────────────────────────────────────────
+static void FreeQuery(lua_State* L, LuaPostgresQuery* q);
+static int  QueryStreamCont(lua_State* L, int status, lua_KContext ctx);
+static int  HelperWaitCont(lua_State* L, int status, lua_KContext ctx);
+static int  HelperStreamCont(lua_State* L, int status, lua_KContext ctx);
+
+// ── PushAsParamString ─────────────────────────────────────────────────────────
 static void PushAsParamString(lua_State* L, int index) {
-
-	if (index < 0) index = lua_gettop(L) + index + 1;
+	if (index < 0)
+		index = lua_gettop(L) + index + 1;
 
 	if (lua_istable(L, index)) {
-
-		if (JsonRef == LUA_NOREF || JsonRefState != L) {
-			JsonRef      = LUA_NOREF;
-			JsonRefState = L;
+		if (s_JsonRef == LUA_NOREF || s_JsonRefState != L) {
+			s_JsonRef      = LUA_NOREF;
+			s_JsonRefState = L;
 			lua_getglobal(L, "Json");
 			lua_pushliteral(L, "Create");
 			lua_gettable(L, -2);
@@ -24,21 +99,18 @@ static void PushAsParamString(lua_State* L, int index) {
 				lua_error(L);
 				return;
 			}
-			JsonRef = luaL_ref(L, LUA_REGISTRYINDEX);
+			s_JsonRef = luaL_ref(L, LUA_REGISTRYINDEX);
 			lua_pop(L, 1);
 		}
-
-		lua_rawgeti(L, LUA_REGISTRYINDEX, JsonRef);
+		lua_rawgeti(L, LUA_REGISTRYINDEX, s_JsonRef);
 		lua_pushliteral(L, "Encode");
 		lua_gettable(L, -2);
 		lua_pushvalue(L, -2);
 		lua_pushvalue(L, index);
-
 		if (lua_pcall_nohook(L, 2, 1, 0)) {
 			lua_error(L);
 			return;
 		}
-
 		lua_remove(L, -2);
 	}
 	else if (lua_iswchar(L, index)) {
@@ -51,452 +123,13 @@ static void PushAsParamString(lua_State* L, int index) {
 	}
 }
 
-LuaPostgres* lua_topostgres(lua_State* L, int index) {
-
-	LuaPostgres* pg = (LuaPostgres*)luaL_checkudata(L, index, LUAPOSTGRES);
-	if (pg == NULL) {
-		luaL_error(L, "parameter is not a %s", LUAPOSTGRES);
-		return NULL;
-	}
-	return pg;
-}
-
-LuaPostgres* lua_pushpostgres(lua_State* L) {
-
-	LuaPostgres* pg = (LuaPostgres*)lua_newuserdata(L, sizeof(LuaPostgres));
-	if (pg == NULL) {
-		luaL_error(L, "Unable to create postgres connection");
-		return NULL;
-	}
-
-	luaL_getmetatable(L, LUAPOSTGRES);
-	lua_setmetatable(L, -2);
-	memset(pg, 0, sizeof(LuaPostgres));
-
-	return pg;
-}
-
-static void FreeParams(LuaPostgres* pg) {
-
-	if (pg->paramValues) {
-		for (int i = 0; i < pg->nParams; i++) {
-			if (pg->paramValues[i]) {
-				gff_free(pg->paramValues[i]);
-			}
-		}
-		gff_free(pg->paramValues);
-		pg->paramValues = NULL;
-	}
-
-	if (pg->paramLengths) {
-		gff_free(pg->paramLengths);
-		pg->paramLengths = NULL;
-	}
-
-	pg->nParams = 0;
-}
-
-static void SetDone(LuaPostgres* pg, const char* error, PGresult* result) {
-
-	if (pg->query) {
-		gff_free(pg->query);
-	}
-	pg->query = NULL;
-	pg->querylen = 0;
-	FreeParams(pg);
-	pg->isParamQuery = false;
-	pg->currentRow = -1;
-
-	if (pg->result) {
-		PQclear(pg->result);
-		pg->result = NULL;
-	}
-
-	pg->result = result;
-
-	if (error) {
-		if (pg->error) {
-			gff_free(pg->error);
-		}
-
-		pg->error = (char*)gff_malloc(strlen(error) + 1);
-		if (pg->error) {
-			strcpy(pg->error, error);
-		}
-	}
-	else {
-		if (pg->error) {
-			gff_free(pg->error);
-			pg->error = NULL;
-		}
-	}
-
-	pg->busy = false;
-}
-
-DWORD WINAPI PostgresQueryThread(LPVOID param) {
-
-	LuaPostgres* pg = (LuaPostgres*)param;
-
-	while (pg->alive) {
-
-		if (pg->busy) {
-
-			PGresult* result = NULL;
-
-			if (pg->isParamQuery) {
-				result = PQexecParams(pg->connection, pg->query, pg->nParams, NULL,
-					(const char* const*)pg->paramValues, pg->paramLengths, NULL, 0);
-			}
-			else {
-				result = PQexec(pg->connection, pg->query);
-			}
-
-			if (!result) {
-				SetDone(pg, PQerrorMessage(pg->connection), NULL);
-				continue;
-			}
-
-			ExecStatusType status = PQresultStatus(result);
-			if (status != PGRES_TUPLES_OK && status != PGRES_COMMAND_OK) {
-				SetDone(pg, PQresultErrorMessage(result), NULL);
-				PQclear(result);
-				continue;
-			}
-
-			SetDone(pg, NULL, result);
-		}
-
-		WaitForSingleObject(pg->interrupt, INFINITE);
-		ResetEvent(pg->interrupt);
-	}
-
-	return 0;
-}
-
-int PostgresIsBusy(lua_State* L) {
-
-	LuaPostgres* pg = lua_topostgres(L, 1);
-	lua_pushboolean(L, pg->busy);
-	return 1;
-}
-
-int PostgresConnect(lua_State* L) {
-
-	const char* conninfo = luaL_checkstring(L, 1);
-
-	LuaPostgres* pg = lua_pushpostgres(L);
-	pg->connection = PQconnectdb(conninfo);
-
-	if (!pg->connection) {
-		luaL_error(L, "Failed to allocate postgres connection");
-		return 0;
-	}
-
-	if (PQstatus(pg->connection) != CONNECTION_OK) {
-		lua_pushfstring(L, "Failed to connect: %s", PQerrorMessage(pg->connection));
-		lua_error(L);
-		return 0;
-	}
-
-	PQsetClientEncoding(pg->connection, "UTF8");
-
-	pg->alive = true;
-
-	pg->interrupt = CreateEvent(NULL, TRUE, FALSE, NULL);
-	if (!pg->interrupt) {
-		pg->alive = false;
-		luaL_error(L, "Failed to create event for postgres connection");
-		return 0;
-	}
-
-	pg->thread = CreateThread(NULL, 0, PostgresQueryThread, pg, 0, NULL);
-	if (!pg->thread) {
-		pg->alive = false;
-		luaL_error(L, "Failed to create thread for postgres connection");
-		return 0;
-	}
-
-	return 1;
-}
-
-int PostgresQuery(lua_State* L) {
-
-	LuaPostgres* pg = lua_topostgres(L, 1);
-	size_t qlen;
-	const char* query = luaL_checklstring(L, 2, &qlen);
-
-	if (!pg->connection) {
-		luaL_error(L, "Connection is closed");
-		return 0;
-	}
-	else if (pg->busy) {
-		lua_pushboolean(L, false);
-		lua_pushstring(L, "Busy");
-		return 2;
-	}
-
-	if (pg->result) {
-		PQclear(pg->result);
-		pg->result = NULL;
-	}
-
-	if (pg->error) {
-		gff_free(pg->error);
-		pg->error = NULL;
-	}
-
-	if (pg->query) {
-		gff_free(pg->query);
-		pg->query = NULL;
-		pg->querylen = 0;
-	}
-
-	FreeParams(pg);
-
-	pg->query = (char*)gff_malloc(qlen + 1);
-	if (!pg->query) {
-		luaL_error(L, "Out of memory");
-		return 0;
-	}
-
-	memcpy(pg->query, query, qlen);
-	pg->query[qlen] = '\0';
-	pg->querylen = qlen;
-	pg->currentRow = -1;
-
-	if (lua_istable(L, 3)) {
-
-		int nParams = 0;
-		for (size_t k = 0; k + 1 < qlen; k++) {
-			if (query[k] == '$' && query[k + 1] >= '1' && query[k + 1] <= '9') {
-				int n = 0;
-				size_t j = k + 1;
-				while (j < qlen && query[j] >= '0' && query[j] <= '9') {
-					n = n * 10 + (query[j] - '0');
-					j++;
-				}
-				if (n > nParams) nParams = n;
-			}
-		}
-
-		if (nParams > 0) {
-
-			pg->paramValues = (char**)gff_malloc(sizeof(char*) * nParams);
-			pg->paramLengths = (int*)gff_malloc(sizeof(int) * nParams);
-
-			if (!pg->paramValues || !pg->paramLengths) {
-				luaL_error(L, "Out of memory");
-				return 0;
-			}
-
-			memset(pg->paramValues, 0, sizeof(char*) * nParams);
-			memset(pg->paramLengths, 0, sizeof(int) * nParams);
-			pg->nParams = nParams;
-
-			for (int i = 0; i < nParams; i++) {
-
-				lua_rawgeti(L, 3, i + 1);
-
-				if (lua_isnil(L, -1)) {
-					pg->paramValues[i] = NULL;
-					pg->paramLengths[i] = 0;
-					lua_pop(L, 1);
-				}
-				else {
-					PushAsParamString(L, -1);
-
-					size_t plen;
-					const char* pval = lua_tolstring(L, -1, &plen);
-
-					pg->paramValues[i] = (char*)gff_malloc(plen + 1);
-					if (!pg->paramValues[i]) {
-						lua_pop(L, 2);
-						luaL_error(L, "Out of memory");
-						return 0;
-					}
-
-					memcpy(pg->paramValues[i], pval, plen);
-					pg->paramValues[i][plen] = '\0';
-					pg->paramLengths[i] = (int)plen;
-					lua_pop(L, 2);
-				}
-			}
-
-			pg->isParamQuery = true;
-		}
-	}
-
-	pg->busy = true;
-	SetEvent(pg->interrupt);
-
-	lua_pushboolean(L, true);
-	return 1;
-}
-
-int PostgresFetch(lua_State* L) {
-
-	LuaPostgres* pg = lua_topostgres(L, 1);
-
-	if (!pg->alive) {
-		luaL_error(L, "Connection is closed");
-		return 0;
-	}
-
-	while (pg->busy) {
-		Sleep(1);
-	}
-
-	if (pg->error) {
-		lua_pushboolean(L, false);
-		lua_pushstring(L, pg->error);
-		return 2;
-	}
-
-	if (!pg->result) {
-		lua_pushboolean(L, false);
-		return 1;
-	}
-
-	int ntuples = PQntuples(pg->result);
-
-	if (pg->currentRow == -1) {
-
-		if (ntuples == 0) {
-			PQclear(pg->result);
-			pg->result = NULL;
-			lua_pushboolean(L, false);
-			return 1;
-		}
-
-		pg->currentRow = 0;
-		lua_pushboolean(L, true);
-		return 1;
-	}
-
-	pg->currentRow++;
-
-	if (pg->currentRow < ntuples) {
-		lua_pushboolean(L, true);
-		return 1;
-	}
-
-	PQclear(pg->result);
-	pg->result = NULL;
-	pg->currentRow = -1;
-	lua_pushboolean(L, false);
-	return 1;
-}
-
-int PostgresGetRow(lua_State* L) {
-
-	LuaPostgres* pg = lua_topostgres(L, 1);
-
-	if (!pg->alive) {
-		luaL_error(L, "Connection is closed");
-		return 0;
-	}
-
-	if (!pg->result || pg->currentRow < 0) {
-		lua_pushnil(L);
-		return 1;
-	}
-
-	int nfields = PQnfields(pg->result);
-
-	if (lua_type(L, 2) == LUA_TSTRING) {
-
-		int col = PQfnumber(pg->result, lua_tostring(L, 2));
-		if (col < 0) {
-			lua_pushnil(L);
-			return 1;
-		}
-
-		if (PQgetisnull(pg->result, pg->currentRow, col)) {
-			lua_pushnil(L);
-		}
-		else {
-			PushPostgresValue(L, PQgetvalue(pg->result, pg->currentRow, col),
-			PQgetlength(pg->result, pg->currentRow, col),
-			PQftype(pg->result, col));
-		}
-		return 1;
-	}
-
-	int idx = (int)luaL_optinteger(L, 2, -1);
-
-	if (idx > 0) {
-
-		idx--;
-		if (idx >= nfields) {
-			lua_pushnil(L);
-			return 1;
-		}
-
-		if (PQgetisnull(pg->result, pg->currentRow, idx)) {
-			lua_pushnil(L);
-		}
-		else {
-			PushPostgresValue(L, PQgetvalue(pg->result, pg->currentRow, idx),
-				PQgetlength(pg->result, pg->currentRow, idx),
-				PQftype(pg->result, idx));
-		}
-		return 1;
-	}
-
-	lua_createtable(L, 0, nfields);
-
-	for (int i = 0; i < nfields; i++) {
-
-		lua_pushstring(L, PQfname(pg->result, i));
-
-		if (PQgetisnull(pg->result, pg->currentRow, i)) {
-			lua_pushnil(L);
-		}
-		else {
-			PushPostgresValue(L, PQgetvalue(pg->result, pg->currentRow, i),
-				PQgetlength(pg->result, pg->currentRow, i),
-				PQftype(pg->result, i));
-		}
-
-		lua_settable(L, -3);
-	}
-
-	return 1;
-}
-
-int PostgresFinish(lua_State* L) {
-
-	LuaPostgres* pg = lua_topostgres(L, 1);
-
-	while (pg->busy) {
-		Sleep(1);
-	}
-
-	if (pg->result) {
-		PQclear(pg->result);
-		pg->result = NULL;
-	}
-
-	if (pg->error) {
-		gff_free(pg->error);
-		pg->error = NULL;
-	}
-
-	pg->currentRow = -1;
-
-	return 0;
-}
-
+// ── PushPostgresValue ─────────────────────────────────────────────────────────
 static void PushPostgresValue(lua_State* L, const char* val, int len, Oid type) {
-
 	if (!val) {
 		lua_pushnil(L);
 		return;
 	}
-
 	char* endptr;
-
 	switch (type) {
 	case BOOLOID:
 		lua_pushboolean(L, val[0] == 't' || val[0] == 'T' || val[0] == '1');
@@ -517,8 +150,163 @@ static void PushPostgresValue(lua_State* L, const char* val, int len, Oid type) 
 	}
 }
 
-int PostgresEscapeValue(lua_State* L) {
+// ── BuildQueryParams ──────────────────────────────────────────────────────────
+static void BuildQueryParams(LuaPostgresQuery* q, const char* sql, size_t sqllen,
+	lua_State* L, int paramTableIdx) {
+	q->sql = (char*)gff_malloc(sqllen + 1);
+	if (!q->sql) {
+		luaL_error(L, "Out of memory");
+		return;
+	}
+	memcpy(q->sql, sql, sqllen);
+	q->sql[sqllen] = '\0';
 
+	if (!lua_istable(L, paramTableIdx)) {
+		q->nParams = 0;
+		return;
+	}
+
+	int nParams = 0;
+	for (size_t k = 0; k + 1 < sqllen; k++) {
+		if (sql[k] == '$' && sql[k + 1] >= '1' && sql[k + 1] <= '9') {
+			int n = 0;
+			size_t j = k + 1;
+			while (j < sqllen && sql[j] >= '0' && sql[j] <= '9') {
+				n = n * 10 + (sql[j] - '0');
+				j++;
+			}
+			if (n > nParams)
+				nParams = n;
+		}
+	}
+
+	if (nParams == 0) {
+		q->nParams = 0;
+		return;
+	}
+
+	q->paramValues  = (char**)gff_malloc(sizeof(char*) * nParams);
+	if (!q->paramValues) {
+		luaL_error(L, "Out of memory");
+		return;
+	}
+
+	q->paramLengths = (int*)gff_malloc(sizeof(int) * nParams);
+	if (!q->paramLengths) {
+		gff_free(q->paramValues);
+		q->paramValues = NULL;
+		luaL_error(L, "Out of memory");
+		return;
+	}
+	memset(q->paramValues,  0, sizeof(char*) * nParams);
+	memset(q->paramLengths, 0, sizeof(int)   * nParams);
+	q->nParams = nParams;
+
+	for (int i = 0; i < nParams; i++) {
+		lua_rawgeti(L, paramTableIdx, i + 1);
+		if (lua_isnil(L, -1)) {
+			q->paramValues[i]  = NULL;
+			q->paramLengths[i] = 0;
+			lua_pop(L, 1);
+		}
+		else {
+			PushAsParamString(L, -1);
+			size_t plen;
+			const char* pval = lua_tolstring(L, -1, &plen);
+			q->paramValues[i] = (char*)gff_malloc(plen + 1);
+			if (!q->paramValues[i]) {
+				lua_pop(L, 2);
+				luaL_error(L, "Out of memory");
+				return;
+			}
+			memcpy(q->paramValues[i], pval, plen);
+			q->paramValues[i][plen] = '\0';
+			q->paramLengths[i] = (int)plen;
+			lua_pop(L, 2);
+		}
+	}
+}
+
+// ── FreeQuery ─────────────────────────────────────────────────────────────────
+static void FreeQuery(lua_State* L, LuaPostgresQuery* q) {
+	if (!q)
+		return;
+
+	if (q->result) {
+		PQclear(q->result);
+		q->result = NULL;
+	}
+
+	if (q->conn) {
+		if (q->conn->queryRef != LUA_NOREF) {
+			luaL_unref(L, LUA_REGISTRYINDEX, q->conn->queryRef);
+			q->conn->queryRef = LUA_NOREF;
+		}
+		q->conn->activeQuery = NULL;
+	}
+
+	if (q->connRef != LUA_NOREF) {
+		luaL_unref(L, LUA_REGISTRYINDEX, q->connRef);
+		q->connRef = LUA_NOREF;
+	}
+
+	if (q->cancelFnRef != LUA_NOREF) {
+		luaL_unref(L, LUA_REGISTRYINDEX, q->cancelFnRef);
+		q->cancelFnRef = LUA_NOREF;
+	}
+
+	if (q->paramValues) {
+		for (int i = 0; i < q->nParams; i++) {
+			if (q->paramValues[i])
+				gff_free(q->paramValues[i]);
+		}
+		gff_free(q->paramValues);
+		q->paramValues = NULL;
+	}
+
+	if (q->paramLengths) {
+		gff_free(q->paramLengths);
+		q->paramLengths = NULL;
+	}
+
+	if (q->sql) {
+		gff_free(q->sql);
+		q->sql = NULL;
+	}
+
+	if (q->error) {
+		gff_free(q->error);
+		q->error = NULL;
+	}
+
+	gff_free(q);
+}
+
+// ── lua_topostgres / lua_pushpostgres ─────────────────────────────────────────
+LuaPostgres* lua_topostgres(lua_State* L, int index) {
+	LuaPostgres* pg = (LuaPostgres*)lua_touserdata(L, index);
+	if (!pg) {
+		luaL_error(L, "parameter is not a %s", LUAPOSTGRES);
+		return NULL;
+	}
+	return pg;
+}
+
+LuaPostgres* lua_pushpostgres(lua_State* L) {
+	LuaPostgres* pg = (LuaPostgres*)lua_newuserdata(L, sizeof(LuaPostgres));
+	if (!pg) {
+		luaL_error(L, "Unable to create postgres connection");
+		return NULL;
+	}
+	luaL_getmetatable(L, LUAPOSTGRES);
+	lua_setmetatable(L, -2);
+	memset(pg, 0, sizeof(LuaPostgres));
+	pg->queryRef = LUA_NOREF;
+	return pg;
+}
+
+// ── PostgresEscapeValue ───────────────────────────────────────────────────────
+int PostgresEscapeValue(lua_State* L) {
 	LuaPostgres* pg = lua_topostgres(L, 1);
 	size_t len;
 	const char* str = luaL_checklstring(L, 2, &len);
@@ -536,31 +324,482 @@ int PostgresEscapeValue(lua_State* L) {
 
 	lua_pushstring(L, escaped);
 	PQfreemem(escaped);
-
 	return 1;
 }
 
-int luapostgres_gc(lua_State* L) {
+// ── PostgresIsBusy ────────────────────────────────────────────────────────────
+int PostgresIsBusy(lua_State* L) {
+	LuaPostgres* pg = lua_topostgres(L, 1);
+	if (pg->queryRef == LUA_NOREF) {
+		lua_pushboolean(L, false);
+		return 1;
+	}
+	lua_rawgeti(L, LUA_REGISTRYINDEX, pg->queryRef);
+	lua_State* T = lua_tothread(L, -1);
+	lua_pop(L, 1);
+	lua_pushboolean(L, T != NULL && lua_status(T) == LUA_YIELD);
+	return 1;
+}
 
+// ── Connect ───────────────────────────────────────────────────────────────────
+int PostgresConnect(lua_State* L) {
+	const char* conninfo = luaL_checkstring(L, 1);
+	LuaPostgres* pg = lua_pushpostgres(L);
+
+	pg->connection = PQconnectdb(conninfo);
+	if (!pg->connection) {
+		lua_pushnil(L);
+		lua_pushliteral(L, "PQconnectdb: out of memory");
+		return 2;
+	}
+
+	if (PQstatus(pg->connection) != CONNECTION_OK) {
+		const char* err = PQerrorMessage(pg->connection);
+		PQfinish(pg->connection);
+		pg->connection = NULL;
+		lua_pushnil(L);
+		lua_pushfstring(L, "Failed to connect: %s", err && err[0] ? err : "unknown error");
+		return 2;
+	}
+
+	PQsetClientEncoding(pg->connection, "UTF8");
+	// Put the socket into non-blocking mode so PQconsumeInput/PQflush
+	// return immediately when no data is available during query polling.
+	set_fd_nonblocking(PQsocket(pg->connection));
+	return 1;
+}
+
+// ── Query continuation chain ──────────────────────────────────────────────────
+static int QueryStreamCont(lua_State* L, int status, lua_KContext ctx) {
+	(void)status;
+	LuaPostgresQuery* q = (LuaPostgresQuery*)(intptr_t)ctx;
+
+	if (lua_toboolean(L, 1)) {
+		FreeQuery(L, q);
+		return 0;
+	}
+
+	if (!q->result) {
+		FreeQuery(L, q);
+		lua_pushnil(L);
+		return 1;
+	}
+
+	int row = q->accumRowIdx;
+	if (row >= PQntuples(q->result)) {
+		FreeQuery(L, q);
+		lua_pushnil(L);
+		return 1;
+	}
+	q->accumRowIdx++;
+
+	int nfields = PQnfields(q->result);
+	lua_createtable(L, nfields, 0);
+	for (int i = 0; i < nfields; i++) {
+		if (PQgetisnull(q->result, row, i))
+			lua_pushnil(L);
+		else
+			PushPostgresValue(L,
+				PQgetvalue(q->result, row, i),
+				PQgetlength(q->result, row, i),
+				PQftype(q->result, i));
+		lua_rawseti(L, -2, i + 1);
+	}
+	return lua_yieldk(L, 1, ctx, QueryStreamCont);
+}
+
+static int QueryPollCont(lua_State* L, int status, lua_KContext ctx) {
+	(void)status;
+	LuaPostgresQuery* q = (LuaPostgresQuery*)(intptr_t)ctx;
+
+	if (lua_toboolean(L, 1)) {
+		FreeQuery(L, q);
+		return 0;
+	}
+
+	if (!PQconsumeInput(q->conn->connection)) {
+		const char* err = PQerrorMessage(q->conn->connection);
+		lua_pushstring(L, err && err[0] ? err : "PQconsumeInput error");
+		return lua_yieldk(L, 1, ctx, QueryStreamCont);
+	}
+
+	if (PQisBusy(q->conn->connection)) {
+		lua_pushnil(L);
+		return lua_yieldk(L, 1, ctx, QueryPollCont);
+	}
+
+	// Result ready
+	PGresult* result = PQgetResult(q->conn->connection);
+
+	// Drain remaining results
+	PGresult* extra;
+	while ((extra = PQgetResult(q->conn->connection)) != NULL)
+		PQclear(extra);
+
+	if (!result) {
+		lua_pushstring(L, "PQgetResult returned NULL");
+		return lua_yieldk(L, 1, ctx, QueryStreamCont);
+	}
+
+	ExecStatusType es = PQresultStatus(result);
+
+	if (es == PGRES_COMMAND_OK) {
+		const char* t = PQcmdTuples(result);
+		lua_Integer affected = (t && t[0]) ? (lua_Integer)strtoll(t, NULL, 10) : 0;
+		PQclear(result);
+		lua_pushinteger(L, affected);
+		return lua_yieldk(L, 1, ctx, QueryStreamCont);
+	}
+
+	if (es == PGRES_TUPLES_OK) {
+		q->result      = result;
+		q->accumRowIdx = 0;
+		lua_pushinteger(L, (lua_Integer)PQntuples(result));
+		return lua_yieldk(L, 1, ctx, QueryStreamCont);
+	}
+
+	// Error
+	const char* err = PQresultErrorMessage(result);
+	lua_pushstring(L, err && err[0] ? err : "query error");
+	PQclear(result);
+	return lua_yieldk(L, 1, ctx, QueryStreamCont);
+}
+
+static int QueryFlushCont(lua_State* L, int status, lua_KContext ctx) {
+	(void)status;
+	LuaPostgresQuery* q = (LuaPostgresQuery*)(intptr_t)ctx;
+
+	if (lua_toboolean(L, 1)) {
+		FreeQuery(L, q);
+		return 0;
+	}
+
+	int flush = PQflush(q->conn->connection);
+	if (flush == 0) {
+		lua_pushnil(L);
+		return lua_yieldk(L, 1, ctx, QueryPollCont);
+	}
+	if (flush < 0) {
+		const char* err = PQerrorMessage(q->conn->connection);
+		lua_pushstring(L, err && err[0] ? err : "PQflush error");
+		return lua_yieldk(L, 1, ctx, QueryStreamCont);
+	}
+	// flush == 1: more to send
+	lua_pushnil(L);
+	return lua_yieldk(L, 1, ctx, QueryFlushCont);
+}
+
+static int PostgresQueryBody(lua_State* L) {
+	LuaPostgresQuery* q = (LuaPostgresQuery*)lua_touserdata(L, lua_upvalueindex(1));
+
+	if (lua_toboolean(L, 1)) {
+		FreeQuery(L, q);
+		return 0;
+	}
+
+	int ok;
+	if (q->nParams > 0) {
+		ok = PQsendQueryParams(q->conn->connection, q->sql,
+			q->nParams, NULL,
+			(const char* const*)q->paramValues,
+			q->paramLengths, NULL, 0);
+	}
+	else {
+		ok = PQsendQuery(q->conn->connection, q->sql);
+	}
+
+	if (!ok) {
+		const char* err = PQerrorMessage(q->conn->connection);
+		lua_pushstring(L, err && err[0] ? err : "PQsendQuery failed");
+		return lua_yieldk(L, 1, (lua_KContext)(intptr_t)q, QueryStreamCont);
+	}
+
+	lua_pushnil(L);
+	return lua_yieldk(L, 1, (lua_KContext)(intptr_t)q, QueryFlushCont);
+}
+
+// ── SetupQueryCoroutine ───────────────────────────────────────────────────────
+static LuaPostgresQuery* SetupQueryCoroutine(lua_State* L, LuaPostgres* pg,
+	int connIdx, const char* sql, size_t sqllen, int paramTableIdx) {
+	LuaPostgresQuery* q = (LuaPostgresQuery*)gff_malloc(sizeof(LuaPostgresQuery));
+	if (!q) {
+		luaL_error(L, "Out of memory");
+		return NULL;
+	}
+	memset(q, 0, sizeof(LuaPostgresQuery));
+	q->conn        = pg;
+	q->connRef     = LUA_NOREF;
+	q->cancelFnRef = LUA_NOREF;
+
+	lua_pushvalue(L, connIdx);
+	q->connRef = luaL_ref(L, LUA_REGISTRYINDEX);
+
+	BuildQueryParams(q, sql, sqllen, L, paramTableIdx);
+
+	lua_State* T = lua_newthread(L);
+	lua_pushlightuserdata(T, q);
+	lua_pushcclosure(T, PostgresQueryBody, 1);
+
+	pg->queryRef   = luaL_ref(L, LUA_REGISTRYINDEX);
+	pg->activeQuery = q;
+
+	lua_rawgeti(L, LUA_REGISTRYINDEX, pg->queryRef);
+	return q;
+}
+
+// ── PostgresQuery ─────────────────────────────────────────────────────────────
+int PostgresQuery(lua_State* L) {
 	LuaPostgres* pg = lua_topostgres(L, 1);
 
-	pg->alive = false;
-
-	if (pg->thread) {
-		SetEvent(pg->interrupt);
-		WaitForSingleObject(pg->thread, INFINITE);
-		CloseHandle(pg->thread);
-		pg->thread = NULL;
+	if (!pg->connection) {
+		lua_pushnil(L);
+		lua_pushliteral(L, "Connection is closed");
+		return 2;
 	}
 
-	if (pg->interrupt) {
-		CloseHandle(pg->interrupt);
-		pg->interrupt = NULL;
+	if (pg->queryRef != LUA_NOREF) {
+		lua_pushnil(L);
+		lua_pushliteral(L, "Connection already has an active query");
+		return 2;
 	}
 
-	if (pg->result) {
-		PQclear(pg->result);
-		pg->result = NULL;
+	size_t sqllen;
+	const char* sql = luaL_checklstring(L, 2, &sqllen);
+
+	SetupQueryCoroutine(L, pg, 1, sql, sqllen, 3);
+	return 1;
+}
+
+// ── Helper continuations ──────────────────────────────────────────────────────
+static int HelperStreamCont(lua_State* L, int status, lua_KContext ctx) {
+	(void)status;
+	LuaPostgresQuery* q = (LuaPostgresQuery*)(intptr_t)ctx;
+
+	// Save accumTableIdx before any resume that might FreeQuery.
+	int accumIdx = q->accumTableIdx;
+
+	if (q->cancelFnRef != LUA_NOREF) {
+		lua_rawgeti(L, LUA_REGISTRYINDEX, q->cancelFnRef);
+		int cancelled = (lua_pcall_nohook(L, 0, 1, 0) == LUA_OK) && lua_toboolean(L, -1);
+		lua_pop(L, 1);
+		if (cancelled) {
+			lua_rawgeti(L, LUA_REGISTRYINDEX, q->conn->queryRef);
+			lua_State* T = lua_tothread(L, -1);
+			lua_pop(L, 1);
+			if (T) {
+				lua_pushboolean(T, 1);
+				int nr2;
+				lua_resume(T, L, 1, &nr2);
+				if (nr2 > 0)
+					lua_pop(T, nr2);
+			}
+			lua_pushboolean(L, 0);
+			lua_pushliteral(L, "cancelled");
+			return 2;
+		}
+	}
+
+	lua_rawgeti(L, LUA_REGISTRYINDEX, q->conn->queryRef);
+	lua_State* T = lua_tothread(L, -1);
+	lua_pop(L, 1);
+
+	if (!T) {
+		lua_pushboolean(L, 1);
+		lua_pushvalue(L, accumIdx);
+		return 2;
+	}
+
+	int nr = 0;
+	int rc = lua_resume(T, L, 0, &nr);
+
+	if (rc == LUA_YIELD && nr > 0 && lua_istable(T, -1)) {
+		// q is still alive — T yielded, hasn't called FreeQuery yet
+		lua_xmove(T, L, 1);
+		if (nr > 1)
+			lua_pop(T, nr - 1);
+		// Use rawlen to avoid conflict with q->accumRowIdx (stream cursor)
+		int nextIdx = (int)lua_rawlen(L, accumIdx) + 1;
+		lua_rawseti(L, accumIdx, nextIdx);
+		return lua_yieldk(L, 0, ctx, HelperStreamCont);
+	}
+
+	// T returned nil — QueryStreamCont already called FreeQuery
+	if (nr > 0)
+		lua_pop(T, nr);
+	lua_pushboolean(L, 1);
+	lua_pushvalue(L, accumIdx);
+	return 2;
+}
+
+static int HelperWaitCont(lua_State* L, int status, lua_KContext ctx) {
+	(void)status;
+	LuaPostgresQuery* q = (LuaPostgresQuery*)(intptr_t)ctx;
+
+	if (q->cancelFnRef != LUA_NOREF) {
+		lua_rawgeti(L, LUA_REGISTRYINDEX, q->cancelFnRef);
+		int cancelled = (lua_pcall_nohook(L, 0, 1, 0) == LUA_OK) && lua_toboolean(L, -1);
+		lua_pop(L, 1);
+		if (cancelled) {
+			lua_rawgeti(L, LUA_REGISTRYINDEX, q->conn->queryRef);
+			lua_State* T = lua_tothread(L, -1);
+			lua_pop(L, 1);
+			if (T) {
+				lua_pushboolean(T, 1);
+				int nr2;
+				lua_resume(T, L, 1, &nr2);
+				if (nr2 > 0)
+					lua_pop(T, nr2);
+			}
+			FreeQuery(L, q);
+			lua_pushboolean(L, 0);
+			lua_pushliteral(L, "cancelled");
+			return 2;
+		}
+	}
+
+	lua_rawgeti(L, LUA_REGISTRYINDEX, q->conn->queryRef);
+	lua_State* T = lua_tothread(L, -1);
+	lua_pop(L, 1);
+
+	if (!T) {
+		FreeQuery(L, q);
+		lua_pushboolean(L, 0);
+		lua_pushliteral(L, "connection lost");
+		return 2;
+	}
+
+	int nr = 0;
+	int rc = lua_resume(T, L, 0, &nr);
+
+	if (rc != LUA_OK && rc != LUA_YIELD) {
+		if (nr > 0)
+			lua_pop(T, nr);
+		FreeQuery(L, q);
+		lua_pushboolean(L, 0);
+		lua_pushliteral(L, "query coroutine error");
+		return 2;
+	}
+
+	// Still polling — T yielded nil
+	if (nr == 0 || lua_isnil(T, -1)) {
+		if (nr > 0)
+			lua_pop(T, nr);
+		return lua_yieldk(L, 0, ctx, HelperWaitCont);
+	}
+
+	// Query-level error string — T is now in QueryStreamCont; stop it
+	if (lua_type(T, -1) == LUA_TSTRING) {
+		size_t elen;
+		const char* err = lua_tolstring(T, -1, &elen);
+		lua_pushlstring(L, err, elen);
+		lua_pop(T, nr);
+		lua_pushboolean(T, 1);
+		int nr2;
+		lua_resume(T, L, 1, &nr2);
+		if (nr2 > 0)
+			lua_pop(T, nr2);
+		lua_pushboolean(L, 0);
+		lua_insert(L, -2);
+		return 2;
+	}
+
+	// Rowcount integer — T is now suspended in QueryStreamCont
+	lua_Integer rowcount = lua_tointeger(T, -1);
+	lua_pop(T, nr);
+
+	if (q->helperMode == PG_HELPER_NONQUERY) {
+		lua_pushboolean(T, 1);
+		int nr2;
+		lua_resume(T, L, 1, &nr2);
+		if (nr2 > 0)
+			lua_pop(T, nr2);
+		lua_pushboolean(L, 1);
+		lua_pushinteger(L, rowcount);
+		return 2;
+	}
+
+	if (q->helperMode == PG_HELPER_SCALAR) {
+		int nr2 = 0;
+		int rc2 = lua_resume(T, L, 0, &nr2);
+		if (rc2 == LUA_YIELD && nr2 > 0 && lua_istable(T, -1)) {
+			lua_rawgeti(T, -1, 1);
+			lua_xmove(T, L, 1);
+			lua_pop(T, nr2);
+			lua_pushboolean(T, 1);
+			int nr3;
+			lua_resume(T, L, 1, &nr3);
+			if (nr3 > 0)
+				lua_pop(T, nr3);
+			lua_pushboolean(L, 1);
+			lua_insert(L, -2);
+			return 2;
+		}
+		if (nr2 > 0)
+			lua_pop(T, nr2);
+		lua_pushboolean(L, 1);
+		lua_pushnil(L);
+		return 2;
+	}
+
+	// PG_HELPER_QUERYALL: yield L and start streaming
+	return lua_yieldk(L, 0, ctx, HelperStreamCont);
+}
+
+static int PostgresHelperRun(lua_State* L, int mode) {
+	LuaPostgres* pg = lua_topostgres(L, 1);
+
+	if (!pg->connection) {
+		luaL_error(L, "Connection is closed");
+		return 0;
+	}
+
+	if (pg->queryRef != LUA_NOREF) {
+		lua_pushnil(L);
+		lua_pushliteral(L, "Connection already has an active query");
+		return 2;
+	}
+
+	size_t sqllen;
+	const char* sql = luaL_checklstring(L, 2, &sqllen);
+
+	SetupQueryCoroutine(L, pg, 1, sql, sqllen, 3);
+	lua_pop(L, 1); // pop coroutine thread (anchored in pg->queryRef)
+
+	LuaPostgresQuery* q = (LuaPostgresQuery*)pg->activeQuery;
+	q->helperMode    = mode;
+	q->cancelFnRef   = LUA_NOREF;
+	q->accumTableIdx = 0;
+	q->accumRowIdx   = 0;
+
+	if (!lua_isnoneornil(L, 4) && lua_isfunction(L, 4)) {
+		lua_pushvalue(L, 4);
+		q->cancelFnRef = luaL_ref(L, LUA_REGISTRYINDEX);
+	}
+
+	if (mode == PG_HELPER_QUERYALL) {
+		lua_newtable(L);
+		q->accumTableIdx = lua_gettop(L);
+	}
+
+	return lua_yieldk(L, 0, (lua_KContext)(intptr_t)q, HelperWaitCont);
+}
+
+int PostgresNonQuery(lua_State* L) { return PostgresHelperRun(L, PG_HELPER_NONQUERY); }
+int PostgresScalar(lua_State* L)   { return PostgresHelperRun(L, PG_HELPER_SCALAR);   }
+int PostgresQueryAll(lua_State* L) { return PostgresHelperRun(L, PG_HELPER_QUERYALL); }
+
+// ── luapostgres_gc ────────────────────────────────────────────────────────────
+int luapostgres_gc(lua_State* L) {
+	LuaPostgres* pg = (LuaPostgres*)lua_touserdata(L, 1);
+	if (!pg)
+		return 0;
+
+	if (pg->activeQuery)
+		FreeQuery(L, (LuaPostgresQuery*)pg->activeQuery);
+
+	if (pg->queryRef != LUA_NOREF) {
+		luaL_unref(L, LUA_REGISTRYINDEX, pg->queryRef);
+		pg->queryRef = LUA_NOREF;
 	}
 
 	if (pg->connection) {
@@ -568,27 +807,19 @@ int luapostgres_gc(lua_State* L) {
 		pg->connection = NULL;
 	}
 
-	if (pg->query) {
-		gff_free(pg->query);
-		pg->query = NULL;
-		pg->querylen = 0;
-	}
-
 	if (pg->error) {
 		gff_free(pg->error);
 		pg->error = NULL;
 	}
 
-	FreeParams(pg);
-
 	return 0;
 }
 
+// ── luapostgres_tostring ──────────────────────────────────────────────────────
 int luapostgres_tostring(lua_State* L) {
-
 	LuaPostgres* pg = lua_topostgres(L, 1);
-	char buf[1024];
-	sprintf(buf, "Postgres: 0x%016llX", (DWORD64)pg);
+	char buf[64];
+	snprintf(buf, sizeof(buf), "Postgres: 0x%016" PRIx64, (uint64_t)(uintptr_t)pg);
 	lua_pushstring(L, buf);
 	return 1;
 }
