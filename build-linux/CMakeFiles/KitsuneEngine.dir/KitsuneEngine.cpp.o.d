@@ -170,6 +170,7 @@ CMakeFiles/KitsuneEngine.dir/KitsuneEngine.cpp.o: \
  /usr/include/x86_64-linux-gnu/bits/types/struct_FILE.h \
  /usr/include/x86_64-linux-gnu/bits/types/cookie_io_functions_t.h \
  /usr/include/x86_64-linux-gnu/bits/stdio_lim.h \
+ /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/MySQLMain.h \
  /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/LuaMutexMain.h \
  /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/lua_misc.h \
  /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/MD5Main.h \

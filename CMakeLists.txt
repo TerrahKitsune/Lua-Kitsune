@@ -109,9 +109,22 @@ endif()
 
 add_library(KitsuneEngine SHARED ${KITSUNE_ENGINE_SOURCES})
 
+# ── Optional MySQL support ────────────────────────────────────────────────────
+option(KITSUNE_MYSQL "Build with MySQL support (requires libmysqlclient >= 8.0)" OFF)
+
+if(KITSUNE_MYSQL)
+	find_package(PkgConfig REQUIRED)
+	pkg_check_modules(MYSQLCLIENT REQUIRED mysqlclient>=8.0)
+
+	target_sources(KitsuneEngine PRIVATE LuaMySQL.cpp MySQLMain.cpp)
+
+	target_compile_definitions(KitsuneEngine PRIVATE KITSUNE_MYSQL)
+	target_include_directories(KitsuneEngine PRIVATE ${MYSQLCLIENT_INCLUDE_DIRS})
+	target_link_libraries(KitsuneEngine PRIVATE ${MYSQLCLIENT_LINK_LIBRARIES})
+endif()
+
 target_compile_definitions(KitsuneEngine PRIVATE
 	KITSUNE_ENGINE_EXPORTS
-	KITSUNE_BAREBONES       # gates out external-dependency module registrations
 )
 
 target_include_directories(KitsuneEngine PRIVATE

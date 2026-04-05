@@ -629,6 +629,34 @@ CMakeFiles/KitsuneEngine.dir/SQLite/sqlite3.c.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling C source to assembly CMakeFiles/KitsuneEngine.dir/SQLite/sqlite3.c.s"
 	/usr/bin/cc $(C_DEFINES) -DSQLITE_API="__attribute__((visibility(\"hidden\")))" $(C_INCLUDES) $(C_FLAGS) -S /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/SQLite/sqlite3.c -o CMakeFiles/KitsuneEngine.dir/SQLite/sqlite3.c.s
 
+CMakeFiles/KitsuneEngine.dir/LuaMySQL.cpp.o: CMakeFiles/KitsuneEngine.dir/flags.make
+CMakeFiles/KitsuneEngine.dir/LuaMySQL.cpp.o: /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/LuaMySQL.cpp
+CMakeFiles/KitsuneEngine.dir/LuaMySQL.cpp.o: CMakeFiles/KitsuneEngine.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/build-linux/CMakeFiles --progress-num=$(CMAKE_PROGRESS_41) "Building CXX object CMakeFiles/KitsuneEngine.dir/LuaMySQL.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/KitsuneEngine.dir/LuaMySQL.cpp.o -MF CMakeFiles/KitsuneEngine.dir/LuaMySQL.cpp.o.d -o CMakeFiles/KitsuneEngine.dir/LuaMySQL.cpp.o -c /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/LuaMySQL.cpp
+
+CMakeFiles/KitsuneEngine.dir/LuaMySQL.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/KitsuneEngine.dir/LuaMySQL.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/LuaMySQL.cpp > CMakeFiles/KitsuneEngine.dir/LuaMySQL.cpp.i
+
+CMakeFiles/KitsuneEngine.dir/LuaMySQL.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/KitsuneEngine.dir/LuaMySQL.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/LuaMySQL.cpp -o CMakeFiles/KitsuneEngine.dir/LuaMySQL.cpp.s
+
+CMakeFiles/KitsuneEngine.dir/MySQLMain.cpp.o: CMakeFiles/KitsuneEngine.dir/flags.make
+CMakeFiles/KitsuneEngine.dir/MySQLMain.cpp.o: /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/MySQLMain.cpp
+CMakeFiles/KitsuneEngine.dir/MySQLMain.cpp.o: CMakeFiles/KitsuneEngine.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/build-linux/CMakeFiles --progress-num=$(CMAKE_PROGRESS_42) "Building CXX object CMakeFiles/KitsuneEngine.dir/MySQLMain.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/KitsuneEngine.dir/MySQLMain.cpp.o -MF CMakeFiles/KitsuneEngine.dir/MySQLMain.cpp.o.d -o CMakeFiles/KitsuneEngine.dir/MySQLMain.cpp.o -c /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/MySQLMain.cpp
+
+CMakeFiles/KitsuneEngine.dir/MySQLMain.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/KitsuneEngine.dir/MySQLMain.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/MySQLMain.cpp > CMakeFiles/KitsuneEngine.dir/MySQLMain.cpp.i
+
+CMakeFiles/KitsuneEngine.dir/MySQLMain.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/KitsuneEngine.dir/MySQLMain.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/MySQLMain.cpp -o CMakeFiles/KitsuneEngine.dir/MySQLMain.cpp.s
+
 # Object files for target KitsuneEngine
 KitsuneEngine_OBJECTS = \
 "CMakeFiles/KitsuneEngine.dir/KitsuneEngine.cpp.o" \
@@ -670,7 +698,9 @@ KitsuneEngine_OBJECTS = \
 "CMakeFiles/KitsuneEngine.dir/LuaMutexMain.cpp.o" \
 "CMakeFiles/KitsuneEngine.dir/LuaSQLite.cpp.o" \
 "CMakeFiles/KitsuneEngine.dir/LuaSQLiteMain.cpp.o" \
-"CMakeFiles/KitsuneEngine.dir/SQLite/sqlite3.c.o"
+"CMakeFiles/KitsuneEngine.dir/SQLite/sqlite3.c.o" \
+"CMakeFiles/KitsuneEngine.dir/LuaMySQL.cpp.o" \
+"CMakeFiles/KitsuneEngine.dir/MySQLMain.cpp.o"
 
 # External object files for target KitsuneEngine
 KitsuneEngine_EXTERNAL_OBJECTS =
@@ -715,10 +745,13 @@ libKitsuneEngine.so: CMakeFiles/KitsuneEngine.dir/LuaMutexMain.cpp.o
 libKitsuneEngine.so: CMakeFiles/KitsuneEngine.dir/LuaSQLite.cpp.o
 libKitsuneEngine.so: CMakeFiles/KitsuneEngine.dir/LuaSQLiteMain.cpp.o
 libKitsuneEngine.so: CMakeFiles/KitsuneEngine.dir/SQLite/sqlite3.c.o
+libKitsuneEngine.so: CMakeFiles/KitsuneEngine.dir/LuaMySQL.cpp.o
+libKitsuneEngine.so: CMakeFiles/KitsuneEngine.dir/MySQLMain.cpp.o
 libKitsuneEngine.so: CMakeFiles/KitsuneEngine.dir/build.make
+libKitsuneEngine.so: /usr/lib/x86_64-linux-gnu/libmysqlclient.so
 libKitsuneEngine.so: liblua_core.a
 libKitsuneEngine.so: CMakeFiles/KitsuneEngine.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/build-linux/CMakeFiles --progress-num=$(CMAKE_PROGRESS_41) "Linking CXX shared library libKitsuneEngine.so"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/build-linux/CMakeFiles --progress-num=$(CMAKE_PROGRESS_43) "Linking CXX shared library libKitsuneEngine.so"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/KitsuneEngine.dir/link.txt --verbose=$(VERBOSE)
 
 # Rule to build all files generated by this target.

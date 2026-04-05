@@ -23,6 +23,7 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <errno.h>
+#include <sys/random.h>
 #ifdef __x86_64__
 #include <cpuid.h>
 #endif
@@ -67,17 +68,23 @@ int lua_uuid(lua_State* L) {
 #else
 int lua_uuid(lua_State* L) {
 	uint8_t bytes[16];
-	FILE* f = fopen("/dev/urandom", "rb");
-	if (!f) { lua_pushnil(L); lua_pushnil(L); return 2; }
-	fread(bytes, 1, 16, f);
-	fclose(f);
+	// getrandom() is a single syscall — no file open/read/close overhead.
+	// For reads <= 256 bytes it never blocks once the entropy pool is seeded.
+	if (getrandom(bytes, sizeof(bytes), 0) != (ssize_t)sizeof(bytes)) {
+		lua_pushnil(L);
+		lua_pushnil(L);
+		return 2;
+	}
+	// RFC 4122 Version 4: version nibble = 0100, variant bits = 10xxxxxx
+	// Identical layout to CoCreateGuid — 16 big-endian bytes, same string format.
 	bytes[6] = (bytes[6] & 0x0F) | 0x40;
 	bytes[8] = (bytes[8] & 0x3F) | 0x80;
 	char buf[37];
 	snprintf(buf, sizeof(buf),
 		"%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
-		bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5],
-		bytes[6], bytes[7], bytes[8], bytes[9], bytes[10], bytes[11],
+		bytes[0],  bytes[1],  bytes[2],  bytes[3],
+		bytes[4],  bytes[5],  bytes[6],  bytes[7],
+		bytes[8],  bytes[9],  bytes[10], bytes[11],
 		bytes[12], bytes[13], bytes[14], bytes[15]);
 	lua_pushstring(L, buf);
 	lua_pushlstring(L, (const char*)bytes, 16);

@@ -137,53 +137,6 @@ int L_ShellExecute(lua_State *L) {
 #endif // _WIN32
 
 #ifdef _WIN32
-int L_GetReg(lua_State *L) {
-	HKEY key = HKEY_LOCAL_MACHINE;
-	switch (lua_tointeger(L, 1)) {
-	case 1: key = HKEY_CLASSES_ROOT; break;
-	case 2: key = HKEY_CURRENT_CONFIG; break;
-	case 3: key = HKEY_CURRENT_USER; break;
-	case 4: key = HKEY_PERFORMANCE_DATA; break;
-	case 5: key = HKEY_PERFORMANCE_NLSTEXT; break;
-	case 6: key = HKEY_PERFORMANCE_TEXT; break;
-	case 7: key = HKEY_USERS; break;
-	default: break;
-	}
-
-	DWORD max = 1048576;
-	char* buffer = (char*)gff_malloc(max);
-	if (!buffer) {
-		luaL_error(L, "Unable to allocate memory for readbuffer in GetReg");
-		return 0;
-	}
-	memset(buffer, 0, max);
-
-	LSTATUS status = RegGetValue(key, luaL_checkstring(L, 2), luaL_checkstring(L, 3), RRF_RT_ANY, nullptr, buffer, &max);
-	if (status == ERROR_SUCCESS) {
-		lua_pop(L, lua_gettop(L));
-		lua_pushstring(L, buffer);
-		gff_free(buffer);
-	} else {
-		lua_pop(L, lua_gettop(L));
-		char* err;
-		if (!FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM,
-			NULL, status, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-			(LPTSTR)&err, 0, NULL)) {
-			lua_pushnil(L);
-			lua_pushstring(L, "unable to format error message!");
-		} else {
-			lua_pushnil(L);
-			lua_pushstring(L, err);
-			LocalFree(err);
-		}
-		gff_free(buffer);
-		return 2;
-	}
-	return 1;
-}
-#endif // _WIN32
-
-#ifdef _WIN32
 int L_ToggleConsole(lua_State *L) {
 	bool toggle = lua_toboolean(L, 1) > 0;
 	HWND console = GetConsoleWindow();

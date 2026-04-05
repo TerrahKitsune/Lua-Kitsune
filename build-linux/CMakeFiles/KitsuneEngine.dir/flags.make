@@ -3,15 +3,15 @@
 
 # compile C with /usr/bin/cc
 # compile CXX with /usr/bin/c++
-C_DEFINES = -DKITSUNE_BAREBONES -DKITSUNE_ENGINE_EXPORTS -DKitsuneEngine_EXPORTS
+C_DEFINES = -DKITSUNE_ENGINE_EXPORTS -DKITSUNE_MYSQL -DKitsuneEngine_EXPORTS
 
-C_INCLUDES = -I/mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune -I/mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/Lua
+C_INCLUDES = -I/usr/include/mysql -I/mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune -I/mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/Lua
 
 C_FLAGS = -g -std=gnu99 -fPIC -fvisibility=default -Wall -Wno-unused-function -Wno-unused-variable
 
-CXX_DEFINES = -DKITSUNE_BAREBONES -DKITSUNE_ENGINE_EXPORTS -DKitsuneEngine_EXPORTS
+CXX_DEFINES = -DKITSUNE_ENGINE_EXPORTS -DKITSUNE_MYSQL -DKitsuneEngine_EXPORTS
 
-CXX_INCLUDES = -I/mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune -I/mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/Lua
+CXX_INCLUDES = -I/usr/include/mysql -I/mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune -I/mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/Lua
 
 CXX_FLAGS = -g -std=gnu++17 -fPIC -fvisibility=default -Wall -Wno-unused-function -Wno-unused-variable
 

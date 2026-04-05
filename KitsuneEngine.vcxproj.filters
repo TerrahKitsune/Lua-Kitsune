@@ -341,24 +341,6 @@
     <ClCompile Include="KitsuneEngine.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="GFFMain.cpp">
-      <Filter>LuaGff</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaGff.cpp">
-      <Filter>LuaGff</Filter>
-    </ClCompile>
-    <ClCompile Include="GffStruct.cpp">
-      <Filter>LuaGff\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="GffHeader.cpp">
-      <Filter>LuaGff\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="GffField.cpp">
-      <Filter>LuaGff\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="GffLabel.cpp">
-      <Filter>LuaGff\Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="TimerMain.cpp">
       <Filter>LuaTimer</Filter>
     </ClCompile>
@@ -389,12 +371,6 @@
     <ClCompile Include="SQLite\sqlite3.c">
       <Filter>LuaSQLite\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="ERFMain.cpp">
-      <Filter>LuaErf</Filter>
-    </ClCompile>
-    <ClCompile Include="Erf.cpp">
-      <Filter>LuaErf\Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="md5.c">
       <Filter>LuaMD5\Source Files</Filter>
     </ClCompile>
@@ -421,21 +397,6 @@
     </ClCompile>
     <ClCompile Include="LuaClient.cpp">
       <Filter>LuaService\Client\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="tlk.cpp">
-      <Filter>LuaTLK\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="TlkMain.cpp">
-      <Filter>LuaTLK</Filter>
-    </ClCompile>
-    <ClCompile Include="2da.cpp">
-      <Filter>Lua2DA\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="2DAMain.cpp">
-      <Filter>Lua2DA</Filter>
-    </ClCompile>
-    <ClCompile Include="ResourceTypes.cpp">
-      <Filter>LuaErf</Filter>
     </ClCompile>
     <ClCompile Include="List.cpp">
       <Filter>Util</Filter>
@@ -475,12 +436,6 @@
     </ClCompile>
     <ClCompile Include="odbc.cpp">
       <Filter>LuaODBC\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="WinServices.cpp">
-      <Filter>LuaWindowsServices\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="WinServicesMain.cpp">
-      <Filter>LuaWindowsServices</Filter>
     </ClCompile>
     <ClCompile Include="luakafka.cpp">
       <Filter>LuaKafka\Source Files</Filter>
@@ -575,39 +530,6 @@
     <ClCompile Include="LuaArchive.cpp">
       <Filter>Archive\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Imgui\imgui_draw.cpp">
-      <Filter>Lua2DA\Imgui\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Imgui\imgui_tables.cpp">
-      <Filter>Lua2DA\Imgui\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Imgui\imgui_widgets.cpp">
-      <Filter>Lua2DA\Imgui\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Imgui\imgui.cpp">
-      <Filter>Lua2DA\Imgui\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Imgui\imgui_demo.cpp">
-      <Filter>Lua2DA\Imgui\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaImguiMain.cpp">
-      <Filter>Lua2DA\Imgui</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaImgui.cpp">
-      <Filter>Lua2DA\Imgui\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Imgui\imgui_impl_win32.cpp">
-      <Filter>Lua2DA\Imgui\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Imgui\imgui_impl_dx12.cpp">
-      <Filter>Lua2DA\Imgui\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaImguiInterface.cpp">
-      <Filter>Lua2DA\Imgui\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaImguiEnums.cpp">
-      <Filter>Lua2DA\Imgui\Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="RedisMain.cpp">
       <Filter>LuaRedis</Filter>
     </ClCompile>
@@ -616,12 +538,6 @@
     </ClCompile>
     <ClCompile Include="HttpCoroutine.cpp">
       <Filter>LuaHTTP\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaTTSMain.cpp">
-      <Filter>LuaTTS</Filter>
-    </ClCompile>
-    <ClCompile Include="luatts.cpp">
-      <Filter>LuaTTS\Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Bencode.cpp">
       <Filter>Util</Filter>
@@ -781,24 +697,6 @@
     <ClInclude Include="lua_main_incl.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="LuaGff.h">
-      <Filter>LuaGff</Filter>
-    </ClInclude>
-    <ClInclude Include="GFFMain.h">
-      <Filter>LuaGff</Filter>
-    </ClInclude>
-    <ClInclude Include="GffStruct.h">
-      <Filter>LuaGff\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="GffHeader.h">
-      <Filter>LuaGff\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="GffField.h">
-      <Filter>LuaGff\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="GffLabel.h">
-      <Filter>LuaGff\Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="TimerMain.h">
       <Filter>LuaTimer</Filter>
     </ClInclude>
@@ -829,12 +727,6 @@
     <ClInclude Include="SQLite\sqlite3.h">
       <Filter>LuaSQLite\Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="ERFMain.h">
-      <Filter>LuaErf</Filter>
-    </ClInclude>
-    <ClInclude Include="Erf.h">
-      <Filter>LuaErf\Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="md5.h">
       <Filter>LuaMD5\Header Files</Filter>
     </ClInclude>
@@ -864,21 +756,6 @@
     </ClInclude>
     <ClInclude Include="LuaClient.h">
       <Filter>LuaService\Client\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="tlk.h">
-      <Filter>LuaTLK\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="TlkMain.h">
-      <Filter>LuaTLK</Filter>
-    </ClInclude>
-    <ClInclude Include="2da.h">
-      <Filter>Lua2DA\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="2DAMain.h">
-      <Filter>Lua2DA</Filter>
-    </ClInclude>
-    <ClInclude Include="ResourcesTypes.h">
-      <Filter>LuaErf</Filter>
     </ClInclude>
     <ClInclude Include="List.h">
       <Filter>Util</Filter>
@@ -921,12 +798,6 @@
     </ClInclude>
     <ClInclude Include="odbc.h">
       <Filter>LuaODBC\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="WinServices.h">
-      <Filter>LuaWindowsServices\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="WinServicesMain.h">
-      <Filter>LuaWindowsServices</Filter>
     </ClInclude>
     <ClInclude Include="luakafka.h">
       <Filter>LuaKafka\Header Files</Filter>
@@ -1027,36 +898,6 @@
     <ClInclude Include="libarchive\archive_entry.h">
       <Filter>Archive\Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Imgui\imgui_internal.h">
-      <Filter>Lua2DA\Imgui\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Imgui\imstb_rectpack.h">
-      <Filter>Lua2DA\Imgui\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Imgui\imstb_textedit.h">
-      <Filter>Lua2DA\Imgui\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Imgui\imstb_truetype.h">
-      <Filter>Lua2DA\Imgui\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Imgui\imconfig.h">
-      <Filter>Lua2DA\Imgui\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Imgui\imgui.h">
-      <Filter>Lua2DA\Imgui\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="LuaImguiMain.h">
-      <Filter>Lua2DA\Imgui</Filter>
-    </ClInclude>
-    <ClInclude Include="LuaImgui.h">
-      <Filter>Lua2DA\Imgui\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Imgui\imgui_impl_win32.h">
-      <Filter>Lua2DA\Imgui\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Imgui\imgui_impl_dx12.h">
-      <Filter>Lua2DA\Imgui\Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="RedisMain.h">
       <Filter>LuaRedis</Filter>
     </ClInclude>
@@ -1077,12 +918,6 @@
     </ClInclude>
     <ClInclude Include="hiredis\hiredis_ssl.h">
       <Filter>Hiredis</Filter>
-    </ClInclude>
-    <ClInclude Include="LuaTTSMain.h">
-      <Filter>LuaTTS</Filter>
-    </ClInclude>
-    <ClInclude Include="luatts.h">
-      <Filter>LuaTTS\Source Files</Filter>
     </ClInclude>
     <ClInclude Include="Bencode.h">
       <Filter>Util</Filter>
@@ -1232,6 +1067,7 @@
   <ItemGroup>
     <None Include="Lua functions.md" />
     <None Include="testEnvironments.json" />
+    <None Include="MySQL Implementation Plan.md" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />

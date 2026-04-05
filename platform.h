@@ -1,5 +1,12 @@
 ﻿#pragma once
 
+// ── Feature flag cascade ──────────────────────────────────────────────────────
+// Define KITSUNE_ALL before including platform.h to enable every optional module.
+// Individual flags can also be set independently (e.g. -DKITSUNE_MYSQL).
+#ifdef KITSUNE_ALL
+#	define KITSUNE_MYSQL
+#endif
+
 #ifdef _WIN32
 // On Windows just pull in the real Windows.h -- it provides all Win32 types,
 // macros, and functions used throughout the codebase.

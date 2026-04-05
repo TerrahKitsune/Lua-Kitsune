@@ -1163,6 +1163,30 @@ LuaMutexMain.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/LuaMutexMain.cpp.s
 .PHONY : LuaMutexMain.cpp.s
 
+LuaMySQL.o: LuaMySQL.cpp.o
+.PHONY : LuaMySQL.o
+
+# target to build an object file
+LuaMySQL.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/LuaMySQL.cpp.o
+.PHONY : LuaMySQL.cpp.o
+
+LuaMySQL.i: LuaMySQL.cpp.i
+.PHONY : LuaMySQL.i
+
+# target to preprocess a source file
+LuaMySQL.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/LuaMySQL.cpp.i
+.PHONY : LuaMySQL.cpp.i
+
+LuaMySQL.s: LuaMySQL.cpp.s
+.PHONY : LuaMySQL.s
+
+# target to generate assembly for a file
+LuaMySQL.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/LuaMySQL.cpp.s
+.PHONY : LuaMySQL.cpp.s
+
 LuaSHA1.o: LuaSHA1.cpp.o
 .PHONY : LuaSHA1.o
 
@@ -1306,6 +1330,30 @@ MemoryManager.s: MemoryManager.cpp.s
 MemoryManager.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/MemoryManager.cpp.s
 .PHONY : MemoryManager.cpp.s
+
+MySQLMain.o: MySQLMain.cpp.o
+.PHONY : MySQLMain.o
+
+# target to build an object file
+MySQLMain.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/MySQLMain.cpp.o
+.PHONY : MySQLMain.cpp.o
+
+MySQLMain.i: MySQLMain.cpp.i
+.PHONY : MySQLMain.i
+
+# target to preprocess a source file
+MySQLMain.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/MySQLMain.cpp.i
+.PHONY : MySQLMain.cpp.i
+
+MySQLMain.s: MySQLMain.cpp.s
+.PHONY : MySQLMain.s
+
+# target to generate assembly for a file
+MySQLMain.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/KitsuneEngine.dir/build.make CMakeFiles/KitsuneEngine.dir/MySQLMain.cpp.s
+.PHONY : MySQLMain.cpp.s
 
 Program.o: Program.cpp.o
 .PHONY : Program.o
@@ -2044,6 +2092,9 @@ help:
 	@echo "... LuaMutexMain.o"
 	@echo "... LuaMutexMain.i"
 	@echo "... LuaMutexMain.s"
+	@echo "... LuaMySQL.o"
+	@echo "... LuaMySQL.i"
+	@echo "... LuaMySQL.s"
 	@echo "... LuaSHA1.o"
 	@echo "... LuaSHA1.i"
 	@echo "... LuaSHA1.s"
@@ -2062,6 +2113,9 @@ help:
 	@echo "... MemoryManager.o"
 	@echo "... MemoryManager.i"
 	@echo "... MemoryManager.s"
+	@echo "... MySQLMain.o"
+	@echo "... MySQLMain.i"
+	@echo "... MySQLMain.s"
 	@echo "... Program.o"
 	@echo "... Program.i"
 	@echo "... Program.s"

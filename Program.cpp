@@ -4,6 +4,7 @@
 #ifndef _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_WARNINGS
 #endif
+#define KITSUNE_ALL
 
 #include <atomic>
 #include <chrono>

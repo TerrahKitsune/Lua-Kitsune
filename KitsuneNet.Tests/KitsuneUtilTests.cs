@@ -48,6 +48,102 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
+        [Fact]
+        public async Task UUID_IsVersion4()
+        {
+            // The 13th character (index 13 in 1-based Lua) must be '4'.
+            string? r = await Run("return UUID():sub(15,15)");
+            r.ShouldBe("4");
+        }
+
+        [Fact]
+        public async Task UUID_HasRfc4122Variant()
+        {
+            // Variant bits 10xx: the 17th character must be 8, 9, a, or b.
+            string? r = await Run(@"
+                local c = UUID():sub(20,20)
+                return tostring(c == '8' or c == '9' or c == 'a' or c == 'b')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task UUID_ContainsOnlyHexAndDashes()
+        {
+            string? r = await Run(@"
+                local id = UUID()
+                return tostring(id:match('^%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x$') ~= nil)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task UUID_BinaryReturnIs16Bytes()
+        {
+            // UUID() returns two values: the string and a 16-byte binary blob.
+            string? r = await Run(@"
+                local _, bin = UUID()
+                return tostring(type(bin) == 'string' and #bin == 16)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task UUID_BinaryVersionNibbleIs4()
+        {
+            // Byte 7 (1-based): high nibble must be 0x4.
+            string? r = await Run(@"
+                local _, bin = UUID()
+                local b = bin:byte(7)
+                return tostring(b >> 4 == 4)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task UUID_BinaryVariantBitsAreRfc4122()
+        {
+            // Byte 9 (1-based): top two bits must be 10xxxxxx (0x80–0xBF).
+            string? r = await Run(@"
+                local _, bin = UUID()
+                local b = bin:byte(9)
+                return tostring(b & 0xC0 == 0x80)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task UUID_StringMatchesBinaryEncoding()
+        {
+            // The string representation must round-trip consistently with the binary bytes.
+            string? r = await Run(@"
+                local str, bin = UUID()
+                local hex = str:gsub('-', '')
+                local rebuilt = ''
+                for i = 1, 16 do
+                    rebuilt = rebuilt .. string.format('%02x', bin:byte(i))
+                end
+                return tostring(hex == rebuilt)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task UUID_Large_Sample_AllDistinct()
+        {
+            // Probabilistically verify uniqueness across 1000 generations.
+            string? r = await Run(@"
+                local seen = {}
+                for i = 1, 1000 do
+                    local id = UUID()
+                    if seen[id] then return 'false' end
+                    seen[id] = true
+                end
+                return 'true'
+            ");
+            r.ShouldBe("true");
+        }
+
         // -- CRC32 ----------------------------------------------------------------
 
         [Fact]
@@ -432,29 +528,6 @@ namespace KitsuneNet.Tests
         public async Task Dns_WithFullFlag_ReturnsTable()
         {
             string? r = await Run("return tostring(type(Dns('localhost', true))=='table')");
-            r.ShouldBe("true");
-        }
-
-        // -- GetRegistryValue -----------------------------------------------------
-
-        [WindowsOnlyFact]
-        public async Task GetRegistryValue_KnownKey_ReturnsNonEmptyString()
-        {
-            // HKLM(0) \ SOFTWARE\Microsoft\Windows NT\CurrentVersion \ ProductName
-            string? r = await Run(@"
-                local v = GetRegistryValue(0, 'SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion', 'ProductName')
-                return tostring(type(v)=='string' and #v>0)
-            ");
-            r.ShouldBe("true");
-        }
-
-        [WindowsOnlyFact]
-        public async Task GetRegistryValue_NonExistentKey_ReturnsNilAndError()
-        {
-            string? r = await Run(@"
-                local v, err = GetRegistryValue(0, 'SOFTWARE\\NonExistent_XYZ_9876', 'NoSuchEntry')
-                return tostring(v == nil and err ~= nil)
-            ");
             r.ShouldBe("true");
         }
 

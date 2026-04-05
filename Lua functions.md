@@ -109,26 +109,6 @@ Exit(opt code)
 ```
 Called when GFF.exe shuts down; can also be called to shut down prematurely.
 
-### Registry Access
-
-```lua
-string GetRegistryValue(key, subkey, entry)
--- or on failure:
-nil, errorMessage GetRegistryValue(key, subkey, entry)
-```
-
-**Key constants:**
-| Value | Registry Key |
-|-------|--------------|
-| 0 | HKEY_LOCAL_MACHINE |
-| 1 | HKEY_CLASSES_ROOT |
-| 2 | HKEY_CURRENT_CONFIG |
-| 3 | HKEY_CURRENT_USER |
-| 4 | HKEY_PERFORMANCE_DATA |
-| 5 | HKEY_PERFORMANCE_NLSTEXT |
-| 6 | HKEY_PERFORMANCE_TEXT |
-| 7 | HKEY_USERS |
-
 ### String Functions
 
 ```lua

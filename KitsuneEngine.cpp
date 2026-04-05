@@ -11,13 +11,13 @@
 #include <new>      // std::nothrow
 #include <thread>   // std::thread (used in Task 7; included here with atomic)
 
-#if defined(_WIN32) && !defined(KITSUNE_BAREBONES)
+#ifdef _WIN32
 // WinSock2 must be included before windows.h or any headers that include it
 #include <WinSock2.h>
 #endif
 #include "platform.h"
 
-#ifndef KITSUNE_BAREBONES
+#ifdef _WIN32
 // OpenSSL headers — used by HTTP / TLS modules
 #include "openssl/err.h"
 #include "openssl/evp.h"
@@ -27,8 +27,10 @@
 #include "mem.h"
 #include "lua_main_incl.h"
 
-#ifndef KITSUNE_BAREBONES
+#ifdef KITSUNE_MYSQL
 #include "MySQLMain.h"
+#endif
+#ifdef _WIN32
 #include "PostgresMain.h"
 #include "HttpMain.h"
 #include "ProcessMain.h"
@@ -897,7 +899,9 @@ static void* l_alloc(void* ud, void* ptr, size_t osize, size_t nsize) {
 // ============================================================
 
 static KitsuneState* g_state = nullptr;
-static bool          g_coOwned = false;
+#ifdef _WIN32
+static bool g_coOwned = false;
+#endif
 
 extern "C" {
 
@@ -905,7 +909,7 @@ extern "C" {
 		if (g_state)
 			return true;
 
-		#ifndef KITSUNE_BAREBONES
+		#ifdef _WIN32
 		// RPC_E_CHANGED_MODE means COM was already initialised by the host (e.g. .NET's
 		// MTA thread pool).  We can still use COM; we just must not call CoUninitialize.
 		HRESULT cohr = CoInitialize(NULL);
@@ -916,7 +920,7 @@ extern "C" {
 
 		InitMemoryManager();
 
-#ifndef KITSUNE_BAREBONES
+#ifdef _WIN32
 		WSADATA wsa;
 		if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
 			ERR_free_strings();
@@ -938,7 +942,7 @@ extern "C" {
 		state->L = lua_newstate(l_alloc, state);
 		if (!state->L) {
 			delete state;
-#ifndef KITSUNE_BAREBONES
+#ifdef _WIN32
 			ERR_free_strings();
 			EVP_cleanup();
 			WSACleanup();
@@ -962,22 +966,23 @@ extern "C" {
 
 
 
-		#ifndef KITSUNE_BAREBONES
-
-		luaopen_mysql(L);        lua_setglobal(L, "MySQL");		
-		luaopen_postgres(L);     lua_setglobal(L, "Postgres");	
+		#ifdef KITSUNE_MYSQL
+		luaopen_mysql(L);        lua_setglobal(L, "MySQL");
+#endif
+#ifdef _WIN32
+		luaopen_postgres(L);     lua_setglobal(L, "Postgres");
 		luaopen_http(L);         lua_setglobal(L, "Http");
 		luaopen_process(L);      lua_setglobal(L, "Process");
 		luaopen_luaserver(L);    lua_setglobal(L, "Server");
-		luaopen_luaclient(L);    lua_setglobal(L, "Client");	
+		luaopen_luaclient(L);    lua_setglobal(L, "Client");
 		luaopen_namedpipe(L);    lua_setglobal(L, "Pipe");
 		luaopen_image(L);        lua_setglobal(L, "Image");
-		luaopen_odbc(L);         lua_setglobal(L, "ODBC");	
+		luaopen_odbc(L);         lua_setglobal(L, "ODBC");
 		luaopen_kafka(L);        lua_setglobal(L, "Kafka");
 		luaopen_ftp(L);          lua_setglobal(L, "FTP");
 		luaopen_fileasync(L);    lua_setglobal(L, "FileAsync");
 		luaopen_macro(L);        lua_setglobal(L, "Macro");
-		luaopen_archive(L);      lua_setglobal(L, "Archive");	
+		luaopen_archive(L);      lua_setglobal(L, "Archive");
 		luaopen_redis(L);        lua_setglobal(L, "Redis");
 #endif
 		luaopen_luaaes(L);       lua_setglobal(L, "Aes");
@@ -1000,7 +1005,6 @@ extern "C" {
 
 		lua_pushcfunction(L, L_GetRuntime);    lua_setglobal(L, "Runtime");
 #ifdef _WIN32
-		lua_pushcfunction(L, L_GetReg);        lua_setglobal(L, "GetRegistryValue");
 		lua_pushcfunction(L, L_ShellExecute);  lua_setglobal(L, "ShellExecute");
 #endif
 		lua_pushcfunction(L, L_GetMemory);     lua_setglobal(L, "GetMemory");
@@ -1015,13 +1019,13 @@ extern "C" {
 		// Coroutine threads each receive their own hook; no hook is set on the main state.
 		state->schedulerThread = std::thread(SchedulerProc, state);
 		if (!state->schedulerThread.joinable()) {
-#ifndef KITSUNE_BAREBONES
+#ifdef _WIN32
 			GetHttpBuffer(0);
 			luaserver_KillAll(state->L);
 #endif
 			lua_close(state->L);
 			delete state;
-#ifndef KITSUNE_BAREBONES
+#ifdef _WIN32
 			ERR_free_strings();
 			EVP_cleanup();
 			WSACleanup();
@@ -1770,7 +1774,7 @@ extern "C" {
 										gff_free(state->lastCallError);
 										state->lastCallError = nullptr;
 									}
-					#ifndef KITSUNE_BAREBONES
+					#ifdef _WIN32
 									GetHttpBuffer(0);
 									luaserver_KillAll(state->L);
 					#endif
@@ -1786,13 +1790,13 @@ extern "C" {
 			delete state;
 		}
 
-		#ifndef KITSUNE_BAREBONES
+		#ifdef _WIN32
 		ERR_free_strings();
 		EVP_cleanup();
 		WSACleanup();
 #endif
 		EndMemoryManager();
-#ifndef KITSUNE_BAREBONES
+#ifdef _WIN32
 		if (g_coOwned) {
 			CoUninitialize();
 			g_coOwned = false;

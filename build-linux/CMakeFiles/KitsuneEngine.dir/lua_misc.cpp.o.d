@@ -149,4 +149,5 @@ CMakeFiles/KitsuneEngine.dir/lua_misc.cpp.o: \
  /usr/include/linux/errno.h /usr/include/x86_64-linux-gnu/asm/errno.h \
  /usr/include/asm-generic/errno.h /usr/include/asm-generic/errno-base.h \
  /usr/include/x86_64-linux-gnu/bits/types/error_t.h \
+ /usr/include/x86_64-linux-gnu/sys/random.h \
  /usr/lib/gcc/x86_64-linux-gnu/13/include/cpuid.h

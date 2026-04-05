@@ -218,6 +218,9 @@ CMAKE_VERBOSE_MAKEFILE:BOOL=FALSE
 //No help, variable specified on the command line.
 KITSUNE_BAREBONES:UNINITIALIZED=1
 
+//Build with MySQL support (requires libmysqlclient >= 8.0)
+KITSUNE_MYSQL:BOOL=ON
+
 //Value Computed by CMake
 LuaKitsune_BINARY_DIR:STATIC=/mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/build-linux
 
@@ -226,6 +229,15 @@ LuaKitsune_IS_TOP_LEVEL:STATIC=ON
 
 //Value Computed by CMake
 LuaKitsune_SOURCE_DIR:STATIC=/mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune
+
+//Arguments to supply to pkg-config
+PKG_CONFIG_ARGN:STRING=
+
+//pkg-config executable
+PKG_CONFIG_EXECUTABLE:FILEPATH=/usr/bin/pkg-config
+
+//Path to a library.
+pkgcfg_lib_MYSQLCLIENT_mysqlclient:FILEPATH=/usr/lib/x86_64-linux-gnu/libmysqlclient.so
 
 
 ########################
@@ -377,6 +389,52 @@ CMAKE_TAPI-ADVANCED:INTERNAL=1
 CMAKE_UNAME:INTERNAL=/usr/bin/uname
 //ADVANCED property for variable: CMAKE_VERBOSE_MAKEFILE
 CMAKE_VERBOSE_MAKEFILE-ADVANCED:INTERNAL=1
+//Details about finding PkgConfig
+FIND_PACKAGE_MESSAGE_DETAILS_PkgConfig:INTERNAL=[/usr/bin/pkg-config][v1.8.1()]
+MYSQLCLIENT_CFLAGS:INTERNAL=-I/usr/include/mysql;-I/usr/include
+MYSQLCLIENT_CFLAGS_I:INTERNAL=
+MYSQLCLIENT_CFLAGS_OTHER:INTERNAL=
+MYSQLCLIENT_FOUND:INTERNAL=1
+MYSQLCLIENT_INCLUDEDIR:INTERNAL=/usr/include/mysql
+MYSQLCLIENT_INCLUDE_DIRS:INTERNAL=/usr/include/mysql;/usr/include
+MYSQLCLIENT_LDFLAGS:INTERNAL=-L/usr/lib/x86_64-linux-gnu;-lmysqlclient
+MYSQLCLIENT_LDFLAGS_OTHER:INTERNAL=
+MYSQLCLIENT_LIBDIR:INTERNAL=/usr/lib/x86_64-linux-gnu
+MYSQLCLIENT_LIBRARIES:INTERNAL=mysqlclient
+MYSQLCLIENT_LIBRARY_DIRS:INTERNAL=/usr/lib/x86_64-linux-gnu
+MYSQLCLIENT_LIBS:INTERNAL=
+MYSQLCLIENT_LIBS_L:INTERNAL=
+MYSQLCLIENT_LIBS_OTHER:INTERNAL=
+MYSQLCLIENT_LIBS_PATHS:INTERNAL=
+MYSQLCLIENT_MODULE_NAME:INTERNAL=mysqlclient
+MYSQLCLIENT_PREFIX:INTERNAL=/usr
+MYSQLCLIENT_STATIC_CFLAGS:INTERNAL=-I/usr/include/mysql;-I/usr/include
+MYSQLCLIENT_STATIC_CFLAGS_I:INTERNAL=
+MYSQLCLIENT_STATIC_CFLAGS_OTHER:INTERNAL=
+MYSQLCLIENT_STATIC_INCLUDE_DIRS:INTERNAL=/usr/include/mysql;/usr/include
+MYSQLCLIENT_STATIC_LDFLAGS:INTERNAL=-L/usr/lib/x86_64-linux-gnu;-lmysqlclient;-lz;-lzstd;-lresolv;-lm;-L/usr/lib/x86_64-linux-gnu;-lssl;-L/usr/lib/x86_64-linux-gnu;-ldl;-pthread;-lcrypto;-ldl;-pthread
+MYSQLCLIENT_STATIC_LDFLAGS_OTHER:INTERNAL=-pthread;-pthread
+MYSQLCLIENT_STATIC_LIBDIR:INTERNAL=
+MYSQLCLIENT_STATIC_LIBRARIES:INTERNAL=mysqlclient;z;zstd;resolv;m;ssl;dl;crypto;dl
+MYSQLCLIENT_STATIC_LIBRARY_DIRS:INTERNAL=/usr/lib/x86_64-linux-gnu;/usr/lib/x86_64-linux-gnu;/usr/lib/x86_64-linux-gnu
+MYSQLCLIENT_STATIC_LIBS:INTERNAL=
+MYSQLCLIENT_STATIC_LIBS_L:INTERNAL=
+MYSQLCLIENT_STATIC_LIBS_OTHER:INTERNAL=
+MYSQLCLIENT_STATIC_LIBS_PATHS:INTERNAL=
+MYSQLCLIENT_VERSION:INTERNAL=21.2.45
+MYSQLCLIENT_mysqlclient_INCLUDEDIR:INTERNAL=
+MYSQLCLIENT_mysqlclient_LIBDIR:INTERNAL=
+MYSQLCLIENT_mysqlclient_PREFIX:INTERNAL=
+MYSQLCLIENT_mysqlclient_VERSION:INTERNAL=
+//ADVANCED property for variable: PKG_CONFIG_ARGN
+PKG_CONFIG_ARGN-ADVANCED:INTERNAL=1
+//ADVANCED property for variable: PKG_CONFIG_EXECUTABLE
+PKG_CONFIG_EXECUTABLE-ADVANCED:INTERNAL=1
 //linker supports push/pop state
 _CMAKE_LINKER_PUSHPOP_STATE_SUPPORTED:INTERNAL=TRUE
+__pkg_config_arguments_MYSQLCLIENT:INTERNAL=REQUIRED;mysqlclient>=8.0
+__pkg_config_checked_MYSQLCLIENT:INTERNAL=1
+//ADVANCED property for variable: pkgcfg_lib_MYSQLCLIENT_mysqlclient
+pkgcfg_lib_MYSQLCLIENT_mysqlclient-ADVANCED:INTERNAL=1
+prefix_result:INTERNAL=/usr/lib/x86_64-linux-gnu
 
