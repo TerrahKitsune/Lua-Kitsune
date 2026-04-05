@@ -18,6 +18,9 @@ LuaMySQL* lua_pushmysql(lua_State* L);
 int MySqlIsBusy(lua_State* L);
 int MySqlConnect(lua_State* L);
 int MySqlQuery(lua_State* L);
+int MySqlNonQuery(lua_State* L);
+int MySqlScalar(lua_State* L);
+int MySqlQueryAll(lua_State* L);
 int MySqlEscapeValue(lua_State* L);
 
 int luamysql_gc(lua_State* L);

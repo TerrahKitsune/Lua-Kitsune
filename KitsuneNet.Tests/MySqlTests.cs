@@ -23,6 +23,15 @@ public sealed class MySqlTests
 	// ── coroutine protocol ───────────────────────────────────────────────────
 
 	[MySqlFact]
+	public async Task Helper_MethodsExistInModuleTable()
+	{
+		string? r = await Run(@"
+			return tostring(type(MySQL.NonQuery)) .. ':' .. tostring(type(MySQL.Scalar)) .. ':' .. tostring(type(MySQL.QueryAll))
+		");
+		r.ShouldBe("function:function:function");
+	}
+
+	[MySqlFact]
 	public async Task Connect_ValidCredentials_ReturnsUserdata()
 	{
 		string? r = await Run($@"
@@ -436,5 +445,145 @@ public sealed class MySqlTests
 			return tostring(type(row[1])) .. ':' .. tostring(type(row[2]))
 		");
 		r.ShouldBe("string:string");
+	}
+
+	// ── NonQuery ──────────────────────────────────────────────────────────────
+
+	[MySqlFact]
+	public async Task NonQuery_Insert_ReturnsAffectedCount()
+	{
+		string? r = await Run($@"
+			local conn = assert({ConnectLua()})
+			conn:NonQuery('DELETE FROM test WHERE String = ?', {{'helper_nq'}})
+			local ok, n = conn:NonQuery('INSERT INTO test (String) VALUES (?)', {{'helper_nq'}})
+			conn:NonQuery('DELETE FROM test WHERE String = ?', {{'helper_nq'}})
+			return tostring(ok) .. ':' .. tostring(n)
+		");
+		r.ShouldBe("true:1");
+	}
+
+	[MySqlFact]
+	public async Task NonQuery_InvalidSql_ReturnsFalseAndError()
+	{
+		string? r = await Run($@"
+			local conn = assert({ConnectLua()})
+			local ok, err = conn:NonQuery('NOT VALID SQL AT ALL')
+			return tostring(ok == false and type(err) == 'string' and #err > 0)
+		");
+		r.ShouldBe("true");
+	}
+
+	[MySqlFact]
+	public async Task NonQuery_ConnectionNotBusy_AfterCompletion()
+	{
+		string? r = await Run($@"
+			local conn = assert({ConnectLua()})
+			conn:NonQuery('SELECT 1')
+			return tostring(conn:IsBusy())
+		");
+		r.ShouldBe("false");
+	}
+
+	// ── Scalar ────────────────────────────────────────────────────────────────
+
+	[MySqlFact]
+	public async Task Scalar_ReturnsFirstColumnOfFirstRow()
+	{
+		string? r = await Run($@"
+			local conn = assert({ConnectLua()})
+			local ok, v = conn:Scalar('SELECT 42')
+			return tostring(ok) .. ':' .. tostring(v)
+		");
+		r.ShouldBe("true:42");
+	}
+
+	[MySqlFact]
+	public async Task Scalar_NoMatchingRow_ReturnsNil()
+	{
+		string? r = await Run($@"
+			local conn = assert({ConnectLua()})
+			local ok, v = conn:Scalar('SELECT 1 WHERE 1 = 0')
+			return tostring(ok) .. ':' .. tostring(v)
+		");
+		r.ShouldBe("true:nil");
+	}
+
+	[MySqlFact]
+	public async Task Scalar_InvalidSql_ReturnsFalseAndError()
+	{
+		string? r = await Run($@"
+			local conn = assert({ConnectLua()})
+			local ok, err = conn:Scalar('NOT VALID SQL')
+			return tostring(ok == false and type(err) == 'string')
+		");
+		r.ShouldBe("true");
+	}
+
+	[MySqlFact]
+	public async Task Scalar_ConnectionNotBusy_AfterCompletion()
+	{
+		string? r = await Run($@"
+			local conn = assert({ConnectLua()})
+			conn:Scalar('SELECT 1')
+			return tostring(conn:IsBusy())
+		");
+		r.ShouldBe("false");
+	}
+
+	// ── QueryAll ──────────────────────────────────────────────────────────────
+
+	[MySqlFact]
+	public async Task QueryAll_MultipleRows_ReturnsAllRows()
+	{
+		string? r = await Run($@"
+			local conn = assert({ConnectLua()})
+			local ok, rows = conn:QueryAll('SELECT 1 UNION SELECT 2 UNION SELECT 3')
+			return tostring(ok) .. ':' .. tostring(#rows)
+		");
+		r.ShouldBe("true:3");
+	}
+
+	[MySqlFact]
+	public async Task QueryAll_EmptyResult_ReturnsEmptyTable()
+	{
+		string? r = await Run($@"
+			local conn = assert({ConnectLua()})
+			local ok, rows = conn:QueryAll('SELECT 1 WHERE 1 = 0')
+			return tostring(ok) .. ':' .. tostring(#rows)
+		");
+		r.ShouldBe("true:0");
+	}
+
+	[MySqlFact]
+	public async Task QueryAll_RowValuesAccessible()
+	{
+		string? r = await Run($@"
+			local conn = assert({ConnectLua()})
+			local ok, rows = conn:QueryAll('SELECT 10, 20, 30')
+			return tostring(ok and rows[1][1] == 10 and rows[1][2] == 20 and rows[1][3] == 30)
+		");
+		r.ShouldBe("true");
+	}
+
+	[MySqlFact]
+	public async Task QueryAll_InvalidSql_ReturnsFalseAndError()
+	{
+		string? r = await Run($@"
+			local conn = assert({ConnectLua()})
+			local ok, err = conn:QueryAll('NOT VALID SQL')
+			return tostring(ok == false and type(err) == 'string')
+		");
+		r.ShouldBe("true");
+	}
+
+	[MySqlFact]
+	public async Task QueryAll_ConnectionNotBusy_AfterCompletion()
+	{
+		string? r = await Run($@"
+			local conn = assert({ConnectLua()})
+			conn:QueryAll('SELECT 1')
+			return tostring(conn:IsBusy())
+		");
+		r.ShouldBe("false");
 	}
 }

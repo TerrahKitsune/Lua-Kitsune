@@ -5,6 +5,11 @@
 #pragma comment(lib, "mysql/libmysql.lib")
 #endif
 
+// -- Helper mode constants ---------------------------------------------------
+#define MYSQL_HELPER_NONQUERY 1
+#define MYSQL_HELPER_SCALAR   2
+#define MYSQL_HELPER_QUERYALL 3
+
 // -- LuaMySQLQuery -------------------------------------------------------------
 typedef struct LuaMySQLQuery {
 	LuaMySQL*  conn;
@@ -13,6 +18,10 @@ typedef struct LuaMySQLQuery {
 	size_t     sqllen;
 	MYSQL_RES* result;
 	char*      error;
+	int        cancelFnRef;   // LUA_NOREF if none
+	int        helperMode;    // MYSQL_HELPER_* or 0 for raw Query
+	int        accumTableIdx; // QueryAll: absolute L stack index of row accumulator
+	int        accumRowIdx;   // QueryAll: 1-based row counter
 } LuaMySQLQuery;
 
 // -- Static JSON ref for PushAsParamString -------------------------------------
@@ -257,6 +266,11 @@ static void FreeQuery(lua_State* L, LuaMySQLQuery* q) {
 		q->connRef = LUA_NOREF;
 	}
 
+	if (q->cancelFnRef != LUA_NOREF) {
+		luaL_unref(L, LUA_REGISTRYINDEX, q->cancelFnRef);
+		q->cancelFnRef = LUA_NOREF;
+	}
+
 	if (q->sql)
 		gff_free(q->sql);
 	if (q->error)
@@ -483,6 +497,248 @@ static LuaMySQLQuery* SetupQueryCoroutine(lua_State* L, LuaMySQL* m,
 	lua_rawgeti(L, LUA_REGISTRYINDEX, m->queryRef);
 	return q;
 }
+
+// -- HelperStreamCont / HelperWaitCont ----------------------------------------
+// HelperWaitCont drives T until it yields the rowcount (integer) or a
+// query-level error (string), then hands off to the mode-specific finish.
+// HelperStreamCont collects rows one-at-a-time for QueryAll.
+//
+// Correctness rule for FreeQuery ownership:
+//   * Polling phase (QueryRunCont / QueryStoreCont / MySqlQueryBody) never
+//     calls FreeQuery when the stop flag fires — the helper must do it.
+//   * QueryStreamCont ALWAYS calls FreeQuery before returning (stop flag,
+//     nil/error, or natural end of rows).
+
+static int HelperWaitCont(lua_State* L, int status, lua_KContext ctx);
+static int HelperStreamCont(lua_State* L, int status, lua_KContext ctx);
+
+static int HelperStreamCont(lua_State* L, int status, lua_KContext ctx) {
+	(void)status;
+	LuaMySQLQuery* q = (LuaMySQLQuery*)(intptr_t)ctx;
+
+	// Save accumulator index now — a resume below may cause T to call FreeQuery.
+	int accumIdx = q->accumTableIdx;
+
+	// Optional cancel check (q still valid at this point).
+	if (q->cancelFnRef != LUA_NOREF) {
+		lua_rawgeti(L, LUA_REGISTRYINDEX, q->cancelFnRef);
+		int cancelled = (lua_pcall_nohook(L, 0, 1, 0) == LUA_OK) && lua_toboolean(L, -1);
+		lua_pop(L, 1);
+		if (cancelled) {
+			// T is in QueryStreamCont: stop flag causes it to call FreeQuery.
+			lua_rawgeti(L, LUA_REGISTRYINDEX, q->conn->queryRef);
+			lua_State* T = lua_tothread(L, -1);
+			lua_pop(L, 1);
+			if (T) {
+				lua_pushboolean(T, 1);
+				int nr2;
+				lua_resume(T, L, 1, &nr2);
+				if (nr2 > 0)
+					lua_pop(T, nr2);
+			}
+			// q freed by T (or T was already gone)
+			lua_pushboolean(L, 0);
+			lua_pushliteral(L, "cancelled");
+			return 2;
+		}
+	}
+
+	lua_rawgeti(L, LUA_REGISTRYINDEX, q->conn->queryRef);
+	lua_State* T = lua_tothread(L, -1);
+	lua_pop(L, 1);
+
+	if (!T) {
+		// T already gone; return what we accumulated.
+		lua_pushboolean(L, 1);
+		lua_pushvalue(L, accumIdx);
+		return 2;
+	}
+
+	int nr = 0;
+	int rc = lua_resume(T, L, 0, &nr);
+
+	if (rc == LUA_YIELD && nr > 0 && lua_istable(T, -1)) {
+		// Got a row — q is still alive (T yielded, hasn't called FreeQuery yet).
+		lua_xmove(T, L, 1);
+		if (nr > 1)
+			lua_pop(T, nr - 1);
+		lua_rawseti(L, accumIdx, ++q->accumRowIdx);
+		return lua_yieldk(L, 0, ctx, HelperStreamCont);
+	}
+
+	// T returned nil naturally — QueryStreamCont already called FreeQuery.
+	if (nr > 0)
+		lua_pop(T, nr);
+	// q is freed; use saved accumIdx only.
+	lua_pushboolean(L, 1);
+	lua_pushvalue(L, accumIdx);
+	return 2;
+}
+
+static int HelperWaitCont(lua_State* L, int status, lua_KContext ctx) {
+	(void)status;
+	LuaMySQLQuery* q = (LuaMySQLQuery*)(intptr_t)ctx;
+
+	// Cancel check. T is in the polling phase here (QueryRunCont / QueryStoreCont).
+	// Those continuations do NOT call FreeQuery on stop — the helper must.
+	if (q->cancelFnRef != LUA_NOREF) {
+		lua_rawgeti(L, LUA_REGISTRYINDEX, q->cancelFnRef);
+		int cancelled = (lua_pcall_nohook(L, 0, 1, 0) == LUA_OK) && lua_toboolean(L, -1);
+		lua_pop(L, 1);
+		if (cancelled) {
+			lua_rawgeti(L, LUA_REGISTRYINDEX, q->conn->queryRef);
+			lua_State* T = lua_tothread(L, -1);
+			lua_pop(L, 1);
+			if (T) {
+				lua_pushboolean(T, 1);
+				int nr2;
+				lua_resume(T, L, 1, &nr2);
+				if (nr2 > 0)
+					lua_pop(T, nr2);
+			}
+			FreeQuery(L, q); // polling phase never cleans up on stop
+			lua_pushboolean(L, 0);
+			lua_pushliteral(L, "cancelled");
+			return 2;
+		}
+	}
+
+	lua_rawgeti(L, LUA_REGISTRYINDEX, q->conn->queryRef);
+	lua_State* T = lua_tothread(L, -1);
+	lua_pop(L, 1);
+
+	if (!T) {
+		FreeQuery(L, q);
+		lua_pushboolean(L, 0);
+		lua_pushliteral(L, "connection lost");
+		return 2;
+	}
+
+	int nr = 0;
+	int rc = lua_resume(T, L, 0, &nr);
+
+	if (rc != LUA_OK && rc != LUA_YIELD) {
+		if (nr > 0)
+			lua_pop(T, nr);
+		FreeQuery(L, q);
+		lua_pushboolean(L, 0);
+		lua_pushliteral(L, "query coroutine error");
+		return 2;
+	}
+
+	// Still polling (T yielded nil).
+	if (nr == 0 || lua_isnil(T, -1)) {
+		if (nr > 0)
+			lua_pop(T, nr);
+		return lua_yieldk(L, 0, ctx, HelperWaitCont);
+	}
+
+	// Query-level error (string). T transitioned to QueryStreamCont; stop it so
+	// QueryStreamCont calls FreeQuery for us.
+	if (lua_type(T, -1) == LUA_TSTRING) {
+		size_t elen;
+		const char* err = lua_tolstring(T, -1, &elen);
+		lua_pushlstring(L, err, elen); // copy to L before we pop T
+		lua_pop(T, nr);
+		lua_pushboolean(T, 1);
+		int nr2;
+		lua_resume(T, L, 1, &nr2); // QueryStreamCont stop -> FreeQuery
+		if (nr2 > 0)
+			lua_pop(T, nr2);
+		lua_pushboolean(L, 0);
+		lua_insert(L, -2); // false, errmsg
+		return 2;
+	}
+
+	// Rowcount integer — T is now suspended in QueryStreamCont.
+	lua_Integer rowcount = lua_tointeger(T, -1);
+	lua_pop(T, nr);
+
+	if (q->helperMode == MYSQL_HELPER_NONQUERY) {
+		// Stop T — QueryStreamCont calls FreeQuery.
+		lua_pushboolean(T, 1);
+		int nr2;
+		lua_resume(T, L, 1, &nr2);
+		if (nr2 > 0)
+			lua_pop(T, nr2);
+		lua_pushboolean(L, 1);
+		lua_pushinteger(L, rowcount);
+		return 2;
+	}
+
+	if (q->helperMode == MYSQL_HELPER_SCALAR) {
+		int nr2 = 0;
+		int rc2 = lua_resume(T, L, 0, &nr2); // fetch first row
+		if (rc2 == LUA_YIELD && nr2 > 0 && lua_istable(T, -1)) {
+			// Got a row — q still alive.
+			lua_rawgeti(T, -1, 1);  // col[1] onto T
+			lua_xmove(T, L, 1);     // move col[1] to L
+			lua_pop(T, nr2);        // pop row table
+			lua_pushboolean(T, 1);
+			int nr3;
+			lua_resume(T, L, 1, &nr3); // stop T — QueryStreamCont calls FreeQuery
+			if (nr3 > 0)
+				lua_pop(T, nr3);
+			lua_pushboolean(L, 1);
+			lua_insert(L, -2); // true, col1
+			return 2;
+		}
+		// No rows — T returned nil, QueryStreamCont already called FreeQuery.
+		if (nr2 > 0)
+			lua_pop(T, nr2);
+		lua_pushboolean(L, 1);
+		lua_pushnil(L);
+		return 2;
+	}
+
+	// MYSQL_HELPER_QUERYALL: yield L and start streaming.
+	return lua_yieldk(L, 0, ctx, HelperStreamCont);
+}
+
+// -- Shared helper entry point ------------------------------------------------
+static int MySqlHelperRun(lua_State* L, int mode) {
+	LuaMySQL* m = lua_tomysql(L, 1);
+
+	if (!m->connection) {
+		luaL_error(L, "Connection is closed");
+		return 0;
+	}
+
+	if (m->queryRef != LUA_NOREF) {
+		lua_pushnil(L);
+		lua_pushliteral(L, "Connection already has an active query");
+		return 2;
+	}
+
+	size_t sqllen;
+	const char* sql = luaL_checklstring(L, 2, &sqllen);
+
+	SetupQueryCoroutine(L, m, 1, sql, sqllen, 3);
+	lua_pop(L, 1); // pop T (anchored in m->queryRef)
+
+	LuaMySQLQuery* q = (LuaMySQLQuery*)m->activeQuery;
+	q->helperMode    = mode;
+	q->cancelFnRef   = LUA_NOREF;
+	q->accumTableIdx = 0;
+	q->accumRowIdx   = 0;
+
+	if (!lua_isnoneornil(L, 4) && lua_isfunction(L, 4)) {
+		lua_pushvalue(L, 4);
+		q->cancelFnRef = luaL_ref(L, LUA_REGISTRYINDEX);
+	}
+
+	if (mode == MYSQL_HELPER_QUERYALL) {
+		lua_newtable(L);
+		q->accumTableIdx = lua_gettop(L); // stable absolute index across yieldk
+	}
+
+	// Yield immediately; HelperWaitCont drives T from the first resume.
+	return lua_yieldk(L, 0, (lua_KContext)(intptr_t)q, HelperWaitCont);
+}
+
+int MySqlNonQuery(lua_State* L) { return MySqlHelperRun(L, MYSQL_HELPER_NONQUERY); }
+int MySqlScalar(lua_State* L)   { return MySqlHelperRun(L, MYSQL_HELPER_SCALAR);   }
+int MySqlQueryAll(lua_State* L) { return MySqlHelperRun(L, MYSQL_HELPER_QUERYALL); }
 
 // -- MySqlQuery ----------------------------------------------------------------
 int MySqlQuery(lua_State* L) {

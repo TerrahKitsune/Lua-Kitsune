@@ -1,1 +1,0 @@
-/usr/bin/c++ -fsanitize=address -g -g -fsanitize=address CMakeFiles/kitsune.dir/Program.cpp.o -o kitsune  -Wl,-rpath,/mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/build-asan libKitsuneEngine.so 

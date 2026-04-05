@@ -6,6 +6,9 @@ static const luaL_Reg connfunctions[] = {
 	{ "IsBusy",      MySqlIsBusy      },
 	{ "EscapeValue", MySqlEscapeValue },
 	{ "Query",       MySqlQuery       },
+	{ "NonQuery",    MySqlNonQuery    },
+	{ "Scalar",      MySqlScalar      },
+	{ "QueryAll",    MySqlQueryAll    },
 	{ "Close",       luamysql_gc      },
 	{ NULL, NULL }
 };

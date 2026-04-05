@@ -1249,74 +1249,127 @@ hexstring, 20bytes SHA1:Finish()
 
 ## MySQL
 
-Connects to a MySQL/MariaDB database. Queries are dispatched asynchronously on a background thread and results are iterated with the same `Fetch` / `GetRow` pattern as [SQLite](#sqlite) and [Postgres](#postgres). The connection is always configured with `utf8mb4` encoding automatically.
+Connects to a MySQL/MariaDB database. All I/O is driven by the MySQL 8.0 nonblocking API (`mysql_real_query_nonblocking`, `mysql_store_result_nonblocking`) so **no background thread is ever created**. The connection is always configured with `utf8mb4` encoding automatically.
 
 ```lua
-MySQL  MySQL.Connect(host, user, password, database, opt port, opt timeout)
-bool, txt  MySQL:Query(query, opt params)
-bool, txt  MySQL:Fetch()
-table|value  MySQL:GetRow(opt index_or_field)
-nil  MySQL:Finish()
-bool  MySQL:IsBusy()
-string  MySQL:EscapeValue(value)
-MySQL:Close()
+conn, errmsg  MySQL.Connect(host, user, password, database, opt port, opt timeout)
+co, errmsg    conn:Query(sql, opt params)
+ok, n|errmsg  conn:NonQuery(sql, opt params, opt cancelFn)
+ok, v|errmsg  conn:Scalar(sql, opt params, opt cancelFn)
+ok, rows|errmsg conn:QueryAll(sql, opt params, opt cancelFn)
+bool          conn:IsBusy()
+string        conn:EscapeValue(value)
+nil           conn:Close()
 ```
 
 | Function | Description |
 |----------|-------------|
-| `Connect` | Connect to MySQL. `port` defaults to `3306`, `timeout` defaults to `10` seconds |
-| `Query` | Dispatch an async SQL query. Returns `true` on dispatch, or `false, "Busy"` if a query is already running. Pass an optional array table as `params` for parameterized queries |
-| `Fetch` | Block until the query completes on the first call, then advance to the next row. Returns `true` if a row is available, `false` when done, or `false, errorMessage` on execution error |
-| `GetRow` | Return the current row as a hash table keyed by column name, a single column value when `index` (1-based integer) is given, or a single column value when `field` (string column name) is given. `NULL` columns are `nil` |
-| `Finish` | Discard the current result and reset the cursor |
-| `IsBusy` | Returns `true` while a query is in progress |
-| `EscapeValue` | Escape a string using `mysql_real_escape_string`. Returns the escaped string **without** surrounding quotes |
-| `Close` | Close the connection and free all resources |
+| `Connect` | Connect to MySQL, yielding the caller cooperatively during the TCP + auth handshake. Returns the connection on success, or `nil, errmsg` on failure. `port` defaults to `3306`, `timeout` defaults to `10` seconds |
+| `Query` | Returns a **Lua coroutine** immediately without blocking. Drive it with `coroutine.resume` as described below. Returns `nil, errmsg` if the connection is already busy |
+| `NonQuery` | Helper — drives a query to completion and returns `true, rowcount` (integer), or `false, errmsg` on error. Designed for INSERT / UPDATE / DELETE |
+| `Scalar` | Helper — returns `true, col1value` (first column of the first row), or `true, nil` when no rows matched, or `false, errmsg` on error |
+| `QueryAll` | Helper — collects every row into an array of integer-keyed row arrays and returns `true, rows`, or `false, errmsg` on error |
+| `IsBusy` | Returns `true` while a query coroutine is still alive on this connection |
+| `EscapeValue` | Escape a string with `mysql_real_escape_string`. Returns the escaped value **without** surrounding quotes |
+| `Close` | Close the connection and free all resources. Safe to call multiple times |
 
-### Parameterized Queries
+### Helper methods (recommended API)
 
-Pass an array table as the second argument to `Query`. The parameter count is determined automatically by scanning the SQL for `?` placeholders. Missing or `nil` entries in the table are sent as SQL `NULL`. `table` values are JSON-encoded. `Wchar` values are UTF-8 encoded.
-
-```lua
-mysql:Query("SELECT * FROM users WHERE id = ?", {42})
-mysql:Query("INSERT INTO t (a, b, c) VALUES (?, ?, ?)", {"hello", nil, 3.14})
-```
-
-### Usage Pattern
+All three helpers yield the **outer** Kitsune coroutine cooperatively during the async wait, so other coroutines continue to run. An optional zero-argument `cancelFn` is called between each poll; if it returns truthy the query is stopped early and the helper returns `false, "cancelled"`.
 
 ```lua
-local db = MySQL.Connect("127.0.0.1", "user", "pass", "mydb")
+local conn = assert(MySQL.Connect("127.0.0.1", "user", "pass", "mydb"))
 
-db:Query("SELECT id, name FROM users WHERE active = ?", {1})
-while db:Fetch() do
-    local row = db:GetRow()   -- {id=1, name="Alice"}
-    local id  = db:GetRow(1)  -- first column value only
-    local name = db:GetRow("name")  -- column by name
+-- INSERT / UPDATE / DELETE
+local ok, affected = conn:NonQuery(
+    "UPDATE users SET name = ? WHERE id = ?", {"Alice", 1})
+if not ok then error(affected) end
+print(affected .. " row(s) updated")
+
+-- Single value
+local ok, name = conn:Scalar("SELECT name FROM users WHERE id = ?", {1})
+if not ok then error(name) end
+print(name)  -- nil when no row matched
+
+-- All rows
+local ok, rows = conn:QueryAll("SELECT id, name FROM users")
+if not ok then error(rows) end
+for i = 1, #rows do
+    print(rows[i][1], rows[i][2])
 end
 
--- Non-SELECT commands: Fetch() returns false immediately on success
-local ok = db:Query("DELETE FROM sessions WHERE expired = 1")
-local more, err = db:Fetch()
-assert(not err, err)
+-- Cancel mid-stream
+local stop = false
+local ok, rows = conn:QueryAll("SELECT id FROM big_table", nil,
+    function() return stop end)
 ```
 
-### MySQL Type Mapping
+### Raw coroutine protocol (advanced)
+
+`conn:Query(sql, params)` returns a real Lua coroutine `co`. Drive it with `coroutine.resume` to control streaming directly.
+
+#### Yield protocol
+
+| `coroutine.resume` returns | Meaning |
+|---|---|
+| `true, nil` + status `"suspended"` | Query / store still in progress — resume again |
+| `true, <integer>` | Done — integer is the affected / row count |
+| `true, <string>` | Done — string is a query-level error message |
+| `true, {col1, col2, …}` | One data row (integer-keyed, 1-based) |
+| `true, nil` + status `"dead"` | All rows consumed, C buffer freed |
+| `false, <string>` | Coroutine raised a Lua error |
+
+Pass a truthy value as the **first argument** of any `coroutine.resume` call to send the **stop flag**: the coroutine immediately frees the result buffer, clears the connection's busy state, and dies cleanly.
+
+```lua
+local conn = assert(MySQL.Connect("127.0.0.1", "user", "pass", "mydb"))
+local co   = assert(conn:Query("SELECT id, name FROM users WHERE active = ?", {1}))
+
+-- Phase 1: drive the async state machine until rowcount arrives
+local ok, val = coroutine.resume(co)
+while ok and val == nil and coroutine.status(co) == "suspended" do
+    ok, val = coroutine.resume(co)
+end
+if not ok then error(val) end          -- coroutine error
+if type(val) == "string" then error(val) end  -- query-level error
+local rowcount = val                   -- integer
+
+-- Phase 2: stream rows one at a time
+ok, val = coroutine.resume(co)
+while ok and val ~= nil do
+    print(val[1], val[2])              -- val[1] = id, val[2] = name
+    ok, val = coroutine.resume(co)
+end
+
+-- Stop early at any phase (frees C buffer immediately)
+coroutine.resume(co, true)
+```
+
+### Parameterized queries
+
+Pass an array table as the second argument to `Query`, `NonQuery`, `Scalar`, or `QueryAll`. `?` placeholders are substituted in order. Missing or `nil` entries become SQL `NULL`. `table` values are JSON-encoded. `Wchar` values are UTF-8 encoded.
+
+```lua
+conn:NonQuery("INSERT INTO t (a, b, c) VALUES (?, ?, ?)", {"hello", nil, 3.14})
+conn:Scalar("SELECT name FROM users WHERE id = ?", {42})
+```
+
+### MySQL type mapping
 
 | MySQL type | Lua type |
 |------------|----------|
 | TINYINT, SMALLINT, MEDIUMINT, INT, BIGINT | integer |
 | FLOAT, DOUBLE, DECIMAL | number |
-| TINYBLOB, BLOB, MEDIUMBLOB, LONGBLOB | LuaStream |
-| TINYINT(1) (`BOOLEAN`) | integer `1` / `0` |
-| all others | string |
+| TINYBLOB, BLOB, MEDIUMBLOB, LONGBLOB | LuaStream (userdata) |
+| all others (VARCHAR, TEXT, DATE, JSON, …) | string |
 
-> **Note:** MySQL does not have a native boolean type. `TINYINT(1)` columns return `1` or `0` as integers, not Lua `true`/`false`.
+> **Note:** MySQL has no native boolean type. `TINYINT(1)` columns return integer `1` or `0`.
 
 ---
 
 ## Postgres
 
-Connects to a PostgreSQL database using libpq. Queries are dispatched asynchronously on a background thread and results are iterated with the same `Fetch` / `GetRow` pattern as [SQLite](#sqlite) and [MySQL](#mysql). The connection is always configured with `UTF8` client encoding automatically.
+Connects to a PostgreSQL database using libpq. Queries are dispatched asynchronously on a background thread and results are iterated with the same `Fetch` / `GetRow` pattern as [SQLite](#sqlite). The connection is always configured with `UTF8` client encoding automatically.
 
 ```lua
 Postgres  Postgres.Connect(conninfo)

@@ -354,3 +354,6 @@ MigrationBackup/
 # Ionide (cross platform F# VS Code tools) working folder
 .ionide/
 imgui.ini
+
+# Linux CMake build directories — regenerated locally, nothing to track
+build-*/
