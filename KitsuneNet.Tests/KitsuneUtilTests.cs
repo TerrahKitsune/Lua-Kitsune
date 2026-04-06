@@ -2494,7 +2494,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Stream_BackendReadError_PropagatesViaPcall()
         {
-            // lua_call_nohook on READ dispatch means a backend error bubbles up.
+            // lua_callk on READ dispatch means a backend error propagates and is caught by pcall.
             string? r = await Run(@"
                 local OPEN, CLOSE, READ = 0, 1, 2
                 local ok, err = pcall(function()
@@ -5200,12 +5200,14 @@ namespace KitsuneNet.Tests
         // -- Function-backend socket simulation -----------------------------------
         // These tests pass a Lua function backend to Stream.Create() to simulate a
         // network socket that delivers data in small increments.  The READ handler
-        // is called via lua_call_nohook (synchronous — no yielding is possible from
-        // inside it), so Sleep is NOT placed inside the handler.  Instead, "slow
-        // delivery" is simulated by returning at most N bytes per call, forcing each
-        // consumer (CSV, Compress, JSON) to issue multiple reads before it has all
-        // the data it needs.  This exercises the same multi-read code paths that
-        // real network sockets exercise at runtime.
+        // is called via lua_callk, so Sleep() inside it yields cooperatively without
+        // raising "attempt to yield across a C-call boundary" (see
+        // Stream_FunctionBackend_SleepInReadHandler_YieldsCorrectly and
+        // CSV_FunctionBackendSocket_SleepInReadHandler_ParsesRows).  These particular
+        // tests omit Sleep to stay fast and deterministic; "slow delivery" is instead
+        // simulated by returning at most N bytes per Read() call, forcing each consumer
+        // (CSV, Compress, JSON) to issue multiple reads.  This exercises the same
+        // multi-read code paths that real network sockets exercise at runtime.
 
         // Helper Lua prologue shared by all socket-simulation tests.
         // OPEN=0, CLOSE=1, READ=2, CAP_READ=1

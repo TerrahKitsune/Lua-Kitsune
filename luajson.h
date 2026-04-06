@@ -64,11 +64,15 @@ int lua_json_new(lua_State* L);                 // Json.New([pretty])
 
 // Both functions handle the static and instance calling conventions:
 //   Json.Decode(str)             /  json:Decode(str)
-//   Json.Decode(fn)              /  json:Decode(fn)   -- fn() returns chunks
+//   Json.Decode(fn)              /  json:Decode(fn)    -- fn() returns chunks
+//   Json.Decode(stream)          /  json:Decode(stream) -- sync or async LuaStream
 //   Json.Encode(value [,pretty]) /  json:Encode(value)
 // For the chunked form fn is called repeatedly with no arguments.
 // It must return a non-empty string for each chunk; returning nil or an empty
 // string signals end of input.
+// For the stream form: sync streams are read chunk-by-chunk directly; async
+// streams (vtbl->hasdata != NULL) accumulate via lua_callk (may yield), then
+// parse the complete buffer — identical result, no manual accumulation in Lua.
 int lua_json_decode(lua_State* L);
 int lua_json_encode(lua_State* L);
 int lua_json_encode_into_stream(lua_State* L);

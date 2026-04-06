@@ -335,68 +335,6 @@ int ReadLuaStream(lua_State* L) {
 	return 1;
 }
 
-// ── ReadAllStream — stream:ReadAll([limit]) ───────────────────────────────────
-// Reads chunks via stream:Read() (yields for async streams) until EOF or limit
-// bytes have been accumulated.  Returns a new seekable in-memory LuaStream.
-// For small/moderate responses only — allocates the full body in memory.
-static int ReadAllContinuation(lua_State* L, int status, lua_KContext ctx);
-
-int ReadAllStream(lua_State* L) {
-	LuaStream* src = lua_toluastream(L, 1);
-	if (!(src->Caps & STREAM_CAP_READ)) {
-		lua_pushnil(L);
-		return 1;
-	}
-	lua_Integer limit = luaL_optinteger(L, 2, 0);
-	// Normalize stack: L[1]=src, L[2]=nil/limit, L[3]=dst (always at index 3).
-	lua_settop(L, 2);
-	lua_pushluastream(L);  // L[3] = accumulation buffer
-	// Kick off the first Read() call via lua_callk so async backends can yield.
-	lua_pushvalue(L, 1);
-	lua_getfield(L, -1, "Read");
-	lua_insert(L, -2);
-	lua_callk(L, 1, 1, (lua_KContext)limit, ReadAllContinuation);
-	return ReadAllContinuation(L, LUA_OK, (lua_KContext)limit);
-}
-
-static int ReadAllContinuation(lua_State* L, int status, lua_KContext ctx) {
-	lua_Integer limit = (lua_Integer)ctx;
-	const int dstIdx = 3;
-	LuaStream* dst = lua_toluastream(L, dstIdx);
-	// nil (or non-string) at top = EOF or error — rewind and return dst.
-	if (lua_type(L, -1) != LUA_TSTRING) {
-		lua_settop(L, dstIdx);
-		StreamSetPosC(L, dst, 0);
-		return 1;
-	}
-	size_t chunkLen = 0;
-	const char* chunk = lua_tolstring(L, -1, &chunkLen);
-	if (limit > 0) {
-		lua_Integer already = StreamGetLenC(L, dst);
-		lua_Integer remaining = limit - already;
-		if (remaining <= 0) {
-			lua_settop(L, dstIdx);
-			StreamSetPosC(L, dst, 0);
-			return 1;
-		}
-		if ((lua_Integer)chunkLen > remaining)
-			chunkLen = (size_t)remaining;
-	}
-	StreamWrite(L, dst, (const BYTE*)chunk, chunkLen);
-	lua_pop(L, 1);  // pop chunk; stack is now [src, nil/limit, dst]
-	if (limit > 0 && StreamGetLenC(L, dst) >= limit) {
-		lua_settop(L, dstIdx);
-		StreamSetPosC(L, dst, 0);
-		return 1;
-	}
-	// Read the next chunk.
-	lua_pushvalue(L, 1);
-	lua_getfield(L, -1, "Read");
-	lua_insert(L, -2);
-	lua_callk(L, 1, 1, ctx, ReadAllContinuation);
-	return ReadAllContinuation(L, LUA_OK, ctx);
-}
-
 int ReadStreamByte(lua_State* L) {
 	LuaStream* s = lua_toluastream(L, 1);
 	if (!(s->Caps & STREAM_CAP_READ)) {

@@ -110,9 +110,6 @@ int GetStreamInfo(lua_State* L);
 
 // ── Read operations ───────────────────────────────────────────────────────────
 int ReadLuaStream(lua_State* L);
-// Reads via Read() (yields for async streams) until EOF or limit bytes.
-// Returns a seekable in-memory LuaStream. For small/moderate responses only.
-int ReadAllStream(lua_State* L);
 int ReadStreamByte(lua_State* L);
 int PeekStreamByte(lua_State* L);
 // Non-blocking: returns the number of bytes ready (or true/false for backends

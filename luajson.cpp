@@ -616,14 +616,89 @@ static void dec_reset(LuaJson* j, const char* src, size_t len) {
 
 // =============================================================================
 // Instance method entry points (instance required as arg 1):
-//   json:Decode(str | fn)  arg 2 = string or chunk-reader function
-//   json:Encode(value)     arg 2 = Lua value to encode
+//   json:Decode(str | fn | stream)  arg 2 = string, chunk-reader fn, or LuaStream
+//   json:Encode(value)              arg 2 = Lua value to encode
 // =============================================================================
+
+// Forward declaration — defined in the Stream I/O section below.
+static int json_stream_chunk_reader(lua_State* L);
+
+// Async stream decode continuation.
+// Stack invariant on every entry: L[1]=json, L[2]=source stream, L[3]=in-memory
+// accumulator stream, top=latest chunk (string) or nil/false.
+// Accumulates chunks via lua_callk (yielding for async streams), then parses
+// the complete buffer synchronously once EOF is signalled.
+static int JsonDecodeAsyncContinuation(lua_State* L, int status, lua_KContext ctx) {
+	LuaStream* accum = lua_toluastream(L, 3);
+
+	if (lua_type(L, -1) == LUA_TSTRING) {
+		size_t len = 0;
+		const char* data = lua_tolstring(L, -1, &len);
+		if (len > 0)
+			accum->vtbl->write(accum->native, (const BYTE*)data, len);
+		lua_pop(L, 1);
+		lua_pushvalue(L, 2);
+		lua_getfield(L, -1, "Read");
+		lua_insert(L, -2);
+		lua_callk(L, 1, 1, ctx, JsonDecodeAsyncContinuation);
+		return JsonDecodeAsyncContinuation(L, LUA_OK, ctx);
+	}
+
+	lua_pop(L, 1);  // pop nil / false — EOF
+
+	lua_Integer total = accum->vtbl->getlen(accum->native);
+	if (total <= 0) {
+		lua_pushnil(L);
+		return 1;
+	}
+	accum->vtbl->setpos(accum->native, 0);
+	accum->vtbl->read(accum->native, L, (size_t)total);
+	if (lua_type(L, -1) != LUA_TSTRING) {
+		lua_pop(L, 1);
+		lua_pushnil(L);
+		return 1;
+	}
+
+	size_t srcLen = 0;
+	const char* src = lua_tolstring(L, -1, &srcLen);
+	LuaJson* j = lua_json_check(L, 1);
+	dec_reset(j, src, srcLen);
+	dec_value(j, L);  // pushes decoded value; accumulated string stays rooted below it
+	return 1;
+}
 
 int lua_json_decode(lua_State* L) {
 	LuaJson*    j = lua_json_check(L, 1);
 	size_t      len;
 	const char* s;
+
+	if (lua_isstream(L, 2)) {
+		LuaStream* st = lua_toluastream(L, 2);
+		if (!(st->Caps & STREAM_CAP_READ)) {
+			lua_pushnil(L);
+			lua_pushstring(L, "stream is not readable");
+			return 2;
+		}
+		if (st->vtbl && st->vtbl->hasdata) {
+			// Async stream: accumulate chunks via lua_callk (may yield), then parse.
+			lua_pushluastream(L);           // L[3] = accumulator
+			lua_pushvalue(L, 2);
+			lua_getfield(L, -1, "Read");
+			lua_insert(L, -2);
+			lua_callk(L, 1, 1, 0, JsonDecodeAsyncContinuation);
+			return JsonDecodeAsyncContinuation(L, LUA_OK, 0);
+		}
+		// Sync stream: pull 4 KiB chunks directly without yielding.
+		lua_pushlightuserdata(L, st);
+		lua_pushcclosure(L, json_stream_chunk_reader, 1);
+		dec_reset(j, NULL, 0);
+		j->chunkFnIdx = lua_gettop(L);
+		j->chunkL     = L;
+		dec_value(j, L);
+		j->chunkFnIdx = 0;
+		j->chunkL     = NULL;
+		return 1;
+	}
 
 	if (lua_isfunction(L, 2)) {
 		dec_reset(j, NULL, 0);
@@ -656,8 +731,8 @@ int lua_json_encode(lua_State* L) {
 // Stream I/O
 // =============================================================================
 
-// C closure used by DecodeIntoStream: called repeatedly by the chunked decoder.
-// Upvalue 1: LuaStream* (lightuserdata).
+// C closure used by the sync-stream decode path: called repeatedly by the chunked
+// decoder.  Upvalue 1: LuaStream* (lightuserdata).
 // Returns a non-empty string for each 4 KiB chunk, or nil on EOF.
 static int json_stream_chunk_reader(lua_State* L) {
 	LuaStream* st = (LuaStream*)lua_touserdata(L, lua_upvalueindex(1));
@@ -701,7 +776,9 @@ int lua_json_encode_into_stream(lua_State* L) {
 }
 
 // json:DecodeIntoStream(stream)
-// Decodes JSON from a stream incrementally, pulling 4 KiB at a time.
+// Decodes one JSON value from a stream.  For seekable sync streams, seeks back
+// past any over-read bytes so consecutive calls each get one value.  Async
+// streams use the same accumulate-then-parse path as json:Decode(stream).
 int lua_json_decode_into_stream(lua_State* L) {
 	LuaJson*   j  = lua_json_check(L, 1);
 	int streamIdx = 2;
@@ -716,7 +793,18 @@ int lua_json_decode_into_stream(lua_State* L) {
 		return 2;
 	}
 
-	// Push a chunk-reader closure and wire it into the instance's decode state.
+	if (st->vtbl && st->vtbl->hasdata) {
+		// Async stream: same accumulate-via-lua_callk path as lua_json_decode.
+		// Seekback is not applicable — async streams are never seekable.
+		lua_pushluastream(L);           // L[3] = accumulator
+		lua_pushvalue(L, 2);
+		lua_getfield(L, -1, "Read");
+		lua_insert(L, -2);
+		lua_callk(L, 1, 1, 0, JsonDecodeAsyncContinuation);
+		return JsonDecodeAsyncContinuation(L, LUA_OK, 0);
+	}
+
+	// Sync stream: pull 4 KiB chunks directly without yielding.
 	lua_pushlightuserdata(L, st);
 	lua_pushcclosure(L, json_stream_chunk_reader, 1);
 	int fnIdx = lua_gettop(L);
@@ -731,9 +819,8 @@ int lua_json_decode_into_stream(lua_State* L) {
 	j->chunkL     = NULL;
 
 	// The chunk reader fetches 4 KiB at a time, so it may have read bytes that
-	// belong to the NEXT value in the stream. Seek the backend back by however
-	// many bytes were pre-fetched but not consumed by the decoder, so that
-	// consecutive DecodeIntoStream calls on a packed stream each get one value.
+	// belong to the NEXT value in the stream.  Seek back past the unconsumed bytes
+	// so consecutive DecodeIntoStream calls each get one value.
 	if (st->Caps & STREAM_CAP_SEEK) {
 		size_t unconsumed = (j->srcLen - j->srcPos) + (size_t)j->ungetLen;
 		if (unconsumed > 0) {

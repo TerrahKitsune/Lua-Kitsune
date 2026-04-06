@@ -1042,9 +1042,11 @@ int luaopen_http(lua_State* L) {
 
 ## Changes to Existing Files
 
-### `KitsuneEngine.cpp`
+### `KitsuneEngine.cpp` — ✅ Complete (T2)
 
-1. Replace the `#ifdef _WIN32` block for Http includes and registration with `#ifdef KITSUNE_HTTP`:
+All `#ifdef KITSUNE_HTTP` guards, `curl_global_init`/`curl_global_cleanup` calls, and the OpenSSL manual init/cleanup removal are in place. For reference, the completed changes:
+
+1. The `#ifdef _WIN32` block for Http includes and registration was replaced with `#ifdef KITSUNE_HTTP`:
 
 ```cpp
 #ifdef KITSUNE_HTTP
@@ -1103,9 +1105,9 @@ GetHttpBuffer(0);
 
 3. WSAStartup / WSACleanup: keep these — other modules (Kafka, FTP, Redis) still need WinSock on Windows.
 
-### `CMakeLists.txt`
+### `CMakeLists.txt` — ✅ Complete (T1)
 
-Add after the existing optional-module blocks:
+The `KITSUNE_HTTP` option is already in place:
 
 ```cmake
 # ── Optional HTTP + WebSocket support (libcurl) ───────────────────────────────
@@ -1641,11 +1643,11 @@ static const LuaStreamVtable g_wsStreamVtable = {
 `LUAWEBSOCKET` sub-metatable (not on `STREAM`). It calls `curl_ws_send` with
 `CURLWS_BINARY` instead of `CURLWS_TEXT`.
 
-### Impact on `stream.cpp` / existing code
+### Impact on `stream.cpp` / existing code — ✅ Complete (T0)
 
 | Change | Scope |
 |---|---|
-| `STREAM_CAP_ASYNC` **removed** — async signalled by `vtbl->hasdata != NULL` instead | `stream.h` — no cap flag needed; cleaner vtable |
+| `STREAM_CAP_ASYNC` **removed**
 | `read` signature changed to `int (*read)(native, L, len)` — no `outLen`, no pointer return | `stream.h` + all backends — callers use `lua_tolstring` for C pointer when needed |
 | `close` gains `lua_State* L` parameter | `stream.h` + all backends — existing backends ignore it |
 | `readasync` and `infoasync` removed — `read` and `info` handle async via `lua_yieldk` | `stream.h` — vtable is smaller and simpler |
@@ -1667,6 +1669,180 @@ entirely the standard stream `Read` / `GetInfo` API.
 
 `client:Request()` (buffered, returns result table via coroutine) is unchanged.
 Only `client:Stream()` and `client:Connect()` return streams.
+
+---
+
+## Tasks
+
+**Status:** ✅ Done | 🔲 Not started
+
+Tasks are ordered by dependency. Each is independently completable and verifiable.
+
+---
+
+### ✅ T0 — Stream infrastructure (`stream.h` / `stream.cpp`)
+
+All stream-layer changes required by this plan are **complete**:
+
+- `LuaStreamVtable`: new `read` signature `int(*)(void*, lua_State*, size_t)`, `close` gains `lua_State* L`, `hasdata` slot added, `readasync`/`infoasync` removed.
+- `GetStreamInfo`: `vtbl->hasdata != NULL` selects 1-value (async) vs 2-value (sync) return.
+- `ReadLuaStream`: dispatches through `vtbl->read` for vtable streams; `lua_callk` for fn backends so `Sleep()` inside a READ handler yields correctly without hitting "attempt to yield across a C-call boundary".
+- `HasDataLuaStream`: 3-way dispatch — vtbl→hasdata for vtable streams, len−pos for sync streams, `STREAM_OP_HASDATA = 8` for fn backends.
+- `ReadAllStream`: yields-via-`Read()` accumulation; returns a seekable in-memory stream.
+- `Stream.CreateChunked(chunks)` (public Lua API): creates a read-only async stream from an array of string chunks. Each `Read()` yields once before delivering the next chunk, simulating a network socket. Used by all async stream tests (`Stream_Compress_AsyncSource_RoundTrip`, `CSV_Read_AsyncStream_*`, `Stream_FunctionBackend_SleepInReadHandler_YieldsCorrectly`, etc.).
+- `CompressStream` / `DecompressStream`: unified `lua_callk` path; sync backends complete inline, async backends yield cooperatively.
+- Opcode values confirmed from `stream.h`: `STREAM_OP_CURPOS=4`, `STREAM_OP_LEN=5`, `STREAM_OP_SETPOS=6`, `STREAM_OP_INFO=7`, `STREAM_OP_HASDATA=8`. No `STREAM_CAP_PEEK` flag — `PeekByte` is gated on `CAP_READ | CAP_SEEK`.
+
+---
+
+### ✅ T1 — `CMakeLists.txt` — `KITSUNE_HTTP` option
+
+The `KITSUNE_HTTP` cmake option, `find_package(CURL 7.86.0 REQUIRED)`, `target_sources`, `target_compile_definitions`, and `target_link_libraries` are all in `CMakeLists.txt`.
+
+---
+
+### ✅ T2 — `KitsuneEngine.cpp` guards
+
+All `#ifdef KITSUNE_HTTP` guards for include, `curl_global_init(CURL_GLOBAL_DEFAULT)`, module registration (`luaopen_http`), and `curl_global_cleanup()` are in place. The OpenSSL manual init/cleanup block is removed.
+
+---
+
+### 🔲 T3 — Create `HttpCurl.h`
+
+**File:** `HttpCurl.h` (new). Define everything the implementation and callers need:
+
+- Macros: `LUAHTTPCLIENT`, `LUAHTTPREQUEST`, `LUAWEBSOCKET`
+- `ChunkNode` (linked-list node for the streaming chunk queue)
+- `LuaHttpClient` struct
+- `LuaHttpRequest` struct (body buffer, stream I/O refs, header arrays, status, `errorBuf`)
+- `LuaHttpStreamNative` struct (chunk queue, header state, `done` flag)
+- `LuaWebSocketNative` struct (easy handle, frame metadata cache)
+- `int luaopen_http(lua_State* L)` declaration
+
+Reference: **`HttpCurl.h`** section and struct definitions in this plan.
+
+---
+
+### 🔲 T4 — `HttpCurl.cpp` — Module scaffolding + client configuration
+
+**4a** — CURLM\* lifetime and `luaopen_http`: `g_curlm_key`/`g_sentinel_key` keys, `curl_multi_init` → registry, sentinel `__gc`, all three metatables (wchar pattern), `http_module` table.  
+**4b** — `Http.UrlEncode` / `Http.UrlDecode`: port from existing `Http.cpp`.  
+**4c** — `http_create`: allocate `LuaHttpClient` with defaults (`followRedirects=true`, `verifySsl=true`, `timeoutMs=0`, `defaultHeadersRef=LUA_NOREF`).  
+**4d** — `client_set_timeout`, `client_set_default_header`, `client_set_follow_redirects`, `client_set_verify_ssl`.  
+**4e** — `luahttpclient_gc`: unref `defaultHeadersRef`.  
+**4f** — `luahttpclient_tostring`.
+
+---
+
+### 🔲 T5 — `HttpCurl.cpp` — Buffered request (`client:Request()`)
+
+**5a** — `WriteBodyCallback`: route to `req->streamOutput` vtable or heap accumulation.  
+**5b** — `ReadBodyCallback`: read from `req->streamInput` via `StreamRead`; use `req->callbackL`.  
+**5c** — `WriteHeaderCallback`: parse status line into `req->statusText`; parse `Key: Value\r\n` into parallel arrays.  
+**5d** — `HttpRequestContinuation`: `curl_multi_perform` loop; set/clear `req->callbackL` around each call; yield or return `BuildHttpResultTable`.  
+**5e** — `BuildHttpResultTable`: unref stream registry anchors; build `{Code, Status, Contents, Headers}`; omit `Contents` when `streamOutput` is set.  
+**5f** — `client_request`: parse args, configure easy handle, anchor stream refs in registry, create coroutine, `lua_resume` to prime continuation, return thread.  
+**5g** — `luahttprequest_gc`: `curl_multi_remove_handle` if `addedToMulti`; `curl_easy_cleanup`; free body buffer and header arrays; unref stream refs.
+
+Reference: **`client:Request()` setup** and **`HttpRequestContinuation`** sections in this plan.
+
+---
+
+### 🔲 T6 — `HttpCurl.cpp` — Streaming request (`client:Stream()`)
+
+Returns a `LuaStream*` under `STREAM` metatable backed by `g_httpStreamVtable`.
+
+**6a** — `WriteStreamBodyCallback`: allocate `ChunkNode`, append to `chunkHead`/`chunkTail`.  
+**6b** — `WriteStreamHeaderCallback`: mirror of `WriteHeaderCallback`; set `h->headersComplete` on blank separator line.  
+**6c** — `http_stream_read` / `HttpStreamReadContinuation`: `curl_multi_perform` → drain `CURLMSG_DONE` → deliver oldest chunk or yield; push `nil` at EOF.  
+**6d** — `http_stream_info` / `HttpStreamInfoContinuation`: yield until `headersComplete || done` → push `{Code, Status, Headers}`.  
+**6e** — `http_stream_hasdata`: `curl_multi_perform`; drain `CURLMSG_DONE`; return 1 if `chunkHead != NULL || done`.  
+**6f** — `http_stream_close`: remove from multi, cleanup, free chunk queue and headers.  
+**6g** — `g_httpStreamVtable`: static const vtable.  
+**6h** — `client_stream`: allocate `LuaHttpStreamNative`, configure curl, `curl_multi_add_handle`, push `LuaStream*` with `Caps = STREAM_CAP_READ`, `vtbl = &g_httpStreamVtable`.
+
+Reference: **`ChunkNode`**, **`http_stream_read`**, **`http_stream_info`**, **`http_stream_hasdata`** sections in this plan.
+
+---
+
+### 🔲 T7 — `HttpCurl.cpp` — WebSocket (`client:Connect()`)
+
+Returns a `LuaStream*` under `LUAWEBSOCKET` metatable backed by `g_wsStreamVtable`.
+
+**7a** — `ws_stream_read` / `WsReadContinuation`: `curl_ws_recv`; cache `meta->flags`/`meta->bytesleft`; yield on `CURLE_AGAIN`; push `nil` on close/error.  
+**7b** — `ws_stream_write` (`ws:Write(data)`): `curl_ws_send` with `CURLWS_TEXT`.  
+**7c** — `ws_write_binary` (`ws:WriteBinary(data)`): `curl_ws_send` with `CURLWS_BINARY`; registered on `LUAWEBSOCKET` only.  
+**7d** — `ws_stream_info` (`ws:GetInfo()`): synchronous; push `{Binary, Opcode, BytesLeft}` from cached `lastFrameFlags`/`lastBytesLeft`.  
+**7e** — `ws_stream_hasdata`: `curl_multi_perform`; drain DONE; return 1 when `connected && !closed`.  
+**7f** — `ws_stream_close` (`ws:Close()`): send `CURLWS_CLOSE` frame; `curl_easy_cleanup`.  
+**7g** — `g_wsStreamVtable`: static const vtable.  
+**7h** — `WsConnectContinuation`: `curl_multi_perform` → `CURLMSG_DONE` → set `connected = true`, push ws, return 1; otherwise yield.  
+**7i** — `client_connect`: `CURLOPT_CONNECT_ONLY = 2L`; push `LuaStream*` with `Caps = STREAM_CAP_READ | STREAM_CAP_WRITE`; `lua_yieldk → WsConnectContinuation`.  
+**7j** — `LUAWEBSOCKET` metatable: `__index` sub-table merges `ws_functions[]` then chains to STREAM module table so all standard stream methods are inherited.  
+**7k** — `luawebsocket_gc`: call `ws_stream_close` if not already closed.
+
+Reference: **WebSocket connect + receive** and **`LuaWebSocketNative` struct** sections in this plan.
+
+---
+
+### 🔲 T8 — `stream.cpp` — `lua_isstream` WebSocket support
+
+Update `lua_isstream` to accept both `STREAM` and `LUAWEBSOCKET` metatables. **Depends on T3** (needs `LUAWEBSOCKET` constant from `HttpCurl.h`). Reference: **T8** implementation snippet in this plan.
+
+---
+
+### 🔲 T9 — Delete old HTTP files
+
+| File | Replacement |
+|---|---|
+| `Http.h` | `HttpCurl.h` |
+| `Http.cpp` | `HttpCurl.cpp` |
+| `HttpCoroutine.cpp` | `HttpCurl.cpp` |
+| `HttpMain.h` | `HttpCurl.h` |
+| `HttpMain.cpp` | `HttpCurl.cpp` |
+
+---
+
+### 🔲 T10 — Update `KitsuneEngine.vcxproj`
+
+Remove old HTTP `ClCompile`/`ClInclude` entries, add `HttpCurl.cpp`/`HttpCurl.h`, add curl include path and `libcurl.lib`, add `KITSUNE_HTTP` preprocessor definition. See **Changes to Existing Files → `Kitsune.vcxproj`** above for full details.
+
+---
+
+### 🔲 T11 — OpenSSL audit (Windows-only, deferred)
+
+Grep `LuaFTP*.cpp`, `LuaClient.cpp`, `LuaServer.cpp`, `networking.cpp`, `lua_misc.cpp` for direct `SSL_`, `EVP_`, `ERR_` calls before removing OpenSSL from the build. Current finding: `networking.h` provides `SSL*` types for FTP and Server/Client — OpenSSL cannot yet be removed.
+
+---
+
+### 🔲 T12 — Update Lua tests (`tests/http.lua`)
+
+Rewrite using the new client API. Minimum coverage:
+
+| Test | API path |
+|---|---|
+| Simple GET, check `result.Code` and `result.Contents` | `client:Request("GET", url)` |
+| POST with JSON body and `Content-Type` header | `client:Request("POST", url, body, headers)` |
+| Timeout triggers transport error (no `result.Code`) | `client:SetTimeout(1)` + unreachable host |
+| `Http.UrlEncode` / `Http.UrlDecode` round-trip | kept from old tests |
+| Streaming GET, `stream:GetInfo()`, `stream:Read()` loop | `client:Stream("GET", url)` |
+| WebSocket connect + echo frame | `client:Connect("wss://…")` (skip if no test server) |
+| `client:Request()` with `outStream` — `result.Contents` is nil | `Stream.Open` sink |
+
+---
+
+### Suggested implementation order
+
+```
+T3 → T4 → T5 → T6 → T7 → T8 → T9 → T10 → T12
+								  ↑
+							   T11 (deferred; unblocks OpenSSL removal later)
+```
+
+T3 must come first (header required by all other tasks).  
+T8 depends on T3 (needs `LUAWEBSOCKET` constant).  
+T9 and T10 can be done together once T4–T7 compile cleanly.  
+T12 requires the engine to build with `KITSUNE_HTTP` and a reachable test server.
 
 ---
 

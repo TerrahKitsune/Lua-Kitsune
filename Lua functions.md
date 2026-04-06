@@ -714,14 +714,17 @@ data Archive:Read(opt buffer)
 ```lua
 Stream Stream.Create(opt string)
 Stream Stream.Create(backendfunction)
-Stream Stream.Open(filename)
+Stream Stream.Open(filename, mode)
 Stream Stream.OpenSharedMemory(size)
+Stream Stream.CreateChunked(chunks)
 ```
 
 - **No argument** — creates a new empty in-memory stream.
 - **String argument** — creates an in-memory stream pre-loaded with the string contents, with the position reset to 0.
 - **Function argument** — creates a stream backed by the provided Lua function. The function is called with an opcode as its first argument and must handle all `STREAM_OP_*` operations it wishes to support. It must return the capability bitmask when called with `STREAM_OP_OPEN` (0).
+- **`Open(filename, mode)`** — opens a file as a stream. `mode` follows standard C `fopen` conventions: `"rb"`, `"wb"`, `"r"`, `"w"`, `"ab"`, etc. Raises an error if the file cannot be opened.
 - **`OpenSharedMemory(size)`** — creates a new outbound shared-memory stream of the given byte size. The block is owned by Lua's GC; pass it to a C# host via `KITSUNE_TSTREAM`.
+- **`CreateChunked(chunks)`** — creates a read-only async stream from an array of strings. Each `Read()` call yields the coroutine once before delivering the next chunk, simulating asynchronous data arrival (e.g. a network socket). Returns `nil` at EOF. Requires a coroutine context — `pos()` always returns `nil` (no seek capability) and `len()` returns the size of the currently-buffered chunk (0 before the first yield, non-zero after).
 
 ### Custom Backend Functions
 
@@ -732,42 +735,44 @@ A backend function is called as `backend(opcode, arg)` whenever the stream engin
 |-------|----------|-----|-----------------|
 | 0 | `STREAM_OP_OPEN` | — | Integer capability bitmask (`STREAM_CAP_*`) |
 | 1 | `STREAM_OP_CLOSE` | — | `true` or `false [, errmsg]` |
-| 2 | `STREAM_OP_READ` | `len` (0 = read all remaining) | String of up to `len` bytes, or `false [, errmsg]` on error / end of stream |
+| 2 | `STREAM_OP_READ` | `len` (0 = read all remaining) | String of up to `len` bytes, or `nil` / `false [, errmsg]` at EOF / on error |
 | 3 | `STREAM_OP_WRITE` | `data` (string) | `true` or `false [, errmsg]` |
-| 5 | `STREAM_OP_CURPOS` | — | Integer: current byte position |
-| 6 | `STREAM_OP_LEN` | — | Integer: total byte length |
-| 7 | `STREAM_OP_SETPOS` | `pos` (integer) | `true` or `false [, errmsg]` |
-| 8 | `STREAM_OP_INFO` | — | Any value — returned as `backendInfo` from `GetInfo()` |
+| 4 | `STREAM_OP_CURPOS` | — | Integer: current byte position |
+| 5 | `STREAM_OP_LEN` | — | Integer: total byte length |
+| 6 | `STREAM_OP_SETPOS` | `pos` (integer) | `true` or `false [, errmsg]` |
+| 7 | `STREAM_OP_INFO` | — | Any value — returned as `backendInfo` from `GetInfo()` |
+| 8 | `STREAM_OP_HASDATA` | — | Integer bytes ready (>1), `true` (ready, count unknown), or `false`/`nil` (nothing available yet) |
 
 **Capability flags advertised via `STREAM_OP_OPEN`:**
 | Value | Constant | Enables |
 |-------|----------|---------|
 | 1 | `STREAM_CAP_READ` | `Read`, `ReadByte`, `ReadUtf8`, typed reads, `Compress`/`Decompress` source |
 | 2 | `STREAM_CAP_WRITE` | `Write`, `WriteByte`, `WriteUtf8`, typed writes, `Compress`/`Decompress` destination |
-| 4 | `STREAM_CAP_SEEK` | `Seek`, `pos`, `SetByte` with position |
-| 8 | `STREAM_CAP_PEEK` | `PeekByte` |
+| 4 | `STREAM_CAP_SEEK` | `Seek`, `pos`, `len`, `SetByte` with position, `PeekByte` (requires both `CAP_READ` and `CAP_SEEK`) |
+
+> **Note:** There is no `STREAM_CAP_PEEK` flag. `PeekByte` is gated on `CAP_READ | CAP_SEEK` — any seekable readable stream supports it via the save-pos / read / restore-pos path.
 
 **Example — read/write in-memory backend:**
 
 ```lua
 local function makeStream()
     local OPEN, CLOSE, READ, WRITE = 0, 1, 2, 3
-    local CURPOS, LEN, SETPOS, INFO = 5, 6, 7, 8
-    local CAP_READ, CAP_WRITE, CAP_SEEK, CAP_PEEK = 1, 2, 4, 8
+    local CURPOS, LEN, SETPOS, INFO = 4, 5, 6, 7
+    local CAP_READ, CAP_WRITE, CAP_SEEK = 1, 2, 4
 
     local buf = ''
     local pos = 0
 
     return Stream.Create(function(op, arg)
         if op == OPEN then
-            return CAP_READ + CAP_WRITE + CAP_SEEK + CAP_PEEK
+            return CAP_READ + CAP_WRITE + CAP_SEEK
 
         elseif op == CLOSE then
             buf = nil
             return true
 
         elseif op == READ then
-            if pos >= #buf then return '' end
+            if pos >= #buf then return nil end
             local n = (arg == 0) and (#buf - pos) or arg
             local chunk = buf:sub(pos + 1, pos + n)
             pos = pos + #chunk
@@ -813,24 +818,30 @@ nil Stream:ReadFromFile(filename, pos, len)
 ### Read/Write Operations
 
 ```lua
-bool, err Stream:WriteByte(byte)
-byte Stream:ReadByte()
-byte Stream:PeekByte(opt pos)
-void Stream:SetByte(byte, position)
-int Stream:Write(string or Wchar, opt size)
-bool Stream:WriteUtf8(str)
+bool, err   Stream:WriteByte(byte)
+byte        Stream:ReadByte()
+byte        Stream:PeekByte(opt pos)
+void        Stream:SetByte(byte, opt position)
+int         Stream:Write(string or Wchar, opt size)
+bool        Stream:WriteUtf8(str)
 string, int Stream:ReadUtf8()
-Wchar Stream:ReadWchar(opt n)
-int Stream:Buffer(str)
-void Stream:Shrink()
-string Stream:Read(opt length)
-string Stream:ReadUntil(opt tofind)
-pos Stream:IndexOf(string or byte)
+Wchar       Stream:ReadWchar(opt n)
+int         Stream:Buffer(str)
+void        Stream:Shrink()
+string      Stream:Read(opt length)
+string      Stream:ReadUntil(opt tofind)
+pos         Stream:IndexOf(string or byte)
+bool/int    Stream:HasData()
+Stream      Stream:ToSharedMemory(opt dispose)
+nil         Stream:Close()
 ```
 
 - **`Write`** accepts a `string`, `Wchar`, `number`, or `boolean`. A `Wchar` is written as raw UTF-16 LE bytes (2 bytes per code unit); use `WriteUtf8` instead to write its UTF-8 encoding. The optional `size` argument limits the number of bytes written. Returns the number of bytes written, or `0` on failure.
 - **`WriteUtf8`** converts a Lua string from Latin-1/byte values to proper UTF-8 before writing.
 - **`ReadWchar`** reads `n` UTF-16 LE code units (each 2 bytes) from the current position and returns a `Wchar`. If `n` is omitted or `nil`, reads all remaining bytes. Returns `nil` if the stream is not readable or there are no complete code units available.
+- **`HasData`** — non-blocking availability check. For sync (seekable) streams returns the number of bytes remaining as an integer, or `false` at EOF. For async streams (vtable with `hasdata`) returns `true` if data is ready in the buffer, `false` if nothing is available yet (more may arrive later — `false` is **not** EOF for async streams). For fn backends dispatches `STREAM_OP_HASDATA`; returns `nil`/`false` if the backend has no handler. **Never yields.**
+- **`ToSharedMemory(opt dispose)`** — snapshots the stream contents into a new outbound shared-memory block and returns it as a new `Stream`. The source must be both readable and seekable. If `dispose` is `true`, the source stream's caps are zeroed after the snapshot so it can no longer be used. Raises an error if the source is not readable+seekable.
+- **`Close`** — explicitly frees the stream's resources and marks it unusable. Called automatically by the GC; safe to call early when resources should be released promptly.
 
 ### Stream Info
 
@@ -855,18 +866,6 @@ void Stream:Seek(opt pos)
 
 In-memory streams created with `Stream.Create()` have all three flags set (`Caps = 7`).
 
-**Custom backend operation codes** (passed as `op` to `Stream.Create(fn)`):
-| Value | Operation | `arg` | Return |
-|-------|-----------|-------|--------|
-| 0 | Open | — | integer `Caps` bitmask |
-| 1 | Close | — | `true` |
-| 2 | Read | byte count (0 = all) | string, or `""` / `false` on EOF |
-| 3 | Write | string data | `true` |
-| 4 | CurPos | — | integer position |
-| 5 | Len | — | integer total length |
-| 6 | SetPos | integer position | `true` |
-| 7 | Info | — | backend-defined table |
-
 ### Compression
 
 ```lua
@@ -874,11 +873,14 @@ Stream          Stream:Compress(opt level, opt deststream)
 Stream          Stream:Decompress(opt level, opt deststream)
 nil, errmsg     Stream:Compress(...)   -- on failure
 nil, errmsg     Stream:Decompress(...) -- on failure
+Stream          Stream.Compress(source, opt level, opt deststream)
+Stream          Stream.Decompress(source, opt level, opt deststream)
 ```
 
-Both functions work on **Windows and Linux**.
+Both functions work on **Windows and Linux** and accept **sync or async** source streams. Both read the source from position **0** in 64 KB chunks, yielding cooperatively for async sources, and write the result to the destination.
 
-Both read the source stream from position **0** in 64 KB chunks and write the result to the destination.
+- The instance form (`stream:Compress()`) uses the stream itself as the source.
+- The static module form (`Stream.Compress(source)`) accepts any readable stream — including async streams created with `Stream.CreateChunked` or a custom function backend.
 - If `deststream` is omitted or `nil`, a new in-memory stream is created, written to, rewound to position 0, and returned.
 - If `deststream` is provided it is written to **at its current position** and returned as-is (no automatic seek).
 - On failure (non-readable source, non-writable destination, or internal error) both return `nil, errmsg`.
