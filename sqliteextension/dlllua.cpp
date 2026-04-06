@@ -10,7 +10,9 @@
 #include "../LuaCsvMain.h"
 #include "../LuaFileSystemMain.h"
 #include "../LuaFTPMain.h"
-#include "../HttpMain.h"
+#ifdef KITSUNE_HTTP
+#include "../HttpCurlMain.h"
+#endif
 #include "../luakafkamain.h"
 #include "../MD5Main.h"
 #include "../LuaMutexMain.h"
@@ -70,8 +72,10 @@ lua_State* OpenLuaState(lua_Alloc memoryAllocator) {
 	lua_setglobal(L, "FileSystem");
 	luaopen_ftp(L);
 	lua_setglobal(L, "FTP");
+	#ifdef KITSUNE_HTTP
 	luaopen_http(L);
 	lua_setglobal(L, "Http");
+#endif
 	luaopen_kafka(L);
 	lua_setglobal(L, "Kafka");
 	luaopen_md5(L);

@@ -18,7 +18,7 @@
 #include "platform.h"
 
 #ifdef KITSUNE_HTTP
-#include "HttpCurl.h"
+#include "HttpCurlMain.h"
 #endif
 
 #include "mem.h"
@@ -966,10 +966,7 @@ extern "C" {
 #ifdef KITSUNE_POSTGRES
 		luaopen_postgres(L);     lua_setglobal(L, "Postgres");
 #endif
-		
-#ifdef KITSUNE_HTTP
-		luaopen_http(L);         lua_setglobal(L, "Http");
-#endif
+
 #ifdef _WIN32
 		luaopen_kafka(L);        lua_setglobal(L, "Kafka");
 		luaopen_ftp(L);          lua_setglobal(L, "FTP");
@@ -985,6 +982,9 @@ extern "C" {
 		luaopen_filesystem(L);   lua_setglobal(L, "FileSystem");
 		luaopen_md5(L);          lua_setglobal(L, "MD5");
 		luaopen_stream(L);       lua_setglobal(L, "Stream");
+#ifdef KITSUNE_HTTP
+		luaopen_http(L);         lua_setglobal(L, "Http");
+#endif
 		luaopen_sha256(L);       lua_setglobal(L, "SHA256");
 		luaopen_mutex(L);        lua_setglobal(L, "Mutex");
 		luaopen_json(L);         lua_setglobal(L, "Json");

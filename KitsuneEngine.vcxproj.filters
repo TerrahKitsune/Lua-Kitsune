@@ -479,12 +479,6 @@
     <ClCompile Include="LuaCsvMain.cpp">
       <Filter>LuaCSV</Filter>
     </ClCompile>
-    <ClCompile Include="HttpMain.cpp">
-      <Filter>LuaHTTP</Filter>
-    </ClCompile>
-    <ClCompile Include="Http.cpp">
-      <Filter>LuaHTTP\Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="LuaArchiveMain.cpp">
       <Filter>Archive</Filter>
     </ClCompile>
@@ -496,9 +490,6 @@
     </ClCompile>
     <ClCompile Include="Redis.cpp">
       <Filter>LuaRedis\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="HttpCoroutine.cpp">
-      <Filter>LuaHTTP\Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Bencode.cpp">
       <Filter>Util</Filter>
@@ -652,6 +643,12 @@
     </ClCompile>
     <ClCompile Include="LuaProcess.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="HttpCurlMain.cpp">
+      <Filter>LuaHTTP</Filter>
+    </ClCompile>
+    <ClCompile Include="HttpCurl.cpp">
+      <Filter>LuaHTTP\Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -825,12 +822,6 @@
     </ClInclude>
     <ClInclude Include="LuaCsvMain.h">
       <Filter>LuaCSV</Filter>
-    </ClInclude>
-    <ClInclude Include="HttpMain.h">
-      <Filter>LuaHTTP</Filter>
-    </ClInclude>
-    <ClInclude Include="Http.h">
-      <Filter>LuaHTTP\Header Files</Filter>
     </ClInclude>
     <ClInclude Include="LuaArchiveMain.h">
       <Filter>Archive</Filter>
@@ -1008,6 +999,12 @@
     </ClInclude>
     <ClInclude Include="LuaProcess.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="HttpCurlMain.h">
+      <Filter>LuaHTTP</Filter>
+    </ClInclude>
+    <ClInclude Include="HttpCurl.h">
+      <Filter>LuaHTTP\Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

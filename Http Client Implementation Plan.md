@@ -1707,7 +1707,7 @@ All `#ifdef KITSUNE_HTTP` guards for include, `curl_global_init(CURL_GLOBAL_DEFA
 
 ---
 
-### 🔲 T3 — Create `HttpCurl.h`
+### ✅ T3 — Create `HttpCurl.h`
 
 **File:** `HttpCurl.h` (new). Define everything the implementation and callers need:
 
@@ -1723,7 +1723,7 @@ Reference: **`HttpCurl.h`** section and struct definitions in this plan.
 
 ---
 
-### 🔲 T4 — `HttpCurl.cpp` — Module scaffolding + client configuration
+### ✅ T4 — `HttpCurl.cpp` — Module scaffolding + client configuration
 
 **4a** — CURLM\* lifetime and `luaopen_http`: `g_curlm_key`/`g_sentinel_key` keys, `curl_multi_init` → registry, sentinel `__gc`, all three metatables (wchar pattern), `http_module` table.  
 **4b** — `Http.UrlEncode` / `Http.UrlDecode`: port from existing `Http.cpp`.  
@@ -1734,7 +1734,7 @@ Reference: **`HttpCurl.h`** section and struct definitions in this plan.
 
 ---
 
-### 🔲 T5 — `HttpCurl.cpp` — Buffered request (`client:Request()`)
+### ✅ T5 — `HttpCurl.cpp` — Buffered request (`client:Request()`)
 
 **5a** — `WriteBodyCallback`: route to `req->streamOutput` vtable or heap accumulation.  
 **5b** — `ReadBodyCallback`: read from `req->streamInput` via `StreamRead`; use `req->callbackL`.  
@@ -1748,7 +1748,7 @@ Reference: **`client:Request()` setup** and **`HttpRequestContinuation`** sectio
 
 ---
 
-### 🔲 T6 — `HttpCurl.cpp` — Streaming request (`client:Stream()`)
+### ✅ T6 — `HttpCurl.cpp` — Streaming request (`client:Stream()`)
 
 Returns a `LuaStream*` under `STREAM` metatable backed by `g_httpStreamVtable`.
 
@@ -1765,7 +1765,7 @@ Reference: **`ChunkNode`**, **`http_stream_read`**, **`http_stream_info`**, **`h
 
 ---
 
-### 🔲 T7 — `HttpCurl.cpp` — WebSocket (`client:Connect()`)
+### ✅ T7 — `HttpCurl.cpp` — WebSocket (`client:Connect()`)
 
 Returns a `LuaStream*` under `LUAWEBSOCKET` metatable backed by `g_wsStreamVtable`.
 
@@ -1785,13 +1785,13 @@ Reference: **WebSocket connect + receive** and **`LuaWebSocketNative` struct** s
 
 ---
 
-### 🔲 T8 — `stream.cpp` — `lua_isstream` WebSocket support
+### ✅ T8 — `stream.cpp` — `lua_isstream` WebSocket support
 
 Update `lua_isstream` to accept both `STREAM` and `LUAWEBSOCKET` metatables. **Depends on T3** (needs `LUAWEBSOCKET` constant from `HttpCurl.h`). Reference: **T8** implementation snippet in this plan.
 
 ---
 
-### 🔲 T9 — Delete old HTTP files
+### ✅ T9 — Delete old HTTP files
 
 | File | Replacement |
 |---|---|
@@ -1803,7 +1803,7 @@ Update `lua_isstream` to accept both `STREAM` and `LUAWEBSOCKET` metatables. **D
 
 ---
 
-### 🔲 T10 — Update `KitsuneEngine.vcxproj`
+### ✅ T10 — Update `KitsuneEngine.vcxproj`
 
 Remove old HTTP `ClCompile`/`ClInclude` entries, add `HttpCurl.cpp`/`HttpCurl.h`, add curl include path and `libcurl.lib`, add `KITSUNE_HTTP` preprocessor definition. See **Changes to Existing Files → `Kitsune.vcxproj`** above for full details.
 
@@ -1815,7 +1815,7 @@ Grep `LuaFTP*.cpp`, `LuaClient.cpp`, `LuaServer.cpp`, `networking.cpp`, `lua_mis
 
 ---
 
-### 🔲 T12 — Update Lua tests (`tests/http.lua`)
+### ✅ T12 — Update Lua tests (`tests/http.lua`)
 
 Rewrite using the new client API. Minimum coverage:
 

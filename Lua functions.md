@@ -1210,13 +1210,120 @@ nil ImguiDraw:IsMouseDoubleClicked(opt mousebutton)
 
 ## HTTP
 
+The `Http` global provides a libcurl-backed HTTP and WebSocket client. Available only when compiled with `KITSUNE_HTTP`.
+
+### Creation and utilities
+
 ```lua
-Http Http.Start(method, url, content, headers, opt usehttp1.0)
-nil Http:SetTimeout(timeout)
-code, ok, contents, header Http:GetResult()
-IsRunning, status, runtime, recv, send Http:GetStatus()
-file Http:GetRaw()
-bool Http:Wait(opt timeout)
+HttpClient Http.Create()
+string     Http.UrlEncode(str)
+string     Http.UrlDecode(str)
+```
+
+| Function | Description |
+|----------|-------------|
+| `Create` | Create a new HTTP client |
+| `UrlEncode` | Percent-encode a string; unreserved characters (`A–Z a–z 0–9 - _ . ~`) pass through unchanged |
+| `UrlDecode` | Decode a percent-encoded string; `+` is decoded as a space |
+
+### Client configuration
+
+```lua
+nil client:SetTimeout(ms)
+nil client:SetFollowRedirects(bool)
+nil client:SetVerifySSL(bool)
+nil client:SetDefaultHeader(name, value)
+nil client:SetBinary(bool)
+```
+
+| Function | Description |
+|----------|-------------|
+| `SetTimeout` | Request timeout in milliseconds. `0` = no timeout (default) |
+| `SetFollowRedirects` | Follow HTTP redirects. Default `true` |
+| `SetVerifySSL` | Verify SSL certificates. Default `true` |
+| `SetDefaultHeader` | Add a header sent with every request on this client |
+| `SetBinary` | When `true`, `Write` calls on WebSocket connections from this client send binary frames instead of text frames. Default `false` |
+
+### Buffered request
+
+```lua
+coroutine, errmsg client:Request(method, url, opt body, opt headers, opt outStream)
+```
+
+Returns a coroutine immediately. Drive it with `coroutine.resume` until a non-nil result table is returned. `body` is an optional string. `headers` is an optional per-request header table. `outStream` is an optional writable `Stream`; when provided the response body is written there and `Contents` in the result is `nil`.
+
+**Result table:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `Code` | integer or nil | HTTP status code; `nil` on transport error |
+| `Status` | string | Status text (e.g. `"OK"`) or transport error message |
+| `Contents` | string or nil | Response body; `nil` when `outStream` was provided |
+| `Headers` | table | Response headers keyed by header name |
+
+### Streaming request
+
+```lua
+Stream, errmsg client:Stream(method, url, opt body, opt headers)
+```
+
+Returns an async read-only `Stream` and yields the calling coroutine until response headers have arrived. Call `stream:GetInfo()` for metadata, then `stream:Read()` in a loop to receive body chunks. Must be driven from inside a coroutine.
+
+`stream:GetInfo()` returns:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `Code` | integer | HTTP status code |
+| `Status` | string | Status text |
+| `Headers` | table | Response headers keyed by header name |
+| `Url` | string | Effective URL after any redirects |
+
+### WebSocket connection
+
+```lua
+Stream, errmsg client:Connect(url, opt headers)
+```
+
+Connects to a WebSocket endpoint and yields the calling coroutine until the HTTP 101 upgrade completes. Returns an async `Stream`. Must be driven from inside a coroutine.
+
+Binary frame mode is controlled per-client: call `client:SetBinary(true)` before writing to send binary frames; `client:SetBinary(false)` to switch back to text frames (the default).
+
+`ws:GetInfo()` returns metadata about the **last received** frame:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `Binary` | boolean | `true` if the last received frame was binary |
+| `Opcode` | integer | WebSocket opcode (1 = text, 2 = binary, 8 = close, 9 = ping, 10 = pong) |
+| `BytesLeft` | integer | Bytes remaining for fragmented frames; `0` for a complete frame |
+
+### Examples
+
+```lua
+-- Buffered GET
+local client = Http.Create()
+client:SetTimeout(8000)
+local co = client:Request('GET', 'https://httpbin.org/get')
+local ok, result
+repeat ok, result = coroutine.resume(co) until result ~= nil
+print(result.Code, result.Contents)
+
+-- Streaming GET (must run inside a coroutine)
+local stream = client:Stream('GET', 'https://httpbin.org/get')
+local info = stream:GetInfo()
+local chunk = stream:Read()
+while chunk do io.write(chunk); chunk = stream:Read() end
+stream:Close()
+
+-- WebSocket echo (must run inside a coroutine)
+local ws = client:Connect('wss://echo.websocket.org')
+ws:Read()                         -- drain server welcome frame
+ws:Write('hello')
+print(ws:Read())                  -- "hello"
+
+client:SetBinary(true)
+ws:Write('\xDE\xAD\xBE\xEF')    -- binary frame
+client:SetBinary(false)
+ws:Close()
 ```
 
 ---

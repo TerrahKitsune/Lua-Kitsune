@@ -5,7 +5,6 @@
 #include "dlllua.h"
 #include "../stream.h"
 #include "../luawchar.h"
-#include "../HttpMain.h"
 SQLITE_EXTENSION_INIT1
 int JsonObjectRef = LUA_NOREF;
 int StateRef = LUA_NOREF;
@@ -839,7 +838,6 @@ BOOL APIENTRY DllMain(HMODULE hModule,
 	case DLL_THREAD_DETACH:
 		break;
 	case DLL_PROCESS_DETACH:
-		GetHttpBuffer(0);
 		JsonObjectRef = LUA_NOREF;
 		StateRef = LUA_NOREF;
 		lua_close(GlobalState->L);

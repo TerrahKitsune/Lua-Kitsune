@@ -71,6 +71,11 @@ static const BYTE   HEAP_STREAM_CAPS = STREAM_CAP_READ | STREAM_CAP_WRITE | STRE
 // ── Constructor helpers ───────────────────────────────────────────────────────
 LuaStream* lua_pushluastream(lua_State* L);
 LuaStream* lua_pushluastream(lua_State* L, const BYTE* data, size_t len);
+// Pushes a native-backed LuaStream (STREAM metatable) with the given vtable,
+// native pointer, and capability flags.  Always uses the STREAM metatable so
+// luastream_gc fires the vtable close correctly.
+LuaStream* lua_pushluastream_native(lua_State* L, const LuaStreamVtable* vtbl,
+	void* native, BYTE caps);
 LuaStream* lua_toluastream(lua_State* L, int index);
 int        lua_isstream(lua_State* L, int index);
 
@@ -97,12 +102,8 @@ int NewStream(lua_State* L);
 int OpenFile(lua_State* L);
 int OpenSharedMemory(lua_State* L);
 int ToSharedMemory(lua_State* L);
-// Creates a mock STREAM_CAP_READ stream from a Lua table of strings.
-// Each Read() yields once before delivering the next chunk, simulating
-// asynchronous data arrival. Returns nil at EOF. Used for tests.
-int CreateChunkedStream(lua_State* L);
 
-// ── Stream info ───────────────────────────────────────────────────────────────
+// ── Stream info
 int StreamPos(lua_State* L);
 int StreamLen(lua_State* L);
 int StreamSetPos(lua_State* L);

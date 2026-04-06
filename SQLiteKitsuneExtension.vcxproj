@@ -94,9 +94,6 @@
     <ClCompile Include="aes.c" />
     <ClCompile Include="base64.cpp" />
     <ClCompile Include="Bencode.cpp" />
-    <ClCompile Include="Http.cpp" />
-    <ClCompile Include="HttpCoroutine.cpp" />
-    <ClCompile Include="HttpMain.cpp" />
     <ClCompile Include="kafkahelpers.cpp" />
     <ClCompile Include="luaaes.cpp" />
     <ClCompile Include="LuaAesMain.cpp" />
@@ -192,8 +189,6 @@
     <ClInclude Include="aes.hpp" />
     <ClInclude Include="base64.h" />
     <ClInclude Include="Bencode.h" />
-    <ClInclude Include="Http.h" />
-    <ClInclude Include="HttpMain.h" />
     <ClInclude Include="kafkahelpers.h" />
     <ClInclude Include="libarchive\archive.h" />
     <ClInclude Include="libarchive\archive_entry.h" />

@@ -2,6 +2,7 @@
 
 ## Project Guidelines
 - When updating documentation files (especially `Lua functions.md`), use proper Markdown structure/markup instead of plain text formatting. Avoid broad replacements; preserve all existing sections and verify full-file integrity after edits.
+- The `tests/*.lua` files in Lua-Kitsune do not exist and are not used. All tests are C# xUnit tests located in `KitsuneNet.Tests\KitsuneUtilTests.cs` (and related `*Tests.cs` files). Never reference or create `tests/*.lua` files.
 
 ## C++ Code Style
 

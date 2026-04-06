@@ -33,6 +33,19 @@ LuaStream* lua_pushluastream(lua_State* L, const BYTE* data, size_t len) {
 	return stream;
 }
 
+LuaStream* lua_pushluastream_native(lua_State* L, const LuaStreamVtable* vtbl,
+	void* native, BYTE caps) {
+	LuaStream* s = (LuaStream*)lua_newuserdata(L, sizeof(LuaStream));
+	memset(s, 0, sizeof(LuaStream));
+	luaL_getmetatable(L, STREAM);
+	lua_setmetatable(L, -2);
+	s->backendRef = LUA_NOREF;
+	s->vtbl       = vtbl;
+	s->native     = native;
+	s->Caps       = caps;
+	return s;
+}
+
 static bool StreamWrite(lua_State* L, LuaStream* s, const BYTE* data, size_t len) {
 	if (s->vtbl)
 		return s->vtbl->write(s->native, data, len);
@@ -358,12 +371,14 @@ int ReadStreamByte(lua_State* L) {
 // 1  → boolean true   (data ready, quantity unknown)
 // n>1 → integer n     (n bytes are ready, e.g. network socket buffer)
 static void push_hasdata_result(lua_State* L, lua_Integer n) {
-	if (n <= 0)
-		lua_pushboolean(L, 0);
+	if (n < 0)
+		lua_pushinteger(L, n);  // negative = stream is dead/closed
+	else if (n == 0)
+		lua_pushboolean(L, 0);  // alive but no data ready
 	else if (n == 1)
-		lua_pushboolean(L, 1);
+		lua_pushboolean(L, 1);  // data ready, quantity unknown
 	else
-		lua_pushinteger(L, n);
+		lua_pushinteger(L, n);  // n bytes ready
 }
 
 int HasDataLuaStream(lua_State* L) {
@@ -378,102 +393,17 @@ int HasDataLuaStream(lua_State* L) {
 			lua_Integer len = s->vtbl->getlen ? s->vtbl->getlen(s->native) : 0;
 			push_hasdata_result(L, len > pos ? len - pos : 0);
 		}
-	} else {
+	} else if (s->backendRef != LUA_NOREF) {
 		// Lua function backend: dispatch STREAM_OP_HASDATA and pass the result
 		// through as-is (caller may return false, nil, a boolean, or a count).
 		lua_rawgeti(L, LUA_REGISTRYINDEX, s->backendRef);
 		lua_pushinteger(L, STREAM_OP_HASDATA);
 		lua_call_nohook(L, 1, 1);
+	} else {
+		// Closed / zeroed stream: return -1 to signal "stream is dead".
+		// Callers can distinguish no-data-yet (false) from dead (-1).
+		push_hasdata_result(L, -1);
 	}
-	return 1;
-}
-
-// ── Chunked stream (mock async backend for testing) ───────────────────────────
-
-typedef struct LuaChunkedStreamNative {
-	int  chunksRef;   // LUA_REGISTRYINDEX ref to a Lua table of strings
-	int  chunkIndex;  // 1-based index of next chunk to deliver
-	int  chunkCount;  // total number of chunks
-	bool pending;     // true = we have yielded once; deliver on next call
-} LuaChunkedStreamNative;
-
-static int chunked_read_continuation(lua_State* L, int status, lua_KContext ctx);
-
-static int chunked_read(void* native, lua_State* L, size_t len) {
-	LuaChunkedStreamNative* c = (LuaChunkedStreamNative*)native;
-	if (c->chunkIndex > c->chunkCount) {
-		lua_pushboolean(L, 0);
-		return 1;
-	}
-	if (!c->pending) {
-		c->pending = true;
-		return lua_yieldk(L, 0, (lua_KContext)native, chunked_read_continuation);
-	}
-	c->pending = false;
-	lua_rawgeti(L, LUA_REGISTRYINDEX, c->chunksRef);
-	lua_rawgeti(L, -1, c->chunkIndex++);
-	lua_remove(L, -2);
-	if (lua_type(L, -1) != LUA_TSTRING) {
-		lua_pop(L, 1);
-		lua_pushboolean(L, 0);
-	}
-	return 1;
-}
-
-static int chunked_read_continuation(lua_State* L, int status, lua_KContext ctx) {
-	return chunked_read((void*)ctx, L, 0);
-}
-
-static int chunked_hasdata(void* native) {
-	return ((LuaChunkedStreamNative*)native)->pending ? 1 : 0;
-}
-
-static lua_Integer chunked_curpos(void* native) {
-	return 0;
-}
-
-static lua_Integer chunked_getlen(void* native) {
-	return ((LuaChunkedStreamNative*)native)->pending ? 1 : 0;
-}
-
-static void chunked_close(void* native, lua_State* L) {
-	LuaChunkedStreamNative* c = (LuaChunkedStreamNative*)native;
-	if (c->chunksRef != LUA_NOREF && L) {
-		luaL_unref(L, LUA_REGISTRYINDEX, c->chunksRef);
-		c->chunksRef = LUA_NOREF;
-	}
-	gff_free(c);
-}
-
-static const LuaStreamVtable g_chunked_vtbl = {
-	chunked_read,
-	NULL,              // write
-	NULL,              // setpos
-	chunked_curpos,
-	chunked_getlen,
-	chunked_close,
-	NULL,              // info
-	chunked_hasdata,
-};
-
-int CreateChunkedStream(lua_State* L) {
-	luaL_checktype(L, 1, LUA_TTABLE);
-	int count = (int)lua_rawlen(L, 1);
-
-	LuaChunkedStreamNative* c = (LuaChunkedStreamNative*)gff_malloc(sizeof(LuaChunkedStreamNative));
-	if (!c)
-		return luaL_error(L, "out of memory");
-	c->chunkIndex = 1;
-	c->chunkCount = count;
-	c->pending    = false;
-
-	lua_pushvalue(L, 1);
-	c->chunksRef = luaL_ref(L, LUA_REGISTRYINDEX);
-
-	LuaStream* s  = lua_pushluastream(L);
-	s->Caps       = STREAM_CAP_READ;
-	s->vtbl       = &g_chunked_vtbl;
-	s->native     = c;
 	return 1;
 }
 

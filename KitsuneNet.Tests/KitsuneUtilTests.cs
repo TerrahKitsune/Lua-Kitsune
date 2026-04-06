@@ -4986,10 +4986,31 @@ namespace KitsuneNet.Tests
             end
         ";
 
+        // Lua function-backend that replicates the old CreateChunked behaviour:
+        // CAP_READ only (no seek), yields once via Sleep(0) before each chunk,
+        // reports HasData/len state through STREAM_OP_HASDATA / STREAM_OP_LEN.
+        private const string MakeChunkedStream = @"
+            local function makeChunkedStream(chunks)
+                local idx, pending = 1, false
+                return Stream.Create(function(op)
+                    if op == 0 then return 1 end
+                    if op == 1 then return true end
+                    if op == 5 then return pending and 1 or 0 end
+                    if op == 8 then return pending end
+                    if op == 2 then
+                        if idx > #chunks then return nil end
+                        if not pending then pending = true; Sleep(0) end
+                        pending = false
+                        local c = chunks[idx]; idx = idx + 1; return c
+                    end
+                end)
+            end
+        ";
+
         [Fact]
         public async Task Stream_CreateChunked_IsNotNil()
         {
-            string? r = await Run("return tostring(Stream.CreateChunked({'a','b'}) ~= nil)");
+            string? r = await Run(MakeChunkedStream + "return tostring(makeChunkedStream({'a','b'}) ~= nil)");
             r.ShouldBe("true");
         }
 
@@ -4997,8 +5018,8 @@ namespace KitsuneNet.Tests
         public async Task Stream_CreateChunked_PosIsAlwaysNil()
         {
             // Async streams have no STREAM_CAP_SEEK; pos() returns nil like all non-seekable streams.
-            string? r = await Run(@"
-                local cs = Stream.CreateChunked({'hello'})
+            string? r = await Run(MakeChunkedStream + @"
+                local cs = makeChunkedStream({'hello'})
                 return tostring(cs:pos() == nil)
             ");
             r.ShouldBe("true");
@@ -5007,8 +5028,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Stream_CreateChunked_LenIsZeroBeforeFirstRead()
         {
-            string? r = await Run(@"
-                local cs = Stream.CreateChunked({'hello'})
+            string? r = await Run(MakeChunkedStream + @"
+                local cs = makeChunkedStream({'hello'})
                 return tostring(cs:len() == 0)
             ");
             r.ShouldBe("true");
@@ -5034,9 +5055,70 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Stream_HasData_AsyncStream_FalseBeforeYield()
         {
-            string? r = await Run(@"
-                local cs = Stream.CreateChunked({'data'})
+            string? r = await Run(MakeChunkedStream + @"
+                local cs = makeChunkedStream({'data'})
                 return tostring(cs:HasData() == false)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_Closed_HasData_ReturnsMinusOne()
+        {
+            // A closed (zeroed) stream returns -1 from HasData so callers can
+            // distinguish "stream alive but no data yet" (false) from
+            // "stream is dead" (-1) and break out of streaming loops cleanly.
+            string? r = await Run(@"
+                local s = Stream.Create()
+                s:Write('hello')
+                s:Close()
+                return tostring(s:HasData() == -1)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_Closed_Read_ReturnsNil()
+        {
+            // Reading from a closed stream returns nil regardless of what was
+            // written before Close().  No STREAM_CAP_READ on a zeroed stream.
+            string? r = await Run(@"
+                local s = Stream.Create()
+                s:Write('hello')
+                s:Close()
+                return tostring(s:Read() == nil)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_Closed_Write_ReturnsZero()
+        {
+            // Writing to a closed stream returns 0 (bytes written).
+            // No STREAM_CAP_WRITE on a zeroed stream.
+            string? r = await Run(@"
+                local s = Stream.Create()
+                s:Close()
+                return tostring(s:Write('x') == 0)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_Closed_Dead_Distinguishable_From_NoData()
+        {
+            // The full contract: false = alive/waiting, -1 = dead.
+            // An alive stream with no data ready must return false, not -1.
+            string? r = await Run(@"
+                local alive = Stream.Create()   -- empty, no data at pos=0 after Create
+                alive:Seek(0)
+                local alive_hd = alive:HasData()  -- 0 bytes remaining -> false
+
+                local dead = Stream.Create()
+                dead:Close()
+                local dead_hd  = dead:HasData()   -- zeroed -> -1
+
+                return tostring(alive_hd == false and dead_hd == -1)
             ");
             r.ShouldBe("true");
         }
@@ -5044,9 +5126,9 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Stream_CreateChunked_DeliversChunksInOrder()
         {
-            string? r = await Run(RunCoroutine + @"
+            string? r = await Run(RunCoroutine + MakeChunkedStream + @"
                 run(function()
-                    local cs = Stream.CreateChunked({'alpha', 'beta', 'gamma'})
+                    local cs = makeChunkedStream({'alpha', 'beta', 'gamma'})
                     local a = cs:Read()
                     local b = cs:Read()
                     local c = cs:Read()
@@ -5061,9 +5143,9 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Stream_CreateChunked_ReturnsNilAfterLastChunk()
         {
-            string? r = await Run(RunCoroutine + @"
+            string? r = await Run(RunCoroutine + MakeChunkedStream + @"
                 run(function()
-                    local cs = Stream.CreateChunked({'only'})
+                    local cs = makeChunkedStream({'only'})
                     cs:Read()
                     local eof = cs:Read()
                     assert(eof == nil, 'expected nil at EOF, got: ' .. tostring(eof))
@@ -5076,9 +5158,9 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Stream_CreateChunked_EmptyTable_ImmediateEof()
         {
-            string? r = await Run(RunCoroutine + @"
+            string? r = await Run(RunCoroutine + MakeChunkedStream + @"
                 run(function()
-                    local cs = Stream.CreateChunked({})
+                    local cs = makeChunkedStream({})
                     local v = cs:Read()
                     assert(v == nil, 'empty chunked stream should return nil, got: ' .. tostring(v))
                 end)
@@ -5092,8 +5174,8 @@ namespace KitsuneNet.Tests
         {
             // The chunked stream yields once before each chunk.
             // After the first yield HasData() returns true (pending=true).
-            string? r = await Run(@"
-                local cs = Stream.CreateChunked({'data'})
+            string? r = await Run(MakeChunkedStream + @"
+                local cs = makeChunkedStream({'data'})
                 local co = coroutine.create(function() cs:Read() end)
                 coroutine.resume(co)   -- yields once; pending = true
                 return tostring(cs:HasData() == true)
@@ -5104,8 +5186,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Stream_LenNonZero_AfterYield()
         {
-            string? r = await Run(@"
-                local cs = Stream.CreateChunked({'data'})
+            string? r = await Run(MakeChunkedStream + @"
+                local cs = makeChunkedStream({'data'})
                 local co = coroutine.create(function() cs:Read() end)
                 coroutine.resume(co)
                 return tostring(cs:len() > 0)
@@ -5116,9 +5198,9 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task CSV_Read_AsyncStream_SimpleRows()
         {
-            string? r = await Run(RunCoroutine + @"
+            string? r = await Run(RunCoroutine + MakeChunkedStream + @"
                 run(function()
-                    local cs = Stream.CreateChunked({'a,b,c\n', '1,2,3\n', '4,5,6\n'})
+                    local cs = makeChunkedStream({'a,b,c\n', '1,2,3\n', '4,5,6\n'})
                     local rows = {}
                     for row in CSV.New():DecodeFromFunction(cs) do rows[#rows + 1] = row end
                     assert(#rows == 3, 'expected 3 rows, got ' .. #rows)
@@ -5135,9 +5217,9 @@ namespace KitsuneNet.Tests
         public async Task CSV_Read_AsyncStream_RowSpanningMultipleChunks()
         {
             // "hello" and ",world\n" arrive in separate chunks — must be joined.
-            string? r = await Run(RunCoroutine + @"
+            string? r = await Run(RunCoroutine + MakeChunkedStream + @"
                 run(function()
-                    local cs = Stream.CreateChunked({'hello', ',world\n', 'foo,bar\n'})
+                    local cs = makeChunkedStream({'hello', ',world\n', 'foo,bar\n'})
                     local rows = {}
                     for row in CSV.New():DecodeFromFunction(cs) do rows[#rows + 1] = row end
                     assert(#rows == 2, 'expected 2 rows, got ' .. #rows)
@@ -5153,10 +5235,10 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Stream_Compress_AsyncSource_RoundTrip()
         {
-            string? r = await Run(RunCoroutine + @"
+            string? r = await Run(RunCoroutine + MakeChunkedStream + @"
                 run(function()
                     local original = 'the quick brown fox jumps over the lazy dog'
-                    local cs = Stream.CreateChunked({'the quick ', 'brown fox ', 'jumps over ', 'the lazy dog'})
+                    local cs = makeChunkedStream({'the quick ', 'brown fox ', 'jumps over ', 'the lazy dog'})
                     local compressed = Stream.Compress(cs)
                     assert(compressed ~= nil, 'Compress returned nil')
                     local decompressed = Stream.Decompress(compressed)
@@ -5173,7 +5255,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Stream_Decompress_AsyncSource_RoundTrip()
         {
-            // Compress sync → wrap the compressed bytes in a chunked stream → decompress async.
+            // Compress sync then decompress via a non-seekable Lua fn backend,
+            // exercising the fn-backend read path inside DecompressStream.
             string? r = await Run(RunCoroutine + @"
                 run(function()
                     local src = Stream.Create()
@@ -5183,14 +5266,23 @@ namespace KitsuneNet.Tests
                     compressed:Seek(0)
                     local compBytes = compressed:Read()
                     assert(type(compBytes) == 'string')
-                    local chunks = {}
-                    for i = 1, #compBytes do chunks[i] = compBytes:sub(i, i) end
-                    local asyncComp = Stream.CreateChunked(chunks)
-                    local decompressed = Stream.Decompress(asyncComp)
+                    local pos = 1
+                    local fnSrc = Stream.Create(function(op, len)
+                        if op == 0 then return 1 end
+                        if op == 1 then return true end
+                        if op == 2 then
+                            if pos > #compBytes then return nil end
+                            local n = len > 0 and math.min(len, #compBytes - pos + 1) or (#compBytes - pos + 1)
+                            local chunk = compBytes:sub(pos, pos + n - 1)
+                            pos = pos + n
+                            return chunk
+                        end
+                    end)
+                    local decompressed = fnSrc:Decompress()
                     assert(decompressed ~= nil)
                     local result = decompressed:Read()
                     assert(result == 'hello compressed world',
-                        'async decompress mismatch: ' .. tostring(result))
+                        'fn-backend decompress mismatch: ' .. tostring(result))
                 end)
                 return 'ok'
             ");

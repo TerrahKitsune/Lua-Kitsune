@@ -144,7 +144,7 @@ option(KITSUNE_HTTP "Build with HTTP/WebSocket support (requires libcurl >= 7.86
 
 if(KITSUNE_HTTP)
 	find_package(CURL 7.86.0 REQUIRED)
-	target_sources(KitsuneEngine PRIVATE HttpCurl.cpp)
+	target_sources(KitsuneEngine PRIVATE HttpCurl.cpp HttpCurlMain.cpp)
 	target_compile_definitions(KitsuneEngine PRIVATE KITSUNE_HTTP)
 	target_link_libraries(KitsuneEngine PRIVATE CURL::libcurl)
 endif()

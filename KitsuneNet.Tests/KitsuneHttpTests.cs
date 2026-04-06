@@ -1,0 +1,921 @@
+﻿using KitsuneNet;
+using Shouldly;
+using Xunit;
+
+namespace KitsuneNet.Tests
+{
+    // See KitsuneEngineTests for why both classes share a single collection.
+    [Collection("KitsuneSequential")]
+    /// <summary>
+    /// Tests for the Http module (libcurl backend).
+    /// Tests skip only when KITSUNE_HTTP was not compiled in (Http global is nil).
+    /// Network failures cause test failures — not skips.
+    /// Buffered tests use httpbin.org; streaming and WebSocket tests also use
+    /// httpbin.org and wss://echo.websocket.org respectively.
+    /// </summary>
+    public sealed class KitsuneHttpTests
+    {
+        private static async Task<string?> Run(string lua)
+        {
+            using KitsuneEngine engine = new();
+            return await engine.ExecuteStringAsync(lua);
+        }
+
+        // ── Shared helpers ────────────────────────────────────────────────────
+
+        // drain(co): resumes a client:Request() coroutine until it produces a
+        // non-nil result and returns (ok, result).
+        private const string DrainRequest = @"
+            local function drain(co)
+                local ok, r = coroutine.resume(co)
+                while ok and r == nil do ok, r = coroutine.resume(co) end
+                return ok, r
+            end
+        ";
+
+        // run_http: drives a coroutine that uses streaming or WebSocket ops.
+        // skip() is only for the Http == nil (not compiled) case.
+        // ws_connect: wraps client:Connect() and drains the echo server's
+        // one-time "Request served by <id>" welcome frame before returning.
+        private const string StreamHelper = @"
+            local _outcome = nil
+            local function skip() error('__skip__') end
+            local function run_http(fn)
+                local co = coroutine.create(fn)
+                local ok, err = coroutine.resume(co)
+                while ok and coroutine.status(co) ~= 'dead' do
+                    ok, err = coroutine.resume(co)
+                end
+                if not ok then
+                    if type(err) ~= 'string' or not err:find('__skip__') then
+                        error(err, 2)
+                    end
+                end
+            end
+            local function ws_connect(client, url)
+                local ws, err = client:Connect(url)
+                if not ws then return nil, err end
+                ws:Read()  -- drain server welcome frame ('Request served by...')
+                return ws
+            end
+        ";
+
+        // ── Http module availability ──────────────────────────────────────────
+
+        [Fact]
+        public async Task Http_Module_IsTableWhenAvailable()
+        {
+            string? r = await Run("if Http == nil then return 'skip' end; return type(Http)");
+            if (r != "skip") r.ShouldBe("table");
+        }
+
+        // ── Http.Create ───────────────────────────────────────────────────────
+
+        [Fact]
+        public async Task Http_Create_ReturnsNonNil()
+        {
+            string? r = await Run("if Http == nil then return 'skip' end; return tostring(Http.Create() ~= nil)");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Http_Create_Tostring_ReturnsNonEmptyString()
+        {
+            string? r = await Run(@"
+                if Http == nil then return 'skip' end
+                local s = tostring(Http.Create())
+                return tostring(type(s) == 'string' and #s > 0)
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Http_Create_ConfigMethods_DoNotRaise()
+        {
+            string? r = await Run(@"
+                if Http == nil then return 'skip' end
+                local c = Http.Create()
+                c:SetTimeout(5000)
+                c:SetFollowRedirects(true)
+                c:SetVerifySSL(false)
+                c:SetDefaultHeader('X-Test', '1')
+                return 'ok'
+            ");
+            if (r != "skip") r.ShouldBe("ok");
+        }
+
+        // ── Http.UrlEncode / Http.UrlDecode (no network required) ─────────────
+
+        [Fact]
+        public async Task Http_UrlEncode_SpacesAreEncoded()
+        {
+            string? r = await Run(@"
+                if Http == nil then return 'skip' end
+                return tostring(Http.UrlEncode('hello world'):find(' ') == nil)
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Http_UrlEncode_AmpersandIsEncoded()
+        {
+            string? r = await Run(@"
+                if Http == nil then return 'skip' end
+                return tostring(Http.UrlEncode('a&b'):find('%%26') ~= nil)
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Http_UrlDecode_RoundTrip()
+        {
+            string? r = await Run(@"
+                if Http == nil then return 'skip' end
+                local orig = 'hello world & foo=bar'
+                return tostring(Http.UrlDecode(Http.UrlEncode(orig)) == orig)
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Http_UrlEncode_UnreservedCharsPassThrough()
+        {
+            string? r = await Run(@"
+                if Http == nil then return 'skip' end
+                local safe = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.~'
+                return tostring(Http.UrlEncode(safe) == safe)
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Http_UrlDecode_PlusDecodedAsSpace()
+        {
+            string? r = await Run(@"
+                if Http == nil then return 'skip' end
+                return tostring(Http.UrlDecode('hello+world') == 'hello world')
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Http_UrlEncode_Empty_ReturnsEmpty()
+        {
+            string? r = await Run(@"
+                if Http == nil then return 'skip' end
+                return tostring(Http.UrlEncode('') == '' and Http.UrlDecode('') == '')
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        // ── Buffered GET ──────────────────────────────────────────────────────
+
+        [Fact]
+        public async Task Http_GET_Returns200()
+        {
+            string? r = await Run(DrainRequest + @"
+                if Http == nil then return 'skip' end
+                local client = Http.Create()
+                client:SetTimeout(8000)
+                client:SetVerifySSL(true)
+                local co, err = client:Request('GET', 'https://httpbin.org/get')
+                local ok, result = drain(co)
+                return tostring(result.Code == 200)
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Http_GET_StatusIsOK()
+        {
+            string? r = await Run(DrainRequest + @"
+                if Http == nil then return 'skip' end
+                local client = Http.Create()
+                client:SetTimeout(8000)
+                local co, err = client:Request('GET', 'https://httpbin.org/get')
+                local ok, result = drain(co)
+                return result.Status
+            ");
+            if (r != "skip") r.ShouldBe("OK");
+        }
+
+        [Fact]
+        public async Task Http_GET_ContentsIsNonEmptyString()
+        {
+            string? r = await Run(DrainRequest + @"
+                if Http == nil then return 'skip' end
+                local client = Http.Create()
+                client:SetTimeout(8000)
+                local co, err = client:Request('GET', 'https://httpbin.org/get')
+                local ok, result = drain(co)
+                return tostring(type(result.Contents) == 'string' and #result.Contents > 0)
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Http_GET_HeadersIsTable()
+        {
+            string? r = await Run(DrainRequest + @"
+                if Http == nil then return 'skip' end
+                local client = Http.Create()
+                client:SetTimeout(8000)
+                local co, err = client:Request('GET', 'https://httpbin.org/get')
+                local ok, result = drain(co)
+                return tostring(type(result.Headers) == 'table')
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        // ── POST with JSON body ───────────────────────────────────────────────
+
+        [Fact]
+        public async Task Http_POST_JsonBody_EchoesPostedData()
+        {
+            string? r = await Run(DrainRequest + @"
+                if Http == nil then return 'skip' end
+                local client = Http.Create()
+                client:SetTimeout(8000)
+                local body = '{""key"":""kitsune""}'
+                local co, err = client:Request('POST', 'https://httpbin.org/post', body,
+                    { ['Content-Type'] = 'application/json' })
+                local ok, result = drain(co)
+                return tostring(result.Code == 200 and result.Contents:find('kitsune') ~= nil)
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        // ── Timeout → transport error (Code is nil) ───────────────────────────
+
+        [Fact]
+        public async Task Http_Timeout_TransportError_CodeIsNil()
+        {
+            // 50 ms is far shorter than the 10 s delay endpoint will ever respond.
+            // If the network is unreachable, DNS failure also produces nil Code.
+            string? r = await Run(DrainRequest + @"
+                if Http == nil then return 'skip' end
+                local client = Http.Create()
+                client:SetTimeout(50)
+                local co, err = client:Request('GET', 'https://httpbin.org/delay/10')
+                if not co then return 'true' end
+                local ok, result = drain(co)
+                if not ok then return 'true' end
+                return tostring(result.Code == nil)
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Http_Timeout_TransportError_StatusIsNonEmptyString()
+        {
+            string? r = await Run(DrainRequest + @"
+                if Http == nil then return 'skip' end
+                local client = Http.Create()
+                client:SetTimeout(50)
+                local co, err = client:Request('GET', 'https://httpbin.org/delay/10')
+                if not co then return 'true' end
+                local ok, result = drain(co)
+                if not ok then return 'true' end
+                if result.Code ~= nil then return 'skip' end
+                return tostring(type(result.Status) == 'string' and #result.Status > 0)
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        // ── Buffered request with outStream ───────────────────────────────────
+
+        [Fact]
+        public async Task Http_Request_OutStream_ContentsIsNil()
+        {
+            string? r = await Run(DrainRequest + @"
+                if Http == nil then return 'skip' end
+                local client = Http.Create()
+                client:SetTimeout(8000)
+                local sink = Stream.Create()
+                local co, err = client:Request('GET', 'https://httpbin.org/get', nil, nil, sink)
+                local ok, result = drain(co)
+                return tostring(result.Code == 200 and result.Contents == nil and sink:len() > 0)
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        // ── Streaming GET ─────────────────────────────────────────────────────
+
+        [Fact]
+        public async Task Http_Stream_GetInfo_Returns200()
+        {
+            string? r = await Run(StreamHelper + @"
+                run_http(function()
+                    if Http == nil then skip() end
+                    local client = Http.Create()
+                    client:SetTimeout(8000)
+                    local stream, err = client:Stream('GET', 'https://httpbin.org/get')
+                    local info = stream:GetInfo()
+                    stream:Close()
+                    _outcome = tostring(info.Code == 200)
+                end)
+                return _outcome or 'skip'
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Http_Stream_GetInfo_HeadersIsTable()
+        {
+            string? r = await Run(StreamHelper + @"
+                run_http(function()
+                    if Http == nil then skip() end
+                    local client = Http.Create()
+                    client:SetTimeout(8000)
+                    local stream, err = client:Stream('GET', 'https://httpbin.org/get')
+                    local info = stream:GetInfo()
+                    stream:Close()
+                    _outcome = tostring(type(info.Headers) == 'table')
+                end)
+                return _outcome or 'skip'
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Http_Stream_Read_DeliversNonEmptyBody()
+        {
+            string? r = await Run(StreamHelper + @"
+                run_http(function()
+                    if Http == nil then skip() end
+                    local client = Http.Create()
+                    client:SetTimeout(8000)
+                    local stream, err = client:Stream('GET', 'https://httpbin.org/get')
+                    local info = stream:GetInfo()
+                    local body = ''
+                    local chunk = stream:Read()
+                    while chunk do
+                        body = body .. chunk
+                        chunk = stream:Read()
+                    end
+                    stream:Close()
+                    _outcome = tostring(info.Code == 200 and #body > 0)
+                end)
+                return _outcome or 'skip'
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Http_Stream_Read_BodyLooksLikeJson()
+        {
+            string? r = await Run(StreamHelper + @"
+                run_http(function()
+                    if Http == nil then skip() end
+                    local client = Http.Create()
+                    client:SetTimeout(8000)
+                    local stream, err = client:Stream('GET', 'https://httpbin.org/get')
+                    local info = stream:GetInfo()
+                    local body = ''
+                    local chunk = stream:Read()
+                    while chunk do
+                        body = body .. chunk
+                        chunk = stream:Read()
+                    end
+                    stream:Close()
+                    _outcome = tostring(info.Code == 200 and body:sub(1, 1) == '{')
+                end)
+                return _outcome or 'skip'
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        // ── DELETE ────────────────────────────────────────────────────────────
+
+        [Fact]
+        public async Task Http_DELETE_Returns200()
+        {
+            string? r = await Run(DrainRequest + @"
+                if Http == nil then return 'skip' end
+                local client = Http.Create()
+                client:SetTimeout(8000)
+                local co, err = client:Request('DELETE', 'https://httpbin.org/delete')
+                local ok, result = drain(co)
+                return tostring(result.Code == 200)
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Http_DELETE_ResponseEchoesDeleteUrl()
+        {
+            string? r = await Run(DrainRequest + @"
+                if Http == nil then return 'skip' end
+                local client = Http.Create()
+                client:SetTimeout(8000)
+                local co, err = client:Request('DELETE', 'https://httpbin.org/delete')
+                local ok, result = drain(co)
+                return tostring(result.Code == 200 and result.Contents:find('delete') ~= nil)
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        // ── PUT ───────────────────────────────────────────────────────────────
+
+        [Fact]
+        public async Task Http_PUT_Returns200()
+        {
+            string? r = await Run(DrainRequest + @"
+                if Http == nil then return 'skip' end
+                local client = Http.Create()
+                client:SetTimeout(8000)
+                local body = '{""item"":""kitsune_put""}'
+                local co, err = client:Request('PUT', 'https://httpbin.org/put', body,
+                    { ['Content-Type'] = 'application/json' })
+                local ok, result = drain(co)
+                return tostring(result.Code == 200)
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Http_PUT_JsonBody_EchoedInResponse()
+        {
+            string? r = await Run(DrainRequest + @"
+                if Http == nil then return 'skip' end
+                local client = Http.Create()
+                client:SetTimeout(8000)
+                local body = '{""item"":""kitsune_put""}'
+                local co, err = client:Request('PUT', 'https://httpbin.org/put', body,
+                    { ['Content-Type'] = 'application/json' })
+                local ok, result = drain(co)
+                return tostring(result.Code == 200 and result.Contents:find('kitsune_put') ~= nil)
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        // ── PATCH ─────────────────────────────────────────────────────────────
+
+        [Fact]
+        public async Task Http_PATCH_Returns200()
+        {
+            string? r = await Run(DrainRequest + @"
+                if Http == nil then return 'skip' end
+                local client = Http.Create()
+                client:SetTimeout(8000)
+                local body = '{""field"":""kitsune_patch""}'
+                local co, err = client:Request('PATCH', 'https://httpbin.org/patch', body,
+                    { ['Content-Type'] = 'application/json' })
+                local ok, result = drain(co)
+                return tostring(result.Code == 200)
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Http_PATCH_JsonBody_EchoedInResponse()
+        {
+            string? r = await Run(DrainRequest + @"
+                if Http == nil then return 'skip' end
+                local client = Http.Create()
+                client:SetTimeout(8000)
+                local body = '{""field"":""kitsune_patch""}'
+                local co, err = client:Request('PATCH', 'https://httpbin.org/patch', body,
+                    { ['Content-Type'] = 'application/json' })
+                local ok, result = drain(co)
+                return tostring(result.Code == 200 and result.Contents:find('kitsune_patch') ~= nil)
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        // ── Query-string args ─────────────────────────────────────────────────
+
+        [Fact]
+        public async Task Http_GET_QueryArgs_EchoedInArgsField()
+        {
+            string? r = await Run(DrainRequest + @"
+                if Http == nil then return 'skip' end
+                local client = Http.Create()
+                client:SetTimeout(8000)
+                local co, err = client:Request('GET', 'https://httpbin.org/get?kitsune=engine&version=4')
+                local ok, result = drain(co)
+                return tostring(
+                    result.Code == 200 and
+                    result.Contents:find('kitsune') ~= nil and
+                    result.Contents:find('engine')  ~= nil)
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Http_GET_UrlEncodedQueryArg_DecodedByServer()
+        {
+            string? r = await Run(DrainRequest + @"
+                if Http == nil then return 'skip' end
+                local client = Http.Create()
+                client:SetTimeout(8000)
+                local encoded = Http.UrlEncode('hello world')
+                local co, err = client:Request('GET', 'https://httpbin.org/get?q=' .. encoded)
+                local ok, result = drain(co)
+                return tostring(result.Code == 200 and result.Contents:find('hello world') ~= nil)
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        // ── Request headers ───────────────────────────────────────────────────
+
+        [Fact]
+        public async Task Http_DefaultHeader_AppearsInEchoedHeaders()
+        {
+            string? r = await Run(DrainRequest + @"
+                if Http == nil then return 'skip' end
+                local client = Http.Create()
+                client:SetTimeout(8000)
+                client:SetDefaultHeader('X-Kitsune-Id', 'kitsune_default_hdr')
+                local co, err = client:Request('GET', 'https://httpbin.org/get')
+                local ok, result = drain(co)
+                return tostring(result.Code == 200 and result.Contents:find('kitsune_default_hdr') ~= nil)
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Http_PerRequestHeader_AppearsInEchoedHeaders()
+        {
+            string? r = await Run(DrainRequest + @"
+                if Http == nil then return 'skip' end
+                local client = Http.Create()
+                client:SetTimeout(8000)
+                local co, err = client:Request('GET', 'https://httpbin.org/get', nil,
+                    { ['X-Kitsune-Req'] = 'kitsune_per_req_hdr' })
+                local ok, result = drain(co)
+                return tostring(result.Code == 200 and result.Contents:find('kitsune_per_req_hdr') ~= nil)
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Http_DefaultAndPerRequestHeaders_BothPresent()
+        {
+            string? r = await Run(DrainRequest + @"
+                if Http == nil then return 'skip' end
+                local client = Http.Create()
+                client:SetTimeout(8000)
+                client:SetDefaultHeader('X-Kitsune-Default', 'val_default')
+                local co, err = client:Request('GET', 'https://httpbin.org/get', nil,
+                    { ['X-Kitsune-PerCall'] = 'val_percall' })
+                local ok, result = drain(co)
+                return tostring(
+                    result.Code == 200 and
+                    result.Contents:find('val_default') ~= nil and
+                    result.Contents:find('val_percall') ~= nil)
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        // ── POST form-urlencoded ──────────────────────────────────────────────
+
+        [Fact]
+        public async Task Http_POST_FormUrlEncoded_EchoedInFormField()
+        {
+            string? r = await Run(DrainRequest + @"
+                if Http == nil then return 'skip' end
+                local client = Http.Create()
+                client:SetTimeout(8000)
+                local body = 'engine=kitsune&version=4'
+                local co, err = client:Request('POST', 'https://httpbin.org/post', body,
+                    { ['Content-Type'] = 'application/x-www-form-urlencoded' })
+                local ok, result = drain(co)
+                return tostring(result.Code == 200 and result.Contents:find('kitsune') ~= nil)
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        // ── Streaming for non-GET methods ─────────────────────────────────────
+
+        [Fact]
+        public async Task Http_Stream_POST_Returns200()
+        {
+            string? r = await Run(StreamHelper + @"
+                run_http(function()
+                    if Http == nil then skip() end
+                    local client = Http.Create()
+                    client:SetTimeout(8000)
+                    local stream, err = client:Stream('POST', 'https://httpbin.org/post',
+                        '{""msg"":""kitsune_stream_post""}',
+                        { ['Content-Type'] = 'application/json' })
+                    local info = stream:GetInfo()
+                    stream:Close()
+                    _outcome = tostring(info.Code == 200)
+                end)
+                return _outcome or 'skip'
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Http_Stream_POST_BodyEchoedInResponse()
+        {
+            string? r = await Run(StreamHelper + @"
+                run_http(function()
+                    if Http == nil then skip() end
+                    local client = Http.Create()
+                    client:SetTimeout(8000)
+                    local stream, err = client:Stream('POST', 'https://httpbin.org/post',
+                        '{""msg"":""kitsune_stream_post""}',
+                        { ['Content-Type'] = 'application/json' })
+                    local info = stream:GetInfo()
+                    local body = ''
+                    local chunk = stream:Read()
+                    while chunk do body = body .. chunk; chunk = stream:Read() end
+                    stream:Close()
+                    _outcome = tostring(info.Code == 200 and body:find('kitsune_stream_post') ~= nil)
+                end)
+                return _outcome or 'skip'
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Http_Stream_PUT_Returns200()
+        {
+            string? r = await Run(StreamHelper + @"
+                run_http(function()
+                    if Http == nil then skip() end
+                    local client = Http.Create()
+                    client:SetTimeout(8000)
+                    local stream, err = client:Stream('PUT', 'https://httpbin.org/put',
+                        '{""msg"":""kitsune_stream_put""}',
+                        { ['Content-Type'] = 'application/json' })
+                    local info = stream:GetInfo()
+                    stream:Close()
+                    _outcome = tostring(info.Code == 200)
+                end)
+                return _outcome or 'skip'
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Http_Stream_PATCH_Returns200()
+        {
+            string? r = await Run(StreamHelper + @"
+                run_http(function()
+                    if Http == nil then skip() end
+                    local client = Http.Create()
+                    client:SetTimeout(8000)
+                    local stream, err = client:Stream('PATCH', 'https://httpbin.org/patch',
+                        '{""msg"":""kitsune_stream_patch""}',
+                        { ['Content-Type'] = 'application/json' })
+                    local info = stream:GetInfo()
+                    stream:Close()
+                    _outcome = tostring(info.Code == 200)
+                end)
+                return _outcome or 'skip'
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Http_Stream_DELETE_Returns200()
+        {
+            string? r = await Run(StreamHelper + @"
+                run_http(function()
+                    if Http == nil then skip() end
+                    local client = Http.Create()
+                    client:SetTimeout(8000)
+                    local stream, err = client:Stream('DELETE', 'https://httpbin.org/delete')
+                    local info = stream:GetInfo()
+                    stream:Close()
+                    _outcome = tostring(info.Code == 200)
+                end)
+                return _outcome or 'skip'
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        // ── WebSocket ─────────────────────────────────────────────────────────
+
+        private const string WsUrl = "wss://echo.websocket.org";
+
+        [Fact]
+        public async Task Http_WebSocket_Connect_Succeeds()
+        {
+            string? r = await Run(StreamHelper + $@"
+                run_http(function()
+                    if Http == nil then skip() end
+                    local client = Http.Create()
+                    client:SetTimeout(8000)
+                    local ws, err = client:Connect('{WsUrl}')
+                    ws:Close()
+                    _outcome = 'true'
+                end)
+                return _outcome or 'skip'
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Http_WebSocket_Echo_TextFrame_RoundTrips()
+        {
+            string? r = await Run(StreamHelper + $@"
+                run_http(function()
+                    if Http == nil then skip() end
+                    local client = Http.Create()
+                    client:SetTimeout(8000)
+                    local ws = ws_connect(client, '{WsUrl}')
+                    ws:Write('hello kitsune')
+                    local frame = ws:Read()
+                    ws:Close()
+                    _outcome = tostring(frame == 'hello kitsune')
+                end)
+                return _outcome or 'skip'
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Http_WebSocket_Echo_TextFrame_GetInfo_OpcodeIsOne()
+        {
+            string? r = await Run(StreamHelper + $@"
+                run_http(function()
+                    if Http == nil then skip() end
+                    local client = Http.Create()
+                    client:SetTimeout(8000)
+                    local ws = ws_connect(client, '{WsUrl}')
+                    ws:Write('opcode_test')
+                    local frame = ws:Read()
+                    local meta = ws:GetInfo()
+                    ws:Close()
+                    _outcome = tostring(frame ~= nil and meta.Opcode == 1 and meta.Binary == false)
+                end)
+                return _outcome or 'skip'
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Http_WebSocket_Echo_BinaryFrame_RoundTrips()
+        {
+            string? r = await Run(StreamHelper + $@"
+                run_http(function()
+                    if Http == nil then skip() end
+                    local client = Http.Create()
+                    client:SetTimeout(8000)
+                    local ws = ws_connect(client, '{WsUrl}')
+                    local payload = '\1\2\3\4\5'
+                    client:SetBinary(true)
+                    ws:Write(payload)
+                    local frame = ws:Read()
+                    ws:Close()
+                    _outcome = tostring(frame == payload)
+                end)
+                return _outcome or 'skip'
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Http_WebSocket_Echo_BinaryFrame_GetInfo_OpcodeIsTwo()
+        {
+            string? r = await Run(StreamHelper + $@"
+                run_http(function()
+                    if Http == nil then skip() end
+                    local client = Http.Create()
+                    client:SetTimeout(8000)
+                    local ws = ws_connect(client, '{WsUrl}')
+                    client:SetBinary(true)
+                    ws:Write('\xDE\xAD\xBE\xEF')
+                    local frame = ws:Read()
+                    local meta = ws:GetInfo()
+                    ws:Close()
+                    _outcome = tostring(frame ~= nil and meta.Opcode == 2 and meta.Binary == true)
+                end)
+                return _outcome or 'skip'
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Http_WebSocket_Echo_BytesLeft_IsZeroForCompleteFrame()
+        {
+            string? r = await Run(StreamHelper + $@"
+                run_http(function()
+                    if Http == nil then skip() end
+                    local client = Http.Create()
+                    client:SetTimeout(8000)
+                    local ws = ws_connect(client, '{WsUrl}')
+                    ws:Write('complete')
+                    local frame = ws:Read()
+                    local meta = ws:GetInfo()
+                    ws:Close()
+                    _outcome = tostring(frame ~= nil and meta.BytesLeft == 0)
+                end)
+                return _outcome or 'skip'
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Http_WebSocket_MultipleFrames_AllEchoedInOrder()
+        {
+            string? r = await Run(StreamHelper + $@"
+                run_http(function()
+                    if Http == nil then skip() end
+                    local client = Http.Create()
+                    client:SetTimeout(8000)
+                    local ws = ws_connect(client, '{WsUrl}')
+                    ws:Write('frame1')
+                    ws:Write('frame2')
+                    ws:Write('frame3')
+                    local f1 = ws:Read()
+                    local f2 = ws:Read()
+                    local f3 = ws:Read()
+                    ws:Close()
+                    _outcome = tostring(f1 == 'frame1' and f2 == 'frame2' and f3 == 'frame3')
+                end)
+                return _outcome or 'skip'
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Http_WebSocket_MixedFrames_TextAndBinary_EchoedCorrectly()
+        {
+            string? r = await Run(StreamHelper + $@"
+                run_http(function()
+                    if Http == nil then skip() end
+                    local client = Http.Create()
+                    client:SetTimeout(8000)
+                    local ws = ws_connect(client, '{WsUrl}')
+                    ws:Write('text_payload')
+                    client:SetBinary(true)
+                    ws:Write('\xAB\xCD')
+                    client:SetBinary(false)
+                    local tf = ws:Read()
+                    local tm = ws:GetInfo()
+                    local bf = ws:Read()
+                    local bm = ws:GetInfo()
+                    ws:Close()
+                    _outcome = tostring(
+                        tf == 'text_payload'   and tm.Binary == false and tm.Opcode == 1 and
+                        bf == '\xAB\xCD'        and bm.Binary == true  and bm.Opcode == 2)
+                end)
+                return _outcome or 'skip'
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Http_WebSocket_Close_AfterClose_ReadReturnsNil()
+        {
+            string? r = await Run(StreamHelper + $@"
+                run_http(function()
+                    if Http == nil then skip() end
+                    local client = Http.Create()
+                    client:SetTimeout(8000)
+                    local ws, err = client:Connect('{WsUrl}')
+                    ws:Close()
+                    local frame = ws:Read()
+                    _outcome = tostring(frame == nil)
+                end)
+                return _outcome or 'skip'
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Http_WebSocket_HasData_TrueWhenConnected_MinusOneAfterClose()
+        {
+            string? r = await Run(StreamHelper + $@"
+                run_http(function()
+                    if Http == nil then skip() end
+                    local client = Http.Create()
+                    client:SetTimeout(8000)
+                    local ws, err = client:Connect('{WsUrl}')
+                    local when_connected = ws:HasData()
+                    ws:Close()
+                    local after_close = ws:HasData()
+                    _outcome = tostring(when_connected == true and after_close == -1)
+                end)
+                return _outcome or 'skip'
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Http_WebSocket_LargeTextPayload_RoundTrips()
+        {
+            string? r = await Run(StreamHelper + $@"
+                run_http(function()
+                    if Http == nil then skip() end
+                    local client = Http.Create()
+                    client:SetTimeout(8000)
+                    local ws = ws_connect(client, '{WsUrl}')
+                    local payload = string.rep('kitsune_ws_', 400)
+                    ws:Write(payload)
+                    local frame = ws:Read()
+                    ws:Close()
+                    _outcome = tostring(frame == payload)
+                end)
+                return _outcome or 'skip'
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+    }
+}

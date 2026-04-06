@@ -39,7 +39,6 @@ static const struct luaL_Reg streamfunctions[] = {
 	{ "Compress",  CompressStream },
 	{ "Decompress",  DecompressStream },
 	{ "HasData",  HasDataLuaStream },
-	{ "CreateChunked",  CreateChunkedStream },
 	{ NULL, NULL }
 }; 
 
