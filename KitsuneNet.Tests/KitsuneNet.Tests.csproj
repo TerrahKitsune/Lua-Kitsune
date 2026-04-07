@@ -51,4 +51,15 @@
     <ProjectReference Include="..\KitsuneNet\KitsuneNet.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="..\test.7z">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>test.7z</Link>
+    </Content>
+    <Content Include="..\test.zip">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>test.zip</Link>
+    </Content>
+  </ItemGroup>
+
 </Project>

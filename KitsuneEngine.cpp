@@ -32,12 +32,13 @@
 #endif
 #include "ProcessMain.h"
 
-#ifdef _WIN32
+#ifdef KITSUNE_KAFKA
 #include "luakafkamain.h"
-#include "LuaFTPMain.h"
-#include "FileAsyncMain.h"
-#include "MacroMain.h"
+#endif
+#ifdef KITSUNE_ARCHIVE
 #include "LuaArchiveMain.h"
+#endif
+#ifdef KITSUNE_REDIS
 #include "RedisMain.h"
 #endif
 
@@ -64,7 +65,7 @@
 #include "LuaEngineBuiltins.h"
 
 // Unique address used as the Lua registry key for the shared bridge LuaJson instance.
-static char g_bridge_json_key;
+// Defined in luajson.cpp; accessed via lua_json_bridge_registry_key().
 
 // ── Portable auto-reset event (replaces Win32 HANDLE-based WinEvent) ─────────
 // Uses std::condition_variable so it works on all platforms without any
@@ -419,7 +420,7 @@ static void PushKitsuneVariable(lua_State* L, const KitsuneVariable* v) {
 		// Decode JSON using the shared bridge instance (avoids GC churn per call).
 		if (v->data && v->length > 0) {
 			lua_pushcfunction(L, lua_json_decode);
-			lua_rawgetp(L, LUA_REGISTRYINDEX, &g_bridge_json_key);
+			lua_rawgetp(L, LUA_REGISTRYINDEX, lua_json_bridge_registry_key());
 			lua_pushlstring(L, (const char*)v->data, v->length);
 			if (lua_pcall_nohook(L, 2, 1, 0) != LUA_OK) {
 				lua_pop(L, 1);
@@ -967,12 +968,13 @@ extern "C" {
 		luaopen_postgres(L);     lua_setglobal(L, "Postgres");
 #endif
 
-#ifdef _WIN32
+#ifdef KITSUNE_KAFKA
 		luaopen_kafka(L);        lua_setglobal(L, "Kafka");
-		luaopen_ftp(L);          lua_setglobal(L, "FTP");
-		luaopen_fileasync(L);    lua_setglobal(L, "FileAsync");
-		luaopen_macro(L);        lua_setglobal(L, "Macro");
+#endif
+#ifdef KITSUNE_ARCHIVE
 		luaopen_archive(L);      lua_setglobal(L, "Archive");
+#endif
+#ifdef KITSUNE_REDIS
 		luaopen_redis(L);        lua_setglobal(L, "Redis");
 #endif
 		luaopen_process(L);      lua_setglobal(L, "Process");
@@ -991,7 +993,7 @@ extern "C" {
 		// Store a single LuaJson instance in the registry for the C bridge to reuse
 		// when decoding KITSUNE_TJSON values — avoids one GC allocation per bridge call.
 		lua_json_push(L);
-		lua_rawsetp(L, LUA_REGISTRYINDEX, &g_bridge_json_key);
+		lua_rawsetp(L, LUA_REGISTRYINDEX, lua_json_bridge_registry_key());
 		luaopen_base64(L);       lua_setglobal(L, "Base64");
 		luaopen_wchar(L);        lua_setglobal(L, "Wchar");
 		luaopen_csv(L);          lua_setglobal(L, "CSV");
@@ -1723,7 +1725,7 @@ extern "C" {
 		ReleaseLuaAccess(state);
 	}
 
-	KITSUNE_API void KitsuneCleanup() {
+	KITSUNE_API size_t KitsuneCleanup() {
 		KitsuneState* state = g_state;
 		g_state = nullptr;
 
@@ -1780,13 +1782,14 @@ extern "C" {
 		#ifdef _WIN32
 		WSACleanup();
 #endif
-		EndMemoryManager();
+		size_t leaked = EndMemoryManager();
 #ifdef _WIN32
 		if (g_coOwned) {
 			CoUninitialize();
 			g_coOwned = false;
 		}
 #endif
+		return leaked;
 	}
 
 	KITSUNE_API void KitsuneRegisterSession() {

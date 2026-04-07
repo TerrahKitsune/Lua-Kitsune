@@ -1,4 +1,4 @@
-#include "LuaArchive.h"
+﻿#include "LuaArchive.h"
 #include "luawchar.h"
 
 int OpenReadArchive(lua_State* L) {
@@ -148,18 +148,72 @@ int ReadEntry(lua_State* L) {
 
 	if (size > 0) {
 		lua_pushlstring(L, (const char*)arc->buff, size);
+		gff_free(arc->buff);
+		arc->buff = NULL;
+	}
+	else if (size < 0) {
+		gff_free(arc->buff);
+		arc->buff = NULL;
+		const char* error = archive_error_string(arc->a);
+		luaL_error(L, error ? error : "error reading archive data");
+		return 0;
 	}
 	else {
 		gff_free(arc->buff);
 		arc->buff = NULL;
-		const char* error = archive_error_string(arc->a);
-		luaL_error(L, error);
+		lua_pushnil(L);
+	}
+
+	return 1;
+}
+
+int ReadAllEntry(lua_State* L) {
+
+	LuaArchive* arc = lua_toarchive(L, 1);
+
+	if (!arc || !arc->file || !arc->isRead || !arc->a || !arc->entry) {
+
+		luaL_error(L, "Invalid params or file not open");
 		return 0;
 	}
 
-	gff_free(arc->buff);
-	arc->buff = NULL;
+	const size_t CHUNK = 65536;
+	size_t capacity = CHUNK;
+	size_t total = 0;
 
+	char* buf = (char*)gff_malloc(capacity);
+
+	if (!buf) {
+		luaL_error(L, "Not enough memory to allocate buffer");
+		return 0;
+	}
+
+	for (;;) {
+		if (total == capacity) {
+			size_t newcap = capacity * 2;
+			char* newbuf = (char*)gff_realloc(buf, newcap);
+			if (!newbuf) {
+				gff_free(buf);
+				luaL_error(L, "Not enough memory to allocate buffer");
+				return 0;
+			}
+			buf = newbuf;
+			capacity = newcap;
+		}
+		long long n = archive_read_data(arc->a, buf + total, capacity - total);
+		if (n == 0)
+			break;
+		if (n < 0) {
+			const char* err = archive_error_string(arc->a);
+			gff_free(buf);
+			luaL_error(L, err ? err : "error reading archive entry");
+			return 0;
+		}
+		total += (size_t)n;
+	}
+
+	lua_pushlstring(L, buf, total);
+	gff_free(buf);
 	return 1;
 }
 

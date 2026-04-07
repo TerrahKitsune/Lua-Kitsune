@@ -16,8 +16,13 @@ public sealed class PostgresTests
 
 	private static async Task<string?> Run(string lua)
 	{
-		using KitsuneEngine engine = new();
-		return await engine.ExecuteStringAsync(lua);
+		var engine = new KitsuneEngine();
+		string? result;
+		try   { result = await engine.ExecuteStringAsync(lua); }
+		finally { engine.Dispose(); }
+		if (engine.LeakedAllocations != 0)
+			throw new InvalidOperationException($"Native memory leak: {engine.LeakedAllocations} unfreed allocation(s) after KitsuneCleanup");
+		return result;
 	}
 
 	// ── coroutine protocol ───────────────────────────────────────────────────

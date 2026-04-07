@@ -404,12 +404,6 @@
     <ClCompile Include="luakafkamain.cpp">
       <Filter>LuaKafka</Filter>
     </ClCompile>
-    <ClCompile Include="luakafkamessage.cpp">
-      <Filter>LuaKafka\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="luakafkatopic.cpp">
-      <Filter>LuaKafka\Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="kafkahelpers.cpp">
       <Filter>LuaKafka\Source Files</Filter>
     </ClCompile>
@@ -421,21 +415,6 @@
     </ClCompile>
     <ClCompile Include="Sha256Main.cpp">
       <Filter>LuaSha256</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaFTPMain.cpp">
-      <Filter>LuaFTP</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaFTP.cpp">
-      <Filter>LuaFTP\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="FileAsync.cpp">
-      <Filter>LuaFileAsync\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="FileAsyncMain.cpp">
-      <Filter>LuaFileAsync</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaFTPChannel.cpp">
-      <Filter>LuaFTP\Source Files</Filter>
     </ClCompile>
     <ClCompile Include="LuaMutexMain.cpp">
       <Filter>LuaMutex</Filter>
@@ -460,12 +439,6 @@
     </ClCompile>
     <ClCompile Include="MemoryManager.cpp">
       <Filter>Memory\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="MacroMain.cpp">
-      <Filter>Macro</Filter>
-    </ClCompile>
-    <ClCompile Include="macro.cpp">
-      <Filter>Macro\Source Files</Filter>
     </ClCompile>
     <ClCompile Include="wcharmain.cpp">
       <Filter>LuaWchar</Filter>
@@ -650,6 +623,18 @@
     <ClCompile Include="HttpCurl.cpp">
       <Filter>LuaHTTP\Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="luakafkaproducer.cpp">
+      <Filter>LuaKafka\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="luakafkaconsumer.cpp">
+      <Filter>LuaKafka\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="RedisPubSub.cpp">
+      <Filter>LuaRedis\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="RedisJson.cpp">
+      <Filter>LuaRedis\Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="KitsuneEngine.h">
@@ -745,12 +730,6 @@
     <ClInclude Include="luakafkamain.h">
       <Filter>LuaKafka</Filter>
     </ClInclude>
-    <ClInclude Include="luakafkamessage.h">
-      <Filter>LuaKafka\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="luakafkatopic.h">
-      <Filter>LuaKafka\Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="kafkahelpers.h">
       <Filter>LuaKafka\Header Files</Filter>
     </ClInclude>
@@ -762,21 +741,6 @@
     </ClInclude>
     <ClInclude Include="Sha256Main.h">
       <Filter>LuaSha256</Filter>
-    </ClInclude>
-    <ClInclude Include="LuaFTPMain.h">
-      <Filter>LuaFTP</Filter>
-    </ClInclude>
-    <ClInclude Include="LuaFTP.h">
-      <Filter>LuaFTP\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="FileAsync.h">
-      <Filter>LuaFileAsync\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="FileAsyncMain.h">
-      <Filter>LuaFileAsync</Filter>
-    </ClInclude>
-    <ClInclude Include="LuaFTPChannel.h">
-      <Filter>LuaFTP\Header Files</Filter>
     </ClInclude>
     <ClInclude Include="LuaMutexMain.h">
       <Filter>LuaMutex</Filter>
@@ -805,12 +769,6 @@
     <ClInclude Include="MemoryManager.h">
       <Filter>Memory\Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="MacroMain.h">
-      <Filter>Macro</Filter>
-    </ClInclude>
-    <ClInclude Include="macro.h">
-      <Filter>Macro\Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="wcharmain.h">
       <Filter>LuaWchar</Filter>
     </ClInclude>
@@ -825,12 +783,6 @@
     </ClInclude>
     <ClInclude Include="LuaArchiveMain.h">
       <Filter>Archive</Filter>
-    </ClInclude>
-    <ClInclude Include="libarchive\archive.h">
-      <Filter>Archive\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="libarchive\archive_entry.h">
-      <Filter>Archive\Header Files</Filter>
     </ClInclude>
     <ClInclude Include="RedisMain.h">
       <Filter>LuaRedis</Filter>
@@ -1006,6 +958,18 @@
     <ClInclude Include="HttpCurl.h">
       <Filter>LuaHTTP\Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="luakafkaproducer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="luakafkaconsumer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="RedisPubSub.h">
+      <Filter>LuaRedis\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="RedisJson.h">
+      <Filter>LuaRedis\Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="Lua functions.md" />
@@ -1014,6 +978,10 @@
     <None Include="Postgres Implementation Plan.md" />
     <None Include="build-linux-and-test.ps1" />
     <None Include="Http Client Implementation Plan.md" />
+    <None Include="Kafka refactor plan.md" />
+    <None Include="build-release.ps1" />
+    <None Include="vcpkg.json" />
+    <None Include="triplets\x64-windows-static-md.cmake" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />

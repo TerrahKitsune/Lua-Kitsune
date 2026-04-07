@@ -9,41 +9,25 @@ A comprehensive reference for all available functions in the Lua environment.
 - [Global Functions](#global-functions)
 - [Session](#session)
 - [Mutex](#mutex)
-- [Macro](#macro)
 - [Redis](#redis)
 - [CSV](#csv)
 - [Kafka](#kafka)
-- [FileAsync](#fileasync)
-- [FTP](#ftp)
 - [Sound](#sound)
-- [ODBC](#odbc)
 - [Archive](#archive)
 - [Stream](#stream)
-- [TTS](#tts)
 - [Env](#env)
-- [Zip](#zip)
-- [Server](#server)
-- [Client](#client)
-- [Pipe](#pipe)
 - [Base64](#base64)
-- [Services](#services)
 - [Aes](#aes)
 - [Process](#process)
-- [Imgui](#imgui)
 - [HTTP](#http)
 - [Hashing (SHA256, MD5, SHA1)](#hashing)
 - [MySQL](#mysql)
 - [Postgres](#postgres)
 - [Timer](#timer)
 - [SQLite](#sqlite)
-- [Image](#image)
 - [Json](#json)
 - [Wchar](#wchar)
 - [FileSystem](#filesystem)
-- [TWODA (2da)](#twoda)
-- [TLK](#tlk)
-- [ERF](#erf)
-- [GFF](#gff)
 ---
 
 ## Global Functions
@@ -53,7 +37,7 @@ A comprehensive reference for all available functions in the Lua environment.
 ```lua
 string, raw16bytestring UUID()
 ```
-Returns a UUID from Windows `CoCreateGuid`. Returns `nil` if uniqueness cannot be guaranteed.
+Returns a UUID. On Windows uses `CoCreateGuid`; on Linux uses `getrandom`. Returns `nil` on failure.
 
 ### CRC Functions
 
@@ -71,7 +55,7 @@ nil Sleep(opt int)
 int Time()
 ms Runtime()
 ```
-- `Sleep`: Sleep for 1 millisecond (default) or specified ms (max 1000)
+- `Sleep`: Yield the current coroutine for the specified ms (default 0). Falls back to a blocking OS sleep when called outside a scheduler-managed coroutine.
 - `Time`: Get current Unix epoch in milliseconds
 - `Runtime`: Get runtime in milliseconds
 
@@ -85,15 +69,8 @@ Retrieves the last error code as a message and code.
 ### Shell
 
 ```lua
-bool ShellExecute(file, parameter)
+bool ShellExecute(file, parameter)   -- Windows only
 ```
-
-### Ticker Function
-
-```lua
-nil SetTicker(function, opt ms)
-```
-Sets a function as a ticker. If the parameter isn't a function, the ticker is disabled.
 
 ### Memory
 
@@ -101,13 +78,6 @@ Sets a function as a ticker. If the parameter isn't a function, the ticker is di
 int GetMemory()
 ```
 Returns memory in bytes used by Lua.
-
-### Application Control
-
-```lua
-Exit(opt code)
-```
-Called when GFF.exe shuts down; can also be called to shut down prematurely.
 
 ### String Functions
 
@@ -172,8 +142,6 @@ bool GetIsAdmin()
 | Variable | Description |
 |----------|-------------|
 | `c` | Table with special characters 0-31 (e.g., `c.LF = '\n'`) |
-| `ResList` | Key-value table for ERF container extensions |
-| `LAST_TEMP_FILE` | Set by `io.tmpfile()` with created filename |
 | `ARGS[1]` | The script file being run (or `"cmd"` in REPL mode) |
 | `ARGS[2..n]` | Additional command-line parameters passed after the script name |
 
@@ -185,24 +153,26 @@ The `Session` global table groups interactive environment functions into three s
 
 ### Session.Console
 
+> **Note:** `Create`, `Destroy`, `Attach`, `SetCursorPosition`, `Clear`, `Write`, `Print`, `ReadKey`, `SetColor`, `GetColor`, `SetVisible`, `SetTitle`, and `GetInfo` are Windows-only. `Put`, `GetKey`, `HasKeyDown`, and `GetKeyState` are available on all platforms.
+
 ```lua
-bool   Session.Console.Create()
-bool   Session.Console.Destroy()
-bool   Session.Console.Attach(opt processId)
-cursorx, cursory, sizex, sizey, maxsizex, maxsizey Session.Console.GetInfo()
-nil    Session.Console.SetCursorPosition(x, y)
-nil    Session.Console.Clear()
+bool   Session.Console.Create()                                              -- Windows only
+bool   Session.Console.Destroy()                                             -- Windows only
+bool   Session.Console.Attach(opt processId)                                 -- Windows only
+cursorx, cursory, sizex, sizey, maxsizex, maxsizey Session.Console.GetInfo() -- Windows only
+nil    Session.Console.SetCursorPosition(x, y)                               -- Windows only
+nil    Session.Console.Clear()                                               -- Windows only
 nil    Session.Console.Put(text)
-characterswritten Session.Console.Write(data)
-charactersprinted Session.Console.Print(...)
-key    Session.Console.ReadKey()
+characterswritten Session.Console.Write(data)                                -- Windows only
+charactersprinted Session.Console.Print(...)                                 -- Windows only
+key    Session.Console.ReadKey()                                             -- Windows only
 int    Session.Console.GetKey()
 bool   Session.Console.HasKeyDown()
 bool   Session.Console.GetKeyState(key)
-nil    Session.Console.SetColor(Background, Foreground)
+nil    Session.Console.SetColor(Background, Foreground)                      -- Windows only
 Background, Foreground Session.Console.GetColor()
-nil    Session.Console.SetVisible(toggle)
-nil    Session.Console.SetTitle(newtitle)
+nil    Session.Console.SetVisible(toggle)                                    -- Windows only
+nil    Session.Console.SetTitle(newtitle)                                    -- Windows only
 ```
 
 | Function | Description |
@@ -243,13 +213,13 @@ x, y, monitor Session.Display.GetCursorPosition()
 
 ```lua
 bool   Session.Clipboard.Set(data)
-string Session.Clipboard.Get()
+Wchar  Session.Clipboard.Get()
 ```
 
 | Function | Description |
 |----------|-------------|
 | `Set` | Write `data` to the system clipboard. Pass an empty string or `nil` to clear it. Returns `true` on success |
-| `Get` | Read the current clipboard content as a UTF-8 string, or `nil` if empty or unavailable |
+| `Get` | Read the current clipboard content as a `Wchar`, or `nil` if empty or unavailable |
 
 ---
 
@@ -270,27 +240,6 @@ islocked, name, internalid Mutex:Info()
 | `Lock` | Lock mutex (waits infinitely if no timeout). Returns `true` on success/already-held |
 | `Unlock` | Unlocks the mutex |
 | `Info` | Get mutex information |
-
----
-
-## Macro
-
-```lua
-x, y Macro.ScreenToMousePoint(x, y)
-Macro Macro.Create(inputs)
-int Macro:Send()
-inputs Macro:GetInputs()
-```
-
-### Input Types
-
-**Type 0 - Mouse:**
-- `ExtraInfo`, `Flags`, `Time`, `Data`, `X` (0-65536), `Y` (0-65536)
-- [Mouse Event Flags](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-mouse_event)
-
-**Type 1 - Keyboard:**
-- `ExtraInfo`, `Flags` (0=down, 2=up), `Time`, `Scan`, `Key`
-- [Virtual Key Codes](https://docs.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes)
 
 ---
 
@@ -334,6 +283,7 @@ channel, message Redis:Poll()
 ### Data Types
 
 ```lua
+RedisKey   Redis:GetKey(key)
 RedisString Redis:GetString(key)
 RedisValue Redis:GetHashset(key)
 RedisValue Redis:GetList(key)
@@ -527,116 +477,186 @@ The sniffer scans up to the first 5 lines, counts each candidate's occurrences p
 
 ## Kafka
 
-### Consumer/Producer
+### Creation
 
 ```lua
-Kafka Kafka.NewConsumer(opt conf)
-Kafka Kafka.NewProducer(opt conf)
+KafkaProducer  Kafka.NewProducer(opt conf)
+KafkaConsumer  Kafka.NewConsumer(opt conf)
 ```
 
-Default group IDs: `LUAC` (consumer), `LUAP` (producer)
-
-### Operations
-
-```lua
-bool, errormsg Kafka:Send(topic, data, opt partition, opt key, opt timeout, opt headers)
-event Kafka:Events()
-bool Kafka:AddBroker(address)
-Groups Kafka:GetGroups(opt group, opt timeout)
-Metadata Kafka:GetMetadata(opt timeout)
-string Kafka.Logs(opt filename)
-bool, errormsg Kafka:Subscribe(topic, opt partition)
-bool, errormsg Kafka:Assign(topic, partition)
-kafkamessage Kafka:Poll()
-kafkamessage Kafka:Consume(topicobject)
-int Kafka:GetCommitted(topic, partition)
-bool, err Kafka:Seek(topic, partition, offset, opt timeout)
-bool, low, high Kafka:GetOffsets(topic, partition, opt timeout)
-```
-
-### Topic Management
-
-```lua
-kafkatopic, errormsg Kafka:OpenTopic(topicname, opt partition, offset, opt conf)
-table, errormsg Kafka:CreateTopic(topicname, opt partitions, opt replicationfactor, opt brokerid, opt requesttimeout, opt operationtimeout)
-table, errormsg Kafka:DeleteTopic(topicname)
-table, errormsg Kafka:AlterConfig(resourcetype, resourcename, configname, configvalue, opt timeout)
-table Kafka:GetConfig(resourcetype, resourcename, opt timeout)
-table, errormsg Kafka:SetPartitions(topicname, newpartitioncount, opt timeout)
-bool, errormsg Kafka:PauseTopic(Kafkatopic)
-bool, errormsg Kafka:ResumeTopic(Kafkatopic)
-int Kafka:GetId()
-```
-
-**Resource types:** 1=any, 2=topic, 3=group, 4=broker
-
-### Kafkatopic
-
-```lua
-int Kafkatopic:GetOwnerId()
-name, partition Kafkatopic:GetInfo()
-nil Kafkatopic:Dispose()
-bool Kafkatopic:IsPaused()
-```
-
-### Kafkamessage
-
-```lua
-table Kafkamessage:GetData()
-int, int Kafkamessage:GetTimestamp()
-int Kafkamessage:GetLatency()
-int Kafkamessage:GetOwnerId()
-nil Kafkamessage:Dispose()
-```
-
-**GetData returns:** `Error`, `ErrorCode`, `Key`, `Offset`, `Partition`, `Payload`, `Topic`, `Headers`
+`conf` is an optional table of librdkafka configuration key/value pairs.  
+Default `group.id` values: `"LUAP"` (producer), `"LUAC"` (consumer).
 
 ---
 
-## FileAsync
+### KafkaProducer
+
+#### Producing
 
 ```lua
-FileAsync FileAsync.Open(file, mode, opt buffersize)
-bool FileAsync:Busy(opt wait, opt cancel)
-int FileAsync:Tell()
-int FileAsync:Seek(pos, opt type)
-nil FileAsync:Rewind()
-bool FileAsync:EndOfFile()
-nil FileAsync:Read(opt bytestoread, opt readbuffersize)
-currentlength, maxlength FileAsync:BufferStatus()
-string, bool FileAsync:EmptyBuffer()
-nil FileAsync:Close()
+bool, errmsg  producer:Send(topic, key, value [, headers [, partition]])
 ```
 
-**Seek types:** 0=start, 1=current, 2=end
+- `key` — may be `nil` for keyless messages
+- `headers` — optional table of string key/value pairs: `{source='app', version='1'}`
+- `partition` — optional integer; omit (or pass `nil`) for automatic partitioning
+
+#### Offsets & metadata
+
+```lua
+bool, low, high  producer:GetOffsets(topic, partition [, timeout_ms])
+bool, metadata   producer:GetMetadata([timeout_ms])
+```
+
+`GetMetadata` returns `true, meta` where `meta` is:
+```lua
+{
+  Brokers = { {Id=N, Host='...', Port=N}, ... },
+  Topics  = { {Name='...', ErrorCode=N, Error='...', Partitions={...}}, ... },
+  OrigBrokerId   = N,
+  OrigBrokerName = '...',
+}
+```
+
+#### Topic admin
+
+```lua
+bool, errmsg  producer:CreateTopic(name, partitions [, retention_ms [, retention_bytes [, replication_factor [, timeout_ms]]]])
+bool, errmsg  producer:DestroyTopic(name [, timeout_ms])
+bool, config  producer:GetTopicConfig(name [, timeout_ms])
+bool, errmsg  producer:SetTopicConfig(name, {['key']='value', ...} [, timeout_ms])
+```
+
+- `CreateTopic` — `nil` retention/replication values use the broker default (`-1`).
+- `GetTopicConfig` — returns `true, table` where the table maps config names to their current string values (e.g. `{['retention.ms']='86400000', ...}`).
+- `SetTopicConfig` — uses `IncrementalAlterConfigs`; only the keys present in the table are changed, all other config is untouched.
+
+#### Group admin
+
+```lua
+bool, groups   producer:ListGroups([timeout_ms])
+bool, descs    producer:DescribeGroups({groupId, ...} [, timeout_ms])
+bool, errmsg   producer:DeleteGroup(groupId [, timeout_ms])
+bool, offsets  producer:GetGroupOffsets(groupId [, partitions [, timeout_ms]])
+bool, errmsg   producer:SetGroupOffsets(groupId, {['topic:N']=offset, ...} [, timeout_ms])
+bool, errmsg   producer:DeleteGroupOffsets(groupId, {'topic:N', ...} [, timeout_ms])
+```
+
+**`ListGroups`** returns `true, { {GroupId, State}, ... }`.
+
+**`DescribeGroups`** returns `true, { desc, ... }` where each `desc` is:
+```lua
+{
+  GroupId     = 'my-group',
+  State       = 'Stable',       -- 'Unknown'|'PreparingRebalance'|'CompletingRebalance'|'Stable'|'Dead'|'Empty'
+  Protocol    = 'range',        -- partition assignor
+  Error       = '',             -- non-empty string on per-group error
+  Coordinator = { Id=N, Host='...', Port=N },
+  Members = {
+    { ClientId='...', ConsumerId='...', Host='...',
+      Partitions = { {Topic='...', Partition=N}, ... } },
+    ...
+  },
+}
+```
+
+**`GetGroupOffsets`** — `partitions` is an optional array `{'topic:N', ...}`; omit or pass `nil` to retrieve all committed partitions. Returns `true, {['topic:N']=offset, ...}`.
+
+**`SetGroupOffsets`** — sets committed offsets using `AlterConsumerGroupOffsets`. The group must be inactive (no live members).
+
+**`DeleteGroupOffsets`** — removes committed offsets for the listed partitions. After deletion the partition's next start position is governed by `auto.offset.reset`. The group must be inactive.
+
+**`DeleteGroup`** — deletes the group entirely. The group must have no active members.
+
+```lua
+bool, errmsg  producer:Close()
+```
 
 ---
 
-## FTP
+### KafkaConsumer
 
-### Connection
+All topic-admin and group-admin methods available on `KafkaProducer` are also available on `KafkaConsumer` with identical signatures.
 
-```lua
-ftp, welcomemessages FTP.Open(address, opt port)
-nil FTP:SetEndline(endline)
-bool, error FTP:Login(user, password)
-bool, error FTP:Command(command)
-ip, port FTP:Passive()
-nil FTP.SetTimeout(timeinseconds)
-msgs FTP:GetMessages(opt timeout)
-nil FTP:Close()
-isconnected, wsaerror FTP:GetConnectionStatus()
-```
-
-### Data Channel
+#### Consuming
 
 ```lua
-ftpchannel FTP.OpenDataChannel(address, port)
-bool ftpchannel:Send(data)
-isalive, data ftpchannel:Recv(opt buffersize)
-isalive, hasdata ftpchannel:GetConnectionStatus()
-nil ftpchannel:Close()
+coroutine  consumer:Subscribe({'topic', ...})
+coroutine  consumer:Assign({'topic:partition[:offset]', ...})
 ```
+
+**Offset keyword in `Assign`:**
+
+| String | librdkafka offset | Behaviour |
+|--------|-------------------|-----------|
+| `"topic:N"` | `OFFSET_STORED` | Uses committed offset; falls back to `auto.offset.reset` |
+| `"topic:N:earliest"` | `OFFSET_BEGINNING` | Always starts from message 0 |
+| `"topic:N:latest"` | `OFFSET_END` | Starts after the current last message |
+| `"topic:N:123"` | `123` | Starts from exact offset 123 |
+
+Both methods return a **Lua thread** (coroutine).
+
+#### Driving the consume coroutine
+
+```lua
+ok, data = coroutine.resume(co, stop_flag)
+```
+
+- Pass `false` (or any falsy value) to poll for the next message.
+- Pass `true` to stop: the coroutine frees its resources and dies cleanly.
+- Returns `true, nil` when no message is available yet (call again after a short sleep).
+- Returns `true, message` when a message arrives.
+- Returns `false, errmsg` if the coroutine encountered an error.
+
+**Message table fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `Value` | string | Message payload |
+| `Key` | string or nil | Message key |
+| `Topic` | string | Topic name |
+| `Partition` | number | Partition index |
+| `Offset` | number | Offset within the partition |
+| `Timestamp` | number | Message timestamp (ms) |
+| `ErrorCode` | number | librdkafka error code (0 = success) |
+| `Error` | string | Error description |
+| `Headers` | table | Key/value header table |
+
+#### Coroutine methods
+
+```lua
+co:AutoCommit(bool)   -- enable (true) or disable (false) automatic offset commit
+```
+
+#### Manual commit
+
+```lua
+bool, errmsg  consumer:Commit(message_data)
+```
+
+After a successful commit the message handle is cleared; calling `Commit` on the same data a second time returns `false, errmsg`.
+
+#### Seeking
+
+```lua
+bool, errmsg  consumer:Seek(topic, partition, offset [, timeout_ms])
+```
+
+Repositions an already-assigned, already-polling partition. `offset` accepts a number or the keywords `"earliest"`, `"latest"`, `"stored"`. Uses `rd_kafka_seek_partitions` internally; the most reliable pattern is a **specific numeric offset** obtained from `GetOffsets`.
+
+```lua
+bool, errmsg  consumer:Close()
+```
+
+---
+
+### Module-level utility
+
+```lua
+string  Kafka.Logs([filename])
+```
+
+Returns (and optionally saves to file) the accumulated librdkafka log output.
 
 ---
 
@@ -646,50 +666,6 @@ nil ftpchannel:Close()
 bool Sound.Play(wavefile, opt async)
 bool Sound.Beep(freq, duration)
 int, string Sound.SendMCS(command)
-```
-
----
-
-## ODBC
-
-### Connection
-
-```lua
-array ODBC.GetAllDrivers()
-ODBC ODBC.DriverConnect(connectionstring)
-```
-
-### Query Operations
-
-```lua
-bool, error ODBC:Prepare(sql)
-bool, error ODBC:Bind(data, opt asbinary)
-bool, error ODBC:Execute()
-bool, error ODBC:Fetch()
-table, error ODBC:GetRow()
-table ODBC:GetRowColumnTypes()
-```
-
-### Transaction Control
-
-```lua
-bool, error ODBC:ToggleAutoCommit(bool)
-bool, error ODBC:Begin()
-bool, error ODBC:Commit()
-bool, error ODBC:Rollback()
-```
-
-### Schema Queries
-
-```lua
-bool, error ODBC:Tables(schema)
-bool, error ODBC:Columns(table, schema)
-bool, error ODBC:SpecialColumns(table, schema)
-bool, error ODBC:PrimaryKeys(table, schema)
-bool, error ODBC:ForeignKeys(table, schema)
-bool, error ODBC:Procedures(schema)
-bool, error ODBC:ProcedureColumns(procedure, schema)
-nil ODBC:Disconnect()
 ```
 
 ---
@@ -925,26 +901,6 @@ Wchar Stream:ReadWchar(opt n)
 
 ---
 
-## TTS
-
-```lua
-TTS TTS.Create()
-array TTS.GetVoices()
-bool TTS:Speak(text, opt flags)
-bool TTS:GetIsSpeaking()
-nil TTS:PlayPause()
-bool TTS:GetIsPaused()
-int TTS:GetVolume()
-bool TTS:SetVolume(volume)
-int TTS:GetRate()
-bool TTS:SetRate(rate)
-bool TTS:SetVoice(voicename)
-bool TTS:Skip()
-nil TTS:Dispose()
-```
-
----
-
 ## Env
 
 ```lua
@@ -956,74 +912,6 @@ table Env.Meta()
 
 ---
 
-## Zip
-
-```lua
-Zip Zip.Open(zipfile)
-int Zip:AddFile(key, file)
-int Zip:AddData(key, data)
-true/data Zip:Extract(key/index, opt targetfile)
-table Zip:GetInfo(key/index)
-int Zip:Delete(key/index)
-array Zip:GetFiles()
-nil Zip:Close()
-```
-
-**GetInfo returns:** `comp_method`, `comp_size`, `crc`, `encryption_method`, `flags`, `index`, `mtime`, `name`, `size`, `valid`
-
----
-
-## Server
-
-```lua
-Server Server.Start(port)
-nil Server:Stop()
-event/nil Server:GetEvent()
-bool Server:Disconnect(socket)
-bool Server:Send(socket, data)
-nil Server.SetStartFunc(function)
-table Server:GetClients()
-```
-
-**Event types:** `socket`, `type`, `data`
-
----
-
-## Client
-
-```lua
-Client Client.Connect(address, port)
-bool/error Client:Status()
-nil Client:Disconnect()
-event/nil Client:GetEvent()
-bool Client:Send(data)
-```
-
-**Network event types:**
-| Value | Type |
-|-------|------|
-| 1 | NETEVENT_CONNECTED |
-| 2 | NETEVENT_DISCONNECTED |
-| 3 | NETEVENT_SEND |
-| 4 | NETEVENT_RECEIVE |
-
----
-
-## Pipe
-
-```lua
-Pipe Pipe.Create(name, opt maxinstances, opt buffersize, opt timeout, opt write, opt read)
-Pipe Pipe.Open(name, opt write, opt read)
-int Pipe:Write(string)
-string Pipe:Read(opt buffersize)
-int Pipe:ReadByte()
-bool Pipe:WriteByte(byte)
-avail Pipe:Available()
-nil Pipe:Close()
-```
-
----
-
 ## Base64
 
 ```lua
@@ -1031,19 +919,6 @@ base64string Base64.Encode(string)
 string Base64.Decode(base64string)
 string Base64.GetEncodeTable()
 void Base64.SetEncodeTable(encodetablestring)
-```
-
----
-
-## Services
-
-```lua
-array Services.All()
-Service Services.Open(servicename, opt readonly)
-status Service:Status()
-config Service:Config()
-bool Service:Start()
-bool Service:Stop()
 ```
 
 ---
@@ -1074,143 +949,18 @@ bool Process:Stop()
 int/nil Process:GetExitCode()
 int Process:GetID()
 string Process:GetName()
-number Process:GetCPU()
+number Process:GetCPU()              -- Windows only
 number Process:GetRAM()
-int/bool Process:Priority(opt prio)
-int, int Process:Affinity(opt newmask)
-array Process:Threads()
-```
-
----
-
-## Imgui
-
-### Creation
-
-```lua
-Imgui Imgui.Create(title, tag, width, height, renderfunction)
-float Imgui.GetFontSize()
-nil Imgui.SetStyle(table)
-table Imgui.GetStyle()
-```
-
-### Value Types
-
-| Type | Description |
-|------|-------------|
-| 1 | bool |
-| 2 | float |
-| 3 | vec4 {x,y,z,w} |
-| 4 | int |
-| 5 | string |
-| 6 | double |
-
-### Operations
-
-```lua
-value Imgui:GetValue(tag, opt type)
-nil Imgui:SetValue(tag, type, value)
-array Imgui:GetAllValues()
-bool Imgui:Tick()
-nil Imgui:Close()
-nil Imgui:Quit(opt code)
-info Imgui:Info()
-nil Imgui:Clear()
-```
-
-### Helpers
-
-```lua
-table Imgui.GetEnums()
-nil Imgui.SetClipboardText(text)
-string Imgui.GetClipboardText()
-r, g, b Imgui.Vec4ToRGB(vector4)
-vec4 Imgui.RGBToVec4(r, g, b)
-```
-
-### ImguiDraw Functions
-
-**Layout:**
-```lua
-nil ImguiDraw:SameLine(opt offsetstartx, opt spacing)
-vec2 ImguiDraw:GetCursorPos()
-vec2 ImguiDraw:GetCursorStartPos()
-nil ImguiDraw:Indent(opt w)
-nil ImguiDraw:Unindent(opt w)
-nil ImguiDraw:BeginGroup() / nil ImguiDraw:EndGroup()
-nil ImguiDraw:PushStyleVar(flag, value)
-nil ImguiDraw:PopStyleVar(opt count)
-vec2 ImguiDraw:GetWindowSize()
-nil ImguiDraw:SetNextItemWidth(width)
-```
-
-**Text:**
-```lua
-nil ImguiDraw:Text(text)
-nil ImguiDraw:TextWrapped(text)
-nil ImguiDraw:TextColored(color, text)
-vec2 ImguiDraw:CalcTextSize(string)
-```
-
-**Input:**
-```lua
-bool ImguiDraw:InputText(label, tag, opt hint)
-bool ImguiDraw:InputTextMultiline(label, tag, size, flags)
-bool ImguiDraw:InputInt(label, tag, opt step, opt faststep, opt flags)
-bool ImguiDraw:InputFloat(label, tag, opt step, opt faststep, opt format, opt flags)
-bool ImguiDraw:InputDouble(label, tag, opt step, opt faststep, opt format, opt flags)
-```
-
-**Controls:**
-```lua
-bool ImguiDraw:Button(title)
-bool ImguiDraw:Checkbox(title, tag)
-bool ImguiDraw:RadioButton(title, tag, id)
-bool ImguiDraw:Combo(label, tag, stringarray, opt maxitemsshown)
-bool ImguiDraw:SliderFloat(title, tag, min, max, opt format, opt flags)
-bool ImguiDraw:SliderInt(title, tag, min, max, opt format, opt flags)
-bool ImguiDraw:ColorEdit3(title, tag)
-bool ImguiDraw:Selectable(text, selected)
-```
-
-**Windows/Menus:**
-```lua
-bool ImguiDraw:Begin(title, opt tag, flags)
-nil ImguiDraw:End()
-bool ImguiDraw:BeginChild(title, width, height, noborder)
-nil ImguiDraw:EndChild()
-bool ImguiDraw:BeginMainMenuBar() / nil ImguiDraw:EndMainMenuBar()
-bool ImguiDraw:BeginMenu(title, disabled) / nil ImguiDraw:EndMenu()
-bool ImguiDraw:MenuItem(title)
-bool ImguiDraw:BeginTabBar(id, flags) / nil ImguiDraw:EndTabBar()
-bool ImguiDraw:BeginTabItem(label, opt tag, flags) / nil ImguiDraw:EndTabItem()
-```
-
-**Tables:**
-```lua
-bool ImguiDraw:BeginTable(labelid, columns, opt flags)
-nil ImguiDraw:EndTable()
-nil ImguiDraw:TableSetupColumn(columnname, flags, widthorweight)
-bool ImguiDraw:TableNextColumn()
-bool ImguiDraw:TableSetColumnIndex(idx)
-nil ImguiDraw:TableNextRow(opt flags, opt row_min_height)
-```
-
-**Utilities:**
-```lua
-nil ImguiDraw:Separator()
-nil ImguiDraw:ShowDemoWindow(opt tag)
-bool ImguiDraw:IsItemHovered(opt flags)
--- Current implementation does not return a Lua boolean:
-nil ImguiDraw:IsItemClicked(opt mousebutton)
-nil ImguiDraw:IsMouseDoubleClicked(opt mousebutton)
+int/bool Process:Priority(opt prio)  -- Windows only
+int, int Process:Affinity(opt newmask) -- Windows only
+array Process:Threads()              -- Windows only
 ```
 
 ---
 
 ## HTTP
 
-The `Http` global provides a libcurl-backed HTTP and WebSocket client. Available only when compiled with `KITSUNE_HTTP`.
+The `Http` global
 
 ### Creation and utilities
 
@@ -1579,28 +1329,6 @@ nil SQLite:Close()
 
 ---
 
-## Image
-
-*All coordinates are 1-indexed*
-
-```lua
-Image Image.Screenshot(width, height, startx, starty, monitor)
-bool Image:Save(filename)
-Image Image.Load(filename)
-Image Image.Create(Width, Height)
-Image Image:Crop(Width, Height, StartX, StartY)
-array Image:GetPixels()
-bool Image:SetPixels(pixel)
-matrix Image:GetPixelMatrix()
-bool Image:SetPixelMatrix(pixelmatrix)
-pixel Image:GetPixel(y, x)
-void Image:SetPixel(y, x, pixel)
-width, height Image:GetSize()
-void Image:Close()
-```
-
----
-
 ## Json
 
 ```lua
@@ -1704,7 +1432,6 @@ nil Wchar.Setlocale(codepage)
 ```lua
 string Wchar:ToUtf8()
 string Wchar:ToAnsi()
-string Wchar:ToWide()
 array Wchar:ToBytes()
 ```
 
@@ -1822,82 +1549,3 @@ Wchar   FileSystem.GetSpecialFolder(csidl)   -- Windows only
 | `0x001a` | AppData |
 
 ---
-
-## TWODA
-
-```lua
-TWODA TWODA.Open(file)
-string TWODA:Get2DAString(row, index or columnname)
-table TWODA:Get2DARow(row)
-array, numrows, version TWODA:GetInfo()
-```
-
----
-
-## TLK
-
-```lua
-TLK TLK.Create(filename, array, opt languageid, opt version)
-TLK TLK.Open(filename)
-table TLK:GetAll()
-table TLK:Get(strref)
-bool TLK:SetSoundInfo(strref, soundresref, opt soundlength)
-bool TLK:Set(strref, newstring)
-bool TLK:Defragment(opt extra)
-count, languageid, version TLK:GetInfo()
-```
-
----
-
-## KeyBif
-
-```lua
-KeyBif KeyBif.Create()
-```
-
----
-
-## ERF
-
-```lua
-ERF, entries, filetype, version ERF.Open(filename)
-ERF ERF.Create(filename, typeheader, filelist, opt version, opt desc)
-header ERF:GetHeader()
-array ERF:GetStrings()
-array ERF:GetKeys()
-binary ERF:GetResource(ResID)
-nil ERF:Extract(ResID, targetfile)
-```
-
----
-
-## GFF
-
-```lua
-struct GFF.OpenFile(file)
-struct GFF.OpenString(string)
-nil GFF.SaveToFile(gff, file)
-string GFF.SaveToString(gff)
-```
-
-### GFF Types
-
-| Value | Type |
-|-------|------|
-| 0 | byte |
-| 1 | char |
-| 2 | word |
-| 3 | short |
-| 4 | dword |
-| 5 | int |
-| 6 | dword64 |
-| 7 | int64 |
-| 8 | float |
-| 9 | double |
-| 10 | CExoString |
-| 11 | ResRef |
-| 12 | CExoLocString |
-| 13 | binary string |
-| 14 | struct |
-| 15 | list |
-

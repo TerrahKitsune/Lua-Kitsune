@@ -1,9 +1,6 @@
 ﻿#include "RedisStream.h"
 #include "RedisKey.h"
 
-static int        JsonRef      = LUA_NOREF;
-static lua_State* JsonRefState = NULL;
-
 int RedisPushStreamInternal(lua_State* L, int redisIdx, const char* key, size_t keylength) {
 
 	luaL_checkudata(L, redisIdx, REDIS);
@@ -204,11 +201,11 @@ int redisstream_add(lua_State* L) {
 	lua_pushnil(L);
 	while (lua_pairs(L)) {
 
+		lua_checkstack(L, lua_gettop(L) + 5);
 		InternalPushValue(L, -1);
 		lua_remove(L, -2);
 		lua_rotate(L, -4, 1);
 		lua_rotate(L, -4, 1);
-		lua_checkstack(L, lua_gettop(L) + 5);
 		lua_pushvalue(L, -4);
 	}
 

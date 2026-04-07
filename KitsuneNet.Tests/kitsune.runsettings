@@ -4,6 +4,8 @@
     <EnvironmentVariables>
       <KITSUNE_MYSQL_TEST>10.9.23.252:3306:kitsune:testTest123!:kitsune</KITSUNE_MYSQL_TEST>
       <KITSUNE_POSTGRES_TEST>host=10.9.23.252 port=5432 user=kitsune password=testTest123! dbname=kitsune</KITSUNE_POSTGRES_TEST>
+      <KITSUNE_KAFKA_TEST>10.9.23.252:9092:Test:0</KITSUNE_KAFKA_TEST>
+      <KITSUNE_REDIS_TEST>10.9.23.252:6379:hej123</KITSUNE_REDIS_TEST>
     </EnvironmentVariables>
   </RunConfiguration>
 </RunSettings>

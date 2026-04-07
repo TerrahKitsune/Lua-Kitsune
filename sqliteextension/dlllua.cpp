@@ -9,7 +9,6 @@
 #include "../LuaAesMain.h"
 #include "../LuaCsvMain.h"
 #include "../LuaFileSystemMain.h"
-#include "../LuaFTPMain.h"
 #ifdef KITSUNE_HTTP
 #include "../HttpCurlMain.h"
 #endif
@@ -70,8 +69,6 @@ lua_State* OpenLuaState(lua_Alloc memoryAllocator) {
 	lua_setglobal(L, "CSV");
 	luaopen_filesystem(L);
 	lua_setglobal(L, "FileSystem");
-	luaopen_ftp(L);
-	lua_setglobal(L, "FTP");
 	#ifdef KITSUNE_HTTP
 	luaopen_http(L);
 	lua_setglobal(L, "Http");

@@ -134,9 +134,19 @@ int GetIsAdmin(lua_State* L) {
 static int GetLastErrorAsMessage(lua_State* L) {
 	int code = (int)luaL_optinteger(L, 1, errno);
 	lua_pop(L, lua_gettop(L));
-	char buf[256];
-	strerror_r(code, buf, sizeof(buf));
-	lua_pushstring(L, buf);
+	char buf[256] = {};
+	// strerror_r has two incompatible signatures depending on feature macros:
+	//   GNU  (_GNU_SOURCE):    char* strerror_r(int, char*, size_t)  — returns pointer, may ignore buf
+	//   POSIX (_POSIX_C_SOURCE >= 200112L && !_GNU_SOURCE): int — writes into buf
+	// Cast the call through (void*) to suppress the "ignoring return value" warning on
+	// the GNU variant, then fall back to strerror() which is always correct here since
+	// Lua scripts run on a single OS thread managed by KitsuneEngine.
+	(void)strerror_r(code, buf, sizeof(buf));
+	// strerror() is thread-safe in glibc when the locale is not being changed concurrently,
+	// which is guaranteed by the single-threaded Lua scheduler.  It reliably returns the
+	// correct message string regardless of the strerror_r variant in use.
+	const char* msg = strerror(code);
+	lua_pushstring(L, msg ? msg : buf);
 	lua_pushinteger(L, code);
 	return 2;
 }

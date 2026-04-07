@@ -24,6 +24,8 @@ $Tfm              = "net10.0"
 # Database credentials passed as env vars to dotnet test
 $MySqlConnStr     = "10.9.23.252:3306:kitsune:testTest123!:kitsune"
 $PostgresConnStr  = "host=10.9.23.252 port=5432 user=kitsune password=testTest123! dbname=kitsune"
+$KafkaConnStr     = "10.9.23.252:9092:Test:0"
+$RedisConnStr     = "10.9.23.252:6379:hej123"
 
 # Destinations that need the fresh .so (relative to repo root)
 $SoDeploys = @(
@@ -57,11 +59,15 @@ function Write-Step {
 	Write-Host "── $Message" -ForegroundColor Cyan
 }
 
-# ── 1. Configure ──────────────────────────────────────────────────────────────
+# ── 1. Install prerequisites ──────────────────────────────────────────────────
+Write-Step "Installing Linux prerequisites"
+Invoke-Wsl "dpkg -s libarchive-dev libhiredis-dev libssl-dev > /dev/null 2>&1 || (sudo apt-get update -qq && sudo apt-get install -y libarchive-dev libhiredis-dev libssl-dev)"
+
+# ── 2. Configure ──────────────────────────────────────────────────────────────
 Write-Step "Configuring ($CMakeFlags)"
 Invoke-Wsl "cd '$WslRoot' && cmake $CMakeFlags -B $BuildDir . 2>&1"
 
-# ── 2. Build ──────────────────────────────────────────────────────────────────
+# ── 3. Build ──────────────────────────────────────────────────────────────────
 Write-Step "Building"
 $parallelArg = if ($BuildJobs -eq 0) { "--parallel" } else { "--parallel $BuildJobs" }
 Invoke-Wsl "cd '$WslRoot' && cmake --build $BuildDir $parallelArg 2>&1"
@@ -76,9 +82,11 @@ foreach ($dest in $SoDeploys) {
 # ── 4. Run tests ──────────────────────────────────────────────────────────────
 Write-Step "Running tests"
 $testCmd = "cd '$WslRoot' && " +
-           "KITSUNE_MYSQL_TEST='$MySqlConnStr' " +
-           "KITSUNE_POSTGRES_TEST='$PostgresConnStr' " +
-           "dotnet test '$TestProject' -v m 2>&1"
+		   "KITSUNE_MYSQL_TEST='$MySqlConnStr' " +
+		   "KITSUNE_POSTGRES_TEST='$PostgresConnStr' " +
+		   "KITSUNE_KAFKA_TEST='$KafkaConnStr' " +
+		   "KITSUNE_REDIS_TEST='$RedisConnStr' " +
+		   "dotnet test '$TestProject' -v m 2>&1"
 Invoke-Wsl $testCmd
 
 Write-Host ""

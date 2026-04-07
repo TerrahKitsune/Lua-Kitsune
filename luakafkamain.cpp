@@ -1,121 +1,118 @@
-#include "luakafka.h"
+﻿#include "luakafka.h"
 #include "luakafkamain.h"
-#include "luakafkamessage.h"
-#include "luakafkatopic.h"
+#include "luakafkaproducer.h"
+#include "luakafkaconsumer.h"
 
-static const struct luaL_Reg kafkafunctions[] = {
-
-	{ "Poll",  PollMessages },
-	{ "Events",  PollEvents },
-	{ "NewConsumer",  CreateConsumer },
-	{ "NewProducer",  CreateProducer },
-	{ "Send",  ProduceMessage },
-	{ "Commit",  CommitMessage },
-	{ "Seek", SeekOffset },
-	{ "AddBroker",  AddBroker },
-	{ "GetGroups",  DescribeGroups },
-	{ "GetMetadata",  GetMetadata },
-	{ "Logs",  GetLastLogs },
-	{ "Consume",  ConsumeMessage },
-	{ "OpenTopic",  StartTopicConsumer },
-	{ "GetOffsets",  QueryHighLow },
-	{ "CreateTopic",  CreateTopic },
-	{ "DeleteTopic",  DeleteTopic },
-	{ "Close",  kafka_gc },
-	{ "GetId",  GetKafkaId },
-	{ "AlterConfig",  AlterConfig },
-	{ "SetPartitions",  CreatePartition },
-	{ "PauseTopic",  PausePartition },
-	{ "ResumeTopic",  ResumePartition },
-	{ "GetConfig",  GetConfig },
-	{ "GetCommitted",  GetCommitted },
-	{ "Subscribe",  Subscribe },
-	{ "Assign",  Assign },
-	{ NULL, NULL }
+static const luaL_Reg kafkaproducerfunctions[] = {
+    { "Send",               ProducerSend               },
+    { "GetOffsets",         ProducerGetOffsets         },
+    { "GetMetadata",        ProducerGetMetadata        },
+    { "CreateTopic",        ProducerCreateTopic        },
+    { "DestroyTopic",       ProducerDestroyTopic       },
+    { "GetTopicConfig",     ProducerGetTopicConfig     },
+    { "SetTopicConfig",     ProducerSetTopicConfig     },
+    { "ListGroups",         ProducerListGroups         },
+    { "DescribeGroups",     ProducerDescribeGroups     },
+    { "DeleteGroup",        ProducerDeleteGroup        },
+    { "GetGroupOffsets",    ProducerGetGroupOffsets    },
+    { "SetGroupOffsets",    ProducerSetGroupOffsets    },
+    { "DeleteGroupOffsets", ProducerDeleteGroupOffsets },
+    { "Close",              ProducerGC                 },
+    { NULL, NULL }
 };
 
-static const luaL_Reg kafkameta[] = {
-	{ "__gc",  kafka_gc },
-	{ "__tostring",  kafka_tostring },
-{ NULL, NULL }
+static const luaL_Reg kafkaproducermeta[] = {
+    { "__gc",       ProducerGC       },
+    { "__tostring", ProducerToString },
+    { NULL, NULL }
 };
 
-static const struct luaL_Reg kafkamessagefunctions[] = {
-	{ "GetData",  GetKafkaMessageData },
-	{ "GetOwnerId",  GetKafkaMessageOwnerId },
-	{ "GetTimestamp",  GetKafkaMessageTimestamp },
-	{ "GetLatency",  GetKafkaMessageLatency },
-	{ "GetEqual",  GetKafkaMessageEqual },
-	{ "Dispose",  kafkamsg_gc },
-	{ NULL, NULL }
+static const luaL_Reg kafkaconsumerfunctions[] = {
+    { "Subscribe",          ConsumerSubscribe          },
+    { "Assign",             ConsumerAssign             },
+    { "Commit",             ConsumerCommit             },
+    { "Seek",               ConsumerSeek               },
+    { "GetOffsets",         ConsumerGetOffsets         },
+    { "GetMetadata",        ConsumerGetMetadata        },
+    { "GetTopicConfig",     ConsumerGetTopicConfig     },
+    { "SetTopicConfig",     ConsumerSetTopicConfig     },
+    { "ListGroups",         ConsumerListGroups         },
+    { "DescribeGroups",     ConsumerDescribeGroups     },
+    { "DeleteGroup",        ConsumerDeleteGroup        },
+    { "GetGroupOffsets",    ConsumerGetGroupOffsets    },
+    { "SetGroupOffsets",    ConsumerSetGroupOffsets    },
+    { "DeleteGroupOffsets", ConsumerDeleteGroupOffsets },
+    { "Close",              ConsumerGC                 },
+    { NULL, NULL }
 };
 
-static const luaL_Reg kafkamessagemeta[] = {
-	{ "__gc",  kafkamsg_gc },
-	{ "__tostring",  kafkamsg_tostring },
-	{ NULL, NULL }
+static const luaL_Reg kafkaconsumermeta[] = {
+    { "__gc",       ConsumerGC       },
+    { "__tostring", ConsumerToString },
+    { NULL, NULL }
 };
 
-static const struct luaL_Reg kafkatopicfunctions[] = {
-	{ "GetOwnerId",  GetKafkaTopicOwnerId },
-	{ "GetInfo",  GetKafkaTopicInfo },
-	{ "Dispose",  kafkatopic_gc },
-	{ "IsPaused",  TopicIsPaused },
-	{ NULL, NULL }
+static const luaL_Reg kafkacoroutinemethods[] = {
+    { "AutoCommit", ConsumeAutoCommit },
+    { NULL, NULL }
 };
 
-static const luaL_Reg kafkatopicmeta[] = {
-	{ "__gc",  kafkatopic_gc },
-	{ "__tostring",  kafkatopic_tostring },
-	{ NULL, NULL }
+static const luaL_Reg kafkacoroutinemeta[] = {
+    { "__gc", ConsumeCoroutineGC },
+    { NULL, NULL }
 };
+
+static const luaL_Reg kafkamodule[] = {
+    { "NewProducer", CreateProducer },
+    { "NewConsumer", CreateConsumer },
+    { "Logs",        GetLastLogs    },
+    { NULL, NULL }
+};
+
+static void register_type(lua_State* L, const char* metaname,
+    const luaL_Reg* functions, const luaL_Reg* meta) {
+
+    luaL_newlibtable(L, functions);
+    luaL_setfuncs(L, functions, 0);
+
+    luaL_newmetatable(L, metaname);
+    luaL_setfuncs(L, meta, 0);
+
+    lua_pushliteral(L, "__index");
+    lua_pushvalue(L, -3);
+    lua_rawset(L, -3);
+    lua_pushliteral(L, "__metatable");
+    lua_pushvalue(L, -3);
+    lua_rawset(L, -3);
+
+    lua_pop(L, 2);
+}
 
 int luaopen_kafka(lua_State* L) {
 
-	luaL_newlibtable(L, kafkatopicfunctions);
-	luaL_setfuncs(L, kafkatopicfunctions, 0);
+    register_type(L, LUAKAFKAPRODUCER, kafkaproducerfunctions, kafkaproducermeta);
+    register_type(L, LUAKAFKACONSUMER, kafkaconsumerfunctions, kafkaconsumermeta);
 
-	luaL_newmetatable(L, LUAKAFKATOPIC);
-	luaL_setfuncs(L, kafkatopicmeta, 0);
+    // KAFKACONSUMERSTATE — internal userdata, only needs __gc for cleanup
+    luaL_newmetatable(L, LUAKAFKACONSUMERSTATE);
+    lua_pop(L, 1);
 
-	lua_pushliteral(L, "__index");
-	lua_pushvalue(L, -3);
-	lua_rawset(L, -3);
-	lua_pushliteral(L, "__metatable");
-	lua_pushvalue(L, -3);
-	lua_rawset(L, -3);
+    // KAFKACONSUMECOROUTINE — thread metatable: __gc + __index -> methods table
+    luaL_newlibtable(L, kafkacoroutinemethods);
+    luaL_setfuncs(L, kafkacoroutinemethods, 0);
 
-	lua_pop(L, 2);
+    luaL_newmetatable(L, LUAKAFKACONSUMECOROUTINE);
+    luaL_setfuncs(L, kafkacoroutinemeta, 0);
 
-	luaL_newlibtable(L, kafkamessagefunctions);
-	luaL_setfuncs(L, kafkamessagefunctions, 0);
+    lua_pushliteral(L, "__index");
+    lua_pushvalue(L, -3);
+    lua_rawset(L, -3);
 
-	luaL_newmetatable(L, LUAKAFKAMESSAGE);
-	luaL_setfuncs(L, kafkamessagemeta, 0);
+    lua_pop(L, 2);
 
-	lua_pushliteral(L, "__index");
-	lua_pushvalue(L, -3);
-	lua_rawset(L, -3);
-	lua_pushliteral(L, "__metatable");
-	lua_pushvalue(L, -3);
-	lua_rawset(L, -3);
+    // Module table returned to Lua
+    luaL_newlibtable(L, kafkamodule);
+    luaL_setfuncs(L, kafkamodule, 0);
 
-	lua_pop(L, 2);
-
-	luaL_newlibtable(L, kafkafunctions);
-	luaL_setfuncs(L, kafkafunctions, 0);
-
-	luaL_newmetatable(L, LUAKAFKA);
-	luaL_setfuncs(L, kafkameta, 0);
-
-	lua_pushliteral(L, "__index");
-	lua_pushvalue(L, -3);
-	lua_rawset(L, -3);
-	lua_pushliteral(L, "__metatable");
-	lua_pushvalue(L, -3);
-	lua_rawset(L, -3);
-
-	lua_pop(L, 1);
-
-	return 1;
+    return 1;
 }

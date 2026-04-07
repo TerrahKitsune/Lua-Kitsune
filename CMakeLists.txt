@@ -122,6 +122,9 @@ option(KITSUNE_ALL "Enable all optional modules (MySQL, PostgreSQL, …)" OFF)
 if(KITSUNE_ALL)
 	set(KITSUNE_MYSQL    ON CACHE BOOL "Enabled by KITSUNE_ALL" FORCE)
 	set(KITSUNE_POSTGRES ON CACHE BOOL "Enabled by KITSUNE_ALL" FORCE)
+	set(KITSUNE_KAFKA    ON CACHE BOOL "Enabled by KITSUNE_ALL" FORCE)
+	set(KITSUNE_ARCHIVE  ON CACHE BOOL "Enabled by KITSUNE_ALL" FORCE)
+	set(KITSUNE_REDIS    ON CACHE BOOL "Enabled by KITSUNE_ALL" FORCE)
 	target_compile_definitions(KitsuneEngine PRIVATE KITSUNE_ALL)
 endif()
 
@@ -161,6 +164,67 @@ if(KITSUNE_POSTGRES)
 	target_compile_definitions(KitsuneEngine PRIVATE KITSUNE_POSTGRES)
 	target_include_directories(KitsuneEngine PRIVATE ${LIBPQ_INCLUDE_DIRS})
 	target_link_libraries(KitsuneEngine PRIVATE ${LIBPQ_LINK_LIBRARIES})
+endif()
+
+# ── Optional Kafka support ────────────────────────────────────────────────────
+option(KITSUNE_KAFKA "Build with Kafka support (requires librdkafka >= 1.9)" OFF)
+
+if(KITSUNE_KAFKA)
+	find_package(PkgConfig REQUIRED)
+	pkg_check_modules(RDKAFKA REQUIRED rdkafka>=1.9)
+
+	target_sources(KitsuneEngine PRIVATE
+		luakafka.cpp
+		luakafkaconsumer.cpp
+		luakafkaproducer.cpp
+		kafkahelpers.cpp
+		luakafkamain.cpp
+	)
+
+	target_compile_definitions(KitsuneEngine PRIVATE KITSUNE_KAFKA)
+	target_include_directories(KitsuneEngine PRIVATE ${RDKAFKA_INCLUDE_DIRS})
+	target_link_libraries(KitsuneEngine PRIVATE ${RDKAFKA_LINK_LIBRARIES})
+endif()
+
+# ── Optional Archive support ──────────────────────────────────────────────────
+option(KITSUNE_ARCHIVE "Build with Archive support (requires libarchive >= 3.2)" OFF)
+
+if(KITSUNE_ARCHIVE)
+	find_package(LibArchive 3.2 REQUIRED)
+
+	target_sources(KitsuneEngine PRIVATE LuaArchive.cpp LuaArchiveMain.cpp)
+
+	target_compile_definitions(KitsuneEngine PRIVATE KITSUNE_ARCHIVE)
+	target_include_directories(KitsuneEngine PRIVATE ${LibArchive_INCLUDE_DIRS})
+	target_link_libraries(KitsuneEngine PRIVATE ${LibArchive_LIBRARIES})
+endif()
+
+# ── Optional Redis support ─────────────────────────────────────────────
+option(KITSUNE_REDIS "Build with Redis support (requires hiredis >= 1.0 with SSL)" OFF)
+
+if(KITSUNE_REDIS)
+	find_package(PkgConfig REQUIRED)
+	pkg_check_modules(HIREDIS REQUIRED hiredis)
+	find_package(OpenSSL REQUIRED)
+
+	target_sources(KitsuneEngine PRIVATE
+		Redis.cpp
+		RedisMain.cpp
+		RedisPubSub.cpp
+		RedisKey.cpp
+		RedisString.cpp
+		RedisValue.cpp
+		RedisStream.cpp
+		RedisJson.cpp
+	)
+
+	target_compile_definitions(KitsuneEngine PRIVATE KITSUNE_REDIS)
+	target_link_libraries(KitsuneEngine PRIVATE
+		${HIREDIS_LIBRARIES}
+		hiredis_ssl
+		OpenSSL::SSL
+		OpenSSL::Crypto
+	)
 endif()
 
 target_compile_definitions(KitsuneEngine PRIVATE

@@ -84,10 +84,12 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="Program.cpp" />  </ItemGroup>
+    <ClCompile Include="Program.cpp" />
+  </ItemGroup>
   <ItemGroup>
     <ClInclude Include="KitsuneEngine.h" />
-    <ClInclude Include="resource.h" />  </ItemGroup>
+    <ClInclude Include="resource.h" />
+  </ItemGroup>
   <ItemGroup>
     <Text Include="main.lua">
       <FileType>Document</FileType>
@@ -106,7 +108,6 @@
   <ItemGroup>
     <None Include=".github\copilot-instructions.md" />
     <None Include="Extension functions.md" />
-    <None Include="KitsuneEngine\KitsuneEngine.vcxproj" />
     <None Include="Lua functions.md" />
     <None Include="Lua\Makefile" />
   </ItemGroup>

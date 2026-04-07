@@ -21,18 +21,12 @@
     <ClCompile Include="Program.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="streamfile.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="KitsuneEngine.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="resource.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="streamfile.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -64,7 +58,6 @@
     <None Include="Lua\Makefile">
       <Filter>Documentation</Filter>
     </None>
-    <None Include="KitsuneEngine\KitsuneEngine.vcxproj" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="main.lua" />

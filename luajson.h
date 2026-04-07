@@ -55,8 +55,21 @@ typedef struct LuaJson {
 // lua_pushlightuserdata(L, lua_json_null()) produces the Json.Null value.
 void*    lua_json_null(void);
 
+// Returns the unique pointer address used as the registry key for the shared
+// bridge LuaJson instance stored by KitsuneInit.
+// Use:  lua_rawgetp(L, LUA_REGISTRYINDEX, lua_json_bridge_registry_key())
+void*    lua_json_bridge_registry_key(void);
+
 LuaJson* lua_json_push(lua_State* L);           // push a fresh GC-managed instance
 LuaJson* lua_json_check(lua_State* L, int idx); // check + return instance at idx
+
+// json:Encode(value) — encodes Lua value at position 2 to a JSON string.
+// Arg 1 must be a LuaJson instance (use lua_json_bridge_registry_key()).
+int      lua_json_encode(lua_State* L);
+
+// json:Decode(str | fn | stream) — decodes JSON at position 2 to a Lua value.
+// Arg 1 must be a LuaJson instance (use lua_json_bridge_registry_key()).
+int      lua_json_decode(lua_State* L);
 
 int lua_json_gc(lua_State* L);
 int lua_json_tostring(lua_State* L);

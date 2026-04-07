@@ -10,6 +10,15 @@
 #	ifndef KITSUNE_POSTGRES
 #		define KITSUNE_POSTGRES
 #	endif
+#	ifndef KITSUNE_KAFKA
+#		define KITSUNE_KAFKA
+#	endif
+#	ifndef KITSUNE_ARCHIVE
+#		define KITSUNE_ARCHIVE
+#	endif
+#	ifndef KITSUNE_REDIS
+#		define KITSUNE_REDIS
+#	endif
 #endif
 
 #ifdef _WIN32

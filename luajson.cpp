@@ -5,6 +5,12 @@
 // Unique address used as the JSON null sentinel.
 // Both encoder and decoder reference this directly — no registry lookup needed.
 static char g_json_null;
+// Unique address used as the Lua registry key for the shared bridge LuaJson instance.
+static char g_bridge_json_key;
+void* lua_json_bridge_registry_key(void) {
+	return &g_bridge_json_key;
+}
+
 void* lua_json_null(void) {
 	return &g_json_null;
 }

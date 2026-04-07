@@ -357,3 +357,8 @@ imgui.ini
 
 # Linux CMake build directories — regenerated locally, nothing to track
 build-*/
+
+build/
+
+# vcpkg installed packages — restored locally by vcpkg, not committed
+vcpkg_installed/

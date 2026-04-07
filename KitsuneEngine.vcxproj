@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
@@ -45,9 +45,9 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(SolutionDir)mysql\include;$(SolutionDir)postgres\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)zip;$(SolutionDir)libarchive;$(SolutionDir)libarchive/lzma;$(SolutionDir)hiredis;$(SolutionDir)curl\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)vcpkg_installed\x64-windows-static-md\include;$(SolutionDir)mysql\include;$(SolutionDir)postgres\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)zip;$(SolutionDir)hiredis;$(SolutionDir)curl\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4703;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <PreprocessorDefinitions>KITSUNE_HTTP;KITSUNE_ENGINE_EXPORTS;KITSUNE_ALL;STANDALONEGFF;_CRT_SECURE_NO_WARNINGS;ImTextureID=ImU64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>KITSUNE_HTTP;KITSUNE_KAFKA;KITSUNE_REDIS;KITSUNE_ENGINE_EXPORTS;KITSUNE_ALL;STANDALONEGFF;_CRT_SECURE_NO_WARNINGS;ImTextureID=ImU64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
@@ -55,7 +55,8 @@
     <Link>
       <LinkIncremental>false</LinkIncremental>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>Cabinet.lib;$(SolutionDir)curl\lib\libcurl.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>archive.lib;bz2d.lib;lzma.lib;zlibd.lib;zstd.lib;Cabinet.lib;$(SolutionDir)curl\lib\libcurl.lib;$(SolutionDir)hiredis\hiredis.lib;$(SolutionDir)hiredis\hiredis_ssl.lib;$(SolutionDir)OpenSSL\libssl.lib;$(SolutionDir)OpenSSL\libcrypto.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(SolutionDir)vcpkg_installed\x64-windows-static-md\debug\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <LargeAddressAware>true</LargeAddressAware>
       <IgnoreSpecificDefaultLibraries>msvcrt.lib;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
     </Link>
@@ -70,9 +71,9 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(SolutionDir)mysql\include;$(SolutionDir)postgres\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)zip;$(SolutionDir)libarchive;$(SolutionDir)libarchive/lzma;$(SolutionDir)hiredis;$(SolutionDir)curl\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)vcpkg_installed\x64-windows-static-md\include;$(SolutionDir)mysql\include;$(SolutionDir)postgres\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)zip;$(SolutionDir)hiredis;$(SolutionDir)curl\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4703;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <PreprocessorDefinitions>KITSUNE_HTTP;KITSUNE_ENGINE_EXPORTS;KITSUNE_ALL;STANDALONEGFF;_CRT_SECURE_NO_WARNINGS;ImTextureID=ImU64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>KITSUNE_HTTP;KITSUNE_KAFKA;KITSUNE_REDIS;KITSUNE_ENGINE_EXPORTS;KITSUNE_ALL;STANDALONEGFF;_CRT_SECURE_NO_WARNINGS;ImTextureID=ImU64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
@@ -82,7 +83,8 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>Cabinet.lib;$(SolutionDir)curl\lib\libcurl.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>archive.lib;bz2.lib;lzma.lib;zlib.lib;zstd.lib;Cabinet.lib;$(SolutionDir)curl\lib\libcurl.lib;$(SolutionDir)hiredis\hiredis.lib;$(SolutionDir)hiredis\hiredis_ssl.lib;$(SolutionDir)OpenSSL\libssl.lib;$(SolutionDir)OpenSSL\libcrypto.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(SolutionDir)vcpkg_installed\x64-windows-static-md\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <LargeAddressAware>true</LargeAddressAware>
     </Link>
     <PostBuildEvent>
@@ -99,8 +101,6 @@
     <ClCompile Include="LuaArchiveMain.cpp" />
     <ClCompile Include="base64.cpp" />
     <ClCompile Include="Client.cpp" />
-    <ClCompile Include="FileAsync.cpp" />
-    <ClCompile Include="FileAsyncMain.cpp" />
     <ClCompile Include="luajson.cpp" />
     <ClCompile Include="luajsonmain.cpp" />
     <ClCompile Include="kafkahelpers.cpp" />
@@ -109,13 +109,10 @@
     <ClCompile Include="luacsv.cpp" />
     <ClCompile Include="LuaCsvMain.cpp" />
     <ClCompile Include="LuaEngineBuiltins.cpp" />
-    <ClCompile Include="LuaFTP.cpp" />
-    <ClCompile Include="LuaFTPChannel.cpp" />
-    <ClCompile Include="LuaFTPMain.cpp" />
     <ClCompile Include="luakafka.cpp" />
+    <ClCompile Include="luakafkaconsumer.cpp" />
     <ClCompile Include="luakafkamain.cpp" />
-    <ClCompile Include="luakafkamessage.cpp" />
-    <ClCompile Include="luakafkatopic.cpp" />
+    <ClCompile Include="luakafkaproducer.cpp" />
     <ClCompile Include="LuaMutex.cpp" />
     <ClCompile Include="LuaMutexMain.cpp" />
     <ClCompile Include="LuaPostgres.cpp" />
@@ -156,13 +153,13 @@
     <ClCompile Include="Lua\lvm.c" />
     <ClCompile Include="Lua\lzio.c" />
     <ClCompile Include="lua_misc.cpp" />
-    <ClCompile Include="macro.cpp" />
-    <ClCompile Include="MacroMain.cpp" />
     <ClCompile Include="mem.cpp" />
     <ClCompile Include="MemoryManager.cpp" />
     <ClCompile Include="Redis.cpp" />
+    <ClCompile Include="RedisJson.cpp" />
     <ClCompile Include="RedisKey.cpp" />
     <ClCompile Include="RedisMain.cpp" />
+    <ClCompile Include="RedisPubSub.cpp" />
     <ClCompile Include="RedisStream.cpp" />
     <ClCompile Include="RedisString.cpp" />
     <ClCompile Include="RedisValue.cpp" />
@@ -211,14 +208,10 @@
     <ClInclude Include="hiredis\read.h" />
     <ClInclude Include="hiredis\sds.h" />
     <ClInclude Include="KitsuneEngine.h" />
-    <ClInclude Include="libarchive\archive.h" />
-    <ClInclude Include="libarchive\archive_entry.h" />
     <ClInclude Include="LuaArchive.h" />
     <ClInclude Include="LuaArchiveMain.h" />
     <ClInclude Include="base64.h" />
     <ClInclude Include="Client.h" />
-    <ClInclude Include="FileAsync.h" />
-    <ClInclude Include="FileAsyncMain.h" />
     <ClInclude Include="HttpCurl.h" />
     <ClInclude Include="HttpCurlMain.h" />
     <ClInclude Include="luajson.h" />
@@ -229,13 +222,10 @@
     <ClInclude Include="luacsv.h" />
     <ClInclude Include="LuaCsvMain.h" />
     <ClInclude Include="LuaEngineBuiltins.h" />
-    <ClInclude Include="LuaFTP.h" />
-    <ClInclude Include="LuaFTPChannel.h" />
-    <ClInclude Include="LuaFTPMain.h" />
     <ClInclude Include="luakafka.h" />
+    <ClInclude Include="luakafkaconsumer.h" />
     <ClInclude Include="luakafkamain.h" />
-    <ClInclude Include="luakafkamessage.h" />
-    <ClInclude Include="luakafkatopic.h" />
+    <ClInclude Include="luakafkaproducer.h" />
     <ClInclude Include="LuaMutex.h" />
     <ClInclude Include="LuaMutexMain.h" />
     <ClInclude Include="LuaProcess.h" />
@@ -272,15 +262,15 @@
     <ClInclude Include="Lua\lzio.h" />
     <ClInclude Include="lua_main_incl.h" />
     <ClInclude Include="lua_misc.h" />
-    <ClInclude Include="macro.h" />
-    <ClInclude Include="MacroMain.h" />
     <ClInclude Include="mem.h" />
     <ClInclude Include="MemoryManager.h" />
     <ClInclude Include="platform.h" />
     <ClInclude Include="postgres\include\libpq-fe.h" />
     <ClInclude Include="Redis.h" />
+    <ClInclude Include="RedisJson.h" />
     <ClInclude Include="RedisKey.h" />
     <ClInclude Include="RedisMain.h" />
+    <ClInclude Include="RedisPubSub.h" />
     <ClInclude Include="RedisStream.h" />
     <ClInclude Include="RedisString.h" />
     <ClInclude Include="RedisValue.h" />
@@ -323,11 +313,15 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="build-linux-and-test.ps1" />
+    <None Include="build-release.ps1" />
     <None Include="Http Client Implementation Plan.md" />
+    <None Include="Kafka refactor plan.md" />
     <None Include="Lua functions.md" />
     <None Include="MySQL Implementation Plan.md" />
     <None Include="Postgres Implementation Plan.md" />
     <None Include="testEnvironments.json" />
+    <None Include="triplets\x64-windows-static-md.cmake" />
+    <None Include="vcpkg.json" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />

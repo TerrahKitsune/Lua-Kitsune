@@ -225,7 +225,7 @@ extern "C" {
 	// key and value are temporary — valid only for the duration of each call. Thread-safe.
 	KITSUNE_API void KitsuneGetAll(const char* path, kitsune_KeyValuePairCallback callback, void* userdata);
 	// Destroy the Lua state and clean up the engine.
-	KITSUNE_API void KitsuneCleanup();
+	KITSUNE_API size_t KitsuneCleanup();
 	// Registers the Session table (Session.Console, Session.Clipboard) into the Lua global
 	// environment. Call once from the host after KitsuneInit() to enable interactive session
 	// functions. No-op if called before KitsuneInit(). Thread-safe.

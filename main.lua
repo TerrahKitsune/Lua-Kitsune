@@ -156,6 +156,9 @@ local test=[[{
 local j = Json.Create(true):Decode(test);
 
 print(Json.Create(true):Encode(j));
+for k,v in pairs(Kafka) do
+	print(k, v);
+end
 
 GetKey();
 

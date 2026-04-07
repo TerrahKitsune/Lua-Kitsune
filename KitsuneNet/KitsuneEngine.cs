@@ -100,7 +100,7 @@ namespace KitsuneNet
         private static extern int KitsuneGetActiveIds(int[]? buffer, int bufferSize);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern void KitsuneCleanup();
+        private static extern nuint KitsuneCleanup();
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern void KitsuneRegisterSession();
@@ -135,11 +135,25 @@ namespace KitsuneNet
 
         #endregion
 
+        // Tracks the number of live KitsuneEngine instances.  KitsuneCleanup is
+        // only called when the last instance is disposed; calling it earlier would
+        // null g_state and break any concurrently running scripts (e.g. the stress
+        // test runs a producer and a consumer as two independent engine instances).
+        private static int _refCount;
+
+        /// <summary>
+        /// Number of native allocations that had not been freed when this engine was disposed.
+        /// Non-zero only in USEMEMORYMANAGER builds (Debug/Windows); always 0 in release or Linux.
+        /// Check this after <see cref="Dispose"/> to detect native memory leaks.
+        /// </summary>
+        public ulong LeakedAllocations { get; private set; }
+
         /// <summary>Initialises the engine. Throws if <c>KitsuneInit</c> returns false.</summary>
         public KitsuneEngine()
         {
             if (!KitsuneInit(IntPtr.Zero))
                 throw new InvalidOperationException("KitsuneInit failed");
+            Interlocked.Increment(ref _refCount);
         }
 
         // -- Execution ------------------------------------------------------------
@@ -779,10 +793,18 @@ namespace KitsuneNet
 
         public void Dispose()
         {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        private void Dispose(bool disposing)
+        {
             if (Interlocked.Exchange(ref _disposed, 1) == 0)
             {
-                KitsuneCleanup();
-                if (_functionHandles is not null)
+                if (Interlocked.Decrement(ref _refCount) == 0)
+                    LeakedAllocations = (ulong)KitsuneCleanup();
+
+                if (disposing && _functionHandles is not null)
                 {
                     foreach (var h in _functionHandles)
                         if (h.IsAllocated) h.Free();
@@ -790,6 +812,8 @@ namespace KitsuneNet
                 }
             }
         }
+
+        ~KitsuneEngine() => Dispose(false);
     }
 
     /// <summary>

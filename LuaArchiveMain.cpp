@@ -1,9 +1,10 @@
-#include "LuaArchive.h"
+﻿#include "LuaArchive.h"
 #include "LuaArchiveMain.h"
 
 static const struct luaL_Reg archivefunctions[] = {
 
 	{ "Read", ReadEntry },
+	{ "ReadAll", ReadAllEntry },
 	{ "SetEntry", SetReadEntry },
 	{ "Entries", ReadArchiveEntries },
 	{ "OpenRead", OpenReadArchive },
