@@ -12,10 +12,8 @@ A comprehensive reference for all available functions in the Lua environment.
 - [Redis](#redis)
 - [CSV](#csv)
 - [Kafka](#kafka)
-- [Sound](#sound)
 - [Archive](#archive)
 - [Stream](#stream)
-- [Env](#env)
 - [Base64](#base64)
 - [Aes](#aes)
 - [Process](#process)
@@ -144,6 +142,10 @@ bool GetIsAdmin()
 | `c` | Table with special characters 0-31 (e.g., `c.LF = '\n'`) |
 | `ARGS[1]` | The script file being run (or `"cmd"` in REPL mode) |
 | `ARGS[2..n]` | Additional command-line parameters passed after the script name |
+| `ID` | Integer ID of the currently running coroutine (set by the scheduler before each resume) |
+| `VERSION` | Engine version string (e.g. `"1.0.0"`) |
+| `CPUID` | CPU identifier string returned by the CPUID instruction |
+| `DEBUG` | `true` in debug builds; not defined in release builds |
 
 ---
 
@@ -259,7 +261,6 @@ Redis Redis.Open(host, port, opt useTls, opt timeout, opt sslOptions, opt passwo
 
 ```lua
 reply Redis:Command(command, arg, arg, arg, ...)
-channel, message Redis:Poll()
 ```
 
 **Reply types:**
@@ -290,6 +291,7 @@ RedisValue Redis:GetList(key)
 RedisValue Redis:GetSet(key)
 RedisValue Redis:GetSortedSet(key)
 RedisStream Redis:GetStream(key)
+RedisJson   Redis:GetJson(key)
 ```
 
 ### RedisStream
@@ -312,13 +314,21 @@ bool RedisKey:SetTTL(ms)
 ### RedisString
 
 ```lua
-int RedisString:GetTTL()
-bool RedisString:SetTTL(ms)
-string RedisString:Set(newValue)
-string RedisString:GetOrSet(newValue)
-string RedisString:Delete()
+int    RedisString:GetTTL()
+bool   RedisString:SetTTL(ms)
+string RedisString:Set(newValue)      -- returns old value, or nil if key was new
+string RedisString:GetOrSet(newValue) -- alias: GetSet
+string RedisString:Delete()           -- returns value before deletion
+byte   RedisString:At(n)             -- byte at 1-based position; nil if out of range
 length RedisString:len()
 ```
+
+Metamethod shortcuts:
+- `#str` — same as `len()`
+- `str[n]` — same as `At(n)` (read)
+- `str[n] = byte` — writes byte via `SETRANGE`
+- `str1 .. str2` — concatenates, returning a Lua string
+- `pairs(str)` — iterates bytes as `(position, byte)` pairs
 
 ### Iterator Example
 
@@ -326,6 +336,72 @@ length RedisString:len()
 for key in redis do
     print(key)
 end
+```
+
+### Pub/Sub
+
+```lua
+thread, errmsg  Redis:Subscribe(channel, ...)
+thread, errmsg  Redis:PSubscribe(pattern, ...)
+```
+
+Opens a **dedicated connection** and sends `SUBSCRIBE` / `PSUBSCRIBE` for the given channels or patterns. Returns a coroutine thread on success, or `nil, errmsg` on failure.
+
+Drive the coroutine with `coroutine.resume(co, stop_flag)`:
+
+- Pass `false` (or nothing) to poll for the next message.
+- Pass `true` to unsubscribe, free the dedicated connection, and let the coroutine die.
+- When a message arrives the coroutine **yields** rather than returning, so drive it in a loop.
+
+| Resume result | Meaning |
+|---|---|
+| `true, channel, message` | A message arrived on `channel` |
+| `true, pattern, channel, message` | A `PSubscribe` message matched `pattern` on `channel` |
+| `true` (no extra values) | Subscribe/unsubscribe acknowledgement — resume again |
+| `true, nil, errmsg` | Connection error; coroutine is now dead |
+
+```lua
+-- Subscribe example
+local co = assert(redis:Subscribe('news', 'alerts'))
+while coroutine.status(co) == 'suspended' do
+    local ok, ch, msg = coroutine.resume(co)
+    if ch then print(ch, msg) end
+    if done then coroutine.resume(co, true) end
+end
+```
+
+### RedisJson
+
+`Redis:GetJson(key)` returns a `RedisJson` object representing the root path (`$`) of a RedisJSON key. Paths are built by chaining field names or 1-based integer indices via `__index`.
+
+```lua
+RedisJson  redis:GetJson(key)
+
+value      json:Get()         -- fetch decoded value at current path
+nil        json:Set(value)    -- write value at current path
+int        json:Delete()      -- delete at current path; returns count removed
+string     json:Type()        -- JSON type string: "null", "boolean", "integer",
+                              --   "number", "string", "object", "array"
+int        json:Length()      -- array length at current path
+```
+
+Metamethod shortcuts:
+- `json.field` — descends into object field (path chaining, returns new `RedisJson`)
+- `json[n]` — descends into array element at 1-based index `n` (0 raises an error)
+- `json.field = value` / `json[n] = value` — calls `Set`
+- `#json` — calls `Length`
+- `tostring(json)` — shows key and accumulated path
+- `json()` — `__call`: returns key name and Redis type string
+- `pairs(json)` — iterates object keys/values or array elements at current path
+
+```lua
+local j = redis:GetJson('config')
+print(j.version:Get())         -- scalar at $.version
+print(j.servers[1].host:Get()) -- nested path $.servers[0].host
+j.debug:Set(false)             -- JSON set
+j.servers[2]:Delete()          -- JSON del
+print(j:Type())                -- e.g. "object"
+print(j.items:Length())        -- array length
 ```
 
 ---
@@ -660,16 +736,6 @@ Returns (and optionally saves to file) the accumulated librdkafka log output.
 
 ---
 
-## Sound
-
-```lua
-bool Sound.Play(wavefile, opt async)
-bool Sound.Beep(freq, duration)
-int, string Sound.SendMCS(command)
-```
-
----
-
 ## Archive
 
 ```lua
@@ -897,17 +963,6 @@ bool Stream:WriteUnsignedInt() / int Stream:ReadUnsignedInt()
 bool Stream:WriteLong() / int Stream:ReadLong()
 bool Stream:WriteUnsignedLong() / int Stream:ReadUnsignedLong()
 Wchar Stream:ReadWchar(opt n)
-```
-
----
-
-## Env
-
-```lua
-table Env.Create(name)
-table Env.Get(name)
-table Env.GetOrCreate(name)
-table Env.Meta()
 ```
 
 ---
@@ -1228,29 +1283,29 @@ conn:Scalar("SELECT name FROM users WHERE id = ?", {42})
 
 ## Postgres
 
-Connects to a PostgreSQL database using libpq. Queries are dispatched asynchronously on a background thread and results are iterated with the same `Fetch` / `GetRow` pattern as [SQLite](#sqlite). The connection is always configured with `UTF8` client encoding automatically.
+Connects to a PostgreSQL database using libpq. All I/O is driven by the libpq async API so **no background thread is ever created**. The connection is always configured with `UTF8` client encoding automatically.
 
 ```lua
-Postgres  Postgres.Connect(conninfo)
-bool, txt  Postgres:Query(query, opt params)
-bool, txt  Postgres:Fetch()
-table|value  Postgres:GetRow(opt index_or_field)
-nil  Postgres:Finish()
-bool  Postgres:IsBusy()
-string  Postgres:EscapeValue(value)
-Postgres:Close()
+conn, errmsg    Postgres.Connect(conninfo)
+co, errmsg      conn:Query(sql, opt params)
+ok, n|errmsg    conn:NonQuery(sql, opt params)
+ok, v|errmsg    conn:Scalar(sql, opt params)
+ok, rows|errmsg conn:QueryAll(sql, opt params)
+bool            conn:IsBusy()
+string          conn:EscapeValue(value)
+nil             conn:Close()
 ```
 
 | Function | Description |
 |----------|-------------|
-| `Connect` | Connect using a libpq connection string (e.g. `"host=localhost user=postgres password=secret dbname=mydb connect_timeout=5"`) |
-| `Query` | Dispatch an async SQL query. Returns `true` on dispatch, or `false, "Busy"` if a query is already running. Pass an optional array table as `params` for parameterized queries |
-| `Fetch` | Block until the query completes on the first call, then advance to the next row. Returns `true` if a row is available, `false` when done, or `false, errorMessage` on execution error |
-| `GetRow` | Return the current row as a hash table keyed by column name, a single column value when `index` (1-based integer) is given, or a single column value when `field` (string column name) is given. `NULL` columns are `nil` |
-| `Finish` | Discard the current result and reset the cursor |
-| `IsBusy` | Returns `true` while a query is in progress |
+| `Connect` | Connect using a libpq connection string (e.g. `"host=localhost user=postgres password=secret dbname=mydb connect_timeout=5"`). Returns the connection on success, or `nil, errmsg` on failure |
+| `Query` | Returns a **Lua coroutine** immediately without blocking. Drive it with `coroutine.resume` as described below. Returns `nil, errmsg` if the connection is already busy |
+| `NonQuery` | Helper — drives a query to completion and returns `true, rowcount` (integer), or `false, errmsg` on error. Designed for INSERT / UPDATE / DELETE |
+| `Scalar` | Helper — returns `true, col1value` (first column of the first row), or `true, nil` when no rows matched, or `false, errmsg` on error |
+| `QueryAll` | Helper — collects every row into an array of integer-keyed row arrays and returns `true, rows`, or `false, errmsg` on error |
+| `IsBusy` | Returns `true` while a query coroutine is still alive on this connection |
 | `EscapeValue` | Escape a string using `PQescapeLiteral`. The result **includes** surrounding single quotes (e.g. `'O''Reilly'`) |
-| `Close` | Close the connection and free all resources |
+| `Close` | Close the connection and free all resources. Safe to call multiple times |
 
 ### Connection String
 
@@ -1258,30 +1313,56 @@ Postgres:Close()
 "host=127.0.0.1 port=5432 user=postgres password=secret dbname=mydb connect_timeout=5"
 ```
 
-### Parameterized Queries
+### Helper methods (recommended API)
 
-Pass an array table as the second argument to `Query`. The parameter count is determined automatically by scanning the SQL for the highest `$N` placeholder (`$1`, `$2`, ...). Missing or `nil` entries in the table are sent as SQL `NULL`. `table` values are JSON-encoded. `Wchar` values are UTF-8 encoded.
+All three helpers yield the **outer** Kitsune coroutine cooperatively during the async wait, so other coroutines continue to run.
 
 ```lua
-pg:Query("SELECT * FROM users WHERE id = $1", {42})
-pg:Query("INSERT INTO t (a, b, c) VALUES ($1, $2, $3)", {"hello", nil, 3.14})
+local conn = assert(Postgres.Connect("host=127.0.0.1 user=postgres password=secret dbname=mydb"))
+
+-- INSERT / UPDATE / DELETE
+local ok, affected = conn:NonQuery(
+    "UPDATE users SET name = $1 WHERE id = $2", {"Alice", 1})
+if not ok then error(affected) end
+print(affected .. " row(s) updated")
+
+-- Single value
+local ok, name = conn:Scalar("SELECT name FROM users WHERE id = $1", {1})
+if not ok then error(name) end
+print(name)  -- nil when no row matched
+
+-- All rows
+local ok, rows = conn:QueryAll("SELECT id, name FROM users")
+if not ok then error(rows) end
+for i = 1, #rows do
+    print(rows[i][1], rows[i][2])
+end
 ```
 
-### Usage Pattern
+### Raw coroutine protocol (advanced)
+
+`conn:Query(sql, params)` returns a real Lua coroutine `co`. The protocol is identical to [MySQL](#mysql).
+
+#### Yield protocol
+
+| `coroutine.resume` returns | Meaning |
+|---|---|
+| `true, nil` + status `"suspended"` | Query still in progress — resume again |
+| `true, <integer>` | Done — integer is the affected / row count |
+| `true, <string>` | Done — string is a query-level error message |
+| `true, {col1, col2, …}` | One data row (integer-keyed, 1-based) |
+| `true, nil` + status `"dead"` | All rows consumed |
+| `false, <string>` | Coroutine raised a Lua error |
+
+Pass a truthy value as the **first argument** of any `coroutine.resume` call to send the **stop flag**: the coroutine immediately frees the result buffer and dies cleanly.
+
+### Parameterized Queries
+
+Pass an array table as the second argument to `Query`, `NonQuery`, `Scalar`, or `QueryAll`. Uses PostgreSQL native `$1`, `$2`, … placeholders. Missing or `nil` entries are sent as SQL `NULL`. `table` values are JSON-encoded. `Wchar` values are UTF-8 encoded.
 
 ```lua
-local pg = Postgres.Connect("host=localhost user=postgres password=secret dbname=mydb")
-
-pg:Query("SELECT id, name FROM users WHERE active = $1", {true})
-while pg:Fetch() do
-    local row = pg:GetRow()        -- {id=1, name="Alice"}
-    local id  = pg:GetRow(1)       -- first column value only
-    local name = pg:GetRow("name") -- column by name
-end
-
-local ok = pg:Query("DELETE FROM sessions WHERE expired = true")
-local more, err = pg:Fetch()
-assert(not err, err)
+conn:Query("SELECT * FROM users WHERE id = $1", {42})
+conn:NonQuery("INSERT INTO t (a, b, c) VALUES ($1, $2, $3)", {"hello", nil, 3.14})
 ```
 
 ### PostgreSQL Type OID Mapping
@@ -1296,6 +1377,7 @@ assert(not err, err)
 | 701 | FLOAT8 (double precision) | number |
 | 1700 | NUMERIC | number |
 | all others | TEXT, VARCHAR, DATE, JSON, etc. | string |
+
 ---
 
 ## Timer

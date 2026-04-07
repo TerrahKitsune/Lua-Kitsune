@@ -211,6 +211,44 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
+        [Fact]
+        public async Task CRC64_WithWchar_ReturnsNumber()
+        {
+            // CRC64 uses the raw UTF-16 LE bytes of the Wchar, not the UTF-8 encoding.
+            string? r = await Run("return tostring(type(CRC64(Wchar.FromUtf8('hello'))) == 'number')");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task CRC64_Wchar_IsDeterministic()
+        {
+            string? r = await Run(@"
+                local w = Wchar.FromUtf8('deterministic')
+                return tostring(CRC64(w) == CRC64(w))
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task CRC64_Wchar_DiffersFromStringEquivalent()
+        {
+            // Wchar stores UTF-16 LE bytes; plain string is UTF-8 — different byte sequences.
+            string? r = await Run("return tostring(CRC64(Wchar.FromUtf8('hello')) ~= CRC64('hello'))");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task CRC64_WithStream_ReturnsNumber()
+        {
+            // CRC64 accepts a Stream argument and returns a number.
+            string? r = await Run(@"
+                local s = Stream.Create()
+                s:Write('hello')
+                return tostring(type(CRC64(s)) == 'number')
+            ");
+            r.ShouldBe("true");
+        }
+
         // -- Time -----------------------------------------------------------------
 
         [Fact]
@@ -453,6 +491,14 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
+        [Fact]
+        public async Task BencodeDecode_NestedDict_Decoded()
+        {
+            // 'd5:outerd5:inneri99eee' encodes {outer={inner=99}}
+            string? r = await Run("local t = BencodeDecode('d5:outerd5:inneri99eee'); return tostring(type(t[1].outer)=='table' and t[1].outer.inner==99)");
+            r.ShouldBe("true");
+        }
+
         // -- GetLastError ---------------------------------------------------------
 
         [Fact]
@@ -489,6 +535,30 @@ namespace KitsuneNet.Tests
         public async Task CGlobal_HasAtLeast32Entries()
         {
             string? r = await Run("local n=0; for _ in pairs(c) do n=n+1 end; return tostring(n>=32)");
+            r.ShouldBe("true");
+        }
+
+        // -- Global variables -----------------------------------------------------
+
+        [Fact]
+        public async Task VERSION_Global_IsNonEmptyString()
+        {
+            string? r = await Run("return tostring(type(VERSION) == 'string' and #VERSION > 0)");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task CPUID_Global_IsNonEmptyString()
+        {
+            string? r = await Run("return tostring(type(CPUID) == 'string' and #CPUID > 0)");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DEBUG_Global_IsBoolOrNil()
+        {
+            // DEBUG is true in debug builds; the global is not defined in release builds.
+            string? r = await Run("local t = type(DEBUG); return tostring(t == 'boolean' or t == 'nil')");
             r.ShouldBe("true");
         }
 
@@ -541,6 +611,22 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
+        [Fact]
+        public async Task Dns_WithFullFlag_EntryHasTypeAndIPFields()
+        {
+            // Each entry must have a string 'Type' ("IPV4" or "IPV6") and a string 'IP'.
+            string? r = await Run(@"
+                local results = Dns('localhost', true)
+                if type(results) ~= 'table' or #results == 0 then return 'skip' end
+                local entry = results[1]
+                return tostring(
+                    type(entry.Type) == 'string' and
+                    type(entry.IP)   == 'string' and
+                    (entry.Type == 'IPV4' or entry.Type == 'IPV6'))
+            ");
+            if (r != "skip") r.ShouldBe("true");
+        }
+
         // -- Put / GetTextColor (smoke tests) -------------------------------------
 
         [Fact]
@@ -583,6 +669,49 @@ namespace KitsuneNet.Tests
         public async Task Base64_BinaryRoundTrip_PreservesBytes()
         {
             string? r = await Run("local b = '\\0\\1\\2\\255'; return tostring(Base64.Decode(Base64.Encode(b)) == b)");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Base64_GetEncodeTable_Returns64CharString()
+        {
+            // The default RFC 4648 alphabet is exactly 64 characters starting with 'ABCD'.
+            string? r = await Run(@"
+                local t = Base64.GetEncodeTable()
+                return tostring(type(t) == 'string' and #t == 64 and t:sub(1, 4) == 'ABCD')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Base64_SetEncodeTable_CustomTable_ChangesEncoding()
+        {
+            // Index 62 is '+' in the default alphabet and '-' in URL-safe.
+            // string.char(251) = 0xFB; its top 6 bits are 62 so it exercises that index.
+            // Use sub(1,1) for literal char comparison — find('-') treats '-' as a Lua pattern.
+            string? r = await Run(@"
+                local default = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+                local urlsafe = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
+                local input   = string.char(251)   -- 0xFB: top-6-bits = 62
+                local std_enc = Base64.Encode(input)
+                Base64.SetEncodeTable(urlsafe)
+                local url_enc = Base64.Encode(input)
+                Base64.SetEncodeTable(default)      -- restore default
+                return tostring(std_enc ~= url_enc and url_enc:sub(1,1) == '-')
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Base64_SetEncodeTable_RestoreDefault_RoundTripsCorrectly()
+        {
+            // After restoring the default table, standard round-trips must still work.
+            string? r = await Run(@"
+                local default = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+                Base64.SetEncodeTable(default)
+                local plain = 'hello world'
+                return tostring(Base64.Decode(Base64.Encode(plain)) == plain)
+            ");
             r.ShouldBe("true");
         }
 
@@ -633,6 +762,57 @@ namespace KitsuneNet.Tests
         {
             string? r = await Run("local h = SHA1.New(); h:Update('abc'); return h:Finish()");
             r.ShouldBe("a9993e364706816aba3e25717850c26c9cd0d89d");
+        }
+
+        [Fact]
+        public async Task SHA256_Finish_ReturnsBinaryWith32Bytes()
+        {
+            // Finish() returns two values: the hex string and a raw 32-byte binary digest.
+            string? r = await Run(@"
+                local h = SHA256.New()
+                h:Update('abc')
+                local hex, bin = h:Finish()
+                return tostring(type(bin) == 'string' and #bin == 32)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task SHA256_BinaryMatchesHex()
+        {
+            string? r = await Run(@"
+                local h = SHA256.New()
+                h:Update('abc')
+                local hex, bin = h:Finish()
+                local rebuilt = ''
+                for i = 1, 32 do rebuilt = rebuilt .. string.format('%02x', string.byte(bin, i)) end
+                return tostring(hex == rebuilt)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MD5_Finish_ReturnsBinaryWith16Bytes()
+        {
+            string? r = await Run(@"
+                local h = MD5.New()
+                h:Update('abc')
+                local hex, bin = h:Finish()
+                return tostring(type(bin) == 'string' and #bin == 16)
+            ");
+            r.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task SHA1_Finish_ReturnsBinaryWith20Bytes()
+        {
+            string? r = await Run(@"
+                local h = SHA1.New()
+                h:Update('abc')
+                local hex, bin = h:Finish()
+                return tostring(type(bin) == 'string' and #bin == 20)
+            ");
+            r.ShouldBe("true");
         }
 
         // -- Json -----------------------------------------------------------------
@@ -1750,6 +1930,17 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
+        [Fact]
+        public async Task Wchar_Setlocale_DoesNotThrow()
+        {
+            // Setlocale sets the C locale used by FromAnsi/ToAnsi; must not raise an error.
+            string? r = await Run(@"
+                local ok, err = pcall(Wchar.Setlocale, '')
+                return tostring(ok or type(err) == 'string')
+            ");
+            r.ShouldBe("true");
+        }
+
         // -- Stream Wchar read/write -----------------------------------------------
 
         [Fact]
@@ -1989,209 +2180,65 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
-        // -- SQLite (in-memory) ---------------------------------------------------
-
         [Fact]
-        public async Task SQLite_InMemory_CreateInsertSelect()
+        public async Task Aes_SetIV_ResetIV_AllowsDecryptWithSameInstance()
         {
+            // SetIV with no argument resets to the stored IV, making the same instance usable
+            // for both encrypt and decrypt when the IV is restored between operations.
             string? r = await Run(@"
-                local db = SQLite.Open()
-                db:Query('CREATE TABLE t (id INTEGER, name TEXT)'); db:Fetch()
-                db:Query([[INSERT INTO t VALUES (1, 'alice')]]); db:Fetch()
-                db:Query([[INSERT INTO t VALUES (2, 'bob')]]);   db:Fetch()
-                db:Query('SELECT id, name FROM t ORDER BY id')
-                local out = {}
-                while db:Fetch() do
-                    local row = db:GetRow()
-                    table.insert(out, tostring(row.id) .. ':' .. tostring(row.name))
-                end
-                db:Close()
-                return table.concat(out, ',')
-            ");
-            r.ShouldBe("1:alice,2:bob");
-        }
-
-        [Fact]
-        public async Task SQLite_GetRow_ByIndex_ReturnsValue()
-        {
-            string? r = await Run(@"
-                local db = SQLite.Open()
-                db:Query('CREATE TABLE t (v TEXT)'); db:Fetch()
-                db:Query([[INSERT INTO t VALUES ('test_val')]]); db:Fetch()
-                db:Query('SELECT v FROM t')
-                db:Fetch()
-                local val = db:GetRow(1)
-                db:Close()
-                return val
-            ");
-            r.ShouldBe("test_val");
-        }
-
-        [Fact]
-        public async Task SQLite_RegisterFunction_CallableFromQuery()
-        {
-            // SQLite returns numeric results as floats (7.0, not 7).
-            string? r = await Run(@"
-                local db = SQLite.Open()
-                db:RegisterFunction(function(a, b) return a + b end, 'add2', 2)
-                db:Query('SELECT add2(3, 4) AS result')
-                db:Fetch()
-                local val = db:GetRow(1)
-                db:Close()
-                return tostring(val)
-            ");
-            r.ShouldBe("7.0");
-        }
-
-        [Fact]
-        public async Task SQLite_NullValue_IsNilInLua()
-        {
-            string? r = await Run(@"
-                local db = SQLite.Open()
-                db:Query('CREATE TABLE t (v TEXT)'); db:Fetch()
-                db:Query('INSERT INTO t VALUES (NULL)'); db:Fetch()
-                db:Query('SELECT v FROM t')
-                db:Fetch()
-                local val = db:GetRow(1)
-                db:Close()
-                return tostring(val)
-            ");
-            r.ShouldBe("nil");
-        }
-
-        [Fact]
-        public async Task SQLite_IntegerColumn_RoundTrips()
-        {
-            string? r = await Run(@"
-                local db = SQLite.Open()
-                db:Query('CREATE TABLE t (n INTEGER)'); db:Fetch()
-                db:Query('INSERT INTO t VALUES (42)'); db:Fetch()
-                db:Query('SELECT n FROM t')
-                db:Fetch()
-                local row = db:GetRow()
-                db:Close()
-                return tostring(row.n)
-            ");
-            r.ShouldBe("42");
-        }
-
-        [Fact]
-        public async Task SQLite_FloatColumn_RoundTrips()
-        {
-            string? r = await Run(@"
-                local db = SQLite.Open()
-                db:Query('CREATE TABLE t (f REAL)'); db:Fetch()
-                db:Query('INSERT INTO t VALUES (3.14)'); db:Fetch()
-                db:Query('SELECT f FROM t')
-                db:Fetch()
-                local row = db:GetRow()
-                db:Close()
-                return tostring(math.abs(row.f - 3.14) < 0.0001)
+                local key   = string.rep('\0', 32)
+                local iv    = string.rep('\0', 16)
+                local plain = 'hello aes world!'
+                local ctx   = Aes.Create(key, iv)
+                local enc   = ctx:Encrypt(plain)
+                ctx:SetIV(iv)   -- reset to original IV before decrypting
+                local dec   = ctx:Decrypt(enc)
+                return tostring(dec == plain)
             ");
             r.ShouldBe("true");
         }
 
         [Fact]
-        public async Task SQLite_MultipleRows_FetchAll()
+        public async Task Aes_DifferentIVs_ProduceDifferentCiphertext()
         {
             string? r = await Run(@"
-                local db = SQLite.Open()
-                db:Query('CREATE TABLE t (n INTEGER)'); db:Fetch()
-                for i = 1, 5 do
-                    db:Query('INSERT INTO t VALUES (' .. i .. ')'); db:Fetch()
-                end
-                db:Query('SELECT n FROM t ORDER BY n')
-                local sum = 0
-                while db:Fetch() do
-                    sum = sum + db:GetRow(1)
-                end
-                db:Close()
-                return tostring(sum)
-            ");
-            r.ShouldBe("15");
-        }
-
-        [Fact]
-        public async Task SQLite_ParameterizedQuery_TableBind()
-        {
-            string? r = await Run(@"
-                local db = SQLite.Open()
-                db:Query('CREATE TABLE t (id INTEGER, name TEXT)'); db:Fetch()
-                db:Query('INSERT INTO t VALUES (:id, :name)', {id=7, name='kitsune'}); db:Fetch()
-                db:Query('SELECT name FROM t WHERE id = 7')
-                db:Fetch()
-                local val = db:GetRow(1)
-                db:Close()
-                return tostring(val)
-            ");
-            r.ShouldBe("kitsune");
-        }
-
-        [Fact]
-        public async Task SQLite_InvalidQuery_ReturnsFalseAndError()
-        {
-            string? r = await Run(@"
-                local db = SQLite.Open()
-                local ok, err = db:Query('THIS IS NOT SQL')
-                db:Close()
-                return tostring(ok == false and type(err) == 'string' and #err > 0)
+                local key   = string.rep('\0', 32)
+                local plain = 'hello different!'
+                local enc1  = Aes.Create(key, string.rep('\0', 16)):Encrypt(plain)
+                local enc2  = Aes.Create(key, string.rep('\1', 16)):Encrypt(plain)
+                return tostring(enc1 ~= enc2)
             ");
             r.ShouldBe("true");
         }
 
         [Fact]
-        public async Task SQLite_AggregateFunction_SumCustom()
+        public async Task Aes_CTRMode_RoundTrip()
         {
+            // CTR (stream cipher): encrypt with one instance, decrypt with a fresh instance
+            // sharing the same key and IV. Must produce the original plaintext.
             string? r = await Run(@"
-                local db = SQLite.Open()
-                db:Query('CREATE TABLE t (n INTEGER)'); db:Fetch()
-                for i = 1, 4 do
-                    db:Query('INSERT INTO t VALUES (' .. i .. ')'); db:Fetch()
-                end
-                local acc = 0
-                db:RegisterAggregateFunction(function(isFinish, v)
-                    if isFinish then return acc end
-                    acc = acc + v
-                end, 'mysum', 1)
-                db:Query('SELECT mysum(n) FROM t')
-                db:Fetch()
-                local val = db:GetRow(1)
-                db:Close()
-                return tostring(val)
-            ");
-            r.ShouldBe("10.0");
-        }
-
-        [Fact]
-        public async Task SQLite_Close_ThenQueryRaisesError()
-        {
-            string? r = await Run(@"
-                local db = SQLite.Open()
-                db:Close()
-                local ok, err = pcall(function() db:Query('SELECT 1') end)
-                return tostring(not ok and type(err) == 'string')
+                local key   = string.rep('\0', 32)
+                local iv    = string.rep('\0', 16)
+                local plain = 'hello ctr mode!!'
+                local enc   = Aes.Create(key, iv, true):Encrypt(plain)
+                local dec   = Aes.Create(key, iv, true):Decrypt(enc)
+                return tostring(dec == plain)
             ");
             r.ShouldBe("true");
         }
 
         [Fact]
-        public async Task SQLite_InstanceReuse_MultipleQueries()
+        public async Task Aes_ECBMode_NoIV_RoundTrip()
         {
+            // ECB mode: created without IV; each block encrypted independently.
             string? r = await Run(@"
-                local db = SQLite.Open()
-                db:Query('CREATE TABLE t (v TEXT)'); db:Fetch()
-                db:Query([[INSERT INTO t VALUES ('first')]]); db:Fetch()
-                db:Query([[INSERT INTO t VALUES ('second')]]); db:Fetch()
-                db:Query('SELECT COUNT(*) FROM t')
-                db:Fetch()
-                local count = db:GetRow(1)
-                db:Query('SELECT v FROM t ORDER BY rowid LIMIT 1')
-                db:Fetch()
-                local first = db:GetRow(1)
-                db:Close()
-                return tostring(count) .. ':' .. tostring(first)
+                local key   = string.rep('\0', 32)
+                local plain = 'hello ecb mode!!'   -- exactly 16 bytes (one AES block)
+                local enc   = Aes.Create(key):Encrypt(plain)
+                local dec   = Aes.Create(key):Decrypt(enc)
+                return tostring(dec == plain)
             ");
-            r.ShouldBe("2:first");
+            r.ShouldBe("true");
         }
 
         // -- Stream (in-memory) ---------------------------------------------------
@@ -3436,6 +3483,19 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
         }
 
+        [Fact]
+        public async Task Mutex_Lock_ZeroTimeout_SucceedsWhenFree()
+        {
+            // Lock(0) is a non-blocking trylock; must succeed when nobody holds the mutex.
+            string? r = await Run(@"
+                local m = Mutex.Open('KitsuneTestMutex_ZeroTO')
+                local ok = m:Lock(0)
+                if ok then m:Unlock() end
+                return tostring(ok == true)
+            ");
+            r.ShouldBe("true");
+        }
+
         // -- FileSystem -----------------------------------------------------------
 
         [Fact]
@@ -3812,32 +3872,6 @@ namespace KitsuneNet.Tests
                 FileSystem.SetCurrentDirectory(orig)
                 FileSystem.RemoveDirectory(tmp)
                 return tostring(ok == true)
-            ");
-            r.ShouldBe("true");
-        }
-
-        // -- Env ------------------------------------------------------------------
-
-        [Fact]
-        public async Task Env_Create_StoresAndRetrievesValues()
-        {
-            string? r = await Run(@"
-                local e = Env.Create('KitsuneUtilTestEnv')
-                e.greeting = 'hello'
-                e.count    = 42
-                return tostring(e.greeting == 'hello' and e.count == 42)
-            ");
-            r.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task Env_GetOrCreate_ReturnsSameEnv()
-        {
-            string? r = await Run(@"
-                local e1 = Env.GetOrCreate('SharedEnvUtil')
-                e1.val = 'shared'
-                local e2 = Env.GetOrCreate('SharedEnvUtil')
-                return tostring(e2.val == 'shared')
             ");
             r.ShouldBe("true");
         }

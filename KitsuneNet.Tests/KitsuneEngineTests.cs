@@ -3379,6 +3379,51 @@ namespace KitsuneNet.Tests
             finally { engine.Dispose(); }
             ThrowIfLeaked(engine);
         }
+
+        // -- RegisterSession ------------------------------------------------------
+
+        [Fact]
+        public async Task RegisterSession_MakesSessionTableAvailable()
+        {
+            // Session is not registered by default; RegisterSession must create the global.
+            using KitsuneEngine engine = new();
+            engine.RegisterSession();
+            string? r = await engine.ExecuteStringAsync("return type(Session)");
+            r.ShouldBe("table");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task RegisterSession_SessionConsoleHasPutFunction()
+        {
+            // Session.Console.Put is cross-platform; must be callable after RegisterSession.
+            using KitsuneEngine engine = new();
+            engine.RegisterSession();
+            string? r = await engine.ExecuteStringAsync("return type(Session.Console.Put)");
+            r.ShouldBe("function");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task RegisterSession_SessionDisplayHasGetScreenSize()
+        {
+            using KitsuneEngine engine = new();
+            engine.RegisterSession();
+            string? r = await engine.ExecuteStringAsync("return type(Session.Display.GetScreenSize)");
+            r.ShouldBe("function");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task RegisterSession_SessionClipboardHasSetAndGet()
+        {
+            using KitsuneEngine engine = new();
+            engine.RegisterSession();
+            string? r = await engine.ExecuteStringAsync(
+                "return tostring(type(Session.Clipboard.Set) == 'function' and type(Session.Clipboard.Get) == 'function')");
+            r.ShouldBe("true");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
     }
 }
 

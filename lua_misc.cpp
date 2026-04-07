@@ -31,9 +31,6 @@
 
 #define DIV 1024
 
-static int env_table = -1;
-static int env_original = -1;
-
 #ifdef _WIN32
 int lua_uuid(lua_State* L) {
 
@@ -187,69 +184,6 @@ int Time(lua_State* L) {
 }
 #endif
 
-int NewEnvironment(lua_State* L) {
-
-	if (!lua_isstring(L, 1) || lua_gettop(L) != 1) {
-		luaL_error(L, "Invalid parameters");
-		return 0;
-	}
-
-	lua_newtable(L);
-
-	lua_rawgeti(L, LUA_REGISTRYINDEX, env_table);
-
-	lua_pushvalue(L, 1);
-	lua_pushvalue(L, 2);
-	lua_settable(L, -3);
-
-	lua_pushvalue(L, 2);
-	lua_copy(L, 2, 1);
-	lua_pop(L, 3);
-
-	return 1;
-}
-
-int GetEnvironment(lua_State* L) {
-
-	if (!lua_isstring(L, 1) || lua_gettop(L) != 1) {
-		luaL_error(L, "Invalid parameters");
-		return 0;
-	}
-
-	lua_rawgeti(L, LUA_REGISTRYINDEX, env_table);
-
-	lua_pushvalue(L, 1);
-	lua_gettable(L, -2);
-
-	lua_copy(L, 3, 1);
-
-	lua_pop(L, 2);
-
-	return 1;
-}
-
-int GetCreateEnvironment(lua_State* L) {
-
-	const char* name = luaL_checkstring(L, 1);
-
-	GetEnvironment(L);
-	if (lua_istable(L, 1)) {
-		return 1;
-	}
-	else {
-		lua_pop(L, lua_gettop(L));
-		lua_pushstring(L, name);
-		return NewEnvironment(L);
-	}
-}
-
-int GetAllEnvironment(lua_State* L) {
-
-	lua_rawgeti(L, LUA_REGISTRYINDEX, env_table);
-
-	return 1;
-}
-
 int GetStringEqual(lua_State* L) {
 
 	size_t len1;
@@ -398,63 +332,6 @@ int CRC32(lua_State* L) {
 
 	return 1;
 }
-
-#ifdef _WIN32
-int luabeep(lua_State* L) {
-
-	DWORD freq = (DWORD)luaL_checkinteger(L, 1);
-	DWORD dur = (DWORD)luaL_checkinteger(L, 2);
-
-	lua_pop(L, lua_gettop(L));
-
-	lua_pushboolean(L, Beep(freq, dur));
-
-	return 1;
-}
-
-int luasound(lua_State* L) {
-
-	const char* sound = NULL;
-
-	if (!lua_isnoneornil(L, 1)) {
-		sound = lua_tostring(L, 1);
-	}
-
-	DWORD Flags = SND_FILENAME | SND_NODEFAULT;
-
-	if (lua_toboolean(L, 2)) {
-		Flags |= SND_ASYNC;
-	}
-	else {
-		Flags |= SND_SYNC;
-	}
-
-	lua_pop(L, lua_gettop(L));
-
-	lua_pushboolean(L, PlaySound(sound, NULL, Flags));
-
-	return 1;
-}
-
-int luasoundcommand(lua_State* L) {
-
-	const char* cmd = luaL_checkstring(L, 1);
-	char retstring[1024] = { 0 };
-
-	MCIERROR result = mciSendString(cmd, retstring, 1024, NULL);
-
-	lua_pop(L, lua_gettop(L));
-
-	lua_pushinteger(L, result);
-	lua_pushstring(L, retstring);
-
-	return 2;
-}
-#else
-static int luabeep(lua_State* L) { lua_pop(L, lua_gettop(L)); lua_pushboolean(L, 0); return 1; }
-static int luasound(lua_State* L) { lua_pop(L, lua_gettop(L)); lua_pushboolean(L, 0); return 1; }
-static int luasoundcommand(lua_State* L) { lua_pop(L, lua_gettop(L)); lua_pushinteger(L, -1); lua_pushstring(L, ""); return 2; }
-#endif
 
 #ifdef _WIN32
 static int setenv_win(const char* name, const char* value, int overwrite)
@@ -766,9 +643,6 @@ int Test(lua_State* L) {
 
 int luaopen_misc(lua_State* L) {
 
-	lua_newtable(L);
-	env_table = luaL_ref(L, LUA_REGISTRYINDEX);
-
 	char esc[2] = { 0,0 };
 
 	lua_createtable(L, 0, 3);
@@ -885,22 +759,6 @@ int luaopen_misc(lua_State* L) {
 
 	lua_setglobal(L, "c");
 
-	lua_newtable(L);
-
-	lua_pushstring(L, "Play");
-	lua_pushcfunction(L, luasound);
-	lua_settable(L, -3);
-
-	lua_pushstring(L, "Beep");
-	lua_pushcfunction(L, luabeep);
-	lua_settable(L, -3);
-
-	lua_pushstring(L, "SendMCS");
-	lua_pushcfunction(L, luasoundcommand);
-	lua_settable(L, -3);
-
-	lua_setglobal(L, "Sound");
-
 	lua_getglobal(L, "string");
 	lua_pushstring(L, "equal");
 	lua_pushcfunction(L, GetStringEqual);
@@ -960,26 +818,6 @@ int luaopen_misc(lua_State* L) {
 
 	lua_pushcfunction(L, luagetenv);
 	lua_setglobal(L, "getenv");
-
-	lua_newtable(L);
-
-	lua_pushstring(L, "Create");
-	lua_pushcfunction(L, NewEnvironment);
-	lua_settable(L, -3);
-
-	lua_pushstring(L, "Get");
-	lua_pushcfunction(L, GetEnvironment);
-	lua_settable(L, -3);
-
-	lua_pushstring(L, "GetOrCreate");
-	lua_pushcfunction(L, GetCreateEnvironment);
-	lua_settable(L, -3);
-
-	lua_pushstring(L, "Meta");
-	lua_pushcfunction(L, GetAllEnvironment);
-	lua_settable(L, -3);
-
-	lua_setglobal(L, "Env");
 
 	return 0;
 }

@@ -6,6 +6,7 @@
       <KITSUNE_POSTGRES_TEST>host=10.9.23.252 port=5432 user=kitsune password=testTest123! dbname=kitsune</KITSUNE_POSTGRES_TEST>
       <KITSUNE_KAFKA_TEST>10.9.23.252:9092:Test:0</KITSUNE_KAFKA_TEST>
       <KITSUNE_REDIS_TEST>10.9.23.252:6379:hej123</KITSUNE_REDIS_TEST>
+      <KITSUNE_SQLITE_TEST>R:\test.sqlite</KITSUNE_SQLITE_TEST>
     </EnvironmentVariables>
   </RunConfiguration>
 </RunSettings>

@@ -46,10 +46,14 @@ void push_sqlitevalue(lua_State* L, sqlite3_stmt* pStmt, int idx, bool usewchar)
 		break;
 	case SQLITE_TEXT:
 		if (usewchar) {
-			lua_pushwchar(L, (wchar_t*)sqlite3_column_text16(pStmt, idx), sqlite3_column_bytes16(pStmt, idx) / sizeof(wchar_t));
+			const void* txt16 = sqlite3_column_text16(pStmt, idx);
+			int bytes16 = sqlite3_column_bytes16(pStmt, idx);
+			lua_pushwchar(L, (wchar_t*)txt16, bytes16 / sizeof(wchar_t));
 		}
 		else {
-			lua_pushlstring(L, (const char*)sqlite3_column_text(pStmt, idx), sqlite3_column_bytes(pStmt, idx));
+			const char* txt = (const char*)sqlite3_column_text(pStmt, idx);
+			int bytes = sqlite3_column_bytes(pStmt, idx);
+			lua_pushlstring(L, txt, bytes);
 		}
 		break;
 
