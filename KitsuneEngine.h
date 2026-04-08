@@ -115,7 +115,7 @@ typedef int (*kitsune_ResultSetter) (const KitsuneVariable* result);
 // Signature for C functions registered via RegisterFunction.
 // argc/argv are the Lua call arguments; call resultSetter to return a result or raise an error.
 // Return > 0 on success, <= 0 to raise a generic "delegate function error" in Lua.
-// CONSTRAINTS: do NOT call KitsuneSetVariable, KitsuneGetVariable, KitsuneExecuteString/File/Function,
+// CONSTRAINTS: do NOT call KitsuneSetVariable, KitsuneGetVariable, KitsuneExecuteStringAsync/FileAsync/FunctionAsync,
 // KitsuneGetAll, or KitsuneRegisterFunction from within this callback — the scheduler
 // thread owns the Lua state for the duration of the call, so any function that calls
 // AcquireLuaAccess will deadlock permanently. lua_State* is intentionally not exposed.
@@ -149,18 +149,30 @@ extern "C" {
 	// Returns NULL on failure.
 	KITSUNE_API SharedMemoryBlock* KitsuneCreateMemoryBlock(size_t size);
 
-	// ── Execution ─────────────────────────────────────────────────────────────
+	// ── Execution ──────────────────────────────────────────────────────────────
+	// All three functions execute synchronously: they block the calling thread until
+	// the script finishes and return the typed result directly. Returns NULL on start
+	// failure (e.g. engine not initialised, no slots available). On success the caller
+	// MUST free the returned pointer with KitsuneVariableFree. A result with type
+	// KITSUNE_TNONE means the script returned nothing or raised a Lua error; use the
+	// Async API with KitsuneGetError to obtain error details. Cannot be called from
+	// within a kitsune_CFunction — the scheduler owns the Lua state and will deadlock.
+	KITSUNE_API KitsuneVariable* KitsuneExecuteFile(const char* path, int argc, const KitsuneVariable* argv);
+	KITSUNE_API KitsuneVariable* KitsuneExecuteString(const char* script, int argc, const KitsuneVariable* argv);
+	KITSUNE_API KitsuneVariable* KitsuneExecuteFunction(const char* functionName, int argc, const KitsuneVariable* argv);
+
+	// ── Async Execution ────────────────────────────────────────────────────────
 	// All three functions start execution as a Lua coroutine managed by the scheduler.
 	// Returns a positive coroutine ID on success, or -1 on failure.
-	// KitsuneExecuteFunction still returns a positive ID when the named function does not exist;
+	// KitsuneExecuteFunctionAsync still returns a positive ID when the named function does not exist;
 	// in that case KitsuneHasResult will return true immediately with error "function not found".
 	// When fireAndForget is true the slot is freed automatically on completion;
 	// do not call KitsuneHasResult / KitsuneGetResult for that id.
-	KITSUNE_API int KitsuneExecuteFile(const char* path, int argc, const KitsuneVariable* argv, bool fireAndForget = false);
-	KITSUNE_API int KitsuneExecuteString(const char* script, int argc, const KitsuneVariable* argv, bool fireAndForget = false);
-	KITSUNE_API int KitsuneExecuteFunction(const char* functionName, int argc, const KitsuneVariable* argv, bool fireAndForget = false);
+	KITSUNE_API int KitsuneExecuteFileAsync(const char* path, int argc, const KitsuneVariable* argv, bool fireAndForget = false);
+	KITSUNE_API int KitsuneExecuteStringAsync(const char* script, int argc, const KitsuneVariable* argv, bool fireAndForget = false);
+	KITSUNE_API int KitsuneExecuteFunctionAsync(const char* functionName, int argc, const KitsuneVariable* argv, bool fireAndForget = false);
 
-	// ── Per-coroutine queries (id = value returned by KitsuneExecuteFile/String) ──
+	// ── Per-coroutine queries (id = value returned by KitsuneExecuteFileAsync/StringAsync) ──
 	// Returns true once the coroutine has finished (success or error).
 	// If len is not NULL it is set to the byte length of the string result, or 0 if the result
 	// is absent or is not a string type (number, boolean, table, etc. all yield len == 0).

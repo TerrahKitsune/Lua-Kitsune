@@ -17,6 +17,11 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KitsuneNet", "KitsuneNet\Ki
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KitsuneNet.Tests", "KitsuneNet.Tests\KitsuneNet.Tests.csproj", "{3A8C320D-0941-A0E2-7635-8E6FF9F574CD}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{7F771E5C-129E-4995-8196-7FFACBFDA22E}"
+	ProjectSection(SolutionItems) = preProject
+		analysis.ruleset = analysis.ruleset
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU

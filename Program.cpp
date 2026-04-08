@@ -123,7 +123,7 @@ int main(int argc, char* argv[]) {
 	KitsuneRegisterFunction("Test", Test);
 #endif
 
-	int id = KitsuneExecuteFile(file, extraArgc, vars);
+	int id = KitsuneExecuteFileAsync(file, extraArgc, vars);
 	delete[] vars;
 
 	if (id < 0) {

@@ -8,92 +8,92 @@ namespace KitsuneNet.Tests;
 [Collection("KitsuneSequential")]
 public sealed class RedisTests
 {
-	private readonly ITestOutputHelper _output;
+    private readonly ITestOutputHelper _output;
 
-	public RedisTests(ITestOutputHelper output) => _output = output;
+    public RedisTests(ITestOutputHelper output) => _output = output;
 
-	// Parses KITSUNE_REDIS_TEST=host:port[:password]
-	private static string Host()
-	{
-		return Environment.GetEnvironmentVariable("KITSUNE_REDIS_TEST")!.Split(':')[0];
-	}
+    // Parses KITSUNE_REDIS_TEST=host:port[:password]
+    private static string Host()
+    {
+        return Environment.GetEnvironmentVariable("KITSUNE_REDIS_TEST")!.Split(':')[0];
+    }
 
-	private static int Port()
-	{
-		var parts = Environment.GetEnvironmentVariable("KITSUNE_REDIS_TEST")!.Split(':');
-		return parts.Length > 1 && int.TryParse(parts[1], out int p) ? p : 6379;
-	}
+    private static int Port()
+    {
+        var parts = Environment.GetEnvironmentVariable("KITSUNE_REDIS_TEST")!.Split(':');
+        return parts.Length > 1 && int.TryParse(parts[1], out int p) ? p : 6379;
+    }
 
-	private static string? Password()
-	{
-		var parts = Environment.GetEnvironmentVariable("KITSUNE_REDIS_TEST")!.Split(':');
-		return parts.Length > 2 && parts[2].Length > 0 ? parts[2] : null;
-	}
+    private static string? Password()
+    {
+        var parts = Environment.GetEnvironmentVariable("KITSUNE_REDIS_TEST")!.Split(':');
+        return parts.Length > 2 && parts[2].Length > 0 ? parts[2] : null;
+    }
 
-	// Returns a Lua snippet that opens a Redis connection with the test settings.
-	private static string Open()
-	{
-		var pass    = Password();
-		var passLua = pass is not null ? $"'{pass}'" : "nil";
-		return $"Redis.Open('{Host()}', {Port()}, false, 10, nil, {passLua})";
-	}
+    // Returns a Lua snippet that opens a Redis connection with the test settings.
+    private static string Open()
+    {
+        var pass = Password();
+        var passLua = pass is not null ? $"'{pass}'" : "nil";
+        return $"Redis.Open('{Host()}', {Port()}, false, 10, nil, {passLua})";
+    }
 
-	private async Task<string?> Run(string lua)
-	{
-		var engine = new KitsuneEngine();
-		engine.RegisterFunction("print", args =>
-		{
-			_output.WriteLine(string.Join("\t", args.Select(v => v.String ?? v.Type.ToString())));
-			return LuaValue.None;
-		});
-		string? result;
-		try   { result = await engine.ExecuteStringAsync(lua); }
-		finally { engine.Dispose(); }
-		if (engine.LeakedAllocations != 0)
-			throw new InvalidOperationException($"Native memory leak: {engine.LeakedAllocations} unfreed allocation(s) after KitsuneCleanup");
-		return result;
-	}
+    private async Task<string?> Run(string lua)
+    {
+        var engine = new KitsuneEngine();
+        engine.RegisterFunction("print", args =>
+        {
+            _output.WriteLine(string.Join("\t", args.Select(v => v.String ?? v.Type.ToString())));
+            return LuaValue.None;
+        });
+        string? result;
+        try { result = await engine.ExecuteStringAsync(lua); }
+        finally { engine.Dispose(); }
+        if (engine.LeakedAllocations != 0)
+            throw new InvalidOperationException($"Native memory leak: {engine.LeakedAllocations} unfreed allocation(s) after KitsuneCleanup");
+        return result;
+    }
 
-	// ── Connection ────────────────────────────────────────────────────────────
+    // ── Connection ────────────────────────────────────────────────────────────
 
-	[RedisFact]
-	public async Task Open_ValidHost_ToStringStartsWithRedis()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task Open_ValidHost_ToStringStartsWithRedis()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			assert(redis, 'Open returned nil')
 			return tostring(redis):sub(1, 6)
 			""");
-		r.ShouldBe("Redis:");
-	}
+        r.ShouldBe("Redis:");
+    }
 
-	[RedisFact]
-	public async Task Open_InvalidHost_ThrowsConnectionError()
-	{
-		string? r = await Run("""
+    [RedisFact]
+    public async Task Open_InvalidHost_ThrowsConnectionError()
+    {
+        string? r = await Run("""
 			local ok, err = pcall(Redis.Open, 'invalid.host.does.not.exist', 6379, false, 1)
 			return tostring(not ok)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	// ── Command ───────────────────────────────────────────────────────────────
+    // ── Command ───────────────────────────────────────────────────────────────
 
-	[RedisFact]
-	public async Task Command_PING_ReturnsPong()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task Command_PING_ReturnsPong()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			local reply = redis:Command('PING')
 			return reply.Value
 			""");
-		r.ShouldBe("PONG");
-	}
+        r.ShouldBe("PONG");
+    }
 
-	[RedisFact]
-	public async Task Command_SET_GET_RoundTrip()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task Command_SET_GET_RoundTrip()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_cmd_sg')
 			redis:Command('SET', 'kitsune_test_cmd_sg', 'hello')
@@ -101,27 +101,27 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_cmd_sg')
 			return reply.Value
 			""");
-		r.ShouldBe("hello");
-	}
+        r.ShouldBe("hello");
+    }
 
-	[RedisFact]
-	public async Task Command_DEL_RemovesKey()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task Command_DEL_RemovesKey()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('SET', 'kitsune_test_cmd_del', 'x')
 			local reply = redis:Command('DEL', 'kitsune_test_cmd_del')
 			return tostring(reply.Value)
 			""");
-		r.ShouldBe("1");
-	}
+        r.ShouldBe("1");
+    }
 
-	// ── GetString ─────────────────────────────────────────────────────────────
+    // ── GetString ─────────────────────────────────────────────────────────────
 
-	[RedisFact]
-	public async Task GetString_Set_Tostring_RoundTrip()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetString_Set_Tostring_RoundTrip()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_str')
 			local str = redis:GetString('kitsune_test_str')
@@ -130,25 +130,25 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_str')
 			return val
 			""");
-		r.ShouldBe("world");
-	}
+        r.ShouldBe("world");
+    }
 
-	[RedisFact]
-	public async Task GetString_Delete_ReturnsOldValue()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetString_Delete_ReturnsOldValue()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('SET', 'kitsune_test_str_del', 'goodbye')
 			local str = redis:GetString('kitsune_test_str_del')
 			return str:Delete()
 			""");
-		r.ShouldBe("goodbye");
-	}
+        r.ShouldBe("goodbye");
+    }
 
-	[RedisFact]
-	public async Task GetString_SetTTL_GetTTL_ReturnsPositive()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetString_SetTTL_GetTTL_ReturnsPositive()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('SET', 'kitsune_test_str_ttl', 'temp')
 			local str = redis:GetString('kitsune_test_str_ttl')
@@ -157,26 +157,26 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_str_ttl')
 			return tostring(ttl > 0)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	// ── GetKey ────────────────────────────────────────────────────────────────
+    // ── GetKey ────────────────────────────────────────────────────────────────
 
-	[RedisFact]
-	public async Task GetKey_Tostring_ReturnsKeyName()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetKey_Tostring_ReturnsKeyName()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			local key = redis:GetKey('kitsune_test_keyname')
 			return tostring(key)
 			""");
-		r.ShouldBe("kitsune_test_keyname");
-	}
+        r.ShouldBe("kitsune_test_keyname");
+    }
 
-	[RedisFact]
-	public async Task GetKey_Type_ReturnsString()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetKey_Type_ReturnsString()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('SET', 'kitsune_test_keytype', 'v')
 			local key = redis:GetKey('kitsune_test_keytype')
@@ -184,27 +184,27 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_keytype')
 			return t
 			""");
-		r.ShouldBe("string");
-	}
+        r.ShouldBe("string");
+    }
 
-	[RedisFact]
-	public async Task GetKey_Delete_ReturnsTrueWhenExists()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetKey_Delete_ReturnsTrueWhenExists()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('SET', 'kitsune_test_keydel', 'v')
 			local key = redis:GetKey('kitsune_test_keydel')
 			return tostring(key:Delete())
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	// ── GetHashset ────────────────────────────────────────────────────────────
+    // ── GetHashset ────────────────────────────────────────────────────────────
 
-	[RedisFact]
-	public async Task GetHashset_SetGet_RoundTrip()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetHashset_SetGet_RoundTrip()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_hash')
 			local hash = redis:GetHashset('kitsune_test_hash')
@@ -213,13 +213,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_hash')
 			return v
 			""");
-		r.ShouldBe("alpha");
-	}
+        r.ShouldBe("alpha");
+    }
 
-	[RedisFact]
-	public async Task GetHashset_DeleteField_ReturnsNil()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetHashset_DeleteField_ReturnsNil()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('HSET', 'kitsune_test_hash_del', 'f', 'v')
 			local hash = redis:GetHashset('kitsune_test_hash_del')
@@ -228,15 +228,15 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_hash_del')
 			return tostring(v == nil)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	// ── GetList ───────────────────────────────────────────────────────────────
+    // ── GetList ───────────────────────────────────────────────────────────────
 
-	[RedisFact]
-	public async Task GetList_RPUSH_ThenIndex_ReturnsValues()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetList_RPUSH_ThenIndex_ReturnsValues()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_list')
 			redis:Command('RPUSH', 'kitsune_test_list', 'first', 'second', 'third')
@@ -246,15 +246,15 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_list')
 			return v1 .. ':' .. v2
 			""");
-		r.ShouldBe("first:second");
-	}
+        r.ShouldBe("first:second");
+    }
 
-	// ── GetSet ────────────────────────────────────────────────────────────────
+    // ── GetSet ────────────────────────────────────────────────────────────────
 
-	[RedisFact]
-	public async Task GetSet_SADD_IsMember_ReturnsTrueAndFalse()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetSet_SADD_IsMember_ReturnsTrueAndFalse()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_set')
 			redis:Command('SADD', 'kitsune_test_set', 'apple', 'banana', 'cherry')
@@ -264,15 +264,15 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_set')
 			return tostring(has) .. ':' .. tostring(missing)
 			""");
-		r.ShouldBe("true:false");
-	}
+        r.ShouldBe("true:false");
+    }
 
-	// ── GetSortedSet ──────────────────────────────────────────────────────────
+    // ── GetSortedSet ──────────────────────────────────────────────────────────
 
-	[RedisFact]
-	public async Task GetSortedSet_ZADD_IndexByRank_ReturnsLowestScoreMember()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetSortedSet_ZADD_IndexByRank_ReturnsLowestScoreMember()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_zset')
 			redis:Command('ZADD', 'kitsune_test_zset', '10', 'memberA')
@@ -282,15 +282,15 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_zset')
 			return first
 			""");
-		r.ShouldBe("memberA");
-	}
+        r.ShouldBe("memberA");
+    }
 
-	// ── GetStream ─────────────────────────────────────────────────────────────
+    // ── GetStream ─────────────────────────────────────────────────────────────
 
-	[RedisFact]
-	public async Task GetStream_Add_Then_Read_ReturnsEntry()
-	{
-		string? r = await Run($@"
+    [RedisFact]
+    public async Task GetStream_Add_Then_Read_ReturnsEntry()
+    {
+        string? r = await Run($@"
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_stream')
 			local stream = redis:GetStream('kitsune_test_stream')
@@ -299,15 +299,15 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_stream')
 			return tostring(id ~= nil) .. ':' .. tostring(entry_id ~= nil) .. ':' .. tostring(fields ~= nil)
 		");
-		r.ShouldBe("true:true:true");
-	}
+        r.ShouldBe("true:true:true");
+    }
 
-	// ── Key iterator ──────────────────────────────────────────────────────────
+    // ── Key iterator ──────────────────────────────────────────────────────────
 
-	[RedisFact]
-	public async Task KeyIterator_SCAN_FindsInsertedKeys()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task KeyIterator_SCAN_FindsInsertedKeys()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('SET', 'kitsune_iter_1', '1')
 			redis:Command('SET', 'kitsune_iter_2', '2')
@@ -324,41 +324,41 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_iter_3')
 			return tostring(found >= 3)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	// ── Subscribe ─────────────────────────────────────────────────────────────
+    // ── Subscribe ─────────────────────────────────────────────────────────────
 
-	[RedisFact]
-	public async Task Subscribe_ReturnsThread()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task Subscribe_ReturnsThread()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			local co = redis:Subscribe('kitsune_sub_type_test')
 			local t = type(co)
 			coroutine.resume(co, true)
 			return t
 			""");
-		r.ShouldBe("thread");
-	}
+        r.ShouldBe("thread");
+    }
 
-	[RedisFact]
-	public async Task PSubscribe_ReturnsThread()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task PSubscribe_ReturnsThread()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			local co = redis:PSubscribe('kitsune_psub_*')
 			local t = type(co)
 			coroutine.resume(co, true)
 			return t
 			""");
-		r.ShouldBe("thread");
-	}
+        r.ShouldBe("thread");
+    }
 
-	[RedisFact]
-	public async Task Subscribe_RoundTrip_ReceivesMessage()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task Subscribe_RoundTrip_ReceivesMessage()
+    {
+        string? r = await Run($"""
 			local channel = 'kitsune_pubsub_rt'
 			local unique  = 'msg-' .. tostring(Time())
 
@@ -391,14 +391,14 @@ public sealed class RedisTests
 			coroutine.resume(co, true)
 			return result or 'timeout'
 			""");
-		r.ShouldNotBe("timeout");
-		r.ShouldStartWith("kitsune_pubsub_rt:");
-	}
+        r.ShouldNotBe("timeout");
+        r.ShouldStartWith("kitsune_pubsub_rt:");
+    }
 
-	[RedisFact]
-	public async Task PSubscribe_RoundTrip_ReceivesMessageWithPattern()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task PSubscribe_RoundTrip_ReceivesMessageWithPattern()
+    {
+        string? r = await Run($"""
 			local pattern = 'kitsune_pps_*'
 			local channel = 'kitsune_pps_test'
 			local unique  = 'msg-' .. tostring(Time())
@@ -430,16 +430,16 @@ public sealed class RedisTests
 			coroutine.resume(co, true)
 			return result or 'timeout'
 			""");
-		r.ShouldNotBe("timeout");
-		r.ShouldStartWith("kitsune_pps_*:kitsune_pps_test:");
-	}
+        r.ShouldNotBe("timeout");
+        r.ShouldStartWith("kitsune_pps_*:kitsune_pps_test:");
+    }
 
-	// ── RedisString extended ──────────────────────────────────────────────────
+    // ── RedisString extended ──────────────────────────────────────────────────
 
-	[RedisFact]
-	public async Task GetString_Set_ReturnsOldValue()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetString_Set_ReturnsOldValue()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('SET', 'kitsune_test_str_prev', 'old')
 			local str = redis:GetString('kitsune_test_str_prev')
@@ -447,13 +447,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_str_prev')
 			return old
 			""");
-		r.ShouldBe("old");
-	}
+        r.ShouldBe("old");
+    }
 
-	[RedisFact]
-	public async Task GetString_Set_ReturnsNilWhenKeyDidNotExist()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetString_Set_ReturnsNilWhenKeyDidNotExist()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_str_nonexist')
 			local str = redis:GetString('kitsune_test_str_nonexist')
@@ -461,13 +461,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_str_nonexist')
 			return tostring(old)
 			""");
-		r.ShouldBe("nil");
-	}
+        r.ShouldBe("nil");
+    }
 
-	[RedisFact]
-	public async Task GetString_Len_ReturnsStrlen()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetString_Len_ReturnsStrlen()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('SET', 'kitsune_test_str_len', 'hello')
 			local str = redis:GetString('kitsune_test_str_len')
@@ -475,13 +475,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_str_len')
 			return tostring(n)
 			""");
-		r.ShouldBe("5");
-	}
+        r.ShouldBe("5");
+    }
 
-	[RedisFact]
-	public async Task GetString_At_ReturnsByte()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetString_At_ReturnsByte()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('SET', 'kitsune_test_str_at', 'ABC')
 			local str = redis:GetString('kitsune_test_str_at')
@@ -489,13 +489,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_str_at')
 			return tostring(b)
 			""");
-		r.ShouldBe("65"); // 'A'
-	}
+        r.ShouldBe("65"); // 'A'
+    }
 
-	[RedisFact]
-	public async Task GetString_IndexRead_ReturnsByte()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetString_IndexRead_ReturnsByte()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('SET', 'kitsune_test_str_idxr', 'ABC')
 			local str = redis:GetString('kitsune_test_str_idxr')
@@ -503,13 +503,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_str_idxr')
 			return tostring(b)
 			""");
-		r.ShouldBe("66"); // 'B'
-	}
+        r.ShouldBe("66"); // 'B'
+    }
 
-	[RedisFact]
-	public async Task GetString_IndexWrite_SetsByte()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetString_IndexWrite_SetsByte()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('SET', 'kitsune_test_str_idxw', 'ABC')
 			local str = redis:GetString('kitsune_test_str_idxw')
@@ -518,13 +518,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_str_idxw')
 			return val
 			""");
-		r.ShouldBe("XBC");
-	}
+        r.ShouldBe("XBC");
+    }
 
-	[RedisFact]
-	public async Task GetString_Concat_ProducesJoinedString()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetString_Concat_ProducesJoinedString()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('SET', 'kitsune_test_str_cc', 'Hello')
 			local str = redis:GetString('kitsune_test_str_cc')
@@ -532,13 +532,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_str_cc')
 			return result
 			""");
-		r.ShouldBe("Hello, world");
-	}
+        r.ShouldBe("Hello, world");
+    }
 
-	[RedisFact]
-	public async Task GetString_GetOrSet_ReturnsExistingValue()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetString_GetOrSet_ReturnsExistingValue()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('SET', 'kitsune_test_str_gos', 'existing')
 			local str = redis:GetString('kitsune_test_str_gos')
@@ -546,13 +546,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_str_gos')
 			return v
 			""");
-		r.ShouldBe("existing");
-	}
+        r.ShouldBe("existing");
+    }
 
-	[RedisFact]
-	public async Task GetString_GetOrSet_SetsAndReturnsNewWhenMissing()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetString_GetOrSet_SetsAndReturnsNewWhenMissing()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_str_gos2')
 			local str = redis:GetString('kitsune_test_str_gos2')
@@ -560,13 +560,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_str_gos2')
 			return v
 			""");
-		r.ShouldBe("default");
-	}
+        r.ShouldBe("default");
+    }
 
-	[RedisFact]
-	public async Task GetString_GetTTL_ReturnsNegativeOneWhenNoPersist()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetString_GetTTL_ReturnsNegativeOneWhenNoPersist()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('SET', 'kitsune_test_str_nottl', 'v')
 			local str = redis:GetString('kitsune_test_str_nottl')
@@ -574,13 +574,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_str_nottl')
 			return tostring(ttl)
 			""");
-		r.ShouldBe("-1");
-	}
+        r.ShouldBe("-1");
+    }
 
-	[RedisFact]
-	public async Task GetString_SetTTL_Zero_RemovesTTL()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetString_SetTTL_Zero_RemovesTTL()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('SET', 'kitsune_test_str_persist', 'v')
 			local str = redis:GetString('kitsune_test_str_persist')
@@ -590,13 +590,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_str_persist')
 			return tostring(ttl)
 			""");
-		r.ShouldBe("-1");
-	}
+        r.ShouldBe("-1");
+    }
 
-	[RedisFact]
-	public async Task GetString_Pairs_IteratesBytes()
-	{
-		string? r = await Run($@"
+    [RedisFact]
+    public async Task GetString_Pairs_IteratesBytes()
+    {
+        string? r = await Run($@"
 			local redis = {Open()}
 			redis:Command('SET', 'kitsune_test_str_pairs', 'AB')
 			local str = redis:GetString('kitsune_test_str_pairs')
@@ -607,13 +607,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_str_pairs')
 			return tostring(bytes[1]) .. ':' .. tostring(bytes[2])
 		");
-		r.ShouldBe("65:66"); // 'A'=65, 'B'=66
-	}
+        r.ShouldBe("65:66"); // 'A'=65, 'B'=66
+    }
 
-	[RedisFact]
-	public async Task GetString_Call_ReturnsRedisKey()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetString_Call_ReturnsRedisKey()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('SET', 'kitsune_test_str_call', 'v')
 			local str = redis:GetString('kitsune_test_str_call')
@@ -621,15 +621,15 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_str_call')
 			return tostring(key)
 			""");
-		r.ShouldBe("kitsune_test_str_call");
-	}
+        r.ShouldBe("kitsune_test_str_call");
+    }
 
-	// ── RedisKey extended ─────────────────────────────────────────────────────
+    // ── RedisKey extended ─────────────────────────────────────────────────────
 
-	[RedisFact]
-	public async Task GetKey_SetTTL_GetTTL_RoundTrip()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetKey_SetTTL_GetTTL_RoundTrip()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('SET', 'kitsune_test_key_ttl', 'v')
 			local key = redis:GetKey('kitsune_test_key_ttl')
@@ -638,13 +638,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_key_ttl')
 			return tostring(ttl > 0)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[RedisFact]
-	public async Task GetKey_SetTTL_Zero_RemovesTTL()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetKey_SetTTL_Zero_RemovesTTL()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('SET', 'kitsune_test_key_persist', 'v')
 			local key = redis:GetKey('kitsune_test_key_persist')
@@ -654,13 +654,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_key_persist')
 			return tostring(ttl)
 			""");
-		r.ShouldBe("-1");
-	}
+        r.ShouldBe("-1");
+    }
 
-	[RedisFact]
-	public async Task GetKey_Type_ReturnsHash()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetKey_Type_ReturnsHash()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('HSET', 'kitsune_test_key_hashtype', 'f', 'v')
 			local key = redis:GetKey('kitsune_test_key_hashtype')
@@ -668,13 +668,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_key_hashtype')
 			return t
 			""");
-		r.ShouldBe("hash");
-	}
+        r.ShouldBe("hash");
+    }
 
-	[RedisFact]
-	public async Task GetKey_Type_ReturnsList()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetKey_Type_ReturnsList()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('RPUSH', 'kitsune_test_key_listtype', 'v')
 			local key = redis:GetKey('kitsune_test_key_listtype')
@@ -682,27 +682,27 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_key_listtype')
 			return t
 			""");
-		r.ShouldBe("list");
-	}
+        r.ShouldBe("list");
+    }
 
-	[RedisFact]
-	public async Task GetKey_Type_ReturnsNoneWhenMissing()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetKey_Type_ReturnsNoneWhenMissing()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_key_noexist')
 			local key = redis:GetKey('kitsune_test_key_noexist')
 			return key:Type()
 			""");
-		r.ShouldBe("none");
-	}
+        r.ShouldBe("none");
+    }
 
-	// ── GetHashset extended ───────────────────────────────────────────────────
+    // ── GetHashset extended ───────────────────────────────────────────────────
 
-	[RedisFact]
-	public async Task GetHashset_MultipleFields_RoundTrip()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetHashset_MultipleFields_RoundTrip()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_hash_multi')
 			local hash = redis:GetHashset('kitsune_test_hash_multi')
@@ -715,13 +715,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_hash_multi')
 			return a .. ':' .. b .. ':' .. c
 			""");
-		r.ShouldBe("alpha:beta:gamma");
-	}
+        r.ShouldBe("alpha:beta:gamma");
+    }
 
-	[RedisFact]
-	public async Task GetHashset_Pairs_IteratesAllFields()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetHashset_Pairs_IteratesAllFields()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_hash_pairs')
 			redis:Command('HSET', 'kitsune_test_hash_pairs', 'x', '1', 'y', '2', 'z', '3')
@@ -733,39 +733,39 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_hash_pairs')
 			return tostring(count)
 			""");
-		r.ShouldBe("3");
-	}
+        r.ShouldBe("3");
+    }
 
-	[RedisFact]
-	public async Task GetHashset_Tostring_ContainsKeyName()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetHashset_Tostring_ContainsKeyName()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			local hash = redis:GetHashset('kitsune_test_hash_ts')
 			local s = tostring(hash)
 			return tostring(s:find('kitsune_test_hash_ts', 1, true) ~= nil)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[RedisFact]
-	public async Task GetHashset_Call_ReturnsKeyAndType()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetHashset_Call_ReturnsKeyAndType()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			local hash = redis:GetHashset('kitsune_test_hash_call')
 			local key, t = hash()
 			return tostring(key) .. ':' .. tostring(t)
 			""");
-		r.ShouldBe("kitsune_test_hash_call:1");
-	}
+        r.ShouldBe("kitsune_test_hash_call:1");
+    }
 
-	// ── GetList extended ──────────────────────────────────────────────────────
+    // ── GetList extended ──────────────────────────────────────────────────────
 
-	[RedisFact]
-	public async Task GetList_Len_ReturnsCount()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetList_Len_ReturnsCount()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_list_len')
 			redis:Command('RPUSH', 'kitsune_test_list_len', 'a', 'b', 'c')
@@ -774,13 +774,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_list_len')
 			return tostring(n)
 			""");
-		r.ShouldBe("3");
-	}
+        r.ShouldBe("3");
+    }
 
-	[RedisFact]
-	public async Task GetList_IndexZero_LPops()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetList_IndexZero_LPops()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_list_lpop')
 			redis:Command('RPUSH', 'kitsune_test_list_lpop', 'first', 'second')
@@ -789,13 +789,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_list_lpop')
 			return v
 			""");
-		r.ShouldBe("first");
-	}
+        r.ShouldBe("first");
+    }
 
-	[RedisFact]
-	public async Task GetList_NegativeIndex_ReturnsFromEnd()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetList_NegativeIndex_ReturnsFromEnd()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_list_neg')
 			redis:Command('RPUSH', 'kitsune_test_list_neg', 'a', 'b', 'c')
@@ -804,13 +804,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_list_neg')
 			return v
 			""");
-		r.ShouldBe("c");
-	}
+        r.ShouldBe("c");
+    }
 
-	[RedisFact]
-	public async Task GetList_AssignIndexZero_AppendsByRpush()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetList_AssignIndexZero_AppendsByRpush()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_list_push')
 			local list = redis:GetList('kitsune_test_list_push')
@@ -819,13 +819,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_list_push')
 			return v
 			""");
-		r.ShouldBe("appended");
-	}
+        r.ShouldBe("appended");
+    }
 
-	[RedisFact]
-	public async Task GetList_AssignExistingIndex_UpdatesViaLset()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetList_AssignExistingIndex_UpdatesViaLset()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_list_lset')
 			redis:Command('RPUSH', 'kitsune_test_list_lset', 'old', 'b')
@@ -835,13 +835,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_list_lset')
 			return v
 			""");
-		r.ShouldBe("new");
-	}
+        r.ShouldBe("new");
+    }
 
-	[RedisFact]
-	public async Task GetList_Pairs_IteratesAll()
-	{
-		string? r = await Run($@"
+    [RedisFact]
+    public async Task GetList_Pairs_IteratesAll()
+    {
+        string? r = await Run($@"
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_list_pairs')
 			redis:Command('RPUSH', 'kitsune_test_list_pairs', 'x', 'y', 'z')
@@ -853,39 +853,39 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_list_pairs')
 			return found[1] .. ':' .. found[2] .. ':' .. found[3]
 		");
-		r.ShouldBe("x:y:z");
-	}
+        r.ShouldBe("x:y:z");
+    }
 
-	[RedisFact]
-	public async Task GetList_Tostring_ContainsKeyName()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetList_Tostring_ContainsKeyName()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			local list = redis:GetList('kitsune_test_list_ts')
 			local s = tostring(list)
 			return tostring(s:find('kitsune_test_list_ts', 1, true) ~= nil)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[RedisFact]
-	public async Task GetList_Call_ReturnsKeyAndType()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetList_Call_ReturnsKeyAndType()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			local list = redis:GetList('kitsune_test_list_call')
 			local key, t = list()
 			return tostring(key) .. ':' .. tostring(t)
 			""");
-		r.ShouldBe("kitsune_test_list_call:2");
-	}
+        r.ShouldBe("kitsune_test_list_call:2");
+    }
 
-	// ── GetSet extended ───────────────────────────────────────────────────────
+    // ── GetSet extended ───────────────────────────────────────────────────────
 
-	[RedisFact]
-	public async Task GetSet_Srandmember_ReturnsAMember()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetSet_Srandmember_ReturnsAMember()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_set_rand')
 			redis:Command('SADD', 'kitsune_test_set_rand', 'apple', 'banana')
@@ -894,13 +894,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_set_rand')
 			return tostring(v == 'apple' or v == 'banana')
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[RedisFact]
-	public async Task GetSet_Spop_RemovesAndReturnsMember()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetSet_Spop_RemovesAndReturnsMember()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_set_pop')
 			redis:Command('SADD', 'kitsune_test_set_pop', 'only')
@@ -910,13 +910,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_set_pop')
 			return v .. ':' .. tostring(remaining.Value)
 			""");
-		r.ShouldBe("only:0");
-	}
+        r.ShouldBe("only:0");
+    }
 
-	[RedisFact]
-	public async Task GetSet_AssignTrue_AddsMember()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetSet_AssignTrue_AddsMember()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_set_add')
 			local set = redis:GetSet('kitsune_test_set_add')
@@ -925,13 +925,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_set_add')
 			return tostring(has)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[RedisFact]
-	public async Task GetSet_AssignFalse_RemovesMember()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetSet_AssignFalse_RemovesMember()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('SADD', 'kitsune_test_set_remf', 'peach')
 			local set = redis:GetSet('kitsune_test_set_remf')
@@ -940,13 +940,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_set_remf')
 			return tostring(has)
 			""");
-		r.ShouldBe("false");
-	}
+        r.ShouldBe("false");
+    }
 
-	[RedisFact]
-	public async Task GetSet_AssignNil_RemovesMember()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetSet_AssignNil_RemovesMember()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('SADD', 'kitsune_test_set_remn', 'plum')
 			local set = redis:GetSet('kitsune_test_set_remn')
@@ -955,13 +955,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_set_remn')
 			return tostring(has)
 			""");
-		r.ShouldBe("false");
-	}
+        r.ShouldBe("false");
+    }
 
-	[RedisFact]
-	public async Task GetSet_Len_ReturnsScard()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetSet_Len_ReturnsScard()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_set_len')
 			redis:Command('SADD', 'kitsune_test_set_len', 'a', 'b', 'c', 'd')
@@ -970,13 +970,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_set_len')
 			return tostring(n)
 			""");
-		r.ShouldBe("4");
-	}
+        r.ShouldBe("4");
+    }
 
-	[RedisFact]
-	public async Task GetSet_IndexedAccess_ReturnsMember()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetSet_IndexedAccess_ReturnsMember()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_set_idx')
 			redis:Command('SADD', 'kitsune_test_set_idx', 'solo')
@@ -985,13 +985,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_set_idx')
 			return v
 			""");
-		r.ShouldBe("solo");
-	}
+        r.ShouldBe("solo");
+    }
 
-	[RedisFact]
-	public async Task GetSet_Pairs_IteratesAll()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetSet_Pairs_IteratesAll()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_set_pairs')
 			redis:Command('SADD', 'kitsune_test_set_pairs', 'x', 'y', 'z')
@@ -1003,39 +1003,39 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_set_pairs')
 			return tostring(count)
 			""");
-		r.ShouldBe("3");
-	}
+        r.ShouldBe("3");
+    }
 
-	[RedisFact]
-	public async Task GetSet_Tostring_ContainsKeyName()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetSet_Tostring_ContainsKeyName()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			local set = redis:GetSet('kitsune_test_set_ts')
 			local s = tostring(set)
 			return tostring(s:find('kitsune_test_set_ts', 1, true) ~= nil)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[RedisFact]
-	public async Task GetSet_Call_ReturnsKeyAndType()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetSet_Call_ReturnsKeyAndType()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			local set = redis:GetSet('kitsune_test_set_call')
 			local key, t = set()
 			return tostring(key) .. ':' .. tostring(t)
 			""");
-		r.ShouldBe("kitsune_test_set_call:3");
-	}
+        r.ShouldBe("kitsune_test_set_call:3");
+    }
 
-	// ── GetSortedSet extended ─────────────────────────────────────────────────
+    // ── GetSortedSet extended ─────────────────────────────────────────────────
 
-	[RedisFact]
-	public async Task GetSortedSet_GetScore_ByMemberName()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetSortedSet_GetScore_ByMemberName()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_zset_score')
 			redis:Command('ZADD', 'kitsune_test_zset_score', '42', 'alpha')
@@ -1044,13 +1044,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_zset_score')
 			return tostring(score)
 			""");
-		r.ShouldBe("42");
-	}
+        r.ShouldBe("42");
+    }
 
-	[RedisFact]
-	public async Task GetSortedSet_AddViaAssignment_AddsToSet()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetSortedSet_AddViaAssignment_AddsToSet()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_zset_add')
 			local zset = redis:GetSortedSet('kitsune_test_zset_add')
@@ -1059,13 +1059,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_zset_add')
 			return tostring(score)
 			""");
-		r.ShouldBe("99");
-	}
+        r.ShouldBe("99");
+    }
 
-	[RedisFact]
-	public async Task GetSortedSet_RemoveViaNil_DeletesMember()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetSortedSet_RemoveViaNil_DeletesMember()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_zset_rem')
 			redis:Command('ZADD', 'kitsune_test_zset_rem', '5', 'beta')
@@ -1075,13 +1075,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_zset_rem')
 			return tostring(score == nil)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[RedisFact]
-	public async Task GetSortedSet_Pairs_YieldsMembersWithScores()
-	{
-		string? r = await Run($@"
+    [RedisFact]
+    public async Task GetSortedSet_Pairs_YieldsMembersWithScores()
+    {
+        string? r = await Run($@"
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_zset_pairs')
 			redis:Command('ZADD', 'kitsune_test_zset_pairs', '10', 'a')
@@ -1094,39 +1094,39 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_zset_pairs')
 			return tostring(members['a']) .. ':' .. tostring(members['b'])
 		");
-		r.ShouldBe("10:20");
-	}
+        r.ShouldBe("10:20");
+    }
 
-	[RedisFact]
-	public async Task GetSortedSet_Tostring_ContainsKeyName()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetSortedSet_Tostring_ContainsKeyName()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			local zset = redis:GetSortedSet('kitsune_test_zset_ts')
 			local s = tostring(zset)
 			return tostring(s:find('kitsune_test_zset_ts', 1, true) ~= nil)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[RedisFact]
-	public async Task GetSortedSet_Call_ReturnsKeyAndType()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetSortedSet_Call_ReturnsKeyAndType()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			local zset = redis:GetSortedSet('kitsune_test_zset_call')
 			local key, t = zset()
 			return tostring(key) .. ':' .. tostring(t)
 			""");
-		r.ShouldBe("kitsune_test_zset_call:4");
-	}
+        r.ShouldBe("kitsune_test_zset_call:4");
+    }
 
-	// ── GetStream extended ────────────────────────────────────────────────────
+    // ── GetStream extended ────────────────────────────────────────────────────
 
-	[RedisFact]
-	public async Task GetStream_Add_IdIsNonEmptyString()
-	{
-		string? r = await Run($@"
+    [RedisFact]
+    public async Task GetStream_Add_IdIsNonEmptyString()
+    {
+        string? r = await Run($@"
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_stream_id')
 			local stream = redis:GetStream('kitsune_test_stream_id')
@@ -1134,13 +1134,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_stream_id')
 			return tostring(type(id) == 'string' and #id > 0)
 		");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[RedisFact]
-	public async Task GetStream_MultipleAdd_ReadSequential()
-	{
-		string? r = await Run($@"
+    [RedisFact]
+    public async Task GetStream_MultipleAdd_ReadSequential()
+    {
+        string? r = await Run($@"
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_stream_seq')
 			local stream = redis:GetStream('kitsune_test_stream_seq')
@@ -1151,13 +1151,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_stream_seq')
 			return fields.msg .. ':' .. fields2.msg
 		");
-		r.ShouldBe("first:second");
-	}
+        r.ShouldBe("first:second");
+    }
 
-	[RedisFact]
-	public async Task GetStream_Trim_ReducesLength()
-	{
-		string? r = await Run($@"
+    [RedisFact]
+    public async Task GetStream_Trim_ReducesLength()
+    {
+        string? r = await Run($@"
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_stream_trim')
 			local stream = redis:GetStream('kitsune_test_stream_trim')
@@ -1169,51 +1169,51 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_stream_trim')
 			return tostring(trimmed >= 0) .. ':' .. tostring(len.Value == 1)
 		");
-		r.ShouldBe("true:true");
-	}
+        r.ShouldBe("true:true");
+    }
 
-	[RedisFact]
-	public async Task GetStream_Tostring_ContainsKeyName()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetStream_Tostring_ContainsKeyName()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			local stream = redis:GetStream('kitsune_test_stream_ts')
 			local s = tostring(stream)
 			return tostring(s:find('kitsune_test_stream_ts', 1, true) ~= nil)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[RedisFact]
-	public async Task GetStream_Call_ReturnsRedisKey()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetStream_Call_ReturnsRedisKey()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			local stream = redis:GetStream('kitsune_test_stream_call')
 			local key = stream()
 			return tostring(key)
 			""");
-		r.ShouldBe("kitsune_test_stream_call");
-	}
+        r.ShouldBe("kitsune_test_stream_call");
+    }
 
-	// ── Command reply ─────────────────────────────────────────────────────────
+    // ── Command reply ─────────────────────────────────────────────────────────
 
-	[RedisFact]
-	public async Task Command_GET_NonExistentKey_NilValue()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task Command_GET_NonExistentKey_NilValue()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_reply_nil')
 			local reply = redis:Command('GET', 'kitsune_test_reply_nil')
 			return tostring(reply.Value == nil)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[RedisFact]
-	public async Task Command_SMEMBERS_ValueIsTable()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task Command_SMEMBERS_ValueIsTable()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_reply_arr')
 			redis:Command('SADD', 'kitsune_test_reply_arr', 'x', 'y')
@@ -1221,13 +1221,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_reply_arr')
 			return tostring(type(reply.Value) == 'table' and #reply.Value == 2)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[RedisFact]
-	public async Task Command_INCR_ReturnsInteger()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task Command_INCR_ReturnsInteger()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_reply_int')
 			redis:Command('SET', 'kitsune_test_reply_int', '10')
@@ -1235,54 +1235,54 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_reply_int')
 			return tostring(reply.Value)
 			""");
-		r.ShouldBe("11");
-	}
+        r.ShouldBe("11");
+    }
 
-	[RedisFact]
-	public async Task GetStream_Read_EmptyStream_ReturnsNilPair()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetStream_Read_EmptyStream_ReturnsNilPair()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_stream_empty')
 			local stream = redis:GetStream('kitsune_test_stream_empty')
 			local eid, fields = stream:Read()
 			return tostring(eid == nil and fields == nil)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	// ── Command validation ────────────────────────────────────────────────────
+    // ── Command validation ────────────────────────────────────────────────────
 
-	[RedisFact]
-	public async Task Command_NilArgument_Raises()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task Command_NilArgument_Raises()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			local ok = pcall(function()
 				redis:Command('SET', nil, 'value')
 			end)
 			return tostring(not ok)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[RedisFact]
-	public async Task Command_BooleanArgument_Raises()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task Command_BooleanArgument_Raises()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			local ok = pcall(function()
 				redis:Command('SET', 'key', true)
 			end)
 			return tostring(not ok)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[RedisFact]
-	public async Task Command_WRONGTYPE_Raises()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task Command_WRONGTYPE_Raises()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_wt_list')
 			redis:Command('RPUSH', 'kitsune_test_wt_list', 'item')
@@ -1292,15 +1292,15 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_wt_list')
 			return tostring(not ok)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	// ── GetString extended (new paths) ────────────────────────────────────────
+    // ── GetString extended (new paths) ────────────────────────────────────────
 
-	[RedisFact]
-	public async Task GetString_GetSet_IsAliasOfGetOrSet()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetString_GetSet_IsAliasOfGetOrSet()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('SET', 'kitsune_test_str_getset_alias', 'original')
 			local str = redis:GetString('kitsune_test_str_getset_alias')
@@ -1308,13 +1308,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_str_getset_alias')
 			return old
 			""");
-		r.ShouldBe("original");
-	}
+        r.ShouldBe("original");
+    }
 
-	[RedisFact]
-	public async Task GetString_Concat_TwoRedisStrings()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetString_Concat_TwoRedisStrings()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('SET', 'kitsune_test_str_cat_a', 'foo')
 			redis:Command('SET', 'kitsune_test_str_cat_b', 'bar')
@@ -1324,13 +1324,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_str_cat_a', 'kitsune_test_str_cat_b')
 			return result
 			""");
-		r.ShouldBe("foobar");
-	}
+        r.ShouldBe("foobar");
+    }
 
-	[RedisFact]
-	public async Task GetString_At_OutOfRange_ReturnsNil()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetString_At_OutOfRange_ReturnsNil()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('SET', 'kitsune_test_str_at_oor', 'Hi')
 			local str = redis:GetString('kitsune_test_str_at_oor')
@@ -1338,66 +1338,66 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_str_at_oor')
 			return tostring(b == nil)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[RedisFact]
-	public async Task GetString_Delete_NonExistentKey_ReturnsNil()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetString_Delete_NonExistentKey_ReturnsNil()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_str_del_nokey')
 			local str = redis:GetString('kitsune_test_str_del_nokey')
 			local v = str:Delete()
 			return tostring(v == nil)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[RedisFact]
-	public async Task GetString_GetTTL_NonExistentKey_ReturnsNil()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetString_GetTTL_NonExistentKey_ReturnsNil()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_str_ttl_nokey')
 			local str = redis:GetString('kitsune_test_str_ttl_nokey')
 			return tostring(str:GetTTL() == nil)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	// ── GetKey extended (new paths) ───────────────────────────────────────────
+    // ── GetKey extended (new paths) ───────────────────────────────────────────
 
-	[RedisFact]
-	public async Task GetKey_GetTTL_NonExistentKey_ReturnsNil()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetKey_GetTTL_NonExistentKey_ReturnsNil()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_key_ttl_noexist')
 			local key = redis:GetKey('kitsune_test_key_ttl_noexist')
 			return tostring(key:GetTTL() == nil)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[RedisFact]
-	public async Task GetKey_SetTTL_NonExistentKey_ReturnsFalse()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetKey_SetTTL_NonExistentKey_ReturnsFalse()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_key_pexpire_nokey')
 			local key = redis:GetKey('kitsune_test_key_pexpire_nokey')
 			return tostring(key:SetTTL(60000))
 			""");
-		r.ShouldBe("false");
-	}
+        r.ShouldBe("false");
+    }
 
-	// ── GetHashset extended (new paths) ──────────────────────────────────────
+    // ── GetHashset extended (new paths) ──────────────────────────────────────
 
-	[RedisFact]
-	public async Task GetHashset_StoreAndRetrieveNumber()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetHashset_StoreAndRetrieveNumber()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_hash_num')
 			local hash = redis:GetHashset('kitsune_test_hash_num')
@@ -1406,13 +1406,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_hash_num')
 			return v
 			""");
-		r.ShouldBe("42");
-	}
+        r.ShouldBe("42");
+    }
 
-	[RedisFact]
-	public async Task GetHashset_StoreTable_IsJsonEncoded()
-	{
-		string? r = await Run($@"
+    [RedisFact]
+    public async Task GetHashset_StoreTable_IsJsonEncoded()
+    {
+        string? r = await Run($@"
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_hash_json')
 			local hash = redis:GetHashset('kitsune_test_hash_json')
@@ -1421,13 +1421,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_hash_json')
 			return tostring(type(v) == 'string' and v:find('1', 1, true) ~= nil)
 		");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[RedisFact]
-	public async Task GetHashset_Len_ReturnsZero()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetHashset_Len_ReturnsZero()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('HSET', 'kitsune_test_hash_lenz', 'f', 'v')
 			local hash = redis:GetHashset('kitsune_test_hash_lenz')
@@ -1435,40 +1435,40 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_hash_lenz')
 			return tostring(n)
 			""");
-		r.ShouldBe("0");
-	}
+        r.ShouldBe("0");
+    }
 
-	// ── GetList extended (new paths) ──────────────────────────────────────────
+    // ── GetList extended (new paths) ──────────────────────────────────────────
 
-	[RedisFact]
-	public async Task GetList_Len_EmptyList_ReturnsZero()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetList_Len_EmptyList_ReturnsZero()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_list_empty')
 			local list = redis:GetList('kitsune_test_list_empty')
 			return tostring(#list)
 			""");
-		r.ShouldBe("0");
-	}
+        r.ShouldBe("0");
+    }
 
-	[RedisFact]
-	public async Task GetList_IndexZero_EmptyList_ReturnsNil()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetList_IndexZero_EmptyList_ReturnsNil()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_list_lpop_empty')
 			local list = redis:GetList('kitsune_test_list_lpop_empty')
 			local v = list[0]
 			return tostring(v == nil)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[RedisFact]
-	public async Task GetList_AssignNegativeIndex_PrependsByLpush()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetList_AssignNegativeIndex_PrependsByLpush()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_list_neg_push')
 			redis:Command('RPUSH', 'kitsune_test_list_neg_push', 'a', 'b', 'c')
@@ -1478,15 +1478,15 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_list_neg_push')
 			return first
 			""");
-		r.ShouldBe("prepended");
-	}
+        r.ShouldBe("prepended");
+    }
 
-	// ── GetSet extended (new paths) ───────────────────────────────────────────
+    // ── GetSet extended (new paths) ───────────────────────────────────────────
 
-	[RedisFact]
-	public async Task GetSet_IndexedAccess_BeyondSize_ReturnsNil()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetSet_IndexedAccess_BeyondSize_ReturnsNil()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_set_oob')
 			redis:Command('SADD', 'kitsune_test_set_oob', 'a', 'b')
@@ -1495,16 +1495,16 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_set_oob')
 			return tostring(v == nil)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[RedisFact]
-	public async Task GetSet_MutationInvalidatesScanCache()
-	{
-		// set[1] fills the SSCAN cache; set[2] keeps it alive (2 of 3).
-		// After SREM the cache must be cleared so set[3] re-scans the
-		// now-2-member set and returns nil instead of a stale third element.
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetSet_MutationInvalidatesScanCache()
+    {
+        // set[1] fills the SSCAN cache; set[2] keeps it alive (2 of 3).
+        // After SREM the cache must be cleared so set[3] re-scans the
+        // now-2-member set and returns nil instead of a stale third element.
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_set_stale')
 			redis:Command('SADD', 'kitsune_test_set_stale', 'alpha', 'beta', 'gamma')
@@ -1516,15 +1516,15 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_set_stale')
 			return tostring(third == nil)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	// ── GetSortedSet extended (new paths) ─────────────────────────────────────
+    // ── GetSortedSet extended (new paths) ─────────────────────────────────────
 
-	[RedisFact]
-	public async Task GetSortedSet_IndexByRank_OutOfRange_ReturnsNil()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetSortedSet_IndexByRank_OutOfRange_ReturnsNil()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_zset_oor')
 			redis:Command('ZADD', 'kitsune_test_zset_oor', '1', 'a')
@@ -1533,13 +1533,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_zset_oor')
 			return tostring(v == nil)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[RedisFact]
-	public async Task GetSortedSet_Score_NonExistentMember_ReturnsNil()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetSortedSet_Score_NonExistentMember_ReturnsNil()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_test_zset_noscore')
 			redis:Command('ZADD', 'kitsune_test_zset_noscore', '5', 'member')
@@ -1548,13 +1548,13 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_zset_noscore')
 			return tostring(score == nil)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[RedisFact]
-	public async Task GetSortedSet_Len_ReturnsZero()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetSortedSet_Len_ReturnsZero()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('ZADD', 'kitsune_test_zset_lenz', '1', 'a')
 			local zset = redis:GetSortedSet('kitsune_test_zset_lenz')
@@ -1562,14 +1562,14 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_zset_lenz')
 			return tostring(n)
 			""");
-		r.ShouldBe("0");
-	}
+        r.ShouldBe("0");
+    }
 
-	[RedisFact]
-	public async Task GetSortedSet_Pairs_FloatScoreRoundTrips()
-	{
-		// Verifies that lua_stringtonumber is used (not atoll) so fractional scores survive.
-		string? r = await Run($$"""
+    [RedisFact]
+    public async Task GetSortedSet_Pairs_FloatScoreRoundTrips()
+    {
+        // Verifies that lua_stringtonumber is used (not atoll) so fractional scores survive.
+        string? r = await Run($$"""
 			local redis = {{Open()}}
 			redis:Command('DEL', 'kitsune_test_zset_float')
 			redis:Command('ZADD', 'kitsune_test_zset_float', '1.5', 'a')
@@ -1582,34 +1582,34 @@ public sealed class RedisTests
 			redis:Command('DEL', 'kitsune_test_zset_float')
 			return tostring(scores['a']) .. ':' .. tostring(scores['b'])
 			""");
-		r.ShouldBe("1.5:2");
-	}
+        r.ShouldBe("1.5:2");
+    }
 
-	// ── GetJson ───────────────────────────────────────────────────────────────
+    // ── GetJson ───────────────────────────────────────────────────────────────
 
-	// Sample JSON document used by all GetJson tests.
-	private const string JsonDoc =
-		"""{"NullableGuid":{"HasValue":false,"Value":"SomeGuidBlablabla"},"OtherProperties":null,"TestArray":[{"Id":1,"Name":"Cake"},{"Id":2,"Name":"Also Cake"}],"SomeNumber":123}""";
+    // Sample JSON document used by all GetJson tests.
+    private const string JsonDoc =
+        """{"NullableGuid":{"HasValue":false,"Value":"SomeGuidBlablabla"},"OtherProperties":null,"TestArray":[{"Id":1,"Name":"Cake"},{"Id":2,"Name":"Also Cake"}],"SomeNumber":123}""";
 
-	private string JsonSetup(string key = "kitsune_test_json") =>
-		$"redis:Command('JSON.SET', '{key}', '$', '{JsonDoc}')";
+    private string JsonSetup(string key = "kitsune_test_json") =>
+        $"redis:Command('JSON.SET', '{key}', '$', '{JsonDoc}')";
 
-	[RedisFact]
-	public async Task GetJson_Tostring_ShowsKeyAndPath()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_Tostring_ShowsKeyAndPath()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			local json = redis:GetJson('kitsune_test_json')
 			local s = tostring(json)
 			return tostring(s:find('kitsune_test_json', 1, true) ~= nil)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[RedisFact]
-	public async Task GetJson_GetScalar_ReturnsNumber()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_GetScalar_ReturnsNumber()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -1617,13 +1617,13 @@ public sealed class RedisTests
 			redis:Command('JSON.DEL', 'kitsune_test_json')
 			return tostring(n)
 			""");
-		r.ShouldBe("123");
-	}
+        r.ShouldBe("123");
+    }
 
-	[RedisFact]
-	public async Task GetJson_GetNestedBool_ReturnsFalse()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_GetNestedBool_ReturnsFalse()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -1631,13 +1631,13 @@ public sealed class RedisTests
 			redis:Command('JSON.DEL', 'kitsune_test_json')
 			return tostring(v)
 			""");
-		r.ShouldBe("false");
-	}
+        r.ShouldBe("false");
+    }
 
-	[RedisFact]
-	public async Task GetJson_GetNestedString_ReturnsValue()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_GetNestedString_ReturnsValue()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -1645,13 +1645,13 @@ public sealed class RedisTests
 			redis:Command('JSON.DEL', 'kitsune_test_json')
 			return v
 			""");
-		r.ShouldBe("SomeGuidBlablabla");
-	}
+        r.ShouldBe("SomeGuidBlablabla");
+    }
 
-	[RedisFact]
-	public async Task GetJson_GetArrayElement_ByLuaIndex_ReturnsSecondEntry()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_GetArrayElement_ByLuaIndex_ReturnsSecondEntry()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -1659,13 +1659,13 @@ public sealed class RedisTests
 			redis:Command('JSON.DEL', 'kitsune_test_json')
 			return name
 			""");
-		r.ShouldBe("Also Cake");
-	}
+        r.ShouldBe("Also Cake");
+    }
 
-	[RedisFact]
-	public async Task GetJson_GetArrayElement_FirstEntry()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_GetArrayElement_FirstEntry()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -1673,13 +1673,13 @@ public sealed class RedisTests
 			redis:Command('JSON.DEL', 'kitsune_test_json')
 			return name
 			""");
-		r.ShouldBe("Cake");
-	}
+        r.ShouldBe("Cake");
+    }
 
-	[RedisFact]
-	public async Task GetJson_GetMissingPath_ReturnsNil()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_GetMissingPath_ReturnsNil()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -1687,13 +1687,13 @@ public sealed class RedisTests
 			redis:Command('JSON.DEL', 'kitsune_test_json')
 			return tostring(v == nil)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[RedisFact]
-	public async Task GetJson_Get_Root_ReturnsTable()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_Get_Root_ReturnsTable()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -1701,13 +1701,13 @@ public sealed class RedisTests
 			redis:Command('JSON.DEL', 'kitsune_test_json')
 			return tostring(type(doc) == 'table' and doc.SomeNumber == 123)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[RedisFact]
-	public async Task GetJson_SetViaMethod_UpdatesScalar()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_SetViaMethod_UpdatesScalar()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -1716,13 +1716,13 @@ public sealed class RedisTests
 			redis:Command('JSON.DEL', 'kitsune_test_json')
 			return tostring(v)
 			""");
-		r.ShouldBe("456");
-	}
+        r.ShouldBe("456");
+    }
 
-	[RedisFact]
-	public async Task GetJson_SetViaNewindex_UpdatesScalar()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_SetViaNewindex_UpdatesScalar()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -1731,13 +1731,13 @@ public sealed class RedisTests
 			redis:Command('JSON.DEL', 'kitsune_test_json')
 			return tostring(v)
 			""");
-		r.ShouldBe("789");
-	}
+        r.ShouldBe("789");
+    }
 
-	[RedisFact]
-	public async Task GetJson_SetNestedViaNewindex_UpdatesField()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_SetNestedViaNewindex_UpdatesField()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -1746,13 +1746,13 @@ public sealed class RedisTests
 			redis:Command('JSON.DEL', 'kitsune_test_json')
 			return tostring(v)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[RedisFact]
-	public async Task GetJson_Delete_DeletesPath()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_Delete_DeletesPath()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -1761,13 +1761,13 @@ public sealed class RedisTests
 			redis:Command('JSON.DEL', 'kitsune_test_json')
 			return tostring(v == nil)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[RedisFact]
-	public async Task GetJson_Type_ReturnsNonNilForRootAndArray()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_Type_ReturnsNonNilForRootAndArray()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -1776,13 +1776,13 @@ public sealed class RedisTests
 			redis:Command('JSON.DEL', 'kitsune_test_json')
 			return tostring(t_obj ~= nil) .. ':' .. tostring(t_arr ~= nil)
 			""");
-		r.ShouldBe("true:true");
-	}
+        r.ShouldBe("true:true");
+    }
 
-	[RedisFact]
-	public async Task GetJson_Length_ReturnsArrayLength()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_Length_ReturnsArrayLength()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -1790,13 +1790,13 @@ public sealed class RedisTests
 			redis:Command('JSON.DEL', 'kitsune_test_json')
 			return tostring(len)
 			""");
-		r.ShouldBe("2");
-	}
+        r.ShouldBe("2");
+    }
 
-	[RedisFact]
-	public async Task GetJson_LenMetamethod_ReturnsArrayLength()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_LenMetamethod_ReturnsArrayLength()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -1804,27 +1804,27 @@ public sealed class RedisTests
 			redis:Command('JSON.DEL', 'kitsune_test_json')
 			return tostring(len)
 			""");
-		r.ShouldBe("2");
-	}
+        r.ShouldBe("2");
+    }
 
-	[RedisFact]
-	public async Task GetJson_PathChaining_ToStringShowsAccumulatedPath()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_PathChaining_ToStringShowsAccumulatedPath()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			local json = redis:GetJson('kitsune_test_json')
 			local s = tostring(json.TestArray[2].Name)
 			return tostring(s:find('TestArray', 1, true) ~= nil)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	// ── GetJson extended ──────────────────────────────────────────────────────
+    // ── GetJson extended ──────────────────────────────────────────────────────
 
-	[RedisFact]
-	public async Task GetJson_GetNull_ReturnsJsonNullSentinel()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_GetNull_ReturnsJsonNullSentinel()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -1832,13 +1832,13 @@ public sealed class RedisTests
 			redis:Command('JSON.DEL', 'kitsune_test_json')
 			return tostring(v == Json.Null)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[RedisFact]
-	public async Task GetJson_GetNestedObject_ReturnsTable()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_GetNestedObject_ReturnsTable()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -1846,13 +1846,13 @@ public sealed class RedisTests
 			redis:Command('JSON.DEL', 'kitsune_test_json')
 			return tostring(type(val) == 'table' and val.HasValue == false and val.Value == 'SomeGuidBlablabla')
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[RedisFact]
-	public async Task GetJson_GetArray_ReturnsTableWithTwoElements()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_GetArray_ReturnsTableWithTwoElements()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -1860,13 +1860,13 @@ public sealed class RedisTests
 			redis:Command('JSON.DEL', 'kitsune_test_json')
 			return tostring(type(val) == 'table' and #val == 2)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[RedisFact]
-	public async Task GetJson_GetArrayElementId_ReturnsInteger()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_GetArrayElementId_ReturnsInteger()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -1875,26 +1875,26 @@ public sealed class RedisTests
 			redis:Command('JSON.DEL', 'kitsune_test_json')
 			return tostring(id1) .. ':' .. tostring(id2)
 			""");
-		r.ShouldBe("1:2");
-	}
+        r.ShouldBe("1:2");
+    }
 
-	[RedisFact]
-	public async Task GetJson_GetNonExistentKey_ReturnsNil()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_GetNonExistentKey_ReturnsNil()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			redis:Command('DEL', 'kitsune_json_noexist')
 			local json = redis:GetJson('kitsune_json_noexist')
 			local v = json()
 			return tostring(v == nil)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[RedisFact]
-	public async Task GetJson_SetString_UpdatesField()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_SetString_UpdatesField()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -1903,13 +1903,13 @@ public sealed class RedisTests
 			redis:Command('JSON.DEL', 'kitsune_test_json')
 			return v
 			""");
-		r.ShouldBe("UpdatedGuid");
-	}
+        r.ShouldBe("UpdatedGuid");
+    }
 
-	[RedisFact]
-	public async Task GetJson_SetNil_SetsJsonNull()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_SetNil_SetsJsonNull()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -1918,14 +1918,14 @@ public sealed class RedisTests
 			redis:Command('JSON.DEL', 'kitsune_test_json')
 			return tostring(v == Json.Null)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[RedisFact]
-	public async Task GetJson_SetJsonNullSentinel_RoundTrips()
-	{
-		// Read a null field → get Json.Null sentinel → assign it to another field → reads back as Json.Null.
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_SetJsonNullSentinel_RoundTrips()
+    {
+        // Read a null field → get Json.Null sentinel → assign it to another field → reads back as Json.Null.
+        string? r = await Run($"""
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -1935,14 +1935,14 @@ public sealed class RedisTests
 			redis:Command('JSON.DEL', 'kitsune_test_json')
 			return tostring(v == Json.Null)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[RedisFact]
-	public async Task GetJson_SetTable_ReplacesNestedObject()
-	{
-		// Sets each field individually (the table-encoding path); verifies both fields update.
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_SetTable_ReplacesNestedObject()
+    {
+        // Sets each field individually (the table-encoding path); verifies both fields update.
+        string? r = await Run($"""
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -1953,14 +1953,14 @@ public sealed class RedisTests
 			redis:Command('JSON.DEL', 'kitsune_test_json')
 			return tostring(has) .. ':' .. val
 			""");
-		r.ShouldBe("true:NewGuid");
-	}
+        r.ShouldBe("true:NewGuid");
+    }
 
-	[RedisFact]
-	public async Task GetJson_Set_Table_EncodesAndUpdates()
-	{
-		// Calls Set({...}) with a Lua table and verifies the raw JSON.GET sees the change.
-		string? r = await Run($@"
+    [RedisFact]
+    public async Task GetJson_Set_Table_EncodesAndUpdates()
+    {
+        // Calls Set({...}) with a Lua table and verifies the raw JSON.GET sees the change.
+        string? r = await Run($@"
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -1969,13 +1969,13 @@ public sealed class RedisTests
 			redis:Command('JSON.DEL', 'kitsune_test_json')
 			return tostring(raw.Value ~= nil and raw.Value:find('TableSet', 1, true) ~= nil)
 		");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[RedisFact]
-	public async Task GetJson_SetViaArrayIndexNewindex_UpdatesElement()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_SetViaArrayIndexNewindex_UpdatesElement()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -1984,13 +1984,13 @@ public sealed class RedisTests
 			redis:Command('JSON.DEL', 'kitsune_test_json')
 			return name
 			""");
-		r.ShouldBe("Updated Cake");
-	}
+        r.ShouldBe("Updated Cake");
+    }
 
-	[RedisFact]
-	public async Task GetJson_Delete_Root_ReturnsOneAndKeyGone()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_Delete_Root_ReturnsOneAndKeyGone()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -1998,13 +1998,13 @@ public sealed class RedisTests
 			local exists = redis:Command('EXISTS', 'kitsune_test_json')
 			return tostring(count) .. ':' .. tostring(exists.Value == 0)
 			""");
-		r.ShouldBe("1:true");
-	}
+        r.ShouldBe("1:true");
+    }
 
-	[RedisFact]
-	public async Task GetJson_Delete_ReturnsDeleteCount()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_Delete_ReturnsDeleteCount()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -2012,13 +2012,13 @@ public sealed class RedisTests
 			redis:Command('JSON.DEL', 'kitsune_test_json')
 			return tostring(count)
 			""");
-		r.ShouldBe("1");
-	}
+        r.ShouldBe("1");
+    }
 
-	[RedisFact]
-	public async Task GetJson_Type_NumberField_ReturnsTypeString()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_Type_NumberField_ReturnsTypeString()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -2026,13 +2026,13 @@ public sealed class RedisTests
 			redis:Command('JSON.DEL', 'kitsune_test_json')
 			return tostring(t ~= nil and type(t) == 'string')
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[RedisFact]
-	public async Task GetJson_Type_ObjectField_ReturnsObject()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_Type_ObjectField_ReturnsObject()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -2040,13 +2040,13 @@ public sealed class RedisTests
 			redis:Command('JSON.DEL', 'kitsune_test_json')
 			return t
 			""");
-		r.ShouldBe("object");
-	}
+        r.ShouldBe("object");
+    }
 
-	[RedisFact]
-	public async Task GetJson_Type_ArrayField_ReturnsArray()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_Type_ArrayField_ReturnsArray()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -2054,15 +2054,15 @@ public sealed class RedisTests
 			redis:Command('JSON.DEL', 'kitsune_test_json')
 			return t
 			""");
-		r.ShouldBe("array");
-	}
+        r.ShouldBe("array");
+    }
 
-	[RedisFact]
-	public async Task GetJson_Length_NonArray_ReturnsNilOrRaises()
-	{
-		// JSON.ARRLEN on a non-array type: Valkey returns a wrapped null element → nil,
-		// or raises an error. Either outcome is correct.
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_Length_NonArray_ReturnsNilOrRaises()
+    {
+        // JSON.ARRLEN on a non-array type: Valkey returns a wrapped null element → nil,
+        // or raises an error. Either outcome is correct.
+        string? r = await Run($"""
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -2072,13 +2072,13 @@ public sealed class RedisTests
 			redis:Command('JSON.DEL', 'kitsune_test_json')
 			return tostring(not ok or result == nil)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[RedisFact]
-	public async Task GetJson_ArrayIndexZero_RaisesError()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_ArrayIndexZero_RaisesError()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			local json = redis:GetJson('kitsune_test_json')
 			local ok = pcall(function()
@@ -2086,13 +2086,13 @@ public sealed class RedisTests
 			end)
 			return tostring(not ok)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[RedisFact]
-	public async Task GetJson_ReusePathObject_IndependentAccess()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_ReusePathObject_IndependentAccess()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -2102,27 +2102,27 @@ public sealed class RedisTests
 			redis:Command('JSON.DEL', 'kitsune_test_json')
 			return tostring(has) .. ':' .. val
 			""");
-		r.ShouldBe("false:SomeGuidBlablabla");
-	}
+        r.ShouldBe("false:SomeGuidBlablabla");
+    }
 
-	[RedisFact]
-	public async Task GetJson_Tostring_ArrayIndexPath_ShowsBrackets()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_Tostring_ArrayIndexPath_ShowsBrackets()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			local json = redis:GetJson('kitsune_test_json')
 			local s = tostring(json.TestArray[1])
 			return tostring(s:find('[0]', 1, true) ~= nil)
 			""");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	// ── GetJson pairs ─────────────────────────────────────────────────────────
+    // ── GetJson pairs ─────────────────────────────────────────────────────────
 
-	[RedisFact]
-	public async Task GetJson_Pairs_OnObject_IteratesKeyValuePairs()
-	{
-		string? r = await Run($@"
+    [RedisFact]
+    public async Task GetJson_Pairs_OnObject_IteratesKeyValuePairs()
+    {
+        string? r = await Run($@"
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -2134,13 +2134,13 @@ public sealed class RedisTests
 			redis:Command('JSON.DEL', 'kitsune_test_json')
 			return table.concat(keys, ',')
 		");
-		r.ShouldBe("HasValue,Value");
-	}
+        r.ShouldBe("HasValue,Value");
+    }
 
-	[RedisFact]
-	public async Task GetJson_Pairs_OnObject_ValuesAreDecodedCorrectly()
-	{
-		string? r = await Run($@"
+    [RedisFact]
+    public async Task GetJson_Pairs_OnObject_ValuesAreDecodedCorrectly()
+    {
+        string? r = await Run($@"
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -2151,13 +2151,13 @@ public sealed class RedisTests
 			redis:Command('JSON.DEL', 'kitsune_test_json')
 			return result.Value .. ':' .. result.HasValue
 		");
-		r.ShouldBe("SomeGuidBlablabla:false");
-	}
+        r.ShouldBe("SomeGuidBlablabla:false");
+    }
 
-	[RedisFact]
-	public async Task GetJson_Pairs_OnArray_CountsAllElements()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_Pairs_OnArray_CountsAllElements()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -2168,13 +2168,13 @@ public sealed class RedisTests
 			redis:Command('JSON.DEL', 'kitsune_test_json')
 			return tostring(count)
 			""");
-		r.ShouldBe("2");
-	}
+        r.ShouldBe("2");
+    }
 
-	[RedisFact]
-	public async Task GetJson_Pairs_OnRoot_IteratesTopLevelKeys()
-	{
-		string? r = await Run($@"
+    [RedisFact]
+    public async Task GetJson_Pairs_OnRoot_IteratesTopLevelKeys()
+    {
+        string? r = await Run($@"
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -2186,13 +2186,13 @@ public sealed class RedisTests
 			redis:Command('JSON.DEL', 'kitsune_test_json')
 			return table.concat(keys, ',')
 		");
-		r.ShouldBe("NullableGuid,OtherProperties,SomeNumber,TestArray");
-	}
+        r.ShouldBe("NullableGuid,OtherProperties,SomeNumber,TestArray");
+    }
 
-	[RedisFact]
-	public async Task GetJson_Pairs_OnMissingPath_IteratesNothing()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_Pairs_OnMissingPath_IteratesNothing()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -2203,13 +2203,13 @@ public sealed class RedisTests
 			redis:Command('JSON.DEL', 'kitsune_test_json')
 			return tostring(count)
 			""");
-		r.ShouldBe("0");
-	}
+        r.ShouldBe("0");
+    }
 
-	[RedisFact]
-	public async Task GetJson_Pairs_OnScalar_IteratesNothing()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_Pairs_OnScalar_IteratesNothing()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -2220,13 +2220,13 @@ public sealed class RedisTests
 			redis:Command('JSON.DEL', 'kitsune_test_json')
 			return tostring(count)
 			""");
-		r.ShouldBe("0");
-	}
+        r.ShouldBe("0");
+    }
 
-	[RedisFact]
-	public async Task GetJson_Pairs_ViaMethod_WorksLikePairs()
-	{
-		string? r = await Run($"""
+    [RedisFact]
+    public async Task GetJson_Pairs_ViaMethod_WorksLikePairs()
+    {
+        string? r = await Run($"""
 			local redis = {Open()}
 			{JsonSetup()}
 			local json = redis:GetJson('kitsune_test_json')
@@ -2237,6 +2237,6 @@ public sealed class RedisTests
 			redis:Command('JSON.DEL', 'kitsune_test_json')
 			return tostring(count)
 			""");
-		r.ShouldBe("2");
-	}
+        r.ShouldBe("2");
+    }
 }

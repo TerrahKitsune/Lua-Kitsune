@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -43,16 +43,25 @@ namespace KitsuneNet
         private static extern void KitsuneVariableFree(IntPtr var);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-        private static extern int KitsuneExecuteFile(string path, int argc, KitsuneVariable[]? argv,
+        private static extern int KitsuneExecuteFileAsync(string path, int argc, KitsuneVariable[]? argv,
             [MarshalAs(UnmanagedType.I1)] bool fireAndForget);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-        private static extern int KitsuneExecuteString(string script, int argc, KitsuneVariable[]? argv,
+        private static extern int KitsuneExecuteStringAsync(string script, int argc, KitsuneVariable[]? argv,
             [MarshalAs(UnmanagedType.I1)] bool fireAndForget);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-        private static extern int KitsuneExecuteFunction(string functionName, int argc, KitsuneVariable[]? argv,
+        private static extern int KitsuneExecuteFunctionAsync(string functionName, int argc, KitsuneVariable[]? argv,
             [MarshalAs(UnmanagedType.I1)] bool fireAndForget);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        private static extern IntPtr KitsuneExecuteFile(string path, int argc, KitsuneVariable[]? argv);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        private static extern IntPtr KitsuneExecuteString(string script, int argc, KitsuneVariable[]? argv);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        private static extern IntPtr KitsuneExecuteFunction(string functionName, int argc, KitsuneVariable[]? argv);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern nuint KitsuneGetError(int id, byte[]? buf, nuint bufSize);
@@ -140,6 +149,9 @@ namespace KitsuneNet
         // null g_state and break any concurrently running scripts (e.g. the stress
         // test runs a producer and a consumer as two independent engine instances).
         private static int _refCount;
+        // Set to true on the scheduler thread while a LuaFunctionTrampoline call is executing.
+        // Used to detect and reject recursive Execute* / Run* calls from within a registered function.
+        [ThreadStatic] private static bool s_inLuaCallback;
 
         /// <summary>
         /// Number of native allocations that had not been freed when this engine was disposed.
@@ -226,6 +238,7 @@ namespace KitsuneNet
                 LuaType.Json   when nv.Data != IntPtr.Zero && nv.Length > 0 => NativeParseJson(nv.Data, nv.Length),
                 LuaType.Stream when nv.Data != IntPtr.Zero => NativeWrapSharedMemory(nv.Data),
                 LuaType.Table  => ReadNativeTable(nv.Data),
+                LuaType.Error  when nv.Data != IntPtr.Zero => NativeCopyBytes(nv.Data, nv.Length) with { Type = LuaType.Error },
                 LuaType.None    => LuaValue.None,
                 _               => new LuaValue { Type = t },  // Nil/Function/Userdata/Thread/LightUserdata
             };
@@ -409,18 +422,22 @@ namespace KitsuneNet
         // -- Execution ------------------------------------------------------------
 
         /// <summary>Starts a Lua script file as a coroutine and returns its ID, or -1 on failure.</summary>
+        /// <exception cref="LuaException">Thrown if called from within a registered function callback.</exception>
         public int ExecuteFile(string path, bool fireAndForget = false, params LuaValue[]? args)
         {
+            if (s_inLuaCallback) throw new LuaException("cannot be called from within a registered function");
             var (native, ptrs) = BuildNativeArgs(args);
-            try   { return KitsuneExecuteFile(path, native?.Length ?? 0, native, fireAndForget); }
+            try   { return KitsuneExecuteFileAsync(path, native?.Length ?? 0, native, fireAndForget); }
             finally { FreeNativeArgs(ptrs); }
         }
 
         /// <summary>Starts a Lua script string as a coroutine and returns its ID, or -1 on failure.</summary>
+        /// <exception cref="LuaException">Thrown if called from within a registered function callback.</exception>
         public int ExecuteString(string script, bool fireAndForget = false, params LuaValue[]? args)
         {
+            if (s_inLuaCallback) throw new LuaException("cannot be called from within a registered function");
             var (native, ptrs) = BuildNativeArgs(args);
-            try   { return KitsuneExecuteString(script, native?.Length ?? 0, native, fireAndForget); }
+            try   { return KitsuneExecuteStringAsync(script, native?.Length ?? 0, native, fireAndForget); }
             finally { FreeNativeArgs(ptrs); }
         }
 
@@ -430,7 +447,7 @@ namespace KitsuneNet
         {
             int id = ExecuteFile(path, false, args);
             if (id < 0) throw new InvalidOperationException($"Failed to start Lua coroutine for file '{path}'.");
-            try { await WaitAsync(id, cancellationToken); }
+            try { await WaitAsync(id, cancellationToken).ConfigureAwait(false); }
             catch (OperationCanceledException) { Cancel(id); throw; }
             string? error = GetError(id);
             if (!string.IsNullOrEmpty(error)) { Cancel(id); throw new LuaException(error); }
@@ -443,7 +460,7 @@ namespace KitsuneNet
         {
             int id = ExecuteString(script, false, args);
             if (id < 0) throw new InvalidOperationException("Failed to start Lua coroutine.");
-            try { await WaitAsync(id, cancellationToken); }
+            try { await WaitAsync(id, cancellationToken).ConfigureAwait(false); }
             catch (OperationCanceledException) { Cancel(id); throw; }
             string? error = GetError(id);
             if (!string.IsNullOrEmpty(error)) { Cancel(id); throw new LuaException(error); }
@@ -451,10 +468,12 @@ namespace KitsuneNet
         }
 
         /// <summary>Calls a global Lua function as a coroutine and returns its ID, or -1 on failure.</summary>
+        /// <exception cref="LuaException">Thrown if called from within a registered function callback.</exception>
         public int ExecuteFunction(string functionName, bool fireAndForget = false, params LuaValue[]? args)
         {
+            if (s_inLuaCallback) throw new LuaException("cannot be called from within a registered function");
             var (native, ptrs) = BuildNativeArgs(args);
-            try   { return KitsuneExecuteFunction(functionName, native?.Length ?? 0, native, fireAndForget); }
+            try   { return KitsuneExecuteFunctionAsync(functionName, native?.Length ?? 0, native, fireAndForget); }
             finally { FreeNativeArgs(ptrs); }
         }
 
@@ -464,11 +483,47 @@ namespace KitsuneNet
         {
             int id = ExecuteFunction(functionName, false, args);
             if (id < 0) throw new InvalidOperationException($"Failed to start Lua coroutine for function '{functionName}'.");
-            try { await WaitAsync(id, cancellationToken); }
+            try { await WaitAsync(id, cancellationToken).ConfigureAwait(false); }
             catch (OperationCanceledException) { Cancel(id); throw; }
             string? error = GetError(id);
             if (!string.IsNullOrEmpty(error)) { Cancel(id); throw new LuaException(error); }
             return GetResultString(id);
+        }
+
+        /// <summary>Runs a Lua script file synchronously and returns the typed result.
+        /// Returns <see cref="LuaValue.None"/> on start failure or if the script raised an error.
+        /// For error details use <see cref="ExecuteFileAsync"/> instead.</summary>
+        /// <exception cref="LuaException">Thrown if called from within a registered function callback.</exception>
+        public LuaValue RunFile(string path, params LuaValue[]? args)
+        {
+            if (s_inLuaCallback) throw new LuaException("cannot be called from within a registered function");
+            var (native, ptrs) = BuildNativeArgs(args);
+            try   { return NativePtrToLuaValue(KitsuneExecuteFile(path, native?.Length ?? 0, native)); }
+            finally { FreeNativeArgs(ptrs); }
+        }
+
+        /// <summary>Runs a Lua script string synchronously and returns the typed result.
+        /// Returns <see cref="LuaValue.None"/> on start failure or if the script raised an error.
+        /// For error details use <see cref="ExecuteStringAsync"/> instead.</summary>
+        /// <exception cref="LuaException">Thrown if called from within a registered function callback.</exception>
+        public LuaValue RunString(string script, params LuaValue[]? args)
+        {
+            if (s_inLuaCallback) throw new LuaException("cannot be called from within a registered function");
+            var (native, ptrs) = BuildNativeArgs(args);
+            try   { return NativePtrToLuaValue(KitsuneExecuteString(script, native?.Length ?? 0, native)); }
+            finally { FreeNativeArgs(ptrs); }
+        }
+
+        /// <summary>Calls a global Lua function synchronously and returns the typed result.
+        /// Returns <see cref="LuaValue.None"/> on start failure or if the function raised an error.
+        /// For error details use <see cref="ExecuteFunctionAsync"/> instead.</summary>
+        /// <exception cref="LuaException">Thrown if called from within a registered function callback.</exception>
+        public LuaValue RunFunction(string functionName, params LuaValue[]? args)
+        {
+            if (s_inLuaCallback) throw new LuaException("cannot be called from within a registered function");
+            var (native, ptrs) = BuildNativeArgs(args);
+            try   { return NativePtrToLuaValue(KitsuneExecuteFunction(functionName, native?.Length ?? 0, native)); }
+            finally { FreeNativeArgs(ptrs); }
         }
         // -- Per-coroutine queries ------------------------------------------------
 
@@ -598,7 +653,7 @@ namespace KitsuneNet
             while (IsRunning)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                await Task.Delay(1, cancellationToken);
+                await Task.Delay(1, cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -611,7 +666,7 @@ namespace KitsuneNet
             while (!HasResult(id))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                await Task.Delay(1, cancellationToken);
+                await Task.Delay(1, cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -732,6 +787,8 @@ namespace KitsuneNet
         private static unsafe int LuaFunctionTrampoline(
             int argc, KitsuneVariable* argv, nint resultSetterPtr, void* userdata)
         {
+            bool prev = s_inLuaCallback;
+            s_inLuaCallback = true;
             try
             {
                 var handle = GCHandle.FromIntPtr((nint)userdata);
@@ -751,6 +808,10 @@ namespace KitsuneNet
                 try { InvokeResultSetterError(resultSetterPtr, ex.Message); }
                 catch { /* OOM during error marshal: fall through, engine raises generic error */ }
                 return 0;
+            }
+            finally
+            {
+                s_inLuaCallback = prev;
             }
         }
 

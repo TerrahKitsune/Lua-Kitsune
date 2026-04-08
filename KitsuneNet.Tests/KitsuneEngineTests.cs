@@ -3424,6 +3424,199 @@ namespace KitsuneNet.Tests
             r.ShouldBe("true");
             engine.GetActiveIds().ShouldBeEmpty();
         }
+
+        // -- RunString / RunFile / RunFunction (sync blocking) --------------------
+
+        [Fact]
+        public void RunString_ReturnsStringResult()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue result = engine.RunString("return 'sync result'");
+            result.Type.ShouldBe(LuaType.String);
+            result.String.ShouldBe("sync result");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void RunString_ReturnsNoneOnNoReturn()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue result = engine.RunString("local x = 1");
+            result.Type.ShouldBe(LuaType.None);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void RunString_RuntimeError_ReturnsNone()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue result = engine.RunString("error('sync boom')");
+            result.Type.ShouldBe(LuaType.None);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void RunString_WithArgs_ArgsAreVisible()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue result = engine.RunString("return ARGS[1] .. ':' .. ARGS[2]", "hello", "world");
+            result.Type.ShouldBe(LuaType.String);
+            result.String.ShouldBe("hello:world");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void RunFile_ReturnsStringResult()
+        {
+            string path = Path.GetTempFileName();
+            try
+            {
+                File.WriteAllText(path, "return 'file sync result'");
+                using KitsuneEngine engine = new();
+                LuaValue result = engine.RunFile(path);
+                result.Type.ShouldBe(LuaType.String);
+                result.String.ShouldBe("file sync result");
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+            finally { File.Delete(path); }
+        }
+
+        [Fact]
+        public void RunFunction_ReturnsStringResult()
+        {
+            using KitsuneEngine engine = new();
+            engine.ExecuteString("function syncTarget() return 'fn sync result' end", fireAndForget: true);
+            engine.Wait();
+            LuaValue result = engine.RunFunction("syncTarget");
+            result.Type.ShouldBe(LuaType.String);
+            result.String.ShouldBe("fn sync result");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void RunFunction_WithArgs_ReturnsResult()
+        {
+            using KitsuneEngine engine = new();
+            engine.ExecuteString("function syncAdd(a, b) return a + b end", fireAndForget: true);
+            engine.Wait();
+            LuaValue result = engine.RunFunction("syncAdd", LuaValue.FromInt64(10), LuaValue.FromInt64(32));
+            result.AsInt64.ShouldBe(42L);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        // -- Non-recursive guard: Execute* rejected inside registered functions ---
+
+        [Fact]
+        public void RegisterFunction_CallingRunString_ThrowsLuaException()
+        {
+            using KitsuneEngine engine = new();
+            engine.RegisterFunction("TryRunString", _ =>
+            {
+                engine.RunString("return 'nested'");
+                return LuaValue.None;
+            });
+            int id = engine.ExecuteString("TryRunString()");
+            engine.Wait(id);
+            (engine.GetError(id) ?? "").ShouldContain("registered function");
+            engine.ReleaseResult(id);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void RegisterFunction_CallingRunFile_ThrowsLuaException()
+        {
+            string path = Path.GetTempFileName();
+            try
+            {
+                File.WriteAllText(path, "return 'nested file'");
+                using KitsuneEngine engine = new();
+                engine.RegisterFunction("TryRunFile", _ =>
+                {
+                    engine.RunFile(path);
+                    return LuaValue.None;
+                });
+                int id = engine.ExecuteString("TryRunFile()");
+                engine.Wait(id);
+                (engine.GetError(id) ?? "").ShouldContain("registered function");
+                engine.ReleaseResult(id);
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+            finally { File.Delete(path); }
+        }
+
+        [Fact]
+        public void RegisterFunction_CallingRunFunction_ThrowsLuaException()
+        {
+            using KitsuneEngine engine = new();
+            engine.ExecuteString("function syncTarget() return 'target' end", fireAndForget: true);
+            engine.Wait();
+            engine.RegisterFunction("TryRunFunction", _ =>
+            {
+                engine.RunFunction("syncTarget");
+                return LuaValue.None;
+            });
+            int id = engine.ExecuteString("TryRunFunction()");
+            engine.Wait(id);
+            (engine.GetError(id) ?? "").ShouldContain("registered function");
+            engine.ReleaseResult(id);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void RegisterFunction_CallingExecuteString_ThrowsLuaException()
+        {
+            using KitsuneEngine engine = new();
+            engine.RegisterFunction("TryExecuteString", _ =>
+            {
+                engine.ExecuteString("return 'nested'");
+                return LuaValue.None;
+            });
+            int id = engine.ExecuteString("TryExecuteString()");
+            engine.Wait(id);
+            (engine.GetError(id) ?? "").ShouldContain("registered function");
+            engine.ReleaseResult(id);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void RegisterFunction_CallingExecuteFile_ThrowsLuaException()
+        {
+            string path = Path.GetTempFileName();
+            try
+            {
+                File.WriteAllText(path, "return 'nested file'");
+                using KitsuneEngine engine = new();
+                engine.RegisterFunction("TryExecuteFile", _ =>
+                {
+                    engine.ExecuteFile(path);
+                    return LuaValue.None;
+                });
+                int id = engine.ExecuteString("TryExecuteFile()");
+                engine.Wait(id);
+                (engine.GetError(id) ?? "").ShouldContain("registered function");
+                engine.ReleaseResult(id);
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+            finally { File.Delete(path); }
+        }
+
+        [Fact]
+        public void RegisterFunction_CallingExecuteFunction_ThrowsLuaException()
+        {
+            using KitsuneEngine engine = new();
+            engine.ExecuteString("function syncTarget() return 'target' end", fireAndForget: true);
+            engine.Wait();
+            engine.RegisterFunction("TryExecuteFunction", _ =>
+            {
+                engine.ExecuteFunction("syncTarget");
+                return LuaValue.None;
+            });
+            int id = engine.ExecuteString("TryExecuteFunction()");
+            engine.Wait(id);
+            (engine.GetError(id) ?? "").ShouldContain("registered function");
+            engine.ReleaseResult(id);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
     }
 }
 

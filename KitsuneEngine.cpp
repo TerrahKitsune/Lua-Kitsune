@@ -655,8 +655,9 @@ static void SchedulerProc(KitsuneState* state) {
 #ifdef _WIN32
 	state->schedulerThreadId.store((uint32_t)GetCurrentThreadId());
 #endif
+	g_isSchedulerThread = true;
 
-	bool prevAnyActive = false;  // tracks whether the previous iteration had active coroutines
+	bool prevAnyActive = false;
 
 	while (!state->schedulerStop.load()) {
 		// ── Step 1: Service pause requests BEFORE touching state->L ──────────────
@@ -886,6 +887,28 @@ static void* l_alloc(void* ud, void* ptr, size_t osize, size_t nsize) {
 	else {
 		return gff_realloc(ptr, nsize);
 	}
+}
+
+// True only on the scheduler thread; set once in SchedulerProc and never cleared.
+// Used by all KitsuneExecute* guards on every platform without OS-specific thread IDs.
+static thread_local bool g_isSchedulerThread = false;
+
+// Allocates a heap KitsuneVariable with KITSUNE_TERROR and an optional message.
+// The caller must free the returned pointer with KitsuneVariableFree.
+static KitsuneVariable* MakeErrorVariable(const char* msg) {
+	KitsuneVariable* var = (KitsuneVariable*)gff_malloc(sizeof(KitsuneVariable));
+	if (!var) return NULL;
+	memset(var, 0, sizeof(KitsuneVariable));
+	var->type = KITSUNE_TERROR;
+	if (msg) {
+		size_t len = strlen(msg);
+		var->data = (unsigned char*)gff_malloc(len + 1);
+		if (var->data) {
+			memcpy(var->data, msg, len + 1);
+			var->length = len;
+		}
+	}
+	return var;
 }
 
 // ============================================================
@@ -1123,17 +1146,13 @@ extern "C" {
 		return id;
 	}
 
-	KITSUNE_API int KitsuneExecuteFile(const char* path, int argc, const KitsuneVariable* argv, bool fireAndForget) {
-#ifdef _WIN32
-		if (g_state && GetCurrentThreadId() == g_state->schedulerThreadId.load() && g_state->DelegateState) return -1;
-#endif
+	KITSUNE_API int KitsuneExecuteFileAsync(const char* path, int argc, const KitsuneVariable* argv, bool fireAndForget) {
+		if (g_isSchedulerThread && g_state && g_state->DelegateState) return -1;
 		return StartCoroutine(g_state, true, path, argc, argv, fireAndForget);
 	}
 
-	KITSUNE_API int KitsuneExecuteString(const char* script, int argc, const KitsuneVariable* argv, bool fireAndForget) {
-#ifdef _WIN32
-		if (g_state && GetCurrentThreadId() == g_state->schedulerThreadId.load() && g_state->DelegateState) return -1;
-#endif
+	KITSUNE_API int KitsuneExecuteStringAsync(const char* script, int argc, const KitsuneVariable* argv, bool fireAndForget) {
+		if (g_isSchedulerThread && g_state && g_state->DelegateState) return -1;
 		return StartCoroutine(g_state, false, script, argc, argv, fireAndForget);
 	}
 
@@ -1213,11 +1232,36 @@ extern "C" {
 		return id;
 	}
 
-	KITSUNE_API int KitsuneExecuteFunction(const char* functionName, int argc, const KitsuneVariable* argv, bool fireAndForget) {
-#ifdef _WIN32
-		if (g_state && GetCurrentThreadId() == g_state->schedulerThreadId.load() && g_state->DelegateState) return -1;
-#endif
+	KITSUNE_API int KitsuneExecuteFunctionAsync(const char* functionName, int argc, const KitsuneVariable* argv, bool fireAndForget) {
+		if (g_isSchedulerThread && g_state && g_state->DelegateState) return -1;
 		return StartCoroutineFunction(g_state, functionName, argc, argv, fireAndForget);
+	}
+
+	KITSUNE_API KitsuneVariable* KitsuneExecuteFile(const char* path, int argc, const KitsuneVariable* argv) {
+		if (g_isSchedulerThread && g_state && g_state->DelegateState) return MakeErrorVariable("cannot be called from within a registered function");
+		int id = KitsuneExecuteFileAsync(path, argc, argv, false);
+		if (id < 0) return NULL;
+		while (!KitsuneHasResult(id, NULL))
+			Sleep(1);
+		return KitsuneGetResult(id);
+	}
+
+	KITSUNE_API KitsuneVariable* KitsuneExecuteString(const char* script, int argc, const KitsuneVariable* argv) {
+		if (g_isSchedulerThread && g_state && g_state->DelegateState) return MakeErrorVariable("cannot be called from within a registered function");
+		int id = KitsuneExecuteStringAsync(script, argc, argv, false);
+		if (id < 0) return NULL;
+		while (!KitsuneHasResult(id, NULL))
+			Sleep(1);
+		return KitsuneGetResult(id);
+	}
+
+	KITSUNE_API KitsuneVariable* KitsuneExecuteFunction(const char* functionName, int argc, const KitsuneVariable* argv) {
+		if (g_isSchedulerThread && g_state && g_state->DelegateState) return MakeErrorVariable("cannot be called from within a registered function");
+		int id = KitsuneExecuteFunctionAsync(functionName, argc, argv, false);
+		if (id < 0) return NULL;
+		while (!KitsuneHasResult(id, NULL))
+			Sleep(1);
+		return KitsuneGetResult(id);
 	}
 
 	KITSUNE_API size_t KitsuneGetError(int id, char* buf, size_t bufSize) {

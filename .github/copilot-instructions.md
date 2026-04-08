@@ -53,3 +53,20 @@
 ### Lua module registration
 - Follow the **wchar pattern**: one `functions[]` table containing all callable methods, one `meta[]` table containing only metamethods (`__gc`, `__tostring`, etc.), and `__index = module table` so all functions are reachable both as `Module.Xxx()` and `instance:Xxx()`.
 - Do **not** create a separate `__index` subtable with a filtered subset of methods.
+
+## C# Code Style
+- When writing C# code for the Lua-Kitsune project, follow the rules defined in `analysis.ruleset`. Key rules include:
+  - UseConfigureAwait (Warning)
+  - CA1001 (Warning)
+  - CA1063 (Warning)
+  - IDE0052 (Warning)
+  - IDE0180 (Warning)
+  - IDE0033 (Warning)
+  - SA1412 (Warning)
+  - StyleCop/SA rules
+- CS1591 (missing XML doc) is None (suppressed).
+- SA1101 (this. prefix) is None.
+- SA1200 (using directives placement) is None.
+- SA1309 (field name prefix) is None.
+- SA1310 (field name underscore) is None.
+- SA1600 (public member docs) is None.

@@ -15,23 +15,23 @@ namespace KitsuneNet.Tests;
 /// </summary>
 public sealed class SQLiteTests
 {
-	private static async Task<string?> Run(string lua)
-	{
-		var engine = new KitsuneEngine();
-		string? result;
-		try   { result = await engine.ExecuteStringAsync(lua); }
-		finally { engine.Dispose(); }
-		if (engine.LeakedAllocations != 0)
-			throw new InvalidOperationException($"Native memory leak: {engine.LeakedAllocations} unfreed allocation(s) after KitsuneCleanup");
-		return result;
-	}
+    private static async Task<string?> Run(string lua)
+    {
+        var engine = new KitsuneEngine();
+        string? result;
+        try { result = await engine.ExecuteStringAsync(lua); }
+        finally { engine.Dispose(); }
+        if (engine.LeakedAllocations != 0)
+            throw new InvalidOperationException($"Native memory leak: {engine.LeakedAllocations} unfreed allocation(s) after KitsuneCleanup");
+        return result;
+    }
 
-	// -- In-memory ------------------------------------------------------------
+    // -- In-memory ------------------------------------------------------------
 
-	[Fact]
-	public async Task SQLite_InMemory_CreateInsertSelect()
-	{
-		string? r = await Run(@"
+    [Fact]
+    public async Task SQLite_InMemory_CreateInsertSelect()
+    {
+        string? r = await Run(@"
             local db = SQLite.Open()
             db:Query('CREATE TABLE t (id INTEGER, name TEXT)'); db:Fetch()
             db:Query([[INSERT INTO t VALUES (1, 'alice')]]); db:Fetch()
@@ -45,13 +45,13 @@ public sealed class SQLiteTests
             db:Close()
             return table.concat(out, ',')
         ");
-		r.ShouldBe("1:alice,2:bob");
-	}
+        r.ShouldBe("1:alice,2:bob");
+    }
 
-	[Fact]
-	public async Task SQLite_GetRow_ByIndex_ReturnsValue()
-	{
-		string? r = await Run(@"
+    [Fact]
+    public async Task SQLite_GetRow_ByIndex_ReturnsValue()
+    {
+        string? r = await Run(@"
             local db = SQLite.Open()
             db:Query('CREATE TABLE t (v TEXT)'); db:Fetch()
             db:Query([[INSERT INTO t VALUES ('test_val')]]); db:Fetch()
@@ -61,14 +61,14 @@ public sealed class SQLiteTests
             db:Close()
             return val
         ");
-		r.ShouldBe("test_val");
-	}
+        r.ShouldBe("test_val");
+    }
 
-	[Fact]
-	public async Task SQLite_RegisterFunction_CallableFromQuery()
-	{
-		// SQLite returns numeric results as floats (7.0, not 7).
-		string? r = await Run(@"
+    [Fact]
+    public async Task SQLite_RegisterFunction_CallableFromQuery()
+    {
+        // SQLite returns numeric results as floats (7.0, not 7).
+        string? r = await Run(@"
             local db = SQLite.Open()
             db:RegisterFunction(function(a, b) return a + b end, 'add2', 2)
             db:Query('SELECT add2(3, 4) AS result')
@@ -77,13 +77,13 @@ public sealed class SQLiteTests
             db:Close()
             return tostring(val)
         ");
-		r.ShouldBe("7.0");
-	}
+        r.ShouldBe("7.0");
+    }
 
-	[Fact]
-	public async Task SQLite_NullValue_IsNilInLua()
-	{
-		string? r = await Run(@"
+    [Fact]
+    public async Task SQLite_NullValue_IsNilInLua()
+    {
+        string? r = await Run(@"
             local db = SQLite.Open()
             db:Query('CREATE TABLE t (v TEXT)'); db:Fetch()
             db:Query('INSERT INTO t VALUES (NULL)'); db:Fetch()
@@ -93,13 +93,13 @@ public sealed class SQLiteTests
             db:Close()
             return tostring(val)
         ");
-		r.ShouldBe("nil");
-	}
+        r.ShouldBe("nil");
+    }
 
-	[Fact]
-	public async Task SQLite_IntegerColumn_RoundTrips()
-	{
-		string? r = await Run(@"
+    [Fact]
+    public async Task SQLite_IntegerColumn_RoundTrips()
+    {
+        string? r = await Run(@"
             local db = SQLite.Open()
             db:Query('CREATE TABLE t (n INTEGER)'); db:Fetch()
             db:Query('INSERT INTO t VALUES (42)'); db:Fetch()
@@ -109,13 +109,13 @@ public sealed class SQLiteTests
             db:Close()
             return tostring(row.n)
         ");
-		r.ShouldBe("42");
-	}
+        r.ShouldBe("42");
+    }
 
-	[Fact]
-	public async Task SQLite_FloatColumn_RoundTrips()
-	{
-		string? r = await Run(@"
+    [Fact]
+    public async Task SQLite_FloatColumn_RoundTrips()
+    {
+        string? r = await Run(@"
             local db = SQLite.Open()
             db:Query('CREATE TABLE t (f REAL)'); db:Fetch()
             db:Query('INSERT INTO t VALUES (3.14)'); db:Fetch()
@@ -125,13 +125,13 @@ public sealed class SQLiteTests
             db:Close()
             return tostring(math.abs(row.f - 3.14) < 0.0001)
         ");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[Fact]
-	public async Task SQLite_MultipleRows_FetchAll()
-	{
-		string? r = await Run(@"
+    [Fact]
+    public async Task SQLite_MultipleRows_FetchAll()
+    {
+        string? r = await Run(@"
             local db = SQLite.Open()
             db:Query('CREATE TABLE t (n INTEGER)'); db:Fetch()
             for i = 1, 5 do
@@ -145,13 +145,13 @@ public sealed class SQLiteTests
             db:Close()
             return tostring(sum)
         ");
-		r.ShouldBe("15");
-	}
+        r.ShouldBe("15");
+    }
 
-	[Fact]
-	public async Task SQLite_ParameterizedQuery_TableBind()
-	{
-		string? r = await Run(@"
+    [Fact]
+    public async Task SQLite_ParameterizedQuery_TableBind()
+    {
+        string? r = await Run(@"
             local db = SQLite.Open()
             db:Query('CREATE TABLE t (id INTEGER, name TEXT)'); db:Fetch()
             db:Query('INSERT INTO t VALUES (:id, :name)', {id=7, name='kitsune'}); db:Fetch()
@@ -161,25 +161,25 @@ public sealed class SQLiteTests
             db:Close()
             return tostring(val)
         ");
-		r.ShouldBe("kitsune");
-	}
+        r.ShouldBe("kitsune");
+    }
 
-	[Fact]
-	public async Task SQLite_InvalidQuery_ReturnsFalseAndError()
-	{
-		string? r = await Run(@"
+    [Fact]
+    public async Task SQLite_InvalidQuery_ReturnsFalseAndError()
+    {
+        string? r = await Run(@"
             local db = SQLite.Open()
             local ok, err = db:Query('THIS IS NOT SQL')
             db:Close()
             return tostring(ok == false and type(err) == 'string' and #err > 0)
         ");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[Fact]
-	public async Task SQLite_AggregateFunction_SumCustom()
-	{
-		string? r = await Run(@"
+    [Fact]
+    public async Task SQLite_AggregateFunction_SumCustom()
+    {
+        string? r = await Run(@"
             local db = SQLite.Open()
             db:Query('CREATE TABLE t (n INTEGER)'); db:Fetch()
             for i = 1, 4 do
@@ -196,25 +196,25 @@ public sealed class SQLiteTests
             db:Close()
             return tostring(val)
         ");
-		r.ShouldBe("10.0");
-	}
+        r.ShouldBe("10.0");
+    }
 
-	[Fact]
-	public async Task SQLite_Close_ThenQueryRaisesError()
-	{
-		string? r = await Run(@"
+    [Fact]
+    public async Task SQLite_Close_ThenQueryRaisesError()
+    {
+        string? r = await Run(@"
             local db = SQLite.Open()
             db:Close()
             local ok, err = pcall(function() db:Query('SELECT 1') end)
             return tostring(not ok and type(err) == 'string')
         ");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[Fact]
-	public async Task SQLite_InstanceReuse_MultipleQueries()
-	{
-		string? r = await Run(@"
+    [Fact]
+    public async Task SQLite_InstanceReuse_MultipleQueries()
+    {
+        string? r = await Run(@"
             local db = SQLite.Open()
             db:Query('CREATE TABLE t (v TEXT)'); db:Fetch()
             db:Query([[INSERT INTO t VALUES ('first')]]); db:Fetch()
@@ -228,30 +228,30 @@ public sealed class SQLiteTests
             db:Close()
             return tostring(count) .. ':' .. tostring(first)
         ");
-		r.ShouldBe("2:first");
-	}
+        r.ShouldBe("2:first");
+    }
 
-	// -- Query return values --------------------------------------------------
+    // -- Query return values --------------------------------------------------
 
-	[Fact]
-	public async Task SQLite_Query_DML_Returns_Done()
-	{
-		// INSERT/UPDATE/DELETE complete without rows → second return is "DONE".
-		string? r = await Run(@"
+    [Fact]
+    public async Task SQLite_Query_DML_Returns_Done()
+    {
+        // INSERT/UPDATE/DELETE complete without rows → second return is "DONE".
+        string? r = await Run(@"
 			local db = SQLite.Open()
 			db:Query('CREATE TABLE t (n INTEGER)'); db:Fetch()
 			local ok, msg = db:Query('INSERT INTO t VALUES (1)')
 			db:Close()
 			return tostring(ok == true and msg == 'DONE')
 		");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[Fact]
-	public async Task SQLite_Query_Select_WithRows_Returns_Row()
-	{
-		// A SELECT that finds rows pre-steps once → second return is "ROW".
-		string? r = await Run(@"
+    [Fact]
+    public async Task SQLite_Query_Select_WithRows_Returns_Row()
+    {
+        // A SELECT that finds rows pre-steps once → second return is "ROW".
+        string? r = await Run(@"
 			local db = SQLite.Open()
 			db:Query('CREATE TABLE t (n INTEGER)'); db:Fetch()
 			db:Query('INSERT INTO t VALUES (1)'); db:Fetch()
@@ -260,30 +260,30 @@ public sealed class SQLiteTests
 			db:Close()
 			return tostring(ok == true and msg == 'ROW')
 		");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[Fact]
-	public async Task SQLite_Query_Select_NoRows_Returns_Done()
-	{
-		// A SELECT that matches nothing → second return is "DONE".
-		string? r = await Run(@"
+    [Fact]
+    public async Task SQLite_Query_Select_NoRows_Returns_Done()
+    {
+        // A SELECT that matches nothing → second return is "DONE".
+        string? r = await Run(@"
 			local db = SQLite.Open()
 			db:Query('CREATE TABLE t (n INTEGER)'); db:Fetch()
 			local ok, msg = db:Query('SELECT n FROM t WHERE n = 9999')
 			db:Close()
 			return tostring(ok == true and msg == 'DONE')
 		");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	// -- Finish ---------------------------------------------------------------
+    // -- Finish ---------------------------------------------------------------
 
-	[Fact]
-	public async Task SQLite_Finish_AbandonsMidQuery_AllowsNextQuery()
-	{
-		// Finish() finalizes the prepared statement early so the next Query can run.
-		string? r = await Run(@"
+    [Fact]
+    public async Task SQLite_Finish_AbandonsMidQuery_AllowsNextQuery()
+    {
+        // Finish() finalizes the prepared statement early so the next Query can run.
+        string? r = await Run(@"
 			local db = SQLite.Open()
 			db:Query('CREATE TABLE t (n INTEGER)'); db:Fetch()
 			for i = 1, 10 do
@@ -299,31 +299,31 @@ public sealed class SQLiteTests
 			db:Close()
 			return tostring(first == 1 and ok == true and count == 10)
 		");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[Fact]
-	public async Task SQLite_Fetch_AfterDDL_ReturnsFalse()
-	{
-		// After DDL the statement is finalized by Query; Fetch with no active
-		// statement returns false immediately.
-		string? r = await Run(@"
+    [Fact]
+    public async Task SQLite_Fetch_AfterDDL_ReturnsFalse()
+    {
+        // After DDL the statement is finalized by Query; Fetch with no active
+        // statement returns false immediately.
+        string? r = await Run(@"
 			local db = SQLite.Open()
 			db:Query('CREATE TABLE t (n INTEGER)')
 			local fetched = db:Fetch()
 			db:Close()
 			return tostring(fetched == false)
 		");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	// -- GetRow edge cases ----------------------------------------------------
+    // -- GetRow edge cases ----------------------------------------------------
 
-	[Fact]
-	public async Task SQLite_GetRow_OutOfRange_ReturnsNil()
-	{
-		// Requesting a column index beyond the column count returns nil.
-		string? r = await Run(@"
+    [Fact]
+    public async Task SQLite_GetRow_OutOfRange_ReturnsNil()
+    {
+        // Requesting a column index beyond the column count returns nil.
+        string? r = await Run(@"
 			local db = SQLite.Open()
 			db:Query('CREATE TABLE t (a INTEGER, b INTEGER)'); db:Fetch()
 			db:Query('INSERT INTO t VALUES (1, 2)'); db:Fetch()
@@ -334,16 +334,16 @@ public sealed class SQLiteTests
 			db:Close()
 			return tostring(col1 == 1 and col3 == nil)
 		");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	// -- BLOB column ----------------------------------------------------------
+    // -- BLOB column ----------------------------------------------------------
 
-	[Fact]
-	public async Task SQLite_BlobColumn_ReturnsStreamUserdata()
-	{
-		// BLOB columns are returned as LuaStream userdata objects.
-		string? r = await Run(@"
+    [Fact]
+    public async Task SQLite_BlobColumn_ReturnsStreamUserdata()
+    {
+        // BLOB columns are returned as LuaStream userdata objects.
+        string? r = await Run(@"
 			local db = SQLite.Open()
 			db:Query('CREATE TABLE t (v BLOB)'); db:Fetch()
 			db:Query([[INSERT INTO t VALUES (X'48454C4C4F')]]); db:Fetch()
@@ -353,14 +353,14 @@ public sealed class SQLiteTests
 			db:Close()
 			return tostring(type(val) == 'userdata')
 		");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[Fact]
-	public async Task SQLite_BlobColumn_ContentAccessibleViaStream()
-	{
-		// The LuaStream wrapping a BLOB can be Read() to recover the raw bytes.
-		string? r = await Run(@"
+    [Fact]
+    public async Task SQLite_BlobColumn_ContentAccessibleViaStream()
+    {
+        // The LuaStream wrapping a BLOB can be Read() to recover the raw bytes.
+        string? r = await Run(@"
 			local db = SQLite.Open()
 			db:Query('CREATE TABLE t (v BLOB)'); db:Fetch()
 			db:Query([[INSERT INTO t VALUES (X'48454C4C4F')]]); db:Fetch()  -- 'HELLO'
@@ -371,16 +371,16 @@ public sealed class SQLiteTests
 			db:Close()
 			return content
 		");
-		r.ShouldBe("HELLO");
-	}
+        r.ShouldBe("HELLO");
+    }
 
-	// -- Parameter binding ----------------------------------------------------
+    // -- Parameter binding ----------------------------------------------------
 
-	[Fact]
-	public async Task SQLite_ParameterizedQuery_FunctionBind()
-	{
-		// A function can supply parameter values by name instead of a table.
-		string? r = await Run(@"
+    [Fact]
+    public async Task SQLite_ParameterizedQuery_FunctionBind()
+    {
+        // A function can supply parameter values by name instead of a table.
+        string? r = await Run(@"
 			local db = SQLite.Open()
 			db:Query('CREATE TABLE t (id INTEGER, name TEXT)'); db:Fetch()
 			db:Query('INSERT INTO t VALUES (:id, :name)', function(param)
@@ -394,15 +394,15 @@ public sealed class SQLiteTests
 				db:Close()
 				return tostring(row.id == 42 and tostring(row.name) == 'fn_value')
 		");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[Fact]
-	public async Task SQLite_ParameterizedQuery_BooleanParam_StoresAsInteger()
-	{
-		// Booleans bind as 1 (true) or 0 (false); SQLite has no BOOLEAN type
-		// so they round-trip as integers.
-		string? r = await Run(@"
+    [Fact]
+    public async Task SQLite_ParameterizedQuery_BooleanParam_StoresAsInteger()
+    {
+        // Booleans bind as 1 (true) or 0 (false); SQLite has no BOOLEAN type
+        // so they round-trip as integers.
+        string? r = await Run(@"
 			local db = SQLite.Open()
 			db:Query('CREATE TABLE t (a INTEGER, b INTEGER)'); db:Fetch()
 			db:Query('INSERT INTO t VALUES (:a, :b)', {a=true, b=false}); db:Fetch()
@@ -412,15 +412,15 @@ public sealed class SQLiteTests
 			db:Close()
 			return tostring(row.a == 1 and row.b == 0)
 		");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[Fact]
-	public async Task SQLite_ParameterizedQuery_WcharParam_RoundTrips()
-	{
-		// Wchar values bind as UTF-16 text; read back with ToggleWidechar(true)
-		// so both sides use the matched text16/bytes16 pair.
-		string? r = await Run(@"
+    [Fact]
+    public async Task SQLite_ParameterizedQuery_WcharParam_RoundTrips()
+    {
+        // Wchar values bind as UTF-16 text; read back with ToggleWidechar(true)
+        // so both sides use the matched text16/bytes16 pair.
+        string? r = await Run(@"
 			local db = SQLite.Open()
 			db:ToggleWidechar(true)
 			db:Query('CREATE TABLE t (v TEXT)'); db:Fetch()
@@ -431,16 +431,16 @@ public sealed class SQLiteTests
 			db:Close()
 			return tostring(val)       -- Wchar.__tostring → ToUtf8
 		");
-		r.ShouldBe("hello wchar");
-	}
+        r.ShouldBe("hello wchar");
+    }
 
-	// -- Custom functions -----------------------------------------------------
+    // -- Custom functions -----------------------------------------------------
 
-	[Fact]
-	public async Task SQLite_RegisterFunction_ReturnsString()
-	{
-		// A custom function that returns a Lua string produces a TEXT result.
-		string? r = await Run(@"
+    [Fact]
+    public async Task SQLite_RegisterFunction_ReturnsString()
+    {
+        // A custom function that returns a Lua string produces a TEXT result.
+        string? r = await Run(@"
 			local db = SQLite.Open()
 			db:RegisterFunction(function(s) return 'prefix_' .. s end, 'prepend', 1)
 			db:Query([[SELECT prepend('hello')]])
@@ -449,14 +449,14 @@ public sealed class SQLiteTests
 			db:Close()
 			return tostring(val)
 		");
-		r.ShouldBe("prefix_hello");
-	}
+        r.ShouldBe("prefix_hello");
+    }
 
-	[Fact]
-	public async Task SQLite_RegisterFunction_ReturnsNil_StoresNull()
-	{
-		// A custom function that returns nil produces a SQL NULL result.
-		string? r = await Run(@"
+    [Fact]
+    public async Task SQLite_RegisterFunction_ReturnsNil_StoresNull()
+    {
+        // A custom function that returns nil produces a SQL NULL result.
+        string? r = await Run(@"
 			local db = SQLite.Open()
 			db:RegisterFunction(function() return nil end, 'nullfn', 0)
 			db:Query('SELECT nullfn()')
@@ -465,14 +465,14 @@ public sealed class SQLiteTests
 			db:Close()
 			return tostring(val)
 		");
-		r.ShouldBe("nil");
-	}
+        r.ShouldBe("nil");
+    }
 
-	[Fact]
-	public async Task SQLite_RegisterFunction_DuplicateName_RaisesError()
-	{
-		// Registering a second function with the same name must raise a Lua error.
-		string? r = await Run(@"
+    [Fact]
+    public async Task SQLite_RegisterFunction_DuplicateName_RaisesError()
+    {
+        // Registering a second function with the same name must raise a Lua error.
+        string? r = await Run(@"
 			local db = SQLite.Open()
 			db:RegisterFunction(function() return 1 end, 'myfn', 0)
 			local ok, err = pcall(function()
@@ -481,14 +481,14 @@ public sealed class SQLiteTests
 			db:Close()
 			return tostring(not ok and type(err) == 'string')
 		");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[Fact]
-	public async Task SQLite_RegisterFunction_NegativeArgs_RaisesError()
-	{
-		// Negative arg count must be rejected immediately.
-		string? r = await Run(@"
+    [Fact]
+    public async Task SQLite_RegisterFunction_NegativeArgs_RaisesError()
+    {
+        // Negative arg count must be rejected immediately.
+        string? r = await Run(@"
 			local db = SQLite.Open()
 			local ok, err = pcall(function()
 				db:RegisterFunction(function() end, 'badfn', -1)
@@ -496,16 +496,16 @@ public sealed class SQLiteTests
 			db:Close()
 			return tostring(not ok and type(err) == 'string')
 		");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	// -- ToggleWidechar -------------------------------------------------------
+    // -- ToggleWidechar -------------------------------------------------------
 
-	[Fact]
-	public async Task SQLite_ToggleWidechar_False_TextComesBackAsString()
-	{
-		// After ToggleWidechar(false) TEXT columns must be plain Lua strings.
-		string? r = await Run(@"
+    [Fact]
+    public async Task SQLite_ToggleWidechar_False_TextComesBackAsString()
+    {
+        // After ToggleWidechar(false) TEXT columns must be plain Lua strings.
+        string? r = await Run(@"
 			local db = SQLite.Open()
 			db:ToggleWidechar(false)
 			db:Query('CREATE TABLE t (v TEXT)'); db:Fetch()
@@ -516,14 +516,14 @@ public sealed class SQLiteTests
 			db:Close()
 			return tostring(type(val) == 'string')
 		");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[Fact]
-	public async Task SQLite_ToggleWidechar_True_TextComesBackAsWchar()
-	{
-		// After ToggleWidechar(true) TEXT columns must be Wchar userdata.
-		string? r = await Run(@"
+    [Fact]
+    public async Task SQLite_ToggleWidechar_True_TextComesBackAsWchar()
+    {
+        // After ToggleWidechar(true) TEXT columns must be Wchar userdata.
+        string? r = await Run(@"
 			local db = SQLite.Open()
 			db:ToggleWidechar(true)
 			db:Query('CREATE TABLE t (v TEXT)'); db:Fetch()
@@ -534,32 +534,32 @@ public sealed class SQLiteTests
 			db:Close()
 			return tostring(type(val) == 'userdata')
 		");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	// -- __tostring -----------------------------------------------------------
+    // -- __tostring -----------------------------------------------------------
 
-	[Fact]
-	public async Task SQLite_Tostring_InMemory_ContainsPointerAndMemoryKeyword()
-	{
-		// __tostring format: "SQLite: 0x… File: :memory:"
-		string? r = await Run(@"
+    [Fact]
+    public async Task SQLite_Tostring_InMemory_ContainsPointerAndMemoryKeyword()
+    {
+        // __tostring format: "SQLite: 0x… File: :memory:"
+        string? r = await Run(@"
 			local db = SQLite.Open()
 			local s = tostring(db)
 			db:Close()
 			return tostring(s:find('SQLite:') ~= nil and s:find(':memory:') ~= nil)
 		");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	// -- Lua() built-in SQL function ------------------------------------------
+    // -- Lua() built-in SQL function ------------------------------------------
 
-	[Fact]
-	public async Task SQLite_LuaBuiltinFunction_CanRunScript()
-	{
-		// Kitsune registers Lua(script) as a built-in SQLite function that
-		// evaluates a Lua chunk and returns the result via tostring.
-		string? r = await Run(@"
+    [Fact]
+    public async Task SQLite_LuaBuiltinFunction_CanRunScript()
+    {
+        // Kitsune registers Lua(script) as a built-in SQLite function that
+        // evaluates a Lua chunk and returns the result via tostring.
+        string? r = await Run(@"
 			local db = SQLite.Open()
 			db:Query([[SELECT Lua('return 1 + 1')]])
 			db:Fetch()
@@ -567,14 +567,14 @@ public sealed class SQLiteTests
 			db:Close()
 			return tostring(val)
 		");
-		r.ShouldBe("2");
-	}
+        r.ShouldBe("2");
+    }
 
-	[Fact]
-	public async Task SQLite_LuaBuiltinFunction_NilReturn_ProducesNull()
-	{
-		// A Lua chunk that returns nil maps to SQL NULL → Lua nil.
-		string? r = await Run(@"
+    [Fact]
+    public async Task SQLite_LuaBuiltinFunction_NilReturn_ProducesNull()
+    {
+        // A Lua chunk that returns nil maps to SQL NULL → Lua nil.
+        string? r = await Run(@"
 			local db = SQLite.Open()
 			db:Query([[SELECT Lua('return nil')]])
 			db:Fetch()
@@ -582,14 +582,14 @@ public sealed class SQLiteTests
 			db:Close()
 			return tostring(val)
 		");
-		r.ShouldBe("nil");
-	}
+        r.ShouldBe("nil");
+    }
 
-	[Fact]
-	public async Task SQLite_LuaBuiltinFunction_CanAccessLuaGlobals()
-	{
-		// The Lua() function shares the engine's Lua state so globals are visible.
-		string? r = await Run(@"
+    [Fact]
+    public async Task SQLite_LuaBuiltinFunction_CanAccessLuaGlobals()
+    {
+        // The Lua() function shares the engine's Lua state so globals are visible.
+        string? r = await Run(@"
 			_G.sqliteTestGlobal = 'hello_from_lua'
 			local db = SQLite.Open()
 			db:Query([[SELECT Lua('return _G.sqliteTestGlobal')]])
@@ -598,17 +598,17 @@ public sealed class SQLiteTests
 			db:Close()
 			return val
 		");
-		r.ShouldBe("hello_from_lua");
-	}
+        r.ShouldBe("hello_from_lua");
+    }
 
-	// -- SetBusyHandler -------------------------------------------------------
+    // -- SetBusyHandler -------------------------------------------------------
 
-	[Fact]
-	public async Task SQLite_SetBusyHandler_SetAndClear_DoesNotCrash()
-	{
-		// Setting and then clearing a busy handler must not crash; with no
-		// contention the handler is never invoked.
-		string? r = await Run(@"
+    [Fact]
+    public async Task SQLite_SetBusyHandler_SetAndClear_DoesNotCrash()
+    {
+        // Setting and then clearing a busy handler must not crash; with no
+        // contention the handler is never invoked.
+        string? r = await Run(@"
 			local db = SQLite.Open()
 			local invoked = false
 			db:SetBusyHandler(function(retries)
@@ -620,46 +620,46 @@ public sealed class SQLiteTests
 			db:Close()
 			return tostring(invoked == false)
 		");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	// -- Open modes -----------------------------------------------------------
+    // -- Open modes -----------------------------------------------------------
 
-	[Fact]
-	public async Task SQLite_Open_Mode1_Multithread_OpensSuccessfully()
-	{
-		// Mode 1 (multithread) must open without error and allow queries.
-		string? r = await Run(@"
+    [Fact]
+    public async Task SQLite_Open_Mode1_Multithread_OpensSuccessfully()
+    {
+        // Mode 1 (multithread) must open without error and allow queries.
+        string? r = await Run(@"
 			local db = SQLite.Open(nil, 1)
 			local ok, _ = db:Query('SELECT 1')
 			db:Fetch()
 			db:Close()
 			return tostring(ok == true)
 		");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[Fact]
-	public async Task SQLite_Open_Mode2_Serialized_OpensSuccessfully()
-	{
-		// Mode 2 (serialized) must open without error and allow queries.
-		string? r = await Run(@"
+    [Fact]
+    public async Task SQLite_Open_Mode2_Serialized_OpensSuccessfully()
+    {
+        // Mode 2 (serialized) must open without error and allow queries.
+        string? r = await Run(@"
 			local db = SQLite.Open(nil, 2)
 			local ok, _ = db:Query('SELECT 1')
 			db:Fetch()
 			db:Close()
 			return tostring(ok == true)
 		");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	// -- File database --------------------------------------------------------
+    // -- File database --------------------------------------------------------
 
-	[SQLiteFact]
-	public async Task SQLite_FileDatabase_OpenAndVersion()
-	{
-		// Opens the configured database and confirms SQLite returns a version string.
-		string? r = await Run(@"
+    [SQLiteFact]
+    public async Task SQLite_FileDatabase_OpenAndVersion()
+    {
+        // Opens the configured database and confirms SQLite returns a version string.
+        string? r = await Run(@"
             local db = SQLite.Open(os.getenv('KITSUNE_SQLITE_TEST'))
             db:Query('SELECT sqlite_version()')
             db:Fetch()
@@ -667,14 +667,14 @@ public sealed class SQLiteTests
 			db:Close()
 			return tostring(v ~= nil and #tostring(v) > 0)
         ");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[SQLiteFact]
-	public async Task SQLite_FileDatabase_ListTables_ReturnsTable()
-	{
-		// sqlite_master always exists; querying it must succeed and return a table.
-		string? r = await Run(@"
+    [SQLiteFact]
+    public async Task SQLite_FileDatabase_ListTables_ReturnsTable()
+    {
+        // sqlite_master always exists; querying it must succeed and return a table.
+        string? r = await Run(@"
 			local db = SQLite.Open(os.getenv('KITSUNE_SQLITE_TEST'))
 			local ok, err = db:Query([[SELECT name FROM sqlite_master WHERE type='table' ORDER BY name]])
 			if not ok then db:Close(); return tostring(err) end
@@ -685,14 +685,14 @@ public sealed class SQLiteTests
 			db:Close()
 			return tostring(type(names) == 'table')
 		");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[SQLiteFact]
-	public async Task SQLite_FileDatabase_WriteAndRead_RoundTrip()
-	{
-		// Creates a temporary table, inserts a row, reads it back, then drops the table.
-		string? r = await Run(@"
+    [SQLiteFact]
+    public async Task SQLite_FileDatabase_WriteAndRead_RoundTrip()
+    {
+        // Creates a temporary table, inserts a row, reads it back, then drops the table.
+        string? r = await Run(@"
             local db = SQLite.Open(os.getenv('KITSUNE_SQLITE_TEST'))
             db:Query('CREATE TABLE IF NOT EXISTS _kitsune_test (v TEXT)'); db:Fetch()
             db:Query([[INSERT INTO _kitsune_test VALUES ('round_trip')]]); db:Fetch()
@@ -703,14 +703,14 @@ public sealed class SQLiteTests
             db:Close()
             return tostring(val)
         ");
-		r.ShouldBe("round_trip");
-	}
+        r.ShouldBe("round_trip");
+    }
 
-	[SQLiteFact]
-	public async Task SQLite_FileDatabase_ParameterizedQuery_RoundTrips()
-	{
-		// Verifies that named parameters work against the file-backed database.
-		string? r = await Run(@"
+    [SQLiteFact]
+    public async Task SQLite_FileDatabase_ParameterizedQuery_RoundTrips()
+    {
+        // Verifies that named parameters work against the file-backed database.
+        string? r = await Run(@"
 			local db = SQLite.Open(os.getenv('KITSUNE_SQLITE_TEST'))
 			db:Query('CREATE TABLE IF NOT EXISTS _kitsune_param (id INTEGER, name TEXT)'); db:Fetch()
 			db:Query('INSERT INTO _kitsune_param VALUES (:id, :name)', {id=99, name='kitsune_file'}); db:Fetch()
@@ -721,28 +721,28 @@ public sealed class SQLiteTests
 			db:Close()
 			return tostring(val)
 		");
-		r.ShouldBe("kitsune_file");
-	}
+        r.ShouldBe("kitsune_file");
+    }
 
-	[SQLiteFact]
-	public async Task SQLite_FileDatabase_Tostring_ContainsFilePath()
-	{
-		// __tostring for a file database must include the file path.
-		string? r = await Run(@"
+    [SQLiteFact]
+    public async Task SQLite_FileDatabase_Tostring_ContainsFilePath()
+    {
+        // __tostring for a file database must include the file path.
+        string? r = await Run(@"
 			local path = os.getenv('KITSUNE_SQLITE_TEST')
 			local db = SQLite.Open(path)
 			local s = tostring(db)
 			db:Close()
 			return tostring(s:find('SQLite:') ~= nil and s:find(path, 1, true) ~= nil)
 		");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 
-	[SQLiteFact]
-	public async Task SQLite_FileDatabase_Mode1_WAL_JournalModeIsWal()
-	{
-		// Mode 1 (multithread) sets WAL journal mode on the file database.
-		string? r = await Run(@"
+    [SQLiteFact]
+    public async Task SQLite_FileDatabase_Mode1_WAL_JournalModeIsWal()
+    {
+        // Mode 1 (multithread) sets WAL journal mode on the file database.
+        string? r = await Run(@"
 			local db = SQLite.Open(os.getenv('KITSUNE_SQLITE_TEST'), 1)
 			db:Query('PRAGMA journal_mode')
 			db:Fetch()
@@ -750,6 +750,6 @@ public sealed class SQLiteTests
 			db:Close()
 			return tostring(tostring(mode) == 'wal')
 		");
-		r.ShouldBe("true");
-	}
+        r.ShouldBe("true");
+    }
 }
