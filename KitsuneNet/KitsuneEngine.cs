@@ -43,7 +43,7 @@ namespace KitsuneNet
         {
             public KitsuneVariable Key;
             public KitsuneVariable Value;
-            public IntPtr          Next;
+            public IntPtr Next;
         }
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
@@ -53,22 +53,22 @@ namespace KitsuneNet
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern void KitsuneVariableFree(IntPtr var);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi, BestFitMapping = false, ThrowOnUnmappableChar = true)]
         private static extern int KitsuneExecuteFileAsync([MarshalAs(UnmanagedType.LPStr)] string path, int argc, KitsuneVariable[]? argv, [MarshalAs(UnmanagedType.I1)] bool fireAndForget);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi, BestFitMapping = false, ThrowOnUnmappableChar = true)]
         private static extern int KitsuneExecuteStringAsync([MarshalAs(UnmanagedType.LPStr)] string script, int argc, KitsuneVariable[]? argv, [MarshalAs(UnmanagedType.I1)] bool fireAndForget);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi, BestFitMapping = false, ThrowOnUnmappableChar = true)]
         private static extern int KitsuneExecuteFunctionAsync([MarshalAs(UnmanagedType.LPStr)] string functionName, int argc, KitsuneVariable[]? argv, [MarshalAs(UnmanagedType.I1)] bool fireAndForget);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi, BestFitMapping = false, ThrowOnUnmappableChar = true)]
         private static extern IntPtr KitsuneExecuteFile([MarshalAs(UnmanagedType.LPStr)] string path, int argc, KitsuneVariable[]? argv);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi, BestFitMapping = false, ThrowOnUnmappableChar = true)]
         private static extern IntPtr KitsuneExecuteString([MarshalAs(UnmanagedType.LPStr)] string script, int argc, KitsuneVariable[]? argv);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi, BestFitMapping = false, ThrowOnUnmappableChar = true)]
         private static extern IntPtr KitsuneExecuteFunction([MarshalAs(UnmanagedType.LPStr)] string functionName, int argc, KitsuneVariable[]? argv);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
@@ -106,11 +106,11 @@ namespace KitsuneNet
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern void KitsuneWait();
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi, BestFitMapping = false, ThrowOnUnmappableChar = true)]
         [return: MarshalAs(UnmanagedType.I1)]
         private static extern bool KitsuneSetVariable([MarshalAs(UnmanagedType.LPStr)] string name, ref KitsuneVariable var);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi, BestFitMapping = false, ThrowOnUnmappableChar = true)]
         private static extern IntPtr KitsuneGetVariable([MarshalAs(UnmanagedType.LPStr)] string name);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
@@ -125,11 +125,11 @@ namespace KitsuneNet
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate void GetAllCallback(IntPtr key, IntPtr value, IntPtr userdata);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi, BestFitMapping = false, ThrowOnUnmappableChar = true)]
         private static extern void KitsuneGetAll([MarshalAs(UnmanagedType.LPStr)] string? path, GetAllCallback callback, IntPtr userdata);
 
         // func is a delegate* unmanaged[Cdecl] cast to nint; userdata is a GCHandle address.
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi, BestFitMapping = false, ThrowOnUnmappableChar = true)]
         private static extern void KitsuneRegisterFunction([MarshalAs(UnmanagedType.LPStr)] string name, nint func, nint userdata);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
@@ -177,21 +177,18 @@ namespace KitsuneNet
         /// </summary>
         public ulong LeakedAllocations { get; private set; }
 
-        /// <summary>Initialises the engine. Throws if <c>KitsuneInit</c> returns false.</summary>
         public KitsuneEngine()
         {
             if (!KitsuneInit(IntPtr.Zero))
+            {
                 throw new InvalidOperationException("KitsuneInit failed");
+            }
             Interlocked.Increment(ref _refCount);
         }
 
-        // -- Execution ------------------------------------------------------------
-
-        // -- Helpers -------------------------------------------------------------
-
         // Converts a LuaValue[] to a KitsuneVariable[] suitable for P/Invoke.
         // String data is heap-allocated; caller MUST call FreeNativeArgs when done.
-        private static (KitsuneVariable[]? native, IntPtr[] ptrs) BuildNativeArgs(LuaValue[]? args)
+        private static (KitsuneVariable[]? Native, IntPtr[] Ptrs) BuildNativeArgs(LuaValue[]? args)
         {
             if (args is null || args.Length == 0)
             {
@@ -210,13 +207,18 @@ namespace KitsuneNet
 
         private static void FreeNativeArgs(IntPtr[] ptrs)
         {
-            foreach (var p in ptrs) Marshal.FreeHGlobal(p);
+            foreach (var p in ptrs)
+            {
+                Marshal.FreeHGlobal(p);
+            }
         }
 
         private static LuaValue NativeCopyBytes(IntPtr src, nuint length)
         {
             if (length > (nuint)Array.MaxLength)
+            {
                 throw new InvalidOperationException($"Native data length {length} exceeds the managed array limit.");
+            }
             int len = (int)length;
             byte[] bytes = new byte[len];
             if (len > 0)
@@ -227,34 +229,47 @@ namespace KitsuneNet
         }
 
         // wcharCount is the char16_t count; each char16_t is 2 bytes (UTF-16 LE on Windows).
-        private static LuaValue NativeCopyWchar(IntPtr src, nuint wcharCount)
+        private static LuaValue NativeCopyChar16(IntPtr src, nuint wcharCount)
         {
             if (wcharCount > (nuint)(Array.MaxLength / 2))
+            {
                 throw new InvalidOperationException($"Native wchar count {wcharCount} exceeds the managed array limit.");
+            }
             int byteCount = (int)wcharCount * 2;
             byte[] bytes = new byte[byteCount];
             if (byteCount > 0)
             {
                 Marshal.Copy(src, bytes, 0, byteCount);
             }
-            return new LuaValue { Type = LuaType.Wchar, Bytes = bytes };
+            return new LuaValue { Type = LuaType.Char16, Bytes = bytes };
         }
 
         private static LuaValue NativeParseJson(IntPtr src, nuint length)
         {
             if (length > (nuint)Array.MaxLength)
+            {
                 throw new InvalidOperationException($"Native data length {length} exceeds the managed array limit.");
+            }
             int len = (int)length;
             byte[] bytes = new byte[len];
             Marshal.Copy(src, bytes, 0, len);
-            try   { return new LuaValue { Type = LuaType.Json, JsonNode = JsonNode.Parse(bytes) }; }
-            catch { return LuaValue.FromBytes(bytes); }  // malformed JSON falls back to raw string
+            try
+            {
+                return new LuaValue { Type = LuaType.Json, JsonNode = JsonNode.Parse(bytes) };
+            }
+            catch
+            {
+                return LuaValue.FromBytes(bytes);
+            }
         }
 
         // Reads a heap-allocated KitsuneVariable*, converts it to LuaValue, and frees it.
         private static LuaValue NativePtrToLuaValue(IntPtr ptr)
         {
-            if (ptr == IntPtr.Zero) return LuaValue.None;
+            if (ptr == IntPtr.Zero)
+            {
+                return LuaValue.None;
+            }
             var nv = Marshal.PtrToStructure<KitsuneVariable>(ptr);
             LuaType t = (LuaType)nv.Type;
             LuaValue result = t switch
@@ -263,7 +278,7 @@ namespace KitsuneNet
                 LuaType.Integer => LuaValue.FromInt64(nv.Integer),
                 LuaType.Boolean => LuaValue.FromBool(nv.BoolByte != 0),
                 LuaType.String when nv.Data != IntPtr.Zero => NativeCopyBytes(nv.Data, nv.Length),
-                LuaType.Wchar when nv.Data != IntPtr.Zero => NativeCopyWchar(nv.Data, nv.Length),
+                LuaType.Char16 when nv.Data != IntPtr.Zero => NativeCopyChar16(nv.Data, nv.Length),
                 LuaType.Userdata when nv.Data != IntPtr.Zero && nv.Length > 0 => NativeCopyBytes(nv.Data, nv.Length) with { Type = LuaType.Userdata },
                 LuaType.Json when nv.Data != IntPtr.Zero && nv.Length > 0 => NativeParseJson(nv.Data, nv.Length),
                 LuaType.Stream when nv.Data != IntPtr.Zero => NativeWrapSharedMemory(nv.Data),
@@ -287,7 +302,7 @@ namespace KitsuneNet
                 LuaType.Integer => LuaValue.FromInt64(nv.Integer),
                 LuaType.Boolean => LuaValue.FromBool(nv.BoolByte != 0),
                 LuaType.String when nv.Data != IntPtr.Zero => NativeCopyBytes(nv.Data, nv.Length),
-                LuaType.Wchar when nv.Data != IntPtr.Zero => NativeCopyWchar(nv.Data, nv.Length),
+                LuaType.Char16 when nv.Data != IntPtr.Zero => NativeCopyChar16(nv.Data, nv.Length),
                 LuaType.Userdata when nv.Data != IntPtr.Zero && nv.Length > 0 => NativeCopyBytes(nv.Data, nv.Length) with { Type = LuaType.Userdata },
                 LuaType.Json when nv.Data != IntPtr.Zero && nv.Length > 0 => NativeParseJson(nv.Data, nv.Length),
                 LuaType.Stream when nv.Data != IntPtr.Zero => NativeWrapSharedMemory(nv.Data),
@@ -365,20 +380,26 @@ namespace KitsuneNet
                     {
                         byte[] bytes = v.Bytes;
                         IntPtr p = Marshal.AllocHGlobal(bytes.Length + 1);
-                        if (bytes.Length > 0) Marshal.Copy(bytes, 0, p, bytes.Length);
+                        if (bytes.Length > 0)
+                        {
+                            Marshal.Copy(bytes, 0, p, bytes.Length);
+                        }
                         Marshal.WriteByte(p, bytes.Length, 0);
                         ptrs.Add(p);
                         nv.Data = p;
                         nv.Length = (nuint)bytes.Length;
                     }
                     break;
-                case LuaType.Wchar:
+                case LuaType.Char16:
                     if (v.Bytes is not null)
                     {
                         // Bytes stores UTF-16 LE; Length = number of char16_t code units (2 bytes each).
                         byte[] wbytes = v.Bytes;
                         IntPtr p = Marshal.AllocHGlobal(wbytes.Length + 2);  // +2 for null char16_t
-                        if (wbytes.Length > 0) Marshal.Copy(wbytes, 0, p, wbytes.Length);
+                        if (wbytes.Length > 0)
+                        {
+                            Marshal.Copy(wbytes, 0, p, wbytes.Length);
+                        }
                         Marshal.WriteInt16(p, wbytes.Length, 0);
                         ptrs.Add(p);
                         nv.Data = p;
@@ -732,7 +753,7 @@ namespace KitsuneNet
         public string? GetResultString(int id)
         {
             LuaValue v = GetResultVariable(id);
-            return (v.Type == LuaType.String || v.Type == LuaType.Wchar) ? v.String : null;
+            return (v.Type == LuaType.String || v.Type == LuaType.Char16) ? v.String : null;
         }
 
         /// <summary>Returns the result as raw bytes, or <c>null</c> if nil/none. Releases the slot.</summary>
@@ -795,7 +816,10 @@ namespace KitsuneNet
         public int[] GetActiveIds()
         {
             int count = KitsuneGetActiveIds(null, 0);
-            if (count == 0) return [];
+            if (count == 0)
+            {
+                return [];
+            }
             int[] ids = new int[count];
             KitsuneGetActiveIds(ids, ids.Length);
             return ids;
@@ -1016,11 +1040,15 @@ namespace KitsuneNet
 
                 var args = new LuaValue[argc];
                 for (int i = 0; i < argc; i++)
+                {
                     args[i] = NativeVariableToLuaValue(argv[i]);
+                }
 
                 LuaValue result = func(Array.AsReadOnly(args));
                 if (result.Type != LuaType.None)
+                {
                     InvokeResultSetter(resultSetterPtr, result);
+                }
                 return 1;
             }
             catch (Exception ex)

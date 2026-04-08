@@ -15,7 +15,6 @@ namespace KitsuneNet.Tests
     public sealed class KitsuneUtilTests
     {
         // Helper Lua prologue shared by all socket-simulation tests.
-        // OPEN=0, CLOSE=1, READ=2, CAP_READ=1
         private const string SocketPrologue =
             "local OPEN, CLOSE, READ, CAP_READ = 0, 1, 2, 1\n";
 
@@ -30,9 +29,8 @@ namespace KitsuneNet.Tests
             end
         ";
 
-        // Lua function-backend that replicates the old CreateChunked behaviour:
-        // CAP_READ only (no seek), yields once via Sleep(0) before each chunk,
-        // reports HasData/len state through STREAM_OP_HASDATA / STREAM_OP_LEN.
+        // Lua function-backend stream that yields once per chunk via Sleep(0)
+        // and supports CAP_READ only (no seek).
         private const string MakeChunkedStream = @"
             local function makeChunkedStream(chunks)
                 local idx, pending = 1, false
@@ -74,7 +72,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task UUID_IsVersion4()
         {
-            // The 13th character (index 13 in 1-based Lua) must be '4'.
+            // The 15th character (the version nibble, after two hyphens) must be '4'.
             string? r = await Run("return UUID():sub(15,15)");
             r.ShouldBe("4");
         }
@@ -351,8 +349,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task SetEnv_GetEnv_RoundTrip()
         {
-            // getenv returns the value with a trailing null byte (lua_pushlstring includes
-            // the null terminator that getenv_s writes); strip it before comparing.
+            // The returned value includes a trailing null byte; strip it before comparing.
             string? r = await Run(@"
                 setenv('KITSUNE_UTIL_TEST_1', 'hello_kitsune', true)
                 return getenv('KITSUNE_UTIL_TEST_1'):gsub('%z', '')
@@ -363,8 +360,6 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task SetEnv_WithoutOverride_PreservesOriginalValue()
         {
-            // In Lua only nil/false are falsy; integer 0 is truthy, so lua_toboolean(0)=1.
-            // Passing false (not 0) is required to get allowOverwrite=false.
             string? r = await Run(@"
                 setenv('KITSUNE_UTIL_TEST_2', 'original', true)
                 setenv('KITSUNE_UTIL_TEST_2', 'overwritten', false)
@@ -683,9 +678,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Base64_SetEncodeTable_CustomTable_ChangesEncoding()
         {
-            // Index 62 is '+' in the default alphabet and '-' in URL-safe.
-            // string.char(251) = 0xFB; its top 6 bits are 62 so it exercises that index.
-            // Use sub(1,1) for literal char comparison — find('-') treats '-' as a Lua pattern.
+            // Swap to URL-safe alphabet and verify the encoding changes accordingly.
             string? r = await Run(@"
                 local default = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
                 local urlsafe = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
@@ -716,8 +709,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task SHA256_OfAbc_MatchesEngineOutput()
         {
-            // Pins the engine's specific SHA256 implementation output for 'abc';
-            // this may differ from the RFC test vector if the engine uses a variant.
+            // RFC 6234 test vector for SHA-256 of "abc".
             string? r = await Run(@"
                 local h = SHA256.New()
                 h:Update('abc')
@@ -813,7 +805,7 @@ namespace KitsuneNet.Tests
 
         // -- Json -----------------------------------------------------------------
         // All operations require an instance (Json.New() or Json.Create()).
-        // Json.Null is the fixed lightuserdata sentinel for JSON null values.
+        // Json.Null is the sentinel value for JSON null.
 
         // -- Instance round-trips ---------------------------------------------
         [Fact]
@@ -853,7 +845,6 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Json_AllBasicTypes_RoundTrip()
         {
-            // Mirrors the "Json encode/decode" test from tests/json.lua.
             // Verifies every basic Lua type survives an encode/decode cycle.
             string? r = await Run(@"
                 local j = Json.Create()
@@ -883,8 +874,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Json_InstanceReuse_MultipleCalls()
         {
-            // The same instance must work correctly when used for multiple
-            // encode/decode calls in sequence (enc_reset / dec_reset).
+            // The same instance must work correctly for multiple encode/decode calls.
             string? r = await Run(@"
                 local j = Json.Create()
                 local s1 = j:Encode({a=1})
@@ -1016,8 +1006,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Json_EmptyTable_EncodesAsArray()
         {
-            // A truly empty table has no keys at all, so it encodes as [] (empty JSON array).
-            // A table with only string keys (e.g. {foo="bar"}) still encodes as a JSON object.
+            // A table with only string keys encodes as a JSON object; a truly empty table encodes as [].
             string? r = await Run("return Json.New():Encode({})");
             r.ShouldBe("[]");
         }
@@ -1068,9 +1057,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Json_New_CalledOnInstance_ProducesCompactOutput()
         {
-            // Regression: before the fix, calling New() on an existing instance passed
-            // the instance (truthy userdata) as arg 1, making lua_toboolean return 1
-            // and silently creating a pretty-printing instance instead of compact.
+            // Regression: New() called on an existing instance must produce a compact
+            // instance, not a pretty-printing one.
             string? r = await Run(@"
                 local j1 = Json.New()      -- compact
                 local j2 = j1:New()        -- must also be compact, not pretty
@@ -1082,10 +1070,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Json_MixedTable_EncodesAsObject_IntegerKeysBecomesStrings()
         {
-            // Lua can't distinguish "array" from "object" for mixed tables.
-            // Option A: encode as object — no data is lost, but integer keys become
-            // string keys in the JSON object, changing their type on decode.
-            // This is the safest default: silent data loss (Option B) is worse.
+            // Mixed tables (integer and string keys) encode as JSON objects;
+            // integer keys become string keys on the round-trip.
             string? r = await Run(@"
                 local j   = Json.New()
                 local t   = {[1]='a', b=2}
@@ -1112,8 +1098,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Json_Decode_NumberTooLong_RaisesError()
         {
-            // buf[64] holds at most 63 significant characters + NUL.
-            // A 64-digit integer literal exceeds that and must raise an error
+            // A number literal that exceeds the internal buffer size must raise an error
             // rather than silently producing a wrong value.
             string? r = await Run(@"
                 local ok, err = pcall(function()
@@ -1127,8 +1112,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Json_Decode_63DigitNumber_ParsesWithoutError()
         {
-            // 63 digits fit exactly in buf[64] (63 chars + NUL), so the
-            // largest representable literal must succeed (parsed as a float).
+            // A number literal just within the internal limit must parse without error.
             string? r = await Run(@"
                 local ok, v = pcall(function()
                     return Json.New():Decode('123456789012345678901234567890123456789012345678901234567890123')
@@ -1362,9 +1346,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Json_EncodeDecodeIntoStream_LargePayload_AllValuesCorrect()
         {
-            // 1000 integers produce ~3900 bytes of JSON, forcing multiple streaming
-            // flushes through jbuf_grow (512-byte initial buffer) during encode, and
-            // a multi-chunk read sequence (4 KiB chunks) during decode.
+            // 1000 integers produce ~3900 bytes, exercising multiple streaming flushes
+            // during encode and multi-chunk reads during decode.
             string? r = await Run(@"
                 local j    = Json.New()
                 local data = {}
@@ -1464,9 +1447,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Json_Encode_Stream_ReadableSeekable_ProducesJsonString()
         {
-            // A readable+seekable in-memory stream encodes as a JSON string of its bytes.
-            // enc_value rewinds to position 0 before reading, so the result is always the
-            // full content regardless of where the cursor sits at the time of the call.
+            // A readable+seekable stream encodes as a JSON string of its full contents,
+            // regardless of the current cursor position.
             string? r = await Run(@"
                 local j = Json.New()
                 local s = Stream.Create('hello')
@@ -1478,7 +1460,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Json_Encode_Stream_EmptyStream_ProducesNull()
         {
-            // An empty stream has no bytes; lua_stream_read_chunk returns nil ? null.
+            // An empty stream has no bytes and encodes as null.
             string? r = await Run(@"
                 local j = Json.New()
                 local s = Stream.Create()
@@ -1558,8 +1540,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Json_Encode_Wchar_NonAscii_RoundTripsCorrectly()
         {
-            // é = U+00E9, UTF-8: 0xC3 0xA9.  Use Lua hex escapes so the bytes are
-            // unambiguous ASCII in the script source and survive ANSI marshaling.
+            // é = U+00E9, UTF-8: 0xC3 0xA9.  Use Lua hex escapes for unambiguous byte values.
             string? r = await Run(@"
                 local j = Json.New()
                 local w = Wchar.FromUtf8('\xC3\xa9')
@@ -1734,8 +1715,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Wchar_Find_NonAsciiStringPattern_Works()
         {
-            // Verifies WcharFind now uses FromUtf8 (not FromAnsi) for string patterns.
-            // \xC3\xA9 are the raw UTF-8 bytes for U+00E9 (é).
+            // String patterns are interpreted as UTF-8; \xC3\xA9 are the UTF-8 bytes for U+00E9 (é).
             string? r = await Run(@"
                 local hay = Wchar.FromUtf8('caf\xC3\xA9 au lait')
                 return tostring(hay:Find('\xC3\xA9') ~= nil)
@@ -1767,7 +1747,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Wchar_Equality_EmptyWchars_AreEqual()
         {
-            // Verifies the wchar_eq fix: wcsncmp is not called when len == 0.
+            // Edge case: two empty Wchars must compare as equal.
             string? r = await Run("return tostring(Wchar.FromUtf8('') == Wchar.FromUtf8(''))");
             r.ShouldBe("true");
         }
@@ -1796,8 +1776,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Wchar_Concat_NonAsciiStringOperand_ProducesCorrectResult()
         {
-            // Verifies wchar_concat uses MultiByteToWideChar(CP_UTF8) for string operands.
-            // \xC3\xA9 = UTF-8 for U+00E9 (é); previous code used mbstowcs (ANSI).
+            // \xC3\xA9 = UTF-8 for U+00E9 (é); string operands are treated as UTF-8.
             string? r = await Run(@"return (Wchar.FromUtf8('caf') .. '\xC3\xA9'):ToUtf8()");
             r.ShouldBe("caf\u00e9");
         }
@@ -1832,8 +1811,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Wchar_FromBytes_InvalidCodepoint_ProducesEmptyWchar()
         {
-            // 0x200000 exceeds U+10FFFF; verifies the FillLuaWCharWithCodePoint fix
-            // (wcharCount > 0 instead of != -1) returns an empty Wchar rather than crashing.
+            // A codepoint above U+10FFFF is invalid; FromBytes must return an empty Wchar.
             string? r = await Run("return tostring(#Wchar.FromBytes(0x200000) == 0)");
             r.ShouldBe("true");
         }
@@ -1841,7 +1819,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Wchar_ToBytes_AsciiChar_ProducesOneCodeUnit()
         {
-            // ToBytes returns a table of char16_t code units (UTF-16 LE, platform-independent).
+            // ToBytes returns a table of UTF-16 code units.
             // 'A' is U+0041 — one code unit — so the table has exactly one entry with value 65.
             string? r = await Run(@"
                 local units = Wchar.FromUtf8('A'):ToBytes()
@@ -1853,7 +1831,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Wchar_FromBytes_Table_RoundTrips()
         {
-            // ToBytes yields a table of char16_t code units; FromBytes(table) reconstructs from them.
+            // ToBytes returns a table of UTF-16 code units; FromBytes(table) reconstructs from them.
             string? r = await Run(@"
                 local w1 = Wchar.FromUtf8('hello')
                 local w2 = Wchar.FromBytes(w1:ToBytes())
@@ -2030,7 +2008,7 @@ namespace KitsuneNet.Tests
             string? r = await Run(@"
                 local s = Stream.Create()
                 s:Write(Wchar.FromUtf8('abcde'))
-                s:Seek(4)   -- skip first 2 code units (4 bytes each)
+                s:Seek(4)   -- skip first 2 code units (2 bytes each)
                 local w = s:ReadWchar()
                 return tostring(w:len() == 3 and w:ToUtf8() == 'cde')
             ");
@@ -2079,8 +2057,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Stream_WriteWchar_NonWritable_ReturnsZero()
         {
-            // Writing a Wchar to a read-only function-backend stream must return 0.
-            // Caps: READ=1, WRITE=2, SEEK=4 — return 1 for read-only.
+            // Writing a Wchar to a read-only stream must return 0.
             string? r = await Run(@"
                 local s = Stream.Create(function(op, ...)
                     if op == READ then return 'x' end

@@ -72,7 +72,7 @@ static const luaL_Reg kafkamodule[] = {
 static void register_type(lua_State* L, const char* metaname,
     const luaL_Reg* functions, const luaL_Reg* meta) {
 
-    luaL_newlibtable(L, functions);
+    lua_newtable(L);
     luaL_setfuncs(L, functions, 0);
 
     luaL_newmetatable(L, metaname);

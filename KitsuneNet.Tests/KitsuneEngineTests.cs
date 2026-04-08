@@ -1454,8 +1454,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public void GetStatus_TwoConcurrentCoroutines_OneIsIdle()
         {
-            // The Ticker yields every 1000 instructions when runningCount > 1,
-            // so at any moment one coroutine is in lua_resume and the other is Idle.
+            // With two concurrent coroutines, the scheduler alternates between them,
+            // so at any moment one is running and the other is Idle.
             using KitsuneEngine engine = new();
             int idA = engine.ExecuteString("while true do end");
             int idB = engine.ExecuteString("while true do end");
@@ -1539,11 +1539,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public void GetStatus_AfterCancelOnSleepingCoroutine_ReturnsCancelled()
         {
-            // Once KitsuneCancel sets interrupted=1, GetStatus returns Cancelled regardless
-            // of whether the scheduler has finished processing the cancel yet. There is no
-            // longer a separate Cancelling state — callers act the same way in both cases.
-            // On a fast scheduler (e.g. Linux) the slot may already be freed and the status
-            // returns None — that is also valid; the coroutine was cancelled and released.
+            // After Cancel, GetStatus returns Cancelled until the slot is freed.
+            // On fast schedulers (e.g. Linux) the slot may already be freed, returning None.
             using KitsuneEngine engine = new();
             int id = engine.ExecuteString("Sleep(60000)");
             DateTime readyDeadline = DateTime.UtcNow.AddSeconds(5);
@@ -2261,8 +2258,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Coroutine_YieldWithValue_ValueIsDiscardedByScheduler()
         {
-            // The scheduler calls lua_pop(T, nresults) on LUA_YIELD, so any value passed
-            // to coroutine.yield() is silently discarded. The result comes from return, not yield.
+            // Any value passed to coroutine.yield() in a Kitsune coroutine is silently
+            // discarded by the scheduler. The result comes from return, not yield.
             using KitsuneEngine engine = new();
             string? result = await engine.ExecuteStringAsync("coroutine.yield('hello')");
             result.ShouldBeNull();  // no return statement ? result is nil/none
@@ -2272,7 +2269,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Coroutine_YieldWithValue_ResumeReceivesNil()
         {
-            // The scheduler always resumes with 0 args (nstart=0 after a yield),
+            // The scheduler always resumes with 0 args after a yield,
             // so coroutine.yield() always returns nil inside a Kitsune-managed coroutine.
             using KitsuneEngine engine = new();
             string? result = await engine.ExecuteStringAsync(@"
@@ -2305,7 +2302,7 @@ namespace KitsuneNet.Tests
             int id = engine.ExecuteString("return Wchar.FromUtf8('hello wchar')");
             engine.Wait(id);
             LuaValue v = engine.GetResultVariable(id);
-            v.Type.ShouldBe(LuaType.Wchar);
+            v.Type.ShouldBe(LuaType.Char16);
             v.String.ShouldBe("hello wchar");
             engine.GetActiveIds().ShouldBeEmpty();
         }
@@ -2351,7 +2348,7 @@ namespace KitsuneNet.Tests
             engine.ExecuteString("myWchar = Wchar.FromUtf8('bridge test')", fireAndForget: true);
             engine.Wait();
             LuaValue v = engine.GetVariable("myWchar");
-            v.Type.ShouldBe(LuaType.Wchar);
+            v.Type.ShouldBe(LuaType.Char16);
             v.String.ShouldBe("bridge test");
             engine.GetActiveIds().ShouldBeEmpty();
         }
@@ -2362,7 +2359,7 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             engine.SetVariable("wRound", LuaValue.FromWchar("round trip \u00e9"));  // é is non-ASCII
             LuaValue back = engine.GetVariable("wRound");
-            back.Type.ShouldBe(LuaType.Wchar);
+            back.Type.ShouldBe(LuaType.Char16);
             back.String.ShouldBe("round trip \u00e9");
         }
 
@@ -2377,7 +2374,7 @@ namespace KitsuneNet.Tests
             result.Type.ShouldBe(LuaType.Table);
             result.Table.ShouldNotBeNull();
             var entry = result.Table!.Single(kvp => kvp.Key.String == "w");
-            entry.Value.Type.ShouldBe(LuaType.Wchar);
+            entry.Value.Type.ShouldBe(LuaType.Char16);
             entry.Value.String.ShouldBe("in table");
             engine.GetActiveIds().ShouldBeEmpty();
         }
@@ -2396,7 +2393,7 @@ namespace KitsuneNet.Tests
             int id = engine.ExecuteString("CaptureWchar(Wchar.FromUtf8('from lua'))");
             engine.Wait(id);
             received.ShouldNotBeNull();
-            received!.Value.Type.ShouldBe(LuaType.Wchar);
+            received!.Value.Type.ShouldBe(LuaType.Char16);
             received.Value.String.ShouldBe("from lua");
             engine.ReleaseResult(id);
             engine.GetActiveIds().ShouldBeEmpty();
@@ -2479,12 +2476,9 @@ namespace KitsuneNet.Tests
         [Fact]
         public void NohookCallback_ErrorCaughtByPcall_HookRestoredAndCancelStillWorks()
         {
-            // Regression: lua_call_nohook previously used lua_call whose longjmp error
-            // path bypassed the lua_sethook restore.  If Lua code caught that error with
-            // pcall/xpcall the coroutine continued running hookless — the Ticker never
-            // fired again, making Cancel and Interrupt permanently ineffective.
-            // Fix: lua_call_nohook now wraps with lua_pcall, restores the hook, then
-            // re-raises via lua_error so the hook is always restored before any unwind.
+            // Regression: if a nohook callback error was caught by pcall, the coroutine
+            // could continue running without the Ticker hook, making Cancel ineffective.
+            // Verifies the hook is always restored before the error unwinds.
             using KitsuneEngine engine = new();
             int id = engine.ExecuteString(@"
                 -- CSV.DecodeFromFunction calls the supplier via lua_call_nohook only
@@ -2514,11 +2508,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task NohookCallback_SleepInsideSupplier_CompletesWithoutCrash()
         {
-            // Regression: L_Sleep called lua_yieldk unconditionally. Inside a nohook
-            // callback the internal lua_pcall creates a luaD_callnoyield boundary, so
-            // lua_isyieldable(L) == false. L_Sleep now falls back to a blocking OS sleep
-            // rather than lua_yieldk, which would raise
-            // "attempt to yield across a C-call boundary".
+            // Regression: Sleep inside a nohook callback must not attempt to yield;
+            // it falls back to a blocking sleep when the call stack is non-yieldable.
             using KitsuneEngine engine = new();
             string? result = await engine.ExecuteStringAsync(@"
                 local count = 0
@@ -2540,21 +2531,16 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task MetamethodFromCCode_WithConcurrentCoroutines_NoCrash()
         {
-            // Regression: the Ticker called lua_yield unconditionally. When a C library
-            // function (tostring -> luaB_tostring -> luaL_tolstring -> luaL_callmeta ->
-            // lua_pcall) dispatches __tostring via a luaD_callnoyield boundary, a
-            // lua_yield inside the metamethod raises "attempt to yield across a C-call
-            // boundary". The Ticker now guards with lua_isyieldable(L) and silently skips
-            // the yield when a non-yieldable boundary is on the call stack.
+            // Regression: the Ticker must not yield when a non-yieldable C-call boundary
+            // is on the stack (e.g. when __tostring is dispatched via tostring()).
             using KitsuneEngine engine = new();
 
-            // Keeps runningCount > 1 so the Ticker's yield branch is active.
+            // Runs concurrently to keep the scheduler active.
             Task<string?> bgTask = engine.ExecuteStringAsync(
                 "local n = 0; for _ = 1, 1000000 do n = n + 1 end; return tostring(n)");
 
-            // Repeatedly calls tostring() on a table with __tostring. tostring() is
-            // luaB_tostring (C), which dispatches __tostring via lua_pcall — a
-            // non-yieldable boundary. The Ticker must not crash when it fires inside.
+            // Calls tostring() on an object with __tostring; dispatched via a non-yieldable
+            // C boundary — the Ticker must handle this without crashing.
             Task<string?> fgTask = engine.ExecuteStringAsync(@"
                 local obj = setmetatable({}, {
                     __tostring = function()
@@ -3100,27 +3086,12 @@ namespace KitsuneNet.Tests
             // on the same shared-memory block, and that the LOCKED flag is observable from C#.
             //
             // Block layout (data starts at struct offset 32):
-            //   data[0] – counter incremented by Lua each iteration  (wraps at 256)
+            //   data[0] – counter incremented by Lua each iteration (wraps at 256)
             //   data[1..3] – sentinel 0xAA, must never be written to
             //
-            // ? IMPORTANT — the LOCKED flag is a cooperative advisory signal, NOT a mutex.
-            //
-            //   The vtable uses  flags |= LOCKED  and  flags &= ~LOCKED  which compile to a
-            //   non-atomic read-modify-write sequence (movzx / or / mov on x86-64).
-            //   Two concurrent writers can both read flags = 0, compute 0|1 = 1, and store it —
-            //   neither has exclusive ownership.  There are also no memory barriers, so the CPU
-            //   or compiler may reorder data stores relative to the flag write.
-            //
-            //   For true mutual exclusion the flags byte would need to be a
-            //   std::atomic<uint8_t> with fetch_or / fetch_and (or _InterlockedOr8 /
-            //   _InterlockedAnd8 on Windows) to make the RMW atomic and provide a
-            //   release–acquire fence around the protected data.
-            //
-            // What this test verifies:
-            //   • Concurrent access does not crash or corrupt sentinel bytes when C# follows
-            //     the cooperative protocol: spin until LOCKED is clear before reading.
-            //   • The vtable correctly sets LOCKED during every read and write, making the
-            //     flag observable from a C# thread polling stream.Flags.
+            // The LOCKED flag is a cooperative advisory signal, not a mutex. C# must spin
+            // until the flag clears before reading. The test verifies that sentinel bytes
+            // are not corrupted and that LOCKED is correctly set during every access.
             var engine = new KitsuneEngine();
             try
             {
@@ -3128,16 +3099,10 @@ namespace KitsuneNet.Tests
                 const byte Sentinel = 0xAA;
                 const int Iterations = 1000;
 
-                // CreateStream allocates a block in the global registry (ACCESSOR_DISPOSED=0).
-                // After SetVariable passes it to Lua, MarkPassedToLua flips _isManaged=false
-                // so the block cannot be fast-passed to Lua a second time.  Lua's shmem_close
-                // will set OWNER_DISPOSED when the inbound stream is GC'd; this stream's Dispose
-                // sets ACCESSOR_DISPOSED. The ticker frees the block only when both are set.
                 LuaStream stream = engine.CreateStream(4);
                 stream.Write([0, Sentinel, Sentinel, Sentinel]);
                 stream.Seek(0, System.IO.SeekOrigin.Begin);
 
-                // Pass to Lua. FillNativeVariable uses the existing block directly (zero copy).
                 engine.SetVariable("shmem", LuaValue.FromStream(stream));
 
                 // Lua coroutine: read data[0], increment, write back — 1000× with Sleep(0) to yield.
@@ -3189,13 +3154,11 @@ namespace KitsuneNet.Tests
                 sentinelCorrupted.ShouldBeFalse("sentinel bytes were overwritten — Lua wrote outside data[0]");
                 luaCount.ShouldBe(Iterations, "Lua must complete all iterations without error");
 
-                // lockedObservations may be zero when the LOCKED window (nanoseconds) is too
-                // narrow to catch reliably; not a hard assertion.  A non-zero value confirms
-                // the vtable is correctly signalling concurrent access via the flag.
+                // lockedObservations may be zero when the LOCKED window is too narrow to
+                // catch reliably; not a hard assertion.
                 _ = lockedObservations;
 
-                // Safe to dispose after the handoff: sets ACCESSOR_DISPOSED only, not OWNER_DISPOSED,
-                // because FlagLuaReferenced was set when Lua created its inbound stream.
+                // Safe to dispose C# side after handoff; the block stays alive until Lua's GC releases it.
                 stream.Dispose();
             }
             finally
@@ -3257,9 +3220,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public void CreateStream_AfterSetVariable_LuaReferencedFlagIsSet()
         {
-            // When FillNativeVariable calls lua_push_sharedmemory_stream, the C++ side
-            // sets FlagLuaReferenced on the block so Dispose knows Lua's GC will
-            // eventually set OWNER_DISPOSED.
+            // FlagLuaReferenced is set when the block is passed to Lua, so Dispose
+            // knows Lua's GC will eventually release it.
             var engine = new KitsuneEngine();
             try
             {
@@ -3282,9 +3244,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task CreateStream_NotPassedToLua_DisposeIsSafe_EngineFunctional()
         {
-            // Disposing a CreateStream block that was never given to Lua must set both
-            // ACCESSOR_DISPOSED and OWNER_DISPOSED so the ticker can free it.
-            // Engine must remain fully functional afterward.
+            // Disposing a CreateStream block that was never given to Lua must be safe.
+            // The engine must remain fully functional afterward.
             var engine = new KitsuneEngine();
             try
             {
@@ -3309,8 +3270,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task CreateStream_PassedToLua_DisposeSafeAfterHandoff()
         {
-            // After passing to Lua, C# can still Dispose the stream safely.
-            // The block must not be freed until Lua's GC also sets OWNER_DISPOSED.
+            // After passing to Lua, C# can Dispose its side; the block stays alive
+            // until Lua's GC releases it.
             var engine = new KitsuneEngine();
             try
             {
@@ -3339,8 +3300,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task CreateStream_CanBeCalledFromRegisterFunctionCallback()
         {
-            // KitsuneCreateMemoryBlock no longer requires AcquireLuaAccess, so it can
-            // now be called from inside a RegisterFunction callback without deadlocking.
+            // CreateStream may be called from inside a RegisterFunction callback.
             var engine = new KitsuneEngine();
             try
             {
@@ -3388,8 +3348,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public void LuaStream_InboundFromLua_HasLuaReferencedFlagSet()
         {
-            // lua_push_sharedmemory_stream_outbound sets FlagLuaReferenced on allocation.
-            // An inbound stream received from a Lua coroutine must therefore have it set.
+            // A stream returned from a Lua coroutine must have FlagLuaReferenced set.
             var engine = new KitsuneEngine();
             try
             {

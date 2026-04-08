@@ -37,7 +37,7 @@ namespace KitsuneNet
 
         /// <summary>Decodes <see cref="Bytes"/> as UTF-8 for strings, or UTF-16 LE for Wchar values.
         /// Returns <c>null</c> when <see cref="Bytes"/> is null.</summary>
-        public string? String => Type == LuaType.Wchar
+        public string? String => Type == LuaType.Char16
             ? (Bytes is null ? null : Encoding.Unicode.GetString(Bytes))
             : (Bytes is null ? null : Encoding.UTF8.GetString(Bytes));
 
@@ -68,7 +68,7 @@ namespace KitsuneNet
         public override string ToString() => Type switch
         {
             LuaType.String => String ?? string.Empty,
-            LuaType.Wchar => String ?? string.Empty,
+            LuaType.Char16 => String ?? string.Empty,
             LuaType.Number => Number.ToString(System.Globalization.CultureInfo.InvariantCulture),
             LuaType.Integer => Int64.ToString(),
             LuaType.Boolean => Boolean.ToString(),
@@ -132,7 +132,7 @@ namespace KitsuneNet
         /// <summary>Creates a Wchar value. When set on a Lua global the engine pushes a Lua Wchar object.
         /// The UTF-16 LE encoded text is stored in <see cref="Bytes"/>; <see cref="String"/> decodes it back.</summary>
         public static LuaValue FromWchar(string? v) =>
-            v is null ? None : new() { Type = LuaType.Wchar, Bytes = Encoding.Unicode.GetBytes(v) };
+            v is null ? None : new() { Type = LuaType.Char16, Bytes = Encoding.Unicode.GetBytes(v) };
 
         /// <summary>Creates a table value from a list of key-value entries.</summary>
         public static LuaValue FromTable(IReadOnlyList<KeyValuePair<LuaValue, LuaValue>> entries) =>

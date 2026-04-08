@@ -651,6 +651,10 @@ static void FinishCoroutine(KitsuneState* state, KitsuneCoroutine* slot, lua_Sta
 		slot->released.store(1);
 }
 
+// True only on the scheduler thread; set once in SchedulerProc and never cleared.
+// Used by all KitsuneExecute* guards on every platform without OS-specific thread IDs.
+static thread_local bool g_isSchedulerThread = false;
+
 static void SchedulerProc(KitsuneState* state) {
 #ifdef _WIN32
 	state->schedulerThreadId.store((uint32_t)GetCurrentThreadId());
@@ -888,10 +892,6 @@ static void* l_alloc(void* ud, void* ptr, size_t osize, size_t nsize) {
 		return gff_realloc(ptr, nsize);
 	}
 }
-
-// True only on the scheduler thread; set once in SchedulerProc and never cleared.
-// Used by all KitsuneExecute* guards on every platform without OS-specific thread IDs.
-static thread_local bool g_isSchedulerThread = false;
 
 // Allocates a heap KitsuneVariable with KITSUNE_TERROR and an optional message.
 // The caller must free the returned pointer with KitsuneVariableFree.

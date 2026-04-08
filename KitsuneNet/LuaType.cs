@@ -42,7 +42,7 @@ namespace KitsuneNet
 
         /// <summary>Kitsune Wchar userdata. UTF-8 bytes are stored in <see cref="LuaValue.Bytes"/>;
         /// <see cref="LuaValue.String"/> decodes them. Pushes a Lua Wchar object back into the state.</summary>
-        Wchar = -4,
+        Char16 = -4,
 
         /// <summary>JSON value bridged via the engine's Json instance. C# holds a
         /// <see cref="System.Text.Json.Nodes.JsonNode"/>; Lua receives/sends a table decoded/encoded
