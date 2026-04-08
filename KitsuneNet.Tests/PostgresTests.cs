@@ -7,26 +7,7 @@ namespace KitsuneNet.Tests;
 [Collection("KitsuneSequential")]
 public sealed class PostgresTests
 {
-    // Reads KITSUNE_POSTGRES_TEST=<libpq conninfo>
-    private static string ConnectLua()
-    {
-        var conninfo = Environment.GetEnvironmentVariable("KITSUNE_POSTGRES_TEST")!;
-        return $"Postgres.Connect('{conninfo}')";
-    }
-
-    private static async Task<string?> Run(string lua)
-    {
-        var engine = new KitsuneEngine();
-        string? result;
-        try { result = await engine.ExecuteStringAsync(lua); }
-        finally { engine.Dispose(); }
-        if (engine.LeakedAllocations != 0)
-            throw new InvalidOperationException($"Native memory leak: {engine.LeakedAllocations} unfreed allocation(s) after KitsuneCleanup");
-        return result;
-    }
-
     // ── coroutine protocol ───────────────────────────────────────────────────
-
     [PostgresFact]
     public async Task Helper_MethodsExistInModuleTable()
     {
@@ -159,7 +140,6 @@ public sealed class PostgresTests
     }
 
     // ── CRUD ─────────────────────────────────────────────────────────────────
-
     [PostgresFact]
     public async Task Crud_Insert_ReturnsOneAffectedRow()
     {
@@ -262,7 +242,6 @@ public sealed class PostgresTests
     }
 
     // ── type mapping ──────────────────────────────────────────────────────────
-
     [PostgresFact]
     public async Task Types_IntegersReturnedAsInteger()
     {
@@ -339,7 +318,6 @@ public sealed class PostgresTests
     }
 
     // ── NonQuery ──────────────────────────────────────────────────────────────
-
     [PostgresFact]
     public async Task NonQuery_Insert_ReturnsAffectedCount()
     {
@@ -376,7 +354,6 @@ public sealed class PostgresTests
     }
 
     // ── Scalar ────────────────────────────────────────────────────────────────
-
     [PostgresFact]
     public async Task Scalar_ReturnsFirstColumnOfFirstRow()
     {
@@ -422,7 +399,6 @@ public sealed class PostgresTests
     }
 
     // ── QueryAll ──────────────────────────────────────────────────────────────
-
     [PostgresFact]
     public async Task QueryAll_MultipleRows_ReturnsAllRows()
     {
@@ -476,5 +452,32 @@ public sealed class PostgresTests
 			return tostring(conn:IsBusy())
 		");
         r.ShouldBe("false");
+    }
+
+    // Reads KITSUNE_POSTGRES_TEST=<libpq conninfo>
+    private static string ConnectLua()
+    {
+        var conninfo = Environment.GetEnvironmentVariable("KITSUNE_POSTGRES_TEST")!;
+        return $"Postgres.Connect('{conninfo}')";
+    }
+
+    private static async Task<string?> Run(string lua)
+    {
+        var engine = new KitsuneEngine();
+        string? result;
+        try
+        {
+            result = await engine.ExecuteStringAsync(lua).ConfigureAwait(false);
+        }
+        finally
+        {
+            engine.Dispose();
+        }
+
+        if (engine.LeakedAllocations != 0)
+        {
+            throw new InvalidOperationException($"Native memory leak: {engine.LeakedAllocations} unfreed allocation(s) after KitsuneCleanup");
+        }
+        return result;
     }
 }

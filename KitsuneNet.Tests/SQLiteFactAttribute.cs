@@ -11,29 +11,33 @@ namespace KitsuneNet.Tests;
 /// </summary>
 public sealed class SQLiteFactAttribute : FactAttribute
 {
-	private static readonly string? _path = ResolvedPath();
+    private static readonly string? _path = ResolvedPath();
 
-	private static string? ResolvedPath()
-	{
-		string? raw = Environment.GetEnvironmentVariable("KITSUNE_SQLITE_TEST");
-		if (string.IsNullOrEmpty(raw))
-			return null;
+    public SQLiteFactAttribute()
+    {
+        if (string.IsNullOrEmpty(_path))
+        {
+            Skip = "Set KITSUNE_SQLITE_TEST to the path of a SQLite database file to run SQLite file-database tests";
+        }
+    }
 
-		// Translate Windows drive-letter paths (e.g. R:\test.sqlite) when running
-		// on Linux so that file-database tests can run without a separate runsettings.
-		if (!OperatingSystem.IsWindows() && raw.Length >= 2 && raw[1] == ':')
-		{
-			string translated = Path.Combine("/tmp", Path.GetFileName(raw));
-			Environment.SetEnvironmentVariable("KITSUNE_SQLITE_TEST", translated);
-			return translated;
-		}
+    private static string? ResolvedPath()
+    {
+        string? raw = Environment.GetEnvironmentVariable("KITSUNE_SQLITE_TEST");
+        if (string.IsNullOrEmpty(raw))
+        {
+            return null;
+        }
 
-		return raw;
-	}
+        // Translate Windows drive-letter paths (e.g. R:\test.sqlite) when running
+        // on Linux so that file-database tests can run without a separate runsettings.
+        if (!OperatingSystem.IsWindows() && raw.Length >= 2 && raw[1] == ':')
+        {
+            string translated = Path.Combine("/tmp", Path.GetFileName(raw));
+            Environment.SetEnvironmentVariable("KITSUNE_SQLITE_TEST", translated);
+            return translated;
+        }
 
-	public SQLiteFactAttribute()
-	{
-		if (string.IsNullOrEmpty(_path))
-			Skip = "Set KITSUNE_SQLITE_TEST to the path of a SQLite database file to run SQLite file-database tests";
-	}
+        return raw;
+    }
 }

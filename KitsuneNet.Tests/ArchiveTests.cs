@@ -14,7 +14,6 @@ public sealed class ArchiveTests
     ];
 
     // ── Entries ───────────────────────────────────────────────────────────────
-
     [ArchiveTheory]
     [MemberData(nameof(ArchiveFiles))]
     public async Task Entries_Returns_TwoFiles(string path)
@@ -66,7 +65,6 @@ public sealed class ArchiveTests
     }
 
     // ── ReadAll ───────────────────────────────────────────────────────────────
-
     [ArchiveTheory]
     [MemberData(nameof(ArchiveFiles))]
     public async Task ReadAll_FirstEntry_ReturnsNonEmptyData(string path)
@@ -124,7 +122,6 @@ public sealed class ArchiveTests
     }
 
     // ── Read (chunked) ────────────────────────────────────────────────────────
-
     [ArchiveTheory]
     [MemberData(nameof(ArchiveFiles))]
     public async Task Read_ChunkedRead_ReassemblesFullEntry(string path)
@@ -149,7 +146,6 @@ public sealed class ArchiveTests
     }
 
     // ── OpenRead error handling ───────────────────────────────────────────────
-
     [ArchiveFact]
     public async Task OpenRead_NonExistentFile_ReturnsNilAndError()
     {

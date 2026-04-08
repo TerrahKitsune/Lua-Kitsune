@@ -14,31 +14,44 @@ namespace KitsuneNet.Tests
     /// </summary>
     public sealed class KitsuneUtilTests
     {
-        private static async Task<string?> Run(string lua)
-        {
-            var engine = new KitsuneEngine();
-            string? result;
-            try   { result = await engine.ExecuteStringAsync(lua); }
-            finally { engine.Dispose(); }
-            if (engine.LeakedAllocations != 0)
-                throw new InvalidOperationException($"Native memory leak: {engine.LeakedAllocations} unfreed allocation(s) after KitsuneCleanup");
-            return result;
-        }
+        // Helper Lua prologue shared by all socket-simulation tests.
+        // OPEN=0, CLOSE=1, READ=2, CAP_READ=1
+        private const string SocketPrologue =
+            "local OPEN, CLOSE, READ, CAP_READ = 0, 1, 2, 1\n";
 
-        private static async Task<string?> RunWithSession(string lua)
-        {
-            var engine = new KitsuneEngine();
-            engine.RegisterSession();
-            string? result;
-            try   { result = await engine.ExecuteStringAsync(lua); }
-            finally { engine.Dispose(); }
-            if (engine.LeakedAllocations != 0)
-                throw new InvalidOperationException($"Native memory leak: {engine.LeakedAllocations} unfreed allocation(s) after KitsuneCleanup");
-            return result;
-        }
+        private const string RunCoroutine = @"
+            local function run(fn)
+                local co = coroutine.create(fn)
+                local ok, err = coroutine.resume(co)
+                while ok and coroutine.status(co) ~= 'dead' do
+                    ok, err = coroutine.resume(co)
+                end
+                if not ok then error(err, 2) end
+            end
+        ";
+
+        // Lua function-backend that replicates the old CreateChunked behaviour:
+        // CAP_READ only (no seek), yields once via Sleep(0) before each chunk,
+        // reports HasData/len state through STREAM_OP_HASDATA / STREAM_OP_LEN.
+        private const string MakeChunkedStream = @"
+            local function makeChunkedStream(chunks)
+                local idx, pending = 1, false
+                return Stream.Create(function(op)
+                    if op == 0 then return 1 end
+                    if op == 1 then return true end
+                    if op == 5 then return pending and 1 or 0 end
+                    if op == 8 then return pending end
+                    if op == 2 then
+                        if idx > #chunks then return nil end
+                        if not pending then pending = true; Sleep(0) end
+                        pending = false
+                        local c = chunks[idx]; idx = idx + 1; return c
+                    end
+                end)
+            end
+        ";
 
         // -- UUID -----------------------------------------------------------------
-
         [Fact]
         public async Task UUID_HasStandardFormat()
         {
@@ -155,7 +168,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- CRC32 ----------------------------------------------------------------
-
         [Fact]
         public async Task CRC32_ReturnsInteger()
         {
@@ -189,7 +201,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- CRC64 ----------------------------------------------------------------
-
         [Fact]
         public async Task CRC64_ReturnsNumber()
         {
@@ -250,7 +261,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- Time -----------------------------------------------------------------
-
         [Fact]
         public async Task Time_ReturnsPositiveInteger()
         {
@@ -266,7 +276,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- Runtime --------------------------------------------------------------
-
         [Fact]
         public async Task Runtime_ReturnsNonNegativeNumber()
         {
@@ -282,7 +291,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- GetMemory ------------------------------------------------------------
-
         [Fact]
         public async Task GetMemory_ReturnsPositiveValue()
         {
@@ -291,7 +299,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- GlobalMemoryStatus ---------------------------------------------------
-
         [Fact]
         public async Task GlobalMemoryStatus_Default_ReturnsPercentageInRange()
         {
@@ -319,7 +326,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- string.equal ---------------------------------------------------------
-
         [Fact]
         public async Task StringEqual_SameString_ReturnsTrue()
         {
@@ -342,7 +348,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- setenv / getenv ------------------------------------------------------
-
         [Fact]
         public async Task SetEnv_GetEnv_RoundTrip()
         {
@@ -381,7 +386,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- table.first ----------------------------------------------------------
-
         [Fact]
         public async Task TableFirst_UniqueMatch_ReturnsKey()
         {
@@ -405,7 +409,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- table.select ---------------------------------------------------------
-
         [Fact]
         public async Task TableSelect_FilterEvenNumbers_ReturnsCorrectValues()
         {
@@ -425,7 +428,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- GetIsAdmin -----------------------------------------------------------
-
         [Fact]
         public async Task GetIsAdmin_ReturnsBool()
         {
@@ -434,7 +436,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- GetComputerName ------------------------------------------------------
-
         [Fact]
         public async Task GetComputerName_ReturnsNonEmptyString()
         {
@@ -443,7 +444,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- GetScreenSize / GetCursorPosition ------------------------------------
-
         [Fact]
         public async Task GetScreenSize_ReturnsTwoNumbers()
         {
@@ -466,7 +466,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- BencodeDecode --------------------------------------------------------
-
         [Fact]
         public async Task BencodeDecode_StringField_Decoded()
         {
@@ -500,7 +499,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- GetLastError ---------------------------------------------------------
-
         [Fact]
         public async Task GetLastError_WithCode2_ReturnsNonEmptyMessageAndCode()
         {
@@ -516,7 +514,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- c global variable ----------------------------------------------------
-
         [Fact]
         public async Task CGlobal_IsTable()
         {
@@ -539,7 +536,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- Global variables -----------------------------------------------------
-
         [Fact]
         public async Task VERSION_Global_IsNonEmptyString()
         {
@@ -563,7 +559,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- Clipboard ------------------------------------------------------------
-
         [Fact]
         public async Task Clipboard_SetAndGet_RoundTrip()
         {
@@ -576,11 +571,13 @@ namespace KitsuneNet.Tests
                 if got ~= 'kitsune_clip_test_xyz' then return 'skip' end
                 return got
             ");
-            if (r != "skip") r.ShouldBe("kitsune_clip_test_xyz");
+            if (r != "skip")
+            {
+                r.ShouldBe("kitsune_clip_test_xyz");
+            }
         }
 
         // -- GetKeyState / HasKeyDown ---------------------------------------------
-
         [Fact]
         public async Task GetKeyState_ReturnsBoolean()
         {
@@ -596,7 +593,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- Dns ------------------------------------------------------------------
-
         [Fact]
         public async Task Dns_Localhost_ReturnsString()
         {
@@ -624,11 +620,13 @@ namespace KitsuneNet.Tests
                     type(entry.IP)   == 'string' and
                     (entry.Type == 'IPV4' or entry.Type == 'IPV6'))
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         // -- Put / GetTextColor (smoke tests) -------------------------------------
-
         [Fact]
         public async Task Put_DoesNotThrow()
         {
@@ -650,7 +648,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- Base64 ---------------------------------------------------------------
-
         [Fact]
         public async Task Base64_Encode_ReturnsCorrectString()
         {
@@ -716,7 +713,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- Hashing --------------------------------------------------------------
-
         [Fact]
         public async Task SHA256_OfAbc_MatchesEngineOutput()
         {
@@ -820,7 +816,6 @@ namespace KitsuneNet.Tests
         // Json.Null is the fixed lightuserdata sentinel for JSON null values.
 
         // -- Instance round-trips ---------------------------------------------
-
         [Fact]
         public async Task Json_Encode_ProducesValidJson()
         {
@@ -902,7 +897,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- Number encoding --------------------------------------------------
-
         [Fact]
         public async Task Json_Integer_EncodedWithoutDecimal()
         {
@@ -984,7 +978,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- Boolean / nil encoding -------------------------------------------
-
         [Fact]
         public async Task Json_Boolean_True_EncodesCorrectly()
         {
@@ -1007,7 +1000,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- Array vs object detection ----------------------------------------
-
         [Fact]
         public async Task Json_SequenceTable_EncodesAsArray()
         {
@@ -1105,7 +1097,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- String escaping --------------------------------------------------
-
         [Fact]
         public async Task Json_DecodeEscapes_HandledCorrectly()
         {
@@ -1172,7 +1163,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- Null sentinel ----------------------------------------------------
-
         [Fact]
         public async Task Json_NullSentinel_RoundTrips()
         {
@@ -1225,7 +1215,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- Encode / Decode --------------------------------------------------
-
         [Fact]
         public async Task Json_Decode_ReturnsTable()
         {
@@ -1285,7 +1274,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- Stream I/O ----------------------------------------------------------
-
         [Fact]
         public async Task Json_EncodeIntoStream_StreamContainsValidJson()
         {
@@ -1473,7 +1461,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- Encode stream / Wchar as JSON value ----------------------------------
-
         [Fact]
         public async Task Json_Encode_Stream_ReadableSeekable_ProducesJsonString()
         {
@@ -1643,7 +1630,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- Wchar ----------------------------------------------------------------
-
         [Fact]
         public async Task Wchar_FromUtf8_ToUtf8_RoundTrip()
         {
@@ -1942,7 +1928,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- Stream Wchar read/write -----------------------------------------------
-
         [Fact]
         public async Task Stream_WriteWchar_ReadWchar_AsciiRoundTrip()
         {
@@ -2153,7 +2138,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- Aes ------------------------------------------------------------------
-
         [Fact]
         public async Task Aes_EncryptDecrypt_RoundTrip()
         {
@@ -2242,7 +2226,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- Stream (in-memory) ---------------------------------------------------
-
         [Fact]
         public async Task Stream_Create_FromString_LoadsDataAtPositionZero()
         {
@@ -2547,7 +2530,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- Stream backend error propagation -------------------------------------
-
         [Fact]
         public async Task Stream_BackendReadError_PropagatesViaPcall()
         {
@@ -2642,7 +2624,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- Stream.Open (file backend) -------------------------------------------
-
         [Fact]
         public async Task Stream_Open_WriteRead_RoundTrip()
         {
@@ -2766,7 +2747,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- Stream (module API) --------------------------------------------------
-
         [Fact]
         public async Task Stream_Seek_AllowsMultipleReads()
         {
@@ -2859,7 +2839,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- CSV ------------------------------------------------------------------
-
         [Fact]
         public async Task CSV_DecodeString_ParsesRows()
         {
@@ -3457,7 +3436,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- Mutex ----------------------------------------------------------------
-
         [Fact]
         public async Task Mutex_Open_LockAndUnlock_Succeeds()
         {
@@ -3497,7 +3475,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- FileSystem -----------------------------------------------------------
-
         [Fact]
         public async Task FileSystem_CurrentDirectory_ReturnsNonEmptyString()
         {
@@ -3877,7 +3854,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- CSV instance extras --------------------------------------------------
-
         [Fact]
         public async Task CSV_Create_AliasWorksIdenticallyToNew()
         {
@@ -4023,7 +3999,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- Json extras ----------------------------------------------------------
-
         [Fact]
         public async Task Json_NegativeInfinity_EncodesAsSpecialLiteral()
         {
@@ -4091,7 +4066,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- Stream extras --------------------------------------------------------
-
         [Fact]
         public async Task Stream_WriteDouble_ReadDouble_RoundTrip()
         {
@@ -4253,7 +4227,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- Write / Read coverage -------------------------------------------------
-
         [Fact]
         public async Task Stream_Write_ReturnsWrittenByteCount()
         {
@@ -4311,7 +4284,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- SetByte / PeekByte extra forms ----------------------------------------
-
         [Fact]
         public async Task Stream_SetByte_WithoutPosition_WritesAtCursorAndAdvances()
         {
@@ -4364,7 +4336,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- Capability-guard return values ----------------------------------------
-
         [Fact]
         public async Task Stream_Seek_NonSeekable_ReturnsFalse()
         {
@@ -4408,7 +4379,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- WriteByte boundary and range ------------------------------------------
-
         [Fact]
         public async Task Stream_WriteByte_OutOfRange_ReturnsFalse()
         {
@@ -4433,7 +4403,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- Signed short ----------------------------------------------------------
-
         [Fact]
         public async Task Stream_WriteShort_NegativeValue_RoundTrips()
         {
@@ -4447,7 +4416,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- ReadUtf8 extended coverage --------------------------------------------
-
         [Fact]
         public async Task Stream_ReadUtf8_MultiByte_ReturnsCodepoint()
         {
@@ -4477,7 +4445,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- WriteUtf8 Latin-1 conversion ------------------------------------------
-
         [Fact]
         public async Task Stream_WriteUtf8_HighByte_ConvertedToUtf8Pair()
         {
@@ -4496,7 +4463,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- Compress / Decompress error paths -------------------------------------
-
         [Fact]
         public async Task Stream_Compress_NonReadableSource_ReturnsNilAndError()
         {
@@ -4546,7 +4512,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- Misc stream operations ------------------------------------------------
-
         [Fact]
         public async Task Stream_Close_ExplicitCall_DoesNotCrash()
         {
@@ -4572,7 +4537,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- SharedMemory (ToSharedMemory / OpenSharedMemory) ---------------------
-
         [Fact]
         public async Task SharedMemory_OpenSharedMemory_InfoType_IsSharedMemoryOut()
         {
@@ -4767,7 +4731,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- Process --------------------------------------------------------------
-
         [Fact]
         public async Task Process_All_ReturnsTableWithAtLeastOneEntry()
         {
@@ -4881,7 +4844,10 @@ namespace KitsuneNet.Tests
                 end
                 return tostring(out:find('hello') ~= nil)
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -4897,7 +4863,10 @@ namespace KitsuneNet.Tests
                 local err = proc:ReadErrorFromPipe()
                 return tostring(err == nil or type(err) == 'string')
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -4912,7 +4881,10 @@ namespace KitsuneNet.Tests
                 proc:Stop()
                 return tostring(code == nil)
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -4925,7 +4897,10 @@ namespace KitsuneNet.Tests
                 if proc == nil then return 'skip' end
                 return tostring(proc:Stop() == true)
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -4944,7 +4919,10 @@ namespace KitsuneNet.Tests
                 end
                 return tostring(type(code) == 'number')
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -4966,7 +4944,10 @@ namespace KitsuneNet.Tests
                 local c2 = proc:GetExitCode()
                 return tostring(c1 ~= nil and c1 == c2)
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -4980,7 +4961,10 @@ namespace KitsuneNet.Tests
                 if proc == nil then return 'skip' end
                 return tostring(proc:ReadFromPipe() == nil)
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -4997,7 +4981,10 @@ namespace KitsuneNet.Tests
                 proc:Stop()
                 return tostring(type(written) == 'number' and written > 0)
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -5012,45 +4999,15 @@ namespace KitsuneNet.Tests
                 proc:Stop()
                 return tostring(math.type(id) == 'integer' and id > 0)
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         // -- Async stream (CreateChunked / HasData / CSV / Compress) --------------
         // All tests that involve yielding coroutines use the helper below, which
         // mirrors the coroutine-resume loop that test scripts previously used.
-
-        private const string RunCoroutine = @"
-            local function run(fn)
-                local co = coroutine.create(fn)
-                local ok, err = coroutine.resume(co)
-                while ok and coroutine.status(co) ~= 'dead' do
-                    ok, err = coroutine.resume(co)
-                end
-                if not ok then error(err, 2) end
-            end
-        ";
-
-        // Lua function-backend that replicates the old CreateChunked behaviour:
-        // CAP_READ only (no seek), yields once via Sleep(0) before each chunk,
-        // reports HasData/len state through STREAM_OP_HASDATA / STREAM_OP_LEN.
-        private const string MakeChunkedStream = @"
-            local function makeChunkedStream(chunks)
-                local idx, pending = 1, false
-                return Stream.Create(function(op)
-                    if op == 0 then return 1 end
-                    if op == 1 then return true end
-                    if op == 5 then return pending and 1 or 0 end
-                    if op == 8 then return pending end
-                    if op == 2 then
-                        if idx > #chunks then return nil end
-                        if not pending then pending = true; Sleep(0) end
-                        pending = false
-                        local c = chunks[idx]; idx = idx + 1; return c
-                    end
-                end)
-            end
-        ";
-
         [Fact]
         public async Task Stream_CreateChunked_IsNotNil()
         {
@@ -5344,12 +5301,6 @@ namespace KitsuneNet.Tests
         // simulated by returning at most N bytes per Read() call, forcing each consumer
         // (CSV, Compress, JSON) to issue multiple reads.  This exercises the same
         // multi-read code paths that real network sockets exercise at runtime.
-
-        // Helper Lua prologue shared by all socket-simulation tests.
-        // OPEN=0, CLOSE=1, READ=2, CAP_READ=1
-        private const string SocketPrologue =
-            "local OPEN, CLOSE, READ, CAP_READ = 0, 1, 2, 1\n";
-
         [Fact]
         public async Task Stream_FunctionBackendSocket_Read_DeliversAllChunks()
         {
@@ -5575,6 +5526,49 @@ namespace KitsuneNet.Tests
                 return 'ok'
             ");
             r.ShouldBe("ok");
+        }
+
+        private static async Task<string?> Run(string lua)
+        {
+            var engine = new KitsuneEngine();
+            string? result;
+            try
+            {
+                result = await engine.ExecuteStringAsync(lua).ConfigureAwait(false);
+            }
+            finally
+            {
+                engine.Dispose();
+            }
+
+            if (engine.LeakedAllocations != 0)
+            {
+                throw new InvalidOperationException($"Native memory leak: {engine.LeakedAllocations} unfreed allocation(s) after KitsuneCleanup");
+            }
+
+            return result;
+        }
+
+        private static async Task<string?> RunWithSession(string lua)
+        {
+            var engine = new KitsuneEngine();
+            engine.RegisterSession();
+            string? result;
+            try
+            {
+                result = await engine.ExecuteStringAsync(lua).ConfigureAwait(false);
+            }
+            finally
+            {
+                engine.Dispose();
+            }
+
+            if (engine.LeakedAllocations != 0)
+            {
+                throw new InvalidOperationException($"Native memory leak: {engine.LeakedAllocations} unfreed allocation(s) after KitsuneCleanup");
+            }
+
+            return result;
         }
     }
 }

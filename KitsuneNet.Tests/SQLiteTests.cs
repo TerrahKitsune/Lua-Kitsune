@@ -15,19 +15,7 @@ namespace KitsuneNet.Tests;
 /// </summary>
 public sealed class SQLiteTests
 {
-    private static async Task<string?> Run(string lua)
-    {
-        var engine = new KitsuneEngine();
-        string? result;
-        try { result = await engine.ExecuteStringAsync(lua); }
-        finally { engine.Dispose(); }
-        if (engine.LeakedAllocations != 0)
-            throw new InvalidOperationException($"Native memory leak: {engine.LeakedAllocations} unfreed allocation(s) after KitsuneCleanup");
-        return result;
-    }
-
     // -- In-memory ------------------------------------------------------------
-
     [Fact]
     public async Task SQLite_InMemory_CreateInsertSelect()
     {
@@ -232,7 +220,6 @@ public sealed class SQLiteTests
     }
 
     // -- Query return values --------------------------------------------------
-
     [Fact]
     public async Task SQLite_Query_DML_Returns_Done()
     {
@@ -278,7 +265,6 @@ public sealed class SQLiteTests
     }
 
     // -- Finish ---------------------------------------------------------------
-
     [Fact]
     public async Task SQLite_Finish_AbandonsMidQuery_AllowsNextQuery()
     {
@@ -318,7 +304,6 @@ public sealed class SQLiteTests
     }
 
     // -- GetRow edge cases ----------------------------------------------------
-
     [Fact]
     public async Task SQLite_GetRow_OutOfRange_ReturnsNil()
     {
@@ -338,7 +323,6 @@ public sealed class SQLiteTests
     }
 
     // -- BLOB column ----------------------------------------------------------
-
     [Fact]
     public async Task SQLite_BlobColumn_ReturnsStreamUserdata()
     {
@@ -375,7 +359,6 @@ public sealed class SQLiteTests
     }
 
     // -- Parameter binding ----------------------------------------------------
-
     [Fact]
     public async Task SQLite_ParameterizedQuery_FunctionBind()
     {
@@ -435,7 +418,6 @@ public sealed class SQLiteTests
     }
 
     // -- Custom functions -----------------------------------------------------
-
     [Fact]
     public async Task SQLite_RegisterFunction_ReturnsString()
     {
@@ -500,7 +482,6 @@ public sealed class SQLiteTests
     }
 
     // -- ToggleWidechar -------------------------------------------------------
-
     [Fact]
     public async Task SQLite_ToggleWidechar_False_TextComesBackAsString()
     {
@@ -538,7 +519,6 @@ public sealed class SQLiteTests
     }
 
     // -- __tostring -----------------------------------------------------------
-
     [Fact]
     public async Task SQLite_Tostring_InMemory_ContainsPointerAndMemoryKeyword()
     {
@@ -553,7 +533,6 @@ public sealed class SQLiteTests
     }
 
     // -- Lua() built-in SQL function ------------------------------------------
-
     [Fact]
     public async Task SQLite_LuaBuiltinFunction_CanRunScript()
     {
@@ -602,7 +581,6 @@ public sealed class SQLiteTests
     }
 
     // -- SetBusyHandler -------------------------------------------------------
-
     [Fact]
     public async Task SQLite_SetBusyHandler_SetAndClear_DoesNotCrash()
     {
@@ -624,7 +602,6 @@ public sealed class SQLiteTests
     }
 
     // -- Open modes -----------------------------------------------------------
-
     [Fact]
     public async Task SQLite_Open_Mode1_Multithread_OpensSuccessfully()
     {
@@ -654,7 +631,6 @@ public sealed class SQLiteTests
     }
 
     // -- File database --------------------------------------------------------
-
     [SQLiteFact]
     public async Task SQLite_FileDatabase_OpenAndVersion()
     {
@@ -751,5 +727,25 @@ public sealed class SQLiteTests
 			return tostring(tostring(mode) == 'wal')
 		");
         r.ShouldBe("true");
+    }
+
+    private static async Task<string?> Run(string lua)
+    {
+        var engine = new KitsuneEngine();
+        string? result;
+        try
+        {
+            result = await engine.ExecuteStringAsync(lua).ConfigureAwait(false);
+        }
+        finally
+        {
+            engine.Dispose();
+        }
+
+        if (engine.LeakedAllocations != 0)
+        {
+            throw new InvalidOperationException($"Native memory leak: {engine.LeakedAllocations} unfreed allocation(s) after KitsuneCleanup");
+        }
+        return result;
     }
 }

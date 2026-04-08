@@ -15,18 +15,7 @@ namespace KitsuneNet.Tests
     /// </summary>
     public sealed class KitsuneHttpTests
     {
-        private static async Task<string?> Run(string lua)
-        {
-            var engine = new KitsuneEngine();
-            string? result;
-            try   { result = await engine.ExecuteStringAsync(lua); }
-            finally { engine.Dispose(); }
-            if (engine.LeakedAllocations != 0)
-                throw new InvalidOperationException($"Native memory leak: {engine.LeakedAllocations} unfreed allocation(s) after KitsuneCleanup");
-            return result;
-        }
-
-        // ── Shared helpers ────────────────────────────────────────────────────
+        private const string WsUrl = "wss://echo.websocket.org";
 
         // drain(co): resumes a client:Request() coroutine until it produces a
         // non-nil result and returns (ok, result).
@@ -38,10 +27,6 @@ namespace KitsuneNet.Tests
             end
         ";
 
-        // run_http: drives a coroutine that uses streaming or WebSocket ops.
-        // skip() is only for the Http == nil (not compiled) case.
-        // ws_connect: wraps client:Connect() and drains the echo server's
-        // one-time "Request served by <id>" welcome frame before returning.
         private const string StreamHelper = @"
             local _outcome = nil
             local function skip() error('__skip__') end
@@ -66,21 +51,25 @@ namespace KitsuneNet.Tests
         ";
 
         // ── Http module availability ──────────────────────────────────────────
-
         [Fact]
         public async Task Http_Module_IsTableWhenAvailable()
         {
             string? r = await Run("if Http == nil then return 'skip' end; return type(Http)");
-            if (r != "skip") r.ShouldBe("table");
+            if (r != "skip")
+            {
+                r.ShouldBe("table");
+            }
         }
 
         // ── Http.Create ───────────────────────────────────────────────────────
-
         [Fact]
         public async Task Http_Create_ReturnsNonNil()
         {
             string? r = await Run("if Http == nil then return 'skip' end; return tostring(Http.Create() ~= nil)");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -91,7 +80,10 @@ namespace KitsuneNet.Tests
                 local s = tostring(Http.Create())
                 return tostring(type(s) == 'string' and #s > 0)
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -106,11 +98,13 @@ namespace KitsuneNet.Tests
                 c:SetDefaultHeader('X-Test', '1')
                 return 'ok'
             ");
-            if (r != "skip") r.ShouldBe("ok");
+            if (r != "skip")
+            {
+                r.ShouldBe("ok");
+            }
         }
 
         // ── Http.UrlEncode / Http.UrlDecode (no network required) ─────────────
-
         [Fact]
         public async Task Http_UrlEncode_SpacesAreEncoded()
         {
@@ -118,7 +112,10 @@ namespace KitsuneNet.Tests
                 if Http == nil then return 'skip' end
                 return tostring(Http.UrlEncode('hello world'):find(' ') == nil)
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -128,7 +125,10 @@ namespace KitsuneNet.Tests
                 if Http == nil then return 'skip' end
                 return tostring(Http.UrlEncode('a&b'):find('%%26') ~= nil)
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -139,7 +139,10 @@ namespace KitsuneNet.Tests
                 local orig = 'hello world & foo=bar'
                 return tostring(Http.UrlDecode(Http.UrlEncode(orig)) == orig)
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -150,7 +153,10 @@ namespace KitsuneNet.Tests
                 local safe = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.~'
                 return tostring(Http.UrlEncode(safe) == safe)
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -160,7 +166,10 @@ namespace KitsuneNet.Tests
                 if Http == nil then return 'skip' end
                 return tostring(Http.UrlDecode('hello+world') == 'hello world')
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -170,11 +179,13 @@ namespace KitsuneNet.Tests
                 if Http == nil then return 'skip' end
                 return tostring(Http.UrlEncode('') == '' and Http.UrlDecode('') == '')
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         // ── Buffered GET ──────────────────────────────────────────────────────
-
         [Fact]
         public async Task Http_GET_Returns200()
         {
@@ -187,7 +198,10 @@ namespace KitsuneNet.Tests
                 local ok, result = drain(co)
                 return tostring(result.Code == 200)
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -201,7 +215,10 @@ namespace KitsuneNet.Tests
                 local ok, result = drain(co)
                 return result.Status
             ");
-            if (r != "skip") r.ShouldBe("OK");
+            if (r != "skip")
+            {
+                r.ShouldBe("OK");
+            }
         }
 
         [Fact]
@@ -215,7 +232,10 @@ namespace KitsuneNet.Tests
                 local ok, result = drain(co)
                 return tostring(type(result.Contents) == 'string' and #result.Contents > 0)
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -229,11 +249,13 @@ namespace KitsuneNet.Tests
                 local ok, result = drain(co)
                 return tostring(type(result.Headers) == 'table')
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         // ── POST with JSON body ───────────────────────────────────────────────
-
         [Fact]
         public async Task Http_POST_JsonBody_EchoesPostedData()
         {
@@ -247,11 +269,13 @@ namespace KitsuneNet.Tests
                 local ok, result = drain(co)
                 return tostring(result.Code == 200 and result.Contents:find('kitsune') ~= nil)
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         // ── Timeout → transport error (Code is nil) ───────────────────────────
-
         [Fact]
         public async Task Http_Timeout_TransportError_CodeIsNil()
         {
@@ -267,7 +291,10 @@ namespace KitsuneNet.Tests
                 if not ok then return 'true' end
                 return tostring(result.Code == nil)
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -284,11 +311,13 @@ namespace KitsuneNet.Tests
                 if result.Code ~= nil then return 'skip' end
                 return tostring(type(result.Status) == 'string' and #result.Status > 0)
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         // ── Buffered request with outStream ───────────────────────────────────
-
         [Fact]
         public async Task Http_Request_OutStream_ContentsIsNil()
         {
@@ -301,11 +330,13 @@ namespace KitsuneNet.Tests
                 local ok, result = drain(co)
                 return tostring(result.Code == 200 and result.Contents == nil and sink:len() > 0)
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         // ── Streaming GET ─────────────────────────────────────────────────────
-
         [Fact]
         public async Task Http_Stream_GetInfo_Returns200()
         {
@@ -321,7 +352,10 @@ namespace KitsuneNet.Tests
                 end)
                 return _outcome or 'skip'
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -339,7 +373,10 @@ namespace KitsuneNet.Tests
                 end)
                 return _outcome or 'skip'
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -363,7 +400,10 @@ namespace KitsuneNet.Tests
                 end)
                 return _outcome or 'skip'
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -387,11 +427,13 @@ namespace KitsuneNet.Tests
                 end)
                 return _outcome or 'skip'
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         // ── DELETE ────────────────────────────────────────────────────────────
-
         [Fact]
         public async Task Http_DELETE_Returns200()
         {
@@ -403,7 +445,10 @@ namespace KitsuneNet.Tests
                 local ok, result = drain(co)
                 return tostring(result.Code == 200)
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -417,11 +462,13 @@ namespace KitsuneNet.Tests
                 local ok, result = drain(co)
                 return tostring(result.Code == 200 and result.Contents:find('delete') ~= nil)
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         // ── PUT ───────────────────────────────────────────────────────────────
-
         [Fact]
         public async Task Http_PUT_Returns200()
         {
@@ -435,7 +482,10 @@ namespace KitsuneNet.Tests
                 local ok, result = drain(co)
                 return tostring(result.Code == 200)
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -451,11 +501,13 @@ namespace KitsuneNet.Tests
                 local ok, result = drain(co)
                 return tostring(result.Code == 200 and result.Contents:find('kitsune_put') ~= nil)
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         // ── PATCH ─────────────────────────────────────────────────────────────
-
         [Fact]
         public async Task Http_PATCH_Returns200()
         {
@@ -469,7 +521,10 @@ namespace KitsuneNet.Tests
                 local ok, result = drain(co)
                 return tostring(result.Code == 200)
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -485,11 +540,13 @@ namespace KitsuneNet.Tests
                 local ok, result = drain(co)
                 return tostring(result.Code == 200 and result.Contents:find('kitsune_patch') ~= nil)
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         // ── Query-string args ─────────────────────────────────────────────────
-
         [Fact]
         public async Task Http_GET_QueryArgs_EchoedInArgsField()
         {
@@ -504,7 +561,10 @@ namespace KitsuneNet.Tests
                     result.Contents:find('kitsune') ~= nil and
                     result.Contents:find('engine')  ~= nil)
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -519,11 +579,13 @@ namespace KitsuneNet.Tests
                 local ok, result = drain(co)
                 return tostring(result.Code == 200 and result.Contents:find('hello world') ~= nil)
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         // ── Request headers ───────────────────────────────────────────────────
-
         [Fact]
         public async Task Http_DefaultHeader_AppearsInEchoedHeaders()
         {
@@ -536,7 +598,10 @@ namespace KitsuneNet.Tests
                 local ok, result = drain(co)
                 return tostring(result.Code == 200 and result.Contents:find('kitsune_default_hdr') ~= nil)
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -551,7 +616,10 @@ namespace KitsuneNet.Tests
                 local ok, result = drain(co)
                 return tostring(result.Code == 200 and result.Contents:find('kitsune_per_req_hdr') ~= nil)
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -570,11 +638,13 @@ namespace KitsuneNet.Tests
                     result.Contents:find('val_default') ~= nil and
                     result.Contents:find('val_percall') ~= nil)
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         // ── POST form-urlencoded ──────────────────────────────────────────────
-
         [Fact]
         public async Task Http_POST_FormUrlEncoded_EchoedInFormField()
         {
@@ -588,11 +658,13 @@ namespace KitsuneNet.Tests
                 local ok, result = drain(co)
                 return tostring(result.Code == 200 and result.Contents:find('kitsune') ~= nil)
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         // ── Streaming for non-GET methods ─────────────────────────────────────
-
         [Fact]
         public async Task Http_Stream_POST_Returns200()
         {
@@ -610,7 +682,10 @@ namespace KitsuneNet.Tests
                 end)
                 return _outcome or 'skip'
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -633,7 +708,10 @@ namespace KitsuneNet.Tests
                 end)
                 return _outcome or 'skip'
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -653,7 +731,10 @@ namespace KitsuneNet.Tests
                 end)
                 return _outcome or 'skip'
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -673,7 +754,10 @@ namespace KitsuneNet.Tests
                 end)
                 return _outcome or 'skip'
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -691,13 +775,13 @@ namespace KitsuneNet.Tests
                 end)
                 return _outcome or 'skip'
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         // ── WebSocket ─────────────────────────────────────────────────────────
-
-        private const string WsUrl = "wss://echo.websocket.org";
-
         [Fact]
         public async Task Http_WebSocket_Connect_Succeeds()
         {
@@ -712,7 +796,10 @@ namespace KitsuneNet.Tests
                 end)
                 return _outcome or 'skip'
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -731,7 +818,10 @@ namespace KitsuneNet.Tests
                 end)
                 return _outcome or 'skip'
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -751,7 +841,10 @@ namespace KitsuneNet.Tests
                 end)
                 return _outcome or 'skip'
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -772,7 +865,10 @@ namespace KitsuneNet.Tests
                 end)
                 return _outcome or 'skip'
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -793,7 +889,10 @@ namespace KitsuneNet.Tests
                 end)
                 return _outcome or 'skip'
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -813,7 +912,10 @@ namespace KitsuneNet.Tests
                 end)
                 return _outcome or 'skip'
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -836,7 +938,10 @@ namespace KitsuneNet.Tests
                 end)
                 return _outcome or 'skip'
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -863,7 +968,10 @@ namespace KitsuneNet.Tests
                 end)
                 return _outcome or 'skip'
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -881,7 +989,10 @@ namespace KitsuneNet.Tests
                 end)
                 return _outcome or 'skip'
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -900,7 +1011,10 @@ namespace KitsuneNet.Tests
                 end)
                 return _outcome or 'skip'
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
         }
 
         [Fact]
@@ -920,7 +1034,30 @@ namespace KitsuneNet.Tests
                 end)
                 return _outcome or 'skip'
             ");
-            if (r != "skip") r.ShouldBe("true");
+            if (r != "skip")
+            {
+                r.ShouldBe("true");
+            }
+        }
+
+        private static async Task<string?> Run(string lua)
+        {
+            var engine = new KitsuneEngine();
+            string? result;
+            try
+            {
+                result = await engine.ExecuteStringAsync(lua).ConfigureAwait(false);
+            }
+            finally
+            {
+                engine.Dispose();
+            }
+
+            if (engine.LeakedAllocations != 0)
+            {
+                throw new InvalidOperationException($"Native memory leak: {engine.LeakedAllocations} unfreed allocation(s) after KitsuneCleanup");
+            }
+            return result;
         }
     }
 }
