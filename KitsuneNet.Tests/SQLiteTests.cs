@@ -389,10 +389,10 @@ public sealed class SQLiteTests
 			end)
 			db:Fetch()
 			db:Query('SELECT id, name FROM t')
-			db:Fetch()
-			local row = db:GetRow()
-			db:Close()
-			return tostring(row.id == 42 and row.name == 'fn_value')
+				db:Fetch()
+				local row = db:GetRow()
+				db:Close()
+				return tostring(row.id == 42 and tostring(row.name) == 'fn_value')
 		");
 		r.ShouldBe("true");
 	}
@@ -663,9 +663,9 @@ public sealed class SQLiteTests
             local db = SQLite.Open(os.getenv('KITSUNE_SQLITE_TEST'))
             db:Query('SELECT sqlite_version()')
             db:Fetch()
-            local v = db:GetRow(1)
-            db:Close()
-            return tostring(type(v) == 'string' and #v > 0)
+			local v = db:GetRow(1)
+			db:Close()
+			return tostring(v ~= nil and #tostring(v) > 0)
         ");
 		r.ShouldBe("true");
 	}
@@ -748,7 +748,7 @@ public sealed class SQLiteTests
 			db:Fetch()
 			local mode = db:GetRow(1)
 			db:Close()
-			return tostring(mode == 'wal')
+			return tostring(tostring(mode) == 'wal')
 		");
 		r.ShouldBe("true");
 	}
