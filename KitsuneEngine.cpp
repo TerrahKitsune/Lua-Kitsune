@@ -201,26 +201,58 @@ static void SetSlotError(KitsuneCoroutine* slot, const char* msg) {
 // Forward declaration — defined after FillKitsuneVariableFromStack to allow mutual recursion for nested tables.
 static KeyValuePairKitsuneVariableNode* TableToLinkedList(lua_State* L, int idx, int depth);
 
+// ── Deferred variable-free queue ─────────────────────────────────────────────
+// KitsuneVariableFree enqueues TFUNCTION / TTABLE (with function nodes) here instead of
+// blocking on AcquireLuaAccess.  The scheduler drains the queue each cycle so luaL_unref
+// is always called from a context that already owns the Lua state.
+struct KitsuneVariableChain {
+	KitsuneVariable*      variable;
+	KitsuneVariableChain* next;
+};
+static std::atomic<KitsuneVariableChain*> g_pendingVariableChainHead{nullptr};
+
+// Forward declaration — FreeVariableData is defined after FreeKVNode below.
+static void FreeVariableData(KitsuneVariable* var, lua_State* L);
+
+// Atomically swaps the entire pending chain out and processes every entry.
+// Must be called from a context that holds Lua access (scheduler thread or KitsuneCleanup).
+static void DrainPendingVariableChain(lua_State* L) {
+	KitsuneVariableChain* chain = g_pendingVariableChainHead.exchange(nullptr, std::memory_order_acquire);
+	while (chain) {
+		KitsuneVariableChain* next = chain->next;
+		FreeVariableData(chain->variable, L);
+		gff_free(chain->variable);
+		gff_free(chain);
+		chain = next;
+	}
+}
+
 // Recursively frees a KeyValuePairKitsuneVariableNode linked list produced by TableToLinkedList.
-static void FreeKVNode(KeyValuePairKitsuneVariableNode* node) {
+// L must be non-NULL if any node key or value may be LUA_TFUNCTION (to release registry refs).
+static void FreeKVNode(KeyValuePairKitsuneVariableNode* node, lua_State* L) {
 	while (node) {
 		if ((node->key.type == LUA_TSTRING || node->key.type == KITSUNE_TJSON || node->key.type == KITSUNE_TCHAR16 || node->key.type == KITSUNE_TERROR || node->key.type == LUA_TUSERDATA) && node->key.data)
 			gff_free(node->key.data);
 		else if (node->key.type == LUA_TTABLE && node->key.table)
-			FreeKVNode(node->key.table);
+			FreeKVNode(node->key.table, L);
+		else if (node->key.type == LUA_TFUNCTION && L && (int)node->key.integer != LUA_NOREF)
+			luaL_unref(L, LUA_REGISTRYINDEX, (int)node->key.integer);
 		if ((node->value.type == LUA_TSTRING || node->value.type == KITSUNE_TJSON || node->value.type == KITSUNE_TCHAR16 || node->value.type == KITSUNE_TERROR || node->value.type == LUA_TUSERDATA) && node->value.data)
 			gff_free(node->value.data);
 		else if (node->value.type == LUA_TTABLE && node->value.table)
-			FreeKVNode(node->value.table);
+			FreeKVNode(node->value.table, L);
+		else if (node->value.type == LUA_TFUNCTION && L && (int)node->value.integer != LUA_NOREF)
+			luaL_unref(L, LUA_REGISTRYINDEX, (int)node->value.integer);
 		KeyValuePairKitsuneVariableNode* next = node->next;
 		gff_free(node);
 		node = next;
 	}
 }
 
-// Frees the heap data owned by a KitsuneVariable (string bytes or table linked list).
+// Frees the heap data owned by a KitsuneVariable (string bytes, table linked list, or Lua function ref).
 // Nulls the data pointer after freeing to prevent double-free. Does NOT free var itself.
-static void FreeVariableData(KitsuneVariable* var) {
+// L must be non-NULL when var may be LUA_TFUNCTION or LUA_TTABLE containing functions.
+static void FreeVariableData(KitsuneVariable* var, lua_State* L) {
 	if (!var) return;
 	if ((var->type == LUA_TSTRING || var->type == KITSUNE_TJSON || var->type == KITSUNE_TERROR || var->type == LUA_TUSERDATA) && var->data) {
 		gff_free(var->data);
@@ -231,7 +263,7 @@ static void FreeVariableData(KitsuneVariable* var) {
 		var->char16data = NULL;
 	}
 	else if (var->type == LUA_TTABLE && var->table) {
-		FreeKVNode(var->table);
+		FreeKVNode(var->table, L);
 		var->table = NULL;
 	}
 	else if (var->type == KITSUNE_TSTREAM) {
@@ -239,6 +271,10 @@ static void FreeVariableData(KitsuneVariable* var) {
 		if (var->stream)
 			var->stream->flags |= KITSUNE_SHARED_MEMORY_FLAG_ACCESSOR_DISPOSED;
 		var->stream = NULL;
+	}
+	else if (var->type == LUA_TFUNCTION && L && (int)var->integer != LUA_NOREF) {
+		luaL_unref(L, LUA_REGISTRYINDEX, (int)var->integer);
+		var->integer = LUA_NOREF;
 	}
 }
 
@@ -338,8 +374,15 @@ static void FillKitsuneVariableFromStack(lua_State* L, int idx, KitsuneVariable*
 		if (!shallow)
 			out->table = TableToLinkedList(L, abs_idx, KITSUNE_MAX_TABLE_DEPTH);
 		break;
+	case LUA_TFUNCTION:
+		// Anchor the function in the Lua registry so it survives beyond this stack frame.
+		// The ref is stored in out->integer; release with luaL_unref via FreeVariableData.
+		lua_pushvalue(L, abs_idx);
+		out->integer = luaL_ref(L, LUA_REGISTRYINDEX);
+		out->type = LUA_TFUNCTION;
+		break;
 	default:
-		out->type = t;  // preserve actual type (function, thread, etc.); data/table remain NULL
+		out->type = t;  // preserve actual type (thread, lightuserdata, etc.); data/table remain NULL
 		break;
 	}
 }
@@ -452,6 +495,14 @@ static void PushKitsuneVariable(lua_State* L, const KitsuneVariable* v) {
 		else
 			lua_pushnil(L);  // NULL or not created via KitsuneCreateMemoryBlock — push nil
 		break;
+	case LUA_TFUNCTION:
+		// Push the function from the Lua registry using the stored ref.
+		// Pushing via rawgeti does not consume the ref; the caller retains ownership.
+		if ((int)v->integer != LUA_NOREF)
+			lua_rawgeti(L, LUA_REGISTRYINDEX, (int)v->integer);
+		else
+			lua_pushnil(L);
+		break;
 	default:
 		lua_pushnil(L);
 		break;
@@ -459,7 +510,7 @@ static void PushKitsuneVariable(lua_State* L, const KitsuneVariable* v) {
 }
 
 static void SetSlotResult(KitsuneCoroutine* slot, lua_State* T, int idx) {
-	FreeVariableData(&slot->result);
+	FreeVariableData(&slot->result, T);
 	memset(&slot->result, 0, sizeof(slot->result));
 	slot->result.type = LUA_TNONE;
 	int t = lua_type(T, idx);
@@ -678,6 +729,8 @@ static void SchedulerProc(KitsuneState* state) {
 		// Sweep the global shared-memory block registry: free any block where both
 		// OWNER_DISPOSED and ACCESSOR_DISPOSED flags are set.
 		lua_shmem_sweep_disposed_blocks();
+		// Drain variables queued for deferred release by KitsuneVariableFree.
+		DrainPendingVariableChain(state->L);
 
 		bool anyActive = false;
 
@@ -775,11 +828,13 @@ static void SchedulerProc(KitsuneState* state) {
 
 		// ── Step 4: Release done + released slots – zero the struct for reuse ─
 		{
-			// Phase 1 (under slotsLock): collect registry refs and zero each slot.
-			// luaL_unref is kept outside the lock so its internal Lua allocations
-			// do not block concurrent KitsuneCancel / KitsuneGetActiveIds callers.
+			// Phase 1 (under slotsLock): collect registry refs and slot results, then zero each slot.
+			// All luaL_unref calls (pendingArgs, pendingThreads, and any TFUNCTION/TTABLE result)
+			// are deferred to phase 2 so they do not block concurrent KitsuneCancel / KitsuneGetActiveIds
+			// callers while Lua's internal allocator is running.
 			int pendingArgs[KITSUNE_MAX_COROUTINES];
 			int pendingThreads[KITSUNE_MAX_COROUTINES];
+			KitsuneVariable pendingResults[KITSUNE_MAX_COROUTINES];
 			int pendingCount = 0;
 
 			state->slotsLock.lock();
@@ -788,21 +843,22 @@ static void SchedulerProc(KitsuneState* state) {
 				if (slot->id != 0 && slot->done.load() && slot->released.load()) {
 					pendingArgs[pendingCount] = slot->argsRef;
 					pendingThreads[pendingCount] = slot->threadRef;
+					pendingResults[pendingCount] = slot->result;  // shallow copy; ownership transferred
 					pendingCount++;
 					slot->thread = NULL;  // invariant: null before memset so the pointer is never stale
 					gff_free(slot->error);
-					FreeVariableData(&slot->result);
 					memset(slot, 0, sizeof(KitsuneCoroutine));  // id = 0 marks the slot as reusable
 				}
 			}
 			state->slotsLock.unlock();
 
-			// Phase 2 (outside slotsLock): release Lua registry references.
+			// Phase 2 (outside slotsLock): release all Lua registry references.
 			for (int i = 0; i < pendingCount; i++) {
 				if (pendingArgs[i] != LUA_NOREF)
 					luaL_unref(state->L, LUA_REGISTRYINDEX, pendingArgs[i]);
 				if (pendingThreads[i] != LUA_NOREF)
 					luaL_unref(state->L, LUA_REGISTRYINDEX, pendingThreads[i]);
+				FreeVariableData(&pendingResults[i], state->L);
 			}
 		}
 
@@ -1334,6 +1390,12 @@ extern "C" {
 			out->stream = slot->result.stream;
 			slot->result.stream = nullptr;
 		}
+		else if (slot->result.type == LUA_TFUNCTION) {
+			// Transfer the registry ref; zero the slot field so no stale ref remains.
+			out->type = LUA_TFUNCTION;
+			out->integer = slot->result.integer;
+			slot->result.integer = LUA_NOREF;
+		}
 		else {
 			*out = slot->result;  // inline copy for number / bool / none
 		}
@@ -1478,13 +1540,47 @@ extern "C" {
 
 	KITSUNE_API void KitsuneVariableFree(KitsuneVariable* var) {
 		if (!var) return;
-		// TSTREAM: the block was already transferred to the host by KitsuneGetResult and is owned
-		// by the caller (e.g. a LuaStream in C#).  The host calls block->close when it is done.
-		// Null the pointer before FreeVariableData so the new close-on-free path is not triggered —
-		// that path is only correct for unconsumed slots (KitsuneReleaseResult / fireAndForget).
+		// TSTREAM: null the pointer before FreeVariableData so the accessor-dispose path is not
+		// triggered — that path is only correct for unconsumed slots, not host-owned blocks.
 		if (var->type == KITSUNE_TSTREAM)
 			var->stream = NULL;
-		FreeVariableData(var);
+		// TFUNCTION and TTABLE (with nodes): need the Lua state to luaL_unref function registry
+		// entries.  On the scheduler thread Lua access is already owned so call directly.
+		// On any other thread, enqueue the variable for the scheduler to drain — this avoids
+		// blocking the caller while a coroutine is running (same pattern as stream sweep).
+		if (var->type == LUA_TFUNCTION || (var->type == LUA_TTABLE && var->table)) {
+			KitsuneState* state = g_state;
+			if (state && state->L) {
+				if (!g_isSchedulerThread) {
+					// Non-blocking path: push onto the deferred queue.
+					KitsuneVariableChain* node = (KitsuneVariableChain*)gff_malloc(sizeof(KitsuneVariableChain));
+					if (node) {
+						node->variable = var;
+						KitsuneVariableChain* head = g_pendingVariableChainHead.load(std::memory_order_relaxed);
+						do {
+							node->next = head;
+						}
+						while (!g_pendingVariableChainHead.compare_exchange_weak(
+							head, node, std::memory_order_release, std::memory_order_relaxed));
+						return;  // scheduler owns var now; do not gff_free here
+					}
+					// OOM fallback: block until we can call luaL_unref directly.
+					AcquireLuaAccess(state);
+					FreeVariableData(var, state->L);
+					ReleaseLuaAccess(state);
+				}
+				else {
+					// Scheduler thread: Lua access is already owned.
+					FreeVariableData(var, state->L);
+				}
+			}
+			else {
+				FreeVariableData(var, nullptr);
+			}
+		}
+		else {
+			FreeVariableData(var, nullptr);
+		}
 		gff_free(var);
 	}
 
@@ -1623,13 +1719,13 @@ extern "C" {
 			FillKitsuneVariableFromStack(L, -1, &v);
 			if (k.type == LUA_TNONE || v.type == LUA_TNONE) {
 				// OOM filling key or value: release any allocated data and abort iteration.
-				FreeVariableData(&k);
-				FreeVariableData(&v);
+				FreeVariableData(&k, L);
+				FreeVariableData(&v, L);
 				luaL_error(L, "out of memory");
 			}
 			ctx->callback(&k, &v, ctx->userdata);
-			FreeVariableData(&k);
-			FreeVariableData(&v);
+			FreeVariableData(&k, L);
+			FreeVariableData(&v, L);
 			lua_pop(L, 1);  // pop value, keep key for next lua_next
 		}
 		return 0;
@@ -1717,7 +1813,7 @@ extern "C" {
 		for (int i = 0; i < argc; i++) {
 			if (args[i].type == LUA_TNONE) {
 				for (int j = 0; j < argc; j++)
-					FreeVariableData(&args[j]);
+					FreeVariableData(&args[j], L);
 				gff_free(args);
 				state->DelegateState = prevDelegateState;
 				lua_pushstring(L, "out of memory");
@@ -1734,7 +1830,7 @@ extern "C" {
 
 		// Free args before any potential lua_error so we never leak them on the error path.
 		for (int i = 0; i < argc; i++)
-			FreeVariableData(&args[i]);
+			FreeVariableData(&args[i], L);
 		gff_free(args);
 
 		// Raise a deferred error that was stored by LuaResultSetter for KITSUNE_TERROR.
@@ -1803,11 +1899,16 @@ extern "C" {
 							luaL_unref(state->L, LUA_REGISTRYINDEX, slot->threadRef);
 					}
 					gff_free(slot->error);
-					FreeVariableData(&slot->result);
+					FreeVariableData(&slot->result, state->L);
 				}
 				delete slot;
 			}
 			state->slotCount = 0;
+
+			// Drain any variables queued for deferred release by KitsuneVariableFree;
+			// must run before lua_close so all luaL_unref calls complete while the state is live.
+			if (state->L)
+				DrainPendingVariableChain(state->L);
 
 			if (state->L) {
 							if (state->lastCallError) {

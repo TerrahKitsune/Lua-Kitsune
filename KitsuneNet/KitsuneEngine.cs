@@ -53,6 +53,11 @@ namespace KitsuneNet
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern void KitsuneVariableFree(IntPtr var);
 
+        /// <summary>Releases a heap-allocated <c>KitsuneVariable*</c> via the native free function.
+        /// Called by <see cref="LuaFunctionRef.Dispose"/> to release a Lua registry reference.
+        /// Must not be called while the pointer is still in use.</summary>
+        internal static void ReleaseNativeVariable(IntPtr ptr) => KitsuneVariableFree(ptr);
+
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern int KitsuneExecuteFileAsync([MarshalAs(UnmanagedType.LPUTF8Str)] string path, int argc, KitsuneVariable[]? argv, [MarshalAs(UnmanagedType.I1)] bool fireAndForget);
 
@@ -264,6 +269,7 @@ namespace KitsuneNet
         }
 
         // Reads a heap-allocated KitsuneVariable*, converts it to LuaValue, and frees it.
+        // For LuaType.Function the pointer is NOT freed here; ownership transfers to LuaFunctionRef.
         private static LuaValue NativePtrToLuaValue(IntPtr ptr)
         {
             if (ptr == IntPtr.Zero)
@@ -272,6 +278,12 @@ namespace KitsuneNet
             }
             var nv = Marshal.PtrToStructure<KitsuneVariable>(ptr);
             LuaType t = (LuaType)nv.Type;
+            // Function: transfer the native pointer to a LuaFunctionRef; caller owns the ref.
+            // KitsuneVariableFree must NOT be called here — LuaFunctionRef.Dispose() does it.
+            if (t == LuaType.Function)
+            {
+                return new LuaValue { Type = LuaType.Function, FunctionRef = new LuaFunctionRef(ptr) };
+            }
             LuaValue result = t switch
             {
                 LuaType.Number => LuaValue.FromNumber(nv.Number),
@@ -285,7 +297,7 @@ namespace KitsuneNet
                 LuaType.Table => ReadNativeTable(nv.Data),
                 LuaType.Error when nv.Data != IntPtr.Zero => NativeCopyBytes(nv.Data, nv.Length) with { Type = LuaType.Error },
                 LuaType.None => LuaValue.None,
-                _ => new LuaValue { Type = t },  // Nil/Function/Userdata/Thread/LightUserdata
+                _ => new LuaValue { Type = t },  // Nil/Userdata/Thread/LightUserdata
             };
             KitsuneVariableFree(ptr);
             return result;
@@ -293,6 +305,8 @@ namespace KitsuneNet
 
         // Converts a by-value KitsuneVariable (already marshaled into managed memory) to a LuaValue.
         // Does NOT free any native memory — use this for embedded struct members, not heap pointers.
+        // Function values are returned as opaque (Type=Function, no FunctionRef) since the variable
+        // is embedded inside a larger allocation (table node or callback args array).
         private static LuaValue NativeVariableToLuaValue(KitsuneVariable nv)
         {
             LuaType t = (LuaType)nv.Type;
@@ -406,6 +420,14 @@ namespace KitsuneNet
                         nv.Length = (nuint)(wbytes.Length / 2);
                     }
                     break;
+                case LuaType.Function when v.FunctionRef is { } fr && fr.NativePtr != IntPtr.Zero:
+                {
+                    // Copy the registry ref integer from the native KitsuneVariable.
+                    // PushKitsuneVariable uses lua_rawgeti with this ref to push the function.
+                    var fnv = Marshal.PtrToStructure<KitsuneVariable>(fr.NativePtr);
+                    nv.Integer = fnv.Integer;
+                    break;
+                }
                 case LuaType.Table when v.Table is not null:
                     nv.Data = BuildNativeTable(v.Table, ptrs);
                     nv.Length = (nuint)v.Table.Count;

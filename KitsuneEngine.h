@@ -29,7 +29,10 @@
 #define KITSUNE_TNUMBER         (3)
 #define KITSUNE_TSTRING         (4)
 #define KITSUNE_TTABLE          (5)
-#define KITSUNE_TFUNCTION       (6)
+#define KITSUNE_TFUNCTION       (6)  // When returned from the engine, integer holds a luaL_ref registry reference
+									// anchoring the function. Release via KitsuneVariableFree, which calls
+									// luaL_unref. Push back to Lua via PushKitsuneVariable (lua_rawgeti).
+									// Cannot be constructed from scratch on the host side in a meaningful way.
 #define KITSUNE_TUSERDATA       (7)
 #define KITSUNE_TTHREAD         (8)
 
@@ -160,6 +163,7 @@ extern "C" {
 	KITSUNE_API KitsuneVariable* KitsuneExecuteFile(const char* path, int argc, const KitsuneVariable* argv);
 	KITSUNE_API KitsuneVariable* KitsuneExecuteString(const char* script, int argc, const KitsuneVariable* argv);
 	KITSUNE_API KitsuneVariable* KitsuneExecuteFunction(const char* functionName, int argc, const KitsuneVariable* argv);
+	KITSUNE_API KitsuneVariable* KitsuneExecuteVariable(const KitsuneVariable* var, int argc, const KitsuneVariable* argv);
 
 	// ── Async Execution ────────────────────────────────────────────────────────
 	// All three functions start execution as a Lua coroutine managed by the scheduler.
@@ -171,6 +175,7 @@ extern "C" {
 	KITSUNE_API int KitsuneExecuteFileAsync(const char* path, int argc, const KitsuneVariable* argv, bool fireAndForget = false);
 	KITSUNE_API int KitsuneExecuteStringAsync(const char* script, int argc, const KitsuneVariable* argv, bool fireAndForget = false);
 	KITSUNE_API int KitsuneExecuteFunctionAsync(const char* functionName, int argc, const KitsuneVariable* argv, bool fireAndForget = false);
+	KITSUNE_API int KitsuneExecuteVariableAsync(const KitsuneVariable* var, int argc, const KitsuneVariable* argv, bool fireAndForget = false);
 
 	// ── Per-coroutine queries (id = value returned by KitsuneExecuteFileAsync/StringAsync) ──
 	// Returns true once the coroutine has finished (success or error).

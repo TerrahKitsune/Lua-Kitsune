@@ -3701,6 +3701,263 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
+        // -- Function results (LuaType.Function) -----------------------------------------
+        // These tests exercise:
+        //   (a) the explicit LUA_TFUNCTION branch in KitsuneGetResult that zeroes slot->result.integer
+        //   (b) the pendingResults[] array in scheduler step 4 that defers FreeVariableData outside slotsLock
+        //   (c) the KitsuneVariableChain deferred-free queue used by KitsuneVariableFree on non-scheduler threads
+
+        [Fact]
+        public void GetResultVariable_FunctionReturn_HasFunctionType()
+        {
+            // A coroutine that returns a Lua function must produce a result with LuaType.Function.
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("return function() return 42 end");
+            engine.Wait(id);
+            LuaValue result = engine.GetResultVariable(id);
+            result.Type.ShouldBe(LuaType.Function);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void GetResultVariable_TableContainingFunction_FunctionEntryHasFunctionType()
+        {
+            // A table result containing a function value must preserve the entry as LuaType.Function.
+            // This exercises FillKitsuneVariableFromStack + TableToLinkedList for function-valued nodes.
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("return { callback = function() return 99 end, n = 1 }");
+            engine.Wait(id);
+            LuaValue result = engine.GetResultVariable(id);
+            result.Type.ShouldBe(LuaType.Table);
+            result.Table.ShouldNotBeNull();
+            result.Table!.ShouldContain(kvp => kvp.Key.String == "n" && kvp.Value.AsDouble == 1);
+            result.Table!.Single(kvp => kvp.Key.String == "callback").Value.Type.ShouldBe(LuaType.Function);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void RegisterFunction_ReceivesFunctionArg_HasFunctionType()
+        {
+            // A Lua function passed as an arg to a RegisterFunction callback arrives as LuaType.Function.
+            // The registry ref is anchored by FillKitsuneVariableFromStack and freed by FreeVariableData
+            // in LuaCFunctionWrapper after the callback returns (scheduler-thread fast path, no deferred queue).
+            using KitsuneEngine engine = new();
+            LuaValue? received = null;
+            engine.RegisterFunction("CaptureFunc", args =>
+            {
+                received = args[0];
+                return LuaValue.None;
+            });
+            int id = engine.ExecuteString("CaptureFunc(function() return 99 end)");
+            engine.Wait(id);
+            received.ShouldNotBeNull();
+            received!.Value.Type.ShouldBe(LuaType.Function);
+            engine.ReleaseResult(id);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void ReleaseResult_FunctionResult_SchedulerFreesViaPendingResults_NoLeak()
+        {
+            // ReleaseResult marks the slot for scheduler cleanup without the C# side consuming
+            // the result.  The scheduler's step-4 pendingResults array takes ownership of the
+            // TFUNCTION result and calls FreeVariableData (→ luaL_unref) in phase 2 outside
+            // slotsLock.  This is the specific code path changed by the pendingResults fix.
+            var engine = new KitsuneEngine();
+            try
+            {
+                for (int i = 0; i < 20; i++)
+                {
+                    int id = engine.ExecuteString("return function() end");
+                    engine.Wait(id);
+                    engine.HasResult(id).ShouldBeTrue();
+                    engine.ReleaseResult(id);
+                    DateTime deadline = DateTime.UtcNow.AddSeconds(5);
+                    while (engine.HasResult(id) && DateTime.UtcNow < deadline)
+                        Thread.Sleep(1);
+                }
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+            finally
+            {
+                engine.Dispose();
+            }
+            ThrowIfLeaked(engine);
+        }
+
+        [Fact]
+        public void ReleaseResult_TableWithFunctionResult_SchedulerFreesViaPendingResults_NoLeak()
+        {
+            // A table result containing function entries: FreeKVNode must luaL_unref every
+            // nested function ref.  With the pendingResults fix this happens outside slotsLock
+            // (phase 2), so concurrent KitsuneCancel / KitsuneGetActiveIds callers are not blocked.
+            var engine = new KitsuneEngine();
+            try
+            {
+                for (int i = 0; i < 20; i++)
+                {
+                    int id = engine.ExecuteString("return { f1 = function() end, f2 = function() end, n = 1 }");
+                    engine.Wait(id);
+                    engine.ReleaseResult(id);
+                    DateTime deadline = DateTime.UtcNow.AddSeconds(5);
+                    while (engine.HasResult(id) && DateTime.UtcNow < deadline)
+                        Thread.Sleep(1);
+                }
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+            finally
+            {
+                engine.Dispose();
+            }
+            ThrowIfLeaked(engine);
+        }
+
+        [Fact]
+        public async Task DeferredFree_FunctionResultsFreedWhileSchedulerActive_NoLeak()
+        {
+            // Exercises the KitsuneVariableChain deferred-free queue: function results are
+            // obtained via GetResultVariable while the scheduler is running a background coroutine,
+            // then GC is forced so any LuaFunctionRef finalizers run and enqueue the native
+            // variables.  ExecuteStringAsync guarantees at least one scheduler drain cycle before
+            // Dispose so all queued luaL_unref calls complete while the Lua state is still live.
+            var engine = new KitsuneEngine();
+            try
+            {
+                int bgId = engine.ExecuteString("Sleep(2000)");
+                SpinUntilRunning(engine);
+
+                for (int i = 0; i < 10; i++)
+                {
+                    int id = engine.ExecuteString("return function() end");
+                    engine.Wait(id);
+                    _ = engine.GetResultVariable(id);
+                }
+
+                GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true);
+                GC.WaitForPendingFinalizers();
+
+                engine.Cancel(bgId);
+                engine.Wait();
+                // One scheduler cycle after GC drains anything enqueued by finalizers.
+                await engine.ExecuteStringAsync("return 'drain'");
+
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+            finally
+            {
+                engine.Dispose();
+            }
+            ThrowIfLeaked(engine);
+        }
+
+        [Fact]
+        public async Task Stress_FunctionResults_ManyReleasedViaScheduler_NoLeak()
+        {
+            // 50 coroutines each returning a function released via ReleaseResult under concurrent
+            // pressure — stresses pendingResults compaction across many scheduler cycles.
+            var engine = new KitsuneEngine();
+            try
+            {
+                const int count = 50;
+                Task[] tasks = Enumerable.Range(0, count).Select(_ => Task.Run(() =>
+                {
+                    int id = engine.ExecuteString("return function() end");
+                    engine.Wait(id);
+                    engine.ReleaseResult(id);
+                })).ToArray();
+                await Task.WhenAll(tasks);
+
+                DateTime deadline = DateTime.UtcNow.AddSeconds(10);
+                while (engine.GetActiveIds().Length > 0 && DateTime.UtcNow < deadline)
+                    Thread.Sleep(1);
+
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+            finally
+            {
+                engine.Dispose();
+            }
+            ThrowIfLeaked(engine);
+        }
+
+        // -- Boundary / edge cases --------------------------------------------------------
+
+        [Fact]
+        public void GetError_NonExistentId_ReturnsNull()
+        {
+            using KitsuneEngine engine = new();
+            engine.GetError(99999).ShouldBeNull();
+        }
+
+        [Fact]
+        public void GetResult_WhileCoroutineStillRunning_ReturnsNull()
+        {
+            // KitsuneGetResult returns NULL when done==0; the C# wrapper must surface this as null.
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("while true do end");
+            SpinUntilRunning(engine);
+            try
+            {
+                engine.GetResult(id).ShouldBeNull();
+            }
+            finally
+            {
+                engine.Interrupt();
+                engine.Wait();
+                engine.ReleaseResult(id);
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+        }
+
+        [Fact]
+        public void ReleaseResult_NonExistentId_IsNoOp()
+        {
+            using KitsuneEngine engine = new();
+            Should.NotThrow(() => engine.ReleaseResult(99999));
+        }
+
+        [Fact]
+        public void GetRuntime_NonExistentId_ReturnsZero()
+        {
+            using KitsuneEngine engine = new();
+            engine.GetRuntime(99999).ShouldBe(0.0);
+        }
+
+        [Fact]
+        public void GetResultVariable_FunctionResult_SlotReleasedAfterConsume()
+        {
+            // After GetResultVariable consumes the function result (sets released=1), the scheduler
+            // must compact the slot.  The explicit LUA_TFUNCTION branch in KitsuneGetResult zeroes
+            // slot->result.integer so no stale ref lingers after transfer.
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("return function() end");
+            engine.Wait(id);
+            engine.HasResult(id).ShouldBeTrue();
+            _ = engine.GetResultVariable(id);  // consumes result, sets released=1
+
+            DateTime deadline = DateTime.UtcNow.AddSeconds(5);
+            while (engine.HasResult(id) && DateTime.UtcNow < deadline)
+                Thread.Sleep(1);
+
+            engine.HasResult(id).ShouldBeFalse();
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void GetResultVariable_FunctionReturn_ConsumedTwice_ReturnsNoneSecondTime()
+        {
+            // Consuming a function result twice must not double-unref the registry entry.
+            // The second call must return LuaType.None (slot already released).
+            using KitsuneEngine engine = new();
+            int id = engine.ExecuteString("return function() end");
+            engine.Wait(id);
+            LuaValue first = engine.GetResultVariable(id);
+            first.Type.ShouldBe(LuaType.Function);
+            LuaValue second = engine.GetResultVariable(id);
+            second.Type.ShouldBe(LuaType.None);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
         private static void SpinUntilRunning(KitsuneEngine engine, int timeoutMs = 2000)
         {
             DateTime deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);

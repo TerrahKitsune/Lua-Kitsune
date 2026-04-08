@@ -25,6 +25,11 @@ namespace KitsuneNet
         /// <summary>Parsed JSON node for <see cref="LuaType.Json"/> values. Null for all other types.</summary>
         public JsonNode? JsonNode { get; init; }
 
+        /// <summary>Live reference to a Lua function for <see cref="LuaType.Function"/> values returned
+        /// by the engine.  Holds a Lua registry anchor; must be disposed when no longer needed.
+        /// Null for all other types and for function values embedded inside tables.</summary>
+        public LuaFunctionRef? FunctionRef { get; init; }
+
         /// <summary>Stream for <see cref="LuaType.Stream"/> values.
         /// Inbound (Lua → C#): a <see cref="LuaStream"/> wrapping native block memory directly.
         /// Read-only when <c>KITSUNE_SHARED_MEMORY_FLAG_READONLY</c> is set on the block;
