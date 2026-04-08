@@ -58,7 +58,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>
       </PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>$(SolutionDir)mysql\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)libarchive;$(SolutionDir)hiredis;$(SolutionDir)sqliteextension;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)mysql\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)hiredis;$(SolutionDir)sqliteextension;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
     </ClCompile>
     <Link>
@@ -79,7 +79,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>
       </PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>$(SolutionDir)mysql\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)libarchive;$(SolutionDir)hiredis;$(SolutionDir)sqliteextension;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)mysql\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)hiredis;$(SolutionDir)sqliteextension;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
     </ClCompile>
     <Link>
@@ -97,8 +97,6 @@
     <ClCompile Include="kafkahelpers.cpp" />
     <ClCompile Include="luaaes.cpp" />
     <ClCompile Include="LuaAesMain.cpp" />
-    <ClCompile Include="LuaArchive.cpp" />
-    <ClCompile Include="LuaArchiveMain.cpp" />
     <ClCompile Include="luacsv.cpp" />
     <ClCompile Include="LuaCsvMain.cpp" />
     <ClCompile Include="LuaFileSystem.cpp" />
@@ -156,7 +154,9 @@
     <ClCompile Include="MySQLMain.cpp" />
     <ClCompile Include="networking.cpp" />
     <ClCompile Include="Redis.cpp" />
+    <ClCompile Include="RedisJson.cpp" />
     <ClCompile Include="RedisKey.cpp" />
+    <ClCompile Include="RedisPubSub.cpp" />
     <ClCompile Include="RedisMain.cpp" />
     <ClCompile Include="RedisStream.cpp" />
     <ClCompile Include="RedisString.cpp" />
@@ -186,14 +186,8 @@
     <ClInclude Include="aes.hpp" />
     <ClInclude Include="base64.h" />
     <ClInclude Include="Bencode.h" />
-    <ClInclude Include="kafkahelpers.h" />
-    <ClInclude Include="libarchive\archive.h" />
-    <ClInclude Include="libarchive\archive_entry.h" />
-    <ClInclude Include="luaaes.h" />
-    <ClInclude Include="LuaAesMain.h" />
-    <ClInclude Include="LuaArchive.h" />
-    <ClInclude Include="LuaArchiveMain.h" />
-    <ClInclude Include="luacsv.h" />
+    <ClInclude Include="kafkahelpers.h" />    <ClInclude Include="luaaes.h" />
+    <ClInclude Include="LuaAesMain.h" />    <ClInclude Include="luacsv.h" />
     <ClInclude Include="LuaCsvMain.h" />
     <ClInclude Include="LuaFileSystem.h" />
     <ClInclude Include="LuaFileSystemMain.h" />
@@ -247,7 +241,9 @@
     <ClInclude Include="MySQLMain.h" />
     <ClInclude Include="networking.h" />
     <ClInclude Include="Redis.h" />
+    <ClInclude Include="RedisJson.h" />
     <ClInclude Include="RedisKey.h" />
+    <ClInclude Include="RedisPubSub.h" />
     <ClInclude Include="RedisMain.h" />
     <ClInclude Include="RedisStream.h" />
     <ClInclude Include="RedisString.h" />

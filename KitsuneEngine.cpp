@@ -3,6 +3,7 @@
 #endif
 
 #include <cassert>  // assert() is a no-op in release builds (NDEBUG defined by MSVC /MD /MT)
+#include <clocale>  // setlocale — force LC_NUMERIC to "C" so Lua number formatting uses '.' not ','
 #include <cstdint>  // int64_t
 #include <atomic>   // std::atomic
 #include <chrono>   // portable timing fallback
@@ -973,6 +974,11 @@ extern "C" {
 		lua_State* L = state->L;
 		lua_gc(L, LUA_GCGEN, 20, 100);
 		luaL_openlibs(L);
+
+		// Force LC_NUMERIC to "C" so Lua's tostring / string.format always use '.' as the
+		// decimal separator, regardless of the OS locale.  Without this, machines with a
+		// locale that uses ',' (e.g. German) produce "7,0" instead of "7.0".
+		setlocale(LC_NUMERIC, "C");
 
 #ifdef _DEBUG
 		lua_pushboolean(L, TRUE);

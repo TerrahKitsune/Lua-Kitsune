@@ -53,23 +53,23 @@ namespace KitsuneNet
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern void KitsuneVariableFree(IntPtr var);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi, BestFitMapping = false, ThrowOnUnmappableChar = true)]
-        private static extern int KitsuneExecuteFileAsync([MarshalAs(UnmanagedType.LPStr)] string path, int argc, KitsuneVariable[]? argv, [MarshalAs(UnmanagedType.I1)] bool fireAndForget);
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern int KitsuneExecuteFileAsync([MarshalAs(UnmanagedType.LPUTF8Str)] string path, int argc, KitsuneVariable[]? argv, [MarshalAs(UnmanagedType.I1)] bool fireAndForget);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi, BestFitMapping = false, ThrowOnUnmappableChar = true)]
-        private static extern int KitsuneExecuteStringAsync([MarshalAs(UnmanagedType.LPStr)] string script, int argc, KitsuneVariable[]? argv, [MarshalAs(UnmanagedType.I1)] bool fireAndForget);
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern int KitsuneExecuteStringAsync([MarshalAs(UnmanagedType.LPUTF8Str)] string script, int argc, KitsuneVariable[]? argv, [MarshalAs(UnmanagedType.I1)] bool fireAndForget);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi, BestFitMapping = false, ThrowOnUnmappableChar = true)]
-        private static extern int KitsuneExecuteFunctionAsync([MarshalAs(UnmanagedType.LPStr)] string functionName, int argc, KitsuneVariable[]? argv, [MarshalAs(UnmanagedType.I1)] bool fireAndForget);
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern int KitsuneExecuteFunctionAsync([MarshalAs(UnmanagedType.LPUTF8Str)] string functionName, int argc, KitsuneVariable[]? argv, [MarshalAs(UnmanagedType.I1)] bool fireAndForget);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi, BestFitMapping = false, ThrowOnUnmappableChar = true)]
-        private static extern IntPtr KitsuneExecuteFile([MarshalAs(UnmanagedType.LPStr)] string path, int argc, KitsuneVariable[]? argv);
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr KitsuneExecuteFile([MarshalAs(UnmanagedType.LPUTF8Str)] string path, int argc, KitsuneVariable[]? argv);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi, BestFitMapping = false, ThrowOnUnmappableChar = true)]
-        private static extern IntPtr KitsuneExecuteString([MarshalAs(UnmanagedType.LPStr)] string script, int argc, KitsuneVariable[]? argv);
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr KitsuneExecuteString([MarshalAs(UnmanagedType.LPUTF8Str)] string script, int argc, KitsuneVariable[]? argv);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi, BestFitMapping = false, ThrowOnUnmappableChar = true)]
-        private static extern IntPtr KitsuneExecuteFunction([MarshalAs(UnmanagedType.LPStr)] string functionName, int argc, KitsuneVariable[]? argv);
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr KitsuneExecuteFunction([MarshalAs(UnmanagedType.LPUTF8Str)] string functionName, int argc, KitsuneVariable[]? argv);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern nuint KitsuneGetError(int id, byte[]? buf, nuint bufSize);
@@ -106,12 +106,12 @@ namespace KitsuneNet
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern void KitsuneWait();
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi, BestFitMapping = false, ThrowOnUnmappableChar = true)]
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         [return: MarshalAs(UnmanagedType.I1)]
-        private static extern bool KitsuneSetVariable([MarshalAs(UnmanagedType.LPStr)] string name, ref KitsuneVariable var);
+        private static extern bool KitsuneSetVariable([MarshalAs(UnmanagedType.LPUTF8Str)] string name, ref KitsuneVariable var);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi, BestFitMapping = false, ThrowOnUnmappableChar = true)]
-        private static extern IntPtr KitsuneGetVariable([MarshalAs(UnmanagedType.LPStr)] string name);
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr KitsuneGetVariable([MarshalAs(UnmanagedType.LPUTF8Str)] string name);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern int KitsuneGetActiveIds(int[]? buffer, int bufferSize);
@@ -125,12 +125,12 @@ namespace KitsuneNet
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate void GetAllCallback(IntPtr key, IntPtr value, IntPtr userdata);
 
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi, BestFitMapping = false, ThrowOnUnmappableChar = true)]
-        private static extern void KitsuneGetAll([MarshalAs(UnmanagedType.LPStr)] string? path, GetAllCallback callback, IntPtr userdata);
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern void KitsuneGetAll([MarshalAs(UnmanagedType.LPUTF8Str)] string? path, GetAllCallback callback, IntPtr userdata);
 
         // func is a delegate* unmanaged[Cdecl] cast to nint; userdata is a GCHandle address.
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi, BestFitMapping = false, ThrowOnUnmappableChar = true)]
-        private static extern void KitsuneRegisterFunction([MarshalAs(UnmanagedType.LPStr)] string name, nint func, nint userdata);
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern void KitsuneRegisterFunction([MarshalAs(UnmanagedType.LPUTF8Str)] string name, nint func, nint userdata);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern IntPtr KitsuneCreateMemoryBlock(nuint size);

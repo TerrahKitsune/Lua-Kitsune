@@ -1,7 +1,7 @@
 ﻿#include <windows.h>
+#include <clocale>
 #include "objbase.h"
 #include "dlllua.h"
-#include "../LuaArchiveMain.h"
 #include "../mem.h"
 #include "../StreamMain.h"
 #include "../wcharmain.h"
@@ -54,9 +54,8 @@ lua_State* OpenLuaState(lua_Alloc memoryAllocator) {
 	lua_State* L = lua_newstate(memoryAllocator, NULL);
 	lua_gc(L, LUA_GCGEN, 20, 100);
 	luaL_openlibs(L);
+	setlocale(LC_NUMERIC, "C");
 
-	luaopen_archive(L);
-	lua_setglobal(L, "Archive");
 	luaopen_wchar(L);
 	lua_setglobal(L, "Wchar");
 	luaopen_stream(L);
