@@ -55,6 +55,7 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <AdditionalIncludeDirectories>$(ProjectDir)..;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -74,6 +75,7 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <AdditionalIncludeDirectories>$(ProjectDir)..;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -85,10 +87,12 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Program.cpp" />
+    <ClCompile Include="Session.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="KitsuneEngine.h" />
+    <ClInclude Include="..\KitsuneEngine.h" />
     <ClInclude Include="resource.h" />
+    <ClInclude Include="Session.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="main.lua">
@@ -100,19 +104,19 @@
     <ResourceCompile Include="Kitsune.rc" />
   </ItemGroup>
   <ItemGroup>
-    <Image Include="Lua\jiiiiiiiiitsu.ico" />
+    <Image Include="..\Lua\jiiiiiiiiitsu.ico" />
   </ItemGroup>
   <ItemGroup>
     <Manifest Include="kitsune.exe.manifest" />
   </ItemGroup>
   <ItemGroup>
-    <None Include=".github\copilot-instructions.md" />
-    <None Include="Extension functions.md" />
-    <None Include="Lua functions.md" />
-    <None Include="Lua\Makefile" />
+    <None Include="..\.github\copilot-instructions.md" />
+    <None Include="..\Extension functions.md" />
+    <None Include="..\Lua functions.md" />
+    <None Include="..\Lua\Makefile" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="KitsuneEngine.vcxproj">
+    <ProjectReference Include="..\KitsuneEngine.vcxproj">
       <Project>{455B7EC7-9F27-4507-BE42-3770EAE69D38}</Project>
     </ProjectReference>
   </ItemGroup>

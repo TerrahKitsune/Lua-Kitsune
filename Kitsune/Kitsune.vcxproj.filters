@@ -21,12 +21,18 @@
     <ClCompile Include="Program.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Session.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="KitsuneEngine.h">
+    <ClInclude Include="..\KitsuneEngine.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="resource.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Session.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -36,7 +42,7 @@
     </ResourceCompile>
   </ItemGroup>
   <ItemGroup>
-    <Image Include="Lua\jiiiiiiiiitsu.ico">
+    <Image Include="..\Lua\jiiiiiiiiitsu.ico">
       <Filter>Resource Files</Filter>
     </Image>
   </ItemGroup>
@@ -46,16 +52,16 @@
     </Manifest>
   </ItemGroup>
   <ItemGroup>
-    <None Include=".github\copilot-instructions.md">
+    <None Include="..\.github\copilot-instructions.md">
       <Filter>Documentation</Filter>
     </None>
-    <None Include="Extension functions.md">
+    <None Include="..\Extension functions.md">
       <Filter>Documentation</Filter>
     </None>
-    <None Include="Lua functions.md">
+    <None Include="..\Lua functions.md">
       <Filter>Documentation</Filter>
     </None>
-    <None Include="Lua\Makefile">
+    <None Include="..\Lua\Makefile">
       <Filter>Documentation</Filter>
     </None>
   </ItemGroup>
