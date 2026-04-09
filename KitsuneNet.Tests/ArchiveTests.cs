@@ -1,4 +1,4 @@
-﻿using KitsuneNet;
+using KitsuneNet;
 using Shouldly;
 using Xunit;
 
@@ -13,19 +13,19 @@ public sealed class ArchiveTests
         Path.Combine(AppContext.BaseDirectory, "test.zip").Replace('\\', '/'),
     ];
 
-    // ── Entries ───────────────────────────────────────────────────────────────
+    // -- Entries ---------------------------------------------------------------
     [ArchiveTheory]
     [MemberData(nameof(ArchiveFiles))]
     public async Task Entries_Returns_TwoFiles(string path)
     {
         using KitsuneEngine engine = new();
-        string? r = await engine.ExecuteStringAsync("""
+        LuaValue r = await engine.ExecuteStringAsync("""
             local arc, err = Archive.OpenRead(ARGS[1])
             assert(arc, err or "failed to open archive")
             local entries = Archive.Entries(arc)
             return tostring(#entries)
             """, args: [LuaValue.FromString(path)]);
-        r.ShouldBe("2");
+        r.String.ShouldBe("2");
     }
 
     [ArchiveTheory]
@@ -33,7 +33,7 @@ public sealed class ArchiveTests
     public async Task Entries_ContainsExpectedFileNames(string path)
     {
         using KitsuneEngine engine = new();
-        string? r = await engine.ExecuteStringAsync("""
+        LuaValue r = await engine.ExecuteStringAsync("""
             local arc, err = Archive.OpenRead(ARGS[1])
             assert(arc, err or "failed to open archive")
             local entries = Archive.Entries(arc)
@@ -44,7 +44,7 @@ public sealed class ArchiveTests
             table.sort(names)
             return names[1] .. '|' .. names[2]
             """, args: [LuaValue.FromString(path)]);
-        r.ShouldBe("this is a test file.txt|this is also a test file.txt");
+        r.String.ShouldBe("this is a test file.txt|this is also a test file.txt");
     }
 
     [ArchiveTheory]
@@ -52,7 +52,7 @@ public sealed class ArchiveTests
     public async Task Entries_ReportsCorrectFileSizes(string path)
     {
         using KitsuneEngine engine = new();
-        string? r = await engine.ExecuteStringAsync("""
+        LuaValue r = await engine.ExecuteStringAsync("""
             local arc, err = Archive.OpenRead(ARGS[1])
             assert(arc, err or "failed to open archive")
             local entries = Archive.Entries(arc)
@@ -61,16 +61,16 @@ public sealed class ArchiveTests
             end
             return "ok"
             """, args: [LuaValue.FromString(path)]);
-        r.ShouldBe("ok");
+        r.String.ShouldBe("ok");
     }
 
-    // ── ReadAll ───────────────────────────────────────────────────────────────
+    // -- ReadAll ---------------------------------------------------------------
     [ArchiveTheory]
     [MemberData(nameof(ArchiveFiles))]
     public async Task ReadAll_FirstEntry_ReturnsNonEmptyData(string path)
     {
         using KitsuneEngine engine = new();
-        string? r = await engine.ExecuteStringAsync("""
+        LuaValue r = await engine.ExecuteStringAsync("""
             local arc, err = Archive.OpenRead(ARGS[1])
             assert(arc, err or "failed to open archive")
             local name, size = Archive.SetEntry(arc, 1)
@@ -79,7 +79,7 @@ public sealed class ArchiveTests
             assert(data ~= nil, "ReadAll returned nil")
             return tostring(#data > 0)
             """, args: [LuaValue.FromString(path)]);
-        r.ShouldBe("true");
+        r.String.ShouldBe("true");
     }
 
     [ArchiveTheory]
@@ -87,7 +87,7 @@ public sealed class ArchiveTests
     public async Task ReadAll_SecondEntry_ReturnsNonEmptyData(string path)
     {
         using KitsuneEngine engine = new();
-        string? r = await engine.ExecuteStringAsync("""
+        LuaValue r = await engine.ExecuteStringAsync("""
             local arc, err = Archive.OpenRead(ARGS[1])
             assert(arc, err or "failed to open archive")
             local name, size = Archive.SetEntry(arc, 2)
@@ -96,7 +96,7 @@ public sealed class ArchiveTests
             assert(data ~= nil, "ReadAll returned nil")
             return tostring(#data > 0)
             """, args: [LuaValue.FromString(path)]);
-        r.ShouldBe("true");
+        r.String.ShouldBe("true");
     }
 
     [ArchiveTheory]
@@ -104,7 +104,7 @@ public sealed class ArchiveTests
     public async Task ReadAll_BothEntries_DataMatchesDeclaredSize(string path)
     {
         using KitsuneEngine engine = new();
-        string? r = await engine.ExecuteStringAsync("""
+        LuaValue r = await engine.ExecuteStringAsync("""
             local arc, err = Archive.OpenRead(ARGS[1])
             assert(arc, err or "failed to open archive")
             local entries = Archive.Entries(arc)
@@ -118,16 +118,16 @@ public sealed class ArchiveTests
             end
             return "ok"
             """, args: [LuaValue.FromString(path)]);
-        r.ShouldBe("ok");
+        r.String.ShouldBe("ok");
     }
 
-    // ── Read (chunked) ────────────────────────────────────────────────────────
+    // -- Read (chunked) --------------------------------------------------------
     [ArchiveTheory]
     [MemberData(nameof(ArchiveFiles))]
     public async Task Read_ChunkedRead_ReassemblesFullEntry(string path)
     {
         using KitsuneEngine engine = new();
-        string? r = await engine.ExecuteStringAsync("""
+        LuaValue r = await engine.ExecuteStringAsync("""
             local arc, err = Archive.OpenRead(ARGS[1])
             assert(arc, err or "failed to open archive")
             local name, size = Archive.SetEntry(arc, 1)
@@ -142,19 +142,19 @@ public sealed class ArchiveTests
             local assembled = table.concat(parts)
             return tostring(#assembled == size)
             """, args: [LuaValue.FromString(path)]);
-        r.ShouldBe("true");
+        r.String.ShouldBe("true");
     }
 
-    // ── OpenRead error handling ───────────────────────────────────────────────
+    // -- OpenRead error handling -----------------------------------------------
     [ArchiveFact]
     public async Task OpenRead_NonExistentFile_ReturnsNilAndError()
     {
         using KitsuneEngine engine = new();
-        string? r = await engine.ExecuteStringAsync("""
+        LuaValue r = await engine.ExecuteStringAsync("""
             local arc, err = Archive.OpenRead(ARGS[1])
             return tostring(arc == nil) .. '|' .. tostring(type(err) == 'string')
             """, args: [LuaValue.FromString("nonexistent_file_that_does_not_exist.7z")]);
-        r.ShouldBe("true|true");
+        r.String.ShouldBe("true|true");
     }
 }
 

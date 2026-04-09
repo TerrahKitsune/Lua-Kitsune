@@ -9,161 +9,6 @@ namespace KitsuneNet
     {
         private const string DllName = "KitsuneEngine";
 
-        private int _disposed;  // 0 = not disposed; 1 = disposed
-        private List<GCHandle>? _functionHandles;
-
-        #region P/Invoke
-
-        // KitsuneVariable x64 layout: int(4) + padding(4) + nuint(8) + union(8) = 24 bytes.
-        [StructLayout(LayoutKind.Explicit, Size = 24)]
-        private struct KitsuneVariable
-        {
-            [FieldOffset(0)]
-            public int Type;
-
-            [FieldOffset(8)]
-            public nuint Length;
-
-            [FieldOffset(16)]
-            public IntPtr Data;
-
-            [FieldOffset(16)]
-            public double Number;
-
-            [FieldOffset(16)]
-            public long Integer;
-
-            [FieldOffset(16)]
-            public byte BoolByte;
-        }
-
-        // Mirrors KeyValuePairKitsuneVariableNode: Key(24) + Value(24) + Next ptr(8) = 56 bytes.
-        [StructLayout(LayoutKind.Sequential)]
-        private struct NativeKVNode
-        {
-            public KitsuneVariable Key;
-            public KitsuneVariable Value;
-            public IntPtr Next;
-        }
-
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        [return: MarshalAs(UnmanagedType.I1)]
-        private static extern bool KitsuneInit(IntPtr initFunc);
-
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern void KitsuneVariableFree(IntPtr var);
-
-        /// <summary>Releases a heap-allocated <c>KitsuneVariable*</c> via the native free function.
-        /// Called by <see cref="LuaFunctionRef.Dispose"/> to release a Lua registry reference.
-        /// Must not be called while the pointer is still in use.</summary>
-        internal static void ReleaseNativeVariable(IntPtr ptr) => KitsuneVariableFree(ptr);
-
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern int KitsuneExecuteFileAsync([MarshalAs(UnmanagedType.LPUTF8Str)] string path, int argc, KitsuneVariable[]? argv, [MarshalAs(UnmanagedType.I1)] bool fireAndForget);
-
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern int KitsuneExecuteStringAsync([MarshalAs(UnmanagedType.LPUTF8Str)] string script, int argc, KitsuneVariable[]? argv, [MarshalAs(UnmanagedType.I1)] bool fireAndForget);
-
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern int KitsuneExecuteFunctionAsync([MarshalAs(UnmanagedType.LPUTF8Str)] string functionName, int argc, KitsuneVariable[]? argv, [MarshalAs(UnmanagedType.I1)] bool fireAndForget);
-
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern IntPtr KitsuneExecuteFile([MarshalAs(UnmanagedType.LPUTF8Str)] string path, int argc, KitsuneVariable[]? argv);
-
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern IntPtr KitsuneExecuteString([MarshalAs(UnmanagedType.LPUTF8Str)] string script, int argc, KitsuneVariable[]? argv);
-
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern IntPtr KitsuneExecuteFunction([MarshalAs(UnmanagedType.LPUTF8Str)] string functionName, int argc, KitsuneVariable[]? argv);
-
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern nuint KitsuneGetError(int id, byte[]? buf, nuint bufSize);
-
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        [return: MarshalAs(UnmanagedType.I1)]
-        private static extern bool KitsuneHasResult(int id, out nuint len);
-
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern IntPtr KitsuneGetResult(int id);
-
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern void KitsuneCancel(int id);
-
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern void KitsuneReleaseResult(int id);
-
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern double KitsuneGetRuntime(int id);
-
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern int KitsuneGetStatus(int id);
-
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        [return: MarshalAs(UnmanagedType.I1)]
-        private static extern bool KitsuneIsRunning();
-
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern int KitsuneGetRunningId();
-
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern void KitsuneInterrupt();
-
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern void KitsuneWait();
-
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        [return: MarshalAs(UnmanagedType.I1)]
-        private static extern bool KitsuneSetVariable([MarshalAs(UnmanagedType.LPUTF8Str)] string name, ref KitsuneVariable var);
-
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern IntPtr KitsuneGetVariable([MarshalAs(UnmanagedType.LPUTF8Str)] string name);
-
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern int KitsuneGetActiveIds(int[]? buffer, int bufferSize);
-
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern nuint KitsuneCleanup();
-
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern void KitsuneRegisterSession();
-
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        private delegate void GetAllCallback(IntPtr key, IntPtr value, IntPtr userdata);
-
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern void KitsuneGetAll([MarshalAs(UnmanagedType.LPUTF8Str)] string? path, GetAllCallback callback, IntPtr userdata);
-
-        // func is a delegate* unmanaged[Cdecl] cast to nint; userdata is a GCHandle address.
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern void KitsuneRegisterFunction([MarshalAs(UnmanagedType.LPUTF8Str)] string name, nint func, nint userdata);
-
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern IntPtr KitsuneCreateMemoryBlock(nuint size);
-
-        // Mirrors the x64 layout of SharedMemoryBlock (see KitsuneEngine.h):
-        //   offset  0: BYTE              flags    (1 byte + 7 padding)
-        //   offset  8: void*             userdata (8 bytes, reserved)
-        //   offset 16: SharedMemoryBlock* next    (8 bytes, intrusive list link — do NOT read/write from C#)
-        //   offset 24: size_t            size     (8 bytes)
-        //   offset 32: BYTE              data[]   (variable — NOT part of this header struct)
-        [StructLayout(LayoutKind.Explicit, Size = 32)]
-        private struct SharedMemoryBlockHeader
-        {
-            [FieldOffset(0)]
-            public byte Flags;
-
-            [FieldOffset(8)]
-            public IntPtr UserData;
-
-            [FieldOffset(16)]
-            public IntPtr Next; // intrusive list pointer — not used by C#
-
-            [FieldOffset(24)]
-            public nuint Size;
-        }
-
-        #endregion
-
         // Tracks the number of live KitsuneEngine instances.  KitsuneCleanup is
         // only called when the last instance is disposed; calling it earlier would
         // null g_state and break any concurrently running scripts (e.g. the stress
@@ -175,12 +20,8 @@ namespace KitsuneNet
         [ThreadStatic]
         private static bool inLuaCallback;
 
-        /// <summary>
-        /// Number of native allocations that had not been freed when this engine was disposed.
-        /// Non-zero only in USEMEMORYMANAGER builds (Debug/Windows); always 0 in release or Linux.
-        /// Check this after <see cref="Dispose"/> to detect native memory leaks.
-        /// </summary>
-        public ulong LeakedAllocations { get; private set; }
+        private int _disposed;  // 0 = not disposed; 1 = disposed
+        private List<GCHandle>? _functionHandles;
 
         public KitsuneEngine()
         {
@@ -191,343 +32,23 @@ namespace KitsuneNet
             Interlocked.Increment(ref _refCount);
         }
 
-        // Converts a LuaValue[] to a KitsuneVariable[] suitable for P/Invoke.
-        // String data is heap-allocated; caller MUST call FreeNativeArgs when done.
-        private static (KitsuneVariable[]? Native, IntPtr[] Ptrs) BuildNativeArgs(LuaValue[]? args)
-        {
-            if (args is null || args.Length == 0)
-            {
-                return (null, []);
-            }
+        ~KitsuneEngine() => Dispose(false);
 
-            var native = new KitsuneVariable[args.Length];
-            var ptrs = new List<IntPtr>(args.Length);
-            for (int i = 0; i < args.Length; i++)
-            {
-                FillNativeVariable(ref native[i], args[i], ptrs);
-            }
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate void GetAllCallback(IntPtr key, IntPtr value, IntPtr userdata);
 
-            return (native, [.. ptrs]);
-        }
-
-        private static void FreeNativeArgs(IntPtr[] ptrs)
-        {
-            foreach (var p in ptrs)
-            {
-                Marshal.FreeHGlobal(p);
-            }
-        }
-
-        private static LuaValue NativeCopyBytes(IntPtr src, nuint length)
-        {
-            if (length > (nuint)Array.MaxLength)
-            {
-                throw new InvalidOperationException($"Native data length {length} exceeds the managed array limit.");
-            }
-            int len = (int)length;
-            byte[] bytes = new byte[len];
-            if (len > 0)
-            {
-                Marshal.Copy(src, bytes, 0, len);
-            }
-            return LuaValue.FromBytes(bytes);
-        }
-
-        // wcharCount is the char16_t count; each char16_t is 2 bytes (UTF-16 LE on Windows).
-        private static LuaValue NativeCopyChar16(IntPtr src, nuint wcharCount)
-        {
-            if (wcharCount > (nuint)(Array.MaxLength / 2))
-            {
-                throw new InvalidOperationException($"Native wchar count {wcharCount} exceeds the managed array limit.");
-            }
-            int byteCount = (int)wcharCount * 2;
-            byte[] bytes = new byte[byteCount];
-            if (byteCount > 0)
-            {
-                Marshal.Copy(src, bytes, 0, byteCount);
-            }
-            return new LuaValue { Type = LuaType.Char16, Bytes = bytes };
-        }
-
-        private static LuaValue NativeParseJson(IntPtr src, nuint length)
-        {
-            if (length > (nuint)Array.MaxLength)
-            {
-                throw new InvalidOperationException($"Native data length {length} exceeds the managed array limit.");
-            }
-            int len = (int)length;
-            byte[] bytes = new byte[len];
-            Marshal.Copy(src, bytes, 0, len);
-            try
-            {
-                return new LuaValue { Type = LuaType.Json, JsonNode = JsonNode.Parse(bytes) };
-            }
-            catch
-            {
-                return LuaValue.FromBytes(bytes);
-            }
-        }
-
-        // Reads a heap-allocated KitsuneVariable*, converts it to LuaValue, and frees it.
-        // For LuaType.Function the pointer is NOT freed here; ownership transfers to LuaFunctionRef.
-        private static LuaValue NativePtrToLuaValue(IntPtr ptr)
-        {
-            if (ptr == IntPtr.Zero)
-            {
-                return LuaValue.None;
-            }
-            var nv = Marshal.PtrToStructure<KitsuneVariable>(ptr);
-            LuaType t = (LuaType)nv.Type;
-            // Function: transfer the native pointer to a LuaFunctionRef; caller owns the ref.
-            // KitsuneVariableFree must NOT be called here — LuaFunctionRef.Dispose() does it.
-            if (t == LuaType.Function)
-            {
-                return new LuaValue { Type = LuaType.Function, FunctionRef = new LuaFunctionRef(ptr) };
-            }
-            LuaValue result = t switch
-            {
-                LuaType.Number => LuaValue.FromNumber(nv.Number),
-                LuaType.Integer => LuaValue.FromInt64(nv.Integer),
-                LuaType.Boolean => LuaValue.FromBool(nv.BoolByte != 0),
-                LuaType.String when nv.Data != IntPtr.Zero => NativeCopyBytes(nv.Data, nv.Length),
-                LuaType.Char16 when nv.Data != IntPtr.Zero => NativeCopyChar16(nv.Data, nv.Length),
-                LuaType.Userdata when nv.Data != IntPtr.Zero && nv.Length > 0 => NativeCopyBytes(nv.Data, nv.Length) with { Type = LuaType.Userdata },
-                LuaType.Json when nv.Data != IntPtr.Zero && nv.Length > 0 => NativeParseJson(nv.Data, nv.Length),
-                LuaType.Stream when nv.Data != IntPtr.Zero => NativeWrapSharedMemory(nv.Data),
-                LuaType.Table => ReadNativeTable(nv.Data),
-                LuaType.Error when nv.Data != IntPtr.Zero => NativeCopyBytes(nv.Data, nv.Length) with { Type = LuaType.Error },
-                LuaType.None => LuaValue.None,
-                _ => new LuaValue { Type = t },  // Nil/Userdata/Thread/LightUserdata
-            };
-            KitsuneVariableFree(ptr);
-            return result;
-        }
-
-        // Converts a by-value KitsuneVariable (already marshaled into managed memory) to a LuaValue.
-        // Does NOT free any native memory — use this for embedded struct members, not heap pointers.
-        // Function values are returned as opaque (Type=Function, no FunctionRef) since the variable
-        // is embedded inside a larger allocation (table node or callback args array).
-        private static LuaValue NativeVariableToLuaValue(KitsuneVariable nv)
-        {
-            LuaType t = (LuaType)nv.Type;
-            return t switch
-            {
-                LuaType.Number => LuaValue.FromNumber(nv.Number),
-                LuaType.Integer => LuaValue.FromInt64(nv.Integer),
-                LuaType.Boolean => LuaValue.FromBool(nv.BoolByte != 0),
-                LuaType.String when nv.Data != IntPtr.Zero => NativeCopyBytes(nv.Data, nv.Length),
-                LuaType.Char16 when nv.Data != IntPtr.Zero => NativeCopyChar16(nv.Data, nv.Length),
-                LuaType.Userdata when nv.Data != IntPtr.Zero && nv.Length > 0 => NativeCopyBytes(nv.Data, nv.Length) with { Type = LuaType.Userdata },
-                LuaType.Json when nv.Data != IntPtr.Zero && nv.Length > 0 => NativeParseJson(nv.Data, nv.Length),
-                LuaType.Stream when nv.Data != IntPtr.Zero => NativeWrapSharedMemory(nv.Data),
-                LuaType.Table => ReadNativeTable(nv.Data),
-                LuaType.None => LuaValue.None,
-                _ => new LuaValue { Type = t },
-            };
-        }
-
-        // Walks a native KeyValuePairKitsuneVariableNode linked list and converts it to a LuaValue table.
-        // NativeVariableToLuaValue is called recursively for each entry, so nested tables are handled.
-        private static LuaValue ReadNativeTable(IntPtr headPtr)
-        {
-            if (headPtr == IntPtr.Zero)
-            {
-                return new LuaValue { Type = LuaType.Table };
-            }
-            var entries = new List<KeyValuePair<LuaValue, LuaValue>>();
-            IntPtr node = headPtr;
-            while (node != IntPtr.Zero)
-            {
-                var n = Marshal.PtrToStructure<NativeKVNode>(node);
-                entries.Add(new KeyValuePair<LuaValue, LuaValue>(
-                    NativeVariableToLuaValue(n.Key),
-                    NativeVariableToLuaValue(n.Value)));
-                node = n.Next;
-            }
-            return LuaValue.FromTable(entries.AsReadOnly());
-        }
-
-        // Builds a native linked list from a managed table. Every allocation is added to ptrs for cleanup.
-        private static IntPtr BuildNativeTable(
-            IReadOnlyList<KeyValuePair<LuaValue, LuaValue>> entries, List<IntPtr> ptrs)
-        {
-            if (entries.Count == 0)
-            {
-                return IntPtr.Zero;
-            }
-            int nodeSize = Marshal.SizeOf<NativeKVNode>();
-            var nodes = new IntPtr[entries.Count];
-            for (int i = 0; i < entries.Count; i++)
-            {
-                nodes[i] = Marshal.AllocHGlobal(nodeSize);
-                ptrs.Add(nodes[i]);
-            }
-            for (int i = 0; i < entries.Count; i++)
-            {
-                var n = default(NativeKVNode);
-                FillNativeVariable(ref n.Key, entries[i].Key, ptrs);
-                FillNativeVariable(ref n.Value, entries[i].Value, ptrs);
-                n.Next = i + 1 < entries.Count ? nodes[i + 1] : IntPtr.Zero;
-                Marshal.StructureToPtr(n, nodes[i], false);
-            }
-            return nodes[0];
-        }
-
-        // Fills a single KitsuneVariable struct for native pass-through; string and table data are
-        // heap-allocated and added to ptrs so FreeNativeArgs cleans them up after the call returns.
-        private static void FillNativeVariable(ref KitsuneVariable nv, LuaValue v, List<IntPtr> ptrs)
-        {
-            nv.Type = (int)v.Type;
-            switch (v.Type)
-            {
-                case LuaType.Number:
-                    nv.Number = v.Number;
-                    break;
-                case LuaType.Integer:
-                    nv.Integer = v.Int64;
-                    break;
-                case LuaType.Boolean:
-                    nv.BoolByte = v.Boolean ? (byte)1 : (byte)0;
-                    break;
-                case LuaType.String:
-                    if (v.Bytes is not null)
-                    {
-                        byte[] bytes = v.Bytes;
-                        IntPtr p = Marshal.AllocHGlobal(bytes.Length + 1);
-                        if (bytes.Length > 0)
-                        {
-                            Marshal.Copy(bytes, 0, p, bytes.Length);
-                        }
-                        Marshal.WriteByte(p, bytes.Length, 0);
-                        ptrs.Add(p);
-                        nv.Data = p;
-                        nv.Length = (nuint)bytes.Length;
-                    }
-                    break;
-                case LuaType.Char16:
-                    if (v.Bytes is not null)
-                    {
-                        // Bytes stores UTF-16 LE; Length = number of char16_t code units (2 bytes each).
-                        byte[] wbytes = v.Bytes;
-                        IntPtr p = Marshal.AllocHGlobal(wbytes.Length + 2);  // +2 for null char16_t
-                        if (wbytes.Length > 0)
-                        {
-                            Marshal.Copy(wbytes, 0, p, wbytes.Length);
-                        }
-                        Marshal.WriteInt16(p, wbytes.Length, 0);
-                        ptrs.Add(p);
-                        nv.Data = p;
-                        nv.Length = (nuint)(wbytes.Length / 2);
-                    }
-                    break;
-                case LuaType.Function when v.FunctionRef is { } fr && fr.NativePtr != IntPtr.Zero:
-                {
-                    // Copy the registry ref integer from the native KitsuneVariable.
-                    // PushKitsuneVariable uses lua_rawgeti with this ref to push the function.
-                    var fnv = Marshal.PtrToStructure<KitsuneVariable>(fr.NativePtr);
-                    nv.Integer = fnv.Integer;
-                    break;
-                }
-                case LuaType.Table when v.Table is not null:
-                    nv.Data = BuildNativeTable(v.Table, ptrs);
-                    nv.Length = (nuint)v.Table.Count;
-                    break;
-                case LuaType.Json when v.JsonNode is not null:
-                {
-                    byte[] json = JsonSerializer.SerializeToUtf8Bytes(v.JsonNode);
-                    IntPtr p = Marshal.AllocHGlobal(json.Length + 1);
-                    Marshal.Copy(json, 0, p, json.Length);
-                    Marshal.WriteByte(p, json.Length, 0);
-                    ptrs.Add(p);
-                    nv.Data = p;
-                    nv.Length = (nuint)json.Length;
-                    break;
-                }
-                case LuaType.Stream when v.StreamValue is not null:
-                {
-                    // Fast path: CreateStream block — pass the existing block directly (zero copy).
-                    // MarkPassedToLua flips _isManaged=false to prevent a second fast-pass of the
-                    // same block. The C++ lua_push_sharedmemory_stream call sets FlagLuaReferenced
-                    // on the block so Dispose knows Lua's GC will eventually set OWNER_DISPOSED.
-                    if (v.StreamValue is LuaStream managedLs)
-                    {
-                        IntPtr sharedPtr = managedLs.GetSharedBlockPtr();
-                        if (sharedPtr != IntPtr.Zero)
-                        {
-                            managedLs.MarkPassedToLua(); // disable fast path for future calls
-                            nv.Data = sharedPtr;
-                            break;
-                        }
-                    }
-
-                    // Copy path: allocate a new block and fill it with the stream's bytes.
-                    byte[] data = v.StreamValue switch
-                    {
-                        LuaStream ls => ls.ToArray(),
-                        System.IO.MemoryStream ms => ms.ToArray(),
-                        _ => ReadStreamToBytes(v.StreamValue),
-                    };
-
-                    // Returns NULL on allocation failure; stream arg is silently skipped.
-                    IntPtr block = KitsuneCreateMemoryBlock((nuint)data.Length);
-                    if (block == IntPtr.Zero)
-                    {
-                        break;
-                    }
-
-                    if (data.Length > 0)
-                    {
-                        Marshal.Copy(data, 0, IntPtr.Add(block, 32), data.Length);
-                    }
-
-                    nv.Data = block;
-
-                    // NOT added to ptrs — the block is owned by the global list; freed by ticker.
-                    break;
-                }
-            }
-        }
-
-        // Wraps an inbound SharedMemoryBlock* in a LuaStream — zero copy.
-        // The LuaStream clears ACCESSOR_DISPOSED on the block, taking ownership of the accessor
-        // role. Disposing sets ACCESSOR_DISPOSED; the engine's ticker frees the block once Lua
-        // also sets OWNER_DISPOSED via shmem_close.
-        private static LuaValue NativeWrapSharedMemory(IntPtr blockPtr)
-        {
-            if (blockPtr == IntPtr.Zero)
-            {
-                return LuaValue.None;
-            }
-            var header = Marshal.PtrToStructure<SharedMemoryBlockHeader>(blockPtr);
-            if ((ulong)header.Size > (ulong)long.MaxValue)
-            {
-                throw new InvalidOperationException($"Stream block size {header.Size} exceeds the addressable range.");
-            }
-            return new LuaValue { Type = LuaType.Stream, StreamValue = new LuaStream(blockPtr, (long)header.Size) };
-        }
-
-        // Reads a System.IO.Stream into a byte array, seeking from the start when possible.
-        private static byte[] ReadStreamToBytes(System.IO.Stream stream)
-        {
-            if (stream.CanSeek)
-            {
-                long saved = stream.Position;
-                stream.Position = 0;
-                byte[] buf = new byte[checked((int)stream.Length)];
-                stream.ReadExactly(buf);
-                stream.Position = saved;
-                return buf;
-            }
-            using var ms = new System.IO.MemoryStream();
-            stream.CopyTo(ms);
-            return ms.ToArray();
-        }
+        /// <summary>
+        /// Number of native allocations that had not been freed when this engine was disposed.
+        /// Non-zero only in USEMEMORYMANAGER builds (Debug/Windows); always 0 in release or Linux.
+        /// Check this after <see cref="Dispose"/> to detect native memory leaks.
+        /// </summary>
+        public ulong LeakedAllocations { get; private set; }
 
         // -- Execution ------------------------------------------------------------
 
-        /// <summary>Starts a Lua script file as a coroutine and returns its ID, or -1 on failure.</summary>
+        /// <summary>Starts a Lua script file as a background coroutine (fire-and-forget).</summary>
         /// <exception cref="LuaException">Thrown if called from within a registered function callback.</exception>
-        public int ExecuteFile(string path, bool fireAndForget = false, params LuaValue[]? args)
+        public void ExecuteFile(string path, params LuaValue[]? args)
         {
             if (inLuaCallback)
             {
@@ -537,7 +58,7 @@ namespace KitsuneNet
             var (native, ptrs) = BuildNativeArgs(args);
             try
             {
-                return KitsuneExecuteFileAsync(path, native?.Length ?? 0, native, fireAndForget);
+                KitsuneExecuteFileAsync(path, native?.Length ?? 0, native, true);
             }
             finally
             {
@@ -545,9 +66,9 @@ namespace KitsuneNet
             }
         }
 
-        /// <summary>Starts a Lua script string as a coroutine and returns its ID, or -1 on failure.</summary>
+        /// <summary>Starts a Lua script string as a background coroutine (fire-and-forget).</summary>
         /// <exception cref="LuaException">Thrown if called from within a registered function callback.</exception>
-        public int ExecuteString(string script, bool fireAndForget = false, params LuaValue[]? args)
+        public void ExecuteString(string script, params LuaValue[]? args)
         {
             if (inLuaCallback)
             {
@@ -557,7 +78,7 @@ namespace KitsuneNet
             var (native, ptrs) = BuildNativeArgs(args);
             try
             {
-                return KitsuneExecuteStringAsync(script, native?.Length ?? 0, native, fireAndForget);
+                KitsuneExecuteStringAsync(script, native?.Length ?? 0, native, true);
             }
             finally
             {
@@ -567,9 +88,24 @@ namespace KitsuneNet
 
         /// <summary>Starts a Lua script file as a coroutine and asynchronously waits for it to complete.</summary>
         /// <exception cref="LuaException">Thrown if the Lua script raised a runtime or syntax error.</exception>
-        public async Task<string?> ExecuteFileAsync(string path, CancellationToken cancellationToken = default, params LuaValue[]? args)
+        public async Task<LuaValue> ExecuteFileAsync(string path, CancellationToken cancellationToken = default, params LuaValue[]? args)
         {
-            int id = ExecuteFile(path, false, args);
+            if (inLuaCallback)
+            {
+                throw new LuaException("cannot be called from within a registered function");
+            }
+
+            var (native, ptrs) = BuildNativeArgs(args);
+            int id = -1;
+            try
+            {
+                id = KitsuneExecuteFileAsync(path, native?.Length ?? 0, native, false);
+            }
+            finally
+            {
+                FreeNativeArgs(ptrs);
+            }
+
             if (id < 0)
             {
                 throw new InvalidOperationException($"Failed to start Lua coroutine for file '{path}'.");
@@ -586,20 +122,35 @@ namespace KitsuneNet
             }
 
             string? error = GetError(id);
+            LuaValue result = GetResultVariable(id);
             if (!string.IsNullOrEmpty(error))
             {
-                Cancel(id);
                 throw new LuaException(error);
             }
 
-            return GetResultString(id);
+            return result;
         }
 
         /// <summary>Starts a Lua script string as a coroutine and asynchronously waits for it to complete.</summary>
         /// <exception cref="LuaException">Thrown if the Lua script raised a runtime or syntax error.</exception>
-        public async Task<string?> ExecuteStringAsync(string script, CancellationToken cancellationToken = default, params LuaValue[]? args)
+        public async Task<LuaValue> ExecuteStringAsync(string script, CancellationToken cancellationToken = default, params LuaValue[]? args)
         {
-            int id = ExecuteString(script, false, args);
+            if (inLuaCallback)
+            {
+                throw new LuaException("cannot be called from within a registered function");
+            }
+
+            var (native, ptrs) = BuildNativeArgs(args);
+            int id = -1;
+            try
+            {
+                id = KitsuneExecuteStringAsync(script, native?.Length ?? 0, native, false);
+            }
+            finally
+            {
+                FreeNativeArgs(ptrs);
+            }
+
             if (id < 0)
             {
                 throw new InvalidOperationException("Failed to start Lua coroutine.");
@@ -616,18 +167,18 @@ namespace KitsuneNet
             }
 
             string? error = GetError(id);
+            LuaValue result = GetResultVariable(id);
             if (!string.IsNullOrEmpty(error))
             {
-                Cancel(id);
                 throw new LuaException(error);
             }
 
-            return GetResultString(id);
+            return result;
         }
 
-        /// <summary>Calls a global Lua function as a coroutine and returns its ID, or -1 on failure.</summary>
+        /// <summary>Calls a global Lua function as a background coroutine (fire-and-forget).</summary>
         /// <exception cref="LuaException">Thrown if called from within a registered function callback.</exception>
-        public int ExecuteFunction(string functionName, bool fireAndForget = false, params LuaValue[]? args)
+        public void ExecuteFunction(string functionName, params LuaValue[]? args)
         {
             if (inLuaCallback)
             {
@@ -637,7 +188,7 @@ namespace KitsuneNet
             var (native, ptrs) = BuildNativeArgs(args);
             try
             {
-                return KitsuneExecuteFunctionAsync(functionName, native?.Length ?? 0, native, fireAndForget);
+                KitsuneExecuteFunctionAsync(functionName, native?.Length ?? 0, native, true);
             }
             finally
             {
@@ -647,9 +198,24 @@ namespace KitsuneNet
 
         /// <summary>Calls a global Lua function as a coroutine and asynchronously waits for it to complete.</summary>
         /// <exception cref="LuaException">Thrown if the Lua function raised a runtime error.</exception>
-        public async Task<string?> ExecuteFunctionAsync(string functionName, CancellationToken cancellationToken = default, params LuaValue[]? args)
+        public async Task<LuaValue> ExecuteFunctionAsync(string functionName, CancellationToken cancellationToken = default, params LuaValue[]? args)
         {
-            int id = ExecuteFunction(functionName, false, args);
+            if (inLuaCallback)
+            {
+                throw new LuaException("cannot be called from within a registered function");
+            }
+
+            var (native, ptrs) = BuildNativeArgs(args);
+            int id = -1;
+            try
+            {
+                id = KitsuneExecuteFunctionAsync(functionName, native?.Length ?? 0, native, false);
+            }
+            finally
+            {
+                FreeNativeArgs(ptrs);
+            }
+
             if (id < 0)
             {
                 throw new InvalidOperationException($"Failed to start Lua coroutine for function '{functionName}'.");
@@ -666,13 +232,13 @@ namespace KitsuneNet
             }
 
             string? error = GetError(id);
+            LuaValue result = GetResultVariable(id);
             if (!string.IsNullOrEmpty(error))
             {
-                Cancel(id);
                 throw new LuaException(error);
             }
 
-            return GetResultString(id);
+            return result;
         }
 
         /// <summary>Runs a Lua script file synchronously and returns the typed result.
@@ -741,75 +307,101 @@ namespace KitsuneNet
             }
         }
 
-        // -- Per-coroutine queries ------------------------------------------------
-
-        /// <summary>Returns <c>true</c> once the coroutine has finished (success or error).</summary>
-        public bool HasResult(int id, out nuint len) => KitsuneHasResult(id, out len);
-
-        /// <summary>Returns <c>true</c> once the coroutine has finished (success or error).</summary>
-        public bool HasResult(int id) => KitsuneHasResult(id, out _);
-
-        /// <summary>Returns the error string for a finished coroutine, or <c>null</c> if none.</summary>
-        public string? GetError(int id)
+        /// <summary>Starts execution of a <see cref="LuaValue"/> as a background coroutine (fire-and-forget).
+        /// <list type="bullet">
+        /// <item><see cref="LuaType.Function"/> — calls the Lua function with <paramref name="args"/> as direct parameters.</item>
+        /// <item><see cref="LuaType.String"/> — loads the string as a Lua chunk; <paramref name="args"/> are exposed as <c>ARGS[1..n]</c>.</item>
+        /// <item>Anything else — no-op (silently ignored).</item>
+        /// </list></summary>
+        /// <exception cref="LuaException">Thrown if called from within a registered function callback.</exception>
+        public void ExecuteVariable(LuaValue variable, params LuaValue[]? args)
         {
-            nuint len = KitsuneGetError(id, null, 0);
-            if (len == 0)
+            if (inLuaCallback)
             {
-                return null;
+                throw new LuaException("cannot be called from within a registered function");
             }
 
-            if (len > (nuint)Array.MaxLength)
+            var (nv, native, ptrs) = BuildVariableAndArgs(variable, args);
+            try
             {
-                throw new InvalidOperationException($"Error message length {len} exceeds the managed array limit.");
+                KitsuneExecuteVariableAsync(ref nv, native?.Length ?? 0, native, true);
             }
-            int intLen = (int)len;
-            byte[] buf = new byte[intLen + 1];
-            KitsuneGetError(id, buf, (nuint)buf.Length);
-            return Encoding.UTF8.GetString(buf, 0, intLen);
+            finally
+            {
+                FreeNativeArgs(ptrs);
+            }
         }
 
-        /// <summary>Returns the typed result and releases the slot.</summary>
-        public LuaValue GetResultVariable(int id) => NativePtrToLuaValue(KitsuneGetResult(id));
-
-        /// <summary>Returns the result as a UTF-8/Unicode string, or <c>null</c> if nil/none. Releases the slot.</summary>
-        public string? GetResultString(int id)
+        /// <summary>Executes a <see cref="LuaValue"/> as a coroutine and asynchronously waits for it to complete.
+        /// See <see cref="ExecuteVariable"/> for dispatch rules.</summary>
+        /// <exception cref="LuaException">Thrown if the execution raised a runtime or syntax error.</exception>
+        public async Task<LuaValue> ExecuteVariableAsync(LuaValue variable, CancellationToken cancellationToken = default, params LuaValue[]? args)
         {
-            LuaValue v = GetResultVariable(id);
-            return (v.Type == LuaType.String || v.Type == LuaType.Char16) ? v.String : null;
-        }
+            if (inLuaCallback)
+            {
+                throw new LuaException("cannot be called from within a registered function");
+            }
 
-        /// <summary>Returns the result as raw bytes, or <c>null</c> if nil/none. Releases the slot.</summary>
-        public byte[]? GetResult(int id)
-        {
-            IntPtr ptr = KitsuneGetResult(id);
-            if (ptr == IntPtr.Zero)
+            var (nv, native, ptrs) = BuildVariableAndArgs(variable, args);
+            int id = -1;
+            try
             {
-                return null;
+                id = KitsuneExecuteVariableAsync(ref nv, native?.Length ?? 0, native, false);
             }
-            var nv = Marshal.PtrToStructure<KitsuneVariable>(ptr);
-            byte[]? result = null;
-            if (nv.Type == (int)LuaType.String && nv.Data != IntPtr.Zero && nv.Length > 0)
+            finally
             {
-                if (nv.Length > (nuint)Array.MaxLength)
-                {
-                    throw new InvalidOperationException($"Result length {nv.Length} exceeds the managed array limit.");
-                }
-                int len = (int)nv.Length;
-                result = new byte[len];
-                Marshal.Copy(nv.Data, result, 0, len);
+                FreeNativeArgs(ptrs);
             }
-            KitsuneVariableFree(ptr);
+
+            if (id < 0)
+            {
+                throw new InvalidOperationException("Failed to start Lua coroutine.");
+            }
+
+            try
+            {
+                await WaitAsync(id, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                Cancel(id);
+                throw;
+            }
+
+            string? error = GetError(id);
+            LuaValue result = GetResultVariable(id);
+            if (!string.IsNullOrEmpty(error))
+            {
+                throw new LuaException(error);
+            }
+
             return result;
+        }
+
+        /// <summary>Executes a <see cref="LuaValue"/> synchronously and returns the typed result.
+        /// Returns <see cref="LuaValue.None"/> on start failure or if execution raised an error.
+        /// See <see cref="ExecuteVariable"/> for dispatch rules.</summary>
+        /// <exception cref="LuaException">Thrown if called from within a registered function callback.</exception>
+        public LuaValue RunVariable(LuaValue variable, params LuaValue[]? args)
+        {
+            if (inLuaCallback)
+            {
+                throw new LuaException("cannot be called from within a registered function");
+            }
+
+            var (nv, native, ptrs) = BuildVariableAndArgs(variable, args);
+            try
+            {
+                return NativePtrToLuaValue(KitsuneExecuteVariable(ref nv, native?.Length ?? 0, native));
+            }
+            finally
+            {
+                FreeNativeArgs(ptrs);
+            }
         }
 
         /// <summary>Signals the coroutine to stop and releases its slot.</summary>
         public void Cancel(int id) => KitsuneCancel(id);
-
-        /// <summary>Releases the slot of a finished coroutine without consuming its result.
-        /// Use after reading the error with <see cref="GetError"/> when you do not need the result.
-        /// No-op for running coroutines — use <see cref="Cancel"/> for those. Thread-safe.
-        /// </summary>
-        public void ReleaseResult(int id) => KitsuneReleaseResult(id);
 
         /// <summary>
         /// Returns how long the coroutine has been alive in milliseconds, measured from when it was created.
@@ -870,6 +462,8 @@ namespace KitsuneNet
             while (!HasResult(id))
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                if (GetStatus(id) == CoroutineStatus.None)
+                    return;  // engine disposed or slot compacted; will never produce a result
                 Thread.Sleep(1);
             }
         }
@@ -896,6 +490,8 @@ namespace KitsuneNet
             while (!HasResult(id))
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                if (GetStatus(id) == CoroutineStatus.None)
+                    return;  // engine disposed or slot compacted; will never produce a result
                 await Task.Delay(1, cancellationToken).ConfigureAwait(false);
             }
         }
@@ -1047,6 +643,472 @@ namespace KitsuneNet
             KitsuneRegisterFunction(name, fp, (nint)GCHandle.ToIntPtr(handle));
         }
 
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        #region P/Invoke
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool KitsuneInit(IntPtr initFunc);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern void KitsuneVariableFree(IntPtr var);
+
+        /// <summary>Releases a heap-allocated <c>KitsuneVariable*</c> via the native free function.
+        /// Called by <see cref="LuaFunctionRef.Dispose"/> to release a Lua registry reference.
+        /// Must not be called while the pointer is still in use.</summary>
+        private static void ReleaseNativeVariable(IntPtr ptr) => KitsuneVariableFree(ptr);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern int KitsuneExecuteFileAsync([MarshalAs(UnmanagedType.LPUTF8Str)] string path, int argc, KitsuneVariable[]? argv, [MarshalAs(UnmanagedType.I1)] bool fireAndForget);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern int KitsuneExecuteStringAsync([MarshalAs(UnmanagedType.LPUTF8Str)] string script, int argc, KitsuneVariable[]? argv, [MarshalAs(UnmanagedType.I1)] bool fireAndForget);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern int KitsuneExecuteFunctionAsync([MarshalAs(UnmanagedType.LPUTF8Str)] string functionName, int argc, KitsuneVariable[]? argv, [MarshalAs(UnmanagedType.I1)] bool fireAndForget);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr KitsuneExecuteFile([MarshalAs(UnmanagedType.LPUTF8Str)] string path, int argc, KitsuneVariable[]? argv);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr KitsuneExecuteString([MarshalAs(UnmanagedType.LPUTF8Str)] string script, int argc, KitsuneVariable[]? argv);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr KitsuneExecuteFunction([MarshalAs(UnmanagedType.LPUTF8Str)] string functionName, int argc, KitsuneVariable[]? argv);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern int KitsuneExecuteVariableAsync(ref KitsuneVariable var, int argc, KitsuneVariable[]? argv, [MarshalAs(UnmanagedType.I1)] bool fireAndForget);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr KitsuneExecuteVariable(ref KitsuneVariable var, int argc, KitsuneVariable[]? argv);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern nuint KitsuneGetError(int id, byte[]? buf, nuint bufSize);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool KitsuneHasResult(int id, out nuint len);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr KitsuneGetResult(int id);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern void KitsuneCancel(int id);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern void KitsuneReleaseResult(int id);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern double KitsuneGetRuntime(int id);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern int KitsuneGetStatus(int id);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool KitsuneIsRunning();
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern int KitsuneGetRunningId();
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern void KitsuneInterrupt();
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern void KitsuneWait();
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool KitsuneSetVariable([MarshalAs(UnmanagedType.LPUTF8Str)] string name, ref KitsuneVariable var);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr KitsuneGetVariable([MarshalAs(UnmanagedType.LPUTF8Str)] string name);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern int KitsuneGetActiveIds(int[]? buffer, int bufferSize);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern nuint KitsuneCleanup();
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern void KitsuneRegisterSession();
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern void KitsuneGetAll([MarshalAs(UnmanagedType.LPUTF8Str)] string? path, GetAllCallback callback, IntPtr userdata);
+
+        // func is a delegate* unmanaged[Cdecl] cast to nint; userdata is a GCHandle address.
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern void KitsuneRegisterFunction([MarshalAs(UnmanagedType.LPUTF8Str)] string name, nint func, nint userdata);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr KitsuneCreateMemoryBlock(nuint size);
+
+        #endregion
+
+        // Converts a LuaValue[] to a KitsuneVariable[] suitable for P/Invoke.
+        // String data is heap-allocated; caller MUST call FreeNativeArgs when done.
+        private static (KitsuneVariable[]? Native, IntPtr[] Ptrs) BuildNativeArgs(LuaValue[]? args)
+        {
+            if (args is null || args.Length == 0)
+            {
+                return (null, []);
+            }
+
+            var native = new KitsuneVariable[args.Length];
+            var ptrs = new List<IntPtr>(args.Length);
+            for (int i = 0; i < args.Length; i++)
+            {
+                FillNativeVariable(ref native[i], args[i], ptrs);
+            }
+
+            return (native, [.. ptrs]);
+        }
+
+        private static void FreeNativeArgs(IntPtr[] ptrs)
+        {
+            foreach (var p in ptrs)
+            {
+                Marshal.FreeHGlobal(p);
+            }
+        }
+
+        private static LuaValue NativeCopyBytes(IntPtr src, nuint length)
+        {
+            if (length > (nuint)Array.MaxLength)
+            {
+                throw new InvalidOperationException($"Native data length {length} exceeds the managed array limit.");
+            }
+            int len = (int)length;
+            byte[] bytes = new byte[len];
+            if (len > 0)
+            {
+                Marshal.Copy(src, bytes, 0, len);
+            }
+            return LuaValue.FromBytes(bytes);
+        }
+
+        // wcharCount is the char16_t count; each char16_t is 2 bytes (UTF-16 LE on Windows).
+        private static LuaValue NativeCopyChar16(IntPtr src, nuint wcharCount)
+        {
+            if (wcharCount > (nuint)(Array.MaxLength / 2))
+            {
+                throw new InvalidOperationException($"Native wchar count {wcharCount} exceeds the managed array limit.");
+            }
+            int byteCount = (int)wcharCount * 2;
+            byte[] bytes = new byte[byteCount];
+            if (byteCount > 0)
+            {
+                Marshal.Copy(src, bytes, 0, byteCount);
+            }
+            return new LuaValue { Type = LuaType.Char16, Bytes = bytes };
+        }
+
+        private static LuaValue NativeParseJson(IntPtr src, nuint length)
+        {
+            if (length > (nuint)Array.MaxLength)
+            {
+                throw new InvalidOperationException($"Native data length {length} exceeds the managed array limit.");
+            }
+            int len = (int)length;
+            byte[] bytes = new byte[len];
+            Marshal.Copy(src, bytes, 0, len);
+            try
+            {
+                return new LuaValue { Type = LuaType.Json, JsonNode = JsonNode.Parse(bytes) };
+            }
+            catch
+            {
+                return LuaValue.FromBytes(bytes);
+            }
+        }
+
+        // Reads a heap-allocated KitsuneVariable*, converts it to LuaValue, and frees it.
+        // For LuaType.Function the pointer is NOT freed here; ownership transfers to LuaFunctionRef.
+        private static LuaValue NativePtrToLuaValue(IntPtr ptr)
+        {
+            if (ptr == IntPtr.Zero)
+            {
+                return LuaValue.None;
+            }
+            var nv = Marshal.PtrToStructure<KitsuneVariable>(ptr);
+            LuaType t = (LuaType)nv.Type;
+
+            // Function: transfer the native pointer to a LuaFunctionRef; caller owns the ref.
+            // KitsuneVariableFree must NOT be called here — LuaFunctionRef.Dispose() does it.
+            if (t == LuaType.Function)
+            {
+                return new LuaValue
+                {
+                    Type = LuaType.Function,
+                    FunctionRef = new LuaFunctionRef(ptr)
+                };
+            }
+            LuaValue result = t switch
+            {
+                LuaType.Number => LuaValue.FromNumber(nv.Number),
+                LuaType.Integer => LuaValue.FromInt64(nv.Integer),
+                LuaType.Boolean => LuaValue.FromBool(nv.BoolByte != 0),
+                LuaType.String when nv.Data != IntPtr.Zero => NativeCopyBytes(nv.Data, nv.Length),
+                LuaType.Char16 when nv.Data != IntPtr.Zero => NativeCopyChar16(nv.Data, nv.Length),
+                LuaType.Userdata when nv.Data != IntPtr.Zero && nv.Length > 0 => NativeCopyBytes(nv.Data, nv.Length) with { Type = LuaType.Userdata },
+                LuaType.Json when nv.Data != IntPtr.Zero && nv.Length > 0 => NativeParseJson(nv.Data, nv.Length),
+                LuaType.Stream when nv.Data != IntPtr.Zero => NativeWrapSharedMemory(nv.Data),
+                LuaType.Table => ReadNativeTable(nv.Data),
+                LuaType.Error when nv.Data != IntPtr.Zero => NativeCopyBytes(nv.Data, nv.Length) with { Type = LuaType.Error },
+                LuaType.None => LuaValue.None,
+                _ => new LuaValue { Type = t },  // Nil/Userdata/Thread/LightUserdata
+            };
+            KitsuneVariableFree(ptr);
+            return result;
+        }
+
+        // Converts a by-value KitsuneVariable (already marshaled into managed memory) to a LuaValue.
+        // Does NOT free any native memory — use this for embedded struct members, not heap pointers.
+        // Function values are returned as opaque (Type=Function, no FunctionRef) since the variable
+        // is embedded inside a larger allocation (table node or callback args array).
+        private static LuaValue NativeVariableToLuaValue(KitsuneVariable nv)
+        {
+            LuaType t = (LuaType)nv.Type;
+            return t switch
+            {
+                LuaType.Number => LuaValue.FromNumber(nv.Number),
+                LuaType.Integer => LuaValue.FromInt64(nv.Integer),
+                LuaType.Boolean => LuaValue.FromBool(nv.BoolByte != 0),
+                LuaType.String when nv.Data != IntPtr.Zero => NativeCopyBytes(nv.Data, nv.Length),
+                LuaType.Char16 when nv.Data != IntPtr.Zero => NativeCopyChar16(nv.Data, nv.Length),
+                LuaType.Userdata when nv.Data != IntPtr.Zero && nv.Length > 0 => NativeCopyBytes(nv.Data, nv.Length) with { Type = LuaType.Userdata },
+                LuaType.Json when nv.Data != IntPtr.Zero && nv.Length > 0 => NativeParseJson(nv.Data, nv.Length),
+                LuaType.Stream when nv.Data != IntPtr.Zero => NativeWrapSharedMemory(nv.Data),
+                LuaType.Table => ReadNativeTable(nv.Data),
+                LuaType.None => LuaValue.None,
+                _ => new LuaValue { Type = t },
+            };
+        }
+
+        // Walks a native KeyValuePairKitsuneVariableNode linked list and converts it to a LuaValue table.
+        // NativeVariableToLuaValue is called recursively for each entry, so nested tables are handled.
+        private static LuaValue ReadNativeTable(IntPtr headPtr)
+        {
+            if (headPtr == IntPtr.Zero)
+            {
+                return new LuaValue { Type = LuaType.Table };
+            }
+            var entries = new List<KeyValuePair<LuaValue, LuaValue>>();
+            IntPtr node = headPtr;
+            while (node != IntPtr.Zero)
+            {
+                var n = Marshal.PtrToStructure<NativeKVNode>(node);
+                entries.Add(new KeyValuePair<LuaValue, LuaValue>(
+                    NativeVariableToLuaValue(n.Key),
+                    NativeVariableToLuaValue(n.Value)));
+                node = n.Next;
+            }
+            return LuaValue.FromTable(entries.AsReadOnly());
+        }
+
+        // Builds a native linked list from a managed table. Every allocation is added to ptrs for cleanup.
+        private static IntPtr BuildNativeTable(
+            IReadOnlyList<KeyValuePair<LuaValue, LuaValue>> entries, List<IntPtr> ptrs)
+        {
+            if (entries.Count == 0)
+            {
+                return IntPtr.Zero;
+            }
+            int nodeSize = Marshal.SizeOf<NativeKVNode>();
+            var nodes = new IntPtr[entries.Count];
+            for (int i = 0; i < entries.Count; i++)
+            {
+                nodes[i] = Marshal.AllocHGlobal(nodeSize);
+                ptrs.Add(nodes[i]);
+            }
+            for (int i = 0; i < entries.Count; i++)
+            {
+                var n = default(NativeKVNode);
+                FillNativeVariable(ref n.Key, entries[i].Key, ptrs);
+                FillNativeVariable(ref n.Value, entries[i].Value, ptrs);
+                n.Next = i + 1 < entries.Count ? nodes[i + 1] : IntPtr.Zero;
+                Marshal.StructureToPtr(n, nodes[i], false);
+            }
+            return nodes[0];
+        }
+
+        // Fills a single KitsuneVariable struct for native pass-through; string and table data are
+        // heap-allocated and added to ptrs so FreeNativeArgs cleans them up after the call returns.
+        private static void FillNativeVariable(ref KitsuneVariable nv, LuaValue v, List<IntPtr> ptrs)
+        {
+            nv.Type = (int)v.Type;
+            switch (v.Type)
+            {
+                case LuaType.Number:
+                    nv.Number = v.Number;
+                    break;
+                case LuaType.Integer:
+                    nv.Integer = v.Int64;
+                    break;
+                case LuaType.Boolean:
+                    nv.BoolByte = v.Boolean ? (byte)1 : (byte)0;
+                    break;
+                case LuaType.String:
+                    if (v.Bytes is not null)
+                    {
+                        byte[] bytes = v.Bytes;
+                        IntPtr p = Marshal.AllocHGlobal(bytes.Length + 1);
+                        if (bytes.Length > 0)
+                        {
+                            Marshal.Copy(bytes, 0, p, bytes.Length);
+                        }
+                        Marshal.WriteByte(p, bytes.Length, 0);
+                        ptrs.Add(p);
+                        nv.Data = p;
+                        nv.Length = (nuint)bytes.Length;
+                    }
+                    break;
+                case LuaType.Char16:
+                    if (v.Bytes is not null)
+                    {
+                        // Bytes stores UTF-16 LE; Length = number of char16_t code units (2 bytes each).
+                        byte[] wbytes = v.Bytes;
+                        IntPtr p = Marshal.AllocHGlobal(wbytes.Length + 2);  // +2 for null char16_t
+                        if (wbytes.Length > 0)
+                        {
+                            Marshal.Copy(wbytes, 0, p, wbytes.Length);
+                        }
+                        Marshal.WriteInt16(p, wbytes.Length, 0);
+                        ptrs.Add(p);
+                        nv.Data = p;
+                        nv.Length = (nuint)(wbytes.Length / 2);
+                    }
+                    break;
+                case LuaType.Function when v.FunctionRef is { } fr && fr.NativePtr != IntPtr.Zero:
+                    {
+                        // Copy the registry ref integer from the native KitsuneVariable.
+                        // PushKitsuneVariable uses lua_rawgeti with this ref to push the function.
+                        var fnv = Marshal.PtrToStructure<KitsuneVariable>(fr.NativePtr);
+                        nv.Integer = fnv.Integer;
+                        break;
+                    }
+                case LuaType.Table when v.Table is not null:
+                    nv.Data = BuildNativeTable(v.Table, ptrs);
+                    nv.Length = (nuint)v.Table.Count;
+                    break;
+                case LuaType.Json when v.JsonNode is not null:
+                    {
+                        byte[] json = JsonSerializer.SerializeToUtf8Bytes(v.JsonNode);
+                        IntPtr p = Marshal.AllocHGlobal(json.Length + 1);
+                        Marshal.Copy(json, 0, p, json.Length);
+                        Marshal.WriteByte(p, json.Length, 0);
+                        ptrs.Add(p);
+                        nv.Data = p;
+                        nv.Length = (nuint)json.Length;
+                        break;
+                    }
+                case LuaType.Stream when v.StreamValue is not null:
+                    {
+                        // Fast path: CreateStream block — pass the existing block directly (zero copy).
+                        // MarkPassedToLua flips _isManaged=false to prevent a second fast-pass of the
+                        // same block. The C++ lua_push_sharedmemory_stream call sets FlagLuaReferenced
+                        // on the block so Dispose knows Lua's GC will eventually set OWNER_DISPOSED.
+                        if (v.StreamValue is LuaStream managedLs)
+                        {
+                            IntPtr sharedPtr = managedLs.GetSharedBlockPtr();
+                            if (sharedPtr != IntPtr.Zero)
+                            {
+                                managedLs.MarkPassedToLua(); // disable fast path for future calls
+                                nv.Data = sharedPtr;
+                                break;
+                            }
+                        }
+
+                        // Copy path: allocate a new block and fill it with the stream's bytes.
+                        byte[] data = v.StreamValue switch
+                        {
+                            LuaStream ls => ls.ToArray(),
+                            System.IO.MemoryStream ms => ms.ToArray(),
+                            _ => ReadStreamToBytes(v.StreamValue),
+                        };
+
+                        // Returns NULL on allocation failure; stream arg is silently skipped.
+                        IntPtr block = KitsuneCreateMemoryBlock((nuint)data.Length);
+                        if (block == IntPtr.Zero)
+                        {
+                            break;
+                        }
+
+                        if (data.Length > 0)
+                        {
+                            Marshal.Copy(data, 0, IntPtr.Add(block, 32), data.Length);
+                        }
+
+                        nv.Data = block;
+
+                        // NOT added to ptrs — the block is owned by the global list; freed by ticker.
+                        break;
+                    }
+            }
+        }
+
+        // Wraps an inbound SharedMemoryBlock* in a LuaStream — zero copy.
+        // The LuaStream clears ACCESSOR_DISPOSED on the block, taking ownership of the accessor
+        // role. Disposing sets ACCESSOR_DISPOSED; the engine's ticker frees the block once Lua
+        // also sets OWNER_DISPOSED via shmem_close.
+        private static LuaValue NativeWrapSharedMemory(IntPtr blockPtr)
+        {
+            if (blockPtr == IntPtr.Zero)
+            {
+                return LuaValue.None;
+            }
+            var header = Marshal.PtrToStructure<SharedMemoryBlockHeader>(blockPtr);
+            if ((ulong)header.Size > (ulong)long.MaxValue)
+            {
+                throw new InvalidOperationException($"Stream block size {header.Size} exceeds the addressable range.");
+            }
+            return new LuaValue { Type = LuaType.Stream, StreamValue = new LuaStream(blockPtr, (long)header.Size) };
+        }
+
+        // Reads a System.IO.Stream into a byte array, seeking from the start when possible.
+        private static byte[] ReadStreamToBytes(System.IO.Stream stream)
+        {
+            if (stream.CanSeek)
+            {
+                long saved = stream.Position;
+                stream.Position = 0;
+                byte[] buf = new byte[checked((int)stream.Length)];
+                stream.ReadExactly(buf);
+                stream.Position = saved;
+                return buf;
+            }
+            using var ms = new System.IO.MemoryStream();
+            stream.CopyTo(ms);
+            return ms.ToArray();
+        }
+
+        // Fills a single KitsuneVariable for the variable-to-execute and its argument list.
+        // All heap allocations are added to ptrs; caller must pass the array to FreeNativeArgs.
+        private static (KitsuneVariable Var, KitsuneVariable[]? Args, IntPtr[] Ptrs) BuildVariableAndArgs(
+            LuaValue variable, LuaValue[]? args)
+        {
+            var ptrs = new List<IntPtr>();
+            var nv = default(KitsuneVariable);
+            FillNativeVariable(ref nv, variable, ptrs);
+
+            KitsuneVariable[]? native = null;
+            if (args is { Length: > 0 })
+            {
+                native = new KitsuneVariable[args.Length];
+                for (int i = 0; i < args.Length; i++)
+                {
+                    FillNativeVariable(ref native[i], args[i], ptrs);
+                }
+            }
+
+            return (nv, native, [.. ptrs]);
+        }
+
         // Called from native code for every function registered via RegisterFunction.
         // One trampoline handles all registrations; the GCHandle in userdata identifies the target.
         [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
@@ -1129,10 +1191,141 @@ namespace KitsuneNet
             }
         }
 
-        public void Dispose()
+        private int StartFile(string path, params LuaValue[]? args)
         {
-            Dispose(true);
-            GC.SuppressFinalize(this);
+            if (inLuaCallback)
+            {
+                throw new LuaException("cannot be called from within a registered function");
+            }
+
+            var (native, ptrs) = BuildNativeArgs(args);
+            try
+            {
+                return KitsuneExecuteFileAsync(path, native?.Length ?? 0, native, false);
+            }
+            finally
+            {
+                FreeNativeArgs(ptrs);
+            }
+        }
+
+        /// <summary>Releases the slot of a finished coroutine without consuming its result.
+        /// Use after reading the error with <see cref="GetError"/> when you do not need the result.
+        /// No-op for running coroutines — use <see cref="Cancel"/> for those. Thread-safe.
+        /// </summary>
+        private void ReleaseResult(int id) => KitsuneReleaseResult(id);
+
+        private int StartString(string script, params LuaValue[]? args)
+        {
+            if (inLuaCallback)
+            {
+                throw new LuaException("cannot be called from within a registered function");
+            }
+
+            var (native, ptrs) = BuildNativeArgs(args);
+            try
+            {
+                return KitsuneExecuteStringAsync(script, native?.Length ?? 0, native, false);
+            }
+            finally
+            {
+                FreeNativeArgs(ptrs);
+            }
+        }
+
+        private int StartFunction(string functionName, params LuaValue[]? args)
+        {
+            if (inLuaCallback)
+            {
+                throw new LuaException("cannot be called from within a registered function");
+            }
+
+            var (native, ptrs) = BuildNativeArgs(args);
+            try
+            {
+                return KitsuneExecuteFunctionAsync(functionName, native?.Length ?? 0, native, false);
+            }
+            finally
+            {
+                FreeNativeArgs(ptrs);
+            }
+        }
+
+        private int StartVariable(LuaValue variable, params LuaValue[]? args)
+        {
+            if (inLuaCallback)
+            {
+                throw new LuaException("cannot be called from within a registered function");
+            }
+
+            var (nv, native, ptrs) = BuildVariableAndArgs(variable, args);
+            try
+            {
+                return KitsuneExecuteVariableAsync(ref nv, native?.Length ?? 0, native, false);
+            }
+            finally
+            {
+                FreeNativeArgs(ptrs);
+            }
+        }
+
+        /// <summary>Returns <c>true</c> once the coroutine has finished (success or error).</summary>
+        private bool HasResult(int id, out nuint len) => KitsuneHasResult(id, out len);
+
+        /// <summary>Returns <c>true</c> once the coroutine has finished (success or error).</summary>
+        private bool HasResult(int id) => KitsuneHasResult(id, out _);
+
+        /// <summary>Returns the error string for a finished coroutine, or <c>null</c> if none.</summary>
+        private string? GetError(int id)
+        {
+            nuint len = KitsuneGetError(id, null, 0);
+            if (len == 0)
+            {
+                return null;
+            }
+
+            if (len > (nuint)Array.MaxLength)
+            {
+                throw new InvalidOperationException($"Error message length {len} exceeds the managed array limit.");
+            }
+            int intLen = (int)len;
+            byte[] buf = new byte[intLen + 1];
+            KitsuneGetError(id, buf, (nuint)buf.Length);
+            return Encoding.UTF8.GetString(buf, 0, intLen);
+        }
+
+        /// <summary>Returns the typed result and releases the slot.</summary>
+        private LuaValue GetResultVariable(int id) => NativePtrToLuaValue(KitsuneGetResult(id));
+
+        /// <summary>Returns the result as a UTF-8/Unicode string, or <c>null</c> if nil/none. Releases the slot.</summary>
+        private string? GetResultString(int id)
+        {
+            LuaValue v = GetResultVariable(id);
+            return (v.Type == LuaType.String || v.Type == LuaType.Char16) ? v.String : null;
+        }
+
+        /// <summary>Returns the result as raw bytes, or <c>null</c> if nil/none. Releases the slot.</summary>
+        private byte[]? GetResult(int id)
+        {
+            IntPtr ptr = KitsuneGetResult(id);
+            if (ptr == IntPtr.Zero)
+            {
+                return null;
+            }
+            var nv = Marshal.PtrToStructure<KitsuneVariable>(ptr);
+            byte[]? result = null;
+            if (nv.Type == (int)LuaType.String && nv.Data != IntPtr.Zero && nv.Length > 0)
+            {
+                if (nv.Length > (nuint)Array.MaxLength)
+                {
+                    throw new InvalidOperationException($"Result length {nv.Length} exceeds the managed array limit.");
+                }
+                int len = (int)nv.Length;
+                result = new byte[len];
+                Marshal.Copy(nv.Data, result, 0, len);
+            }
+            KitsuneVariableFree(ptr);
+            return result;
         }
 
         private void Dispose(bool disposing)
@@ -1159,6 +1352,58 @@ namespace KitsuneNet
             }
         }
 
-        ~KitsuneEngine() => Dispose(false);
+        // KitsuneVariable x64 layout: int(4) + padding(4) + nuint(8) + union(8) = 24 bytes.
+        [StructLayout(LayoutKind.Explicit, Size = 24)]
+        private struct KitsuneVariable
+        {
+            [FieldOffset(0)]
+            public int Type;
+
+            [FieldOffset(8)]
+            public nuint Length;
+
+            [FieldOffset(16)]
+            public IntPtr Data;
+
+            [FieldOffset(16)]
+            public double Number;
+
+            [FieldOffset(16)]
+            public long Integer;
+
+            [FieldOffset(16)]
+            public byte BoolByte;
+        }
+
+        // Mirrors KeyValuePairKitsuneVariableNode: Key(24) + Value(24) + Next ptr(8) = 56 bytes.
+        [StructLayout(LayoutKind.Sequential)]
+        private struct NativeKVNode
+        {
+            public KitsuneVariable Key;
+            public KitsuneVariable Value;
+            public IntPtr Next;
+        }
+
+        // Mirrors the x64 layout of SharedMemoryBlock (see KitsuneEngine.h):
+        //   offset  0: BYTE              flags    (1 byte + 7 padding)
+        //   offset  8: void*             userdata (8 bytes, reserved)
+        //   offset 16: SharedMemoryBlock* next    (8 bytes, intrusive list link — do NOT read/write from C#)
+        //   offset 24: size_t            size     (8 bytes)
+        //   offset 32: BYTE              data[]   (variable — NOT part of this header struct)
+        [StructLayout(LayoutKind.Explicit, Size = 32)]
+        private struct SharedMemoryBlockHeader
+        {
+            [FieldOffset(0)]
+            public byte Flags;
+
+            [FieldOffset(8)]
+            public IntPtr UserData;
+
+            [FieldOffset(16)]
+            public IntPtr Next; // intrusive list pointer — not used by C#
+
+            [FieldOffset(24)]
+            public nuint Size;
+        }
     }
 }

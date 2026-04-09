@@ -42,7 +42,7 @@ public sealed class KafkaTests
         _ => v.String ?? v.Type.ToString(),
     };
 
-    private async Task<string?> Run(string lua)
+    private async Task<LuaValue> Run(string lua)
     {
         var engine = new KitsuneEngine();
         engine.RegisterFunction("print", args =>
@@ -50,7 +50,7 @@ public sealed class KafkaTests
             _output.WriteLine(string.Join("\t", args.Select(LuaValueToString)));
             return LuaValue.None;
         });
-        string? result;
+        LuaValue result;
         try
         {
             result = await engine.ExecuteStringAsync(lua).ConfigureAwait(false);
@@ -68,58 +68,58 @@ public sealed class KafkaTests
         return result;
     }
 
-    // ── creation ─────────────────────────────────────────────────────────────
+    // -- creation -------------------------------------------------------------
     [KafkaFact]
     public async Task NewProducer_ValidConfig_ReturnsUserdata()
     {
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
             assert(p, 'NewProducer returned nil')
             return tostring(p):sub(1, 13)
         ");
-        r.ShouldBe("KafkaProducer");
+        r.String.ShouldBe("KafkaProducer");
     }
 
     [KafkaFact]
     public async Task NewConsumer_ValidConfig_ReturnsUserdata()
     {
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local c = Kafka.NewConsumer({{['bootstrap.servers']='{Bootstrap()}'}})
             assert(c, 'NewConsumer returned nil')
             return tostring(c):sub(1, 13)
         ");
-        r.ShouldBe("KafkaConsumer");
+        r.String.ShouldBe("KafkaConsumer");
     }
 
     [KafkaFact]
     public async Task Producer_Close_IsIdempotent()
     {
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
             p:Close()
             p:Close()  -- second close must not crash or error
             return 'ok'
         ");
-        r.ShouldBe("ok");
+        r.String.ShouldBe("ok");
     }
 
     [KafkaFact]
     public async Task Consumer_Close_IsIdempotent()
     {
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local c = Kafka.NewConsumer({{['bootstrap.servers']='{Bootstrap()}'}})
             c:Close()
             c:Close()  -- second close must not crash or error
             return 'ok'
         ");
-        r.ShouldBe("ok");
+        r.String.ShouldBe("ok");
     }
 
     [KafkaFact]
     public async Task Logs_ReturnsAccumulatedLogsThenClears()
     {
         // Trigger at least one librdkafka log event by connecting and disconnecting
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             -- Produce to ensure the library emits at least some internal log lines
             local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
             p:Close()
@@ -129,54 +129,54 @@ public sealed class KafkaTests
         ");
         // logs1 may or may not have content (depends on broker log level) but must be a string;
         // logs2 must always be empty after the first call clears the buffer
-        r.ShouldStartWith("true:");
-        r.ShouldEndWith(":true");
+        r.String.ShouldStartWith("true:");
+        r.String.ShouldEndWith(":true");
     }
 
-    // ── producer ─────────────────────────────────────────────────────────────
+    // -- producer -------------------------------------------------------------
     [KafkaFact]
     public async Task Producer_Send_ReturnsTrue()
     {
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
             assert(p, 'NewProducer failed')
             local ok, err = p:Send('{Topic()}', 'test-key', 'test-value')
             p:Close()
             return tostring(ok) .. ':' .. tostring(err == nil)
         ");
-        r.ShouldBe("true:true");
+        r.String.ShouldBe("true:true");
     }
 
     [KafkaFact]
     public async Task Producer_Send_NilKey_ReturnsTrue()
     {
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
             assert(p, 'NewProducer failed')
             local ok, err = p:Send('{Topic()}', nil, 'keyless-value')
             p:Close()
             return tostring(ok) .. ':' .. tostring(err == nil)
         ");
-        r.ShouldBe("true:true");
+        r.String.ShouldBe("true:true");
     }
 
     [KafkaFact]
     public async Task Producer_Send_WithHeaders_ReturnsTrue()
     {
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
             assert(p, 'NewProducer failed')
             local ok, err = p:Send('{Topic()}', 'hdr-key', 'hdr-value', {{source='kitsune-test', version='1'}})
             p:Close()
             return tostring(ok) .. ':' .. tostring(err == nil)
         ");
-        r.ShouldBe("true:true");
+        r.String.ShouldBe("true:true");
     }
 
     [KafkaFact]
     public async Task Producer_Send_WithHeadersAndPartition_ReturnsTrue()
     {
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
             assert(p, 'NewProducer failed')
             -- Exercise the branch that requires BOTH explicit partition AND headers
@@ -185,13 +185,13 @@ public sealed class KafkaTests
             p:Close()
             return tostring(ok) .. ':' .. tostring(err == nil)
         ");
-        r.ShouldBe("true:true");
+        r.String.ShouldBe("true:true");
     }
 
     [KafkaFact]
     public async Task Producer_Send_Headers_AreReceivedByConsumer()
     {
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local part      = {Partition()}
@@ -229,14 +229,14 @@ public sealed class KafkaTests
             if not data then return 'no-message' end
             return tostring(data.Headers.x == '42' and data.Headers.y == 'hello')
         ");
-        r.ShouldBe("true");
+        r.String.ShouldBe("true");
     }
 
-    // ── consumer ─────────────────────────────────────────────────────────────
+    // -- consumer -------------------------------------------------------------
     [KafkaFact]
     public async Task Consumer_Subscribe_ReturnsThread()
     {
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local c = Kafka.NewConsumer({{
                 ['bootstrap.servers'] = '{Bootstrap()}',
                 ['group.id']          = 'test_kitsune'
@@ -247,14 +247,14 @@ public sealed class KafkaTests
             c:Close()
             return type(co)
         ");
-        r.ShouldBe("thread");
+        r.String.ShouldBe("thread");
     }
 
     [KafkaFact]
     public async Task Consumer_Subscribe_ToMultipleTopics_ReturnsThread()
     {
         // Create a temporary second topic to subscribe to alongside the default one
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local bootstrap = '{Bootstrap()}'
             local topic1    = '{Topic()}'
             local topic2    = 'kitsune-multi-' .. tostring(Time())
@@ -279,13 +279,13 @@ public sealed class KafkaTests
 
             return tostring(ok2) .. ':' .. tostring(type(co) == 'thread')
         ");
-        r.ShouldBe("true:true");
+        r.String.ShouldBe("true:true");
     }
 
     [KafkaFact]
     public async Task Consumer_Assign_ReturnsThread()
     {
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local c = Kafka.NewConsumer({{
                 ['bootstrap.servers'] = '{Bootstrap()}',
                 ['group.id']          = 'test_kitsune'
@@ -296,14 +296,14 @@ public sealed class KafkaTests
             c:Close()
             return type(co)
         ");
-        r.ShouldBe("thread");
+        r.String.ShouldBe("thread");
     }
 
-    // ── round-trip ───────────────────────────────────────────────────────────
+    // -- round-trip -----------------------------------------------------------
     [KafkaFact]
     public async Task Consumer_RoundTrip_ReceivesProducedMessage()
     {
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local part      = {Partition()}
@@ -339,13 +339,13 @@ public sealed class KafkaTests
             consumer:Close()
             return tostring(received ~= nil)
         ");
-        r.ShouldBe("true");
+        r.String.ShouldBe("true");
     }
 
     [KafkaFact]
     public async Task Consumer_RoundTrip_MessageFieldsArePopulated()
     {
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local part      = {Partition()}
@@ -394,14 +394,14 @@ public sealed class KafkaTests
                 data.Key             == 'fields-key'
             return tostring(ok)
         ");
-        r.ShouldBe("true");
+        r.String.ShouldBe("true");
     }
 
-    // ── manual commit ─────────────────────────────────────────────────────────
+    // -- manual commit ---------------------------------------------------------
     [KafkaFact]
     public async Task Consumer_ManualCommit_CommitsAndPreventsDoubleCommit()
     {
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local part      = {Partition()}
@@ -446,14 +446,14 @@ public sealed class KafkaTests
             consumer:Close()
             return tostring(ok1) .. ':' .. tostring(ok2) .. ':' .. tostring(type(e2) == 'string')
         ");
-        r.ShouldBe("true:false:true");
+        r.String.ShouldBe("true:false:true");
     }
 
-    // ── AutoCommit toggle ─────────────────────────────────────────────────────
+    // -- AutoCommit toggle -----------------------------------------------------
     [KafkaFact]
     public async Task Consumer_Assign_Partition_RoundTrip()
     {
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local part      = {Partition()}
@@ -494,28 +494,28 @@ public sealed class KafkaTests
             consumer:Close()
             return tostring(found) .. '/' .. tostring(count)
         ");
-        r.ShouldBe("5/5");
+        r.String.ShouldBe("5/5");
     }
 
-    // ── Group operations ──────────────────────────────────────────────────────
+    // -- Group operations ------------------------------------------------------
     [KafkaFact]
     public async Task Producer_ListGroups_ReturnsArray()
     {
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
             local ok, groups = p:ListGroups()
             p:Close()
             if not ok then return 'err:' .. tostring(groups) end
             return tostring(type(groups) == 'table')
         ");
-        r.ShouldBe("true");
+        r.String.ShouldBe("true");
     }
 
     [KafkaFact]
     public async Task Producer_DescribeGroups_ReturnsDescription()
     {
         // First produce a message so the test group is created, then describe it
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local groupId   = 'test_kitsune'
@@ -543,14 +543,14 @@ public sealed class KafkaTests
                           type(d.Members)  == 'table'
             return tostring(valid)
         ");
-        r.ShouldBe("true");
+        r.String.ShouldBe("true");
     }
 
     [KafkaFact]
     public async Task Producer_GetGroupOffsets_ReturnsTable()
     {
         // Create a group with committed offsets, then query them
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local part      = {Partition()}
@@ -594,13 +594,13 @@ public sealed class KafkaTests
             if not ok then return 'err:' .. tostring(offsets) end
             return tostring(type(offsets) == 'table' and next(offsets) ~= nil)
         ");
-        r.ShouldBe("true");
+        r.String.ShouldBe("true");
     }
 
     [KafkaFact]
     public async Task Producer_SetGroupOffsets_ResetsPosition()
     {
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local part      = {Partition()}
@@ -627,14 +627,14 @@ public sealed class KafkaTests
             local storedOffset = offsets[key]
             return tostring(storedOffset == hi0) .. ' stored=' .. tostring(storedOffset) .. ' hi0=' .. hi0
         ");
-        r.ShouldStartWith("true");
+        r.String.ShouldStartWith("true");
     }
 
     [KafkaFact]
     public async Task Producer_DeleteGroup_DeletesInactiveGroup()
     {
         const string groupId = "test_kitsune_delgrp";
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local groupId   = '{groupId}'
@@ -661,14 +661,14 @@ public sealed class KafkaTests
             p:Close()
             return tostring(found) .. ':' .. tostring(ok3)
         ");
-        r.ShouldBe("true:true");
+        r.String.ShouldBe("true:true");
     }
 
     [KafkaFact]
     public async Task Producer_DeleteGroupOffsets_RemovesOffsets()
     {
         const string groupId = "test_kitsune_deloff";
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local part      = {Partition()}
@@ -699,14 +699,14 @@ public sealed class KafkaTests
             p:Close()
             return tostring(hadOffset) .. ':' .. tostring(ok3) .. ':' .. tostring(goneOrInvalid)
         ");
-        r.ShouldBe("true:true:true");
+        r.String.ShouldBe("true:true:true");
     }
 
-    // ── GetTopicConfig / SetTopicConfig ──────────────────────────────────────
+    // -- GetTopicConfig / SetTopicConfig --------------------------------------
     [KafkaFact]
     public async Task Producer_GetTopicConfig_ReturnsTable()
     {
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local p = Kafka.NewProducer({{['bootstrap.servers'] = bootstrap}})
@@ -719,13 +719,13 @@ public sealed class KafkaTests
                          and cfg['cleanup.policy']   ~= nil
             return tostring(valid)
         ");
-        r.ShouldBe("true");
+        r.String.ShouldBe("true");
     }
 
     [KafkaFact]
     public async Task Producer_SetTopicConfig_ChangesRetention()
     {
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local bootstrap = '{Bootstrap()}'
             local topicName = 'kitsune-cfg-' .. tostring(Time())
 
@@ -780,13 +780,13 @@ public sealed class KafkaTests
                    ' default=' .. tostring(defaultRetention) ..
                    ' updated=' .. newRetention
         ");
-        r.ShouldStartWith("true");
+        r.String.ShouldStartWith("true");
     }
 
     [KafkaFact]
     public async Task Consumer_GetTopicConfig_ReturnsTable()
     {
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local c = Kafka.NewConsumer({{['bootstrap.servers'] = bootstrap}})
@@ -795,14 +795,14 @@ public sealed class KafkaTests
             if not ok then return 'err:' .. tostring(cfg) end
             return tostring(type(cfg) == 'table' and cfg['retention.ms'] ~= nil)
         ");
-        r.ShouldBe("true");
+        r.String.ShouldBe("true");
     }
 
-    // ── CreateTopic / DestroyTopic ────────────────────────────────────────────
+    // -- CreateTopic / DestroyTopic --------------------------------------------
     [KafkaFact]
     public async Task Producer_CreateTopic_And_DestroyTopic()
     {
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local bootstrap = '{Bootstrap()}'
             local topicName = 'kitsune-test-' .. tostring(Time())
 
@@ -843,13 +843,13 @@ public sealed class KafkaTests
                    ':' .. tostring(not ok2) .. ':' .. tostring(ok3) ..
                    ':' .. tostring(existsGone)
         ");
-        r.ShouldBe("true:true:true:true:true");
+        r.String.ShouldBe("true:true:true:true:true");
     }
 
     [KafkaFact]
     public async Task Producer_CreateTopic_WithRetention_Succeeds()
     {
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local bootstrap = '{Bootstrap()}'
             local topicName = 'kitsune-ret-' .. tostring(Time())
 
@@ -884,27 +884,27 @@ public sealed class KafkaTests
             return tostring(ok) .. ':' .. tostring(existsAfter) ..
                    ':' .. tostring(ok2) .. ':' .. tostring(existsGone)
         ");
-        r.ShouldBe("true:true:true:true");
+        r.String.ShouldBe("true:true:true:true");
     }
 
     [KafkaFact]
     public async Task Producer_DestroyTopic_NonExistent_ReturnsError()
     {
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local bootstrap = '{Bootstrap()}'
             local p = Kafka.NewProducer({{['bootstrap.servers'] = bootstrap}})
             local ok, err = p:DestroyTopic('kitsune-nonexistent-' .. tostring(Time()))
             p:Close()
             return tostring(not ok) .. ':' .. tostring(type(err) == 'string')
         ");
-        r.ShouldBe("true:true");
+        r.String.ShouldBe("true:true");
     }
 
-    // ── Assign with offset / Seek ─────────────────────────────────────────────
+    // -- Assign with offset / Seek ---------------------------------------------
     [KafkaFact]
     public async Task Consumer_Assign_WithExplicitOffset_StartsFromThatOffset()
     {
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local part      = {Partition()}
@@ -951,13 +951,13 @@ public sealed class KafkaTests
             consumer:Close()
             return tostring(found) .. '/' .. tostring(count)
         ");
-        r.ShouldBe("4/4");
+        r.String.ShouldBe("4/4");
     }
 
     [KafkaFact]
     public async Task Consumer_Assign_WithEarliestKeyword_ReceivesMessages()
     {
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local part      = {Partition()}
@@ -988,13 +988,13 @@ public sealed class KafkaTests
             consumer:Close()
             return tostring(received >= 1)
         ");
-        r.ShouldBe("true");
+        r.String.ShouldBe("true");
     }
 
     [KafkaFact]
     public async Task Consumer_Seek_RepositionsToSpecificOffset()
     {
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local part      = {Partition()}
@@ -1052,7 +1052,7 @@ public sealed class KafkaTests
             consumer:Close()
             return tostring(found) .. '/' .. tostring(count)
         ");
-        r.ShouldBe("3/3");
+        r.String.ShouldBe("3/3");
     }
 
     [KafkaFact]
@@ -1062,7 +1062,7 @@ public sealed class KafkaTests
         // if the consumer is GC'd while a coroutine still holds a reference to
         // state->owner, the next poll would use-after-free. The registry anchor
         // introduced to fix that must keep the consumer alive.
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
 
@@ -1087,13 +1087,13 @@ public sealed class KafkaTests
 
             return tostring(ok)
         ");
-        r.ShouldBe("true");
+        r.String.ShouldBe("true");
     }
 
     [KafkaFact]
     public async Task Consumer_GetGroupOffsets_WithPartitionFilter()
     {
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local part      = {Partition()}
@@ -1112,7 +1112,7 @@ public sealed class KafkaTests
             if not ok2 then return 'err:' .. tostring(offsets) end
             return tostring(offsets[key] == hi0)
         ");
-        r.ShouldBe("true");
+        r.String.ShouldBe("true");
     }
 
     [KafkaFact]
@@ -1120,7 +1120,7 @@ public sealed class KafkaTests
     {
         const string g1 = "test_kitsune";
         const string g2 = "test_kitsune2";
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local part      = {Partition()}
@@ -1143,13 +1143,13 @@ public sealed class KafkaTests
             if not ok then return 'err:' .. tostring(descs) end
             return tostring(#descs == 2)
         ");
-        r.ShouldBe("true");
+        r.String.ShouldBe("true");
     }
 
     [KafkaFact]
     public async Task CreateTopic_WithReplicationFactor_Succeeds()
     {
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local bootstrap = '{Bootstrap()}'
             local topicName = 'kitsune-rf-' .. tostring(Time())
 
@@ -1162,25 +1162,25 @@ public sealed class KafkaTests
             p:Close()
             return tostring(ok)
         ");
-        r.ShouldBe("true");
+        r.String.ShouldBe("true");
     }
 
     [KafkaFact]
     public async Task GetTopicConfig_NonExistentTopic_ReturnsError()
     {
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local p = Kafka.NewProducer({{['bootstrap.servers'] = '{Bootstrap()}'}})
             local ok, cfg = p:GetTopicConfig('kitsune-does-not-exist-' .. tostring(Time()))
             p:Close()
             return tostring(not ok) .. ':' .. tostring(type(cfg) == 'string')
         ");
-        r.ShouldBe("true:true");
+        r.String.ShouldBe("true:true");
     }
 
     [KafkaFact]
     public async Task Consumer_Seek_WithEarliestKeyword_ReceivesMessages()
     {
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local part      = {Partition()}
@@ -1221,13 +1221,13 @@ public sealed class KafkaTests
             consumer:Close()
             return tostring(received >= 1)
         ");
-        r.ShouldBe("true");
+        r.String.ShouldBe("true");
     }
 
     [KafkaFact]
     public async Task Consumer_Assign_WithLatestKeyword_NoOldMessages()
     {
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local part      = {Partition()}
@@ -1256,13 +1256,13 @@ public sealed class KafkaTests
             consumer:Close()
             return tostring(received == 0)
         ");
-        r.ShouldBe("true");
+        r.String.ShouldBe("true");
     }
 
     [KafkaFact]
     public async Task Producer_GetOffsets_ReturnsLowHigh()
     {
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local part      = {Partition()}
@@ -1275,13 +1275,13 @@ public sealed class KafkaTests
             local valid = type(low) == 'number' and type(high) == 'number' and high >= low
             return tostring(valid) .. ' low=' .. low .. ' high=' .. high
         ");
-        r.ShouldStartWith("true");
+        r.String.ShouldStartWith("true");
     }
 
     [KafkaFact]
     public async Task Consumer_GetOffsets_ReturnsLowHigh()
     {
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local part      = {Partition()}
@@ -1294,13 +1294,13 @@ public sealed class KafkaTests
             local valid = type(low) == 'number' and type(high) == 'number' and high >= low
             return tostring(valid) .. ' low=' .. low .. ' high=' .. high
         ");
-        r.ShouldStartWith("true");
+        r.String.ShouldStartWith("true");
     }
 
     [KafkaFact]
     public async Task Producer_GetOffsets_AfterSend_HighIncreases()
     {
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local part      = {Partition()}
@@ -1322,13 +1322,13 @@ public sealed class KafkaTests
 
             return tostring(hi2 > hi1) .. ' before=' .. hi1 .. ' after=' .. hi2
         ");
-        r.ShouldStartWith("true");
+        r.String.ShouldStartWith("true");
     }
 
     [KafkaFact]
     public async Task Consumer_AutoCommitToggle_DoesNotError()
     {
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local c = Kafka.NewConsumer({{
                 ['bootstrap.servers'] = '{Bootstrap()}',
                 ['group.id']          = 'test_kitsune'
@@ -1340,10 +1340,10 @@ public sealed class KafkaTests
             c:Close()
             return 'ok'
         ");
-        r.ShouldBe("ok");
+        r.String.ShouldBe("ok");
     }
 
-    // ── Stress test ───────────────────────────────────────────────────────────
+    // -- Stress test -----------------------------------------------------------
     [KafkaFact]
     public async Task StressTest_ProduceAndConsume_ConcurrentMessages()
     {
@@ -1410,7 +1410,7 @@ public sealed class KafkaTests
             var consumerTask = Run(consumerLua);
             await Task.WhenAll(producerTask, consumerTask);
 
-            producerTask.Result.ShouldBe("ok");
+            producerTask.Result.String.ShouldBe("ok");
             consumerTask.Result.ShouldBe(count.ToString());
         }
         finally
@@ -1508,9 +1508,9 @@ public sealed class KafkaTests
             var consumer2Task = Run(consumerLua);
             await Task.WhenAll(producerTask, consumer1Task, consumer2Task);
 
-            producerTask.Result.ShouldBe("ok");
-            int c1 = int.Parse(consumer1Task.Result!);
-            int c2 = int.Parse(consumer2Task.Result!);
+            producerTask.Result.String.ShouldBe("ok");
+            int c1 = int.Parse(consumer1Task.Result.String!);
+            int c2 = int.Parse(consumer2Task.Result.String!);
             (c1 + c2).ShouldBe(totalCount);
         }
         finally
@@ -1523,11 +1523,11 @@ public sealed class KafkaTests
         }
     }
 
-    // ── Cleanup utility ───────────────────────────────────────────────────────
+    // -- Cleanup utility -------------------------------------------------------
     [KafkaFact]
     public async Task Cleanup_DeleteTestConsumerGroups()
     {
-        string? r = await Run($@"
+        LuaValue r = await Run($@"
             local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
 
             local function startsWith(s, prefix)
@@ -1578,7 +1578,7 @@ public sealed class KafkaTests
             print(result)
             return result
         ");
-        r.ShouldNotBeNull();
-        r.ShouldContain("total deleted:");
+        r.String.ShouldNotBeNull();
+        r.String.ShouldContain("total deleted:");
     }
 }

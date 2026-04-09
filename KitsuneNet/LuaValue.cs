@@ -160,6 +160,37 @@ namespace KitsuneNet
         public static LuaValue FromStream(System.IO.Stream stream)
             => new() { Type = LuaType.Stream, StreamValue = stream };
 
+        /// <summary>Content-based equality: <see cref="Bytes"/> arrays are compared element-by-element.</summary>
+        public bool Equals(LuaValue other) =>
+            Type == other.Type &&
+            Number == other.Number &&
+            Int64 == other.Int64 &&
+            Boolean == other.Boolean &&
+            (Bytes is null ? other.Bytes is null : other.Bytes is not null && Bytes.AsSpan().SequenceEqual(other.Bytes)) &&
+            ReferenceEquals(Table, other.Table) &&
+            ReferenceEquals(JsonNode, other.JsonNode) &&
+            ReferenceEquals(FunctionRef, other.FunctionRef) &&
+            ReferenceEquals(StreamValue, other.StreamValue);
+
+        public override int GetHashCode()
+        {
+            var hash = new System.HashCode();
+            hash.Add(Type);
+            hash.Add(Number);
+            hash.Add(Int64);
+            hash.Add(Boolean);
+            if (Bytes is not null)
+            {
+                foreach (byte b in Bytes)
+                    hash.Add(b);
+            }
+            hash.Add(Table);
+            hash.Add(JsonNode);
+            hash.Add(FunctionRef);
+            hash.Add(StreamValue);
+            return hash.ToHashCode();
+        }
+
         private static JsonNode? TableToJsonNode(LuaValue v)
         {
             if (v.Table is null || v.Table.Count == 0)

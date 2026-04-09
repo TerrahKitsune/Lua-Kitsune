@@ -147,6 +147,12 @@ struct KitsuneState {
 	int               slotCount;
 	std::mutex        slotsLock; // guards add/remove of slots[] entries
 
+	// ── Done notification ────────────────────────────────────────────────────
+	// Signalled (notify_all) whenever any slot transitions to done=1 or runningCount reaches 0.
+	// Allows sync Execute* callers and KitsuneWait to block without Sleep(1) polling.
+	std::mutex              doneMtx;
+	std::condition_variable doneCV;
+
 	// ── Counters ─────────────────────────────────────────────────────────────
 	std::atomic<long> nextId{0};             // monotonically increasing coroutine ID
 	std::atomic<long> runningCount{0};       // number of slots where done == 0
@@ -699,6 +705,7 @@ static void FinishCoroutine(KitsuneState* state, KitsuneCoroutine* slot, lua_Sta
 	lua_settop(T, 0);
 	slot->done.store(1);
 	--state->runningCount;
+	state->doneCV.notify_all();
 	if (slot->fireAndForget.load())
 		slot->released.store(1);
 }
@@ -746,6 +753,7 @@ static void SchedulerProc(KitsuneState* state) {
 						lua_settop(T, 0);
 					slot->done.store(1);
 					--state->runningCount;
+					state->doneCV.notify_all();
 					if (slot->fireAndForget.load())
 						slot->released.store(1);
 				}
@@ -778,6 +786,7 @@ static void SchedulerProc(KitsuneState* state) {
 						lua_settop(Tc, 0);
 					slot->done.store(1);
 					--state->runningCount;
+					state->doneCV.notify_all();
 					slot->released.store(1);
 					continue;
 				}
@@ -795,6 +804,7 @@ static void SchedulerProc(KitsuneState* state) {
 					slot->result.type = LUA_TNONE;
 					slot->done.store(1);
 					--state->runningCount;
+					state->doneCV.notify_all();
 					if (slot->fireAndForget.load())
 						slot->released.store(1);
 					continue;
@@ -1187,6 +1197,7 @@ extern "C" {
 			luaL_unref(state->L, LUA_REGISTRYINDEX, slot->threadRef); slot->threadRef = LUA_NOREF;
 			slot->thread = NULL;  // invariant: thread is only valid while threadRef != LUA_NOREF
 			slot->done.store(1);
+			state->doneCV.notify_all();
 			if (slot->fireAndForget.load())
 				slot->released.store(1);
 		}
@@ -1271,6 +1282,7 @@ extern "C" {
 			slot->threadRef = LUA_NOREF;
 			slot->thread = NULL;
 			slot->done.store(1);
+			state->doneCV.notify_all();
 			if (slot->fireAndForget.load())
 				slot->released.store(1);
 		}
@@ -1299,30 +1311,193 @@ extern "C" {
 		return StartCoroutineFunction(g_state, functionName, argc, argv, fireAndForget);
 	}
 
+	// Executes a KitsuneVariable as a coroutine:
+	//   LUA_TFUNCTION — pushes the function from the Lua registry and calls it with argc/argv as direct parameters.
+	//   LUA_TSTRING   — loads the string as a Lua chunk and runs it; argv is exposed as ARGS[1..argc].
+	//   Anything else — the slot is created in done/faulted state with a descriptive error.
+	static int StartCoroutineVariable(KitsuneState* state, const KitsuneVariable* var,
+		int argc, const KitsuneVariable* argv, bool fireAndForget) {
+		if (!state || !var) return -1;
+
+		AcquireLuaAccess(state);
+
+		KitsuneCoroutine* slot = NULL;
+		bool isNewSlot = false;
+		for (int i = 0; i < state->slotCount; i++) {
+			if (state->slots[i]->id == 0) {
+				slot = state->slots[i];
+				break;
+			}
+		}
+		if (!slot) {
+			if (state->slotCount >= KITSUNE_MAX_COROUTINES) {
+				ReleaseLuaAccess(state);
+				return -1;
+			}
+			slot = new (std::nothrow) KitsuneCoroutine{};
+			if (!slot) {
+				ReleaseLuaAccess(state);
+				return -1;
+			}
+			isNewSlot = true;
+		}
+
+		slot->threadRef = LUA_NOREF;
+		slot->argsRef = LUA_NOREF;
+		slot->fireAndForget = fireAndForget ? 1 : 0;
+
+		lua_State* T = CreateCoroutineThread(state, slot);
+
+		int id = (int)(++state->nextId);
+		bool loadOk = false;
+
+		if (var->type == LUA_TFUNCTION) {
+			// Lift the function from the Lua registry onto T; args are passed as direct parameters.
+			if ((int)var->integer != LUA_NOREF)
+				lua_rawgeti(state->L, LUA_REGISTRYINDEX, (int)var->integer);
+			else
+				lua_pushnil(state->L);
+			lua_xmove(state->L, T, 1);
+
+			if (!lua_isfunction(T, -1)) {
+				lua_pop(T, 1);
+				SetSlotError(slot, "invalid function reference");
+			}
+			else {
+				for (int n = 0; n < argc; n++)
+					PushKitsuneVariable(T, argv ? &argv[n] : nullptr);
+				slot->initialNArgs = argc;
+				loadOk = true;
+			}
+		}
+		else if (var->type == LUA_TSTRING && var->data && var->length > 0) {
+			// Build ARGS table: argv[0..argc-1] map to ARGS[1..argc].
+			lua_newtable(state->L);
+			for (int n = 0; n < argc; n++) {
+				PushKitsuneVariable(state->L, argv ? &argv[n] : nullptr);
+				lua_rawseti(state->L, -2, n + 1);
+			}
+			slot->argsRef = luaL_ref(state->L, LUA_REGISTRYINDEX);
+
+			int rc = luaL_loadbuffer(T, (const char*)var->data, var->length, "variable");
+			if (rc != 0) {
+				const char* err = lua_tolstring(T, -1, NULL);
+				SetSlotError(slot, err ? err : "load error");
+				lua_settop(T, 0);
+				luaL_unref(state->L, LUA_REGISTRYINDEX, slot->argsRef);
+				slot->argsRef = LUA_NOREF;
+			}
+			else {
+				loadOk = true;
+			}
+		}
+		else {
+			SetSlotError(slot, "variable is not executable");
+		}
+
+		if (!loadOk) {
+			slot->result.type = LUA_TNONE;
+			luaL_unref(state->L, LUA_REGISTRYINDEX, slot->threadRef);
+			slot->threadRef = LUA_NOREF;
+			slot->thread = NULL;
+			slot->done.store(1);
+			state->doneCV.notify_all();
+			if (slot->fireAndForget.load())
+				slot->released.store(1);
+		}
+		else {
+			++state->runningCount;
+		}
+
+		slot->startTime = GetCounter(state);
+
+		state->slotsLock.lock();
+		slot->id = id;
+		if (isNewSlot)
+			state->slots[state->slotCount++] = slot;
+		state->slotsLock.unlock();
+
+		ReleaseLuaAccess(state);
+		state->workEvent.Set();
+		return id;
+	}
+
+	KITSUNE_API int KitsuneExecuteVariableAsync(const KitsuneVariable* var, int argc, const KitsuneVariable* argv, bool fireAndForget) {
+		if (g_isSchedulerThread && g_state && g_state->DelegateState) return -1;
+		return StartCoroutineVariable(g_state, var, argc, argv, fireAndForget);
+	}
+
+	// Waits until the coroutine identified by id has finished.  Finds the slot pointer once
+	// under slotsLock (safe since released=0 until KitsuneGetResult is called), then blocks
+	// on doneCV until done=1 or the scheduler stops.
+	// On each 10 ms periodic wakeup the thread also drains g_pendingVariableChainHead if it
+	// is non-empty, freeing Lua registry refs that accumulated while waiting.  The fast
+	// atomic head-check avoids AcquireLuaAccess overhead when there is nothing to do.
+	static void WaitForResult(KitsuneState* state, int id) {
+		state->slotsLock.lock();
+		KitsuneCoroutine* slot = FindSlot(state, id);
+		state->slotsLock.unlock();
+		if (!slot || slot->done.load(std::memory_order_acquire))
+			return;
+		std::unique_lock<std::mutex> lk(state->doneMtx);
+		while (!state->doneCV.wait_for(lk, std::chrono::milliseconds(10),
+			[slot] { return slot->done.load(std::memory_order_acquire) != 0; })) {
+			if (state->schedulerStop.load())
+				return;
+			if (g_pendingVariableChainHead.load(std::memory_order_relaxed)) {
+					lk.unlock();
+					// Re-check after releasing doneMtx: KitsuneCleanup may have joined the
+					// scheduler between the outer check above and here, making pausedEvent
+					// in AcquireLuaAccess unsignallable and causing a permanent hang.
+					if (!state->schedulerStop.load()) {
+						AcquireLuaAccess(state);
+						DrainPendingVariableChain(state->L);
+						ReleaseLuaAccess(state);
+					}
+					lk.lock();
+					if (slot->done.load(std::memory_order_acquire))
+						return;
+				}
+		}
+	}
+
 	KITSUNE_API KitsuneVariable* KitsuneExecuteFile(const char* path, int argc, const KitsuneVariable* argv) {
 		if (g_isSchedulerThread && g_state && g_state->DelegateState) return MakeErrorVariable("cannot be called from within a registered function");
+		KitsuneState* state = g_state;
+		if (!state) return NULL;
 		int id = KitsuneExecuteFileAsync(path, argc, argv, false);
 		if (id < 0) return NULL;
-		while (!KitsuneHasResult(id, NULL))
-			Sleep(1);
+		WaitForResult(state, id);
 		return KitsuneGetResult(id);
 	}
 
 	KITSUNE_API KitsuneVariable* KitsuneExecuteString(const char* script, int argc, const KitsuneVariable* argv) {
 		if (g_isSchedulerThread && g_state && g_state->DelegateState) return MakeErrorVariable("cannot be called from within a registered function");
+		KitsuneState* state = g_state;
+		if (!state) return NULL;
 		int id = KitsuneExecuteStringAsync(script, argc, argv, false);
 		if (id < 0) return NULL;
-		while (!KitsuneHasResult(id, NULL))
-			Sleep(1);
+		WaitForResult(state, id);
 		return KitsuneGetResult(id);
 	}
 
 	KITSUNE_API KitsuneVariable* KitsuneExecuteFunction(const char* functionName, int argc, const KitsuneVariable* argv) {
 		if (g_isSchedulerThread && g_state && g_state->DelegateState) return MakeErrorVariable("cannot be called from within a registered function");
+		KitsuneState* state = g_state;
+		if (!state) return NULL;
 		int id = KitsuneExecuteFunctionAsync(functionName, argc, argv, false);
 		if (id < 0) return NULL;
-		while (!KitsuneHasResult(id, NULL))
-			Sleep(1);
+		WaitForResult(state, id);
+		return KitsuneGetResult(id);
+	}
+
+	KITSUNE_API KitsuneVariable* KitsuneExecuteVariable(const KitsuneVariable* var, int argc, const KitsuneVariable* argv) {
+		if (g_isSchedulerThread && g_state && g_state->DelegateState) return MakeErrorVariable("cannot be called from within a registered function");
+		KitsuneState* state = g_state;
+		if (!state) return NULL;
+		int id = KitsuneExecuteVariableAsync(var, argc, argv, false);
+		if (id < 0) return NULL;
+		WaitForResult(state, id);
 		return KitsuneGetResult(id);
 	}
 
@@ -1516,8 +1691,10 @@ extern "C" {
 	KITSUNE_API void KitsuneWait() {
 		KitsuneState* state = g_state;
 		if (!state) return;
-		while (state->runningCount.load())
-			Sleep(1);
+		std::unique_lock<std::mutex> lk(state->doneMtx);
+		state->doneCV.wait(lk, [state] {
+			return state->runningCount.load() == 0 || state->schedulerStop.load() != 0;
+		});
 	}
 
 	KITSUNE_API int KitsuneGetActiveIds(int* buffer, int bufferSize) {
@@ -1886,6 +2063,7 @@ extern "C" {
 				state->resumeEvent.Set();   // unblock scheduler if it is in the pause handler
 				state->workEvent.Set();     // wake scheduler if it is sleeping
 				state->schedulerThread.join();
+				state->doneCV.notify_all(); // wake any threads blocked in WaitForResult or KitsuneWait
 			}
 
 			// Free all slot pointers. Slots with id==0 are already zeroed; only active slots need resource cleanup.

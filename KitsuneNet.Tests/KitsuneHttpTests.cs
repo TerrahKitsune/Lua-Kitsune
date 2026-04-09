@@ -1,4 +1,4 @@
-﻿using KitsuneNet;
+using KitsuneNet;
 using Shouldly;
 using Xunit;
 
@@ -9,7 +9,7 @@ namespace KitsuneNet.Tests
     /// <summary>
     /// Tests for the Http module.
     /// Tests skip only when KITSUNE_HTTP was not compiled in (Http global is nil).
-    /// Network failures cause test failures — not skips.
+    /// Network failures cause test failures � not skips.
     /// Buffered tests use httpbin.org; streaming and WebSocket tests also use
     /// httpbin.org and wss://echo.websocket.org respectively.
     /// </summary>
@@ -50,46 +50,46 @@ namespace KitsuneNet.Tests
             end
         ";
 
-        // ── Http module availability ──────────────────────────────────────────
+        // -- Http module availability ------------------------------------------
         [Fact]
         public async Task Http_Module_IsTableWhenAvailable()
         {
-            string? r = await Run("if Http == nil then return 'skip' end; return type(Http)");
+            LuaValue r = await Run("if Http == nil then return 'skip' end; return type(Http)");
             if (r != "skip")
             {
-                r.ShouldBe("table");
+                r.String.ShouldBe("table");
             }
         }
 
-        // ── Http.Create ───────────────────────────────────────────────────────
+        // -- Http.Create -------------------------------------------------------
         [Fact]
         public async Task Http_Create_ReturnsNonNil()
         {
-            string? r = await Run("if Http == nil then return 'skip' end; return tostring(Http.Create() ~= nil)");
+            LuaValue r = await Run("if Http == nil then return 'skip' end; return tostring(Http.Create() ~= nil)");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
         [Fact]
         public async Task Http_Create_Tostring_ReturnsNonEmptyString()
         {
-            string? r = await Run(@"
+            LuaValue r = await Run(@"
                 if Http == nil then return 'skip' end
                 local s = tostring(Http.Create())
                 return tostring(type(s) == 'string' and #s > 0)
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
         [Fact]
         public async Task Http_Create_ConfigMethods_DoNotRaise()
         {
-            string? r = await Run(@"
+            LuaValue r = await Run(@"
                 if Http == nil then return 'skip' end
                 local c = Http.Create()
                 c:SetTimeout(5000)
@@ -100,96 +100,96 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("ok");
+                r.String.ShouldBe("ok");
             }
         }
 
-        // ── Http.UrlEncode / Http.UrlDecode (no network required) ─────────────
+        // -- Http.UrlEncode / Http.UrlDecode (no network required) -------------
         [Fact]
         public async Task Http_UrlEncode_SpacesAreEncoded()
         {
-            string? r = await Run(@"
+            LuaValue r = await Run(@"
                 if Http == nil then return 'skip' end
                 return tostring(Http.UrlEncode('hello world'):find(' ') == nil)
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
         [Fact]
         public async Task Http_UrlEncode_AmpersandIsEncoded()
         {
-            string? r = await Run(@"
+            LuaValue r = await Run(@"
                 if Http == nil then return 'skip' end
                 return tostring(Http.UrlEncode('a&b'):find('%%26') ~= nil)
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
         [Fact]
         public async Task Http_UrlDecode_RoundTrip()
         {
-            string? r = await Run(@"
+            LuaValue r = await Run(@"
                 if Http == nil then return 'skip' end
                 local orig = 'hello world & foo=bar'
                 return tostring(Http.UrlDecode(Http.UrlEncode(orig)) == orig)
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
         [Fact]
         public async Task Http_UrlEncode_UnreservedCharsPassThrough()
         {
-            string? r = await Run(@"
+            LuaValue r = await Run(@"
                 if Http == nil then return 'skip' end
                 local safe = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.~'
                 return tostring(Http.UrlEncode(safe) == safe)
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
         [Fact]
         public async Task Http_UrlDecode_PlusDecodedAsSpace()
         {
-            string? r = await Run(@"
+            LuaValue r = await Run(@"
                 if Http == nil then return 'skip' end
                 return tostring(Http.UrlDecode('hello+world') == 'hello world')
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
         [Fact]
         public async Task Http_UrlEncode_Empty_ReturnsEmpty()
         {
-            string? r = await Run(@"
+            LuaValue r = await Run(@"
                 if Http == nil then return 'skip' end
                 return tostring(Http.UrlEncode('') == '' and Http.UrlDecode('') == '')
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
-        // ── Buffered GET ──────────────────────────────────────────────────────
+        // -- Buffered GET ------------------------------------------------------
         [Fact]
         public async Task Http_GET_Returns200()
         {
-            string? r = await Run(DrainRequest + @"
+            LuaValue r = await Run(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(8000)
@@ -200,14 +200,14 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
         [Fact]
         public async Task Http_GET_StatusIsOK()
         {
-            string? r = await Run(DrainRequest + @"
+            LuaValue r = await Run(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(8000)
@@ -217,14 +217,14 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("OK");
+                r.String.ShouldBe("OK");
             }
         }
 
         [Fact]
         public async Task Http_GET_ContentsIsNonEmptyString()
         {
-            string? r = await Run(DrainRequest + @"
+            LuaValue r = await Run(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(8000)
@@ -234,14 +234,14 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
         [Fact]
         public async Task Http_GET_HeadersIsTable()
         {
-            string? r = await Run(DrainRequest + @"
+            LuaValue r = await Run(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(8000)
@@ -251,15 +251,15 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
-        // ── POST with JSON body ───────────────────────────────────────────────
+        // -- POST with JSON body -----------------------------------------------
         [Fact]
         public async Task Http_POST_JsonBody_EchoesPostedData()
         {
-            string? r = await Run(DrainRequest + @"
+            LuaValue r = await Run(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(8000)
@@ -271,17 +271,17 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
-        // ── Timeout → transport error (Code is nil) ───────────────────────────
+        // -- Timeout ? transport error (Code is nil) ---------------------------
         [Fact]
         public async Task Http_Timeout_TransportError_CodeIsNil()
         {
             // 50 ms is far shorter than the 10 s delay endpoint will ever respond.
             // If the network is unreachable, DNS failure also produces nil Code.
-            string? r = await Run(DrainRequest + @"
+            LuaValue r = await Run(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(50)
@@ -293,14 +293,14 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
         [Fact]
         public async Task Http_Timeout_TransportError_StatusIsNonEmptyString()
         {
-            string? r = await Run(DrainRequest + @"
+            LuaValue r = await Run(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(50)
@@ -313,15 +313,15 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
-        // ── Buffered request with outStream ───────────────────────────────────
+        // -- Buffered request with outStream -----------------------------------
         [Fact]
         public async Task Http_Request_OutStream_ContentsIsNil()
         {
-            string? r = await Run(DrainRequest + @"
+            LuaValue r = await Run(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(8000)
@@ -332,15 +332,15 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
-        // ── Streaming GET ─────────────────────────────────────────────────────
+        // -- Streaming GET -----------------------------------------------------
         [Fact]
         public async Task Http_Stream_GetInfo_Returns200()
         {
-            string? r = await Run(StreamHelper + @"
+            LuaValue r = await Run(StreamHelper + @"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -354,14 +354,14 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
         [Fact]
         public async Task Http_Stream_GetInfo_HeadersIsTable()
         {
-            string? r = await Run(StreamHelper + @"
+            LuaValue r = await Run(StreamHelper + @"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -375,14 +375,14 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
         [Fact]
         public async Task Http_Stream_Read_DeliversNonEmptyBody()
         {
-            string? r = await Run(StreamHelper + @"
+            LuaValue r = await Run(StreamHelper + @"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -402,14 +402,14 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
         [Fact]
         public async Task Http_Stream_Read_BodyLooksLikeJson()
         {
-            string? r = await Run(StreamHelper + @"
+            LuaValue r = await Run(StreamHelper + @"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -429,15 +429,15 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
-        // ── DELETE ────────────────────────────────────────────────────────────
+        // -- DELETE ------------------------------------------------------------
         [Fact]
         public async Task Http_DELETE_Returns200()
         {
-            string? r = await Run(DrainRequest + @"
+            LuaValue r = await Run(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(8000)
@@ -447,14 +447,14 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
         [Fact]
         public async Task Http_DELETE_ResponseEchoesDeleteUrl()
         {
-            string? r = await Run(DrainRequest + @"
+            LuaValue r = await Run(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(8000)
@@ -464,15 +464,15 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
-        // ── PUT ───────────────────────────────────────────────────────────────
+        // -- PUT ---------------------------------------------------------------
         [Fact]
         public async Task Http_PUT_Returns200()
         {
-            string? r = await Run(DrainRequest + @"
+            LuaValue r = await Run(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(8000)
@@ -484,14 +484,14 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
         [Fact]
         public async Task Http_PUT_JsonBody_EchoedInResponse()
         {
-            string? r = await Run(DrainRequest + @"
+            LuaValue r = await Run(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(8000)
@@ -503,15 +503,15 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
-        // ── PATCH ─────────────────────────────────────────────────────────────
+        // -- PATCH -------------------------------------------------------------
         [Fact]
         public async Task Http_PATCH_Returns200()
         {
-            string? r = await Run(DrainRequest + @"
+            LuaValue r = await Run(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(8000)
@@ -523,14 +523,14 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
         [Fact]
         public async Task Http_PATCH_JsonBody_EchoedInResponse()
         {
-            string? r = await Run(DrainRequest + @"
+            LuaValue r = await Run(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(8000)
@@ -542,15 +542,15 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
-        // ── Query-string args ─────────────────────────────────────────────────
+        // -- Query-string args -------------------------------------------------
         [Fact]
         public async Task Http_GET_QueryArgs_EchoedInArgsField()
         {
-            string? r = await Run(DrainRequest + @"
+            LuaValue r = await Run(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(8000)
@@ -563,14 +563,14 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
         [Fact]
         public async Task Http_GET_UrlEncodedQueryArg_DecodedByServer()
         {
-            string? r = await Run(DrainRequest + @"
+            LuaValue r = await Run(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(8000)
@@ -581,15 +581,15 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
-        // ── Request headers ───────────────────────────────────────────────────
+        // -- Request headers ---------------------------------------------------
         [Fact]
         public async Task Http_DefaultHeader_AppearsInEchoedHeaders()
         {
-            string? r = await Run(DrainRequest + @"
+            LuaValue r = await Run(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(8000)
@@ -600,14 +600,14 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
         [Fact]
         public async Task Http_PerRequestHeader_AppearsInEchoedHeaders()
         {
-            string? r = await Run(DrainRequest + @"
+            LuaValue r = await Run(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(8000)
@@ -618,14 +618,14 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
         [Fact]
         public async Task Http_DefaultAndPerRequestHeaders_BothPresent()
         {
-            string? r = await Run(DrainRequest + @"
+            LuaValue r = await Run(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(8000)
@@ -640,15 +640,15 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
-        // ── POST form-urlencoded ──────────────────────────────────────────────
+        // -- POST form-urlencoded ----------------------------------------------
         [Fact]
         public async Task Http_POST_FormUrlEncoded_EchoedInFormField()
         {
-            string? r = await Run(DrainRequest + @"
+            LuaValue r = await Run(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(8000)
@@ -660,15 +660,15 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
-        // ── Streaming for non-GET methods ─────────────────────────────────────
+        // -- Streaming for non-GET methods -------------------------------------
         [Fact]
         public async Task Http_Stream_POST_Returns200()
         {
-            string? r = await Run(StreamHelper + @"
+            LuaValue r = await Run(StreamHelper + @"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -684,14 +684,14 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
         [Fact]
         public async Task Http_Stream_POST_BodyEchoedInResponse()
         {
-            string? r = await Run(StreamHelper + @"
+            LuaValue r = await Run(StreamHelper + @"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -710,14 +710,14 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
         [Fact]
         public async Task Http_Stream_PUT_Returns200()
         {
-            string? r = await Run(StreamHelper + @"
+            LuaValue r = await Run(StreamHelper + @"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -733,14 +733,14 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
         [Fact]
         public async Task Http_Stream_PATCH_Returns200()
         {
-            string? r = await Run(StreamHelper + @"
+            LuaValue r = await Run(StreamHelper + @"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -756,14 +756,14 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
         [Fact]
         public async Task Http_Stream_DELETE_Returns200()
         {
-            string? r = await Run(StreamHelper + @"
+            LuaValue r = await Run(StreamHelper + @"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -777,15 +777,15 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
-        // ── WebSocket ─────────────────────────────────────────────────────────
+        // -- WebSocket ---------------------------------------------------------
         [Fact]
         public async Task Http_WebSocket_Connect_Succeeds()
         {
-            string? r = await Run(StreamHelper + $@"
+            LuaValue r = await Run(StreamHelper + $@"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -798,14 +798,14 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
         [Fact]
         public async Task Http_WebSocket_Echo_TextFrame_RoundTrips()
         {
-            string? r = await Run(StreamHelper + $@"
+            LuaValue r = await Run(StreamHelper + $@"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -820,14 +820,14 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
         [Fact]
         public async Task Http_WebSocket_Echo_TextFrame_GetInfo_OpcodeIsOne()
         {
-            string? r = await Run(StreamHelper + $@"
+            LuaValue r = await Run(StreamHelper + $@"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -843,14 +843,14 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
         [Fact]
         public async Task Http_WebSocket_Echo_BinaryFrame_RoundTrips()
         {
-            string? r = await Run(StreamHelper + $@"
+            LuaValue r = await Run(StreamHelper + $@"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -867,14 +867,14 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
         [Fact]
         public async Task Http_WebSocket_Echo_BinaryFrame_GetInfo_OpcodeIsTwo()
         {
-            string? r = await Run(StreamHelper + $@"
+            LuaValue r = await Run(StreamHelper + $@"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -891,14 +891,14 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
         [Fact]
         public async Task Http_WebSocket_Echo_BytesLeft_IsZeroForCompleteFrame()
         {
-            string? r = await Run(StreamHelper + $@"
+            LuaValue r = await Run(StreamHelper + $@"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -914,14 +914,14 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
         [Fact]
         public async Task Http_WebSocket_MultipleFrames_AllEchoedInOrder()
         {
-            string? r = await Run(StreamHelper + $@"
+            LuaValue r = await Run(StreamHelper + $@"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -940,14 +940,14 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
         [Fact]
         public async Task Http_WebSocket_MixedFrames_TextAndBinary_EchoedCorrectly()
         {
-            string? r = await Run(StreamHelper + $@"
+            LuaValue r = await Run(StreamHelper + $@"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -970,14 +970,14 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
         [Fact]
         public async Task Http_WebSocket_Close_AfterClose_ReadReturnsNil()
         {
-            string? r = await Run(StreamHelper + $@"
+            LuaValue r = await Run(StreamHelper + $@"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -991,14 +991,14 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
         [Fact]
         public async Task Http_WebSocket_HasData_TrueWhenConnected_MinusOneAfterClose()
         {
-            string? r = await Run(StreamHelper + $@"
+            LuaValue r = await Run(StreamHelper + $@"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -1013,14 +1013,14 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
         [Fact]
         public async Task Http_WebSocket_LargeTextPayload_RoundTrips()
         {
-            string? r = await Run(StreamHelper + $@"
+            LuaValue r = await Run(StreamHelper + $@"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -1036,14 +1036,14 @@ namespace KitsuneNet.Tests
             ");
             if (r != "skip")
             {
-                r.ShouldBe("true");
+                r.String.ShouldBe("true");
             }
         }
 
-        private static async Task<string?> Run(string lua)
+        private static async Task<LuaValue> Run(string lua)
         {
             var engine = new KitsuneEngine();
-            string? result;
+            LuaValue result;
             try
             {
                 result = await engine.ExecuteStringAsync(lua).ConfigureAwait(false);

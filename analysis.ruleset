@@ -26,7 +26,7 @@
     <Rule Id="CA1901" Action="Warning" />
     <Rule Id="CA2002" Action="Info" />
     <Rule Id="CA2100" Action="Warning" />
-    <Rule Id="CA2101" Action="None" />
+    <Rule Id="CA2101" Action="Info" />
     <Rule Id="CA2108" Action="Warning" />
     <Rule Id="CA2111" Action="Warning" />
     <Rule Id="CA2112" Action="Warning" />
@@ -70,7 +70,6 @@
   <Rules AnalyzerId="Microsoft.CodeAnalysis.CSharp" RuleNamespace="Microsoft.CodeAnalysis.CSharp">
     <Rule Id="CS0612" Action="Info" />
     <Rule Id="CS0618" Action="Info" />
-    <Rule Id="CS1591" Action="None" />
   </Rules>
   <Rules AnalyzerId="Microsoft.CodeAnalysis.CSharp.Features" RuleNamespace="Microsoft.CodeAnalysis.CSharp.Features">
     <Rule Id="IDE0052" Action="Warning" />
@@ -80,9 +79,6 @@
   </Rules>
   <Rules AnalyzerId="Microsoft.CodeAnalysis.Features" RuleNamespace="Microsoft.CodeAnalysis.Features">
     <Rule Id="IDE0033" Action="Warning" />
-  </Rules>
-  <Rules AnalyzerId="Microsoft.CodeAnalysis.NetAnalyzers" RuleNamespace="Microsoft.CodeAnalysis.NetAnalyzers">
-    <Rule Id="CA1060" Action="Info" />
   </Rules>
   <Rules AnalyzerId="SerilogAnalyzer" RuleNamespace="SerilogAnalyzer">
     <Rule Id="Serilog004" Action="None" />
@@ -95,14 +91,10 @@
     <Rule Id="SA1118" Action="None" />
     <Rule Id="SA1124" Action="None" />
     <Rule Id="SA1200" Action="None" />
-    <Rule Id="SA1201" Action="None" />
-    <Rule Id="SA1202" Action="None" />
     <Rule Id="SA1208" Action="None" />
     <Rule Id="SA1305" Action="Hidden" />
     <Rule Id="SA1309" Action="None" />
-    <Rule Id="SA1310" Action="None" />
     <Rule Id="SA1401" Action="Hidden" />
-    <Rule Id="SA1412" Action="Warning" />
     <Rule Id="SA1413" Action="Hidden" />
     <Rule Id="SA1513" Action="Info" />
     <Rule Id="SA1600" Action="None" />
