@@ -408,27 +408,31 @@ public sealed class KafkaTests
 
             -- Send all messages to the configured partition explicitly
             local producer = Kafka.NewProducer({{['bootstrap.servers'] = bootstrap}})
+            -- Snapshot the high-water mark before producing so the consumer starts
+            -- exactly at our messages rather than scanning from the beginning.
+            local ok_hw, lo_hw, hi_hw = producer:GetOffsets(topic, part)
+            assert(ok_hw, tostring(lo_hw))
             for i = 1, count do
                 local ok, err = producer:Send(topic, 'pk-' .. i, prefix .. i, nil, part)
                 assert(ok, err or 'Send ' .. i .. ' failed on partition ' .. part)
             end
             producer:Close()
 
-            -- Assign to the same partition with a fresh group; earliest starts from offset 0
+            -- Assign starting from exactly where our messages begin
             local consumer = Kafka.NewConsumer({{
                 ['bootstrap.servers'] = bootstrap,
                 ['group.id']          = 'test_kitsune',
-                ['auto.offset.reset'] = 'earliest'
             }})
-            local co = consumer:Assign({{topic .. ':' .. part}})
+            local co = consumer:Assign({{topic .. ':' .. part .. ':' .. hi_hw}})
 
-            -- Scan all messages on this partition and count the ones from this run
-            local deadline = Time() + 30000
+            -- Receive exactly the messages we just produced; no historical backlog
+            local deadline = Time() + 15000
             local found = 0
             while Time() < deadline do
                 local ok2, data = coroutine.resume(co, false)
                 if not ok2 then error(tostring(data)) end
-                if data and string.sub(data.Value, 1, #prefix) == prefix then
+                if data and data.ErrorCode == 0 and
+                   string.sub(data.Value, 1, #prefix) == prefix then
                     found = found + 1
                     if found >= count then break end
                 end
@@ -967,8 +971,11 @@ public sealed class KafkaTests
             }})
             local co = consumer:Assign({{topic .. ':' .. part}})
 
-            -- Warm up: drive at least one poll so the partition assignment is complete
-            local warmDeadline = Time() + 2000
+            -- Warm up: drive polls for a fixed 3 s window to ensure librdkafka has
+            -- fully established the partition assignment before Seek is called.
+            -- On Linux, early responses can arrive before the internal state is ready;
+            -- a time-based loop is safer than breaking after the first poll.
+            local warmDeadline = Time() + 3000
             while Time() < warmDeadline do
                 coroutine.resume(co, false)
                 Sleep(50)
@@ -1138,8 +1145,11 @@ public sealed class KafkaTests
             }})
             local co = consumer:Assign({{topic .. ':' .. part}})
 
-            -- Warm-up to complete assignment
-            local warmDeadline = Time() + 2000
+            -- Warm-up: drive polls for a fixed 5 s window so librdkafka has fully
+            -- established the Assign-based partition assignment before Seek is called.
+            -- On Linux, early nil responses can arrive before the assignment is stable;
+            -- a time-based loop avoids breaking out prematurely.
+            local warmDeadline = Time() + 5000
             while Time() < warmDeadline do
                 coroutine.resume(co, false)
                 Sleep(50)
@@ -1323,9 +1333,11 @@ public sealed class KafkaTests
             local consumer = Kafka.NewConsumer({{
                 ['bootstrap.servers'] = '{Bootstrap()}',
                 ['group.id']          = 'stress-{guid}',
-                ['auto.offset.reset'] = 'earliest'
             }})
-            local co = consumer:Subscribe({{'{stressTopic}'}})
+            -- Use Assign rather than Subscribe to bypass group-coordinator rebalancing.
+            -- The topic has exactly one partition; earliest starts from offset 0 on this
+            -- fresh GUID-keyed topic so no old messages can slip through.
+            local co = consumer:Assign({{'{stressTopic}:0:earliest'}})
 
             local seen     = {{}}
             local found    = 0
@@ -1401,6 +1413,27 @@ public sealed class KafkaTests
         // so the load is guaranteed to split evenly between the two consumers.
         string producerLua = $@"
             local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
+
+            -- Wait until both consumers have joined the group and partition assignment
+            -- is stable before sending any messages.  DescribeGroups returns
+            -- State='Stable' only after all members have completed rebalancing and
+            -- received their partition assignments, so this is a genuine readiness signal
+            -- rather than an arbitrary delay.
+            local grpDeadline = Time() + 45000
+            local ready = false
+            while Time() < grpDeadline do
+                local ok, descs = p:DescribeGroups({{'{groupId}'}})
+                if ok and descs and #descs > 0 then
+                    local d = descs[1]
+                    if d.State == 'Stable' and d.Members and #d.Members >= 2 then
+                        ready = true
+                        break
+                    end
+                end
+                Sleep(500)
+            end
+            assert(ready, 'consumer group did not reach Stable/2-member state within 45 s')
+
             for i = 1, {countPerPartition} do
                 local ok0, e0 = p:Send('{stressTopic}', '{guid}-0-' .. i, '{guid}-0-' .. i, nil, 0)
                 assert(ok0, e0 or 'Send p0 ' .. i .. ' failed')
@@ -1426,7 +1459,7 @@ public sealed class KafkaTests
 
             local seen     = {{}}
             local found    = 0
-            local deadline = Time() + 60000
+            local deadline = Time() + 90000
 
             while Time() < deadline do
                 local ok, d = coroutine.resume(co, false)
@@ -1448,9 +1481,12 @@ public sealed class KafkaTests
 
         try
         {
-            var producerTask = Run(producerLua);
+            // Start consumers and producer concurrently.  The producer polls DescribeGroups
+            // internally and only begins sending once both consumers are Stable, so no
+            // external fixed delay is needed here.
             var consumer1Task = Run(consumerLua);
             var consumer2Task = Run(consumerLua);
+            var producerTask = Run(producerLua);
             await Task.WhenAll(producerTask, consumer1Task, consumer2Task);
 
             producerTask.Result.String.ShouldBe("ok");

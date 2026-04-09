@@ -30,6 +30,11 @@ namespace KitsuneNet
         /// Null for all other types and for function values embedded inside tables.</summary>
         public LuaFunctionRef? FunctionRef { get; init; }
 
+        /// <summary>Live reference to a Lua coroutine thread for <see cref="LuaType.Thread"/> values
+        /// returned by the engine.  Holds a Lua registry anchor; must be disposed when no longer needed.
+        /// Null for all other types and for thread values embedded inside tables.</summary>
+        public LuaThreadRef? ThreadRef { get; init; }
+
         /// <summary>Stream for <see cref="LuaType.Stream"/> values.
         /// Inbound (Lua → C#): a <see cref="LuaStream"/> wrapping native block memory directly.
         /// Read-only when <c>KITSUNE_SHARED_MEMORY_FLAG_READONLY</c> is set on the block;
@@ -198,6 +203,7 @@ namespace KitsuneNet
             ReferenceEquals(Table, other.Table) &&
             ReferenceEquals(JsonNode, other.JsonNode) &&
             ReferenceEquals(FunctionRef, other.FunctionRef) &&
+            ReferenceEquals(ThreadRef, other.ThreadRef) &&
             ReferenceEquals(StreamValue, other.StreamValue) &&
             ReferenceEquals(CFunctionValue, other.CFunctionValue);
 
@@ -218,6 +224,7 @@ namespace KitsuneNet
             hash.Add(Table);
             hash.Add(JsonNode);
             hash.Add(FunctionRef);
+            hash.Add(ThreadRef);
             hash.Add(StreamValue);
             hash.Add(CFunctionValue);
             return hash.ToHashCode();

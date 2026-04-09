@@ -22,7 +22,7 @@
 #define KITSUNE_TJSON          (-5) // Kitsune extension: JSON string type; data is a UTF-8 char* and length is in bytes (excluding null terminator). Not a value returned by lua_type().
 #define KITSUNE_TCHAR16        (-4) // Kitsune extension: UTF-16 string type; data is a char16_t* and length is in char16_t code units (excluding null terminator). Not a value returned by lua_type().
 #define KITSUNE_TINTEGER       (-3) // Kitsune extension: Lua 5.3+ integer subtype (lua_isinteger); not a value returned by lua_type()
-#define KITSUNE_TERROR         (-2) // registered C function and will never appear in a KitsuneVariable returned by the engine.
+#define KITSUNE_TERROR         (-2) // Kitsune extension: The variable represents an error message (UTF-8 char*); length is in bytes (excluding null terminator). Not a value returned by lua_type(); Used to signal an error when passed too and from Lua via kitsune_ResultSetter and KitsuneVariableReturnFromLua.
 #define KITSUNE_TNONE          (-1)
 #define KITSUNE_TNIL            (0)
 #define KITSUNE_TBOOLEAN        (1)
@@ -147,6 +147,9 @@ extern "C" {
 	// Returns false on failure.
 	KITSUNE_API bool KitsuneInit(kitsune_Init initFunc = nullptr);
 
+	// Destroy the Lua state and clean up the engine.
+	KITSUNE_API size_t KitsuneCleanup();
+
 	// Frees a KitsuneVariable returned by KitsuneGetResult or KitsuneGetVariable
 	// (frees the string data if present, then the struct pointer itself). Safe on NULL.
 	KITSUNE_API void KitsuneVariableFree(KitsuneVariable* var);
@@ -256,8 +259,7 @@ extern "C" {
 	// invoking callback once per key-value pair. Pass NULL or "" to iterate _G itself.
 	// key and value are temporary — valid only for the duration of each call. Thread-safe.
 	KITSUNE_API void KitsuneGetAll(const char* path, kitsune_KeyValuePairCallback callback, void* userdata);
-	// Destroy the Lua state and clean up the engine.
-	KITSUNE_API size_t KitsuneCleanup();
+	
 	// Registers the Session table (Session.Console, Session.Clipboard) into the Lua global
 	// environment. Call once from the host after KitsuneInit() to enable interactive session
 	// functions. No-op if called before KitsuneInit(). Thread-safe.

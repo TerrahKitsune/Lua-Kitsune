@@ -1,4 +1,4 @@
-﻿using KitsuneNet;
+using KitsuneNet;
 using Shouldly;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -894,7 +894,7 @@ namespace KitsuneNet.Tests
             await Task.Delay(25);
 
             Task disposeTask = Task.Run(engine.Dispose);
-            Task allDone = Task.WhenAll([..waitTasks, disposeTask]);
+            Task allDone = Task.WhenAll([.. waitTasks, disposeTask]);
             Task timeout = Task.Delay(TimeSpan.FromSeconds(5));
             Task winner = await Task.WhenAny(allDone, timeout);
             winner.ShouldNotBe(timeout,
@@ -1996,7 +1996,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- CFunction (SetVariable / args / return) ----------------------------
-
         [Fact]
         public async Task CFunction_SetVariable_LuaCanCallIt()
         {
@@ -2057,7 +2056,612 @@ namespace KitsuneNet.Tests
             Should.NotThrow(engine.Dispose);
         }
 
-        // -- Shallow / deep table bridge ------------------------------------------
+        // -- Thread (coroutine) iterator ----------------------------------------
+        [Fact]
+        public async Task Thread_IterateAsync_YieldsValues()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue thread = await engine.ExecuteStringAsync(
+                "return coroutine.create(function() coroutine.yield(1) coroutine.yield(2) coroutine.yield(3) end)");
+            thread.Type.ShouldBe(LuaType.Thread);
+            var values = new List<double>();
+            await foreach (var v in thread.ThreadRef!.IterateAsync())
+            {
+                values.Add(v.AsDouble);
+            }
+
+            values.ShouldBe([1.0, 2.0, 3.0]);
+            thread.ThreadRef?.Dispose();
+            await engine.ExecuteStringAsync("Sleep(0)");
+        }
+
+        [Fact]
+        public async Task Thread_IterateAsync_FinalReturnValueIncluded()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue thread = await engine.ExecuteStringAsync(
+                "return coroutine.create(function() coroutine.yield(10) return 20 end)");
+            var values = new List<double>();
+            await foreach (var v in thread.ThreadRef!.IterateAsync())
+            {
+                values.Add(v.AsDouble);
+            }
+
+            values.ShouldBe([10.0, 20.0]);
+            thread.ThreadRef?.Dispose();
+            await engine.ExecuteStringAsync("Sleep(0)");
+        }
+
+        [Fact]
+        public async Task Thread_IterateAsync_EmptyCoroutine_NoValues()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue thread = await engine.ExecuteStringAsync(
+                "return coroutine.create(function() end)");
+            var values = new List<LuaValue>();
+            await foreach (var v in thread.ThreadRef!.IterateAsync())
+            {
+                values.Add(v);
+            }
+
+            values.ShouldBeEmpty();
+            thread.ThreadRef?.Dispose();
+            await engine.ExecuteStringAsync("Sleep(0)");
+        }
+
+        [Fact]
+        public async Task Thread_IterateAsync_DeadThread_NoValues()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue thread = await engine.ExecuteStringAsync(
+                "return coroutine.create(function() coroutine.yield(1) end)");
+
+            // exhaust it first
+            await foreach (var item in thread.ThreadRef!.IterateAsync())
+            {
+            }
+
+            // iterating a dead thread should produce nothing
+            var second = new List<LuaValue>();
+            await foreach (var v in thread.ThreadRef!.IterateAsync())
+            {
+                second.Add(v);
+            }
+            second.ShouldBeEmpty();
+            thread.ThreadRef?.Dispose();
+            await engine.ExecuteStringAsync("Sleep(0)");
+        }
+
+        [Fact]
+        public async Task Thread_IterateAsync_Error_ThrowsLuaException()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue thread = await engine.ExecuteStringAsync(
+                "return coroutine.create(function() coroutine.yield(1) error(\"boom\") end)");
+            var values = new List<double>();
+            await Should.ThrowAsync<LuaException>(async () =>
+            {
+                await foreach (var v in thread.ThreadRef!.IterateAsync())
+                {
+                    values.Add(v.AsDouble);
+                }
+            });
+            values.ShouldBe([1.0]);  // first yield was received before the error
+            thread.ThreadRef?.Dispose();
+            await engine.ExecuteStringAsync("Sleep(0)");
+        }
+
+        [Fact]
+        public async Task Thread_IterateAsync_PassedAsArg_LuaCanResume()
+        {
+            using KitsuneEngine engine = new();
+
+            // Pass the thread as a variable set on the global bridge
+            LuaValue thread = await engine.ExecuteStringAsync(
+                "return coroutine.create(function() for i = 1, 5 do coroutine.yield(i) end end)");
+            engine.SetVariable("Gen", thread);
+
+            // Lua can also resume a thread set via SetVariable
+            LuaValue result = await engine.ExecuteStringAsync(
+                "local ok, v = coroutine.resume(Gen) return v");
+            result.AsDouble.ShouldBe(1.0);
+            thread.ThreadRef?.Dispose();
+            await engine.ExecuteStringAsync("Sleep(0)");
+        }
+
+        [Fact]
+        public async Task Thread_IterateAsync_NilYield_ContinuesIteration()
+        {
+            // coroutine.yield(nil) produces LuaType.Nil — iteration must NOT stop.
+            // Only coroutine.yield() with no args produces TNONE, which stops iteration.
+            using KitsuneEngine engine = new();
+            LuaValue thread = await engine.ExecuteStringAsync(
+                "return coroutine.create(function() coroutine.yield(nil) coroutine.yield(1) end)");
+            var values = new List<LuaValue>();
+            await foreach (var v in thread.ThreadRef!.IterateAsync())
+            {
+                values.Add(v);
+            }
+
+            values.Count.ShouldBe(2);
+            values[0].Type.ShouldBe(LuaType.Nil);
+            values[1].AsDouble.ShouldBe(1.0);
+            thread.ThreadRef?.Dispose();
+            await engine.ExecuteStringAsync("Sleep(0)");
+        }
+
+        [Fact]
+        public async Task Thread_IterateAsync_NoYieldOnlyReturn_ProducesReturnValue()
+        {
+            // A thread that skips yield() and goes straight to return still produces one element.
+            using KitsuneEngine engine = new();
+            LuaValue thread = await engine.ExecuteStringAsync(
+                "return coroutine.create(function() return 42 end)");
+            var values = new List<double>();
+            await foreach (var v in thread.ThreadRef!.IterateAsync())
+            {
+                values.Add(v.AsDouble);
+            }
+
+            values.ShouldBe([42.0]);
+            thread.ThreadRef?.Dispose();
+            await engine.ExecuteStringAsync("Sleep(0)");
+        }
+
+        [Fact]
+        public async Task Thread_IterateAsync_MixedValueTypes_AllReceived()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue thread = await engine.ExecuteStringAsync(@"
+                return coroutine.create(function()
+                    coroutine.yield('hello')
+                    coroutine.yield(42)
+                    coroutine.yield(true)
+                end)");
+            var values = new List<LuaValue>();
+            await foreach (var v in thread.ThreadRef!.IterateAsync())
+            {
+                values.Add(v);
+            }
+
+            values.Count.ShouldBe(3);
+            values[0].String.ShouldBe("hello");
+            values[1].AsDouble.ShouldBe(42.0);
+            values[2].Boolean.ShouldBeTrue();
+            thread.ThreadRef?.Dispose();
+            await engine.ExecuteStringAsync("Sleep(0)");
+        }
+
+        [Fact]
+        public async Task Thread_IterateAsync_TableYield_ContentsAccessible()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue thread = await engine.ExecuteStringAsync(
+                "return coroutine.create(function() coroutine.yield({x=1, y=2}) end)");
+            LuaValue? received = null;
+            await foreach (var v in thread.ThreadRef!.IterateAsync())
+            {
+                received = v;
+            }
+
+            received.ShouldNotBeNull();
+            received!.Value.Type.ShouldBe(LuaType.Table);
+            received.Value.Table.ShouldNotBeNull();
+            received.Value.Table!.ShouldContain(kvp => kvp.Key.String == "x" && kvp.Value.AsDouble == 1.0);
+            received.Value.Table!.ShouldContain(kvp => kvp.Key.String == "y" && kvp.Value.AsDouble == 2.0);
+            thread.ThreadRef?.Dispose();
+            await engine.ExecuteStringAsync("Sleep(0)");
+        }
+
+        [Fact]
+        public async Task Thread_IterateAsync_PartialIteration_ThreadRemainsResumable()
+        {
+            // Breaking the loop early leaves the thread suspended; a second iteration
+            // picks up from the next yield, not from the beginning.
+            using KitsuneEngine engine = new();
+            LuaValue thread = await engine.ExecuteStringAsync(@"
+                return coroutine.create(function()
+                    coroutine.yield(1)
+                    coroutine.yield(2)
+                    coroutine.yield(3)
+                end)");
+
+            var first = new List<double>();
+            await foreach (var v in thread.ThreadRef!.IterateAsync())
+            {
+                first.Add(v.AsDouble);
+                break;
+            }
+
+            first.ShouldBe([1.0]);
+
+            var rest = new List<double>();
+            await foreach (var v in thread.ThreadRef!.IterateAsync())
+            {
+                rest.Add(v.AsDouble);
+            }
+
+            rest.ShouldBe([2.0, 3.0]);
+            thread.ThreadRef?.Dispose();
+            await engine.ExecuteStringAsync("Sleep(0)");
+        }
+
+        [Fact]
+        public async Task Thread_IterateAsync_CancellationToken_CancelsIteration()
+        {
+            // The cancellation token is checked at the top of each loop iteration;
+            // cancelling inside the loop stops the NEXT step before it is started.
+            using KitsuneEngine engine = new();
+            LuaValue thread = await engine.ExecuteStringAsync(@"
+                return coroutine.create(function()
+                    for i = 1, 100 do coroutine.yield(i) end
+                end)");
+            using CancellationTokenSource cts = new();
+            var values = new List<double>();
+            await Should.ThrowAsync<OperationCanceledException>(async () =>
+            {
+                await foreach (var v in thread.ThreadRef!.IterateAsync(cts.Token))
+                {
+                    values.Add(v.AsDouble);
+                    if (values.Count == 3)
+                    {
+                        cts.Cancel();
+                    }
+                }
+            });
+
+            values.ShouldBe([1.0, 2.0, 3.0]);
+            thread.ThreadRef?.Dispose();
+            await engine.ExecuteStringAsync("Sleep(0)");
+        }
+
+        [Fact]
+        public async Task Thread_IterateAsync_FromCallback_ThrowsLuaException()
+        {
+            // IterateThreadAsync must refuse to start (inLuaCallback guard) when called
+            // from within a RegisterFunction callback on the scheduler thread.
+            using KitsuneEngine engine = new();
+            LuaValue thread = engine.RunString(
+                "return coroutine.create(function() coroutine.yield(1) end)");
+
+            engine.RegisterFunction("TryIterate", _ =>
+            {
+                thread.ThreadRef!.Iterate().GetEnumerator().MoveNext();
+                return LuaValue.None;
+            });
+
+            LuaException ex = await Should.ThrowAsync<LuaException>(
+                engine.ExecuteStringAsync("TryIterate()"));
+            ex.Message.ShouldContain("registered function");
+            engine.GetActiveIds().ShouldBeEmpty();
+            thread.ThreadRef?.Dispose();
+            await engine.ExecuteStringAsync("Sleep(0)");
+        }
+
+        [Fact]
+        public async Task Thread_IterateAsync_ThreadFromGetVariable_WorksCorrectly()
+        {
+            // A thread set as a Lua global and then read back via GetVariable can be iterated.
+            // This exercises the LUA_TTHREAD branch in FillKitsuneVariableFromStack (GetVariable path).
+            using KitsuneEngine engine = new();
+            engine.RunString("myThread = coroutine.create(function() coroutine.yield(99) end)");
+            LuaValue thread = engine.GetVariable("myThread");
+            thread.Type.ShouldBe(LuaType.Thread);
+
+            var values = new List<double>();
+            await foreach (var v in thread.ThreadRef!.IterateAsync())
+            {
+                values.Add(v.AsDouble);
+            }
+
+            values.ShouldBe([99.0]);
+            engine.GetActiveIds().ShouldBeEmpty();
+            thread.ThreadRef?.Dispose();
+            await engine.ExecuteStringAsync("Sleep(0)");
+        }
+
+        // -- Thread (coroutine) synchronous iterator
+        [Fact]
+        public void Thread_Iterate_YieldsValues()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue thread = engine.RunString(
+                "return coroutine.create(function() coroutine.yield(1) coroutine.yield(2) coroutine.yield(3) end)");
+            thread.Type.ShouldBe(LuaType.Thread);
+            var values = new List<double>();
+            foreach (var v in thread.ThreadRef!.Iterate())
+            {
+                values.Add(v.AsDouble);
+            }
+
+            values.ShouldBe([1.0, 2.0, 3.0]);
+            thread.ThreadRef?.Dispose();
+            engine.RunString("Sleep(0)");
+        }
+
+        [Fact]
+        public void Thread_Iterate_FinalReturnValueIncluded()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue thread = engine.RunString(
+                "return coroutine.create(function() coroutine.yield(10) return 20 end)");
+            var values = new List<double>();
+            foreach (var v in thread.ThreadRef!.Iterate())
+            {
+                values.Add(v.AsDouble);
+            }
+
+            values.ShouldBe([10.0, 20.0]);
+            thread.ThreadRef?.Dispose();
+            engine.RunString("Sleep(0)");
+        }
+
+        [Fact]
+        public void Thread_Iterate_EmptyCoroutine_NoValues()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue thread = engine.RunString(
+                "return coroutine.create(function() end)");
+            thread.ThreadRef!.Iterate().ShouldBeEmpty();
+            thread.ThreadRef?.Dispose();
+            engine.RunString("Sleep(0)");
+        }
+
+        [Fact]
+        public void Thread_Iterate_DeadThread_NoValues()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue thread = engine.RunString(
+                "return coroutine.create(function() coroutine.yield(1) end)");
+
+            // exhaust it first
+            thread.ThreadRef!.Iterate().ToList();
+
+            // iterating a dead thread should produce nothing
+            thread.ThreadRef!.Iterate().ShouldBeEmpty();
+            thread.ThreadRef?.Dispose();
+            engine.RunString("Sleep(0)");
+        }
+
+        [Fact]
+        public void Thread_Iterate_Error_ThrowsLuaException()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue thread = engine.RunString(
+                "return coroutine.create(function() coroutine.yield(1) error(\"boom\") end)");
+            var values = new List<double>();
+            Should.Throw<LuaException>(() =>
+            {
+                foreach (var v in thread.ThreadRef!.Iterate())
+                {
+                    values.Add(v.AsDouble);
+                }
+            });
+            values.ShouldBe([1.0]);  // first yield was received before the error
+            thread.ThreadRef?.Dispose();
+            engine.RunString("Sleep(0)");
+        }
+
+        [Fact]
+        public void Thread_Iterate_NilYield_ContinuesIteration()
+        {
+            // coroutine.yield(nil) produces LuaType.Nil — iteration must NOT stop.
+            using KitsuneEngine engine = new();
+            LuaValue thread = engine.RunString(
+                "return coroutine.create(function() coroutine.yield(nil) coroutine.yield(1) end)");
+            var values = new List<LuaValue>();
+            foreach (var v in thread.ThreadRef!.Iterate())
+            {
+                values.Add(v);
+            }
+
+            values.Count.ShouldBe(2);
+            values[0].Type.ShouldBe(LuaType.Nil);
+            values[1].AsDouble.ShouldBe(1.0);
+            thread.ThreadRef?.Dispose();
+            engine.RunString("Sleep(0)");
+        }
+
+        [Fact]
+        public void Thread_Iterate_NoYieldOnlyReturn_ProducesReturnValue()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue thread = engine.RunString(
+                "return coroutine.create(function() return 42 end)");
+            var values = new List<double>();
+            foreach (var v in thread.ThreadRef!.Iterate())
+            {
+                values.Add(v.AsDouble);
+            }
+
+            values.ShouldBe([42.0]);
+            thread.ThreadRef?.Dispose();
+            engine.RunString("Sleep(0)");
+        }
+
+        [Fact]
+        public void Thread_Iterate_MixedValueTypes_AllReceived()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue thread = engine.RunString(@"
+                return coroutine.create(function()
+                    coroutine.yield('hello')
+                    coroutine.yield(42)
+                    coroutine.yield(true)
+                end)");
+            var values = new List<LuaValue>();
+            foreach (var v in thread.ThreadRef!.Iterate())
+            {
+                values.Add(v);
+            }
+
+            values.Count.ShouldBe(3);
+            values[0].String.ShouldBe("hello");
+            values[1].AsDouble.ShouldBe(42.0);
+            values[2].Boolean.ShouldBeTrue();
+            thread.ThreadRef?.Dispose();
+            engine.RunString("Sleep(0)");
+        }
+
+        [Fact]
+        public void Thread_Iterate_TableYield_ContentsAccessible()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue thread = engine.RunString(
+                "return coroutine.create(function() coroutine.yield({x=1, y=2}) end)");
+            LuaValue? received = null;
+            foreach (var v in thread.ThreadRef!.Iterate())
+            {
+                received = v;
+            }
+
+            received.ShouldNotBeNull();
+            received!.Value.Type.ShouldBe(LuaType.Table);
+            received.Value.Table.ShouldNotBeNull();
+            received.Value.Table!.ShouldContain(kvp => kvp.Key.String == "x" && kvp.Value.AsDouble == 1.0);
+            received.Value.Table!.ShouldContain(kvp => kvp.Key.String == "y" && kvp.Value.AsDouble == 2.0);
+            thread.ThreadRef?.Dispose();
+            engine.RunString("Sleep(0)");
+        }
+
+        [Fact]
+        public void Thread_Iterate_PartialIteration_ThreadRemainsResumable()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue thread = engine.RunString(@"
+                return coroutine.create(function()
+                    coroutine.yield(1)
+                    coroutine.yield(2)
+                    coroutine.yield(3)
+                end)");
+
+            var first = new List<double>();
+            foreach (var v in thread.ThreadRef!.Iterate())
+            {
+                first.Add(v.AsDouble);
+                break;
+            }
+
+            first.ShouldBe([1.0]);
+
+            var rest = new List<double>();
+            foreach (var v in thread.ThreadRef!.Iterate())
+            {
+                rest.Add(v.AsDouble);
+            }
+
+            rest.ShouldBe([2.0, 3.0]);
+            thread.ThreadRef?.Dispose();
+            engine.RunString("Sleep(0)");
+        }
+
+        [Fact]
+        public void Thread_Iterate_LargeSequence_AllValuesCorrect()
+        {
+            // Stresses the one-step-per-coroutine approach over 100 iterations.
+            using KitsuneEngine engine = new();
+            LuaValue thread = engine.RunString(
+                "return coroutine.create(function() for i = 1, 100 do coroutine.yield(i) end end)");
+            var values = new List<long>();
+            foreach (var v in thread.ThreadRef!.Iterate())
+            {
+                values.Add(v.AsInt64);
+            }
+
+            values.Count.ShouldBe(100);
+            for (int i = 0; i < 100; i++)
+            {
+                values[i].ShouldBe(i + 1L);
+            }
+
+            thread.ThreadRef?.Dispose();
+            engine.RunString("Sleep(0)");
+        }
+
+        [Fact]
+        public void Thread_Iterate_CancellationToken_CancelsIteration()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue thread = engine.RunString(
+                "return coroutine.create(function() for i = 1, 100 do coroutine.yield(i) end end)");
+            using CancellationTokenSource cts = new();
+            var values = new List<double>();
+            Should.Throw<OperationCanceledException>(() =>
+            {
+                foreach (var v in thread.ThreadRef!.Iterate(cts.Token))
+                {
+                    values.Add(v.AsDouble);
+                    if (values.Count == 3)
+                    {
+                        cts.Cancel();
+                    }
+                }
+            });
+
+            values.ShouldBe([1.0, 2.0, 3.0]);
+            thread.ThreadRef?.Dispose();
+            engine.RunString("Sleep(0)");
+        }
+
+        [Fact]
+        public void Thread_Iterate_PassedAsArg_LuaCanResume()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue thread = engine.RunString(
+                "return coroutine.create(function() for i = 1, 5 do coroutine.yield(i) end end)");
+            engine.SetVariable("Gen", thread);
+
+            LuaValue result = engine.RunString("local ok, v = coroutine.resume(Gen) return v");
+            result.AsDouble.ShouldBe(1.0);
+            thread.ThreadRef?.Dispose();
+            engine.RunString("Sleep(0)");
+        }
+
+        [Fact]
+        public void Thread_Iterate_ThreadFromGetVariable_WorksCorrectly()
+        {
+            // A thread stored as a Lua global, read back via GetVariable, can be iterated.
+            using KitsuneEngine engine = new();
+            engine.RunString("myThread = coroutine.create(function() coroutine.yield(99) end)");
+            LuaValue thread = engine.GetVariable("myThread");
+            thread.Type.ShouldBe(LuaType.Thread);
+
+            var values = new List<double>();
+            foreach (var v in thread.ThreadRef!.Iterate())
+            {
+                values.Add(v.AsDouble);
+            }
+
+            values.ShouldBe([99.0]);
+            engine.GetActiveIds().ShouldBeEmpty();
+            thread.ThreadRef?.Dispose();
+            engine.RunString("Sleep(0)");
+        }
+
+        [Fact]
+        public async Task Thread_Iterate_FromCallback_ThrowsLuaException()
+        {
+            // IterateThread must refuse to step (inLuaCallback guard fires on first MoveNext)
+            // when called from within a RegisterFunction callback.
+            using KitsuneEngine engine = new();
+            LuaValue thread = engine.RunString(
+                "return coroutine.create(function() coroutine.yield(1) end)");
+
+            engine.RegisterFunction("TryIterate", _ =>
+            {
+                thread.ThreadRef!.Iterate().GetEnumerator().MoveNext();
+                return LuaValue.None;
+            });
+
+            LuaException ex = await Should.ThrowAsync<LuaException>(
+                engine.ExecuteStringAsync("TryIterate()"));
+            ex.Message.ShouldContain("registered function");
+            engine.GetActiveIds().ShouldBeEmpty();
+            thread.ThreadRef?.Dispose();
+            await engine.ExecuteStringAsync("Sleep(0)");
+        }
+
+        // -- Shallow / deep table bridge
         [Fact]
         public void GetVariable_TableValue_IsOpaqueWithNoContents()
         {
@@ -3697,6 +4301,7 @@ namespace KitsuneNet.Tests
                 engine.ExecuteStringAsync("TryExecuteVariable()"));
             ex.Message.ShouldContain("registered function");
             engine.GetActiveIds().ShouldBeEmpty();
+            fn.FunctionRef?.Dispose();
         }
 
         // -- ExecuteVariable / ExecuteVariableAsync / RunVariable -------------------------
@@ -3712,6 +4317,7 @@ namespace KitsuneNet.Tests
             LuaValue result = await engine.ExecuteVariableAsync(fn, args: ["hello", "world"]);
             result.String.ShouldBe("hello,world");
             engine.GetActiveIds().ShouldBeEmpty();
+            fn.FunctionRef?.Dispose();
         }
 
         [Fact]
@@ -3723,6 +4329,7 @@ namespace KitsuneNet.Tests
             LuaValue result = await engine.ExecuteVariableAsync(fn);
             result.String.ShouldBe("no args");
             engine.GetActiveIds().ShouldBeEmpty();
+            fn.FunctionRef?.Dispose();
         }
 
         [Fact]
@@ -3735,6 +4342,7 @@ namespace KitsuneNet.Tests
                 engine.ExecuteVariableAsync(fn));
             ex.Message.ShouldContain("fn variable boom");
             engine.GetActiveIds().ShouldBeEmpty();
+            fn.FunctionRef?.Dispose();
         }
 
         [Fact]
@@ -3792,6 +4400,7 @@ namespace KitsuneNet.Tests
             r1.ShouldBe("10");
             r2.ShouldBe("42");
             engine.GetActiveIds().ShouldBeEmpty();
+            fn.FunctionRef?.Dispose();
         }
 
         [Fact]
@@ -3803,6 +4412,7 @@ namespace KitsuneNet.Tests
             LuaValue result = engine.RunVariable(fn, LuaValue.FromInt64(7));
             result.AsInt64.ShouldBe(49L);
             engine.GetActiveIds().ShouldBeEmpty();
+            fn.FunctionRef?.Dispose();
         }
 
         [Fact]
@@ -3838,6 +4448,7 @@ namespace KitsuneNet.Tests
             LuaValue result = await engine.ExecuteVariableAsync(fn, args: [LuaValue.FromInt64(21)]);
             result.String.ShouldBe("42");
             engine.GetActiveIds().ShouldBeEmpty();
+            fn.FunctionRef?.Dispose();
         }
 
         [Fact]
@@ -3859,6 +4470,7 @@ namespace KitsuneNet.Tests
             }
 
             engine.GetActiveIds().ShouldBeEmpty();
+            fn.FunctionRef?.Dispose();
         }
 
         // -- ExecuteVariable / ExecuteVariableAsync / RunVariable (boundary cases) ------
@@ -3870,6 +4482,7 @@ namespace KitsuneNet.Tests
             fn.Type.ShouldBe(LuaType.Function);
             (await engine.ExecuteVariableAsync(fn)).AsInt64.ShouldBe(1L);
             engine.GetActiveIds().ShouldBeEmpty();
+            fn.FunctionRef?.Dispose();
         }
 
         [Fact]
@@ -3897,6 +4510,7 @@ namespace KitsuneNet.Tests
                 engine.ExecuteStringAsync("TryRunVariable()"));
             ex.Message.ShouldContain("registered function");
             engine.GetActiveIds().ShouldBeEmpty();
+            fn.FunctionRef?.Dispose();
         }
 
         // -- Function results (LuaType.Function) -----------------------------------------
@@ -3911,6 +4525,7 @@ namespace KitsuneNet.Tests
             LuaValue result = engine.RunString("return function() return 42 end");
             result.Type.ShouldBe(LuaType.Function);
             engine.GetActiveIds().ShouldBeEmpty();
+            result.FunctionRef?.Dispose();
         }
 
         [Fact]
@@ -4134,6 +4749,7 @@ namespace KitsuneNet.Tests
 
             // RunString consumes the result; slot is auto-released
             engine.GetActiveIds().ShouldBeEmpty();
+            result.FunctionRef?.Dispose();
         }
 
         [Fact]
@@ -4143,6 +4759,7 @@ namespace KitsuneNet.Tests
             LuaValue result = engine.RunString("return function() end");
             result.Type.ShouldBe(LuaType.Function);
             engine.GetActiveIds().ShouldBeEmpty();
+            result.FunctionRef?.Dispose();
         }
 
         // -- LuaFunctionRef.Invoke / InvokeAsync ---------------------------------

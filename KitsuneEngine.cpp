@@ -220,7 +220,7 @@ static std::atomic<KitsuneVariableChain*> g_pendingVariableChainHead{nullptr};
 // Forward declaration — FreeVariableData is defined after FreeKVNode below.
 static void FreeVariableData(KitsuneVariable* var, lua_State* L);
 
-// Atomically swaps the entire pending chain out and processes every entry.
+
 // Must be called from a context that holds Lua access (scheduler thread or KitsuneCleanup).
 static void DrainPendingVariableChain(lua_State* L) {
 	KitsuneVariableChain* chain = g_pendingVariableChainHead.exchange(nullptr, std::memory_order_acquire);
@@ -234,20 +234,20 @@ static void DrainPendingVariableChain(lua_State* L) {
 }
 
 // Recursively frees a KeyValuePairKitsuneVariableNode linked list produced by TableToLinkedList.
-// L must be non-NULL if any node key or value may be LUA_TFUNCTION (to release registry refs).
+// L must be non-NULL if any node key or value may be LUA_TFUNCTION or LUA_TTHREAD (to release registry refs).
 static void FreeKVNode(KeyValuePairKitsuneVariableNode* node, lua_State* L) {
 	while (node) {
 		if ((node->key.type == LUA_TSTRING || node->key.type == KITSUNE_TJSON || node->key.type == KITSUNE_TCHAR16 || node->key.type == KITSUNE_TERROR || node->key.type == LUA_TUSERDATA) && node->key.data)
 			gff_free(node->key.data);
 		else if (node->key.type == LUA_TTABLE && node->key.table)
 			FreeKVNode(node->key.table, L);
-		else if (node->key.type == LUA_TFUNCTION && L && (int)node->key.integer != LUA_NOREF)
+		else if ((node->key.type == LUA_TFUNCTION || node->key.type == LUA_TTHREAD) && L && (int)node->key.integer != LUA_NOREF)
 			luaL_unref(L, LUA_REGISTRYINDEX, (int)node->key.integer);
 		if ((node->value.type == LUA_TSTRING || node->value.type == KITSUNE_TJSON || node->value.type == KITSUNE_TCHAR16 || node->value.type == KITSUNE_TERROR || node->value.type == LUA_TUSERDATA) && node->value.data)
 			gff_free(node->value.data);
 		else if (node->value.type == LUA_TTABLE && node->value.table)
 			FreeKVNode(node->value.table, L);
-		else if (node->value.type == LUA_TFUNCTION && L && (int)node->value.integer != LUA_NOREF)
+		else if ((node->value.type == LUA_TFUNCTION || node->value.type == LUA_TTHREAD) && L && (int)node->value.integer != LUA_NOREF)
 			luaL_unref(L, LUA_REGISTRYINDEX, (int)node->value.integer);
 		KeyValuePairKitsuneVariableNode* next = node->next;
 		gff_free(node);
@@ -255,9 +255,9 @@ static void FreeKVNode(KeyValuePairKitsuneVariableNode* node, lua_State* L) {
 	}
 }
 
-// Frees the heap data owned by a KitsuneVariable (string bytes, table linked list, or Lua function ref).
+// Frees the heap data owned by a KitsuneVariable (string bytes, table linked list, or Lua function/thread ref).
 // Nulls the data pointer after freeing to prevent double-free. Does NOT free var itself.
-// L must be non-NULL when var may be LUA_TFUNCTION or LUA_TTABLE containing functions.
+// L must be non-NULL when var may be LUA_TFUNCTION, LUA_TTHREAD, or LUA_TTABLE containing functions.
 static void FreeVariableData(KitsuneVariable* var, lua_State* L) {
 	if (!var) return;
 	if ((var->type == LUA_TSTRING || var->type == KITSUNE_TJSON || var->type == KITSUNE_TERROR || var->type == LUA_TUSERDATA) && var->data) {
@@ -278,7 +278,7 @@ static void FreeVariableData(KitsuneVariable* var, lua_State* L) {
 			var->stream->flags |= KITSUNE_SHARED_MEMORY_FLAG_ACCESSOR_DISPOSED;
 		var->stream = NULL;
 	}
-	else if (var->type == LUA_TFUNCTION && L && (int)var->integer != LUA_NOREF) {
+	else if ((var->type == LUA_TFUNCTION || var->type == LUA_TTHREAD) && L && (int)var->integer != LUA_NOREF) {
 		luaL_unref(L, LUA_REGISTRYINDEX, (int)var->integer);
 		var->integer = LUA_NOREF;
 	}
@@ -391,8 +391,15 @@ static void FillKitsuneVariableFromStack(lua_State* L, int idx, KitsuneVariable*
 		out->integer = luaL_ref(L, LUA_REGISTRYINDEX);
 		out->type = LUA_TFUNCTION;
 		break;
+	case LUA_TTHREAD:
+		// Anchor the coroutine thread in the Lua registry so it can be iterated from C#.
+		// The ref is stored in out->integer; release with luaL_unref via FreeVariableData.
+		lua_pushvalue(L, abs_idx);
+		out->integer = luaL_ref(L, LUA_REGISTRYINDEX);
+		out->type = LUA_TTHREAD;
+		break;
 	default:
-		out->type = t;  // preserve actual type (thread, lightuserdata, etc.); data/table remain NULL
+		out->type = t;  // preserve actual type (lightuserdata, etc.); data/table remain NULL
 		break;
 	}
 }
@@ -508,6 +515,13 @@ static void PushKitsuneVariable(lua_State* L, const KitsuneVariable* v) {
 	case LUA_TFUNCTION:
 		// Push the function from the Lua registry using the stored ref.
 		// Pushing via rawgeti does not consume the ref; the caller retains ownership.
+		if ((int)v->integer != LUA_NOREF)
+			lua_rawgeti(L, LUA_REGISTRYINDEX, (int)v->integer);
+		else
+			lua_pushnil(L);
+		break;
+	case LUA_TTHREAD:
+		// Push the coroutine thread from the Lua registry using the stored ref.
 		if ((int)v->integer != LUA_NOREF)
 			lua_rawgeti(L, LUA_REGISTRYINDEX, (int)v->integer);
 		else
@@ -1003,6 +1017,18 @@ static KitsuneVariable* MakeErrorVariable(const char* msg) {
 // Exported API
 // ============================================================
 
+// Embedded Lua script for stepping a Lua thread (coroutine) one resume at a time.
+// Used by StartCoroutineVariable when var->type == LUA_TTHREAD.
+// ARGS[1] is the thread. Returns the first yielded/returned value, nothing (TNONE)
+// when the thread is dead or produces no values, or raises a Lua error on failure.
+static const char* THREAD_STEP_SCRIPT =
+	"local t = ARGS[1]\n"
+	"if coroutine.status(t) == \"dead\" then return end\n"
+	"local results = table.pack(coroutine.resume(t))\n"
+	"if not results[1] then error(results[2] or \"thread error\") end\n"
+	"if results.n == 1 then return end\n"
+	"return results[2]";
+
 static KitsuneState* g_state = nullptr;
 #ifdef _WIN32
 static bool g_coOwned = false;
@@ -1412,6 +1438,26 @@ extern "C" {
 				loadOk = true;
 			}
 		}
+		else if (var->type == LUA_TTHREAD && (int)var->integer != LUA_NOREF) {
+			// Build ARGS[1] = the thread, then load the step script to resume it once.
+			// argc/argv are intentionally ignored: the thread itself is the subject.
+			lua_newtable(state->L);
+			lua_rawgeti(state->L, LUA_REGISTRYINDEX, (int)var->integer);
+			lua_rawseti(state->L, -2, 1);
+			slot->argsRef = luaL_ref(state->L, LUA_REGISTRYINDEX);
+
+			int rc = luaL_loadbuffer(T, THREAD_STEP_SCRIPT, strlen(THREAD_STEP_SCRIPT), "thread_step");
+			if (rc != 0) {
+				const char* err = lua_tolstring(T, -1, NULL);
+				SetSlotError(slot, err ? err : "load error");
+				lua_settop(T, 0);
+				luaL_unref(state->L, LUA_REGISTRYINDEX, slot->argsRef);
+				slot->argsRef = LUA_NOREF;
+			}
+			else {
+				loadOk = true;
+			}
+		}
 		else {
 			SetSlotError(slot, "variable is not executable");
 		}
@@ -1586,9 +1632,9 @@ extern "C" {
 			out->stream = slot->result.stream;
 			slot->result.stream = nullptr;
 		}
-		else if (slot->result.type == LUA_TFUNCTION) {
+		else if (slot->result.type == LUA_TFUNCTION || slot->result.type == LUA_TTHREAD) {
 			// Transfer the registry ref; zero the slot field so no stale ref remains.
-			out->type = LUA_TFUNCTION;
+			out->type = slot->result.type;
 			out->integer = slot->result.integer;
 			slot->result.integer = LUA_NOREF;
 		}
@@ -1751,11 +1797,11 @@ extern "C" {
 		// triggered — that path is only correct for unconsumed slots, not host-owned blocks.
 		if (var->type == KITSUNE_TSTREAM)
 			var->stream = NULL;
-		// TFUNCTION and TTABLE (with nodes): need the Lua state to luaL_unref function registry
+		// TFUNCTION, TTHREAD, and TTABLE (with nodes): need the Lua state to luaL_unref registry
 		// entries.  On the scheduler thread Lua access is already owned so call directly.
 		// On any other thread, enqueue the variable for the scheduler to drain — this avoids
 		// blocking the caller while a coroutine is running (same pattern as stream sweep).
-		if (var->type == LUA_TFUNCTION || (var->type == LUA_TTABLE && var->table)) {
+		if (var->type == LUA_TFUNCTION || var->type == LUA_TTHREAD || (var->type == LUA_TTABLE && var->table)) {
 			KitsuneState* state = g_state;
 			if (state && state->L) {
 				if (!g_isSchedulerThread) {
