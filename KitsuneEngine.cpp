@@ -138,7 +138,6 @@ struct KitsuneState {
 
 	// ── Scheduler thread ─────────────────────────────────────────────────────
 	std::thread           schedulerThread;
-	std::atomic<uint32_t> schedulerThreadId{0}; // OS thread ID set at scheduler startup; guards are scoped to this thread only
 	std::atomic<long>     schedulerStop{0}; // set to 1 by KitsuneCleanup
 	PlatformEvent         workEvent;     // signaled when a new coroutine is ready to run
 
@@ -278,6 +277,10 @@ static void FreeVariableData(KitsuneVariable* var, lua_State* L) {
 			var->stream->flags |= KITSUNE_SHARED_MEMORY_FLAG_ACCESSOR_DISPOSED;
 		var->stream = NULL;
 	}
+	else if (var->type == KITSUNE_TITERATOR) {
+		// KitsuneIterator* is caller-owned; the engine only nulls the pointer.
+		var->iterator = nullptr;
+	}
 	else if ((var->type == LUA_TFUNCTION || var->type == LUA_TTHREAD) && L && (int)var->integer != LUA_NOREF) {
 		luaL_unref(L, LUA_REGISTRYINDEX, (int)var->integer);
 		var->integer = LUA_NOREF;
@@ -307,6 +310,21 @@ static inline const wchar_t* Char16AsWchar(const char16_t* p) {
 // Forward declaration — LuaCFunctionWrapper is defined inside the extern "C" block below;
 // wrapping in extern "C" here matches the definition's C language linkage and avoids C2732.
 extern "C" { static int LuaCFunctionWrapper(lua_State* L); }
+
+// KitsuneIteratorUD — Lua-owned (lua_newuserdata) memory; GC'd via "KitsuneIterator" metatable.
+struct KitsuneIteratorUD {
+	kitsune_CFunctionData first;
+	kitsune_CFunctionData next;
+	kitsune_CFunctionData finalized;
+	void* iteratorUserdata; // copy of KitsuneIterator.userdata; passed as userdata to each callback
+	int state;              // 0=uncalled, 1=first called, 2=next, 3=finalized/dead
+};
+
+// Forward declarations — defined inside extern "C" below alongside LuaCFunctionWrapper.
+extern "C" {
+	static int KitsuneIteratorUD_gc(lua_State* L);
+	static int KitsuneIteratorWrapper(lua_State* L);
+}
 
 // Fills a KitsuneVariable from the Lua stack at the given index.
 // When shallow=true (default), tables are left opaque (type=KITSUNE_TTABLE, table=NULL).
@@ -542,6 +560,26 @@ static void PushKitsuneVariable(lua_State* L, const KitsuneVariable* v) {
 		}
 		break;
 	}
+	case KITSUNE_TITERATOR: {
+		// Allocate a KitsuneIteratorUD full userdata (Lua-owned), copy the three callback
+		// slots from the host's KitsuneIterator, set the __gc metatable, then wrap it in a
+		// closure. Lua sees only the closure; the userdata is upvalue 1.
+		const KitsuneIterator* it = v->iterator;
+		if (!it) {
+			lua_pushnil(L);
+			break;
+		}
+		KitsuneIteratorUD* ud = (KitsuneIteratorUD*)lua_newuserdata(L, sizeof(KitsuneIteratorUD));
+		memset(ud, 0, sizeof(KitsuneIteratorUD));
+		if (it->first)     ud->first     = *it->first;
+		if (it->next)      ud->next      = *it->next;
+		if (it->finalized) ud->finalized = *it->finalized;
+		ud->iteratorUserdata = it->userdata;
+		ud->state = 0;
+		luaL_setmetatable(L, "KitsuneIterator");
+		lua_pushcclosure(L, KitsuneIteratorWrapper, 1);
+		break;
+	}
 	default:
 		lua_pushnil(L);
 		break;
@@ -652,6 +690,11 @@ static void AcquireLuaAccess(KitsuneState* state) {
 	// which would let this thread race with the scheduler on state->L.
 	state->pauseFlag.store(1);
 	state->workEvent.Set();  // wake the scheduler if it is sleeping in step 5
+	// If the scheduler has already stopped (KitsuneCleanup joined it before this
+	// call), no one will ever signal pausedEvent.  Self-signal here so the Wait
+	// below returns immediately rather than blocking forever.
+	if (state->schedulerStop.load())
+		state->pausedEvent.Set();
 	state->pausedEvent.Wait();
 }
 
@@ -748,9 +791,6 @@ static void FinishCoroutine(KitsuneState* state, KitsuneCoroutine* slot, lua_Sta
 static thread_local bool g_isSchedulerThread = false;
 
 static void SchedulerProc(KitsuneState* state) {
-#ifdef _WIN32
-	state->schedulerThreadId.store((uint32_t)GetCurrentThreadId());
-#endif
 	g_isSchedulerThread = true;
 
 	bool prevAnyActive = false;
@@ -1150,6 +1190,12 @@ extern "C" {
 		luaopen_misc(L);
 		lua_pushcfunction(L, L_Sleep);
 		lua_setglobal(L, "Sleep");
+
+		// Register the KitsuneIterator metatable used by KITSUNE_TITERATOR closures.
+		luaL_newmetatable(L, "KitsuneIterator");
+		lua_pushcfunction(L, KitsuneIteratorUD_gc);
+		lua_setfield(L, -2, "__gc");
+		lua_pop(L, 1);
 
 		if (initFunc)
 			initFunc(L);
@@ -1897,9 +1943,7 @@ extern "C" {
 	KITSUNE_API bool KitsuneSetVariable(const char* path, const KitsuneVariable* var) {
 		KitsuneState* state = g_state;
 		if (!state || !state->L || !path || !*path) return false;
-#ifdef _WIN32
-		if (GetCurrentThreadId() == state->schedulerThreadId.load() && state->DelegateState) return false;  // scheduler thread re-entering from within a registered function; would deadlock
-#endif
+		if (g_isSchedulerThread && state->DelegateState) return false;  // re-entering from a registered function; would deadlock
 		if (var && var->type == KITSUNE_TSTREAM) {
 			if (!var->stream || !(var->stream->flags & KITSUNE_SHARED_MEMORY_FLAG_KITSUNE_OWNED))
 				return false;  // stream block was not created by KitsuneCreateMemoryBlock
@@ -1923,9 +1967,7 @@ extern "C" {
 	KITSUNE_API KitsuneVariable* KitsuneGetVariable(const char* path) {
 		KitsuneState* state = g_state;
 		if (!state || !state->L || !path || !*path) return NULL;
-#ifdef _WIN32
-		if (GetCurrentThreadId() == state->schedulerThreadId.load() && state->DelegateState) return NULL;  // scheduler thread re-entering from within a registered function; would deadlock
-#endif
+		if (g_isSchedulerThread && state->DelegateState) return NULL;  // re-entering from a registered function; would deadlock
 
 		AcquireLuaAccess(state);
 		KitsuneVariable* out = NULL;
@@ -1987,9 +2029,7 @@ extern "C" {
 	KITSUNE_API void KitsuneGetAll(const char* path, kitsune_KeyValuePairCallback callback, void* userdata) {
 		KitsuneState* state = g_state;
 		if (!state || !state->L || !callback) return;
-#ifdef _WIN32
-		if (GetCurrentThreadId() == state->schedulerThreadId.load() && state->DelegateState) return;  // scheduler thread re-entering from within a registered function; would deadlock
-#endif
+		if (g_isSchedulerThread && state->DelegateState) return;  // re-entering from a registered function; would deadlock
 
 		AcquireLuaAccess(state);
 
@@ -2104,12 +2144,106 @@ extern "C" {
 		return lua_gettop(L);  // number of values pushed by LuaResultSetter
 	}
 
+	// Called by Lua GC when the KitsuneIteratorUD upvalue is collected.
+	// Sets state=3 before calling finalized so any reentrant call is a no-op.
+	// Passes a no-op resultSetter — never nullptr — to avoid a null-pointer crash
+	// in LuaFunctionTrampoline when finalized tries to return a value.
+	static int KitsuneIteratorUD_gc(lua_State* L) {
+		KitsuneIteratorUD* ud = (KitsuneIteratorUD*)lua_touserdata(L, 1);
+		if (!ud || ud->state == 3)
+			return 0;
+		ud->state = 3;
+		if (ud->finalized.func) {
+			auto noop = [](const KitsuneVariable*) -> int { return 1; };
+			ud->finalized.func(0, nullptr, noop, ud->finalized.userdata);
+		}
+		return 0;
+	}
+
+	// Lua closure pushed by PushKitsuneVariable for KITSUNE_TITERATOR values.
+	// Upvalue 1 is the KitsuneIteratorUD full userdata.
+	// On state==0 calls first; on state==1/2 calls next.
+	// Returning KITSUNE_TNONE or rc<=0 signals end-of-iteration (pushes nil) — NOT a Lua error.
+	static int KitsuneIteratorWrapper(lua_State* L) {
+		KitsuneIteratorUD* ud = (KitsuneIteratorUD*)lua_touserdata(L, lua_upvalueindex(1));
+		if (!ud || ud->state == 3) {
+			lua_pushnil(L);
+			return 1;
+		}
+
+		kitsune_CFunctionData* cfd = (ud->state == 0) ? &ud->first : &ud->next;
+		if (ud->state == 0)
+			ud->state = 1;
+		else
+			ud->state = 2;
+
+		if (!cfd->func) {
+			ud->state = 3;
+			lua_pushnil(L);
+			return 1;
+		}
+
+		KitsuneState* state = g_state;
+		int argc = lua_gettop(L);
+		KitsuneVariable* args = nullptr;
+		if (argc > 0) {
+			args = (KitsuneVariable*)gff_calloc(argc, sizeof(KitsuneVariable));
+			if (!args) {
+				lua_pushnil(L);
+				return 1;
+			}
+		}
+
+		lua_State* prevDelegateState = state->DelegateState;
+		state->DelegateState = L;
+		for (int i = 0; i < argc; i++)
+			FillKitsuneVariableFromStack(L, i + 1, &args[i], false);
+		lua_settop(L, 0);
+
+		// FillKitsuneVariableFromStack signals allocation failure via LUA_TNONE.
+		for (int i = 0; i < argc; i++) {
+			if (args[i].type == LUA_TNONE) {
+				for (int j = 0; j < argc; j++)
+					FreeVariableData(&args[j], L);
+				gff_free(args);
+				state->DelegateState = prevDelegateState;
+				lua_pushstring(L, "out of memory");
+				lua_error(L);
+				return 0;  // unreachable
+			}
+		}
+
+		int rc = cfd->func(argc, args, LuaResultSetter, cfd->userdata);
+		state->DelegateState = prevDelegateState;
+
+		for (int i = 0; i < argc; i++)
+			FreeVariableData(&args[i], L);
+		gff_free(args);
+
+		// A deferred TERROR from LuaResultSetter is still raised as a Lua error.
+		if (state->lastCallError) {
+			ud->state = 3;  // iterator is dead after an error; any further call returns nil
+			lua_pushstring(L, state->lastCallError);
+			gff_free(state->lastCallError);
+			state->lastCallError = nullptr;
+			lua_error(L);
+			return 0;  // unreachable
+		}
+
+		if (rc <= 0 || lua_gettop(L) == 0) {
+			// End of iteration: push nil to break the for loop; not an error.
+			ud->state = 3;
+			lua_pushnil(L);
+			return 1;
+		}
+
+		return lua_gettop(L);
+	}
+
 	KITSUNE_API void KitsuneRegisterFunction(const char* name, kitsune_CFunction func, void* userdata) {
 		KitsuneState* state = g_state;
 		if (!state || !state->L || !name || !*name || !func) return;
-#ifdef _WIN32
-		if (GetCurrentThreadId() == state->schedulerThreadId.load() && state->DelegateState) return;  // scheduler thread re-entering from within a registered function; would deadlock
-#endif
+		if (g_isSchedulerThread && state->DelegateState) return;  // re-entering from a registered function; would deadlock
 		AcquireLuaAccess(state);
 
 		const char* finalKey = NavigateGlobalParent(state->L, name, true);
@@ -2195,17 +2329,6 @@ extern "C" {
 		}
 #endif
 		return leaked;
-	}
-
-	KITSUNE_API void KitsuneRegisterSession() {
-		KitsuneState* state = g_state;
-		if (!state || !state->L) return;
-#ifdef _WIN32
-		if (GetCurrentThreadId() == state->schedulerThreadId.load() && state->DelegateState) return;
-#endif
-		AcquireLuaAccess(state);
-		luaopen_session(state->L);
-		ReleaseLuaAccess(state);
 	}
 
 	KITSUNE_API SharedMemoryBlock* KitsuneCreateMemoryBlock(size_t size) {

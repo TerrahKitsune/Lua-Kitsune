@@ -315,6 +315,7 @@
     <None Include="build-linux-and-test.ps1" />
     <None Include="build-release.ps1" />
     <None Include="Http Client Implementation Plan.md" />
+    <None Include="ITERATOR_PLAN.md" />
     <None Include="Kafka refactor plan.md" />
     <None Include="Lua functions.md" />
     <None Include="MySQL Implementation Plan.md" />

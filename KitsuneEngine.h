@@ -14,6 +14,7 @@
 // KitsuneVariable type constants — values 0–8 match Lua's LUA_T* constants for direct comparison.
 // KITSUNE_TNONE (-1) matches LUA_TNONE. KITSUNE_TERROR (-2) is a Kitsune extension not present
 // in Lua; it is used exclusively with kitsune_ResultSetter to signal a Lua error from a
+#define KITSUNE_TITERATOR      (-8) // Kitsune extension: iterator type; data is a pointer to a kitsune_Iterator struct containing the iteration state. Not a value returned by lua_type() — only used in KitsuneVariable for iterating tables with KitsuneGetAll, and never appears in Lua or in a variable returned by the engine. Data should be a pointer to a kitsune_Iterator.
 #define KITSUNE_TCFUNCTION     (-7) // Kitsune extension: C function pointer type; data is a pointer to a kitsune_CFunctionData struct containing the function pointer and its userdata. Not a value returned by lua_type() — only used in KitsuneVariable for passing C function pointers to Lua, and never appears in Lua or in a variable returned by the engine. Data should be a pointer to a kitsune_CFunctionData.
 #define KITSUNE_TSTREAM        (-6) // Kitsune extension: pointer to a SharedMemoryBlock that Lua always owns.
 									// The block MUST have been obtained via KitsuneCreateMemoryBlock.
@@ -78,6 +79,9 @@ struct KeyValuePairKitsuneVariableNode;
 // Forward declaration required so KitsuneVariable can hold a kitsune_CFunctionData* in its union;
 // the full definition follows after kitsune_CFunction is declared.
 struct kitsune_CFunctionData;
+// Forward declaration required so KitsuneVariable can hold a KitsuneIterator* in its union;
+// the full definition follows after kitsune_CFunction is declared.
+struct KitsuneIterator;
 
 struct KitsuneVariable {
 	int type; // see KITSUNE_T* constants above
@@ -92,7 +96,19 @@ struct KitsuneVariable {
 		KeyValuePairKitsuneVariableNode* table; // KITSUNE_TTABLE: head of linked list (NULL = empty table)
 		SharedMemoryBlock* stream; // KITSUNE_TSTREAM: pointer to a SharedMemoryBlock representing the stream; caller-owned on Set
 		kitsune_CFunctionData* cfunction; // KITSUNE_TCFUNCTION: pointer to a kitsune_CFunctionData struct containing the function pointer and its userdata; caller-owned on Set
+		KitsuneIterator* iterator; // KITSUNE_TITERATOR: pointer to a kitsune_Iterator struct containing the iteration state; caller-owned on Set
 	};
+};
+
+// Iterator struct for KITSUNE_TITERATOR values.
+// First time the it calls first, subsequent it calls next.
+// When Lua GC's the iterator (e.g. after a for-in loop), finalized is called to free any remaining resources.
+// Iteration should break if first or next returns a KitsuneVariable with type == KITSUNE_TNONE.
+struct KitsuneIterator {
+	kitsune_CFunctionData* first; // First time the iterator is called
+	kitsune_CFunctionData* next; // Subsequent calls after the first
+	kitsune_CFunctionData* finalized; // Called when garbage collected
+	void* userdata;
 };
 
 // Intrusive linked list node for KITSUNE_TTABLE values.
@@ -113,11 +129,13 @@ struct KeyValuePairKitsuneVariableNode {
 // (the same deadlock constraint as kitsune_CFunction — see above).
 typedef void (*kitsune_KeyValuePairCallback)(const KitsuneVariable* key, const KitsuneVariable* value, void* userdata);
 
-// Callback passed to kitsune_CFunction to return a value to Lua.
-// Pass a KitsuneVariable with any type to return a value; pass KITSUNE_TERROR with an optional
-// error message in data to raise a Lua error. Returns non-zero if the value was stored, 0 if
-// the store failed (e.g. allocation error for KITSUNE_TERROR). The caller retains ownership of
-// the KitsuneVariable and any data it points to for the duration of the call.
+// Callback passed to kitsune_CFunction to return one or more values to Lua.
+// Call once per return value; each call pushes one value onto the Lua stack.
+// The number of calls determines the number of values Lua receives (e.g. call twice to
+// return two values the way a regular Lua function does with 'return a, b').
+// Pass KITSUNE_TERROR with an optional error message in data to raise a Lua error instead.
+// Returns non-zero if the value was stored, 0 on failure (e.g. allocation error for KITSUNE_TERROR).
+// The caller retains ownership of the KitsuneVariable and any data it points to for the duration of the call.
 typedef int (*kitsune_ResultSetter) (const KitsuneVariable* result);
 
 // Signature for C functions registered via RegisterFunction.
@@ -259,9 +277,4 @@ extern "C" {
 	// invoking callback once per key-value pair. Pass NULL or "" to iterate _G itself.
 	// key and value are temporary — valid only for the duration of each call. Thread-safe.
 	KITSUNE_API void KitsuneGetAll(const char* path, kitsune_KeyValuePairCallback callback, void* userdata);
-	
-	// Registers the Session table (Session.Console, Session.Clipboard) into the Lua global
-	// environment. Call once from the host after KitsuneInit() to enable interactive session
-	// functions. No-op if called before KitsuneInit(). Thread-safe.
-	KITSUNE_API void KitsuneRegisterSession();
 }

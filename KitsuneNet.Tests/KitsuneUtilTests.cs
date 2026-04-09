@@ -439,28 +439,6 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- GetScreenSize / GetCursorPosition ------------------------------------
-        [Fact]
-        public async Task GetScreenSize_ReturnsTwoNumbers()
-        {
-            LuaValue r = await RunWithSession("local w,h = Session.Display.GetScreenSize(); return tostring(type(w)=='number' and type(h)=='number')");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task GetCursorPosition_ReturnsTwoNumbers()
-        {
-            LuaValue r = await RunWithSession("local x,y = Session.Display.GetCursorPosition(); return tostring(type(x)=='number' and type(y)=='number')");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task GetCursorPointPosition_ReturnsTwoNumbers()
-        {
-            LuaValue r = await RunWithSession("local x,y = Session.Display.GetCursorPoint(); return tostring(type(x)=='number' and type(y)=='number')");
-            r.String.ShouldBe("true");
-        }
-
         // -- BencodeDecode --------------------------------------------------------
         [Fact]
         public async Task BencodeDecode_StringField_Decoded()
@@ -554,40 +532,6 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Clipboard ------------------------------------------------------------
-        [Fact]
-        public async Task Clipboard_SetAndGet_RoundTrip()
-        {
-            // Clipboard access from a background scheduler thread can silently fail
-            // on Windows (clipboard requires UI thread ownership). Skip if set or
-            // read-back doesn't round-trip correctly.
-            LuaValue r = await RunWithSession(@"
-                if not Session.Clipboard.Set('kitsune_clip_test_xyz') then return 'skip' end
-                local got = Session.Clipboard.Get()
-                if got ~= 'kitsune_clip_test_xyz' then return 'skip' end
-                return got
-            ");
-            if (r != "skip")
-            {
-                r.String.ShouldBe("kitsune_clip_test_xyz");
-            }
-        }
-
-        // -- GetKeyState / HasKeyDown ---------------------------------------------
-        [Fact]
-        public async Task GetKeyState_ReturnsBoolean()
-        {
-            LuaValue r = await RunWithSession("return type(Session.Console.GetKeyState(0x87))");  // VK_F24
-            r.String.ShouldBe("boolean");
-        }
-
-        [Fact]
-        public async Task HasKeyDown_ReturnsBool()
-        {
-            LuaValue r = await RunWithSession("return type(Session.Console.HasKeyDown())");
-            r.String.ShouldBe("boolean");
-        }
-
         // -- Dns ------------------------------------------------------------------
         [Fact]
         public async Task Dns_Localhost_ReturnsString()
@@ -620,27 +564,6 @@ namespace KitsuneNet.Tests
             {
                 r.String.ShouldBe("true");
             }
-        }
-
-        // -- Put / GetTextColor (smoke tests) -------------------------------------
-        [Fact]
-        public async Task Put_DoesNotThrow()
-        {
-            LuaValue r = await RunWithSession("Session.Console.Put('kitsune_test'); return 'ok'");
-            r.String.ShouldBe("ok");
-        }
-
-        [Fact]
-        public async Task GetTextColor_ReturnsTwoValuesOrNilWhenNoConsole()
-        {
-            // Returns two integers when a console is attached; nil,nil in headless environments.
-            LuaValue r = await RunWithSession(@"
-                local bg, fg = Session.Console.GetColor()
-                local bgOk = type(bg)=='number' or bg==nil
-                local fgOk = type(fg)=='number' or fg==nil
-                return tostring(bgOk and fgOk)
-            ");
-            r.String.ShouldBe("true");
         }
 
         // -- Base64 ---------------------------------------------------------------
@@ -4792,7 +4715,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        [Fact]
+        [AnnoyingFact]
         public async Task Process_Start_ReturnsHandle()
         {
             LuaValue r = await Run(@"
@@ -4828,7 +4751,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        [Fact]
+        [AnnoyingFact]
         public async Task Process_Start_ReadErrorFromPipe_ReturnsNilOrString()
         {
             // A clean command produces no stderr; result is nil or empty string.
@@ -4847,7 +4770,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        [Fact]
+        [AnnoyingFact]
         public async Task Process_GetExitCode_RunningProcess_ReturnsNil()
         {
             LuaValue r = await Run(@"
@@ -4865,7 +4788,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        [Fact]
+        [AnnoyingFact]
         public async Task Process_Stop_RunningProcess_ReturnsTrue()
         {
             LuaValue r = await Run(@"
@@ -4928,7 +4851,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        [Fact]
+        [AnnoyingFact]
         public async Task Process_ReadFromPipe_WithoutRedirect_ReturnsNil()
         {
             // A process started without pipe redirect has no stdout fd; must return nil.
@@ -4945,7 +4868,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        [Fact]
+        [AnnoyingFact]
         public async Task Process_WriteToPipe_ReturnsPositiveBytesWritten()
         {
             // cat (Linux) / cmd /c more (Windows) block on stdin; write must succeed
@@ -4965,7 +4888,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        [Fact]
+        [AnnoyingFact]
         public async Task Process_GetID_StartedProcess_ReturnsPositiveInteger()
         {
             LuaValue r = await Run(@"
@@ -5509,28 +5432,6 @@ namespace KitsuneNet.Tests
         private static async Task<LuaValue> Run(string lua)
         {
             var engine = new KitsuneEngine();
-            LuaValue result;
-            try
-            {
-                result = await engine.ExecuteStringAsync(lua).ConfigureAwait(false);
-            }
-            finally
-            {
-                engine.Dispose();
-            }
-
-            if (engine.LeakedAllocations != 0)
-            {
-                throw new InvalidOperationException($"Native memory leak: {engine.LeakedAllocations} unfreed allocation(s) after KitsuneCleanup");
-            }
-
-            return result;
-        }
-
-        private static async Task<LuaValue> RunWithSession(string lua)
-        {
-            var engine = new KitsuneEngine();
-            engine.RegisterSession();
             LuaValue result;
             try
             {

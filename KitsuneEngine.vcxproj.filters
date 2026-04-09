@@ -982,6 +982,7 @@
     <None Include="build-release.ps1" />
     <None Include="vcpkg.json" />
     <None Include="triplets\x64-windows-static-md.cmake" />
+    <None Include="ITERATOR_PLAN.md" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />

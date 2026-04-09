@@ -66,6 +66,13 @@ namespace KitsuneNet
         /// <see cref="LuaValue.FromCFunction"/>.</summary>
         CFunction = -7,
 
+        /// <summary>Stateful iterator (KITSUNE_TITERATOR = -8).
+        /// Outbound (C# → Lua) only. Lua receives a callable closure consumable with
+        /// <c>for v in iter do</c>. <see cref="IEnumerator{T}.GetEnumerator"/> is called
+        /// lazily when Lua invokes the closure for the first time.
+        /// Never returned by the engine. Create via <see cref="LuaValue.FromIterator"/>.</summary>
+        Iterator = -8,
+
         /// <summary>Error returned by the blocking execute functions (KITSUNE_TERROR = -2) when
         /// the call was rejected — e.g. called from the scheduler thread, from a
         /// <c>kitsune_CFunction</c> callback, or re-entrantly from the same thread.

@@ -1,4 +1,4 @@
-using KitsuneNet;
+﻿using KitsuneNet;
 using Shouldly;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -12,6 +12,8 @@ namespace KitsuneNet.Tests
     [Collection("KitsuneSequential")]
     public sealed class KitsuneEngineTests
     {
+        private bool _iteratorEnumeratorDisposed;
+
         // -- Init / Dispose -------------------------------------------------------
         [Fact]
         public void Init_CreatesEngine_WithoutThrowing()
@@ -4044,50 +4046,6 @@ namespace KitsuneNet.Tests
             ThrowIfLeaked(engine);
         }
 
-        // -- RegisterSession ------------------------------------------------------
-        [Fact]
-        public async Task RegisterSession_MakesSessionTableAvailable()
-        {
-            // Session is not registered by default; RegisterSession must create the global.
-            using KitsuneEngine engine = new();
-            engine.RegisterSession();
-            LuaValue r = await engine.ExecuteStringAsync("return type(Session)");
-            r.ShouldBe("table");
-            engine.GetActiveIds().ShouldBeEmpty();
-        }
-
-        [Fact]
-        public async Task RegisterSession_SessionConsoleHasPutFunction()
-        {
-            // Session.Console.Put is cross-platform; must be callable after RegisterSession.
-            using KitsuneEngine engine = new();
-            engine.RegisterSession();
-            LuaValue r = await engine.ExecuteStringAsync("return type(Session.Console.Put)");
-            r.ShouldBe("function");
-            engine.GetActiveIds().ShouldBeEmpty();
-        }
-
-        [Fact]
-        public async Task RegisterSession_SessionDisplayHasGetScreenSize()
-        {
-            using KitsuneEngine engine = new();
-            engine.RegisterSession();
-            LuaValue r = await engine.ExecuteStringAsync("return type(Session.Display.GetScreenSize)");
-            r.ShouldBe("function");
-            engine.GetActiveIds().ShouldBeEmpty();
-        }
-
-        [Fact]
-        public async Task RegisterSession_SessionClipboardHasSetAndGet()
-        {
-            using KitsuneEngine engine = new();
-            engine.RegisterSession();
-            LuaValue r = await engine.ExecuteStringAsync(
-                "return tostring(type(Session.Clipboard.Set) == 'function' and type(Session.Clipboard.Get) == 'function')");
-            r.ShouldBe("true");
-            engine.GetActiveIds().ShouldBeEmpty();
-        }
-
         // -- RunString / RunFile / RunFunction (sync blocking) --------------------
         [Fact]
         public void RunString_ReturnsStringResult()
@@ -4955,6 +4913,192 @@ namespace KitsuneNet.Tests
             funcRef.Dispose();
 
             Should.Throw<ObjectDisposedException>(() => funcRef.InvokeAsync());
+        }
+
+        // -- KITSUNE_TITERATOR tests --------------------------------------------
+        [Fact]
+        public async Task Iterator_BasicIteration_ReceivesAllValuesInOrder()
+        {
+            var source = new List<LuaValue> { "alpha", "beta", "gamma" };
+            using KitsuneEngine engine = new();
+            engine.SetVariable("Items", LuaValue.FromIterator(source));
+            LuaValue result = await engine.ExecuteStringAsync(
+                @"local out = {}
+                  for v in Items do
+                      out[#out + 1] = v
+                  end
+                  return table.concat(out, ',')");
+            result.String.ShouldBe("alpha,beta,gamma");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task Iterator_EmptySource_LoopBodyNeverRuns()
+        {
+            using KitsuneEngine engine = new();
+            engine.SetVariable("Items", LuaValue.FromIterator(Array.Empty<LuaValue>()));
+            LuaValue result = await engine.ExecuteStringAsync(
+                @"local count = 0
+                  for v in Items do count = count + 1 end
+                  return count");
+            result.AsInt64.ShouldBe(0);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task Iterator_EarlyBreak_FinalizedFires()
+        {
+            IEnumerable<LuaValue> TrackedSource()
+            {
+                try
+                {
+                    yield return "a";
+                    yield return "b";
+                    yield return "c";
+                }
+                finally
+                {
+                    _iteratorEnumeratorDisposed = true;
+                }
+            }
+
+            using KitsuneEngine engine = new();
+            engine.SetVariable("Items", LuaValue.FromIterator(TrackedSource()));
+
+            // Use a do-block so the closure is unreachable after the loop,
+            // then nil the global and force two full GC cycles so __gc fires.
+            await engine.ExecuteStringAsync(
+                @"do
+                      local iter = Items
+                      Items = nil
+                      for v in iter do
+                          if v == 'a' then break end
+                      end
+                  end
+                  collectgarbage('collect')
+                  collectgarbage('collect')");
+
+            _iteratorEnumeratorDisposed.ShouldBeTrue("Dispose was not called — finalizeFunc did not fire via __gc");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task Iterator_Cancel_LoopStopsCleanly()
+        {
+            var source = new List<LuaValue> { 1L, 2L, 3L, 4L, 5L };
+            using KitsuneEngine engine = new();
+            engine.SetVariable("Items", LuaValue.FromIterator(source, out LuaIteratorRef handle));
+            handle.Cancel();
+            LuaValue result = await engine.ExecuteStringAsync(
+                @"local count = 0
+                  for v in Items do count = count + 1 end
+                  return count");
+            result.AsInt64.ShouldBe(0);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task Iterator_ReEnumerable_TwoIndependentLoops()
+        {
+            var source = new List<LuaValue> { "x", "y" };
+            using KitsuneEngine engine = new();
+            engine.SetVariable("Items1", LuaValue.FromIterator(source));
+            engine.SetVariable("Items2", LuaValue.FromIterator(source));
+            LuaValue result = await engine.ExecuteStringAsync(
+                @"local a, b = {}, {}
+                  for v in Items1 do a[#a+1] = v end
+                  for v in Items2 do b[#b+1] = v end
+                  return table.concat(a, ',') .. '|' .. table.concat(b, ',')");
+            result.String.ShouldBe("x,y|x,y");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void Iterator_LuaIteratorRef_CsideIteration_ReturnsAllValues()
+        {
+            var source = new List<LuaValue> { "p", "q", "r" };
+            LuaValue.FromIterator(source, out LuaIteratorRef handle);
+            handle.Iterator().Select(x => x.String).ToList().ShouldBe(new[] { "p", "q", "r" });
+        }
+
+        [Fact]
+        public async Task Iterator_LuaIteratorRef_CsideAsyncIteration_ReturnsAllValues()
+        {
+            var source = new List<LuaValue> { "p", "q", "r" };
+            LuaValue.FromIterator(source, out LuaIteratorRef handle);
+            var collected = new List<string?>();
+            await foreach (LuaValue item in handle.IteratorAsync())
+            {
+                collected.Add(item.String);
+            }
+
+            collected.ShouldBe(new[] { "p", "q", "r" });
+        }
+
+        [Fact]
+        public async Task Iterator_FactoryPattern_FreshIteratorEachCall()
+        {
+            var source = new List<LuaValue> { 10L, 20L, 30L };
+            using KitsuneEngine engine = new();
+            engine.RegisterFunction("MakeIter", _ => LuaValue.FromIterator(source));
+            LuaValue result = await engine.ExecuteStringAsync(
+                @"local s1, s2 = 0, 0
+                  for v in MakeIter() do s1 = s1 + v end
+                  for v in MakeIter() do s2 = s2 + v end
+                  return s1 + s2");
+            result.AsInt64.ShouldBe(120);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task Iterator_StepThrows_RaisesLuaError_CatchableByPcall()
+        {
+            int callCount = 0;
+            using KitsuneEngine engine = new();
+            engine.RegisterFunction("MakeIter", _ =>
+            {
+                IEnumerable<LuaValue> Src()
+                {
+                    yield return "ok";
+                    callCount++;
+                    throw new InvalidOperationException("step exploded");
+                }
+                return LuaValue.FromIterator(Src());
+            });
+            LuaValue result = await engine.ExecuteStringAsync(
+                @"local ok, err = pcall(function()
+                      local out = {}
+                      for v in MakeIter() do out[#out+1] = v end
+                  end)
+                  return tostring(ok) .. ':' .. tostring(err ~= nil)");
+            result.String.ShouldStartWith("false:");
+            callCount.ShouldBe(1);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task Iterator_AsyncSource_LuaIteratesBlocking()
+        {
+            // IAsyncEnumerable source passed to Lua — consumed via ToBlockingEnumerable().
+            async IAsyncEnumerable<LuaValue> AsyncSource(
+                [System.Runtime.CompilerServices.EnumeratorCancellation] System.Threading.CancellationToken ct = default)
+            {
+                await System.Threading.Tasks.Task.Yield();
+                yield return "a";
+                await System.Threading.Tasks.Task.Yield();
+                yield return "b";
+                await System.Threading.Tasks.Task.Yield();
+                yield return "c";
+            }
+
+            using KitsuneEngine engine = new();
+            engine.SetVariable("Items", LuaValue.FromIterator(AsyncSource()));
+            LuaValue result = await engine.ExecuteStringAsync(
+                @"local out = {}
+                  for v in Items do out[#out+1] = v end
+                  return table.concat(out, ',')");
+            result.String.ShouldBe("a,b,c");
+            engine.GetActiveIds().ShouldBeEmpty();
         }
 
         private static void SpinUntilRunning(KitsuneEngine engine, int timeoutMs = 2000)

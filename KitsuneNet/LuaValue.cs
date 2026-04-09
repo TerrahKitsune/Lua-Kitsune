@@ -50,6 +50,11 @@ namespace KitsuneNet
         /// without being registered in the global table. Null for all other types.</summary>
         public LuaFunction? CFunctionValue { get; init; }
 
+        /// <summary>Iterator source for <see cref="LuaType.Iterator"/> values.
+        /// Holds the <see cref="LuaIteratorRef"/> wrapping the underlying sequence.
+        /// Null for all other types.</summary>
+        public LuaIteratorRef? IteratorValue { get; init; }
+
         /// <summary>Decodes <see cref="Bytes"/> as UTF-8 for strings, or UTF-16 LE for Wchar values.
         /// Returns <c>null</c> when <see cref="Bytes"/> is null.</summary>
         public string? String => Type == LuaType.Char16
@@ -92,6 +97,7 @@ namespace KitsuneNet
             LuaType.Json => JsonNode?.ToJsonString() ?? "null",
             LuaType.Stream => StreamValue?.ToString() ?? "stream(null)",
             LuaType.CFunction => "cfunction",
+            LuaType.Iterator => "iterator",
             LuaType.Function => "function",
             LuaType.Userdata => "userdata",
             LuaType.Thread => "thread",
@@ -193,6 +199,40 @@ namespace KitsuneNet
         public static LuaValue FromCFunction(LuaFunction func) =>
             new() { Type = LuaType.CFunction, CFunctionValue = func };
 
+        /// <summary>Creates an iterator value from a synchronous sequence.
+        /// Lua receives a stateful closure iterable with <c>for v in iter do</c>.
+        /// <see cref="IEnumerable{T}.GetEnumerator"/> is called lazily when Lua invokes
+        /// the closure for the first time.</summary>
+        public static LuaValue FromIterator(IEnumerable<LuaValue> source)
+        {
+            var iterRef = new LuaIteratorRef(source);
+            return new() { Type = LuaType.Iterator, IteratorValue = iterRef };
+        }
+
+        /// <summary>Creates an iterator value and returns a control handle for cancellation
+        /// or independent C#-side enumeration via <see cref="LuaIteratorRef.Iterator"/>.</summary>
+        public static LuaValue FromIterator(IEnumerable<LuaValue> source, out LuaIteratorRef handle)
+        {
+            handle = new LuaIteratorRef(source);
+            return new() { Type = LuaType.Iterator, IteratorValue = handle };
+        }
+
+        /// <summary>Creates an iterator value from an async sequence. When passed to Lua the
+        /// async source is consumed via <c>ToBlockingEnumerable</c>, which blocks the Lua
+        /// scheduler thread per step. Suitable only for fast async sources.</summary>
+        public static LuaValue FromIterator(IAsyncEnumerable<LuaValue> source)
+        {
+            var iterRef = new LuaIteratorRef(source);
+            return new() { Type = LuaType.Iterator, IteratorValue = iterRef };
+        }
+
+        /// <inheritdoc cref="FromIterator(IAsyncEnumerable{LuaValue})"/>
+        public static LuaValue FromIterator(IAsyncEnumerable<LuaValue> source, out LuaIteratorRef handle)
+        {
+            handle = new LuaIteratorRef(source);
+            return new() { Type = LuaType.Iterator, IteratorValue = handle };
+        }
+
         /// <summary>Content-based equality: <see cref="Bytes"/> arrays are compared element-by-element.</summary>
         public bool Equals(LuaValue other) =>
             Type == other.Type &&
@@ -205,7 +245,8 @@ namespace KitsuneNet
             ReferenceEquals(FunctionRef, other.FunctionRef) &&
             ReferenceEquals(ThreadRef, other.ThreadRef) &&
             ReferenceEquals(StreamValue, other.StreamValue) &&
-            ReferenceEquals(CFunctionValue, other.CFunctionValue);
+            ReferenceEquals(CFunctionValue, other.CFunctionValue) &&
+            ReferenceEquals(IteratorValue, other.IteratorValue);
 
         public override int GetHashCode()
         {
@@ -227,6 +268,7 @@ namespace KitsuneNet
             hash.Add(ThreadRef);
             hash.Add(StreamValue);
             hash.Add(CFunctionValue);
+            hash.Add(IteratorValue);
             return hash.ToHashCode();
         }
 

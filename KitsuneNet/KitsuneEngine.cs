@@ -523,6 +523,11 @@ namespace KitsuneNet
         /// <summary>Sets a Lua global from a typed value using a dot-separated path. Pass <see cref="LuaValue.None"/> to remove the key.</summary>
         public bool SetVariable(string name, LuaValue value)
         {
+            if (inLuaCallback)
+            {
+                throw new LuaException("SetVariable cannot be called from within a registered function");
+            }
+
             var ptrs = new List<IntPtr>();
             try
             {
@@ -537,7 +542,15 @@ namespace KitsuneNet
         }
 
         /// <summary>Returns the Lua global at the given dot-separated path, or <see cref="LuaValue.None"/> if not found.</summary>
-        public LuaValue GetVariable(string name) => NativePtrToLuaValue(KitsuneGetVariable(name), this);
+        public LuaValue GetVariable(string name)
+        {
+            if (inLuaCallback)
+            {
+                throw new LuaException("GetVariable cannot be called from within a registered function");
+            }
+
+            return NativePtrToLuaValue(KitsuneGetVariable(name), this);
+        }
 
         /// <summary>
         /// Allocates a shared-memory <see cref="LuaStream"/> of <paramref name="size"/> bytes
@@ -619,6 +632,11 @@ namespace KitsuneNet
         /// </summary>
         public IReadOnlyList<KeyValuePair<LuaValue, LuaValue>> GetAll(string? path = null)
         {
+            if (inLuaCallback)
+            {
+                throw new LuaException("GetAll cannot be called from within a registered function");
+            }
+
             var result = new List<KeyValuePair<LuaValue, LuaValue>>();
             GetAllCallback cb = (key, value, _) =>
             {
@@ -638,13 +656,6 @@ namespace KitsuneNet
         }
 
         /// <summary>
-        /// Registers the <c>Session</c> table (<c>Session.Console</c>, <c>Session.Clipboard</c>)
-        /// into the Lua global environment. Call once from the host after construction to enable
-        /// interactive session functions. Safe to call multiple times (re-registers the table).
-        /// </summary>
-        public void RegisterSession() => KitsuneRegisterSession();
-
-        /// <summary>
         /// Registers a C# function as a Lua global callable by <paramref name="name"/>.
         /// <paramref name="name"/> may be a dot-separated path (e.g. <c>"Ns.Foo"</c>);
         /// intermediate tables are created automatically.
@@ -654,6 +665,11 @@ namespace KitsuneNet
         /// </summary>
         public void RegisterFunction(string name, LuaFunction func)
         {
+            if (inLuaCallback)
+            {
+                throw new LuaException("RegisterFunction cannot be called from within a registered function");
+            }
+
             _functionHandles ??= new();
             var handle = GCHandle.Alloc(func);
             _functionHandles.Add(handle);
@@ -849,9 +865,6 @@ namespace KitsuneNet
         private static extern void KitsuneCancel(int id);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern void KitsuneReleaseResult(int id);
-
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern double KitsuneGetRuntime(int id);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
@@ -882,9 +895,6 @@ namespace KitsuneNet
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern nuint KitsuneCleanup();
-
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern void KitsuneRegisterSession();
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern void KitsuneGetAll([MarshalAs(UnmanagedType.LPUTF8Str)] string? path, GetAllCallback callback, IntPtr userdata);
@@ -940,7 +950,7 @@ namespace KitsuneNet
             return LuaValue.FromBytes(bytes);
         }
 
-        // wcharCount is the char16_t count; each char16_t is 2 bytes (UTF-16 LE on Windows).
+        // wcharCount is the char16_t count; each char16_t is 2 bytes (UTF-16 LE).
         private static LuaValue NativeCopyChar16(IntPtr src, nuint wcharCount)
         {
             if (wcharCount > (nuint)(Array.MaxLength / 2))
@@ -1239,6 +1249,76 @@ namespace KitsuneNet
                         nv.Data = structPtr;
                         break;
                     }
+                case LuaType.Iterator when v.IteratorValue is LuaIteratorRef iterRef:
+                    {
+                        // IteratorState holds the source ref and, lazily, the enumerator created on first
+                        // Lua call.  Both stepFunc and finalizeFunc close over the same instance.
+                        // GCHandles are self-cleaning: freed inside finalizeFunc when Lua GCs the closure,
+                        // NOT added to GlobalCFunctionHandles.
+                        var iterState = new IteratorState();
+
+                        LuaFunction stepFunc = _ =>
+                        {
+                            if (iterRef.IsCancelled)
+                            {
+                                return LuaValue.None;
+                            }
+
+                            iterState.Enumerator ??= iterRef.GetSyncEnumerator();
+                            if (iterState.Enumerator is null || !iterState.Enumerator.MoveNext())
+                            {
+                                return LuaValue.None;
+                            }
+
+                            return iterState.Enumerator.Current;
+                        };
+
+                        LuaFunction finalizeFunc = _ =>
+                        {
+                            iterState.Enumerator?.Dispose();
+                            iterState.Enumerator = null;
+                            if (iterState.StepHandle.IsAllocated)
+                            {
+                                iterState.StepHandle.Free();
+                            }
+
+                            if (iterState.FinalizeHandle.IsAllocated)
+                            {
+                                iterState.FinalizeHandle.Free();
+                            }
+
+                            return LuaValue.None;
+                        };
+
+                        iterState.StepHandle = GCHandle.Alloc(stepFunc);
+                        iterState.FinalizeHandle = GCHandle.Alloc(finalizeFunc);
+
+                        // kitsune_CFunctionData for step — first and next share the same struct
+                        // because IEnumerator.MoveNext() is already stateful.
+                        IntPtr stepCFD = Marshal.AllocHGlobal(IntPtr.Size * 2);
+                        Marshal.WriteIntPtr(stepCFD, 0, GetTrampolinePtr());
+                        Marshal.WriteIntPtr(stepCFD, IntPtr.Size, GCHandle.ToIntPtr(iterState.StepHandle));
+                        ptrs.Add(stepCFD);
+
+                        // kitsune_CFunctionData for finalized
+                        IntPtr finCFD = Marshal.AllocHGlobal(IntPtr.Size * 2);
+                        Marshal.WriteIntPtr(finCFD, 0, GetTrampolinePtr());
+                        Marshal.WriteIntPtr(finCFD, IntPtr.Size, GCHandle.ToIntPtr(iterState.FinalizeHandle));
+                        ptrs.Add(finCFD);
+
+                        // KitsuneIterator { first*, next*, finalized*, userdata }
+                        IntPtr iterStruct = Marshal.AllocHGlobal(IntPtr.Size * 4);
+                        Marshal.WriteIntPtr(iterStruct, 0, stepCFD);
+                        Marshal.WriteIntPtr(iterStruct, IntPtr.Size, stepCFD);
+                        Marshal.WriteIntPtr(iterStruct, IntPtr.Size * 2, finCFD);
+                        Marshal.WriteIntPtr(iterStruct, IntPtr.Size * 3, IntPtr.Zero);
+                        ptrs.Add(iterStruct);
+
+                        nv.Data = iterStruct;
+
+                        // GCHandles intentionally NOT in ptrs — freed by finalizeFunc.
+                        break;
+                    }
             }
         }
 
@@ -1382,9 +1462,6 @@ namespace KitsuneNet
         }
 
         /// <summary>Returns <c>true</c> once the coroutine has finished (success or error).</summary>
-        private bool HasResult(int id, out nuint len) => KitsuneHasResult(id, out len);
-
-        /// <summary>Returns <c>true</c> once the coroutine has finished (success or error).</summary>
         private bool HasResult(int id) => KitsuneHasResult(id, out _);
 
         /// <summary>Returns the error string for a finished coroutine, or <c>null</c> if none.</summary>
@@ -1489,6 +1566,15 @@ namespace KitsuneNet
 
             [FieldOffset(24)]
             public nuint Size;
+        }
+
+        // Holds the lazy enumerator and GCHandles for a KITSUNE_TITERATOR marshal.
+        // Shared by stepFunc and finalizeFunc closures inside FillNativeVariable.
+        private sealed class IteratorState
+        {
+            public IEnumerator<LuaValue>? Enumerator;
+            public GCHandle StepHandle;
+            public GCHandle FinalizeHandle;
         }
     }
 }
