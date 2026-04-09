@@ -15,6 +15,11 @@ namespace KitsuneNet
         // test runs a producer and a consumer as two independent engine instances).
         private static int _refCount;
 
+        // GCHandle roots for anonymous Lua closures created via LuaValue.FromCFunction.
+        // Unlike RegisterFunction handles (per-engine, freed on individual dispose), these
+        // are tied to the shared Lua state and freed when the last engine is disposed.
+        private static readonly System.Collections.Concurrent.ConcurrentBag<GCHandle> s_globalCFunctionHandles = new();
+
         // Set to true on the scheduler thread while a LuaFunctionTrampoline call is executing.
         // Used to detect and reject recursive Execute* / Run* calls from within a registered function.
         [ThreadStatic]
@@ -1067,6 +1072,23 @@ namespace KitsuneNet
                         // NOT added to ptrs — the block is owned by the global list; freed by ticker.
                         break;
                     }
+                case LuaType.CFunction when v.CFunctionValue is LuaFunction luaFunc:
+                    {
+                        // Allocate a GCHandle to keep the delegate alive while Lua may call the closure.
+                        // The handle is added to s_globalCFunctionHandles and freed when the last engine
+                        // is disposed (same lifetime as the Lua state that owns the closure).
+                        var handle = GCHandle.Alloc(luaFunc);
+                        s_globalCFunctionHandles.Add(handle);
+                        // Allocate a kitsune_CFunctionData { func, userdata } on the unmanaged heap.
+                        // PushKitsuneVariable copies the two pointer values into Lua upvalue slots, so
+                        // this struct only needs to survive until the native call returns.
+                        IntPtr structPtr = Marshal.AllocHGlobal(IntPtr.Size * 2);
+                        Marshal.WriteIntPtr(structPtr, 0, GetTrampolinePtr());
+                        Marshal.WriteIntPtr(structPtr, IntPtr.Size, GCHandle.ToIntPtr(handle));
+                        ptrs.Add(structPtr);
+                        nv.Data = structPtr;
+                        break;
+                    }
             }
         }
 
@@ -1244,6 +1266,10 @@ namespace KitsuneNet
                 if (Interlocked.Decrement(ref _refCount) == 0)
                 {
                     LeakedAllocations = (ulong)KitsuneCleanup();
+                    while (s_globalCFunctionHandles.TryTake(out var h))
+                    {
+                        h.Free();
+                    }
                 }
 
                 if (disposing && _functionHandles is not null)

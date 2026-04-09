@@ -1995,6 +1995,68 @@ namespace KitsuneNet.Tests
             Should.NotThrow(engine.Dispose);
         }
 
+        // -- CFunction (SetVariable / args / return) ----------------------------
+
+        [Fact]
+        public async Task CFunction_SetVariable_LuaCanCallIt()
+        {
+            using KitsuneEngine engine = new();
+            engine.SetVariable("MyFunc", LuaValue.FromCFunction(args => (LuaValue)"hello from cfunction"));
+            LuaValue result = await engine.ExecuteStringAsync("return MyFunc()");
+            result.String.ShouldBe("hello from cfunction");
+        }
+
+        [Fact]
+        public async Task CFunction_AsArg_LuaCanCallIt()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue result = await engine.ExecuteStringAsync(
+                "local f = ARGS[1]\nreturn f(10, 20)",
+                default,
+                LuaValue.FromCFunction(args => (LuaValue)(args[0].AsDouble + args[1].AsDouble)));
+            result.AsDouble.ShouldBe(30.0);
+        }
+
+        [Fact]
+        public async Task CFunction_ReturnedFromRegisteredFunction_LuaCanCallIt()
+        {
+            using KitsuneEngine engine = new();
+            engine.RegisterFunction("GetAdder", args =>
+            {
+                double addend = args.Count > 0 ? args[0].AsDouble : 0;
+                return LuaValue.FromCFunction(inner => (LuaValue)(inner[0].AsDouble + addend));
+            });
+            LuaValue result = await engine.ExecuteStringAsync("local add5 = GetAdder(5)\nreturn add5(3)");
+            result.AsDouble.ShouldBe(8.0);
+        }
+
+        [Fact]
+        public async Task CFunction_ThrowsLuaException_RaisesLuaError()
+        {
+            using KitsuneEngine engine = new();
+            engine.SetVariable("Boom", LuaValue.FromCFunction(_ => throw new LuaException("boom from cfunction")));
+            LuaException ex = await Should.ThrowAsync<LuaException>(
+                engine.ExecuteStringAsync("Boom()"));
+            ex.Message.ShouldContain("boom from cfunction");
+        }
+
+        [Fact]
+        public async Task CFunction_InTable_LuaCanCallIt()
+        {
+            using KitsuneEngine engine = new();
+            engine.SetVariable("Ns.Fn", LuaValue.FromCFunction(_ => (LuaValue)99.0));
+            LuaValue result = await engine.ExecuteStringAsync("return Ns.Fn()");
+            result.AsDouble.ShouldBe(99.0);
+        }
+
+        [Fact]
+        public async Task CFunction_Dispose_DoesNotCrash()
+        {
+            KitsuneEngine engine = new();
+            engine.SetVariable("Fn", LuaValue.FromCFunction(_ => LuaValue.None));
+            Should.NotThrow(engine.Dispose);
+        }
+
         // -- Shallow / deep table bridge ------------------------------------------
         [Fact]
         public void GetVariable_TableValue_IsOpaqueWithNoContents()

@@ -59,6 +59,13 @@ namespace KitsuneNet
         /// <see cref="LuaValue.FromStream(System.IO.Stream)"/> to send a stream to Lua.</summary>
         Stream = -6,
 
+        /// <summary>Inline C# function value (KITSUNE_TCFUNCTION = -7).
+        /// When passed to the engine the function is wrapped as an anonymous Lua closure
+        /// without being registered in the global table.
+        /// Never returned by the engine; only valid for inbound (C# → Lua) use via
+        /// <see cref="LuaValue.FromCFunction"/>.</summary>
+        CFunction = -7,
+
         /// <summary>Error returned by the blocking execute functions (KITSUNE_TERROR = -2) when
         /// the call was rejected — e.g. called from the scheduler thread, from a
         /// <c>kitsune_CFunction</c> callback, or re-entrantly from the same thread.

@@ -304,6 +304,10 @@ static inline const wchar_t* Char16AsWchar(const char16_t* p) {
 	return reinterpret_cast<const wchar_t*>(p);
 }
 
+// Forward declaration — LuaCFunctionWrapper is defined inside the extern "C" block below;
+// wrapping in extern "C" here matches the definition's C language linkage and avoids C2732.
+extern "C" { static int LuaCFunctionWrapper(lua_State* L); }
+
 // Fills a KitsuneVariable from the Lua stack at the given index.
 // When shallow=true (default), tables are left opaque (type=KITSUNE_TTABLE, table=NULL).
 // When shallow=false, KITSUNE_TTABLE values are converted to a linked list via TableToLinkedList
@@ -509,6 +513,21 @@ static void PushKitsuneVariable(lua_State* L, const KitsuneVariable* v) {
 		else
 			lua_pushnil(L);
 		break;
+	case KITSUNE_TCFUNCTION: {
+		// Create an anonymous Lua closure from the kitsune_CFunctionData pointed to by data.
+		// func and userdata are stored by value as light-userdata upvalues so the struct
+		// is not referenced after this case returns.
+		const kitsune_CFunctionData* cfd = (const kitsune_CFunctionData*)v->data;
+		if (cfd && cfd->func) {
+			lua_pushlightuserdata(L, (void*)cfd->func);
+			lua_pushlightuserdata(L, cfd->userdata);
+			lua_pushcclosure(L, LuaCFunctionWrapper, 2);
+		}
+		else {
+			lua_pushnil(L);
+		}
+		break;
+	}
 	default:
 		lua_pushnil(L);
 		break;

@@ -40,6 +40,11 @@ namespace KitsuneNet
         /// avoids a double-copy. Null for all other types.</summary>
         public System.IO.Stream? StreamValue { get; init; }
 
+        /// <summary>Delegate for <see cref="LuaType.CFunction"/> values.
+        /// When passed to the engine the delegate is wrapped as an anonymous Lua closure
+        /// without being registered in the global table. Null for all other types.</summary>
+        public LuaFunction? CFunctionValue { get; init; }
+
         /// <summary>Decodes <see cref="Bytes"/> as UTF-8 for strings, or UTF-16 LE for Wchar values.
         /// Returns <c>null</c> when <see cref="Bytes"/> is null.</summary>
         public string? String => Type == LuaType.Char16
@@ -81,6 +86,7 @@ namespace KitsuneNet
             LuaType.Table => Table is not null ? $"table({Table.Count})" : "table",
             LuaType.Json => JsonNode?.ToJsonString() ?? "null",
             LuaType.Stream => StreamValue?.ToString() ?? "stream(null)",
+            LuaType.CFunction => "cfunction",
             LuaType.Function => "function",
             LuaType.Userdata => "userdata",
             LuaType.Thread => "thread",
@@ -175,6 +181,13 @@ namespace KitsuneNet
         public static LuaValue FromStream(System.IO.Stream stream)
             => new() { Type = LuaType.Stream, StreamValue = stream };
 
+        /// <summary>Creates an anonymous Lua function value from a C# delegate.
+        /// When passed to the engine the delegate is wrapped as an anonymous Lua closure
+        /// without being registered in the global table. The engine keeps the delegate
+        /// alive until it is shut down via <see cref="KitsuneEngine.Dispose"/>.</summary>
+        public static LuaValue FromCFunction(LuaFunction func) =>
+            new() { Type = LuaType.CFunction, CFunctionValue = func };
+
         /// <summary>Content-based equality: <see cref="Bytes"/> arrays are compared element-by-element.</summary>
         public bool Equals(LuaValue other) =>
             Type == other.Type &&
@@ -185,7 +198,8 @@ namespace KitsuneNet
             ReferenceEquals(Table, other.Table) &&
             ReferenceEquals(JsonNode, other.JsonNode) &&
             ReferenceEquals(FunctionRef, other.FunctionRef) &&
-            ReferenceEquals(StreamValue, other.StreamValue);
+            ReferenceEquals(StreamValue, other.StreamValue) &&
+            ReferenceEquals(CFunctionValue, other.CFunctionValue);
 
         public override int GetHashCode()
         {
@@ -205,6 +219,7 @@ namespace KitsuneNet
             hash.Add(JsonNode);
             hash.Add(FunctionRef);
             hash.Add(StreamValue);
+            hash.Add(CFunctionValue);
             return hash.ToHashCode();
         }
 

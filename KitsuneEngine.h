@@ -14,7 +14,7 @@
 // KitsuneVariable type constants — values 0–8 match Lua's LUA_T* constants for direct comparison.
 // KITSUNE_TNONE (-1) matches LUA_TNONE. KITSUNE_TERROR (-2) is a Kitsune extension not present
 // in Lua; it is used exclusively with kitsune_ResultSetter to signal a Lua error from a
-#define KITSUNE_TCFUNCTION     (-7) // Kitsune extension: C function pointer type; data is a pointer to a struct containing the function pointer and its userdata. Not a value returned by lua_type() — only used in KitsuneVariable for passing C function pointers to Lua via kitsune_ResultSetter, and never appears in Lua or in a variable returned by the engine. Data should be a pointer to a kitsune_CFunction.
+#define KITSUNE_TCFUNCTION     (-7) // Kitsune extension: C function pointer type; data is a pointer to a kitsune_CFunctionData struct containing the function pointer and its userdata. Not a value returned by lua_type() — only used in KitsuneVariable for passing C function pointers to Lua, and never appears in Lua or in a variable returned by the engine. Data should be a pointer to a kitsune_CFunctionData.
 #define KITSUNE_TSTREAM        (-6) // Kitsune extension: pointer to a SharedMemoryBlock that Lua always owns.
 									// The block MUST have been obtained via KitsuneCreateMemoryBlock.
 									// Passing a block not created by KitsuneCreateMemoryBlock is an error
@@ -75,6 +75,9 @@ struct SharedMemoryBlock {
 
 // Forward declaration required so KitsuneVariable can hold a pointer to the node in its union.
 struct KeyValuePairKitsuneVariableNode;
+// Forward declaration required so KitsuneVariable can hold a kitsune_CFunctionData* in its union;
+// the full definition follows after kitsune_CFunction is declared.
+struct kitsune_CFunctionData;
 
 struct KitsuneVariable {
 	int type; // see KITSUNE_T* constants above
@@ -88,6 +91,7 @@ struct KitsuneVariable {
 		char16_t* char16data;                  // KITSUNE_TCHAR16: heap-allocated char16_t string; length = number of char16_t code units (excl. null terminator)
 		KeyValuePairKitsuneVariableNode* table; // KITSUNE_TTABLE: head of linked list (NULL = empty table)
 		SharedMemoryBlock* stream; // KITSUNE_TSTREAM: pointer to a SharedMemoryBlock representing the stream; caller-owned on Set
+		kitsune_CFunctionData* cfunction; // KITSUNE_TCFUNCTION: pointer to a kitsune_CFunctionData struct containing the function pointer and its userdata; caller-owned on Set
 	};
 };
 
@@ -125,7 +129,17 @@ typedef int (*kitsune_ResultSetter) (const KitsuneVariable* result);
 // AcquireLuaAccess will deadlock permanently. lua_State* is intentionally not exposed.
 typedef int (*kitsune_CFunction) (int argc, KitsuneVariable* argv, const kitsune_ResultSetter resultSetter, void* userdata);
 
-// Initialisation callback passed to KitsuneInit. L is a pointer to the Lua state after the engine has created it and loaded the standard libraries, but before any scripts have been executed. This is intended for advanced users who need to perform custom setup on the Lua state (e.g. load additional libraries, set up a custom panic handler, etc.) before the engine starts running scripts. The callback must not call any Kitsune API that calls AcquireLuaAccess (see above) — the scheduler thread owns the Lua state for the duration of this call.
+// Holds the function pointer and userdata for a KITSUNE_TCFUNCTION variable.
+// Set KitsuneVariable.data to a pointer to one of these to pass an anonymous C function to Lua
+// without registering it in the global table. The struct only needs to be alive for the duration
+// of the PushKitsuneVariable call; after that the func and userdata values are captured by value
+// in Lua closure upvalues and the struct itself is no longer referenced.
+struct kitsune_CFunctionData {
+	kitsune_CFunction func; // C function to wrap as a Lua closure
+	void* userdata;         // opaque userdata passed to func on each call
+};
+
+// Initialisation callback passed to KitsuneInit.
 typedef void (*kitsune_Init) (const void* L);
 
 extern "C" {
