@@ -44,7 +44,11 @@ namespace KitsuneNet
         /// </summary>
         public ulong LeakedAllocations { get; private set; }
 
-        // -- Execution ------------------------------------------------------------
+        /// <summary>Returns <c>true</c> if any coroutine is currently running or yielded.</summary>
+        public bool IsRunning => KitsuneIsRunning();
+
+        /// <summary>Returns the ID of the first coroutine that is still running, or 0 if none are active.</summary>
+        public int RunningCoroutineId => KitsuneGetRunningId();
 
         /// <summary>Starts a Lua script file as a background coroutine (fire-and-forget).</summary>
         /// <exception cref="LuaException">Thrown if called from within a registered function callback.</exception>
@@ -412,14 +416,6 @@ namespace KitsuneNet
         /// <summary>Returns the current status of the coroutine. Thread-safe.</summary>
         public CoroutineStatus GetStatus(int id) => (CoroutineStatus)KitsuneGetStatus(id);
 
-        // -- Global control -------------------------------------------------------
-
-        /// <summary>Returns <c>true</c> if any coroutine is currently running or yielded.</summary>
-        public bool IsRunning => KitsuneIsRunning();
-
-        /// <summary>Returns the ID of the first coroutine that is still running, or 0 if none are active.</summary>
-        public int RunningCoroutineId => KitsuneGetRunningId();
-
         /// <summary>Signals all running coroutines to stop at the next instruction boundary.</summary>
         public void Interrupt() => KitsuneInterrupt();
 
@@ -463,7 +459,10 @@ namespace KitsuneNet
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 if (GetStatus(id) == CoroutineStatus.None)
+                {
                     return;  // engine disposed or slot compacted; will never produce a result
+                }
+
                 Thread.Sleep(1);
             }
         }
@@ -491,12 +490,13 @@ namespace KitsuneNet
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 if (GetStatus(id) == CoroutineStatus.None)
+                {
                     return;  // engine disposed or slot compacted; will never produce a result
+                }
+
                 await Task.Delay(1, cancellationToken).ConfigureAwait(false);
             }
         }
-
-        // -- Variable bridge ------------------------------------------------------
 
         /// <summary>Sets a Lua global from a typed value using a dot-separated path. Pass <see cref="LuaValue.None"/> to remove the key.</summary>
         public bool SetVariable(string name, LuaValue value)
@@ -615,16 +615,12 @@ namespace KitsuneNet
             return result.AsReadOnly();
         }
 
-        // -- RegisterSession / RegisterFunction -----------------------------------
-
         /// <summary>
         /// Registers the <c>Session</c> table (<c>Session.Console</c>, <c>Session.Clipboard</c>)
         /// into the Lua global environment. Call once from the host after construction to enable
         /// interactive session functions. Safe to call multiple times (re-registers the table).
         /// </summary>
         public void RegisterSession() => KitsuneRegisterSession();
-
-        // -- RegisterFunction ----------------------------------------------------
 
         /// <summary>
         /// Registers a C# function as a Lua global callable by <paramref name="name"/>.
@@ -649,6 +645,11 @@ namespace KitsuneNet
             GC.SuppressFinalize(this);
         }
 
+        /// <summary>Releases a heap-allocated <c>KitsuneVariable*</c> via the native free function.
+        /// Called by <see cref="LuaFunctionRef.Dispose"/> to release a Lua registry reference.
+        /// Must not be called while the pointer is still in use.</summary>
+        internal static void ReleaseNativeVariable(IntPtr ptr) => KitsuneVariableFree(ptr);
+
         #region P/Invoke
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
@@ -657,11 +658,6 @@ namespace KitsuneNet
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern void KitsuneVariableFree(IntPtr var);
-
-        /// <summary>Releases a heap-allocated <c>KitsuneVariable*</c> via the native free function.
-        /// Called by <see cref="LuaFunctionRef.Dispose"/> to release a Lua registry reference.
-        /// Must not be called while the pointer is still in use.</summary>
-        private static void ReleaseNativeVariable(IntPtr ptr) => KitsuneVariableFree(ptr);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern int KitsuneExecuteFileAsync([MarshalAs(UnmanagedType.LPUTF8Str)] string path, int argc, KitsuneVariable[]? argv, [MarshalAs(UnmanagedType.I1)] bool fireAndForget);

@@ -22,6 +22,8 @@ namespace KitsuneNet
             _nativePtr = nativePtr;
         }
 
+        ~LuaFunctionRef() => Dispose();
+
         /// <summary>Raw pointer to the native <c>KitsuneVariable</c> struct. Zero when disposed.</summary>
         internal IntPtr NativePtr => _nativePtr;
 
@@ -42,7 +44,5 @@ namespace KitsuneNet
 
             GC.SuppressFinalize(this);
         }
-
-        ~LuaFunctionRef() => Dispose();
     }
 }

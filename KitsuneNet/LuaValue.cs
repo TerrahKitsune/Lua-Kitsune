@@ -174,7 +174,7 @@ namespace KitsuneNet
 
         public override int GetHashCode()
         {
-            var hash = new System.HashCode();
+            var hash = default(System.HashCode);
             hash.Add(Type);
             hash.Add(Number);
             hash.Add(Int64);
@@ -182,7 +182,9 @@ namespace KitsuneNet
             if (Bytes is not null)
             {
                 foreach (byte b in Bytes)
+                {
                     hash.Add(b);
+                }
             }
             hash.Add(Table);
             hash.Add(JsonNode);
