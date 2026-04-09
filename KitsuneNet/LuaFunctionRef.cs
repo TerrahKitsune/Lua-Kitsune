@@ -12,20 +12,54 @@ namespace KitsuneNet
     /// </summary>
     public sealed class LuaFunctionRef : IDisposable
     {
+        private readonly WeakReference<KitsuneEngine>? _engine;
+
         // Heap-allocated KitsuneVariable* returned by KitsuneGetResult / KitsuneGetVariable.
         // Owned exclusively by this instance; KitsuneVariableFree is called on dispose.
         private IntPtr _nativePtr;
         private int _disposed;
 
-        internal LuaFunctionRef(IntPtr nativePtr)
+        internal LuaFunctionRef(IntPtr nativePtr, KitsuneEngine? engine = null)
         {
             _nativePtr = nativePtr;
+            _engine = engine is not null ? new WeakReference<KitsuneEngine>(engine) : null;
         }
 
         ~LuaFunctionRef() => Dispose();
 
         /// <summary>Raw pointer to the native <c>KitsuneVariable</c> struct. Zero when disposed.</summary>
         internal IntPtr NativePtr => _nativePtr;
+
+        /// <summary>Calls this Lua function synchronously and returns its result.
+        /// Returns <see cref="LuaValue.None"/> when the function raises a Lua runtime error;
+        /// use <see cref="InvokeAsync"/> when error details are needed.
+        /// Throws <see cref="ObjectDisposedException"/> when the ref or its engine has been disposed.
+        /// Throws <see cref="LuaException"/> if the native engine rejects the call
+        /// (e.g. re-entrant invocation — same as <see cref="KitsuneEngine.RunVariable"/>).</summary>
+        public LuaValue Invoke(params LuaValue[]? args)
+        {
+            ObjectDisposedException.ThrowIf(_disposed != 0, this);
+            if (_engine is null || !_engine.TryGetTarget(out var engine))
+            {
+                throw new ObjectDisposedException(nameof(KitsuneEngine));
+            }
+
+            return engine.RunVariable(new LuaValue { Type = LuaType.Function, FunctionRef = this }, args);
+        }
+
+        /// <summary>Calls this Lua function as a coroutine and asynchronously waits for it to complete.
+        /// Throws <see cref="ObjectDisposedException"/> when the ref or its engine has been disposed.
+        /// Throws <see cref="LuaException"/> when the function raises a Lua error.</summary>
+        public Task<LuaValue> InvokeAsync(CancellationToken cancellationToken = default, params LuaValue[]? args)
+        {
+            ObjectDisposedException.ThrowIf(_disposed != 0, this);
+            if (_engine is null || !_engine.TryGetTarget(out var engine))
+            {
+                throw new ObjectDisposedException(nameof(KitsuneEngine));
+            }
+
+            return engine.ExecuteVariableAsync(new LuaValue { Type = LuaType.Function, FunctionRef = this }, cancellationToken, args);
+        }
 
         /// <summary>
         /// Releases the Lua registry reference.  After disposal the function may be

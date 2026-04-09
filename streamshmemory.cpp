@@ -1,6 +1,16 @@
 ﻿#include "streamshmemory.h"
+#include <atomic>
 #include <mutex>
 #include <string.h>
+
+// Atomically OR a flag mask into a flags byte, preventing a concurrent reader
+// from silently clearing bits we set (and vice versa).
+static inline void flags_atomic_or(uint8_t* flags, uint8_t mask) {
+	// Cast to std::atomic<uint8_t>*: safe because sizeof/alignof are the same
+	// and the byte is always naturally aligned.  The reinterpret_cast is the
+	// standard-blessed way to add atomic ops to a plain byte field.
+	reinterpret_cast<std::atomic<uint8_t>*>(flags)->fetch_or(mask, std::memory_order_relaxed);
+}
 
 struct InSharedMemoryStream {
 	SharedMemoryBlock* block;
@@ -66,7 +76,7 @@ static lua_Integer shmem_getlen(void* native) {
 static void shmem_close(void* native, lua_State* L) {
 	InSharedMemoryStream* s = (InSharedMemoryStream*)native;
 	if (s->block)
-		s->block->flags |= KITSUNE_SHARED_MEMORY_FLAG_OWNER_DISPOSED;
+		flags_atomic_or(&s->block->flags, KITSUNE_SHARED_MEMORY_FLAG_OWNER_DISPOSED);
 	gff_free(s);
 }
 
@@ -219,7 +229,7 @@ LuaStream* lua_push_sharedmemory_stream_outbound(lua_State* L, size_t size) {
 
 	InSharedMemoryStream* s = (InSharedMemoryStream*)gff_malloc(sizeof(InSharedMemoryStream));
 	if (!s) {
-		block->flags |= KITSUNE_SHARED_MEMORY_FLAG_OWNER_DISPOSED;  // mark for ticker cleanup
+		flags_atomic_or(&block->flags, KITSUNE_SHARED_MEMORY_FLAG_OWNER_DISPOSED);  // mark for ticker cleanup
 		luaL_error(L, "Out of memory");
 		return NULL;
 	}
@@ -260,7 +270,7 @@ LuaStream* lua_try_push_sharedmemory_stream_outbound_copy(lua_State* L, const vo
 
 	InSharedMemoryStream* s = (InSharedMemoryStream*)gff_malloc(sizeof(InSharedMemoryStream));
 	if (!s) {
-		block->flags |= KITSUNE_SHARED_MEMORY_FLAG_OWNER_DISPOSED;  // mark for ticker cleanup
+		flags_atomic_or(&block->flags, KITSUNE_SHARED_MEMORY_FLAG_OWNER_DISPOSED);  // mark for ticker cleanup
 		lua_pop(L, 1);  // remove the partially-constructed userdata
 		return NULL;
 	}

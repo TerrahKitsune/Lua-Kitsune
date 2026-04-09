@@ -1,4 +1,6 @@
-﻿using System.Runtime.InteropServices;
+﻿using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace KitsuneNet
 {
@@ -233,7 +235,7 @@ namespace KitsuneNet
                 if (_blockPtr != IntPtr.Zero)
                 {
                     byte flags = Marshal.ReadByte(_blockPtr, 0);
-                    byte toSet = FlagAccessorDisposed;
+                    int toSet = FlagAccessorDisposed;
 
                     // If Lua never created a stream from this block, nobody will set OWNER_DISPOSED;
                     // set it here so the ticker can free the block on its next cycle.
@@ -242,7 +244,16 @@ namespace KitsuneNet
                         toSet |= FlagOwnerDisposed;
                     }
 
-                    Marshal.WriteByte(_blockPtr, 0, (byte)(flags | toSet));
+                    // Atomic OR: the C++ GC thread may set OWNER_DISPOSED concurrently on the
+                    // same byte. A plain read-modify-write would silently clear that bit if the
+                    // GC write lands between our read and our write. Using Interlocked.Or on the
+                    // 4-byte word at offset 0 (flags byte + 3 padding bytes) is safe on little-
+                    // endian x86/x64: toSet ≤ 0x7F so it only affects byte 0, and the padding
+                    // bytes are always zeroed at allocation time.
+                    unsafe
+                    {
+                        Interlocked.Or(ref Unsafe.AsRef<int>((void*)_blockPtr), toSet);
+                    }
                     _blockPtr = IntPtr.Zero;
                 }
             }

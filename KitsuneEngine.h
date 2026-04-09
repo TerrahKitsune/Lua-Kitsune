@@ -14,6 +14,7 @@
 // KitsuneVariable type constants — values 0–8 match Lua's LUA_T* constants for direct comparison.
 // KITSUNE_TNONE (-1) matches LUA_TNONE. KITSUNE_TERROR (-2) is a Kitsune extension not present
 // in Lua; it is used exclusively with kitsune_ResultSetter to signal a Lua error from a
+#define KITSUNE_TCFUNCTION     (-7) // Kitsune extension: C function pointer type; data is a pointer to a struct containing the function pointer and its userdata. Not a value returned by lua_type() — only used in KitsuneVariable for passing C function pointers to Lua via kitsune_ResultSetter, and never appears in Lua or in a variable returned by the engine. Data should be a pointer to a kitsune_CFunction.
 #define KITSUNE_TSTREAM        (-6) // Kitsune extension: pointer to a SharedMemoryBlock that Lua always owns.
 									// The block MUST have been obtained via KitsuneCreateMemoryBlock.
 									// Passing a block not created by KitsuneCreateMemoryBlock is an error
@@ -213,13 +214,13 @@ extern "C" {
 	KITSUNE_API int KitsuneGetStatus(int id);
 
 	// ── Global control ────────────────────────────────────────────────────────
-	// Returns true if any coroutine is currently running or yielded. Thread-safe.
+	// Returns true if any coroutine slot exists (running, sleeping, idle, or finished but not yet released). Thread-safe.
 	KITSUNE_API bool KitsuneIsRunning();
 	// Returns the ID of the first coroutine that is still running, or 0 if none are active. Thread-safe.
 	KITSUNE_API int  KitsuneGetRunningId();
 	// Signals all running coroutines to stop at the next instruction boundary. Thread-safe.
 	KITSUNE_API void KitsuneInterrupt();
-	// Blocks the calling thread until all coroutines have finished. Thread-safe.
+	// Blocks the calling thread until all coroutine slots are gone (finished and released). Thread-safe.
 	KITSUNE_API void KitsuneWait();
 	// Returns all unreleased coroutine IDs (running or awaiting result consumption).
 	// Fills buffer with up to bufferSize IDs and returns the total count.

@@ -1045,9 +1045,21 @@ namespace KitsuneNet.Tests
                 engine.ExecuteString("Sleep(50)");
             }
 
-            SpinUntilRunning(engine);
+            // Poll until all 8 coroutines are active — more reliable than SpinUntilRunning
+            // followed by a bare assertion, which races if a fast machine sees IsRunning before
+            // all coroutines are queued.
+            DateTime ready = DateTime.UtcNow.AddSeconds(5);
+            while (engine.GetActiveIds().Length < count && DateTime.UtcNow < ready)
+            {
+                Thread.Sleep(1);
+            }
+
             engine.GetActiveIds().Length.ShouldBe(count);
-            engine.Wait();
+
+            // Wait(CancellationToken) now uses KitsuneGetActiveIds, not IsRunning, so it
+            // correctly blocks for sleeping coroutines between scheduler ticks.
+            using CancellationTokenSource cts = new(TimeSpan.FromSeconds(10));
+            engine.Wait(cts.Token);
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
@@ -4069,6 +4081,201 @@ namespace KitsuneNet.Tests
             LuaValue result = engine.RunString("return function() end");
             result.Type.ShouldBe(LuaType.Function);
             engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        // -- LuaFunctionRef.Invoke / InvokeAsync ---------------------------------
+        [Fact]
+        public void FunctionRef_Invoke_NoArgs_ReturnsResult()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue fn = engine.RunString("return function() return 'invoke result' end");
+            using LuaFunctionRef funcRef = fn.FunctionRef!;
+
+            LuaValue result = funcRef.Invoke();
+
+            result.String.ShouldBe("invoke result");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void FunctionRef_Invoke_WithStringArgs_ReceivesArgs()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue fn = engine.RunString("return function(a, b) return a .. ',' .. b end");
+            using LuaFunctionRef funcRef = fn.FunctionRef!;
+
+            LuaValue result = funcRef.Invoke("hello", "world");
+
+            result.String.ShouldBe("hello,world");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void FunctionRef_Invoke_WithTypedArgs_PassedCorrectly()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue fn = engine.RunString("return function(a, b) return tostring(a + b) end");
+            using LuaFunctionRef funcRef = fn.FunctionRef!;
+
+            LuaValue result = funcRef.Invoke(LuaValue.FromInt64(10), LuaValue.FromInt64(32));
+
+            result.ShouldBe("42");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void FunctionRef_Invoke_RuntimeError_ReturnsNone()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue fn = engine.RunString("return function() error('invoke boom') end");
+            using LuaFunctionRef funcRef = fn.FunctionRef!;
+
+            LuaValue result = funcRef.Invoke();
+
+            result.Type.ShouldBe(LuaType.None);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void FunctionRef_Invoke_CalledMultipleTimes_CorrectResultEachTime()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue fn = engine.RunString("return function(n) return tostring(n * 2) end");
+            using LuaFunctionRef funcRef = fn.FunctionRef!;
+
+            LuaValue r1 = funcRef.Invoke(LuaValue.FromInt64(5));
+            LuaValue r2 = funcRef.Invoke(LuaValue.FromInt64(21));
+
+            r1.ShouldBe("10");
+            r2.ShouldBe("42");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void FunctionRef_Invoke_CallsRegisteredFunction_FullRoundTrip()
+        {
+            using KitsuneEngine engine = new();
+            engine.RegisterFunction("Double", args => LuaValue.FromInt64(args[0].AsInt64 * 2));
+            LuaValue fn = engine.RunString("return function(n) return tostring(Double(n)) end");
+            using LuaFunctionRef funcRef = fn.FunctionRef!;
+
+            LuaValue result = funcRef.Invoke(LuaValue.FromInt64(21));
+
+            result.ShouldBe("42");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void FunctionRef_Invoke_Disposed_ThrowsObjectDisposedException()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue fn = engine.RunString("return function() return 'ok' end");
+            LuaFunctionRef funcRef = fn.FunctionRef!;
+            funcRef.Dispose();
+
+            Should.Throw<ObjectDisposedException>(() => funcRef.Invoke());
+        }
+
+        [Fact]
+        public async Task FunctionRef_InvokeAsync_NoArgs_ReturnsResult()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue fn = engine.RunString("return function() return 'async invoke result' end");
+            using LuaFunctionRef funcRef = fn.FunctionRef!;
+
+            LuaValue result = await funcRef.InvokeAsync();
+
+            result.String.ShouldBe("async invoke result");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task FunctionRef_InvokeAsync_WithStringArgs_ReceivesArgs()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue fn = engine.RunString("return function(a, b) return a .. ',' .. b end");
+            using LuaFunctionRef funcRef = fn.FunctionRef!;
+
+            LuaValue result = await funcRef.InvokeAsync(default, "hello", "world");
+
+            result.String.ShouldBe("hello,world");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task FunctionRef_InvokeAsync_WithTypedArgs_PassedCorrectly()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue fn = engine.RunString("return function(a, b) return tostring(a + b) end");
+            using LuaFunctionRef funcRef = fn.FunctionRef!;
+
+            LuaValue result = await funcRef.InvokeAsync(default, LuaValue.FromInt64(10), LuaValue.FromInt64(32));
+
+            result.ShouldBe("42");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task FunctionRef_InvokeAsync_RuntimeError_ThrowsLuaException()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue fn = engine.RunString("return function() error('async invoke boom') end");
+            using LuaFunctionRef funcRef = fn.FunctionRef!;
+
+            LuaException ex = await Should.ThrowAsync<LuaException>(funcRef.InvokeAsync());
+
+            ex.Message.ShouldContain("async invoke boom");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task FunctionRef_InvokeAsync_ConcurrentCalls_AllReturnCorrectResults()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue fn = engine.RunString("return function(n) return tostring(n) end");
+            using LuaFunctionRef funcRef = fn.FunctionRef!;
+
+            const int count = 20;
+            Task<LuaValue>[] tasks = Enumerable.Range(0, count)
+                .Select(i => funcRef.InvokeAsync(default, LuaValue.FromInt64(i)))
+                .ToArray();
+            LuaValue[] results = await Task.WhenAll(tasks);
+            for (int i = 0; i < count; i++)
+            {
+                results[i].ShouldBe(i.ToString());
+            }
+
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task FunctionRef_InvokeAsync_CancelledToken_ThrowsOperationCanceledException()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue fn = engine.RunString("return function() while true do end end");
+            using LuaFunctionRef funcRef = fn.FunctionRef!;
+
+            using CancellationTokenSource cts = new(TimeSpan.FromMilliseconds(100));
+            await Should.ThrowAsync<OperationCanceledException>(funcRef.InvokeAsync(cts.Token));
+
+            DateTime deadline = DateTime.UtcNow.AddSeconds(5);
+            while (engine.GetActiveIds().Length > 0 && DateTime.UtcNow < deadline)
+            {
+                Thread.Sleep(1);
+            }
+
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void FunctionRef_InvokeAsync_Disposed_ThrowsObjectDisposedException()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue fn = engine.RunString("return function() return 'ok' end");
+            LuaFunctionRef funcRef = fn.FunctionRef!;
+            funcRef.Dispose();
+
+            Should.Throw<ObjectDisposedException>(() => funcRef.InvokeAsync());
         }
 
         private static void SpinUntilRunning(KitsuneEngine engine, int timeoutMs = 2000)

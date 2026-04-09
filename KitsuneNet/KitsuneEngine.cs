@@ -29,7 +29,16 @@ namespace KitsuneNet
             {
                 throw new InvalidOperationException("KitsuneInit failed");
             }
-            Interlocked.Increment(ref _refCount);
+
+            // When this becomes the sole live engine and the scheduler is already running,
+            // there are orphaned coroutines from a previous engine that was not properly
+            // disposed (e.g. abandoned by a test-runner abort).  Interrupt and drain them
+            // now so they cannot block Wait() calls issued by this engine.
+            if (Interlocked.Increment(ref _refCount) == 1 && KitsuneIsRunning())
+            {
+                KitsuneInterrupt();
+                KitsuneWait();
+            }
         }
 
         ~KitsuneEngine() => Dispose(false);
@@ -246,9 +255,10 @@ namespace KitsuneNet
         }
 
         /// <summary>Runs a Lua script file synchronously and returns the typed result.
-        /// Returns <see cref="LuaValue.None"/> on start failure or if the script raised an error.
-        /// For error details use <see cref="ExecuteFileAsync"/> instead.</summary>
-        /// <exception cref="LuaException">Thrown if called from within a registered function callback.</exception>
+        /// Returns <see cref="LuaValue.None"/> on start failure or if the script returned nothing.
+        /// For Lua runtime error details use <see cref="ExecuteFileAsync"/> instead.</summary>
+        /// <exception cref="LuaException">Thrown if called from within a registered function callback,
+        /// or if the native engine rejects the call (e.g. re-entrant invocation).</exception>
         public LuaValue RunFile(string path, params LuaValue[]? args)
         {
             if (inLuaCallback)
@@ -259,7 +269,7 @@ namespace KitsuneNet
             var (native, ptrs) = BuildNativeArgs(args);
             try
             {
-                return NativePtrToLuaValue(KitsuneExecuteFile(path, native?.Length ?? 0, native));
+                return NativePtrToLuaValue(KitsuneExecuteFile(path, native?.Length ?? 0, native), this).GetOrThrow();
             }
             finally
             {
@@ -268,9 +278,10 @@ namespace KitsuneNet
         }
 
         /// <summary>Runs a Lua script string synchronously and returns the typed result.
-        /// Returns <see cref="LuaValue.None"/> on start failure or if the script raised an error.
-        /// For error details use <see cref="ExecuteStringAsync"/> instead.</summary>
-        /// <exception cref="LuaException">Thrown if called from within a registered function callback.</exception>
+        /// Returns <see cref="LuaValue.None"/> on start failure or if the script returned nothing.
+        /// For Lua runtime error details use <see cref="ExecuteStringAsync"/> instead.</summary>
+        /// <exception cref="LuaException">Thrown if called from within a registered function callback,
+        /// or if the native engine rejects the call (e.g. re-entrant invocation).</exception>
         public LuaValue RunString(string script, params LuaValue[]? args)
         {
             if (inLuaCallback)
@@ -281,7 +292,7 @@ namespace KitsuneNet
             var (native, ptrs) = BuildNativeArgs(args);
             try
             {
-                return NativePtrToLuaValue(KitsuneExecuteString(script, native?.Length ?? 0, native));
+                return NativePtrToLuaValue(KitsuneExecuteString(script, native?.Length ?? 0, native), this).GetOrThrow();
             }
             finally
             {
@@ -290,9 +301,10 @@ namespace KitsuneNet
         }
 
         /// <summary>Calls a global Lua function synchronously and returns the typed result.
-        /// Returns <see cref="LuaValue.None"/> on start failure or if the function raised an error.
-        /// For error details use <see cref="ExecuteFunctionAsync"/> instead.</summary>
-        /// <exception cref="LuaException">Thrown if called from within a registered function callback.</exception>
+        /// Returns <see cref="LuaValue.None"/> on start failure or if the function returned nothing.
+        /// For Lua runtime error details use <see cref="ExecuteFunctionAsync"/> instead.</summary>
+        /// <exception cref="LuaException">Thrown if called from within a registered function callback,
+        /// or if the native engine rejects the call (e.g. re-entrant invocation).</exception>
         public LuaValue RunFunction(string functionName, params LuaValue[]? args)
         {
             if (inLuaCallback)
@@ -303,7 +315,7 @@ namespace KitsuneNet
             var (native, ptrs) = BuildNativeArgs(args);
             try
             {
-                return NativePtrToLuaValue(KitsuneExecuteFunction(functionName, native?.Length ?? 0, native));
+                return NativePtrToLuaValue(KitsuneExecuteFunction(functionName, native?.Length ?? 0, native), this).GetOrThrow();
             }
             finally
             {
@@ -383,9 +395,10 @@ namespace KitsuneNet
         }
 
         /// <summary>Executes a <see cref="LuaValue"/> synchronously and returns the typed result.
-        /// Returns <see cref="LuaValue.None"/> on start failure or if execution raised an error.
+        /// Returns <see cref="LuaValue.None"/> on start failure or if execution returned nothing.
         /// See <see cref="ExecuteVariable"/> for dispatch rules.</summary>
-        /// <exception cref="LuaException">Thrown if called from within a registered function callback.</exception>
+        /// <exception cref="LuaException">Thrown if called from within a registered function callback,
+        /// or if the native engine rejects the call (e.g. re-entrant invocation).</exception>
         public LuaValue RunVariable(LuaValue variable, params LuaValue[]? args)
         {
             if (inLuaCallback)
@@ -396,7 +409,7 @@ namespace KitsuneNet
             var (nv, native, ptrs) = BuildVariableAndArgs(variable, args);
             try
             {
-                return NativePtrToLuaValue(KitsuneExecuteVariable(ref nv, native?.Length ?? 0, native));
+                return NativePtrToLuaValue(KitsuneExecuteVariable(ref nv, native?.Length ?? 0, native), this).GetOrThrow();
             }
             finally
             {
@@ -440,10 +453,14 @@ namespace KitsuneNet
 
         /// <summary>
         /// Blocks until all coroutines have finished, or <paramref name="cancellationToken"/> is cancelled.
+        /// Equivalent to <see cref="Wait()"/> but interruptible; checks the same active-coroutine
+        /// count used by the native scheduler so sleeping, idle, and running coroutines are all
+        /// included (unlike <see cref="IsRunning"/> which can transiently miss sleeping coroutines
+        /// between scheduler ticks).
         /// </summary>
         public void Wait(CancellationToken cancellationToken)
         {
-            while (IsRunning)
+            while (KitsuneGetActiveIds(null, 0) > 0)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 Thread.Sleep(1);
@@ -515,7 +532,7 @@ namespace KitsuneNet
         }
 
         /// <summary>Returns the Lua global at the given dot-separated path, or <see cref="LuaValue.None"/> if not found.</summary>
-        public LuaValue GetVariable(string name) => NativePtrToLuaValue(KitsuneGetVariable(name));
+        public LuaValue GetVariable(string name) => NativePtrToLuaValue(KitsuneGetVariable(name), this);
 
         /// <summary>
         /// Allocates a shared-memory <see cref="LuaStream"/> of <paramref name="size"/> bytes
@@ -827,7 +844,7 @@ namespace KitsuneNet
 
         // Reads a heap-allocated KitsuneVariable*, converts it to LuaValue, and frees it.
         // For LuaType.Function the pointer is NOT freed here; ownership transfers to LuaFunctionRef.
-        private static LuaValue NativePtrToLuaValue(IntPtr ptr)
+        private static LuaValue NativePtrToLuaValue(IntPtr ptr, KitsuneEngine? engine = null)
         {
             if (ptr == IntPtr.Zero)
             {
@@ -843,7 +860,7 @@ namespace KitsuneNet
                 return new LuaValue
                 {
                     Type = LuaType.Function,
-                    FunctionRef = new LuaFunctionRef(ptr)
+                    FunctionRef = new LuaFunctionRef(ptr, engine)
                 };
             }
             LuaValue result = t switch
@@ -982,6 +999,9 @@ namespace KitsuneNet
                         nv.Length = (nuint)(wbytes.Length / 2);
                     }
                     break;
+                case LuaType.Function when v.FunctionRef is { NativePtr: 0 }:
+                    throw new ObjectDisposedException(nameof(LuaFunctionRef),
+                        "Cannot marshal a disposed LuaFunctionRef across the native bridge.");
                 case LuaType.Function when v.FunctionRef is { } fr && fr.NativePtr != IntPtr.Zero:
                     {
                         // Copy the registry ref integer from the native KitsuneVariable.
@@ -1189,84 +1209,6 @@ namespace KitsuneNet
             }
         }
 
-        private int StartFile(string path, params LuaValue[]? args)
-        {
-            if (inLuaCallback)
-            {
-                throw new LuaException("cannot be called from within a registered function");
-            }
-
-            var (native, ptrs) = BuildNativeArgs(args);
-            try
-            {
-                return KitsuneExecuteFileAsync(path, native?.Length ?? 0, native, false);
-            }
-            finally
-            {
-                FreeNativeArgs(ptrs);
-            }
-        }
-
-        /// <summary>Releases the slot of a finished coroutine without consuming its result.
-        /// Use after reading the error with <see cref="GetError"/> when you do not need the result.
-        /// No-op for running coroutines — use <see cref="Cancel"/> for those. Thread-safe.
-        /// </summary>
-        private void ReleaseResult(int id) => KitsuneReleaseResult(id);
-
-        private int StartString(string script, params LuaValue[]? args)
-        {
-            if (inLuaCallback)
-            {
-                throw new LuaException("cannot be called from within a registered function");
-            }
-
-            var (native, ptrs) = BuildNativeArgs(args);
-            try
-            {
-                return KitsuneExecuteStringAsync(script, native?.Length ?? 0, native, false);
-            }
-            finally
-            {
-                FreeNativeArgs(ptrs);
-            }
-        }
-
-        private int StartFunction(string functionName, params LuaValue[]? args)
-        {
-            if (inLuaCallback)
-            {
-                throw new LuaException("cannot be called from within a registered function");
-            }
-
-            var (native, ptrs) = BuildNativeArgs(args);
-            try
-            {
-                return KitsuneExecuteFunctionAsync(functionName, native?.Length ?? 0, native, false);
-            }
-            finally
-            {
-                FreeNativeArgs(ptrs);
-            }
-        }
-
-        private int StartVariable(LuaValue variable, params LuaValue[]? args)
-        {
-            if (inLuaCallback)
-            {
-                throw new LuaException("cannot be called from within a registered function");
-            }
-
-            var (nv, native, ptrs) = BuildVariableAndArgs(variable, args);
-            try
-            {
-                return KitsuneExecuteVariableAsync(ref nv, native?.Length ?? 0, native, false);
-            }
-            finally
-            {
-                FreeNativeArgs(ptrs);
-            }
-        }
-
         /// <summary>Returns <c>true</c> once the coroutine has finished (success or error).</summary>
         private bool HasResult(int id, out nuint len) => KitsuneHasResult(id, out len);
 
@@ -1293,38 +1235,7 @@ namespace KitsuneNet
         }
 
         /// <summary>Returns the typed result and releases the slot.</summary>
-        private LuaValue GetResultVariable(int id) => NativePtrToLuaValue(KitsuneGetResult(id));
-
-        /// <summary>Returns the result as a UTF-8/Unicode string, or <c>null</c> if nil/none. Releases the slot.</summary>
-        private string? GetResultString(int id)
-        {
-            LuaValue v = GetResultVariable(id);
-            return (v.Type == LuaType.String || v.Type == LuaType.Char16) ? v.String : null;
-        }
-
-        /// <summary>Returns the result as raw bytes, or <c>null</c> if nil/none. Releases the slot.</summary>
-        private byte[]? GetResult(int id)
-        {
-            IntPtr ptr = KitsuneGetResult(id);
-            if (ptr == IntPtr.Zero)
-            {
-                return null;
-            }
-            var nv = Marshal.PtrToStructure<KitsuneVariable>(ptr);
-            byte[]? result = null;
-            if (nv.Type == (int)LuaType.String && nv.Data != IntPtr.Zero && nv.Length > 0)
-            {
-                if (nv.Length > (nuint)Array.MaxLength)
-                {
-                    throw new InvalidOperationException($"Result length {nv.Length} exceeds the managed array limit.");
-                }
-                int len = (int)nv.Length;
-                result = new byte[len];
-                Marshal.Copy(nv.Data, result, 0, len);
-            }
-            KitsuneVariableFree(ptr);
-            return result;
-        }
+        private LuaValue GetResultVariable(int id) => NativePtrToLuaValue(KitsuneGetResult(id), this);
 
         private void Dispose(bool disposing)
         {

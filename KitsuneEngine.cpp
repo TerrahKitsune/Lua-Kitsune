@@ -870,6 +870,8 @@ static void SchedulerProc(KitsuneState* state) {
 					luaL_unref(state->L, LUA_REGISTRYINDEX, pendingThreads[i]);
 				FreeVariableData(&pendingResults[i], state->L);
 			}
+			if (pendingCount > 0)
+				state->doneCV.notify_all(); // wake KitsuneWait: slots were compacted
 		}
 
 		// ── Step 5: GC on active→idle transition, then sleep ─────────────────
@@ -1642,17 +1644,16 @@ extern "C" {
 	KITSUNE_API bool KitsuneIsRunning() {
 		KitsuneState* state = g_state;
 		if (!state) return false;
-		if (state->currentCoroutineId.load()) return true;
 		state->slotsLock.lock();
-		bool running = false;
+		bool any = false;
 		for (int i = 0; i < state->slotCount; i++) {
-			if (state->slots[i]->id != 0 && !state->slots[i]->done.load()) {
-				running = true;
+			if (state->slots[i]->id != 0 && !state->slots[i]->released.load()) {
+				any = true;
 				break;
 			}
 		}
 		state->slotsLock.unlock();
-		return running;
+		return any;
 	}
 
 	KITSUNE_API int KitsuneGetRunningId() {
@@ -1693,7 +1694,17 @@ extern "C" {
 		if (!state) return;
 		std::unique_lock<std::mutex> lk(state->doneMtx);
 		state->doneCV.wait(lk, [state] {
-			return state->runningCount.load() == 0 || state->schedulerStop.load() != 0;
+			if (state->schedulerStop.load()) return true;
+			state->slotsLock.lock();
+			bool any = false;
+			for (int i = 0; i < state->slotCount; i++) {
+				if (state->slots[i]->id != 0 && !state->slots[i]->released.load()) {
+					any = true;
+					break;
+				}
+			}
+			state->slotsLock.unlock();
+			return !any;
 		});
 	}
 

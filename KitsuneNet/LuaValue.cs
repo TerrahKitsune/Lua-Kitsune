@@ -99,6 +99,21 @@ namespace KitsuneNet
         /// <item><see cref="LuaType.Nil"/> / <see cref="LuaType.None"/>: returns <c>null</c>.</item>
         /// </list>
         /// </summary>
+        /// <summary>Returns this value unchanged, or throws <see cref="LuaException"/> when
+        /// <see cref="Type"/> is <see cref="LuaType.Error"/>. Called by the synchronous
+        /// <c>Run*</c> methods to surface native rejections as exceptions rather than
+        /// silent <see cref="None"/> returns.</summary>
+        /// <exception cref="LuaException">Thrown when <see cref="Type"/> is <see cref="LuaType.Error"/>.</exception>
+        public LuaValue GetOrThrow()
+        {
+            if (Type == LuaType.Error)
+            {
+                throw new LuaException(String ?? string.Empty);
+            }
+
+            return this;
+        }
+
         public JsonNode? AsJsonNode()
         {
             if (Type == LuaType.Json)
