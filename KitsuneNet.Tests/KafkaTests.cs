@@ -12,62 +12,6 @@ public sealed class KafkaTests
 
     public KafkaTests(ITestOutputHelper output) => _output = output;
 
-    // Parses KITSUNE_KAFKA_TEST=host:port:topic:partition
-    private static string Bootstrap()
-    {
-        var parts = Environment.GetEnvironmentVariable("KITSUNE_KAFKA_TEST")!.Split(':');
-        return $"{parts[0]}:{parts[1]}";
-    }
-
-    private static string Topic()
-    {
-        var parts = Environment.GetEnvironmentVariable("KITSUNE_KAFKA_TEST")!.Split(':');
-        return parts[2];
-    }
-
-    private static int Partition()
-    {
-        var parts = Environment.GetEnvironmentVariable("KITSUNE_KAFKA_TEST")!.Split(':');
-        return parts.Length > 3 && int.TryParse(parts[3], out int p) ? p : 0;
-    }
-
-    private static string LuaValueToString(LuaValue v) => v.Type switch
-    {
-        LuaType.String => v.String ?? string.Empty,
-        LuaType.Integer => v.Int64.ToString(),
-        LuaType.Number => v.Number.ToString(),
-        LuaType.Boolean => v.Boolean ? "true" : "false",
-        LuaType.Nil => "nil",
-        LuaType.None => "nil",
-        _ => v.String ?? v.Type.ToString(),
-    };
-
-    private async Task<LuaValue> Run(string lua)
-    {
-        var engine = new KitsuneEngine();
-        engine.RegisterFunction("print", args =>
-        {
-            _output.WriteLine(string.Join("\t", args.Select(LuaValueToString)));
-            return LuaValue.None;
-        });
-        LuaValue result;
-        try
-        {
-            result = await engine.ExecuteStringAsync(lua).ConfigureAwait(false);
-        }
-        finally
-        {
-            engine.Dispose();
-        }
-
-        if (engine.LeakedAllocations != 0)
-        {
-            throw new InvalidOperationException($"Native memory leak: {engine.LeakedAllocations} unfreed allocation(s) after KitsuneCleanup");
-        }
-
-        return result;
-    }
-
     // -- creation -------------------------------------------------------------
     [KafkaFact]
     public async Task NewProducer_ValidConfig_ReturnsUserdata()
@@ -127,6 +71,7 @@ public sealed class KafkaTests
             local logs2 = Kafka.Logs()  -- second call must be empty after the clear
             return tostring(type(logs1) == 'string') .. ':' .. tostring(logs2 == '')
         ");
+
         // logs1 may or may not have content (depends on broker log level) but must be a string;
         // logs2 must always be empty after the first call clears the buffer
         r.String.ShouldStartWith("true:");
@@ -1430,7 +1375,7 @@ public sealed class KafkaTests
         const int countPerPartition = 50;
         const int totalCount = countPerPartition * 2;
         string stressTopic = $"stress2-{guid}";
-        string groupId    = $"stress2-{guid}";
+        string groupId = $"stress2-{guid}";
 
         // Create a 2-partition topic and wait for it to appear in metadata so
         // both consumers can each be assigned one partition by the group coordinator.
@@ -1503,7 +1448,7 @@ public sealed class KafkaTests
 
         try
         {
-            var producerTask  = Run(producerLua);
+            var producerTask = Run(producerLua);
             var consumer1Task = Run(consumerLua);
             var consumer2Task = Run(consumerLua);
             await Task.WhenAll(producerTask, consumer1Task, consumer2Task);
@@ -1580,5 +1525,61 @@ public sealed class KafkaTests
         ");
         r.String.ShouldNotBeNull();
         r.String.ShouldContain("total deleted:");
+    }
+
+    // Parses KITSUNE_KAFKA_TEST=host:port:topic:partition
+    private static string Bootstrap()
+    {
+        var parts = Environment.GetEnvironmentVariable("KITSUNE_KAFKA_TEST")!.Split(':');
+        return $"{parts[0]}:{parts[1]}";
+    }
+
+    private static string Topic()
+    {
+        var parts = Environment.GetEnvironmentVariable("KITSUNE_KAFKA_TEST")!.Split(':');
+        return parts[2];
+    }
+
+    private static int Partition()
+    {
+        var parts = Environment.GetEnvironmentVariable("KITSUNE_KAFKA_TEST")!.Split(':');
+        return parts.Length > 3 && int.TryParse(parts[3], out int p) ? p : 0;
+    }
+
+    private static string LuaValueToString(LuaValue v) => v.Type switch
+    {
+        LuaType.String => v.String ?? string.Empty,
+        LuaType.Integer => v.Int64.ToString(),
+        LuaType.Number => v.Number.ToString(),
+        LuaType.Boolean => v.Boolean ? "true" : "false",
+        LuaType.Nil => "nil",
+        LuaType.None => "nil",
+        _ => v.String ?? v.Type.ToString(),
+    };
+
+    private async Task<LuaValue> Run(string lua)
+    {
+        var engine = new KitsuneEngine();
+        engine.RegisterFunction("print", args =>
+        {
+            _output.WriteLine(string.Join("\t", args.Select(LuaValueToString)));
+            return LuaValue.None;
+        });
+        LuaValue result;
+        try
+        {
+            result = await engine.ExecuteStringAsync(lua).ConfigureAwait(false);
+        }
+        finally
+        {
+            engine.Dispose();
+        }
+
+        if (engine.LeakedAllocations != 0)
+        {
+            throw new InvalidOperationException($"Native memory leak: {engine.LeakedAllocations} unfreed allocation(s) after KitsuneCleanup");
+        }
+
+        return result;
     }
 }

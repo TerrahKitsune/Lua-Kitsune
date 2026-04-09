@@ -535,7 +535,7 @@ namespace KitsuneNet
         /// </summary>
         /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="size"/> is zero or negative.</exception>
         /// <exception cref="OutOfMemoryException">Thrown when the native allocation fails.</exception>
-        public unsafe LuaStream CreateStream(int size)
+        public LuaStream CreateStream(int size)
         {
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(size);
             IntPtr block = KitsuneCreateMemoryBlock((nuint)size);
@@ -630,13 +630,12 @@ namespace KitsuneNet
         /// or <see cref="LuaValue.None"/> to return nothing. Throw a <see cref="LuaException"/> to
         /// raise a Lua error with a specific message; any other exception raises the exception message.
         /// </summary>
-        public unsafe void RegisterFunction(string name, LuaFunction func)
+        public void RegisterFunction(string name, LuaFunction func)
         {
             _functionHandles ??= new();
             var handle = GCHandle.Alloc(func);
             _functionHandles.Add(handle);
-            var fp = (nint)(delegate* unmanaged[Cdecl]<int, KitsuneVariable*, nint, void*, int>)&LuaFunctionTrampoline;
-            KitsuneRegisterFunction(name, fp, (nint)GCHandle.ToIntPtr(handle));
+            KitsuneRegisterFunction(name, GetTrampolinePtr(), (nint)GCHandle.ToIntPtr(handle));
         }
 
         public void Dispose()
@@ -649,6 +648,9 @@ namespace KitsuneNet
         /// Called by <see cref="LuaFunctionRef.Dispose"/> to release a Lua registry reference.
         /// Must not be called while the pointer is still in use.</summary>
         internal static void ReleaseNativeVariable(IntPtr ptr) => KitsuneVariableFree(ptr);
+
+        private static unsafe nint GetTrampolinePtr() =>
+           (nint)(delegate* unmanaged[Cdecl]<int, KitsuneVariable*, nint, void*, int>)&LuaFunctionTrampoline;
 
         #region P/Invoke
 

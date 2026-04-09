@@ -1,4 +1,4 @@
-using KitsuneNet;
+﻿using KitsuneNet;
 using Shouldly;
 using Xunit;
 
@@ -24,7 +24,8 @@ public sealed class ArchiveTests
             assert(arc, err or "failed to open archive")
             local entries = Archive.Entries(arc)
             return tostring(#entries)
-            """, args: [LuaValue.FromString(path)]);
+            """,
+            args: [LuaValue.FromString(path)]);
         r.String.ShouldBe("2");
     }
 
@@ -43,7 +44,8 @@ public sealed class ArchiveTests
             end
             table.sort(names)
             return names[1] .. '|' .. names[2]
-            """, args: [LuaValue.FromString(path)]);
+            """,
+            args: [LuaValue.FromString(path)]);
         r.String.ShouldBe("this is a test file.txt|this is also a test file.txt");
     }
 
@@ -60,7 +62,8 @@ public sealed class ArchiveTests
                 assert(entries[i].Size >= 0, "entry " .. i .. " has negative size")
             end
             return "ok"
-            """, args: [LuaValue.FromString(path)]);
+            """,
+            args: [LuaValue.FromString(path)]);
         r.String.ShouldBe("ok");
     }
 
@@ -78,7 +81,8 @@ public sealed class ArchiveTests
             local data = Archive.ReadAll(arc)
             assert(data ~= nil, "ReadAll returned nil")
             return tostring(#data > 0)
-            """, args: [LuaValue.FromString(path)]);
+            """,
+            args: [LuaValue.FromString(path)]);
         r.String.ShouldBe("true");
     }
 
@@ -95,7 +99,8 @@ public sealed class ArchiveTests
             local data = Archive.ReadAll(arc)
             assert(data ~= nil, "ReadAll returned nil")
             return tostring(#data > 0)
-            """, args: [LuaValue.FromString(path)]);
+            """,
+            args: [LuaValue.FromString(path)]);
         r.String.ShouldBe("true");
     }
 
@@ -117,7 +122,8 @@ public sealed class ArchiveTests
                     "entry " .. i .. ": ReadAll size " .. #data .. " != declared " .. size)
             end
             return "ok"
-            """, args: [LuaValue.FromString(path)]);
+            """,
+            args: [LuaValue.FromString(path)]);
         r.String.ShouldBe("ok");
     }
 
@@ -141,7 +147,8 @@ public sealed class ArchiveTests
             until chunk == nil
             local assembled = table.concat(parts)
             return tostring(#assembled == size)
-            """, args: [LuaValue.FromString(path)]);
+            """,
+            args: [LuaValue.FromString(path)]);
         r.String.ShouldBe("true");
     }
 
@@ -153,8 +160,8 @@ public sealed class ArchiveTests
         LuaValue r = await engine.ExecuteStringAsync("""
             local arc, err = Archive.OpenRead(ARGS[1])
             return tostring(arc == nil) .. '|' .. tostring(type(err) == 'string')
-            """, args: [LuaValue.FromString("nonexistent_file_that_does_not_exist.7z")]);
+            """,
+            args: [LuaValue.FromString("nonexistent_file_that_does_not_exist.7z")]);
         r.String.ShouldBe("true|true");
     }
 }
-

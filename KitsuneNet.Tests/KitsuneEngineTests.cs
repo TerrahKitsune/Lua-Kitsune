@@ -191,6 +191,7 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             engine.RunString("return 'done'").String.ShouldBe("done");
+
             // RunString consumes the result; slot is auto-released
             engine.GetActiveIds().ShouldBeEmpty();
         }
@@ -876,11 +877,16 @@ namespace KitsuneNet.Tests
             const int count = 4;
             KitsuneEngine engine = new();
             for (int i = 0; i < count; i++)
+            {
                 engine.ExecuteString("Sleep(60000)");
+            }
 
             DateTime ready = DateTime.UtcNow.AddSeconds(5);
             while (engine.GetActiveIds().Length < count && DateTime.UtcNow < ready)
+            {
                 Thread.Sleep(1);
+            }
+
             int[] ids = engine.GetActiveIds();
             ids.Length.ShouldBe(count);
 
@@ -1451,7 +1457,10 @@ namespace KitsuneNet.Tests
             SpinUntilRunning(engine);
             DateTime ready = DateTime.UtcNow.AddSeconds(5);
             while (engine.GetActiveIds().Length < 2 && DateTime.UtcNow < ready)
+            {
                 Thread.Sleep(1);
+            }
+
             int[] activeIds = engine.GetActiveIds();
             int idA = activeIds[0], idB = activeIds[1];
             try
@@ -1541,7 +1550,9 @@ namespace KitsuneNet.Tests
             int id = engine.GetActiveIds()[0];
             DateTime sleepDeadline = DateTime.UtcNow.AddSeconds(5);
             while (engine.GetStatus(id) != CoroutineStatus.Sleeping && DateTime.UtcNow < sleepDeadline)
+            {
                 Thread.Sleep(1);
+            }
 
             engine.GetStatus(id).ShouldBe(CoroutineStatus.Sleeping);
 
@@ -1580,6 +1591,7 @@ namespace KitsuneNet.Tests
         public void GetRuntime_AfterCoroutineReleased_ReturnsZero()
         {
             using KitsuneEngine engine = new();
+
             // RunString is synchronous; after return the slot is auto-released
             engine.RunString("return 'done'").String.ShouldBe("done");
             engine.GetActiveIds().ShouldBeEmpty();
@@ -2986,7 +2998,7 @@ namespace KitsuneNet.Tests
 
         // -- Shared-memory concurrent access -------------------------------------
         [Fact]
-        public void SharedMemory_ConcurrentLuaAndCSharpAccess_CooperativeLockedFlag()
+        public async Task SharedMemory_ConcurrentLuaAndCSharpAccess_CooperativeLockedFlag()
         {
             // Verifies concurrent access between Lua (scheduler thread) and C# (test thread)
             // on the same shared-memory block, and that the LOCKED flag is observable from C#.
@@ -3052,7 +3064,7 @@ namespace KitsuneNet.Tests
                     }
                 }
 
-                long luaCount = luaTask.GetAwaiter().GetResult().Int64;
+                long luaCount = (await luaTask).Int64;
 
                 sentinelCorrupted.ShouldBeFalse("sentinel bytes were overwritten — Lua wrote outside data[0]");
                 luaCount.ShouldBe(Iterations, "Lua must complete all iterations without error");
@@ -3614,7 +3626,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- ExecuteVariable / ExecuteVariableAsync / RunVariable -------------------------
-
         [Fact]
         public async Task ExecuteVariable_FunctionValue_CallsFunction()
         {
@@ -3777,7 +3788,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- ExecuteVariable / ExecuteVariableAsync / RunVariable (boundary cases) ------
-
         [Fact]
         public async Task ExecuteVariable_FunctionValue_IdIsPositive()
         {
@@ -3820,7 +3830,6 @@ namespace KitsuneNet.Tests
         //   (a) the explicit LUA_TFUNCTION branch in KitsuneGetResult that zeroes slot->result.integer
         //   (b) the pendingResults[] array in scheduler step 4 that defers FreeVariableData outside slotsLock
         //   (c) the KitsuneVariableChain deferred-free queue used by KitsuneVariableFree on non-scheduler threads
-
         [Fact]
         public void GetResultVariable_FunctionReturn_HasFunctionType()
         {
@@ -3939,6 +3948,7 @@ namespace KitsuneNet.Tests
 
             engine.Cancel(bgId);
             engine.Wait();
+
             // One scheduler cycle ensures DrainPendingVariableChain processes anything enqueued by finalizers.
             (await engine.ExecuteStringAsync("return 'drain'")).ShouldBe("drain");
 
@@ -3991,7 +4001,7 @@ namespace KitsuneNet.Tests
                 // then drain via a scheduler cycle so native free count is accurate before Dispose.
                 GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true);
                 GC.WaitForPendingFinalizers();
-                await engine.ExecuteStringAsync("return 'drain'").ConfigureAwait(false);
+                await engine.ExecuteStringAsync("return 'drain'");
             }
             finally
             {
@@ -4001,7 +4011,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- Boundary / edge cases --------------------------------------------------------
-
         [Fact]
         public void GetError_NonExistentId_ReturnsNull()
         {
@@ -4048,6 +4057,7 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue result = engine.RunString("return function() end");
             result.Type.ShouldBe(LuaType.Function);
+
             // RunString consumes the result; slot is auto-released
             engine.GetActiveIds().ShouldBeEmpty();
         }

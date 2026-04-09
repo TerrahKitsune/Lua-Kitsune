@@ -1,4 +1,4 @@
-using KitsuneNet;
+ï»¿using KitsuneNet;
 using Shouldly;
 using Xunit;
 
@@ -6,6 +6,7 @@ namespace KitsuneNet.Tests
 {
     // See KitsuneEngineTests for why both classes share a single collection.
     [Collection("KitsuneSequential")]
+
     /// <summary>
     /// Tests for the non-module global functions in the Kitsune Lua environment.
     /// Covers: UUID, CRC32/64, Time, Runtime, GetMemory, GlobalMemoryStatus,
@@ -124,7 +125,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task UUID_BinaryVariantBitsAreRfc4122()
         {
-            // Byte 9 (1-based): top two bits must be 10xxxxxx (0x80–0xBF).
+            // Byte 9 (1-based): top two bits must be 10xxxxxx (0x80â€“0xBF).
             LuaValue r = await Run(@"
                 local _, bin = UUID()
                 local b = bin:byte(9)
@@ -241,7 +242,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task CRC64_Wchar_DiffersFromStringEquivalent()
         {
-            // Wchar stores UTF-16 LE bytes; plain string is UTF-8 — different byte sequences.
+            // Wchar stores UTF-16 LE bytes; plain string is UTF-8 â€” different byte sequences.
             LuaValue r = await Run("return tostring(CRC64(Wchar.FromUtf8('hello')) ~= CRC64('hello'))");
             r.String.ShouldBe("true");
         }
@@ -1125,7 +1126,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Json_UnicodeEscape_DecodedCorrectly()
         {
-            // \u0041 is 'A', \u00E9 is 'é' (U+00E9)
+            // \u0041 is 'A', \u00E9 is 'Ã©' (U+00E9)
             LuaValue r = await Run(@"
                 local j  = Json.New()
                 local a  = j:Decode('""\\u0041""')
@@ -1540,13 +1541,13 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Json_Encode_Wchar_NonAscii_RoundTripsCorrectly()
         {
-            // é = U+00E9, UTF-8: 0xC3 0xA9.  Use Lua hex escapes for unambiguous byte values.
+            // Ã© = U+00E9, UTF-8: 0xC3 0xA9.  Use Lua hex escapes for unambiguous byte values.
             LuaValue r = await Run(@"
                 local j = Json.New()
                 local w = Wchar.FromUtf8('\xC3\xa9')
                 return j:Decode(j:Encode(w))
             ");
-            r.String.ShouldBe("é");
+            r.String.ShouldBe("Ã©");
         }
 
         [Fact]
@@ -1715,7 +1716,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Wchar_Find_NonAsciiStringPattern_Works()
         {
-            // String patterns are interpreted as UTF-8; \xC3\xA9 are the UTF-8 bytes for U+00E9 (é).
+            // String patterns are interpreted as UTF-8; \xC3\xA9 are the UTF-8 bytes for U+00E9 (Ã©).
             LuaValue r = await Run(@"
                 local hay = Wchar.FromUtf8('caf\xC3\xA9 au lait')
                 return tostring(hay:Find('\xC3\xA9') ~= nil)
@@ -1776,7 +1777,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Wchar_Concat_NonAsciiStringOperand_ProducesCorrectResult()
         {
-            // \xC3\xA9 = UTF-8 for U+00E9 (é); string operands are treated as UTF-8.
+            // \xC3\xA9 = UTF-8 for U+00E9 (Ã©); string operands are treated as UTF-8.
             LuaValue r = await Run(@"return (Wchar.FromUtf8('caf') .. '\xC3\xA9'):ToUtf8()");
             r.String.ShouldBe("caf\u00e9");
         }
@@ -1820,7 +1821,7 @@ namespace KitsuneNet.Tests
         public async Task Wchar_ToBytes_AsciiChar_ProducesOneCodeUnit()
         {
             // ToBytes returns a table of UTF-16 code units.
-            // 'A' is U+0041 — one code unit — so the table has exactly one entry with value 65.
+            // 'A' is U+0041 â€” one code unit â€” so the table has exactly one entry with value 65.
             LuaValue r = await Run(@"
                 local units = Wchar.FromUtf8('A'):ToBytes()
                 return tostring(#units == 1 and units[1] == 65)
@@ -1877,7 +1878,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Wchar_NonAsciiUtf8_LengthIsWcharCount()
         {
-            // U+00E9 (é) is 2 UTF-8 bytes (\xC3\xA9) but 1 wchar_t; length should be 1.
+            // U+00E9 (Ã©) is 2 UTF-8 bytes (\xC3\xA9) but 1 wchar_t; length should be 1.
             LuaValue r = await Run(@"return tostring(#Wchar.FromUtf8('\xC3\xA9') == 1)");
             r.String.ShouldBe("true");
         }
@@ -3863,7 +3864,7 @@ namespace KitsuneNet.Tests
         public async Task CSV_New_CalledOnInstance_CreatesNewIndependentInstance()
         {
             // csv:New(delim) must ignore the existing instance and return a fresh one
-            // with its own delimiter — not a reference to the original.
+            // with its own delimiter â€” not a reference to the original.
             LuaValue r = await Run(@"
                 local a = CSV.New(';')
                 local b = a:New(',')
@@ -4059,7 +4060,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Stream_UnsignedNumericTypes_RoundTrip()
         {
-            // WriteUnsignedShort / WriteUnsignedInt / WriteUnsignedLong — each must
+            // WriteUnsignedShort / WriteUnsignedInt / WriteUnsignedLong â€” each must
             // round-trip without sign-extension or truncation.
             LuaValue r = await Run(@"
                 local s = Stream.Create()
@@ -4151,7 +4152,7 @@ namespace KitsuneNet.Tests
         public async Task Stream_Tostring_FileStream_ReturnsFallbackString()
         {
             // A file stream opened with "rb" has CAP_READ + CAP_SEEK, but __tostring
-            // must NOT silently read the file — it must return the pointer fallback.
+            // must NOT silently read the file â€” it must return the pointer fallback.
             LuaValue r = await Run(@"
                 local _tmp = (os.getenv('TEMP') or os.getenv('TMPDIR') or '/tmp') .. package.config:sub(1,1)
                 local path = _tmp .. 'kitsune_tostring_test.bin'
@@ -4188,7 +4189,7 @@ namespace KitsuneNet.Tests
         public async Task Stream_Tostring_ReadableButNotSeekable_ReturnsFallbackString()
         {
             // A read-only stream without CAP_SEEK must also fall back to the pointer
-            // string — reading without being able to seek would silently consume data.
+            // string â€” reading without being able to seek would silently consume data.
             LuaValue r = await Run(@"
                 local OPEN, CLOSE, READ, CAP_READ = 0, 1, 2, 1
                 local s = Stream.Create(function(op, len)
@@ -4292,7 +4293,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Stream_PeekByte_RequiresReadAndSeek_NotADistinctFlag()
         {
-            // PeekStreamByte is now gated on CAP_READ + CAP_SEEK — there is no
+            // PeekStreamByte is now gated on CAP_READ + CAP_SEEK â€” there is no
             // separate CAP_PEEK flag.  A backend with both returns a real value;
             // a backend with only CAP_READ (no seek) returns -1.
             LuaValue r = await Run(@"
@@ -4396,7 +4397,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Stream_ReadUtf8_MultiByte_ReturnsCodepoint()
         {
-            // U+00E9 (é) encodes as 0xC3 0xA9 in UTF-8.
+            // U+00E9 (Ã©) encodes as 0xC3 0xA9 in UTF-8.
             LuaValue r = await Run(@"
                 local s = Stream.Create()
                 s:WriteByte(0xC3)
@@ -4426,7 +4427,7 @@ namespace KitsuneNet.Tests
         public async Task Stream_WriteUtf8_HighByte_ConvertedToUtf8Pair()
         {
             // WriteUtf8 treats the input string as Latin-1 and re-encodes to UTF-8.
-            // Latin-1 0xE9 (é) must produce the two-byte sequence 0xC3 0xA9.
+            // Latin-1 0xE9 (Ã©) must produce the two-byte sequence 0xC3 0xA9.
             LuaValue r = await Run(@"
                 local s = Stream.Create()
                 s:WriteUtf8('\xE9')
@@ -5194,7 +5195,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task CSV_Read_AsyncStream_RowSpanningMultipleChunks()
         {
-            // "hello" and ",world\n" arrive in separate chunks — must be joined.
+            // "hello" and ",world\n" arrive in separate chunks â€” must be joined.
             LuaValue r = await Run(RunCoroutine + MakeChunkedStream + @"
                 run(function()
                     local cs = makeChunkedStream({'hello', ',world\n', 'foo,bar\n'})
@@ -5419,7 +5420,7 @@ namespace KitsuneNet.Tests
         {
             // A function backend that has not yet delivered any data reports 0 bytes
             // remaining via HasData() because len==0 and pos==0 (no curpos/getlen
-            // vtable — the Lua fn backend falls through to STREAM_OP_HASDATA dispatch
+            // vtable â€” the Lua fn backend falls through to STREAM_OP_HASDATA dispatch
             // which returns nil, treated as falsy by the caller).
             LuaValue r = await Run(SocketPrologue + @"
                 local s = Stream.Create(function(op, len)
@@ -5429,7 +5430,7 @@ namespace KitsuneNet.Tests
                 end)
                 -- The fn backend has no getlen/curpos vtable; STREAM_OP_HASDATA
                 -- is dispatched and the function returns nil (no handler) which
-                -- is falsy — callers should treat nil as 'no data available yet'.
+                -- is falsy â€” callers should treat nil as 'no data available yet'.
                 local hd = s:HasData()
                 return tostring(hd == nil or hd == false or hd == 0)
             ");

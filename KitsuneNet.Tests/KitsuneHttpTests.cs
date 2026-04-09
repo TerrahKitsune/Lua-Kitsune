@@ -1,4 +1,4 @@
-using KitsuneNet;
+﻿using KitsuneNet;
 using Shouldly;
 using Xunit;
 
@@ -6,10 +6,11 @@ namespace KitsuneNet.Tests
 {
     // See KitsuneEngineTests for why both classes share a single collection.
     [Collection("KitsuneSequential")]
+
     /// <summary>
     /// Tests for the Http module.
     /// Tests skip only when KITSUNE_HTTP was not compiled in (Http global is nil).
-    /// Network failures cause test failures � not skips.
+    /// Network failures cause test failures — not skips.
     /// Buffered tests use httpbin.org; streaming and WebSocket tests also use
     /// httpbin.org and wss://echo.websocket.org respectively.
     /// </summary>

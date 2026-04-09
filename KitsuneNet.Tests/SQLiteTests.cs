@@ -1,4 +1,4 @@
-using KitsuneNet;
+﻿using KitsuneNet;
 using Shouldly;
 using Xunit;
 
@@ -6,6 +6,7 @@ namespace KitsuneNet.Tests;
 
 // See KitsuneEngineTests for why both classes share a single collection.
 [Collection("KitsuneSequential")]
+
 /// <summary>
 /// Tests for the SQLite module.
 /// In-memory tests (<see cref="FactAttribute"/>) run unconditionally.
@@ -522,7 +523,7 @@ public sealed class SQLiteTests
     [Fact]
     public async Task SQLite_Tostring_InMemory_ContainsPointerAndMemoryKeyword()
     {
-        // __tostring format: "SQLite: 0x� File: :memory:"
+        // __tostring format: "SQLite: 0x… File: :memory:"
         LuaValue r = await Run(@"
 			local db = SQLite.Open()
 			local s = tostring(db)
