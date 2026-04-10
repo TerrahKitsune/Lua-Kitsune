@@ -246,11 +246,12 @@ set_target_properties(KitsuneEngine PROPERTIES
 target_link_libraries(KitsuneEngine PRIVATE lua_core pthread dl)
 
 # ── kitsune host executable ───────────────────────────────────────────────────
-add_executable(kitsune Program.cpp)
+add_executable(kitsune Kitsune/Program.cpp Kitsune/Session.cpp)
 
 target_include_directories(kitsune PRIVATE
 	"${CMAKE_SOURCE_DIR}"
 	"${CMAKE_SOURCE_DIR}/Lua"
+	"${CMAKE_SOURCE_DIR}/Kitsune"
 )
 
 target_link_libraries(kitsune PRIVATE KitsuneEngine)
