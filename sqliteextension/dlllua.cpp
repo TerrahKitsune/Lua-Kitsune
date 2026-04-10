@@ -1,29 +1,7 @@
 ﻿#include <windows.h>
 #include <clocale>
-#include "objbase.h"
 #include "dlllua.h"
-#include "../mem.h"
-#include "../StreamMain.h"
-#include "../wcharmain.h"
-#include "../luajsonmain.h"
-#include "../LuaAesMain.h"
-#include "../LuaCsvMain.h"
-#include "../LuaFileSystemMain.h"
-#ifdef KITSUNE_HTTP
-#include "../HttpCurlMain.h"
-#endif
-#include "../luakafkamain.h"
-#include "../MD5Main.h"
-#include "../LuaMutexMain.h"
-#include "../MySQLMain.h"
-#include "../RedisMain.h"
-#include "../LuaSQLiteMain.h"
-#include "../Sha256Main.h"
-#include "../TimerMain.h"
-#include "../base64.h"
-#include "../SHA1Main.h"
-#include "../OpenSSL/include/openssl/ssl.h"
-#include "../lua_misc.h"
+
 
 static int dostring(lua_State* L) {
 
@@ -47,54 +25,10 @@ lua_State* OpenLuaState(lua_Alloc memoryAllocator) {
 		return NULL;
 	}
 
-	SSL_load_error_strings();
-	SSL_library_init();
-	OpenSSL_add_all_algorithms();
-
 	lua_State* L = lua_newstate(memoryAllocator, NULL);
 	lua_gc(L, LUA_GCGEN, 20, 100);
 	luaL_openlibs(L);
 	setlocale(LC_NUMERIC, "C");
-
-	luaopen_wchar(L);
-	lua_setglobal(L, "Wchar");
-	luaopen_stream(L);
-	lua_setglobal(L, "Stream");
-	luaopen_json(L);
-	lua_setglobal(L, "Json");
-	luaopen_luaaes(L);
-	lua_setglobal(L, "Aes");
-	luaopen_csv(L);
-	lua_setglobal(L, "CSV");
-	luaopen_filesystem(L);
-	lua_setglobal(L, "FileSystem");
-	#ifdef KITSUNE_HTTP
-	luaopen_http(L);
-	lua_setglobal(L, "Http");
-#endif
-	luaopen_kafka(L);
-	lua_setglobal(L, "Kafka");
-	luaopen_md5(L);
-	lua_setglobal(L, "MD5");
-	luaopen_mutex(L);
-	lua_setglobal(L, "Mutex");
-	luaopen_mysql(L);
-	lua_setglobal(L, "MySQL");
-	luaopen_sqlite(L);
-	lua_setglobal(L, "SQLite");
-	luaopen_redis(L);
-	lua_setglobal(L, "Redis");
-	luaopen_sha256(L);
-	lua_setglobal(L, "SHA256");
-	luaopen_timer(L);
-	lua_setglobal(L, "Timer");
-	luaopen_base64(L);
-	lua_setglobal(L, "Base64");
-	luaopen_sha1(L);
-	lua_setglobal(L, "SHA1");
-
-	// Returns nothing
-	luaopen_misc(L);
 
 	lua_pushcfunction(L, dostring);
 	lua_setglobal(L, "dostring");

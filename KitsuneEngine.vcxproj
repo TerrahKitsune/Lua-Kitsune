@@ -55,7 +55,7 @@
     <Link>
       <LinkIncremental>false</LinkIncremental>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>archive.lib;bz2d.lib;lzma.lib;zlibd.lib;zstd.lib;Cabinet.lib;$(SolutionDir)curl\lib\libcurl.lib;$(SolutionDir)hiredis\hiredis.lib;$(SolutionDir)hiredis\hiredis_ssl.lib;$(SolutionDir)OpenSSL\libssl.lib;$(SolutionDir)OpenSSL\libcrypto.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(SolutionDir)mysql\libmysql.lib;ws2_32.lib;archive.lib;bz2d.lib;lzma.lib;zlibd.lib;zstd.lib;Cabinet.lib;$(SolutionDir)curl\lib\libcurl.lib;$(SolutionDir)hiredis\hiredis.lib;$(SolutionDir)hiredis\hiredis_ssl.lib;$(SolutionDir)OpenSSL\libssl.lib;$(SolutionDir)OpenSSL\libcrypto.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(SolutionDir)libarchive\debug\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <LargeAddressAware>true</LargeAddressAware>
       <IgnoreSpecificDefaultLibraries>msvcrt.lib;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
@@ -83,7 +83,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>archive.lib;bz2.lib;lzma.lib;zlib.lib;zstd.lib;Cabinet.lib;$(SolutionDir)curl\lib\libcurl.lib;$(SolutionDir)hiredis\hiredis.lib;$(SolutionDir)hiredis\hiredis_ssl.lib;$(SolutionDir)OpenSSL\libssl.lib;$(SolutionDir)OpenSSL\libcrypto.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(SolutionDir)mysql\libmysql.lib;ws2_32.lib;archive.lib;bz2.lib;lzma.lib;zlib.lib;zstd.lib;Cabinet.lib;$(SolutionDir)curl\lib\libcurl.lib;$(SolutionDir)hiredis\hiredis.lib;$(SolutionDir)hiredis\hiredis_ssl.lib;$(SolutionDir)OpenSSL\libssl.lib;$(SolutionDir)OpenSSL\libcrypto.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(SolutionDir)libarchive\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <LargeAddressAware>true</LargeAddressAware>
     </Link>
@@ -100,7 +100,6 @@
     <ClCompile Include="LuaArchive.cpp" />
     <ClCompile Include="LuaArchiveMain.cpp" />
     <ClCompile Include="base64.cpp" />
-    <ClCompile Include="Client.cpp" />
     <ClCompile Include="luajson.cpp" />
     <ClCompile Include="luajsonmain.cpp" />
     <ClCompile Include="kafkahelpers.cpp" />
@@ -174,14 +173,9 @@
     <ClCompile Include="StreamMain.cpp" />
     <ClCompile Include="streamshmemory.cpp" />
     <ClCompile Include="wcharmain.cpp" />
-    <ClCompile Include="List.cpp" />
-    <ClCompile Include="LuaClient.cpp" />
-    <ClCompile Include="LuaClientMain.cpp" />
     <ClCompile Include="LuaFileSystem.cpp" />
     <ClCompile Include="LuaFileSystemMain.cpp" />
     <ClCompile Include="LuaMD5.cpp" />
-    <ClCompile Include="LuaServer.cpp" />
-    <ClCompile Include="LuaServerMain.cpp" />
     <ClCompile Include="LuaSQLite.cpp" />
     <ClCompile Include="LuaSQLiteMain.cpp" />
     <ClCompile Include="LuaMySQL.cpp" />
@@ -189,11 +183,7 @@
     <ClCompile Include="MD5Main.cpp" />
     <ClCompile Include="MySQLMain.cpp" />
     <ClCompile Include="PostgresMain.cpp" />
-    <ClCompile Include="NetEvent.cpp" />
-    <ClCompile Include="networking.cpp" />
     <ClCompile Include="ProcessMain.cpp" />
-    <ClCompile Include="Queue.cpp" />
-    <ClCompile Include="Server.cpp" />
     <ClCompile Include="SQLite\sqlite3.c" />
     <ClCompile Include="Timer.cpp" />
     <ClCompile Include="TimerMain.cpp" />
@@ -211,7 +201,6 @@
     <ClInclude Include="LuaArchive.h" />
     <ClInclude Include="LuaArchiveMain.h" />
     <ClInclude Include="base64.h" />
-    <ClInclude Include="Client.h" />
     <ClInclude Include="HttpCurl.h" />
     <ClInclude Include="HttpCurlMain.h" />
     <ClInclude Include="luajson.h" />
@@ -274,7 +263,6 @@
     <ClInclude Include="RedisStream.h" />
     <ClInclude Include="RedisString.h" />
     <ClInclude Include="RedisValue.h" />
-    <ClInclude Include="resource.h" />
     <ClInclude Include="sha1.h" />
     <ClInclude Include="SHA1Main.h" />
     <ClInclude Include="sha256.h" />
@@ -286,14 +274,9 @@
     <ClInclude Include="streammemory.h" />
     <ClInclude Include="streamshmemory.h" />
     <ClInclude Include="wcharmain.h" />
-    <ClInclude Include="List.h" />
-    <ClInclude Include="LuaClient.h" />
-    <ClInclude Include="LuaClientMain.h" />
     <ClInclude Include="LuaFileSystem.h" />
     <ClInclude Include="LuaFileSystemMain.h" />
     <ClInclude Include="LuaMD5.h" />
-    <ClInclude Include="LuaServer.h" />
-    <ClInclude Include="LuaServerMain.h" />
     <ClInclude Include="LuaSQLite.h" />
     <ClInclude Include="LuaSQLiteMain.h" />
     <ClInclude Include="LuaMySQL.h" />
@@ -302,11 +285,7 @@
     <ClInclude Include="MD5Main.h" />
     <ClInclude Include="MySQLMain.h" />
     <ClInclude Include="PostgresMain.h" />
-    <ClInclude Include="NetEvent.h" />
-    <ClInclude Include="networking.h" />
     <ClInclude Include="ProcessMain.h" />
-    <ClInclude Include="Queue.h" />
-    <ClInclude Include="Server.h" />
     <ClInclude Include="SQLite\sqlite3.h" />
     <ClInclude Include="Timer.h" />
     <ClInclude Include="TimerMain.h" />
@@ -314,12 +293,7 @@
   <ItemGroup>
     <None Include="build-linux-and-test.ps1" />
     <None Include="build-release.ps1" />
-    <None Include="Http Client Implementation Plan.md" />
-    <None Include="ITERATOR_PLAN.md" />
-    <None Include="Kafka refactor plan.md" />
     <None Include="Lua functions.md" />
-    <None Include="MySQL Implementation Plan.md" />
-    <None Include="Postgres Implementation Plan.md" />
     <None Include="testEnvironments.json" />
     <None Include="triplets\x64-windows-static-md.cmake" />
     <None Include="vcpkg.json" />
@@ -338,3 +312,6 @@
     <Error Condition="!Exists('packages\librdkafka.redist.2.12.0\build\native\librdkafka.redist.targets')" Text="$([System.String]::Format('$(ErrorText)', 'packages\librdkafka.redist.2.12.0\build\native\librdkafka.redist.targets'))" />
   </Target>
 </Project>
+
+
+

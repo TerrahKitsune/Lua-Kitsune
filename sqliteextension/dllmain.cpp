@@ -1,10 +1,7 @@
-﻿#include "../networking.h"
-#include <Windows.h>
+﻿#include <Windows.h>
 #include "objbase.h"
 #include "luasqlite.h"
 #include "dlllua.h"
-#include "../stream.h"
-#include "../luawchar.h"
 SQLITE_EXTENSION_INIT1
 int JsonObjectRef = LUA_NOREF;
 int StateRef = LUA_NOREF;
@@ -84,7 +81,6 @@ int querysqlite(lua_State* L, bool isScalar) {
 	size_t len;
 	const char* data;
 	const char* name;
-	LuaWChar* wchar;
 
 	int err = sqlite3_prepare_v2(db, query, -1, &stmt, 0);
 	if (err) {
@@ -134,19 +130,6 @@ int querysqlite(lua_State* L, bool isScalar) {
 				sqlite3_bind_text(stmt, ++cnt, data, (int)len, SQLITE_STATIC);
 				break;
 			case LUA_TUSERDATA:
-
-				if (luaL_testudata(L, -1, LUAWCHAR)) {
-					wchar = lua_towchar(L, -1);
-					if (wchar->str) {
-						sqlite3_bind_text16(stmt, ++cnt, wchar->str, (int)(wchar->len * sizeof(wchar_t)), SQLITE_STATIC);
-						break;
-					}
-				}
-				else if (luaL_testudata(L, -1, STREAM)) {
-					sqlite3_bind_null(stmt, ++cnt);
-					break;
-				}
-
 				sqlite3_bind_null(stmt, ++cnt);
 				break;
 			}
@@ -200,19 +183,6 @@ int querysqlite(lua_State* L, bool isScalar) {
 				sqlite3_bind_text(stmt, ++cnt, data, (int)len, SQLITE_STATIC);
 				break;
 			case LUA_TUSERDATA:
-
-				if (luaL_testudata(L, -1, LUAWCHAR)) {
-					wchar = lua_towchar(L, -1);
-					if (wchar->str) {
-						sqlite3_bind_text16(stmt, ++cnt, wchar->str, (int)(wchar->len * sizeof(wchar_t)), SQLITE_STATIC);
-						break;
-					}
-				}
-				else if (luaL_testudata(L, -1, STREAM)) {
-					sqlite3_bind_null(stmt, ++cnt);
-					break;
-				}
-
 				sqlite3_bind_null(stmt, ++cnt);
 				break;
 			}
@@ -249,7 +219,7 @@ int querysqlite(lua_State* L, bool isScalar) {
 					lua_pushnumber(L, sqlite3_column_double(stmt, 0));
 					break;
 				case SQLITE_BLOB:
-					lua_pushluastream(L, (const BYTE*)sqlite3_column_blob(stmt, 0), sqlite3_column_bytes(stmt, 0));
+					lua_pushlstring(L, (const char*)sqlite3_column_blob(stmt, 0), sqlite3_column_bytes(stmt, 0));
 					break;
 				case SQLITE_NULL:
 					lua_pushnil(L);
@@ -277,7 +247,7 @@ int querysqlite(lua_State* L, bool isScalar) {
 						lua_pushnumber(L, sqlite3_column_double(stmt, i));
 						break;
 					case SQLITE_BLOB:
-						lua_pushluastream(L, (const BYTE*)sqlite3_column_blob(stmt, i), sqlite3_column_bytes(stmt, i));
+						lua_pushlstring(L, (const char*)sqlite3_column_blob(stmt, i), sqlite3_column_bytes(stmt, i));
 						break;
 					case SQLITE_NULL:
 						lua_pushnil(L);
@@ -337,7 +307,7 @@ void lua_pushsqlite3value(lua_State* L, sqlite3_value* value) {
 		lua_pushnumber(L, sqlite3_value_double(value));
 		break;
 	case SQLITE_BLOB:
-		lua_pushluastream(L, (const BYTE*)sqlite3_value_blob(value), sqlite3_value_bytes(value));
+		lua_pushlstring(L, (const char*)sqlite3_value_blob(value), sqlite3_value_bytes(value));
 		break;
 	case SQLITE_TEXT:
 		lua_pushlstring(L, (const char*)sqlite3_value_text(value), sqlite3_value_bytes(value));
@@ -406,24 +376,6 @@ void lua_tosqlite3value(lua_State* L, int idx, sqlite3_context* context) {
 		lua_pop(L, 1);
 		break;
 	case LUA_TUSERDATA:
-
-		if (lua_isstream(L, idx)) {
-			sqlite3_result_null(context);
-			break;
-		}
-		else if (lua_iswchar(L, idx)) {
-			lua_pushvalue(L, idx);
-			ToUtf8(L);
-			str = lua_tolstring(L, -1, &len);
-			if (str) {
-				sqlite3_result_text64(context, str, len, SQLITE_TRANSIENT, SQLITE_UTF8);
-			}
-			else {
-				sqlite3_result_null(context);
-			}
-			lua_pop(L, 2);
-			break;
-		}
 		// Intentionally fallthrough here.
 	default:
 		str = luaL_tolstring(L, idx, &len);

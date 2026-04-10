@@ -7,7 +7,8 @@
 #include "Bencode.h"
 #include "stream.h"
 #ifdef _WIN32
-#include "networking.h"
+#include <WinSock2.h>
+#include <ws2tcpip.h>
 #include <objbase.h>
 #include <io.h>
 #include <windowsx.h>
