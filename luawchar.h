@@ -1,6 +1,6 @@
-#pragma once
+﻿#pragma once
 #include "lua_main_incl.h"
-#include <Windows.h>
+#include "platform.h"
 static const char* LUAWCHAR = "WCHAR";
 
 typedef struct LuaWChar {
@@ -24,7 +24,6 @@ int FromUtf8(lua_State* L);
 int SetLocale(lua_State* L);
 int FromAnsi(lua_State* L);
 int ToAnsi(lua_State* L);
-int ToWide(lua_State* L);
 int FromSubstring(lua_State* L);
 int FromToLower(lua_State* L);
 int FromToUpper(lua_State* L);
@@ -37,3 +36,25 @@ int wchar_eq(lua_State* L);
 int wchar_concat(lua_State* L);
 int wchar_gc(lua_State* L);
 int wchar_tostring(lua_State* L);
+
+// ── Platform-abstraction helpers for char16_t ↔ wchar_t ─────────────────────
+// On Windows (sizeof(wchar_t) == 2 / UTF-16): zero-cost memcpy, no conversion.
+// On Linux  (sizeof(wchar_t) == 4 / UTF-32): real UTF-16↔UTF-32 conversion.
+// Returned pointers must be freed with gff_free.
+
+// Allocates a char16_t* copy of src (len wchar_t code units, excl. null terminator).
+// Sets *outChar16Len to the number of char16_t code units written.
+// Returns NULL on OOM.
+char16_t* wchar_alloc_as_char16(const wchar_t* src, size_t len, size_t* outChar16Len);
+
+// Allocates a wchar_t* from char16_t stream data (charCount code units, excl. null terminator).
+// Sets *outWcharLen to the number of wchar_t code units written.
+// Returns NULL on OOM.
+wchar_t* char16_alloc_as_wchar(const char16_t* src, size_t charCount, size_t* outWcharLen);
+
+// ── Unified path helper ───────────────────────────────────────────────────────
+// Returns the Lua argument at idx as a UTF-8 C string stored in a static 4 KiB
+// buffer.  Accepts either a plain Lua string (passed through as-is) or a LuaWChar
+// userdata (converted to UTF-8 with WideCharToMultiByte / iconv).
+// Not re-entrant — caller must consume the value before the next call.
+const char* lua_topathutf8(lua_State* L, int idx);

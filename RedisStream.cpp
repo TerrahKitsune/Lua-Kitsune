@@ -1,28 +1,22 @@
 ﻿#include "RedisStream.h"
 #include "RedisKey.h"
 
-static int JsonRef = LUA_NOREF;
-
 int RedisPushStreamInternal(lua_State* L, int redisIdx, const char* key, size_t keylength) {
 
 	luaL_checkudata(L, redisIdx, REDIS);
-	lua_pushvalue(L, redisIdx);
-	int ref = luaL_ref(L, LUA_REGISTRYINDEX);
+	redisIdx = lua_absindex(L, redisIdx);
 
 	LuaRedisStream* redisStream = (LuaRedisStream*)lua_newuserdata(L, sizeof(LuaRedisStream));
-	if (redisStream == NULL) {
-		luaL_error(L, "Unable to push redisstream");
-		return NULL;
-	}
 	luaL_getmetatable(L, REDISSTREAM);
 	lua_setmetatable(L, -2);
 	memset(redisStream, 0, sizeof(LuaRedisStream));
-	redisStream->key.redis_ref = ref;
+
+	lua_pushvalue(L, redisIdx);
+	redisStream->key.redis_ref = luaL_ref(L, LUA_REGISTRYINDEX);
 
 	redisStream->key.key = (char*)gff_malloc(keylength + 1);
 	if (!redisStream->key.key) {
 		luaL_error(L, "Out of memory");
-		return 0;
 	}
 
 	redisStream->key.key[keylength] = '\0';
@@ -60,7 +54,7 @@ int lua_pairs(lua_State* L) {
 		lua_getglobal(L, "pairs");
 		lua_pushvalue(L, -2);
 
-		if (lua_pcall(L, 1, 3, NULL)) {
+		if (lua_pcall_nohook(L, 1, 3, NULL)) {
 			lua_error(L);
 			return 0;
 		}
@@ -70,7 +64,7 @@ int lua_pairs(lua_State* L) {
 		lua_rotate(L, -3, -1);
 		lua_rotate(L, -2, -1);
 
-		if (lua_pcall(L, 2, 2, NULL)) {
+		if (lua_pcall_nohook(L, 2, 2, NULL)) {
 			lua_error(L);
 			return 0;
 		}
@@ -85,7 +79,7 @@ int lua_pairs(lua_State* L) {
 	lua_pushvalue(L, -4);
 	lua_pushvalue(L, -3);
 
-	if (lua_pcall(L, 2, 2, NULL)) {
+	if (lua_pcall_nohook(L, 2, 2, NULL)) {
 		lua_error(L);
 		return 0;
 	}
@@ -207,11 +201,11 @@ int redisstream_add(lua_State* L) {
 	lua_pushnil(L);
 	while (lua_pairs(L)) {
 
+		lua_checkstack(L, lua_gettop(L) + 5);
 		InternalPushValue(L, -1);
 		lua_remove(L, -2);
 		lua_rotate(L, -4, 1);
 		lua_rotate(L, -4, 1);
-		lua_checkstack(L, lua_gettop(L) + 5);
 		lua_pushvalue(L, -4);
 	}
 

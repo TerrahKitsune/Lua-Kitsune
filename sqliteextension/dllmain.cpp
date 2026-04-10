@@ -1,11 +1,10 @@
-#include "../networking.h"
+﻿#include "../networking.h"
 #include <Windows.h>
 #include "objbase.h"
 #include "luasqlite.h"
 #include "dlllua.h"
 #include "../stream.h"
 #include "../luawchar.h"
-#include "../HttpMain.h"
 SQLITE_EXTENSION_INIT1
 int JsonObjectRef = LUA_NOREF;
 int StateRef = LUA_NOREF;
@@ -86,7 +85,6 @@ int querysqlite(lua_State* L, bool isScalar) {
 	const char* data;
 	const char* name;
 	LuaWChar* wchar;
-	LuaStream* stream;
 
 	int err = sqlite3_prepare_v2(db, query, -1, &stmt, 0);
 	if (err) {
@@ -145,11 +143,8 @@ int querysqlite(lua_State* L, bool isScalar) {
 					}
 				}
 				else if (luaL_testudata(L, -1, STREAM)) {
-					stream = lua_toluastream(L, -1);
-					if (stream->data) {
-						sqlite3_bind_blob64(stmt, ++cnt, stream->data, stream->len, SQLITE_STATIC);
-						break;
-					}
+					sqlite3_bind_null(stmt, ++cnt);
+					break;
 				}
 
 				sqlite3_bind_null(stmt, ++cnt);
@@ -214,11 +209,8 @@ int querysqlite(lua_State* L, bool isScalar) {
 					}
 				}
 				else if (luaL_testudata(L, -1, STREAM)) {
-					stream = lua_toluastream(L, -1);
-					if (stream->data) {
-						sqlite3_bind_blob64(stmt, ++cnt, stream->data, stream->len, SQLITE_STATIC);
-						break;
-					}
+					sqlite3_bind_null(stmt, ++cnt);
+					break;
 				}
 
 				sqlite3_bind_null(stmt, ++cnt);
@@ -416,13 +408,7 @@ void lua_tosqlite3value(lua_State* L, int idx, sqlite3_context* context) {
 	case LUA_TUSERDATA:
 
 		if (lua_isstream(L, idx)) {
-			LuaStream* stream = lua_toluastream(L, idx);
-			if (stream && stream->data) {
-				sqlite3_result_blob64(context, stream->data, stream->len, SQLITE_TRANSIENT);
-			}
-			else {
-				sqlite3_result_null(context);
-			}
+			sqlite3_result_null(context);
 			break;
 		}
 		else if (lua_iswchar(L, idx)) {
@@ -852,7 +838,6 @@ BOOL APIENTRY DllMain(HMODULE hModule,
 	case DLL_THREAD_DETACH:
 		break;
 	case DLL_PROCESS_DETACH:
-		GetHttpBuffer(0);
 		JsonObjectRef = LUA_NOREF;
 		StateRef = LUA_NOREF;
 		lua_close(GlobalState->L);

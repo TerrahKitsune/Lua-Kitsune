@@ -1,4 +1,5 @@
-#pragma once
+﻿#pragma once
+#include <stddef.h>
 
 void InitMemoryManager();
 size_t EndMemoryManager();

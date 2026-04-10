@@ -1,42 +1,43 @@
-#include "lua_json.h"
+﻿#include "luajson.h"
 #include "luajsonmain.h"
 
-static const struct luaL_Reg jsonfunctions[] = {
-
-	{ "DecodeFromFile",  lua_jsondecodefromfile },
-	{ "Decode",  lua_jsondecodestring },
-	{ "EncodeToFile",  lua_jsonencodetabletofile },
-	{ "Encode",  lua_jsonencodetabletostring },
-	{ "EncodeToFunction",  lua_jsonencodefunction },
-	{ "DecodeFromFunction",  lua_jsondecodefunction },
-	{ "Iterator",  lua_jsoniterator },
-	{ "Create",  lua_jsoncreate },
-	{ "SetNullValue",  lua_jsonsetnullvalue },
-	{ "Dispose",  json_gc },
+static const struct luaL_Reg json_functions[] = {
+	{ "New",              lua_json_new               },  // Json.New([pretty])
+	{ "Create",           lua_json_new               },  // backward-compat alias
+	{ "Decode",           lua_json_decode            },  // json:Decode(str | fn)
+	{ "Encode",           lua_json_encode            },  // json:Encode(value)
+	{ "EncodeIntoStream", lua_json_encode_into_stream },  // json:EncodeIntoStream(stream, value)
+	{ "DecodeIntoStream", lua_json_decode_into_stream },  // json:DecodeIntoStream(stream)
+	{ "Dispose",          lua_json_gc                },  // json:Dispose()
 	{ NULL, NULL }
 };
 
-static const luaL_Reg jsonmeta[] = {
-	{ "__gc",  json_gc },
-	{ "__tostring",  json_tostring },
+static const struct luaL_Reg json_meta[] = {
+	{ "__gc",       lua_json_gc       },
+	{ "__tostring", lua_json_tostring },
 	{ NULL, NULL }
 };
 
-int luaopen_json(lua_State *L) {
+int luaopen_json(lua_State* L) {
+	luaL_newlibtable(L, json_functions);
+	luaL_setfuncs(L, json_functions, 0);
 
-	luaL_newlibtable(L, jsonfunctions);
-	luaL_setfuncs(L, jsonfunctions, 0);
+	// Json.Null — the unique lightuserdata sentinel for JSON null values.
+	// Lua code compares with:  if value == Json.Null then
+	lua_pushlightuserdata(L, lua_json_null());
+	lua_setfield(L, -2, "Null");
 
+	// Instance metatable: __gc, __tostring, and __index = module table so all
+	// json_functions are reachable as both Json.Xxx() and json:Xxx().
 	luaL_newmetatable(L, LUAJSON);
-	luaL_setfuncs(L, jsonmeta, 0);
-
+	luaL_setfuncs(L, json_meta, 0);
 	lua_pushliteral(L, "__index");
-	lua_pushvalue(L, -3);
+	lua_pushvalue(L, -3);   // module table
 	lua_rawset(L, -3);
 	lua_pushliteral(L, "__metatable");
-	lua_pushvalue(L, -3);
+	lua_pushvalue(L, -3);   // module table
 	lua_rawset(L, -3);
 
-	lua_pop(L, 1);
-	return 1;
+	lua_pop(L, 1);   // pop metatable
+	return 1;        // return module table
 }

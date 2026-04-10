@@ -4,23 +4,19 @@
 int RedisPushStringInternal(lua_State* L, int redisIdx, const char* key, size_t keylength) {
 
 	luaL_checkudata(L, redisIdx, REDIS);
-	lua_pushvalue(L, redisIdx);
-	int ref = luaL_ref(L, LUA_REGISTRYINDEX);
+	redisIdx = lua_absindex(L, redisIdx);
 
 	LuaRedisString* redisString = (LuaRedisString*)lua_newuserdata(L, sizeof(LuaRedisString));
-	if (redisString == NULL) {
-		luaL_error(L, "Unable to push redisstring");
-		return NULL;
-	}
 	luaL_getmetatable(L, REDISSTRING);
 	lua_setmetatable(L, -2);
 	memset(redisString, 0, sizeof(LuaRedisString));
-	redisString->key.redis_ref = ref;
+
+	lua_pushvalue(L, redisIdx);
+	redisString->key.redis_ref = luaL_ref(L, LUA_REGISTRYINDEX);
 
 	redisString->key.key = (char*)gff_malloc(keylength + sizeof(char));
 	if (!redisString->key.key) {
 		luaL_error(L, "Out of memory");
-		return NULL;
 	}
 	redisString->key.key[keylength] = '\0';
 	memcpy(redisString->key.key, key, keylength);

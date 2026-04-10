@@ -1,36 +1,36 @@
 ﻿#include "MySQLMain.h"
 #include "LuaMySQL.h"
 
-static const struct luaL_Reg mysqlfunctions[] = {
-
-	{ "IsBusy", MySqlIsBusy },
-	{ "Fetch", MySqlFetch },
-	{ "GetRow", MySqlGetRow },
-	{ "Finish", MySqlFinish },
+static const luaL_Reg connfunctions[] = {
+	{ "Connect",     MySqlConnect     },
+	{ "IsBusy",      MySqlIsBusy      },
 	{ "EscapeValue", MySqlEscapeValue },
-	{ "Query", MySqlQuery },
-	{ "Connect", MySqlConnect },
-	{ "Close", luamysql_gc },
+	{ "Query",       MySqlQuery       },
+	{ "NonQuery",    MySqlNonQuery    },
+	{ "Scalar",      MySqlScalar      },
+	{ "QueryAll",    MySqlQueryAll    },
+	{ "Close",       luamysql_gc      },
 	{ NULL, NULL }
 };
 
-static const luaL_Reg mysqlmeta[] = {
-	{ "__gc", luamysql_gc },
+static const luaL_Reg connmeta[] = {
+	{ "__gc",       luamysql_gc       },
 	{ "__tostring", luamysql_tostring },
 	{ NULL, NULL }
 };
 
 int luaopen_mysql(lua_State* L) {
 
-	luaL_newlibtable(L, mysqlfunctions);
-	luaL_setfuncs(L, mysqlfunctions, 0);
+	luaL_newlibtable(L, connfunctions);
+	luaL_setfuncs(L, connfunctions, 0);
 
 	luaL_newmetatable(L, LUAMYSQL);
-	luaL_setfuncs(L, mysqlmeta, 0);
+	luaL_setfuncs(L, connmeta, 0);
 
 	lua_pushliteral(L, "__index");
 	lua_pushvalue(L, -3);
 	lua_rawset(L, -3);
+
 	lua_pushliteral(L, "__metatable");
 	lua_pushvalue(L, -3);
 	lua_rawset(L, -3);

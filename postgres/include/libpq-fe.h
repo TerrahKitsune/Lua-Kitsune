@@ -86,6 +86,38 @@ extern char*          PQescapeIdentifier(PGconn* conn, const char* str, size_t l
 extern size_t         PQescapeStringConn(PGconn* conn, char* to, const char* from, size_t length, int* error);
 extern void           PQfreemem(void* ptr);
 
+// ── Nonblocking connect ───────────────────────────────────────────────────────
+typedef enum {
+	PGRES_POLLING_FAILED = 0,
+	PGRES_POLLING_READING,
+	PGRES_POLLING_WRITING,
+	PGRES_POLLING_OK,
+	PGRES_POLLING_ACTIVE
+} PostgresPollingStatusType;
+
+extern PGconn*                   PQconnectStart(const char* conninfo);
+extern PostgresPollingStatusType PQconnectPoll(PGconn* conn);
+
+// ── Nonblocking query dispatch ────────────────────────────────────────────────
+extern int  PQsendQuery(PGconn* conn, const char* query);
+extern int  PQsendQueryParams(PGconn* conn, const char* command,
+				int nParams, const Oid* paramTypes,
+				const char* const* paramValues,
+				const int* paramLengths,
+				const int* paramFormats, int resultFormat);
+
+// ── Flush / poll / fetch ──────────────────────────────────────────────────────
+extern int        PQflush(PGconn* conn);
+extern int        PQconsumeInput(PGconn* conn);
+extern int        PQisBusy(PGconn* conn);
+extern PGresult*  PQgetResult(PGconn* conn);
+
+// ── Socket fd (for set_fd_nonblocking) ───────────────────────────────────────
+extern int   PQsocket(const PGconn* conn);
+
+// ── Affected-row count (PGRES_COMMAND_OK path) ────────────────────────────────
+extern char* PQcmdTuples(PGresult* res);
+
 #ifdef __cplusplus
 }
 #endif

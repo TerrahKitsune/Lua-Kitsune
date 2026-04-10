@@ -19,6 +19,9 @@ tests/config.lua
 # Mono auto generated files
 mono_crash.*
 
+# Build log scratch files
+build_*.txt
+
 # Build results
 [Dd]ebug/
 [Dd]ebugPublic/
@@ -354,3 +357,18 @@ MigrationBackup/
 # Ionide (cross platform F# VS Code tools) working folder
 .ionide/
 imgui.ini
+imgui_log.txt
+
+# Test output files generated at runtime — not source
+pg_out.txt
+pg_test_err.txt
+pg_test_out.txt
+testout.txt
+
+# Linux CMake build directories — regenerated locally, nothing to track
+build-*/
+
+build/
+
+# vcpkg installed packages — restored locally by vcpkg, not committed
+vcpkg_installed/

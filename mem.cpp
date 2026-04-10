@@ -1,10 +1,11 @@
-#include "mem.h"
+﻿#include "mem.h"
 #include <stdlib.h>
 #include "MemoryManager.h"
 #include "string.h"
 #include <assert.h>
 #include <math.h>
-#include <windows.h>
+#include <atomic>
+#include "platform.h"
 
 #ifdef USEMEMORYMANAGER
 
@@ -62,70 +63,139 @@ void gff_free(void * ptr) {
 	return MemoryStateDealloc(memState, ptr);
 }
 
-#elseifdef USEHEAPALLOC
+#elif defined(USEHEAPALLOC)
+
+#ifdef _DEBUG
+static std::atomic<size_t> g_live_allocs{0};
+#endif
 
 size_t EndMemoryManager() {
+#ifdef _DEBUG
+	return g_live_allocs.load();
+#else
 	return 0;
+#endif
 }
 
 void InitMemoryManager() {
+#ifdef _DEBUG
+	g_live_allocs.store(0);
+#endif
 }
 
 void * gff_malloc(size_t size) {
-	return HeapAlloc(GetProcessHeap(), 0, size);
+	void* p = HeapAlloc(GetProcessHeap(), 0, size);
+#ifdef _DEBUG
+	if (p)
+		g_live_allocs++;
+#endif
+	return p;
 }
 
 void * gff_calloc(size_t num, size_t size) {
-	return HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, num*size);
+	void* p = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, num * size);
+#ifdef _DEBUG
+	if (p)
+		g_live_allocs++;
+#endif
+	return p;
 }
 
 void * gff_realloc(void * ptr, size_t size) {
 
 	if (size == 0) {
-
 		if (ptr) {
 			assert(HeapFree(GetProcessHeap(), 0, ptr));
+#ifdef _DEBUG
+			g_live_allocs--;
+#endif
 		}
-
 		return NULL;
 	}
 	else if (!ptr) {
-		return HeapAlloc(GetProcessHeap(), 0, size);
+		void* p = HeapAlloc(GetProcessHeap(), 0, size);
+#ifdef _DEBUG
+		if (p)
+			g_live_allocs++;
+#endif
+		return p;
 	}
 
 	return HeapReAlloc(GetProcessHeap(), 0, ptr, size);
 }
 
 void gff_free(void * ptr) {
-	assert(HeapFree(GetProcessHeap(), 0, ptr));
+	if (ptr) {
+		assert(HeapFree(GetProcessHeap(), 0, ptr));
+#ifdef _DEBUG
+		g_live_allocs--;
+#endif
+	}
 }
 
 #else
 
+#ifdef _DEBUG
+static std::atomic<size_t> g_live_allocs{0};
+#endif
+
 size_t EndMemoryManager() {
+#ifdef _DEBUG
+	return g_live_allocs.load();
+#else
 	return 0;
+#endif
 }
 
 void InitMemoryManager() {
+#ifdef _DEBUG
+	g_live_allocs.store(0);
+#endif
 }
 
 void * gff_malloc(size_t size) {
-
-	return malloc(size);
+	void* p = malloc(size);
+#ifdef _DEBUG
+	if (p)
+		g_live_allocs++;
+#endif
+	return p;
 }
 
 void * gff_calloc(size_t num, size_t size) {
-
-	return calloc(num, size);
+	void* p = calloc(num, size);
+#ifdef _DEBUG
+	if (p)
+		g_live_allocs++;
+#endif
+	return p;
 }
 
 void * gff_realloc(void * ptr, size_t size) {
-
-	return realloc(ptr, size);
+	if (size == 0) {
+		if (ptr) {
+			free(ptr);
+#ifdef _DEBUG
+			g_live_allocs--;
+#endif
+		}
+		return NULL;
+	}
+	void* p = realloc(ptr, size);
+#ifdef _DEBUG
+	if (!ptr && p)
+		g_live_allocs++;  // NULL ptr: behaves like malloc
+#endif
+	return p;
 }
 
 void gff_free(void * ptr) {
-	free(ptr);
+	if (ptr) {
+		free(ptr);
+#ifdef _DEBUG
+		g_live_allocs--;
+#endif
+	}
 }
 
 #endif

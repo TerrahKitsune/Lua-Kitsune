@@ -1,24 +1,26 @@
-#include "ProcessMain.h"
+﻿#include "ProcessMain.h"
 #include "LuaProcess.h"
 
 static const struct luaL_Reg processfunctions[] = {
 	{ "All", GetAllProcesses },
+#ifdef _WIN32
+	{ "Affinity", GetSetAffinity },
+	{ "Priority", GetSetPriority },
+	{ "Threads", GetThreads },
+	{ "GetCPU", GetCPU },
+#endif
 	{ "Open", LuaOpenProcess },
 	{ "Start", StartNewProcess },
 	{ "Stop", StopProcess },
 	{ "GetID", GetProcId },
 	{ "GetName", GetProcName },
-	{ "Affinity", GetSetAffinity },
-	{ "GetExitCode", GetExitCode }, 
-	{ "Priority", GetSetPriority },
-	{ "Threads", GetThreads },
-	{ "GetCPU", GetCPU },
+	{ "GetExitCode", GetExitCode },
 	{ "GetRAM", GetMemory },
 	{ "ReadFromPipe", ReadFromPipe },
 	{ "WriteToPipe", WriteToPipe },
 	{ "ReadErrorFromPipe", ErrorFromPipe },
 	{ NULL, NULL }
-}; 
+};
 
 static const luaL_Reg processmeta[] = {
 	{ "__gc", process_gc },

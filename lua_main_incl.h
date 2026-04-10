@@ -1,12 +1,43 @@
-#pragma once
+﻿#pragma once
 #include "xp_lua_incl.h"
 #include "mem.h"
+#ifndef _WIN32
+#include <stdint.h>
+#endif
 
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 
-static void DumpStack(lua_State *L, bool untilnil = false){
+// Drop-in replacements for lua_call / lua_pcall that suppress the scheduler
+// Ticker hook for the duration of the call.  Both lua_call and lua_pcall use
+// luaD_callnoyield internally (non-yieldable boundary), so if the Ticker fires
+// inside the called function and attempts lua_yield it raises "attempt to yield
+// across a C-call boundary".  Suppressing the hook prevents that error whenever
+// a user-supplied Lua callback is invoked from within a C processing loop.
+// The hook is always restored before returning or re-raising, so a Lua-level
+// pcall/xpcall catching the error cannot leave the coroutine hookless.
+static inline void lua_call_nohook(lua_State* L, int nargs, int nresults) {
+	lua_Hook savedHook  = lua_gethook(L);
+	int      savedMask  = lua_gethookmask(L);
+	int      savedCount = lua_gethookcount(L);
+	lua_sethook(L, NULL, 0, 0);
+	int rc = lua_pcall(L, nargs, nresults, 0);
+	lua_sethook(L, savedHook, savedMask, savedCount);
+	if (rc != LUA_OK)
+		lua_error(L);
+}
 
+static inline int lua_pcall_nohook(lua_State* L, int nargs, int nresults, int msgh) {
+	lua_Hook savedHook  = lua_gethook(L);
+	int      savedMask  = lua_gethookmask(L);
+	int      savedCount = lua_gethookcount(L);
+	lua_sethook(L, NULL, 0, 0);
+	int rc = lua_pcall(L, nargs, nresults, msgh);
+	lua_sethook(L, savedHook, savedMask, savedCount);
+	return rc;
+}
+
+static void DumpStack(lua_State* L, bool untilnil = false) {
 	size_t len;
 	const char* str;
 	FILE * file = fopen("STACK.txt", "w");

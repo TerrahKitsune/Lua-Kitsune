@@ -1,4 +1,5 @@
-#pragma once
+﻿#pragma once
+#include <stddef.h>
 
 typedef void * (*memoryBlockReAllocatorFunction) (void *ptr, size_t requestedSize, size_t* allocatedSize);
 typedef void * (*memoryBlockAllocatorFunction) (size_t requestedSize, size_t* allocatedSize);

@@ -1,14 +1,13 @@
-#pragma once
+﻿#pragma once
+
+// Required when linking the static build on Windows; harmless on Linux.
 #define LIBARCHIVE_STATIC
 
-#pragma comment(lib, "libarchive/archive_static.lib")
-#pragma comment(lib, "libarchive/zlibstatic.lib")
-
 #include "lua_main_incl.h"
-#include <Windows.h>
+#include "platform.h"
 static const char* ARCHIVE = "ARCHIVE";
-#include "libarchive/archive.h"
-#include "libarchive/archive_entry.h"
+#include <archive.h>
+#include <archive_entry.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -35,6 +34,7 @@ int OpenReadArchive(lua_State* L);
 int ReadArchiveEntries(lua_State* L);
 int SetReadEntry(lua_State* L);
 int ReadEntry(lua_State* L);
+int ReadAllEntry(lua_State* L);
 
 int archive_gc(lua_State* L);
 int archive_tostring(lua_State* L);

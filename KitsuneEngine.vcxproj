@@ -1,0 +1,340 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{455B7EC7-9F27-4507-BE42-3770EAE69D38}</ProjectGuid>
+    <RootNamespace>KitsuneEngine</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <ProjectName>KitsuneEngine</ProjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <SDLCheck>true</SDLCheck>
+      <AdditionalIncludeDirectories>$(SolutionDir)vcpkg_installed\x64-windows-static-md\include;$(SolutionDir)mysql\include;$(SolutionDir)postgres\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)zip;$(SolutionDir)hiredis;$(SolutionDir)curl\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <DisableSpecificWarnings>4703;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+      <PreprocessorDefinitions>KITSUNE_HTTP;KITSUNE_KAFKA;KITSUNE_REDIS;KITSUNE_ENGINE_EXPORTS;KITSUNE_ALL;STANDALONEGFF;_CRT_SECURE_NO_WARNINGS;ImTextureID=ImU64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+    </ClCompile>
+    <Link>
+      <LinkIncremental>false</LinkIncremental>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>archive.lib;bz2d.lib;lzma.lib;zlibd.lib;zstd.lib;Cabinet.lib;$(SolutionDir)curl\lib\libcurl.lib;$(SolutionDir)hiredis\hiredis.lib;$(SolutionDir)hiredis\hiredis_ssl.lib;$(SolutionDir)OpenSSL\libssl.lib;$(SolutionDir)OpenSSL\libcrypto.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(SolutionDir)vcpkg_installed\x64-windows-static-md\debug\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <LargeAddressAware>true</LargeAddressAware>
+      <IgnoreSpecificDefaultLibraries>msvcrt.lib;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+    </Link>
+    <PostBuildEvent>
+      <Command>xcopy /Y "$(OutDir)$(TargetName).dll" "$(SolutionDir)KitsuneNet.Tests\bin\$(Configuration)\net10.0\" &amp;&amp; xcopy /Y "$(OutDir)$(TargetName).pdb" "$(SolutionDir)KitsuneNet.Tests\bin\$(Configuration)\net10.0\"</Command>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <AdditionalIncludeDirectories>$(SolutionDir)vcpkg_installed\x64-windows-static-md\include;$(SolutionDir)mysql\include;$(SolutionDir)postgres\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)zip;$(SolutionDir)hiredis;$(SolutionDir)curl\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <DisableSpecificWarnings>4703;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+      <PreprocessorDefinitions>KITSUNE_HTTP;KITSUNE_KAFKA;KITSUNE_REDIS;KITSUNE_ENGINE_EXPORTS;KITSUNE_ALL;STANDALONEGFF;_CRT_SECURE_NO_WARNINGS;ImTextureID=ImU64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+    </ClCompile>
+    <Link>
+      <LinkIncremental>false</LinkIncremental>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <AdditionalDependencies>archive.lib;bz2.lib;lzma.lib;zlib.lib;zstd.lib;Cabinet.lib;$(SolutionDir)curl\lib\libcurl.lib;$(SolutionDir)hiredis\hiredis.lib;$(SolutionDir)hiredis\hiredis_ssl.lib;$(SolutionDir)OpenSSL\libssl.lib;$(SolutionDir)OpenSSL\libcrypto.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(SolutionDir)vcpkg_installed\x64-windows-static-md\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <LargeAddressAware>true</LargeAddressAware>
+    </Link>
+    <PostBuildEvent>
+      <Command>xcopy /Y "$(OutDir)$(TargetName).dll" "$(SolutionDir)KitsuneNet.Tests\bin\$(Configuration)\net10.0\" &amp;&amp; xcopy /Y "$(OutDir)$(TargetName).pdb" "$(SolutionDir)KitsuneNet.Tests\bin\$(Configuration)\net10.0\"</Command>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="aes.c" />
+    <ClCompile Include="Bencode.cpp" />
+    <ClCompile Include="HttpCurl.cpp" />
+    <ClCompile Include="HttpCurlMain.cpp" />
+    <ClCompile Include="KitsuneEngine.cpp" />
+    <ClCompile Include="LuaArchive.cpp" />
+    <ClCompile Include="LuaArchiveMain.cpp" />
+    <ClCompile Include="base64.cpp" />
+    <ClCompile Include="Client.cpp" />
+    <ClCompile Include="luajson.cpp" />
+    <ClCompile Include="luajsonmain.cpp" />
+    <ClCompile Include="kafkahelpers.cpp" />
+    <ClCompile Include="luaaes.cpp" />
+    <ClCompile Include="LuaAesMain.cpp" />
+    <ClCompile Include="luacsv.cpp" />
+    <ClCompile Include="LuaCsvMain.cpp" />
+    <ClCompile Include="LuaEngineBuiltins.cpp" />
+    <ClCompile Include="luakafka.cpp" />
+    <ClCompile Include="luakafkaconsumer.cpp" />
+    <ClCompile Include="luakafkamain.cpp" />
+    <ClCompile Include="luakafkaproducer.cpp" />
+    <ClCompile Include="LuaMutex.cpp" />
+    <ClCompile Include="LuaMutexMain.cpp" />
+    <ClCompile Include="LuaPostgres.cpp" />
+    <ClCompile Include="LuaProcess.cpp" />
+    <ClCompile Include="LuaSHA1.cpp" />
+    <ClCompile Include="LuaSha256.cpp" />
+    <ClCompile Include="luawchar.cpp" />
+    <ClCompile Include="Lua\lapi.c" />
+    <ClCompile Include="Lua\lauxlib.c" />
+    <ClCompile Include="Lua\lbaselib.c" />
+    <ClCompile Include="Lua\lcode.c" />
+    <ClCompile Include="Lua\lcorolib.c" />
+    <ClCompile Include="Lua\lctype.c" />
+    <ClCompile Include="Lua\ldblib.c" />
+    <ClCompile Include="Lua\ldebug.c" />
+    <ClCompile Include="Lua\ldo.c" />
+    <ClCompile Include="Lua\ldump.c" />
+    <ClCompile Include="Lua\lfunc.c" />
+    <ClCompile Include="Lua\lgc.c" />
+    <ClCompile Include="Lua\linit.c" />
+    <ClCompile Include="Lua\liolib.c" />
+    <ClCompile Include="Lua\llex.c" />
+    <ClCompile Include="Lua\lmathlib.c" />
+    <ClCompile Include="Lua\lmem.c" />
+    <ClCompile Include="Lua\loadlib.c" />
+    <ClCompile Include="Lua\lobject.c" />
+    <ClCompile Include="Lua\lopcodes.c" />
+    <ClCompile Include="Lua\loslib.c" />
+    <ClCompile Include="Lua\lparser.c" />
+    <ClCompile Include="Lua\lstate.c" />
+    <ClCompile Include="Lua\lstring.c" />
+    <ClCompile Include="Lua\lstrlib.c" />
+    <ClCompile Include="Lua\ltable.c" />
+    <ClCompile Include="Lua\ltablib.c" />
+    <ClCompile Include="Lua\ltm.c" />
+    <ClCompile Include="Lua\lundump.c" />
+    <ClCompile Include="Lua\lutf8lib.c" />
+    <ClCompile Include="Lua\lvm.c" />
+    <ClCompile Include="Lua\lzio.c" />
+    <ClCompile Include="lua_misc.cpp" />
+    <ClCompile Include="mem.cpp" />
+    <ClCompile Include="MemoryManager.cpp" />
+    <ClCompile Include="Redis.cpp" />
+    <ClCompile Include="RedisJson.cpp" />
+    <ClCompile Include="RedisKey.cpp" />
+    <ClCompile Include="RedisMain.cpp" />
+    <ClCompile Include="RedisPubSub.cpp" />
+    <ClCompile Include="RedisStream.cpp" />
+    <ClCompile Include="RedisString.cpp" />
+    <ClCompile Include="RedisValue.cpp" />
+    <ClCompile Include="sha1.c" />
+    <ClCompile Include="SHA1Main.cpp" />
+    <ClCompile Include="sha256.c" />
+    <ClCompile Include="Sha256Main.cpp" />
+    <ClCompile Include="stream.cpp" />
+    <ClCompile Include="miniz.c" />
+    <ClCompile Include="streamfile.cpp" />
+    <ClCompile Include="streammemory.cpp" />
+    <ClCompile Include="StreamMain.cpp" />
+    <ClCompile Include="streamshmemory.cpp" />
+    <ClCompile Include="wcharmain.cpp" />
+    <ClCompile Include="List.cpp" />
+    <ClCompile Include="LuaClient.cpp" />
+    <ClCompile Include="LuaClientMain.cpp" />
+    <ClCompile Include="LuaFileSystem.cpp" />
+    <ClCompile Include="LuaFileSystemMain.cpp" />
+    <ClCompile Include="LuaMD5.cpp" />
+    <ClCompile Include="LuaServer.cpp" />
+    <ClCompile Include="LuaServerMain.cpp" />
+    <ClCompile Include="LuaSQLite.cpp" />
+    <ClCompile Include="LuaSQLiteMain.cpp" />
+    <ClCompile Include="LuaMySQL.cpp" />
+    <ClCompile Include="md5.c" />
+    <ClCompile Include="MD5Main.cpp" />
+    <ClCompile Include="MySQLMain.cpp" />
+    <ClCompile Include="PostgresMain.cpp" />
+    <ClCompile Include="NetEvent.cpp" />
+    <ClCompile Include="networking.cpp" />
+    <ClCompile Include="ProcessMain.cpp" />
+    <ClCompile Include="Queue.cpp" />
+    <ClCompile Include="Server.cpp" />
+    <ClCompile Include="SQLite\sqlite3.c" />
+    <ClCompile Include="Timer.cpp" />
+    <ClCompile Include="TimerMain.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="aes.h" />
+    <ClInclude Include="aes.hpp" />
+    <ClInclude Include="Bencode.h" />
+    <ClInclude Include="hiredis\alloc.h" />
+    <ClInclude Include="hiredis\hiredis.h" />
+    <ClInclude Include="hiredis\hiredis_ssl.h" />
+    <ClInclude Include="hiredis\read.h" />
+    <ClInclude Include="hiredis\sds.h" />
+    <ClInclude Include="KitsuneEngine.h" />
+    <ClInclude Include="LuaArchive.h" />
+    <ClInclude Include="LuaArchiveMain.h" />
+    <ClInclude Include="base64.h" />
+    <ClInclude Include="Client.h" />
+    <ClInclude Include="HttpCurl.h" />
+    <ClInclude Include="HttpCurlMain.h" />
+    <ClInclude Include="luajson.h" />
+    <ClInclude Include="luajsonmain.h" />
+    <ClInclude Include="kafkahelpers.h" />
+    <ClInclude Include="luaaes.h" />
+    <ClInclude Include="LuaAesMain.h" />
+    <ClInclude Include="luacsv.h" />
+    <ClInclude Include="LuaCsvMain.h" />
+    <ClInclude Include="LuaEngineBuiltins.h" />
+    <ClInclude Include="luakafka.h" />
+    <ClInclude Include="luakafkaconsumer.h" />
+    <ClInclude Include="luakafkamain.h" />
+    <ClInclude Include="luakafkaproducer.h" />
+    <ClInclude Include="LuaMutex.h" />
+    <ClInclude Include="LuaMutexMain.h" />
+    <ClInclude Include="LuaProcess.h" />
+    <ClInclude Include="LuaSHA1.h" />
+    <ClInclude Include="LuaSha256.h" />
+    <ClInclude Include="luawchar.h" />
+    <ClInclude Include="Lua\lapi.h" />
+    <ClInclude Include="Lua\lauxlib.h" />
+    <ClInclude Include="Lua\lcode.h" />
+    <ClInclude Include="Lua\lctype.h" />
+    <ClInclude Include="Lua\ldebug.h" />
+    <ClInclude Include="Lua\ldo.h" />
+    <ClInclude Include="Lua\lfunc.h" />
+    <ClInclude Include="Lua\lgc.h" />
+    <ClInclude Include="Lua\ljumptab.h" />
+    <ClInclude Include="Lua\llex.h" />
+    <ClInclude Include="Lua\llimits.h" />
+    <ClInclude Include="Lua\lmem.h" />
+    <ClInclude Include="Lua\lobject.h" />
+    <ClInclude Include="Lua\lopcodes.h" />
+    <ClInclude Include="Lua\lopnames.h" />
+    <ClInclude Include="Lua\lparser.h" />
+    <ClInclude Include="Lua\lprefix.h" />
+    <ClInclude Include="Lua\lstate.h" />
+    <ClInclude Include="Lua\lstring.h" />
+    <ClInclude Include="Lua\ltable.h" />
+    <ClInclude Include="Lua\ltm.h" />
+    <ClInclude Include="Lua\lua.h" />
+    <ClInclude Include="Lua\lua.hpp" />
+    <ClInclude Include="Lua\luaconf.h" />
+    <ClInclude Include="Lua\lualib.h" />
+    <ClInclude Include="Lua\lundump.h" />
+    <ClInclude Include="Lua\lvm.h" />
+    <ClInclude Include="Lua\lzio.h" />
+    <ClInclude Include="lua_main_incl.h" />
+    <ClInclude Include="lua_misc.h" />
+    <ClInclude Include="mem.h" />
+    <ClInclude Include="MemoryManager.h" />
+    <ClInclude Include="platform.h" />
+    <ClInclude Include="postgres\include\libpq-fe.h" />
+    <ClInclude Include="Redis.h" />
+    <ClInclude Include="RedisJson.h" />
+    <ClInclude Include="RedisKey.h" />
+    <ClInclude Include="RedisMain.h" />
+    <ClInclude Include="RedisPubSub.h" />
+    <ClInclude Include="RedisStream.h" />
+    <ClInclude Include="RedisString.h" />
+    <ClInclude Include="RedisValue.h" />
+    <ClInclude Include="resource.h" />
+    <ClInclude Include="sha1.h" />
+    <ClInclude Include="SHA1Main.h" />
+    <ClInclude Include="sha256.h" />
+    <ClInclude Include="Sha256Main.h" />
+    <ClInclude Include="stream.h" />
+    <ClInclude Include="miniz.h" />
+    <ClInclude Include="streamfile.h" />
+    <ClInclude Include="StreamMain.h" />
+    <ClInclude Include="streammemory.h" />
+    <ClInclude Include="streamshmemory.h" />
+    <ClInclude Include="wcharmain.h" />
+    <ClInclude Include="List.h" />
+    <ClInclude Include="LuaClient.h" />
+    <ClInclude Include="LuaClientMain.h" />
+    <ClInclude Include="LuaFileSystem.h" />
+    <ClInclude Include="LuaFileSystemMain.h" />
+    <ClInclude Include="LuaMD5.h" />
+    <ClInclude Include="LuaServer.h" />
+    <ClInclude Include="LuaServerMain.h" />
+    <ClInclude Include="LuaSQLite.h" />
+    <ClInclude Include="LuaSQLiteMain.h" />
+    <ClInclude Include="LuaMySQL.h" />
+    <ClInclude Include="LuaPostgres.h" />
+    <ClInclude Include="md5.h" />
+    <ClInclude Include="MD5Main.h" />
+    <ClInclude Include="MySQLMain.h" />
+    <ClInclude Include="PostgresMain.h" />
+    <ClInclude Include="NetEvent.h" />
+    <ClInclude Include="networking.h" />
+    <ClInclude Include="ProcessMain.h" />
+    <ClInclude Include="Queue.h" />
+    <ClInclude Include="Server.h" />
+    <ClInclude Include="SQLite\sqlite3.h" />
+    <ClInclude Include="Timer.h" />
+    <ClInclude Include="TimerMain.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="build-linux-and-test.ps1" />
+    <None Include="build-release.ps1" />
+    <None Include="Http Client Implementation Plan.md" />
+    <None Include="ITERATOR_PLAN.md" />
+    <None Include="Kafka refactor plan.md" />
+    <None Include="Lua functions.md" />
+    <None Include="MySQL Implementation Plan.md" />
+    <None Include="Postgres Implementation Plan.md" />
+    <None Include="testEnvironments.json" />
+    <None Include="triplets\x64-windows-static-md.cmake" />
+    <None Include="vcpkg.json" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="CMakeLists.txt" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+    <Import Project="packages\librdkafka.redist.2.12.0\build\native\librdkafka.redist.targets" Condition="Exists('packages\librdkafka.redist.2.12.0\build\native\librdkafka.redist.targets')" />
+  </ImportGroup>
+  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
+    </PropertyGroup>
+    <Error Condition="!Exists('packages\librdkafka.redist.2.12.0\build\native\librdkafka.redist.targets')" Text="$([System.String]::Format('$(ErrorText)', 'packages\librdkafka.redist.2.12.0\build\native\librdkafka.redist.targets'))" />
+  </Target>
+</Project>

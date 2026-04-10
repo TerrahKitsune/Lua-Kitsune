@@ -1,0 +1,12 @@
+﻿{
+  "name": "kitsune",
+  "version-string": "1.0",
+  "builtin-baseline": "81e3c888ef717a026eb57bb2f3cb0dbd30246271",
+  "dependencies": [
+    {
+      "name": "libarchive",
+      "features": ["bzip2", "lzma", "zstd"],
+      "default-features": false
+    }
+  ]
+}
