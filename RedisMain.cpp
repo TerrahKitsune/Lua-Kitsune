@@ -1,9 +1,11 @@
-#include "Redis.h"
+﻿#include "Redis.h"
 #include "RedisMain.h"
 #include "RedisString.h"
 #include "RedisKey.h"
 #include "RedisValue.h"
 #include "RedisStream.h"
+#include "RedisJson.h"
+#include "RedisPubSub.h"
 
 static const struct luaL_Reg redisfunctions[] = {
 	{ "Command", RedisCommand },
@@ -13,8 +15,10 @@ static const struct luaL_Reg redisfunctions[] = {
 	{ "GetSortedSet", RedisGetSortedSet },
 	{ "GetStream", RedisGetStream },
 	{ "GetSet", RedisGetSet },
+	{ "GetJson", RedisGetJson },
 	{ "GetKey", RedisGetKey },
-	{ "Poll", RedisPoll },
+	{ "Subscribe", RedisSubscribe },
+	{ "PSubscribe", RedisPSubscribe },
 	{ "Open", RedisOpen },
 	{ NULL, NULL }
 };
@@ -54,6 +58,21 @@ int luaopen_redis(lua_State* L) {
 
 	internal_luaopen_redisstream(L);
 	lua_pop(L, 2);
+
+	internal_luaopen_redisjson(L);
+	lua_pop(L, 2);
+
+	// REDISPUBSUBSTATE
+	luaL_newmetatable(L, REDISPUBSUBSTATE);
+	lua_pushcfunction(L, PubSubStateGC);
+	lua_setfield(L, -2, "__gc");
+	lua_pop(L, 1);
+
+	// REDISPUBSUBCOROUTINE — coroutine thread metatable; only needs __gc
+	luaL_newmetatable(L, REDISPUBSUBCOROUTINE);
+	lua_pushcfunction(L, PubSubCoroutineGC);
+	lua_setfield(L, -2, "__gc");
+	lua_pop(L, 1);
 
 	return 1;
 }

@@ -1,27 +1,25 @@
-#include "PostgresMain.h"
+﻿#include "PostgresMain.h"
 #include "LuaPostgres.h"
 
-static const struct luaL_Reg postgresfunctions[] = {
-
-	{ "IsBusy", PostgresIsBusy },
-	{ "Fetch", PostgresFetch },
-	{ "GetRow", PostgresGetRow },
-	{ "Finish", PostgresFinish },
+static const luaL_Reg postgresfunctions[] = {
+	{ "Connect",     PostgresConnect     },
+	{ "IsBusy",      PostgresIsBusy      },
 	{ "EscapeValue", PostgresEscapeValue },
-	{ "Query", PostgresQuery },
-	{ "Connect", PostgresConnect },
-	{ "Close", luapostgres_gc },
+	{ "Query",       PostgresQuery       },
+	{ "NonQuery",    PostgresNonQuery    },
+	{ "Scalar",      PostgresScalar      },
+	{ "QueryAll",    PostgresQueryAll    },
+	{ "Close",       luapostgres_gc      },
 	{ NULL, NULL }
 };
 
 static const luaL_Reg postgresmeta[] = {
-	{ "__gc", luapostgres_gc },
+	{ "__gc",       luapostgres_gc       },
 	{ "__tostring", luapostgres_tostring },
 	{ NULL, NULL }
 };
 
 int luaopen_postgres(lua_State* L) {
-
 	luaL_newlibtable(L, postgresfunctions);
 	luaL_setfuncs(L, postgresfunctions, 0);
 
@@ -31,11 +29,11 @@ int luaopen_postgres(lua_State* L) {
 	lua_pushliteral(L, "__index");
 	lua_pushvalue(L, -3);
 	lua_rawset(L, -3);
+
 	lua_pushliteral(L, "__metatable");
 	lua_pushvalue(L, -3);
 	lua_rawset(L, -3);
 
 	lua_pop(L, 1);
-
 	return 1;
 }

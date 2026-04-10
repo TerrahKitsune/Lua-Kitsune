@@ -1,12 +1,13 @@
-#pragma once
+﻿#pragma once
 #include "lua_main_incl.h"
+#include <stdint.h>
 static const char * TIMER = "Timer";
 
 typedef struct Timer {
-	double PCFreq;
-	__int64 CounterStart;
-	__int64 CounterStop;
-	double StoredTime;
+	double  PCFreq;        // ns per ms = 1,000,000.0
+	int64_t CounterStart;  // steady_clock ns at Start(), 0 when not started
+	int64_t CounterStop;   // steady_clock ns at Stop(),  0 when still running
+	double  StoredTime;    // accumulated ms from previous Start/Stop cycles
 } Timer;
 
 Timer * lua_totimer(lua_State *L, int index);

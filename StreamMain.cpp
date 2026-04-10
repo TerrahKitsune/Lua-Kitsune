@@ -1,15 +1,13 @@
-#include "stream.h"
+﻿#include "stream.h"
 #include "StreamMain.h"
 
 static const struct luaL_Reg streamfunctions[] = {
 	{ "WriteUtf8",  WriteUtf8 },
 	{ "Close",  luastream_gc },
 	{ "Create",  NewStream },
-	{ "FromString", NewStreamFromString },
-	{ "Open",  OpenFileToStream },
-	{ "WriteToFile",  WriteToFile },
-	{ "ReadFromFile",  ReadFromFile },
-	{ "Save",  DumpToFile },
+	{ "Open",  OpenFile },
+	{ "OpenSharedMemory",  OpenSharedMemory },
+	{ "ToSharedMemory",  ToSharedMemory },
 	{ "len",  StreamLen },
 	{ "pos",  StreamPos },
 	{ "WriteByte",  WriteStreamByte },
@@ -17,9 +15,7 @@ static const struct luaL_Reg streamfunctions[] = {
 	{ "SetByte",  SetStreamByte },
 	{ "PeekByte",  PeekStreamByte },
 	{ "GetInfo",  GetStreamInfo },
-	{ "Shrink",  StreamShrink },
 	{ "Seek",  StreamSetPos },
-	{ "Buffer",  StreamBuffer },
 	{ "Write",  WriteLuaValue },
 	{ "Read",  ReadLuaStream },
 	{ "WriteFloat",  WriteFloat },
@@ -38,15 +34,11 @@ static const struct luaL_Reg streamfunctions[] = {
 	{ "ReadLong",  ReadLong },
 	{ "WriteUnsignedLong",  WriteUnsignedLong },
 	{ "ReadUnsignedLong", ReadUnsignedLong },
+	{ "ReadWchar",  ReadWchar },
 	{ "ReadUtf8",  ReadUtf8 },
-	{ "SetLength", SetLength },
-	{ "ReadUntil", ReadUntilLuaStream },
-	{ "IndexOf", StreamIndexOf },
-	{ "Compress", Compress },
-	{ "Decompress", Decompress },
-	{ "CreateSharedMemoryStream", NewSharedMemoryStream },
-	{ "OpenSharedMemoryStream", OpenSharedMemoryStream },
-	{ "GetSharedMemoryStreamInfo", GetSharedMemoryStreamInfo },
+	{ "Compress",  CompressStream },
+	{ "Decompress",  DecompressStream },
+	{ "HasData",  HasDataLuaStream },
 	{ NULL, NULL }
 }; 
 
@@ -57,7 +49,6 @@ static const luaL_Reg streammeta[] = {
 };
 
 int luaopen_stream(lua_State* L) {
-
 	luaL_newlibtable(L, streamfunctions);
 	luaL_setfuncs(L, streamfunctions, 0);
 

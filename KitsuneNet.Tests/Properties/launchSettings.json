@@ -1,0 +1,8 @@
+﻿{
+  "profiles": {
+    "KitsuneNet.Tests": {
+      "commandName": "Project",
+      "nativeDebugging": true
+    }
+  }
+}

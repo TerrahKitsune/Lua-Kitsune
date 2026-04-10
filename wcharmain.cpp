@@ -1,4 +1,4 @@
-#include "luawchar.h"
+﻿#include "luawchar.h"
 #include "wcharmain.h"
 
 static const struct luaL_Reg wcharfunctions[] = {
@@ -8,7 +8,6 @@ static const struct luaL_Reg wcharfunctions[] = {
 	{ "FromUtf8", FromUtf8 },
 	{ "ToUtf8", ToUtf8 },
 	{ "Substring", FromSubstring },
-	{ "ToWide", ToWide },
 	{ "ToLower", FromToLower },
 	{ "ToUpper", FromToUpper },
 	{ "ToBytes", ToBytes },

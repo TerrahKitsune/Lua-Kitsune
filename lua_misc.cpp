@@ -1,29 +1,37 @@
-#include "networking.h"
-#include "lua_misc.h"
-#include <objbase.h>
+﻿#include "lua_misc.h"
 #include <time.h>
-#include <io.h>
 #include <stdio.h>
-#include <windows.h>
+#include <ctype.h>
+#include "platform.h"
+#include "luawchar.h"
+#include "Bencode.h"
+#include "stream.h"
+#ifdef _WIN32
+#include "networking.h"
+#include <objbase.h>
+#include <io.h>
 #include <windowsx.h>
 #include <mmsystem.h>
 #include <conio.h>
-#include "lua_json.h"
-#include "luawchar.h"
-#include "Bencode.h"
 #include <intrin.h>
-#include "stream.h"
-#include "luawchar.h"
-
+#ifdef _MSC_VER
 #pragma comment (lib , "winmm.lib")
+#endif
+#else
+#include <sys/socket.h>
+#include <netdb.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <errno.h>
+#include <sys/random.h>
+#ifdef __x86_64__
+#include <cpuid.h>
+#endif
+#endif
 
-#define HI_PART(x)  ((x>>4) & 0x0F)
-#define LO_PART(x)  ((x) & 0x0F)
 #define DIV 1024
 
-static int env_table = -1;
-static int env_original = -1;
-
+#ifdef _WIN32
 int lua_uuid(lua_State* L) {
 
 	GUID guid;
@@ -54,109 +62,34 @@ int lua_uuid(lua_State* L) {
 
 	return 2;
 }
-
-int lua_SetClipboard(lua_State* L) {
-
-	size_t len;
-	const char* data = lua_tolstring(L, -1, &len);
-
-	if (!OpenClipboard(NULL)) {
-		lua_pushboolean(L, false);
-		return 1;
-	}
-
-	if (!data || len == 0) {
-
-		if (!EmptyClipboard()) {
-			lua_pushboolean(L, false);
-		}
-		else {
-			lua_pushboolean(L, true);
-		}
-
-		CloseClipboard();
-
-		return 1;
-	}
-
-	HGLOBAL hGlobal = GlobalAlloc(GMEM_MOVEABLE, len + 1);
-
-	if (hGlobal == NULL) {
-
-		CloseClipboard();
-		lua_pushboolean(L, false);
-		return 1;
-	}
-
-	char* pGlobal = (char*)GlobalLock(hGlobal);
-
-	if (pGlobal == NULL) {
-		GlobalFree(hGlobal);
-		CloseClipboard();
-		lua_pushboolean(L, false);
-		return 1;
-	}
-
-	memcpy(pGlobal, data, len);
-	GlobalUnlock(hGlobal);
-
-	if (SetClipboardData(CF_TEXT, hGlobal) == NULL) {
-		GlobalFree(hGlobal);
-		lua_pushboolean(L, false);
-	}
-	else {
-		lua_pushboolean(L, true);
-	}
-
-	CloseClipboard();
-
-	return 1;
-}
-
-int lua_GetClipboard(lua_State* L) {
-
-	if (!OpenClipboard(NULL)) {
+#else
+int lua_uuid(lua_State* L) {
+	uint8_t bytes[16];
+	// getrandom() is a single syscall — no file open/read/close overhead.
+	// For reads <= 256 bytes it never blocks once the entropy pool is seeded.
+	if (getrandom(bytes, sizeof(bytes), 0) != (ssize_t)sizeof(bytes)) {
 		lua_pushnil(L);
-		return 1;
-	}
-
-	HANDLE hData = GetClipboardData(CF_UNICODETEXT);
-	if (hData == NULL) {
-		CloseClipboard();
 		lua_pushnil(L);
-		return 1;
+		return 2;
 	}
-
-	wchar_t* pszText = (wchar_t*)GlobalLock(hData);
-
-	if (pszText == NULL) {
-		CloseClipboard();
-		lua_pushnil(L);
-		return 1;
-	}
-
-	lua_pushwchar(L, pszText);
-
-	GlobalUnlock(hData);
-	CloseClipboard();
-
-	return 1;
+	// RFC 4122 Version 4: version nibble = 0100, variant bits = 10xxxxxx
+	// Identical layout to CoCreateGuid — 16 big-endian bytes, same string format.
+	bytes[6] = (bytes[6] & 0x0F) | 0x40;
+	bytes[8] = (bytes[8] & 0x3F) | 0x80;
+	char buf[37];
+	snprintf(buf, sizeof(buf),
+		"%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+		bytes[0],  bytes[1],  bytes[2],  bytes[3],
+		bytes[4],  bytes[5],  bytes[6],  bytes[7],
+		bytes[8],  bytes[9],  bytes[10], bytes[11],
+		bytes[12], bytes[13], bytes[14], bytes[15]);
+	lua_pushstring(L, buf);
+	lua_pushlstring(L, (const char*)bytes, 16);
+	return 2;
 }
+#endif
 
-int lua_sleep(lua_State* L) {
-
-	int zzz = (int)luaL_optinteger(L, 1, 1);
-
-	if (zzz <= 0)
-		zzz = 1;
-	else if (zzz > 1000)
-		zzz = 1000;
-
-	Sleep(zzz);
-	lua_pop(L, 1);
-	return 0;
-}
-
+#ifdef _WIN32
 static int GetLastErrorAsMessage(lua_State* L)
 {
 	DWORD lasterror = (DWORD)luaL_optinteger(L, 1, GetLastError());
@@ -194,7 +127,34 @@ int GetIsAdmin(lua_State* L) {
 
 	return 1;
 }
+#else
+static int GetLastErrorAsMessage(lua_State* L) {
+	int code = (int)luaL_optinteger(L, 1, errno);
+	lua_pop(L, lua_gettop(L));
+	char buf[256] = {};
+	// strerror_r has two incompatible signatures depending on feature macros:
+	//   GNU  (_GNU_SOURCE):    char* strerror_r(int, char*, size_t)  — returns pointer, may ignore buf
+	//   POSIX (_POSIX_C_SOURCE >= 200112L && !_GNU_SOURCE): int — writes into buf
+	// Cast the call through (void*) to suppress the "ignoring return value" warning on
+	// the GNU variant, then fall back to strerror() which is always correct here since
+	// Lua scripts run on a single OS thread managed by KitsuneEngine.
+	(void)strerror_r(code, buf, sizeof(buf));
+	// strerror() is thread-safe in glibc when the locale is not being changed concurrently,
+	// which is guaranteed by the single-threaded Lua scheduler.  It reliably returns the
+	// correct message string regardless of the strerror_r variant in use.
+	const char* msg = strerror(code);
+	lua_pushstring(L, msg ? msg : buf);
+	lua_pushinteger(L, code);
+	return 2;
+}
 
+static int GetIsAdmin(lua_State* L) {
+	lua_pushboolean(L, geteuid() == 0);
+	return 1;
+}
+#endif
+
+#ifdef _WIN32
 int Time(lua_State* L) {
 
 	//https://gist.github.com/e-yes/278302
@@ -215,69 +175,14 @@ int Time(lua_State* L) {
 
 	return 1;
 }
-
-int NewEnvironment(lua_State* L) {
-
-	if (!lua_isstring(L, 1) || lua_gettop(L) != 1) {
-		luaL_error(L, "Invalid parameters");
-		return 0;
-	}
-
-	lua_newtable(L);
-
-	lua_rawgeti(L, LUA_REGISTRYINDEX, env_table);
-
-	lua_pushvalue(L, 1);
-	lua_pushvalue(L, 2);
-	lua_settable(L, -3);
-
-	lua_pushvalue(L, 2);
-	lua_copy(L, 2, 1);
-	lua_pop(L, 3);
-
+#else
+int Time(lua_State* L) {
+	struct timespec ts;
+	clock_gettime(CLOCK_REALTIME, &ts);
+	lua_pushinteger(L, (lua_Integer)ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
 	return 1;
 }
-
-int GetEnvironment(lua_State* L) {
-
-	if (!lua_isstring(L, 1) || lua_gettop(L) != 1) {
-		luaL_error(L, "Invalid parameters");
-		return 0;
-	}
-
-	lua_rawgeti(L, LUA_REGISTRYINDEX, env_table);
-
-	lua_pushvalue(L, 1);
-	lua_gettable(L, -2);
-
-	lua_copy(L, 3, 1);
-
-	lua_pop(L, 2);
-
-	return 1;
-}
-
-int GetCreateEnvironment(lua_State* L) {
-
-	const char* name = luaL_checkstring(L, 1);
-
-	GetEnvironment(L);
-	if (lua_istable(L, 1)) {
-		return 1;
-	}
-	else {
-		lua_pop(L, lua_gettop(L));
-		lua_pushstring(L, name);
-		return NewEnvironment(L);
-	}
-}
-
-int GetAllEnvironment(lua_State* L) {
-
-	lua_rawgeti(L, LUA_REGISTRYINDEX, env_table);
-
-	return 1;
-}
+#endif
 
 int GetStringEqual(lua_State* L) {
 
@@ -330,7 +235,7 @@ int TableFirst(lua_State* L) {
 		lua_pushvalue(L, 4);
 		lua_pushvalue(L, 5);
 
-		if (lua_pcall(L, 2, 1, 0) != 0) {
+		if (lua_pcall_nohook(L, 2, 1, 0) != 0) {
 			luaL_error(L, lua_tostring(L, -1));
 			return 0;
 		}
@@ -368,7 +273,7 @@ int TableSelect(lua_State* L) {
 		lua_pushvalue(L, 5);
 		lua_pushvalue(L, 6);
 
-		if (lua_pcall(L, 2, 1, 0) != 0) {
+		if (lua_pcall_nohook(L, 2, 1, 0) != 0) {
 			luaL_error(L, lua_tostring(L, -1));
 			return 0;
 		}
@@ -389,10 +294,10 @@ int TableSelect(lua_State* L) {
 	return 1;
 }
 
-DWORD crc32(byte* data, int size, DWORD crc)
+DWORD crc32(uint8_t* data, int size, DWORD crc)
 {
 	DWORD r = crc;
-	byte* end = data + size;
+	uint8_t* end = data + size;
 	DWORD t;
 
 	while (data < end)
@@ -428,58 +333,8 @@ int CRC32(lua_State* L) {
 	return 1;
 }
 
-int luabeep(lua_State* L) {
-
-	DWORD freq = (DWORD)luaL_checkinteger(L, 1);
-	DWORD dur = (DWORD)luaL_checkinteger(L, 2);
-
-	lua_pop(L, lua_gettop(L));
-
-	lua_pushboolean(L, Beep(freq, dur));
-
-	return 1;
-}
-
-int luasound(lua_State* L) {
-
-	const char* sound = NULL;
-
-	if (!lua_isnoneornil(L, 1)) {
-		sound = lua_tostring(L, 1);
-	}
-
-	DWORD Flags = SND_FILENAME | SND_NODEFAULT;
-
-	if (lua_toboolean(L, 2)) {
-		Flags |= SND_ASYNC;
-	}
-	else {
-		Flags |= SND_SYNC;
-	}
-
-	lua_pop(L, lua_gettop(L));
-
-	lua_pushboolean(L, PlaySound(sound, NULL, Flags));
-
-	return 1;
-}
-
-int luasoundcommand(lua_State* L) {
-
-	const char* cmd = luaL_checkstring(L, 1);
-	char retstring[1024] = { 0 };
-
-	MCIERROR result = mciSendString(cmd, retstring, 1024, NULL);
-
-	lua_pop(L, lua_gettop(L));
-
-	lua_pushinteger(L, result);
-	lua_pushstring(L, retstring);
-
-	return 2;
-}
-
-int setenv(const char* name, const char* value, int overwrite)
+#ifdef _WIN32
+static int setenv_win(const char* name, const char* value, int overwrite)
 {
 	int errcode = 0;
 	if (!overwrite) {
@@ -489,6 +344,7 @@ int setenv(const char* name, const char* value, int overwrite)
 	}
 	return _putenv_s(name, value);
 }
+#endif
 
 int luasetenv(lua_State* L) {
 
@@ -498,7 +354,11 @@ int luasetenv(lua_State* L) {
 
 	lua_pop(L, lua_gettop(L));
 
+#ifdef _WIN32
+	lua_pushinteger(L, setenv_win(var, value, allowOverwrite));
+#else
 	lua_pushinteger(L, setenv(var, value, allowOverwrite));
+#endif
 
 	return 1;
 }
@@ -507,285 +367,28 @@ int luagetenv(lua_State* L) {
 
 	const char* var = luaL_checkstring(L, 1);
 
+	lua_pop(L, lua_gettop(L));
+
+#ifdef _WIN32
 	size_t len;
 	int error = getenv_s(&len, NULL, 0, var);
 
-	lua_pop(L, lua_gettop(L));
-
-	if (error) {
-		lua_pushnil(L);
-		return 1;
-	}
-	else if (len <= 0) {
-		lua_pushstring(L, "");
-		return 1;
-	}
+	if (error) { lua_pushnil(L); return 1; }
+	if (len <= 0) { lua_pushstring(L, ""); return 1; }
 
 	char* data = (char*)gff_calloc(sizeof(char), len + 1);
-
-	if (!data) {
-		lua_pushnil(L);
-		return 1;
-	}
+	if (!data) { lua_pushnil(L); return 1; }
 
 	error = getenv_s(&len, data, len, var);
-
-	if (error) {
-
-		gff_free(data);
-		lua_pushnil(L);
-		return 1;
-	}
+	if (error) { gff_free(data); lua_pushnil(L); return 1; }
 
 	lua_pushlstring(L, data, len);
-
 	gff_free(data);
-
-	return 1;
-}
-
-static int L_cls(lua_State* L) {
-
-	HANDLE                     hStdOut;
-	CONSOLE_SCREEN_BUFFER_INFO csbi;
-	DWORD                      count;
-	DWORD                      cellCount;
-	COORD                      homeCoords = { 0, 0 };
-
-	hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
-	if (hStdOut == INVALID_HANDLE_VALUE) return 0;
-
-	if (!GetConsoleScreenBufferInfo(hStdOut, &csbi)) return 0;
-	cellCount = csbi.dwSize.X * csbi.dwSize.Y;
-
-	if (!FillConsoleOutputCharacter(
-		hStdOut,
-		(TCHAR)' ',
-		cellCount,
-		homeCoords,
-		&count
-	)) return 0;
-
-	if (!FillConsoleOutputAttribute(
-		hStdOut,
-		csbi.wAttributes,
-		cellCount,
-		homeCoords,
-		&count
-	)) return 0;
-
-	SetConsoleCursorPosition(hStdOut, homeCoords);
-
-	return 0;
-}
-
-static int L_SetConsoleCoords(lua_State* L) {
-
-	int x = (int)luaL_checkinteger(L, 1);
-	int y = (int)luaL_checkinteger(L, 2);
-	HANDLE hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
-	if (hStdOut == INVALID_HANDLE_VALUE) return 0;
-
-	COORD homeCoords = { (SHORT)x, (SHORT)y };
-
-	SetConsoleCursorPosition(hStdOut, homeCoords);
-
-	return 0;
-}
-
-static int L_GetConsoleCoords(lua_State* L) {
-
-	HANDLE hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
-	CONSOLE_SCREEN_BUFFER_INFO info;
-	lua_pop(L, lua_gettop(L));
-
-	if (hStdOut == INVALID_HANDLE_VALUE) return 0;
-
-	if (!GetConsoleScreenBufferInfo(hStdOut, &info)) {
-
-		lua_pushnil(L);
-		return 1;
-	}
-
-	lua_pushinteger(L, info.dwCursorPosition.X);
-	lua_pushinteger(L, info.dwCursorPosition.Y);
-	lua_pushinteger(L, info.dwSize.X);
-	lua_pushinteger(L, info.dwSize.Y);
-	lua_pushinteger(L, info.dwMaximumWindowSize.X);
-	lua_pushinteger(L, info.dwMaximumWindowSize.Y);
-
-	return 6;
-}
-
-static int L_ConsoleCreate(lua_State* L) {
-
-	lua_pop(L, lua_gettop(L));
-	BOOL ok = AllocConsole();
-
-	lua_pushboolean(L, ok > 0);
-
-	return 1;
-}
-
-static int L_ConsoleDestroy(lua_State* L) {
-
-	lua_pop(L, lua_gettop(L));
-	BOOL ok = FreeConsole();
-
-	lua_pushboolean(L, ok > 0);
-
-	return 1;
-}
-
-static int L_SetTitle(lua_State* L) {
-	SetConsoleTitle(luaL_checkstring(L, 1));
-	lua_pop(L, 1);
-	return 0;
-}
-
-static int L_ToggleConsole(lua_State* L) {
-
-	bool toggle = lua_toboolean(L, 1) > 0;
-	HWND console = GetConsoleWindow();
-	if (toggle) {
-		ShowWindow(console, SW_RESTORE);
-	}
-	else {
-		ShowWindow(console, SW_HIDE);
-	}
-	lua_pop(L, 1);
-	return 0;
-}
-
-static int L_SetTextColor(lua_State* L) {
-
-	int BackC = (int)luaL_checknumber(L, 1);
-	int ForgC = (int)luaL_checknumber(L, 2);
-
-	lua_pop(L, 2);
-
-	WORD wColor = ((BackC & 0x0F) << 4) + (ForgC & 0x0F);
-	SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), wColor);
-
-	return 0;
-}
-
-static int L_GetTextColor(lua_State* L) {
-
-	WORD data;
-	CONSOLE_SCREEN_BUFFER_INFO   csbi;
-	if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi)) {
-		data = csbi.wAttributes;
-
-		lua_pushinteger(L, HI_PART(data));
-		lua_pushinteger(L, LO_PART(data));
-	}
-	else {
-		lua_pushnil(L);
-		lua_pushnil(L);
-	}
-
-	return 2;
-}
-
-static int L_ConsoleWrite(lua_State* L) {
-
-	HANDLE hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
-
-	if (hStdOut == INVALID_HANDLE_VALUE) {
-		return 0;
-	}
-
-	size_t len;
-	const char* data;
-
-	if (lua_isstring(L, 1)) {
-		data = lua_tolstring(L, 1, &len);
-	}
-	else {
-		data = luaL_tolstring(L, 1, &len);
-	}
-
-	DWORD written;
-	WriteConsole(hStdOut, data, (DWORD)len, &written, NULL);
-
-	lua_pop(L, lua_gettop(L));
-	lua_pushinteger(L, written);
-
-	return 1;
-}
-
-static int L_ConsolePrint(lua_State* L) {
-
-	HANDLE hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
-
-	if (hStdOut == INVALID_HANDLE_VALUE) {
-		return 0;
-	}
-
-	DWORD written;
-	DWORD total = 0;
-	size_t len;
-	const char* data;
-
-	for (int n = 1; n <= lua_gettop(L); n++) {
-
-		data = luaL_tolstring(L, n, &len);
-		lua_pop(L, 1);
-
-		if (!data) {
-			data = "";
-			len = 0;
-		}
-
-		WriteConsole(hStdOut, data, (DWORD)len, &written, NULL);
-		total += written;
-
-		if (n < lua_gettop(L)) {
-			data = "\t";
-			len = 1;
-			WriteConsole(hStdOut, data, (DWORD)len, &written, NULL);
-			total += written;
-		}
-		else {
-			data = "\n";
-			len = 1;
-			WriteConsole(hStdOut, data, (DWORD)len, &written, NULL);
-			total += written;
-		}
-	}
-
-	lua_pop(L, lua_gettop(L));
-	lua_pushinteger(L, total);
-
-	return 1;
-}
-
-static int L_ConsoleReadKey(lua_State* L) {
-
-	HANDLE hStdOut = GetStdHandle(STD_INPUT_HANDLE);
-
-	if (hStdOut == INVALID_HANDLE_VALUE) {
-		return 0;
-	}
-
-	lua_pop(L, lua_gettop(L));
-
-	bool keydown = false;
-
-	if (_isatty(_fileno(stdin))) {
-		keydown = _kbhit() > 0;
-	}
-	else {
-		keydown = !feof(stdin);
-	}
-
-	if (keydown) {
-		lua_pushinteger(L, _getch());
-	}
-	else {
-		lua_pushnil(L);
-	}
+#else
+	const char* value = getenv(var);
+	if (!value) { lua_pushnil(L); return 1; }
+	lua_pushstring(L, value);
+#endif
 
 	return 1;
 }
@@ -874,18 +477,7 @@ static int L_GetHost(lua_State* L) {
 	return 1;
 }
 
-static int L_AttachConsole(lua_State* L) {
-
-	DWORD processId = (DWORD)luaL_optinteger(L, 1, ATTACH_PARENT_PROCESS);
-
-	lua_pop(L, lua_gettop(L));
-	BOOL ok = AttachConsole(processId);
-
-	lua_pushboolean(L, ok > 0);
-
-	return 1;
-}
-
+#ifdef _WIN32
 static int L_GetComputerName(lua_State* L) {
 
 	char data[MAX_COMPUTERNAME_LENGTH + 1];
@@ -894,17 +486,27 @@ static int L_GetComputerName(lua_State* L) {
 	lua_pop(L, lua_gettop(L));
 
 	if (GetComputerNameEx(ComputerNameDnsFullyQualified, data, &len)) {
-
 		lua_pushlstring(L, data, len);
 	}
 	else {
-
 		lua_pushnil(L);
 	}
 
 	return 1;
 }
+#else
+static int L_GetComputerName(lua_State* L) {
+	char data[256];
+	lua_pop(L, lua_gettop(L));
+	if (gethostname(data, sizeof(data)) == 0)
+		lua_pushstring(L, data);
+	else
+		lua_pushnil(L);
+	return 1;
+}
+#endif
 
+#ifdef _WIN32
 int L_GetGlobalMemoryStatus(lua_State* L) {
 
 	int type = (int)luaL_optinteger(L, 1, 0);
@@ -915,154 +517,78 @@ int L_GetGlobalMemoryStatus(lua_State* L) {
 
 	switch (type)
 	{
-	case 1:
-		lua_pushinteger(L, statex.ullTotalPhys / DIV);
-		break;
-
-	case 2:
-		lua_pushinteger(L, statex.ullAvailPhys / DIV);
-		break;
-
-	case 3:
-		lua_pushinteger(L, statex.ullTotalPageFile / DIV);
-		break;
-
-	case 4:
-		lua_pushinteger(L, statex.ullAvailPageFile / DIV);
-		break;
-
-	case 5:
-		lua_pushinteger(L, statex.ullTotalVirtual / DIV);
-		break;
-
-	case 6:
-		lua_pushinteger(L, statex.ullAvailVirtual / DIV);
-		break;
-
-	default:
-		lua_pushinteger(L, statex.dwMemoryLoad);
-		break;
+	case 1: lua_pushinteger(L, statex.ullTotalPhys / DIV); break;
+	case 2: lua_pushinteger(L, statex.ullAvailPhys / DIV); break;
+	case 3: lua_pushinteger(L, statex.ullTotalPageFile / DIV); break;
+	case 4: lua_pushinteger(L, statex.ullAvailPageFile / DIV); break;
+	case 5: lua_pushinteger(L, statex.ullTotalVirtual / DIV); break;
+	case 6: lua_pushinteger(L, statex.ullAvailVirtual / DIV); break;
+	default: lua_pushinteger(L, statex.dwMemoryLoad); break;
 	}
 
 	return 1;
 }
 
-int GetKeyState(lua_State* L) {
-
-	SHORT state = GetAsyncKeyState((int)luaL_checkinteger(L, 1));
-
-	lua_pushboolean(L, (state & 0x8000) == 0x8000);
-	return 1;
-}
-
-typedef struct DisplayEnumData {
-
-	int count;
-	HMONITOR search;
-	int idx;
-
-} DisplayEnumData;
-
-BOOL CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM dwData) {
-
-	DisplayEnumData* DisplayCallback = (DisplayEnumData*)dwData;
-
-	DisplayCallback->count++;
-
-	if (DisplayCallback->search == hMonitor) {
-		DisplayCallback->idx = DisplayCallback->count;
-	}
-
-	return TRUE;
-}
-
-int GetMonitorIndex(HMONITOR hMonitor) {
-
-	DisplayEnumData data;
-
-	data.count = 0;
-	data.search = hMonitor;
-	data.idx = 0;
-
-	if (EnumDisplayMonitors(NULL, NULL, MonitorEnumProc, (LPARAM)&data)) {
-		return data.idx;
-	}
-
-	return 0;
-}
-
-int GetCursorPosition(lua_State* L) {
-
-	POINT cursorPos;
-	HMONITOR hMonitor;
-	MONITORINFO monitorInfo;
-	UINT monitorIndex;
-
-	if (GetCursorPos(&cursorPos)) {
-
-		hMonitor = MonitorFromPoint(cursorPos, MONITOR_DEFAULTTONEAREST);
-		monitorInfo.cbSize = sizeof(MONITORINFO);
-
-		if (GetMonitorInfo(hMonitor, &monitorInfo))
-		{
-			monitorIndex = GetMonitorIndex(hMonitor);
-			lua_pushinteger(L, cursorPos.x - monitorInfo.rcMonitor.left);
-			lua_pushinteger(L, cursorPos.y - monitorInfo.rcMonitor.top);
-			lua_pushinteger(L, monitorIndex);
+static int L_DebugBreak(lua_State* L) { return 0; }
+#else
+static int L_GetGlobalMemoryStatus(lua_State* L) {
+	int type = (int)luaL_optinteger(L, 1, 0);
+	// Parse /proc/meminfo for portable memory statistics.
+	// Fields are reported in kB; multiply by 1024 then divide by DIV (1024) = value in kB.
+	unsigned long long memTotal = 0, memAvail = 0, swapTotal = 0, swapFree = 0;
+	FILE* f = fopen("/proc/meminfo", "r");
+	if (f) {
+		char line[128];
+		while (fgets(line, sizeof(line), f)) {
+			unsigned long long val = 0;
+			if (sscanf(line, "MemTotal: %llu", &val) == 1)        memTotal  = val;
+			else if (sscanf(line, "MemAvailable: %llu", &val) == 1) memAvail  = val;
+			else if (sscanf(line, "SwapTotal: %llu", &val) == 1)  swapTotal = val;
+			else if (sscanf(line, "SwapFree: %llu", &val) == 1)   swapFree  = val;
 		}
-
-		return 3;
+		fclose(f);
 	}
-
-	lua_pushnil(L);
+	// Compute memory load (0-100) as used physical / total physical.
+	unsigned long long memUsed = (memTotal > memAvail) ? memTotal - memAvail : 0;
+	int load = (memTotal > 0) ? (int)((memUsed * 100) / memTotal) : 0;
+	// Values stored in kB; map to the same unit Windows uses (DIV=1024 → MB).
+	switch (type) {
+	case 1: lua_pushinteger(L, (lua_Integer)(memTotal  / DIV)); break;
+	case 2: lua_pushinteger(L, (lua_Integer)(memAvail  / DIV)); break;
+	case 3: lua_pushinteger(L, (lua_Integer)(swapTotal / DIV)); break;
+	case 4: lua_pushinteger(L, (lua_Integer)(swapFree  / DIV)); break;
+	case 5: lua_pushinteger(L, (lua_Integer)(memTotal  / DIV)); break;  // virtual ≈ total on Linux
+	case 6: lua_pushinteger(L, (lua_Integer)(memAvail  / DIV)); break;  // virtual avail ≈ avail
+	default: lua_pushinteger(L, load); break;
+	}
 	return 1;
 }
 
-int GetCursorPointPosition(lua_State* L) {
-
-	POINT point;
-
-	GetCursorPos(&point);
-
-	lua_pushinteger(L, point.x);
-	lua_pushinteger(L, point.y);
-
-	return 2;
-}
-
-int GetScreenSize(lua_State* L) {
-
-	lua_pushinteger(L, GetSystemMetrics(SM_CXSCREEN));
-	lua_pushinteger(L, GetSystemMetrics(SM_CYSCREEN));
-
-	return 2;
-}
-
-int L_DebugBreak(lua_State* L) {
-
-	DebugBreak();
-
-	return 0;
-}
+static int L_DebugBreak(lua_State* L) { return 0; }
+#endif
 
 static const char* cpuId(void)
 {
-	int cpuInfo[4] = { 0 };
-
-	// CPUID function 0: Get Vendor ID (s1, s2)
-	__cpuid(cpuInfo, 0);
-	unsigned long s1 = cpuInfo[3]; // EDX
-	unsigned long s2 = cpuInfo[0]; // EAX
-
-	// CPUID function 1: Get Processor Features (s3, s4)
-	__cpuid(cpuInfo, 1);
-	unsigned long s3 = cpuInfo[3]; // EDX
-	unsigned long s4 = cpuInfo[2]; // ECX
-
-	// Store as a formatted string
 	static char buf[100];
+#ifdef _WIN32
+	int cpuInfo[4] = { 0 };
+	__cpuid(cpuInfo, 0);
+	unsigned long s1 = cpuInfo[3];
+	unsigned long s2 = cpuInfo[0];
+	__cpuid(cpuInfo, 1);
+	unsigned long s3 = cpuInfo[3];
+	unsigned long s4 = cpuInfo[2];
 	snprintf(buf, sizeof(buf), "%08lX%08lX%08lX%08lX", s1, s2, s3, s4);
-
+#elif defined(__x86_64__) || defined(__i386__)
+	unsigned int eax = 0, ebx = 0, ecx = 0, edx = 0;
+	__get_cpuid(0, &eax, &ebx, &ecx, &edx);
+	unsigned int s1 = edx, s2 = eax;
+	__get_cpuid(1, &eax, &ebx, &ecx, &edx);
+	unsigned int s3 = edx, s4 = ecx;
+	snprintf(buf, sizeof(buf), "%08X%08X%08X%08X", s1, s2, s3, s4);
+#else
+	snprintf(buf, sizeof(buf), "0000000000000000");
+#endif
 	return buf;
 }
 
@@ -1077,9 +603,8 @@ static int crc64(lua_State* L) {
 		data = (const BYTE*)lua_tolstring(L, -1, &len);
 	}
 	else if (lua_isstream(L, -1)) {
-		LuaStream* stream = lua_toluastream(L, -1);
-		data = stream->data;
-		len = stream->len;
+		data = NULL;
+		len = 0;
 	}
 	else if (lua_iswchar(L, -1)) {
 		LuaWChar* wchar = lua_towchar(L, -1);
@@ -1117,9 +642,6 @@ int Test(lua_State* L) {
 }
 
 int luaopen_misc(lua_State* L) {
-
-	lua_newtable(L);
-	env_table = luaL_ref(L, LUA_REGISTRYINDEX);
 
 	char esc[2] = { 0,0 };
 
@@ -1237,78 +759,6 @@ int luaopen_misc(lua_State* L) {
 
 	lua_setglobal(L, "c");
 
-	lua_newtable(L);
-
-	lua_pushstring(L, "Attach");
-	lua_pushcfunction(L, L_AttachConsole);
-	lua_settable(L, -3);
-
-	lua_pushstring(L, "Print");
-	lua_pushcfunction(L, L_ConsolePrint);
-	lua_settable(L, -3);
-
-	lua_pushstring(L, "ReadKey");
-	lua_pushcfunction(L, L_ConsoleReadKey);
-	lua_settable(L, -3);
-
-	lua_pushstring(L, "Write");
-	lua_pushcfunction(L, L_ConsoleWrite);
-	lua_settable(L, -3);
-
-	lua_pushstring(L, "SetColor");
-	lua_pushcfunction(L, L_SetTextColor);
-	lua_settable(L, -3);
-
-	lua_pushstring(L, "GetColor");
-	lua_pushcfunction(L, L_GetTextColor);
-	lua_settable(L, -3);
-
-	lua_pushstring(L, "SetVisible");
-	lua_pushcfunction(L, L_ToggleConsole);
-	lua_settable(L, -3);
-
-	lua_pushstring(L, "SetTitle");
-	lua_pushcfunction(L, L_SetTitle);
-	lua_settable(L, -3);
-
-	lua_pushstring(L, "Destroy");
-	lua_pushcfunction(L, L_ConsoleDestroy);
-	lua_settable(L, -3);
-
-	lua_pushstring(L, "Create");
-	lua_pushcfunction(L, L_ConsoleCreate);
-	lua_settable(L, -3);
-
-	lua_pushstring(L, "Clear");
-	lua_pushcfunction(L, L_cls);
-	lua_settable(L, -3);
-
-	lua_pushstring(L, "GetInfo");
-	lua_pushcfunction(L, L_GetConsoleCoords);
-	lua_settable(L, -3);
-
-	lua_pushstring(L, "SetCursorPosition");
-	lua_pushcfunction(L, L_SetConsoleCoords);
-	lua_settable(L, -3);
-
-	lua_setglobal(L, "Console");
-
-	lua_newtable(L);
-
-	lua_pushstring(L, "Play");
-	lua_pushcfunction(L, luasound);
-	lua_settable(L, -3);
-
-	lua_pushstring(L, "Beep");
-	lua_pushcfunction(L, luabeep);
-	lua_settable(L, -3);
-
-	lua_pushstring(L, "SendMCS");
-	lua_pushcfunction(L, luasoundcommand);
-	lua_settable(L, -3);
-
-	lua_setglobal(L, "Sound");
-
 	lua_getglobal(L, "string");
 	lua_pushstring(L, "equal");
 	lua_pushcfunction(L, GetStringEqual);
@@ -1324,29 +774,11 @@ int luaopen_misc(lua_State* L) {
 	lua_settable(L, -3);
 	lua_pop(L, 1);
 
-	lua_pushcfunction(L, GetKeyState);
-	lua_setglobal(L, "GetKeyState");
-
-	lua_pushcfunction(L, GetCursorPointPosition);
-	lua_setglobal(L, "GetCursorPointPosition");
-
-	lua_pushcfunction(L, GetCursorPosition);
-	lua_setglobal(L, "GetCursorPosition");
-
-	lua_pushcfunction(L, GetScreenSize);
-	lua_setglobal(L, "GetScreenSize");
-
 	lua_pushcfunction(L, Test);
 	lua_setglobal(L, "Test");
 
 	lua_pushcfunction(L, crc64);
 	lua_setglobal(L, "CRC64");
-
-	lua_pushcfunction(L, lua_SetClipboard);
-	lua_setglobal(L, "SetClipboard");
-
-	lua_pushcfunction(L, lua_GetClipboard);
-	lua_setglobal(L, "GetClipboard");
 
 	lua_pushstring(L, cpuId());
 	lua_setglobal(L, "CPUID");
@@ -1366,17 +798,14 @@ int luaopen_misc(lua_State* L) {
 	lua_pushcfunction(L, GetLastErrorAsMessage);
 	lua_setglobal(L, "GetLastError");
 
+	lua_pushcfunction(L, GetIsAdmin);
+	lua_setglobal(L, "GetIsAdmin");
+
 	lua_pushcfunction(L, lua_uuid);
 	lua_setglobal(L, "UUID");
 
-	lua_pushcfunction(L, lua_sleep);
-	lua_setglobal(L, "Sleep");
-
 	lua_pushcfunction(L, Time);
 	lua_setglobal(L, "Time");
-
-	lua_pushcfunction(L, GetIsAdmin);
-	lua_setglobal(L, "GetIsAdmin");
 
 	lua_pushcfunction(L, CRC32);
 	lua_setglobal(L, "CRC32");
@@ -1389,26 +818,6 @@ int luaopen_misc(lua_State* L) {
 
 	lua_pushcfunction(L, luagetenv);
 	lua_setglobal(L, "getenv");
-
-	lua_newtable(L);
-
-	lua_pushstring(L, "Create");
-	lua_pushcfunction(L, NewEnvironment);
-	lua_settable(L, -3);
-
-	lua_pushstring(L, "Get");
-	lua_pushcfunction(L, GetEnvironment);
-	lua_settable(L, -3);
-
-	lua_pushstring(L, "GetOrCreate");
-	lua_pushcfunction(L, GetCreateEnvironment);
-	lua_settable(L, -3);
-
-	lua_pushstring(L, "Meta");
-	lua_pushcfunction(L, GetAllEnvironment);
-	lua_settable(L, -3);
-
-	lua_setglobal(L, "Env");
 
 	return 0;
 }

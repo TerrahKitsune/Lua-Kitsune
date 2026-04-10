@@ -1,27 +1,15 @@
-#pragma once
+﻿#pragma once
 #include "lua_main_incl.h"
-#include <Windows.h>
+#include <inttypes.h>
 #include <libpq-fe.h>
 
 static const char* LUAPOSTGRES = "LuaPostgres";
 
 typedef struct LuaPostgres {
-
 	PGconn* connection;
-	volatile bool busy;
-	volatile bool alive;
-	char* error;
-	PGresult* result;
-	int currentRow;
-	char* query;
-	size_t querylen;
-	char** paramValues;
-	int* paramLengths;
-	int nParams;
-	bool isParamQuery;
-	HANDLE thread;
-	HANDLE interrupt;
-
+	int     queryRef;    // Lua registry ref to active query coroutine; LUA_NOREF = idle
+	void*   activeQuery; // LuaPostgresQuery* of the running query, or NULL
+	char*   error;       // last connection-level error
 } LuaPostgres;
 
 LuaPostgres* lua_topostgres(lua_State* L, int index);
@@ -30,9 +18,9 @@ LuaPostgres* lua_pushpostgres(lua_State* L);
 int PostgresIsBusy(lua_State* L);
 int PostgresConnect(lua_State* L);
 int PostgresQuery(lua_State* L);
-int PostgresFetch(lua_State* L);
-int PostgresGetRow(lua_State* L);
-int PostgresFinish(lua_State* L);
+int PostgresNonQuery(lua_State* L);
+int PostgresScalar(lua_State* L);
+int PostgresQueryAll(lua_State* L);
 int PostgresEscapeValue(lua_State* L);
 
 int luapostgres_gc(lua_State* L);

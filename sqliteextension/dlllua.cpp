@@ -1,7 +1,7 @@
-#include <windows.h>
+﻿#include <windows.h>
+#include <clocale>
 #include "objbase.h"
 #include "dlllua.h"
-#include "../LuaArchiveMain.h"
 #include "../mem.h"
 #include "../StreamMain.h"
 #include "../wcharmain.h"
@@ -9,18 +9,17 @@
 #include "../LuaAesMain.h"
 #include "../LuaCsvMain.h"
 #include "../LuaFileSystemMain.h"
-#include "../LuaFTPMain.h"
-#include "../HttpMain.h"
+#ifdef KITSUNE_HTTP
+#include "../HttpCurlMain.h"
+#endif
 #include "../luakafkamain.h"
 #include "../MD5Main.h"
 #include "../LuaMutexMain.h"
 #include "../MySQLMain.h"
-#include "../ODBCMain.h"
 #include "../RedisMain.h"
 #include "../LuaSQLiteMain.h"
 #include "../Sha256Main.h"
 #include "../TimerMain.h"
-#include "../NamedPipeMain.h"
 #include "../base64.h"
 #include "../SHA1Main.h"
 #include "../OpenSSL/include/openssl/ssl.h"
@@ -55,9 +54,8 @@ lua_State* OpenLuaState(lua_Alloc memoryAllocator) {
 	lua_State* L = lua_newstate(memoryAllocator, NULL);
 	lua_gc(L, LUA_GCGEN, 20, 100);
 	luaL_openlibs(L);
+	setlocale(LC_NUMERIC, "C");
 
-	luaopen_archive(L);
-	lua_setglobal(L, "Archive");
 	luaopen_wchar(L);
 	lua_setglobal(L, "Wchar");
 	luaopen_stream(L);
@@ -70,16 +68,14 @@ lua_State* OpenLuaState(lua_Alloc memoryAllocator) {
 	lua_setglobal(L, "CSV");
 	luaopen_filesystem(L);
 	lua_setglobal(L, "FileSystem");
-	luaopen_ftp(L);
-	lua_setglobal(L, "FTP");
+	#ifdef KITSUNE_HTTP
 	luaopen_http(L);
 	lua_setglobal(L, "Http");
+#endif
 	luaopen_kafka(L);
 	lua_setglobal(L, "Kafka");
 	luaopen_md5(L);
 	lua_setglobal(L, "MD5");
-	luaopen_odbc(L);
-	lua_setglobal(L, "ODBC");
 	luaopen_mutex(L);
 	lua_setglobal(L, "Mutex");
 	luaopen_mysql(L);
@@ -92,8 +88,6 @@ lua_State* OpenLuaState(lua_Alloc memoryAllocator) {
 	lua_setglobal(L, "SHA256");
 	luaopen_timer(L);
 	lua_setglobal(L, "Timer");
-	luaopen_namedpipe(L);
-	lua_setglobal(L, "Pipe");
 	luaopen_base64(L);
 	lua_setglobal(L, "Base64");
 	luaopen_sha1(L);

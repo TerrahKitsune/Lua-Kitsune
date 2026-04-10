@@ -1,0 +1,52 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <CodeAnalysisRuleSet>..\analysis.ruleset</CodeAnalysisRuleSet>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <NativeVcxProj>$(ProjectDir)..\KitsuneEngine.vcxproj</NativeVcxProj>
+    <NativeOutputDir>$(ProjectDir)..\x64\$(Configuration)\</NativeOutputDir>
+    <NativeRootDir>$(ProjectDir)..\</NativeRootDir>
+  </PropertyGroup>
+
+  <!-- Windows only: builds KitsuneEngine.vcxproj and copies the native DLLs.
+       When building inside VS the solution dependency on KitsuneEngine already ensures
+       the DLL is produced before this project runs, so the MSBuild invocation is skipped
+       and we only copy. Outside VS (dotnet CLI) we must drive the C++ build ourselves
+       and forward SolutionDir/SolutionPath so all $(SolutionDir)-based paths resolve. -->
+  <Target Name="BuildNativeEngine" BeforeTargets="Build"
+          Condition="$([MSBuild]::IsOSPlatform('Windows')) and '$(BuildingInsideVisualStudio)' != 'true'">
+    <MSBuild Projects="$(NativeVcxProj)"
+             Properties="Configuration=$(Configuration);Platform=x64;SolutionDir=$(NativeRootDir);SolutionPath=$(NativeRootDir)Kitsune.sln" />
+  </Target>
+
+  <Target Name="CopyNativeDlls" BeforeTargets="Build" Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+    <ItemGroup>
+      <_NativeDlls Include="$(NativeOutputDir)*.dll" Condition="Exists('$(NativeOutputDir)')" />
+      <_NativeDlls Include="$(NativeRootDir)*.dll" Condition="Exists('$(NativeRootDir)')" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_NativeDlls)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
+  </Target>
+
+  <!-- Copy libKitsuneEngine.so whenever it exists (Linux build or Windows with pre-built .so).
+       Unconditional so VS remote testing can include it when sending the output to WSL2. -->
+  <Target Name="CopyLinuxNativeSo" BeforeTargets="Build"
+          Condition="Exists('$(NativeRootDir)build-linux/libKitsuneEngine.so')">
+    <Copy SourceFiles="$(NativeRootDir)build-linux/libKitsuneEngine.so"
+          DestinationFolder="$(OutputPath)"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <ItemGroup>
+    <PackageReference Include="StyleCop.Analyzers" Version="1.2.0-beta.556">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+</Project>
