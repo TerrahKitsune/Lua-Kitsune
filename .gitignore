@@ -6,6 +6,9 @@
 # Local test credentials - tracked once as a safe template then ignored
 tests/config.lua
 
+# Planning / design documents — local only, not for version control
+plans/
+
 # User-specific files
 *.rsuser
 *.suo

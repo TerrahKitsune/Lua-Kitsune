@@ -8,6 +8,9 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <RunSettingsFilePath>$(MSBuildProjectDirectory)\kitsune.runsettings</RunSettingsFilePath>
+    <!-- UseConfigureAwait is not applicable to xUnit tests: the framework provides no
+         synchronisation context, so ConfigureAwait(false) is both unnecessary and noise. -->
+    <NoWarn>$(NoWarn);UseConfigureAwait</NoWarn>
   </PropertyGroup>
 
   <PropertyGroup>

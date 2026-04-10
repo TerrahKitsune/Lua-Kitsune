@@ -365,33 +365,6 @@
     <ClCompile Include="ProcessMain.cpp">
       <Filter>LuaProcess</Filter>
     </ClCompile>
-    <ClCompile Include="LuaServerMain.cpp">
-      <Filter>LuaService\Server</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaServer.cpp">
-      <Filter>LuaService\Server\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaClientMain.cpp">
-      <Filter>LuaService\Client</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaClient.cpp">
-      <Filter>LuaService\Client\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="List.cpp">
-      <Filter>Util</Filter>
-    </ClCompile>
-    <ClCompile Include="Queue.cpp">
-      <Filter>Util</Filter>
-    </ClCompile>
-    <ClCompile Include="Server.cpp">
-      <Filter>LuaService\Server\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="NetEvent.cpp">
-      <Filter>LuaService</Filter>
-    </ClCompile>
-    <ClCompile Include="Client.cpp">
-      <Filter>LuaService\Client\Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="stream.cpp">
       <Filter>LuaStream\Source Files</Filter>
     </ClCompile>
@@ -466,9 +439,6 @@
     </ClCompile>
     <ClCompile Include="Bencode.cpp">
       <Filter>Util</Filter>
-    </ClCompile>
-    <ClCompile Include="networking.cpp">
-      <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="LuaSHA1.cpp">
       <Filter>LuaSHA1\Source Files</Filter>
@@ -684,39 +654,6 @@
     </ClInclude>
     <ClInclude Include="ProcessMain.h">
       <Filter>LuaProcess</Filter>
-    </ClInclude>
-    <ClInclude Include="networking.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="LuaServerMain.h">
-      <Filter>LuaService\Server</Filter>
-    </ClInclude>
-    <ClInclude Include="LuaServer.h">
-      <Filter>LuaService\Server\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="LuaClientMain.h">
-      <Filter>LuaService\Client</Filter>
-    </ClInclude>
-    <ClInclude Include="LuaClient.h">
-      <Filter>LuaService\Client\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="List.h">
-      <Filter>Util</Filter>
-    </ClInclude>
-    <ClInclude Include="Queue.h">
-      <Filter>Util</Filter>
-    </ClInclude>
-    <ClInclude Include="Server.h">
-      <Filter>LuaService\Server\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="NetEvent.h">
-      <Filter>LuaService</Filter>
-    </ClInclude>
-    <ClInclude Include="Client.h">
-      <Filter>LuaService\Client\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="resource.h">
-      <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="stream.h">
       <Filter>LuaStream\Header Files</Filter>
@@ -974,15 +911,11 @@
   <ItemGroup>
     <None Include="Lua functions.md" />
     <None Include="testEnvironments.json" />
-    <None Include="MySQL Implementation Plan.md" />
-    <None Include="Postgres Implementation Plan.md" />
     <None Include="build-linux-and-test.ps1" />
-    <None Include="Http Client Implementation Plan.md" />
-    <None Include="Kafka refactor plan.md" />
     <None Include="build-release.ps1" />
     <None Include="vcpkg.json" />
     <None Include="triplets\x64-windows-static-md.cmake" />
-    <None Include="ITERATOR_PLAN.md" />
+    <None Include="SYNC_EXECUTE_REFACTOR_PLAN.md" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />

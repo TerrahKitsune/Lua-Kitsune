@@ -1,4 +1,5 @@
-﻿using System.Runtime.InteropServices;
+﻿using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -260,10 +261,10 @@ namespace KitsuneNet
         }
 
         /// <summary>Runs a Lua script file synchronously and returns the typed result.
-        /// Returns <see cref="LuaValue.None"/> on start failure or if the script returned nothing.
-        /// For Lua runtime error details use <see cref="ExecuteFileAsync"/> instead.</summary>
-        /// <exception cref="LuaException">Thrown if called from within a registered function callback,
-        /// or if the native engine rejects the call (e.g. re-entrant invocation).</exception>
+        /// Returns <see cref="LuaValue.None"/> on start failure or if the script returned nothing.</summary>
+        /// <exception cref="LuaException">Thrown on any Lua runtime or syntax error, if called from
+        /// within a registered function callback, or if the native engine rejects the call (e.g. re-entrant
+        /// invocation). For concurrent non-blocking execution use <see cref="ExecuteFileAsync"/>.</exception>
         public LuaValue RunFile(string path, params LuaValue[]? args)
         {
             if (inLuaCallback)
@@ -283,10 +284,10 @@ namespace KitsuneNet
         }
 
         /// <summary>Runs a Lua script string synchronously and returns the typed result.
-        /// Returns <see cref="LuaValue.None"/> on start failure or if the script returned nothing.
-        /// For Lua runtime error details use <see cref="ExecuteStringAsync"/> instead.</summary>
-        /// <exception cref="LuaException">Thrown if called from within a registered function callback,
-        /// or if the native engine rejects the call (e.g. re-entrant invocation).</exception>
+        /// Returns <see cref="LuaValue.None"/> on start failure or if the script returned nothing.</summary>
+        /// <exception cref="LuaException">Thrown on any Lua runtime or syntax error, if called from
+        /// within a registered function callback, or if the native engine rejects the call (e.g. re-entrant
+        /// invocation). For concurrent non-blocking execution use <see cref="ExecuteStringAsync"/>.</exception>
         public LuaValue RunString(string script, params LuaValue[]? args)
         {
             if (inLuaCallback)
@@ -306,10 +307,10 @@ namespace KitsuneNet
         }
 
         /// <summary>Calls a global Lua function synchronously and returns the typed result.
-        /// Returns <see cref="LuaValue.None"/> on start failure or if the function returned nothing.
-        /// For Lua runtime error details use <see cref="ExecuteFunctionAsync"/> instead.</summary>
-        /// <exception cref="LuaException">Thrown if called from within a registered function callback,
-        /// or if the native engine rejects the call (e.g. re-entrant invocation).</exception>
+        /// Returns <see cref="LuaValue.None"/> on start failure or if the function returned nothing.</summary>
+        /// <exception cref="LuaException">Thrown on any Lua runtime error, if the function does not exist,
+        /// if called from within a registered function callback, or if the native engine rejects the call
+        /// (e.g. re-entrant invocation). For concurrent non-blocking execution use <see cref="ExecuteFunctionAsync"/>.</exception>
         public LuaValue RunFunction(string functionName, params LuaValue[]? args)
         {
             if (inLuaCallback)
@@ -400,7 +401,9 @@ namespace KitsuneNet
         }
 
         /// <summary>Executes a <see cref="LuaValue"/> synchronously and returns the typed result.
-        /// Returns <see cref="LuaValue.None"/> on start failure or if execution returned nothing.
+        /// Returns <see cref="LuaValue.None"/> on start failure, if execution returned nothing,
+        /// or if the Lua code raised an error (silent variant — use
+        /// <see cref="ExecuteVariableAsync"/> for error details).
         /// See <see cref="ExecuteVariable"/> for dispatch rules.</summary>
         /// <exception cref="LuaException">Thrown if called from within a registered function callback,
         /// or if the native engine rejects the call (e.g. re-entrant invocation).</exception>
@@ -414,7 +417,11 @@ namespace KitsuneNet
             var (nv, native, ptrs) = BuildVariableAndArgs(variable, args);
             try
             {
-                return NativePtrToLuaValue(KitsuneExecuteVariable(ref nv, native?.Length ?? 0, native), this).GetOrThrow();
+                // RunVariable is the "silent" sync variant: Lua runtime errors and type errors
+                // return None rather than throwing.  Context rejections (inLuaCallback guard above)
+                // still throw before the native call is made.
+                LuaValue result = NativePtrToLuaValue(KitsuneExecuteVariable(ref nv, native?.Length ?? 0, native), this);
+                return result.Type == LuaType.Error ? LuaValue.None : result;
             }
             finally
             {
@@ -528,16 +535,16 @@ namespace KitsuneNet
                 throw new LuaException("SetVariable cannot be called from within a registered function");
             }
 
-            var ptrs = new List<IntPtr>();
+            List<IntPtr>? ptrs = null;
             try
             {
                 var nv = default(KitsuneVariable);
-                FillNativeVariable(ref nv, value, ptrs);
+                FillNativeVariable(ref nv, value, ref ptrs);
                 return KitsuneSetVariable(name, ref nv);
             }
             finally
             {
-                FreeNativeArgs([.. ptrs]);
+                FreeNativeArgs(ptrs);
             }
         }
 
@@ -910,25 +917,30 @@ namespace KitsuneNet
 
         // Converts a LuaValue[] to a KitsuneVariable[] suitable for P/Invoke.
         // String data is heap-allocated; caller MUST call FreeNativeArgs when done.
-        private static (KitsuneVariable[]? Native, IntPtr[] Ptrs) BuildNativeArgs(LuaValue[]? args)
+        private static (KitsuneVariable[]? Native, List<IntPtr>? Ptrs) BuildNativeArgs(LuaValue[]? args)
         {
             if (args is null || args.Length == 0)
             {
-                return (null, []);
+                return (null, null);
             }
 
             var native = new KitsuneVariable[args.Length];
-            var ptrs = new List<IntPtr>(args.Length);
+            List<IntPtr>? ptrs = null;
             for (int i = 0; i < args.Length; i++)
             {
-                FillNativeVariable(ref native[i], args[i], ptrs);
+                FillNativeVariable(ref native[i], args[i], ref ptrs);
             }
 
-            return (native, [.. ptrs]);
+            return (native, ptrs);
         }
 
-        private static void FreeNativeArgs(IntPtr[] ptrs)
+        private static void FreeNativeArgs(List<IntPtr>? ptrs)
         {
+            if (ptrs is null)
+            {
+                return;
+            }
+
             foreach (var p in ptrs)
             {
                 Marshal.FreeHGlobal(p);
@@ -993,7 +1005,10 @@ namespace KitsuneNet
             {
                 return LuaValue.None;
             }
-            var nv = Marshal.PtrToStructure<KitsuneVariable>(ptr);
+            // ReadUnaligned is a direct memory load on the blittable struct,
+            // avoiding the marshalling-layer overhead of Marshal.PtrToStructure.
+            KitsuneVariable nv;
+            unsafe { nv = Unsafe.ReadUnaligned<KitsuneVariable>((void*)ptr); }
             LuaType t = (LuaType)nv.Type;
 
             // Function / Thread: transfer the native pointer to a LuaFunctionRef / LuaThreadRef;
@@ -1079,14 +1094,15 @@ namespace KitsuneNet
             return LuaValue.FromTable(entries.AsReadOnly());
         }
 
-        // Builds a native linked list from a managed table. Every allocation is added to ptrs for cleanup.
+        // Builds a native linked list from a managed table. Every allocation is appended to ptrs (lazily created) for cleanup.
         private static IntPtr BuildNativeTable(
-            IReadOnlyList<KeyValuePair<LuaValue, LuaValue>> entries, List<IntPtr> ptrs)
+            IReadOnlyList<KeyValuePair<LuaValue, LuaValue>> entries, ref List<IntPtr>? ptrs)
         {
             if (entries.Count == 0)
             {
                 return IntPtr.Zero;
             }
+            ptrs ??= new List<IntPtr>();
             int nodeSize = Marshal.SizeOf<NativeKVNode>();
             var nodes = new IntPtr[entries.Count];
             for (int i = 0; i < entries.Count; i++)
@@ -1097,8 +1113,8 @@ namespace KitsuneNet
             for (int i = 0; i < entries.Count; i++)
             {
                 var n = default(NativeKVNode);
-                FillNativeVariable(ref n.Key, entries[i].Key, ptrs);
-                FillNativeVariable(ref n.Value, entries[i].Value, ptrs);
+                FillNativeVariable(ref n.Key, entries[i].Key, ref ptrs);
+                FillNativeVariable(ref n.Value, entries[i].Value, ref ptrs);
                 n.Next = i + 1 < entries.Count ? nodes[i + 1] : IntPtr.Zero;
                 Marshal.StructureToPtr(n, nodes[i], false);
             }
@@ -1106,8 +1122,8 @@ namespace KitsuneNet
         }
 
         // Fills a single KitsuneVariable struct for native pass-through; string and table data are
-        // heap-allocated and added to ptrs so FreeNativeArgs cleans them up after the call returns.
-        private static void FillNativeVariable(ref KitsuneVariable nv, LuaValue v, List<IntPtr> ptrs)
+        // heap-allocated and appended to ptrs (lazily created if null) for cleanup by FreeNativeArgs.
+        private static void FillNativeVariable(ref KitsuneVariable nv, LuaValue v, ref List<IntPtr>? ptrs)
         {
             nv.Type = (int)v.Type;
             switch (v.Type)
@@ -1131,6 +1147,7 @@ namespace KitsuneNet
                             Marshal.Copy(bytes, 0, p, bytes.Length);
                         }
                         Marshal.WriteByte(p, bytes.Length, 0);
+                        ptrs ??= new List<IntPtr>();
                         ptrs.Add(p);
                         nv.Data = p;
                         nv.Length = (nuint)bytes.Length;
@@ -1147,6 +1164,7 @@ namespace KitsuneNet
                             Marshal.Copy(wbytes, 0, p, wbytes.Length);
                         }
                         Marshal.WriteInt16(p, wbytes.Length, 0);
+                        ptrs ??= new List<IntPtr>();
                         ptrs.Add(p);
                         nv.Data = p;
                         nv.Length = (nuint)(wbytes.Length / 2);
@@ -1175,7 +1193,7 @@ namespace KitsuneNet
                         break;
                     }
                 case LuaType.Table when v.Table is not null:
-                    nv.Data = BuildNativeTable(v.Table, ptrs);
+                    nv.Data = BuildNativeTable(v.Table, ref ptrs);
                     nv.Length = (nuint)v.Table.Count;
                     break;
                 case LuaType.Json when v.JsonNode is not null:
@@ -1184,6 +1202,7 @@ namespace KitsuneNet
                         IntPtr p = Marshal.AllocHGlobal(json.Length + 1);
                         Marshal.Copy(json, 0, p, json.Length);
                         Marshal.WriteByte(p, json.Length, 0);
+                        ptrs ??= new List<IntPtr>();
                         ptrs.Add(p);
                         nv.Data = p;
                         nv.Length = (nuint)json.Length;
@@ -1245,6 +1264,7 @@ namespace KitsuneNet
                         IntPtr structPtr = Marshal.AllocHGlobal(IntPtr.Size * 2);
                         Marshal.WriteIntPtr(structPtr, 0, GetTrampolinePtr());
                         Marshal.WriteIntPtr(structPtr, IntPtr.Size, GCHandle.ToIntPtr(handle));
+                        ptrs ??= new List<IntPtr>();
                         ptrs.Add(structPtr);
                         nv.Data = structPtr;
                         break;
@@ -1298,6 +1318,7 @@ namespace KitsuneNet
                         IntPtr stepCFD = Marshal.AllocHGlobal(IntPtr.Size * 2);
                         Marshal.WriteIntPtr(stepCFD, 0, GetTrampolinePtr());
                         Marshal.WriteIntPtr(stepCFD, IntPtr.Size, GCHandle.ToIntPtr(iterState.StepHandle));
+                        ptrs ??= new List<IntPtr>();
                         ptrs.Add(stepCFD);
 
                         // kitsune_CFunctionData for finalized
@@ -1358,13 +1379,13 @@ namespace KitsuneNet
         }
 
         // Fills a single KitsuneVariable for the variable-to-execute and its argument list.
-        // All heap allocations are added to ptrs; caller must pass the array to FreeNativeArgs.
-        private static (KitsuneVariable Var, KitsuneVariable[]? Args, IntPtr[] Ptrs) BuildVariableAndArgs(
+        // Heap allocations for strings, tables etc. are collected lazily in ptrs; pass to FreeNativeArgs.
+        private static (KitsuneVariable Var, KitsuneVariable[]? Args, List<IntPtr>? Ptrs) BuildVariableAndArgs(
             LuaValue variable, LuaValue[]? args)
         {
-            var ptrs = new List<IntPtr>();
+            List<IntPtr>? ptrs = null;
             var nv = default(KitsuneVariable);
-            FillNativeVariable(ref nv, variable, ptrs);
+            FillNativeVariable(ref nv, variable, ref ptrs);
 
             KitsuneVariable[]? native = null;
             if (args is { Length: > 0 })
@@ -1372,11 +1393,11 @@ namespace KitsuneNet
                 native = new KitsuneVariable[args.Length];
                 for (int i = 0; i < args.Length; i++)
                 {
-                    FillNativeVariable(ref native[i], args[i], ptrs);
+                    FillNativeVariable(ref native[i], args[i], ref ptrs);
                 }
             }
 
-            return (nv, native, [.. ptrs]);
+            return (nv, native, ptrs);
         }
 
         // Called from native code for every function registered via RegisterFunction.
@@ -1428,16 +1449,16 @@ namespace KitsuneNet
         private static unsafe void InvokeResultSetter(nint resultSetterPtr, LuaValue result)
         {
             var setter = (delegate* unmanaged[Cdecl]<KitsuneVariable*, int>)resultSetterPtr;
-            var ptrs = new List<IntPtr>();
+            List<IntPtr>? ptrs = null;
             try
             {
                 var nv = default(KitsuneVariable);
-                FillNativeVariable(ref nv, result, ptrs);
+                FillNativeVariable(ref nv, result, ref ptrs);
                 setter(&nv);
             }
             finally
             {
-                FreeNativeArgs([.. ptrs]);
+                FreeNativeArgs(ptrs);
             }
         }
 

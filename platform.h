@@ -39,7 +39,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>     // memset, memcpy
-#include <unistd.h>     // usleep
+#include <time.h>       // nanosleep, struct timespec
+#include <unistd.h>     // sched_yield (via sched.h), legacy usleep header
 #include <signal.h>     // signal(), SIGPIPE
 #include <sched.h>      // sched_yield
 #include <algorithm>    // std::min, std::max
@@ -80,14 +81,19 @@ typedef intptr_t        INT_PTR;
 #endif
 
 // ── Sleep ─────────────────────────────────────────────────────────────────────
-// Windows Sleep() takes milliseconds.  On Linux, usleep() takes microseconds;
-// Sleep(0) maps to sched_yield() so the scheduler gives up its time-slice
-// rather than blocking for 0 µs (which is a no-op on some implementations).
+// Windows Sleep() takes milliseconds.  On Linux we use nanosleep(), which
+// accepts any non-negative duration without useconds_t overflow or the old
+// POSIX < 1 s limit on usleep().  Sleep(0) yields the scheduler time-slice.
 static inline void Sleep(unsigned long ms) {
-	if (ms == 0)
+	if (ms == 0) {
 		sched_yield();
-	else
-		usleep((useconds_t)(ms * 1000UL));
+	}
+	else {
+		struct timespec ts;
+		ts.tv_sec  = (time_t)(ms / 1000UL);
+		ts.tv_nsec = (long)((ms % 1000UL) * 1000000UL);
+		nanosleep(&ts, nullptr);
+	}
 }
 
 // ── KITSUNE_API visibility ────────────────────────────────────────────────────

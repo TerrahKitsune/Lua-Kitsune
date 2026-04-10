@@ -1,8 +1,10 @@
 ﻿using KitsuneNet;
 using Shouldly;
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json.Nodes;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace KitsuneNet.Tests
 {
@@ -12,7 +14,13 @@ namespace KitsuneNet.Tests
     [Collection("KitsuneSequential")]
     public sealed class KitsuneEngineTests
     {
+        private readonly ITestOutputHelper _output;
         private bool _iteratorEnumeratorDisposed;
+
+        public KitsuneEngineTests(ITestOutputHelper output)
+        {
+            _output = output;
+        }
 
         // -- Init / Dispose -------------------------------------------------------
         [Fact]
@@ -4067,11 +4075,12 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public void RunString_RuntimeError_ReturnsNone()
+        public void RunString_RuntimeError_ThrowsLuaException()
         {
+            // The inline path returns KITSUNE_TERROR for runtime errors; GetOrThrow() surfaces it.
             using KitsuneEngine engine = new();
-            LuaValue result = engine.RunString("error('sync boom')");
-            result.Type.ShouldBe(LuaType.None);
+            LuaException ex = Should.Throw<LuaException>(() => engine.RunString("error('sync boom')"));
+            ex.Message.ShouldContain("sync boom");
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
@@ -4124,6 +4133,315 @@ namespace KitsuneNet.Tests
             engine.Wait();
             LuaValue result = engine.RunFunction("syncAdd", LuaValue.FromInt64(10), LuaValue.FromInt64(32));
             result.AsInt64.ShouldBe(42L);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        // -- Inline path: error surfacing -----------------------------------------
+        [Fact]
+        public void RunString_SyntaxError_ThrowsLuaException()
+        {
+            using KitsuneEngine engine = new();
+            LuaException ex = Should.Throw<LuaException>(() => engine.RunString("~~~~invalid lua~~~~"));
+            ex.Message.ShouldNotBeNullOrEmpty();
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void RunFile_RuntimeError_ThrowsLuaException()
+        {
+            string path = Path.GetTempFileName();
+            try
+            {
+                File.WriteAllText(path, "error('file runtime error')");
+                using KitsuneEngine engine = new();
+                LuaException ex = Should.Throw<LuaException>(() => engine.RunFile(path));
+                ex.Message.ShouldContain("file runtime error");
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void RunFunction_RuntimeError_ThrowsLuaException()
+        {
+            using KitsuneEngine engine = new();
+            engine.ExecuteString("function failSync() error('fn runtime error') end");
+            engine.Wait();
+            LuaException ex = Should.Throw<LuaException>(() => engine.RunFunction("failSync"));
+            ex.Message.ShouldContain("fn runtime error");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        // -- Inline path: slot lifecycle ------------------------------------------
+        [Fact]
+        public void RunString_SlotLifecycle_VisibleDuringExecution_GoneAfter()
+        {
+            // A registered function callback captures the slot id while it's running.
+            // After RunString returns, the slot must be compacted (id no longer in GetActiveIds).
+            using KitsuneEngine engine = new();
+            int capturedId = -1;
+            engine.RegisterFunction("CaptureId", _ =>
+            {
+                capturedId = engine.RunningCoroutineId;
+                return LuaValue.None;
+            });
+            engine.RunString("CaptureId()");
+            capturedId.ShouldBeGreaterThan(0);
+            engine.GetActiveIds().ShouldNotContain(capturedId);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void RunString_IsRunning_ReturnsTrueWhileExecuting()
+        {
+            using KitsuneEngine engine = new();
+            bool seenRunning = false;
+            engine.RegisterFunction("CheckRunning", _ =>
+            {
+                seenRunning = engine.IsRunning;
+                return LuaValue.None;
+            });
+            engine.RunString("CheckRunning()");
+            seenRunning.ShouldBeTrue();
+            engine.IsRunning.ShouldBeFalse();
+        }
+
+        [Fact]
+        public void RunString_GetActiveIds_IncludesIdDuringExecution()
+        {
+            using KitsuneEngine engine = new();
+            bool idWasActive = false;
+            engine.RegisterFunction("CheckActive", _ =>
+            {
+                int id = engine.RunningCoroutineId;
+                idWasActive = engine.GetActiveIds().Contains(id);
+                return LuaValue.None;
+            });
+            engine.RunString("CheckActive()");
+            idWasActive.ShouldBeTrue();
+        }
+
+        [Fact]
+        public void RunString_GetRuntime_PositiveDuringExecution()
+        {
+            using KitsuneEngine engine = new();
+            double capturedRuntime = 0;
+            engine.RegisterFunction("CaptureRuntime", _ =>
+            {
+                int id = engine.RunningCoroutineId;
+                capturedRuntime = engine.GetRuntime(id);
+                return LuaValue.None;
+            });
+            engine.RunString("CaptureRuntime()");
+            capturedRuntime.ShouldBeGreaterThan(0);
+        }
+
+        // -- Inline path: Sleep / Yield -------------------------------------------
+        [Fact]
+        public void RunString_WithSleep_ResultIsCorrect()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue result = engine.RunString("Sleep(10); return 'slept'");
+            result.String.ShouldBe("slept");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void RunString_WithSleep_HonoursMinimumDuration()
+        {
+            using KitsuneEngine engine = new();
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            engine.RunString("Sleep(50)");
+            sw.Stop();
+            sw.ElapsedMilliseconds.ShouldBeGreaterThanOrEqualTo(40,
+                "Sleep(50) in a sync RunString must block for at least ~50 ms");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void RunString_WithYield_ResultIsCorrect()
+        {
+            // Yield() in a sync call briefly releases access (1 ms) then resumes.
+            using KitsuneEngine engine = new();
+            LuaValue result = engine.RunString("Yield(); return 'yielded'");
+            result.String.ShouldBe("yielded");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void RunString_WithYield_ARGSPreservedAfterYield()
+        {
+            // ARGS must still be set correctly after re-acquiring access in the yield loop.
+            using KitsuneEngine engine = new();
+            LuaValue result = engine.RunString("Yield(); return ARGS[1] .. ARGS[2]", "foo", "bar");
+            result.String.ShouldBe("foobar");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task RunString_WithSleep_AsyncCoroutineRunsDuringYieldWindow()
+        {
+            // An async coroutine started before RunString must complete during the Sleep window.
+            using KitsuneEngine engine = new();
+            Task<LuaValue> asyncTask = engine.ExecuteStringAsync("return 'async done'");
+            SpinUntilRunning(engine);
+
+            // Sleep gives the scheduler at least one cycle to finish the async task.
+            LuaValue syncResult = engine.RunString("Sleep(50); return 'sync done'");
+            syncResult.String.ShouldBe("sync done");
+            asyncTask.IsCompletedSuccessfully.ShouldBeTrue("async coroutine should finish during the 50 ms yield window");
+            (await asyncTask).ShouldBe("async done");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task RunString_Yield_AsyncCoroutine_DoesNotBreakSchedulerCycle()
+        {
+            // Verify Yield() on an async coroutine is unaffected by the inline refactor.
+            // The async coroutine uses coroutine.yield(); scheduler must resume it.
+            using KitsuneEngine engine = new();
+            LuaValue result = await engine.ExecuteStringAsync(@"
+                local x = 1
+                coroutine.yield()
+                x = x + 1
+                return x
+            ");
+            result.AsInt64.ShouldBe(2L);
+        }
+
+        // -- Inline path: GetStatus == Inline during yield window -----------------
+        [Fact]
+        public async Task RunString_GetStatus_IsInline_DuringYieldWindow()
+        {
+            // During a Sleep() yield window the slot must report KITSUNE_STATUS_INLINE (7).
+            using KitsuneEngine engine = new();
+            int capturedId = -1;
+            CoroutineStatus capturedStatus = CoroutineStatus.None;
+
+            Task runTask = Task.Run(() =>
+            {
+                engine.RunString("Sleep(200); return 'done'");
+            });
+
+            // Wait until the slot appears in GetActiveIds (i.e. Sleep has yielded).
+            DateTime deadline = DateTime.UtcNow.AddSeconds(5);
+            while (engine.GetActiveIds().Length == 0 && DateTime.UtcNow < deadline)
+            {
+                Thread.Sleep(1);
+            }
+
+            int[] ids = engine.GetActiveIds();
+            if (ids.Length > 0)
+            {
+                capturedId = ids[0];
+                capturedStatus = engine.GetStatus(capturedId);
+            }
+
+            await runTask;
+
+            capturedId.ShouldBeGreaterThan(0, "slot must be visible during yield window");
+            ((int)capturedStatus).ShouldBe(7, "status must be INLINE (7) during Sleep() yield window");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        // -- Inline path: Cancel --------------------------------------------------
+        [Fact]
+        public async Task RunString_Cancel_FromAnotherThread_Interrupts()
+        {
+            // RunString runs on a background thread. The test thread polls GetActiveIds,
+            // then cancels. The Ticker fires within microseconds in the tight loop, raising
+            // "cancelled", so RunString throws LuaException on the background thread.
+            using KitsuneEngine engine = new();
+            LuaException? caught = null;
+
+            Task runTask = Task.Run(() =>
+            {
+                try
+                {
+                    engine.RunString("while true do end");
+                }
+                catch (LuaException ex)
+                {
+                    caught = ex;
+                }
+            });
+
+            // Poll until the slot appears in GetActiveIds.
+            DateTime deadline = DateTime.UtcNow.AddSeconds(5);
+            while (engine.GetActiveIds().Length == 0 && DateTime.UtcNow < deadline)
+            {
+                Thread.Sleep(1);
+            }
+
+            int[] ids = engine.GetActiveIds();
+            ids.Length.ShouldBeGreaterThan(0, "inline slot must be visible");
+            engine.Cancel(ids[0]);
+
+            await runTask;
+            caught.ShouldNotBeNull("Cancel must interrupt the inline call with LuaException");
+            caught!.Message.ShouldContain("cancel", Case.Insensitive);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        // -- Inline path: WaitAsync blocks until inline call completes ------------
+        [Fact]
+        public async Task RunString_WaitAsync_BlocksUntilInlineCallCompletes()
+        {
+            using KitsuneEngine engine = new();
+
+            // Run the inline call on a background thread so this test thread is free to await.
+            Task runTask = Task.Run(() => engine.RunString("Sleep(200)"));
+
+            // Poll until the slot appears in GetActiveIds (Sleep has yielded).
+            DateTime deadline = DateTime.UtcNow.AddSeconds(5);
+            while (engine.GetActiveIds().Length == 0 && DateTime.UtcNow < deadline)
+            {
+                Thread.Sleep(1);
+            }
+
+            int[] ids = engine.GetActiveIds();
+            ids.Length.ShouldBeGreaterThan(0, "inline slot must be visible during Sleep() yield window");
+            int inlineId = ids[0];
+
+            // WaitAsync must block until the inline call (including the Sleep) completes.
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            await engine.WaitAsync(inlineId);
+            sw.Stop();
+
+            sw.ElapsedMilliseconds.ShouldBeGreaterThanOrEqualTo(50,
+                "WaitAsync must wait for the inline Sleep to complete");
+            await runTask;
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        // -- Inline path: rapid sequential calls (slot reuse) ---------------------
+        [Fact]
+        public void RunString_RapidSequential_CorrectResultsNoSlotLeak()
+        {
+            // 500 sequential inline calls must all return correct results and leave no active slots.
+            using KitsuneEngine engine = new();
+            for (int i = 0; i < 500; i++)
+            {
+                LuaValue v = engine.RunString($"return {i}");
+                v.AsInt64.ShouldBe(i, $"call {i} returned wrong value");
+            }
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void RunFunction_RapidSequential_CorrectResultsNoSlotLeak()
+        {
+            using KitsuneEngine engine = new();
+            engine.ExecuteString("function echo(n) return n end");
+            engine.Wait();
+            for (int i = 0; i < 500; i++)
+            {
+                LuaValue v = engine.RunFunction("echo", LuaValue.FromInt64(i));
+                v.AsInt64.ShouldBe(i, $"call {i} returned wrong value");
+            }
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
@@ -4276,6 +4594,67 @@ namespace KitsuneNet.Tests
             result.String.ShouldBe("hello,world");
             engine.GetActiveIds().ShouldBeEmpty();
             fn.FunctionRef?.Dispose();
+        }
+
+        // -- Spam tests (per-call performance measurement) --------------------------
+        [Fact]
+        public async Task Spam_FunctionRef_Invoke_TimeTaken()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue script = engine.RunString("local count=0; return function() count = count + 1; return count; end");
+
+            using (var func = script.FunctionRef)
+            {
+                func.ShouldNotBeNull();
+
+                Stopwatch sw = Stopwatch.StartNew();
+
+                for (int i = 0; i < 1000000; i++)
+                {
+                    func.Invoke().AsInt64.ShouldBe(i + 1);
+                }
+
+                sw.Stop();
+                _output.WriteLine($"Elapsed time: {sw.ElapsedMilliseconds} ms  |  {sw.Elapsed.TotalMicroseconds / 1_000_000.0:F2} µs/call");
+            }
+        }
+
+        [Fact]
+        public void Spam_RunFunction_TimeTaken()
+        {
+            // Measures the per-call cost of RunFunction (name lookup + scheduler round-trip).
+            // The function is compiled once; count is an upvalue kept alive by the closure.
+            using KitsuneEngine engine = new();
+            engine.RunString("local count = 0; function tick() count = count + 1; return count end");
+
+            Stopwatch sw = Stopwatch.StartNew();
+
+            for (int i = 0; i < 1000000; i++)
+            {
+                engine.RunFunction("tick").AsInt64.ShouldBe(i + 1);
+            }
+
+            sw.Stop();
+            _output.WriteLine($"Elapsed time: {sw.ElapsedMilliseconds} ms  |  {sw.Elapsed.TotalMicroseconds / 1_000_000.0:F2} µs/call");
+        }
+
+        [Fact]
+        public void Spam_RunString_TimeTaken()
+        {
+            // Measures the per-call cost of RunString including Lua compilation on each call.
+            // Uses fewer iterations than the function-ref test because compilation adds ~2-5 µs.
+            using KitsuneEngine engine = new();
+            engine.SetInt64("count", 0);
+
+            Stopwatch sw = Stopwatch.StartNew();
+
+            for (int i = 0; i < 100000; i++)
+            {
+                engine.RunString("count = count + 1; return count").AsInt64.ShouldBe(i + 1);
+            }
+
+            sw.Stop();
+            _output.WriteLine($"Elapsed time: {sw.ElapsedMilliseconds} ms  |  {sw.Elapsed.TotalMicroseconds / 100_000.0:F2} µs/call");
         }
 
         [Fact]

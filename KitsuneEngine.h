@@ -46,6 +46,7 @@
 #define KITSUNE_STATUS_DONE      (4)  // finished successfully; result not yet consumed
 #define KITSUNE_STATUS_FAULTED   (5)  // finished with a runtime or Lua error; call KitsuneGetError
 #define KITSUNE_STATUS_CANCELLED (6)  // stopped by an explicit KitsuneCancel(id) call, or cancel is pending
+#define KITSUNE_STATUS_INLINE    (7)  // inline sync call paused in cooperative yield window; calling thread will resume imminently
 
 #define KITSUNE_SHARED_MEMORY_FLAG_LOCKED (1 << 0) // Set by an accessor while it is reading or writing the block to signal concurrent usage.
 														// Other accessors should check this flag and wait or retry before accessing the block.
@@ -177,32 +178,40 @@ extern "C" {
 	// See kitsune_CFunction for the full list of constraints on what may be called from within func.
 	KITSUNE_API void KitsuneRegisterFunction(const char* name, kitsune_CFunction func, void* userdata = nullptr);
 
-	// Allocates a Lua-owned memory block of the given size, anchors it in the Lua registry,
+	// Allocates a memory block of the given size, anchors it in the Lua registry,
 	// and returns a pointer to the block for the host to read from or write into.
 	// block->data[] is zero-initialised and its length is block->size.
-	// The block MUST be released exactly once by one of:
-	//   a) Passing it to Lua as KITSUNE_TSTREAM — Lua takes ownership and calls block->close on GC.
-	//   b) Calling block->close(block) directly — releases the Lua anchor and frees the block.
+	// Block lifecycle (dual-flag ownership):
+	//   a) Pass to Lua as KITSUNE_TSTREAM — Lua takes the owner role.
+	//      KITSUNE_SHARED_MEMORY_FLAG_OWNER_DISPOSED is set by the engine when Lua's GC
+	//      collects the last stream referencing the block.
+	//   b) The host (C#) holds the accessor role: KITSUNE_SHARED_MEMORY_FLAG_ACCESSOR_DISPOSED
+	//      starts set (no accessor); clear it to claim the accessor role, set it when done.
+	//   When both OWNER_DISPOSED and ACCESSOR_DISPOSED are set the engine's ticker sweeps
+	//   the block free on its next cycle.
+	//   If the block is never passed to Lua, setting both flags releases it immediately on
+	//   the next ticker sweep.
 	// Do NOT call free() or any other allocator on the block.
 	// Cannot be called from the Lua scheduler thread inside a registered function (will return NULL).
 	// Returns NULL on failure.
 	KITSUNE_API SharedMemoryBlock* KitsuneCreateMemoryBlock(size_t size);
 
 	// ── Execution ──────────────────────────────────────────────────────────────
-	// All three functions execute synchronously: they block the calling thread until
+	// All four functions execute synchronously: they block the calling thread until
 	// the script finishes and return the typed result directly. Returns NULL on start
 	// failure (e.g. engine not initialised, no slots available). On success the caller
 	// MUST free the returned pointer with KitsuneVariableFree. A result with type
 	// KITSUNE_TNONE means the script returned nothing or raised a Lua error; use the
 	// Async API with KitsuneGetError to obtain error details. Cannot be called from
-	// within a kitsune_CFunction — the scheduler owns the Lua state and will deadlock.
+	// within a kitsune_CFunction, from the scheduler thread, or recursively from within
+	// another sync Execute call — all three cases deadlock or corrupt state.
 	KITSUNE_API KitsuneVariable* KitsuneExecuteFile(const char* path, int argc, const KitsuneVariable* argv);
 	KITSUNE_API KitsuneVariable* KitsuneExecuteString(const char* script, int argc, const KitsuneVariable* argv);
 	KITSUNE_API KitsuneVariable* KitsuneExecuteFunction(const char* functionName, int argc, const KitsuneVariable* argv);
 	KITSUNE_API KitsuneVariable* KitsuneExecuteVariable(const KitsuneVariable* var, int argc, const KitsuneVariable* argv);
 
 	// ── Async Execution ────────────────────────────────────────────────────────
-	// All three functions start execution as a Lua coroutine managed by the scheduler.
+	// All four functions start execution as a Lua coroutine managed by the scheduler.
 	// Returns a positive coroutine ID on success, or -1 on failure.
 	// KitsuneExecuteFunctionAsync still returns a positive ID when the named function does not exist;
 	// in that case KitsuneHasResult will return true immediately with error "function not found".

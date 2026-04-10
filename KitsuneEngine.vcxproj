@@ -294,6 +294,7 @@
     <None Include="build-linux-and-test.ps1" />
     <None Include="build-release.ps1" />
     <None Include="Lua functions.md" />
+    <None Include="SYNC_EXECUTE_REFACTOR_PLAN.md" />
     <None Include="testEnvironments.json" />
     <None Include="triplets\x64-windows-static-md.cmake" />
     <None Include="vcpkg.json" />
@@ -312,6 +313,3 @@
     <Error Condition="!Exists('packages\librdkafka.redist.2.12.0\build\native\librdkafka.redist.targets')" Text="$([System.String]::Format('$(ErrorText)', 'packages\librdkafka.redist.2.12.0\build\native\librdkafka.redist.targets'))" />
   </Target>
 </Project>
-
-
-

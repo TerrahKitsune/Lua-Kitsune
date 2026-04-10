@@ -28,5 +28,10 @@ namespace KitsuneNet
         /// <summary>Stopped by an explicit <see cref="KitsuneEngine.Cancel"/> call, or cancel is pending
         /// but the scheduler has not yet processed it — callers can treat both the same way.</summary>
         Cancelled = 6,
+
+        /// <summary>An inline sync call (<c>RunString</c>, <c>RunFunction</c>, etc.) temporarily
+        /// paused in a cooperative yield window (<c>Yield()</c> or <c>Sleep()</c>).
+        /// The calling thread will resume it imminently. Not queued for the scheduler.</summary>
+        Inline = 7,
     }
 }
