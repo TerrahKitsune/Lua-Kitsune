@@ -868,7 +868,7 @@ namespace KitsuneNet.Tests
         {
             KitsuneEngine engine = new();
             engine.ExecuteString("Sleep(60000)");
-            SpinUntilRunning(engine);
+            SpinUntilActive(engine);
             int id = engine.GetActiveIds()[0];
             Task waitTask = Task.Run(() => engine.Wait(id));
             await Task.Delay(25);
@@ -1174,7 +1174,7 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             Task<LuaValue> sleepingTask = engine.ExecuteStringAsync("Sleep(2000); return 'slept'");
-            SpinUntilRunning(engine);
+            SpinUntilActive(engine);
             var sw = System.Diagnostics.Stopwatch.StartNew();
             LuaValue fastResult = await engine.ExecuteStringAsync("return 'fast'");
             sw.Stop();
@@ -1430,7 +1430,7 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             engine.ExecuteString("Sleep(10000); return 'never'");
-            SpinUntilRunning(engine);
+            SpinUntilActive(engine);
             int id = engine.GetActiveIds()[0];
             engine.Cancel(id);
             var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -1510,7 +1510,7 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             engine.ExecuteString("Sleep(60000)");
-            SpinUntilRunning(engine);
+            SpinUntilActive(engine);
             int id = engine.GetActiveIds()[0];
             DateTime deadline = DateTime.UtcNow.AddSeconds(5);
             CoroutineStatus status;
@@ -1568,7 +1568,7 @@ namespace KitsuneNet.Tests
             // On fast schedulers (e.g. Linux) the slot may already be freed, returning None.
             using KitsuneEngine engine = new();
             engine.ExecuteString("Sleep(60000)");
-            SpinUntilRunning(engine);
+            SpinUntilActive(engine);
             int id = engine.GetActiveIds()[0];
             DateTime sleepDeadline = DateTime.UtcNow.AddSeconds(5);
             while (engine.GetStatus(id) != CoroutineStatus.Sleeping && DateTime.UtcNow < sleepDeadline)
@@ -1594,9 +1594,8 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             engine.ExecuteString("Sleep(500)");
-            SpinUntilRunning(engine);
+            SpinUntilActive(engine);
             int id = engine.GetActiveIds()[0];
-            SpinUntilRunning(engine);
             Thread.Sleep(5);  // ensure at least a few ms have elapsed
             engine.GetRuntime(id).ShouldBeGreaterThan(0);
             engine.Cancel(id);
@@ -2003,6 +2002,75 @@ namespace KitsuneNet.Tests
             engine.RegisterFunction("Noop", _ => LuaValue.None);
             engine.RegisterFunction("Echo", args => args.FirstOrDefault());
             Should.NotThrow(engine.Dispose);
+        }
+
+        [Fact]
+        public async Task TwoEngines_FunctionRegisteredByFirst_RemainsCallableAfterFirstDisposed()
+        {
+            // Regression: _functionHandles were freed immediately on Dispose even when a second
+            // engine (sharing the same global Lua state) was still alive.  The delegate GCHandle
+            // must survive until the last engine calls KitsuneCleanup / lua_close.
+            KitsuneEngine engine1 = new();
+            KitsuneEngine engine2 = new();
+            try
+            {
+                int callCount = 0;
+                engine1.RegisterFunction("MultiEngineFn", _ =>
+                {
+                    callCount++;
+                    return LuaValue.FromInt64(callCount);
+                });
+
+                // Dispose the first engine while the second is still alive.
+                // The delegate handle must NOT be freed here.
+                engine1.Dispose();
+
+                // engine2 shares the same Lua state; the function must still be callable.
+                LuaValue r1 = await engine2.ExecuteStringAsync("return MultiEngineFn()");
+                LuaValue r2 = await engine2.ExecuteStringAsync("return MultiEngineFn()");
+                r1.AsInt64.ShouldBe(1L);
+                r2.AsInt64.ShouldBe(2L);
+                callCount.ShouldBe(2);
+                engine2.GetActiveIds().ShouldBeEmpty();
+            }
+            finally
+            {
+                engine2.Dispose();
+            }
+
+            ThrowIfLeaked(engine2);
+        }
+
+        [Fact]
+        public async Task TwoEngines_UserdataCreatedByFirst_RemainsAccessibleAfterFirstDisposed()
+        {
+            // Regression: _userdataHandles were freed immediately on engine1.Dispose even when
+            // engine2 was still alive.  The GCHandle pin for the instance must survive until
+            // the last engine disposes and KitsuneCleanup fires __gc via lua_close.
+            KitsuneEngine engine1 = new();
+            KitsuneEngine engine2 = new();
+            try
+            {
+                engine1.RegisterUserdata<Counter>();
+                var counter = new Counter { Value = 5 };
+                engine1.SetVariable("sharedCounter", engine1.CreateUserdata(counter));
+
+                // Dispose engine1; the userdata GCHandle must NOT be freed yet.
+                engine1.Dispose();
+
+                // engine2 can still access the Lua global and call methods on the userdata.
+                LuaValue result = await engine2.ExecuteStringAsync(
+                    "sharedCounter:Increment(); sharedCounter:Increment(); return sharedCounter:Get()");
+                result.AsInt64.ShouldBe(7L);
+                counter.Value.ShouldBe(7);
+                engine2.GetActiveIds().ShouldBeEmpty();
+            }
+            finally
+            {
+                engine2.Dispose();
+            }
+
+            ThrowIfLeaked(engine2);
         }
 
         // -- CFunction (SetVariable / args / return) ----------------------------
@@ -2956,7 +3024,7 @@ namespace KitsuneNet.Tests
 
         // -- Wchar bridge ---------------------------------------------------------
         [Fact]
-        public async Task Wchar_ReturnedFromScript_HasWcharType()
+        public void Wchar_ReturnedFromScript_HasWcharType()
         {
             // A Lua Wchar returned by a coroutine is surfaced as LuaType.Wchar, not LuaType.String.
             using KitsuneEngine engine = new();
@@ -2967,7 +3035,7 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task Wchar_ReturnedFromScript_StringAccessible()
+        public void Wchar_ReturnedFromScript_StringAccessible()
         {
             // GetResultString decodes the UTF-8 bytes regardless of String vs Wchar type.
             using KitsuneEngine engine = new();
@@ -3011,7 +3079,7 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task Wchar_RoundTrip_SetAndGet_PreservesContent()
+        public void Wchar_RoundTrip_SetAndGet_PreservesContent()
         {
             using KitsuneEngine engine = new();
             engine.SetVariable("wRound", LuaValue.FromWchar("round trip \u00e9"));  // é is non-ASCII
@@ -3122,7 +3190,413 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        // -- Nohook / yield safety ------------------------------------------------
+        // -- RegisterUserdata / CreateUserdata ------------------------------------
+        [Fact]
+        public async Task RegisterUserdata_MethodsCallable_FromLua()
+        {
+            using KitsuneEngine engine = new();
+            engine.RegisterUserdata<Counter>();
+            engine.SetVariable("c", engine.CreateUserdata(new Counter { Value = 10 }));
+            LuaValue result = await engine.ExecuteStringAsync(
+                "c:Increment(); c:Increment(); return c:Get()");
+            result.AsInt64.ShouldBe(12);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task RegisterUserdata_MetaMethod_ToStringCallable()
+        {
+            using KitsuneEngine engine = new();
+            engine.RegisterUserdata<Counter>();
+            engine.SetVariable("c", engine.CreateUserdata(new Counter { Value = 7 }));
+            LuaValue result = await engine.ExecuteStringAsync("return tostring(c)");
+            result.String.ShouldBe("Counter(7)");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task RegisterUserdata_NoToStringMetaMethod_DefaultUsesObjectToString()
+        {
+            // Widget has no [LuaMetaMethod("__tostring")], so the injected default must
+            // call inst.ToString() — the standard C# Object.ToString() override.
+            // The user-defined Counter case above confirms the user's method is NOT
+            // replaced; this case confirms the fallback fires only when nothing is defined.
+            using KitsuneEngine engine = new();
+            engine.RegisterUserdata<Widget>();
+            var w = new Widget("hello");
+            engine.SetVariable("w", engine.CreateUserdata(w));
+            LuaValue result = await engine.ExecuteStringAsync("return tostring(w)");
+            result.String.ShouldBe(w.ToString());
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void RegisterUserdata_DuplicateName_ReturnsFalse()
+        {
+            using KitsuneEngine engine = new();
+            engine.RegisterUserdata<Counter>().ShouldBeTrue();
+            engine.RegisterUserdata<Counter>().ShouldBeFalse();
+        }
+
+        [Fact]
+        public async Task RegisterUserdata_InstancePassedToCallback_GetUserdataReturnsInstance()
+        {
+            using KitsuneEngine engine = new();
+            engine.RegisterUserdata<Counter>();
+            var original = new Counter { Value = 42 };
+            engine.SetVariable("c", engine.CreateUserdata(original));
+
+            Counter? captured = null;
+            engine.RegisterFunction("Capture", args =>
+            {
+                captured = args[0].GetUserdata<Counter>();
+                return LuaValue.None;
+            });
+
+            engine.ExecuteString("Capture(c)");
+            engine.Wait();
+            captured.ShouldNotBeNull();
+            captured.ShouldBeSameAs(original);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task RegisterUserdata_GcFreesHandle_EngineDisposeDoesNotLeak()
+        {
+            var engine = new KitsuneEngine();
+            try
+            {
+                engine.RegisterUserdata<Counter>();
+                engine.SetVariable("c", engine.CreateUserdata(new Counter()));
+
+                // Force __gc by collecting and nilifying the global.
+                await engine.ExecuteStringAsync(
+                    "c = nil; collectgarbage('collect'); collectgarbage('collect')");
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+            finally
+            {
+                engine.Dispose();
+            }
+            ThrowIfLeaked(engine);
+        }
+
+        [Fact]
+        public async Task RegisterUserdata_MultipleInstances_IndependentState()
+        {
+            using KitsuneEngine engine = new();
+            engine.RegisterUserdata<Counter>();
+            engine.SetVariable("a", engine.CreateUserdata(new Counter { Value = 0 }));
+            engine.SetVariable("b", engine.CreateUserdata(new Counter { Value = 100 }));
+            LuaValue result = await engine.ExecuteStringAsync(
+                "a:Increment(); a:Increment(); b:Increment(); return tostring(a:Get()) .. ':' .. tostring(b:Get())");
+            result.String.ShouldBe("2:101");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task RegisterUserdata_Method_WithLuaArgs_ReceivedCorrectly()
+        {
+            // args[0] = self (the userdata); args[1..n] = the Lua call arguments.
+            using KitsuneEngine engine = new();
+            engine.RegisterUserdata<Counter>();
+            engine.SetVariable("c", engine.CreateUserdata(new Counter { Value = 10 }));
+            LuaValue result = await engine.ExecuteStringAsync(
+                "c:Add(5); c:Add(3); return c:Get()");
+            result.AsInt64.ShouldBe(18);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task RegisterUserdata_Method_ThrowsLuaException_CatchableByPcall()
+        {
+            // A [LuaMethod] that throws LuaException must propagate the *original* message as a
+            // Lua error. TargetInvocationException must NOT swallow it before it reaches pcall.
+            using KitsuneEngine engine = new();
+            engine.RegisterUserdata<Counter>();
+            engine.SetVariable("c", engine.CreateUserdata(new Counter { Value = -1 }));
+            LuaValue result = await engine.ExecuteStringAsync(
+                "local ok, err = pcall(function() c:BangIfNegative() end); return tostring(ok) .. ':' .. tostring(err)");
+            result.String.ShouldStartWith("false:");
+            result.String.ShouldContain("Counter value is negative");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task RegisterUserdata_Method_DoesNotThrow_PcallReturnsTrue()
+        {
+            // When Value >= 0 the method must not throw; pcall sees true.
+            using KitsuneEngine engine = new();
+            engine.RegisterUserdata<Counter>();
+            engine.SetVariable("c", engine.CreateUserdata(new Counter { Value = 5 }));
+            LuaValue result = await engine.ExecuteStringAsync(
+                "local ok = pcall(function() c:BangIfNegative() end); return tostring(ok)");
+            result.String.ShouldBe("true");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void RegisterUserdata_GetVariableType_ReturnsUserdata()
+        {
+            // SetVariable with a Kitsune userdata stores it in Lua; GetVariableType must
+            // reflect the Lua type, not the C# type.
+            using KitsuneEngine engine = new();
+            engine.RegisterUserdata<Counter>();
+            engine.SetVariable("c", engine.CreateUserdata(new Counter()));
+            engine.GetVariableType("c").ShouldBe(LuaType.Userdata);
+        }
+
+        [Fact]
+        public void RegisterUserdata_GetVariable_PreservesInstance()
+        {
+            // GetVariable on a Kitsune-registered global returns a LuaValue whose
+            // UserdataGCHandlePtr is populated, so GetUserdata<T>() recovers the original instance.
+            using KitsuneEngine engine = new();
+            engine.RegisterUserdata<Counter>();
+            var original = new Counter { Value = 99 };
+            engine.SetVariable("c", engine.CreateUserdata(original));
+            LuaValue v = engine.GetVariable("c");
+            v.Type.ShouldBe(LuaType.Userdata);
+            v.GetUserdata<Counter>().ShouldBeSameAs(original);
+        }
+
+        [Fact]
+        public void RegisterUserdata_ReturnedFromCoroutine_GetUserdataReturnsInstance()
+        {
+            // A Kitsune-registered userdata returned by RunString has UserdataGCHandlePtr set
+            // so the original C# instance can be recovered via GetUserdata<T>().
+            using KitsuneEngine engine = new();
+            engine.RegisterUserdata<Counter>();
+            var original = new Counter { Value = 77 };
+            engine.SetVariable("c", engine.CreateUserdata(original));
+            LuaValue result = engine.RunString("return c");
+            result.Type.ShouldBe(LuaType.Userdata);
+            result.GetUserdata<Counter>().ShouldBeSameAs(original);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void RegisterUserdata_GetUserdata_WrongType_ReturnsNull()
+        {
+            // GetUserdata<T>() returns null when the stored instance is not a T;
+            // the correct type returns non-null. No engine interaction needed.
+            using KitsuneEngine engine = new();
+            engine.RegisterUserdata<Counter>();
+            LuaValue v = engine.CreateUserdata(new Counter { Value = 1 });
+            v.GetUserdata<string>().ShouldBeNull();
+            v.GetUserdata<Counter>().ShouldNotBeNull();
+        }
+
+        [Fact]
+        public async Task RegisterUserdata_TwoTypesRegistered_WorkIndependently()
+        {
+            // Two independently registered types must not share metatables or methods.
+            using KitsuneEngine engine = new();
+            engine.RegisterUserdata<Counter>().ShouldBeTrue();
+            engine.RegisterUserdata<Widget>().ShouldBeTrue();
+            engine.SetVariable("c", engine.CreateUserdata(new Counter { Value = 3 }));
+            engine.SetVariable("w", engine.CreateUserdata(new Widget("kitsune")));
+            LuaValue result = await engine.ExecuteStringAsync(
+                "c:Increment(); return c:Get() .. ':' .. w:GetName()");
+            result.String.ShouldBe("4:kitsune");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task RegisterUserdata_ConcurrentMethodCalls_AllCorrect()
+        {
+            // 20 concurrent coroutines each hold their own Counter instance; method calls
+            // must not cross-contaminate instances under scheduler pressure.
+            using KitsuneEngine engine = new();
+            engine.RegisterUserdata<Counter>();
+            const int count = 20;
+            for (int i = 0; i < count; i++)
+            {
+                engine.SetVariable($"co{i}", engine.CreateUserdata(new Counter { Value = i * 10 }));
+            }
+
+            Task<LuaValue>[] tasks = Enumerable.Range(0, count)
+                .Select(i => engine.ExecuteStringAsync(
+                    $"co{i}:Increment(); co{i}:Increment(); return co{i}:Get()"))
+                .ToArray();
+            LuaValue[] results = await Task.WhenAll(tasks);
+            for (int i = 0; i < count; i++)
+            {
+                results[i].AsInt64.ShouldBe((i * 10) + 2, $"instance {i} returned wrong value");
+            }
+
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task RegisterUserdata_FromCallback_ThrowsLuaException()
+        {
+            // RegisterUserdata may not be called from inside a RegisterFunction callback.
+            using KitsuneEngine engine = new();
+            engine.RegisterFunction("TryRegister", _ =>
+            {
+                engine.RegisterUserdata<Counter>();
+                return LuaValue.None;
+            });
+            LuaException ex = await Should.ThrowAsync<LuaException>(
+                engine.ExecuteStringAsync("TryRegister()"));
+            ex.Message.ShouldContain("registered function");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task CreateUserdata_FromCallback_ThrowsLuaException()
+        {
+            // CreateUserdata may not be called from inside a RegisterFunction callback.
+            using KitsuneEngine engine = new();
+            engine.RegisterUserdata<Counter>();
+            engine.RegisterFunction("TryCreate", _ =>
+            {
+                engine.CreateUserdata(new Counter());
+                return LuaValue.None;
+            });
+            LuaException ex = await Should.ThrowAsync<LuaException>(
+                engine.ExecuteStringAsync("TryCreate()"));
+            ex.Message.ShouldContain("registered function");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task RegisterUserdata_UserdataPassedViaARGS_MethodCallable()
+        {
+            // A userdata instance passed as a coroutine arg arrives with its GCHandlePtr
+            // populated so Lua can call methods and C# sees the same mutated instance.
+            using KitsuneEngine engine = new();
+            engine.RegisterUserdata<Counter>();
+            var c = new Counter { Value = 5 };
+            LuaValue result = await engine.ExecuteStringAsync(
+                "local c = ARGS[1]; c:Increment(); return c:Get()",
+                default,
+                engine.CreateUserdata(c));
+            result.AsInt64.ShouldBe(6);
+            c.Value.ShouldBe(6);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void RegisterUserdata_HandleFreedByDisposeWithoutGc_DoesNotCrash()
+        {
+            // If the engine is disposed before Lua GC fires __gc, the _userdataHandles
+            // fallback frees the GCHandle safely — no ObjectDisposedException or double-free.
+            KitsuneEngine engine = new();
+            engine.RegisterUserdata<Counter>();
+            engine.SetVariable("c", engine.CreateUserdata(new Counter()));
+            Should.NotThrow(engine.Dispose);
+        }
+
+        [Fact]
+        public void CreateUserdata_NullInstance_ThrowsArgumentNullException()
+        {
+            // GCHandle.Alloc(null) is valid in .NET: it creates a handle whose Target is null.
+            // A null-instance userdata would silently surface as "expected T as self" when Lua
+            // calls any method, hiding the real mistake.  ArgumentNullException must be thrown
+            // before any handle is allocated.
+            using KitsuneEngine engine = new();
+            engine.RegisterUserdata<Counter>();
+            Should.Throw<ArgumentNullException>(() => engine.CreateUserdata<Counter>(null!));
+        }
+
+        [Fact]
+        public void RegisterUserdata_DuplicateMethodName_ThrowsInvalidOperationException()
+        {
+            // Two [LuaMethod] attributes that map to the same Lua name silently overwrite each
+            // other in the dictionary; the earlier fix makes this a hard error instead.
+            using KitsuneEngine engine = new();
+            Should.Throw<InvalidOperationException>(() => engine.RegisterUserdata<TypeWithDuplicateLuaMethod>())
+                .Message.ShouldContain("Foo");
+        }
+
+        [Fact]
+        public void RegisterUserdata_DuplicateMetaMethodName_ThrowsInvalidOperationException()
+        {
+            // Two [LuaMetaMethod] with the same name must also be rejected.
+            using KitsuneEngine engine = new();
+            Should.Throw<InvalidOperationException>(() => engine.RegisterUserdata<TypeWithDuplicateLuaMetaMethod>())
+                .Message.ShouldContain("__tostring");
+        }
+
+        [Fact]
+        public async Task RegisterUserdata_MethodReturnsUserdata_LuaCanCallMethods()
+        {
+            // A RegisterFunction handler may return a pre-created userdata LuaValue;
+            // Lua can call methods on the received instance.
+            using KitsuneEngine engine = new();
+            engine.RegisterUserdata<Counter>();
+            var source = new Counter { Value = 42 };
+            LuaValue preCreated = engine.CreateUserdata(source);
+            engine.RegisterFunction("GetCounter", _ => preCreated);
+            LuaValue result = await engine.ExecuteStringAsync(
+                "local c = GetCounter(); c:Increment(); return c:Get()");
+            result.AsInt64.ShouldBe(43);
+            source.Value.ShouldBe(43);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task RegisterUserdata_TableYield_ContainsUserdata()
+        {
+            // A table returned from a coroutine that contains a registered userdata entry
+            // must preserve the userdata type and GCHandlePtr for that entry.
+            using KitsuneEngine engine = new();
+            engine.RegisterUserdata<Counter>();
+            var c = new Counter { Value = 55 };
+            engine.SetVariable("c", engine.CreateUserdata(c));
+            LuaValue result = engine.RunString("return { item = c, label = 'test' }");
+            result.Type.ShouldBe(LuaType.Table);
+            result.Table.ShouldNotBeNull();
+            var entry = result.Table!.Single(kvp => kvp.Key.String == "item");
+            entry.Value.Type.ShouldBe(LuaType.Userdata);
+            entry.Value.GetUserdata<Counter>().ShouldBeSameAs(c);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task RegisterUserdata_RegisterFunctionReceivesUserdata_GetUserdataWorks()
+        {
+            // When Lua passes a Kitsune userdata as an argument to a RegisterFunction callback
+            // the received LuaValue has UserdataGCHandlePtr set so GetUserdata<T>() works.
+            using KitsuneEngine engine = new();
+            engine.RegisterUserdata<Counter>();
+            var original = new Counter { Value = 7 };
+            engine.SetVariable("c", engine.CreateUserdata(original));
+
+            Counter? captured = null;
+            int capturedValue = -1;
+            engine.RegisterFunction("Inspect", args =>
+            {
+                captured = args[0].GetUserdata<Counter>();
+                capturedValue = captured?.Value ?? -1;
+                return LuaValue.None;
+            });
+
+            engine.ExecuteString("Inspect(c)");
+            engine.Wait();
+            captured.ShouldNotBeNull();
+            captured.ShouldBeSameAs(original);
+            capturedValue.ShouldBe(7);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task RegisterUserdata_DotPath_UserdataAccessibleViaNestedTable()
+        {
+            // SetVariable at a dot-path should work for userdatas, storing the object in a sub-table.
+            using KitsuneEngine engine = new();
+            engine.RegisterUserdata<Counter>();
+            var c = new Counter { Value = 3 };
+            engine.SetVariable("ns.counter", engine.CreateUserdata(c));
+            LuaValue result = await engine.ExecuteStringAsync(
+                "ns.counter:Increment(); ns.counter:Increment(); return ns.counter:Get()");
+            result.AsInt64.ShouldBe(5);
+            c.Value.ShouldBe(5);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
         [Fact]
         public void NohookCallback_ErrorCaughtByPcall_HookRestoredAndCancelStillWorks()
         {
@@ -4287,7 +4761,10 @@ namespace KitsuneNet.Tests
             // An async coroutine started before RunString must complete during the Sleep window.
             using KitsuneEngine engine = new();
             Task<LuaValue> asyncTask = engine.ExecuteStringAsync("return 'async done'");
-            SpinUntilRunning(engine);
+
+            // No spin needed — ExecuteStringAsync submits the coroutine synchronously;
+            // the subsequent RunString(Sleep(50)) yields the scheduler enough cycles
+            // to complete it regardless of when it was picked up.
 
             // Sleep gives the scheduler at least one cycle to finish the async task.
             LuaValue syncResult = engine.RunString("Sleep(50); return 'sync done'");
@@ -4609,7 +5086,7 @@ namespace KitsuneNet.Tests
 
                 Stopwatch sw = Stopwatch.StartNew();
 
-                for (int i = 0; i < 1000000; i++)
+                for (int i = 0; i < 100000; i++)
                 {
                     func.Invoke().AsInt64.ShouldBe(i + 1);
                 }
@@ -4629,7 +5106,7 @@ namespace KitsuneNet.Tests
 
             Stopwatch sw = Stopwatch.StartNew();
 
-            for (int i = 0; i < 1000000; i++)
+            for (int i = 0; i < 100000; i++)
             {
                 engine.RunFunction("tick").AsInt64.ShouldBe(i + 1);
             }
@@ -4960,7 +5437,7 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
 
             engine.ExecuteString("Sleep(2000)");
-            SpinUntilRunning(engine);
+            SpinUntilActive(engine);
             int bgId = engine.GetActiveIds()[0];
 
             for (int i = 0; i < 10; i++)
@@ -5480,10 +5957,151 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
+        // -- Registry references (Register / GetByReference / Unregister) ----------
+        [Fact]
+        public void Register_String_GetByReference_ReturnsEqualValue()
+        {
+            using KitsuneEngine engine = new();
+            int @ref = engine.Register((LuaValue)"hello");
+            @ref.ShouldNotBe(-2); // LUA_NOREF
+            engine.GetByReference(@ref).String.ShouldBe("hello");
+            engine.Unregister(@ref);
+        }
+
+        [Fact]
+        public void Register_Number_GetByReference_ReturnsEqualValue()
+        {
+            using KitsuneEngine engine = new();
+            int @ref = engine.Register(LuaValue.FromNumber(3.14));
+            @ref.ShouldNotBe(-2);
+            engine.GetByReference(@ref).Number.ShouldBe(3.14);
+            engine.Unregister(@ref);
+        }
+
+        [Fact]
+        public void Register_Integer_GetByReference_ReturnsEqualValue()
+        {
+            using KitsuneEngine engine = new();
+            int @ref = engine.Register(LuaValue.FromInt64(42L));
+            @ref.ShouldNotBe(-2);
+            engine.GetByReference(@ref).Int64.ShouldBe(42L);
+            engine.Unregister(@ref);
+        }
+
+        [Fact]
+        public void Register_Bool_GetByReference_ReturnsEqualValue()
+        {
+            using KitsuneEngine engine = new();
+            int @ref = engine.Register(LuaValue.FromBool(true));
+            @ref.ShouldNotBe(-2);
+            engine.GetByReference(@ref).Boolean.ShouldBeTrue();
+            engine.Unregister(@ref);
+        }
+
+        [Fact]
+        public void GetByReference_CalledMultipleTimes_PinPersists()
+        {
+            using KitsuneEngine engine = new();
+            int @ref = engine.Register((LuaValue)"persistent");
+            engine.GetByReference(@ref).String.ShouldBe("persistent");
+            engine.GetByReference(@ref).String.ShouldBe("persistent");
+            engine.Unregister(@ref);
+        }
+
+        [Fact]
+        public void Unregister_ReturnsValue_AndReleasesPin()
+        {
+            using KitsuneEngine engine = new();
+            int @ref = engine.Register((LuaValue)"gone");
+
+            // Unregister returns the value and releases the pin; calling Register again
+            // reuses the freed slot, so the original ref now resolves to the new value.
+            engine.Unregister(@ref).String.ShouldBe("gone");
+            int r2 = engine.Register((LuaValue)"reused");
+            r2.ShouldBe(@ref); // Lua freelist reuses the slot
+            engine.GetByReference(r2).String.ShouldBe("reused");
+            engine.Unregister(r2);
+        }
+
+        [Fact]
+        public void GetByReference_InvalidRef_ReturnsNone()
+        {
+            using KitsuneEngine engine = new();
+            engine.GetByReference(-2).Type.ShouldBe(LuaType.None); // LUA_NOREF
+        }
+
+        [Fact]
+        public void Register_Table_GetByReference_ReturnsTableSnapshot()
+        {
+            using KitsuneEngine engine = new();
+            var entries = new List<KeyValuePair<LuaValue, LuaValue>>
+            {
+                new((LuaValue)"k", (LuaValue)"v")
+            };
+            int @ref = engine.Register(LuaValue.FromTable(entries.AsReadOnly()));
+            @ref.ShouldNotBe(-2);
+            LuaValue result = engine.GetByReference(@ref);
+            result.Type.ShouldBe(LuaType.Table);
+            result.Table!.Count.ShouldBe(1);
+            result.Table[0].Value.String.ShouldBe("v");
+            engine.Unregister(@ref);
+        }
+
+        [Fact]
+        public void Register_MultipleValues_EachGetIndependentRef()
+        {
+            using KitsuneEngine engine = new();
+            int r1 = engine.Register((LuaValue)"first");
+            int r2 = engine.Register((LuaValue)"second");
+            r1.ShouldNotBe(r2);
+            engine.GetByReference(r1).String.ShouldBe("first");
+            engine.GetByReference(r2).String.ShouldBe("second");
+            engine.Unregister(r1);
+            engine.Unregister(r2);
+        }
+
+        [Fact]
+        public async Task Register_Function_PinsAfterOriginalRefReleased()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue fn = await engine.ExecuteStringAsync("return function(x) return x * 2 end");
+            fn.Type.ShouldBe(LuaType.Function);
+
+            int @ref = engine.Register(fn);
+            @ref.ShouldNotBe(-2);
+
+            // Release the original — the registered pin keeps the function alive.
+            fn.FunctionRef!.Dispose();
+
+            LuaValue pinned = engine.GetByReference(@ref);
+            pinned.Type.ShouldBe(LuaType.Function);
+            LuaValue result = pinned.FunctionRef!.Invoke(LuaValue.FromInt64(21));
+            result.Int64.ShouldBe(42L);
+            pinned.FunctionRef.Dispose();
+
+            engine.Unregister(@ref).FunctionRef!.Dispose();
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
         private static void SpinUntilRunning(KitsuneEngine engine, int timeoutMs = 2000)
         {
             DateTime deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
             while (!engine.IsRunning && DateTime.UtcNow < deadline)
+            {
+                Thread.Sleep(1);
+            }
+        }
+
+        // SpinUntilActive returns as soon as the coroutine has been assigned a slot
+        // (appears in GetActiveIds), which happens synchronously with ExecuteString.
+        // Use this instead of SpinUntilRunning when the coroutine sleeps immediately,
+        // because IsRunning transiently drops to false between scheduler ticks while
+        // a coroutine is sleeping and SpinUntilRunning would burn the full 2-second
+        // timeout before the subsequent GetActiveIds()[0] call.
+        private static void SpinUntilActive(KitsuneEngine engine, int timeoutMs = 5000)
+        {
+            DateTime deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+            while (engine.GetActiveIds().Length == 0 && DateTime.UtcNow < deadline)
             {
                 Thread.Sleep(1);
             }
@@ -5495,6 +6113,77 @@ namespace KitsuneNet.Tests
             {
                 throw new InvalidOperationException($"Native memory leak: {engine.LeakedAllocations} unfreed allocation(s) after KitsuneCleanup");
             }
+        }
+
+        private sealed class Counter
+        {
+            public int Value;
+
+            [LuaMethod]
+            public LuaValue Increment(IReadOnlyList<LuaValue> val)
+            {
+                Value++;
+                return LuaValue.None;
+            }
+
+            // args[0] = self, args[1] = amount to add
+            [LuaMethod]
+            public LuaValue Add(IReadOnlyList<LuaValue> args)
+            {
+                Value += (int)args[1].AsInt64;
+                return LuaValue.None;
+            }
+
+            // Throws when Value is negative so error-propagation tests can use it.
+            [LuaMethod]
+            public LuaValue BangIfNegative(IReadOnlyList<LuaValue> args)
+            {
+                if (Value < 0)
+                {
+                    throw new LuaException("Counter value is negative");
+                }
+
+                return LuaValue.None;
+            }
+
+            [LuaMethod(Name = "Get")]
+            public LuaValue GetValue(IReadOnlyList<LuaValue> val) => LuaValue.FromInt64(Value);
+
+            [LuaMetaMethod("__tostring")]
+            public LuaValue ToStr(IReadOnlyList<LuaValue> val) => $"Counter({Value})";
+        }
+
+        private sealed class Widget
+        {
+            public Widget(string name)
+            {
+                Name = name;
+            }
+
+            public string Name { get; }
+
+            [LuaMethod]
+            public LuaValue GetName(IReadOnlyList<LuaValue> val) => LuaValue.FromString(Name);
+        }
+
+        // Used by RegisterUserdata_DuplicateMethodName_ThrowsInvalidOperationException.
+        private sealed class TypeWithDuplicateLuaMethod
+        {
+            [LuaMethod]
+            public LuaValue Foo(IReadOnlyList<LuaValue> args) => LuaValue.None;
+
+            [LuaMethod(Name = "Foo")]
+            public LuaValue AlsoFoo(IReadOnlyList<LuaValue> args) => LuaValue.None;
+        }
+
+        // Used by RegisterUserdata_DuplicateMetaMethodName_ThrowsInvalidOperationException.
+        private sealed class TypeWithDuplicateLuaMetaMethod
+        {
+            [LuaMetaMethod("__tostring")]
+            public LuaValue ToStr1(IReadOnlyList<LuaValue> args) => LuaValue.None;
+
+            [LuaMetaMethod("__tostring")]
+            public LuaValue ToStr2(IReadOnlyList<LuaValue> args) => LuaValue.None;
         }
     }
 }

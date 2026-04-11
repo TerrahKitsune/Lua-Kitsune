@@ -64,6 +64,7 @@
 
 #include "KitsuneEngine.h"
 #include "LuaEngineBuiltins.h"
+#include "kitsuneuserdata.h"
 
 // Unique address used as the Lua registry key for the shared bridge LuaJson instance.
 // Defined in luajson.cpp; accessed via lua_json_bridge_registry_key().
@@ -240,14 +241,22 @@ static void DrainPendingVariableChain(lua_State* L) {
 // L must be non-NULL if any node key or value may be LUA_TFUNCTION or LUA_TTHREAD (to release registry refs).
 static void FreeKVNode(KeyValuePairKitsuneVariableNode* node, lua_State* L) {
 	while (node) {
-		if ((node->key.type == LUA_TSTRING || node->key.type == KITSUNE_TJSON || node->key.type == KITSUNE_TCHAR16 || node->key.type == KITSUNE_TERROR || node->key.type == LUA_TUSERDATA) && node->key.data)
+		if ((node->key.type == LUA_TSTRING || node->key.type == KITSUNE_TJSON || node->key.type == KITSUNE_TCHAR16 || node->key.type == KITSUNE_TERROR) && node->key.data)
 			gff_free(node->key.data);
+		else if (node->key.type == LUA_TUSERDATA && node->key.userdata) {
+			gff_free(node->key.userdata->name);
+			gff_free(node->key.userdata);
+		}
 		else if (node->key.type == LUA_TTABLE && node->key.table)
 			FreeKVNode(node->key.table, L);
 		else if ((node->key.type == LUA_TFUNCTION || node->key.type == LUA_TTHREAD) && L && (int)node->key.integer != LUA_NOREF)
 			luaL_unref(L, LUA_REGISTRYINDEX, (int)node->key.integer);
-		if ((node->value.type == LUA_TSTRING || node->value.type == KITSUNE_TJSON || node->value.type == KITSUNE_TCHAR16 || node->value.type == KITSUNE_TERROR || node->value.type == LUA_TUSERDATA) && node->value.data)
+		if ((node->value.type == LUA_TSTRING || node->value.type == KITSUNE_TJSON || node->value.type == KITSUNE_TCHAR16 || node->value.type == KITSUNE_TERROR) && node->value.data)
 			gff_free(node->value.data);
+		else if (node->value.type == LUA_TUSERDATA && node->value.userdata) {
+			gff_free(node->value.userdata->name);
+			gff_free(node->value.userdata);
+		}
 		else if (node->value.type == LUA_TTABLE && node->value.table)
 			FreeKVNode(node->value.table, L);
 		else if ((node->value.type == LUA_TFUNCTION || node->value.type == LUA_TTHREAD) && L && (int)node->value.integer != LUA_NOREF)
@@ -263,9 +272,14 @@ static void FreeKVNode(KeyValuePairKitsuneVariableNode* node, lua_State* L) {
 // L must be non-NULL when var may be LUA_TFUNCTION, LUA_TTHREAD, or LUA_TTABLE containing functions.
 static void FreeVariableData(KitsuneVariable* var, lua_State* L) {
 	if (!var) return;
-	if ((var->type == LUA_TSTRING || var->type == KITSUNE_TJSON || var->type == KITSUNE_TERROR || var->type == LUA_TUSERDATA) && var->data) {
+	if ((var->type == LUA_TSTRING || var->type == KITSUNE_TJSON || var->type == KITSUNE_TERROR) && var->data) {
 		gff_free(var->data);
 		var->data = NULL;
+	}
+	else if (var->type == LUA_TUSERDATA && var->userdata) {
+		gff_free(var->userdata->name);
+		gff_free(var->userdata);
+		var->userdata = NULL;
 	}
 	else if (var->type == KITSUNE_TCHAR16 && var->char16data) {
 		gff_free(var->char16data);
@@ -381,18 +395,34 @@ static void FillKitsuneVariableFromStack(lua_State* L, int idx, KitsuneVariable*
 			out->type = KITSUNE_TCHAR16;
 			break;
 		}
-		// All other userdata types: read __name from the metatable and store it as a string.
+		// All other userdata types: bridge as KITSUNE_TUSERDATA with a KitsuneUserData*.
+		// Kitsune-registered userdatas (sentinel present) also surface their instance pointer.
 		// __tostring is intentionally not called (may execute arbitrary Lua code).
 		if (lua_getmetatable(L, abs_idx)) {
+			lua_pushliteral(L, "__kitsune_userdata");
+			lua_rawget(L, -2);
+			bool isKitsuneRegistered = lua_touserdata(L, -1) == (void*)lua_registerkitsuneuserdata;
+			lua_pop(L, 1);  // pop sentinel value
+
 			lua_getfield(L, -1, "__name");
 			if (lua_type(L, -1) == LUA_TSTRING) {
 				size_t typeNameLen;
 				const char* typeName = lua_tolstring(L, -1, &typeNameLen);
 				if (typeName && typeNameLen > 0) {
-					out->data = (unsigned char*)gff_malloc(typeNameLen + 1);
-					if (out->data) {
-						memcpy(out->data, typeName, typeNameLen + 1);
-						out->length = typeNameLen;
+					KitsuneUserData* kud = (KitsuneUserData*)gff_malloc(sizeof(KitsuneUserData));
+					if (kud) {
+						kud->name = (char*)gff_malloc(typeNameLen + 1);
+						if (kud->name) {
+							memcpy(kud->name, typeName, typeNameLen + 1);
+							kud->userdata = isKitsuneRegistered
+								? ((LuaKitsuneUserdata*)lua_touserdata(L, abs_idx))->userdata
+								: NULL;
+							out->userdata = kud;
+							out->length = typeNameLen;
+						}
+						else {
+							gff_free(kud);
+						}
 					}
 				}
 			}
@@ -420,8 +450,12 @@ static void FillKitsuneVariableFromStack(lua_State* L, int idx, KitsuneVariable*
 		out->integer = luaL_ref(L, LUA_REGISTRYINDEX);
 		out->type = LUA_TTHREAD;
 		break;
+	case LUA_TLIGHTUSERDATA:
+		out->type = LUA_TLIGHTUSERDATA;
+		out->lightuserdata = lua_touserdata(L, abs_idx);
+		break;
 	default:
-		out->type = t;  // preserve actual type (lightuserdata, etc.); data/table remain NULL
+		out->type = t;
 		break;
 	}
 }
@@ -584,6 +618,28 @@ static void PushKitsuneVariable(lua_State* L, const KitsuneVariable* v) {
 		lua_pushcclosure(L, KitsuneIteratorWrapper, 1);
 		break;
 	}
+	case LUA_TUSERDATA: {
+		// Allocate a Lua-owned LuaKitsuneUserdata block, copy name and instance pointer,
+		// then apply the registered metatable.  Pushes nil if the type was never registered.
+		const KitsuneUserData* ud = v->userdata;
+		if (!ud || !ud->name) {
+			lua_pushnil(L);
+			break;
+		}
+		LuaKitsuneUserdata* lkud = (LuaKitsuneUserdata*)lua_newuserdata(L, sizeof(LuaKitsuneUserdata));
+		lkud->name = ud->name;
+		lkud->userdata = ud->userdata;
+		if (luaL_getmetatable(L, ud->name) != LUA_TTABLE) {
+			lua_pop(L, 2);  // pop failed getmetatable result and the new userdata
+			lua_pushnil(L);
+			break;
+		}
+		lua_setmetatable(L, -2);
+		break;
+	}
+	case LUA_TLIGHTUSERDATA:
+		lua_pushlightuserdata(L, v->lightuserdata);
+		break;
 	default:
 		lua_pushnil(L);
 		break;
@@ -637,18 +693,33 @@ static void SetSlotResult(KitsuneCoroutine* slot, lua_State* T, int idx) {
 			}
 			break;
 		}
-		// All other userdata types: read __name from the metatable and store it as a string.
-		// __tostring is intentionally not called (may execute arbitrary Lua code).
+		// All other userdata types: bridge as KITSUNE_TUSERDATA with a KitsuneUserData*.
+		// Kitsune-registered userdatas (sentinel present) also surface their instance pointer.
 		if (lua_getmetatable(T, idx)) {
+			lua_pushliteral(T, "__kitsune_userdata");
+			lua_rawget(T, -2);
+			bool isKitsuneRegistered = lua_touserdata(T, -1) == (void*)lua_registerkitsuneuserdata;
+			lua_pop(T, 1);  // pop sentinel value
+
 			lua_getfield(T, -1, "__name");
 			if (lua_type(T, -1) == LUA_TSTRING) {
 				size_t typeNameLen;
 				const char* typeName = lua_tolstring(T, -1, &typeNameLen);
 				if (typeName && typeNameLen > 0) {
-					slot->result.data = (unsigned char*)gff_malloc(typeNameLen + 1);
-					if (slot->result.data) {
-						memcpy(slot->result.data, typeName, typeNameLen + 1);
-						slot->result.length = typeNameLen;
+					KitsuneUserData* kud = (KitsuneUserData*)gff_malloc(sizeof(KitsuneUserData));
+					if (kud) {
+						kud->name = (char*)gff_malloc(typeNameLen + 1);
+						if (kud->name) {
+							memcpy(kud->name, typeName, typeNameLen + 1);
+							kud->userdata = isKitsuneRegistered
+								? ((LuaKitsuneUserdata*)lua_touserdata(T, idx))->userdata
+								: NULL;
+							slot->result.userdata = kud;
+							slot->result.length = typeNameLen;
+						}
+						else {
+							gff_free(kud);
+						}
 					}
 				}
 			}
@@ -2637,6 +2708,74 @@ extern "C" {
 		}
 
 		ReleaseLuaAccess(state);
+	}
+
+	KITSUNE_API bool KitsuneRegisterUserdata(const char* name, const KitsuneUserDataRegistration* registration) {
+		KitsuneState* state = g_state;
+		if (!state || !state->L || !name || !*name || !registration) return false;
+		if (g_isSchedulerThread && state->DelegateState) return false;
+		AcquireLuaAccess(state);
+		bool ok = lua_registerkitsuneuserdata(state->L, name, registration, LuaCFunctionWrapper);
+		ReleaseLuaAccess(state);
+		return ok;
+	}
+
+	KITSUNE_API int KitsuneRegister(const KitsuneVariable* var) {
+		KitsuneState* state = g_state;
+		if (!state || !state->L || !var) return LUA_NOREF;
+		if (g_isSchedulerThread && state->DelegateState) return LUA_NOREF;
+		AcquireLuaAccess(state);
+		PushKitsuneVariable(state->L, var);
+		int ref = luaL_ref(state->L, LUA_REGISTRYINDEX);
+		ReleaseLuaAccess(state);
+		return ref;
+	}
+
+	KITSUNE_API KitsuneVariable* KitsuneGetByReference(int ref) {
+		KitsuneState* state = g_state;
+		if (!state || !state->L || ref == LUA_NOREF) return NULL;
+		if (g_isSchedulerThread && state->DelegateState) return NULL;
+		AcquireLuaAccess(state);
+		KitsuneVariable* out = NULL;
+		lua_rawgeti(state->L, LUA_REGISTRYINDEX, ref);
+		int t = lua_type(state->L, -1);
+		if (t != LUA_TNIL && t != LUA_TNONE) {
+			out = (KitsuneVariable*)gff_malloc(sizeof(KitsuneVariable));
+			if (out) {
+				FillKitsuneVariableFromStack(state->L, -1, out, /*shallow=*/false);
+				if (out->type == LUA_TNONE) {
+					gff_free(out);
+					out = NULL;
+				}
+			}
+		}
+		lua_pop(state->L, 1);
+		ReleaseLuaAccess(state);
+		return out;
+	}
+
+	KITSUNE_API KitsuneVariable* KitsuneUnregister(int ref) {
+		KitsuneState* state = g_state;
+		if (!state || !state->L || ref == LUA_NOREF) return NULL;
+		if (g_isSchedulerThread && state->DelegateState) return NULL;
+		AcquireLuaAccess(state);
+		KitsuneVariable* out = NULL;
+		lua_rawgeti(state->L, LUA_REGISTRYINDEX, ref);
+		int t = lua_type(state->L, -1);
+		if (t != LUA_TNIL && t != LUA_TNONE) {
+			out = (KitsuneVariable*)gff_malloc(sizeof(KitsuneVariable));
+			if (out) {
+				FillKitsuneVariableFromStack(state->L, -1, out, /*shallow=*/false);
+				if (out->type == LUA_TNONE) {
+					gff_free(out);
+					out = NULL;
+				}
+			}
+		}
+		lua_pop(state->L, 1);
+		luaL_unref(state->L, LUA_REGISTRYINDEX, ref);
+		ReleaseLuaAccess(state);
+		return out;
 	}
 
 	KITSUNE_API size_t KitsuneCleanup() {

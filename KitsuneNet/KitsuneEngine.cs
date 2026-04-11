@@ -1,4 +1,5 @@
-﻿using System.Runtime.CompilerServices;
+﻿using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
@@ -11,9 +12,15 @@ namespace KitsuneNet
         private const string DllName = "KitsuneEngine";
 
         // GCHandle roots for anonymous Lua closures created via LuaValue.FromCFunction.
-        // Unlike RegisterFunction handles (per-engine, freed on individual dispose), these
-        // are tied to the shared Lua state and freed when the last engine is disposed.
+        // Like the bags below, these are tied to the shared Lua state.
         private static readonly System.Collections.Concurrent.ConcurrentBag<GCHandle> GlobalCFunctionHandles = new();
+
+        // GCHandle roots for delegates registered via RegisterFunction / RegisterUserdata
+        // (dispatch lambdas, gcWrappers, etc.) and for CreateUserdata instance pins.
+        // Per-engine handles are transferred here before the engine decrements _refCount,
+        // so they remain valid until KitsuneCleanup fires lua_close on the last Dispose.
+        private static readonly System.Collections.Concurrent.ConcurrentBag<GCHandle> GlobalFunctionHandles = new();
+        private static readonly System.Collections.Concurrent.ConcurrentBag<GCHandle> GlobalUserdataHandles = new();
 
         // Tracks the number of live KitsuneEngine instances.  KitsuneCleanup is
         // only called when the last instance is disposed; calling it earlier would
@@ -28,6 +35,7 @@ namespace KitsuneNet
 
         private int _disposed;  // 0 = not disposed; 1 = disposed
         private List<GCHandle>? _functionHandles;
+        private List<GCHandle>? _userdataHandles;
 
         public KitsuneEngine()
         {
@@ -663,6 +671,63 @@ namespace KitsuneNet
         }
 
         /// <summary>
+        /// Pins a <see cref="LuaValue"/> in the Lua registry and returns an integer reference.
+        /// The pinned value is kept alive until <see cref="Unregister"/> is called with the returned ref.
+        /// Returns <c>-2</c> (<c>LUA_NOREF</c>) on failure.
+        /// </summary>
+        public int Register(LuaValue value)
+        {
+            if (inLuaCallback)
+            {
+                throw new LuaException("Register cannot be called from within a registered function");
+            }
+
+            List<IntPtr>? ptrs = null;
+            try
+            {
+                var nv = default(KitsuneVariable);
+                FillNativeVariable(ref nv, value, ref ptrs);
+                return KitsuneRegister(ref nv);
+            }
+            finally
+            {
+                FreeNativeArgs(ptrs);
+            }
+        }
+
+        /// <summary>
+        /// Returns a copy of the value pinned at <paramref name="ref"/> without releasing the pin.
+        /// For <see cref="LuaType.Function"/> and <see cref="LuaType.Thread"/> values the returned
+        /// <see cref="LuaValue"/> holds an independent registry reference; dispose it when done.
+        /// Returns <see cref="LuaValue.None"/> if the ref is not found.
+        /// </summary>
+        public LuaValue GetByReference(int @ref)
+        {
+            if (inLuaCallback)
+            {
+                throw new LuaException("GetByReference cannot be called from within a registered function");
+            }
+
+            return NativePtrToLuaValue(KitsuneGetByReference(@ref), this);
+        }
+
+        /// <summary>
+        /// Releases the registry pin at <paramref name="ref"/> and returns the previously pinned value.
+        /// For <see cref="LuaType.Function"/> and <see cref="LuaType.Thread"/> values the returned
+        /// <see cref="LuaValue"/> holds an independent registry reference; dispose it when done.
+        /// Returns <see cref="LuaValue.None"/> if the ref is not found.
+        /// </summary>
+        public LuaValue Unregister(int @ref)
+        {
+            if (inLuaCallback)
+            {
+                throw new LuaException("Unregister cannot be called from within a registered function");
+            }
+
+            return NativePtrToLuaValue(KitsuneUnregister(@ref), this);
+        }
+
+        /// <summary>
         /// Registers a C# function as a Lua global callable by <paramref name="name"/>.
         /// <paramref name="name"/> may be a dot-separated path (e.g. <c>"Ns.Foo"</c>);
         /// intermediate tables are created automatically.
@@ -681,6 +746,144 @@ namespace KitsuneNet
             var handle = GCHandle.Alloc(func);
             _functionHandles.Add(handle);
             KitsuneRegisterFunction(name, GetTrampolinePtr(), (nint)GCHandle.ToIntPtr(handle));
+        }
+
+        /// <summary>
+        /// Registers a type to be used as userdata.
+        /// </summary>
+        /// <typeparam name="T">The type to register as userdata.</typeparam>
+        /// <returns><c>true</c> if the type was successfully registered; <c>false</c> if the type name was already registered.</returns>
+        /// <exception cref="LuaException">Thrown if called from within a registered function.</exception>
+        public bool RegisterUserdata<T>()
+            where T : class
+        {
+            if (inLuaCallback)
+            {
+                throw new LuaException("RegisterUserdata cannot be called from within a registered function");
+            }
+
+            var methods = new Dictionary<string, LuaFunction>();
+            var metaMethods = new Dictionary<string, LuaFunction>();
+
+            foreach (var method in typeof(T).GetMethods(BindingFlags.Public | BindingFlags.Instance))
+            {
+                var ma = method.GetCustomAttribute<LuaMethodAttribute>();
+                if (ma is not null)
+                {
+                    string key = ma.Name ?? method.Name;
+                    if (methods.ContainsKey(key))
+                    {
+                        throw new InvalidOperationException(
+                            $"[LuaMethod] name '{key}' is used by more than one method on {typeof(T).Name}.");
+                    }
+
+                    var captured = method;
+                    methods[key] = args =>
+                    {
+                        var inst = args.Count > 0 ? args[0].GetUserdata<T>() : null;
+                        if (inst is null)
+                        {
+                            return LuaValue.FromError($"expected {typeof(T).Name} as self (arg 0)");
+                        }
+
+                        try
+                        {
+                            object? ret = captured.Invoke(inst, [args]);
+                            return ret is LuaValue v ? v : LuaValue.None;
+                        }
+                        catch (TargetInvocationException tie) when (tie.InnerException is not null)
+                        {
+                            return LuaValue.FromError(tie.InnerException.Message);
+                        }
+                        catch (Exception ex)
+                        {
+                            return LuaValue.FromError(ex.Message);
+                        }
+                    };
+                }
+
+                var mm = method.GetCustomAttribute<LuaMetaMethodAttribute>();
+                if (mm is not null)
+                {
+                    string key = mm.Name;
+                    if (metaMethods.ContainsKey(key))
+                    {
+                        throw new InvalidOperationException(
+                            $"[LuaMetaMethod] name '{key}' is used by more than one method on {typeof(T).Name}.");
+                    }
+
+                    var captured = method;
+                    metaMethods[key] = args =>
+                    {
+                        var inst = args.Count > 0 ? args[0].GetUserdata<T>() : null;
+                        if (inst is null)
+                        {
+                            return LuaValue.FromError($"expected {typeof(T).Name} as self (arg 0)");
+                        }
+
+                        try
+                        {
+                            object? ret = captured.Invoke(inst, [args]);
+                            return ret is LuaValue v ? v : LuaValue.None;
+                        }
+                        catch (TargetInvocationException tie) when (tie.InnerException is not null)
+                        {
+                            return LuaValue.FromError(tie.InnerException.Message);
+                        }
+                        catch (Exception ex)
+                        {
+                            return LuaValue.FromError(ex.Message);
+                        }
+                    };
+                }
+            }
+
+            // Inject a default __tostring if the user did not provide one.
+            // Every C# object inherits Object.ToString(), so calling it is always safe.
+            if (!metaMethods.ContainsKey("__tostring"))
+            {
+                metaMethods["__tostring"] = args =>
+                {
+                    var inst = args.Count > 0 ? args[0].GetUserdata<T>() : null;
+                    if (inst is null)
+                    {
+                        return LuaValue.FromError($"expected {typeof(T).Name} as self (arg 0)");
+                    }
+
+                    return LuaValue.FromString(inst.ToString());
+                };
+            }
+
+            return RegisterUserdataCore(typeof(T).Name, methods, metaMethods);
+        }
+
+        /// <summary>
+        /// Creates a Lua userdata value wrapping the given C# object instance. The userdata is pinned in memory
+        /// until it is collected by Lua's garbage collector or the engine is disposed.
+        /// </summary>
+        /// <typeparam name="T">The type of the C# object to wrap as userdata.</typeparam>
+        /// <param name="instance">The C# object instance to wrap as userdata.</param>
+        /// <returns>A LuaValue representing the userdata.</returns>
+        /// <exception cref="LuaException">Thrown if called from within a registered function.</exception>
+        public LuaValue CreateUserdata<T>(T instance)
+            where T : class
+        {
+            if (inLuaCallback)
+            {
+                throw new LuaException("CreateUserdata cannot be called from within a registered function");
+            }
+
+            ArgumentNullException.ThrowIfNull(instance);
+
+            var handle = GCHandle.Alloc(instance);
+            _userdataHandles ??= new List<GCHandle>();
+            _userdataHandles.Add(handle);
+            return new LuaValue
+            {
+                Type = LuaType.Userdata,
+                Bytes = Encoding.UTF8.GetBytes(typeof(T).Name),
+                UserdataGCHandlePtr = GCHandle.ToIntPtr(handle),
+            };
         }
 
         public void Dispose()
@@ -822,9 +1025,6 @@ namespace KitsuneNet
             }
         }
 
-        private static unsafe nint GetTrampolinePtr() =>
-           (nint)(delegate* unmanaged[Cdecl]<int, KitsuneVariable*, nint, void*, int>)&LuaFunctionTrampoline;
-
         #region P/Invoke
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
@@ -906,6 +1106,15 @@ namespace KitsuneNet
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern void KitsuneGetAll([MarshalAs(UnmanagedType.LPUTF8Str)] string? path, GetAllCallback callback, IntPtr userdata);
 
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern int KitsuneRegister(ref KitsuneVariable var);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr KitsuneGetByReference(int @ref);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr KitsuneUnregister(int @ref);
+
         // func is a delegate* unmanaged[Cdecl] cast to nint; userdata is a GCHandle address.
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern void KitsuneRegisterFunction([MarshalAs(UnmanagedType.LPUTF8Str)] string name, nint func, nint userdata);
@@ -913,7 +1122,14 @@ namespace KitsuneNet
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern IntPtr KitsuneCreateMemoryBlock(nuint size);
 
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool KitsuneRegisterUserdata([MarshalAs(UnmanagedType.LPUTF8Str)] string name, IntPtr registration);
+
         #endregion
+
+        private static unsafe nint GetTrampolinePtr() =>
+            (nint)(delegate* unmanaged[Cdecl]<int, KitsuneVariable*, nint, void*, int>)&LuaFunctionTrampoline;
 
         // Converts a LuaValue[] to a KitsuneVariable[] suitable for P/Invoke.
         // String data is heap-allocated; caller MUST call FreeNativeArgs when done.
@@ -978,6 +1194,25 @@ namespace KitsuneNet
             return new LuaValue { Type = LuaType.Char16, Bytes = bytes };
         }
 
+        // Unmarshals a KitsuneUserDataNative { char* name, void* userdata } pointed to by ptr.
+        // nv.Length carries the name byte count so the name string can be copied without strlen.
+        private static LuaValue NativeUnmarshalUserdata(IntPtr ptr, nuint nameLen)
+        {
+            if (ptr == IntPtr.Zero)
+            {
+                return new LuaValue { Type = LuaType.Userdata };
+            }
+            var kud = Marshal.PtrToStructure<KitsuneUserDataNative>(ptr);
+            byte[]? nameBytes = null;
+            if (kud.Name != IntPtr.Zero && nameLen > 0)
+            {
+                int len = (int)nameLen;
+                nameBytes = new byte[len];
+                Marshal.Copy(kud.Name, nameBytes, 0, len);
+            }
+            return new LuaValue { Type = LuaType.Userdata, Bytes = nameBytes, UserdataGCHandlePtr = kud.Userdata };
+        }
+
         private static LuaValue NativeParseJson(IntPtr src, nuint length)
         {
             if (length > (nuint)Array.MaxLength)
@@ -1005,10 +1240,15 @@ namespace KitsuneNet
             {
                 return LuaValue.None;
             }
+
             // ReadUnaligned is a direct memory load on the blittable struct,
             // avoiding the marshalling-layer overhead of Marshal.PtrToStructure.
             KitsuneVariable nv;
-            unsafe { nv = Unsafe.ReadUnaligned<KitsuneVariable>((void*)ptr); }
+            unsafe
+            {
+                nv = Unsafe.ReadUnaligned<KitsuneVariable>((void*)ptr);
+            }
+
             LuaType t = (LuaType)nv.Type;
 
             // Function / Thread: transfer the native pointer to a LuaFunctionRef / LuaThreadRef;
@@ -1038,7 +1278,7 @@ namespace KitsuneNet
                 LuaType.Boolean => LuaValue.FromBool(nv.BoolByte != 0),
                 LuaType.String when nv.Data != IntPtr.Zero => NativeCopyBytes(nv.Data, nv.Length),
                 LuaType.Char16 when nv.Data != IntPtr.Zero => NativeCopyChar16(nv.Data, nv.Length),
-                LuaType.Userdata when nv.Data != IntPtr.Zero && nv.Length > 0 => NativeCopyBytes(nv.Data, nv.Length) with { Type = LuaType.Userdata },
+                LuaType.Userdata when nv.Data != IntPtr.Zero => NativeUnmarshalUserdata(nv.Data, nv.Length),
                 LuaType.Json when nv.Data != IntPtr.Zero && nv.Length > 0 => NativeParseJson(nv.Data, nv.Length),
                 LuaType.Stream when nv.Data != IntPtr.Zero => NativeWrapSharedMemory(nv.Data),
                 LuaType.Table => ReadNativeTable(nv.Data),
@@ -1064,7 +1304,7 @@ namespace KitsuneNet
                 LuaType.Boolean => LuaValue.FromBool(nv.BoolByte != 0),
                 LuaType.String when nv.Data != IntPtr.Zero => NativeCopyBytes(nv.Data, nv.Length),
                 LuaType.Char16 when nv.Data != IntPtr.Zero => NativeCopyChar16(nv.Data, nv.Length),
-                LuaType.Userdata when nv.Data != IntPtr.Zero && nv.Length > 0 => NativeCopyBytes(nv.Data, nv.Length) with { Type = LuaType.Userdata },
+                LuaType.Userdata when nv.Data != IntPtr.Zero => NativeUnmarshalUserdata(nv.Data, nv.Length),
                 LuaType.Json when nv.Data != IntPtr.Zero && nv.Length > 0 => NativeParseJson(nv.Data, nv.Length),
                 LuaType.Stream when nv.Data != IntPtr.Zero => NativeWrapSharedMemory(nv.Data),
                 LuaType.Table => ReadNativeTable(nv.Data),
@@ -1340,6 +1580,26 @@ namespace KitsuneNet
                         // GCHandles intentionally NOT in ptrs — freed by finalizeFunc.
                         break;
                     }
+                case LuaType.Userdata when v.Bytes is not null && v.UserdataGCHandlePtr != 0:
+                    {
+                        // Allocate a KitsuneUserData { char* name, void* userdata } on the unmanaged heap.
+                        // PushKitsuneVariable reads it to fill LuaKitsuneUserdata and apply the metatable.
+                        byte[] nameBytes = v.Bytes;
+                        IntPtr namePtr = Marshal.AllocHGlobal(nameBytes.Length + 1);
+                        Marshal.Copy(nameBytes, 0, namePtr, nameBytes.Length);
+                        Marshal.WriteByte(namePtr, nameBytes.Length, 0);
+
+                        IntPtr structPtr = Marshal.AllocHGlobal(IntPtr.Size * 2);
+                        Marshal.WriteIntPtr(structPtr, 0, namePtr);
+                        Marshal.WriteIntPtr(structPtr, IntPtr.Size, v.UserdataGCHandlePtr);
+
+                        ptrs ??= new List<IntPtr>();
+                        ptrs.Add(namePtr);
+                        ptrs.Add(structPtr);
+                        nv.Data = structPtr;
+                        nv.Length = (nuint)nameBytes.Length;
+                        break;
+                    }
             }
         }
 
@@ -1420,10 +1680,17 @@ namespace KitsuneNet
                 }
 
                 LuaValue result = func(Array.AsReadOnly(args));
+                if (result.Type == LuaType.Error)
+                {
+                    InvokeResultSetterError(resultSetterPtr, result.String ?? string.Empty);
+                    return 0;
+                }
+
                 if (result.Type != LuaType.None)
                 {
                     InvokeResultSetter(resultSetterPtr, result);
                 }
+
                 return 1;
             }
             catch (Exception ex)
@@ -1482,6 +1749,112 @@ namespace KitsuneNet
             }
         }
 
+        private static void FreeNamedFunctionList(IntPtr head)
+        {
+            while (head != IntPtr.Zero)
+            {
+                IntPtr namePtr = Marshal.ReadIntPtr(head, 0);
+                IntPtr next = Marshal.ReadIntPtr(head, IntPtr.Size * 3);
+                Marshal.FreeHGlobal(namePtr);
+                Marshal.FreeHGlobal(head);
+                head = next;
+            }
+        }
+
+        private bool RegisterUserdataCore(
+            string name,
+            IReadOnlyDictionary<string, LuaFunction> methods,
+            IReadOnlyDictionary<string, LuaFunction> metaMethods)
+        {
+            // Inject __gc: call any user-supplied __gc first, then always free the GCHandle.
+            LuaFunction? userGc = metaMethods.GetValueOrDefault("__gc");
+            LuaFunction gcWrapper = args =>
+            {
+                nint handlePtr = args.Count > 0 ? args[0].UserdataGCHandlePtr : 0;
+                try
+                {
+                    userGc?.Invoke(args);
+                }
+                finally
+                {
+                    if (handlePtr != 0)
+                    {
+                        var h = GCHandle.FromIntPtr(handlePtr);
+                        if (h.IsAllocated)
+                        {
+                            h.Free();
+                        }
+                    }
+                }
+
+                return LuaValue.None;
+            };
+
+            IntPtr funcHead = IntPtr.Zero;
+            IntPtr metaHead = IntPtr.Zero;
+            IntPtr reg = IntPtr.Zero;
+            try
+            {
+                foreach (var kvp in methods)
+                {
+                    funcHead = AllocNamedFunction(kvp.Key, kvp.Value, funcHead);
+                }
+
+                metaHead = AllocNamedFunction("__gc", gcWrapper, IntPtr.Zero);
+                foreach (var kvp in metaMethods)
+                {
+                    if (kvp.Key == "__gc")
+                    {
+                        continue;
+                    }
+
+                    metaHead = AllocNamedFunction(kvp.Key, kvp.Value, metaHead);
+                }
+
+                // KitsuneUserDataRegistration { MetaTableFunctions*, Functions* }
+                reg = Marshal.AllocHGlobal(IntPtr.Size * 2);
+                Marshal.WriteIntPtr(reg, 0, metaHead);
+                Marshal.WriteIntPtr(reg, IntPtr.Size, funcHead);
+
+                return KitsuneRegisterUserdata(name, reg);
+            }
+            finally
+            {
+                // Free temporary structs — the engine copied method info into Lua metatables.
+                // GCHandles for the LuaFunction delegates remain alive in _functionHandles.
+                FreeNamedFunctionList(funcHead);
+                FreeNamedFunctionList(metaHead);
+                if (reg != IntPtr.Zero)
+                {
+                    Marshal.FreeHGlobal(reg);
+                }
+            }
+        }
+
+        // Allocates a NamedKitsuneFunction { char* name, func, void* userdata, Next* } node.
+        // The LuaFunction delegate is rooted in _functionHandles; the name string and node itself
+        // are freed by FreeNamedFunctionList once KitsuneRegisterUserdata has consumed them.
+        private IntPtr AllocNamedFunction(string name, LuaFunction func, IntPtr next)
+        {
+            _functionHandles ??= new List<GCHandle>();
+            var handle = GCHandle.Alloc(func);
+            _functionHandles.Add(handle);
+
+            byte[] nameBytes = Encoding.UTF8.GetBytes(name);
+            IntPtr namePtr = Marshal.AllocHGlobal(nameBytes.Length + 1);
+            Marshal.Copy(nameBytes, 0, namePtr, nameBytes.Length);
+            Marshal.WriteByte(namePtr, nameBytes.Length, 0);
+
+            // NamedKitsuneFunction { char* name, kitsune_CFunction func, void* userdata, NamedKitsuneFunction* Next }
+            // Each field is pointer-sized on x64 (32 bytes total).
+            IntPtr node = Marshal.AllocHGlobal(IntPtr.Size * 4);
+            Marshal.WriteIntPtr(node, 0, namePtr);
+            Marshal.WriteIntPtr(node, IntPtr.Size, GetTrampolinePtr());
+            Marshal.WriteIntPtr(node, IntPtr.Size * 2, GCHandle.ToIntPtr(handle));
+            Marshal.WriteIntPtr(node, IntPtr.Size * 3, next);
+            return node;
+        }
+
         /// <summary>Returns <c>true</c> once the coroutine has finished (success or error).</summary>
         private bool HasResult(int id) => KitsuneHasResult(id, out _);
 
@@ -1511,26 +1884,64 @@ namespace KitsuneNet
         {
             if (Interlocked.Exchange(ref _disposed, 1) == 0)
             {
+                // Transfer this engine's handles to the shared bags BEFORE decrementing
+                // the ref-count.  The Lua state is process-wide: delegates and userdata
+                // pins registered by any engine must stay valid until lua_close fires all
+                // __gc callbacks inside KitsuneCleanup.  Only the last engine calls
+                // KitsuneCleanup, so handles must not be freed while earlier engines dispose.
+                //
+                // Safety: transfer-before-decrement is the key invariant.  When a decrement
+                // reaches zero, every previously-decremented engine has already completed its
+                // transfer, so KitsuneCleanup sees all handles in the global bags.
+                if (disposing)
+                {
+                    if (_functionHandles is not null)
+                    {
+                        foreach (var h in _functionHandles)
+                        {
+                            GlobalFunctionHandles.Add(h);
+                        }
+
+                        _functionHandles = null;
+                    }
+
+                    if (_userdataHandles is not null)
+                    {
+                        foreach (var h in _userdataHandles)
+                        {
+                            GlobalUserdataHandles.Add(h);
+                        }
+
+                        _userdataHandles = null;
+                    }
+                }
+
                 if (Interlocked.Decrement(ref _refCount) == 0)
                 {
+                    // Last engine: stop the scheduler and close the Lua state.
+                    // lua_close fires __gc for all live objects, which frees their userdata GCHandles.
                     LeakedAllocations = (ulong)KitsuneCleanup();
+
+                    // Safe to free all accumulated handles now that the Lua state is gone.
                     while (GlobalCFunctionHandles.TryTake(out var h))
                     {
                         h.Free();
                     }
-                }
 
-                if (disposing && _functionHandles is not null)
-                {
-                    foreach (var h in _functionHandles)
+                    // Dispatch lambdas and gcWrappers: never freed by __gc, always freed here.
+                    while (GlobalFunctionHandles.TryTake(out var h))
+                    {
+                        h.Free();
+                    }
+
+                    // Userdata instance pins: __gc may have already freed some during lua_close.
+                    while (GlobalUserdataHandles.TryTake(out var h))
                     {
                         if (h.IsAllocated)
                         {
                             h.Free();
                         }
                     }
-
-                    _functionHandles.Clear();
                 }
             }
         }
@@ -1565,6 +1976,15 @@ namespace KitsuneNet
             public KitsuneVariable Key;
             public KitsuneVariable Value;
             public IntPtr Next;
+        }
+
+        // Mirrors KitsuneUserData: { char* name, void* userdata }.
+        // nv.Data points to one of these for every LUA_TUSERDATA variable produced by the engine.
+        [StructLayout(LayoutKind.Sequential)]
+        private struct KitsuneUserDataNative
+        {
+            public IntPtr Name;     // heap-allocated UTF-8 name string
+            public IntPtr Userdata; // GCHandle address for Kitsune-registered userdatas; IntPtr.Zero otherwise
         }
 
         // Mirrors the x64 layout of SharedMemoryBlock (see KitsuneEngine.h):

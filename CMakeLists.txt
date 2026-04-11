@@ -32,6 +32,7 @@ set_target_properties(lua_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 set(KITSUNE_ENGINE_SOURCES
 	# ── Core scheduler ─────────────────────────────────────────────────────
 	KitsuneEngine.cpp
+	kitsuneuserdata.cpp
 	mem.cpp
 	LuaEngineBuiltins.cpp
 	lua_misc.cpp

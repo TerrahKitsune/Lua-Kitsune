@@ -83,6 +83,9 @@ struct kitsune_CFunctionData;
 // Forward declaration required so KitsuneVariable can hold a KitsuneIterator* in its union;
 // the full definition follows after kitsune_CFunction is declared.
 struct KitsuneIterator;
+// Forward declaration required so KitsuneVariable can hold a KitsuneUserData* in its union;
+// the full definition follows below.
+struct KitsuneUserData;
 
 struct KitsuneVariable {
 	int type; // see KITSUNE_T* constants above
@@ -92,13 +95,19 @@ struct KitsuneVariable {
 		long long integer;                     // KITSUNE_TINTEGER
 		bool boolean;                          // KITSUNE_TBOOLEAN
 		unsigned char* data;                   // KITSUNE_TSTRING: heap-allocated UTF-8 bytes; caller-owned on Set
-		// KITSUNE_TUSERDATA: heap-allocated UTF-8 __name from metatable (NULL if no __name); length = byte count
 		char16_t* char16data;                  // KITSUNE_TCHAR16: heap-allocated char16_t string; length = number of char16_t code units (excl. null terminator)
 		KeyValuePairKitsuneVariableNode* table; // KITSUNE_TTABLE: head of linked list (NULL = empty table)
 		SharedMemoryBlock* stream; // KITSUNE_TSTREAM: pointer to a SharedMemoryBlock representing the stream; caller-owned on Set
 		kitsune_CFunctionData* cfunction; // KITSUNE_TCFUNCTION: pointer to a kitsune_CFunctionData struct containing the function pointer and its userdata; caller-owned on Set
 		KitsuneIterator* iterator; // KITSUNE_TITERATOR: pointer to a kitsune_Iterator struct containing the iteration state; caller-owned on Set
+		void* lightuserdata; // KITSUNE_TLIGHTUSERDATA: opaque pointer; caller-owned on Set
+		KitsuneUserData* userdata; // KITSUNE_TUSERDATA: pointer to a KitsuneUserData struct containing the name and userdata pointer; caller-owned on Set
 	};
+};
+
+struct KitsuneUserData {
+	char* name; // Name of the userdata
+	void* userdata; // Opaque pointer passed to C functions registered in this userdata's metatable; null if it its userdata that was not registered by KitsuneRegisterUserdata
 };
 
 // Iterator struct for KITSUNE_TITERATOR values.
@@ -158,6 +167,20 @@ struct kitsune_CFunctionData {
 	void* userdata;         // opaque userdata passed to func on each call
 };
 
+// A named entry in a userdata's method or metamethod table.
+struct NamedKitsuneFunction {
+	char* name;
+	kitsune_CFunction func;
+	void* userdata; // Opaque pointer passed to func when this method is called
+	NamedKitsuneFunction* Next;
+};
+
+// Passed to KitsuneRegisterUserdata to describe the methods and metamethods of a userdata type.
+struct KitsuneUserDataRegistration {
+	NamedKitsuneFunction* MetaTableFunctions; // Meta functions names should match lua https://www.lua.org/pil/13.html
+	NamedKitsuneFunction* Functions; // Functions added to the userdata metatable
+};
+
 // Initialisation callback passed to KitsuneInit.
 typedef void (*kitsune_Init) (const void* L);
 
@@ -177,6 +200,11 @@ extern "C" {
 	// name is a dot-separated path (e.g. "Foo" or "Ns.Foo"); intermediate tables are created.
 	// See kitsune_CFunction for the full list of constraints on what may be called from within func.
 	KITSUNE_API void KitsuneRegisterFunction(const char* name, kitsune_CFunction func, void* userdata = nullptr);
+
+	// Registers a userdata type with the engine, allowing Lua to recognise it and call its metamethods.
+	// Fails if the name is already taken, or if registration->MetaTableFunctions is missing
+	// a __gc entry (releases the managed GCHandle) or a __tostring entry (enables tostring()).
+	KITSUNE_API bool KitsuneRegisterUserdata(const char* name, const KitsuneUserDataRegistration* registration);
 
 	// Allocates a memory block of the given size, anchors it in the Lua registry,
 	// and returns a pointer to the block for the host to read from or write into.
@@ -286,4 +314,12 @@ extern "C" {
 	// invoking callback once per key-value pair. Pass NULL or "" to iterate _G itself.
 	// key and value are temporary — valid only for the duration of each call. Thread-safe.
 	KITSUNE_API void KitsuneGetAll(const char* path, kitsune_KeyValuePairCallback callback, void* userdata);
+	// Registers a KitsuneVariable on the lua registry and returns an integer reference. Thread-safe.
+	KITSUNE_API int KitsuneRegister(const KitsuneVariable* var);
+	// Retrieves a registered KitsuneVariable from the lua registry by its integer reference.
+	// Call KitsuneVariableFree on the result when done. Thread-safe.
+	KITSUNE_API KitsuneVariable* KitsuneGetByReference(int ref);
+	// Unregisters a KitsuneVariable from the lua registry by its integer reference and returns it.
+	// Call KitsuneVariableFree on the result when done. Thread-safe.
+	KITSUNE_API KitsuneVariable* KitsuneUnregister(int ref);
 }

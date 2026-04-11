@@ -97,6 +97,7 @@
     <ClCompile Include="HttpCurl.cpp" />
     <ClCompile Include="HttpCurlMain.cpp" />
     <ClCompile Include="KitsuneEngine.cpp" />
+    <ClCompile Include="kitsuneuserdata.cpp" />
     <ClCompile Include="LuaArchive.cpp" />
     <ClCompile Include="LuaArchiveMain.cpp" />
     <ClCompile Include="base64.cpp" />
@@ -198,6 +199,7 @@
     <ClInclude Include="hiredis\read.h" />
     <ClInclude Include="hiredis\sds.h" />
     <ClInclude Include="KitsuneEngine.h" />
+    <ClInclude Include="kitsuneuserdata.h" />
     <ClInclude Include="LuaArchive.h" />
     <ClInclude Include="LuaArchiveMain.h" />
     <ClInclude Include="base64.h" />
@@ -294,7 +296,6 @@
     <None Include="build-linux-and-test.ps1" />
     <None Include="build-release.ps1" />
     <None Include="Lua functions.md" />
-    <None Include="SYNC_EXECUTE_REFACTOR_PLAN.md" />
     <None Include="testEnvironments.json" />
     <None Include="triplets\x64-windows-static-md.cmake" />
     <None Include="vcpkg.json" />

@@ -74,6 +74,11 @@ namespace KitsuneNet
         /// <summary>No value / not set.</summary>
         public static LuaValue None => new() { Type = LuaType.None };
 
+        /// <summary>GCHandle address for <see cref="LuaType.Userdata"/> instances created via
+        /// <see cref="KitsuneEngine.CreateUserdata{T}"/>. Zero for unregistered userdatas
+        /// and all other types. Used internally to round-trip the managed instance through Lua.</summary>
+        internal nint UserdataGCHandlePtr { get; init; }
+
         public static implicit operator LuaValue(double v) => FromNumber(v);
 
         public static implicit operator LuaValue(bool v) => FromBool(v);
@@ -83,6 +88,17 @@ namespace KitsuneNet
         public static implicit operator LuaValue(byte[]? v) => FromBytes(v);
 
         public static implicit operator LuaValue(JsonNode? v) => FromJson(v);
+
+        /// <summary>Returns the C# instance for a Kitsune-registered <see cref="LuaType.Userdata"/>
+        /// value, or <c>null</c> for unregistered userdatas and all other types.</summary>
+        public object? GetUserdata() =>
+            UserdataGCHandlePtr != 0 ? System.Runtime.InteropServices.GCHandle.FromIntPtr(UserdataGCHandlePtr).Target : null;
+
+        /// <summary>Typed convenience wrapper over <see cref="GetUserdata"/>.
+        /// Returns <c>null</c> when the instance is not a <typeparamref name="T"/>.</summary>
+        /// <typeparam name="T">The expected userdata type. Must match the type argument used to register the instance.</typeparam>
+        public T? GetUserdata<T>()
+            where T : class => GetUserdata() as T;
 
         /// <summary>Returns the most useful string representation of the value.</summary>
         public override string ToString() => Type switch
@@ -171,6 +187,13 @@ namespace KitsuneNet
         public static LuaValue FromWchar(string? v) =>
             v is null ? None : new() { Type = LuaType.Char16, Bytes = Encoding.Unicode.GetBytes(v) };
 
+        /// <summary>Creates an error value carrying <paramref name="message"/>.
+        /// When returned from a <see cref="LuaFunction"/> the engine converts it to a Lua error
+        /// via the result-setter, raising it in the calling coroutine. On the C# side
+        /// <see cref="GetOrThrow"/> surfaces it as a <see cref="LuaException"/>.</summary>
+        public static LuaValue FromError(string message) =>
+            new() { Type = LuaType.Error, Bytes = Encoding.UTF8.GetBytes(message) };
+
         /// <summary>Creates a table value from a list of key-value entries.</summary>
         public static LuaValue FromTable(IReadOnlyList<KeyValuePair<LuaValue, LuaValue>> entries) =>
             new() { Type = LuaType.Table, Table = entries };
@@ -246,7 +269,8 @@ namespace KitsuneNet
             ReferenceEquals(ThreadRef, other.ThreadRef) &&
             ReferenceEquals(StreamValue, other.StreamValue) &&
             ReferenceEquals(CFunctionValue, other.CFunctionValue) &&
-            ReferenceEquals(IteratorValue, other.IteratorValue);
+            ReferenceEquals(IteratorValue, other.IteratorValue) &&
+            UserdataGCHandlePtr == other.UserdataGCHandlePtr;
 
         public override int GetHashCode()
         {
@@ -269,6 +293,7 @@ namespace KitsuneNet
             hash.Add(StreamValue);
             hash.Add(CFunctionValue);
             hash.Add(IteratorValue);
+            hash.Add(UserdataGCHandlePtr);
             return hash.ToHashCode();
         }
 
