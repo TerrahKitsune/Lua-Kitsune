@@ -79,8 +79,10 @@ static void jbuf_grow(LuaJson* j, lua_State* L, size_t need) {
 	while (cap < j->outLen + need)
 		cap *= 2;
 	char* p = (char*)gff_realloc(j->out, cap);
-	if (!p)
+	if (!p) {
 		luaL_error(L, "Json: out of memory");
+		return;
+	}
 	j->out    = p;
 	j->outCap = cap;
 }
@@ -103,18 +105,26 @@ static void jbuf_emitc(LuaJson* j, lua_State* L, char c) {
 // Encoder — anti-recursion
 // =============================================================================
 
+
 static void rec_push(LuaJson* j, lua_State* L, uintptr_t addr) {
-	for (size_t i = 0; i < j->recLen; i++)
+	for (size_t i = 0; i < j->recLen; i++) {
 		if (j->rec[i] == addr)
 			luaL_error(L, "Json: recursion detected");
+	}
+
 	if (j->recLen == j->recCap) {
 		size_t     cap = j->recCap ? j->recCap * 2 : 8;
 		uintptr_t* p   = (uintptr_t*)gff_realloc(j->rec, cap * sizeof(uintptr_t));
-		if (!p)
+
+		if (!p) {
 			luaL_error(L, "Json: out of memory");
+			return;
+		}
+
 		j->rec    = p;
 		j->recCap = cap;
 	}
+
 	j->rec[j->recLen++] = addr;
 }
 
@@ -375,8 +385,10 @@ static char jread_next(LuaJson* j) {
 }
 
 static void jread_unget(LuaJson* j, lua_State* L, char c) {
-	if (j->ungetLen >= (int)(sizeof j->unget))
+	if (j->ungetLen >= (int)(sizeof j->unget)) {
 		luaL_error(L, "Json: unget buffer overflow (internal error)");
+		return;
+	}
 	j->unget[j->ungetLen++] = c;
 }
 

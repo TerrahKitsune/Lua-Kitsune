@@ -5426,58 +5426,63 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task DeferredFree_FunctionResultsFreedWhileSchedulerActive_NoLeak()
         {
-            // Exercises the KitsuneVariableChain deferred-free queue: function results are
-            // obtained via GetResultVariable while the scheduler is running a background coroutine,
-            // then GC is forced so any LuaFunctionRef finalizers run and enqueue the native
-            // variables.  ExecuteStringAsync guarantees at least one scheduler drain cycle before
-            // Dispose so all queued luaL_unref calls complete while the Lua state is still live.
-            // Note: ThrowIfLeaked is not used here because LuaFunctionRef finalizers may run after
-            // EndMemoryManager(), underflowing the native counter.  Correctness is verified by
-            // confirming the engine remains fully functional after the drain cycle.
-            using KitsuneEngine engine = new();
-
-            engine.ExecuteString("Sleep(2000)");
-            SpinUntilActive(engine);
-            int bgId = engine.GetActiveIds()[0];
-
-            for (int i = 0; i < 10; i++)
+            // Exercises the KitsuneVariableChain deferred-free queue: function refs are
+            // explicitly disposed while the scheduler is running a background coroutine,
+            // enqueuing their KitsuneVariable* for the scheduler to luaL_unref on the next
+            // drain cycle.  Verifies no leaks after cleanup.
+            var engine = new KitsuneEngine();
+            try
             {
-                _ = await engine.ExecuteStringAsync("return function() end");
+                engine.ExecuteString("Sleep(2000)");
+                SpinUntilActive(engine);
+                int bgId = engine.GetActiveIds()[0];
+
+                var refs = new List<LuaValue>();
+                for (int i = 0; i < 10; i++)
+                {
+                    refs.Add(await engine.ExecuteStringAsync("return function() end"));
+                }
+
+                // Dispose while the background coroutine is still running — each Dispose
+                // enqueues to g_pendingVariableChainHead (non-scheduler-thread deferred path).
+                foreach (var r in refs)
+                {
+                    r.FunctionRef?.Dispose();
+                }
+
+                engine.Cancel(bgId);
+                engine.Wait();
+
+                // One scheduler cycle ensures DrainPendingVariableChain processes all enqueued frees.
+                (await engine.ExecuteStringAsync("return 'drain'")).ShouldBe("drain");
+                engine.GetActiveIds().ShouldBeEmpty();
             }
-
-            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true);
-            GC.WaitForPendingFinalizers();
-            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true);
-
-            engine.Cancel(bgId);
-            engine.Wait();
-
-            // One scheduler cycle ensures DrainPendingVariableChain processes anything enqueued by finalizers.
-            (await engine.ExecuteStringAsync("return 'drain'")).ShouldBe("drain");
-
-            engine.GetActiveIds().ShouldBeEmpty();
+            finally
+            {
+                engine.Dispose();
+            }
+            ThrowIfLeaked(engine);
         }
 
         [Fact]
         public void Wait_ForId_WithDeferredFunctionsEnqueued_CompletesWithoutDeadlock()
         {
-            // Exercises the drain path added to WaitForResult: force function-ref finalizers
-            // to run (enqueuing to g_pendingVariableChainHead) before a sync Wait(id) enters
-            // its 10ms periodic-wakeup loop. The periodic wakeup must drain the chain via
-            // AcquireLuaAccess without deadlocking, and the waited coroutine must return the
-            // correct result. Guards against the race where AcquireLuaAccess is called after
-            // the scheduler has been joined (now protected by the second schedulerStop check).
+            // Exercises the drain path in RunInline: dispose function refs (enqueuing to
+            // g_pendingVariableChainHead) then run a sync call with Sleep() so the yield
+            // window drains them via AcquireLuaAccess without deadlocking.
             using KitsuneEngine engine = new();
 
+            var refs = new List<LuaValue>();
             for (int i = 0; i < 10; i++)
             {
-                _ = engine.RunString("return function() end");  // LuaFunctionRef created, immediately GC-eligible
+                refs.Add(engine.RunString("return function() end"));
             }
 
-            // Force finalizers to run — each LuaFunctionRef finalizer calls KitsuneVariableFree
-            // which enqueues to g_pendingVariableChainHead for deferred luaL_unref.
-            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true);
-            GC.WaitForPendingFinalizers();
+            // Dispose all refs — each enqueues to g_pendingVariableChainHead for deferred luaL_unref.
+            foreach (var r in refs)
+            {
+                r.FunctionRef?.Dispose();
+            }
 
             // Sync-wait on a sleeping coroutine so WaitForResult has multiple 10ms wakeup
             // cycles to drain the enqueued chain entries via AcquireLuaAccess.
@@ -5488,22 +5493,26 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Stress_FunctionResults_ManyReleasedViaScheduler_NoLeak()
         {
-            // 50 coroutines each returning a function released via ReleaseResult under concurrent
-            // pressure — stresses pendingResults compaction across many scheduler cycles.
+            // 50 concurrent coroutines each returning a function; refs are explicitly disposed
+            // before the drain cycle — stresses pendingResults compaction across many scheduler cycles.
             var engine = new KitsuneEngine();
             try
             {
                 const int count = 50;
+                var results = new System.Collections.Concurrent.ConcurrentBag<LuaValue>();
                 Task[] tasks = Enumerable.Range(0, count).Select(_ => Task.Run(async () =>
                 {
-                    await engine.ExecuteStringAsync("return function() end").ConfigureAwait(false);
+                    results.Add(await engine.ExecuteStringAsync("return function() end").ConfigureAwait(false));
                 })).ToArray();
                 await Task.WhenAll(tasks);
 
-                // Force GC so LuaFunctionRef finalizers enqueue their deferred luaL_unref calls,
-                // then drain via a scheduler cycle so native free count is accurate before Dispose.
-                GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true);
-                GC.WaitForPendingFinalizers();
+                // Dispose all function refs — each enqueues to g_pendingVariableChainHead.
+                foreach (var r in results)
+                {
+                    r.FunctionRef?.Dispose();
+                }
+
+                // Drain cycle: scheduler processes all deferred luaL_unref calls.
                 await engine.ExecuteStringAsync("return 'drain'");
             }
             finally
@@ -6081,6 +6090,277 @@ namespace KitsuneNet.Tests
 
             engine.Unregister(@ref).FunctionRef!.Dispose();
             engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        // -- Thread step with arguments -------------------------------------------
+        [Fact]
+        public void Thread_Step_PassesArgAndReceivesYieldedValue()
+        {
+            // The coroutine loops: each resume delivers a new number and yields number-1.
+            // First step: number=1 → yields 0. Second step: number=10 → yields 9.
+            using KitsuneEngine engine = new();
+            LuaValue thread = engine.RunString(@"
+                return coroutine.create(function(number)
+                    while true do
+                        number = coroutine.yield(number - 1)
+                    end
+                end)");
+            thread.Type.ShouldBe(LuaType.Thread);
+
+            LuaValue r1 = thread.ThreadRef!.Step(LuaValue.FromInt64(1));
+            r1.AsInt64.ShouldBe(0L);
+
+            LuaValue r2 = thread.ThreadRef!.Step(LuaValue.FromInt64(10));
+            r2.AsInt64.ShouldBe(9L);
+
+            thread.ThreadRef?.Dispose();
+            engine.RunString("Sleep(0)");
+        }
+
+        [Fact]
+        public async Task Thread_StepAsync_PassesArgAndReceivesYieldedValue()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue thread = engine.RunString(@"
+                return coroutine.create(function(number)
+                    while true do
+                        number = coroutine.yield(number - 1)
+                    end
+                end)");
+            thread.Type.ShouldBe(LuaType.Thread);
+
+            LuaValue r1 = await thread.ThreadRef!.StepAsync(default, LuaValue.FromInt64(1));
+            r1.AsInt64.ShouldBe(0L);
+
+            LuaValue r2 = await thread.ThreadRef!.StepAsync(default, LuaValue.FromInt64(10));
+            r2.AsInt64.ShouldBe(9L);
+
+            thread.ThreadRef?.Dispose();
+            await engine.ExecuteStringAsync("Sleep(0)");
+        }
+
+        [Fact]
+        public void Thread_Step_YieldWithNoValue_ReturnsNil()
+        {
+            // A yield with no argument produces KITSUNE_TNIL (thread alive, no value).
+            using KitsuneEngine engine = new();
+            LuaValue thread = engine.RunString(
+                "return coroutine.create(function() coroutine.yield() end)");
+
+            LuaValue result = thread.ThreadRef!.Step();
+            result.Type.ShouldBe(LuaType.Nil);
+
+            thread.ThreadRef?.Dispose();
+            engine.RunString("Sleep(0)");
+        }
+
+        [Fact]
+        public void Thread_Step_DeadThread_ReturnsNone()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue thread = engine.RunString(
+                "return coroutine.create(function() end)");
+
+            // Exhaust the thread.
+            thread.ThreadRef!.Step();
+
+            // Second step on a dead thread returns None.
+            LuaValue result = thread.ThreadRef!.Step();
+            result.Type.ShouldBe(LuaType.None);
+
+            thread.ThreadRef?.Dispose();
+            engine.RunString("Sleep(0)");
+        }
+
+        [Fact]
+        public void Thread_Step_Error_ThrowsLuaException()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue thread = engine.RunString(
+                "return coroutine.create(function() error('step boom') end)");
+
+            LuaException ex = Should.Throw<LuaException>(() => thread.ThreadRef!.Step());
+            ex.Message.ShouldContain("step boom");
+
+            thread.ThreadRef?.Dispose();
+            engine.RunString("Sleep(0)");
+        }
+
+        [Fact]
+        public void Thread_Step_MultipleYieldsWithAccumulatedArg()
+        {
+            // Each step passes a value in; the coroutine accumulates and yields the running total.
+            using KitsuneEngine engine = new();
+            LuaValue thread = engine.RunString(@"
+                return coroutine.create(function(a)
+                    local b = coroutine.yield(a)
+                    local c = coroutine.yield(a + b)
+                    coroutine.yield(a + b + c)
+                end)");
+
+            // Step 1 — initial arg=10, yields 10.
+            thread.ThreadRef!.Step(LuaValue.FromInt64(10)).AsInt64.ShouldBe(10L);
+
+            // Step 2 — arg=5, yields 10+5=15.
+            thread.ThreadRef!.Step(LuaValue.FromInt64(5)).AsInt64.ShouldBe(15L);
+
+            // Step 3 — arg=3, yields 10+5+3=18.
+            thread.ThreadRef!.Step(LuaValue.FromInt64(3)).AsInt64.ShouldBe(18L);
+
+            // Step 4 — thread dead.
+            thread.ThreadRef!.Step().Type.ShouldBe(LuaType.None);
+
+            thread.ThreadRef?.Dispose();
+            engine.RunString("Sleep(0)");
+        }
+
+        [Fact]
+        public async Task Thread_StepAsync_Error_ThrowsLuaException()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue thread = engine.RunString(
+                "return coroutine.create(function(x) error('async step boom ' .. tostring(x)) end)");
+
+            LuaException ex = await Should.ThrowAsync<LuaException>(
+                thread.ThreadRef!.StepAsync(default, LuaValue.FromInt64(42)));
+            ex.Message.ShouldContain("async step boom 42");
+
+            thread.ThreadRef?.Dispose();
+            await engine.ExecuteStringAsync("Sleep(0)");
+        }
+
+        [Fact]
+        public void Thread_Step_FinalReturnValue_Received()
+        {
+            // A coroutine that returns (not yields) on the last step produces that value.
+            using KitsuneEngine engine = new();
+            LuaValue thread = engine.RunString(
+                "return coroutine.create(function(x) coroutine.yield(x * 2); return x * 3 end)");
+
+            thread.ThreadRef!.Step(LuaValue.FromInt64(7)).AsInt64.ShouldBe(14L);
+            thread.ThreadRef!.Step().AsInt64.ShouldBe(21L);
+            thread.ThreadRef!.Step().Type.ShouldBe(LuaType.None);
+
+            thread.ThreadRef?.Dispose();
+            engine.RunString("Sleep(0)");
+        }
+
+        [Fact]
+        public void Thread_Step_Disposed_ThrowsObjectDisposedException()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue thread = engine.RunString(
+                "return coroutine.create(function() coroutine.yield(1) end)");
+            LuaThreadRef tref = thread.ThreadRef!;
+            tref.Dispose();
+
+            Should.Throw<ObjectDisposedException>(() => tref.Step());
+        }
+
+        [Fact]
+        public void Thread_StepAsync_Disposed_ThrowsObjectDisposedException()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue thread = engine.RunString(
+                "return coroutine.create(function() coroutine.yield(1) end)");
+            LuaThreadRef tref = thread.ThreadRef!;
+            tref.Dispose();
+
+            Should.Throw<ObjectDisposedException>(() => tref.StepAsync());
+        }
+
+        [Fact]
+        public void Thread_Iterate_Disposed_ThrowsObjectDisposedException()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue thread = engine.RunString(
+                "return coroutine.create(function() coroutine.yield(1) end)");
+            LuaThreadRef tref = thread.ThreadRef!;
+            tref.Dispose();
+
+            Should.Throw<ObjectDisposedException>(() => tref.Iterate());
+        }
+
+        [Fact]
+        public void Thread_IterateAsync_Disposed_ThrowsObjectDisposedException()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue thread = engine.RunString(
+                "return coroutine.create(function() coroutine.yield(1) end)");
+            LuaThreadRef tref = thread.ThreadRef!;
+            tref.Dispose();
+
+            Should.Throw<ObjectDisposedException>(() => tref.IterateAsync());
+        }
+
+        [Fact]
+        public void LuaThreadRef_DoubleDispose_DoesNotThrow()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue thread = engine.RunString(
+                "return coroutine.create(function() end)");
+            LuaThreadRef tref = thread.ThreadRef!;
+
+            tref.Dispose();
+            Should.NotThrow(() => tref.Dispose());
+        }
+
+        [Fact]
+        public void LuaFunctionRef_DoubleDispose_DoesNotThrow()
+        {
+            using KitsuneEngine engine = new();
+            LuaFunctionRef fref = engine.RunString("return function() end").FunctionRef!;
+
+            fref.Dispose();
+            Should.NotThrow(() => fref.Dispose());
+        }
+
+        [Fact]
+        public void ThreadRef_DisposedBeforeEngine_NoLeak()
+        {
+            var engine = new KitsuneEngine();
+            try
+            {
+                var refs = new List<LuaValue>();
+                for (int i = 0; i < 10; i++)
+                {
+                    refs.Add(engine.RunString(
+                        "return coroutine.create(function() coroutine.yield(1) end)"));
+                }
+
+                foreach (var r in refs)
+                {
+                    r.ThreadRef?.Dispose();
+                }
+
+                engine.RunString("Sleep(0)");
+            }
+            finally
+            {
+                engine.Dispose();
+            }
+            ThrowIfLeaked(engine);
+        }
+
+        [Fact]
+        public void FunctionRef_NativePtrIsZero_AfterDispose()
+        {
+            using KitsuneEngine engine = new();
+            LuaFunctionRef fref = engine.RunString("return function() end").FunctionRef!;
+
+            fref.Dispose();
+            Should.Throw<ObjectDisposedException>(() => fref.Invoke());
+        }
+
+        [Fact]
+        public void ThreadRef_NativePtrIsZero_AfterDispose()
+        {
+            using KitsuneEngine engine = new();
+            LuaThreadRef tref = engine.RunString(
+                "return coroutine.create(function() end)").ThreadRef!;
+
+            tref.Dispose();
+            Should.Throw<ObjectDisposedException>(() => tref.Step());
         }
 
         private static void SpinUntilRunning(KitsuneEngine engine, int timeoutMs = 2000)

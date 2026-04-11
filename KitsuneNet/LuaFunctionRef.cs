@@ -12,17 +12,14 @@ namespace KitsuneNet
     /// </summary>
     public sealed class LuaFunctionRef : IDisposable
     {
-        private readonly WeakReference<KitsuneEngine>? _engine;
-
         // Heap-allocated KitsuneVariable* returned by KitsuneGetResult / KitsuneGetVariable.
         // Owned exclusively by this instance; KitsuneVariableFree is called on dispose.
         private IntPtr _nativePtr;
         private int _disposed;
 
-        internal LuaFunctionRef(IntPtr nativePtr, KitsuneEngine? engine = null)
+        internal LuaFunctionRef(IntPtr nativePtr)
         {
             _nativePtr = nativePtr;
-            _engine = engine is not null ? new WeakReference<KitsuneEngine>(engine) : null;
         }
 
         ~LuaFunctionRef() => Dispose();
@@ -39,12 +36,7 @@ namespace KitsuneNet
         public LuaValue Invoke(params LuaValue[]? args)
         {
             ObjectDisposedException.ThrowIf(_disposed != 0, this);
-            if (_engine is null || !_engine.TryGetTarget(out var engine))
-            {
-                throw new ObjectDisposedException(nameof(KitsuneEngine));
-            }
-
-            return engine.RunVariable(new LuaValue { Type = LuaType.Function, FunctionRef = this }, args);
+            return KitsuneEngine.InvokeFunction(this, args);
         }
 
         /// <summary>Calls this Lua function as a coroutine and asynchronously waits for it to complete.
@@ -53,12 +45,7 @@ namespace KitsuneNet
         public Task<LuaValue> InvokeAsync(CancellationToken cancellationToken = default, params LuaValue[]? args)
         {
             ObjectDisposedException.ThrowIf(_disposed != 0, this);
-            if (_engine is null || !_engine.TryGetTarget(out var engine))
-            {
-                throw new ObjectDisposedException(nameof(KitsuneEngine));
-            }
-
-            return engine.ExecuteVariableAsync(new LuaValue { Type = LuaType.Function, FunctionRef = this }, cancellationToken, args);
+            return KitsuneEngine.InvokeFunctionAsync(this, args, cancellationToken);
         }
 
         /// <summary>

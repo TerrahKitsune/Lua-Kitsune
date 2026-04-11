@@ -13,23 +13,48 @@ namespace KitsuneNet
     /// </summary>
     public sealed class LuaThreadRef : IDisposable
     {
-        private readonly WeakReference<KitsuneEngine>? _engine;
-
         // Heap-allocated KitsuneVariable* returned by KitsuneGetResult / KitsuneGetVariable.
         // Owned exclusively by this instance; KitsuneVariableFree is called on dispose.
         private IntPtr _nativePtr;
         private int _disposed;
 
-        internal LuaThreadRef(IntPtr nativePtr, KitsuneEngine? engine = null)
+        internal LuaThreadRef(IntPtr nativePtr)
         {
             _nativePtr = nativePtr;
-            _engine = engine is not null ? new WeakReference<KitsuneEngine>(engine) : null;
         }
 
         ~LuaThreadRef() => Dispose();
 
         /// <summary>Raw pointer to the native <c>KitsuneVariable</c> struct. Zero when disposed.</summary>
         internal IntPtr NativePtr => _nativePtr;
+
+        /// <summary>
+        /// Synchronously steps the coroutine once, optionally passing <paramref name="args"/>
+        /// as the result of the current <c>coroutine.yield()</c> (or as initial parameters on
+        /// the first call). Returns the first value yielded or returned by this step.
+        /// Returns <see cref="LuaValue.None"/> when the thread is dead.
+        /// Returns a nil <see cref="LuaValue"/> when the thread yielded with no value.
+        /// Throws <see cref="LuaException"/> if the coroutine raises a runtime error.
+        /// </summary>
+        public LuaValue Step(params LuaValue[]? args)
+        {
+            ObjectDisposedException.ThrowIf(_disposed != 0, this);
+            return KitsuneEngine.StepThread(this, args);
+        }
+
+        /// <summary>
+        /// Asynchronously steps the coroutine once, optionally passing <paramref name="args"/>
+        /// as the result of the current <c>coroutine.yield()</c> (or as initial parameters on
+        /// the first call). Returns the first value yielded or returned by this step.
+        /// Returns <see cref="LuaValue.None"/> when the thread is dead.
+        /// Returns a nil <see cref="LuaValue"/> when the thread yielded with no value.
+        /// Throws <see cref="LuaException"/> if the coroutine raises a runtime error.
+        /// </summary>
+        public Task<LuaValue> StepAsync(CancellationToken cancellationToken = default, params LuaValue[]? args)
+        {
+            ObjectDisposedException.ThrowIf(_disposed != 0, this);
+            return KitsuneEngine.StepThreadAsync(this, args, cancellationToken);
+        }
 
         /// <summary>
         /// Synchronously iterates the coroutine, yielding each value it produces.
@@ -41,12 +66,7 @@ namespace KitsuneNet
         public IEnumerable<LuaValue> Iterate(CancellationToken cancellationToken = default)
         {
             ObjectDisposedException.ThrowIf(_disposed != 0, this);
-            if (_engine is null || !_engine.TryGetTarget(out var engine))
-            {
-                throw new ObjectDisposedException(nameof(KitsuneEngine));
-            }
-
-            return engine.IterateThread(this, cancellationToken);
+            return KitsuneEngine.IterateThread(this, cancellationToken);
         }
 
         /// <summary>
@@ -59,12 +79,7 @@ namespace KitsuneNet
         public IAsyncEnumerable<LuaValue> IterateAsync(CancellationToken cancellationToken = default)
         {
             ObjectDisposedException.ThrowIf(_disposed != 0, this);
-            if (_engine is null || !_engine.TryGetTarget(out var engine))
-            {
-                throw new ObjectDisposedException(nameof(KitsuneEngine));
-            }
-
-            return engine.IterateThreadAsync(this, cancellationToken);
+            return KitsuneEngine.IterateThreadAsync(this, cancellationToken);
         }
 
         /// <summary>

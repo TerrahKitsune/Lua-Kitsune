@@ -192,6 +192,9 @@ extern "C" {
 	// Destroy the Lua state and clean up the engine.
 	KITSUNE_API size_t KitsuneCleanup();
 
+	// Perform a full garbage collection cycle, including finalizers.
+	KITSUNE_API void KitsuneGC();
+
 	// Frees a KitsuneVariable returned by KitsuneGetResult or KitsuneGetVariable
 	// (frees the string data if present, then the struct pointer itself). Safe on NULL.
 	KITSUNE_API void KitsuneVariableFree(KitsuneVariable* var);

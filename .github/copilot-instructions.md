@@ -1,8 +1,10 @@
 ﻿# Copilot Instructions
+- Responses should be concise and directly address the question or task. Responses that are too long may be truncated in which case it is unusable to the user. If a response is too long, try to break it into smaller parts or focus on the most relevant information.
 
 ## Project Guidelines
 - When updating documentation files (especially `Lua functions.md`), use proper Markdown structure/markup instead of plain text formatting. Avoid broad replacements; preserve all existing sections and verify full-file integrity after edits.
 - The `tests/*.lua` files in Lua-Kitsune do not exist and are not used. All tests are C# xUnit tests located in `KitsuneNet.Tests\KitsuneUtilTests.cs` (and related `*Tests.cs` files). Never reference or create `tests/*.lua` files.
+- LuaFunctionRef and LuaThreadRef must be explicitly disposed before `KitsuneEngine.Dispose()` in test contexts (multiple sessions) to avoid cross-session `g_live_allocs` counter underflow. In long-running single-session applications, relying on GC finalizers is acceptable. The finalizer is a safety net, not the primary cleanup path.
 
 ## C++ Code Style
 

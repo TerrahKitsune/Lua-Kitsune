@@ -104,16 +104,16 @@ struct KitsuneCoroutine {
 	// Must be NULLed whenever threadRef is unref'd.
 	// Written only under AcquireLuaAccess; read only by the scheduler.
 	int               argsRef;        // LUA_REGISTRYINDEX anchor for the ARGS table; retrieved by GetArgs()
-	std::atomic<long> fireAndForget{0};
-	std::atomic<long> done{0};        // 0 = still running / yielded, 1 = finished
-	std::atomic<long> released{0};    // 1 = slot should be freed; scheduler zeros it on next compaction
-	std::atomic<long> interrupted{0}; // set to 1 by KitsuneCancel; observed by the scheduler before resuming this coroutine
+	std::atomic<long> fireAndForget{ 0 };
+	std::atomic<long> done{ 0 };        // 0 = still running / yielded, 1 = finished
+	std::atomic<long> released{ 0 };    // 1 = slot should be freed; scheduler zeros it on next compaction
+	std::atomic<long> interrupted{ 0 }; // set to 1 by KitsuneCancel; observed by the scheduler before resuming this coroutine
 	char* error;
 	KitsuneVariable  result;
 	double        sleepUntil;   // GetCounter deadline (ms) before which the coroutine must not be resumed; 0 = not sleeping
 	double        startTime;    // GetCounter value recorded when the coroutine was created
 	int           initialNArgs; // number of args already on the thread stack for the first lua_resume; 0 for file/string coroutines
-	std::atomic<long> isInline{0}; // 1 = inline sync call; scheduler skips Step 2 resume
+	std::atomic<long> isInline{ 0 }; // 1 = inline sync call; scheduler skips Step 2 resume
 };
 
 #define KITSUNE_MAX_COROUTINES 256
@@ -130,8 +130,8 @@ struct KitsuneState {
 	char* lastCallError;  // deferred KITSUNE_TERROR message; freed after args cleanup
 
 	// ── Interrupt / pause ────────────────────────────────────────────────────
-	std::atomic<long> interrupt{0};   // set by KitsuneInterrupt; cleared by scheduler when all done
-	std::atomic<long> pauseFlag{0};   // set by AcquireLuaAccess; serviced by hook + scheduler
+	std::atomic<long> interrupt{ 0 };   // set by KitsuneInterrupt; cleared by scheduler when all done
+	std::atomic<long> pauseFlag{ 0 };   // set by AcquireLuaAccess; serviced by hook + scheduler
 	PlatformEvent pausedEvent;   // hook signals this when it parks
 	PlatformEvent resumeEvent;   // AcquireLuaAccess signals this to let hook continue
 
@@ -140,7 +140,7 @@ struct KitsuneState {
 
 	// ── Scheduler thread ─────────────────────────────────────────────────────
 	std::thread           schedulerThread;
-	std::atomic<long>     schedulerStop{0}; // set to 1 by KitsuneCleanup
+	std::atomic<long>     schedulerStop{ 0 }; // set to 1 by KitsuneCleanup
 	PlatformEvent         workEvent;     // signaled when a new coroutine is ready to run
 
 	// ── Active coroutine slots (written only by scheduler; read by callers) ──
@@ -155,9 +155,9 @@ struct KitsuneState {
 	std::condition_variable doneCV;
 
 	// ── Counters ─────────────────────────────────────────────────────────────
-	std::atomic<long> nextId{0};             // monotonically increasing coroutine ID
-	std::atomic<long> runningCount{0};       // number of slots where done == 0
-	std::atomic<long> currentCoroutineId{0}; // ID of the coroutine currently inside lua_resume, or 0
+	std::atomic<long> nextId{ 0 };             // monotonically increasing coroutine ID
+	std::atomic<long> runningCount{ 0 };       // number of slots where done == 0
+	std::atomic<long> currentCoroutineId{ 0 }; // ID of the coroutine currently inside lua_resume, or 0
 };
 
 #ifdef _WIN32
@@ -213,10 +213,10 @@ static KeyValuePairKitsuneVariableNode* TableToLinkedList(lua_State* L, int idx,
 // blocking on AcquireLuaAccess.  The scheduler drains the queue each cycle so luaL_unref
 // is always called from a context that already owns the Lua state.
 struct KitsuneVariableChain {
-	KitsuneVariable*      variable;
+	KitsuneVariable* variable;
 	KitsuneVariableChain* next;
 };
-static std::atomic<KitsuneVariableChain*> g_pendingVariableChainHead{nullptr};
+static std::atomic<KitsuneVariableChain*> g_pendingVariableChainHead{ nullptr };
 // True on a calling thread while it is inside RunInline (holds accessLock, running lua_resume).
 // Suppresses the Ticker's pause-park so AcquireLuaAccess on the same thread doesn't deadlock.
 static thread_local bool g_inlineExecution = false;
@@ -328,6 +328,12 @@ static inline const wchar_t* Char16AsWchar(const char16_t* p) {
 // Forward declaration — LuaCFunctionWrapper is defined inside the extern "C" block below;
 // wrapping in extern "C" here matches the definition's C language linkage and avoids C2732.
 extern "C" { static int LuaCFunctionWrapper(lua_State* L); }
+// Native single-step function for LUA_TTHREAD execution (replaces THREAD_STEP_SCRIPT).
+// Upvalue 1: target thread (Lua thread value). Upvalue 2: argc (integer).
+// argc args must be pre-pushed onto the target thread's stack before the wrapper is started.
+// Returns: first yielded/returned value; nil if alive but yielded nothing (KITSUNE_TNIL);
+// nothing (KITSUNE_TNONE) if dead with no return; raises a Lua error on failure.
+extern "C" { static int ThreadStepNative(lua_State* L); }
 
 // KitsuneIteratorUD — Lua-owned (lua_newuserdata) memory; GC'd via "KitsuneIterator" metatable.
 struct KitsuneIteratorUD {
@@ -609,8 +615,8 @@ static void PushKitsuneVariable(lua_State* L, const KitsuneVariable* v) {
 		}
 		KitsuneIteratorUD* ud = (KitsuneIteratorUD*)lua_newuserdata(L, sizeof(KitsuneIteratorUD));
 		memset(ud, 0, sizeof(KitsuneIteratorUD));
-		if (it->first)     ud->first     = *it->first;
-		if (it->next)      ud->next      = *it->next;
+		if (it->first)     ud->first = *it->first;
+		if (it->next)      ud->next = *it->next;
 		if (it->finalized) ud->finalized = *it->finalized;
 		ud->iteratorUserdata = it->userdata;
 		ud->state = 0;
@@ -670,7 +676,7 @@ static void SetSlotResult(KitsuneCoroutine* slot, lua_State* T, int idx) {
 			LuaStream* s = (LuaStream*)lua_touserdata(T, idx);
 			if (lua_is_outbound_sharedmemory_stream(s)) {
 				SharedMemoryBlock* block = lua_get_outbound_sharedmemory_block(s);
-				slot->result.type   = KITSUNE_TSTREAM;
+				slot->result.type = KITSUNE_TSTREAM;
 				slot->result.stream = block;
 				// Clear ACCESSOR_DISPOSED: the result slot holds the accessor reference for C#.
 				block->flags &= ~KITSUNE_SHARED_MEMORY_FLAG_ACCESSOR_DISPOSED;
@@ -683,7 +689,7 @@ static void SetSlotResult(KitsuneCoroutine* slot, lua_State* T, int idx) {
 					break;
 				}
 				SharedMemoryBlock* block = lua_get_outbound_sharedmemory_block(outStream);
-				slot->result.type   = KITSUNE_TSTREAM;
+				slot->result.type = KITSUNE_TSTREAM;
 				slot->result.stream = block;
 				block->flags &= ~KITSUNE_SHARED_MEMORY_FLAG_ACCESSOR_DISPOSED;
 				lua_pop(T, 1);  // pop the outbound userdata
@@ -1001,6 +1007,7 @@ static void SchedulerProc(KitsuneState* state) {
 			for (int i = 0; i < state->slotCount; i++) {
 				KitsuneCoroutine* slot = state->slots[i];
 				if (slot->id != 0 && slot->done.load() && slot->released.load()) {
+					assert(pendingCount < KITSUNE_MAX_COROUTINES);
 					pendingArgs[pendingCount] = slot->argsRef;
 					pendingThreads[pendingCount] = slot->threadRef;
 					pendingResults[pendingCount] = slot->result;  // shallow copy; ownership transferred
@@ -1141,18 +1148,6 @@ static KitsuneVariable* MakeErrorVariable(const char* msg) {
 // Exported API
 // ============================================================
 
-// Embedded Lua script for stepping a Lua thread (coroutine) one resume at a time.
-// Used by StartCoroutineVariable when var->type == LUA_TTHREAD.
-// ARGS[1] is the thread. Returns the first yielded/returned value, nothing (TNONE)
-// when the thread is dead or produces no values, or raises a Lua error on failure.
-static const char* THREAD_STEP_SCRIPT =
-	"local t = ARGS[1]\n"
-	"if coroutine.status(t) == \"dead\" then return end\n"
-	"local results = table.pack(coroutine.resume(t))\n"
-	"if not results[1] then error(results[2] or \"thread error\") end\n"
-	"if results.n == 1 then return end\n"
-	"return results[2]";
-
 static KitsuneState* g_state = nullptr;
 #ifdef _WIN32
 static bool g_coOwned = false;
@@ -1164,7 +1159,7 @@ extern "C" {
 		if (g_state)
 			return true;
 
-		#ifdef _WIN32
+#ifdef _WIN32
 		// RPC_E_CHANGED_MODE means COM was already initialised by the host (e.g. .NET's
 		// MTA thread pool).  We can still use COM; we just must not call CoUninitialize.
 		HRESULT cohr = CoInitialize(NULL);
@@ -1181,7 +1176,7 @@ extern "C" {
 		signal(SIGPIPE, SIG_IGN);
 #endif
 
-		#ifdef _WIN32
+#ifdef _WIN32
 		WSADATA wsa;
 		if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
 			EndMemoryManager();
@@ -1227,7 +1222,7 @@ extern "C" {
 
 
 
-		#ifdef KITSUNE_MYSQL
+#ifdef KITSUNE_MYSQL
 		luaopen_mysql(L);        lua_setglobal(L, "MySQL");
 #endif
 #ifdef KITSUNE_POSTGRES
@@ -1571,22 +1566,29 @@ extern "C" {
 			}
 		}
 		else if (var->type == LUA_TTHREAD && (int)var->integer != LUA_NOREF) {
-			// Build ARGS[1] = the thread, then load the step script to resume it once.
-			// argc/argv are intentionally ignored: the thread itself is the subject.
-			lua_newtable(state->L);
+			// Native single-step: resume the target thread exactly once with argc/argv as args.
+			// The first yielded or returned value is surfaced as the result.
 			lua_rawgeti(state->L, LUA_REGISTRYINDEX, (int)var->integer);
-			lua_rawseti(state->L, -2, 1);
-			slot->argsRef = luaL_ref(state->L, LUA_REGISTRYINDEX);
+			lua_State* targetT = lua_tothread(state->L, -1);
+			lua_pop(state->L, 1);
 
-			int rc = luaL_loadbuffer(T, THREAD_STEP_SCRIPT, strlen(THREAD_STEP_SCRIPT), "thread_step");
-			if (rc != 0) {
-				const char* err = lua_tolstring(T, -1, NULL);
-				SetSlotError(slot, err ? err : "load error");
-				lua_settop(T, 0);
-				luaL_unref(state->L, LUA_REGISTRYINDEX, slot->argsRef);
-				slot->argsRef = LUA_NOREF;
+			if (!targetT) {
+				SetSlotError(slot, "invalid thread");
+			}
+			else if (lua_status(targetT) == LUA_OK && lua_gettop(targetT) == 0) {
+				// Thread is dead; leave loadOk=false with no error so result is TNONE.
 			}
 			else {
+				lua_sethook(targetT, Ticker, LUA_MASKCOUNT, 1000);
+				// Pre-push argv onto targetT — these become resume args for this step.
+				for (int n = 0; n < argc; n++)
+					PushKitsuneVariable(targetT, argv ? &argv[n] : nullptr);
+				// Push ThreadStepNative closure onto wrapper T.
+				// Upvalue 1 = target thread (Lua value); upvalue 2 = argc.
+				lua_rawgeti(state->L, LUA_REGISTRYINDEX, (int)var->integer);
+				lua_xmove(state->L, T, 1);
+				lua_pushinteger(T, (lua_Integer)argc);
+				lua_pushcclosure(T, ThreadStepNative, 2);
 				loadOk = true;
 			}
 		}
@@ -1715,20 +1717,20 @@ extern "C" {
 			else {
 				memset(out, 0, sizeof(KitsuneVariable));
 				if (nresults > 0) {
-						KitsuneCoroutine tmp{};
-						SetSlotResult(&tmp, T, 1);
-						if (tmp.error) {
-							// SetSlotResult encountered an internal error (e.g. string OOM, stream snapshot failure).
-							// Surface it as KITSUNE_TERROR rather than silently returning TNONE.
-							gff_free(out);
-							out = MakeErrorVariable(tmp.error);
-							gff_free(tmp.error);
-						}
-						else {
-							*out = tmp.result;
-							memset(&tmp.result, 0, sizeof(KitsuneVariable));
-						}
+					KitsuneCoroutine tmp{};
+					SetSlotResult(&tmp, T, 1);
+					if (tmp.error) {
+						// SetSlotResult encountered an internal error (e.g. string OOM, stream snapshot failure).
+						// Surface it as KITSUNE_TERROR rather than silently returning TNONE.
+						gff_free(out);
+						out = MakeErrorVariable(tmp.error);
+						gff_free(tmp.error);
 					}
+					else {
+						*out = tmp.result;
+						memset(&tmp.result, 0, sizeof(KitsuneVariable));
+					}
+				}
 				else {
 					out->type = LUA_TNONE;
 				}
@@ -1780,9 +1782,12 @@ extern "C" {
 		}
 		if (state->slotCount >= KITSUNE_MAX_COROUTINES)
 			return NULL;
+
 		KitsuneCoroutine* slot = new (std::nothrow) KitsuneCoroutine{};
+
 		if (!slot)
 			return NULL;
+
 		slot->isInline.store(1);
 		isNewSlot = true;
 		return slot;
@@ -2033,20 +2038,43 @@ extern "C" {
 			loadOk = true;
 		}
 		else if (var->type == LUA_TTHREAD && (int)var->integer != LUA_NOREF) {
-			lua_newtable(state->L);
+			// Native single-step: resume the target thread exactly once with argc/argv as args.
 			lua_rawgeti(state->L, LUA_REGISTRYINDEX, (int)var->integer);
-			lua_rawseti(state->L, -2, 1);
-			slot->argsRef = luaL_ref(state->L, LUA_REGISTRYINDEX);
+			lua_State* targetT = lua_tothread(state->L, -1);
+			lua_pop(state->L, 1);
 
-			int rc = luaL_loadbuffer(T, THREAD_STEP_SCRIPT, strlen(THREAD_STEP_SCRIPT), "thread_step");
-			if (rc != 0) {
-				const char* err = lua_tolstring(T, -1, NULL);
-				KitsuneVariable* out = MakeErrorVariable(err ? err : "load error");
-				lua_settop(T, 0);
+			if (!targetT) {
+				KitsuneVariable* out = MakeErrorVariable("invalid thread");
 				ReleaseFailedInlineSlot(state, slot, isNewSlot);
 				ReleaseLuaAccess(state);
 				return out;
 			}
+
+			if (lua_status(targetT) == LUA_OK && lua_gettop(targetT) == 0) {
+				// Thread is dead: return TNONE.
+				KitsuneVariable* out = (KitsuneVariable*)gff_malloc(sizeof(KitsuneVariable));
+				if (!out)
+					out = MakeErrorVariable("out of memory");
+				else {
+					memset(out, 0, sizeof(KitsuneVariable));
+					out->type = LUA_TNONE;
+				}
+				ReleaseFailedInlineSlot(state, slot, isNewSlot);
+				ReleaseLuaAccess(state);
+				return out;
+			}
+
+			lua_sethook(targetT, Ticker, LUA_MASKCOUNT, 1000);
+			// Pre-push argv onto targetT — these become resume args for this step.
+			for (int n = 0; n < argc; n++)
+				PushKitsuneVariable(targetT, argv ? &argv[n] : nullptr);
+			// Push ThreadStepNative closure onto wrapper T.
+			// Upvalue 1 = target thread (Lua value); upvalue 2 = argc.
+			lua_rawgeti(state->L, LUA_REGISTRYINDEX, (int)var->integer);
+			lua_xmove(state->L, T, 1);
+			lua_pushinteger(T, (lua_Integer)argc);
+			lua_pushcclosure(T, ThreadStepNative, 2);
+			initialNArgs = 0;
 			loadOk = true;
 		}
 
@@ -2258,17 +2286,13 @@ extern "C" {
 		std::unique_lock<std::mutex> lk(state->doneMtx);
 		state->doneCV.wait(lk, [state] {
 			if (state->schedulerStop.load()) return true;
-			state->slotsLock.lock();
-			bool any = false;
+			std::lock_guard<std::mutex> slk(state->slotsLock);
 			for (int i = 0; i < state->slotCount; i++) {
-				if (state->slots[i]->id != 0 && !state->slots[i]->released.load()) {
-					any = true;
-					break;
-				}
+				if (state->slots[i]->id != 0 && !state->slots[i]->released.load())
+					return false;
 			}
-			state->slotsLock.unlock();
-			return !any;
-		});
+			return true;
+			});
 	}
 
 	KITSUNE_API int KitsuneGetActiveIds(int* buffer, int bufferSize) {
@@ -2314,8 +2338,7 @@ extern "C" {
 						KitsuneVariableChain* head = g_pendingVariableChainHead.load(std::memory_order_relaxed);
 						do {
 							node->next = head;
-						}
-						while (!g_pendingVariableChainHead.compare_exchange_weak(
+						} while (!g_pendingVariableChainHead.compare_exchange_weak(
 							head, node, std::memory_order_release, std::memory_order_relaxed));
 						return;  // scheduler owns var now; do not gff_free here
 					}
@@ -2410,9 +2433,9 @@ extern "C" {
 				PushKitsuneVariable(state->L, var);
 			lua_setfield(state->L, -2, finalKey);
 			lua_pop(state->L, 1);  // pop parent table
-				ok = true;
-			}
-			ReleaseLuaAccess(state);
+			ok = true;
+		}
+		ReleaseLuaAccess(state);
 		return ok;
 	}
 
@@ -2594,6 +2617,64 @@ extern "C" {
 		}
 
 		return lua_gettop(L);  // number of values pushed by LuaResultSetter
+	}
+
+	// Native single-step implementation for LUA_TTHREAD execution.
+	// Upvalue 1: target thread (Lua thread value). Upvalue 2: argc (integer).
+	// The caller pre-pushes argc args onto the target thread before starting the wrapper.
+	// Returns: first yielded/returned value; nil (KITSUNE_TNIL) if alive with no value;
+	// nothing (KITSUNE_TNONE) if dead with no return; raises a Lua error on thread error.
+	static int ThreadStepNative(lua_State* L) {
+		lua_State* targetT = lua_tothread(L, lua_upvalueindex(1));
+		int argc = (int)lua_tointeger(L, lua_upvalueindex(2));
+
+		if (!targetT) {
+			luaL_error(L, "invalid thread");
+			return 0;
+		}
+
+		// Safety: if dead (status LUA_OK and empty stack), return nothing (TNONE).
+		if (lua_status(targetT) == LUA_OK && lua_gettop(targetT) == 0) {
+			return 0;
+		}
+
+		int nresults = 0;
+		int rc = lua_resume(targetT, L, argc, &nresults);
+
+		if (rc == LUA_YIELD) {
+			if (nresults > 0) {
+				// Yielded values are at the top of targetT's stack; locals may be below.
+				// Copy the first yielded value to this wrapper thread, then discard all yielded values.
+				int firstIdx = lua_gettop(targetT) - nresults + 1;
+				lua_pushvalue(targetT, firstIdx);
+				lua_xmove(targetT, L, 1);
+				lua_pop(targetT, nresults);
+				return 1;
+			}
+			lua_pushnil(L); // alive but yielded nothing -> KITSUNE_TNIL
+			return 1;
+		}
+
+		if (rc == LUA_OK) {
+			if (nresults > 0) {
+				// After normal return: stack has exactly nresults values at indices 1..n.
+				lua_pushvalue(targetT, 1);
+				lua_xmove(targetT, L, 1);
+				lua_settop(targetT, 0);
+				return 1;
+			}
+			lua_settop(targetT, 0);
+			return 0; // dead, returned nothing -> KITSUNE_TNONE
+		}
+
+		// Thread error: propagate to the wrapper coroutine.
+		const char* err = lua_tolstring(targetT, -1, NULL);
+		lua_settop(targetT, 0);
+		if (err)
+			lua_pushstring(L, err);
+		else
+			lua_pushliteral(L, "thread error");
+		return lua_error(L);
 	}
 
 	// Called by Lua GC when the KitsuneIteratorUD upvalue is collected.
@@ -2778,6 +2859,10 @@ extern "C" {
 		return out;
 	}
 
+	KITSUNE_API void KitsuneGC() {
+		// Todo: acquire access and call lua_gc to perform a full garbage collection.
+	}
+
 	KITSUNE_API size_t KitsuneCleanup() {
 		KitsuneState* state = g_state;
 		g_state = nullptr;
@@ -2827,11 +2912,11 @@ extern "C" {
 				DrainPendingVariableChain(state->L);
 
 			if (state->L) {
-							if (state->lastCallError) {
-									gff_free(state->lastCallError);
-									state->lastCallError = nullptr;
-								}
-						lua_gc(state->L, LUA_GCCOLLECT, 0);
+				if (state->lastCallError) {
+					gff_free(state->lastCallError);
+					state->lastCallError = nullptr;
+				}
+				lua_gc(state->L, LUA_GCCOLLECT, 0);
 				lua_close(state->L);
 				state->L = nullptr;
 			}
@@ -2843,10 +2928,10 @@ extern "C" {
 			delete state;
 		}
 
-		#ifdef KITSUNE_HTTP
+#ifdef KITSUNE_HTTP
 		curl_global_cleanup();
 #endif
-		#ifdef _WIN32
+#ifdef _WIN32
 		WSACleanup();
 #endif
 		size_t leaked = EndMemoryManager();
@@ -2865,11 +2950,11 @@ extern "C" {
 		SharedMemoryBlock* block = (SharedMemoryBlock*)gff_malloc(sizeof(SharedMemoryBlock) + size);
 		if (!block) return NULL;
 		memset(block, 0, sizeof(SharedMemoryBlock) + size);
-		block->size  = size;
+		block->size = size;
 		// KITSUNE_OWNED: accepted by PushKitsuneVariable.
 		// ACCESSOR_DISPOSED=1: cleared by LuaStream constructor when C# takes ownership.
 		block->flags = KITSUNE_SHARED_MEMORY_FLAG_KITSUNE_OWNED
-					 | KITSUNE_SHARED_MEMORY_FLAG_ACCESSOR_DISPOSED;
+			| KITSUNE_SHARED_MEMORY_FLAG_ACCESSOR_DISPOSED;
 		lua_shmem_list_add(block);
 		return block;
 	}
