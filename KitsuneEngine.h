@@ -192,8 +192,13 @@ extern "C" {
 	// Destroy the Lua state and clean up the engine.
 	KITSUNE_API size_t KitsuneCleanup();
 
-	// Perform a full garbage collection cycle, including finalizers.
-	KITSUNE_API void KitsuneGC();
+	// Perform garbage collection or query memory useage.
+	// Mode = 0: do no garbage collection. Only return the current usage.
+	// Mode = 1: perform a full garbage collection cycle and return the usage after collection.
+	// Mode = 2: perform an incremental step of garbage collection and return the current usage.
+	// Mode = 3: Pause garbage collection. Returns the current usage. Warning: if you pause garbage collection and never restart it, memory usage will grow without bound until the process runs out of memory and crashes or you mantually call KitsuneGC with mode 1 or 2 or resume it with mode 4.
+	// Mode = 4: Restart garbage collection. Returns the current usage.
+	KITSUNE_API long KitsuneGC(int mode = 1);
 
 	// Frees a KitsuneVariable returned by KitsuneGetResult or KitsuneGetVariable
 	// (frees the string data if present, then the struct pointer itself). Safe on NULL.

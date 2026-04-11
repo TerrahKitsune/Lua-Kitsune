@@ -892,6 +892,23 @@ namespace KitsuneNet
             GC.SuppressFinalize(this);
         }
 
+        /// <summary>
+        /// Performs a Lua garbage collection operation and returns current heap usage in bytes.
+        /// <list type="bullet">
+        /// <item><paramref name="mode"/> 0 — query only; no collection performed.</item>
+        /// <item><paramref name="mode"/> 1 (default) — full collection cycle (<c>LUA_GCCOLLECT</c>).</item>
+        /// <item><paramref name="mode"/> 2 — single incremental step (<c>LUA_GCSTEP</c>).</item>
+        /// <item><paramref name="mode"/> 3 — pause the GC (<c>LUA_GCSTOP</c>). Memory grows without
+        /// bound until mode 1, 2, or 4 is called.</item>
+        /// <item><paramref name="mode"/> 4 — restart a paused GC (<c>LUA_GCRESTART</c>).</item>
+        /// </list>
+        /// <para>Drains any pending deferred frees from disposed <see cref="LuaFunctionRef"/> /
+        /// <see cref="LuaThreadRef"/> instances before the cycle. Holds the Lua scheduler lock
+        /// for the full duration.</para>
+        /// </summary>
+        /// <returns>Current Lua heap usage in bytes, or -1 if the engine is not initialised.</returns>
+        public long CollectGarbage(int mode = 1) => KitsuneGC(mode);
+
         /// <summary>Releases a heap-allocated <c>KitsuneVariable*</c> via the native free function.
         /// Called by <see cref="LuaFunctionRef.Dispose"/> to release a Lua registry reference.
         /// Must not be called while the pointer is still in use.</summary>
@@ -1287,6 +1304,9 @@ namespace KitsuneNet
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern nuint KitsuneCleanup();
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern int KitsuneGC(int mode);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern void KitsuneGetAll([MarshalAs(UnmanagedType.LPUTF8Str)] string? path, GetAllCallback callback, IntPtr userdata);

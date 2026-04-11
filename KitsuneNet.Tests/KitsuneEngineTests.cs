@@ -45,6 +45,65 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
+        public void CollectGarbage_DoesNotThrow()
+        {
+            using KitsuneEngine engine = new();
+            Should.NotThrow(() => engine.CollectGarbage());
+        }
+
+        [Fact]
+        public void CollectGarbage_Mode0_ReturnsPositiveUsage()
+        {
+            using KitsuneEngine engine = new();
+            engine.CollectGarbage(0).ShouldBeGreaterThan(0);
+        }
+
+        [Fact]
+        public void CollectGarbage_Mode1_ReturnsUsageAfterCollection()
+        {
+            using KitsuneEngine engine = new();
+            long usage = engine.CollectGarbage(1);
+            usage.ShouldBeGreaterThan(0);
+        }
+
+        [Fact]
+        public void CollectGarbage_Mode2_IncrementalStep_ReturnsUsage()
+        {
+            using KitsuneEngine engine = new();
+            engine.CollectGarbage(2).ShouldBeGreaterThan(0);
+        }
+
+        [Fact]
+        public void CollectGarbage_PauseAndRestart_DoesNotThrow()
+        {
+            using KitsuneEngine engine = new();
+            Should.NotThrow(() => engine.CollectGarbage(3)); // pause
+            Should.NotThrow(() => engine.CollectGarbage(4)); // restart
+        }
+
+        [Fact]
+        public void CollectGarbage_AfterLargeDataBatch_NoLeak()
+        {
+            // Create many tables and function refs, discard them, force GC, then verify no leaks.
+            var engine = new KitsuneEngine();
+            try
+            {
+                for (int i = 0; i < 20; i++)
+                {
+                    LuaValue fn = engine.RunString("return function() return {1,2,3} end");
+                    fn.FunctionRef?.Dispose();
+                }
+
+                engine.CollectGarbage();
+            }
+            finally
+            {
+                engine.Dispose();
+            }
+            ThrowIfLeaked(engine);
+        }
+
+        [Fact]
         public async Task Dispose_WithRunningCoroutine_InterruptsAndCompletes()
         {
             KitsuneEngine engine = new();

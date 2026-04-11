@@ -874,8 +874,6 @@ static thread_local bool g_isSchedulerThread = false;
 static void SchedulerProc(KitsuneState* state) {
 	g_isSchedulerThread = true;
 
-	bool prevAnyActive = false;
-
 	while (!state->schedulerStop.load()) {
 		// ── Step 1: Service pause requests BEFORE touching state->L ──────────────
 		// AcquireLuaAccess (SetVariable, GetVariable, StartCoroutine) sets pauseFlag
@@ -1031,15 +1029,10 @@ static void SchedulerProc(KitsuneState* state) {
 				state->doneCV.notify_all(); // wake KitsuneWait: slots were compacted
 		}
 
-		// ── Step 5: GC on active→idle transition, then sleep ─────────────────
-		// Run a full collection cycle when the last coroutine finishes so that all
-		// memory allocated during execution is reclaimed before the scheduler idles.
-		// prevAnyActive ensures this fires exactly once per work batch, not every
-		// idle iteration, and only after Step 4 has released thread registry refs.
-		if (prevAnyActive && !anyActive && state->runningCount.load() == 0)
-			lua_gc(state->L, LUA_GCCOLLECT, 0);
-		prevAnyActive = anyActive;
-
+		// ── Step 5: Sleep until new work arrives ─────────────────────────────
+		// Lua's generational GC (LUA_GCGEN, minor=20%, major=100%) handles collection
+		// incrementally under allocation pressure.  Forced full cycles belong only in
+		// KitsuneCleanup (before lua_close) and in the explicit KitsuneGC() API.
 		if (!anyActive) {
 			// Use a short wait when coroutines are mid-Sleep() so their deadlines
 			// are checked promptly; fall back to 10ms when the engine is truly idle.
@@ -2859,8 +2852,24 @@ extern "C" {
 		return out;
 	}
 
-	KITSUNE_API void KitsuneGC() {
-		// Todo: acquire access and call lua_gc to perform a full garbage collection.
+	KITSUNE_API long KitsuneGC(int mode) {
+		KitsuneState* state = g_state;
+		if (!state || !state->L)
+			return -1;
+		AcquireLuaAccess(state);
+		// Drain deferred luaL_unref calls before any collection so those objects become candidates.
+		DrainPendingVariableChain(state->L);
+		switch (mode) {
+		case 1: lua_gc(state->L, LUA_GCCOLLECT, 0); break;
+		case 2: lua_gc(state->L, LUA_GCSTEP, 0); break;
+		case 3: lua_gc(state->L, LUA_GCSTOP, 0); break;
+		case 4: lua_gc(state->L, LUA_GCRESTART, 0); break;
+		default: break; // mode 0: query only
+		}
+		long usage = (long)lua_gc(state->L, LUA_GCCOUNT, 0) * 1024L
+			+ (long)lua_gc(state->L, LUA_GCCOUNTB, 0);
+		ReleaseLuaAccess(state);
+		return usage;
 	}
 
 	KITSUNE_API size_t KitsuneCleanup() {

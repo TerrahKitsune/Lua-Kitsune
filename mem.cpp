@@ -9,21 +9,21 @@
 
 #ifdef USEMEMORYMANAGER
 
-static MemoryState * memState = NULL;
+static MemoryState* memState = NULL;
 
-void * Allocate(size_t requested, size_t* actual) {
+void* Allocate(size_t requested, size_t* actual) {
 
 	*actual = requested;
 
 	return HeapAlloc(GetProcessHeap(), 0, *actual);
 }
 
-void Deallocate(void * ptr) {
+void Deallocate(void* ptr) {
 
 	assert(HeapFree(GetProcessHeap(), 0, ptr));
 }
 
-void * ReAllocate(void * ptr, size_t requested, size_t* actual) {
+void* ReAllocate(void* ptr, size_t requested, size_t* actual) {
 
 	*actual = requested;
 	return HeapReAlloc(GetProcessHeap(), 0, ptr, *actual);
@@ -43,30 +43,30 @@ void InitMemoryManager() {
 	memState = CreateNewMemoryState(Allocate, Deallocate, ReAllocate);
 }
 
-void * gff_malloc(size_t size) {
+void* gff_malloc(size_t size) {
 	return MemoryStateAlloc(memState, size);
 }
 
-void * gff_calloc(size_t num, size_t size) {
-	void*ptr = MemoryStateAlloc(memState, num*size);
+void* gff_calloc(size_t num, size_t size) {
+	void* ptr = MemoryStateAlloc(memState, num * size);
 	if (ptr) {
-		memset(ptr, 0, num*size);
+		memset(ptr, 0, num * size);
 	}
 	return ptr;
 }
 
-void * gff_realloc(void * ptr, size_t size) {
+void* gff_realloc(void* ptr, size_t size) {
 	return MemoryStateRealloc(memState, ptr, size);
 }
 
-void gff_free(void * ptr) {
+void gff_free(void* ptr) {
 	return MemoryStateDealloc(memState, ptr);
 }
 
 #elif defined(USEHEAPALLOC)
 
 #ifdef _DEBUG
-static std::atomic<size_t> g_live_allocs{0};
+static std::atomic<size_t> g_live_allocs{ 0 };
 #endif
 
 size_t EndMemoryManager() {
@@ -83,7 +83,7 @@ void InitMemoryManager() {
 #endif
 }
 
-void * gff_malloc(size_t size) {
+void* gff_malloc(size_t size) {
 	void* p = HeapAlloc(GetProcessHeap(), 0, size);
 #ifdef _DEBUG
 	if (p)
@@ -92,7 +92,7 @@ void * gff_malloc(size_t size) {
 	return p;
 }
 
-void * gff_calloc(size_t num, size_t size) {
+void* gff_calloc(size_t num, size_t size) {
 	void* p = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, num * size);
 #ifdef _DEBUG
 	if (p)
@@ -101,7 +101,7 @@ void * gff_calloc(size_t num, size_t size) {
 	return p;
 }
 
-void * gff_realloc(void * ptr, size_t size) {
+void* gff_realloc(void* ptr, size_t size) {
 
 	if (size == 0) {
 		if (ptr) {
@@ -124,7 +124,7 @@ void * gff_realloc(void * ptr, size_t size) {
 	return HeapReAlloc(GetProcessHeap(), 0, ptr, size);
 }
 
-void gff_free(void * ptr) {
+void gff_free(void* ptr) {
 	if (ptr) {
 		assert(HeapFree(GetProcessHeap(), 0, ptr));
 #ifdef _DEBUG
@@ -136,7 +136,7 @@ void gff_free(void * ptr) {
 #else
 
 #ifdef _DEBUG
-static std::atomic<size_t> g_live_allocs{0};
+static std::atomic<size_t> g_live_allocs{ 0 };
 #endif
 
 size_t EndMemoryManager() {
@@ -153,7 +153,7 @@ void InitMemoryManager() {
 #endif
 }
 
-void * gff_malloc(size_t size) {
+void* gff_malloc(size_t size) {
 	void* p = malloc(size);
 #ifdef _DEBUG
 	if (p)
@@ -162,7 +162,7 @@ void * gff_malloc(size_t size) {
 	return p;
 }
 
-void * gff_calloc(size_t num, size_t size) {
+void* gff_calloc(size_t num, size_t size) {
 	void* p = calloc(num, size);
 #ifdef _DEBUG
 	if (p)
@@ -171,7 +171,7 @@ void * gff_calloc(size_t num, size_t size) {
 	return p;
 }
 
-void * gff_realloc(void * ptr, size_t size) {
+void* gff_realloc(void* ptr, size_t size) {
 	if (size == 0) {
 		if (ptr) {
 			free(ptr);
@@ -189,7 +189,7 @@ void * gff_realloc(void * ptr, size_t size) {
 	return p;
 }
 
-void gff_free(void * ptr) {
+void gff_free(void* ptr) {
 	if (ptr) {
 		free(ptr);
 #ifdef _DEBUG
