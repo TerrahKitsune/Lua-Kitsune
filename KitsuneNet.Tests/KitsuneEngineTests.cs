@@ -4983,36 +4983,40 @@ namespace KitsuneNet.Tests
 
         // -- Non-recursive guard: Execute* rejected inside registered functions ---
         [Fact]
-        public async Task RegisterFunction_CallingRunString_ThrowsLuaException()
+        public async Task RegisterFunction_CallingRunString_ReturnsResult()
         {
+            // Sync Execute functions are permitted inside a kitsune_CFunction via RunInlineTight.
+            // Sleep() and Yield() inside the nested call are no-ops in this context.
             using KitsuneEngine engine = new();
+            LuaValue? captured = null;
             engine.RegisterFunction("TryRunString", _ =>
             {
-                engine.RunString("return 'nested'");
+                captured = engine.RunString("return 'nested result'");
                 return LuaValue.None;
             });
-            LuaException ex = await Should.ThrowAsync<LuaException>(
-                engine.ExecuteStringAsync("TryRunString()"));
-            ex.Message.ShouldContain("registered function");
+            await engine.ExecuteStringAsync("TryRunString()");
+            captured.ShouldNotBeNull();
+            captured!.Value.String.ShouldBe("nested result");
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
         [Fact]
-        public async Task RegisterFunction_CallingRunFile_ThrowsLuaException()
+        public async Task RegisterFunction_CallingRunFile_ReturnsResult()
         {
             string path = Path.GetTempFileName();
             try
             {
-                File.WriteAllText(path, "return 'nested file'");
+                File.WriteAllText(path, "return 'nested file result'");
                 using KitsuneEngine engine = new();
+                LuaValue? captured = null;
                 engine.RegisterFunction("TryRunFile", _ =>
                 {
-                    engine.RunFile(path);
+                    captured = engine.RunFile(path);
                     return LuaValue.None;
                 });
-                LuaException ex = await Should.ThrowAsync<LuaException>(
-                    engine.ExecuteStringAsync("TryRunFile()"));
-                ex.Message.ShouldContain("registered function");
+                await engine.ExecuteStringAsync("TryRunFile()");
+                captured.ShouldNotBeNull();
+                captured!.Value.String.ShouldBe("nested file result");
                 engine.GetActiveIds().ShouldBeEmpty();
             }
             finally
@@ -5022,19 +5026,20 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task RegisterFunction_CallingRunFunction_ThrowsLuaException()
+        public async Task RegisterFunction_CallingRunFunction_ReturnsResult()
         {
             using KitsuneEngine engine = new();
-            engine.ExecuteString("function syncTarget() return 'target' end");
+            engine.ExecuteString("function syncTarget() return 'target result' end");
             engine.Wait();
+            LuaValue? captured = null;
             engine.RegisterFunction("TryRunFunction", _ =>
             {
-                engine.RunFunction("syncTarget");
+                captured = engine.RunFunction("syncTarget");
                 return LuaValue.None;
             });
-            LuaException ex = await Should.ThrowAsync<LuaException>(
-                engine.ExecuteStringAsync("TryRunFunction()"));
-            ex.Message.ShouldContain("registered function");
+            await engine.ExecuteStringAsync("TryRunFunction()");
+            captured.ShouldNotBeNull();
+            captured!.Value.String.ShouldBe("target result");
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
@@ -5114,6 +5119,159 @@ namespace KitsuneNet.Tests
             ex.Message.ShouldContain("registered function");
             engine.GetActiveIds().ShouldBeEmpty();
             fn.FunctionRef?.Dispose();
+        }
+
+        // -- Async Execute functions blocked from inside registered function callbacks --------
+        [Fact]
+        public async Task RegisterFunction_CallingExecuteStringAsync_ThrowsLuaException()
+        {
+            using KitsuneEngine engine = new();
+            engine.RegisterFunction("TryExecuteStringAsync", _ =>
+            {
+                engine.ExecuteStringAsync("return 'nested'").GetAwaiter().GetResult();
+                return LuaValue.None;
+            });
+            LuaException ex = await Should.ThrowAsync<LuaException>(
+                engine.ExecuteStringAsync("TryExecuteStringAsync()"));
+            ex.Message.ShouldContain("registered function");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task RegisterFunction_CallingExecuteFileAsync_ThrowsLuaException()
+        {
+            string path = Path.GetTempFileName();
+            try
+            {
+                File.WriteAllText(path, "return 'nested file'");
+                using KitsuneEngine engine = new();
+                engine.RegisterFunction("TryExecuteFileAsync", _ =>
+                {
+                    engine.ExecuteFileAsync(path).GetAwaiter().GetResult();
+                    return LuaValue.None;
+                });
+                LuaException ex = await Should.ThrowAsync<LuaException>(
+                    engine.ExecuteStringAsync("TryExecuteFileAsync()"));
+                ex.Message.ShouldContain("registered function");
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public async Task RegisterFunction_CallingExecuteFunctionAsync_ThrowsLuaException()
+        {
+            using KitsuneEngine engine = new();
+            engine.ExecuteString("function syncTarget() return 'target' end");
+            engine.Wait();
+            engine.RegisterFunction("TryExecuteFunctionAsync", _ =>
+            {
+                engine.ExecuteFunctionAsync("syncTarget").GetAwaiter().GetResult();
+                return LuaValue.None;
+            });
+            LuaException ex = await Should.ThrowAsync<LuaException>(
+                engine.ExecuteStringAsync("TryExecuteFunctionAsync()"));
+            ex.Message.ShouldContain("registered function");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task RegisterFunction_CallingExecuteVariableAsync_ThrowsLuaException()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue fn = engine.RunString("return function() return 'nested' end");
+            engine.RegisterFunction("TryExecuteVariableAsync", _ =>
+            {
+                engine.ExecuteVariableAsync(fn).GetAwaiter().GetResult();
+                return LuaValue.None;
+            });
+            LuaException ex = await Should.ThrowAsync<LuaException>(
+                engine.ExecuteStringAsync("TryExecuteVariableAsync()"));
+            ex.Message.ShouldContain("registered function");
+            engine.GetActiveIds().ShouldBeEmpty();
+            fn.FunctionRef?.Dispose();
+        }
+
+        // -- Sync Execute from callback: behavioral tests -------------------------
+        [Fact]
+        public void RegisterFunction_CallingRunString_FromSyncCoroutine_ReturnsResult()
+        {
+            // Also works when the outer coroutine was started by RunString.
+            using KitsuneEngine engine = new();
+            LuaValue? captured = null;
+            engine.RegisterFunction("TryRunString", _ =>
+            {
+                captured = engine.RunString("return 'sync context'");
+                return LuaValue.None;
+            });
+            engine.RunString("TryRunString()");
+            captured.ShouldNotBeNull();
+            captured!.Value.String.ShouldBe("sync context");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task RegisterFunction_CallingRunString_ResultReturnedToLua()
+        {
+            // The result of RunString can be forwarded back to Lua via resultSetter.
+            using KitsuneEngine engine = new();
+            engine.RegisterFunction("FetchVersion", _ => engine.RunString("return VERSION"));
+            LuaValue result = await engine.ExecuteStringAsync("return FetchVersion()");
+            result.String.ShouldBe("1.0.0");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task RegisterFunction_CallingRunString_WithArgs_PassedCorrectly()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue? captured = null;
+            engine.RegisterFunction("TryRunString", args =>
+            {
+                captured = engine.RunString("return ARGS[1] .. ':' .. ARGS[2]", args[0], args[1]);
+                return LuaValue.None;
+            });
+            await engine.ExecuteStringAsync("TryRunString('hello', 'world')");
+            captured.ShouldNotBeNull();
+            captured!.Value.String.ShouldBe("hello:world");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task RegisterFunction_CallingRunFunction_WithArgs_ReturnsResult()
+        {
+            using KitsuneEngine engine = new();
+            await engine.ExecuteStringAsync("function add(a, b) return a + b end");
+            LuaValue? captured = null;
+            engine.RegisterFunction("TryRunFunction", _ =>
+            {
+                captured = engine.RunFunction("add", LuaValue.FromInt64(10), LuaValue.FromInt64(32));
+                return LuaValue.None;
+            });
+            await engine.ExecuteStringAsync("TryRunFunction()");
+            captured.ShouldNotBeNull();
+            captured!.Value.AsInt64.ShouldBe(42L);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task RegisterFunction_CallingRunString_LuaErrorPropagatesAsCallbackError()
+        {
+            // A Lua error inside a nested RunString throws LuaException from the callback,
+            // which the trampoline converts to a Lua error in the outer coroutine.
+            using KitsuneEngine engine = new();
+            engine.RegisterFunction("TryRunString", _ =>
+            {
+                engine.RunString("error('nested error')");
+                return LuaValue.None;
+            });
+            LuaException ex = await Should.ThrowAsync<LuaException>(
+                engine.ExecuteStringAsync("TryRunString()"));
+            ex.Message.ShouldContain("nested error");
+            engine.GetActiveIds().ShouldBeEmpty();
         }
 
         // -- ExecuteVariable / ExecuteVariableAsync / RunVariable -------------------------
@@ -5369,19 +5527,19 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task RegisterFunction_CallingRunVariable_ThrowsLuaException()
+        public async Task RegisterFunction_CallingRunVariable_ReturnsResult()
         {
             using KitsuneEngine engine = new();
-            LuaValue fn = engine.RunString("return function() end");
-
+            LuaValue fn = engine.RunString("return function() return 'variable result' end");
+            LuaValue? captured = null;
             engine.RegisterFunction("TryRunVariable", _ =>
             {
-                engine.RunVariable(fn);
+                captured = engine.RunVariable(fn);
                 return LuaValue.None;
             });
-            LuaException ex = await Should.ThrowAsync<LuaException>(
-                engine.ExecuteStringAsync("TryRunVariable()"));
-            ex.Message.ShouldContain("registered function");
+            await engine.ExecuteStringAsync("TryRunVariable()");
+            captured.ShouldNotBeNull();
+            captured!.Value.String.ShouldBe("variable result");
             engine.GetActiveIds().ShouldBeEmpty();
             fn.FunctionRef?.Dispose();
         }

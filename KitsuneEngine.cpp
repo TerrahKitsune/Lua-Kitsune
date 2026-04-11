@@ -1763,6 +1763,96 @@ extern "C" {
 		return out;
 	}
 
+	// -- RunInlineTight: re-entrant variant for kitsune_CFunction → KitsuneExecute* calls -----
+	// Precondition: caller is on the scheduler thread inside LuaCFunctionWrapper (DelegateState set),
+	// Lua access is already owned. Sleep() and Yield() in the called function are no-ops — the
+	// coroutine is immediately re-resumed on each LUA_YIELD without releasing Lua access.
+	// Saves and restores currentCoroutineId so the outer coroutine's tracking is undisturbed.
+	// Does NOT call ReleaseLuaAccess — the caller never acquired it.
+	static KitsuneVariable* RunInlineTight(KitsuneState* state, KitsuneCoroutine* slot,
+		lua_State* T, int initialNArgs) {
+		int id = slot->id;
+
+		if (slot->argsRef != LUA_NOREF) {
+			lua_rawgeti(T, LUA_REGISTRYINDEX, slot->argsRef);
+			lua_setglobal(T, "ARGS");
+		}
+		lua_pushinteger(T, id);
+		lua_setglobal(T, "ID");
+
+		long prevCoroutineId = state->currentCoroutineId.load();
+		state->currentCoroutineId.store((long)id);
+		g_inlineExecution = true;
+
+		int nresults = 0;
+		int rc = lua_resume(T, state->L, initialNArgs, &nresults);
+
+		while (rc == LUA_YIELD) {
+			lua_pop(T, nresults);
+			nresults = 0;
+			slot->sleepUntil = 0.0;
+			rc = lua_resume(T, state->L, 0, &nresults);
+		}
+
+		g_inlineExecution = false;
+		state->currentCoroutineId.store(prevCoroutineId);
+
+		KitsuneVariable* out;
+		if (rc == LUA_OK) {
+			out = (KitsuneVariable*)kitsune_malloc(sizeof(KitsuneVariable));
+			if (!out) {
+				out = MakeErrorVariable("out of memory");
+			}
+			else {
+				memset(out, 0, sizeof(KitsuneVariable));
+				if (nresults > 0) {
+					KitsuneCoroutine tmp{};
+					SetSlotResult(&tmp, T, 1);
+					if (tmp.error) {
+						kitsune_free(out);
+						out = MakeErrorVariable(tmp.error);
+						kitsune_free(tmp.error);
+					}
+					else {
+						*out = tmp.result;
+						memset(&tmp.result, 0, sizeof(KitsuneVariable));
+					}
+				}
+				else {
+					out->type = LUA_TNONE;
+				}
+			}
+		}
+		else {
+			const char* err = lua_tolstring(T, -1, NULL);
+			out = MakeErrorVariable(err ? err : "unknown error");
+		}
+
+		lua_settop(T, 0);
+		DrainPendingVariableChain(state->L);
+
+		--state->runningCount;
+
+		if (slot->threadRef != LUA_NOREF) {
+			luaL_unref(state->L, LUA_REGISTRYINDEX, slot->threadRef);
+			slot->threadRef = LUA_NOREF;
+			slot->thread = NULL;
+		}
+		if (slot->argsRef != LUA_NOREF) {
+			luaL_unref(state->L, LUA_REGISTRYINDEX, slot->argsRef);
+			slot->argsRef = LUA_NOREF;
+		}
+
+		state->slotsLock.lock();
+		kitsune_free(slot->error);
+		memset(slot, 0, sizeof(KitsuneCoroutine));
+		state->slotsLock.unlock();
+
+		state->doneCV.notify_all();
+
+		return out;
+	}
+
 	// -- Shared slot-acquisition helper for inline sync execute functions --------
 	// Finds a zeroed (reusable) slot or allocates a new one, marks it isInline=1,
 	// and adds it to slots[] if newly allocated.
@@ -1824,6 +1914,41 @@ extern "C" {
 	KITSUNE_API KitsuneVariable* KitsuneExecuteFile(const char* path, int argc, const KitsuneVariable* argv) {
 		KitsuneState* state = g_state;
 		if (!state) return NULL;
+
+		// Re-entrant from kitsune_CFunction: DelegateState is set, we're on the scheduler thread
+		// with Lua access already held. Run in a tight loop; Sleep/Yield are no-ops.
+		if (state->DelegateState) {
+			if (!path) return NULL;
+			bool isNewSlot = false;
+			KitsuneCoroutine* slot = AcquireInlineSlot(state, isNewSlot);
+			if (!slot)
+				return NULL;
+			slot->threadRef = LUA_NOREF;
+			slot->argsRef = LUA_NOREF;
+			lua_State* T = CreateCoroutineThread(state, slot);
+			lua_newtable(state->L);
+			lua_pushstring(state->L, path);
+			lua_rawseti(state->L, -2, 1);
+			for (int n = 0; n < argc; n++) {
+				PushKitsuneVariable(state->L, argv ? &argv[n] : nullptr);
+				lua_rawseti(state->L, -2, n + 2);
+			}
+			slot->argsRef = luaL_ref(state->L, LUA_REGISTRYINDEX);
+			int loadrc = luaL_loadfile(T, path);
+			int id = (int)(++state->nextId);
+			if (loadrc != 0) {
+				const char* err = lua_tolstring(T, -1, NULL);
+				KitsuneVariable* out = MakeErrorVariable(err ? err : "load error");
+				lua_settop(T, 0);
+				ReleaseFailedInlineSlot(state, slot, isNewSlot);
+				return out;
+			}
+			++state->runningCount;
+			slot->startTime = GetCounter(state);
+			CommitInlineSlot(state, slot, id, isNewSlot);
+			return RunInlineTight(state, slot, T, 0);
+		}
+
 		if (g_isSchedulerThread || state->DelegateState || g_inlineExecution)
 			return MakeErrorVariable("cannot call Execute from this context");
 		if (!path) return NULL;
@@ -1875,6 +2000,39 @@ extern "C" {
 	KITSUNE_API KitsuneVariable* KitsuneExecuteString(const char* script, int argc, const KitsuneVariable* argv) {
 		KitsuneState* state = g_state;
 		if (!state) return NULL;
+
+		// Re-entrant from kitsune_CFunction: DelegateState is set, we're on the scheduler thread
+		// with Lua access already held. Run in a tight loop; Sleep/Yield are no-ops.
+		if (state->DelegateState) {
+			if (!script) return NULL;
+			bool isNewSlot = false;
+			KitsuneCoroutine* slot = AcquireInlineSlot(state, isNewSlot);
+			if (!slot)
+				return NULL;
+			slot->threadRef = LUA_NOREF;
+			slot->argsRef = LUA_NOREF;
+			lua_State* T = CreateCoroutineThread(state, slot);
+			lua_newtable(state->L);
+			for (int n = 0; n < argc; n++) {
+				PushKitsuneVariable(state->L, argv ? &argv[n] : nullptr);
+				lua_rawseti(state->L, -2, n + 1);
+			}
+			slot->argsRef = luaL_ref(state->L, LUA_REGISTRYINDEX);
+			int loadrc = luaL_loadbuffer(T, script, strlen(script), "string");
+			int id = (int)(++state->nextId);
+			if (loadrc != 0) {
+				const char* err = lua_tolstring(T, -1, NULL);
+				KitsuneVariable* out = MakeErrorVariable(err ? err : "load error");
+				lua_settop(T, 0);
+				ReleaseFailedInlineSlot(state, slot, isNewSlot);
+				return out;
+			}
+			++state->runningCount;
+			slot->startTime = GetCounter(state);
+			CommitInlineSlot(state, slot, id, isNewSlot);
+			return RunInlineTight(state, slot, T, 0);
+		}
+
 		if (g_isSchedulerThread || state->DelegateState || g_inlineExecution)
 			return MakeErrorVariable("cannot call Execute from this context");
 		if (!script) return NULL;
@@ -1924,6 +2082,38 @@ extern "C" {
 	KITSUNE_API KitsuneVariable* KitsuneExecuteFunction(const char* functionName, int argc, const KitsuneVariable* argv) {
 		KitsuneState* state = g_state;
 		if (!state) return NULL;
+
+		// Re-entrant from kitsune_CFunction: DelegateState is set, we're on the scheduler thread
+		// with Lua access already held. Run in a tight loop; Sleep/Yield are no-ops.
+		if (state->DelegateState) {
+			if (!functionName) return NULL;
+			bool isNewSlot = false;
+			KitsuneCoroutine* slot = AcquireInlineSlot(state, isNewSlot);
+			if (!slot)
+				return NULL;
+			slot->threadRef = LUA_NOREF;
+			slot->argsRef = LUA_NOREF;
+			lua_State* T = CreateCoroutineThread(state, slot);
+			if (PushGlobalAtPath(state->L, functionName))
+				lua_xmove(state->L, T, 1);
+			else
+				lua_pushnil(T);
+			int id = (int)(++state->nextId);
+			if (!lua_isfunction(T, -1)) {
+				lua_pop(T, 1);
+				KitsuneVariable* out = MakeErrorVariable("function not found");
+				ReleaseFailedInlineSlot(state, slot, isNewSlot);
+				return out;
+			}
+			for (int n = 0; n < argc; n++)
+				PushKitsuneVariable(T, argv ? &argv[n] : nullptr);
+			slot->initialNArgs = argc;
+			++state->runningCount;
+			slot->startTime = GetCounter(state);
+			CommitInlineSlot(state, slot, id, isNewSlot);
+			return RunInlineTight(state, slot, T, argc);
+		}
+
 		if (g_isSchedulerThread || state->DelegateState || g_inlineExecution)
 			return MakeErrorVariable("cannot call Execute from this context");
 		if (!functionName) return NULL;
@@ -1973,6 +2163,95 @@ extern "C" {
 	KITSUNE_API KitsuneVariable* KitsuneExecuteVariable(const KitsuneVariable* var, int argc, const KitsuneVariable* argv) {
 		KitsuneState* state = g_state;
 		if (!state) return NULL;
+
+		// Re-entrant from kitsune_CFunction: DelegateState is set, we're on the scheduler thread
+		// with Lua access already held. Run in a tight loop; Sleep/Yield are no-ops.
+		if (state->DelegateState) {
+			if (!var) return NULL;
+			bool isNewSlot = false;
+			KitsuneCoroutine* slot = AcquireInlineSlot(state, isNewSlot);
+			if (!slot)
+				return NULL;
+			slot->threadRef = LUA_NOREF;
+			slot->argsRef = LUA_NOREF;
+			lua_State* T = CreateCoroutineThread(state, slot);
+			int id = (int)(++state->nextId);
+			bool loadOk = false;
+			int initialNArgs = 0;
+			if (var->type == LUA_TFUNCTION) {
+				if ((int)var->integer != LUA_NOREF)
+					lua_rawgeti(state->L, LUA_REGISTRYINDEX, (int)var->integer);
+				else
+					lua_pushnil(state->L);
+				lua_xmove(state->L, T, 1);
+				if (lua_isfunction(T, -1)) {
+					for (int n = 0; n < argc; n++)
+						PushKitsuneVariable(T, argv ? &argv[n] : nullptr);
+					slot->initialNArgs = argc;
+					initialNArgs = argc;
+					loadOk = true;
+				}
+				else {
+					lua_pop(T, 1);
+				}
+			}
+			else if (var->type == LUA_TSTRING && var->data && var->length > 0) {
+				lua_newtable(state->L);
+				for (int n = 0; n < argc; n++) {
+					PushKitsuneVariable(state->L, argv ? &argv[n] : nullptr);
+					lua_rawseti(state->L, -2, n + 1);
+				}
+				slot->argsRef = luaL_ref(state->L, LUA_REGISTRYINDEX);
+				int rc = luaL_loadbuffer(T, (const char*)var->data, var->length, "variable");
+				if (rc != 0) {
+					const char* err = lua_tolstring(T, -1, NULL);
+					KitsuneVariable* out = MakeErrorVariable(err ? err : "load error");
+					lua_settop(T, 0);
+					ReleaseFailedInlineSlot(state, slot, isNewSlot);
+					return out;
+				}
+				loadOk = true;
+			}
+			else if (var->type == LUA_TTHREAD && (int)var->integer != LUA_NOREF) {
+				lua_rawgeti(state->L, LUA_REGISTRYINDEX, (int)var->integer);
+				lua_State* targetT = lua_tothread(state->L, -1);
+				lua_pop(state->L, 1);
+				if (!targetT) {
+					KitsuneVariable* out = MakeErrorVariable("invalid thread");
+					ReleaseFailedInlineSlot(state, slot, isNewSlot);
+					return out;
+				}
+				if (lua_status(targetT) == LUA_OK && lua_gettop(targetT) == 0) {
+					KitsuneVariable* out = (KitsuneVariable*)kitsune_malloc(sizeof(KitsuneVariable));
+					if (!out)
+						out = MakeErrorVariable("out of memory");
+					else {
+						memset(out, 0, sizeof(KitsuneVariable));
+						out->type = LUA_TNONE;
+					}
+					ReleaseFailedInlineSlot(state, slot, isNewSlot);
+					return out;
+				}
+				lua_sethook(targetT, Ticker, LUA_MASKCOUNT, 1000);
+				for (int n = 0; n < argc; n++)
+					PushKitsuneVariable(targetT, argv ? &argv[n] : nullptr);
+				lua_rawgeti(state->L, LUA_REGISTRYINDEX, (int)var->integer);
+				lua_xmove(state->L, T, 1);
+				lua_pushinteger(T, (lua_Integer)argc);
+				lua_pushcclosure(T, ThreadStepNative, 2);
+				loadOk = true;
+			}
+			if (!loadOk) {
+				KitsuneVariable* out = MakeErrorVariable("variable is not executable");
+				ReleaseFailedInlineSlot(state, slot, isNewSlot);
+				return out;
+			}
+			++state->runningCount;
+			slot->startTime = GetCounter(state);
+			CommitInlineSlot(state, slot, id, isNewSlot);
+			return RunInlineTight(state, slot, T, initialNArgs);
+		}
+
 		if (g_isSchedulerThread || state->DelegateState || g_inlineExecution)
 			return MakeErrorVariable("cannot call Execute from this context");
 		if (!var) return NULL;

@@ -269,17 +269,13 @@ namespace KitsuneNet
         }
 
         /// <summary>Runs a Lua script file synchronously and returns the typed result.
-        /// Returns <see cref="LuaValue.None"/> on start failure or if the script returned nothing.</summary>
-        /// <exception cref="LuaException">Thrown on any Lua runtime or syntax error, if called from
-        /// within a registered function callback, or if the native engine rejects the call (e.g. re-entrant
-        /// invocation). For concurrent non-blocking execution use <see cref="ExecuteFileAsync"/>.</exception>
+        /// Returns <see cref="LuaValue.None"/> on start failure or if the script returned nothing.
+        /// When called from within a registered function callback the call executes via a re-entrant
+        /// tight loop; Sleep() and Yield() inside the nested script are no-ops in that context.</summary>
+        /// <exception cref="LuaException">Thrown on any Lua runtime or syntax error, or if the
+        /// native engine rejects the call. For concurrent non-blocking execution use <see cref="ExecuteFileAsync"/>.</exception>
         public LuaValue RunFile(string path, params LuaValue[]? args)
         {
-            if (inLuaCallback)
-            {
-                throw new LuaException("cannot be called from within a registered function");
-            }
-
             var (native, ptrs) = BuildNativeArgs(args);
             try
             {
@@ -292,17 +288,13 @@ namespace KitsuneNet
         }
 
         /// <summary>Runs a Lua script string synchronously and returns the typed result.
-        /// Returns <see cref="LuaValue.None"/> on start failure or if the script returned nothing.</summary>
-        /// <exception cref="LuaException">Thrown on any Lua runtime or syntax error, if called from
-        /// within a registered function callback, or if the native engine rejects the call (e.g. re-entrant
-        /// invocation). For concurrent non-blocking execution use <see cref="ExecuteStringAsync"/>.</exception>
+        /// Returns <see cref="LuaValue.None"/> on start failure or if the script returned nothing.
+        /// When called from within a registered function callback the call executes via a re-entrant
+        /// tight loop; Sleep() and Yield() inside the nested script are no-ops in that context.</summary>
+        /// <exception cref="LuaException">Thrown on any Lua runtime or syntax error, or if the
+        /// native engine rejects the call. For concurrent non-blocking execution use <see cref="ExecuteStringAsync"/>.</exception>
         public LuaValue RunString(string script, params LuaValue[]? args)
         {
-            if (inLuaCallback)
-            {
-                throw new LuaException("cannot be called from within a registered function");
-            }
-
             var (native, ptrs) = BuildNativeArgs(args);
             try
             {
@@ -315,17 +307,13 @@ namespace KitsuneNet
         }
 
         /// <summary>Calls a global Lua function synchronously and returns the typed result.
-        /// Returns <see cref="LuaValue.None"/> on start failure or if the function returned nothing.</summary>
+        /// Returns <see cref="LuaValue.None"/> on start failure or if the function returned nothing.
+        /// When called from within a registered function callback the call executes via a re-entrant
+        /// tight loop; Sleep() and Yield() inside the nested function are no-ops in that context.</summary>
         /// <exception cref="LuaException">Thrown on any Lua runtime error, if the function does not exist,
-        /// if called from within a registered function callback, or if the native engine rejects the call
-        /// (e.g. re-entrant invocation). For concurrent non-blocking execution use <see cref="ExecuteFunctionAsync"/>.</exception>
+        /// or if the native engine rejects the call. For concurrent non-blocking execution use <see cref="ExecuteFunctionAsync"/>.</exception>
         public LuaValue RunFunction(string functionName, params LuaValue[]? args)
         {
-            if (inLuaCallback)
-            {
-                throw new LuaException("cannot be called from within a registered function");
-            }
-
             var (native, ptrs) = BuildNativeArgs(args);
             try
             {
@@ -412,16 +400,12 @@ namespace KitsuneNet
         /// Returns <see cref="LuaValue.None"/> on start failure, if execution returned nothing,
         /// or if the Lua code raised an error (silent variant — use
         /// <see cref="ExecuteVariableAsync"/> for error details).
+        /// When called from within a registered function callback the call executes via a re-entrant
+        /// tight loop; Sleep() and Yield() inside the nested call are no-ops in that context.
         /// See <see cref="ExecuteVariable"/> for dispatch rules.</summary>
-        /// <exception cref="LuaException">Thrown if called from within a registered function callback,
-        /// or if the native engine rejects the call (e.g. re-entrant invocation).</exception>
+        /// <exception cref="LuaException">Thrown if the native engine rejects the call.</exception>
         public LuaValue RunVariable(LuaValue variable, params LuaValue[]? args)
         {
-            if (inLuaCallback)
-            {
-                throw new LuaException("cannot be called from within a registered function");
-            }
-
             var (nv, native, ptrs) = BuildVariableAndArgs(variable, args);
             try
             {

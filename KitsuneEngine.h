@@ -244,6 +244,9 @@ extern "C" {
 	// Async API with KitsuneGetError to obtain error details. Cannot be called from
 	// within a kitsune_CFunction, from the scheduler thread, or recursively from within
 	// another sync Execute call — all three cases deadlock or corrupt state.
+	// Exception: calling from within a kitsune_CFunction IS supported via a re-entrant
+	// tight-loop path. Sleep() and Yield() inside the called function are no-ops in this
+	// case (the coroutine is immediately re-resumed); the call is otherwise fully functional.
 	KITSUNE_API KitsuneVariable* KitsuneExecuteFile(const char* path, int argc, const KitsuneVariable* argv);
 	KITSUNE_API KitsuneVariable* KitsuneExecuteString(const char* script, int argc, const KitsuneVariable* argv);
 	KITSUNE_API KitsuneVariable* KitsuneExecuteFunction(const char* functionName, int argc, const KitsuneVariable* argv);
