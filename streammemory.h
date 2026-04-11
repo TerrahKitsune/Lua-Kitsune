@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "stream.h"
 
 // Allocates an InMemoryStream and wires stream->vtbl, stream->native, stream->Caps.
@@ -14,5 +14,5 @@ bool lua_is_inmemory_stream(const LuaStream* stream);
 // *outLen is set to the byte count (m->len, not the allocated capacity).
 // Returns NULL with *outLen == 0 for an empty stream (not an error).
 // Returns NULL with *outLen  > 0 on allocation failure (OOM).
-// Only valid when lua_is_inmemory_stream returns true. Free the result with gff_free.
+// Only valid when lua_is_inmemory_stream returns true. Free the result with kitsune_free.
 unsigned char* lua_copy_inmemory_stream_data(const LuaStream* stream, size_t* outLen);

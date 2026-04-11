@@ -1,4 +1,4 @@
-﻿#include "RedisJson.h"
+#include "RedisJson.h"
 #include "RedisKey.h"
 #include "luajson.h"
 #include <string.h>
@@ -37,7 +37,7 @@ static void push_decoded_json(lua_State* L, const char* str, size_t len) {
 		return;
 	}
 
-	// JSONPath always wraps the result: [value] → unwrap to value
+	// JSONPath always wraps the result: [value] ? unwrap to value
 	if (lua_istable(L, -1)) {
 		lua_rawgeti(L, -1, 1);
 		lua_remove(L, -2);
@@ -66,7 +66,7 @@ int RedisPushJsonInternal(lua_State* L, int redisIdx, const char* rediskey, size
 	lua_pushvalue(L, redisIdx);
 	json->key.redis_ref = luaL_ref(L, LUA_REGISTRYINDEX);
 
-	json->key.key = (char*)gff_malloc(rediskeylen + 1);
+	json->key.key = (char*)kitsune_malloc(rediskeylen + 1);
 	if (!json->key.key) {
 		luaL_error(L, "Out of memory");
 	}
@@ -74,7 +74,7 @@ int RedisPushJsonInternal(lua_State* L, int redisIdx, const char* rediskey, size
 	json->key.key[rediskeylen] = '\0';
 	json->key.keylen = rediskeylen;
 
-	json->path = (char*)gff_malloc(pathlen + 1);
+	json->path = (char*)kitsune_malloc(pathlen + 1);
 	if (!json->path) {
 		luaL_error(L, "Out of memory");
 	}
@@ -89,7 +89,7 @@ int RedisPushJsonInternal(lua_State* L, int redisIdx, const char* rediskey, size
 static void push_json_field(lua_State* L, LuaRedisJson* json, const char* field, size_t fieldlen) {
 
 	size_t new_pathlen = json->pathlen + 1 + fieldlen;
-	char*  new_path    = (char*)gff_malloc(new_pathlen + 1);
+	char*  new_path    = (char*)kitsune_malloc(new_pathlen + 1);
 	if (!new_path) {
 		luaL_error(L, "Out of memory");
 	}
@@ -103,17 +103,17 @@ static void push_json_field(lua_State* L, LuaRedisJson* json, const char* field,
 	RedisPushJsonInternal(L, -1, json->key.key, json->key.keylen, new_path, new_pathlen);
 	lua_remove(L, -2);
 
-	gff_free(new_path);
+	kitsune_free(new_path);
 }
 
-// Returns a new LuaRedisJson with path extended by "[lua_idx-1]" (Lua 1-indexed → JSONPath 0-indexed).
+// Returns a new LuaRedisJson with path extended by "[lua_idx-1]" (Lua 1-indexed ? JSONPath 0-indexed).
 static void push_json_index(lua_State* L, LuaRedisJson* json, lua_Integer lua_idx) {
 
 	char buf[32];
 	int  n = snprintf(buf, sizeof(buf), "[%lld]", (long long)(lua_idx - 1));
 
 	size_t new_pathlen = json->pathlen + (size_t)n;
-	char*  new_path    = (char*)gff_malloc(new_pathlen + 1);
+	char*  new_path    = (char*)kitsune_malloc(new_pathlen + 1);
 	if (!new_path) {
 		luaL_error(L, "Out of memory");
 	}
@@ -126,7 +126,7 @@ static void push_json_index(lua_State* L, LuaRedisJson* json, lua_Integer lua_id
 	RedisPushJsonInternal(L, -1, json->key.key, json->key.keylen, new_path, new_pathlen);
 	lua_remove(L, -2);
 
-	gff_free(new_path);
+	kitsune_free(new_path);
 }
 
 int redisjson_index(lua_State* L) {
@@ -174,7 +174,7 @@ int redisjson_newindex(lua_State* L) {
 		const char* field = lua_tolstring(L, 2, &fieldlen);
 
 		new_pathlen = json->pathlen + 1 + fieldlen;
-		new_path    = (char*)gff_malloc(new_pathlen + 1);
+		new_path    = (char*)kitsune_malloc(new_pathlen + 1);
 		if (!new_path) {
 			luaL_error(L, "Out of memory");
 		}
@@ -192,7 +192,7 @@ int redisjson_newindex(lua_State* L) {
 		char buf[32];
 		int  n       = snprintf(buf, sizeof(buf), "[%lld]", (long long)(idx - 1));
 		new_pathlen  = json->pathlen + (size_t)n;
-		new_path     = (char*)gff_malloc(new_pathlen + 1);
+		new_path     = (char*)kitsune_malloc(new_pathlen + 1);
 		if (!new_path) {
 			luaL_error(L, "Out of memory");
 		}
@@ -213,7 +213,7 @@ int redisjson_newindex(lua_State* L) {
 	lua_pushrediskey(L, &json->key);
 	lua_pushlstring(L, new_path, new_pathlen);
 	lua_pushvalue(L, encoded_pos);
-	gff_free(new_path);
+	kitsune_free(new_path);
 
 	LuaRedis* redis = RedisCommandInternal(L);
 	lua_settop(L, 3);
@@ -363,7 +363,7 @@ int redisjson_gc(lua_State* L) {
 	LuaRedisJson* json = (LuaRedisJson*)luaL_checkudata(L, 1, REDISJSON);
 	CleanRedisKey(L, &json->key);
 	if (json->path) {
-		gff_free(json->path);
+		kitsune_free(json->path);
 		json->path    = NULL;
 		json->pathlen = 0;
 	}

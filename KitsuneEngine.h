@@ -181,13 +181,16 @@ struct KitsuneUserDataRegistration {
 	NamedKitsuneFunction* Functions; // Functions added to the userdata metatable
 };
 
-// Initialisation callback passed to KitsuneInit.
-typedef void (*kitsune_Init) (const void* L);
+struct MemoryAllocator {
+	void* (*malloc)(size_t);
+	void* (*realloc)(void*, size_t);
+	void  (*free)(void*);
+};
 
 extern "C" {
 	// Initialise the engine and create the Lua state. If already initialised, returns true immediately.
 	// Returns false on failure.
-	KITSUNE_API bool KitsuneInit(kitsune_Init initFunc = nullptr);
+	KITSUNE_API bool KitsuneInit(MemoryAllocator* memoryAllocator = nullptr);
 
 	// Destroy the Lua state and clean up the engine.
 	KITSUNE_API size_t KitsuneCleanup();

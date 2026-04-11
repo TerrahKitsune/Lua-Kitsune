@@ -18,7 +18,7 @@ void CleanRedisKey(lua_State* L, LuaRedisKey* key) {
 	}
 
 	if (key->key) {
-		gff_free(key->key);
+		kitsune_free(key->key);
 		key->key = NULL;
 		key->keylen = 0;
 	}
@@ -95,7 +95,7 @@ LuaRedisKey* lua_createrediskey(lua_State* L, int redisIdx, const char* key, siz
 	memset(redisKey, 0, sizeof(LuaRedisKey));
 	redisKey->redis_ref = ref;
 	
-	redisKey->key = (char*)gff_malloc(keylen + 1);
+	redisKey->key = (char*)kitsune_malloc(keylen + 1);
 	if (!redisKey->key) {
 		luaL_error(L, "Out of memory");
 		return 0;

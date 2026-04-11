@@ -42,7 +42,7 @@ int DecodeInt(const char* data, size_t len, int pos, lua_State* L) {
 		return 0;
 	}
 
-	char* buffer = (char*)gff_calloc(end - pos + 1, sizeof(char));
+	char* buffer = (char*)kitsune_calloc(end - pos + 1, sizeof(char));
 	if (!buffer) {
 		luaL_error(L, "Bencode decode out of memory");
 		return 0;
@@ -50,7 +50,7 @@ int DecodeInt(const char* data, size_t len, int pos, lua_State* L) {
 
 	memcpy(buffer, &data[pos], end - pos);
 	long long result = atoll(buffer);
-	gff_free(buffer);
+	kitsune_free(buffer);
 
 	lua_pushinteger(L, result);
 
@@ -88,7 +88,7 @@ int DecodeString(const char* data, size_t len, int pos, lua_State* L) {
 		return 0;
 	}
 
-	char* buffer = (char*)gff_calloc(end - pos + 1, sizeof(char));
+	char* buffer = (char*)kitsune_calloc(end - pos + 1, sizeof(char));
 	if (!buffer) {
 		luaL_error(L, "Bencode decode out of memory");
 		return 0;
@@ -96,7 +96,7 @@ int DecodeString(const char* data, size_t len, int pos, lua_State* L) {
 
 	memcpy(buffer, &data[pos], end - pos);
 	int length = atoi(buffer);
-	gff_free(buffer);
+	kitsune_free(buffer);
 
 	pos = end + 1;
 

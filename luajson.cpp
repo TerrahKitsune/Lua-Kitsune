@@ -1,9 +1,9 @@
-﻿#include "luajson.h"
+#include "luajson.h"
 #include "stream.h"
 #include "luawchar.h"
 
 // Unique address used as the JSON null sentinel.
-// Both encoder and decoder reference this directly — no registry lookup needed.
+// Both encoder and decoder reference this directly � no registry lookup needed.
 static char g_json_null;
 // Unique address used as the Lua registry key for the shared bridge LuaJson instance.
 static char g_bridge_json_key;
@@ -33,15 +33,15 @@ LuaJson* lua_json_check(lua_State* L, int idx) {
 int lua_json_gc(lua_State* L) {
 	LuaJson* j = lua_json_check(L, 1);
 	if (j->out) {
-		gff_free(j->out);
+		kitsune_free(j->out);
 		j->out = NULL;
 	}
 	if (j->rec) {
-		gff_free(j->rec);
+		kitsune_free(j->rec);
 		j->rec = NULL;
 	}
 	if (j->chunkBuf) {
-		gff_free(j->chunkBuf);
+		kitsune_free(j->chunkBuf);
 		j->chunkBuf = NULL;
 	}
 	return 0;
@@ -60,7 +60,7 @@ int lua_json_new(lua_State* L) {
 }
 
 // =============================================================================
-// Encoder — buffer helpers
+// Encoder � buffer helpers
 // =============================================================================
 
 static void jbuf_grow(LuaJson* j, lua_State* L, size_t need) {
@@ -78,7 +78,7 @@ static void jbuf_grow(LuaJson* j, lua_State* L, size_t need) {
 	size_t cap = j->outCap ? j->outCap * 2 : 512;
 	while (cap < j->outLen + need)
 		cap *= 2;
-	char* p = (char*)gff_realloc(j->out, cap);
+	char* p = (char*)kitsune_realloc(j->out, cap);
 	if (!p) {
 		luaL_error(L, "Json: out of memory");
 		return;
@@ -98,11 +98,11 @@ static void jbuf_emitc(LuaJson* j, lua_State* L, char c) {
 	j->out[j->outLen++] = c;
 }
 
-// For string literals only — sizeof gives the compile-time length.
+// For string literals only � sizeof gives the compile-time length.
 #define jbuf_emitlit(j, L, s) jbuf_emit(j, L, "" s, sizeof(s) - 1)
 
 // =============================================================================
-// Encoder — anti-recursion
+// Encoder � anti-recursion
 // =============================================================================
 
 
@@ -114,7 +114,7 @@ static void rec_push(LuaJson* j, lua_State* L, uintptr_t addr) {
 
 	if (j->recLen == j->recCap) {
 		size_t     cap = j->recCap ? j->recCap * 2 : 8;
-		uintptr_t* p   = (uintptr_t*)gff_realloc(j->rec, cap * sizeof(uintptr_t));
+		uintptr_t* p   = (uintptr_t*)kitsune_realloc(j->rec, cap * sizeof(uintptr_t));
 
 		if (!p) {
 			luaL_error(L, "Json: out of memory");
@@ -134,7 +134,7 @@ static void rec_pop(LuaJson* j) {
 }
 
 // =============================================================================
-// Encoder — value functions
+// Encoder � value functions
 // =============================================================================
 
 static void enc_value(LuaJson* j, lua_State* L, int depth);
@@ -205,7 +205,7 @@ static void enc_table(LuaJson* j, lua_State* L, int depth) {
 	int tbl = lua_gettop(L);
 	rec_push(j, L, (uintptr_t)lua_topointer(L, tbl));
 
-	// ── Classify: single scan for sequence vs object ──────────────────────────
+	// -- Classify: single scan for sequence vs object --------------------------
 	// Walk all key-value pairs once with lua_next.  Track whether every key is
 	// an integer in [1..n]; exit immediately on the first non-sequence key so
 	// pure-object tables pay O(1) instead of O(n) for the classification step.
@@ -233,7 +233,7 @@ static void enc_table(LuaJson* j, lua_State* L, int depth) {
 	}
 	seq = seq && (count == n);
 
-	// ── Encode ────────────────────────────────────────────────────────────────
+	// -- Encode ----------------------------------------------------------------
 	if (seq) {
 		jbuf_emitc(j, L, '[');
 		for (lua_Integer i = 1; i <= n; i++) {
@@ -327,7 +327,7 @@ static void enc_value(LuaJson* j, lua_State* L, int depth) {
 		break;
 	default:
 		// Functions, threads, and non-null userdata are not representable in
-		// JSON — emit null so the output stays valid and callers can detect the
+		// JSON � emit null so the output stays valid and callers can detect the
 		// gap from the missing value rather than from a garbage pointer string.
 		jbuf_emitlit(j, L, "null");
 		break;
@@ -335,7 +335,7 @@ static void enc_value(LuaJson* j, lua_State* L, int depth) {
 }
 
 // =============================================================================
-// Decoder — read helpers
+// Decoder � read helpers
 // =============================================================================
 
 static char jread_next(LuaJson* j) {
@@ -360,7 +360,7 @@ static char jread_next(LuaJson* j) {
 			return '\0';
 		}
 		if (clen > j->chunkBufCap) {
-			char* p = (char*)gff_realloc(j->chunkBuf, clen);
+			char* p = (char*)kitsune_realloc(j->chunkBuf, clen);
 			if (!p) {
 				lua_pop(L, 1);
 				luaL_error(L, "Json: out of memory");
@@ -401,7 +401,7 @@ static char jread_skip(LuaJson* j) {
 }
 
 // =============================================================================
-// Decoder — UTF-8 helper
+// Decoder � UTF-8 helper
 // =============================================================================
 
 static int utf8_encode(unsigned int cp, char* out) {
@@ -428,7 +428,7 @@ static int utf8_encode(unsigned int cp, char* out) {
 }
 
 // =============================================================================
-// Decoder — value functions
+// Decoder � value functions
 // =============================================================================
 
 static void dec_value(LuaJson* j, lua_State* L);
@@ -638,7 +638,7 @@ static void dec_reset(LuaJson* j, const char* src, size_t len) {
 //   json:Encode(value)              arg 2 = Lua value to encode
 // =============================================================================
 
-// Forward declaration — defined in the Stream I/O section below.
+// Forward declaration � defined in the Stream I/O section below.
 static int json_stream_chunk_reader(lua_State* L);
 
 // Async stream decode continuation.
@@ -662,7 +662,7 @@ static int JsonDecodeAsyncContinuation(lua_State* L, int status, lua_KContext ct
 		return JsonDecodeAsyncContinuation(L, LUA_OK, ctx);
 	}
 
-	lua_pop(L, 1);  // pop nil / false — EOF
+	lua_pop(L, 1);  // pop nil / false � EOF
 
 	lua_Integer total = accum->vtbl->getlen(accum->native);
 	if (total <= 0) {
@@ -813,7 +813,7 @@ int lua_json_decode_into_stream(lua_State* L) {
 
 	if (st->vtbl && st->vtbl->hasdata) {
 		// Async stream: same accumulate-via-lua_callk path as lua_json_decode.
-		// Seekback is not applicable — async streams are never seekable.
+		// Seekback is not applicable � async streams are never seekable.
 		lua_pushluastream(L);           // L[3] = accumulator
 		lua_pushvalue(L, 2);
 		lua_getfield(L, -1, "Read");

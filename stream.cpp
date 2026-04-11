@@ -1,4 +1,4 @@
-﻿#include "stream.h"
+#include "stream.h"
 #include "luawchar.h"
 #include <string.h>
 #include <stdlib.h>
@@ -58,8 +58,8 @@ static bool StreamWrite(lua_State* L, LuaStream* s, const BYTE* data, size_t len
 	return result;
 }
 
-// ── Centralized C-level helpers for pos/len/setpos ────────────────────────────
-// These never push to the Lua stack — they return C values directly.
+// -- Centralized C-level helpers for pos/len/setpos ----------------------------
+// These never push to the Lua stack � they return C values directly.
 // All Lua API functions and internal operations route through these so call
 // sites stay clean regardless of whether the stream uses a vtable or Lua fn.
 
@@ -241,13 +241,13 @@ int GetStreamInfo(lua_State* L) {
 	LuaStream* s = lua_toluastream(L, 1);
 	if (s->vtbl && s->vtbl->hasdata) {
 		// Async/network streams: info may yield (e.g. HTTP waits for response headers).
-		// Returns 1 value — the stream-specific info table.
+		// Returns 1 value � the stream-specific info table.
 		if (s->vtbl->info)
 			return s->vtbl->info(s->native, L);
 		lua_pushnil(L);
 		return 1;
 	}
-	// Sync streams: returns 2 values — caps table + backend info table.
+	// Sync streams: returns 2 values � caps table + backend info table.
 	lua_createtable(L, 0, 1);
 	lua_pushinteger(L, s->Caps);
 	lua_setfield(L, -2, "Caps");
@@ -312,7 +312,7 @@ lua_Integer lua_stream_getlen(lua_State* L, LuaStream* s) {
 }
 
 // Continuation for the fn-backend Read path.
-// Normalises whatever the Lua function returned: non-string → nil.
+// Normalises whatever the Lua function returned: non-string ? nil.
 // Called both as the lua_callk continuation (when the backend yielded, e.g.
 // Sleep was called) and directly when the backend returned synchronously.
 static int fn_read_cont(lua_State* L, int status, lua_KContext ctx) {
@@ -367,9 +367,9 @@ int ReadStreamByte(lua_State* L) {
 }
 
 // Helper: map the integer result of a hasdata query to a Lua value.
-// 0  → boolean false  (no data)
-// 1  → boolean true   (data ready, quantity unknown)
-// n>1 → integer n     (n bytes are ready, e.g. network socket buffer)
+// 0  ? boolean false  (no data)
+// 1  ? boolean true   (data ready, quantity unknown)
+// n>1 ? integer n     (n bytes are ready, e.g. network socket buffer)
 static void push_hasdata_result(lua_State* L, lua_Integer n) {
 	if (n < 0)
 		lua_pushinteger(L, n);  // negative = stream is dead/closed
@@ -830,7 +830,7 @@ int WriteLuaValue(lua_State* L) {
 				if (limit > 0 && limit < byteLen)
 					byteLen = limit;
 				bool ok = StreamWrite(L, stream, (const BYTE*)buf, byteLen);
-				gff_free(buf);
+				kitsune_free(buf);
 				lua_pushinteger(L, ok ? (lua_Integer)byteLen : 0);
 				return 1;
 			}
@@ -853,7 +853,7 @@ int WriteUtf8(lua_State* L) {
 	}
 	size_t len;
 	const char* str = luaL_checklstring(L, 2, &len);
-	BYTE* buf = (BYTE*)gff_malloc(len * 2 + 1);
+	BYTE* buf = (BYTE*)kitsune_malloc(len * 2 + 1);
 	if (!buf) {
 		lua_pushboolean(L, false);
 		lua_pushstring(L, "out of memory");
@@ -872,26 +872,26 @@ int WriteUtf8(lua_State* L) {
 		}
 	}
 	bool ok = StreamWrite(L, s, buf, (size_t)(out - buf));
-	gff_free(buf);
+	kitsune_free(buf);
 	lua_pushboolean(L, ok);
 	return 1;
 }
 
-// ── Compress / Decompress ─────────────────────────────────────────────────────
+// -- Compress / Decompress -----------------------------------------------------
 // Unified implementation using miniz (cross-platform, no system dependency).
 //
-// Wire format — a stream of zero or more chunks, each:
+// Wire format � a stream of zero or more chunks, each:
 //   [uint32_le uncompressedSize][uint32_le compressedSize][compressedBytes]
 // An empty uncompressedSize or compressedSize field signals end-of-stream.
 // compressedBytes are zlib-format (deflate + 2-byte header + 4-byte Adler32).
 //
-// The second Lua argument is now a compression level (0–9, default MZ_DEFAULT_COMPRESSION).
+// The second Lua argument is now a compression level (0�9, default MZ_DEFAULT_COMPRESSION).
 // The Windows COMPRESS_ALGORITHM_* integer is no longer accepted.
 
 static const size_t STREAM_COMPRESS_CHUNK = 65536u;
 
 // ctx packing for CompressContinuation:
-//   bits 0-3: compression level clamped to [0,15] — miniz treats any value >9 as default (-1)
+//   bits 0-3: compression level clamped to [0,15] � miniz treats any value >9 as default (-1)
 //   bit    8: ownDst flag
 // Using only 4 bits for the level avoids the classic MZ_DEFAULT_COMPRESSION = -1 bug:
 // (unsigned int)(-1) = 0xFFFFFFFF would set bit 8 and corrupt the ownDst flag.
@@ -920,7 +920,7 @@ static int CompressContinuation(lua_State* L, int status, lua_KContext ctx) {
 	const char* chunkStr = lua_tolstring(L, -1, &chunkLen);
 	LuaStream* dst = lua_toluastream(L, dstIdx);
 	mz_ulong bound = mz_compressBound((mz_ulong)chunkLen);
-	BYTE* buf = (BYTE*)gff_malloc((size_t)bound);
+	BYTE* buf = (BYTE*)kitsune_malloc((size_t)bound);
 	if (!buf) {
 		lua_pop(L, 1);
 		luaL_error(L, "out of memory");
@@ -930,14 +930,14 @@ static int CompressContinuation(lua_State* L, int status, lua_KContext ctx) {
 	int rc = mz_compress2(buf, &finalSize, (const unsigned char*)chunkStr, (mz_ulong)chunkLen, COMPRESS_LEVEL(ctx));
 	lua_pop(L, 1);
 	if (rc != MZ_OK) {
-		gff_free(buf);
+		kitsune_free(buf);
 		luaL_error(L, "compression failed (%d)", rc);
 		return 0;
 	}
 	uint32_t hdr[2] = { (uint32_t)chunkLen, (uint32_t)finalSize };
 	StreamWrite(L, dst, (const BYTE*)hdr, sizeof(hdr));
 	StreamWrite(L, dst, buf, (size_t)finalSize);
-	gff_free(buf);
+	kitsune_free(buf);
 	// Request next chunk. If Read completes synchronously, call the continuation
 	// directly. If it yields, Lua calls the continuation on resume.
 	lua_pushvalue(L, 1);
@@ -1006,7 +1006,7 @@ static int DecompressAsyncAccumulateContinuation(lua_State* L, int status, lua_K
 		return DecompressAsyncAccumulateContinuation(L, LUA_OK, ctx);
 	}
 	lua_pop(L, 1);
-	// EOF — reset accum to 0 and call synchronous DecompressStream on it.
+	// EOF � reset accum to 0 and call synchronous DecompressStream on it.
 	accumIdx = lua_gettop(L);  // re-derive: now accum is at the top
 	LuaStream* accum = lua_toluastream(L, accumIdx);
 	StreamSetPosC(L, accum, 0);
@@ -1083,7 +1083,7 @@ int DecompressStream(lua_State* L) {
 			luaL_error(L, "truncated compressed stream");
 			return 0;
 		}
-		BYTE* buf = (BYTE*)gff_malloc((size_t)uncompressedSize);
+		BYTE* buf = (BYTE*)kitsune_malloc((size_t)uncompressedSize);
 		if (!buf) {
 			lua_pop(L, 1);
 			lua_pop(L, 1);
@@ -1094,13 +1094,13 @@ int DecompressStream(lua_State* L) {
 		int rc = mz_uncompress(buf, &destLen, (const unsigned char*)compData, (mz_ulong)compressedSize);
 		lua_pop(L, 1);
 		if (rc != MZ_OK) {
-			gff_free(buf);
+			kitsune_free(buf);
 			lua_pop(L, 1);
 			luaL_error(L, "decompression failed (%d)", rc);
 			return 0;
 		}
 		StreamWrite(L, dst, buf, (size_t)destLen);
-		gff_free(buf);
+		kitsune_free(buf);
 	}
 	if (ownDst)
 		StreamSetPosC(L, dst, 0);

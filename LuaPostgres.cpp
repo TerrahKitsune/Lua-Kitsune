@@ -1,4 +1,4 @@
-﻿#ifdef _WIN32
+#ifdef _WIN32
 #include <WinSock2.h>
 #pragma comment(lib, "postgres/lib/libpq.lib")
 #endif
@@ -6,7 +6,7 @@
 #include "LuaPostgres.h"
 #include "luawchar.h"
 
-// ── Platform helper: set socket non-blocking ──────────────────────────────────
+// -- Platform helper: set socket non-blocking ----------------------------------
 #ifdef _WIN32
 static void set_fd_nonblocking(int fd) {
 	u_long one = 1;
@@ -21,7 +21,7 @@ static void set_fd_nonblocking(int fd) {
 }
 #endif
 
-// ── OID constants ─────────────────────────────────────────────────────────────
+// -- OID constants -------------------------------------------------------------
 // The Windows bundled libpq-fe.h stub defines these directly.
 // The system libpq-fe.h on Linux omits them (they live in server/catalog/pg_type_d.h
 // which requires postgresql-server-dev, not just libpq-dev).  Individual guards
@@ -51,13 +51,13 @@ static void set_fd_nonblocking(int fd) {
 #  define NUMERICOID 1700
 #endif
 
-// ── Helper mode constants ─────────────────────────────────────────────────────
+// -- Helper mode constants -----------------------------------------------------
 #define PG_HELPER_RAW      0
 #define PG_HELPER_NONQUERY 1
 #define PG_HELPER_SCALAR   2
 #define PG_HELPER_QUERYALL 3
 
-// ── LuaPostgresQuery ──────────────────────────────────────────────────────────
+// -- LuaPostgresQuery ----------------------------------------------------------
 typedef struct LuaPostgresQuery {
 	LuaPostgres* conn;
 	int          connRef;
@@ -73,17 +73,17 @@ typedef struct LuaPostgresQuery {
 	int          accumRowIdx;   // stream cursor (0-based); QueryAll uses rawlen instead
 } LuaPostgresQuery;
 
-// ── JSON ref for PushAsParamString ────────────────────────────────────────────
+// -- JSON ref for PushAsParamString --------------------------------------------
 static int        s_JsonRef      = LUA_NOREF;
 static lua_State* s_JsonRefState = NULL;
 
-// ── Forward declarations ──────────────────────────────────────────────────────
+// -- Forward declarations ------------------------------------------------------
 static void FreeQuery(lua_State* L, LuaPostgresQuery* q);
 static int  QueryStreamCont(lua_State* L, int status, lua_KContext ctx);
 static int  HelperWaitCont(lua_State* L, int status, lua_KContext ctx);
 static int  HelperStreamCont(lua_State* L, int status, lua_KContext ctx);
 
-// ── PushAsParamString ─────────────────────────────────────────────────────────
+// -- PushAsParamString ---------------------------------------------------------
 static void PushAsParamString(lua_State* L, int index) {
 	if (index < 0)
 		index = lua_gettop(L) + index + 1;
@@ -123,7 +123,7 @@ static void PushAsParamString(lua_State* L, int index) {
 	}
 }
 
-// ── PushPostgresValue ─────────────────────────────────────────────────────────
+// -- PushPostgresValue ---------------------------------------------------------
 static void PushPostgresValue(lua_State* L, const char* val, int len, Oid type) {
 	if (!val) {
 		lua_pushnil(L);
@@ -150,10 +150,10 @@ static void PushPostgresValue(lua_State* L, const char* val, int len, Oid type) 
 	}
 }
 
-// ── BuildQueryParams ──────────────────────────────────────────────────────────
+// -- BuildQueryParams ----------------------------------------------------------
 static void BuildQueryParams(LuaPostgresQuery* q, const char* sql, size_t sqllen,
 	lua_State* L, int paramTableIdx) {
-	q->sql = (char*)gff_malloc(sqllen + 1);
+	q->sql = (char*)kitsune_malloc(sqllen + 1);
 	if (!q->sql) {
 		luaL_error(L, "Out of memory");
 		return;
@@ -185,15 +185,15 @@ static void BuildQueryParams(LuaPostgresQuery* q, const char* sql, size_t sqllen
 		return;
 	}
 
-	q->paramValues  = (char**)gff_malloc(sizeof(char*) * nParams);
+	q->paramValues  = (char**)kitsune_malloc(sizeof(char*) * nParams);
 	if (!q->paramValues) {
 		luaL_error(L, "Out of memory");
 		return;
 	}
 
-	q->paramLengths = (int*)gff_malloc(sizeof(int) * nParams);
+	q->paramLengths = (int*)kitsune_malloc(sizeof(int) * nParams);
 	if (!q->paramLengths) {
-		gff_free(q->paramValues);
+		kitsune_free(q->paramValues);
 		q->paramValues = NULL;
 		luaL_error(L, "Out of memory");
 		return;
@@ -213,7 +213,7 @@ static void BuildQueryParams(LuaPostgresQuery* q, const char* sql, size_t sqllen
 			PushAsParamString(L, -1);
 			size_t plen;
 			const char* pval = lua_tolstring(L, -1, &plen);
-			q->paramValues[i] = (char*)gff_malloc(plen + 1);
+			q->paramValues[i] = (char*)kitsune_malloc(plen + 1);
 			if (!q->paramValues[i]) {
 				lua_pop(L, 2);
 				luaL_error(L, "Out of memory");
@@ -227,7 +227,7 @@ static void BuildQueryParams(LuaPostgresQuery* q, const char* sql, size_t sqllen
 	}
 }
 
-// ── FreeQuery ─────────────────────────────────────────────────────────────────
+// -- FreeQuery -----------------------------------------------------------------
 static void FreeQuery(lua_State* L, LuaPostgresQuery* q) {
 	if (!q)
 		return;
@@ -258,31 +258,31 @@ static void FreeQuery(lua_State* L, LuaPostgresQuery* q) {
 	if (q->paramValues) {
 		for (int i = 0; i < q->nParams; i++) {
 			if (q->paramValues[i])
-				gff_free(q->paramValues[i]);
+				kitsune_free(q->paramValues[i]);
 		}
-		gff_free(q->paramValues);
+		kitsune_free(q->paramValues);
 		q->paramValues = NULL;
 	}
 
 	if (q->paramLengths) {
-		gff_free(q->paramLengths);
+		kitsune_free(q->paramLengths);
 		q->paramLengths = NULL;
 	}
 
 	if (q->sql) {
-		gff_free(q->sql);
+		kitsune_free(q->sql);
 		q->sql = NULL;
 	}
 
 	if (q->error) {
-		gff_free(q->error);
+		kitsune_free(q->error);
 		q->error = NULL;
 	}
 
-	gff_free(q);
+	kitsune_free(q);
 }
 
-// ── lua_topostgres / lua_pushpostgres ─────────────────────────────────────────
+// -- lua_topostgres / lua_pushpostgres -----------------------------------------
 LuaPostgres* lua_topostgres(lua_State* L, int index) {
 	LuaPostgres* pg = (LuaPostgres*)lua_touserdata(L, index);
 	if (!pg) {
@@ -305,7 +305,7 @@ LuaPostgres* lua_pushpostgres(lua_State* L) {
 	return pg;
 }
 
-// ── PostgresEscapeValue ───────────────────────────────────────────────────────
+// -- PostgresEscapeValue -------------------------------------------------------
 int PostgresEscapeValue(lua_State* L) {
 	LuaPostgres* pg = lua_topostgres(L, 1);
 	size_t len;
@@ -327,7 +327,7 @@ int PostgresEscapeValue(lua_State* L) {
 	return 1;
 }
 
-// ── PostgresIsBusy ────────────────────────────────────────────────────────────
+// -- PostgresIsBusy ------------------------------------------------------------
 int PostgresIsBusy(lua_State* L) {
 	LuaPostgres* pg = lua_topostgres(L, 1);
 	if (pg->queryRef == LUA_NOREF) {
@@ -341,7 +341,7 @@ int PostgresIsBusy(lua_State* L) {
 	return 1;
 }
 
-// ── Connect ───────────────────────────────────────────────────────────────────
+// -- Connect -------------------------------------------------------------------
 int PostgresConnect(lua_State* L) {
 	const char* conninfo = luaL_checkstring(L, 1);
 	LuaPostgres* pg = lua_pushpostgres(L);
@@ -369,7 +369,7 @@ int PostgresConnect(lua_State* L) {
 	return 1;
 }
 
-// ── Query continuation chain ──────────────────────────────────────────────────
+// -- Query continuation chain --------------------------------------------------
 static int QueryStreamCont(lua_State* L, int status, lua_KContext ctx) {
 	(void)status;
 	LuaPostgresQuery* q = (LuaPostgresQuery*)(intptr_t)ctx;
@@ -518,10 +518,10 @@ static int PostgresQueryBody(lua_State* L) {
 	return lua_yieldk(L, 1, (lua_KContext)(intptr_t)q, QueryFlushCont);
 }
 
-// ── SetupQueryCoroutine ───────────────────────────────────────────────────────
+// -- SetupQueryCoroutine -------------------------------------------------------
 static LuaPostgresQuery* SetupQueryCoroutine(lua_State* L, LuaPostgres* pg,
 	int connIdx, const char* sql, size_t sqllen, int paramTableIdx) {
-	LuaPostgresQuery* q = (LuaPostgresQuery*)gff_malloc(sizeof(LuaPostgresQuery));
+	LuaPostgresQuery* q = (LuaPostgresQuery*)kitsune_malloc(sizeof(LuaPostgresQuery));
 	if (!q) {
 		luaL_error(L, "Out of memory");
 		return NULL;
@@ -547,7 +547,7 @@ static LuaPostgresQuery* SetupQueryCoroutine(lua_State* L, LuaPostgres* pg,
 	return q;
 }
 
-// ── PostgresQuery ─────────────────────────────────────────────────────────────
+// -- PostgresQuery -------------------------------------------------------------
 int PostgresQuery(lua_State* L) {
 	LuaPostgres* pg = lua_topostgres(L, 1);
 
@@ -570,7 +570,7 @@ int PostgresQuery(lua_State* L) {
 	return 1;
 }
 
-// ── Helper continuations ──────────────────────────────────────────────────────
+// -- Helper continuations ------------------------------------------------------
 static int HelperStreamCont(lua_State* L, int status, lua_KContext ctx) {
 	(void)status;
 	LuaPostgresQuery* q = (LuaPostgresQuery*)(intptr_t)ctx;
@@ -613,7 +613,7 @@ static int HelperStreamCont(lua_State* L, int status, lua_KContext ctx) {
 	int rc = lua_resume(T, L, 0, &nr);
 
 	if (rc == LUA_YIELD && nr > 0 && lua_istable(T, -1)) {
-		// q is still alive — T yielded, hasn't called FreeQuery yet
+		// q is still alive � T yielded, hasn't called FreeQuery yet
 		lua_xmove(T, L, 1);
 		if (nr > 1)
 			lua_pop(T, nr - 1);
@@ -623,7 +623,7 @@ static int HelperStreamCont(lua_State* L, int status, lua_KContext ctx) {
 		return lua_yieldk(L, 0, ctx, HelperStreamCont);
 	}
 
-	// T returned nil — QueryStreamCont already called FreeQuery
+	// T returned nil � QueryStreamCont already called FreeQuery
 	if (nr > 0)
 		lua_pop(T, nr);
 	lua_pushboolean(L, 1);
@@ -680,14 +680,14 @@ static int HelperWaitCont(lua_State* L, int status, lua_KContext ctx) {
 		return 2;
 	}
 
-	// Still polling — T yielded nil
+	// Still polling � T yielded nil
 	if (nr == 0 || lua_isnil(T, -1)) {
 		if (nr > 0)
 			lua_pop(T, nr);
 		return lua_yieldk(L, 0, ctx, HelperWaitCont);
 	}
 
-	// Query-level error string — T is now in QueryStreamCont; stop it
+	// Query-level error string � T is now in QueryStreamCont; stop it
 	if (lua_type(T, -1) == LUA_TSTRING) {
 		size_t elen;
 		const char* err = lua_tolstring(T, -1, &elen);
@@ -703,7 +703,7 @@ static int HelperWaitCont(lua_State* L, int status, lua_KContext ctx) {
 		return 2;
 	}
 
-	// Rowcount integer — T is now suspended in QueryStreamCont
+	// Rowcount integer � T is now suspended in QueryStreamCont
 	lua_Integer rowcount = lua_tointeger(T, -1);
 	lua_pop(T, nr);
 
@@ -788,7 +788,7 @@ int PostgresNonQuery(lua_State* L) { return PostgresHelperRun(L, PG_HELPER_NONQU
 int PostgresScalar(lua_State* L)   { return PostgresHelperRun(L, PG_HELPER_SCALAR);   }
 int PostgresQueryAll(lua_State* L) { return PostgresHelperRun(L, PG_HELPER_QUERYALL); }
 
-// ── luapostgres_gc ────────────────────────────────────────────────────────────
+// -- luapostgres_gc ------------------------------------------------------------
 int luapostgres_gc(lua_State* L) {
 	LuaPostgres* pg = (LuaPostgres*)lua_touserdata(L, 1);
 	if (!pg)
@@ -808,14 +808,14 @@ int luapostgres_gc(lua_State* L) {
 	}
 
 	if (pg->error) {
-		gff_free(pg->error);
+		kitsune_free(pg->error);
 		pg->error = NULL;
 	}
 
 	return 0;
 }
 
-// ── luapostgres_tostring ──────────────────────────────────────────────────────
+// -- luapostgres_tostring ------------------------------------------------------
 int luapostgres_tostring(lua_State* L) {
 	LuaPostgres* pg = lua_topostgres(L, 1);
 	char buf[64];

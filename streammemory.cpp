@@ -1,4 +1,4 @@
-﻿#include "streammemory.h"
+#include "streammemory.h"
 #include <string.h>
 
 struct InMemoryStream {
@@ -8,7 +8,7 @@ struct InMemoryStream {
 	size_t alloc;
 };
 
-// ── vtable implementations ────────────────────────────────────────────────────
+// -- vtable implementations ----------------------------------------------------
 
 static int inmem_read(void* native, lua_State* L, size_t len) {
 	InMemoryStream* m = (InMemoryStream*)native;
@@ -31,7 +31,7 @@ static bool inmem_write(void* native, const BYTE* data, size_t len) {
 		size_t newAlloc = m->alloc == 0 ? MIN_STREAM_SIZE : m->alloc * 2;
 		if (newAlloc < m->pos + len)
 			newAlloc = m->pos + len;
-		void* newData = gff_realloc(m->data, newAlloc);
+		void* newData = kitsune_realloc(m->data, newAlloc);
 		if (!newData)
 			return false;
 		m->data  = (BYTE*)newData;
@@ -65,8 +65,8 @@ static lua_Integer inmem_getlen(void* native) {
 static void inmem_close(void* native, lua_State* L) {
 	InMemoryStream* m = (InMemoryStream*)native;
 	if (m->data)
-		gff_free(m->data);
-	gff_free(m);
+		kitsune_free(m->data);
+	kitsune_free(m);
 }
 
 static int inmem_info(void* native, lua_State* L) {
@@ -93,10 +93,10 @@ static const LuaStreamVtable g_inmem_vtbl = {
 	inmem_info,
 };
 
-// ── Public constructor helper ─────────────────────────────────────────────────
+// -- Public constructor helper -------------------------------------------------
 
 void lua_setup_inmemory_stream(lua_State* L, LuaStream* stream) {
-	InMemoryStream* m = (InMemoryStream*)gff_malloc(sizeof(InMemoryStream));
+	InMemoryStream* m = (InMemoryStream*)kitsune_malloc(sizeof(InMemoryStream));
 	if (!m) {
 		luaL_error(L, "Out of memory");
 		return;
@@ -116,7 +116,7 @@ unsigned char* lua_copy_inmemory_stream_data(const LuaStream* stream, size_t* ou
 	*outLen = m->len;
 	if (m->len == 0)
 		return NULL;
-	unsigned char* buf = (unsigned char*)gff_malloc(m->len);
+	unsigned char* buf = (unsigned char*)kitsune_malloc(m->len);
 	if (buf)
 		memcpy(buf, m->data, m->len);
 	return buf;  // NULL with *outLen > 0 signals OOM

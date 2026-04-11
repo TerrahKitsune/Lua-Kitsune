@@ -1,4 +1,4 @@
-﻿#include "Redis.h"
+#include "Redis.h"
 #include "RedisString.h"
 
 int RedisPushStringInternal(lua_State* L, int redisIdx, const char* key, size_t keylength) {
@@ -14,7 +14,7 @@ int RedisPushStringInternal(lua_State* L, int redisIdx, const char* key, size_t 
 	lua_pushvalue(L, redisIdx);
 	redisString->key.redis_ref = luaL_ref(L, LUA_REGISTRYINDEX);
 
-	redisString->key.key = (char*)gff_malloc(keylength + sizeof(char));
+	redisString->key.key = (char*)kitsune_malloc(keylength + sizeof(char));
 	if (!redisString->key.key) {
 		luaL_error(L, "Out of memory");
 	}
@@ -246,7 +246,7 @@ size_t len2;
 		return 0;
 	}
 
-	char* concat = (char*)gff_malloc(len1 + len2);
+	char* concat = (char*)kitsune_malloc(len1 + len2);
 	if (!concat) {
 		lua_pop(L, 2);
 		luaL_error(L, "Out of memory");
@@ -258,7 +258,7 @@ size_t len2;
 	lua_pop(L, 2);
 
 	lua_pushlstring(L, concat, len1 + len2);
-	gff_free(concat);
+	kitsune_free(concat);
 
 	return 1;
 }

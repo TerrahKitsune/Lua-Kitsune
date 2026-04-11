@@ -1,4 +1,4 @@
-ï»¿#include "RedisPubSub.h"
+#include "RedisPubSub.h"
 #include <string.h>
 
 #ifndef _WIN32
@@ -147,12 +147,12 @@ static int make_subscribe_coroutine(lua_State* L, LuaRedisPubSubState* state) {
 	// co stack: [PubSubCoroutineBody_closure]
 	// L stack:  [..., state, co_thread]
 
-	// registry[co] = state â€” PubSubCoroutineGC uses this to clear registry[state].
+	// registry[co] = state — PubSubCoroutineGC uses this to clear registry[state].
 	lua_pushlightuserdata(L, (void*)co);
 	lua_pushvalue(L, state_idx);
 	lua_rawset(L, LUA_REGISTRYINDEX);
 
-	// registry[state] = state â€” keeps state alive as long as co is alive.
+	// registry[state] = state — keeps state alive as long as co is alive.
 	lua_pushlightuserdata(L, (void*)state);
 	lua_pushvalue(L, state_idx);
 	lua_rawset(L, LUA_REGISTRYINDEX);
@@ -231,11 +231,11 @@ static int internal_subscribe(lua_State* L, bool is_pattern) {
 	}
 
 	// Build and pipeline SUBSCRIBE/PSUBSCRIBE channel1 channel2 ...
-	char** argv    = (char**)gff_malloc((size_t)(nchan + 1) * sizeof(char*));
-	size_t* argvlen = (size_t*)gff_malloc((size_t)(nchan + 1) * sizeof(size_t));
+	char** argv    = (char**)kitsune_malloc((size_t)(nchan + 1) * sizeof(char*));
+	size_t* argvlen = (size_t*)kitsune_malloc((size_t)(nchan + 1) * sizeof(size_t));
 	if (!argv || !argvlen) {
-		gff_free(argv);
-		gff_free(argvlen);
+		kitsune_free(argv);
+		kitsune_free(argvlen);
 		redisFree(sub_ctx);
 		lua_pushnil(L);
 		lua_pushstring(L, "out of memory");
@@ -249,8 +249,8 @@ static int internal_subscribe(lua_State* L, bool is_pattern) {
 		argv[i + 1] = (char*)luaL_checklstring(L, i + 2, &argvlen[i + 1]);
 
 	int rc = redisAppendCommandArgv(sub_ctx, nchan + 1, (const char**)argv, argvlen);
-	gff_free(argv);
-	gff_free(argvlen);
+	kitsune_free(argv);
+	kitsune_free(argvlen);
 
 	if (rc == REDIS_ERR) {
 		redisFree(sub_ctx);

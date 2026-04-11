@@ -1,4 +1,4 @@
-﻿#include "RedisStream.h"
+#include "RedisStream.h"
 #include "RedisKey.h"
 
 int RedisPushStreamInternal(lua_State* L, int redisIdx, const char* key, size_t keylength) {
@@ -14,7 +14,7 @@ int RedisPushStreamInternal(lua_State* L, int redisIdx, const char* key, size_t 
 	lua_pushvalue(L, redisIdx);
 	redisStream->key.redis_ref = luaL_ref(L, LUA_REGISTRYINDEX);
 
-	redisStream->key.key = (char*)gff_malloc(keylength + 1);
+	redisStream->key.key = (char*)kitsune_malloc(keylength + 1);
 	if (!redisStream->key.key) {
 		luaL_error(L, "Out of memory");
 	}

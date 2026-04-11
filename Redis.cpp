@@ -1,4 +1,4 @@
-﻿#include "Redis.h"
+#include "Redis.h"
 #include "RedisJson.h"
 #include <string.h>
 #include <stdlib.h>
@@ -22,8 +22,8 @@ static void RedisDispose(lua_State* L, LuaRedis* redis) {
 		redis->ssl = NULL;
 	}
 
-	gff_free(redis->host);
-	gff_free(redis->password);
+	kitsune_free(redis->host);
+	kitsune_free(redis->password);
 	memset(redis, 0, sizeof(LuaRedis));
 	redis->ref = LUA_NOREF;  // memset zeros to 0; restore to proper sentinel
 }
@@ -41,17 +41,17 @@ void CleanReply(LuaRedis* luaRedis) {
 
 			for (int n = 0; n < luaRedis->argc; n++) {
 				if (luaRedis->argv[n]) {
-					gff_free(luaRedis->argv[n]);
+					kitsune_free(luaRedis->argv[n]);
 				}
 			}
 
-			gff_free(luaRedis->argv);
+			kitsune_free(luaRedis->argv);
 			luaRedis->argv = NULL;
 			luaRedis->argc = 0;
 		}
 
 		if (luaRedis->argvlen) {
-			gff_free(luaRedis->argvlen);
+			kitsune_free(luaRedis->argvlen);
 			luaRedis->argvlen = NULL;
 		}
 	}
@@ -116,13 +116,13 @@ int RedisOpen(lua_State* L) {
 	LuaRedis* redis = lua_pushredis(L);
 	// Store connection parameters for pub/sub cloning; freed by RedisDispose on any exit path.
 	size_t hostlen = strlen(host);
-	redis->host = (char*)gff_malloc(hostlen + 1);
+	redis->host = (char*)kitsune_malloc(hostlen + 1);
 	if (redis->host) memcpy(redis->host, host, hostlen + 1);
 	redis->port = port;
 	redis->timeout_sec = timeout;
 	if (password) {
 		size_t passlen = strlen(password);
-		redis->password = (char*)gff_malloc(passlen + 1);
+		redis->password = (char*)kitsune_malloc(passlen + 1);
 		if (redis->password) memcpy(redis->password, password, passlen + 1);
 	}
 	redisSSLContextError ssl_error = REDIS_SSL_CTX_NONE;
@@ -283,8 +283,8 @@ LuaRedis* RedisCommandInternal(lua_State* L) {
 
 	if (top > 0)
 	{
-		luaRedis->argv = (char**)gff_calloc(top, sizeof(char*));
-		luaRedis->argvlen = (size_t*)gff_calloc(top, sizeof(size_t));
+		luaRedis->argv = (char**)kitsune_calloc(top, sizeof(char*));
+		luaRedis->argvlen = (size_t*)kitsune_calloc(top, sizeof(size_t));
 
 		if (!luaRedis->argv || !luaRedis->argvlen) {
 			luaL_error(L, "Out of memory");
@@ -299,7 +299,7 @@ LuaRedis* RedisCommandInternal(lua_State* L) {
 					n + 1, luaL_typename(L, n + idx + 1));
 				return NULL;
 			}
-			luaRedis->argv[n] = (char*)gff_malloc(paramLen);
+			luaRedis->argv[n] = (char*)kitsune_malloc(paramLen);
 
 			if (!luaRedis->argv[n]) {
 				luaL_error(L, "Out of memory");

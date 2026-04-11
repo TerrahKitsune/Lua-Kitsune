@@ -1,4 +1,4 @@
-﻿#include "LuaSQLiteMain.h"
+#include "LuaSQLiteMain.h"
 #include "LuaSQLite.h"
 
 static const struct luaL_Reg lasqlitefunctions[] = {
@@ -33,15 +33,15 @@ static const luaL_Reg luasqlmeta[] = {
 static struct sqlite3_mem_methods sqlitemalloc;
 
 void * sqlite_malloc(int size) {
-	return gff_malloc(size);
+	return kitsune_malloc(size);
 }
 
 void sqlite_free(void * ptr) {
-	gff_free(ptr);
+	kitsune_free(ptr);
 }
 
 void * sqlite_realloc(void * ptr, int size) {
-	return gff_realloc(ptr, size);
+	return kitsune_realloc(ptr, size);
 }
 #endif
 

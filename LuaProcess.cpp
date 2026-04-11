@@ -1,4 +1,4 @@
-﻿#include "LuaProcess.h"
+#include "LuaProcess.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,7 +9,7 @@
 #include <tlhelp32.h>
 #endif
 
-// ── Common ────────────────────────────────────────────────────────────────────
+// -- Common --------------------------------------------------------------------
 
 LuaProcess* lua_toprocess(lua_State* L, int index) {
 	LuaProcess* proc = (LuaProcess*)lua_touserdata(L, index);
@@ -50,7 +50,7 @@ int process_tostring(lua_State* L) {
 	return 1;
 }
 
-// ── Windows ───────────────────────────────────────────────────────────────────
+// -- Windows -------------------------------------------------------------------
 #ifdef _WIN32
 
 static char procname[MAX_PATH];
@@ -306,7 +306,7 @@ int ReadFromPipe(lua_State* L) {
 	if (buffersize <= 0)
 		buffersize = 1;
 
-	char* data = (char*)gff_malloc(buffersize);
+	char* data = (char*)kitsune_malloc(buffersize);
 	if (!data) {
 		lua_pop(L, lua_gettop(L));
 		lua_pushnil(L);
@@ -318,7 +318,7 @@ int ReadFromPipe(lua_State* L) {
 
 	if (success) {
 		if (read <= 0) {
-			gff_free(data);
+			kitsune_free(data);
 			lua_pop(L, lua_gettop(L));
 			lua_pushnil(L);
 			return 1;
@@ -328,7 +328,7 @@ int ReadFromPipe(lua_State* L) {
 	}
 
 	if (!success) {
-		gff_free(data);
+		kitsune_free(data);
 		lua_pop(L, lua_gettop(L));
 		lua_pushnil(L);
 		return 1;
@@ -336,7 +336,7 @@ int ReadFromPipe(lua_State* L) {
 
 	lua_pop(L, lua_gettop(L));
 	lua_pushlstring(L, data, read);
-	gff_free(data);
+	kitsune_free(data);
 	return 1;
 }
 
@@ -353,7 +353,7 @@ int ErrorFromPipe(lua_State* L) {
 	if (buffersize <= 0)
 		buffersize = 1;
 
-	char* data = (char*)gff_malloc(buffersize);
+	char* data = (char*)kitsune_malloc(buffersize);
 	if (!data) {
 		lua_pop(L, lua_gettop(L));
 		lua_pushnil(L);
@@ -365,7 +365,7 @@ int ErrorFromPipe(lua_State* L) {
 
 	if (success) {
 		if (read <= 0) {
-			gff_free(data);
+			kitsune_free(data);
 			lua_pop(L, lua_gettop(L));
 			lua_pushnil(L);
 			return 1;
@@ -375,7 +375,7 @@ int ErrorFromPipe(lua_State* L) {
 	}
 
 	if (!success) {
-		gff_free(data);
+		kitsune_free(data);
 		lua_pop(L, lua_gettop(L));
 		lua_pushnil(L);
 		return 1;
@@ -383,7 +383,7 @@ int ErrorFromPipe(lua_State* L) {
 
 	lua_pop(L, lua_gettop(L));
 	lua_pushlstring(L, data, read);
-	gff_free(data);
+	kitsune_free(data);
 	return 1;
 }
 
@@ -585,7 +585,7 @@ int process_gc(lua_State* L) {
 	return 0;
 }
 
-// ── Linux / POSIX ─────────────────────────────────────────────────────────────
+// -- Linux / POSIX -------------------------------------------------------------
 #else
 
 int GetAllProcesses(lua_State* L) {
@@ -786,7 +786,7 @@ int ReadFromPipe(lua_State* L) {
 	}
 	if (buffersize < 1)
 		buffersize = 1;
-	char* data = (char*)gff_malloc(buffersize);
+	char* data = (char*)kitsune_malloc(buffersize);
 	if (!data) {
 		lua_pop(L, lua_gettop(L));
 		lua_pushnil(L);
@@ -794,14 +794,14 @@ int ReadFromPipe(lua_State* L) {
 	}
 	ssize_t nread = read_nonblocking(proc->fd_out_r, data, buffersize - 1);
 	if (nread <= 0) {
-		gff_free(data);
+		kitsune_free(data);
 		lua_pop(L, lua_gettop(L));
 		lua_pushnil(L);
 		return 1;
 	}
 	lua_pop(L, lua_gettop(L));
 	lua_pushlstring(L, data, (size_t)nread);
-	gff_free(data);
+	kitsune_free(data);
 	return 1;
 }
 
@@ -815,7 +815,7 @@ int ErrorFromPipe(lua_State* L) {
 	}
 	if (buffersize < 1)
 		buffersize = 1;
-	char* data = (char*)gff_malloc(buffersize);
+	char* data = (char*)kitsune_malloc(buffersize);
 	if (!data) {
 		lua_pop(L, lua_gettop(L));
 		lua_pushnil(L);
@@ -823,14 +823,14 @@ int ErrorFromPipe(lua_State* L) {
 	}
 	ssize_t nread = read_nonblocking(proc->fd_err_r, data, buffersize - 1);
 	if (nread <= 0) {
-		gff_free(data);
+		kitsune_free(data);
 		lua_pop(L, lua_gettop(L));
 		lua_pushnil(L);
 		return 1;
 	}
 	lua_pop(L, lua_gettop(L));
 	lua_pushlstring(L, data, (size_t)nread);
-	gff_free(data);
+	kitsune_free(data);
 	return 1;
 }
 

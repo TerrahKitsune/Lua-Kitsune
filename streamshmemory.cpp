@@ -1,4 +1,4 @@
-﻿#include "streamshmemory.h"
+#include "streamshmemory.h"
 #include <atomic>
 #include <mutex>
 #include <string.h>
@@ -17,7 +17,7 @@ struct InSharedMemoryStream {
 	size_t             pos;
 };
 
-// ── vtable implementations ────────────────────────────────────────────────────
+// -- vtable implementations ----------------------------------------------------
 
 static int shmem_read(void* native, lua_State* L, size_t len) {
 	InSharedMemoryStream* s = (InSharedMemoryStream*)native;
@@ -77,7 +77,7 @@ static void shmem_close(void* native, lua_State* L) {
 	InSharedMemoryStream* s = (InSharedMemoryStream*)native;
 	if (s->block)
 		flags_atomic_or(&s->block->flags, KITSUNE_SHARED_MEMORY_FLAG_OWNER_DISPOSED);
-	gff_free(s);
+	kitsune_free(s);
 }
 
 static int shmem_info(void* native, lua_State* L) {
@@ -104,7 +104,7 @@ static const LuaStreamVtable g_shmem_vtbl = {
 	shmem_info,
 };
 
-// ── Inbound public constructor ────────────────────────────────────────────────
+// -- Inbound public constructor ------------------------------------------------
 
 LuaStream* lua_push_sharedmemory_stream(lua_State* L, SharedMemoryBlock* block) {
 	LuaStream* stream = (LuaStream*)lua_newuserdata(L, sizeof(LuaStream));
@@ -113,7 +113,7 @@ LuaStream* lua_push_sharedmemory_stream(lua_State* L, SharedMemoryBlock* block) 
 	memset(stream, 0, sizeof(LuaStream));
 	stream->backendRef = LUA_NOREF;
 
-	InSharedMemoryStream* s = (InSharedMemoryStream*)gff_malloc(sizeof(InSharedMemoryStream));
+	InSharedMemoryStream* s = (InSharedMemoryStream*)kitsune_malloc(sizeof(InSharedMemoryStream));
 	if (!s) {
 		luaL_error(L, "Out of memory");
 		return NULL;
@@ -133,7 +133,7 @@ LuaStream* lua_push_sharedmemory_stream(lua_State* L, SharedMemoryBlock* block) 
 }
 
 
-// ── Global block registry ─────────────────────────────────────────────────────
+// -- Global block registry -----------------------------------------------------
 // Every SharedMemoryBlock lives in this intrusive linked list from allocation
 // until both OWNER_DISPOSED and ACCESSOR_DISPOSED flags are set, at which point
 // lua_shmem_sweep_disposed_blocks (called by the scheduler each cycle) frees it.
@@ -171,12 +171,12 @@ void lua_shmem_sweep_disposed_blocks() {
 	// Phase 2 (outside lock): free collected blocks.
 	while (free_list) {
 		SharedMemoryBlock* next = free_list->next;
-		gff_free(free_list);
+		kitsune_free(free_list);
 		free_list = next;
 	}
 }
 
-// shmem_out_close: same as shmem_close — set OWNER_DISPOSED and free the native struct.
+// shmem_out_close: same as shmem_close � set OWNER_DISPOSED and free the native struct.
 // The block itself is freed by lua_shmem_sweep_disposed_blocks once the accessor also disposes.
 static void shmem_out_close(void* native, lua_State* L) {
 	shmem_close(native, NULL);
@@ -206,10 +206,10 @@ static const LuaStreamVtable g_shmem_out_vtbl = {
 	shmem_out_info,
 };
 
-// ── Outbound public constructor ───────────────────────────────────────────────
+// -- Outbound public constructor -----------------------------------------------
 
 LuaStream* lua_push_sharedmemory_stream_outbound(lua_State* L, size_t size) {
-	SharedMemoryBlock* block = (SharedMemoryBlock*)gff_malloc(sizeof(SharedMemoryBlock) + size);
+	SharedMemoryBlock* block = (SharedMemoryBlock*)kitsune_malloc(sizeof(SharedMemoryBlock) + size);
 	if (!block) {
 		luaL_error(L, "Out of memory");
 		return NULL;
@@ -227,7 +227,7 @@ LuaStream* lua_push_sharedmemory_stream_outbound(lua_State* L, size_t size) {
 	memset(stream, 0, sizeof(LuaStream));
 	stream->backendRef = LUA_NOREF;
 
-	InSharedMemoryStream* s = (InSharedMemoryStream*)gff_malloc(sizeof(InSharedMemoryStream));
+	InSharedMemoryStream* s = (InSharedMemoryStream*)kitsune_malloc(sizeof(InSharedMemoryStream));
 	if (!s) {
 		flags_atomic_or(&block->flags, KITSUNE_SHARED_MEMORY_FLAG_OWNER_DISPOSED);  // mark for ticker cleanup
 		luaL_error(L, "Out of memory");
@@ -251,7 +251,7 @@ SharedMemoryBlock* lua_get_outbound_sharedmemory_block(const LuaStream* stream) 
 }
 
 LuaStream* lua_try_push_sharedmemory_stream_outbound_copy(lua_State* L, const void* data, size_t size) {
-	SharedMemoryBlock* block = (SharedMemoryBlock*)gff_malloc(sizeof(SharedMemoryBlock) + size);
+	SharedMemoryBlock* block = (SharedMemoryBlock*)kitsune_malloc(sizeof(SharedMemoryBlock) + size);
 	if (!block)
 		return NULL;
 	memset(block, 0, sizeof(SharedMemoryBlock) + size);
@@ -268,7 +268,7 @@ LuaStream* lua_try_push_sharedmemory_stream_outbound_copy(lua_State* L, const vo
 	memset(stream, 0, sizeof(LuaStream));
 	stream->backendRef = LUA_NOREF;
 
-	InSharedMemoryStream* s = (InSharedMemoryStream*)gff_malloc(sizeof(InSharedMemoryStream));
+	InSharedMemoryStream* s = (InSharedMemoryStream*)kitsune_malloc(sizeof(InSharedMemoryStream));
 	if (!s) {
 		flags_atomic_or(&block->flags, KITSUNE_SHARED_MEMORY_FLAG_OWNER_DISPOSED);  // mark for ticker cleanup
 		lua_pop(L, 1);  // remove the partially-constructed userdata

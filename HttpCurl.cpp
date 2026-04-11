@@ -1,4 +1,4 @@
-ï»¿#ifdef KITSUNE_HTTP
+#ifdef KITSUNE_HTTP
 
 #include "HttpCurl.h"
 #include "stream.h"
@@ -26,14 +26,14 @@ int http_sentinel_gc(lua_State* L) {
 }
 
 // -----------------------------------------------------------------------------
-// T4b ï¿½ Http.UrlEncode / Http.UrlDecode
+// T4b ? Http.UrlEncode / Http.UrlDecode
 // -----------------------------------------------------------------------------
 
 int UrlEncode(lua_State* L) {
 	size_t len;
 	const char* data = luaL_checklstring(L, 1, &len);
 	size_t allocSize = len * 3 + 1;
-	char* buf = (char*)gff_malloc(allocSize);
+	char* buf = (char*)kitsune_malloc(allocSize);
 	if (!buf)
 		return luaL_error(L, "out of memory");
 	static const char hex[] = "0123456789abcdef";
@@ -51,7 +51,7 @@ int UrlEncode(lua_State* L) {
 	}
 	buf[pos] = '\0';
 	lua_pushlstring(L, buf, (size_t)pos);
-	gff_free(buf);
+	kitsune_free(buf);
 	return 1;
 }
 
@@ -62,7 +62,7 @@ static inline int ishex(int x) {
 int UrlDecode(lua_State* L) {
 	size_t len;
 	const char* s = luaL_checklstring(L, 1, &len);
-	char* buf = (char*)gff_malloc(len + 1);
+	char* buf = (char*)kitsune_malloc(len + 1);
 	if (!buf)
 		return luaL_error(L, "out of memory");
 	char* o = buf;
@@ -80,12 +80,12 @@ int UrlDecode(lua_State* L) {
 		*o++ = (char)c;
 	}
 	lua_pushlstring(L, buf, (size_t)(o - buf));
-	gff_free(buf);
+	kitsune_free(buf);
 	return 1;
 }
 
 // -----------------------------------------------------------------------------
-// T4c-f ï¿½ LuaHttpClient methods
+// T4c-f ? LuaHttpClient methods
 // -----------------------------------------------------------------------------
 
 int http_create(lua_State* L) {
@@ -156,21 +156,21 @@ static bool append_header(char*** keys, char*** vals, int* count, int* alloc,
 	const char* key, size_t keyLen, const char* val, size_t valLen) {
 	if (*count >= *alloc) {
 		int newAlloc = *alloc ? *alloc * 2 : 8;
-		char** newK = (char**)gff_realloc(*keys, (size_t)newAlloc * sizeof(char*));
+		char** newK = (char**)kitsune_realloc(*keys, (size_t)newAlloc * sizeof(char*));
 		if (!newK)
 			return false;
 		*keys = newK;
-		char** newV = (char**)gff_realloc(*vals, (size_t)newAlloc * sizeof(char*));
+		char** newV = (char**)kitsune_realloc(*vals, (size_t)newAlloc * sizeof(char*));
 		if (!newV)
 			return false;
 		*vals  = newV;
 		*alloc = newAlloc;
 	}
-	char* k = (char*)gff_malloc(keyLen + 1);
-	char* v = (char*)gff_malloc(valLen + 1);
+	char* k = (char*)kitsune_malloc(keyLen + 1);
+	char* v = (char*)kitsune_malloc(valLen + 1);
 	if (!k || !v) {
-		gff_free(k);
-		gff_free(v);
+		kitsune_free(k);
+		kitsune_free(v);
 		return false;
 	}
 	memcpy(k, key, keyLen); k[keyLen] = '\0';
@@ -183,11 +183,11 @@ static bool append_header(char*** keys, char*** vals, int* count, int* alloc,
 
 static void free_header_arrays(char** keys, char** vals, int count) {
 	for (int i = 0; i < count; i++) {
-		gff_free(keys[i]);
-		gff_free(vals[i]);
+		kitsune_free(keys[i]);
+		kitsune_free(vals[i]);
 	}
-	gff_free(keys);
-	gff_free(vals);
+	kitsune_free(keys);
+	kitsune_free(vals);
 }
 
 // Build a curl_slist from client defaults + per-call headers table (at headersIdx, 0 = absent).
@@ -224,7 +224,7 @@ static struct curl_slist* build_headers(lua_State* L, LuaHttpClient* client, int
 }
 
 // -----------------------------------------------------------------------------
-// T5a ï¿½ WriteBodyCallback
+// T5a ? WriteBodyCallback
 // -----------------------------------------------------------------------------
 
 static size_t WriteBodyCallback(char* ptr, size_t size, size_t nmemb, void* userdata) {
@@ -238,7 +238,7 @@ static size_t WriteBodyCallback(char* ptr, size_t size, size_t nmemb, void* user
 	// Heap-buffer accumulation path
 	if (req->bodyLen + total + 1 > req->bodyAlloc) {
 		size_t newAlloc = req->bodyLen + total + 8192;
-		char* nb = (char*)gff_realloc(req->body, newAlloc);
+		char* nb = (char*)kitsune_realloc(req->body, newAlloc);
 		if (!nb)
 			return 0;
 		req->body      = nb;
@@ -251,7 +251,7 @@ static size_t WriteBodyCallback(char* ptr, size_t size, size_t nmemb, void* user
 }
 
 // -----------------------------------------------------------------------------
-// T5b ï¿½ ReadBodyCallback
+// T5b ? ReadBodyCallback
 // -----------------------------------------------------------------------------
 
 static size_t ReadBodyCallback(char* buffer, size_t size, size_t nitems, void* userdata) {
@@ -275,7 +275,7 @@ static size_t ReadBodyCallback(char* buffer, size_t size, size_t nitems, void* u
 }
 
 // -----------------------------------------------------------------------------
-// T5c ï¿½ WriteHeaderCallback (buffered request path)
+// T5c ? WriteHeaderCallback (buffered request path)
 // -----------------------------------------------------------------------------
 
 static size_t WriteHeaderCallback(char* buffer, size_t size, size_t nitems, void* userdata) {
@@ -315,7 +315,7 @@ static size_t WriteHeaderCallback(char* buffer, size_t size, size_t nitems, void
 }
 
 // -----------------------------------------------------------------------------
-// T5e ï¿½ BuildHttpResultTable
+// T5e ? BuildHttpResultTable
 // -----------------------------------------------------------------------------
 
 static int BuildHttpResultTable(lua_State* L, LuaHttpRequest* req) {
@@ -352,7 +352,7 @@ static int BuildHttpResultTable(lua_State* L, LuaHttpRequest* req) {
 }
 
 // -----------------------------------------------------------------------------
-// T5d ï¿½ HttpRequestContinuation
+// T5d ? HttpRequestContinuation
 // -----------------------------------------------------------------------------
 
 static int HttpRequestContinuation(lua_State* L, int status, lua_KContext ctx) {
@@ -379,7 +379,7 @@ static int HttpRequestEntry(lua_State* L) {
 }
 
 // -----------------------------------------------------------------------------
-// T5f ï¿½ client_request
+// T5f ? client_request
 // -----------------------------------------------------------------------------
 
 int client_request(lua_State* L) {
@@ -387,7 +387,7 @@ int client_request(lua_State* L) {
 	const char* method = luaL_checkstring(L, 2);
 	const char* url    = luaL_checkstring(L, 3);
 
-	// Arg 4: body ï¿½ string, native Stream, or nil
+	// Arg 4: body ? string, native Stream, or nil
 	size_t      bodyLen    = 0;
 	const char* body       = NULL;
 	LuaStream*  streamInput  = NULL;
@@ -498,7 +498,7 @@ int client_request(lua_State* L) {
 	int nres = 0;
 	int rc = lua_resume(T, L, 1, &nres);
 	if (rc != LUA_YIELD) {
-		// Immediate failure ï¿½ req's __gc will remove it from multi
+		// Immediate failure ? req's __gc will remove it from multi
 		lua_pushnil(L);
 		if (nres > 0)
 			lua_xmove(T, L, 1);
@@ -510,7 +510,7 @@ int client_request(lua_State* L) {
 }
 
 // -----------------------------------------------------------------------------
-// T5g ï¿½ luahttprequest_gc
+// T5g ? luahttprequest_gc
 // -----------------------------------------------------------------------------
 
 int luahttprequest_gc(lua_State* L) {
@@ -527,7 +527,7 @@ int luahttprequest_gc(lua_State* L) {
 		curl_slist_free_all(req->requestHdrs);
 		req->requestHdrs = NULL;
 	}
-	gff_free(req->body);
+	kitsune_free(req->body);
 	req->body = NULL;
 	if (req->streamOutputRef != LUA_NOREF) {
 		luaL_unref(L, LUA_REGISTRYINDEX, req->streamOutputRef);
@@ -545,18 +545,18 @@ int luahttprequest_gc(lua_State* L) {
 }
 
 // -----------------------------------------------------------------------------
-// T6a ï¿½ WriteStreamBodyCallback
+// T6a ? WriteStreamBodyCallback
 // -----------------------------------------------------------------------------
 
 static size_t WriteStreamBodyCallback(char* ptr, size_t size, size_t nmemb, void* userdata) {
 	LuaHttpStreamNative* h = (LuaHttpStreamNative*)userdata;
 	size_t total = size * nmemb;
-	ChunkNode* node = (ChunkNode*)gff_malloc(sizeof(ChunkNode));
+	ChunkNode* node = (ChunkNode*)kitsune_malloc(sizeof(ChunkNode));
 	if (!node)
 		return 0;
-	node->data = (char*)gff_malloc(total);
+	node->data = (char*)kitsune_malloc(total);
 	if (!node->data) {
-		gff_free(node);
+		kitsune_free(node);
 		return 0;
 	}
 	memcpy(node->data, ptr, total);
@@ -571,7 +571,7 @@ static size_t WriteStreamBodyCallback(char* ptr, size_t size, size_t nmemb, void
 }
 
 // -----------------------------------------------------------------------------
-// T6b ï¿½ WriteStreamHeaderCallback
+// T6b ? WriteStreamHeaderCallback
 // -----------------------------------------------------------------------------
 
 static size_t WriteStreamHeaderCallback(char* buffer, size_t size, size_t nitems, void* userdata) {
@@ -612,7 +612,7 @@ static size_t WriteStreamHeaderCallback(char* buffer, size_t size, size_t nitems
 }
 
 // -----------------------------------------------------------------------------
-// T6c ï¿½ http_stream_read / HttpStreamReadContinuation
+// T6c ? http_stream_read / HttpStreamReadContinuation
 // -----------------------------------------------------------------------------
 
 static int HttpStreamReadContinuation(lua_State* L, int status, lua_KContext ctx);
@@ -645,8 +645,8 @@ static int HttpStreamReadContinuation(lua_State* L, int status, lua_KContext ctx
 		if (!h->chunkHead)
 			h->chunkTail = NULL;
 		lua_pushlstring(L, node->data, node->len);
-		gff_free(node->data);
-		gff_free(node);
+		kitsune_free(node->data);
+		kitsune_free(node);
 		return 1;
 	}
 
@@ -659,7 +659,7 @@ static int HttpStreamReadContinuation(lua_State* L, int status, lua_KContext ctx
 }
 
 // -----------------------------------------------------------------------------
-// T6d ï¿½ http_stream_info / HttpStreamInfoContinuation
+// T6d ? http_stream_info / HttpStreamInfoContinuation
 // -----------------------------------------------------------------------------
 
 static int http_stream_info(void* native, lua_State* L) {
@@ -694,7 +694,7 @@ static int http_stream_info(void* native, lua_State* L) {
 }
 
 // -----------------------------------------------------------------------------
-// T6e ï¿½ http_stream_hasdata
+// T6e ? http_stream_hasdata
 // -----------------------------------------------------------------------------
 
 static int http_stream_hasdata(void* native) {
@@ -716,7 +716,7 @@ static int http_stream_hasdata(void* native) {
 }
 
 // -----------------------------------------------------------------------------
-// T6f ï¿½ http_stream_close
+// T6f ? http_stream_close
 // -----------------------------------------------------------------------------
 
 static void http_stream_close(void* native, lua_State* L) {
@@ -737,8 +737,8 @@ static void http_stream_close(void* native, lua_State* L) {
 	ChunkNode* node = h->chunkHead;
 	while (node) {
 		ChunkNode* next = node->next;
-		gff_free(node->data);
-		gff_free(node);
+		kitsune_free(node->data);
+		kitsune_free(node);
 		node = next;
 	}
 	h->chunkHead = NULL;
@@ -747,11 +747,11 @@ static void http_stream_close(void* native, lua_State* L) {
 	h->headerKeys  = NULL;
 	h->headerVals  = NULL;
 	h->headerCount = 0;
-	gff_free(h);
+	kitsune_free(h);
 }
 
 // -----------------------------------------------------------------------------
-// T6g ï¿½ g_httpStreamVtable
+// T6g ? g_httpStreamVtable
 // -----------------------------------------------------------------------------
 
 static const LuaStreamVtable g_httpStreamVtable = {
@@ -828,7 +828,7 @@ int client_stream(lua_State* L) {
 		return 2;
 	}
 
-	LuaHttpStreamNative* h = (LuaHttpStreamNative*)gff_malloc(sizeof(LuaHttpStreamNative));
+	LuaHttpStreamNative* h = (LuaHttpStreamNative*)kitsune_malloc(sizeof(LuaHttpStreamNative));
 	if (!h) {
 		lua_pushnil(L);
 		lua_pushstring(L, "out of memory");
@@ -839,7 +839,7 @@ int client_stream(lua_State* L) {
 
 	h->easy = curl_easy_init();
 	if (!h->easy) {
-		gff_free(h);
+		kitsune_free(h);
 		lua_pushnil(L);
 		lua_pushstring(L, "curl_easy_init failed");
 		return 2;
@@ -862,14 +862,14 @@ int client_stream(lua_State* L) {
 	if (client->timeoutMs > 0)
 		curl_easy_setopt(h->easy, CURLOPT_TIMEOUT_MS, (long)client->timeoutMs);
 
-	// Keep hdrs alive for the lifetime of the easy handle â€” curl does NOT copy it.
+	// Keep hdrs alive for the lifetime of the easy handle — curl does NOT copy it.
 	h->requestHdrs = hdrs;
 
 	if (streamIn) {
 		// Streaming upload bodies need a stateful read callback; reject for now.
 		curl_easy_cleanup(h->easy);
 		curl_slist_free_all(hdrs);
-		gff_free(h);
+		kitsune_free(h);
 		lua_pushnil(L);
 		lua_pushstring(L, "stream body not supported for streaming requests; use a string body");
 		return 2;
@@ -890,7 +890,7 @@ int client_stream(lua_State* L) {
 }
 
 // -----------------------------------------------------------------------------
-// T7a ï¿½ ws_stream_read / WsReadContinuation
+// T7a ? ws_stream_read / WsReadContinuation
 // -----------------------------------------------------------------------------
 
 static int WsReadContinuation(lua_State* L, int status, lua_KContext ctx);
@@ -902,7 +902,7 @@ static int ws_stream_read(void* native, lua_State* L, size_t len) {
 
 static void ws_frag_reset(LuaWebSocketNative* ws) {
 	if (ws->fragBuf) {
-		gff_free(ws->fragBuf);
+		kitsune_free(ws->fragBuf);
 		ws->fragBuf  = NULL;
 		ws->fragLen  = 0;
 		ws->fragAlloc = 0;
@@ -963,7 +963,7 @@ static int WsReadContinuation(lua_State* L, int status, lua_KContext ctx) {
 	if (nrecv > 0) {
 		if (ws->fragLen + nrecv + 1 > ws->fragAlloc) {
 			size_t newAlloc = ws->fragLen + nrecv + 8192;
-			char* nb = (char*)gff_realloc(ws->fragBuf, newAlloc);
+			char* nb = (char*)kitsune_realloc(ws->fragBuf, newAlloc);
 			if (!nb) {
 				ws_frag_reset(ws);
 				lua_pushnil(L);
@@ -984,7 +984,7 @@ static int WsReadContinuation(lua_State* L, int status, lua_KContext ctx) {
 }
 
 // -----------------------------------------------------------------------------
-// T7b ï¿½ ws_stream_write (vtable; used by Stream:Write())
+// T7b ? ws_stream_write (vtable; used by Stream:Write())
 // -----------------------------------------------------------------------------
 
 static bool ws_vtable_write(void* native, const BYTE* data, size_t len) {
@@ -1002,7 +1002,7 @@ int client_set_binary(lua_State* L) {
 }
 
 // -----------------------------------------------------------------------------
-// T7d â€” ws_stream_info (synchronous; returns last frame metadata)
+// T7d — ws_stream_info (synchronous; returns last frame metadata)
 // -----------------------------------------------------------------------------
 
 static int ws_stream_info(void* native, lua_State* L) {
@@ -1023,7 +1023,7 @@ static int ws_stream_info(void* native, lua_State* L) {
 }
 
 // -----------------------------------------------------------------------------
-// T7e â€” ws_stream_hasdata
+// T7e — ws_stream_hasdata
 // -----------------------------------------------------------------------------
 
 static int ws_stream_hasdata(void* native) {
@@ -1034,7 +1034,7 @@ static int ws_stream_hasdata(void* native) {
 }
 
 // -----------------------------------------------------------------------------
-// T7f â€” ws_stream_close
+// T7f — ws_stream_close
 // -----------------------------------------------------------------------------
 
 static void ws_stream_close(void* native, lua_State* L) {
@@ -1045,7 +1045,7 @@ static void ws_stream_close(void* native, lua_State* L) {
 		ws->closed = true;
 	}
 	if (ws->fragBuf) {
-		gff_free(ws->fragBuf);
+		kitsune_free(ws->fragBuf);
 		ws->fragBuf  = NULL;
 		ws->fragLen  = 0;
 		ws->fragAlloc = 0;
@@ -1064,11 +1064,11 @@ static void ws_stream_close(void* native, lua_State* L) {
 		luaL_unref(L, LUA_REGISTRYINDEX, ws->clientRef);
 		ws->clientRef = LUA_NOREF;
 	}
-	gff_free(ws);
+	kitsune_free(ws);
 }
 
 // -----------------------------------------------------------------------------
-// T7g ï¿½ g_wsStreamVtable
+// T7g ? g_wsStreamVtable
 // -----------------------------------------------------------------------------
 
 static const LuaStreamVtable g_wsStreamVtable = {
@@ -1083,7 +1083,7 @@ static const LuaStreamVtable g_wsStreamVtable = {
 };
 
 // -----------------------------------------------------------------------------
-// T7h ï¿½ WsConnectContinuation
+// T7h ? WsConnectContinuation
 // -----------------------------------------------------------------------------
 
 static int WsConnectContinuation(lua_State* L, int status, lua_KContext ctx) {
@@ -1111,7 +1111,7 @@ static int WsConnectContinuation(lua_State* L, int status, lua_KContext ctx) {
 }
 
 // -----------------------------------------------------------------------------
-// T7i ï¿½ client_connect
+// T7i ? client_connect
 // -----------------------------------------------------------------------------
 
 int client_connect(lua_State* L) {
@@ -1128,7 +1128,7 @@ int client_connect(lua_State* L) {
 		return 2;
 	}
 
-	LuaWebSocketNative* ws = (LuaWebSocketNative*)gff_malloc(sizeof(LuaWebSocketNative));
+	LuaWebSocketNative* ws = (LuaWebSocketNative*)kitsune_malloc(sizeof(LuaWebSocketNative));
 	if (!ws) {
 		lua_pushnil(L);
 		lua_pushstring(L, "out of memory");
@@ -1143,7 +1143,7 @@ int client_connect(lua_State* L) {
 
 	ws->easy = curl_easy_init();
 	if (!ws->easy) {
-		gff_free(ws);
+		kitsune_free(ws);
 		lua_pushnil(L);
 		lua_pushstring(L, "curl_easy_init failed");
 		return 2;
@@ -1162,7 +1162,7 @@ int client_connect(lua_State* L) {
 	if (client->timeoutMs > 0)
 		curl_easy_setopt(ws->easy, CURLOPT_TIMEOUT_MS, (long)client->timeoutMs);
 
-	// Keep hdrs alive for the lifetime of the easy handle ï¿½ curl does NOT copy it.
+	// Keep hdrs alive for the lifetime of the easy handle ? curl does NOT copy it.
 	ws->requestHdrs = hdrs;
 	curl_multi_add_handle(multi, ws->easy);
 

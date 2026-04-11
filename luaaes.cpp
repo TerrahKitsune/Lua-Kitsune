@@ -1,4 +1,4 @@
-﻿#include "luaaes.h"
+#include "luaaes.h"
 #include <string.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -81,7 +81,7 @@ int LuaAesEncrypt(lua_State* L) {
 
 	size_t datalen = 16 * ((size_t)((double)len / AES_BLOCKLEN) + 1);
 
-	uint8_t* cbcbuf = (uint8_t*)gff_calloc(datalen, sizeof(uint8_t));
+	uint8_t* cbcbuf = (uint8_t*)kitsune_calloc(datalen, sizeof(uint8_t));
 
 	if (!cbcbuf) {
 		luaL_error(L, "Unable to allocate buffer");
@@ -112,7 +112,7 @@ int LuaAesEncrypt(lua_State* L) {
 	lua_pop(L, lua_gettop(L));
 	lua_pushlstring(L, (const char*)cbcbuf, datalen);
 
-	gff_free(cbcbuf);
+	kitsune_free(cbcbuf);
 
 	return 1;
 }
@@ -130,7 +130,7 @@ int LuaAesDecrypt(lua_State* L) {
 		return 0;
 	}
 
-	uint8_t* cbcbuf = (uint8_t*)gff_calloc(datalen, sizeof(uint8_t));
+	uint8_t* cbcbuf = (uint8_t*)kitsune_calloc(datalen, sizeof(uint8_t));
 
 	if (!cbcbuf) {
 		luaL_error(L, "Unable to allocate buffer");
@@ -160,7 +160,7 @@ int LuaAesDecrypt(lua_State* L) {
 	uint8_t paddingbyte = cbcbuf[len - 1];
 
 	if (paddingbyte <= 0 || paddingbyte > AES_BLOCKLEN) {
-		gff_free(cbcbuf);
+		kitsune_free(cbcbuf);
 		luaL_error(L, "Invalid aes padding");
 		return 0;
 	}
@@ -171,7 +171,7 @@ int LuaAesDecrypt(lua_State* L) {
 	lua_pop(L, lua_gettop(L));
 	lua_pushlstring(L, (const char*)cbcbuf, datalen);
 
-	gff_free(cbcbuf);
+	kitsune_free(cbcbuf);
 
 	return 1;
 }

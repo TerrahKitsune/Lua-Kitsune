@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #ifdef KITSUNE_HTTP
 
@@ -9,14 +9,14 @@
 #define LUAHTTPCLIENT  "LuaHTTPClient"
 #define LUAHTTPREQUEST "LuaHTTPRequest"
 
-// ── ChunkNode — streaming chunk queue ────────────────────────────────────────
+// -- ChunkNode � streaming chunk queue ----------------------------------------
 typedef struct ChunkNode {
 	char*             data;
 	size_t            len;
 	struct ChunkNode* next;
 } ChunkNode;
 
-// ── LuaHttpClient ─────────────────────────────────────────────────────────────
+// -- LuaHttpClient -------------------------------------------------------------
 typedef struct LuaHttpClient {
 	int    defaultHeadersRef;
 	long   timeoutMs;
@@ -25,7 +25,7 @@ typedef struct LuaHttpClient {
 	bool   binaryMode;      // true = subsequent WebSocket writes use CURLWS_BINARY
 } LuaHttpClient;
 
-// ── LuaHttpRequest ────────────────────────────────────────────────────────────
+// -- LuaHttpRequest ------------------------------------------------------------
 typedef struct LuaHttpRequest {
 	CURL*              easy;
 	CURLM*             multi;           // borrowed; do NOT free here
@@ -33,7 +33,7 @@ typedef struct LuaHttpRequest {
 	// can call vtbl->read.  Always valid during callbacks because Kitsune is
 	// single-threaded and curl_multi_perform is only called from within a Lua continuation.
 	lua_State*         callbackL;
-	// Response body — one of the two is active, never both
+	// Response body � one of the two is active, never both
 	char*              body;            // NULL when streamOutput is set
 	size_t             bodyLen;
 	size_t             bodyAlloc;
@@ -44,7 +44,7 @@ typedef struct LuaHttpRequest {
 	int                streamInputRef;  // registry ref
 	// Request headers (owned; freed in __gc)
 	struct curl_slist* requestHdrs;
-	// Accumulated response headers (parallel arrays; each entry is gff_malloc'd)
+	// Accumulated response headers (parallel arrays; each entry is kitsune_malloc'd)
 	char**             headerKeys;
 	char**             headerVals;
 	int                headerCount;
@@ -56,7 +56,7 @@ typedef struct LuaHttpRequest {
 	bool               addedToMulti;
 } LuaHttpRequest;
 
-// ── LuaHttpStreamNative ───────────────────────────────────────────────────────
+// -- LuaHttpStreamNative -------------------------------------------------------
 typedef struct LuaHttpStreamNative {
 	CURL*              easy;
 	CURLM*             multi;           // borrowed
@@ -75,7 +75,7 @@ typedef struct LuaHttpStreamNative {
 	bool               done;            // CURLMSG_DONE received
 } LuaHttpStreamNative;
 
-// ── LuaWebSocketNative ────────────────────────────────────────────────────────
+// -- LuaWebSocketNative --------------------------------------------------------
 		typedef struct LuaWebSocketNative {
 	CURL*              easy;
 	CURLM*             multi;
@@ -96,7 +96,7 @@ typedef struct LuaHttpStreamNative {
 
 int luaopen_http(lua_State* L);
 
-// ── Functions defined in HttpCurl.cpp; referenced by HttpCurlMain.cpp ─────────
+// -- Functions defined in HttpCurl.cpp; referenced by HttpCurlMain.cpp ---------
 extern const char g_curlm_key;
 extern const char g_sentinel_key;
 int http_sentinel_gc(lua_State* L);

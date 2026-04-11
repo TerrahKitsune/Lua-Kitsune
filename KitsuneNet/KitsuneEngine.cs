@@ -1231,7 +1231,7 @@ namespace KitsuneNet
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         [return: MarshalAs(UnmanagedType.I1)]
-        private static extern bool KitsuneInit(IntPtr initFunc);
+        private static extern bool KitsuneInit(IntPtr memoryAllocator);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern void KitsuneVariableFree(IntPtr var);

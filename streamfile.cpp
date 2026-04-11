@@ -1,4 +1,4 @@
-﻿#include "streamfile.h"
+#include "streamfile.h"
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
@@ -56,7 +56,7 @@ static BYTE mode_to_caps(const char* mode) {
 	return caps;
 }
 
-// ── vtable implementations ────────────────────────────────────────────────────
+// -- vtable implementations ----------------------------------------------------
 
 static int file_read(void* native, lua_State* L, size_t len) {
 	InFileStream* f = (InFileStream*)native;
@@ -78,19 +78,19 @@ static int file_read(void* native, lua_State* L, size_t len) {
 		}
 		len = (size_t)(fileSize - cur);
 	}
-	BYTE* buf = (BYTE*)gff_malloc(len);
+	BYTE* buf = (BYTE*)kitsune_malloc(len);
 	if (!buf) {
 		lua_pushboolean(L, false);
 		return 1;
 	}
 	size_t got = fread(buf, 1, len, f->file);
 	if (got == 0) {
-		gff_free(buf);
+		kitsune_free(buf);
 		lua_pushboolean(L, false);
 		return 1;
 	}
 	lua_pushlstring(L, (const char*)buf, got);
-	gff_free(buf);
+	kitsune_free(buf);
 	return 1;
 }
 
@@ -135,7 +135,7 @@ static void file_close(void* native, lua_State* L) {
 	InFileStream* f = (InFileStream*)native;
 	if (f->file)
 		fclose(f->file);
-	gff_free(f);
+	kitsune_free(f);
 }
 
 static int file_info(void* native, lua_State* L) {
@@ -171,7 +171,7 @@ static const LuaStreamVtable g_file_vtbl = {
 	file_info,
 };
 
-// ── Public constructor helper ─────────────────────────────────────────────────
+// -- Public constructor helper -------------------------------------------------
 
 LuaStream* lua_pushfilestream(lua_State* L, const char* filename, const char* mode) {
 	FILE* f = NULL;
@@ -191,7 +191,7 @@ LuaStream* lua_pushfilestream(lua_State* L, const char* filename, const char* mo
 		return NULL;
 	}
 
-	InFileStream* fs = (InFileStream*)gff_malloc(sizeof(InFileStream));
+	InFileStream* fs = (InFileStream*)kitsune_malloc(sizeof(InFileStream));
 	if (!fs) {
 		fclose(f);
 		luaL_error(L, "Stream.Open: out of memory");

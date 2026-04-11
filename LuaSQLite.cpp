@@ -1,4 +1,4 @@
-﻿#include "LuaSQLite.h"
+#include "LuaSQLite.h"
 #include <string.h>
 #include <stdlib.h>
 #ifndef _MAX_PATH
@@ -563,7 +563,7 @@ int RegisterFunction(lua_State* L, bool isAggregate) {
 		}
 	}
 
-	LuaSQLiteFunction** newArray = (LuaSQLiteFunction**)gff_calloc(luasqlite->funcs + 1, sizeof(LuaSQLiteFunction*));
+	LuaSQLiteFunction** newArray = (LuaSQLiteFunction**)kitsune_calloc(luasqlite->funcs + 1, sizeof(LuaSQLiteFunction*));
 
 	if (!newArray) {
 		luaL_error(L, "Out of memory", name);
@@ -571,17 +571,17 @@ int RegisterFunction(lua_State* L, bool isAggregate) {
 	}
 	else if (luasqlite->funcs > 0 && luasqlite->functions) {
 		memcpy(newArray, luasqlite->functions, sizeof(LuaSQLiteFunction) * luasqlite->funcs);
-		gff_free(luasqlite->functions);
+		kitsune_free(luasqlite->functions);
 	}
 
 	luasqlite->functions = newArray;
-	luasqlite->functions[luasqlite->funcs] = (LuaSQLiteFunction*)gff_calloc(1, sizeof(LuaSQLiteFunction));
+	luasqlite->functions[luasqlite->funcs] = (LuaSQLiteFunction*)kitsune_calloc(1, sizeof(LuaSQLiteFunction));
 	if (!luasqlite->functions[luasqlite->funcs]) {
 		luaL_error(L, "Out of memory", name);
 		return 0;
 	}
 
-	luasqlite->functions[luasqlite->funcs]->name = (char*)gff_malloc(strlen(name) + 1);
+	luasqlite->functions[luasqlite->funcs]->name = (char*)kitsune_malloc(strlen(name) + 1);
 	if (!luasqlite->functions[luasqlite->funcs]->name) {
 		luaL_error(L, "Out of memory", name);
 		return 0;
@@ -638,7 +638,7 @@ int SQLiteConnect(lua_State* L) {
 
 	size_t len;
 	const char* db = luaL_optlstring(L, 1, ":memory:", &len);
-	char* file = (char*)gff_malloc(len + 1);
+	char* file = (char*)kitsune_malloc(len + 1);
 	if (!file) {
 		luaL_error(L, "Unable to allocate memory for sqlite");
 		return 0;
@@ -652,7 +652,7 @@ int SQLiteConnect(lua_State* L) {
 	lua_pop(L, lua_gettop(L));
 	LuaSQLite* luasqlite = lua_pushsqlite(L);
 	if (!luasqlite) {
-		gff_free(file);
+		kitsune_free(file);
 		luaL_error(L, "Unable to allocate memory for sqlite");
 		return 0;
 	}
@@ -675,13 +675,13 @@ int SQLiteConnect(lua_State* L) {
 
 	//Ignore missuse
 	if (ok != SQLITE_OK && ok != SQLITE_MISUSE) {
-		gff_free(file);
+		kitsune_free(file);
 		luaL_error(L, "SQLite error %s", sqlite3_errmsg(luasqlite->db));
 	}
 
 	int err = sqlite3_open(file, &luasqlite->db);
 	if (err) {
-		gff_free(file);
+		kitsune_free(file);
 		luaL_error(L, "SQLite error %s", sqlite3_errmsg(luasqlite->db));
 	}
 
@@ -726,7 +726,7 @@ int SQLite_GC(lua_State* L) {
 	}
 
 	if (luasqlite->file) {
-		gff_free(luasqlite->file);
+		kitsune_free(luasqlite->file);
 		luasqlite->file = NULL;
 	}
 
@@ -741,14 +741,14 @@ int SQLite_GC(lua_State* L) {
 					luasqlite->functions[n]->index = -1;
 				}
 				if (luasqlite->functions[n]->name) {
-					gff_free(luasqlite->functions[n]->name);
+					kitsune_free(luasqlite->functions[n]->name);
 					luasqlite->functions[n]->name = NULL;
 				}
-				gff_free(luasqlite->functions[n]);
+				kitsune_free(luasqlite->functions[n]);
 			}
 		}
 
-		gff_free(luasqlite->functions);
+		kitsune_free(luasqlite->functions);
 		luasqlite->functions = NULL;
 	}
 

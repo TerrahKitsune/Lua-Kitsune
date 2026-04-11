@@ -1,4 +1,4 @@
-ï»¿#include "LuaMySQL.h"
+#include "LuaMySQL.h"
 #include "stream.h"
 #include "luawchar.h"
 #ifdef _WIN32
@@ -107,7 +107,7 @@ static void PushMySQLValue(lua_State* L, const char* data, unsigned long length,
 static void BuildQueryWithParams(LuaMySQLQuery* q, const char* sql, size_t sqllen,
 	lua_State* L, int paramTableIdx) {
 	if (!lua_istable(L, paramTableIdx)) {
-		q->sql = (char*)gff_malloc(sqllen + 1);
+		q->sql = (char*)kitsune_malloc(sqllen + 1);
 		if (!q->sql)
 			luaL_error(L, "Out of memory");
 		memcpy(q->sql, sql, sqllen);
@@ -123,7 +123,7 @@ static void BuildQueryWithParams(LuaMySQLQuery* q, const char* sql, size_t sqlle
 	}
 
 	if (nParams == 0) {
-		q->sql = (char*)gff_malloc(sqllen + 1);
+		q->sql = (char*)kitsune_malloc(sqllen + 1);
 		if (!q->sql)
 			luaL_error(L, "Out of memory");
 		memcpy(q->sql, sql, sqllen);
@@ -132,13 +132,13 @@ static void BuildQueryWithParams(LuaMySQLQuery* q, const char* sql, size_t sqlle
 		return;
 	}
 
-	char** paramValues  = (char**)gff_malloc(sizeof(char*) * nParams);
-	int*   paramLengths = (int*)gff_malloc(sizeof(int) * nParams);
+	char** paramValues  = (char**)kitsune_malloc(sizeof(char*) * nParams);
+	int*   paramLengths = (int*)kitsune_malloc(sizeof(int) * nParams);
 	if (!paramValues || !paramLengths) {
 		if (paramValues)
-			gff_free(paramValues);
+			kitsune_free(paramValues);
 		if (paramLengths)
-			gff_free(paramLengths);
+			kitsune_free(paramLengths);
 		luaL_error(L, "Out of memory");
 		return;
 	}
@@ -156,15 +156,15 @@ static void BuildQueryWithParams(LuaMySQLQuery* q, const char* sql, size_t sqlle
 			PushAsParamString(L, -1);
 			size_t plen;
 			const char* pval = lua_tolstring(L, -1, &plen);
-			paramValues[i] = (char*)gff_malloc(plen + 1);
+			paramValues[i] = (char*)kitsune_malloc(plen + 1);
 			if (!paramValues[i]) {
 				lua_pop(L, 2);
 				for (int j = 0; j < i; j++) {
 					if (paramValues[j])
-						gff_free(paramValues[j]);
+						kitsune_free(paramValues[j]);
 				}
-				gff_free(paramValues);
-				gff_free(paramLengths);
+				kitsune_free(paramValues);
+				kitsune_free(paramLengths);
 				luaL_error(L, "Out of memory");
 				return;
 			}
@@ -182,14 +182,14 @@ static void BuildQueryWithParams(LuaMySQLQuery* q, const char* sql, size_t sqlle
 			: 4;
 	}
 
-	char* builtQuery = (char*)gff_malloc(totalLen + 1);
+	char* builtQuery = (char*)kitsune_malloc(totalLen + 1);
 	if (!builtQuery) {
 		for (int i = 0; i < nParams; i++) {
 			if (paramValues[i])
-				gff_free(paramValues[i]);
+				kitsune_free(paramValues[i]);
 		}
-		gff_free(paramValues);
-		gff_free(paramLengths);
+		kitsune_free(paramValues);
+		kitsune_free(paramLengths);
 		luaL_error(L, "Out of memory");
 		return;
 	}
@@ -199,7 +199,7 @@ static void BuildQueryWithParams(LuaMySQLQuery* q, const char* sql, size_t sqlle
 	for (size_t queryPos = 0; queryPos < sqllen; queryPos++) {
 		if (sql[queryPos] == '?' && paramIdx < nParams) {
 			if (paramValues[paramIdx]) {
-				char* escapeBuf = (char*)gff_malloc((size_t)paramLengths[paramIdx] * 2 + 1);
+				char* escapeBuf = (char*)kitsune_malloc((size_t)paramLengths[paramIdx] * 2 + 1);
 				if (escapeBuf) {
 					unsigned long elen = mysql_real_escape_string(
 						q->conn->connection, escapeBuf,
@@ -208,7 +208,7 @@ static void BuildQueryWithParams(LuaMySQLQuery* q, const char* sql, size_t sqlle
 					memcpy(builtQuery + outPos, escapeBuf, elen);
 					outPos += elen;
 					builtQuery[outPos++] = '\'';
-					gff_free(escapeBuf);
+					kitsune_free(escapeBuf);
 				}
 				else {
 					builtQuery[outPos++] = '\'';
@@ -231,10 +231,10 @@ static void BuildQueryWithParams(LuaMySQLQuery* q, const char* sql, size_t sqlle
 
 	for (int i = 0; i < nParams; i++) {
 		if (paramValues[i])
-			gff_free(paramValues[i]);
+			kitsune_free(paramValues[i]);
 	}
-	gff_free(paramValues);
-	gff_free(paramLengths);
+	kitsune_free(paramValues);
+	kitsune_free(paramLengths);
 
 	q->sql    = builtQuery;
 	q->sqllen = outPos;
@@ -272,10 +272,10 @@ static void FreeQuery(lua_State* L, LuaMySQLQuery* q) {
 	}
 
 	if (q->sql)
-		gff_free(q->sql);
+		kitsune_free(q->sql);
 	if (q->error)
-		gff_free(q->error);
-	gff_free(q);
+		kitsune_free(q->error);
+	kitsune_free(q);
 }
 
 // -- lua_tomysql / lua_pushmysql -----------------------------------------------
@@ -312,7 +312,7 @@ int MySqlEscapeValue(lua_State* L) {
 		return 0;
 	}
 
-	char* escaped = (char*)gff_malloc((2 * len) + 1);
+	char* escaped = (char*)kitsune_malloc((2 * len) + 1);
 	if (!escaped) {
 		luaL_error(L, "Out of memory");
 		return 0;
@@ -320,7 +320,7 @@ int MySqlEscapeValue(lua_State* L) {
 
 	unsigned long newlen = mysql_real_escape_string(luamysql->connection, escaped, str, (unsigned long)len);
 	lua_pushlstring(L, escaped, newlen);
-	gff_free(escaped);
+	kitsune_free(escaped);
 	return 1;
 }
 
@@ -338,7 +338,7 @@ int MySqlIsBusy(lua_State* L) {
 	return 1;
 }
 
-// -- QueryStreamCont â€” shared across Windows and Linux -------------------------
+// -- QueryStreamCont — shared across Windows and Linux -------------------------
 // Called when the query coroutine (T) is resumed after yielding the rowcount.
 // Yields one integer-keyed row table per resume; yields nil (returns) when done.
 static int QueryStreamCont(lua_State* L, int status, lua_KContext ctx) {
@@ -473,7 +473,7 @@ static int MySqlQueryBody(lua_State* L) {
 // conn is at L stack position connIdx. paramTableIdx may be 0 (no params).
 static LuaMySQLQuery* SetupQueryCoroutine(lua_State* L, LuaMySQL* m,
 	int connIdx, const char* sql, size_t sqllen, int paramTableIdx) {
-	LuaMySQLQuery* q = (LuaMySQLQuery*)gff_malloc(sizeof(LuaMySQLQuery));
+	LuaMySQLQuery* q = (LuaMySQLQuery*)kitsune_malloc(sizeof(LuaMySQLQuery));
 	if (!q) {
 		luaL_error(L, "Out of memory");
 		return NULL;
@@ -505,7 +505,7 @@ static LuaMySQLQuery* SetupQueryCoroutine(lua_State* L, LuaMySQL* m,
 //
 // Correctness rule for FreeQuery ownership:
 //   * Polling phase (QueryRunCont / QueryStoreCont / MySqlQueryBody) never
-//     calls FreeQuery when the stop flag fires â€” the helper must do it.
+//     calls FreeQuery when the stop flag fires — the helper must do it.
 //   * QueryStreamCont ALWAYS calls FreeQuery before returning (stop flag,
 //     nil/error, or natural end of rows).
 
@@ -516,7 +516,7 @@ static int HelperStreamCont(lua_State* L, int status, lua_KContext ctx) {
 	(void)status;
 	LuaMySQLQuery* q = (LuaMySQLQuery*)(intptr_t)ctx;
 
-	// Save accumulator index now â€” a resume below may cause T to call FreeQuery.
+	// Save accumulator index now — a resume below may cause T to call FreeQuery.
 	int accumIdx = q->accumTableIdx;
 
 	// Optional cancel check (q still valid at this point).
@@ -558,7 +558,7 @@ static int HelperStreamCont(lua_State* L, int status, lua_KContext ctx) {
 	int rc = lua_resume(T, L, 0, &nr);
 
 	if (rc == LUA_YIELD && nr > 0 && lua_istable(T, -1)) {
-		// Got a row â€” q is still alive (T yielded, hasn't called FreeQuery yet).
+		// Got a row — q is still alive (T yielded, hasn't called FreeQuery yet).
 		lua_xmove(T, L, 1);
 		if (nr > 1)
 			lua_pop(T, nr - 1);
@@ -566,7 +566,7 @@ static int HelperStreamCont(lua_State* L, int status, lua_KContext ctx) {
 		return lua_yieldk(L, 0, ctx, HelperStreamCont);
 	}
 
-	// T returned nil naturally â€” QueryStreamCont already called FreeQuery.
+	// T returned nil naturally — QueryStreamCont already called FreeQuery.
 	if (nr > 0)
 		lua_pop(T, nr);
 	// q is freed; use saved accumIdx only.
@@ -580,7 +580,7 @@ static int HelperWaitCont(lua_State* L, int status, lua_KContext ctx) {
 	LuaMySQLQuery* q = (LuaMySQLQuery*)(intptr_t)ctx;
 
 	// Cancel check. T is in the polling phase here (QueryRunCont / QueryStoreCont).
-	// Those continuations do NOT call FreeQuery on stop â€” the helper must.
+	// Those continuations do NOT call FreeQuery on stop — the helper must.
 	if (q->cancelFnRef != LUA_NOREF) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, q->cancelFnRef);
 		int cancelled = (lua_pcall_nohook(L, 0, 1, 0) == LUA_OK) && lua_toboolean(L, -1);
@@ -650,12 +650,12 @@ static int HelperWaitCont(lua_State* L, int status, lua_KContext ctx) {
 		return 2;
 	}
 
-	// Rowcount integer â€” T is now suspended in QueryStreamCont.
+	// Rowcount integer — T is now suspended in QueryStreamCont.
 	lua_Integer rowcount = lua_tointeger(T, -1);
 	lua_pop(T, nr);
 
 	if (q->helperMode == MYSQL_HELPER_NONQUERY) {
-		// Stop T â€” QueryStreamCont calls FreeQuery.
+		// Stop T — QueryStreamCont calls FreeQuery.
 		lua_pushboolean(T, 1);
 		int nr2;
 		lua_resume(T, L, 1, &nr2);
@@ -670,20 +670,20 @@ static int HelperWaitCont(lua_State* L, int status, lua_KContext ctx) {
 		int nr2 = 0;
 		int rc2 = lua_resume(T, L, 0, &nr2); // fetch first row
 		if (rc2 == LUA_YIELD && nr2 > 0 && lua_istable(T, -1)) {
-			// Got a row â€” q still alive.
+			// Got a row — q still alive.
 			lua_rawgeti(T, -1, 1);  // col[1] onto T
 			lua_xmove(T, L, 1);     // move col[1] to L
 			lua_pop(T, nr2);        // pop row table
 			lua_pushboolean(T, 1);
 			int nr3;
-			lua_resume(T, L, 1, &nr3); // stop T â€” QueryStreamCont calls FreeQuery
+			lua_resume(T, L, 1, &nr3); // stop T — QueryStreamCont calls FreeQuery
 			if (nr3 > 0)
 				lua_pop(T, nr3);
 			lua_pushboolean(L, 1);
 			lua_insert(L, -2); // true, col1
 			return 2;
 		}
-		// No rows â€” T returned nil, QueryStreamCont already called FreeQuery.
+		// No rows — T returned nil, QueryStreamCont already called FreeQuery.
 		if (nr2 > 0)
 			lua_pop(T, nr2);
 		lua_pushboolean(L, 1);
@@ -854,7 +854,7 @@ int luamysql_gc(lua_State* L) {
 	}
 
 	if (m->error) {
-		gff_free(m->error);
+		kitsune_free(m->error);
 		m->error = NULL;
 	}
 

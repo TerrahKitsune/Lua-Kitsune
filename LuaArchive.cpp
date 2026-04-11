@@ -1,4 +1,4 @@
-﻿#include "LuaArchive.h"
+#include "LuaArchive.h"
 #include "luawchar.h"
 
 int OpenReadArchive(lua_State* L) {
@@ -33,7 +33,7 @@ int OpenReadArchive(lua_State* L) {
 	arc->useWchar = useWchar != 0;
 
 	arc->isRead = true;
-	arc->file = (char*)gff_malloc(len+1);
+	arc->file = (char*)kitsune_malloc(len+1);
 
 	if (!arc->file) {
 
@@ -127,7 +127,7 @@ int ReadEntry(lua_State* L) {
 	long long size;
 
 	if (arc->buff) {
-		gff_free(arc->buff);
+		kitsune_free(arc->buff);
 		arc->buff = NULL;
 	}
 
@@ -137,7 +137,7 @@ int ReadEntry(lua_State* L) {
 		return 0;
 	}
 
-	arc->buff = gff_malloc(buffer);
+	arc->buff = kitsune_malloc(buffer);
 
 	if (!arc->buff) {
 		luaL_error(L, "Not enough memory to allocate buffer");
@@ -148,18 +148,18 @@ int ReadEntry(lua_State* L) {
 
 	if (size > 0) {
 		lua_pushlstring(L, (const char*)arc->buff, size);
-		gff_free(arc->buff);
+		kitsune_free(arc->buff);
 		arc->buff = NULL;
 	}
 	else if (size < 0) {
-		gff_free(arc->buff);
+		kitsune_free(arc->buff);
 		arc->buff = NULL;
 		const char* error = archive_error_string(arc->a);
 		luaL_error(L, error ? error : "error reading archive data");
 		return 0;
 	}
 	else {
-		gff_free(arc->buff);
+		kitsune_free(arc->buff);
 		arc->buff = NULL;
 		lua_pushnil(L);
 	}
@@ -181,7 +181,7 @@ int ReadAllEntry(lua_State* L) {
 	size_t capacity = CHUNK;
 	size_t total = 0;
 
-	char* buf = (char*)gff_malloc(capacity);
+	char* buf = (char*)kitsune_malloc(capacity);
 
 	if (!buf) {
 		luaL_error(L, "Not enough memory to allocate buffer");
@@ -191,9 +191,9 @@ int ReadAllEntry(lua_State* L) {
 	for (;;) {
 		if (total == capacity) {
 			size_t newcap = capacity * 2;
-			char* newbuf = (char*)gff_realloc(buf, newcap);
+			char* newbuf = (char*)kitsune_realloc(buf, newcap);
 			if (!newbuf) {
-				gff_free(buf);
+				kitsune_free(buf);
 				luaL_error(L, "Not enough memory to allocate buffer");
 				return 0;
 			}
@@ -205,7 +205,7 @@ int ReadAllEntry(lua_State* L) {
 			break;
 		if (n < 0) {
 			const char* err = archive_error_string(arc->a);
-			gff_free(buf);
+			kitsune_free(buf);
 			luaL_error(L, err ? err : "error reading archive entry");
 			return 0;
 		}
@@ -213,7 +213,7 @@ int ReadAllEntry(lua_State* L) {
 	}
 
 	lua_pushlstring(L, buf, total);
-	gff_free(buf);
+	kitsune_free(buf);
 	return 1;
 }
 
@@ -318,12 +318,12 @@ int archive_gc(lua_State* L) {
 
 	if (arc->file) {
 
-		gff_free(arc->file);
+		kitsune_free(arc->file);
 		arc->file = NULL;
 	}
 
 	if (arc->buff) {
-		gff_free(arc->buff);
+		kitsune_free(arc->buff);
 		arc->buff = NULL;
 	}
 

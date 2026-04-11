@@ -1,4 +1,4 @@
-﻿#include "luawchar.h"
+#include "luawchar.h"
 #include <algorithm>
 #include <wchar.h>
 #include <wctype.h>
@@ -53,7 +53,7 @@ LuaWChar* lua_pushwchar(lua_State* L, const wchar_t* str, size_t len) {
 
 	LuaWChar* wchar = lua_pushwchar(L);
 
-	wchar->str = (wchar_t*)gff_calloc(len + 1, sizeof(wchar_t));
+	wchar->str = (wchar_t*)kitsune_calloc(len + 1, sizeof(wchar_t));
 
 	if (!wchar->str) {
 		luaL_error(L, "out of memory");
@@ -92,7 +92,7 @@ bool FillLuaWCharWithCodePoint(LuaWChar* luaStr, int codePoint) {
 
 	if (wcharCount > 0) {
 
-		luaStr->str = (wchar_t*)gff_calloc(wcharCount + 1, sizeof(wchar_t));
+		luaStr->str = (wchar_t*)kitsune_calloc(wcharCount + 1, sizeof(wchar_t));
 
 		if (!luaStr->str) {
 			return false;
@@ -163,7 +163,7 @@ int FromBytes(lua_State* L) {
 	wchar = lua_pushwchar(L);
 
 	// Collect table values as char16_t code units, then convert to wchar_t.
-	char16_t* char16buf = (char16_t*)gff_malloc((len + 1) * sizeof(char16_t));
+	char16_t* char16buf = (char16_t*)kitsune_malloc((len + 1) * sizeof(char16_t));
 	if (!char16buf) {
 		luaL_error(L, "out of memory");
 		return 0;
@@ -180,7 +180,7 @@ int FromBytes(lua_State* L) {
 
 	size_t wcharLen = 0;
 	wchar->str = char16_alloc_as_wchar(char16buf, len, &wcharLen);
-	gff_free(char16buf);
+	kitsune_free(char16buf);
 	wchar->len = wcharLen;
 
 	if (!wchar->str) {
@@ -205,7 +205,7 @@ int ToBytes(lua_State* L) {
 			lua_pushinteger(L, (lua_Integer)buf[i]);
 			lua_rawseti(L, -2, (int)i + 1);
 		}
-		gff_free(buf);
+		kitsune_free(buf);
 	}
 
 	return 1;
@@ -216,7 +216,7 @@ int FromToLower(lua_State* L) {
 	LuaWChar* wchar = lua_towchar(L, 1);
 	LuaWChar* result = lua_pushwchar(L);
 
-	result->str = (wchar_t*)gff_calloc(wchar->len + 1, sizeof(wchar_t));
+	result->str = (wchar_t*)kitsune_calloc(wchar->len + 1, sizeof(wchar_t));
 
 	if (!result->str) {
 		luaL_error(L, "out of memory");
@@ -238,7 +238,7 @@ int FromToUpper(lua_State* L) {
 	LuaWChar* wchar = lua_towchar(L, 1);
 	LuaWChar* result = lua_pushwchar(L);
 
-	result->str = (wchar_t*)gff_calloc(wchar->len + 1, sizeof(wchar_t));
+	result->str = (wchar_t*)kitsune_calloc(wchar->len + 1, sizeof(wchar_t));
 
 	if (!result->str) {
 		luaL_error(L, "out of memory");
@@ -297,7 +297,7 @@ int FromUtf8(lua_State* L) {
 
 	LuaWChar* wchar = lua_pushwchar(L);
 
-	wchar->str = (wchar_t*)gff_calloc(len + 1, sizeof(wchar_t));
+	wchar->str = (wchar_t*)kitsune_calloc(len + 1, sizeof(wchar_t));
 
 	if (!wchar->str) {
 		luaL_error(L, "out of memory");
@@ -382,7 +382,7 @@ int FromAnsi(lua_State* L) {
 
 	LuaWChar* wchar = lua_pushwchar(L);
 
-	wchar->str = (wchar_t*)gff_calloc(len + 1, sizeof(wchar_t));
+	wchar->str = (wchar_t*)kitsune_calloc(len + 1, sizeof(wchar_t));
 
 	if (!wchar->str) {
 		luaL_error(L, "out of memory");
@@ -424,7 +424,7 @@ size_t to_narrow(const wchar_t* src, char* dest, size_t dest_len) {
 char16_t* wchar_alloc_as_char16(const wchar_t* src, size_t len, size_t* outChar16Len) {
 #ifdef _WIN32
 	// On Windows wchar_t is 2 bytes (UTF-16), same layout as char16_t; direct memcpy is valid.
-	char16_t* dst = (char16_t*)gff_malloc((len + 1) * sizeof(char16_t));
+	char16_t* dst = (char16_t*)kitsune_malloc((len + 1) * sizeof(char16_t));
 	if (!dst) {
 		if (outChar16Len) *outChar16Len = 0;
 		return NULL;
@@ -436,7 +436,7 @@ char16_t* wchar_alloc_as_char16(const wchar_t* src, size_t len, size_t* outChar1
 #else
 	// On Linux wchar_t is 4 bytes (UTF-32); encode each code point as UTF-16.
 	// Worst case: every code point is supplementary, producing 2 char16_t per wchar_t.
-	char16_t* dst = (char16_t*)gff_malloc((len * 2 + 1) * sizeof(char16_t));
+	char16_t* dst = (char16_t*)kitsune_malloc((len * 2 + 1) * sizeof(char16_t));
 	if (!dst) {
 		if (outChar16Len) *outChar16Len = 0;
 		return NULL;
@@ -460,7 +460,7 @@ char16_t* wchar_alloc_as_char16(const wchar_t* src, size_t len, size_t* outChar1
 }
 
 wchar_t* char16_alloc_as_wchar(const char16_t* src, size_t charCount, size_t* outWcharLen) {
-	wchar_t* dst = (wchar_t*)gff_malloc((charCount + 1) * sizeof(wchar_t));
+	wchar_t* dst = (wchar_t*)kitsune_malloc((charCount + 1) * sizeof(wchar_t));
 	if (!dst) {
 		if (outWcharLen) *outWcharLen = 0;
 		return NULL;
@@ -502,7 +502,7 @@ int ToUtf8(lua_State* L) {
 	}
 
 	size_t bufferlen = wchar->len * 4;
-	unsigned char* utf8String = (unsigned char*)gff_calloc(bufferlen + 1, sizeof(unsigned char));
+	unsigned char* utf8String = (unsigned char*)kitsune_calloc(bufferlen + 1, sizeof(unsigned char));
 
 	if (!utf8String) {
 		luaL_error(L, "out of memory");
@@ -516,7 +516,7 @@ int ToUtf8(lua_State* L) {
 	#endif
 
 	lua_pushlstring(L, (const char*)utf8String, convertedSize);
-	gff_free(utf8String);
+	kitsune_free(utf8String);
 
 	return 1;
 }
@@ -531,7 +531,7 @@ int ToAnsi(lua_State* L) {
 		return 1;
 	}
 
-	char* real = (char*)gff_calloc(wchar->len + 1, sizeof(char));
+	char* real = (char*)kitsune_calloc(wchar->len + 1, sizeof(char));
 
 	if (!real) {
 		luaL_error(L, "out of memory");
@@ -542,7 +542,7 @@ int ToAnsi(lua_State* L) {
 
 	lua_pushlstring(L, (const char*)real, len * sizeof(char));
 
-	gff_free(real);
+	kitsune_free(real);
 
 	return 1;
 }
@@ -645,7 +645,7 @@ int wchar_gc(lua_State* L) {
 	LuaWChar* wchar = lua_towchar(L, 1);
 
 	if (wchar->str) {
-		gff_free(wchar->str);
+		kitsune_free(wchar->str);
 	}
 
 	memset(wchar, 0, sizeof(LuaWChar));
@@ -704,7 +704,7 @@ int wchar_concat(lua_State* L) {
 
 		result = lua_pushwchar(L);
 
-		result->str = (wchar_t*)gff_calloc(a->len + b->len + 1, sizeof(wchar_t));
+		result->str = (wchar_t*)kitsune_calloc(a->len + b->len + 1, sizeof(wchar_t));
 
 		if (!result->str) {
 			luaL_error(L, "out of memory");
@@ -731,7 +731,7 @@ int wchar_concat(lua_State* L) {
 		#endif
 		if (wcharsNeeded < 0) wcharsNeeded = 0;
 
-		result->str = (wchar_t*)gff_calloc(a->len + (size_t)wcharsNeeded + 1, sizeof(wchar_t));
+		result->str = (wchar_t*)kitsune_calloc(a->len + (size_t)wcharsNeeded + 1, sizeof(wchar_t));
 
 		if (!result->str) {
 			luaL_error(L, "out of memory");
@@ -768,7 +768,7 @@ int wchar_concat(lua_State* L) {
 	return 1;
 }
 
-// ── lua_topathutf8 ────────────────────────────────────────────────────────────
+// -- lua_topathutf8 ------------------------------------------------------------
 // Accepts either a plain Lua string or a LuaWChar at stack index idx and returns
 // a pointer to a static 4 KiB buffer containing the UTF-8 encoded path.
 // This lets every FileSystem function accept both string and Wchar inputs uniformly.

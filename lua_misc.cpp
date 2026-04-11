@@ -1,4 +1,4 @@
-ï»¿#include "lua_misc.h"
+#include "lua_misc.h"
 #include <time.h>
 #include <stdio.h>
 #include <ctype.h>
@@ -66,7 +66,7 @@ int lua_uuid(lua_State* L) {
 #else
 int lua_uuid(lua_State* L) {
 	uint8_t bytes[16];
-	// getrandom() is a single syscall â€” no file open/read/close overhead.
+	// getrandom() is a single syscall — no file open/read/close overhead.
 	// For reads <= 256 bytes it never blocks once the entropy pool is seeded.
 	if (getrandom(bytes, sizeof(bytes), 0) != (ssize_t)sizeof(bytes)) {
 		lua_pushnil(L);
@@ -74,7 +74,7 @@ int lua_uuid(lua_State* L) {
 		return 2;
 	}
 	// RFC 4122 Version 4: version nibble = 0100, variant bits = 10xxxxxx
-	// Identical layout to CoCreateGuid â€” 16 big-endian bytes, same string format.
+	// Identical layout to CoCreateGuid — 16 big-endian bytes, same string format.
 	bytes[6] = (bytes[6] & 0x0F) | 0x40;
 	bytes[8] = (bytes[8] & 0x3F) | 0x80;
 	char buf[37];
@@ -134,8 +134,8 @@ static int GetLastErrorAsMessage(lua_State* L) {
 	lua_pop(L, lua_gettop(L));
 	char buf[256] = {};
 	// strerror_r has two incompatible signatures depending on feature macros:
-	//   GNU  (_GNU_SOURCE):    char* strerror_r(int, char*, size_t)  â€” returns pointer, may ignore buf
-	//   POSIX (_POSIX_C_SOURCE >= 200112L && !_GNU_SOURCE): int â€” writes into buf
+	//   GNU  (_GNU_SOURCE):    char* strerror_r(int, char*, size_t)  — returns pointer, may ignore buf
+	//   POSIX (_POSIX_C_SOURCE >= 200112L && !_GNU_SOURCE): int — writes into buf
 	// Cast the call through (void*) to suppress the "ignoring return value" warning on
 	// the GNU variant, then fall back to strerror() which is always correct here since
 	// Lua scripts run on a single OS thread managed by KitsuneEngine.
@@ -377,14 +377,14 @@ int luagetenv(lua_State* L) {
 	if (error) { lua_pushnil(L); return 1; }
 	if (len <= 0) { lua_pushstring(L, ""); return 1; }
 
-	char* data = (char*)gff_calloc(sizeof(char), len + 1);
+	char* data = (char*)kitsune_calloc(sizeof(char), len + 1);
 	if (!data) { lua_pushnil(L); return 1; }
 
 	error = getenv_s(&len, data, len, var);
-	if (error) { gff_free(data); lua_pushnil(L); return 1; }
+	if (error) { kitsune_free(data); lua_pushnil(L); return 1; }
 
 	lua_pushlstring(L, data, len);
-	gff_free(data);
+	kitsune_free(data);
 #else
 	const char* value = getenv(var);
 	if (!value) { lua_pushnil(L); return 1; }
@@ -552,14 +552,14 @@ static int L_GetGlobalMemoryStatus(lua_State* L) {
 	// Compute memory load (0-100) as used physical / total physical.
 	unsigned long long memUsed = (memTotal > memAvail) ? memTotal - memAvail : 0;
 	int load = (memTotal > 0) ? (int)((memUsed * 100) / memTotal) : 0;
-	// Values stored in kB; map to the same unit Windows uses (DIV=1024 â†’ MB).
+	// Values stored in kB; map to the same unit Windows uses (DIV=1024 ? MB).
 	switch (type) {
 	case 1: lua_pushinteger(L, (lua_Integer)(memTotal  / DIV)); break;
 	case 2: lua_pushinteger(L, (lua_Integer)(memAvail  / DIV)); break;
 	case 3: lua_pushinteger(L, (lua_Integer)(swapTotal / DIV)); break;
 	case 4: lua_pushinteger(L, (lua_Integer)(swapFree  / DIV)); break;
-	case 5: lua_pushinteger(L, (lua_Integer)(memTotal  / DIV)); break;  // virtual â‰ˆ total on Linux
-	case 6: lua_pushinteger(L, (lua_Integer)(memAvail  / DIV)); break;  // virtual avail â‰ˆ avail
+	case 5: lua_pushinteger(L, (lua_Integer)(memTotal  / DIV)); break;  // virtual ˜ total on Linux
+	case 6: lua_pushinteger(L, (lua_Integer)(memAvail  / DIV)); break;  // virtual avail ˜ avail
 	default: lua_pushinteger(L, load); break;
 	}
 	return 1;

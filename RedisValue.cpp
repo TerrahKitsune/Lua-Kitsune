@@ -1,4 +1,4 @@
-﻿#include "RedisValue.h"
+#include "RedisValue.h"
 #include "RedisKey.h"
 #include "luajson.h"
 
@@ -284,7 +284,7 @@ int push_redisvalue(lua_State* L, int redisIdx, int type, const char* key, size_
 	lua_pushvalue(L, redisIdx);
 	val->key.redis_ref = luaL_ref(L, LUA_REGISTRYINDEX);
 
-	val->key.key = (char*)gff_malloc(keylen + 1);
+	val->key.key = (char*)kitsune_malloc(keylen + 1);
 	if (!val->key.key) {
 		luaL_error(L, "Out of memory");
 	}
