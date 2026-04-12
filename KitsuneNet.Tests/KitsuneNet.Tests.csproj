@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -14,8 +14,8 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <NativeOutputDir>$(ProjectDir)..\Lua-Kitsune\x64\$(Configuration)\</NativeOutputDir>
-    <NativeRootDir>$(ProjectDir)..\Lua-Kitsune\</NativeRootDir>
+    <NativeOutputDir>$(ProjectDir)..\x64\$(Configuration)\</NativeOutputDir>
+    <NativeRootDir>$(ProjectDir)..\</NativeRootDir>
   </PropertyGroup>
 
   <!--
@@ -28,20 +28,20 @@
     <ItemGroup>
       <_NativeDlls Include="$(NativeOutputDir)*.dll" Condition="Exists('$(NativeOutputDir)')" />
       <_NativeDlls Include="$(NativeRootDir)*.dll" Condition="Exists('$(NativeRootDir)')" />
+      <_NativePdbs Include="$(NativeOutputDir)*.pdb" Condition="Exists('$(NativeOutputDir)')" />
     </ItemGroup>
     <Copy SourceFiles="@(_NativeDlls)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_NativePdbs)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
   </Target>
 
   <!-- Copy libKitsuneEngine.so whenever it exists (Linux build or Windows with pre-built .so).
        Unconditional so VS remote testing can include it when sending the output to WSL2. -->
-  <Target Name="CopyNativeSo" BeforeTargets="Build"
-          Condition="Exists('$(ProjectDir)../build-linux/libKitsuneEngine.so')">
-    <Copy SourceFiles="$(ProjectDir)../build-linux/libKitsuneEngine.so"
-          DestinationFolder="$(OutputPath)"
-          SkipUnchangedFiles="true" />
+  <Target Name="CopyNativeSo" BeforeTargets="Build" Condition="Exists('$(ProjectDir)../build-linux/libKitsuneEngine.so')">
+    <Copy SourceFiles="$(ProjectDir)../build-linux/libKitsuneEngine.so" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
   </Target>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">

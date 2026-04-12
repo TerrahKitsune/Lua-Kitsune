@@ -142,6 +142,11 @@ struct KitsuneState {
 	std::thread           schedulerThread;
 	std::atomic<long>     schedulerStop{ 0 }; // set to 1 by KitsuneCleanup
 	PlatformEvent         workEvent;     // signaled when a new coroutine is ready to run
+	// Signalled by SchedulerProc just before it returns (all work done, state no longer
+	// accessed). KitsuneCleanup waits on this instead of join() so that the thread can
+	// acquire the loader lock for DLL_THREAD_DETACH independently — avoiding the DllMain
+	// loader-lock deadlock that join() causes when called from FreeLibrary/DLL_PROCESS_DETACH.
+	PlatformEvent         schedulerDoneEvent;
 
 	// -- Active coroutine slots (written only by scheduler; read by callers) --
 	KitsuneCoroutine* slots[KITSUNE_MAX_COROUTINES];
@@ -1047,6 +1052,9 @@ static void SchedulerProc(KitsuneState* state) {
 			state->workEvent.WaitFor(hasSleeping ? 1 : 10);
 		}
 	}
+	// All work is done; signal KitsuneCleanup that it is safe to proceed.
+	// This must be the last access to state in this function.
+	state->schedulerDoneEvent.Set();
 }
 
 static int L_GetRuntime(lua_State* L) {
@@ -3167,7 +3175,15 @@ extern "C" {
 				state->schedulerStop.store(1);
 				state->resumeEvent.Set();   // unblock scheduler if it is in the pause handler
 				state->workEvent.Set();     // wake scheduler if it is sleeping
-				state->schedulerThread.join();
+				// Wait for the scheduler to finish all work and signal it is done.
+				// Using schedulerDoneEvent instead of join() avoids the loader-lock deadlock
+				// that occurs when KitsuneCleanup is called from DLL_PROCESS_DETACH: the OS
+				// holds the loader lock while delivering DllMain, and the scheduler thread
+				// also needs the loader lock for its own DLL_THREAD_DETACH notifications.
+				// schedulerDoneEvent fires before the thread exits, so state is safe to use
+				// immediately after. The thread then exits asynchronously.
+				state->schedulerDoneEvent.Wait();
+				state->schedulerThread.detach();
 				state->doneCV.notify_all(); // wake any threads blocked in WaitForResult or KitsuneWait
 
 				// If an inline sync call was running when Dispose was called, it still holds

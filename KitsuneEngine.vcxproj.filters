@@ -797,8 +797,6 @@
   <ItemGroup>
     <None Include="Lua functions.md" />
     <None Include="testEnvironments.json" />
-    <None Include="build-linux-and-test.ps1" />
-    <None Include="build-release.ps1" />
     <None Include="vcpkg.json" />
     <None Include="triplets\x64-windows-static-md.cmake" />
   </ItemGroup>

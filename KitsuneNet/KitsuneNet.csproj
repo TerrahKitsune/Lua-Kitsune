@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -29,8 +29,10 @@
     <ItemGroup>
       <_NativeDlls Include="$(NativeOutputDir)*.dll" Condition="Exists('$(NativeOutputDir)')" />
       <_NativeDlls Include="$(NativeRootDir)*.dll" Condition="Exists('$(NativeRootDir)')" />
+      <_NativePdbs Include="$(NativeOutputDir)*.pdb" Condition="Exists('$(NativeOutputDir)')" />
     </ItemGroup>
     <Copy SourceFiles="@(_NativeDlls)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_NativePdbs)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
   </Target>
 
   <!-- Copy libKitsuneEngine.so whenever it exists (Linux build or Windows with pre-built .so).

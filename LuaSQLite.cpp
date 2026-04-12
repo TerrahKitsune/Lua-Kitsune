@@ -1,4 +1,4 @@
-#include "LuaSQLite.h"
+﻿#include "LuaSQLite.h"
 #include <string.h>
 #include <stdlib.h>
 #ifndef _MAX_PATH
@@ -701,10 +701,8 @@ int SQLiteConnect(lua_State* L) {
 	luasqlite->useWidechar = false;
 #endif
 
-#ifdef SQLITE_ENABLE_LOAD_EXTENSION
-	sqlite3_enable_load_extension(luasqlite->db, 1);
-#endif
-	sqlite3_create_function(luasqlite->db, "Lua", 1, SQLITE_UTF8, L, SqliteLuaFunction, NULL, NULL);
+sqlite3_enable_load_extension(luasqlite->db, 1);
+sqlite3_create_function(luasqlite->db, "Lua", 1, SQLITE_UTF8, L, SqliteLuaFunction, NULL, NULL);
 
 	return 1;
 }

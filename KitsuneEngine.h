@@ -239,9 +239,11 @@ extern "C" {
 	// All four functions execute synchronously: they block the calling thread until
 	// the script finishes and return the typed result directly. Returns NULL on start
 	// failure (e.g. engine not initialised, no slots available). On success the caller
-	// MUST free the returned pointer with KitsuneVariableFree. A result with type
-	// KITSUNE_TNONE means the script returned nothing or raised a Lua error; use the
-	// Async API with KitsuneGetError to obtain error details. Cannot be called from
+	// MUST free the returned pointer with KitsuneVariableFree.
+	// A result with type KITSUNE_TNONE means the script returned no value.
+	// A result with type KITSUNE_TERROR means the script raised a Lua error;
+	// the error message is in result->data (UTF-8, length in result->length).
+	// Cannot be called from
 	// within a kitsune_CFunction, from the scheduler thread, or recursively from within
 	// another sync Execute call — all three cases deadlock or corrupt state.
 	// Exception: calling from within a kitsune_CFunction IS supported via a re-entrant
