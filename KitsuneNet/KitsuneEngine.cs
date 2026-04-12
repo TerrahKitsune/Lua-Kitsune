@@ -39,19 +39,25 @@ namespace KitsuneNet
 
         public KitsuneEngine()
         {
-            if (!KitsuneInit(IntPtr.Zero))
+            // KitsuneInit now returns true only when it creates a new state (we own it)
+            // and false when the engine is already initialised by another caller. Call it
+            // only on the first instance (_refCount 0 → 1); subsequent instances share the
+            // existing state and must not attempt to re-initialise or re-claim ownership.
+            if (Interlocked.Increment(ref _refCount) == 1)
             {
-                throw new InvalidOperationException("KitsuneInit failed");
-            }
+                if (!KitsuneInit(IntPtr.Zero))
+                {
+                    Interlocked.Decrement(ref _refCount);
+                    throw new InvalidOperationException("KitsuneInit failed");
+                }
 
-            // When this becomes the sole live engine and the scheduler is already running,
-            // there are orphaned coroutines from a previous engine that was not properly
-            // disposed (e.g. abandoned by a test-runner abort).  Interrupt and drain them
-            // now so they cannot block Wait() calls issued by this engine.
-            if (Interlocked.Increment(ref _refCount) == 1 && KitsuneIsRunning())
-            {
-                KitsuneInterrupt();
-                KitsuneWait();
+                // Drain any orphaned coroutines from a previous engine that was not properly
+                // disposed (e.g. abandoned by a test-runner abort).
+                if (KitsuneIsRunning())
+                {
+                    KitsuneInterrupt();
+                    KitsuneWait();
+                }
             }
         }
 

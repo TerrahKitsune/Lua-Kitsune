@@ -18,6 +18,9 @@ public sealed class SQLiteExtensionTests
         Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SQLiteKitsune")
             .Replace('\\', '/');
 
+    // This test verifies that the sqlite extension can be loaded and called from the kitsune engine
+    // Kitsune engine owns the sqlite extension
+    // kitsune engine -> sqlite -> kitsune engine
     [WindowsOnlyFact]
     public async Task SQLiteKitsuneExtension_KitsuneVersion_ReturnsVersionString()
     {
@@ -37,9 +40,9 @@ public sealed class SQLiteExtensionTests
         result.String.ShouldStartWith("1.0.0.");
     }
 
-    // Diagnostic test:
-    // load_extension failure throws a SqliteException with the exact error message,
-    // rather than silently returning null through the Lua path.
+    // This tests verifies that the kitsune engine can be loaded from the sqlite extension
+    // Sqlite owns the kitsuneengine
+    // sqlite -> kitsune engine
     [WindowsOnlyFact]
     public async Task SQLiteKitsuneExtension_CSharpConnection_KitsuneVersion_ReturnsVersionString()
     {

@@ -188,8 +188,10 @@ struct MemoryAllocator {
 };
 
 extern "C" {
-	// Initialise the engine and create the Lua state. If already initialised, returns true immediately.
-	// Returns false on failure.
+	// Initialise the engine and create the Lua state.
+	// Returns true if the engine was just initialised by this call (the caller owns the lifecycle).
+	// Returns false if the engine was already initialised by another caller, or on failure.
+	// Callers that receive false must not call KitsuneCleanup.
 	KITSUNE_API bool KitsuneInit(MemoryAllocator* memoryAllocator = nullptr);
 
 	// Destroy the Lua state and clean up the engine.

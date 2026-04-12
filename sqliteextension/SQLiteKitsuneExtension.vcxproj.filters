@@ -34,9 +34,6 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <Text Include="build_number.txt" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="increment_build.ps1" />
+    <None Include="Extension functions.md" />
   </ItemGroup>
 </Project>

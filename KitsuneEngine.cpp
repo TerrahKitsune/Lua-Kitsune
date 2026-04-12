@@ -776,7 +776,7 @@ static void AcquireLuaAccess(KitsuneState* state) {
 	// which would let this thread race with the scheduler on state->L.
 	state->pauseFlag.store(1);
 	state->workEvent.Set();  // wake the scheduler if it is sleeping in step 5
-	// If the scheduler has already stopped (KitsuneCleanup joined it before this
+	// If the scheduler has already stopped (KitsuneCleanup detached it before this
 	// call), no one will ever signal pausedEvent.  Self-signal here so the Wait
 	// below returns immediately rather than blocking forever.
 	if (state->schedulerStop.load())
@@ -1158,7 +1158,7 @@ extern "C" {
 
 	KITSUNE_API bool KitsuneInit(MemoryAllocator* memoryAllocator) {
 		if (g_state)
-			return true;
+			return false;
 
 		// Apply custom allocators before InitMemoryManager so every subsequent
 		// allocation — including the KitsuneState itself — uses the caller's heap.

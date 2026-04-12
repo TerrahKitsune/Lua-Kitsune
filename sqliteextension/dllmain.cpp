@@ -4,10 +4,26 @@ SQLITE_EXTENSION_INIT1
 
 #define KITSUNE_EXTENSION_VERSION "1.0.0.0"
 
+// True only when this DLL called KitsuneInit and created the engine state.
+// False when the engine was already initialised by the host before this DLL loaded,
+// in which case the host owns the lifecycle and KitsuneCleanup must not be called here.
+static bool g_kitsuneOwned = false;
+
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved) {
 	switch (ul_reason_for_call) {
 	case DLL_PROCESS_ATTACH:
 		DisableThreadLibraryCalls(hModule);
+		// KitsuneInit returns true only if it created a new state (we are the owner).
+		// It returns false if the engine was already initialised by another caller.
+		g_kitsuneOwned = KitsuneInit();
+		break;
+	case DLL_PROCESS_DETACH:
+		// lpReserved is non-NULL when the DLL is unloaded due to process exit: all
+		// threads may already be terminated, so waiting on schedulerDoneEvent inside
+		// KitsuneCleanup would hang forever. Skip cleanup; the OS reclaims resources.
+		// Also skip if we are not the owner (the host manages the engine lifecycle).
+		if (g_kitsuneOwned && lpReserved == NULL)
+			KitsuneCleanup();
 		break;
 	}
 	return TRUE;
