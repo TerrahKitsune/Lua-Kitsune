@@ -68,4 +68,76 @@ public sealed class SQLiteExtensionTests
         version.ShouldNotBeNull();
         version.ShouldStartWith("1.0.0.");
     }
+
+    [WindowsOnlyFact]
+    public async Task SQLiteKitsuneExtension_Luastring_Works()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            db:Query("SELECT LuaString('return ARGS[1]..ARGS[2];', '123', 'abc')")
+            db:Fetch()
+            local result = db:GetRow(1)
+            db:Close()
+            return result
+            """);
+        result.String.ShouldNotBeNull();
+        result.String.ShouldBe("123abc");
+    }
+
+    // Exercises the g_inlineExecution re-entrant path: RunString (blocking, RunInline on
+    // calling thread) → SQLite → LuaString → KitsuneExecuteString. Without the
+    // g_inlineExecution condition this returns "cannot call Execute from this context".
+    [WindowsOnlyFact]
+    public void SQLiteKitsuneExtension_LuaString_Works_Sync()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = engine.RunString("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            db:Query("SELECT LuaString('return ARGS[1]..ARGS[2];', '456', 'xyz')")
+            db:Fetch()
+            local result = db:GetRow(1)
+            db:Close()
+            return result
+            """);
+        result.String.ShouldNotBeNull();
+        result.String.ShouldBe("456xyz");
+    }
+
+    // Verifies that sqlite_register_kitsune_functions auto-executes extension.lua
+    // from the same directory as the database file. A unique temp directory is used
+    // so this test never interferes with other tests sharing the system temp folder.
+    [WindowsOnlyFact]
+    public async Task SQLiteKitsuneExtension_ExtensionLua_AutoExecutedOnLoad()
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            string dbPath = Path.Combine(tempDir, "test.db").Replace('\\', '/');
+            File.WriteAllText(Path.Combine(tempDir, "extension.lua"), "extensionLuaRan = true");
+
+            using KitsuneEngine engine = new();
+            engine.SetString("extPath", ExtensionPath);
+            engine.SetString("dbPath", dbPath);
+            await engine.ExecuteStringAsync("""
+                local db = SQLite.Open(dbPath)
+                db:Query("SELECT load_extension('" .. extPath .. "')")
+                db:Fetch()
+                db:Close()
+                """);
+
+            engine.GetBool("extensionLuaRan").ShouldBe(true);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
 }

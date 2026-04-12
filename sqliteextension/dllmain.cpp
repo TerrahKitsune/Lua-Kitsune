@@ -1,5 +1,7 @@
 ﻿#include <Windows.h>
 #include "dllmain.h"
+#include "luafunctions.h"
+#include "sqlitefunctions.h"
 SQLITE_EXTENSION_INIT1
 
 #define KITSUNE_EXTENSION_VERSION "1.0.0.0"
@@ -43,6 +45,15 @@ extern "C" {
 		SQLITE_EXTENSION_INIT2(pApi);
 		// Special, this isnt related to the kitsune engine.
 		sqlite3_create_function(db, "KitsuneVersion", 0, SQLITE_UTF8, NULL, kitsune_version_func, NULL, NULL);
+
+		if (lua_register_kitsune_functions(db, pzErrMsg) != SQLITE_OK) {
+			return SQLITE_ERROR;
+		}
+
+		if (sqlite_register_kitsune_functions(db, pzErrMsg) != SQLITE_OK) {
+			return SQLITE_ERROR;
+		}
+
 		return SQLITE_OK;
 	}
 

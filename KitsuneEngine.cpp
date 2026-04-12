@@ -1397,12 +1397,12 @@ extern "C" {
 	}
 
 	KITSUNE_API int KitsuneExecuteFileAsync(const char* path, int argc, const KitsuneVariable* argv, bool fireAndForget) {
-		if (g_isSchedulerThread && g_state && g_state->DelegateState) return -1;
+		if (g_isSchedulerThread || g_inlineExecution) return -1;
 		return StartCoroutine(g_state, true, path, argc, argv, fireAndForget);
 	}
 
 	KITSUNE_API int KitsuneExecuteStringAsync(const char* script, int argc, const KitsuneVariable* argv, bool fireAndForget) {
-		if (g_isSchedulerThread && g_state && g_state->DelegateState) return -1;
+		if (g_isSchedulerThread || g_inlineExecution) return -1;
 		return StartCoroutine(g_state, false, script, argc, argv, fireAndForget);
 	}
 
@@ -1484,7 +1484,7 @@ extern "C" {
 	}
 
 	KITSUNE_API int KitsuneExecuteFunctionAsync(const char* functionName, int argc, const KitsuneVariable* argv, bool fireAndForget) {
-		if (g_isSchedulerThread && g_state && g_state->DelegateState) return -1;
+		if (g_isSchedulerThread || g_inlineExecution) return -1;
 		return StartCoroutineFunction(g_state, functionName, argc, argv, fireAndForget);
 	}
 
@@ -1627,7 +1627,7 @@ extern "C" {
 	}
 
 	KITSUNE_API int KitsuneExecuteVariableAsync(const KitsuneVariable* var, int argc, const KitsuneVariable* argv, bool fireAndForget) {
-		if (g_isSchedulerThread && g_state && g_state->DelegateState) return -1;
+		if (g_isSchedulerThread || g_inlineExecution) return -1;
 		return StartCoroutineVariable(g_state, var, argc, argv, fireAndForget);
 	}
 
@@ -1771,11 +1771,14 @@ extern "C" {
 		return out;
 	}
 
-	// -- RunInlineTight: re-entrant variant for kitsune_CFunction → KitsuneExecute* calls -----
-	// Precondition: caller is on the scheduler thread inside LuaCFunctionWrapper (DelegateState set),
-	// Lua access is already owned. Sleep() and Yield() in the called function are no-ops — the
-	// coroutine is immediately re-resumed on each LUA_YIELD without releasing Lua access.
-	// Saves and restores currentCoroutineId so the outer coroutine's tracking is undisturbed.
+	// -- RunInlineTight: re-entrant variant for nested KitsuneExecute* calls ------------------
+	// Used from three contexts:
+	//   (a) scheduler thread inside LuaCFunctionWrapper (DelegateState set)
+	//   (b) scheduler thread inside any raw Lua C callback (g_isSchedulerThread && currentCoroutineId != 0)
+	//   (c) inline calling thread inside RunInline's lua_resume (g_inlineExecution && currentCoroutineId != 0)
+	// In all cases Lua access is already owned; Sleep/Yield in the called function are no-ops
+	// (the coroutine is immediately re-resumed on each LUA_YIELD without releasing Lua access).
+	// Saves and restores currentCoroutineId and g_inlineExecution so the outer context is undisturbed.
 	// Does NOT call ReleaseLuaAccess — the caller never acquired it.
 	static KitsuneVariable* RunInlineTight(KitsuneState* state, KitsuneCoroutine* slot,
 		lua_State* T, int initialNArgs) {
@@ -1789,6 +1792,7 @@ extern "C" {
 		lua_setglobal(T, "ID");
 
 		long prevCoroutineId = state->currentCoroutineId.load();
+		bool prevInlineExecution = g_inlineExecution;
 		state->currentCoroutineId.store((long)id);
 		g_inlineExecution = true;
 
@@ -1802,7 +1806,7 @@ extern "C" {
 			rc = lua_resume(T, state->L, 0, &nresults);
 		}
 
-		g_inlineExecution = false;
+		g_inlineExecution = prevInlineExecution;
 		state->currentCoroutineId.store(prevCoroutineId);
 
 		KitsuneVariable* out;
@@ -1923,9 +1927,12 @@ extern "C" {
 		KitsuneState* state = g_state;
 		if (!state) return NULL;
 
-		// Re-entrant from kitsune_CFunction: DelegateState is set, we're on the scheduler thread
-		// with Lua access already held. Run in a tight loop; Sleep/Yield are no-ops.
-		if (state->DelegateState) {
+		// Re-entrant path: DelegateState is set (LuaCFunctionWrapper), or we are on the
+		// scheduler thread inside lua_resume (g_isSchedulerThread, e.g. async coroutine),
+		// or on the inline calling thread inside lua_resume (g_inlineExecution, e.g. RunString
+		// calling SQLite which calls LuaString). Lua access is already owned. Run in a tight
+		// loop; Sleep/Yield are no-ops.
+		if (state->DelegateState || ((g_isSchedulerThread || g_inlineExecution) && state->currentCoroutineId.load() != 0)) {
 			if (!path) return NULL;
 			bool isNewSlot = false;
 			KitsuneCoroutine* slot = AcquireInlineSlot(state, isNewSlot);
@@ -2009,9 +2016,12 @@ extern "C" {
 		KitsuneState* state = g_state;
 		if (!state) return NULL;
 
-		// Re-entrant from kitsune_CFunction: DelegateState is set, we're on the scheduler thread
-		// with Lua access already held. Run in a tight loop; Sleep/Yield are no-ops.
-		if (state->DelegateState) {
+		// Re-entrant path: DelegateState is set (LuaCFunctionWrapper), or we are on the
+		// scheduler thread inside lua_resume (g_isSchedulerThread, e.g. async coroutine),
+		// or on the inline calling thread inside lua_resume (g_inlineExecution, e.g. RunString
+		// calling SQLite which calls LuaString). Lua access is already owned. Run in a tight
+		// loop; Sleep/Yield are no-ops.
+		if (state->DelegateState || ((g_isSchedulerThread || g_inlineExecution) && state->currentCoroutineId.load() != 0)) {
 			if (!script) return NULL;
 			bool isNewSlot = false;
 			KitsuneCoroutine* slot = AcquireInlineSlot(state, isNewSlot);
@@ -2091,9 +2101,12 @@ extern "C" {
 		KitsuneState* state = g_state;
 		if (!state) return NULL;
 
-		// Re-entrant from kitsune_CFunction: DelegateState is set, we're on the scheduler thread
-		// with Lua access already held. Run in a tight loop; Sleep/Yield are no-ops.
-		if (state->DelegateState) {
+		// Re-entrant path: DelegateState is set (LuaCFunctionWrapper), or we are on the
+		// scheduler thread inside lua_resume (g_isSchedulerThread, e.g. async coroutine),
+		// or on the inline calling thread inside lua_resume (g_inlineExecution, e.g. RunString
+		// calling SQLite which calls LuaString). Lua access is already owned. Run in a tight
+		// loop; Sleep/Yield are no-ops.
+		if (state->DelegateState || ((g_isSchedulerThread || g_inlineExecution) && state->currentCoroutineId.load() != 0)) {
 			if (!functionName) return NULL;
 			bool isNewSlot = false;
 			KitsuneCoroutine* slot = AcquireInlineSlot(state, isNewSlot);
@@ -2172,9 +2185,12 @@ extern "C" {
 		KitsuneState* state = g_state;
 		if (!state) return NULL;
 
-		// Re-entrant from kitsune_CFunction: DelegateState is set, we're on the scheduler thread
-		// with Lua access already held. Run in a tight loop; Sleep/Yield are no-ops.
-		if (state->DelegateState) {
+		// Re-entrant path: DelegateState is set (LuaCFunctionWrapper), or we are on the
+		// scheduler thread inside lua_resume (g_isSchedulerThread, e.g. async coroutine),
+		// or on the inline calling thread inside lua_resume (g_inlineExecution, e.g. RunString
+		// calling SQLite which calls LuaString). Lua access is already owned. Run in a tight
+		// loop; Sleep/Yield are no-ops.
+		if (state->DelegateState || ((g_isSchedulerThread || g_inlineExecution) && state->currentCoroutineId.load() != 0)) {
 			if (!var) return NULL;
 			bool isNewSlot = false;
 			KitsuneCoroutine* slot = AcquireInlineSlot(state, isNewSlot);

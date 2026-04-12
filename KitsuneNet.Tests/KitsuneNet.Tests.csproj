@@ -101,5 +101,19 @@
       <Link>test.zip</Link>
     </Content>
   </ItemGroup>
+  <!-- Copy SQLiteKitsune.dll whenever it is newer than the copy in the test output.
+       Inputs/Outputs enable MSBuild incremental build; UpToDateCheckBuilt tells VS's fast
+       up-to-date check to compare the native source against the output copy so a C++-only
+       rebuild triggers a re-copy even when no C# files have changed. -->
+  <Target Name="CopyNativeSqliteDll" BeforeTargets="Build"
+          Condition="$([MSBuild]::IsOSPlatform('Windows')) and Exists('$(NativeOutputDir)SQLiteKitsune.dll')"
+          Inputs="$(NativeOutputDir)SQLiteKitsune.dll"
+          Outputs="$(OutputPath)SQLiteKitsune.dll">
+    <Copy SourceFiles="$(NativeOutputDir)SQLiteKitsune.dll" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
+  </Target>
+
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+    <UpToDateCheckBuilt Include="$(OutputPath)SQLiteKitsune.dll" Original="$(NativeOutputDir)SQLiteKitsune.dll" />
+  </ItemGroup>
 
 </Project>

@@ -105,11 +105,15 @@ if exist "$(TargetDir)$(TargetName).pdb" copy /Y "$(TargetDir)$(TargetName).pdb"
   <ItemGroup>
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="..\SQLite\sqlite3.c" />
+    <ClCompile Include="luafunctions.cpp" />
+    <ClCompile Include="sqlitefunctions.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\SQLite\sqlite3.h" />
     <ClInclude Include="..\SQLite\sqlite3ext.h" />
     <ClInclude Include="dllmain.h" />
+    <ClInclude Include="luafunctions.h" />
+    <ClInclude Include="sqlitefunctions.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Extension functions.md" />
