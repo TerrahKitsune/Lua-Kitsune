@@ -19,6 +19,9 @@
 #	ifndef KITSUNE_REDIS
 #		define KITSUNE_REDIS
 #	endif
+#	ifndef KITSUNE_HTTP
+#		define KITSUNE_HTTP
+#	endif
 #endif
 
 #ifdef _WIN32

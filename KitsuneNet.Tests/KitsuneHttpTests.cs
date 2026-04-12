@@ -45,7 +45,7 @@ namespace KitsuneNet.Tests
             end
             local function ws_connect(client, url)
                 local ws, err = client:Connect(url)
-                if not ws then return nil, err end
+                if not ws then error('Connect failed: ' .. tostring(err)) end
                 ws:Read()  -- drain server welcome frame ('Request served by...')
                 return ws
             end

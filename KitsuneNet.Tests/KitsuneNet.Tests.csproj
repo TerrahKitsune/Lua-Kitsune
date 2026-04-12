@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -16,6 +16,10 @@
   <PropertyGroup>
     <NativeOutputDir>$(ProjectDir)..\x64\$(Configuration)\</NativeOutputDir>
     <NativeRootDir>$(ProjectDir)..\</NativeRootDir>
+    <!-- WSL path to the repo root.  Uses the always-absolute $(MSBuildProjectDirectory)
+         for the same reason as KitsuneNet.csproj. -->
+    <_NativeRootAbsFwd>$(MSBuildProjectDirectory.Replace('\', '/'))/..</_NativeRootAbsFwd>
+    <_WslRepoPath>/mnt/$(_NativeRootAbsFwd.Substring(0, 1).ToLower())/$(_NativeRootAbsFwd.Substring(3).TrimEnd('/'))</_WslRepoPath>
   </PropertyGroup>
 
   <!--
@@ -34,11 +38,39 @@
     <Copy SourceFiles="@(_NativePdbs)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
   </Target>
 
+  <!-- Delete KitsuneEngine.so (no lib prefix) whenever it appears in the output directory.
+       On Linux, .NET P/Invoke tries name.so before libname.so, so a stale bare-named file
+       silently wins over the correct libKitsuneEngine.so. -->
+  <Target Name="DeleteStaleSo" BeforeTargets="Build">
+    <Delete Files="$(OutputPath)KitsuneEngine.so" Condition="Exists('$(OutputPath)KitsuneEngine.so')" />
+  </Target>
+
+  <!-- On Windows with WSL2: cmake-build libKitsuneEngine.so before copying it.
+       Placed here (not only in KitsuneNet.csproj) because KitsuneNet is a ProjectReference
+       that MSBuild may skip when C# files are up-to-date, whereas this Tests project is
+       always the top-level build entry point for WSL remote-test runs.
+       Document order before CopyNativeSo guarantees cmake completes first. -->
+  <Target Name="BuildLinuxNative" BeforeTargets="Build"
+          Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+    <Exec Command="wsl bash -c &quot;set -e; mkdir -p '$(_WslRepoPath)/build-linux'; cd '$(_WslRepoPath)/build-linux'; if [ ! -f CMakeCache.txt ]; then cmake .. -DCMAKE_BUILD_TYPE=Release -DKITSUNE_ALL=ON; fi; cmake --build . --parallel&quot;"
+          ContinueOnError="WarnAndContinue" />
+  </Target>
+
   <!-- Copy libKitsuneEngine.so whenever it exists (Linux build or Windows with pre-built .so).
-       Unconditional so VS remote testing can include it when sending the output to WSL2. -->
-  <Target Name="CopyNativeSo" BeforeTargets="Build" Condition="Exists('$(ProjectDir)../build-linux/libKitsuneEngine.so')">
+       Inputs/Outputs let MSBuild re-run this target whenever build-linux produces a newer .so,
+       even when the C# project itself is otherwise up-to-date. -->
+  <Target Name="CopyNativeSo" BeforeTargets="Build"
+          Condition="Exists('$(ProjectDir)../build-linux/libKitsuneEngine.so')"
+          Inputs="$(ProjectDir)../build-linux/libKitsuneEngine.so"
+          Outputs="$(OutputPath)libKitsuneEngine.so">
     <Copy SourceFiles="$(ProjectDir)../build-linux/libKitsuneEngine.so" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
   </Target>
+
+  <!-- Tell VS's fast up-to-date check that libKitsuneEngine.so is a required output.
+       When it is absent the project is not up-to-date, triggering CopyNativeSo. -->
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+    <UpToDateCheckBuilt Include="$(MSBuildProjectDirectory)\bin\$(Configuration)\net10.0\libKitsuneEngine.so" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.0" />
