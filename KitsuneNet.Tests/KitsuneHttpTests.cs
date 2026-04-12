@@ -792,6 +792,7 @@ namespace KitsuneNet.Tests
                     local client = Http.Create()
                     client:SetTimeout(8000)
                     local ws, err = client:Connect('{WsUrl}')
+                    if not ws then error('connect failed: ' .. tostring(err)) end
                     ws:Close()
                     _outcome = 'true'
                 end)
@@ -984,6 +985,7 @@ namespace KitsuneNet.Tests
                     local client = Http.Create()
                     client:SetTimeout(8000)
                     local ws, err = client:Connect('{WsUrl}')
+                    if not ws then error('connect failed: ' .. tostring(err)) end
                     ws:Close()
                     local frame = ws:Read()
                     _outcome = tostring(frame == nil)
@@ -1005,6 +1007,7 @@ namespace KitsuneNet.Tests
                     local client = Http.Create()
                     client:SetTimeout(8000)
                     local ws, err = client:Connect('{WsUrl}')
+                    if not ws then error('connect failed: ' .. tostring(err)) end
                     local when_connected = ws:HasData()
                     ws:Close()
                     local after_close = ws:HasData()
