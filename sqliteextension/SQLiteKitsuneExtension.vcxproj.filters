@@ -44,6 +44,9 @@
     <ClInclude Include="luafunctions.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="kitsuneext.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="Extension functions.md" />

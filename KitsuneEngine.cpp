@@ -2716,12 +2716,12 @@ extern "C" {
 	KITSUNE_API bool KitsuneSetVariable(const char* path, const KitsuneVariable* var) {
 		KitsuneState* state = g_state;
 		if (!state || !state->L || !path || !*path) return false;
-		if (g_isSchedulerThread && state->DelegateState) return false;  // re-entering from a registered function; would deadlock
 		if (var && var->type == KITSUNE_TSTREAM) {
 			if (!var->stream || !(var->stream->flags & KITSUNE_SHARED_MEMORY_FLAG_KITSUNE_OWNED))
 				return false;  // stream block was not created by KitsuneCreateMemoryBlock
 		}
-		AcquireLuaAccess(state);
+		bool hasAccess = g_isSchedulerThread || g_inlineExecution;
+		if (!hasAccess) AcquireLuaAccess(state);
 		bool ok = false;
 		const char* finalKey = NavigateGlobalParent(state->L, path, true);
 		if (finalKey) {
@@ -2733,16 +2733,15 @@ extern "C" {
 			lua_pop(state->L, 1);  // pop parent table
 			ok = true;
 		}
-		ReleaseLuaAccess(state);
+		if (!hasAccess) ReleaseLuaAccess(state);
 		return ok;
 	}
 
 	KITSUNE_API KitsuneVariable* KitsuneGetVariable(const char* path) {
 		KitsuneState* state = g_state;
 		if (!state || !state->L || !path || !*path) return NULL;
-		if (g_isSchedulerThread && state->DelegateState) return NULL;  // re-entering from a registered function; would deadlock
-
-		AcquireLuaAccess(state);
+		bool hasAccess = g_isSchedulerThread || g_inlineExecution;
+		if (!hasAccess) AcquireLuaAccess(state);
 		KitsuneVariable* out = NULL;
 		const char* finalKey = NavigateGlobalParent(state->L, path, false);
 		if (finalKey) {
@@ -2766,7 +2765,7 @@ extern "C" {
 			}
 			lua_pop(state->L, 1);  // pop parent table
 		}
-		ReleaseLuaAccess(state);
+		if (!hasAccess) ReleaseLuaAccess(state);
 		return out;
 	}
 
@@ -2802,12 +2801,11 @@ extern "C" {
 	KITSUNE_API void KitsuneGetAll(const char* path, kitsune_KeyValuePairCallback callback, void* userdata) {
 		KitsuneState* state = g_state;
 		if (!state || !state->L || !callback) return;
-		if (g_isSchedulerThread && state->DelegateState) return;  // re-entering from a registered function; would deadlock
-
-		AcquireLuaAccess(state);
+		bool hasAccess = g_isSchedulerThread || g_inlineExecution;
+		if (!hasAccess) AcquireLuaAccess(state);
 
 		if (!PushGlobalAtPath(state->L, path)) {
-			ReleaseLuaAccess(state);
+			if (!hasAccess) ReleaseLuaAccess(state);
 			return;
 		}
 
@@ -2822,7 +2820,7 @@ extern "C" {
 				lua_pop(state->L, 1);  // discard error message; stack is now [..., table]
 		}
 		lua_pop(state->L, 1);  // pop table
-		ReleaseLuaAccess(state);
+		if (!hasAccess) ReleaseLuaAccess(state);
 	}
 
 	static int LuaResultSetter(const KitsuneVariable* result) {
@@ -3074,8 +3072,14 @@ extern "C" {
 	KITSUNE_API void KitsuneRegisterFunction(const char* name, kitsune_CFunction func, void* userdata) {
 		KitsuneState* state = g_state;
 		if (!state || !state->L || !name || !*name || !func) return;
-		if (g_isSchedulerThread && state->DelegateState) return;  // re-entering from a registered function; would deadlock
-		AcquireLuaAccess(state);
+
+		// If already on the scheduler thread or inside inline execution, Lua access is
+		// already owned — skip AcquireLuaAccess to avoid deadlocking on ourselves.
+		// This covers registration from any Lua C callback (e.g. SQLite extension init
+		// fired by load_extension inside a running coroutine).
+		bool hasAccess = g_isSchedulerThread || g_inlineExecution;
+		if (!hasAccess)
+			AcquireLuaAccess(state);
 
 		const char* finalKey = NavigateGlobalParent(state->L, name, true);
 		if (finalKey) {
@@ -3086,35 +3090,36 @@ extern "C" {
 			lua_pop(state->L, 1);  // pop parent table
 		}
 
-		ReleaseLuaAccess(state);
+		if (!hasAccess)
+			ReleaseLuaAccess(state);
 	}
 
 	KITSUNE_API bool KitsuneRegisterUserdata(const char* name, const KitsuneUserDataRegistration* registration) {
 		KitsuneState* state = g_state;
 		if (!state || !state->L || !name || !*name || !registration) return false;
-		if (g_isSchedulerThread && state->DelegateState) return false;
-		AcquireLuaAccess(state);
+		bool hasAccess = g_isSchedulerThread || g_inlineExecution;
+		if (!hasAccess) AcquireLuaAccess(state);
 		bool ok = lua_registerkitsuneuserdata(state->L, name, registration, LuaCFunctionWrapper);
-		ReleaseLuaAccess(state);
+		if (!hasAccess) ReleaseLuaAccess(state);
 		return ok;
 	}
 
 	KITSUNE_API int KitsuneRegister(const KitsuneVariable* var) {
 		KitsuneState* state = g_state;
 		if (!state || !state->L || !var) return LUA_NOREF;
-		if (g_isSchedulerThread && state->DelegateState) return LUA_NOREF;
-		AcquireLuaAccess(state);
+		bool hasAccess = g_isSchedulerThread || g_inlineExecution;
+		if (!hasAccess) AcquireLuaAccess(state);
 		PushKitsuneVariable(state->L, var);
 		int ref = luaL_ref(state->L, LUA_REGISTRYINDEX);
-		ReleaseLuaAccess(state);
+		if (!hasAccess) ReleaseLuaAccess(state);
 		return ref;
 	}
 
 	KITSUNE_API KitsuneVariable* KitsuneGetByReference(int ref) {
 		KitsuneState* state = g_state;
 		if (!state || !state->L || ref == LUA_NOREF) return NULL;
-		if (g_isSchedulerThread && state->DelegateState) return NULL;
-		AcquireLuaAccess(state);
+		bool hasAccess = g_isSchedulerThread || g_inlineExecution;
+		if (!hasAccess) AcquireLuaAccess(state);
 		KitsuneVariable* out = NULL;
 		lua_rawgeti(state->L, LUA_REGISTRYINDEX, ref);
 		int t = lua_type(state->L, -1);
@@ -3129,15 +3134,15 @@ extern "C" {
 			}
 		}
 		lua_pop(state->L, 1);
-		ReleaseLuaAccess(state);
+		if (!hasAccess) ReleaseLuaAccess(state);
 		return out;
 	}
 
 	KITSUNE_API KitsuneVariable* KitsuneUnregister(int ref) {
 		KitsuneState* state = g_state;
 		if (!state || !state->L || ref == LUA_NOREF) return NULL;
-		if (g_isSchedulerThread && state->DelegateState) return NULL;
-		AcquireLuaAccess(state);
+		bool hasAccess = g_isSchedulerThread || g_inlineExecution;
+		if (!hasAccess) AcquireLuaAccess(state);
 		KitsuneVariable* out = NULL;
 		lua_rawgeti(state->L, LUA_REGISTRYINDEX, ref);
 		int t = lua_type(state->L, -1);
@@ -3153,7 +3158,7 @@ extern "C" {
 		}
 		lua_pop(state->L, 1);
 		luaL_unref(state->L, LUA_REGISTRYINDEX, ref);
-		ReleaseLuaAccess(state);
+		if (!hasAccess) ReleaseLuaAccess(state);
 		return out;
 	}
 

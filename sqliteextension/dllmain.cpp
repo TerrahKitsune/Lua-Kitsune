@@ -15,6 +15,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 	switch (ul_reason_for_call) {
 	case DLL_PROCESS_ATTACH:
 		DisableThreadLibraryCalls(hModule);
+		lua_init_kitsune_state();
 		// KitsuneInit returns true only if it created a new state (we are the owner).
 		// It returns false if the engine was already initialised by another caller.
 		g_kitsuneOwned = KitsuneInit();
@@ -23,9 +24,13 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 		// lpReserved is non-NULL when the DLL is unloaded due to process exit: all
 		// threads may already be terminated, so waiting on schedulerDoneEvent inside
 		// KitsuneCleanup would hang forever. Skip cleanup; the OS reclaims resources.
-		// Also skip if we are not the owner (the host manages the engine lifecycle).
-		if (g_kitsuneOwned && lpReserved == NULL)
-			KitsuneCleanup();
+		if (lpReserved == NULL) {
+			// Free all registered Lua function refs before KitsuneCleanup so the
+			// deferred luaL_unref queue is drained before lua_close destroys the state.
+			lua_cleanup_kitsune_state();
+			if (g_kitsuneOwned)
+				KitsuneCleanup();
+		}
 		break;
 	}
 	return TRUE;
@@ -44,7 +49,7 @@ extern "C" {
 	__declspec(dllexport) int sqlite3_sqlitekitsune_init(sqlite3* db, char** pzErrMsg, const sqlite3_api_routines* pApi) {
 		SQLITE_EXTENSION_INIT2(pApi);
 		// Special, this isnt related to the kitsune engine.
-		sqlite3_create_function(db, "KitsuneVersion", 0, SQLITE_UTF8, NULL, kitsune_version_func, NULL, NULL);
+		sqlite3_create_function(db, "KitsuneVersion", 0, SQLITE_UTF8 | SQLITE_DIRECTONLY, NULL, kitsune_version_func, NULL, NULL);
 
 		if (lua_register_kitsune_functions(db, pzErrMsg) != SQLITE_OK) {
 			return SQLITE_ERROR;

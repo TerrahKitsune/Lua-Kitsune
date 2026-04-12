@@ -112,6 +112,7 @@ if exist "$(TargetDir)$(TargetName).pdb" copy /Y "$(TargetDir)$(TargetName).pdb"
     <ClInclude Include="..\SQLite\sqlite3.h" />
     <ClInclude Include="..\SQLite\sqlite3ext.h" />
     <ClInclude Include="dllmain.h" />
+    <ClInclude Include="kitsuneext.h" />
     <ClInclude Include="luafunctions.h" />
     <ClInclude Include="sqlitefunctions.h" />
   </ItemGroup>

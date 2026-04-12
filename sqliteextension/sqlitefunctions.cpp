@@ -1,106 +1,70 @@
 ﻿#include "sqlitefunctions.h"
 #include <stdio.h>
 SQLITE_EXTENSION_INIT3
+#include "kitsuneext.h"
 
+// LuaString(script, args...) — compiles and runs a Lua string; extra args available as ARGS[1..n].
 static void lua_string_func(sqlite3_context* context, int argc, sqlite3_value** argv) {
 	if (argc < 1) {
 		sqlite3_result_error(context, "LuaString requires at least one argument (the script)", -1);
 		return;
 	}
-
 	const char* script = (const char*)sqlite3_value_text(argv[0]);
 	if (!script) {
 		sqlite3_result_error(context, "LuaString: script argument is NULL", -1);
 		return;
 	}
+	int luaArgc = 0;
+	KitsuneVariable* args = sqlite_build_args(context, argc, argv, 1, &luaArgc);
+	if (luaArgc < 0) return;
+	KitsuneVariable* result = KitsuneExecuteString(script, luaArgc, args);
+	if (args) sqlite3_free(args);
+	kitsune_result_to_sqlite(context, result);
+}
 
-	int luaArgc = argc - 1;
-	KitsuneVariable* luaArgs = NULL;
-
-	if (luaArgc > 0) {
-		luaArgs = (KitsuneVariable*)sqlite3_malloc((int)(sizeof(KitsuneVariable) * luaArgc));
-		if (!luaArgs) {
-			sqlite3_result_error_nomem(context);
-			return;
-		}
-
-		for (int i = 0; i < luaArgc; i++) {
-			sqlite3_value* val = argv[i + 1];
-			KitsuneVariable* kv = &luaArgs[i];
-			kv->length = 0;
-
-			switch (sqlite3_value_type(val)) {
-			case SQLITE_INTEGER:
-				kv->type = KITSUNE_TINTEGER;
-				kv->integer = sqlite3_value_int64(val);
-				break;
-			case SQLITE_FLOAT:
-				kv->type = KITSUNE_TNUMBER;
-				kv->number = sqlite3_value_double(val);
-				break;
-			case SQLITE_TEXT:
-				kv->type = KITSUNE_TSTRING;
-				kv->data = (unsigned char*)sqlite3_value_text(val);
-				kv->length = (size_t)sqlite3_value_bytes(val);
-				break;
-			case SQLITE_BLOB:
-				kv->type = KITSUNE_TSTRING;
-				kv->data = (unsigned char*)sqlite3_value_blob(val);
-				kv->length = (size_t)sqlite3_value_bytes(val);
-				break;
-			case SQLITE_NULL:
-			default:
-				kv->type = KITSUNE_TNIL;
-				kv->data = NULL;
-				break;
-			}
-		}
-	}
-
-	KitsuneVariable* result = KitsuneExecuteString(script, luaArgc, luaArgs);
-
-	if (luaArgs)
-		sqlite3_free(luaArgs);
-
-	if (!result) {
-		sqlite3_result_error(context, "LuaString: execution failed", -1);
+// DoFile(path, args...) — loads and runs a Lua file; extra args available as ARGS[2..n]
+// (ARGS[1] is the file path, matching the standard KitsuneExecuteFile convention).
+static void lua_file_func(sqlite3_context* context, int argc, sqlite3_value** argv) {
+	if (argc < 1) {
+		sqlite3_result_error(context, "DoFile requires at least one argument (the file path)", -1);
 		return;
 	}
-
-	if (result->type == KITSUNE_TERROR) {
-		if (result->data && result->length > 0)
-			sqlite3_result_error(context, (const char*)result->data, (int)result->length);
-		else
-			sqlite3_result_error(context, "LuaString: Lua error", -1);
-		KitsuneVariableFree(result);
+	const char* path = (const char*)sqlite3_value_text(argv[0]);
+	if (!path) {
+		sqlite3_result_error(context, "DoFile: path argument is NULL", -1);
 		return;
 	}
+	int luaArgc = 0;
+	KitsuneVariable* args = sqlite_build_args(context, argc, argv, 1, &luaArgc);
+	if (luaArgc < 0) return;
+	KitsuneVariable* result = KitsuneExecuteFile(path, luaArgc, args);
+	if (args) sqlite3_free(args);
+	kitsune_result_to_sqlite(context, result);
+}
 
-	switch (result->type) {
-		case KITSUNE_TINTEGER:
-			sqlite3_result_int64(context, result->integer);
-			break;
-		case KITSUNE_TNUMBER:
-			sqlite3_result_double(context, result->number);
-			break;
-		case KITSUNE_TSTRING:
-			sqlite3_result_text(context, (const char*)result->data, (int)result->length, SQLITE_TRANSIENT);
-			break;
-		case KITSUNE_TBOOLEAN:
-			sqlite3_result_int(context, result->boolean ? 1 : 0);
-			break;
-		case KITSUNE_TNIL:
-		case KITSUNE_TNONE:
-		default:
-			sqlite3_result_null(context);
-		break;
+// DoFunction(name, args...) — calls a named Lua global function; args passed as direct parameters.
+static void lua_function_func(sqlite3_context* context, int argc, sqlite3_value** argv) {
+	if (argc < 1) {
+		sqlite3_result_error(context, "DoFunction requires at least one argument (the function name)", -1);
+		return;
 	}
-
-	KitsuneVariableFree(result);
+	const char* name = (const char*)sqlite3_value_text(argv[0]);
+	if (!name) {
+		sqlite3_result_error(context, "DoFunction: function name argument is NULL", -1);
+		return;
+	}
+	int luaArgc = 0;
+	KitsuneVariable* args = sqlite_build_args(context, argc, argv, 1, &luaArgc);
+	if (luaArgc < 0) return;
+	KitsuneVariable* result = KitsuneExecuteFunction(name, luaArgc, args);
+	if (args) sqlite3_free(args);
+	kitsune_result_to_sqlite(context, result);
 }
 
 int sqlite_register_kitsune_functions(sqlite3* db, char** pzErrMsg) {
 	sqlite3_create_function(db, "LuaString", -1, SQLITE_UTF8 | SQLITE_DIRECTONLY, NULL, lua_string_func, NULL, NULL);
+	sqlite3_create_function(db, "LuaFile", -1, SQLITE_UTF8 | SQLITE_DIRECTONLY, NULL, lua_file_func, NULL, NULL);
+	sqlite3_create_function(db, "LuaFunction", -1, SQLITE_UTF8 | SQLITE_DIRECTONLY, NULL, lua_function_func, NULL, NULL);
 
 	const char* dbPath = sqlite3_db_filename(db, "main");
 	if (dbPath && *dbPath) {

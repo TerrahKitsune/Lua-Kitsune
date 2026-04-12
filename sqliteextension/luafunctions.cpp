@@ -1,7 +1,334 @@
 ﻿#include "luafunctions.h"
+#include <stdlib.h>
+#include <string.h>
+SQLITE_EXTENSION_INIT3
+#include "kitsuneext.h"
+
+// Entry in the list of Lua functions registered as SQLite scalars.
+// funcVar is freed via KitsuneVariableFree in lua_cleanup_kitsune_state,
+// which handles luaL_unref and the free of the struct itself.
+struct RegisteredFunc {
+	KitsuneVariable* funcVar;
+	RegisteredFunc* next;
+};
+
+// Process-wide extension state: allocated in DLL_PROCESS_ATTACH, freed in DLL_PROCESS_DETACH.
+// db is set on the first load_extension call and never overwritten — g_extState is shared
+// across all connections so re-registering on subsequent loads would rebind SQLiteExt.*
+// to a different handle on every call.
+struct KitsuneExtState {
+	sqlite3*        db;
+	RegisteredFunc* funcs;
+};
+
+static KitsuneExtState* g_extState = NULL;
+
+void lua_init_kitsune_state() {
+	g_extState = (KitsuneExtState*)malloc(sizeof(KitsuneExtState));
+	if (g_extState) {
+		g_extState->db   = NULL;
+		g_extState->funcs = NULL;
+	}
+}
+
+// Anchors a Lua function variable in the registry and adds it to the extension state.
+// Returns a kitsune_malloc'd KitsuneVariable* with its own independent registry ref.
+// The caller must NOT free it — it is owned by g_extState and freed by
+// lua_cleanup_kitsune_state via KitsuneVariableFree. Returns NULL on failure.
+static KitsuneVariable* lua_add_kitsune_state(KitsuneVariable* var) {
+	if (!g_extState || !var) return NULL;
+
+	// KitsuneRegister creates an independent registry ref (ref_A) that is not
+	// owned by LuaCFunctionWrapper — var->integer (the original ref in argv) will
+	// be luaL_unref'd by LuaCFunctionWrapper after the callback returns, but ref_A
+	// is ours and will survive.
+	int ref = KitsuneRegister(var);
+	if (ref == -2) // LUA_NOREF
+		return NULL;
+
+	// KitsuneUnregister converts ref_A into a kitsune_malloc'd KitsuneVariable* with
+	// its own new registry ref (ref_B), then unrefs ref_A. Single anchor, no leak,
+	// and KitsuneVariableFree on the result is correct because it is kitsune_malloc'd.
+	KitsuneVariable* funcVar = KitsuneUnregister(ref);
+	if (!funcVar) return NULL; // ref_A leaked on OOM, acceptable
+
+	RegisteredFunc* entry = (RegisteredFunc*)malloc(sizeof(RegisteredFunc));
+	if (!entry) {
+		KitsuneVariableFree(funcVar);
+		return NULL;
+	}
+
+	entry->funcVar = funcVar;
+	entry->next = g_extState->funcs;
+	g_extState->funcs = entry;
+	return funcVar;
+}
+
+void lua_cleanup_kitsune_state() {
+	if (!g_extState) return;
+	RegisteredFunc* entry = g_extState->funcs;
+	while (entry) {
+		RegisteredFunc* next = entry->next;
+		KitsuneVariableFree(entry->funcVar);
+		free(entry);
+		entry = next;
+	}
+	free(g_extState);
+	g_extState = NULL;
+}
+
+// Raises a KITSUNE_TERROR through resultSetter. Always returns 1 so callers can tail-return.
+static int reg_error(kitsune_ResultSetter resultSetter, const char* msg) {
+	KitsuneVariable err = {};
+	err.type = KITSUNE_TERROR;
+	err.data = (unsigned char*)msg;
+	err.length = strlen(msg);
+	resultSetter(&err);
+	return 1;
+}
+
+// -- Static helpers for SQLiteExt.Query --------------------------------------
+
+// Bind a KitsuneVariable value to a prepared statement parameter by index.
+static void bind_kv_to_stmt(sqlite3_stmt* stmt, int idx, const KitsuneVariable* v) {
+	if (!v) { sqlite3_bind_null(stmt, idx); return; }
+	switch (v->type) {
+	case KITSUNE_TINTEGER: sqlite3_bind_int64(stmt, idx, v->integer);                                           break;
+	case KITSUNE_TNUMBER:  sqlite3_bind_double(stmt, idx, v->number);                                           break;
+	case KITSUNE_TSTRING:  sqlite3_bind_text(stmt, idx, (const char*)v->data, (int)v->length, SQLITE_STATIC);  break;
+	case KITSUNE_TBOOLEAN: sqlite3_bind_int(stmt, idx, v->boolean ? 1 : 0);                                    break;
+	default:               sqlite3_bind_null(stmt, idx);                                                        break;
+	}
+}
+
+// Fill a KitsuneVariable from a SQLite result column.
+// String and blob data is sqlite3_malloc'd; must be freed with free_sqlite_kv_tree.
+static void fill_kv_from_col(sqlite3_stmt* stmt, int col, KitsuneVariable* out) {
+	memset(out, 0, sizeof(KitsuneVariable));
+	switch (sqlite3_column_type(stmt, col)) {
+	case SQLITE_INTEGER:
+		out->type = KITSUNE_TINTEGER;
+		out->integer = sqlite3_column_int64(stmt, col);
+		break;
+	case SQLITE_FLOAT:
+		out->type = KITSUNE_TNUMBER;
+		out->number = sqlite3_column_double(stmt, col);
+		break;
+	case SQLITE_TEXT: {
+		const char* text = (const char*)sqlite3_column_text(stmt, col);
+		int         bytes = sqlite3_column_bytes(stmt, col);
+		out->type = KITSUNE_TSTRING;
+		out->data = (unsigned char*)sqlite3_malloc(bytes + 1);
+		if (out->data) { memcpy(out->data, text, bytes + 1); out->length = (size_t)bytes; }
+		break;
+	}
+	case SQLITE_BLOB: {
+		const void* blob = sqlite3_column_blob(stmt, col);
+		int         bytes = sqlite3_column_bytes(stmt, col);
+		out->type = KITSUNE_TSTRING;
+		out->data = (unsigned char*)sqlite3_malloc(bytes);
+		if (out->data) { memcpy(out->data, blob, bytes); out->length = (size_t)bytes; }
+		break;
+	}
+	default:
+		out->type = KITSUNE_TNIL;
+		break;
+	}
+}
+
+// Recursively free a KitsuneVariable tree whose string data and nodes were sqlite3_malloc'd.
+static void free_sqlite_kv_tree(KitsuneVariable* v) {
+	if (!v) return;
+	if (v->type == KITSUNE_TSTRING && v->data) {
+		sqlite3_free(v->data);
+		v->data = NULL;
+	}
+	else if (v->type == KITSUNE_TTABLE && v->table) {
+		KeyValuePairKitsuneVariableNode* node = v->table;
+		while (node) {
+			KeyValuePairKitsuneVariableNode* next = node->next;
+			free_sqlite_kv_tree(&node->key);
+			free_sqlite_kv_tree(&node->value);
+			sqlite3_free(node);
+			node = next;
+		}
+		v->table = NULL;
+	}
+}
+
+// Execute a bound SQLite statement and collect all rows into a KITSUNE_TTABLE.
+// Result layout: { [1] = { col_name = value, ... }, [2] = { ... }, ... }
+// Returns SQLITE_DONE on success; any other code indicates a step error.
+// All allocations inside *out_result use sqlite3_malloc; call free_sqlite_kv_tree to release.
+static int execute_query_into_kv(sqlite3_stmt* stmt, KitsuneVariable* out_result) {
+	memset(out_result, 0, sizeof(KitsuneVariable));
+	out_result->type = KITSUNE_TTABLE;
+	KeyValuePairKitsuneVariableNode** result_tail = &out_result->table;
+	int col_count = sqlite3_column_count(stmt);
+	int row_num = 0;
+	int step_rc;
+
+	while ((step_rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+		row_num++;
+
+		KitsuneVariable row = {};
+		row.type = KITSUNE_TTABLE;
+		KeyValuePairKitsuneVariableNode** row_tail = &row.table;
+
+		for (int i = 0; i < col_count; i++) {
+			KeyValuePairKitsuneVariableNode* cell =
+				(KeyValuePairKitsuneVariableNode*)sqlite3_malloc(sizeof(KeyValuePairKitsuneVariableNode));
+			if (!cell) continue;
+			memset(cell, 0, sizeof(KeyValuePairKitsuneVariableNode));
+
+			const char* colname = sqlite3_column_name(stmt, i);
+			if (!colname) {
+				sqlite3_free(cell);
+				continue;
+			}
+			size_t nlen = strlen(colname);
+			cell->key.type = KITSUNE_TSTRING;
+			cell->key.data = (unsigned char*)sqlite3_malloc((int)nlen + 1);
+			if (cell->key.data) { memcpy(cell->key.data, colname, nlen + 1); cell->key.length = nlen; }
+
+			fill_kv_from_col(stmt, i, &cell->value);
+			*row_tail = cell;
+			row_tail = &cell->next;
+		}
+
+		KeyValuePairKitsuneVariableNode* row_node =
+			(KeyValuePairKitsuneVariableNode*)sqlite3_malloc(sizeof(KeyValuePairKitsuneVariableNode));
+		if (row_node) {
+			memset(row_node, 0, sizeof(KeyValuePairKitsuneVariableNode));
+			row_node->key.type = KITSUNE_TINTEGER;
+			row_node->key.integer = row_num;
+			row_node->value = row;
+			*result_tail = row_node;
+			result_tail = &row_node->next;
+		}
+		else {
+			free_sqlite_kv_tree(&row);
+		}
+	}
+	return step_rc;
+}
+
+// Bind @paramName parameters from a KitsuneVariable table to a prepared statement.
+static void bind_params_from_table(sqlite3_stmt* stmt, KeyValuePairKitsuneVariableNode* params) {
+	for (KeyValuePairKitsuneVariableNode* node = params; node; node = node->next) {
+		if (node->key.type != KITSUNE_TSTRING || !node->key.data) continue;
+		char* pname = (char*)sqlite3_malloc((int)node->key.length + 2);
+		if (!pname) continue;
+		pname[0] = '@';
+		memcpy(pname + 1, node->key.data, node->key.length);
+		pname[node->key.length + 1] = '\0';
+		int idx = sqlite3_bind_parameter_index(stmt, pname);
+		sqlite3_free(pname);
+		if (idx > 0) bind_kv_to_stmt(stmt, idx, &node->value);
+	}
+}
+
+// SQLiteExt.Query(sql[, params]) — executes a SQL query and returns all rows as a table.
+// params: optional {paramName = value} table for @paramName placeholders.
+// Returns: { [1] = { col = val, ... }, [2] = { ... }, ... }
+static int query_cb(int argc, KitsuneVariable* argv, kitsune_ResultSetter resultSetter, void* userdata) {
+	sqlite3* db = ((KitsuneExtState*)userdata)->db;
+
+	if (argc < 1 || argv[0].type != KITSUNE_TSTRING || !argv[0].data)
+		return reg_error(resultSetter, "SQLiteExt.Query(sql[, params]): sql must be a string");
+
+	sqlite3_stmt* stmt = NULL;
+	if (sqlite3_prepare_v2(db, (const char*)argv[0].data, -1, &stmt, NULL) != SQLITE_OK)
+		return reg_error(resultSetter, sqlite3_errmsg(db));
+
+	if (argc >= 2 && argv[1].type == KITSUNE_TTABLE)
+		bind_params_from_table(stmt, argv[1].table);
+
+	KitsuneVariable result = {};
+	int step_rc = execute_query_into_kv(stmt, &result);
+	sqlite3_finalize(stmt);
+
+	if (step_rc != SQLITE_DONE) {
+		free_sqlite_kv_tree(&result);
+		return reg_error(resultSetter, sqlite3_errmsg(db));
+	}
+
+	resultSetter(&result);
+	free_sqlite_kv_tree(&result);
+	return 1;
+}
+
+// SQLiteExt.Scalar(sql[, params]) — executes a SQL query and returns the first column of the first row.
+// Returns nil if the query produces no rows. params follow the same @paramName convention as Query.
+static int scalar_cb(int argc, KitsuneVariable* argv, kitsune_ResultSetter resultSetter, void* userdata) {
+	sqlite3* db = ((KitsuneExtState*)userdata)->db;
+
+	if (argc < 1 || argv[0].type != KITSUNE_TSTRING || !argv[0].data)
+		return reg_error(resultSetter, "SQLiteExt.Scalar(sql[, params]): sql must be a string");
+
+	sqlite3_stmt* stmt = NULL;
+	if (sqlite3_prepare_v2(db, (const char*)argv[0].data, -1, &stmt, NULL) != SQLITE_OK)
+		return reg_error(resultSetter, sqlite3_errmsg(db));
+
+	if (argc >= 2 && argv[1].type == KITSUNE_TTABLE)
+		bind_params_from_table(stmt, argv[1].table);
+
+	KitsuneVariable result = {};
+	int step_rc = sqlite3_step(stmt);
+
+	if (step_rc == SQLITE_ROW && sqlite3_column_count(stmt) > 0) {
+		fill_kv_from_col(stmt, 0, &result);
+	}
+	else if (step_rc != SQLITE_DONE && step_rc != SQLITE_ROW) {
+		sqlite3_finalize(stmt);
+		return reg_error(resultSetter, sqlite3_errmsg(db));
+	}
+
+	sqlite3_finalize(stmt);
+	resultSetter(&result);
+	free_sqlite_kv_tree(&result); // frees sqlite3_malloc'd string data if result is a string
+	return 1;
+}
+
+// SQLite scalar callback for a function registered via RegisterFunction(name, fn).
+// pApp (sqlite3_user_data) is the KitsuneVariable* holding the Lua function reference.
+static void lua_registered_func_callback(sqlite3_context* context, int argc, sqlite3_value** argv) {
+	KitsuneVariable* funcVar = (KitsuneVariable*)sqlite3_user_data(context);
+	int luaArgc = 0;
+	KitsuneVariable* args = sqlite_build_args(context, argc, argv, 0, &luaArgc);
+	if (luaArgc < 0) return;
+	KitsuneVariable* result = KitsuneExecuteVariable(funcVar, luaArgc, args);
+	if (args) sqlite3_free(args);
+	kitsune_result_to_sqlite(context, result);
+}
+
+// Kitsune callback for RegisterFunction(name, fn).
+// argv[0] = SQL function name (KITSUNE_TSTRING)
+// argv[1] = Lua function to register (KITSUNE_TFUNCTION)
+// userdata = sqlite3* db
+static int register_function_cb(int argc, KitsuneVariable* argv, kitsune_ResultSetter resultSetter, void* userdata) {
+	if (argc < 2 || argv[0].type != KITSUNE_TSTRING || argv[1].type != KITSUNE_TFUNCTION || !g_extState)
+		return reg_error(resultSetter, "RegisterFunction(name, function): invalid arguments");
+
+	// Register the function on the Lua environment and anchor it in g_extState.
+	KitsuneVariable* funcVar = lua_add_kitsune_state(&argv[1]);
+	if (!funcVar)
+		return reg_error(resultSetter, "RegisterFunction: failed to anchor function");
+
+	sqlite3_create_function(((KitsuneExtState*)userdata)->db, (const char*)argv[0].data, -1,
+		SQLITE_UTF8, funcVar, lua_registered_func_callback, NULL, NULL);
+
+	return 1; // success; RegisterFunction returns nothing to Lua
+}
 
 int lua_register_kitsune_functions(sqlite3* db, char** pzErrMsg) {
-	// Register all the Lua functions in this extension.
-	// This is called by the main entry point in dllmain.cpp, and can be called by other code if needed.
+	// g_extState is process-wide and shared across all connections. Only register the
+	// SQLiteExt.* Lua globals on the first load_extension call so that subsequent calls
+	// on other connections do not rebind them to a different db handle.
+	if (!g_extState || g_extState->db) return SQLITE_OK;
+	g_extState->db = db;
+	KitsuneRegisterFunction("SQLiteExt.RegisterFunction", register_function_cb, g_extState);
+	KitsuneRegisterFunction("SQLiteExt.Query",            query_cb,             g_extState);
+	KitsuneRegisterFunction("SQLiteExt.Scalar",           scalar_cb,            g_extState);
 	return SQLITE_OK;
 }
