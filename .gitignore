@@ -370,8 +370,12 @@ testout.txt
 
 # Linux CMake build directories — regenerated locally, nothing to track
 build-*/
+build_linux/
 
 build/
+
+# Visual Studio build output — regenerated on every build
+x64/
 
 # vcpkg installed packages — restored locally by vcpkg, not committed
 vcpkg_installed/

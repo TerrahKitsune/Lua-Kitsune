@@ -1,1 +1,0 @@
-/usr/bin/c++ -g CMakeFiles/kitsune.dir/Kitsune/Program.cpp.o CMakeFiles/kitsune.dir/Kitsune/Session.cpp.o -o kitsune  -Wl,-rpath,/mnt/c/Users/Terrah/Documents/GitHub/Lua-Kitsune/build_linux libKitsuneEngine.so 
