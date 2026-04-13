@@ -2383,9 +2383,11 @@ namespace KitsuneNet.Tests
 
             received.ShouldNotBeNull();
             received!.Value.Type.ShouldBe(LuaType.Table);
-            received.Value.Table.ShouldNotBeNull();
-            received.Value.Table!.ShouldContain(kvp => kvp.Key.String == "x" && kvp.Value.AsDouble == 1.0);
-            received.Value.Table!.ShouldContain(kvp => kvp.Key.String == "y" && kvp.Value.AsDouble == 2.0);
+            using var tableRef = received.Value.TableRef;
+            tableRef.ShouldNotBeNull();
+            var table = tableRef!.GetContents();
+            table.ShouldContain(kvp => kvp.Key.String == "x" && kvp.Value.AsDouble == 1.0);
+            table.ShouldContain(kvp => kvp.Key.String == "y" && kvp.Value.AsDouble == 2.0);
             thread.ThreadRef?.Dispose();
             await engine.ExecuteStringAsync("Sleep(0)");
         }
@@ -2654,9 +2656,11 @@ namespace KitsuneNet.Tests
 
             received.ShouldNotBeNull();
             received!.Value.Type.ShouldBe(LuaType.Table);
-            received.Value.Table.ShouldNotBeNull();
-            received.Value.Table!.ShouldContain(kvp => kvp.Key.String == "x" && kvp.Value.AsDouble == 1.0);
-            received.Value.Table!.ShouldContain(kvp => kvp.Key.String == "y" && kvp.Value.AsDouble == 2.0);
+            using var tableRef = received.Value.TableRef;
+            tableRef.ShouldNotBeNull();
+            var table = tableRef!.GetContents();
+            table.ShouldContain(kvp => kvp.Key.String == "x" && kvp.Value.AsDouble == 1.0);
+            table.ShouldContain(kvp => kvp.Key.String == "y" && kvp.Value.AsDouble == 2.0);
             thread.ThreadRef?.Dispose();
             engine.RunString("Sleep(0)");
         }
@@ -2834,9 +2838,11 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue result = engine.RunString("return {x=10, y=20}");
             result.Type.ShouldBe(LuaType.Table);
-            result.Table.ShouldNotBeNull();
-            result.Table!.ShouldContain(kvp => kvp.Key.String == "x" && kvp.Value.AsDouble == 10);
-            result.Table!.ShouldContain(kvp => kvp.Key.String == "y" && kvp.Value.AsDouble == 20);
+            using var contents = result.TableRef;
+            contents.ShouldNotBeNull();
+            var table = contents!.GetContents();
+            table.ShouldContain(kvp => kvp.Key.String == "x" && kvp.Value.AsDouble == 10);
+            table.ShouldContain(kvp => kvp.Key.String == "y" && kvp.Value.AsDouble == 20);
         }
 
         [Fact]
@@ -3154,8 +3160,10 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue result = engine.RunString("return { w = Wchar.FromUtf8('in table') }");
             result.Type.ShouldBe(LuaType.Table);
-            result.Table.ShouldNotBeNull();
-            var entry = result.Table!.Single(kvp => kvp.Key.String == "w");
+            using var tableRef = result.TableRef;
+            tableRef.ShouldNotBeNull();
+            var table = tableRef!.GetContents();
+            var entry = table.Single(kvp => kvp.Key.String == "w");
             entry.Value.Type.ShouldBe(LuaType.Char16);
             entry.Value.String.ShouldBe("in table");
             engine.GetActiveIds().ShouldBeEmpty();
@@ -3607,8 +3615,10 @@ namespace KitsuneNet.Tests
             engine.SetVariable("c", engine.CreateUserdata(c));
             LuaValue result = engine.RunString("return { item = c, label = 'test' }");
             result.Type.ShouldBe(LuaType.Table);
-            result.Table.ShouldNotBeNull();
-            var entry = result.Table!.Single(kvp => kvp.Key.String == "item");
+            using var tableRef = result.TableRef;
+            tableRef.ShouldNotBeNull();
+            var table = tableRef!.GetContents();
+            var entry = table.Single(kvp => kvp.Key.String == "item");
             entry.Value.Type.ShouldBe(LuaType.Userdata);
             entry.Value.GetUserdata<Counter>().ShouldBeSameAs(c);
             engine.GetActiveIds().ShouldBeEmpty();
@@ -5567,9 +5577,11 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue result = engine.RunString("return { callback = function() return 99 end, n = 1 }");
             result.Type.ShouldBe(LuaType.Table);
-            result.Table.ShouldNotBeNull();
-            result.Table!.ShouldContain(kvp => kvp.Key.String == "n" && kvp.Value.AsDouble == 1);
-            result.Table!.Single(kvp => kvp.Key.String == "callback").Value.Type.ShouldBe(LuaType.Function);
+            using var tableRef = result.TableRef;
+            tableRef.ShouldNotBeNull();
+            var table = tableRef!.GetContents();
+            table.ShouldContain(kvp => kvp.Key.String == "n" && kvp.Value.AsDouble == 1);
+            table.Single(kvp => kvp.Key.String == "callback").Value.Type.ShouldBe(LuaType.Function);
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
@@ -6268,8 +6280,11 @@ namespace KitsuneNet.Tests
             @ref.ShouldNotBe(-2);
             LuaValue result = engine.GetByReference(@ref);
             result.Type.ShouldBe(LuaType.Table);
-            result.Table!.Count.ShouldBe(1);
-            result.Table[0].Value.String.ShouldBe("v");
+            using var tableRef = result.TableRef;
+            tableRef.ShouldNotBeNull();
+            var table = tableRef!.GetContents();
+            table.Count.ShouldBe(1);
+            table[0].Value.String.ShouldBe("v");
             engine.Unregister(@ref);
         }
 

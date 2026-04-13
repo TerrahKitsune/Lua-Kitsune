@@ -19,8 +19,15 @@ namespace KitsuneNet
         /// <summary>Raw bytes for <see cref="LuaType.String"/> values. Not guaranteed to be valid UTF-8.</summary>
         public byte[]? Bytes { get; init; }
 
-        /// <summary>Entries for <see cref="LuaType.Table"/> values. Null for empty tables or non-table types.</summary>
+        /// <summary>Entries for <see cref="LuaType.Table"/> snapshot values (including backward-compat
+        /// tables created via <see cref="FromTable"/>). Null for live table refs and non-table types.</summary>
         public IReadOnlyList<KeyValuePair<LuaValue, LuaValue>>? Table { get; init; }
+
+        /// <summary>Live reference to a Lua table for <see cref="LuaType.Table"/> values returned
+        /// by the engine.  Holds a Lua registry anchor; must be disposed when no longer needed.
+        /// Use <see cref="LuaTableRef.GetContents"/> to snapshot the table's contents, and
+        /// <see cref="LuaTableRef.SetContents"/> to replace them. Null for all other types.</summary>
+        public LuaTableRef? TableRef { get; init; }
 
         /// <summary>Parsed JSON node for <see cref="LuaType.Json"/> values. Null for all other types.</summary>
         public JsonNode? JsonNode { get; init; }
@@ -156,7 +163,13 @@ namespace KitsuneNet
 
             if (Type == LuaType.Table)
             {
-                return TableToJsonNode(this);
+                if (TableRef is { } tr)
+                {
+                    // Live ref — snapshot contents on demand.
+                    return TableContentsToJsonNode(tr.GetContents());
+                }
+                // Backward-compat snapshot (e.g. from callback arg or LuaValue.FromTable).
+                return Table is not null ? TableContentsToJsonNode(Table) : new JsonObject();
             }
             return Type switch
             {
@@ -297,18 +310,21 @@ namespace KitsuneNet
             return hash.ToHashCode();
         }
 
-        private static JsonNode? TableToJsonNode(LuaValue v)
+        private static JsonNode? TableToJsonNode(LuaValue v) =>
+            TableContentsToJsonNode(v.Table ?? Array.Empty<KeyValuePair<LuaValue, LuaValue>>());
+
+        private static JsonNode? TableContentsToJsonNode(IReadOnlyList<KeyValuePair<LuaValue, LuaValue>> table)
         {
-            if (v.Table is null || v.Table.Count == 0)
+            if (table.Count == 0)
             {
                 return new JsonObject();
             }
 
             // Detect Lua array: all keys are integers and form a sequence 1..n
-            bool isArray = v.Table.All(kvp => kvp.Key.Type == LuaType.Integer);
+            bool isArray = table.All(kvp => kvp.Key.Type == LuaType.Integer);
             if (isArray)
             {
-                var sorted = v.Table.OrderBy(kvp => kvp.Key.AsInt64).ToList();
+                var sorted = table.OrderBy(kvp => kvp.Key.AsInt64).ToList();
                 bool sequential = sorted.Select((kvp, i) => kvp.Key.AsInt64 == i + 1).All(b => b);
                 if (sequential)
                 {
@@ -322,7 +338,7 @@ namespace KitsuneNet
             }
 
             var obj = new JsonObject();
-            foreach (var kvp in v.Table)
+            foreach (var kvp in table)
             {
                 obj[kvp.Key.String ?? kvp.Key.ToString()] = kvp.Value.AsJsonNode();
             }

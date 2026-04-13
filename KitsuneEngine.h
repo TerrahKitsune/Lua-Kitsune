@@ -14,6 +14,7 @@
 // KitsuneVariable type constants — values 0–8 match Lua's LUA_T* constants for direct comparison.
 // KITSUNE_TNONE (-1) matches LUA_TNONE. KITSUNE_TERROR (-2) is a Kitsune extension not present
 // in Lua; it is used exclusively with kitsune_ResultSetter to signal a Lua error from a
+#define KITSUNE_TTABLECONTENTS  (-9) // Kitsune extension: snapshot of a Lua table's key-value pairs; table field points to a KeyValuePairKitsuneVariableNode linked list. Produced by KitsuneGetTableContents; consumed by KitsuneSetTableContents. KitsuneVariableFree recursively releases the list.
 #define KITSUNE_TITERATOR      (-8) // Kitsune extension: iterator type; data is a pointer to a kitsune_Iterator struct containing the iteration state. Not a value returned by lua_type() — only used in KitsuneVariable for iterating tables with KitsuneGetAll, and never appears in Lua or in a variable returned by the engine. Data should be a pointer to a kitsune_Iterator.
 #define KITSUNE_TCFUNCTION     (-7) // Kitsune extension: C function pointer type; data is a pointer to a kitsune_CFunctionData struct containing the function pointer and its userdata. Not a value returned by lua_type() — only used in KitsuneVariable for passing C function pointers to Lua, and never appears in Lua or in a variable returned by the engine. Data should be a pointer to a kitsune_CFunctionData.
 #define KITSUNE_TSTREAM        (-6) // Kitsune extension: pointer to a SharedMemoryBlock that Lua always owns.
@@ -30,7 +31,10 @@
 #define KITSUNE_TLIGHTUSERDATA  (2)
 #define KITSUNE_TNUMBER         (3)
 #define KITSUNE_TSTRING         (4)
-#define KITSUNE_TTABLE          (5)
+#define KITSUNE_TTABLE          (5)  // When returned from the engine, integer holds a luaL_ref registry reference
+								// anchoring the live table. Same lifecycle as KITSUNE_TFUNCTION: release via
+								// KitsuneVariableFree, push back to Lua via PushKitsuneVariable (lua_rawgeti).
+								// Use KitsuneGetTableContents to snapshot contents; KitsuneSetTableContents to replace them.
 #define KITSUNE_TFUNCTION       (6)  // When returned from the engine, integer holds a luaL_ref registry reference
 									// anchoring the function. Release via KitsuneVariableFree, which calls
 									// luaL_unref. Push back to Lua via PushKitsuneVariable (lua_rawgeti).
@@ -96,7 +100,7 @@ struct KitsuneVariable {
 		bool boolean;                          // KITSUNE_TBOOLEAN
 		unsigned char* data;                   // KITSUNE_TSTRING: heap-allocated UTF-8 bytes; caller-owned on Set
 		char16_t* char16data;                  // KITSUNE_TCHAR16: heap-allocated char16_t string; length = number of char16_t code units (excl. null terminator)
-		KeyValuePairKitsuneVariableNode* table; // KITSUNE_TTABLE: head of linked list (NULL = empty table)
+		KeyValuePairKitsuneVariableNode* table; // KITSUNE_TTABLECONTENTS: head of linked list (NULL = empty snapshot)
 		SharedMemoryBlock* stream; // KITSUNE_TSTREAM: pointer to a SharedMemoryBlock representing the stream; caller-owned on Set
 		kitsune_CFunctionData* cfunction; // KITSUNE_TCFUNCTION: pointer to a kitsune_CFunctionData struct containing the function pointer and its userdata; caller-owned on Set
 		KitsuneIterator* iterator; // KITSUNE_TITERATOR: pointer to a kitsune_Iterator struct containing the iteration state; caller-owned on Set
@@ -121,10 +125,11 @@ struct KitsuneIterator {
 	void* userdata;
 };
 
-// Intrusive linked list node for KITSUNE_TTABLE values.
-// When a KitsuneVariable has type == KITSUNE_TTABLE, its table field points to the head of this list.
-// Keys and values may themselves be KITSUNE_TTABLE nodes, enabling nested tables up to
-// KITSUNE_MAX_TABLE_DEPTH levels deep. Call KitsuneVariableFree to recursively release the list.
+// Intrusive linked list node for KITSUNE_TTABLECONTENTS values.
+// When a KitsuneVariable has type == KITSUNE_TTABLECONTENTS, its table field points to the head of this list.
+// Keys and values may themselves be KITSUNE_TTABLECONTENTS nodes (nested snapshots) or KITSUNE_TTABLE live refs,
+// enabling nested tables up to KITSUNE_MAX_TABLE_DEPTH levels deep.
+// Call KitsuneVariableFree to recursively release the list.
 struct KeyValuePairKitsuneVariableNode {
 	KitsuneVariable key;
 	KitsuneVariable value;
@@ -340,4 +345,13 @@ extern "C" {
 	// Unregisters a KitsuneVariable from the lua registry by its integer reference and returns it.
 	// Call KitsuneVariableFree on the result when done. Thread-safe.
 	KITSUNE_API KitsuneVariable* KitsuneUnregister(int ref);
+	// Snapshots the contents of a live KITSUNE_TTABLE variable into a heap-allocated KITSUNE_TTABLECONTENTS.
+	// tableVar must have type KITSUNE_TTABLE with a valid registry ref (integer != LUA_NOREF).
+	// Returns NULL on failure. Call KitsuneVariableFree on the result when done. Thread-safe.
+	KITSUNE_API KitsuneVariable* KitsuneGetTableContents(const KitsuneVariable* tableVar);
+	// Replaces the contents of a live Lua table (tableVar, type KITSUNE_TTABLE) with the snapshot
+	// from contentsVar (type KITSUNE_TTABLECONTENTS). All existing keys are removed first (replace,
+	// not merge). Integer keys restore the array part naturally. Returns false on invalid arguments.
+	// Thread-safe.
+	KITSUNE_API bool KitsuneSetTableContents(const KitsuneVariable* tableVar, const KitsuneVariable* contentsVar);
 }

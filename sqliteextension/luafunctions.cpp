@@ -153,7 +153,7 @@ static void free_sqlite_kv_tree(KitsuneVariable* v) {
 		sqlite3_free(v->data);
 		v->data = NULL;
 	}
-	else if (v->type == KITSUNE_TTABLE && v->table) {
+	else if (v->type == KITSUNE_TTABLECONTENTS && v->table) {
 		KeyValuePairKitsuneVariableNode* node = v->table;
 		while (node) {
 			KeyValuePairKitsuneVariableNode* next = node->next;
@@ -172,7 +172,7 @@ static void free_sqlite_kv_tree(KitsuneVariable* v) {
 // All allocations inside *out_result use sqlite3_malloc; call free_sqlite_kv_tree to release.
 static int execute_query_into_kv(sqlite3_stmt* stmt, KitsuneVariable* out_result) {
 	memset(out_result, 0, sizeof(KitsuneVariable));
-	out_result->type = KITSUNE_TTABLE;
+	out_result->type = KITSUNE_TTABLECONTENTS;
 	KeyValuePairKitsuneVariableNode** result_tail = &out_result->table;
 	int col_count = sqlite3_column_count(stmt);
 	int row_num = 0;
@@ -182,7 +182,7 @@ static int execute_query_into_kv(sqlite3_stmt* stmt, KitsuneVariable* out_result
 		row_num++;
 
 		KitsuneVariable row = {};
-		row.type = KITSUNE_TTABLE;
+		row.type = KITSUNE_TTABLECONTENTS;
 		KeyValuePairKitsuneVariableNode** row_tail = &row.table;
 
 		for (int i = 0; i < col_count; i++) {
@@ -251,8 +251,14 @@ static int query_cb(int argc, KitsuneVariable* argv, kitsune_ResultSetter result
 	if (sqlite3_prepare_v2(db, (const char*)argv[0].data, -1, &stmt, NULL) != SQLITE_OK)
 		return reg_error(resultSetter, sqlite3_errmsg(db));
 
-	if (argc >= 2 && argv[1].type == KITSUNE_TTABLE)
-		bind_params_from_table(stmt, argv[1].table);
+	if (argc >= 2 && argv[1].type == KITSUNE_TTABLE) {
+		KitsuneVariable* contents = KitsuneGetTableContents(&argv[1]);
+		if (contents) {
+			if (contents->type == KITSUNE_TTABLECONTENTS)
+				bind_params_from_table(stmt, contents->table);
+			KitsuneVariableFree(contents);
+		}
+	}
 
 	KitsuneVariable result = {};
 	int step_rc = execute_query_into_kv(stmt, &result);
@@ -280,8 +286,14 @@ static int scalar_cb(int argc, KitsuneVariable* argv, kitsune_ResultSetter resul
 	if (sqlite3_prepare_v2(db, (const char*)argv[0].data, -1, &stmt, NULL) != SQLITE_OK)
 		return reg_error(resultSetter, sqlite3_errmsg(db));
 
-	if (argc >= 2 && argv[1].type == KITSUNE_TTABLE)
-		bind_params_from_table(stmt, argv[1].table);
+	if (argc >= 2 && argv[1].type == KITSUNE_TTABLE) {
+		KitsuneVariable* contents = KitsuneGetTableContents(&argv[1]);
+		if (contents) {
+			if (contents->type == KITSUNE_TTABLECONTENTS)
+				bind_params_from_table(stmt, contents->table);
+			KitsuneVariableFree(contents);
+		}
+	}
 
 	KitsuneVariable result = {};
 	int step_rc = sqlite3_step(stmt);

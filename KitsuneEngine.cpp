@@ -252,9 +252,9 @@ static void FreeKVNode(KeyValuePairKitsuneVariableNode* node, lua_State* L) {
 			kitsune_free(node->key.userdata->name);
 			kitsune_free(node->key.userdata);
 		}
-		else if (node->key.type == LUA_TTABLE && node->key.table)
+		else if (node->key.type == KITSUNE_TTABLECONTENTS && node->key.table)
 			FreeKVNode(node->key.table, L);
-		else if ((node->key.type == LUA_TFUNCTION || node->key.type == LUA_TTHREAD) && L && (int)node->key.integer != LUA_NOREF)
+		else if ((node->key.type == LUA_TTABLE || node->key.type == LUA_TFUNCTION || node->key.type == LUA_TTHREAD) && L && (int)node->key.integer != LUA_NOREF)
 			luaL_unref(L, LUA_REGISTRYINDEX, (int)node->key.integer);
 		if ((node->value.type == LUA_TSTRING || node->value.type == KITSUNE_TJSON || node->value.type == KITSUNE_TCHAR16 || node->value.type == KITSUNE_TERROR) && node->value.data)
 			kitsune_free(node->value.data);
@@ -262,9 +262,9 @@ static void FreeKVNode(KeyValuePairKitsuneVariableNode* node, lua_State* L) {
 			kitsune_free(node->value.userdata->name);
 			kitsune_free(node->value.userdata);
 		}
-		else if (node->value.type == LUA_TTABLE && node->value.table)
+		else if (node->value.type == KITSUNE_TTABLECONTENTS && node->value.table)
 			FreeKVNode(node->value.table, L);
-		else if ((node->value.type == LUA_TFUNCTION || node->value.type == LUA_TTHREAD) && L && (int)node->value.integer != LUA_NOREF)
+		else if ((node->value.type == LUA_TTABLE || node->value.type == LUA_TFUNCTION || node->value.type == LUA_TTHREAD) && L && (int)node->value.integer != LUA_NOREF)
 			luaL_unref(L, LUA_REGISTRYINDEX, (int)node->value.integer);
 		KeyValuePairKitsuneVariableNode* next = node->next;
 		kitsune_free(node);
@@ -290,7 +290,7 @@ static void FreeVariableData(KitsuneVariable* var, lua_State* L) {
 		kitsune_free(var->char16data);
 		var->char16data = NULL;
 	}
-	else if (var->type == LUA_TTABLE && var->table) {
+	else if (var->type == KITSUNE_TTABLECONTENTS && var->table) {
 		FreeKVNode(var->table, L);
 		var->table = NULL;
 	}
@@ -304,7 +304,7 @@ static void FreeVariableData(KitsuneVariable* var, lua_State* L) {
 		// KitsuneIterator* is caller-owned; the engine only nulls the pointer.
 		var->iterator = nullptr;
 	}
-	else if ((var->type == LUA_TFUNCTION || var->type == LUA_TTHREAD) && L && (int)var->integer != LUA_NOREF) {
+	else if ((var->type == LUA_TTABLE || var->type == LUA_TFUNCTION || var->type == LUA_TTHREAD) && L && (int)var->integer > 0) {
 		luaL_unref(L, LUA_REGISTRYINDEX, (int)var->integer);
 		var->integer = LUA_NOREF;
 	}
@@ -443,9 +443,9 @@ static void FillKitsuneVariableFromStack(lua_State* L, int idx, KitsuneVariable*
 		break;
 	}
 	case LUA_TTABLE:
+		lua_pushvalue(L, abs_idx);
+		out->integer = luaL_ref(L, LUA_REGISTRYINDEX);
 		out->type = LUA_TTABLE;
-		if (!shallow)
-			out->table = TableToLinkedList(L, abs_idx, KITSUNE_MAX_TABLE_DEPTH);
 		break;
 	case LUA_TFUNCTION:
 		// Anchor the function in the Lua registry so it survives beyond this stack frame.
@@ -490,7 +490,7 @@ static KeyValuePairKitsuneVariableNode* TableToLinkedList(lua_State* L, int idx,
 		if (lua_type(L, -1) == LUA_TTABLE) {
 			// Recurse directly rather than through FillKitsuneVariableFromStack so the depth
 			// limit is honoured across all levels instead of resetting to MAX each time.
-			node->value.type = LUA_TTABLE;
+			node->value.type = KITSUNE_TTABLECONTENTS;
 			node->value.table = TableToLinkedList(L, -1, depth - 1);
 		}
 		else {
@@ -561,9 +561,16 @@ static void PushKitsuneVariable(lua_State* L, const KitsuneVariable* v) {
 		break;
 	}
 	case LUA_TTABLE:
+		// Live ref — push the actual Lua table from the registry.
+		if ((int)v->integer > 0)  // valid luaL_ref is always positive; 0 and LUA_NOREF(-2) mean no ref
+			lua_rawgeti(L, LUA_REGISTRYINDEX, (int)v->integer);
+		else
+			lua_newtable(L);  // no ref: push a fresh empty table
+		break;
+	case KITSUNE_TTABLECONTENTS:
+		// Snapshot — create a new Lua table and populate it from the linked list.
 		lua_newtable(L);
 		if (v->table) {
-			// Populate the Lua table from the linked list; keys and values are pushed recursively.
 			const KeyValuePairKitsuneVariableNode* node = v->table;
 			while (node) {
 				PushKitsuneVariable(L, &node->key);
@@ -740,8 +747,9 @@ static void SetSlotResult(KitsuneCoroutine* slot, lua_State* T, int idx) {
 		break;
 	}
 	case LUA_TTABLE: {
+		lua_pushvalue(T, idx);
+		slot->result.integer = luaL_ref(T, LUA_REGISTRYINDEX);
 		slot->result.type = LUA_TTABLE;
-		slot->result.table = TableToLinkedList(T, idx, KITSUNE_MAX_TABLE_DEPTH);
 		slot->result.length = 0;
 		break;
 	}
@@ -2444,7 +2452,7 @@ extern "C" {
 		memset(out, 0, sizeof(KitsuneVariable));
 
 		// Transfer owned data (string or table linked list) atomically to prevent double-free.
-		if ((slot->result.type == LUA_TSTRING || slot->result.type == KITSUNE_TCHAR16 || slot->result.type == LUA_TUSERDATA || slot->result.type == LUA_TTABLE) && slot->result.data) {
+		if ((slot->result.type == LUA_TSTRING || slot->result.type == KITSUNE_TCHAR16 || slot->result.type == LUA_TUSERDATA) && slot->result.data) {
 			out->type = slot->result.type;
 			out->length = slot->result.length;
 			out->data = slot->result.data;
@@ -2456,7 +2464,7 @@ extern "C" {
 			out->stream = slot->result.stream;
 			slot->result.stream = nullptr;
 		}
-		else if (slot->result.type == LUA_TFUNCTION || slot->result.type == LUA_TTHREAD) {
+		else if (slot->result.type == LUA_TFUNCTION || slot->result.type == LUA_TTHREAD || slot->result.type == LUA_TTABLE) {
 			// Transfer the registry ref; zero the slot field so no stale ref remains.
 			out->type = slot->result.type;
 			out->integer = slot->result.integer;
@@ -2621,7 +2629,9 @@ extern "C" {
 		// entries.  On the scheduler thread Lua access is already owned so call directly.
 		// On any other thread, enqueue the variable for the scheduler to drain — this avoids
 		// blocking the caller while a coroutine is running (same pattern as stream sweep).
-		if (var->type == LUA_TFUNCTION || var->type == LUA_TTHREAD || (var->type == LUA_TTABLE && var->table)) {
+		if (var->type == LUA_TFUNCTION || var->type == LUA_TTHREAD
+			|| (var->type == LUA_TTABLE && (int)var->integer > 0)
+			|| (var->type == KITSUNE_TTABLECONTENTS && var->table)) {
 			KitsuneState* state = g_state;
 			if (state && state->L) {
 				if (g_isSchedulerThread || g_inlineExecution) {
@@ -3160,6 +3170,84 @@ extern "C" {
 		luaL_unref(state->L, LUA_REGISTRYINDEX, ref);
 		if (!hasAccess) ReleaseLuaAccess(state);
 		return out;
+	}
+
+	KITSUNE_API KitsuneVariable* KitsuneGetTableContents(const KitsuneVariable* tableVar) {
+		KitsuneState* state = g_state;
+		if (!state || !state->L || !tableVar || tableVar->type != LUA_TTABLE || (int)tableVar->integer == LUA_NOREF)
+			return NULL;
+
+		bool hasAccess = g_isSchedulerThread || g_inlineExecution;
+		if (!hasAccess) AcquireLuaAccess(state);
+
+		KitsuneVariable* out = (KitsuneVariable*)kitsune_malloc(sizeof(KitsuneVariable));
+		if (!out) {
+			if (!hasAccess) ReleaseLuaAccess(state);
+			return NULL;
+		}
+		memset(out, 0, sizeof(KitsuneVariable));
+		out->type = KITSUNE_TTABLECONTENTS;
+
+		lua_rawgeti(state->L, LUA_REGISTRYINDEX, (int)tableVar->integer);
+		if (lua_istable(state->L, -1))
+			out->table = TableToLinkedList(state->L, -1, KITSUNE_MAX_TABLE_DEPTH);
+		lua_pop(state->L, 1);
+
+		if (!hasAccess) ReleaseLuaAccess(state);
+		return out;
+	}
+
+	KITSUNE_API bool KitsuneSetTableContents(const KitsuneVariable* tableVar, const KitsuneVariable* contentsVar) {
+		KitsuneState* state = g_state;
+		if (!state || !state->L || !tableVar || tableVar->type != LUA_TTABLE || (int)tableVar->integer == LUA_NOREF)
+			return false;
+		if (!contentsVar || contentsVar->type != KITSUNE_TTABLECONTENTS)
+			return false;
+
+		bool hasAccess = g_isSchedulerThread || g_inlineExecution;
+		if (!hasAccess) AcquireLuaAccess(state);
+
+		lua_rawgeti(state->L, LUA_REGISTRYINDEX, (int)tableVar->integer);
+		if (!lua_istable(state->L, -1)) {
+			lua_pop(state->L, 1);
+			if (!hasAccess) ReleaseLuaAccess(state);
+			return false;
+		}
+
+		int tableIdx = lua_absindex(state->L, -1);
+
+		// Pass 1: collect all existing keys into a temporary table so we can nil them
+		// without modifying the table during lua_next iteration (undefined behaviour).
+		lua_newtable(state->L);
+		int tempIdx = lua_absindex(state->L, -1);
+		int keyCount = 1;
+		lua_pushnil(state->L);
+		while (lua_next(state->L, tableIdx)) {
+			lua_pop(state->L, 1);              // pop value
+			lua_pushvalue(state->L, -1);       // dup key
+			lua_rawseti(state->L, tempIdx, keyCount++);
+		}
+
+		// Pass 2: nil each collected key (safe: not iterating the original table now).
+		for (int i = 1; i < keyCount; i++) {
+			lua_rawgeti(state->L, tempIdx, i);
+			lua_pushnil(state->L);
+			lua_rawset(state->L, tableIdx);
+		}
+		lua_pop(state->L, 1);  // pop temp table
+
+		// Pass 3: populate from the snapshot.
+		const KeyValuePairKitsuneVariableNode* node = contentsVar->table;
+		while (node) {
+			PushKitsuneVariable(state->L, &node->key);
+			PushKitsuneVariable(state->L, &node->value);
+			lua_rawset(state->L, tableIdx);
+			node = node->next;
+		}
+
+		lua_pop(state->L, 1);  // pop the table
+		if (!hasAccess) ReleaseLuaAccess(state);
+		return true;
 	}
 
 	KITSUNE_API long KitsuneGC(int mode) {

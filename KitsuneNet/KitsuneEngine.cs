@@ -652,8 +652,8 @@ namespace KitsuneNet
                 var k = Marshal.PtrToStructure<KitsuneVariable>(key);
                 var v = Marshal.PtrToStructure<KitsuneVariable>(value);
                 result.Add(new KeyValuePair<LuaValue, LuaValue>(
-                    NativeVariableToLuaValue(k),
-                    NativeVariableToLuaValue(v)));
+                    NativeVariableToLuaValue(k, allowTableSnapshot: false),
+                    NativeVariableToLuaValue(v, allowTableSnapshot: false)));
             };
             KitsuneGetAll(path, cb, IntPtr.Zero);
             GC.KeepAlive(cb);  // prevent GC from collecting the delegate before the call returns
@@ -919,6 +919,41 @@ namespace KitsuneNet
             }
             finally
             {
+                FreeNativeArgs(ptrs);
+            }
+        }
+
+        internal static IReadOnlyList<KeyValuePair<LuaValue, LuaValue>> TableRefGetContents(IntPtr tableVarPtr)
+        {
+            IntPtr resultPtr = KitsuneGetTableContents(tableVarPtr);
+            if (resultPtr == IntPtr.Zero)
+                return Array.Empty<KeyValuePair<LuaValue, LuaValue>>();
+            KitsuneVariable nv;
+            unsafe { nv = Unsafe.ReadUnaligned<KitsuneVariable>((void*)resultPtr); }
+            var snapshotValue = ReadNativeTable(nv.Data);
+            KitsuneVariableFree(resultPtr);
+            return snapshotValue.Table ?? Array.Empty<KeyValuePair<LuaValue, LuaValue>>();
+        }
+
+        internal static bool TableRefSetContents(IntPtr tableVarPtr, IReadOnlyList<KeyValuePair<LuaValue, LuaValue>> contents)
+        {
+            List<IntPtr>? ptrs = null;
+            IntPtr cvPtr = IntPtr.Zero;
+            try
+            {
+                var cv = new KitsuneVariable { Type = (int)LuaType.TableContents };
+                if (contents.Count > 0)
+                {
+                    cv.Data = BuildNativeTable(contents, ref ptrs);
+                    cv.Length = (nuint)contents.Count;
+                }
+                cvPtr = Marshal.AllocHGlobal(Marshal.SizeOf<KitsuneVariable>());
+                Marshal.StructureToPtr(cv, cvPtr, false);
+                return KitsuneSetTableContents(tableVarPtr, cvPtr);
+            }
+            finally
+            {
+                if (cvPtr != IntPtr.Zero) Marshal.FreeHGlobal(cvPtr);
                 FreeNativeArgs(ptrs);
             }
         }
@@ -1310,6 +1345,13 @@ namespace KitsuneNet
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern IntPtr KitsuneUnregister(int @ref);
 
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr KitsuneGetTableContents(IntPtr tableVarPtr);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool KitsuneSetTableContents(IntPtr tableVarPtr, IntPtr contentsVarPtr);
+
         // func is a delegate* unmanaged[Cdecl] cast to nint; userdata is a GCHandle address.
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern void KitsuneRegisterFunction([MarshalAs(UnmanagedType.LPUTF8Str)] string name, nint func, nint userdata);
@@ -1446,7 +1488,7 @@ namespace KitsuneNet
 
             LuaType t = (LuaType)nv.Type;
 
-            // Function / Thread: transfer the native pointer to a LuaFunctionRef / LuaThreadRef;
+            // Function / Thread / Table: transfer the native pointer to a ref object;
             // the ref keeps the Lua registry entry alive until Dispose() calls KitsuneVariableFree.
             // KitsuneVariableFree must NOT be called here — the ref's Dispose() does it.
             if (t == LuaType.Function)
@@ -1458,6 +1500,11 @@ namespace KitsuneNet
             {
                 return new LuaValue { Type = LuaType.Thread, ThreadRef = new LuaThreadRef(ptr) };
             }
+
+            if (t == LuaType.Table)
+            {
+                return new LuaValue { Type = LuaType.Table, TableRef = new LuaTableRef(ptr) };
+            }
             LuaValue result = t switch
             {
                 LuaType.Number => LuaValue.FromNumber(nv.Number),
@@ -1468,10 +1515,10 @@ namespace KitsuneNet
                 LuaType.Userdata when nv.Data != IntPtr.Zero => NativeUnmarshalUserdata(nv.Data, nv.Length),
                 LuaType.Json when nv.Data != IntPtr.Zero && nv.Length > 0 => NativeParseJson(nv.Data, nv.Length),
                 LuaType.Stream when nv.Data != IntPtr.Zero => NativeWrapSharedMemory(nv.Data),
-                LuaType.Table => ReadNativeTable(nv.Data),
+                LuaType.TableContents => ReadNativeTable(nv.Data),  // snapshot from KitsuneGetTableContents
                 LuaType.Error when nv.Data != IntPtr.Zero => NativeCopyBytes(nv.Data, nv.Length) with { Type = LuaType.Error },
                 LuaType.None => LuaValue.None,
-                _ => new LuaValue { Type = t },  // Nil/Userdata/LightUserdata
+                _ => new LuaValue { Type = t },  // Nil/Table(live-ref handled above)/Userdata/LightUserdata
             };
             KitsuneVariableFree(ptr);
             return result;
@@ -1479,11 +1526,31 @@ namespace KitsuneNet
 
         // Converts a by-value KitsuneVariable (already marshaled into managed memory) to a LuaValue.
         // Does NOT free any native memory — use this for embedded struct members, not heap pointers.
-        // Function values are returned as opaque (Type=Function, no FunctionRef) since the variable
+        // Function/Thread values are returned as opaque (Type only, no ref) since the variable
         // is embedded inside a larger allocation (table node or callback args array).
-        private static LuaValue NativeVariableToLuaValue(KitsuneVariable nv)
+        // When allowTableSnapshot is true (default), table values with a live ref are snapshotted inline
+        // via KitsuneGetTableContents.  Pass false from GetAll callbacks, which already hold
+        // AcquireLuaAccess — calling KitsuneGetTableContents there would deadlock.
+        private static LuaValue NativeVariableToLuaValue(KitsuneVariable nv, bool allowTableSnapshot = true)
         {
             LuaType t = (LuaType)nv.Type;
+            if (allowTableSnapshot && t == LuaType.Table && nv.Integer > 0)
+            {
+                // The embedded variable holds a live luaL_ref (valid for the duration of the
+                // enclosing native call). Snapshot it immediately so the returned LuaValue has
+                // .Table populated — restoring the behaviour callers expect for callback args.
+                unsafe
+                {
+                    KitsuneVariable local = nv;
+                    IntPtr contentsPtr = KitsuneGetTableContents((IntPtr)(&local));
+                    if (contentsPtr == IntPtr.Zero)
+                        return new LuaValue { Type = LuaType.Table };
+                    KitsuneVariable cnv = Unsafe.ReadUnaligned<KitsuneVariable>((void*)contentsPtr);
+                    LuaValue snapshot = ReadNativeTable(cnv.Data);
+                    KitsuneVariableFree(contentsPtr);
+                    return snapshot;  // Type = LuaType.Table, Table = entries
+                }
+            }
             return t switch
             {
                 LuaType.Number => LuaValue.FromNumber(nv.Number),
@@ -1494,9 +1561,9 @@ namespace KitsuneNet
                 LuaType.Userdata when nv.Data != IntPtr.Zero => NativeUnmarshalUserdata(nv.Data, nv.Length),
                 LuaType.Json when nv.Data != IntPtr.Zero && nv.Length > 0 => NativeParseJson(nv.Data, nv.Length),
                 LuaType.Stream when nv.Data != IntPtr.Zero => NativeWrapSharedMemory(nv.Data),
-                LuaType.Table => ReadNativeTable(nv.Data),
+                LuaType.TableContents => ReadNativeTable(nv.Data),  // snapshot linked list inside a node
                 LuaType.None => LuaValue.None,
-                _ => new LuaValue { Type = t },
+                _ => new LuaValue { Type = t },  // Nil/Table(no-ref or no-snapshot)/Function/Thread/Userdata/LightUserdata
             };
         }
 
@@ -1619,7 +1686,25 @@ namespace KitsuneNet
                         nv.Integer = tnv.Integer;
                         break;
                     }
+                case LuaType.Table when v.TableRef is { NativePtr: 0 }:
+                    throw new ObjectDisposedException(nameof(LuaTableRef),
+                        "Cannot marshal a disposed LuaTableRef across the native bridge.");
+                case LuaType.Table when v.TableRef is { } tr && tr.NativePtr != IntPtr.Zero:
+                    {
+                        // Copy the registry ref integer from the native KitsuneVariable.
+                        // PushKitsuneVariable uses lua_rawgeti with this ref to push the live table.
+                        var tnv = Marshal.PtrToStructure<KitsuneVariable>(tr.NativePtr);
+                        nv.Integer = tnv.Integer;
+                        break;
+                    }
                 case LuaType.Table when v.Table is not null:
+                    // Backward-compat: snapshot table (created via LuaValue.FromTable).
+                    // Send as KITSUNE_TTABLECONTENTS so PushKitsuneVariable creates a new table.
+                    nv.Type = (int)LuaType.TableContents;
+                    nv.Data = BuildNativeTable(v.Table, ref ptrs);
+                    nv.Length = (nuint)v.Table.Count;
+                    break;
+                case LuaType.TableContents when v.Table is not null:
                     nv.Data = BuildNativeTable(v.Table, ref ptrs);
                     nv.Length = (nuint)v.Table.Count;
                     break;

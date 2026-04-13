@@ -25,7 +25,10 @@ namespace KitsuneNet
         /// <summary>String (LUA_TSTRING).</summary>
         String = 4,
 
-        /// <summary>Table (LUA_TTABLE). Value is not bridgeable; <see cref="LuaValue.Bytes"/> will be null.</summary>
+        /// <summary>Table (LUA_TTABLE). When returned by the engine the value's <see cref="LuaValue.TableRef"/>
+        /// holds a live registry reference; dispose it when done.
+        /// When passed to the engine with <see cref="LuaValue.Table"/> set, the snapshot is sent as
+        /// <see cref="TableContents"/> automatically by the bridge for backward compatibility.</summary>
         Table = 5,
 
         /// <summary>Function (LUA_TFUNCTION). Value is not bridgeable; <see cref="LuaValue.Bytes"/> will be null.</summary>
@@ -72,6 +75,13 @@ namespace KitsuneNet
         /// lazily when Lua invokes the closure for the first time.
         /// Never returned by the engine. Create via <see cref="LuaValue.FromIterator"/>.</summary>
         Iterator = -8,
+
+        /// <summary>Snapshot of a Lua table's key-value pairs (KITSUNE_TTABLECONTENTS = -9).
+        /// Produced by <see cref="LuaTableRef.GetContents"/> and consumed by
+        /// <see cref="LuaTableRef.SetContents"/>.  <see cref="LuaValue.Table"/> holds the entries.
+        /// Passing a <see cref="LuaValue"/> with this type to the engine creates a new Lua table
+        /// populated from the snapshot.</summary>
+        TableContents = -9,
 
         /// <summary>Error returned by the blocking execute functions (KITSUNE_TERROR = -2) when
         /// the call was rejected — e.g. called from the scheduler thread, from a
