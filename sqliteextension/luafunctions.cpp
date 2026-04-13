@@ -17,7 +17,7 @@ struct RegisteredFunc {
 // across all connections so re-registering on subsequent loads would rebind SQLiteExt.*
 // to a different handle on every call.
 struct KitsuneExtState {
-	sqlite3*        db;
+	sqlite3* db;
 	RegisteredFunc* funcs;
 };
 
@@ -26,7 +26,7 @@ static KitsuneExtState* g_extState = NULL;
 void lua_init_kitsune_state() {
 	g_extState = (KitsuneExtState*)malloc(sizeof(KitsuneExtState));
 	if (g_extState) {
-		g_extState->db   = NULL;
+		g_extState->db = NULL;
 		g_extState->funcs = NULL;
 	}
 }
@@ -93,11 +93,21 @@ static int reg_error(kitsune_ResultSetter resultSetter, const char* msg) {
 static void bind_kv_to_stmt(sqlite3_stmt* stmt, int idx, const KitsuneVariable* v) {
 	if (!v) { sqlite3_bind_null(stmt, idx); return; }
 	switch (v->type) {
-	case KITSUNE_TINTEGER: sqlite3_bind_int64(stmt, idx, v->integer);                                           break;
-	case KITSUNE_TNUMBER:  sqlite3_bind_double(stmt, idx, v->number);                                           break;
-	case KITSUNE_TSTRING:  sqlite3_bind_text(stmt, idx, (const char*)v->data, (int)v->length, SQLITE_STATIC);  break;
-	case KITSUNE_TBOOLEAN: sqlite3_bind_int(stmt, idx, v->boolean ? 1 : 0);                                    break;
-	default:               sqlite3_bind_null(stmt, idx);                                                        break;
+	case KITSUNE_TINTEGER: 
+		sqlite3_bind_int64(stmt, idx, v->integer);
+		break;
+	case KITSUNE_TNUMBER:  
+		sqlite3_bind_double(stmt, idx, v->number);
+		break;
+	case KITSUNE_TSTRING:  
+		sqlite3_bind_text(stmt, idx, (const char*)v->data, (int)v->length, SQLITE_STATIC);
+		break;
+	case KITSUNE_TBOOLEAN: 
+		sqlite3_bind_int(stmt, idx, v->boolean ? 1 : 0);
+		break;
+	default:               
+		sqlite3_bind_null(stmt, idx);
+		break;
 	}
 }
 
@@ -302,6 +312,73 @@ static void lua_registered_func_callback(sqlite3_context* context, int argc, sql
 	kitsune_result_to_sqlite(context, result);
 }
 
+// -- RegisterAggregate --------------------------------------------------------
+
+// SQLite aggregate xStep: called once per row.
+// Calls funcVar with (false, col1, col2, ...) as direct parameters.
+// String data in args borrows SQLite-owned memory; valid for the duration of this call.
+static void lua_aggregate_step(sqlite3_context* context, int argc, sqlite3_value** argv) {
+	KitsuneVariable* funcVar = (KitsuneVariable*)sqlite3_user_data(context);
+
+	int luaArgc = argc + 1;
+	KitsuneVariable* args = (KitsuneVariable*)sqlite3_malloc(sizeof(KitsuneVariable) * luaArgc);
+	if (!args) {
+		sqlite3_result_error_nomem(context);
+		return;
+	}
+
+	memset(&args[0], 0, sizeof(KitsuneVariable));
+	args[0].type    = KITSUNE_TBOOLEAN;
+	args[0].boolean = false;
+
+	for (int i = 0; i < argc; i++)
+		sqlite_val_to_kitsune(argv[i], &args[i + 1]);
+
+	KitsuneVariable* result = KitsuneExecuteVariable(funcVar, luaArgc, args);
+	sqlite3_free(args);
+
+	if (result) {
+		if (result->type == KITSUNE_TERROR) {
+			if (result->data && result->length > 0)
+				sqlite3_result_error(context, (const char*)result->data, (int)result->length);
+			else
+				sqlite3_result_error(context, "aggregate step error", -1);
+		}
+		KitsuneVariableFree(result);
+	}
+}
+
+// SQLite aggregate xFinal: called once at end to collect the result.
+// Calls funcVar with (true) as the sole parameter.
+static void lua_aggregate_final(sqlite3_context* context) {
+	KitsuneVariable* funcVar = (KitsuneVariable*)sqlite3_user_data(context);
+
+	KitsuneVariable isFinishedArg = {};
+	isFinishedArg.type    = KITSUNE_TBOOLEAN;
+	isFinishedArg.boolean = true;
+
+	KitsuneVariable* result = KitsuneExecuteVariable(funcVar, 1, &isFinishedArg);
+	kitsune_result_to_sqlite(context, result);
+}
+
+// Kitsune callback for RegisterAggregate(name, fn).
+// argv[0] = SQL function name (KITSUNE_TSTRING)
+// argv[1] = Lua aggregate function (KITSUNE_TFUNCTION)
+// userdata = KitsuneExtState*
+static int register_aggregate_cb(int argc, KitsuneVariable* argv, kitsune_ResultSetter resultSetter, void* userdata) {
+	if (argc < 2 || argv[0].type != KITSUNE_TSTRING || argv[1].type != KITSUNE_TFUNCTION || !g_extState)
+		return reg_error(resultSetter, "RegisterAggregate(name, function): invalid arguments");
+
+	KitsuneVariable* funcVar = lua_add_kitsune_state(&argv[1]);
+	if (!funcVar)
+		return reg_error(resultSetter, "RegisterAggregate: failed to anchor function");
+
+	sqlite3_create_function(((KitsuneExtState*)userdata)->db, (const char*)argv[0].data, -1,
+		SQLITE_UTF8, funcVar, NULL, lua_aggregate_step, lua_aggregate_final);
+
+	return 1; // success; RegisterAggregate returns nothing to Lua
+}
+
 // Kitsune callback for RegisterFunction(name, fn).
 // argv[0] = SQL function name (KITSUNE_TSTRING)
 // argv[1] = Lua function to register (KITSUNE_TFUNCTION)
@@ -327,8 +404,9 @@ int lua_register_kitsune_functions(sqlite3* db, char** pzErrMsg) {
 	// on other connections do not rebind them to a different db handle.
 	if (!g_extState || g_extState->db) return SQLITE_OK;
 	g_extState->db = db;
-	KitsuneRegisterFunction("SQLiteExt.RegisterFunction", register_function_cb, g_extState);
-	KitsuneRegisterFunction("SQLiteExt.Query",            query_cb,             g_extState);
-	KitsuneRegisterFunction("SQLiteExt.Scalar",           scalar_cb,            g_extState);
+	KitsuneRegisterFunction("SQLiteExt.RegisterFunction",  register_function_cb,  g_extState);
+	KitsuneRegisterFunction("SQLiteExt.RegisterAggregate", register_aggregate_cb, g_extState);
+	KitsuneRegisterFunction("SQLiteExt.Query",             query_cb,              g_extState);
+	KitsuneRegisterFunction("SQLiteExt.Scalar",            scalar_cb,             g_extState);
 	return SQLITE_OK;
 }

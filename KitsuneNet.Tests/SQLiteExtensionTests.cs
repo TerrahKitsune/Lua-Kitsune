@@ -320,4 +320,34 @@ public sealed class SQLiteExtensionTests
             """);
         result.String.ShouldBe("hello");
     }
+
+    // SQLiteExt.RegisterAggregate(name, fn) — fn(isFinished, args...); state via closure.
+    [WindowsOnlyFact]
+    public async Task SQLiteKitsuneExtension_RegisterAggregate_AccumulatesRowsAndReturnsResult()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            db:Query("CREATE TABLE t(v INTEGER)")
+            db:Fetch()
+            for i = 1, 5 do
+                db:Query("INSERT INTO t VALUES(" .. i .. ")")
+                db:Fetch()
+            end
+            local total = 0
+            SQLiteExt.RegisterAggregate("LuaSum", function(isFinished, val)
+                if isFinished then local r = total; total = 0; return r end
+                total = total + (val or 0)
+            end)
+            db:Query("SELECT LuaSum(v) FROM t")
+            db:Fetch()
+            local r = db:GetRow(1)
+            db:Close()
+            return r
+            """);
+        result.AsInt64.ShouldBe(15L);
+    }
 }
