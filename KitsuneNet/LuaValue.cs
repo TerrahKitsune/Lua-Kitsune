@@ -168,6 +168,7 @@ namespace KitsuneNet
                     // Live ref — snapshot contents on demand.
                     return TableContentsToJsonNode(tr.GetContents());
                 }
+
                 // Backward-compat snapshot (e.g. from callback arg or LuaValue.FromTable).
                 return Table is not null ? TableContentsToJsonNode(Table) : new JsonObject();
             }

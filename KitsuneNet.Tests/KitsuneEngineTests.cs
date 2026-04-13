@@ -225,6 +225,7 @@ namespace KitsuneNet.Tests
             LuaValue result = engine.RunString("return {}");
             result.Type.ShouldBe(LuaType.Table);
             result.Bytes.ShouldBeNull();
+            result.TableRef?.Dispose();  // release the live Lua registry ref
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
@@ -622,6 +623,7 @@ namespace KitsuneNet.Tests
             LuaValue v = engine.GetVariable("tableVar");
             v.Type.ShouldBe(LuaType.Table);
             v.Bytes.ShouldBeNull();
+            v.TableRef?.Dispose();  // release the live Lua registry ref
         }
 
         // -- Variable bridge path notation ----------------------------------------
@@ -2806,14 +2808,17 @@ namespace KitsuneNet.Tests
         [Fact]
         public void GetVariable_TableValue_IsOpaqueWithNoContents()
         {
-            // GetVariable is shallow: a table value returns type=Table but Table==null.
+            // GetVariable returns type=Table with .Table (old snapshot) null.
+            // The live registry ref is in .TableRef — use .TableRef!.GetContents() to access.
             using KitsuneEngine engine = new();
             engine.ExecuteString("t = {x=1, y=2}");
             engine.Wait();
 
             LuaValue v = engine.GetVariable("t");
             v.Type.ShouldBe(LuaType.Table);
-            v.Table.ShouldBeNull();
+            v.Table.ShouldBeNull();         // .Table snapshot is never populated by GetVariable
+            v.TableRef.ShouldNotBeNull();   // but a live ref IS available via TableRef
+            v.TableRef!.Dispose();
         }
 
         [Fact]
@@ -2821,6 +2826,7 @@ namespace KitsuneNet.Tests
         {
             // GetAll is shallow: iterating a table whose values include a sub-table yields
             // an opaque Table entry (type=Table, Table==null) for that value.
+            // Unlike GetVariable, GetAll returns no TableRef either — both are null.
             using KitsuneEngine engine = new();
             engine.ExecuteString("outer = { scalar = 42, inner = {a=1, b=2} }");
             engine.Wait();
@@ -2829,7 +2835,8 @@ namespace KitsuneNet.Tests
             all.ShouldContain(kvp => kvp.Key.String == "scalar" && kvp.Value.AsDouble == 42);
             var innerEntry = all.Single(kvp => kvp.Key.String == "inner");
             innerEntry.Value.Type.ShouldBe(LuaType.Table);
-            innerEntry.Value.Table.ShouldBeNull();  // opaque: contents not captured
+            innerEntry.Value.Table.ShouldBeNull();    // no snapshot
+            innerEntry.Value.TableRef.ShouldBeNull(); // and no live ref — truly opaque from GetAll
         }
 
         [Fact]
@@ -2865,7 +2872,222 @@ namespace KitsuneNet.Tests
             received.Value.Table!.ShouldContain(kvp => kvp.Key.String == "b" && kvp.Value.AsDouble == 99);
         }
 
-        // -- Table args passed to execute functions (C# ? Lua) --------------------
+        // -- LuaTableRef lifecycle ------------------------------------------------
+        [Fact]
+        public void LuaTableRef_DoubleDispose_DoesNotThrow()
+        {
+            using KitsuneEngine engine = new();
+            LuaTableRef tref = engine.RunString("return {}").TableRef!;
+            tref.Dispose();
+            Should.NotThrow(() => tref.Dispose());
+        }
+
+        [Fact]
+        public void LuaTableRef_AfterDispose_GetContents_ThrowsObjectDisposedException()
+        {
+            using KitsuneEngine engine = new();
+            LuaTableRef tref = engine.RunString("return {x=1}").TableRef!;
+            tref.Dispose();
+            Should.Throw<ObjectDisposedException>(() => tref.GetContents());
+        }
+
+        [Fact]
+        public void LuaTableRef_AfterDispose_SetContents_ThrowsObjectDisposedException()
+        {
+            using KitsuneEngine engine = new();
+            LuaTableRef tref = engine.RunString("return {x=1}").TableRef!;
+            tref.Dispose();
+            Should.Throw<ObjectDisposedException>(() => tref.SetContents([]));
+        }
+
+        // -- GetVariable returns a live TableRef, GetAll does not -----------------
+        [Fact]
+        public void GetVariable_TableRef_IsNotNull_ContentsAccessible()
+        {
+            // GetVariable wraps the live table in a TableRef; contents are on demand.
+            using KitsuneEngine engine = new();
+            engine.ExecuteString("t = {x=1, y=2}");
+            engine.Wait();
+            LuaValue v = engine.GetVariable("t");
+            v.Type.ShouldBe(LuaType.Table);
+            using var tref = v.TableRef;
+            tref.ShouldNotBeNull();
+            var contents = tref!.GetContents();
+            contents.ShouldContain(kvp => kvp.Key.String == "x" && kvp.Value.AsDouble == 1);
+            contents.ShouldContain(kvp => kvp.Key.String == "y" && kvp.Value.AsDouble == 2);
+        }
+
+        // -- TableRef.GetContents -------------------------------------------------
+        [Fact]
+        public void TableRef_GetContents_ConsistentOnMultipleCalls()
+        {
+            // GetContents snapshots the current state; calling it twice on an unchanged
+            // table must return the same keys and values both times.
+            using KitsuneEngine engine = new();
+            using LuaTableRef tref = engine.RunString("return {a=1, b=2}").TableRef!;
+            var first = tref.GetContents();
+            var second = tref.GetContents();
+            first.Count.ShouldBe(2);
+            second.Count.ShouldBe(2);
+            first.ShouldContain(kvp => kvp.Key.String == "a" && kvp.Value.AsDouble == 1);
+            second.ShouldContain(kvp => kvp.Key.String == "a" && kvp.Value.AsDouble == 1);
+        }
+
+        [Fact]
+        public void TableRef_GetContents_ArrayStyleIntegerKeys()
+        {
+            // Lua array-style tables have integer 1-based keys in the snapshot.
+            using KitsuneEngine engine = new();
+            using LuaTableRef tref = engine.RunString("return {10, 20, 30}").TableRef!;
+            var contents = tref.GetContents();
+            contents.Count.ShouldBe(3);
+            contents.ShouldContain(kvp => kvp.Key.Type == LuaType.Integer && kvp.Key.AsInt64 == 1 && kvp.Value.AsDouble == 10);
+            contents.ShouldContain(kvp => kvp.Key.Type == LuaType.Integer && kvp.Key.AsInt64 == 2 && kvp.Value.AsDouble == 20);
+            contents.ShouldContain(kvp => kvp.Key.Type == LuaType.Integer && kvp.Key.AsInt64 == 3 && kvp.Value.AsDouble == 30);
+        }
+
+        [Fact]
+        public void TableRef_GetContents_NestedTableIsExpandedInSnapshot()
+        {
+            // GetContents deep-snapshots nested tables up to the engine's max depth.
+            // Nested values come back as LuaType.Table with .Table populated (not a live ref).
+            using KitsuneEngine engine = new();
+            using LuaTableRef tref = engine.RunString("return {inner = {a=10, b=20}}").TableRef!;
+            var contents = tref.GetContents();
+            var innerEntry = contents.Single(kvp => kvp.Key.String == "inner");
+            innerEntry.Value.Type.ShouldBe(LuaType.Table);
+            innerEntry.Value.Table.ShouldNotBeNull();  // nested table is eagerly snapshotted
+            innerEntry.Value.Table!.ShouldContain(kvp => kvp.Key.String == "a" && kvp.Value.AsDouble == 10);
+            innerEntry.Value.Table!.ShouldContain(kvp => kvp.Key.String == "b" && kvp.Value.AsDouble == 20);
+        }
+
+        // -- TableRef.SetContents -------------------------------------------------
+        [Fact]
+        public async Task TableRef_SetContents_LuaReadsUpdatedValues()
+        {
+            // SetContents replaces all keys; old keys disappear, new keys are visible.
+            using KitsuneEngine engine = new();
+            engine.ExecuteString("t = {a=1, b=2}");
+            engine.Wait();
+            using LuaTableRef tref = engine.GetVariable("t").TableRef!;
+            tref.SetContents(new List<KeyValuePair<LuaValue, LuaValue>>
+            {
+                new(LuaValue.FromString("x"), LuaValue.FromInt64(99)),
+                new(LuaValue.FromString("y"), LuaValue.FromInt64(100)),
+            }.AsReadOnly()).ShouldBeTrue();
+
+            LuaValue result = await engine.ExecuteStringAsync(
+                "return tostring(t.a) .. ':' .. tostring(t.x) .. ':' .. tostring(t.y)");
+            result.String.ShouldBe("nil:99:100");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task TableRef_SetContents_EmptyList_ClearsTable()
+        {
+            using KitsuneEngine engine = new();
+            engine.ExecuteString("t = {a=1, b=2}");
+            engine.Wait();
+            using LuaTableRef tref = engine.GetVariable("t").TableRef!;
+            tref.SetContents([]).ShouldBeTrue();
+            LuaValue result = await engine.ExecuteStringAsync(
+                "local n = 0; for _ in pairs(t) do n = n + 1 end; return n");
+            result.AsInt64.ShouldBe(0L);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void TableRef_SetContents_RoundTrip_WriteReadConsistent()
+        {
+            // Write entries via SetContents then read them back via GetContents.
+            using KitsuneEngine engine = new();
+            engine.ExecuteString("t = {}");
+            engine.Wait();
+            using LuaTableRef tref = engine.GetVariable("t").TableRef!;
+            var entries = new List<KeyValuePair<LuaValue, LuaValue>>
+            {
+                new(LuaValue.FromString("name"), LuaValue.FromString("alice")),
+                new(LuaValue.FromInt64(1), LuaValue.FromInt64(42)),
+            }.AsReadOnly();
+            tref.SetContents(entries).ShouldBeTrue();
+            var readBack = tref.GetContents();
+            readBack.ShouldContain(kvp => kvp.Key.String == "name" && kvp.Value.String == "alice");
+            readBack.ShouldContain(kvp => kvp.Key.Type == LuaType.Integer && kvp.Key.AsInt64 == 1 && kvp.Value.AsDouble == 42);
+        }
+
+        // -- Live-table SetVariable round-trip ------------------------------------
+        [Fact]
+        public async Task SetVariable_WithTableRef_AliasesLiveLuaTable()
+        {
+            // Passing a LuaValue with a live TableRef to SetVariable pushes the same
+            // Lua table object — mutations through the alias are visible via the original.
+            using KitsuneEngine engine = new();
+            LuaValue result = engine.RunString("return {val=42}");
+            engine.SetVariable("alias", result);
+            LuaValue read = await engine.ExecuteStringAsync("return alias.val");
+            read.AsInt64.ShouldBe(42L);
+
+            // Mutate via alias; the original TableRef should reflect the change.
+            await engine.ExecuteStringAsync("alias.val = 99");
+            var contents = result.TableRef!.GetContents();
+            contents.Single(kvp => kvp.Key.String == "val").Value.AsDouble.ShouldBe(99.0);
+            result.TableRef?.Dispose();
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        // -- TableRef stability ---------------------------------------------------
+        [Fact]
+        public void TableRef_RemainsValidAfterGcCycles_AndConcurrentCoroutines()
+        {
+            // The luaL_ref keeps the table in the Lua registry; .NET GC and Lua GC
+            // cycles must not invalidate it while C# holds the ref.
+            var engine = new KitsuneEngine();
+            try
+            {
+                LuaValue r = engine.RunString("return {x=77}");
+                using LuaTableRef tref = r.TableRef!;
+
+                GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true);
+                GC.WaitForPendingFinalizers();
+                GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true);
+                engine.RunString("Sleep(0)");  // give scheduler a cycle
+
+                var contents = tref.GetContents();
+                contents.ShouldContain(kvp => kvp.Key.String == "x" && kvp.Value.AsDouble == 77);
+            }
+            finally
+            {
+                engine.Dispose();
+            }
+            ThrowIfLeaked(engine);
+        }
+
+        [Fact]
+        public void ManyTableRefs_DisposedBeforeEngine_NoLeak()
+        {
+            // 20 table refs created, verified, and explicitly disposed before Dispose().
+            var engine = new KitsuneEngine();
+            try
+            {
+                var refs = new List<LuaTableRef>();
+                for (int i = 0; i < 20; i++)
+                {
+                    refs.Add(engine.RunString($"return {{n={i}}}").TableRef!);
+                }
+                foreach (var tr in refs)
+                {
+                    tr.GetContents().ShouldNotBeEmpty();
+                    tr.Dispose();
+                }
+                engine.RunString("Sleep(0)");  // drain deferred unref queue
+            }
+            finally
+            {
+                engine.Dispose();
+            }
+            ThrowIfLeaked(engine);
+        }
+
         [Fact]
         public void ExecuteString_TableArg_ContentAccessibleFromARGS()
         {

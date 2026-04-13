@@ -1309,6 +1309,124 @@ extern "C" {
 		return true;
 	}
 
+	// -- Async coroutine helpers ------------------------------------------------
+
+	// Initialises a slot's refs to LUA_NOREF and creates the coroutine thread.
+	// Caller must hold AcquireLuaAccess.  Returns the new lua_State*.
+	static lua_State* PrepareSlotThread(KitsuneState* state, KitsuneCoroutine* slot) {
+		slot->threadRef = LUA_NOREF;
+		slot->argsRef = LUA_NOREF;
+		return CreateCoroutineThread(state, slot);
+	}
+
+	// Builds the ARGS table on state->L and stores a registry reference in slot->argsRef.
+	// File mode (isFile=true): ARGS[1]=path, ARGS[2..n+1]=argv[0..n-1].
+	// String mode (isFile=false): ARGS[1..n]=argv[0..n-1].
+	static void BuildArgsRef(KitsuneState* state, KitsuneCoroutine* slot,
+		bool isFile, const char* path, int argc, const KitsuneVariable* argv) {
+		lua_newtable(state->L);
+		int base = 1;
+		if (isFile) {
+			lua_pushstring(state->L, path);
+			lua_rawseti(state->L, -2, 1);
+			base = 2;
+		}
+		for (int n = 0; n < argc; n++) {
+			PushKitsuneVariable(state->L, argv ? &argv[n] : nullptr);
+			lua_rawseti(state->L, -2, base + n);
+		}
+		slot->argsRef = luaL_ref(state->L, LUA_REGISTRYINDEX);
+	}
+
+	// Finds or allocates a reusable async (non-inline) slot and sets fireAndForget.
+	// Returns NULL at capacity or on OOM; caller must ReleaseLuaAccess and return -1.
+	static KitsuneCoroutine* AcquireAsyncSlot(KitsuneState* state,
+		bool fireAndForget, bool& isNewSlot) {
+		isNewSlot = false;
+		for (int i = 0; i < state->slotCount; i++) {
+			if (state->slots[i]->id == 0) {
+				KitsuneCoroutine* slot = state->slots[i];
+				slot->fireAndForget.store(fireAndForget ? 1 : 0);
+				return slot;
+			}
+		}
+		if (state->slotCount >= KITSUNE_MAX_COROUTINES)
+			return NULL;
+		KitsuneCoroutine* slot = new (std::nothrow) KitsuneCoroutine{};
+		if (!slot)
+			return NULL;
+		slot->fireAndForget.store(fireAndForget ? 1 : 0);
+		isNewSlot = true;
+		return slot;
+	}
+
+	// Marks a pre-running async slot as done/failed and releases any held registry refs.
+	// err=NULL means the error was already set via SetSlotError (or there is no error).
+	static void FailAsyncSlot(KitsuneState* state, KitsuneCoroutine* slot, const char* err) {
+		if (err)
+			SetSlotError(slot, err);
+		slot->result.type = LUA_TNONE;
+		if (slot->argsRef != LUA_NOREF) {
+			luaL_unref(state->L, LUA_REGISTRYINDEX, slot->argsRef);
+			slot->argsRef = LUA_NOREF;
+		}
+		if (slot->threadRef != LUA_NOREF) {
+			luaL_unref(state->L, LUA_REGISTRYINDEX, slot->threadRef);
+			slot->threadRef = LUA_NOREF;
+			slot->thread = NULL;
+		}
+		slot->done.store(1);
+		state->doneCV.notify_all();
+		if (slot->fireAndForget.load())
+			slot->released.store(1);
+	}
+
+	// Assigns an id, adds the slot to slots[] if new, releases Lua access, and wakes the scheduler.
+	// Always the final step of every StartCoroutine* path (success or failure).
+	static int CommitAndLaunchAsync(KitsuneState* state, KitsuneCoroutine* slot,
+		int id, bool isNewSlot) {
+		slot->startTime = GetCounter(state);
+		state->slotsLock.lock();
+		slot->id = id;
+		if (isNewSlot)
+			state->slots[state->slotCount++] = slot;
+		state->slotsLock.unlock();
+		ReleaseLuaAccess(state);
+		state->workEvent.Set();
+		return id;
+	}
+
+	// Allocates and fills callback args from the Lua call frame (1..argc), then clears the frame.
+	// Returns the args array on success (NULL for argc==0 is not an error).
+	// Returns NULL on OOM; all partial allocations are freed before returning.
+	// DelegateState must be set by the caller before this call.
+	static KitsuneVariable* AllocAndFillArgs(lua_State* L, int argc) {
+		if (argc == 0) {
+			lua_settop(L, 0);
+			return nullptr;
+		}
+		KitsuneVariable* args = (KitsuneVariable*)kitsune_calloc(argc, sizeof(KitsuneVariable));
+		if (!args)
+			return nullptr;
+		for (int i = 0; i < argc; i++)
+			FillKitsuneVariableFromStack(L, i + 1, &args[i], false);
+		lua_settop(L, 0);
+		for (int i = 0; i < argc; i++) {
+			if (args[i].type == LUA_TNONE) {
+				for (int j = 0; j < argc; j++) FreeVariableData(&args[j], L);
+				kitsune_free(args);
+				return nullptr;
+			}
+		}
+		return args;
+	}
+
+	// Releases the args array returned by AllocAndFillArgs.
+	static void FreeCallbackArgs(lua_State* L, KitsuneVariable* args, int argc) {
+		for (int i = 0; i < argc; i++) FreeVariableData(&args[i], L);
+		kitsune_free(args);
+	}
+
 	// -- Start a coroutine directly: acquire Lua access, create the thread, hand it to the scheduler -
 	static int StartCoroutine(KitsuneState* state, bool isFile,
 		const char* source, int argc, const KitsuneVariable* argv,
@@ -1319,52 +1437,17 @@ extern "C" {
 		// and serialises concurrent calls (e.g. with SetVariable / GetVariable).
 		AcquireLuaAccess(state);
 
-		// Find a reusable zeroed slot, or allocate a new one.
-		KitsuneCoroutine* slot = NULL;
 		bool isNewSlot = false;
-		for (int i = 0; i < state->slotCount; i++) {
-			if (state->slots[i]->id == 0) {
-				slot = state->slots[i];
-				break;
-			}
-		}
+		KitsuneCoroutine* slot = AcquireAsyncSlot(state, fireAndForget, isNewSlot);
 		if (!slot) {
-			if (state->slotCount >= KITSUNE_MAX_COROUTINES) {
-				ReleaseLuaAccess(state);
-				return -1;
-			}
-			slot = new (std::nothrow) KitsuneCoroutine{};
-			if (!slot) {
-				ReleaseLuaAccess(state);
-				return -1;
-			}
-			isNewSlot = true;
+			ReleaseLuaAccess(state);
+			return -1;
 		}
 
-		slot->threadRef = LUA_NOREF;
-		slot->argsRef = LUA_NOREF;
-		slot->fireAndForget = fireAndForget ? 1 : 0;
-
-		// Create the coroutine thread and anchor it so the GC cannot collect it.
-		lua_State* T = CreateCoroutineThread(state, slot);
+		lua_State* T = PrepareSlotThread(state, slot);
 
 		// Build the ARGS table: ARGS[1]=path (file) or ARGS[1..]=argv[0..] (string).
-		lua_newtable(state->L);
-		if (isFile) {
-			lua_pushstring(state->L, source);
-			lua_rawseti(state->L, -2, 1);
-			for (int n = 0; n < argc; n++) {
-				PushKitsuneVariable(state->L, argv ? &argv[n] : nullptr);
-				lua_rawseti(state->L, -2, n + 2);
-			}
-		}
-		else {
-			for (int n = 0; n < argc; n++) {
-				PushKitsuneVariable(state->L, argv ? &argv[n] : nullptr);
-				lua_rawseti(state->L, -2, n + 1);
-			}
-		}
-		slot->argsRef = luaL_ref(state->L, LUA_REGISTRYINDEX);
+		BuildArgsRef(state, slot, isFile, source, argc, argv);
 
 		// Load the script onto the coroutine thread's stack.
 		int loadrc = isFile
@@ -1375,33 +1458,14 @@ extern "C" {
 
 		if (loadrc != 0) {
 			const char* err = lua_tolstring(T, -1, NULL);
-			SetSlotError(slot, err ? err : "load error");
-			slot->result.type = LUA_TNONE;
 			lua_settop(T, 0);
-			luaL_unref(state->L, LUA_REGISTRYINDEX, slot->argsRef);   slot->argsRef = LUA_NOREF;
-			luaL_unref(state->L, LUA_REGISTRYINDEX, slot->threadRef); slot->threadRef = LUA_NOREF;
-			slot->thread = NULL;  // invariant: thread is only valid while threadRef != LUA_NOREF
-			slot->done.store(1);
-			state->doneCV.notify_all();
-			if (slot->fireAndForget.load())
-				slot->released.store(1);
+			FailAsyncSlot(state, slot, err ? err : "load error");
 		}
 		else {
 			++state->runningCount;
 		}
 
-		slot->startTime = GetCounter(state);
-
-		// Expose the slot by assigning its ID; add it to the array if newly allocated.
-		state->slotsLock.lock();
-		slot->id = id;
-		if (isNewSlot)
-			state->slots[state->slotCount++] = slot;
-		state->slotsLock.unlock();
-
-		ReleaseLuaAccess(state);
-		state->workEvent.Set();
-		return id;
+		return CommitAndLaunchAsync(state, slot, id, isNewSlot);
 	}
 
 	KITSUNE_API int KitsuneExecuteFileAsync(const char* path, int argc, const KitsuneVariable* argv, bool fireAndForget) {
@@ -1423,32 +1487,14 @@ extern "C" {
 
 		AcquireLuaAccess(state);
 
-		KitsuneCoroutine* slot = NULL;
 		bool isNewSlot = false;
-		for (int i = 0; i < state->slotCount; i++) {
-			if (state->slots[i]->id == 0) {
-				slot = state->slots[i];
-				break;
-			}
-		}
+		KitsuneCoroutine* slot = AcquireAsyncSlot(state, fireAndForget, isNewSlot);
 		if (!slot) {
-			if (state->slotCount >= KITSUNE_MAX_COROUTINES) {
-				ReleaseLuaAccess(state);
-				return -1;
-			}
-			slot = new (std::nothrow) KitsuneCoroutine{};
-			if (!slot) {
-				ReleaseLuaAccess(state);
-				return -1;
-			}
-			isNewSlot = true;
+			ReleaseLuaAccess(state);
+			return -1;
 		}
 
-		slot->threadRef = LUA_NOREF;
-		slot->argsRef = LUA_NOREF;  // no ARGS table – args are passed directly to the function
-		slot->fireAndForget = fireAndForget ? 1 : 0;
-
-		lua_State* T = CreateCoroutineThread(state, slot);
+		lua_State* T = PrepareSlotThread(state, slot);
 
 		// Resolve the function via dot-path navigation on the main state, then move it to T.
 		// PushGlobalAtPath handles both "Foo" and "Ns.Foo" uniformly, matching SetVariable behaviour.
@@ -1461,15 +1507,7 @@ extern "C" {
 
 		if (!lua_isfunction(T, -1)) {
 			lua_pop(T, 1);
-			SetSlotError(slot, "function not found");
-			slot->result.type = LUA_TNONE;
-			luaL_unref(state->L, LUA_REGISTRYINDEX, slot->threadRef);
-			slot->threadRef = LUA_NOREF;
-			slot->thread = NULL;
-			slot->done.store(1);
-			state->doneCV.notify_all();
-			if (slot->fireAndForget.load())
-				slot->released.store(1);
+			FailAsyncSlot(state, slot, "function not found");
 		}
 		else {
 			for (int n = 0; n < argc; n++)
@@ -1478,17 +1516,7 @@ extern "C" {
 			++state->runningCount;
 		}
 
-		slot->startTime = GetCounter(state);
-
-		state->slotsLock.lock();
-		slot->id = id;
-		if (isNewSlot)
-			state->slots[state->slotCount++] = slot;
-		state->slotsLock.unlock();
-
-		ReleaseLuaAccess(state);
-		state->workEvent.Set();
-		return id;
+		return CommitAndLaunchAsync(state, slot, id, isNewSlot);
 	}
 
 	KITSUNE_API int KitsuneExecuteFunctionAsync(const char* functionName, int argc, const KitsuneVariable* argv, bool fireAndForget) {
@@ -1506,32 +1534,14 @@ extern "C" {
 
 		AcquireLuaAccess(state);
 
-		KitsuneCoroutine* slot = NULL;
 		bool isNewSlot = false;
-		for (int i = 0; i < state->slotCount; i++) {
-			if (state->slots[i]->id == 0) {
-				slot = state->slots[i];
-				break;
-			}
-		}
+		KitsuneCoroutine* slot = AcquireAsyncSlot(state, fireAndForget, isNewSlot);
 		if (!slot) {
-			if (state->slotCount >= KITSUNE_MAX_COROUTINES) {
-				ReleaseLuaAccess(state);
-				return -1;
-			}
-			slot = new (std::nothrow) KitsuneCoroutine{};
-			if (!slot) {
-				ReleaseLuaAccess(state);
-				return -1;
-			}
-			isNewSlot = true;
+			ReleaseLuaAccess(state);
+			return -1;
 		}
 
-		slot->threadRef = LUA_NOREF;
-		slot->argsRef = LUA_NOREF;
-		slot->fireAndForget = fireAndForget ? 1 : 0;
-
-		lua_State* T = CreateCoroutineThread(state, slot);
+		lua_State* T = PrepareSlotThread(state, slot);
 
 		int id = (int)(++state->nextId);
 		bool loadOk = false;
@@ -1557,12 +1567,7 @@ extern "C" {
 		}
 		else if (var->type == LUA_TSTRING && var->data && var->length > 0) {
 			// Build ARGS table: argv[0..argc-1] map to ARGS[1..argc].
-			lua_newtable(state->L);
-			for (int n = 0; n < argc; n++) {
-				PushKitsuneVariable(state->L, argv ? &argv[n] : nullptr);
-				lua_rawseti(state->L, -2, n + 1);
-			}
-			slot->argsRef = luaL_ref(state->L, LUA_REGISTRYINDEX);
+			BuildArgsRef(state, slot, false, nullptr, argc, argv);
 
 			int rc = luaL_loadbuffer(T, (const char*)var->data, var->length, "variable");
 			if (rc != 0) {
@@ -1607,31 +1612,12 @@ extern "C" {
 			SetSlotError(slot, "variable is not executable");
 		}
 
-		if (!loadOk) {
-			slot->result.type = LUA_TNONE;
-			luaL_unref(state->L, LUA_REGISTRYINDEX, slot->threadRef);
-			slot->threadRef = LUA_NOREF;
-			slot->thread = NULL;
-			slot->done.store(1);
-			state->doneCV.notify_all();
-			if (slot->fireAndForget.load())
-				slot->released.store(1);
-		}
-		else {
+		if (!loadOk)
+			FailAsyncSlot(state, slot, nullptr);  // error already set above (or none for dead thread)
+		else
 			++state->runningCount;
-		}
 
-		slot->startTime = GetCounter(state);
-
-		state->slotsLock.lock();
-		slot->id = id;
-		if (isNewSlot)
-			state->slots[state->slotCount++] = slot;
-		state->slotsLock.unlock();
-
-		ReleaseLuaAccess(state);
-		state->workEvent.Set();
-		return id;
+		return CommitAndLaunchAsync(state, slot, id, isNewSlot);
 	}
 
 	KITSUNE_API int KitsuneExecuteVariableAsync(const KitsuneVariable* var, int argc, const KitsuneVariable* argv, bool fireAndForget) {
@@ -1946,17 +1932,8 @@ extern "C" {
 			KitsuneCoroutine* slot = AcquireInlineSlot(state, isNewSlot);
 			if (!slot)
 				return NULL;
-			slot->threadRef = LUA_NOREF;
-			slot->argsRef = LUA_NOREF;
-			lua_State* T = CreateCoroutineThread(state, slot);
-			lua_newtable(state->L);
-			lua_pushstring(state->L, path);
-			lua_rawseti(state->L, -2, 1);
-			for (int n = 0; n < argc; n++) {
-				PushKitsuneVariable(state->L, argv ? &argv[n] : nullptr);
-				lua_rawseti(state->L, -2, n + 2);
-			}
-			slot->argsRef = luaL_ref(state->L, LUA_REGISTRYINDEX);
+			lua_State* T = PrepareSlotThread(state, slot);
+			BuildArgsRef(state, slot, true, path, argc, argv);
 			int loadrc = luaL_loadfile(T, path);
 			int id = (int)(++state->nextId);
 			if (loadrc != 0) {
@@ -1985,19 +1962,9 @@ extern "C" {
 			return NULL;
 		}
 
-		slot->threadRef = LUA_NOREF;
-		slot->argsRef = LUA_NOREF;
+		lua_State* T = PrepareSlotThread(state, slot);
 
-		lua_State* T = CreateCoroutineThread(state, slot);
-
-		lua_newtable(state->L);
-		lua_pushstring(state->L, path);
-		lua_rawseti(state->L, -2, 1);
-		for (int n = 0; n < argc; n++) {
-			PushKitsuneVariable(state->L, argv ? &argv[n] : nullptr);
-			lua_rawseti(state->L, -2, n + 2);
-		}
-		slot->argsRef = luaL_ref(state->L, LUA_REGISTRYINDEX);
+		BuildArgsRef(state, slot, true, path, argc, argv);
 
 		int loadrc = luaL_loadfile(T, path);
 		int id = (int)(++state->nextId);
@@ -2035,15 +2002,8 @@ extern "C" {
 			KitsuneCoroutine* slot = AcquireInlineSlot(state, isNewSlot);
 			if (!slot)
 				return NULL;
-			slot->threadRef = LUA_NOREF;
-			slot->argsRef = LUA_NOREF;
-			lua_State* T = CreateCoroutineThread(state, slot);
-			lua_newtable(state->L);
-			for (int n = 0; n < argc; n++) {
-				PushKitsuneVariable(state->L, argv ? &argv[n] : nullptr);
-				lua_rawseti(state->L, -2, n + 1);
-			}
-			slot->argsRef = luaL_ref(state->L, LUA_REGISTRYINDEX);
+			lua_State* T = PrepareSlotThread(state, slot);
+			BuildArgsRef(state, slot, false, nullptr, argc, argv);
 			int loadrc = luaL_loadbuffer(T, script, strlen(script), "string");
 			int id = (int)(++state->nextId);
 			if (loadrc != 0) {
@@ -2072,17 +2032,9 @@ extern "C" {
 			return NULL;
 		}
 
-		slot->threadRef = LUA_NOREF;
-		slot->argsRef = LUA_NOREF;
+		lua_State* T = PrepareSlotThread(state, slot);
 
-		lua_State* T = CreateCoroutineThread(state, slot);
-
-		lua_newtable(state->L);
-		for (int n = 0; n < argc; n++) {
-			PushKitsuneVariable(state->L, argv ? &argv[n] : nullptr);
-			lua_rawseti(state->L, -2, n + 1);
-		}
-		slot->argsRef = luaL_ref(state->L, LUA_REGISTRYINDEX);
+		BuildArgsRef(state, slot, false, nullptr, argc, argv);
 
 		int loadrc = luaL_loadbuffer(T, script, strlen(script), "string");
 		int id = (int)(++state->nextId);
@@ -2120,9 +2072,7 @@ extern "C" {
 			KitsuneCoroutine* slot = AcquireInlineSlot(state, isNewSlot);
 			if (!slot)
 				return NULL;
-			slot->threadRef = LUA_NOREF;
-			slot->argsRef = LUA_NOREF;
-			lua_State* T = CreateCoroutineThread(state, slot);
+			lua_State* T = PrepareSlotThread(state, slot);
 			if (PushGlobalAtPath(state->L, functionName))
 				lua_xmove(state->L, T, 1);
 			else
@@ -2156,10 +2106,7 @@ extern "C" {
 			return NULL;
 		}
 
-		slot->threadRef = LUA_NOREF;
-		slot->argsRef = LUA_NOREF;
-
-		lua_State* T = CreateCoroutineThread(state, slot);
+		lua_State* T = PrepareSlotThread(state, slot);
 
 		if (PushGlobalAtPath(state->L, functionName))
 			lua_xmove(state->L, T, 1);
@@ -2204,9 +2151,7 @@ extern "C" {
 			KitsuneCoroutine* slot = AcquireInlineSlot(state, isNewSlot);
 			if (!slot)
 				return NULL;
-			slot->threadRef = LUA_NOREF;
-			slot->argsRef = LUA_NOREF;
-			lua_State* T = CreateCoroutineThread(state, slot);
+			lua_State* T = PrepareSlotThread(state, slot);
 			int id = (int)(++state->nextId);
 			bool loadOk = false;
 			int initialNArgs = 0;
@@ -2297,10 +2242,7 @@ extern "C" {
 			return NULL;
 		}
 
-		slot->threadRef = LUA_NOREF;
-		slot->argsRef = LUA_NOREF;
-
-		lua_State* T = CreateCoroutineThread(state, slot);
+		lua_State* T = PrepareSlotThread(state, slot);
 
 		int id = (int)(++state->nextId);
 		bool loadOk = false;
@@ -2863,49 +2805,25 @@ extern "C" {
 			return 0;  // unreachable
 		}
 
-		int argc = lua_gettop(L);
-		KitsuneVariable* args = nullptr;
-		if (argc > 0) {
-			args = (KitsuneVariable*)kitsune_calloc(argc, sizeof(KitsuneVariable));
-			if (!args) {
-				lua_pushstring(L, "out of memory");
-				lua_error(L);
-				return 0;  // unreachable
-			}
-		}
-
 		// Set DelegateState before filling args: if a LUA_TUSERDATA argument's __tostring
 		// metamethod calls a guarded Kitsune API function, the guard returns early instead
 		// of deadlocking. Save/restore handles re-entrant registered-function calls correctly.
+		int argc = lua_gettop(L);
 		lua_State* prevDelegateState = state->DelegateState;
 		state->DelegateState = L;
-
-		for (int i = 0; i < argc; i++)
-			FillKitsuneVariableFromStack(L, i + 1, &args[i], /*shallow=*/false);
-
-		// FillKitsuneVariableFromStack signals string allocation failure via LUA_TNONE.
-		for (int i = 0; i < argc; i++) {
-			if (args[i].type == LUA_TNONE) {
-				for (int j = 0; j < argc; j++)
-					FreeVariableData(&args[j], L);
-				kitsune_free(args);
-				state->DelegateState = prevDelegateState;
-				lua_pushstring(L, "out of memory");
-				lua_error(L);
-				return 0;  // unreachable
-			}
+		KitsuneVariable* args = AllocAndFillArgs(L, argc);
+		if (argc > 0 && !args) {
+			state->DelegateState = prevDelegateState;
+			lua_pushstring(L, "out of memory");
+			lua_error(L);
+			return 0;  // unreachable
 		}
-
-		// Clear the stack so LuaResultSetter pushes results onto a clean base.
-		lua_settop(L, 0);
 
 		int rc = func(argc, args, LuaResultSetter, userdata);
 		state->DelegateState = prevDelegateState;  // restore; handles nesting correctly
 
 		// Free args before any potential lua_error so we never leak them on the error path.
-		for (int i = 0; i < argc; i++)
-			FreeVariableData(&args[i], L);
-		kitsune_free(args);
+		FreeCallbackArgs(L, args, argc);
 
 		// Raise a deferred error that was stored by LuaResultSetter for KITSUNE_TERROR.
 		if (state->lastCallError) {
@@ -3024,40 +2942,20 @@ extern "C" {
 
 		KitsuneState* state = g_state;
 		int argc = lua_gettop(L);
-		KitsuneVariable* args = nullptr;
-		if (argc > 0) {
-			args = (KitsuneVariable*)kitsune_calloc(argc, sizeof(KitsuneVariable));
-			if (!args) {
-				lua_pushnil(L);
-				return 1;
-			}
-		}
-
 		lua_State* prevDelegateState = state->DelegateState;
 		state->DelegateState = L;
-		for (int i = 0; i < argc; i++)
-			FillKitsuneVariableFromStack(L, i + 1, &args[i], false);
-		lua_settop(L, 0);
-
-		// FillKitsuneVariableFromStack signals allocation failure via LUA_TNONE.
-		for (int i = 0; i < argc; i++) {
-			if (args[i].type == LUA_TNONE) {
-				for (int j = 0; j < argc; j++)
-					FreeVariableData(&args[j], L);
-				kitsune_free(args);
-				state->DelegateState = prevDelegateState;
-				lua_pushstring(L, "out of memory");
-				lua_error(L);
-				return 0;  // unreachable
-			}
+		KitsuneVariable* args = AllocAndFillArgs(L, argc);
+		if (argc > 0 && !args) {
+			state->DelegateState = prevDelegateState;
+			lua_pushstring(L, "out of memory");
+			lua_error(L);
+			return 0;  // unreachable
 		}
 
 		int rc = cfd->func(argc, args, LuaResultSetter, cfd->userdata);
 		state->DelegateState = prevDelegateState;
 
-		for (int i = 0; i < argc; i++)
-			FreeVariableData(&args[i], L);
-		kitsune_free(args);
+		FreeCallbackArgs(L, args, argc);
 
 		// A deferred TERROR from LuaResultSetter is still raised as a Lua error.
 		if (state->lastCallError) {

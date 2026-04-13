@@ -927,9 +927,15 @@ namespace KitsuneNet
         {
             IntPtr resultPtr = KitsuneGetTableContents(tableVarPtr);
             if (resultPtr == IntPtr.Zero)
+            {
                 return Array.Empty<KeyValuePair<LuaValue, LuaValue>>();
+            }
+
             KitsuneVariable nv;
-            unsafe { nv = Unsafe.ReadUnaligned<KitsuneVariable>((void*)resultPtr); }
+            unsafe
+            {
+                nv = Unsafe.ReadUnaligned<KitsuneVariable>((void*)resultPtr);
+            }
             var snapshotValue = ReadNativeTable(nv.Data);
             KitsuneVariableFree(resultPtr);
             return snapshotValue.Table ?? Array.Empty<KeyValuePair<LuaValue, LuaValue>>();
@@ -953,7 +959,11 @@ namespace KitsuneNet
             }
             finally
             {
-                if (cvPtr != IntPtr.Zero) Marshal.FreeHGlobal(cvPtr);
+                if (cvPtr != IntPtr.Zero)
+                {
+                    Marshal.FreeHGlobal(cvPtr);
+                }
+
                 FreeNativeArgs(ptrs);
             }
         }
@@ -1544,7 +1554,10 @@ namespace KitsuneNet
                     KitsuneVariable local = nv;
                     IntPtr contentsPtr = KitsuneGetTableContents((IntPtr)(&local));
                     if (contentsPtr == IntPtr.Zero)
+                    {
                         return new LuaValue { Type = LuaType.Table };
+                    }
+
                     KitsuneVariable cnv = Unsafe.ReadUnaligned<KitsuneVariable>((void*)contentsPtr);
                     LuaValue snapshot = ReadNativeTable(cnv.Data);
                     KitsuneVariableFree(contentsPtr);
