@@ -35,22 +35,11 @@ void lua_init_kitsune_state() {
 // Returns a kitsune_malloc'd KitsuneVariable* with its own independent registry ref.
 // The caller must NOT free it — it is owned by g_extState and freed by
 // lua_cleanup_kitsune_state via KitsuneVariableFree. Returns NULL on failure.
-static KitsuneVariable* lua_add_kitsune_state(KitsuneVariable* var) {
+static KitsuneVariable* lua_add_kitsune_state(const KitsuneVariable* var) {
 	if (!g_extState || !var) return NULL;
 
-	// KitsuneRegister creates an independent registry ref (ref_A) that is not
-	// owned by LuaCFunctionWrapper — var->integer (the original ref in argv) will
-	// be luaL_unref'd by LuaCFunctionWrapper after the callback returns, but ref_A
-	// is ours and will survive.
-	int ref = KitsuneRegister(var);
-	if (ref == -2) // LUA_NOREF
-		return NULL;
-
-	// KitsuneUnregister converts ref_A into a kitsune_malloc'd KitsuneVariable* with
-	// its own new registry ref (ref_B), then unrefs ref_A. Single anchor, no leak,
-	// and KitsuneVariableFree on the result is correct because it is kitsune_malloc'd.
-	KitsuneVariable* funcVar = KitsuneUnregister(ref);
-	if (!funcVar) return NULL; // ref_A leaked on OOM, acceptable
+	KitsuneVariable* funcVar = KitsuneAnchorVariable(var);
+	if (!funcVar) return NULL;
 
 	RegisteredFunc* entry = (RegisteredFunc*)malloc(sizeof(RegisteredFunc));
 	if (!entry) {
@@ -241,7 +230,7 @@ static void bind_params_from_table(sqlite3_stmt* stmt, KeyValuePairKitsuneVariab
 // SQLiteExt.Query(sql[, params]) — executes a SQL query and returns all rows as a table.
 // params: optional {paramName = value} table for @paramName placeholders.
 // Returns: { [1] = { col = val, ... }, [2] = { ... }, ... }
-static int query_cb(int argc, KitsuneVariable* argv, kitsune_ResultSetter resultSetter, void* userdata) {
+static int query_cb(int argc, const KitsuneVariable* argv, kitsune_ResultSetter resultSetter, void* userdata) {
 	sqlite3* db = ((KitsuneExtState*)userdata)->db;
 
 	if (argc < 1 || argv[0].type != KITSUNE_TSTRING || !argv[0].data)
@@ -276,7 +265,7 @@ static int query_cb(int argc, KitsuneVariable* argv, kitsune_ResultSetter result
 
 // SQLiteExt.Scalar(sql[, params]) — executes a SQL query and returns the first column of the first row.
 // Returns nil if the query produces no rows. params follow the same @paramName convention as Query.
-static int scalar_cb(int argc, KitsuneVariable* argv, kitsune_ResultSetter resultSetter, void* userdata) {
+static int scalar_cb(int argc, const KitsuneVariable* argv, kitsune_ResultSetter resultSetter, void* userdata) {
 	sqlite3* db = ((KitsuneExtState*)userdata)->db;
 
 	if (argc < 1 || argv[0].type != KITSUNE_TSTRING || !argv[0].data)
@@ -377,7 +366,7 @@ static void lua_aggregate_final(sqlite3_context* context) {
 // argv[0] = SQL function name (KITSUNE_TSTRING)
 // argv[1] = Lua aggregate function (KITSUNE_TFUNCTION)
 // userdata = KitsuneExtState*
-static int register_aggregate_cb(int argc, KitsuneVariable* argv, kitsune_ResultSetter resultSetter, void* userdata) {
+static int register_aggregate_cb(int argc, const KitsuneVariable* argv, kitsune_ResultSetter resultSetter, void* userdata) {
 	if (argc < 2 || argv[0].type != KITSUNE_TSTRING || argv[1].type != KITSUNE_TFUNCTION || !g_extState)
 		return reg_error(resultSetter, "RegisterAggregate(name, function): invalid arguments");
 
@@ -395,7 +384,7 @@ static int register_aggregate_cb(int argc, KitsuneVariable* argv, kitsune_Result
 // argv[0] = SQL function name (KITSUNE_TSTRING)
 // argv[1] = Lua function to register (KITSUNE_TFUNCTION)
 // userdata = sqlite3* db
-static int register_function_cb(int argc, KitsuneVariable* argv, kitsune_ResultSetter resultSetter, void* userdata) {
+static int register_function_cb(int argc, const KitsuneVariable* argv, kitsune_ResultSetter resultSetter, void* userdata) {
 	if (argc < 2 || argv[0].type != KITSUNE_TSTRING || argv[1].type != KITSUNE_TFUNCTION || !g_extState)
 		return reg_error(resultSetter, "RegisterFunction(name, function): invalid arguments");
 

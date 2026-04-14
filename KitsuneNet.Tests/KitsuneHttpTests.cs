@@ -1,4 +1,4 @@
-﻿using KitsuneNet;
+using KitsuneNet;
 using Shouldly;
 using Xunit;
 
@@ -55,7 +55,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_Module_IsTableWhenAvailable()
         {
-            LuaValue r = await Run("if Http == nil then return 'skip' end; return type(Http)");
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync("if Http == nil then return 'skip' end; return type(Http)");
             if (r != "skip")
             {
                 r.String.ShouldBe("table");
@@ -66,7 +67,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_Create_ReturnsNonNil()
         {
-            LuaValue r = await Run("if Http == nil then return 'skip' end; return tostring(Http.Create() ~= nil)");
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync("if Http == nil then return 'skip' end; return tostring(Http.Create() ~= nil)");
             if (r != "skip")
             {
                 r.String.ShouldBe("true");
@@ -76,7 +78,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_Create_Tostring_ReturnsNonEmptyString()
         {
-            LuaValue r = await Run(@"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
                 if Http == nil then return 'skip' end
                 local s = tostring(Http.Create())
                 return tostring(type(s) == 'string' and #s > 0)
@@ -90,7 +93,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_Create_ConfigMethods_DoNotRaise()
         {
-            LuaValue r = await Run(@"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
                 if Http == nil then return 'skip' end
                 local c = Http.Create()
                 c:SetTimeout(5000)
@@ -109,7 +113,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_UrlEncode_SpacesAreEncoded()
         {
-            LuaValue r = await Run(@"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
                 if Http == nil then return 'skip' end
                 return tostring(Http.UrlEncode('hello world'):find(' ') == nil)
             ");
@@ -122,7 +127,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_UrlEncode_AmpersandIsEncoded()
         {
-            LuaValue r = await Run(@"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
                 if Http == nil then return 'skip' end
                 return tostring(Http.UrlEncode('a&b'):find('%%26') ~= nil)
             ");
@@ -135,7 +141,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_UrlDecode_RoundTrip()
         {
-            LuaValue r = await Run(@"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
                 if Http == nil then return 'skip' end
                 local orig = 'hello world & foo=bar'
                 return tostring(Http.UrlDecode(Http.UrlEncode(orig)) == orig)
@@ -149,7 +156,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_UrlEncode_UnreservedCharsPassThrough()
         {
-            LuaValue r = await Run(@"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
                 if Http == nil then return 'skip' end
                 local safe = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.~'
                 return tostring(Http.UrlEncode(safe) == safe)
@@ -163,7 +171,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_UrlDecode_PlusDecodedAsSpace()
         {
-            LuaValue r = await Run(@"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
                 if Http == nil then return 'skip' end
                 return tostring(Http.UrlDecode('hello+world') == 'hello world')
             ");
@@ -176,7 +185,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_UrlEncode_Empty_ReturnsEmpty()
         {
-            LuaValue r = await Run(@"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
                 if Http == nil then return 'skip' end
                 return tostring(Http.UrlEncode('') == '' and Http.UrlDecode('') == '')
             ");
@@ -190,7 +200,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_GET_Returns200()
         {
-            LuaValue r = await Run(DrainRequest + @"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(8000)
@@ -208,7 +219,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_GET_StatusIsOK()
         {
-            LuaValue r = await Run(DrainRequest + @"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(8000)
@@ -225,7 +237,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_GET_ContentsIsNonEmptyString()
         {
-            LuaValue r = await Run(DrainRequest + @"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(8000)
@@ -242,7 +255,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_GET_HeadersIsTable()
         {
-            LuaValue r = await Run(DrainRequest + @"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(8000)
@@ -260,7 +274,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_POST_JsonBody_EchoesPostedData()
         {
-            LuaValue r = await Run(DrainRequest + @"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(8000)
@@ -280,9 +295,10 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_Timeout_TransportError_CodeIsNil()
         {
+            using KitsuneEngine engine = new();
             // 50 ms is far shorter than the 10 s delay endpoint will ever respond.
             // If the network is unreachable, DNS failure also produces nil Code.
-            LuaValue r = await Run(DrainRequest + @"
+            LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(50)
@@ -301,7 +317,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_Timeout_TransportError_StatusIsNonEmptyString()
         {
-            LuaValue r = await Run(DrainRequest + @"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(50)
@@ -322,7 +339,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_Request_OutStream_ContentsIsNil()
         {
-            LuaValue r = await Run(DrainRequest + @"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(8000)
@@ -341,7 +359,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_Stream_GetInfo_Returns200()
         {
-            LuaValue r = await Run(StreamHelper + @"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(StreamHelper + @"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -362,7 +381,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_Stream_GetInfo_HeadersIsTable()
         {
-            LuaValue r = await Run(StreamHelper + @"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(StreamHelper + @"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -383,7 +403,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_Stream_Read_DeliversNonEmptyBody()
         {
-            LuaValue r = await Run(StreamHelper + @"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(StreamHelper + @"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -410,7 +431,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_Stream_Read_BodyLooksLikeJson()
         {
-            LuaValue r = await Run(StreamHelper + @"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(StreamHelper + @"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -438,7 +460,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_DELETE_Returns200()
         {
-            LuaValue r = await Run(DrainRequest + @"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(8000)
@@ -455,7 +478,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_DELETE_ResponseEchoesDeleteUrl()
         {
-            LuaValue r = await Run(DrainRequest + @"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(8000)
@@ -473,7 +497,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_PUT_Returns200()
         {
-            LuaValue r = await Run(DrainRequest + @"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(8000)
@@ -492,7 +517,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_PUT_JsonBody_EchoedInResponse()
         {
-            LuaValue r = await Run(DrainRequest + @"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(8000)
@@ -512,7 +538,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_PATCH_Returns200()
         {
-            LuaValue r = await Run(DrainRequest + @"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(8000)
@@ -531,7 +558,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_PATCH_JsonBody_EchoedInResponse()
         {
-            LuaValue r = await Run(DrainRequest + @"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(8000)
@@ -551,7 +579,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_GET_QueryArgs_EchoedInArgsField()
         {
-            LuaValue r = await Run(DrainRequest + @"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(8000)
@@ -571,7 +600,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_GET_UrlEncodedQueryArg_DecodedByServer()
         {
-            LuaValue r = await Run(DrainRequest + @"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(8000)
@@ -590,7 +620,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_DefaultHeader_AppearsInEchoedHeaders()
         {
-            LuaValue r = await Run(DrainRequest + @"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(8000)
@@ -608,7 +639,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_PerRequestHeader_AppearsInEchoedHeaders()
         {
-            LuaValue r = await Run(DrainRequest + @"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(8000)
@@ -626,7 +658,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_DefaultAndPerRequestHeaders_BothPresent()
         {
-            LuaValue r = await Run(DrainRequest + @"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(8000)
@@ -649,7 +682,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_POST_FormUrlEncoded_EchoedInFormField()
         {
-            LuaValue r = await Run(DrainRequest + @"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
                 if Http == nil then return 'skip' end
                 local client = Http.Create()
                 client:SetTimeout(8000)
@@ -669,7 +703,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_Stream_POST_Returns200()
         {
-            LuaValue r = await Run(StreamHelper + @"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(StreamHelper + @"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -692,7 +727,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_Stream_POST_BodyEchoedInResponse()
         {
-            LuaValue r = await Run(StreamHelper + @"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(StreamHelper + @"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -718,7 +754,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_Stream_PUT_Returns200()
         {
-            LuaValue r = await Run(StreamHelper + @"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(StreamHelper + @"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -741,7 +778,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_Stream_PATCH_Returns200()
         {
-            LuaValue r = await Run(StreamHelper + @"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(StreamHelper + @"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -764,7 +802,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_Stream_DELETE_Returns200()
         {
-            LuaValue r = await Run(StreamHelper + @"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(StreamHelper + @"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -786,7 +825,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_WebSocket_Connect_Succeeds()
         {
-            LuaValue r = await Run(StreamHelper + $@"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(StreamHelper + $@"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -807,7 +847,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_WebSocket_Echo_TextFrame_RoundTrips()
         {
-            LuaValue r = await Run(StreamHelper + $@"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(StreamHelper + $@"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -829,7 +870,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_WebSocket_Echo_TextFrame_GetInfo_OpcodeIsOne()
         {
-            LuaValue r = await Run(StreamHelper + $@"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(StreamHelper + $@"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -852,7 +894,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_WebSocket_Echo_BinaryFrame_RoundTrips()
         {
-            LuaValue r = await Run(StreamHelper + $@"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(StreamHelper + $@"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -876,7 +919,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_WebSocket_Echo_BinaryFrame_GetInfo_OpcodeIsTwo()
         {
-            LuaValue r = await Run(StreamHelper + $@"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(StreamHelper + $@"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -900,7 +944,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_WebSocket_Echo_BytesLeft_IsZeroForCompleteFrame()
         {
-            LuaValue r = await Run(StreamHelper + $@"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(StreamHelper + $@"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -923,7 +968,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_WebSocket_MultipleFrames_AllEchoedInOrder()
         {
-            LuaValue r = await Run(StreamHelper + $@"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(StreamHelper + $@"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -949,7 +995,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_WebSocket_MixedFrames_TextAndBinary_EchoedCorrectly()
         {
-            LuaValue r = await Run(StreamHelper + $@"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(StreamHelper + $@"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -979,7 +1026,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_WebSocket_Close_AfterClose_ReadReturnsNil()
         {
-            LuaValue r = await Run(StreamHelper + $@"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(StreamHelper + $@"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -1001,7 +1049,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_WebSocket_HasData_TrueWhenConnected_MinusOneAfterClose()
         {
-            LuaValue r = await Run(StreamHelper + $@"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(StreamHelper + $@"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -1024,7 +1073,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Http_WebSocket_LargeTextPayload_RoundTrips()
         {
-            LuaValue r = await Run(StreamHelper + $@"
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(StreamHelper + $@"
                 run_http(function()
                     if Http == nil then skip() end
                     local client = Http.Create()
@@ -1044,24 +1094,5 @@ namespace KitsuneNet.Tests
             }
         }
 
-        private static async Task<LuaValue> Run(string lua)
-        {
-            var engine = new KitsuneEngine();
-            LuaValue result;
-            try
-            {
-                result = await engine.ExecuteStringAsync(lua).ConfigureAwait(false);
-            }
-            finally
-            {
-                engine.Dispose();
-            }
-
-            if (engine.LeakedAllocations != 0)
-            {
-                throw new InvalidOperationException($"Native memory leak: {engine.LeakedAllocations} unfreed allocation(s) after KitsuneCleanup");
-            }
-            return result;
-        }
     }
 }

@@ -11,16 +11,11 @@ namespace KitsuneNet
     {
         private const string DllName = "KitsuneEngine";
 
-        // GCHandle roots for anonymous Lua closures created via LuaValue.FromCFunction.
-        // Like the bags below, these are tied to the shared Lua state.
-        private static readonly System.Collections.Concurrent.ConcurrentBag<GCHandle> GlobalCFunctionHandles = new();
-
-        // GCHandle roots for delegates registered via RegisterFunction / RegisterUserdata
-        // (dispatch lambdas, gcWrappers, etc.) and for CreateUserdata instance pins.
-        // Per-engine handles are transferred here before the engine decrements _refCount,
-        // so they remain valid until KitsuneCleanup fires lua_close on the last Dispose.
-        private static readonly System.Collections.Concurrent.ConcurrentBag<GCHandle> GlobalFunctionHandles = new();
-        private static readonly System.Collections.Concurrent.ConcurrentBag<GCHandle> GlobalUserdataHandles = new();
+        // GCHandle roots for every C# object whose address has been handed to the native Lua
+        // state as an upvalue (registered function delegates, method delegates, userdata instance
+        // pins, and anonymous CFunction closures).  All are freed after lua_close fires on the
+        // last engine dispose, at which point no Lua code can call back into managed memory.
+        private static readonly System.Collections.Concurrent.ConcurrentBag<GCHandle> GlobalHandles = new();
 
         // Tracks the number of live KitsuneEngine instances.  KitsuneCleanup is
         // only called when the last instance is disposed; calling it earlier would
@@ -34,8 +29,6 @@ namespace KitsuneNet
         private static bool inLuaCallback;
 
         private int _disposed;  // 0 = not disposed; 1 = disposed
-        private List<GCHandle>? _functionHandles;
-        private List<GCHandle>? _userdataHandles;
 
         public KitsuneEngine()
         {
@@ -50,14 +43,6 @@ namespace KitsuneNet
                     Interlocked.Decrement(ref _refCount);
                     throw new InvalidOperationException("KitsuneInit failed");
                 }
-
-                // Drain any orphaned coroutines from a previous engine that was not properly
-                // disposed (e.g. abandoned by a test-runner abort).
-                if (KitsuneIsRunning())
-                {
-                    KitsuneInterrupt();
-                    KitsuneWait();
-                }
             }
         }
 
@@ -65,13 +50,6 @@ namespace KitsuneNet
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate void GetAllCallback(IntPtr key, IntPtr value, IntPtr userdata);
-
-        /// <summary>
-        /// Number of native allocations that had not been freed when this engine was disposed.
-        /// Non-zero only in USEMEMORYMANAGER builds (Debug/Windows); always 0 in release or Linux.
-        /// Check this after <see cref="Dispose"/> to detect native memory leaks.
-        /// </summary>
-        public ulong LeakedAllocations { get; private set; }
 
         /// <summary>Returns <c>true</c> if any coroutine is currently running or yielded.</summary>
         public bool IsRunning => KitsuneIsRunning();
@@ -628,7 +606,15 @@ namespace KitsuneNet
             return v.Type == LuaType.Boolean ? v.Boolean : null;
         }
 
-        public LuaType GetVariableType(string name) => GetVariable(name).Type;
+        public LuaType GetVariableType(string name)
+        {
+            var v = GetVariable(name);
+            v.FunctionRef?.Dispose();
+            v.ThreadRef?.Dispose();
+            v.TableRef?.Dispose();
+            v.UserdataRef?.Dispose();
+            return v.Type;
+        }
 
         /// <summary>
         /// Returns all entries at the given dot-separated path as a list of key-value pairs.
@@ -732,9 +718,8 @@ namespace KitsuneNet
                 throw new LuaException("RegisterFunction cannot be called from within a registered function");
             }
 
-            _functionHandles ??= new();
             var handle = GCHandle.Alloc(func);
-            _functionHandles.Add(handle);
+            GlobalHandles.Add(handle);
             KitsuneRegisterFunction(name, GetTrampolinePtr(), (nint)GCHandle.ToIntPtr(handle));
         }
 
@@ -866,8 +851,7 @@ namespace KitsuneNet
             ArgumentNullException.ThrowIfNull(instance);
 
             var handle = GCHandle.Alloc(instance);
-            _userdataHandles ??= new List<GCHandle>();
-            _userdataHandles.Add(handle);
+            GlobalHandles.Add(handle);
             return new LuaValue
             {
                 Type = LuaType.Userdata,
@@ -966,6 +950,107 @@ namespace KitsuneNet
 
                 FreeNativeArgs(ptrs);
             }
+        }
+
+        // Calls a named metamethod from obj's metatable: getmetatable(obj).__name(obj, args...).
+        // Returns LuaValue.None when the metamethod is absent or raises.
+        internal static LuaValue CallMetamethod(IntPtr objVarPtr, string metamethod, LuaValue[]? args)
+        {
+            var (native, ptrs) = BuildNativeArgs(args);
+            try
+            {
+                IntPtr resultPtr = KitsuneCallMetamethod(objVarPtr, metamethod, native?.Length ?? 0, native);
+                return resultPtr == IntPtr.Zero ? LuaValue.None : NativePtrToLuaValue(resultPtr);
+            }
+            finally
+            {
+                FreeNativeArgs(ptrs);
+            }
+        }
+
+        // Looks up method on obj via __index and calls it with obj as self: obj:method(args...).
+        // Returns LuaValue.None when the method is absent, not callable, or raises.
+        internal static LuaValue CallMethod(IntPtr objVarPtr, string method, LuaValue[]? args)
+        {
+            var (native, ptrs) = BuildNativeArgs(args);
+            try
+            {
+                IntPtr resultPtr = KitsuneCallMethod(objVarPtr, method, native?.Length ?? 0, native);
+                return resultPtr == IntPtr.Zero ? LuaValue.None : NativePtrToLuaValue(resultPtr);
+            }
+            finally
+            {
+                FreeNativeArgs(ptrs);
+            }
+        }
+
+        // Gets obj[key] via __index. Returns LuaValue.None on OOM/invalid obj; LuaType.Nil for absent/nil key.
+        internal static LuaValue GetIndex(IntPtr objVarPtr, LuaValue key)
+        {
+            var (native, ptrs) = BuildNativeArgs([key]);
+            try
+            {
+                IntPtr resultPtr = KitsuneGetIndex(objVarPtr, ref native![0]);
+                return resultPtr == IntPtr.Zero ? LuaValue.None : NativePtrToLuaValue(resultPtr);
+            }
+            finally
+            {
+                FreeNativeArgs(ptrs);
+            }
+        }
+
+        // Sets obj[key] = value via __newindex. Returns false on error.
+        internal static bool SetIndex(IntPtr objVarPtr, LuaValue key, LuaValue value)
+        {
+            var (native, ptrs) = BuildNativeArgs([key, value]);
+            try
+            {
+                return KitsuneSetIndex(objVarPtr, ref native![0], ref native[1]);
+            }
+            finally
+            {
+                FreeNativeArgs(ptrs);
+            }
+        }
+
+        // Returns #obj via __len. Returns LuaValue.None on OOM/invalid obj.
+        internal static LuaValue GetLength(IntPtr objVarPtr)
+        {
+            IntPtr resultPtr = KitsuneGetLength(objVarPtr);
+            return resultPtr == IntPtr.Zero ? LuaValue.None : NativePtrToLuaValue(resultPtr);
+        }
+
+        // Advances a raw table iterator one step. key is consumed (freed) when it is a
+        // KITSUNE_TTABLECONTENTS result from a prior TableNext call; pass IntPtr.Zero to start.
+        // Returns the new state pointer (TTABLECONTENTS, TNONE when exhausted, or TERROR).
+        // The caller owns the returned pointer and must pass it back or free it.
+        internal static IntPtr TableNext(IntPtr tableVarPtr, IntPtr key) =>
+            KitsuneNext(tableVarPtr, key);
+
+        // Reads the single key-value pair from a KITSUNE_TTABLECONTENTS step pointer without
+        // consuming it. All values are fully materialized (strings copied, tables snapshotted)
+        // before returning, so the pair is safe to use after the cursor is advanced.
+        // Returns null if the pointer is not a valid TTABLECONTENTS entry.
+        internal static (LuaValue Key, LuaValue Value)? ReadNextPair(IntPtr stepPtr)
+        {
+            if (stepPtr == IntPtr.Zero)
+            {
+                return null;
+            }
+
+            KitsuneVariable nv;
+            unsafe
+            {
+                nv = Unsafe.ReadUnaligned<KitsuneVariable>((void*)stepPtr);
+            }
+
+            if ((LuaType)nv.Type != LuaType.TableContents || nv.Data == IntPtr.Zero)
+            {
+                return null;
+            }
+
+            var node = Marshal.PtrToStructure<NativeKVNode>(nv.Data);
+            return (NativeVariableToLuaValue(node.Key), NativeVariableToLuaValue(node.Value));
         }
 
         internal static async Task<LuaValue> InvokeFunctionAsync(LuaFunctionRef fref, LuaValue[]? args, CancellationToken cancellationToken)
@@ -1362,6 +1447,25 @@ namespace KitsuneNet
         [return: MarshalAs(UnmanagedType.I1)]
         private static extern bool KitsuneSetTableContents(IntPtr tableVarPtr, IntPtr contentsVarPtr);
 
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr KitsuneGetIndex(IntPtr objVarPtr, ref KitsuneVariable key);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool KitsuneSetIndex(IntPtr objVarPtr, ref KitsuneVariable key, ref KitsuneVariable value);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr KitsuneGetLength(IntPtr objVarPtr);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr KitsuneNext(IntPtr tableVarPtr, IntPtr key);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr KitsuneCallMetamethod(IntPtr objVarPtr, [MarshalAs(UnmanagedType.LPUTF8Str)] string metamethod, int argc, KitsuneVariable[]? argv);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr KitsuneCallMethod(IntPtr objVarPtr, [MarshalAs(UnmanagedType.LPUTF8Str)] string method, int argc, KitsuneVariable[]? argv);
+
         // func is a delegate* unmanaged[Cdecl] cast to nint; userdata is a GCHandle address.
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern void KitsuneRegisterFunction([MarshalAs(UnmanagedType.LPUTF8Str)] string name, nint func, nint userdata);
@@ -1498,7 +1602,7 @@ namespace KitsuneNet
 
             LuaType t = (LuaType)nv.Type;
 
-            // Function / Thread / Table: transfer the native pointer to a ref object;
+            // Function / Thread / Table / Userdata: transfer the native pointer to a ref object;
             // the ref keeps the Lua registry entry alive until Dispose() calls KitsuneVariableFree.
             // KitsuneVariableFree must NOT be called here — the ref's Dispose() does it.
             if (t == LuaType.Function)
@@ -1515,6 +1619,18 @@ namespace KitsuneNet
             {
                 return new LuaValue { Type = LuaType.Table, TableRef = new LuaTableRef(ptr) };
             }
+
+            if (t == LuaType.Userdata)
+            {
+                // Read name/GCHandle now (while the KitsuneUserData* is still alive),
+                // then transfer ownership to LuaUserdataRef so the registry ref persists
+                // until the caller disposes the value.
+                LuaValue ud = nv.Data != IntPtr.Zero
+                    ? NativeUnmarshalUserdata(nv.Data, nv.Length)
+                    : new LuaValue { Type = LuaType.Userdata };
+                return ud with { UserdataRef = new LuaUserdataRef(ptr) };
+            }
+
             LuaValue result = t switch
             {
                 LuaType.Number => LuaValue.FromNumber(nv.Number),
@@ -1522,13 +1638,12 @@ namespace KitsuneNet
                 LuaType.Boolean => LuaValue.FromBool(nv.BoolByte != 0),
                 LuaType.String when nv.Data != IntPtr.Zero => NativeCopyBytes(nv.Data, nv.Length),
                 LuaType.Char16 when nv.Data != IntPtr.Zero => NativeCopyChar16(nv.Data, nv.Length),
-                LuaType.Userdata when nv.Data != IntPtr.Zero => NativeUnmarshalUserdata(nv.Data, nv.Length),
                 LuaType.Json when nv.Data != IntPtr.Zero && nv.Length > 0 => NativeParseJson(nv.Data, nv.Length),
                 LuaType.Stream when nv.Data != IntPtr.Zero => NativeWrapSharedMemory(nv.Data),
                 LuaType.TableContents => ReadNativeTable(nv.Data),  // snapshot from KitsuneGetTableContents
                 LuaType.Error when nv.Data != IntPtr.Zero => NativeCopyBytes(nv.Data, nv.Length) with { Type = LuaType.Error },
                 LuaType.None => LuaValue.None,
-                _ => new LuaValue { Type = t },  // Nil/Table(live-ref handled above)/Userdata/LightUserdata
+                _ => new LuaValue { Type = t },  // Nil/LightUserdata/etc.
             };
             KitsuneVariableFree(ptr);
             return result;
@@ -1544,7 +1659,7 @@ namespace KitsuneNet
         private static LuaValue NativeVariableToLuaValue(KitsuneVariable nv, bool allowTableSnapshot = true)
         {
             LuaType t = (LuaType)nv.Type;
-            if (allowTableSnapshot && t == LuaType.Table && nv.Integer > 0)
+            if (allowTableSnapshot && t == LuaType.Table && nv.Ref > 0)
             {
                 // The embedded variable holds a live luaL_ref (valid for the duration of the
                 // enclosing native call). Snapshot it immediately so the returned LuaValue has
@@ -1707,7 +1822,7 @@ namespace KitsuneNet
                         // Copy the registry ref integer from the native KitsuneVariable.
                         // PushKitsuneVariable uses lua_rawgeti with this ref to push the live table.
                         var tnv = Marshal.PtrToStructure<KitsuneVariable>(tr.NativePtr);
-                        nv.Integer = tnv.Integer;
+                        nv.Ref = tnv.Ref;
                         break;
                     }
                 case LuaType.Table when v.Table is not null:
@@ -1781,7 +1896,7 @@ namespace KitsuneNet
                         // The handle is added to s_globalCFunctionHandles and freed when the last engine
                         // is disposed (same lifetime as the Lua state that owns the closure).
                         var handle = GCHandle.Alloc(luaFunc);
-                        GlobalCFunctionHandles.Add(handle);
+                        GlobalHandles.Add(handle);
 
                         // Allocate a kitsune_CFunctionData { func, userdata } on the unmanaged heap.
                         // PushKitsuneVariable copies the two pointer values into Lua upvalue slots, so
@@ -1865,18 +1980,29 @@ namespace KitsuneNet
                         // GCHandles intentionally NOT in ptrs — freed by finalizeFunc.
                         break;
                     }
+                case LuaType.Userdata when v.UserdataRef is { } ur && ur.NativePtr != IntPtr.Zero:
+                    {
+                        // Copy the KitsuneUserData* pointer directly from the held KitsuneVariable.
+                        // PushKitsuneVariable reads ud->ref and calls lua_rawgeti to push the
+                        // original Lua userdata — preserving identity.
+                        // The pointer is owned by LuaUserdataRef; do NOT add it to ptrs.
+                        var tnv = Marshal.PtrToStructure<KitsuneVariable>(ur.NativePtr);
+                        nv.Data = tnv.Data;
+                        nv.Length = tnv.Length;
+                        break;
+                    }
                 case LuaType.Userdata when v.Bytes is not null && v.UserdataGCHandlePtr != 0:
                     {
-                        // Allocate a KitsuneUserData { char* name, void* userdata } on the unmanaged heap.
-                        // PushKitsuneVariable reads it to fill LuaKitsuneUserdata and apply the metatable.
+                        // Allocate a KitsuneUserData { char* name, int ref, (pad), void* userdata } on the unmanaged heap.
+                        // PushKitsuneVariable reads it; ref = LUA_NOREF signals the fallback new-wrapper path.
                         byte[] nameBytes = v.Bytes;
                         IntPtr namePtr = Marshal.AllocHGlobal(nameBytes.Length + 1);
                         Marshal.Copy(nameBytes, 0, namePtr, nameBytes.Length);
                         Marshal.WriteByte(namePtr, nameBytes.Length, 0);
 
-                        IntPtr structPtr = Marshal.AllocHGlobal(IntPtr.Size * 2);
-                        Marshal.WriteIntPtr(structPtr, 0, namePtr);
-                        Marshal.WriteIntPtr(structPtr, IntPtr.Size, v.UserdataGCHandlePtr);
+                        var kud = new KitsuneUserDataNative { Name = namePtr, Ref = -2, Userdata = v.UserdataGCHandlePtr };
+                        IntPtr structPtr = Marshal.AllocHGlobal(Marshal.SizeOf<KitsuneUserDataNative>());
+                        Marshal.StructureToPtr(kud, structPtr, false);
 
                         ptrs ??= new List<IntPtr>();
                         ptrs.Add(namePtr);
@@ -2145,7 +2271,7 @@ namespace KitsuneNet
             finally
             {
                 // Free temporary structs — the engine copied method info into Lua metatables.
-                // GCHandles for the LuaFunction delegates remain alive in _functionHandles.
+                // GCHandles for the LuaFunction delegates remain alive in GlobalHandles.
                 FreeNamedFunctionList(funcHead);
                 FreeNamedFunctionList(metaHead);
                 if (reg != IntPtr.Zero)
@@ -2156,13 +2282,12 @@ namespace KitsuneNet
         }
 
         // Allocates a NamedKitsuneFunction { char* name, func, void* userdata, Next* } node.
-        // The LuaFunction delegate is rooted in _functionHandles; the name string and node itself
+        // The LuaFunction delegate is rooted in GlobalHandles; the name string and node itself
         // are freed by FreeNamedFunctionList once KitsuneRegisterUserdata has consumed them.
         private IntPtr AllocNamedFunction(string name, LuaFunction func, IntPtr next)
         {
-            _functionHandles ??= new List<GCHandle>();
             var handle = GCHandle.Alloc(func);
-            _functionHandles.Add(handle);
+            GlobalHandles.Add(handle);
 
             byte[] nameBytes = Encoding.UTF8.GetBytes(name);
             IntPtr namePtr = Marshal.AllocHGlobal(nameBytes.Length + 1);
@@ -2183,60 +2308,23 @@ namespace KitsuneNet
         {
             if (Interlocked.Exchange(ref _disposed, 1) == 0)
             {
-                // Transfer this engine's handles to the shared bags BEFORE decrementing
-                // the ref-count.  The Lua state is process-wide: delegates and userdata
-                // pins registered by any engine must stay valid until lua_close fires all
-                // __gc callbacks inside KitsuneCleanup.  Only the last engine calls
-                // KitsuneCleanup, so handles must not be freed while earlier engines dispose.
-                //
-                // Safety: transfer-before-decrement is the key invariant.  When a decrement
-                // reaches zero, every previously-decremented engine has already completed its
-                // transfer, so KitsuneCleanup sees all handles in the global bags.
-                if (disposing)
-                {
-                    if (_functionHandles is not null)
-                    {
-                        foreach (var h in _functionHandles)
-                        {
-                            GlobalFunctionHandles.Add(h);
-                        }
-
-                        _functionHandles = null;
-                    }
-
-                    if (_userdataHandles is not null)
-                    {
-                        foreach (var h in _userdataHandles)
-                        {
-                            GlobalUserdataHandles.Add(h);
-                        }
-
-                        _userdataHandles = null;
-                    }
-                }
-
                 if (Interlocked.Decrement(ref _refCount) == 0)
                 {
                     // All LuaFunctionRef / LuaThreadRef instances must be disposed by the caller
                     // before this point.  Disposing them enqueues their KitsuneVariable* to
                     // g_pendingVariableChainHead; DrainPendingVariableChain inside KitsuneCleanup
                     // processes those frees while the Lua state is still live.
-                    LeakedAllocations = (ulong)KitsuneCleanup();
+                    ulong sessionLeaks = (ulong)KitsuneCleanup();
+
+                    if (disposing && sessionLeaks != 0)
+                    {
+                        throw new ApplicationException($"Native memory leak: {sessionLeaks} unfreed allocation(s)");
+                    }
 
                     // Safe to free all accumulated handles now that the Lua state is gone.
-                    while (GlobalCFunctionHandles.TryTake(out var h))
-                    {
-                        h.Free();
-                    }
-
-                    // Dispatch lambdas and gcWrappers: never freed by __gc, always freed here.
-                    while (GlobalFunctionHandles.TryTake(out var h))
-                    {
-                        h.Free();
-                    }
-
-                    // Userdata instance pins: __gc may have already freed some during lua_close.
-                    while (GlobalUserdataHandles.TryTake(out var h))
+                    // Userdata instance pins may already be freed by their __gc callbacks;
+                    // IsAllocated guards against double-free.
+                    while (GlobalHandles.TryTake(out var h))
                     {
                         if (h.IsAllocated)
                         {
@@ -2256,6 +2344,9 @@ namespace KitsuneNet
 
             [FieldOffset(8)]
             public nuint Length;
+
+            [FieldOffset(16)]
+            public int Ref;
 
             [FieldOffset(16)]
             public IntPtr Data;
@@ -2279,12 +2370,15 @@ namespace KitsuneNet
             public IntPtr Next;
         }
 
-        // Mirrors KitsuneUserData: { char* name, void* userdata }.
+        // Mirrors KitsuneUserData: { char* name, int ref, (4-byte pad), void* userdata } on x64.
         // nv.Data points to one of these for every LUA_TUSERDATA variable produced by the engine.
         [StructLayout(LayoutKind.Sequential)]
         private struct KitsuneUserDataNative
         {
             public IntPtr Name;     // heap-allocated UTF-8 name string
+            public int Ref;         // luaL_ref registry ref; managed by the engine (LUA_NOREF = -2 when absent)
+
+            // 4 bytes padding (implicit, to align Userdata to pointer boundary)
             public IntPtr Userdata; // GCHandle address for Kitsune-registered userdatas; IntPtr.Zero otherwise
         }
 

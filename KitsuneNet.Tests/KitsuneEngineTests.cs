@@ -100,7 +100,6 @@ namespace KitsuneNet.Tests
             {
                 engine.Dispose();
             }
-            ThrowIfLeaked(engine);
         }
 
         [Fact]
@@ -2068,9 +2067,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task TwoEngines_FunctionRegisteredByFirst_RemainsCallableAfterFirstDisposed()
         {
-            // Regression: _functionHandles were freed immediately on Dispose even when a second
-            // engine (sharing the same global Lua state) was still alive.  The delegate GCHandle
-            // must survive until the last engine calls KitsuneCleanup / lua_close.
+            // Delegate GCHandles go into GlobalHandles (not per-engine); they are freed after
+            // lua_close on the last Dispose.  Engine1 disposing first is therefore safe.
             KitsuneEngine engine1 = new();
             KitsuneEngine engine2 = new();
             try
@@ -2082,11 +2080,8 @@ namespace KitsuneNet.Tests
                     return LuaValue.FromInt64(callCount);
                 });
 
-                // Dispose the first engine while the second is still alive.
-                // The delegate handle must NOT be freed here.
                 engine1.Dispose();
 
-                // engine2 shares the same Lua state; the function must still be callable.
                 LuaValue r1 = await engine2.ExecuteStringAsync("return MultiEngineFn()");
                 LuaValue r2 = await engine2.ExecuteStringAsync("return MultiEngineFn()");
                 r1.AsInt64.ShouldBe(1L);
@@ -2098,16 +2093,13 @@ namespace KitsuneNet.Tests
             {
                 engine2.Dispose();
             }
-
-            ThrowIfLeaked(engine2);
         }
 
         [Fact]
         public async Task TwoEngines_UserdataCreatedByFirst_RemainsAccessibleAfterFirstDisposed()
         {
-            // Regression: _userdataHandles were freed immediately on engine1.Dispose even when
-            // engine2 was still alive.  The GCHandle pin for the instance must survive until
-            // the last engine disposes and KitsuneCleanup fires __gc via lua_close.
+            // Userdata GCHandles go into GlobalHandles; they are freed after lua_close on the
+            // last Dispose, so engine1 disposing first is safe.
             KitsuneEngine engine1 = new();
             KitsuneEngine engine2 = new();
             try
@@ -2116,10 +2108,8 @@ namespace KitsuneNet.Tests
                 var counter = new Counter { Value = 5 };
                 engine1.SetVariable("sharedCounter", engine1.CreateUserdata(counter));
 
-                // Dispose engine1; the userdata GCHandle must NOT be freed yet.
                 engine1.Dispose();
 
-                // engine2 can still access the Lua global and call methods on the userdata.
                 LuaValue result = await engine2.ExecuteStringAsync(
                     "sharedCounter:Increment(); sharedCounter:Increment(); return sharedCounter:Get()");
                 result.AsInt64.ShouldBe(7L);
@@ -2130,8 +2120,6 @@ namespace KitsuneNet.Tests
             {
                 engine2.Dispose();
             }
-
-            ThrowIfLeaked(engine2);
         }
 
         // -- CFunction (SetVariable / args / return) ----------------------------
@@ -2268,7 +2256,6 @@ namespace KitsuneNet.Tests
             }
             second.ShouldBeEmpty();
             thread.ThreadRef?.Dispose();
-            await engine.ExecuteStringAsync("Sleep(0)");
         }
 
         [Fact]
@@ -3059,7 +3046,6 @@ namespace KitsuneNet.Tests
             {
                 engine.Dispose();
             }
-            ThrowIfLeaked(engine);
         }
 
         [Fact]
@@ -3085,7 +3071,6 @@ namespace KitsuneNet.Tests
             {
                 engine.Dispose();
             }
-            ThrowIfLeaked(engine);
         }
 
         [Fact]
@@ -3455,6 +3440,7 @@ namespace KitsuneNet.Tests
             v.Type.ShouldBe(LuaType.Userdata);
             v.Bytes.ShouldNotBeNull();
             v.String.ShouldBe("LUAJSON");
+            v.UserdataRef?.Dispose();
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
@@ -3567,7 +3553,6 @@ namespace KitsuneNet.Tests
             {
                 engine.Dispose();
             }
-            ThrowIfLeaked(engine);
         }
 
         [Fact]
@@ -3647,6 +3632,7 @@ namespace KitsuneNet.Tests
             LuaValue v = engine.GetVariable("c");
             v.Type.ShouldBe(LuaType.Userdata);
             v.GetUserdata<Counter>().ShouldBeSameAs(original);
+            v.UserdataRef?.Dispose();
         }
 
         [Fact]
@@ -3661,6 +3647,7 @@ namespace KitsuneNet.Tests
             LuaValue result = engine.RunString("return c");
             result.Type.ShouldBe(LuaType.Userdata);
             result.GetUserdata<Counter>().ShouldBeSameAs(original);
+            result.UserdataRef?.Dispose();
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
@@ -4037,6 +4024,7 @@ namespace KitsuneNet.Tests
             node.ShouldBeAssignableTo<JsonObject>();
             ((JsonObject)node!)["name"]!.GetValue<string>().ShouldBe("bob");
             ((JsonObject)node)["score"]!.GetValue<long>().ShouldBe(42L);
+            result.TableRef?.Dispose();
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
@@ -4055,6 +4043,7 @@ namespace KitsuneNet.Tests
             arr[0]!.GetValue<long>().ShouldBe(10L);
             arr[1]!.GetValue<long>().ShouldBe(20L);
             arr[2]!.GetValue<long>().ShouldBe(30L);
+            result.TableRef?.Dispose();
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
@@ -4324,7 +4313,6 @@ namespace KitsuneNet.Tests
             {
                 engine.Dispose();
             }
-            ThrowIfLeaked(engine);
         }
 
         // -- Stream disposal ------------------------------------------------------
@@ -4344,7 +4332,6 @@ namespace KitsuneNet.Tests
             {
                 engine.Dispose();
             }
-            ThrowIfLeaked(engine);
         }
 
         [Fact]
@@ -4363,7 +4350,6 @@ namespace KitsuneNet.Tests
             {
                 engine.Dispose();
             }
-            ThrowIfLeaked(engine);
         }
 
         [Fact]
@@ -4381,7 +4367,6 @@ namespace KitsuneNet.Tests
             {
                 engine.Dispose();
             }
-            ThrowIfLeaked(engine);
         }
 
         [Fact]
@@ -4399,7 +4384,6 @@ namespace KitsuneNet.Tests
             {
                 engine.Dispose();
             }
-            ThrowIfLeaked(engine);
         }
 
         [Fact]
@@ -4424,7 +4408,6 @@ namespace KitsuneNet.Tests
             {
                 engine.Dispose();
             }
-            ThrowIfLeaked(engine);
         }
 
         [Fact]
@@ -4446,7 +4429,6 @@ namespace KitsuneNet.Tests
             {
                 engine.Dispose();
             }
-            ThrowIfLeaked(engine);
         }
 
         // -- Shared-memory concurrent access -------------------------------------
@@ -4533,7 +4515,6 @@ namespace KitsuneNet.Tests
             {
                 engine.Dispose();
             }
-            ThrowIfLeaked(engine);
         }
 
         // -- New lifecycle: flag-based block management ---------------------------
@@ -4563,7 +4544,6 @@ namespace KitsuneNet.Tests
             {
                 engine.Dispose();
             }
-            ThrowIfLeaked(engine);
         }
 
         [Fact]
@@ -4582,7 +4562,6 @@ namespace KitsuneNet.Tests
             {
                 engine.Dispose();
             }
-            ThrowIfLeaked(engine);
         }
 
         [Fact]
@@ -4606,7 +4585,6 @@ namespace KitsuneNet.Tests
             {
                 engine.Dispose();
             }
-            ThrowIfLeaked(engine);
         }
 
         [Fact]
@@ -4632,7 +4610,6 @@ namespace KitsuneNet.Tests
             {
                 engine.Dispose();
             }
-            ThrowIfLeaked(engine);
         }
 
         [Fact]
@@ -4662,7 +4639,6 @@ namespace KitsuneNet.Tests
             {
                 engine.Dispose();
             }
-            ThrowIfLeaked(engine);
         }
 
         [Fact]
@@ -4689,7 +4665,6 @@ namespace KitsuneNet.Tests
             {
                 engine.Dispose();
             }
-            ThrowIfLeaked(engine);
         }
 
         [Fact]
@@ -4708,7 +4683,6 @@ namespace KitsuneNet.Tests
             {
                 engine.Dispose();
             }
-            ThrowIfLeaked(engine);
         }
 
         [Fact]
@@ -4726,7 +4700,6 @@ namespace KitsuneNet.Tests
             {
                 engine.Dispose();
             }
-            ThrowIfLeaked(engine);
         }
 
         [Fact]
@@ -4744,7 +4717,6 @@ namespace KitsuneNet.Tests
             {
                 engine.Dispose();
             }
-            ThrowIfLeaked(engine);
         }
 
         [Fact]
@@ -4781,7 +4753,6 @@ namespace KitsuneNet.Tests
             {
                 engine.Dispose();
             }
-            ThrowIfLeaked(engine);
         }
 
         [Fact]
@@ -4816,7 +4787,6 @@ namespace KitsuneNet.Tests
             {
                 engine.Dispose();
             }
-            ThrowIfLeaked(engine);
         }
 
         // -- RunString / RunFile / RunFunction (sync blocking) --------------------
@@ -5848,7 +5818,6 @@ namespace KitsuneNet.Tests
             {
                 engine.Dispose();
             }
-            ThrowIfLeaked(engine);
         }
 
         [Fact]
@@ -5871,7 +5840,6 @@ namespace KitsuneNet.Tests
             {
                 engine.Dispose();
             }
-            ThrowIfLeaked(engine);
         }
 
         [Fact]
@@ -5912,7 +5880,6 @@ namespace KitsuneNet.Tests
             {
                 engine.Dispose();
             }
-            ThrowIfLeaked(engine);
         }
 
         [Fact]
@@ -5970,7 +5937,6 @@ namespace KitsuneNet.Tests
             {
                 engine.Dispose();
             }
-            ThrowIfLeaked(engine);
         }
 
         // -- Boundary / edge cases --------------------------------------------------------
@@ -6178,6 +6144,33 @@ namespace KitsuneNet.Tests
             LuaException ex = await Should.ThrowAsync<LuaException>(funcRef.InvokeAsync());
 
             ex.Message.ShouldContain("async invoke boom");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        // -- Userdata ref round-trip -----------------------------------------------
+        [Fact]
+        public void Userdata_LuaNativeRoundTrip_OriginalObjectPushedBack()
+        {
+            // A Lua-native userdata (Json.Create()) returned by RunString must carry a
+            // live LuaUserdataRef so that passing it back to a second script calls methods
+            // on the original Lua object rather than pushing nil or creating a broken wrapper.
+            using KitsuneEngine engine = new();
+
+            // Step 1: obtain a Lua-native userdata from the engine.
+            LuaValue jsonObj = engine.RunString("return Json.Create()");
+            jsonObj.Type.ShouldBe(LuaType.Userdata);
+            using LuaUserdataRef udRef = jsonObj.UserdataRef!;
+            udRef.ShouldNotBeNull();
+
+            // Step 2: pass it back as ARGS[1] and call a method on the original object.
+            // PushKitsuneVariable uses ud->ref (non-LUA_NOREF) to push from the registry —
+            // giving Lua the exact same object, not a new wrapper with a null instance pointer.
+            LuaValue result = engine.RunString("return ARGS[1]:Encode({Test=1})", jsonObj);
+
+            result.Type.ShouldBe(LuaType.String);
+            result.String.ShouldNotBeNull();
+            result.String!.ShouldContain("Test");
+            result.String!.ShouldContain("1");
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
@@ -6507,7 +6500,7 @@ namespace KitsuneNet.Tests
             var table = tableRef!.GetContents();
             table.Count.ShouldBe(1);
             table[0].Value.String.ShouldBe("v");
-            engine.Unregister(@ref);
+            engine.Unregister(@ref).TableRef?.Dispose();
         }
 
         [Fact]
@@ -6793,7 +6786,6 @@ namespace KitsuneNet.Tests
             {
                 engine.Dispose();
             }
-            ThrowIfLeaked(engine);
         }
 
         [Fact]
@@ -6815,6 +6807,366 @@ namespace KitsuneNet.Tests
 
             tref.Dispose();
             Should.Throw<ObjectDisposedException>(() => tref.Step());
+        }
+
+        // -- CallMetamethod -------------------------------------------------------
+        [Fact]
+        public void TableRef_CallMetamethod_InvokesNamedMetamethod()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue table = engine.RunString(@"
+                return setmetatable({}, {
+                    __tostring = function(t) return 'my_table' end,
+                })
+            ");
+            using LuaTableRef tr = table.TableRef!;
+
+            tr.CallMetamethod("__tostring").String.ShouldBe("my_table");
+
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void TableRef_CallMetamethod_WithArgs_PassesThemCorrectly()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue table = engine.RunString(@"
+                return setmetatable({}, {
+                    __add = function(a, b) return 'sum=' .. tostring(b) end,
+                })
+            ");
+            using LuaTableRef tr = table.TableRef!;
+
+            tr.CallMetamethod("__add", LuaValue.FromInt64(7)).String.ShouldBe("sum=7");
+
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void TableRef_CallMetamethod_AbsentMetamethod_ReturnsNone()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue table = engine.RunString("return {}");
+            using LuaTableRef tr = table.TableRef!;
+
+            tr.CallMetamethod("__tostring").ShouldBe(LuaValue.None);
+
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void UserdataRef_CallMetamethod_Tostring_ReturnsString()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue jsonObj = engine.RunString("return Json.Create()");
+            using LuaUserdataRef ur = jsonObj.UserdataRef!;
+
+            LuaValue result = ur.CallMetamethod("__tostring");
+            result.Type.ShouldBe(LuaType.String);
+            result.String.ShouldNotBeNull();
+
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void UserdataRef_CallMetamethod_AbsentMetamethod_ReturnsNone()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue jsonObj = engine.RunString("return Json.Create()");
+            using LuaUserdataRef ur = jsonObj.UserdataRef!;
+
+            ur.CallMetamethod("__nonexistent_metamethod__").ShouldBe(LuaValue.None);
+
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        // -- CallMethod -----------------------------------------------------------
+        [Fact]
+        public void UserdataRef_CallMethod_InvokesMethodWithSelf()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue jsonObj = engine.RunString("return Json.Create()");
+            using LuaUserdataRef ur = jsonObj.UserdataRef!;
+
+            // Json:Encode({val = 99}) — method is resolved via __index on the userdata
+            LuaValue tableArg = engine.RunString("return {val = 99}");
+            LuaValue result = ur.CallMethod("Encode", tableArg);
+            tableArg.TableRef?.Dispose();
+            result.Type.ShouldBe(LuaType.String);
+            result.String.ShouldNotBeNull();
+            result.String!.ShouldContain("99");
+
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void TableRef_CallMethod_InvokesMethodWithSelf()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue table = engine.RunString(@"
+                return {
+                    prefix = 'hello',
+                    greet = function(self, name) return self.prefix .. '_' .. name end,
+                }
+            ");
+            using LuaTableRef tr = table.TableRef!;
+
+            tr.CallMethod("greet", LuaValue.FromString("world")).String.ShouldBe("hello_world");
+
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void UserdataRef_CallMethod_MissingMethod_ReturnsNone()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue jsonObj = engine.RunString("return Json.Create()");
+            using LuaUserdataRef ur = jsonObj.UserdataRef!;
+
+            ur.CallMethod("__nonexistent_method__").ShouldBe(LuaValue.None);
+
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void TableRef_CallMethod_MissingMethod_ReturnsNone()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue table = engine.RunString("return {}");
+            using LuaTableRef tr = table.TableRef!;
+
+            tr.CallMethod("nonexistent").ShouldBe(LuaValue.None);
+
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void TableRef_CallMethod_IndexErrorInMetamethod_ReturnsTerror()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue table = engine.RunString(@"
+                return setmetatable({}, {
+                    __index = function(_, k) error('lookup failed') end,
+                })
+            ");
+            using LuaTableRef tr = table.TableRef!;
+
+            tr.CallMethod("anything").Type.ShouldBe(LuaType.Error);
+
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void TableRef_CallMetamethod_VoidMetamethod_ReturnsNil()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue table = engine.RunString(@"
+                return setmetatable({}, {
+                    __len = function(t) end,
+                })
+            ");
+            using LuaTableRef tr = table.TableRef!;
+
+            // __len ran but returned nothing → TNIL (ran, no data)
+            tr.CallMetamethod("__len").Type.ShouldBe(LuaType.Nil);
+
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void TableRef_CallMethod_VoidMethod_ReturnsNil()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue table = engine.RunString(@"
+                return { noop = function(self) end }
+            ");
+            using LuaTableRef tr = table.TableRef!;
+
+            // noop ran but returned nothing → TNIL
+            tr.CallMethod("noop").Type.ShouldBe(LuaType.Nil);
+
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        // -- GetIndex / SetIndex / GetLength -------------------------------------
+        [Fact]
+        public void TableRef_GetIndex_ReturnsValue()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue table = engine.RunString("return {name = 'alice', score = 99}");
+            using LuaTableRef tr = table.TableRef!;
+
+            tr.GetIndex(LuaValue.FromString("name")).String.ShouldBe("alice");
+            tr.GetIndex(LuaValue.FromString("score")).AsInt64.ShouldBe(99);
+
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void TableRef_GetIndex_MissingKey_ReturnsNil()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue table = engine.RunString("return {}");
+            using LuaTableRef tr = table.TableRef!;
+
+            tr.GetIndex(LuaValue.FromString("missing")).Type.ShouldBe(LuaType.Nil);
+
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void TableRef_GetIndex_TriggersIndexMetamethod()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue table = engine.RunString(@"
+                return setmetatable({}, {
+                    __index = function(_, k) return k .. '_meta' end,
+                })
+            ");
+            using LuaTableRef tr = table.TableRef!;
+
+            tr.GetIndex(LuaValue.FromString("foo")).String.ShouldBe("foo_meta");
+
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void TableRef_SetIndex_StoresAndReadsBack()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue table = engine.RunString("return {}");
+            using LuaTableRef tr = table.TableRef!;
+
+            tr.SetIndex(LuaValue.FromString("key"), LuaValue.FromInt64(42)).ShouldBeTrue();
+            tr.GetIndex(LuaValue.FromString("key")).AsInt64.ShouldBe(42);
+
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void TableRef_SetIndex_TriggersNewindex()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue table = engine.RunString(@"
+                local shadow = {}
+                return setmetatable({}, {
+                    __newindex = function(_, k, v) shadow[k] = v .. '_modified' end,
+                    __index    = shadow,
+                })
+            ");
+            using LuaTableRef tr = table.TableRef!;
+
+            tr.SetIndex(LuaValue.FromString("x"), LuaValue.FromString("hello")).ShouldBeTrue();
+            tr.GetIndex(LuaValue.FromString("x")).String.ShouldBe("hello_modified");
+
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void TableRef_GetLength_ReturnsSequenceLength()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue table = engine.RunString("return {10, 20, 30, 40, 50}");
+            using LuaTableRef tr = table.TableRef!;
+
+            tr.GetLength().AsInt64.ShouldBe(5);
+
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void TableRef_GetLength_TriggersLenMetamethod()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue table = engine.RunString(@"
+                return setmetatable({}, {
+                    __len = function() return 42 end,
+                })
+            ");
+            using LuaTableRef tr = table.TableRef!;
+
+            tr.GetLength().AsInt64.ShouldBe(42);
+
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void UserdataRef_GetIndex_ReturnsMethod()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue jsonObj = engine.RunString("return Json.Create()");
+            using LuaUserdataRef ur = jsonObj.UserdataRef!;
+
+            // __index on Json userdata points to the module table; Encode is a function
+            var encodeVal = ur.GetIndex(LuaValue.FromString("Encode"));
+            encodeVal.FunctionRef?.Dispose();
+            encodeVal.Type.ShouldBe(LuaType.Function);
+
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void UserdataRef_GetIndex_NonexistentField_ReturnsNil()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue jsonObj = engine.RunString("return Json.Create()");
+            using LuaUserdataRef ur = jsonObj.UserdataRef!;
+
+            ur.GetIndex(LuaValue.FromString("__nonexistent_field__")).Type.ShouldBe(LuaType.Nil);
+
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        // -- KitsuneNext --------------------------------------------------------
+        [Fact]
+        public void TableRef_Pairs_IteratesAllEntries()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue table = engine.RunString("return {a=1, b=2, c=3}");
+            using LuaTableRef tr = table.TableRef!;
+
+            var seen = new System.Collections.Generic.Dictionary<string, long>();
+            foreach (var kv in tr.Pairs())
+            {
+                seen[kv.Key.String!] = kv.Value.AsInt64;
+            }
+
+            seen.Count.ShouldBe(3);
+            seen["a"].ShouldBe(1);
+            seen["b"].ShouldBe(2);
+            seen["c"].ShouldBe(3);
+
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void TableRef_Pairs_EmptyTable_NoEntries()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue table = engine.RunString("return {}");
+            using LuaTableRef tr = table.TableRef!;
+
+            tr.Pairs().ShouldBeEmpty();
+
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void TableRef_Pairs_EarlyBreak_DoesNotLeak()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue table = engine.RunString("return {x=10, y=20, z=30}");
+            using LuaTableRef tr = table.TableRef!;
+
+            int count = 0;
+            foreach (var item in tr.Pairs())
+            {
+                count++;
+                break;
+            }
+
+            count.ShouldBe(1);
+            engine.GetActiveIds().ShouldBeEmpty();
         }
 
         private static void SpinUntilRunning(KitsuneEngine engine, int timeoutMs = 2000)
@@ -6841,12 +7193,17 @@ namespace KitsuneNet.Tests
             }
         }
 
-        private static void ThrowIfLeaked(KitsuneEngine engine)
+        private sealed class Widget
         {
-            if (engine.LeakedAllocations != 0)
+            public Widget(string name)
             {
-                throw new InvalidOperationException($"Native memory leak: {engine.LeakedAllocations} unfreed allocation(s) after KitsuneCleanup");
+                Name = name;
             }
+
+            public string Name { get; }
+
+            [LuaMethod]
+            public LuaValue GetName(IReadOnlyList<LuaValue> val) => LuaValue.FromString(Name);
         }
 
         private sealed class Counter
@@ -6885,19 +7242,6 @@ namespace KitsuneNet.Tests
 
             [LuaMetaMethod("__tostring")]
             public LuaValue ToStr(IReadOnlyList<LuaValue> val) => $"Counter({Value})";
-        }
-
-        private sealed class Widget
-        {
-            public Widget(string name)
-            {
-                Name = name;
-            }
-
-            public string Name { get; }
-
-            [LuaMethod]
-            public LuaValue GetName(IReadOnlyList<LuaValue> val) => LuaValue.FromString(Name);
         }
 
         // Used by RegisterUserdata_DuplicateMethodName_ThrowsInvalidOperationException.

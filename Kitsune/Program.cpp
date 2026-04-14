@@ -1,4 +1,4 @@
-﻿#if defined(_WIN32) && defined(_DEBUG)
+#if defined(_WIN32) && defined(_DEBUG)
 #define _CRTDBG_MAP_ALLOC
 #endif
 #ifndef _CRT_SECURE_NO_WARNINGS
@@ -19,7 +19,7 @@
 #include "Session.h"
 
 #ifdef _DEBUG
-int Test(int argc, KitsuneVariable* argv, const kitsune_ResultSetter resultSetter, void* userdata) {
+int Test(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter resultSetter, void* userdata) {
 
     for (int n = 0; n < argc; n++) {
         if (argv[n].type == KITSUNE_TSTRING && argv[n].data && argv[n].length > 0)

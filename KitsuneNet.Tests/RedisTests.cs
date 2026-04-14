@@ -1,4 +1,4 @@
-using KitsuneNet;
+﻿using KitsuneNet;
 using Shouldly;
 using Xunit;
 using Xunit.Abstractions;
@@ -20,7 +20,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task Open_ValidHost_ToStringStartsWithRedis()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             assert(redis, 'Open returned nil')
             return tostring(redis):sub(1, 6)
@@ -31,7 +32,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task Open_InvalidHost_ThrowsConnectionError()
     {
-        LuaValue r = await Run("""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync("""
             local ok, err = pcall(Redis.Open, 'invalid.host.does.not.exist', 6379, false, 1)
             return tostring(not ok)
             """);
@@ -42,7 +44,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task Command_PING_ReturnsPong()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             local reply = redis:Command('PING')
             return reply.Value
@@ -53,7 +56,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task Command_SET_GET_RoundTrip()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_cmd_sg')
             redis:Command('SET', 'kitsune_test_cmd_sg', 'hello')
@@ -67,7 +71,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task Command_DEL_RemovesKey()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('SET', 'kitsune_test_cmd_del', 'x')
             local reply = redis:Command('DEL', 'kitsune_test_cmd_del')
@@ -80,7 +85,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetString_Set_Tostring_RoundTrip()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_str')
             local str = redis:GetString('kitsune_test_str')
@@ -95,7 +101,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetString_Delete_ReturnsOldValue()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('SET', 'kitsune_test_str_del', 'goodbye')
             local str = redis:GetString('kitsune_test_str_del')
@@ -107,7 +114,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetString_SetTTL_GetTTL_ReturnsPositive()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('SET', 'kitsune_test_str_ttl', 'temp')
             local str = redis:GetString('kitsune_test_str_ttl')
@@ -123,7 +131,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetKey_Tostring_ReturnsKeyName()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             local key = redis:GetKey('kitsune_test_keyname')
             return tostring(key)
@@ -134,7 +143,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetKey_Type_ReturnsString()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('SET', 'kitsune_test_keytype', 'v')
             local key = redis:GetKey('kitsune_test_keytype')
@@ -148,7 +158,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetKey_Delete_ReturnsTrueWhenExists()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('SET', 'kitsune_test_keydel', 'v')
             local key = redis:GetKey('kitsune_test_keydel')
@@ -161,7 +172,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetHashset_SetGet_RoundTrip()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_hash')
             local hash = redis:GetHashset('kitsune_test_hash')
@@ -176,7 +188,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetHashset_DeleteField_ReturnsNil()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('HSET', 'kitsune_test_hash_del', 'f', 'v')
             local hash = redis:GetHashset('kitsune_test_hash_del')
@@ -192,7 +205,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetList_RPUSH_ThenIndex_ReturnsValues()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_list')
             redis:Command('RPUSH', 'kitsune_test_list', 'first', 'second', 'third')
@@ -209,7 +223,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetSet_SADD_IsMember_ReturnsTrueAndFalse()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_set')
             redis:Command('SADD', 'kitsune_test_set', 'apple', 'banana', 'cherry')
@@ -226,7 +241,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetSortedSet_ZADD_IndexByRank_ReturnsLowestScoreMember()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_zset')
             redis:Command('ZADD', 'kitsune_test_zset', '10', 'memberA')
@@ -243,7 +259,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetStream_Add_Then_Read_ReturnsEntry()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_stream')
             local stream = redis:GetStream('kitsune_test_stream')
@@ -259,7 +276,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task KeyIterator_SCAN_FindsInsertedKeys()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('SET', 'kitsune_iter_1', '1')
             redis:Command('SET', 'kitsune_iter_2', '2')
@@ -283,7 +301,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task Subscribe_ReturnsThread()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             local co = redis:Subscribe('kitsune_sub_type_test')
             local t = type(co)
@@ -296,7 +315,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task PSubscribe_ReturnsThread()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             local co = redis:PSubscribe('kitsune_psub_*')
             local t = type(co)
@@ -309,7 +329,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task Subscribe_RoundTrip_ReceivesMessage()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local channel = 'kitsune_pubsub_rt'
             local unique  = 'msg-' .. tostring(Time())
 
@@ -349,7 +370,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task PSubscribe_RoundTrip_ReceivesMessageWithPattern()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local pattern = 'kitsune_pps_*'
             local channel = 'kitsune_pps_test'
             local unique  = 'msg-' .. tostring(Time())
@@ -389,7 +411,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetString_Set_ReturnsOldValue()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('SET', 'kitsune_test_str_prev', 'old')
             local str = redis:GetString('kitsune_test_str_prev')
@@ -403,7 +426,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetString_Set_ReturnsNilWhenKeyDidNotExist()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_str_nonexist')
             local str = redis:GetString('kitsune_test_str_nonexist')
@@ -417,7 +441,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetString_Len_ReturnsStrlen()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('SET', 'kitsune_test_str_len', 'hello')
             local str = redis:GetString('kitsune_test_str_len')
@@ -431,7 +456,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetString_At_ReturnsByte()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('SET', 'kitsune_test_str_at', 'ABC')
             local str = redis:GetString('kitsune_test_str_at')
@@ -445,7 +471,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetString_IndexRead_ReturnsByte()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('SET', 'kitsune_test_str_idxr', 'ABC')
             local str = redis:GetString('kitsune_test_str_idxr')
@@ -459,7 +486,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetString_IndexWrite_SetsByte()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('SET', 'kitsune_test_str_idxw', 'ABC')
             local str = redis:GetString('kitsune_test_str_idxw')
@@ -474,7 +502,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetString_Concat_ProducesJoinedString()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('SET', 'kitsune_test_str_cc', 'Hello')
             local str = redis:GetString('kitsune_test_str_cc')
@@ -488,7 +517,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetString_GetOrSet_ReturnsExistingValue()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('SET', 'kitsune_test_str_gos', 'existing')
             local str = redis:GetString('kitsune_test_str_gos')
@@ -502,7 +532,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetString_GetOrSet_SetsAndReturnsNewWhenMissing()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_str_gos2')
             local str = redis:GetString('kitsune_test_str_gos2')
@@ -516,7 +547,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetString_GetTTL_ReturnsNegativeOneWhenNoPersist()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('SET', 'kitsune_test_str_nottl', 'v')
             local str = redis:GetString('kitsune_test_str_nottl')
@@ -530,7 +562,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetString_SetTTL_Zero_RemovesTTL()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('SET', 'kitsune_test_str_persist', 'v')
             local str = redis:GetString('kitsune_test_str_persist')
@@ -546,7 +579,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetString_Pairs_IteratesBytes()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local redis = {Open()}
             redis:Command('SET', 'kitsune_test_str_pairs', 'AB')
             local str = redis:GetString('kitsune_test_str_pairs')
@@ -563,7 +597,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetString_Call_ReturnsRedisKey()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('SET', 'kitsune_test_str_call', 'v')
             local str = redis:GetString('kitsune_test_str_call')
@@ -578,7 +613,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetKey_SetTTL_GetTTL_RoundTrip()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('SET', 'kitsune_test_key_ttl', 'v')
             local key = redis:GetKey('kitsune_test_key_ttl')
@@ -593,7 +629,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetKey_SetTTL_Zero_RemovesTTL()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('SET', 'kitsune_test_key_persist', 'v')
             local key = redis:GetKey('kitsune_test_key_persist')
@@ -609,7 +646,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetKey_Type_ReturnsHash()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('HSET', 'kitsune_test_key_hashtype', 'f', 'v')
             local key = redis:GetKey('kitsune_test_key_hashtype')
@@ -623,7 +661,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetKey_Type_ReturnsList()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('RPUSH', 'kitsune_test_key_listtype', 'v')
             local key = redis:GetKey('kitsune_test_key_listtype')
@@ -637,7 +676,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetKey_Type_ReturnsNoneWhenMissing()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_key_noexist')
             local key = redis:GetKey('kitsune_test_key_noexist')
@@ -650,7 +690,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetHashset_MultipleFields_RoundTrip()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_hash_multi')
             local hash = redis:GetHashset('kitsune_test_hash_multi')
@@ -669,7 +710,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetHashset_Pairs_IteratesAllFields()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_hash_pairs')
             redis:Command('HSET', 'kitsune_test_hash_pairs', 'x', '1', 'y', '2', 'z', '3')
@@ -687,7 +729,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetHashset_Tostring_ContainsKeyName()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             local hash = redis:GetHashset('kitsune_test_hash_ts')
             local s = tostring(hash)
@@ -699,7 +742,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetHashset_Call_ReturnsKeyAndType()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             local hash = redis:GetHashset('kitsune_test_hash_call')
             local key, t = hash()
@@ -712,7 +756,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetList_Len_ReturnsCount()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_list_len')
             redis:Command('RPUSH', 'kitsune_test_list_len', 'a', 'b', 'c')
@@ -727,7 +772,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetList_IndexZero_LPops()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_list_lpop')
             redis:Command('RPUSH', 'kitsune_test_list_lpop', 'first', 'second')
@@ -742,7 +788,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetList_NegativeIndex_ReturnsFromEnd()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_list_neg')
             redis:Command('RPUSH', 'kitsune_test_list_neg', 'a', 'b', 'c')
@@ -757,7 +804,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetList_AssignIndexZero_AppendsByRpush()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_list_push')
             local list = redis:GetList('kitsune_test_list_push')
@@ -772,7 +820,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetList_AssignExistingIndex_UpdatesViaLset()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_list_lset')
             redis:Command('RPUSH', 'kitsune_test_list_lset', 'old', 'b')
@@ -788,7 +837,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetList_Pairs_IteratesAll()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_list_pairs')
             redis:Command('RPUSH', 'kitsune_test_list_pairs', 'x', 'y', 'z')
@@ -806,7 +856,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetList_Tostring_ContainsKeyName()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             local list = redis:GetList('kitsune_test_list_ts')
             local s = tostring(list)
@@ -818,7 +869,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetList_Call_ReturnsKeyAndType()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             local list = redis:GetList('kitsune_test_list_call')
             local key, t = list()
@@ -831,7 +883,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetSet_Srandmember_ReturnsAMember()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_set_rand')
             redis:Command('SADD', 'kitsune_test_set_rand', 'apple', 'banana')
@@ -846,7 +899,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetSet_Spop_RemovesAndReturnsMember()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_set_pop')
             redis:Command('SADD', 'kitsune_test_set_pop', 'only')
@@ -862,7 +916,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetSet_AssignTrue_AddsMember()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_set_add')
             local set = redis:GetSet('kitsune_test_set_add')
@@ -877,7 +932,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetSet_AssignFalse_RemovesMember()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('SADD', 'kitsune_test_set_remf', 'peach')
             local set = redis:GetSet('kitsune_test_set_remf')
@@ -892,7 +948,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetSet_AssignNil_RemovesMember()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('SADD', 'kitsune_test_set_remn', 'plum')
             local set = redis:GetSet('kitsune_test_set_remn')
@@ -907,7 +964,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetSet_Len_ReturnsScard()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_set_len')
             redis:Command('SADD', 'kitsune_test_set_len', 'a', 'b', 'c', 'd')
@@ -922,7 +980,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetSet_IndexedAccess_ReturnsMember()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_set_idx')
             redis:Command('SADD', 'kitsune_test_set_idx', 'solo')
@@ -937,7 +996,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetSet_Pairs_IteratesAll()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_set_pairs')
             redis:Command('SADD', 'kitsune_test_set_pairs', 'x', 'y', 'z')
@@ -955,7 +1015,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetSet_Tostring_ContainsKeyName()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             local set = redis:GetSet('kitsune_test_set_ts')
             local s = tostring(set)
@@ -967,7 +1028,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetSet_Call_ReturnsKeyAndType()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             local set = redis:GetSet('kitsune_test_set_call')
             local key, t = set()
@@ -980,7 +1042,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetSortedSet_GetScore_ByMemberName()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_zset_score')
             redis:Command('ZADD', 'kitsune_test_zset_score', '42', 'alpha')
@@ -995,7 +1058,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetSortedSet_AddViaAssignment_AddsToSet()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_zset_add')
             local zset = redis:GetSortedSet('kitsune_test_zset_add')
@@ -1010,7 +1074,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetSortedSet_RemoveViaNil_DeletesMember()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_zset_rem')
             redis:Command('ZADD', 'kitsune_test_zset_rem', '5', 'beta')
@@ -1026,7 +1091,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetSortedSet_Pairs_YieldsMembersWithScores()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_zset_pairs')
             redis:Command('ZADD', 'kitsune_test_zset_pairs', '10', 'a')
@@ -1045,7 +1111,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetSortedSet_Tostring_ContainsKeyName()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             local zset = redis:GetSortedSet('kitsune_test_zset_ts')
             local s = tostring(zset)
@@ -1057,7 +1124,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetSortedSet_Call_ReturnsKeyAndType()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             local zset = redis:GetSortedSet('kitsune_test_zset_call')
             local key, t = zset()
@@ -1070,7 +1138,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetStream_Add_IdIsNonEmptyString()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_stream_id')
             local stream = redis:GetStream('kitsune_test_stream_id')
@@ -1084,7 +1153,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetStream_MultipleAdd_ReadSequential()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_stream_seq')
             local stream = redis:GetStream('kitsune_test_stream_seq')
@@ -1101,7 +1171,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetStream_Trim_ReducesLength()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_stream_trim')
             local stream = redis:GetStream('kitsune_test_stream_trim')
@@ -1119,7 +1190,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetStream_Tostring_ContainsKeyName()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             local stream = redis:GetStream('kitsune_test_stream_ts')
             local s = tostring(stream)
@@ -1131,7 +1203,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetStream_Call_ReturnsRedisKey()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             local stream = redis:GetStream('kitsune_test_stream_call')
             local key = stream()
@@ -1144,7 +1217,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task Command_GET_NonExistentKey_NilValue()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_reply_nil')
             local reply = redis:Command('GET', 'kitsune_test_reply_nil')
@@ -1156,7 +1230,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task Command_SMEMBERS_ValueIsTable()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_reply_arr')
             redis:Command('SADD', 'kitsune_test_reply_arr', 'x', 'y')
@@ -1170,7 +1245,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task Command_INCR_ReturnsInteger()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_reply_int')
             redis:Command('SET', 'kitsune_test_reply_int', '10')
@@ -1184,7 +1260,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetStream_Read_EmptyStream_ReturnsNilPair()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_stream_empty')
             local stream = redis:GetStream('kitsune_test_stream_empty')
@@ -1198,7 +1275,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task Command_NilArgument_Raises()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             local ok = pcall(function()
                 redis:Command('SET', nil, 'value')
@@ -1211,7 +1289,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task Command_BooleanArgument_Raises()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             local ok = pcall(function()
                 redis:Command('SET', 'key', true)
@@ -1224,7 +1303,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task Command_WRONGTYPE_Raises()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_wt_list')
             redis:Command('RPUSH', 'kitsune_test_wt_list', 'item')
@@ -1241,7 +1321,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetString_GetSet_IsAliasOfGetOrSet()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('SET', 'kitsune_test_str_getset_alias', 'original')
             local str = redis:GetString('kitsune_test_str_getset_alias')
@@ -1255,7 +1336,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetString_Concat_TwoRedisStrings()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('SET', 'kitsune_test_str_cat_a', 'foo')
             redis:Command('SET', 'kitsune_test_str_cat_b', 'bar')
@@ -1271,7 +1353,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetString_At_OutOfRange_ReturnsNil()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('SET', 'kitsune_test_str_at_oor', 'Hi')
             local str = redis:GetString('kitsune_test_str_at_oor')
@@ -1285,7 +1368,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetString_Delete_NonExistentKey_ReturnsNil()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_str_del_nokey')
             local str = redis:GetString('kitsune_test_str_del_nokey')
@@ -1298,7 +1382,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetString_GetTTL_NonExistentKey_ReturnsNil()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_str_ttl_nokey')
             local str = redis:GetString('kitsune_test_str_ttl_nokey')
@@ -1311,7 +1396,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetKey_GetTTL_NonExistentKey_ReturnsNil()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_key_ttl_noexist')
             local key = redis:GetKey('kitsune_test_key_ttl_noexist')
@@ -1323,7 +1409,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetKey_SetTTL_NonExistentKey_ReturnsFalse()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_key_pexpire_nokey')
             local key = redis:GetKey('kitsune_test_key_pexpire_nokey')
@@ -1336,7 +1423,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetHashset_StoreAndRetrieveNumber()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_hash_num')
             local hash = redis:GetHashset('kitsune_test_hash_num')
@@ -1351,7 +1439,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetHashset_StoreTable_IsJsonEncoded()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_hash_json')
             local hash = redis:GetHashset('kitsune_test_hash_json')
@@ -1366,7 +1455,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetHashset_Len_ReturnsZero()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('HSET', 'kitsune_test_hash_lenz', 'f', 'v')
             local hash = redis:GetHashset('kitsune_test_hash_lenz')
@@ -1381,7 +1471,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetList_Len_EmptyList_ReturnsZero()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_list_empty')
             local list = redis:GetList('kitsune_test_list_empty')
@@ -1393,7 +1484,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetList_IndexZero_EmptyList_ReturnsNil()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_list_lpop_empty')
             local list = redis:GetList('kitsune_test_list_lpop_empty')
@@ -1406,7 +1498,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetList_AssignNegativeIndex_PrependsByLpush()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_list_neg_push')
             redis:Command('RPUSH', 'kitsune_test_list_neg_push', 'a', 'b', 'c')
@@ -1423,7 +1516,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetSet_IndexedAccess_BeyondSize_ReturnsNil()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_set_oob')
             redis:Command('SADD', 'kitsune_test_set_oob', 'a', 'b')
@@ -1438,10 +1532,12 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetSet_MutationInvalidatesScanCache()
     {
+        using KitsuneEngine engine = new();
+
         // set[1] fills the SSCAN cache; set[2] keeps it alive (2 of 3).
         // After SREM the cache must be cleared so set[3] re-scans the
         // now-2-member set and returns nil instead of a stale third element.
-        LuaValue r = await Run($"""
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_set_stale')
             redis:Command('SADD', 'kitsune_test_set_stale', 'alpha', 'beta', 'gamma')
@@ -1460,7 +1556,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetSortedSet_IndexByRank_OutOfRange_ReturnsNil()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_zset_oor')
             redis:Command('ZADD', 'kitsune_test_zset_oor', '1', 'a')
@@ -1475,7 +1572,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetSortedSet_Score_NonExistentMember_ReturnsNil()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_zset_noscore')
             redis:Command('ZADD', 'kitsune_test_zset_noscore', '5', 'member')
@@ -1490,7 +1588,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetSortedSet_Len_ReturnsZero()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('ZADD', 'kitsune_test_zset_lenz', '1', 'a')
             local zset = redis:GetSortedSet('kitsune_test_zset_lenz')
@@ -1504,8 +1603,10 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetSortedSet_Pairs_FloatScoreRoundTrips()
     {
+        using KitsuneEngine engine = new();
+
         // Verifies that lua_stringtonumber is used (not atoll) so fractional scores survive.
-        LuaValue r = await Run($$"""
+        LuaValue r = await engine.ExecuteStringAsync($$"""
             local redis = {{Open()}}
             redis:Command('DEL', 'kitsune_test_zset_float')
             redis:Command('ZADD', 'kitsune_test_zset_float', '1.5', 'a')
@@ -1524,7 +1625,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_Tostring_ShowsKeyAndPath()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             local json = redis:GetJson('kitsune_test_json')
             local s = tostring(json)
@@ -1536,7 +1638,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_GetScalar_ReturnsNumber()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -1550,7 +1653,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_GetNestedBool_ReturnsFalse()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -1564,7 +1668,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_GetNestedString_ReturnsValue()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -1578,7 +1683,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_GetArrayElement_ByLuaIndex_ReturnsSecondEntry()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -1592,7 +1698,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_GetArrayElement_FirstEntry()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -1606,7 +1713,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_GetMissingPath_ReturnsNil()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -1620,7 +1728,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_Get_Root_ReturnsTable()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -1634,7 +1743,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_SetViaMethod_UpdatesScalar()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -1649,7 +1759,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_SetViaNewindex_UpdatesScalar()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -1664,7 +1775,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_SetNestedViaNewindex_UpdatesField()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -1679,7 +1791,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_Delete_DeletesPath()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -1694,7 +1807,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_Type_ReturnsNonNilForRootAndArray()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -1709,7 +1823,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_Length_ReturnsArrayLength()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -1723,7 +1838,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_LenMetamethod_ReturnsArrayLength()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -1737,7 +1853,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_PathChaining_ToStringShowsAccumulatedPath()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             local json = redis:GetJson('kitsune_test_json')
             local s = tostring(json.TestArray[2].Name)
@@ -1750,7 +1867,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_GetNull_ReturnsJsonNullSentinel()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -1764,7 +1882,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_GetNestedObject_ReturnsTable()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -1778,7 +1897,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_GetArray_ReturnsTableWithTwoElements()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -1792,7 +1912,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_GetArrayElementId_ReturnsInteger()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -1807,7 +1928,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_GetNonExistentKey_ReturnsNil()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_json_noexist')
             local json = redis:GetJson('kitsune_json_noexist')
@@ -1820,7 +1942,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_SetString_UpdatesField()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -1835,7 +1958,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_SetNil_SetsJsonNull()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -1850,8 +1974,10 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_SetJsonNullSentinel_RoundTrips()
     {
+        using KitsuneEngine engine = new();
+
         // Read a null field ? get Json.Null sentinel ? assign it to another field ? reads back as Json.Null.
-        LuaValue r = await Run($"""
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -1867,8 +1993,10 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_SetTable_ReplacesNestedObject()
     {
+        using KitsuneEngine engine = new();
+
         // Sets each field individually (the table-encoding path); verifies both fields update.
-        LuaValue r = await Run($"""
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -1885,8 +2013,10 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_Set_Table_EncodesAndUpdates()
     {
+        using KitsuneEngine engine = new();
+
         // Calls Set({...}) with a Lua table and verifies the raw JSON.GET sees the change.
-        LuaValue r = await Run($@"
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -1901,7 +2031,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_SetViaArrayIndexNewindex_UpdatesElement()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -1916,7 +2047,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_Delete_Root_ReturnsOneAndKeyGone()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -1930,7 +2062,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_Delete_ReturnsDeleteCount()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -1944,7 +2077,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_Type_NumberField_ReturnsTypeString()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -1958,7 +2092,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_Type_ObjectField_ReturnsObject()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -1972,7 +2107,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_Type_ArrayField_ReturnsArray()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -1986,9 +2122,11 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_Length_NonArray_ReturnsNilOrRaises()
     {
+        using KitsuneEngine engine = new();
+
         // JSON.ARRLEN on a non-array type: Valkey returns a wrapped null element ? nil,
         // or raises an error. Either outcome is correct.
-        LuaValue r = await Run($"""
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -2004,7 +2142,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_ArrayIndexZero_RaisesError()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             local json = redis:GetJson('kitsune_test_json')
             local ok = pcall(function()
@@ -2018,7 +2157,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_ReusePathObject_IndependentAccess()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -2034,7 +2174,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_Tostring_ArrayIndexPath_ShowsBrackets()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             local json = redis:GetJson('kitsune_test_json')
             local s = tostring(json.TestArray[1])
@@ -2047,7 +2188,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_Pairs_OnObject_IteratesKeyValuePairs()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -2065,7 +2207,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_Pairs_OnObject_ValuesAreDecodedCorrectly()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -2082,7 +2225,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_Pairs_OnArray_CountsAllElements()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -2099,7 +2243,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_Pairs_OnRoot_IteratesTopLevelKeys()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -2117,7 +2262,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_Pairs_OnMissingPath_IteratesNothing()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -2134,7 +2280,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_Pairs_OnScalar_IteratesNothing()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -2151,7 +2298,8 @@ public sealed class RedisTests
     [RedisFact]
     public async Task GetJson_Pairs_ViaMethod_WorksLikePairs()
     {
-        LuaValue r = await Run($"""
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json')
@@ -2189,31 +2337,6 @@ public sealed class RedisTests
         var pass = Password();
         var passLua = pass is not null ? $"'{pass}'" : "nil";
         return $"Redis.Open('{Host()}', {Port()}, false, 10, nil, {passLua})";
-    }
-
-    private async Task<LuaValue> Run(string lua)
-    {
-        var engine = new KitsuneEngine();
-        engine.RegisterFunction("print", args =>
-        {
-            _output.WriteLine(string.Join("\t", args.Select(v => v.String ?? v.Type.ToString())));
-            return LuaValue.None;
-        });
-        LuaValue result;
-        try
-        {
-            result = await engine.ExecuteStringAsync(lua).ConfigureAwait(false);
-        }
-        finally
-        {
-            engine.Dispose();
-        }
-
-        if (engine.LeakedAllocations != 0)
-        {
-            throw new InvalidOperationException($"Native memory leak: {engine.LeakedAllocations} unfreed allocation(s) after KitsuneCleanup");
-        }
-        return result;
     }
 
     // -- GetJson ---------------------------------------------------------------

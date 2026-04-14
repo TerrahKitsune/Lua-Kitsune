@@ -1,4 +1,4 @@
-﻿#ifndef _CRT_SECURE_NO_WARNINGS
+#ifndef _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 
@@ -24,7 +24,7 @@ static inline bool session_is_stdin_tty() {
 }
 
 // Session.Console.Put -- print a string to stdout with CR/BS handling.
-static int SessionConsolePut(int argc, KitsuneVariable* argv, const kitsune_ResultSetter, void*) {
+static int SessionConsolePut(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter, void*) {
     if (argc > 0 && argv[0].type == KITSUNE_TSTRING && argv[0].data && argv[0].length > 0) {
         for (size_t n = 0; n < argv[0].length; n++) {
             char c = (char)argv[0].data[n];
@@ -40,7 +40,7 @@ static int SessionConsolePut(int argc, KitsuneVariable* argv, const kitsune_Resu
 }
 
 // Session.Console.GetKey -- read one byte/key from stdin; returns integer.
-static int SessionConsoleGetKey(int argc, KitsuneVariable* argv, const kitsune_ResultSetter setter, void*) {
+static int SessionConsoleGetKey(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter setter, void*) {
     long long ch;
     if (session_is_stdin_tty()) {
 #ifdef _WIN32
@@ -58,7 +58,7 @@ static int SessionConsoleGetKey(int argc, KitsuneVariable* argv, const kitsune_R
 }
 
 // Session.Console.HasKeyDown -- true if stdin has input waiting.
-static int SessionConsoleHasKeyDown(int argc, KitsuneVariable* argv, const kitsune_ResultSetter setter, void*) {
+static int SessionConsoleHasKeyDown(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter setter, void*) {
     bool has;
     if (session_is_stdin_tty()) {
 #ifdef _WIN32
@@ -75,7 +75,7 @@ static int SessionConsoleHasKeyDown(int argc, KitsuneVariable* argv, const kitsu
 }
 
 // Session.Display.GetScreenSize -- returns width, height (two values).
-static int SessionGetScreenSize(int argc, KitsuneVariable* argv, const kitsune_ResultSetter setter, void*) {
+static int SessionGetScreenSize(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter setter, void*) {
     long long w = 0, h = 0;
 #ifdef _WIN32
     w = GetSystemMetrics(SM_CXSCREEN);
@@ -96,7 +96,7 @@ static int SessionGetScreenSize(int argc, KitsuneVariable* argv, const kitsune_R
 }
 
 // Session.Display.GetCursorPosition -- returns x, y.
-static int SessionGetCursorPosition(int argc, KitsuneVariable* argv, const kitsune_ResultSetter setter, void*) {
+static int SessionGetCursorPosition(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter setter, void*) {
 #ifdef _WIN32
     POINT cur;
     if (GetCursorPos(&cur)) {
@@ -122,7 +122,7 @@ static int SessionGetCursorPosition(int argc, KitsuneVariable* argv, const kitsu
 }
 
 // Session.Display.GetCursorPoint -- raw screen cursor coordinates (pixels).
-static int SessionGetCursorPoint(int argc, KitsuneVariable* argv, const kitsune_ResultSetter setter, void*) {
+static int SessionGetCursorPoint(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter setter, void*) {
 #ifdef _WIN32
     POINT p = {};
     GetCursorPos(&p);
@@ -140,7 +140,7 @@ static int SessionGetCursorPoint(int argc, KitsuneVariable* argv, const kitsune_
 }
 
 // Session.Clipboard.Set -- copy a string to the clipboard; returns boolean.
-static int SessionClipboardSet(int argc, KitsuneVariable* argv, const kitsune_ResultSetter setter, void*) {
+static int SessionClipboardSet(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter setter, void*) {
     bool ok = false;
 #ifdef _WIN32
     if (OpenClipboard(NULL)) {
@@ -171,7 +171,7 @@ static int SessionClipboardSet(int argc, KitsuneVariable* argv, const kitsune_Re
 }
 
 // Session.Clipboard.Get -- returns the clipboard text as a Wchar, or nil.
-static int SessionClipboardGet(int argc, KitsuneVariable* argv, const kitsune_ResultSetter setter, void*) {
+static int SessionClipboardGet(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter setter, void*) {
 #ifdef _WIN32
     if (OpenClipboard(NULL)) {
         HANDLE hData = GetClipboardData(CF_UNICODETEXT);
@@ -199,7 +199,7 @@ static int SessionClipboardGet(int argc, KitsuneVariable* argv, const kitsune_Re
 
 #ifdef _WIN32
 // Session.Console.Write -- WriteConsole with a single string; returns bytes written.
-static int SessionConsoleWrite(int argc, KitsuneVariable* argv, const kitsune_ResultSetter setter, void*) {
+static int SessionConsoleWrite(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter setter, void*) {
     HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);
     DWORD written = 0;
     if (h != INVALID_HANDLE_VALUE && argc > 0 && argv[0].type == KITSUNE_TSTRING && argv[0].data)
@@ -210,7 +210,7 @@ static int SessionConsoleWrite(int argc, KitsuneVariable* argv, const kitsune_Re
 }
 
 // Session.Console.ReadKey -- returns key code or nil if no key is ready.
-static int SessionConsoleReadKey(int argc, KitsuneVariable* argv, const kitsune_ResultSetter setter, void*) {
+static int SessionConsoleReadKey(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter setter, void*) {
     bool has = session_is_stdin_tty() ? (_kbhit() > 0) : !feof(stdin);
     if (has) {
         KitsuneVariable r = {}; r.type = KITSUNE_TINTEGER; r.integer = _getch();
@@ -223,7 +223,7 @@ static int SessionConsoleReadKey(int argc, KitsuneVariable* argv, const kitsune_
 }
 
 // Session.Console.GetKeyState -- returns true if the given virtual key is held.
-static int SessionConsoleGetKeyState(int argc, KitsuneVariable* argv, const kitsune_ResultSetter setter, void*) {
+static int SessionConsoleGetKeyState(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter setter, void*) {
     bool down = false;
     if (argc > 0 && argv[0].type == KITSUNE_TINTEGER)
         down = (GetAsyncKeyState((int)argv[0].integer) & 0x8000) != 0;
@@ -233,7 +233,7 @@ static int SessionConsoleGetKeyState(int argc, KitsuneVariable* argv, const kits
 }
 
 // Session.Console.SetColor -- set console text attributes from (background, foreground).
-static int SessionConsoleSetColor(int argc, KitsuneVariable* argv, const kitsune_ResultSetter, void*) {
+static int SessionConsoleSetColor(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter, void*) {
     if (argc >= 2 && argv[0].type == KITSUNE_TINTEGER && argv[1].type == KITSUNE_TINTEGER) {
         WORD attr = (WORD)(((argv[0].integer & 0x0F) << 4) + (argv[1].integer & 0x0F));
         SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), attr);
@@ -242,7 +242,7 @@ static int SessionConsoleSetColor(int argc, KitsuneVariable* argv, const kitsune
 }
 
 // Session.Console.GetColor -- returns (background, foreground) attribute nibbles.
-static int SessionConsoleGetColor(int argc, KitsuneVariable* argv, const kitsune_ResultSetter setter, void*) {
+static int SessionConsoleGetColor(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter setter, void*) {
     CONSOLE_SCREEN_BUFFER_INFO csbi = {};
     if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi)) {
         KitsuneVariable vbg = {}, vfg = {};
@@ -257,7 +257,7 @@ static int SessionConsoleGetColor(int argc, KitsuneVariable* argv, const kitsune
 }
 
 // Session.Console.SetVisible -- show/hide the console window.
-static int SessionConsoleSetVisible(int argc, KitsuneVariable* argv, const kitsune_ResultSetter, void*) {
+static int SessionConsoleSetVisible(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter, void*) {
     bool show = argc > 0 && argv[0].type == KITSUNE_TBOOLEAN && argv[0].boolean;
     HWND hwnd = GetConsoleWindow();
     ShowWindow(hwnd, show ? SW_RESTORE : SW_HIDE);
@@ -265,24 +265,24 @@ static int SessionConsoleSetVisible(int argc, KitsuneVariable* argv, const kitsu
 }
 
 // Session.Console.SetTitle -- set the console window title.
-static int SessionConsoleSetTitle(int argc, KitsuneVariable* argv, const kitsune_ResultSetter, void*) {
+static int SessionConsoleSetTitle(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter, void*) {
     if (argc > 0 && argv[0].type == KITSUNE_TSTRING && argv[0].data)
         SetConsoleTitleA((const char*)argv[0].data);
     return 1;
 }
 
 // Session.Console.Create / Destroy / Attach -- AllocConsole / FreeConsole / AttachConsole.
-static int SessionConsoleCreate(int argc, KitsuneVariable* argv, const kitsune_ResultSetter setter, void*) {
+static int SessionConsoleCreate(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter setter, void*) {
     KitsuneVariable r = {}; r.type = KITSUNE_TBOOLEAN; r.boolean = AllocConsole() != FALSE;
     setter(&r);
     return 1;
 }
-static int SessionConsoleDestroy(int argc, KitsuneVariable* argv, const kitsune_ResultSetter setter, void*) {
+static int SessionConsoleDestroy(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter setter, void*) {
     KitsuneVariable r = {}; r.type = KITSUNE_TBOOLEAN; r.boolean = FreeConsole() != FALSE;
     setter(&r);
     return 1;
 }
-static int SessionConsoleAttach(int argc, KitsuneVariable* argv, const kitsune_ResultSetter setter, void*) {
+static int SessionConsoleAttach(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter setter, void*) {
     DWORD pid = (argc > 0 && argv[0].type == KITSUNE_TINTEGER)
         ? (DWORD)argv[0].integer : ATTACH_PARENT_PROCESS;
     KitsuneVariable r = {}; r.type = KITSUNE_TBOOLEAN; r.boolean = AttachConsole(pid) != FALSE;
@@ -291,7 +291,7 @@ static int SessionConsoleAttach(int argc, KitsuneVariable* argv, const kitsune_R
 }
 
 // Session.Console.Clear -- clear the console screen buffer.
-static int SessionConsoleClear(int argc, KitsuneVariable* argv, const kitsune_ResultSetter, void*) {
+static int SessionConsoleClear(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter, void*) {
     HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);
     CONSOLE_SCREEN_BUFFER_INFO csbi = {};
     if (h == INVALID_HANDLE_VALUE || !GetConsoleScreenBufferInfo(h, &csbi))
@@ -305,7 +305,7 @@ static int SessionConsoleClear(int argc, KitsuneVariable* argv, const kitsune_Re
 }
 
 // Session.Console.GetInfo -- returns x, y, width, height, maxW, maxH (six values).
-static int SessionConsoleGetInfo(int argc, KitsuneVariable* argv, const kitsune_ResultSetter setter, void*) {
+static int SessionConsoleGetInfo(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter setter, void*) {
     HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);
     CONSOLE_SCREEN_BUFFER_INFO csbi = {};
     if (h != INVALID_HANDLE_VALUE && GetConsoleScreenBufferInfo(h, &csbi)) {
@@ -326,7 +326,7 @@ static int SessionConsoleGetInfo(int argc, KitsuneVariable* argv, const kitsune_
 }
 
 // Session.Console.SetCursorPosition -- move cursor to (x, y).
-static int SessionConsoleSetCursorPosition(int argc, KitsuneVariable* argv, const kitsune_ResultSetter, void*) {
+static int SessionConsoleSetCursorPosition(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter, void*) {
     if (argc >= 2 && argv[0].type == KITSUNE_TINTEGER && argv[1].type == KITSUNE_TINTEGER) {
         HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);
         COORD c = { (SHORT)argv[0].integer, (SHORT)argv[1].integer };

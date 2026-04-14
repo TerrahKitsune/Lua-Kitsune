@@ -31,14 +31,14 @@
 #define KITSUNE_TLIGHTUSERDATA  (2)
 #define KITSUNE_TNUMBER         (3)
 #define KITSUNE_TSTRING         (4)
-#define KITSUNE_TTABLE          (5)  // When returned from the engine, integer holds a luaL_ref registry reference
-								// anchoring the live table. Same lifecycle as KITSUNE_TFUNCTION: release via
-								// KitsuneVariableFree, push back to Lua via PushKitsuneVariable (lua_rawgeti).
-								// Use KitsuneGetTableContents to snapshot contents; KitsuneSetTableContents to replace them.
-#define KITSUNE_TFUNCTION       (6)  // When returned from the engine, integer holds a luaL_ref registry reference
-									// anchoring the function. Release via KitsuneVariableFree, which calls
-									// luaL_unref. Push back to Lua via PushKitsuneVariable (lua_rawgeti).
-									// Cannot be constructed from scratch on the host side in a meaningful way.
+#define KITSUNE_TTABLE          (5)  // When returned from the engine, ref holds a luaL_ref registry reference
+							// anchoring the live table. Same lifecycle as KITSUNE_TFUNCTION: release via
+							// KitsuneVariableFree, push back to Lua via PushKitsuneVariable (lua_rawgeti).
+							// Use KitsuneGetTableContents to snapshot contents; KitsuneSetTableContents to replace them.
+#define KITSUNE_TFUNCTION       (6)  // When returned from the engine, ref holds a luaL_ref registry reference
+								// anchoring the function. Release via KitsuneVariableFree, which calls
+								// luaL_unref. Push back to Lua via PushKitsuneVariable (lua_rawgeti).
+								// Cannot be constructed from scratch on the host side in a meaningful way.
 #define KITSUNE_TUSERDATA       (7)
 #define KITSUNE_TTHREAD         (8)
 
@@ -95,6 +95,7 @@ struct KitsuneVariable {
 	int type; // see KITSUNE_T* constants above
 	size_t length; // byte count for KITSUNE_TSTRING and KITSUNE_TUSERDATA __name; char16_t count for KITSUNE_TCHAR16; entry count for KITSUNE_TTABLE; 0 for all other types
 	union {
+		int ref;							   // Objects that are references such as KITSUNE_TTHREAD, KITSUNE_TFUNCTION, KITSUNE_TTABLE.
 		double number;                         // KITSUNE_TNUMBER
 		long long integer;                     // KITSUNE_TINTEGER
 		bool boolean;                          // KITSUNE_TBOOLEAN
@@ -111,6 +112,7 @@ struct KitsuneVariable {
 
 struct KitsuneUserData {
 	char* name; // Name of the userdata
+	int ref; // luaL_ref registry reference anchoring the userdata in Lua; release with luaL_unref in KitsuneVariableFree when type == KITSUNE_TUSERDATA
 	void* userdata; // Opaque pointer passed to C functions registered in this userdata's metatable; null if it its userdata that was not registered by KitsuneRegisterUserdata
 };
 
@@ -127,9 +129,8 @@ struct KitsuneIterator {
 
 // Intrusive linked list node for KITSUNE_TTABLECONTENTS values.
 // When a KitsuneVariable has type == KITSUNE_TTABLECONTENTS, its table field points to the head of this list.
-// Keys and values may themselves be KITSUNE_TTABLECONTENTS nodes (nested snapshots) or KITSUNE_TTABLE live refs,
-// enabling nested tables up to KITSUNE_MAX_TABLE_DEPTH levels deep.
-// Call KitsuneVariableFree to recursively release the list.
+// Keys and values are bridged the same way as FillKitsuneVariableFromStack: nested tables appear as
+// live KITSUNE_TTABLE registry refs. Call KitsuneVariableFree to recursively release the list.
 struct KeyValuePairKitsuneVariableNode {
 	KitsuneVariable key;
 	KitsuneVariable value;
@@ -140,8 +141,12 @@ struct KeyValuePairKitsuneVariableNode {
 // key and value are temporary copies valid only for the duration of this call.
 // Copy any data you need before returning; do not store the data pointers beyond the callback.
 // userdata is the opaque pointer passed to KitsuneGetAll.
-// CONSTRAINT: do not call any Kitsune API that calls AcquireLuaAccess from within this callback
-// (the same deadlock constraint as kitsune_CFunction — see above).
+// CONSTRAINT: KitsuneGetAll holds accessLock for the entire traversal. From a non-scheduler
+// thread any function that also acquires accessLock (KitsuneSetVariable, KitsuneGetVariable,
+// KitsuneCallMethod, etc.) will deadlock. Only lock-free functions are safe in that context:
+// KitsuneVariableFree, KitsuneGetStatus, KitsuneCancel, KitsuneGetRuntime, etc.
+// Exception: if KitsuneGetAll is itself called from within a kitsune_CFunction (scheduler
+// thread), accessLock is not held and the same safe/unsafe set as kitsune_CFunction applies.
 typedef void (*kitsune_KeyValuePairCallback)(const KitsuneVariable* key, const KitsuneVariable* value, void* userdata);
 
 // Callback passed to kitsune_CFunction to return one or more values to Lua.
@@ -153,14 +158,40 @@ typedef void (*kitsune_KeyValuePairCallback)(const KitsuneVariable* key, const K
 // The caller retains ownership of the KitsuneVariable and any data it points to for the duration of the call.
 typedef int (*kitsune_ResultSetter) (const KitsuneVariable* result);
 
-// Signature for C functions registered via RegisterFunction.
-// argc/argv are the Lua call arguments; call resultSetter to return a result or raise an error.
+// Signature for C functions registered via KitsuneRegisterFunction.
+// Parameters:
+//   argc         — number of arguments passed from Lua (may be 0).
+//   argv         — read-only array of argc KitsuneVariable arguments, each valid ONLY for the
+//                  duration of this call. The engine owns the array and all values inside it;
+//                  do not store pointers into it or modify it.
+//   resultSetter — call once per return value to push a result onto the Lua stack.
+//                  Passing a KITSUNE_TERROR variable raises a Lua error instead.
+//                  Valid only within this function call; do not cache or call after returning.
+//   userdata     — the opaque pointer supplied to KitsuneRegisterFunction; lifetime is
+//                  caller-managed and may be NULL.
 // Return > 0 on success, <= 0 to raise a generic "delegate function error" in Lua.
-// CONSTRAINTS: do NOT call KitsuneSetVariable, KitsuneGetVariable, KitsuneExecuteStringAsync/FileAsync/FunctionAsync,
-// KitsuneGetAll, or KitsuneRegisterFunction from within this callback — the scheduler
-// thread owns the Lua state for the duration of the call, so any function that calls
-// AcquireLuaAccess will deadlock permanently. lua_State* is intentionally not exposed.
-typedef int (*kitsune_CFunction) (int argc, KitsuneVariable* argv, const kitsune_ResultSetter resultSetter, void* userdata);
+// CONSTRAINTS — the following are NOT safe to call from within this callback:
+//   KitsuneExecuteFileAsync / StringAsync / FunctionAsync / VariableAsync:
+//     Explicitly return -1 on the scheduler thread.
+//   KitsuneGC:
+//     Calls AcquireLuaAccess directly. Sets pauseFlag then waits for pausedEvent, which is
+//     only signalled by the Ticker between Lua bytecode instructions — it never fires while
+//     a C function is executing. Deadlock.
+//   KitsuneWait:
+//     Waits for runningCount to reach 0 via doneCV. The scheduler thread is occupied
+//     running this callback so the count never drops. Deadlock.
+//   KitsuneCleanup:
+//     Destroys the engine while it is in use.
+// Everything else is safe:
+//   KitsuneSetVariable, KitsuneGetVariable, KitsuneGetAll, KitsuneRegisterFunction,
+//   KitsuneRegisterUserdata, KitsuneCallMethod, KitsuneCallMetamethod, and all
+//   coroutine-query functions (KitsuneGetStatus, KitsuneCancel, KitsuneHasResult, etc.)
+//   use LuaAccessGuard, which is a no-op on the scheduler thread.
+//   The synchronous KitsuneExecuteFile / String / Function / Variable detect the
+//   scheduler-thread context and run via a re-entrant tight-loop path; Sleep() and
+//   Yield() inside the called script are no-ops in this case.
+// lua_State* is intentionally not exposed.
+typedef int (*kitsune_CFunction) (int argc, const KitsuneVariable* argv, const kitsune_ResultSetter resultSetter, void* userdata);
 
 // Holds the function pointer and userdata for a KITSUNE_TCFUNCTION variable.
 // Set KitsuneVariable.data to a pointer to one of these to pass an anonymous C function to Lua
@@ -238,7 +269,6 @@ extern "C" {
 	//   If the block is never passed to Lua, setting both flags releases it immediately on
 	//   the next ticker sweep.
 	// Do NOT call free() or any other allocator on the block.
-	// Cannot be called from the Lua scheduler thread inside a registered function (will return NULL).
 	// Returns NULL on failure.
 	KITSUNE_API SharedMemoryBlock* KitsuneCreateMemoryBlock(size_t size);
 
@@ -250,12 +280,10 @@ extern "C" {
 	// A result with type KITSUNE_TNONE means the script returned no value.
 	// A result with type KITSUNE_TERROR means the script raised a Lua error;
 	// the error message is in result->data (UTF-8, length in result->length).
-	// Cannot be called from
-	// within a kitsune_CFunction, from the scheduler thread, or recursively from within
-	// another sync Execute call — all three cases deadlock or corrupt state.
-	// Exception: calling from within a kitsune_CFunction IS supported via a re-entrant
-	// tight-loop path. Sleep() and Yield() inside the called function are no-ops in this
-	// case (the coroutine is immediately re-resumed); the call is otherwise fully functional.
+	// Calling from within a kitsune_CFunction IS supported via a re-entrant tight-loop
+	// path; Sleep() and Yield() inside the called script are no-ops in that case.
+	// Do not call recursively from the same non-scheduler thread while already blocking
+	// on another sync Execute call on that thread.
 	KITSUNE_API KitsuneVariable* KitsuneExecuteFile(const char* path, int argc, const KitsuneVariable* argv);
 	KITSUNE_API KitsuneVariable* KitsuneExecuteString(const char* script, int argc, const KitsuneVariable* argv);
 	KITSUNE_API KitsuneVariable* KitsuneExecuteFunction(const char* functionName, int argc, const KitsuneVariable* argv);
@@ -345,8 +373,29 @@ extern "C" {
 	// Unregisters a KitsuneVariable from the lua registry by its integer reference and returns it.
 	// Call KitsuneVariableFree on the result when done. Thread-safe.
 	KITSUNE_API KitsuneVariable* KitsuneUnregister(int ref);
+	// Pushes var onto the Lua stack (converting to a native Lua value), anchors the result
+	// in the registry, and returns a new heap-allocated KitsuneVariable that owns that anchor.
+	// The returned variable remains valid until freed with KitsuneVariableFree, regardless of
+	// the lifetime of the original var.
+	//
+	// Common uses:
+	//   1. Extend the lifetime of a temporary variable from a callback or tight scope:
+	//        KitsuneVariable* kept = KitsuneAnchorVariable(argv[0]);
+	//   2. Create a deep copy of a value-type variable (string, number, etc.) that
+	//      can be freed independently of the original.
+	//   3. Create a second handle to a reference-type variable (table, function, userdata)
+	//      that points to the same Lua object but can be freed independently.
+	//   4. Create a new empty anchored table — pass a KITSUNE_TTABLECONTENTS variable
+	//      with table == NULL; PushKitsuneVariable creates a fresh lua_newtable and
+	//      FillKitsuneVariableFromStack anchors it:
+	//        KitsuneVariable cv = { .type = KITSUNE_TTABLECONTENTS };
+	//        KitsuneVariable* emptyTable = KitsuneAnchorVariable(&cv); // type == LUA_TTABLE
+	//   5. Create a populated table from a KITSUNE_TTABLECONTENTS snapshot (same mechanism
+	//      as above, with a non-NULL linked list).
+	// Returns NULL on failure. Thread-safe.
+	KITSUNE_API KitsuneVariable* KitsuneAnchorVariable(const KitsuneVariable* var);
 	// Snapshots the contents of a live KITSUNE_TTABLE variable into a heap-allocated KITSUNE_TTABLECONTENTS.
-	// tableVar must have type KITSUNE_TTABLE with a valid registry ref (integer != LUA_NOREF).
+	// tableVar must have type KITSUNE_TTABLE with a valid registry ref (ref != LUA_NOREF).
 	// Returns NULL on failure. Call KitsuneVariableFree on the result when done. Thread-safe.
 	KITSUNE_API KitsuneVariable* KitsuneGetTableContents(const KitsuneVariable* tableVar);
 	// Replaces the contents of a live Lua table (tableVar, type KITSUNE_TTABLE) with the snapshot
@@ -354,4 +403,62 @@ extern "C" {
 	// not merge). Integer keys restore the array part naturally. Returns false on invalid arguments.
 	// Thread-safe.
 	KITSUNE_API bool KitsuneSetTableContents(const KitsuneVariable* tableVar, const KitsuneVariable* contentsVar);
+	// Gets obj[key] in Lua, firing the __index metamethod if present.
+	// obj must be KITSUNE_TTABLE (ref > 0) or KITSUNE_TUSERDATA (non-null userdata).
+	// The lookup runs inside a protected call so any __index error surfaces as KITSUNE_TERROR.
+	// Return semantics (always non-NULL on a valid obj):
+	//   KITSUNE_TNIL   — key is absent or is nil (indistinguishable, matching Lua semantics)
+	//   KITSUNE_TERROR — __index raised a Lua error (message in .data)
+	//   anything else  — the value at obj[key]
+	// Returns NULL only on OOM or invalid obj. Heap-allocated; free with KitsuneVariableFree. Thread-safe.
+	KITSUNE_API KitsuneVariable* KitsuneGetIndex(const KitsuneVariable* obj, const KitsuneVariable* key);
+	// Sets obj[key] = value in Lua, firing the __newindex metamethod if present.
+	// obj must be KITSUNE_TTABLE (ref > 0) or KITSUNE_TUSERDATA (non-null userdata).
+	// Returns false on invalid arguments or if __newindex raised an error. Thread-safe.
+	KITSUNE_API bool KitsuneSetIndex(const KitsuneVariable* obj, const KitsuneVariable* key, const KitsuneVariable* value);
+	// Returns the result of #obj, firing the __len metamethod if present.
+	// For plain tables without __len, returns the raw sequence length.
+	// obj must be KITSUNE_TTABLE (ref > 0) or KITSUNE_TUSERDATA (non-null userdata).
+	// Return semantics (always non-NULL on a valid obj):
+	//   KITSUNE_TINTEGER or KITSUNE_TNUMBER — the length value
+	//   KITSUNE_TERROR                       — __len raised a Lua error (message in .data)
+	// Returns NULL only on OOM or invalid obj. Heap-allocated; free with KitsuneVariableFree. Thread-safe.
+	KITSUNE_API KitsuneVariable* KitsuneGetLength(const KitsuneVariable* obj);
+	// Advances iteration over a live KITSUNE_TTABLE by one raw step (no metamethods; mirrors lua_next).
+	// tableVar: must be KITSUNE_TTABLE (ref > 0).
+	// key ownership/cursor rules:
+	//   NULL or type != KITSUNE_TTABLECONTENTS → start from the beginning; key is not consumed.
+	//   KITSUNE_TTABLECONTENTS (result of a prior KitsuneNext call) → advance one step; key is
+	//     consumed (freed by this call). Do NOT use or free key after passing it here.
+	// Return semantics:
+	//   KITSUNE_TTABLECONTENTS (1 entry, node->next == NULL) — next key-value pair. The embedded
+	//     key and value are valid until this result is consumed by the next KitsuneNext call or freed
+	//     with KitsuneVariableFree. To hold the key/value independently (e.g. in a collection),
+	//     call KitsuneNextGetEntry first.
+	//   KITSUNE_TNONE  — table exhausted (no more entries).
+	//   KITSUNE_TERROR — lua_next raised an error (key was invalidated by concurrent modification).
+	//   NULL — OOM or invalid tableVar.
+	// Thread safety: if the table is modified between calls, behavior mirrors Lua's own next(t, k).
+	//   For guaranteed-atomic traversal, use KitsuneGetAll which holds accessLock for the full walk.
+	// Heap-allocated; free the final TNONE/TERROR result with KitsuneVariableFree. Thread-safe.
+	KITSUNE_API KitsuneVariable* KitsuneNext(const KitsuneVariable* tableVar, KitsuneVariable* key);
+	// Calls a named metamethod directly from obj's metatable: getmetatable(obj).__name(obj, args...).
+	// Return semantics (always non-NULL on a valid obj):
+	//   KITSUNE_TNONE  — metamethod is absent from the metatable
+	//   KITSUNE_TNIL   — metamethod ran but returned nothing (or explicitly returned nil)
+	//   KITSUNE_TERROR — metamethod raised a Lua error (message in .data)
+	//   anything else  — the metamethod's first return value
+	// Returns NULL only on OOM or invalid obj. Heap-allocated; free with KitsuneVariableFree. Thread-safe.
+	KITSUNE_API KitsuneVariable* KitsuneCallMetamethod(const KitsuneVariable* obj, const char* metamethod, int argc, const KitsuneVariable* argv);
+	// Looks up method on obj via __index and calls it with obj as self: obj:method(args...).
+	// obj must be KITSUNE_TTABLE (ref > 0) or KITSUNE_TUSERDATA (non-null userdata).
+	// The __index lookup and the call each run in their own protected call so any error surfaces
+	// cleanly without bypassing LuaAccessGuard.
+	// Return semantics (always non-NULL on a valid obj):
+	//   KITSUNE_TNONE  — method is absent or not callable (nil/non-function from __index)
+	//   KITSUNE_TNIL   — method ran but returned nothing (or explicitly returned nil)
+	//   KITSUNE_TERROR — __index or the method raised a Lua error (message in .data)
+	//   anything else  — the method's first return value
+	// Returns NULL only on OOM or invalid obj. Heap-allocated; free with KitsuneVariableFree. Thread-safe.
+	KITSUNE_API KitsuneVariable* KitsuneCallMethod(const KitsuneVariable* obj, const char* method, int argc, const KitsuneVariable* argv);
 }

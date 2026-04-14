@@ -11,7 +11,8 @@ public sealed class MySqlTests
     [MySqlFact]
     public async Task Helper_MethodsExistInModuleTable()
     {
-        LuaValue r = await Run(@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync(@"
             return tostring(type(MySQL.NonQuery)) .. ':' .. tostring(type(MySQL.Scalar)) .. ':' .. tostring(type(MySQL.QueryAll))
         ");
         r.String.ShouldBe("function:function:function");
@@ -20,7 +21,8 @@ public sealed class MySqlTests
     [MySqlFact]
     public async Task Connect_ValidCredentials_ReturnsUserdata()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local conn, err = {ConnectLua()}
             if not conn then error(err) end
             return tostring(conn):sub(1,6)
@@ -31,7 +33,8 @@ public sealed class MySqlTests
     [MySqlFact]
     public async Task Connect_BadCredentials_ReturnsNilAndError()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local conn, err = MySQL.Connect('127.0.0.1','bad_user','bad_pass','bad_db',3306)
             return tostring(conn == nil) .. ':' .. tostring(type(err) == 'string')
         ");
@@ -41,7 +44,8 @@ public sealed class MySqlTests
     [MySqlFact]
     public async Task RawSelect_CoroutineProtocol_YieldsNilThenRowcountThenRows()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local conn, err = {ConnectLua()}
             if not conn then error(err) end
             local co, cerr = conn:Query('SELECT 1 AS n, 2 AS m')
@@ -68,7 +72,8 @@ public sealed class MySqlTests
     [MySqlFact]
     public async Task RawQuery_Error_Phase2YieldsString()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local conn = assert({ConnectLua()})
             local co = assert(conn:Query('SELECT * FROM _no_such_table_xyz'))
             local ok, val = coroutine.resume(co)
@@ -83,7 +88,8 @@ public sealed class MySqlTests
     [MySqlFact]
     public async Task StopFlag_MidWait_ConnNotBusy()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local conn = assert({ConnectLua()})
             local co = assert(conn:Query('SELECT 1'))
             coroutine.resume(co, true)
@@ -95,7 +101,8 @@ public sealed class MySqlTests
     [MySqlFact]
     public async Task StopFlag_MidStream_ConnNotBusy()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local conn = assert({ConnectLua()})
             local co = assert(conn:Query('SELECT 1 UNION SELECT 2 UNION SELECT 3'))
             local ok, val = coroutine.resume(co)
@@ -114,7 +121,8 @@ public sealed class MySqlTests
     [MySqlFact]
     public async Task IsBusy_TrueWhileSuspended_FalseOnceDead()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local conn = assert({ConnectLua()})
             local co = assert(conn:Query('SELECT 1'))
             -- after first resume T is yielded (async wait or rowcount phase)
@@ -140,7 +148,8 @@ public sealed class MySqlTests
     [MySqlFact]
     public async Task EscapeValue_EscapesSingleQuoteAndBackslash()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local conn = assert({ConnectLua()})
             local s = conn:EscapeValue(""it's a \\ test"")
             return s
@@ -151,7 +160,8 @@ public sealed class MySqlTests
     [MySqlFact]
     public async Task Close_IsIdempotent()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local conn = assert({ConnectLua()})
             conn:Close()
             conn:Close()
@@ -172,7 +182,8 @@ public sealed class MySqlTests
     [MySqlFact]
     public async Task Crud_Insert_ReturnsOneAffectedRow()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local conn = assert({ConnectLua()})
             local function exec(sql, p)
                 local co = assert(conn:Query(sql, p))
@@ -195,7 +206,8 @@ public sealed class MySqlTests
     [MySqlFact]
     public async Task Crud_Select_ReturnsInsertedRow()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local conn = assert({ConnectLua()})
             local function exec(sql, p)
                 local co = assert(conn:Query(sql, p))
@@ -221,7 +233,8 @@ public sealed class MySqlTests
     [MySqlFact]
     public async Task Crud_Update_ModifiesRow()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local conn = assert({ConnectLua()})
             local function exec(sql, p)
                 local co = assert(conn:Query(sql, p))
@@ -249,7 +262,8 @@ public sealed class MySqlTests
     [MySqlFact]
     public async Task Crud_Delete_RemovesRow()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local conn = assert({ConnectLua()})
             local function exec(sql, p)
                 local co = assert(conn:Query(sql, p))
@@ -277,7 +291,8 @@ public sealed class MySqlTests
     [MySqlFact]
     public async Task Crud_Select_MultipleRowsReturned()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local conn = assert({ConnectLua()})
             local function exec(sql, p)
                 local co = assert(conn:Query(sql, p))
@@ -305,7 +320,8 @@ public sealed class MySqlTests
     [MySqlFact]
     public async Task Crud_Types_IntColumnsReturnedAsInteger()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local conn = assert({ConnectLua()})
             local function exec(sql, p)
                 local co = assert(conn:Query(sql, p))
@@ -330,7 +346,8 @@ public sealed class MySqlTests
     [MySqlFact]
     public async Task Crud_Types_FloatDoubleDecimalReturnedAsNumber()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local conn = assert({ConnectLua()})
             local function exec(sql, p)
                 local co = assert(conn:Query(sql, p))
@@ -355,7 +372,8 @@ public sealed class MySqlTests
     [MySqlFact]
     public async Task Crud_Types_BlobReturnedAsUserdata()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local conn = assert({ConnectLua()})
             local function exec(sql, p)
                 local co = assert(conn:Query(sql, p))
@@ -380,7 +398,8 @@ public sealed class MySqlTests
     [MySqlFact]
     public async Task Crud_Types_NullableColumnsReturnedAsNil()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local conn = assert({ConnectLua()})
             local function exec(sql, p)
                 local co = assert(conn:Query(sql, p))
@@ -406,7 +425,8 @@ public sealed class MySqlTests
     [MySqlFact]
     public async Task Crud_Types_DatetimeAndJsonReturnedAsString()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local conn = assert({ConnectLua()})
             local function exec(sql, p)
                 local co = assert(conn:Query(sql, p))
@@ -432,7 +452,8 @@ public sealed class MySqlTests
     [MySqlFact]
     public async Task NonQuery_Insert_ReturnsAffectedCount()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local conn = assert({ConnectLua()})
             conn:NonQuery('DELETE FROM test WHERE String = ?', {{'helper_nq'}})
             local ok, n = conn:NonQuery('INSERT INTO test (String) VALUES (?)', {{'helper_nq'}})
@@ -445,7 +466,8 @@ public sealed class MySqlTests
     [MySqlFact]
     public async Task NonQuery_InvalidSql_ReturnsFalseAndError()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local conn = assert({ConnectLua()})
             local ok, err = conn:NonQuery('NOT VALID SQL AT ALL')
             return tostring(ok == false and type(err) == 'string' and #err > 0)
@@ -456,7 +478,8 @@ public sealed class MySqlTests
     [MySqlFact]
     public async Task NonQuery_ConnectionNotBusy_AfterCompletion()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local conn = assert({ConnectLua()})
             conn:NonQuery('SELECT 1')
             return tostring(conn:IsBusy())
@@ -468,7 +491,8 @@ public sealed class MySqlTests
     [MySqlFact]
     public async Task Scalar_ReturnsFirstColumnOfFirstRow()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local conn = assert({ConnectLua()})
             local ok, v = conn:Scalar('SELECT 42')
             return tostring(ok) .. ':' .. tostring(v)
@@ -479,7 +503,8 @@ public sealed class MySqlTests
     [MySqlFact]
     public async Task Scalar_NoMatchingRow_ReturnsNil()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local conn = assert({ConnectLua()})
             local ok, v = conn:Scalar('SELECT 1 WHERE 1 = 0')
             return tostring(ok) .. ':' .. tostring(v)
@@ -490,7 +515,8 @@ public sealed class MySqlTests
     [MySqlFact]
     public async Task Scalar_InvalidSql_ReturnsFalseAndError()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local conn = assert({ConnectLua()})
             local ok, err = conn:Scalar('NOT VALID SQL')
             return tostring(ok == false and type(err) == 'string')
@@ -501,7 +527,8 @@ public sealed class MySqlTests
     [MySqlFact]
     public async Task Scalar_ConnectionNotBusy_AfterCompletion()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local conn = assert({ConnectLua()})
             conn:Scalar('SELECT 1')
             return tostring(conn:IsBusy())
@@ -513,7 +540,8 @@ public sealed class MySqlTests
     [MySqlFact]
     public async Task QueryAll_MultipleRows_ReturnsAllRows()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local conn = assert({ConnectLua()})
             local ok, rows = conn:QueryAll('SELECT 1 UNION SELECT 2 UNION SELECT 3')
             return tostring(ok) .. ':' .. tostring(#rows)
@@ -524,7 +552,8 @@ public sealed class MySqlTests
     [MySqlFact]
     public async Task QueryAll_EmptyResult_ReturnsEmptyTable()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local conn = assert({ConnectLua()})
             local ok, rows = conn:QueryAll('SELECT 1 WHERE 1 = 0')
             return tostring(ok) .. ':' .. tostring(#rows)
@@ -535,7 +564,8 @@ public sealed class MySqlTests
     [MySqlFact]
     public async Task QueryAll_RowValuesAccessible()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local conn = assert({ConnectLua()})
             local ok, rows = conn:QueryAll('SELECT 10, 20, 30')
             return tostring(ok and rows[1][1] == 10 and rows[1][2] == 20 and rows[1][3] == 30)
@@ -546,7 +576,8 @@ public sealed class MySqlTests
     [MySqlFact]
     public async Task QueryAll_InvalidSql_ReturnsFalseAndError()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local conn = assert({ConnectLua()})
             local ok, err = conn:QueryAll('NOT VALID SQL')
             return tostring(ok == false and type(err) == 'string')
@@ -557,7 +588,8 @@ public sealed class MySqlTests
     [MySqlFact]
     public async Task QueryAll_ConnectionNotBusy_AfterCompletion()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local conn = assert({ConnectLua()})
             conn:QueryAll('SELECT 1')
             return tostring(conn:IsBusy())
@@ -572,23 +604,4 @@ public sealed class MySqlTests
         return $"MySQL.Connect('{parts[0]}','{parts[2]}','{parts[3]}','{parts[4]}',{parts[1]})";
     }
 
-    private static async Task<LuaValue> Run(string lua)
-    {
-        var engine = new KitsuneEngine();
-        LuaValue result;
-        try
-        {
-            result = await engine.ExecuteStringAsync(lua).ConfigureAwait(false);
-        }
-        finally
-        {
-            engine.Dispose();
-        }
-
-        if (engine.LeakedAllocations != 0)
-        {
-            throw new InvalidOperationException($"Native memory leak: {engine.LeakedAllocations} unfreed allocation(s) after KitsuneCleanup");
-        }
-        return result;
-    }
 }

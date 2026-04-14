@@ -20,7 +20,8 @@ public sealed class SQLiteTests
     [Fact]
     public async Task SQLite_InMemory_CreateInsertSelect()
     {
-        LuaValue r = await Run(@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync(@"
             local db = SQLite.Open()
             db:Query('CREATE TABLE t (id INTEGER, name TEXT)'); db:Fetch()
             db:Query([[INSERT INTO t VALUES (1, 'alice')]]); db:Fetch()
@@ -40,7 +41,8 @@ public sealed class SQLiteTests
     [Fact]
     public async Task SQLite_GetRow_ByIndex_ReturnsValue()
     {
-        LuaValue r = await Run(@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync(@"
             local db = SQLite.Open()
             db:Query('CREATE TABLE t (v TEXT)'); db:Fetch()
             db:Query([[INSERT INTO t VALUES ('test_val')]]); db:Fetch()
@@ -56,8 +58,10 @@ public sealed class SQLiteTests
     [Fact]
     public async Task SQLite_RegisterFunction_CallableFromQuery()
     {
+        using KitsuneEngine engine = new();
+
         // SQLite returns numeric results as floats (7.0, not 7).
-        LuaValue r = await Run(@"
+        LuaValue r = await engine.ExecuteStringAsync(@"
             local db = SQLite.Open()
             db:RegisterFunction(function(a, b) return a + b end, 'add2', 2)
             db:Query('SELECT add2(3, 4) AS result')
@@ -72,7 +76,8 @@ public sealed class SQLiteTests
     [Fact]
     public async Task SQLite_NullValue_IsNilInLua()
     {
-        LuaValue r = await Run(@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync(@"
             local db = SQLite.Open()
             db:Query('CREATE TABLE t (v TEXT)'); db:Fetch()
             db:Query('INSERT INTO t VALUES (NULL)'); db:Fetch()
@@ -88,7 +93,8 @@ public sealed class SQLiteTests
     [Fact]
     public async Task SQLite_IntegerColumn_RoundTrips()
     {
-        LuaValue r = await Run(@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync(@"
             local db = SQLite.Open()
             db:Query('CREATE TABLE t (n INTEGER)'); db:Fetch()
             db:Query('INSERT INTO t VALUES (42)'); db:Fetch()
@@ -104,7 +110,8 @@ public sealed class SQLiteTests
     [Fact]
     public async Task SQLite_FloatColumn_RoundTrips()
     {
-        LuaValue r = await Run(@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync(@"
             local db = SQLite.Open()
             db:Query('CREATE TABLE t (f REAL)'); db:Fetch()
             db:Query('INSERT INTO t VALUES (3.14)'); db:Fetch()
@@ -120,7 +127,8 @@ public sealed class SQLiteTests
     [Fact]
     public async Task SQLite_MultipleRows_FetchAll()
     {
-        LuaValue r = await Run(@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync(@"
             local db = SQLite.Open()
             db:Query('CREATE TABLE t (n INTEGER)'); db:Fetch()
             for i = 1, 5 do
@@ -140,7 +148,8 @@ public sealed class SQLiteTests
     [Fact]
     public async Task SQLite_ParameterizedQuery_TableBind()
     {
-        LuaValue r = await Run(@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync(@"
             local db = SQLite.Open()
             db:Query('CREATE TABLE t (id INTEGER, name TEXT)'); db:Fetch()
             db:Query('INSERT INTO t VALUES (:id, :name)', {id=7, name='kitsune'}); db:Fetch()
@@ -156,7 +165,8 @@ public sealed class SQLiteTests
     [Fact]
     public async Task SQLite_InvalidQuery_ReturnsFalseAndError()
     {
-        LuaValue r = await Run(@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync(@"
             local db = SQLite.Open()
             local ok, err = db:Query('THIS IS NOT SQL')
             db:Close()
@@ -168,7 +178,8 @@ public sealed class SQLiteTests
     [Fact]
     public async Task SQLite_AggregateFunction_SumCustom()
     {
-        LuaValue r = await Run(@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync(@"
             local db = SQLite.Open()
             db:Query('CREATE TABLE t (n INTEGER)'); db:Fetch()
             for i = 1, 4 do
@@ -191,7 +202,8 @@ public sealed class SQLiteTests
     [Fact]
     public async Task SQLite_Close_ThenQueryRaisesError()
     {
-        LuaValue r = await Run(@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync(@"
             local db = SQLite.Open()
             db:Close()
             local ok, err = pcall(function() db:Query('SELECT 1') end)
@@ -203,7 +215,8 @@ public sealed class SQLiteTests
     [Fact]
     public async Task SQLite_InstanceReuse_MultipleQueries()
     {
-        LuaValue r = await Run(@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync(@"
             local db = SQLite.Open()
             db:Query('CREATE TABLE t (v TEXT)'); db:Fetch()
             db:Query([[INSERT INTO t VALUES ('first')]]); db:Fetch()
@@ -224,8 +237,10 @@ public sealed class SQLiteTests
     [Fact]
     public async Task SQLite_Query_DML_Returns_Done()
     {
+        using KitsuneEngine engine = new();
+
         // INSERT/UPDATE/DELETE complete without rows ? second return is "DONE".
-        LuaValue r = await Run(@"
+        LuaValue r = await engine.ExecuteStringAsync(@"
 			local db = SQLite.Open()
 			db:Query('CREATE TABLE t (n INTEGER)'); db:Fetch()
 			local ok, msg = db:Query('INSERT INTO t VALUES (1)')
@@ -238,8 +253,10 @@ public sealed class SQLiteTests
     [Fact]
     public async Task SQLite_Query_Select_WithRows_Returns_Row()
     {
+        using KitsuneEngine engine = new();
+
         // A SELECT that finds rows pre-steps once ? second return is "ROW".
-        LuaValue r = await Run(@"
+        LuaValue r = await engine.ExecuteStringAsync(@"
 			local db = SQLite.Open()
 			db:Query('CREATE TABLE t (n INTEGER)'); db:Fetch()
 			db:Query('INSERT INTO t VALUES (1)'); db:Fetch()
@@ -254,8 +271,10 @@ public sealed class SQLiteTests
     [Fact]
     public async Task SQLite_Query_Select_NoRows_Returns_Done()
     {
+        using KitsuneEngine engine = new();
+
         // A SELECT that matches nothing ? second return is "DONE".
-        LuaValue r = await Run(@"
+        LuaValue r = await engine.ExecuteStringAsync(@"
 			local db = SQLite.Open()
 			db:Query('CREATE TABLE t (n INTEGER)'); db:Fetch()
 			local ok, msg = db:Query('SELECT n FROM t WHERE n = 9999')
@@ -269,8 +288,10 @@ public sealed class SQLiteTests
     [Fact]
     public async Task SQLite_Finish_AbandonsMidQuery_AllowsNextQuery()
     {
+        using KitsuneEngine engine = new();
+
         // Finish() finalizes the prepared statement early so the next Query can run.
-        LuaValue r = await Run(@"
+        LuaValue r = await engine.ExecuteStringAsync(@"
 			local db = SQLite.Open()
 			db:Query('CREATE TABLE t (n INTEGER)'); db:Fetch()
 			for i = 1, 10 do
@@ -292,9 +313,11 @@ public sealed class SQLiteTests
     [Fact]
     public async Task SQLite_Fetch_AfterDDL_ReturnsFalse()
     {
+        using KitsuneEngine engine = new();
+
         // After DDL the statement is finalized by Query; Fetch with no active
         // statement returns false immediately.
-        LuaValue r = await Run(@"
+        LuaValue r = await engine.ExecuteStringAsync(@"
 			local db = SQLite.Open()
 			db:Query('CREATE TABLE t (n INTEGER)')
 			local fetched = db:Fetch()
@@ -308,8 +331,10 @@ public sealed class SQLiteTests
     [Fact]
     public async Task SQLite_GetRow_OutOfRange_ReturnsNil()
     {
+        using KitsuneEngine engine = new();
+
         // Requesting a column index beyond the column count returns nil.
-        LuaValue r = await Run(@"
+        LuaValue r = await engine.ExecuteStringAsync(@"
 			local db = SQLite.Open()
 			db:Query('CREATE TABLE t (a INTEGER, b INTEGER)'); db:Fetch()
 			db:Query('INSERT INTO t VALUES (1, 2)'); db:Fetch()
@@ -327,8 +352,10 @@ public sealed class SQLiteTests
     [Fact]
     public async Task SQLite_BlobColumn_ReturnsStreamUserdata()
     {
+        using KitsuneEngine engine = new();
+
         // BLOB columns are returned as LuaStream userdata objects.
-        LuaValue r = await Run(@"
+        LuaValue r = await engine.ExecuteStringAsync(@"
 			local db = SQLite.Open()
 			db:Query('CREATE TABLE t (v BLOB)'); db:Fetch()
 			db:Query([[INSERT INTO t VALUES (X'48454C4C4F')]]); db:Fetch()
@@ -344,8 +371,10 @@ public sealed class SQLiteTests
     [Fact]
     public async Task SQLite_BlobColumn_ContentAccessibleViaStream()
     {
+        using KitsuneEngine engine = new();
+
         // The LuaStream wrapping a BLOB can be Read() to recover the raw bytes.
-        LuaValue r = await Run(@"
+        LuaValue r = await engine.ExecuteStringAsync(@"
 			local db = SQLite.Open()
 			db:Query('CREATE TABLE t (v BLOB)'); db:Fetch()
 			db:Query([[INSERT INTO t VALUES (X'48454C4C4F')]]); db:Fetch()  -- 'HELLO'
@@ -363,8 +392,10 @@ public sealed class SQLiteTests
     [Fact]
     public async Task SQLite_ParameterizedQuery_FunctionBind()
     {
+        using KitsuneEngine engine = new();
+
         // A function can supply parameter values by name instead of a table.
-        LuaValue r = await Run(@"
+        LuaValue r = await engine.ExecuteStringAsync(@"
 			local db = SQLite.Open()
 			db:Query('CREATE TABLE t (id INTEGER, name TEXT)'); db:Fetch()
 			db:Query('INSERT INTO t VALUES (:id, :name)', function(param)
@@ -384,9 +415,11 @@ public sealed class SQLiteTests
     [Fact]
     public async Task SQLite_ParameterizedQuery_BooleanParam_StoresAsInteger()
     {
+        using KitsuneEngine engine = new();
+
         // Booleans bind as 1 (true) or 0 (false); SQLite has no BOOLEAN type
         // so they round-trip as integers.
-        LuaValue r = await Run(@"
+        LuaValue r = await engine.ExecuteStringAsync(@"
 			local db = SQLite.Open()
 			db:Query('CREATE TABLE t (a INTEGER, b INTEGER)'); db:Fetch()
 			db:Query('INSERT INTO t VALUES (:a, :b)', {a=true, b=false}); db:Fetch()
@@ -402,9 +435,11 @@ public sealed class SQLiteTests
     [Fact]
     public async Task SQLite_ParameterizedQuery_WcharParam_RoundTrips()
     {
+        using KitsuneEngine engine = new();
+
         // Wchar values bind as UTF-16 text; read back with ToggleWidechar(true)
         // so both sides use the matched text16/bytes16 pair.
-        LuaValue r = await Run(@"
+        LuaValue r = await engine.ExecuteStringAsync(@"
 			local db = SQLite.Open()
 			db:ToggleWidechar(true)
 			db:Query('CREATE TABLE t (v TEXT)'); db:Fetch()
@@ -422,8 +457,10 @@ public sealed class SQLiteTests
     [Fact]
     public async Task SQLite_RegisterFunction_ReturnsString()
     {
+        using KitsuneEngine engine = new();
+
         // A custom function that returns a Lua string produces a TEXT result.
-        LuaValue r = await Run(@"
+        LuaValue r = await engine.ExecuteStringAsync(@"
 			local db = SQLite.Open()
 			db:RegisterFunction(function(s) return 'prefix_' .. s end, 'prepend', 1)
 			db:Query([[SELECT prepend('hello')]])
@@ -438,8 +475,10 @@ public sealed class SQLiteTests
     [Fact]
     public async Task SQLite_RegisterFunction_ReturnsNil_StoresNull()
     {
+        using KitsuneEngine engine = new();
+
         // A custom function that returns nil produces a SQL NULL result.
-        LuaValue r = await Run(@"
+        LuaValue r = await engine.ExecuteStringAsync(@"
 			local db = SQLite.Open()
 			db:RegisterFunction(function() return nil end, 'nullfn', 0)
 			db:Query('SELECT nullfn()')
@@ -454,8 +493,10 @@ public sealed class SQLiteTests
     [Fact]
     public async Task SQLite_RegisterFunction_DuplicateName_RaisesError()
     {
+        using KitsuneEngine engine = new();
+
         // Registering a second function with the same name must raise a Lua error.
-        LuaValue r = await Run(@"
+        LuaValue r = await engine.ExecuteStringAsync(@"
 			local db = SQLite.Open()
 			db:RegisterFunction(function() return 1 end, 'myfn', 0)
 			local ok, err = pcall(function()
@@ -470,8 +511,10 @@ public sealed class SQLiteTests
     [Fact]
     public async Task SQLite_RegisterFunction_NegativeArgs_RaisesError()
     {
+        using KitsuneEngine engine = new();
+
         // Negative arg count must be rejected immediately.
-        LuaValue r = await Run(@"
+        LuaValue r = await engine.ExecuteStringAsync(@"
 			local db = SQLite.Open()
 			local ok, err = pcall(function()
 				db:RegisterFunction(function() end, 'badfn', -1)
@@ -486,8 +529,10 @@ public sealed class SQLiteTests
     [Fact]
     public async Task SQLite_ToggleWidechar_False_TextComesBackAsString()
     {
+        using KitsuneEngine engine = new();
+
         // After ToggleWidechar(false) TEXT columns must be plain Lua strings.
-        LuaValue r = await Run(@"
+        LuaValue r = await engine.ExecuteStringAsync(@"
 			local db = SQLite.Open()
 			db:ToggleWidechar(false)
 			db:Query('CREATE TABLE t (v TEXT)'); db:Fetch()
@@ -504,8 +549,10 @@ public sealed class SQLiteTests
     [Fact]
     public async Task SQLite_ToggleWidechar_True_TextComesBackAsWchar()
     {
+        using KitsuneEngine engine = new();
+
         // After ToggleWidechar(true) TEXT columns must be Wchar userdata.
-        LuaValue r = await Run(@"
+        LuaValue r = await engine.ExecuteStringAsync(@"
 			local db = SQLite.Open()
 			db:ToggleWidechar(true)
 			db:Query('CREATE TABLE t (v TEXT)'); db:Fetch()
@@ -523,8 +570,10 @@ public sealed class SQLiteTests
     [Fact]
     public async Task SQLite_Tostring_InMemory_ContainsPointerAndMemoryKeyword()
     {
+        using KitsuneEngine engine = new();
+
         // __tostring format: "SQLite: 0x… File: :memory:"
-        LuaValue r = await Run(@"
+        LuaValue r = await engine.ExecuteStringAsync(@"
 			local db = SQLite.Open()
 			local s = tostring(db)
 			db:Close()
@@ -537,9 +586,11 @@ public sealed class SQLiteTests
     [Fact]
     public async Task SQLite_LuaBuiltinFunction_CanRunScript()
     {
+        using KitsuneEngine engine = new();
+
         // Kitsune registers Lua(script) as a built-in SQLite function that
         // evaluates a Lua chunk and returns the result via tostring.
-        LuaValue r = await Run(@"
+        LuaValue r = await engine.ExecuteStringAsync(@"
 			local db = SQLite.Open()
 			db:Query([[SELECT Lua('return 1 + 1')]])
 			db:Fetch()
@@ -553,8 +604,10 @@ public sealed class SQLiteTests
     [Fact]
     public async Task SQLite_LuaBuiltinFunction_NilReturn_ProducesNull()
     {
+        using KitsuneEngine engine = new();
+
         // A Lua chunk that returns nil maps to SQL NULL ? Lua nil.
-        LuaValue r = await Run(@"
+        LuaValue r = await engine.ExecuteStringAsync(@"
 			local db = SQLite.Open()
 			db:Query([[SELECT Lua('return nil')]])
 			db:Fetch()
@@ -568,8 +621,10 @@ public sealed class SQLiteTests
     [Fact]
     public async Task SQLite_LuaBuiltinFunction_CanAccessLuaGlobals()
     {
+        using KitsuneEngine engine = new();
+
         // The Lua() function shares the engine's Lua state so globals are visible.
-        LuaValue r = await Run(@"
+        LuaValue r = await engine.ExecuteStringAsync(@"
 			_G.sqliteTestGlobal = 'hello_from_lua'
 			local db = SQLite.Open()
 			db:Query([[SELECT Lua('return _G.sqliteTestGlobal')]])
@@ -585,9 +640,11 @@ public sealed class SQLiteTests
     [Fact]
     public async Task SQLite_SetBusyHandler_SetAndClear_DoesNotCrash()
     {
+        using KitsuneEngine engine = new();
+
         // Setting and then clearing a busy handler must not crash; with no
         // contention the handler is never invoked.
-        LuaValue r = await Run(@"
+        LuaValue r = await engine.ExecuteStringAsync(@"
 			local db = SQLite.Open()
 			local invoked = false
 			db:SetBusyHandler(function(retries)
@@ -606,8 +663,10 @@ public sealed class SQLiteTests
     [Fact]
     public async Task SQLite_Open_Mode1_Multithread_OpensSuccessfully()
     {
+        using KitsuneEngine engine = new();
+
         // Mode 1 (multithread) must open without error and allow queries.
-        LuaValue r = await Run(@"
+        LuaValue r = await engine.ExecuteStringAsync(@"
 			local db = SQLite.Open(nil, 1)
 			local ok, _ = db:Query('SELECT 1')
 			db:Fetch()
@@ -620,8 +679,10 @@ public sealed class SQLiteTests
     [Fact]
     public async Task SQLite_Open_Mode2_Serialized_OpensSuccessfully()
     {
+        using KitsuneEngine engine = new();
+
         // Mode 2 (serialized) must open without error and allow queries.
-        LuaValue r = await Run(@"
+        LuaValue r = await engine.ExecuteStringAsync(@"
 			local db = SQLite.Open(nil, 2)
 			local ok, _ = db:Query('SELECT 1')
 			db:Fetch()
@@ -635,8 +696,10 @@ public sealed class SQLiteTests
     [SQLiteFact]
     public async Task SQLite_FileDatabase_OpenAndVersion()
     {
+        using KitsuneEngine engine = new();
+
         // Opens the configured database and confirms SQLite returns a version string.
-        LuaValue r = await Run(@"
+        LuaValue r = await engine.ExecuteStringAsync(@"
             local db = SQLite.Open(os.getenv('KITSUNE_SQLITE_TEST'))
             db:Query('SELECT sqlite_version()')
             db:Fetch()
@@ -650,8 +713,10 @@ public sealed class SQLiteTests
     [SQLiteFact]
     public async Task SQLite_FileDatabase_ListTables_ReturnsTable()
     {
+        using KitsuneEngine engine = new();
+
         // sqlite_master always exists; querying it must succeed and return a table.
-        LuaValue r = await Run(@"
+        LuaValue r = await engine.ExecuteStringAsync(@"
 			local db = SQLite.Open(os.getenv('KITSUNE_SQLITE_TEST'))
 			local ok, err = db:Query([[SELECT name FROM sqlite_master WHERE type='table' ORDER BY name]])
 			if not ok then db:Close(); return tostring(err) end
@@ -668,8 +733,10 @@ public sealed class SQLiteTests
     [SQLiteFact]
     public async Task SQLite_FileDatabase_WriteAndRead_RoundTrip()
     {
+        using KitsuneEngine engine = new();
+
         // Creates a temporary table, inserts a row, reads it back, then drops the table.
-        LuaValue r = await Run(@"
+        LuaValue r = await engine.ExecuteStringAsync(@"
             local db = SQLite.Open(os.getenv('KITSUNE_SQLITE_TEST'))
             db:Query('CREATE TABLE IF NOT EXISTS _kitsune_test (v TEXT)'); db:Fetch()
             db:Query([[INSERT INTO _kitsune_test VALUES ('round_trip')]]); db:Fetch()
@@ -686,8 +753,10 @@ public sealed class SQLiteTests
     [SQLiteFact]
     public async Task SQLite_FileDatabase_ParameterizedQuery_RoundTrips()
     {
+        using KitsuneEngine engine = new();
+
         // Verifies that named parameters work against the file-backed database.
-        LuaValue r = await Run(@"
+        LuaValue r = await engine.ExecuteStringAsync(@"
 			local db = SQLite.Open(os.getenv('KITSUNE_SQLITE_TEST'))
 			db:Query('CREATE TABLE IF NOT EXISTS _kitsune_param (id INTEGER, name TEXT)'); db:Fetch()
 			db:Query('INSERT INTO _kitsune_param VALUES (:id, :name)', {id=99, name='kitsune_file'}); db:Fetch()
@@ -704,8 +773,10 @@ public sealed class SQLiteTests
     [SQLiteFact]
     public async Task SQLite_FileDatabase_Tostring_ContainsFilePath()
     {
+        using KitsuneEngine engine = new();
+
         // __tostring for a file database must include the file path.
-        LuaValue r = await Run(@"
+        LuaValue r = await engine.ExecuteStringAsync(@"
 			local path = os.getenv('KITSUNE_SQLITE_TEST')
 			local db = SQLite.Open(path)
 			local s = tostring(db)
@@ -718,8 +789,10 @@ public sealed class SQLiteTests
     [SQLiteFact]
     public async Task SQLite_FileDatabase_Mode1_WAL_JournalModeIsWal()
     {
+        using KitsuneEngine engine = new();
+
         // Mode 1 (multithread) sets WAL journal mode on the file database.
-        LuaValue r = await Run(@"
+        LuaValue r = await engine.ExecuteStringAsync(@"
 			local db = SQLite.Open(os.getenv('KITSUNE_SQLITE_TEST'), 1)
 			db:Query('PRAGMA journal_mode')
 			db:Fetch()
@@ -728,25 +801,5 @@ public sealed class SQLiteTests
 			return tostring(tostring(mode) == 'wal')
 		");
         r.String.ShouldBe("true");
-    }
-
-    private static async Task<LuaValue> Run(string lua)
-    {
-        var engine = new KitsuneEngine();
-        LuaValue result;
-        try
-        {
-            result = await engine.ExecuteStringAsync(lua).ConfigureAwait(false);
-        }
-        finally
-        {
-            engine.Dispose();
-        }
-
-        if (engine.LeakedAllocations != 0)
-        {
-            throw new InvalidOperationException($"Native memory leak: {engine.LeakedAllocations} unfreed allocation(s) after KitsuneCleanup");
-        }
-        return result;
     }
 }

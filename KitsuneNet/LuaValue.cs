@@ -42,6 +42,12 @@ namespace KitsuneNet
         /// Null for all other types and for thread values embedded inside tables.</summary>
         public LuaThreadRef? ThreadRef { get; init; }
 
+        /// <summary>Live reference to a Lua userdata for <see cref="LuaType.Userdata"/> values
+        /// returned by the engine.  Holds a Lua registry anchor; must be disposed when no longer needed.
+        /// Passing the owning <see cref="LuaValue"/> back to the engine pushes the original Lua object,
+        /// preserving identity. Null when type is not Userdata.</summary>
+        public LuaUserdataRef? UserdataRef { get; init; }
+
         /// <summary>Stream for <see cref="LuaType.Stream"/> values.
         /// Inbound (Lua → C#): a <see cref="LuaStream"/> wrapping native block memory directly.
         /// Read-only when <c>KITSUNE_SHARED_MEMORY_FLAG_READONLY</c> is set on the block;

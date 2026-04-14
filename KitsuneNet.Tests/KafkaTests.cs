@@ -16,7 +16,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task NewProducer_ValidConfig_ReturnsUserdata()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
             assert(p, 'NewProducer returned nil')
             return tostring(p):sub(1, 13)
@@ -27,7 +28,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task NewConsumer_ValidConfig_ReturnsUserdata()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local c = Kafka.NewConsumer({{['bootstrap.servers']='{Bootstrap()}'}})
             assert(c, 'NewConsumer returned nil')
             return tostring(c):sub(1, 13)
@@ -38,7 +40,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_Close_IsIdempotent()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
             p:Close()
             p:Close()  -- second close must not crash or error
@@ -50,7 +53,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Consumer_Close_IsIdempotent()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local c = Kafka.NewConsumer({{['bootstrap.servers']='{Bootstrap()}'}})
             c:Close()
             c:Close()  -- second close must not crash or error
@@ -62,8 +66,10 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Logs_ReturnsAccumulatedLogsThenClears()
     {
+        using KitsuneEngine engine = new();
+
         // Trigger at least one librdkafka log event by connecting and disconnecting
-        LuaValue r = await Run($@"
+        LuaValue r = await engine.ExecuteStringAsync($@"
             -- Produce to ensure the library emits at least some internal log lines
             local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
             p:Close()
@@ -82,7 +88,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_Send_ReturnsTrue()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
             assert(p, 'NewProducer failed')
             local ok, err = p:Send('{Topic()}', 'test-key', 'test-value')
@@ -95,7 +102,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_Send_NilKey_ReturnsTrue()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
             assert(p, 'NewProducer failed')
             local ok, err = p:Send('{Topic()}', nil, 'keyless-value')
@@ -108,7 +116,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_Send_WithHeaders_ReturnsTrue()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
             assert(p, 'NewProducer failed')
             local ok, err = p:Send('{Topic()}', 'hdr-key', 'hdr-value', {{source='kitsune-test', version='1'}})
@@ -121,7 +130,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_Send_WithHeadersAndPartition_ReturnsTrue()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
             assert(p, 'NewProducer failed')
             -- Exercise the branch that requires BOTH explicit partition AND headers
@@ -136,7 +146,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_Send_Headers_AreReceivedByConsumer()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local part      = {Partition()}
@@ -181,7 +192,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Consumer_Subscribe_ReturnsThread()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local c = Kafka.NewConsumer({{
                 ['bootstrap.servers'] = '{Bootstrap()}',
                 ['group.id']          = 'test_kitsune'
@@ -198,8 +210,10 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Consumer_Subscribe_ToMultipleTopics_ReturnsThread()
     {
+        using KitsuneEngine engine = new();
+
         // Create a temporary second topic to subscribe to alongside the default one
-        LuaValue r = await Run($@"
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local bootstrap = '{Bootstrap()}'
             local topic1    = '{Topic()}'
             local topic2    = 'kitsune-multi-' .. tostring(Time())
@@ -230,7 +244,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Consumer_Assign_ReturnsThread()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local c = Kafka.NewConsumer({{
                 ['bootstrap.servers'] = '{Bootstrap()}',
                 ['group.id']          = 'test_kitsune'
@@ -248,7 +263,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Consumer_RoundTrip_ReceivesProducedMessage()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local part      = {Partition()}
@@ -290,7 +306,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Consumer_RoundTrip_MessageFieldsArePopulated()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local part      = {Partition()}
@@ -346,7 +363,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Consumer_ManualCommit_CommitsAndPreventsDoubleCommit()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local part      = {Partition()}
@@ -398,7 +416,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Consumer_Assign_Partition_RoundTrip()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local part      = {Partition()}
@@ -450,7 +469,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_ListGroups_ReturnsArray()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
             local ok, groups = p:ListGroups()
             p:Close()
@@ -463,8 +483,10 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_DescribeGroups_ReturnsDescription()
     {
+        using KitsuneEngine engine = new();
+
         // First produce a message so the test group is created, then describe it
-        LuaValue r = await Run($@"
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local groupId   = 'test_kitsune'
@@ -498,8 +520,10 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_GetGroupOffsets_ReturnsTable()
     {
+        using KitsuneEngine engine = new();
+
         // Create a group with committed offsets, then query them
-        LuaValue r = await Run($@"
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local part      = {Partition()}
@@ -549,7 +573,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_SetGroupOffsets_ResetsPosition()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local part      = {Partition()}
@@ -582,8 +607,9 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_DeleteGroup_DeletesInactiveGroup()
     {
+        using KitsuneEngine engine = new();
         const string groupId = "test_kitsune_delgrp";
-        LuaValue r = await Run($@"
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local groupId   = '{groupId}'
@@ -616,8 +642,9 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_DeleteGroupOffsets_RemovesOffsets()
     {
+        using KitsuneEngine engine = new();
         const string groupId = "test_kitsune_deloff";
-        LuaValue r = await Run($@"
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local part      = {Partition()}
@@ -655,7 +682,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_GetTopicConfig_ReturnsTable()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local p = Kafka.NewProducer({{['bootstrap.servers'] = bootstrap}})
@@ -674,7 +702,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_SetTopicConfig_ChangesRetention()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local bootstrap = '{Bootstrap()}'
             local topicName = 'kitsune-cfg-' .. tostring(Time())
 
@@ -735,7 +764,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Consumer_GetTopicConfig_ReturnsTable()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local c = Kafka.NewConsumer({{['bootstrap.servers'] = bootstrap}})
@@ -751,7 +781,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_CreateTopic_And_DestroyTopic()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local bootstrap = '{Bootstrap()}'
             local topicName = 'kitsune-test-' .. tostring(Time())
 
@@ -798,7 +829,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_CreateTopic_WithRetention_Succeeds()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local bootstrap = '{Bootstrap()}'
             local topicName = 'kitsune-ret-' .. tostring(Time())
 
@@ -839,7 +871,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_DestroyTopic_NonExistent_ReturnsError()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local bootstrap = '{Bootstrap()}'
             local p = Kafka.NewProducer({{['bootstrap.servers'] = bootstrap}})
             local ok, err = p:DestroyTopic('kitsune-nonexistent-' .. tostring(Time()))
@@ -853,7 +886,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Consumer_Assign_WithExplicitOffset_StartsFromThatOffset()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local part      = {Partition()}
@@ -906,7 +940,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Consumer_Assign_WithEarliestKeyword_ReceivesMessages()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local part      = {Partition()}
@@ -943,7 +978,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Consumer_Seek_RepositionsToSpecificOffset()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local part      = {Partition()}
@@ -1010,11 +1046,13 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Consumer_DroppedBeforeCoroutineFinishes_DoesNotCrash()
     {
+        using KitsuneEngine engine = new();
+
         // Regression for the consumer lifetime bug:
         // if the consumer is GC'd while a coroutine still holds a reference to
         // state->owner, the next poll would use-after-free. The registry anchor
         // introduced to fix that must keep the consumer alive.
-        LuaValue r = await Run($@"
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
 
@@ -1045,7 +1083,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Consumer_GetGroupOffsets_WithPartitionFilter()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local part      = {Partition()}
@@ -1070,9 +1109,10 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_DescribeGroups_MultipleGroups()
     {
+        using KitsuneEngine engine = new();
         const string g1 = "test_kitsune";
         const string g2 = "test_kitsune2";
-        LuaValue r = await Run($@"
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local part      = {Partition()}
@@ -1101,7 +1141,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task CreateTopic_WithReplicationFactor_Succeeds()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local bootstrap = '{Bootstrap()}'
             local topicName = 'kitsune-rf-' .. tostring(Time())
 
@@ -1120,7 +1161,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task GetTopicConfig_NonExistentTopic_ReturnsError()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local p = Kafka.NewProducer({{['bootstrap.servers'] = '{Bootstrap()}'}})
             local ok, cfg = p:GetTopicConfig('kitsune-does-not-exist-' .. tostring(Time()))
             p:Close()
@@ -1132,7 +1174,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Consumer_Seek_WithEarliestKeyword_ReceivesMessages()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local part      = {Partition()}
@@ -1182,7 +1225,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Consumer_Assign_WithLatestKeyword_NoOldMessages()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local part      = {Partition()}
@@ -1217,7 +1261,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_GetOffsets_ReturnsLowHigh()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local part      = {Partition()}
@@ -1236,7 +1281,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Consumer_GetOffsets_ReturnsLowHigh()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local part      = {Partition()}
@@ -1255,7 +1301,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_GetOffsets_AfterSend_HighIncreases()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local bootstrap = '{Bootstrap()}'
             local topic     = '{Topic()}'
             local part      = {Partition()}
@@ -1283,7 +1330,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Consumer_AutoCommitToggle_DoesNotError()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local c = Kafka.NewConsumer({{
                 ['bootstrap.servers'] = '{Bootstrap()}',
                 ['group.id']          = 'test_kitsune'
@@ -1302,13 +1350,14 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task StressTest_ProduceAndConsume_ConcurrentMessages()
     {
+        using KitsuneEngine engine = new();
         string guid = Guid.NewGuid().ToString("N");
         const int count = 100;
         string stressTopic = $"stress-{guid}";
 
         // Create a dedicated single-partition topic so the consumer starts from
         // offset 0 on a clean slate — no old-message backlog to scan through.
-        await Run($@"
+        await engine.ExecuteStringAsync($@"
             local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
             local ok, err = p:CreateTopic('{stressTopic}', 1)
             assert(ok, tostring(err))
@@ -1363,8 +1412,16 @@ public sealed class KafkaTests
 
         try
         {
-            var producerTask = Run(producerLua);
-            var consumerTask = Run(consumerLua);
+            var producerTask = Task.Run(async () =>
+            {
+                using KitsuneEngine e = new();
+                return await e.ExecuteStringAsync(producerLua).ConfigureAwait(false);
+            });
+            var consumerTask = Task.Run(async () =>
+            {
+                using KitsuneEngine e = new();
+                return await e.ExecuteStringAsync(consumerLua).ConfigureAwait(false);
+            });
             await Task.WhenAll(producerTask, consumerTask);
 
             producerTask.Result.String.ShouldBe("ok");
@@ -1372,7 +1429,7 @@ public sealed class KafkaTests
         }
         finally
         {
-            await Run($@"
+            await engine.ExecuteStringAsync($@"
                 local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
                 p:DestroyTopic('{stressTopic}')
                 p:Close()
@@ -1383,6 +1440,7 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task StressTest_OneProducerTwoConsumers_SharedGroupSplitPartitions()
     {
+        using KitsuneEngine engine = new();
         string guid = Guid.NewGuid().ToString("N");
         const int countPerPartition = 50;
         const int totalCount = countPerPartition * 2;
@@ -1391,7 +1449,7 @@ public sealed class KafkaTests
 
         // Create a 2-partition topic and wait for it to appear in metadata so
         // both consumers can each be assigned one partition by the group coordinator.
-        await Run($@"
+        await engine.ExecuteStringAsync($@"
             local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
             local ok, err = p:CreateTopic('{stressTopic}', 2)
             assert(ok, tostring(err))
@@ -1484,9 +1542,21 @@ public sealed class KafkaTests
             // Start consumers and producer concurrently.  The producer polls DescribeGroups
             // internally and only begins sending once both consumers are Stable, so no
             // external fixed delay is needed here.
-            var consumer1Task = Run(consumerLua);
-            var consumer2Task = Run(consumerLua);
-            var producerTask = Run(producerLua);
+            var consumer1Task = Task.Run(async () =>
+            {
+                using KitsuneEngine e = new();
+                return await e.ExecuteStringAsync(consumerLua).ConfigureAwait(false);
+            });
+            var consumer2Task = Task.Run(async () =>
+            {
+                using KitsuneEngine e = new();
+                return await e.ExecuteStringAsync(consumerLua).ConfigureAwait(false);
+            });
+            var producerTask = Task.Run(async () =>
+            {
+                using KitsuneEngine e = new();
+                return await e.ExecuteStringAsync(producerLua).ConfigureAwait(false);
+            });
             await Task.WhenAll(producerTask, consumer1Task, consumer2Task);
 
             producerTask.Result.String.ShouldBe("ok");
@@ -1496,7 +1566,7 @@ public sealed class KafkaTests
         }
         finally
         {
-            await Run($@"
+            await engine.ExecuteStringAsync($@"
                 local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
                 p:DestroyTopic('{stressTopic}')
                 p:Close()
@@ -1508,7 +1578,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Cleanup_DeleteTestConsumerGroups()
     {
-        LuaValue r = await Run($@"
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
             local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
 
             local function startsWith(s, prefix)
@@ -1592,30 +1663,4 @@ public sealed class KafkaTests
         LuaType.None => "nil",
         _ => v.String ?? v.Type.ToString(),
     };
-
-    private async Task<LuaValue> Run(string lua)
-    {
-        var engine = new KitsuneEngine();
-        engine.RegisterFunction("print", args =>
-        {
-            _output.WriteLine(string.Join("\t", args.Select(LuaValueToString)));
-            return LuaValue.None;
-        });
-        LuaValue result;
-        try
-        {
-            result = await engine.ExecuteStringAsync(lua).ConfigureAwait(false);
-        }
-        finally
-        {
-            engine.Dispose();
-        }
-
-        if (engine.LeakedAllocations != 0)
-        {
-            throw new InvalidOperationException($"Native memory leak: {engine.LeakedAllocations} unfreed allocation(s) after KitsuneCleanup");
-        }
-
-        return result;
-    }
 }
