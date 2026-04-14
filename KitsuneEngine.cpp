@@ -1160,40 +1160,41 @@ static void* l_alloc(void* ud, void* ptr, size_t osize, size_t nsize) {
 	}
 }
 
-// Allocates a heap KitsuneVariable with KITSUNE_TERROR and an optional message.
-// The caller must free the returned pointer with KitsuneVariableFree.
-static KitsuneVariable* MakeErrorVariable(const char* msg) {
+// Allocates a heap KitsuneVariable with the given type and copies len bytes from data into
+// var->data (plus a null terminator). Pass data=NULL or len=0 for type-only variables.
+// Returns NULL on OOM. The caller must free the returned pointer with KitsuneVariableFree.
+static KitsuneVariable* MakeStringVariable(int type, const char* data, size_t len) {
 	KitsuneVariable* var = (KitsuneVariable*)kitsune_malloc(sizeof(KitsuneVariable));
-	if (!var) return NULL;
+	if (!var)
+		return NULL;
 	memset(var, 0, sizeof(KitsuneVariable));
-	var->type = KITSUNE_TERROR;
-	if (msg) {
-		size_t len = strlen(msg);
+	var->type = type;
+	if (data && len > 0) {
 		var->data = (unsigned char*)kitsune_malloc(len + 1);
-		if (var->data) {
-			memcpy(var->data, msg, len + 1);
-			var->length = len;
+		if (!var->data) {
+			kitsune_free(var);
+			return NULL;
 		}
+		memcpy(var->data, data, len + 1);
+		var->length = len;
 	}
 	return var;
 }
 
+// Allocates a heap KitsuneVariable with KITSUNE_TERROR and an optional message.
+// The caller must free the returned pointer with KitsuneVariableFree.
+static KitsuneVariable* MakeErrorVariable(const char* msg) {
+	return MakeStringVariable(KITSUNE_TERROR, msg, msg ? strlen(msg) : 0);
+}
+
 // Allocates a heap KitsuneVariable with KITSUNE_TNONE (no result, method/metamethod absent).
 static KitsuneVariable* MakeNoneVariable() {
-	KitsuneVariable* var = (KitsuneVariable*)kitsune_malloc(sizeof(KitsuneVariable));
-	if (!var) return NULL;
-	memset(var, 0, sizeof(KitsuneVariable));
-	var->type = LUA_TNONE;
-	return var;
+	return MakeStringVariable(LUA_TNONE, NULL, 0);
 }
 
 // Allocates a heap KitsuneVariable with KITSUNE_TNIL (method ran, returned nothing or explicit nil).
 static KitsuneVariable* MakeNilVariable() {
-	KitsuneVariable* var = (KitsuneVariable*)kitsune_malloc(sizeof(KitsuneVariable));
-	if (!var) return NULL;
-	memset(var, 0, sizeof(KitsuneVariable));
-	var->type = LUA_TNIL;
-	return var;
+	return MakeStringVariable(LUA_TNIL, NULL, 0);
 }
 
 // ============================================================
@@ -1672,27 +1673,24 @@ extern "C" {
 	// Returns a heap-allocated KitsuneVariable*; caller must KitsuneVariableFree it.
 	static KitsuneVariable* ExtractCoroutineResult(lua_State* T, int rc, int nresults) {
 		if (rc == LUA_OK) {
+			if (nresults == 0)
+				return MakeNoneVariable();
 			KitsuneVariable* out = (KitsuneVariable*)kitsune_malloc(sizeof(KitsuneVariable));
 			if (!out)
 				return MakeErrorVariable("out of memory");
 			memset(out, 0, sizeof(KitsuneVariable));
-			if (nresults > 0) {
-				KitsuneCoroutine tmp{};
-				SetSlotResult(&tmp, T, 1);
-				if (tmp.error) {
-					// SetSlotResult encountered an internal error (e.g. string OOM, stream snapshot failure).
-					// Surface it as KITSUNE_TERROR rather than silently returning TNONE.
-					kitsune_free(out);
-					out = MakeErrorVariable(tmp.error);
-					kitsune_free(tmp.error);
-					return out;
-				}
-				*out = tmp.result;
-				memset(&tmp.result, 0, sizeof(KitsuneVariable));
+			KitsuneCoroutine tmp{};
+			SetSlotResult(&tmp, T, 1);
+			if (tmp.error) {
+				// SetSlotResult encountered an internal error (e.g. string OOM, stream snapshot failure).
+				// Surface it as KITSUNE_TERROR rather than silently returning TNONE.
+				kitsune_free(out);
+				out = MakeErrorVariable(tmp.error);
+				kitsune_free(tmp.error);
+				return out;
 			}
-			else {
-				out->type = LUA_TNONE;
-			}
+			*out = tmp.result;
+			memset(&tmp.result, 0, sizeof(KitsuneVariable));
 			return out;
 		}
 		const char* err = lua_tolstring(T, -1, NULL);
@@ -2174,15 +2172,8 @@ extern "C" {
 					return out;
 				}
 				if (lua_status(targetT) == LUA_OK && lua_gettop(targetT) == 0) {
-					KitsuneVariable* out = (KitsuneVariable*)kitsune_malloc(sizeof(KitsuneVariable));
-					if (!out)
-						out = MakeErrorVariable("out of memory");
-					else {
-						memset(out, 0, sizeof(KitsuneVariable));
-						out->type = LUA_TNONE;
-					}
 					ReleaseFailedInlineSlot(state, slot, isNewSlot);
-					return out;
+					return MakeNoneVariable();
 				}
 				lua_sethook(targetT, Ticker, LUA_MASKCOUNT, 1000);
 				for (int n = 0; n < argc; n++)
@@ -2270,16 +2261,9 @@ extern "C" {
 
 			if (lua_status(targetT) == LUA_OK && lua_gettop(targetT) == 0) {
 				// Thread is dead: return TNONE.
-				KitsuneVariable* out = (KitsuneVariable*)kitsune_malloc(sizeof(KitsuneVariable));
-				if (!out)
-					out = MakeErrorVariable("out of memory");
-				else {
-					memset(out, 0, sizeof(KitsuneVariable));
-					out->type = LUA_TNONE;
-				}
 				ReleaseFailedInlineSlot(state, slot, isNewSlot);
 				ReleaseLuaAccess(state);
-				return out;
+				return MakeNoneVariable();
 			}
 
 			lua_sethook(targetT, Ticker, LUA_MASKCOUNT, 1000);
@@ -2678,9 +2662,17 @@ extern "C" {
 
 	KITSUNE_API KitsuneVariable* KitsuneGetVariable(const char* path) {
 		KitsuneState* state = g_state;
-		if (!state || !state->L || !path || !*path) return NULL;
+		if (!state || !state->L) return NULL;
 		LuaAccessGuard lock(state);
 		KitsuneVariable* out = NULL;
+		if (!path || !*path) {
+			lua_rawgeti(state->L, LUA_REGISTRYINDEX, LUA_RIDX_GLOBALS);
+			out = (KitsuneVariable*)kitsune_malloc(sizeof(KitsuneVariable));
+			if (out)
+				FillKitsuneVariableFromStack(state->L, -1, out);
+			lua_pop(state->L, 1);
+			return out;
+		}
 		const char* finalKey = NavigateGlobalParent(state->L, path, false);
 		if (finalKey) {
 			if (lua_istable(state->L, -1)) {
@@ -3069,6 +3061,40 @@ extern "C" {
 			out->table = TableToLinkedList(state->L, -1);
 		lua_pop(state->L, 1);
 
+		return out;
+	}
+
+	KITSUNE_API KitsuneVariable* KitsuneGetTableContentsAsJson(const KitsuneVariable* var) {
+		KitsuneState* state = g_state;
+		if (!state || !state->L || !var || var->type != LUA_TTABLE || var->ref <= 0)
+			return MakeNoneVariable();
+
+		LuaAccessGuard lock(state);
+		int stackBefore = lua_gettop(state->L);
+
+		lua_pushcfunction(state->L, lua_json_encode);
+		lua_rawgetp(state->L, LUA_REGISTRYINDEX, lua_json_bridge_registry_key());
+		lua_rawgeti(state->L, LUA_REGISTRYINDEX, var->ref);
+
+		if (lua_pcall_nohook(state->L, 2, 1, 0) != LUA_OK) {
+			const char* err = lua_tolstring(state->L, -1, NULL);
+			KitsuneVariable* out = MakeErrorVariable(err ? err : "json encode error");
+			lua_settop(state->L, stackBefore);
+			return out;
+		}
+
+		size_t jsonLen = 0;
+		const char* jsonStr = lua_tolstring(state->L, -1, &jsonLen);
+		KitsuneVariable* out;
+		if (jsonStr && jsonLen > 0) {
+			out = MakeStringVariable(KITSUNE_TJSON, jsonStr, jsonLen);
+			if (!out)
+				out = MakeErrorVariable("out of memory");
+		}
+		else {
+			out = MakeNilVariable();
+		}
+		lua_settop(state->L, stackBefore);
 		return out;
 	}
 

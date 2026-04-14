@@ -625,6 +625,21 @@ namespace KitsuneNet.Tests
             v.TableRef?.Dispose();  // release the live Lua registry ref
         }
 
+        [Fact]
+        public void GetVariable_EmptyPath_ReturnsGlobalTableRef()
+        {
+            // An empty path returns _G itself as a live KITSUNE_TTABLE registry ref
+            // so it can be used with GetIndex, SetIndex, Pairs, etc.
+            using KitsuneEngine engine = new();
+            engine.SetString("testGlobalLookup_xyz", "hello from _G");
+
+            LuaValue v = engine.GetVariable(string.Empty);
+            v.Type.ShouldBe(LuaType.Table);
+            using var tref = v.TableRef;
+            tref.ShouldNotBeNull();
+            tref!.GetIndex(LuaValue.FromString("testGlobalLookup_xyz")).String.ShouldBe("hello from _G");
+        }
+
         // -- Variable bridge path notation ----------------------------------------
         [Fact]
         public void SetVariable_DotPath_WritesToSubtable()
@@ -4045,6 +4060,66 @@ namespace KitsuneNet.Tests
             arr[2]!.GetValue<long>().ShouldBe(30L);
             result.TableRef?.Dispose();
             engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void TableRef_GetContentsAsJson_StringKeyedTable_ProducesJsonObject()
+        {
+            using KitsuneEngine engine = new();
+            using LuaTableRef tref = engine.RunString("return {name='alice', score=42}").TableRef!;
+            JsonNode? node = tref.GetContentsAsJson();
+            node.ShouldBeAssignableTo<JsonObject>();
+            ((JsonObject)node!)["name"]!.GetValue<string>().ShouldBe("alice");
+            ((JsonObject)node)["score"]!.GetValue<long>().ShouldBe(42L);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void TableRef_GetContentsAsJson_SequentialArray_ProducesJsonArray()
+        {
+            using KitsuneEngine engine = new();
+            using LuaTableRef tref = engine.RunString("return {10, 20, 30}").TableRef!;
+            JsonNode? node = tref.GetContentsAsJson();
+            node.ShouldBeAssignableTo<JsonArray>();
+            var arr = (JsonArray)node!;
+            arr.Count.ShouldBe(3);
+            arr[0]!.GetValue<long>().ShouldBe(10L);
+            arr[1]!.GetValue<long>().ShouldBe(20L);
+            arr[2]!.GetValue<long>().ShouldBe(30L);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void TableRef_GetContentsAsJson_NestedTable_ProducesNestedJson()
+        {
+            using KitsuneEngine engine = new();
+            using LuaTableRef tref = engine.RunString("return {outer={inner='deep'}}").TableRef!;
+            JsonNode? node = tref.GetContentsAsJson();
+            node.ShouldBeAssignableTo<JsonObject>();
+            ((JsonObject)node!)["outer"]!["inner"]!.GetValue<string>().ShouldBe("deep");
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void TableRef_GetContentsAsJson_EmptyTable_ProducesEmptyJsonObject()
+        {
+            using KitsuneEngine engine = new();
+
+            // Arrays and tables are the same in lua. An empty table is treated as an empty array.
+            using LuaTableRef tref = engine.RunString("return {}").TableRef!;
+            JsonNode? node = tref.GetContentsAsJson();
+            node.ShouldBeAssignableTo<JsonArray>();
+            ((JsonArray)node!).Count.ShouldBe(0);
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public void TableRef_GetContentsAsJson_AfterDispose_ThrowsObjectDisposedException()
+        {
+            using KitsuneEngine engine = new();
+            LuaTableRef tref = engine.RunString("return {x=1}").TableRef!;
+            tref.Dispose();
+            Should.Throw<ObjectDisposedException>(() => tref.GetContentsAsJson());
         }
 
         [Fact]

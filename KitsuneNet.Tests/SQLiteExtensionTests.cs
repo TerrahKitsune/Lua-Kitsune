@@ -14,7 +14,7 @@ public sealed class SQLiteExtensionTests
     // The DLL is copied into the test output directory by the CopyNativeDlls
     // target in KitsuneNet.csproj. Omit the file extension so SQLite appends
     // the platform-appropriate suffix (.dll on Windows).
-    private static string ExtensionPath =>
+    private static readonly string ExtensionPath =
         Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SQLiteKitsune")
             .Replace('\\', '/');
 
@@ -221,11 +221,14 @@ public sealed class SQLiteExtensionTests
         // Do it again
         result = await engine.ExecuteStringAsync("""
             local db = DB
-            db:Query("SELECT AddOne(68)")
-            db:Fetch()
-            local r = db:GetRow(1)
+            DB = nil
+            local ok, r = pcall(function()
+                db:Query("SELECT AddOne(68)")
+                db:Fetch()
+                return db:GetRow(1)
+            end)
             db:Close()
-            DB = nil; -- Free
+            if not ok then error(r) end
             return r
             """);
         result.AsInt64.ShouldBe(69L);
@@ -350,4 +353,424 @@ public sealed class SQLiteExtensionTests
             """);
         result.AsInt64.ShouldBe(15L);
     }
+
+    // RegisterTable — 2-field table, string PKs, full scan returns all rows in PK order.
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterTable_TwoField_StringPKs_FullScan()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            local t = {}
+            t["a"] = 1
+            t["b"] = 2
+            t["c"] = 3
+            SQLiteExt.RegisterTable("TwoFieldStr", {"Id", "Data"}, t)
+            local rows = SQLiteExt.Query("SELECT Id, Data FROM TwoFieldStr ORDER BY Id")
+            db:Close()
+            return #rows .. "|" .. rows[1]["Id"] .. "|" .. rows[2]["Id"] .. "|" .. rows[3]["Id"]
+            """);
+        result.String.ShouldBe("3|a|b|c");
+    }
+
+    // RegisterTable — 3-field table, integer PKs, full scan returns correct column values.
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterTable_ThreeField_IntegerPKs_FullScan()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            local t = {}
+            t[1] = {"John", "Doe"}
+            t[2] = {"Jane", "Smith"}
+            SQLiteExt.RegisterTable("ThreeFieldInt", {"Id", "FirstName", "LastName"}, t)
+            local rows = SQLiteExt.Query("SELECT Id, FirstName, LastName FROM ThreeFieldInt ORDER BY Id")
+            db:Close()
+            return rows[1]["FirstName"] .. " " .. rows[1]["LastName"] .. "|" ..
+                   rows[2]["FirstName"] .. " " .. rows[2]["LastName"]
+            """);
+        result.String.ShouldBe("John Doe|Jane Smith");
+    }
+
+    // RegisterTable — PK equality index uses the fast single-row lookup path (string PK).
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterTable_PKEqualityIndex_StringPK()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            local t = {}
+            t["abc"] = {"John", "Doe"}
+            t["xyz"] = {"Jane", "Smith"}
+            t["zzz"] = {"Bob", "Jones"}
+            SQLiteExt.RegisterTable("PKStringTest", {"Id", "FirstName", "LastName"}, t)
+            local rows = SQLiteExt.Query("SELECT FirstName, LastName FROM PKStringTest WHERE Id='xyz'")
+            db:Close()
+            return #rows .. "|" .. rows[1]["FirstName"] .. " " .. rows[1]["LastName"]
+            """);
+        result.String.ShouldBe("1|Jane Smith");
+    }
+
+    // RegisterTable — PK equality index uses the fast single-row lookup path (integer PK).
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterTable_PKEqualityIndex_IntegerPK()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            local t = {}
+            t[1] = {"John", "Doe"}
+            t[2] = {"Jane", "Smith"}
+            t[3] = {"Bob", "Jones"}
+            SQLiteExt.RegisterTable("PKIntTest", {"Id", "FirstName", "LastName"}, t)
+            local rows = SQLiteExt.Query("SELECT FirstName FROM PKIntTest WHERE Id=2")
+            db:Close()
+            return #rows .. "|" .. rows[1]["FirstName"]
+            """);
+        result.String.ShouldBe("1|Jane");
+    }
+
+    // RegisterTable — table value in 2-field schema is serialized as JSON.
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterTable_TableValue_SerializedAsJson_TwoField()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            local t = {}
+            t["a"] = {Name="James"}
+            SQLiteExt.RegisterTable("JsonTwoField", {"Id", "Data"}, t)
+            local rows = SQLiteExt.Query("SELECT Data FROM JsonTwoField WHERE Id='a'")
+            db:Close()
+            return rows[1]["Data"]
+            """);
+        result.String.ShouldNotBeNull();
+        result.String.ShouldContain("James");
+    }
+
+    // RegisterTable — nested table value in multi-field schema is serialized as JSON.
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterTable_TableValue_SerializedAsJson_MultiField()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            local t = {}
+            t[1] = {"John", "Doe", {Bla=42}}
+            SQLiteExt.RegisterTable("JsonMultiField", {"Id", "FirstName", "LastName", "Extra"}, t)
+            local rows = SQLiteExt.Query("SELECT FirstName, Extra FROM JsonMultiField WHERE Id=1")
+            db:Close()
+            return rows[1]["FirstName"] .. "|" .. rows[1]["Extra"]
+            """);
+        result.String.ShouldNotBeNull();
+        result.String!.ShouldStartWith("John|");
+        result.String.ShouldContain("42");
+    }
+
+    // RegisterTable — empty data table produces zero rows.
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterTable_EmptyTable_ReturnsNoRows()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            local t = {}
+            SQLiteExt.RegisterTable("EmptyTest", {"Id", "Data"}, t)
+            local rows = SQLiteExt.Query("SELECT * FROM EmptyTest") or {}
+            db:Close()
+            return #rows
+            """);
+        result.AsInt64.ShouldBe(0L);
+    }
+
+    // RegisterTable — row whose value is a scalar (not a sub-table) in a 3-field schema:
+    // first non-PK column returns the scalar, remaining columns return nil.
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterTable_MalformedRow_ScalarInMultiFieldSchema()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            local t = {}
+            t["good"] = {"John", "Doe"}
+            t["bad"]  = "scalar"
+            SQLiteExt.RegisterTable("MalformedTest", {"Id", "FirstName", "LastName"}, t)
+            local rows = SQLiteExt.Query("SELECT FirstName, LastName FROM MalformedTest WHERE Id='bad'")
+            db:Close()
+            return rows[1]["FirstName"] .. "|" .. tostring(rows[1]["LastName"])
+            """);
+        result.String.ShouldBe("scalar|nil");
+    }
+
+    // RegisterTable — running SELECT twice on the same virtual table (re-scan) returns
+    // correct results both times.
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterTable_Rescan_BothScansReturnCorrectResults()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            local t = {}
+            t[1] = "alpha"
+            t[2] = "beta"
+            SQLiteExt.RegisterTable("RescanTest", {"Id", "Word"}, t)
+            local r1 = SQLiteExt.Query("SELECT Word FROM RescanTest ORDER BY Id")
+            local r2 = SQLiteExt.Query("SELECT Word FROM RescanTest ORDER BY Id")
+            db:Close()
+            return r1[1]["Word"] .. "|" .. r1[2]["Word"] .. "|" ..
+                   r2[1]["Word"] .. "|" .. r2[2]["Word"]
+            """);
+        result.String.ShouldBe("alpha|beta|alpha|beta");
+    }
+
+    // RegisterTable V2 — INSERT into a 2-field virtual table; new row visible in SELECT.
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterTable_Insert_TwoField_AddsRow()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            local t = {}
+            t["a"] = 1
+            t["b"] = 2
+            SQLiteExt.RegisterTable("InsertTwo", {"Id", "Data"}, t)
+            local ok, err = db:Query("INSERT INTO InsertTwo VALUES('d', 99)")
+            assert(ok, err)
+            db:Fetch()
+            local rows = SQLiteExt.Query("SELECT Id, Data FROM InsertTwo ORDER BY Id")
+            db:Close()
+            return #rows .. "|" .. rows[3]["Id"] .. "|" .. tostring(rows[3]["Data"])
+            """);
+        result.String.ShouldBe("3|d|99");
+    }
+
+    // RegisterTable V2 — INSERT into a 3-field virtual table; new row visible in SELECT.
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterTable_Insert_ThreeField_AddsRow()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            local t = {}
+            t[1] = {"John", "Doe"}
+            t[2] = {"Jane", "Smith"}
+            SQLiteExt.RegisterTable("InsertThree", {"Id", "FirstName", "LastName"}, t)
+            local ok, err = db:Query("INSERT INTO InsertThree VALUES(4,'Hans','Mueller')")
+            assert(ok, err)
+            db:Fetch()
+            local rows = SQLiteExt.Query("SELECT FirstName, LastName FROM InsertThree WHERE Id=4")
+            db:Close()
+            return rows[1]["FirstName"] .. " " .. rows[1]["LastName"]
+            """);
+        result.String.ShouldBe("Hans Mueller");
+    }
+
+    // RegisterTable V2 — INSERT with a duplicate PK raises a constraint error
+    // containing "Duplicate key" from xUpdate.
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterTable_Insert_DuplicateKey_ReturnsError()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            local t = {}
+            t["a"] = 1
+            SQLiteExt.RegisterTable("InsertDup", {"Id", "Data"}, t)
+            local ok, err = db:Query("INSERT INTO InsertDup VALUES('a', 99)")
+            db:Close()
+            if ok then return "unexpected success" end
+            return err or "(no message)"
+            """);
+        result.String.ShouldNotBeNull();
+        result.String.ShouldContain("Duplicate");
+    }
+
+    // RegisterTable V2 — DELETE removes the row from subsequent SELECT results.
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterTable_Delete_RemovesRow()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            local t = {}
+            t["a"] = 1
+            t["b"] = 2
+            t["c"] = 3
+            SQLiteExt.RegisterTable("DeleteTest", {"Id", "Data"}, t)
+            local ok, err = db:Query("DELETE FROM DeleteTest WHERE Id='b'")
+            assert(ok, err)
+            db:Fetch()
+            local rows = SQLiteExt.Query("SELECT Id FROM DeleteTest ORDER BY Id")
+            db:Close()
+            return #rows .. "|" .. rows[1]["Id"] .. "|" .. rows[2]["Id"]
+            """);
+        result.String.ShouldBe("2|a|c");
+    }
+
+    // RegisterTable V2 — UPDATE changes the scalar value for an existing row.
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterTable_Update_ScalarValue()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            local t = {}
+            t["a"] = 1
+            t["b"] = 2
+            SQLiteExt.RegisterTable("UpdateScalar", {"Id", "Data"}, t)
+            local ok, err = db:Query("UPDATE UpdateScalar SET Data=42 WHERE Id='a'")
+            assert(ok, err)
+            db:Fetch()
+            local rows = SQLiteExt.Query("SELECT Data FROM UpdateScalar WHERE Id='a'")
+            db:Close()
+            return tostring(rows[1]["Data"])
+            """);
+        result.String.ShouldBe("42");
+    }
+
+    // RegisterTable V2 — UPDATE with PK rename: old key absent, new key present.
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterTable_Update_PKRename()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            local t = {}
+            t["a"] = 10
+            t["b"] = 20
+            SQLiteExt.RegisterTable("RenameTest", {"Id", "Data"}, t)
+            local ok, err = db:Query("UPDATE RenameTest SET Id='z' WHERE Id='a'")
+            assert(ok, err)
+            db:Fetch()
+            local rows = SQLiteExt.Query("SELECT Id, Data FROM RenameTest ORDER BY Id")
+            db:Close()
+            -- a gone, b unchanged, z present with a's old value
+            return #rows .. "|" .. rows[1]["Id"] .. "|" .. rows[2]["Id"] .. "|" .. tostring(rows[2]["Data"])
+            """);
+        result.String.ShouldBe("2|b|z|10");
+    }
+
+    // RegisterTable V2 — UPDATE with a WHERE that matches nothing returns SQL success
+    // (SQLite handles the WHERE filter before xUpdate; 0 rows affected is not an error).
+    // Verifies the existing row is untouched.
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterTable_Update_KeyNotFound_ReturnsSuccess()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            local t = {}
+            t["a"] = 1
+            SQLiteExt.RegisterTable("UpdateMissing", {"Id", "Data"}, t)
+            SQLiteExt.Query("UPDATE UpdateMissing SET Data=99 WHERE Id='nope'")
+            local rows = SQLiteExt.Query("SELECT * FROM UpdateMissing")
+            db:Close()
+            -- original row unchanged, no error raised
+            return #rows .. "|" .. tostring(rows[1]["Data"])
+            """);
+        result.String.ShouldBe("1|1");
+    }
+
+    // RegisterTable V2 — UPDATE non-PK columns in a 3-field table; exercises
+    // set_row_value's KITSUNE_TTABLECONTENTS path (fieldCount > 2) for UPDATE.
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterTable_Update_ThreeField_UpdatesSubTableValues()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            local t = {}
+            t[1] = {"John", "Doe"}
+            t[2] = {"Jane", "Smith"}
+            SQLiteExt.RegisterTable("UpdateThree", {"Id", "FirstName", "LastName"}, t)
+            local ok, err = db:Query("UPDATE UpdateThree SET FirstName='Hans', LastName='Mueller' WHERE Id=1")
+            assert(ok, err)
+            db:Fetch()
+            local rows = SQLiteExt.Query("SELECT FirstName, LastName FROM UpdateThree ORDER BY Id")
+            db:Close()
+            -- row 1 updated; row 2 unchanged
+            return rows[1]["FirstName"] .. " " .. rows[1]["LastName"] .. "|" ..
+                   rows[2]["FirstName"] .. " " .. rows[2]["LastName"]
+            """);
+        result.String.ShouldBe("Hans Mueller|Jane Smith");
+    }
+
+    // RegisterTable V2 — UPDATE with PK rename on a 3-field table:
+    // exercises sub-table creation AND old-key deletion in the same xUpdate call.
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterTable_Update_PKRename_ThreeField()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            local t = {}
+            t[1] = {"John", "Doe"}
+            t[2] = {"Jane", "Smith"}
+            SQLiteExt.RegisterTable("PKRenameThree", {"Id", "FirstName", "LastName"}, t)
+            local ok, err = db:Query("UPDATE PKRenameThree SET Id=9, FirstName='Hans', LastName='Mueller' WHERE Id=1")
+            assert(ok, err)
+            db:Fetch()
+            local rows = SQLiteExt.Query("SELECT Id, FirstName, LastName FROM PKRenameThree ORDER BY Id")
+            db:Close()
+            -- old key 1 gone, new key 9 present; row 2 unchanged
+            return #rows .. "|" .. rows[1]["Id"] .. "|" .. rows[1]["FirstName"] .. "|" ..
+                   rows[2]["Id"] .. "|" .. rows[2]["FirstName"]
+            """);
+        result.String.ShouldBe("2|2|Jane|9|Hans");
+    }
 }
+

@@ -1,4 +1,4 @@
-using KitsuneNet;
+﻿using KitsuneNet;
 using Shouldly;
 using Xunit;
 
@@ -603,5 +603,4 @@ public sealed class MySqlTests
         var parts = Environment.GetEnvironmentVariable("KITSUNE_MYSQL_TEST")!.Split(':');
         return $"MySQL.Connect('{parts[0]}','{parts[2]}','{parts[3]}','{parts[4]}',{parts[1]})";
     }
-
 }

@@ -1,4 +1,4 @@
-using KitsuneNet;
+﻿using KitsuneNet;
 using Shouldly;
 using Xunit;
 
@@ -490,5 +490,4 @@ public sealed class PostgresTests
         var conninfo = Environment.GetEnvironmentVariable("KITSUNE_POSTGRES_TEST")!;
         return $"Postgres.Connect('{conninfo}')";
     }
-
 }

@@ -358,6 +358,8 @@ extern "C" {
 	// Thread-safe.
 	KITSUNE_API bool KitsuneSetVariable(const char* path, const KitsuneVariable* var);
 	// Returns the Lua global at the given dot-separated path as a heap-allocated typed variable.
+	// If path is NULL or "", returns the global table (_G) itself as a KITSUNE_TTABLE registry ref,
+	// which can be used directly with KitsuneGetIndex, KitsuneSetIndex, KitsuneGetAll, etc.
 	// Returns NULL if not found or if any intermediate component is not a table.
 	// Call KitsuneVariableFree on the result when done. Thread-safe.
 	KITSUNE_API KitsuneVariable* KitsuneGetVariable(const char* path);
@@ -461,4 +463,8 @@ extern "C" {
 	//   anything else  — the method's first return value
 	// Returns NULL only on OOM or invalid obj. Heap-allocated; free with KitsuneVariableFree. Thread-safe.
 	KITSUNE_API KitsuneVariable* KitsuneCallMethod(const KitsuneVariable* obj, const char* method, int argc, const KitsuneVariable* argv);
+	// Returns the contents of a live KITSUNE_TTABLE variable as a KITSUNE_TJSON.
+	// The JSON string is UTF-8 encoded and null-terminated, with byte length in .length (excluding null terminator).
+	// KITSUNE_TNONE = var is not a table; KITSUNE_TERROR = serialization error (message in .data). Returns NULL on OOM. Thread-safe.
+	KITSUNE_API KitsuneVariable* KitsuneGetTableContentsAsJson(const KitsuneVariable* var);
 }

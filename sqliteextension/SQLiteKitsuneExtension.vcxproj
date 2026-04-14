@@ -106,6 +106,7 @@ if exist "$(TargetDir)$(TargetName).pdb" copy /Y "$(TargetDir)$(TargetName).pdb"
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="..\SQLite\sqlite3.c" />
     <ClCompile Include="luafunctions.cpp" />
+    <ClCompile Include="registerluatable.cpp" />
     <ClCompile Include="sqlitefunctions.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -114,6 +115,7 @@ if exist "$(TargetDir)$(TargetName).pdb" copy /Y "$(TargetDir)$(TargetName).pdb"
     <ClInclude Include="dllmain.h" />
     <ClInclude Include="kitsuneext.h" />
     <ClInclude Include="luafunctions.h" />
+    <ClInclude Include="registerluatable.h" />
     <ClInclude Include="sqlitefunctions.h" />
   </ItemGroup>
   <ItemGroup>

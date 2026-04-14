@@ -925,6 +925,17 @@ namespace KitsuneNet
             return snapshotValue.Table ?? Array.Empty<KeyValuePair<LuaValue, LuaValue>>();
         }
 
+        internal static JsonNode? TableRefGetContentsAsJson(IntPtr tableVarPtr)
+        {
+            IntPtr resultPtr = KitsuneGetTableContentsAsJson(tableVarPtr);
+            if (resultPtr == IntPtr.Zero)
+            {
+                return null;
+            }
+
+            return NativePtrToLuaValue(resultPtr).AsJsonNode();
+        }
+
         internal static bool TableRefSetContents(IntPtr tableVarPtr, IReadOnlyList<KeyValuePair<LuaValue, LuaValue>> contents)
         {
             List<IntPtr>? ptrs = null;
@@ -1456,6 +1467,9 @@ namespace KitsuneNet
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern IntPtr KitsuneGetLength(IntPtr objVarPtr);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr KitsuneGetTableContentsAsJson(IntPtr tableVarPtr);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern IntPtr KitsuneNext(IntPtr tableVarPtr, IntPtr key);

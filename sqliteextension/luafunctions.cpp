@@ -1,4 +1,5 @@
 ﻿#include "luafunctions.h"
+#include "registerluatable.h"
 #include <stdlib.h>
 #include <string.h>
 SQLITE_EXTENSION_INIT3
@@ -10,15 +11,6 @@ SQLITE_EXTENSION_INIT3
 struct RegisteredFunc {
 	KitsuneVariable* funcVar;
 	RegisteredFunc* next;
-};
-
-// Process-wide extension state: allocated in DLL_PROCESS_ATTACH, freed in DLL_PROCESS_DETACH.
-// db is set on the first load_extension call and never overwritten — g_extState is shared
-// across all connections so re-registering on subsequent loads would rebind SQLiteExt.*
-// to a different handle on every call.
-struct KitsuneExtState {
-	sqlite3* db;
-	RegisteredFunc* funcs;
 };
 
 static KitsuneExtState* g_extState = NULL;
@@ -82,19 +74,19 @@ static int reg_error(kitsune_ResultSetter resultSetter, const char* msg) {
 static void bind_kv_to_stmt(sqlite3_stmt* stmt, int idx, const KitsuneVariable* v) {
 	if (!v) { sqlite3_bind_null(stmt, idx); return; }
 	switch (v->type) {
-	case KITSUNE_TINTEGER: 
+	case KITSUNE_TINTEGER:
 		sqlite3_bind_int64(stmt, idx, v->integer);
 		break;
-	case KITSUNE_TNUMBER:  
+	case KITSUNE_TNUMBER:
 		sqlite3_bind_double(stmt, idx, v->number);
 		break;
-	case KITSUNE_TSTRING:  
+	case KITSUNE_TSTRING:
 		sqlite3_bind_text(stmt, idx, (const char*)v->data, (int)v->length, SQLITE_STATIC);
 		break;
-	case KITSUNE_TBOOLEAN: 
+	case KITSUNE_TBOOLEAN:
 		sqlite3_bind_int(stmt, idx, v->boolean ? 1 : 0);
 		break;
-	default:               
+	default:
 		sqlite3_bind_null(stmt, idx);
 		break;
 	}
@@ -329,7 +321,7 @@ static void lua_aggregate_step(sqlite3_context* context, int argc, sqlite3_value
 	}
 
 	memset(&args[0], 0, sizeof(KitsuneVariable));
-	args[0].type    = KITSUNE_TBOOLEAN;
+	args[0].type = KITSUNE_TBOOLEAN;
 	args[0].boolean = false;
 
 	for (int i = 0; i < argc; i++)
@@ -355,7 +347,7 @@ static void lua_aggregate_final(sqlite3_context* context) {
 	KitsuneVariable* funcVar = (KitsuneVariable*)sqlite3_user_data(context);
 
 	KitsuneVariable isFinishedArg = {};
-	isFinishedArg.type    = KITSUNE_TBOOLEAN;
+	isFinishedArg.type = KITSUNE_TBOOLEAN;
 	isFinishedArg.boolean = true;
 
 	KitsuneVariable* result = KitsuneExecuteVariable(funcVar, 1, &isFinishedArg);
@@ -400,14 +392,17 @@ static int register_function_cb(int argc, const KitsuneVariable* argv, kitsune_R
 }
 
 int lua_register_kitsune_functions(sqlite3* db, char** pzErrMsg) {
-	// g_extState is process-wide and shared across all connections. Only register the
-	// SQLiteExt.* Lua globals on the first load_extension call so that subsequent calls
-	// on other connections do not rebind them to a different db handle.
-	if (!g_extState || g_extState->db) return SQLITE_OK;
-	g_extState->db = db;
-	KitsuneRegisterFunction("SQLiteExt.RegisterFunction",  register_function_cb,  g_extState);
+	if (!g_extState) return SQLITE_OK;
+	// Set g_extState->db only on the first load_extension call so that all
+	// connections use the same persistent db handle for SQLiteExt.* and RegisterTable.
+	if (!g_extState->db)
+		g_extState->db = db;
+	// Always (re-)register Lua globals: KitsuneEngine creates a fresh Lua state
+	// each time it is re-initialised, so globals must be populated on every load.
+	KitsuneRegisterFunction("SQLiteExt.RegisterFunction", register_function_cb, g_extState);
 	KitsuneRegisterFunction("SQLiteExt.RegisterAggregate", register_aggregate_cb, g_extState);
-	KitsuneRegisterFunction("SQLiteExt.Query",             query_cb,              g_extState);
-	KitsuneRegisterFunction("SQLiteExt.Scalar",            scalar_cb,             g_extState);
+	KitsuneRegisterFunction("SQLiteExt.Query", query_cb, g_extState);
+	KitsuneRegisterFunction("SQLiteExt.Scalar", scalar_cb, g_extState);
+	KitsuneRegisterFunction("SQLiteExt.RegisterTable", register_table_cb, g_extState);
 	return SQLITE_OK;
 }

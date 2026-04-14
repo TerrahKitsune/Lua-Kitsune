@@ -3,11 +3,22 @@
 // Include AFTER SQLITE_EXTENSION_INIT1/3 in each TU so that sqlite3_api is in scope.
 #include "dllmain.h"
 
+// Process-wide extension state: allocated in DLL_PROCESS_ATTACH, freed in DLL_PROCESS_DETACH.
+// db is set on the first load_extension call and never overwritten — g_extState is shared
+// across all connections so re-registering on subsequent loads would rebind SQLiteExt.*
+// to a different handle on every call.
+struct RegisteredFunc; // defined in luafunctions.cpp
+struct KitsuneExtState {
+	sqlite3* db;
+	RegisteredFunc* funcs;
+};
+
 // Converts one SQLite column value to a KitsuneVariable.
 // Data pointers borrow directly from SQLite-owned memory; valid for the duration of the call only.
 static inline void sqlite_val_to_kitsune(sqlite3_value* val, KitsuneVariable* kv) {
 	kv->length = 0;
-	switch (sqlite3_value_type(val)) {
+	int type = sqlite3_value_type(val);
+	switch (type) {
 	case SQLITE_INTEGER:
 		kv->type = KITSUNE_TINTEGER;
 		kv->integer = sqlite3_value_int64(val);

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Text.Json.Nodes;
 using System.Threading;
 
 namespace KitsuneNet
@@ -152,6 +153,17 @@ namespace KitsuneNet
                     KitsuneEngine.ReleaseNativeVariable(cursor);  // early break: free dangling cursor
                 }
             }
+        }
+
+        /// <summary>
+        /// Encodes the live Lua table to a <see cref="JsonNode"/> using the engine's internal
+        /// JSON encoder. Returns <c>null</c> on failure or if the table cannot be serialised.
+        /// Throws <see cref="ObjectDisposedException"/> when disposed.
+        /// </summary>
+        public JsonNode? GetContentsAsJson()
+        {
+            ObjectDisposedException.ThrowIf(_disposed != 0, this);
+            return KitsuneEngine.TableRefGetContentsAsJson(_nativePtr);
         }
 
         /// <summary>

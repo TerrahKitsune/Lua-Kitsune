@@ -1,4 +1,4 @@
-using KitsuneNet;
+﻿using KitsuneNet;
 using Shouldly;
 using Xunit;
 
@@ -296,6 +296,7 @@ namespace KitsuneNet.Tests
         public async Task Http_Timeout_TransportError_CodeIsNil()
         {
             using KitsuneEngine engine = new();
+
             // 50 ms is far shorter than the 10 s delay endpoint will ever respond.
             // If the network is unreachable, DNS failure also produces nil Code.
             LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
@@ -1093,6 +1094,5 @@ namespace KitsuneNet.Tests
                 r.String.ShouldBe("true");
             }
         }
-
     }
 }
