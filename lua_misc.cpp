@@ -133,30 +133,29 @@ int GetStringEqual(lua_State* L) {
 	const char* str1 = lua_tolstring(L, 1, &len1);
 	const char* str2 = lua_tolstring(L, 2, &len2);
 
-	lua_pop(L, lua_gettop(L));
-
+	// Compare while both strings are still reachable on the stack.
+	bool result;
 	if (!str1 || !str2) {
-		lua_pushboolean(L, str1 == str2);
+		result = (str1 == str2);
 	}
 	else if (str1 == str2 && len1 == len2) {
-		lua_pushboolean(L, true);
+		result = true;
 	}
 	else if (len1 == len2) {
-
-		for (size_t i = 0; i < len1; i++)
-		{
-			if (tolower(str1[i]) != tolower(str2[i])) {
-				lua_pushboolean(L, false);
-				return 1;
+		result = true;
+		for (size_t i = 0; i < len1; i++) {
+			if (tolower((unsigned char)str1[i]) != tolower((unsigned char)str2[i])) {
+				result = false;
+				break;
 			}
 		}
-
-		lua_pushboolean(L, true);
 	}
 	else {
-		lua_pushboolean(L, false);
+		result = false;
 	}
 
+	lua_pop(L, lua_gettop(L));
+	lua_pushboolean(L, result);
 	return 1;
 }
 
@@ -236,7 +235,7 @@ int TableSelect(lua_State* L) {
 	return 1;
 }
 
-DWORD crc32(uint8_t* data, int size, DWORD crc)
+DWORD crc32(uint8_t* data, size_t size, DWORD crc)
 {
 	DWORD r = crc;
 	uint8_t* end = data + size;
@@ -545,8 +544,7 @@ static int crc64(lua_State* L) {
 		data = (const BYTE*)lua_tolstring(L, -1, &len);
 	}
 	else if (lua_isstream(L, -1)) {
-		data = NULL;
-		len = 0;
+		return luaL_error(L, "CRC64 does not support stream input");
 	}
 	else if (lua_iswchar(L, -1)) {
 		LuaWChar* wchar = lua_towchar(L, -1);

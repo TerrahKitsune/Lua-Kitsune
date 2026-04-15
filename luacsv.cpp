@@ -1,4 +1,4 @@
-#include "luacsv.h"
+ï»¿#include "luacsv.h"
 #include <string.h>
 #include "luawchar.h"
 #include "stream.h"
@@ -249,7 +249,7 @@ static wchar_t GetNext(LuaCsv* csv, bool peek = false) {
 			if (!peek)
 				csv->streamPos++;
 		} else {
-			last = L'\0';  // stream exhausted — signals IsEndline to finish the last row
+			last = L'\0';  // stream exhausted â€” signals IsEndline to finish the last row
 		}
 	} else {
 		last = L'\0';
@@ -319,7 +319,7 @@ static void PushAndClearBuffer(LuaCsv* csv, lua_State* L) {
 	// Fast path: if every wide char is within the ASCII range push a plain Lua
 	// string instead of constructing a LuaWChar userdata.  This avoids the heap
 	// allocation and GC pressure for the common case of numeric columns, dates,
-	// and short English text — the overwhelming majority of real CSV cells.
+	// and short English text â€” the overwhelming majority of real CSV cells.
 	bool ascii = true;
 	for (size_t i = 0; i < len && ascii; i++) {
 		if ((unsigned int)buf[i] > 127u)
@@ -467,7 +467,7 @@ static wchar_t SniffDelimiter(const wchar_t* data, size_t len) {
 	const int nCand     = 4;
 	const int maxLines  = 5;
 
-	int counts[4][5] = {};
+	int counts[4][6] = {};  // +1: nLines can reach maxLines before the loop guard fires
 	int nLines = 0;
 	bool inQuote = false;
 
@@ -489,7 +489,7 @@ static wchar_t SniffDelimiter(const wchar_t* data, size_t len) {
 		}
 	}
 	if (nLines < maxLines) {
-		// Flush the last (possibly unterminated) line — but only when it has at
+		// Flush the last (possibly unterminated) line â€” but only when it has at
 		// least one candidate delimiter.  An empty or delimiter-free partial line
 		// (e.g. "al" after "name;age;city\n") would add a zero-count row that
 		// makes the consistency check fail for every valid candidate, causing
@@ -559,7 +559,7 @@ static wchar_t ParseDelimiter(lua_State* L, int idx, wchar_t noArgDefault) {
 // Saves and restores csv->delimiter so auto-detect re-fires on every call.
 //
 // Memory note: the entire input is converted to a wchar_t buffer before
-// parsing begins — a UTF-8 string of N bytes requires approximately 2×N bytes
+// parsing begins â€” a UTF-8 string of N bytes requires approximately 2Ã—N bytes
 // of additional heap for the wide-char representation.  For multi-megabyte
 // files prefer DecodeFromFunction (or csv:DecodeFromFunction) with a stream or
 // chunked supplier so peak memory stays bounded to the chunk size.
@@ -731,7 +731,7 @@ static bool CsvAppendChunkToStreamBuf(LuaCsv* csv, const char* s, size_t slen) {
 		// Use iconv directly at the append offset so the compacted [0..remaining)
 		// data is never touched.  The old csv_utf8_to_wchar path wrote from
 		// position 0, silently overwriting the remainder and then writing the
-		// null terminator past the end of the allocation — causing heap corruption
+		// null terminator past the end of the allocation â€” causing heap corruption
 		// on Linux ("free(): invalid pointer") when multiple chunks were appended.
 		size_t prevLen = csv->streamLen;                // = remaining after compaction
 		size_t needed  = prevLen + slen;                // safe upper bound in wchar_t
@@ -768,7 +768,7 @@ static int CsvStreamIterator(lua_State* L) {
 	csv->streamL = L;
 
 	if (csv->streamRef != LUA_NOREF) {
-		// Stream path — works identically for sync and async streams.
+		// Stream path â€” works identically for sync and async streams.
 		// Keep fetching chunks until the buffer holds at least one complete row
 		// boundary (newline or CR) or the stream is done.  The same accumulation
 		// also ensures SniffDelimiter sees a full line when in auto-detect mode.
@@ -802,7 +802,7 @@ static int CsvStreamIterator(lua_State* L) {
 	return 1;
 }
 
-// Continuation for the stream path — same upvalues as CsvStreamIterator.
+// Continuation for the stream path â€” same upvalues as CsvStreamIterator.
 // Called when stream:Read() yields (async) or used as the direct fallthrough
 // when Read() returns synchronously without yielding.
 // Per Lua 5.4: "the continuation function is called with the same thread,

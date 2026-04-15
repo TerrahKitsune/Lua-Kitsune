@@ -11,6 +11,7 @@ static const char* LUADATETIME = "DATETIME";
 typedef struct LuaDateTime {
 	int64_t ticks;
 	int16_t offset_minutes;
+	uint8_t _pad[6];  // pad to 16 bytes; prevents ABI surprises across TUs
 } LuaDateTime;
 
 // Ticks per unit constants.

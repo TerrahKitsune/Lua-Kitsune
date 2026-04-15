@@ -1287,6 +1287,435 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
+        [Fact]
+        public async Task Decimal_Div_Basic()
+        {
+            using KitsuneEngine engine = new();
+
+            // 1 / 4 = 0.25
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local a = Decimal.FromString('1')
+                local b = Decimal.FromString('4')
+                local d = a / b
+                return tostring(tostring(d:Round(2)) == '0.25')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Decimal_Div_ByZero_Errors()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local ok, err = pcall(function()
+                    return Decimal.FromString('1') / Decimal.FromString('0')
+                end)
+                return tostring(not ok and err ~= nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Decimal_Mod_Basic()
+        {
+            using KitsuneEngine engine = new();
+
+            // 10 mod 3 = 1
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local a = Decimal.FromString('10')
+                local b = Decimal.FromString('3')
+                return tostring(tostring(a % b) == '1')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Decimal_Eq_DifferentScaleSameValue()
+        {
+            using KitsuneEngine engine = new();
+
+            // 1.50 and 1.5 are numerically equal
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local a = Decimal.FromString('1.50')
+                local b = Decimal.FromString('1.5')
+                return tostring(a == b)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Decimal_Parse_ScientificNotation()
+        {
+            using KitsuneEngine engine = new();
+
+            // 1.23E+2 = 123
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local d = Decimal.FromString('1.23E+2')
+                return tostring(tostring(d) == '123')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Decimal_Parse_NegativeScientificNotation()
+        {
+            using KitsuneEngine engine = new();
+
+            // 1.5E-2 = 0.015
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local d = Decimal.FromString('1.5E-2')
+                return tostring(tostring(d) == '0.015')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Decimal_Mul_NegativeSign()
+        {
+            using KitsuneEngine engine = new();
+
+            // -3 * -4 = 12 (positive)
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local a = Decimal.FromString('-3')
+                local b = Decimal.FromString('-4')
+                return tostring(tostring(a * b) == '12')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Decimal_Round_MultipleDigits_RoundsOnFirstDropped()
+        {
+            using KitsuneEngine engine = new();
+
+            // 1.449 rounded to 1 decimal place: first dropped digit is 4 → round down → 1.4
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local d = Decimal.FromString('1.449'):Round(1)
+                return tostring(tostring(d) == '1.4')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Decimal_Round_NoLoss_WhenScaleAlreadyCoarser()
+        {
+            using KitsuneEngine engine = new();
+
+            // Rounding to a scale >= current scale returns identical value
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local d = Decimal.FromString('1.5')
+                return tostring(tostring(d:Round(3)) == '1.5')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Decimal_FromInteger_IsExact()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local d = Decimal.FromNumber(9007199254740993)
+                return tostring(d:Scale() == 0)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_Format_UsesLocalOffset()
+        {
+            // UTC 2024-01-01 23:00:00 shifted by +02:00 should display as 2024-01-02
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local dt  = DateTime.New(2024, 1, 1, 23, 0, 0, 0, 0)
+                local ist = dt:ToOffset(120)
+                return tostring(ist:Format('%Y-%m-%d') == '2024-01-02')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_New_InvalidDay_Errors()
+        {
+            // Feb 30 is not a valid date and must raise an error
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local ok, err = pcall(function() return DateTime.New(2024, 2, 30) end)
+                return tostring(not ok and err ~= nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_New_LastDayOfMonth_IsValid()
+        {
+            // Feb 29 in a leap year must succeed
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local dt = DateTime.New(2024, 2, 29)
+                return tostring(dt ~= nil and dt:Day() == 29)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_Parse_ExplicitZ_IgnoresFallbackOffset()
+        {
+            // A Z-suffixed string is unambiguously UTC; a non-zero fallback must be ignored
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local dt = DateTime.Parse('2024-06-15T12:00:00Z', 120)
+                return tostring(dt:OffsetMinutes() == 0 and dt:Hour() == 12)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_Parse_NoOffset_UsesFallback()
+        {
+            // A string with no offset indicator should adopt the fallback
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local dt = DateTime.Parse('2024-06-15T12:00:00', 60)
+                return tostring(dt:OffsetMinutes() == 60 and dt:Hour() == 12)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Decimal_Div_FractionalDivisor()
+        {
+            // 1 / 0.5 = 2
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local a = Decimal.FromString('1')
+                local b = Decimal.FromString('0.5')
+                return tostring(tostring((a / b):Round(0)) == '2')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Decimal_Mod_NegativeDividend()
+        {
+            // -10 mod 3 = -1 (sign follows dividend)
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local a = Decimal.FromString('-10')
+                local b = Decimal.FromString('3')
+                return tostring(tostring(a % b) == '-1')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Decimal_Round_ProducesCarryIntoNewDigit()
+        {
+            // 9.999 rounded to 2 places: 10.00 — carry propagates across the decimal point
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local d = Decimal.FromString('9.999'):Round(2)
+                return tostring(tostring(d) == '10.00')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Decimal_Mul_LargeCoefficients_DoesNotOverflow()
+        {
+            // 999999999 * 999999999 = 999999998000000001; verifies u128_mul128 carry is correct
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local a = Decimal.FromString('999999999')
+                local b = Decimal.FromString('999999999')
+                return tostring(tostring(a * b) == '999999998000000001')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Decimal_Mul10_LargeValue_DoesNotOverflow()
+        {
+            // Scale up a number that fills most of the high 64 bits to exercise u128_mul10 with large hi
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local a = Decimal.FromString('99999999999999999999999999999')
+                local b = Decimal.FromString('10')
+                return tostring(tostring(a * b) == '999999999999999999999999999990')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Decimal_Mul_LargeScales_DoesNotOverflowScale()
+        {
+            // Both operands have scale 2; result scale must be 4, not a wrapped negative
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local a = Decimal.FromString('1.23')
+                local b = Decimal.FromString('4.56')
+                local c = a * b
+                return tostring(c:Scale() == 4 and tostring(c) == '5.6088')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Decimal_Div_LargeScaleDividend_TargetScaleIsCorrect()
+        {
+            // Dividend scale=10, divisor scale=0: target_scale must be max(10,0)+10 = 20, not a truncated int16
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local a = Decimal.FromString('1.0000000000')
+                local b = Decimal.FromString('3')
+                local c = a / b
+                return tostring(c:Scale() >= 10)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Decimal_Parse_TooManyFractionalDigits_ReturnsNil()
+        {
+            // More than 32767 fractional digits must be rejected gracefully
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local s = '0.' .. string.rep('1', 40000)
+                local d = Decimal.FromString(s)
+                return tostring(d == nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_Parse_InvalidOffset_ReturnsNil()
+        {
+            // An offset larger than +-14:00 (840 min) must be rejected
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local dt = DateTime.Parse('2024-01-01T00:00:00+99:00')
+                return tostring(dt == nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_Format_Yday_IsCorrect()
+        {
+            // March 1 in a leap year (2024) is day 61 (0-based yday = 60, %j = 061)
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local dt = DateTime.New(2024, 3, 1, 0, 0, 0, 0, 0)
+                return tostring(dt:Format('%j') == '061')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Decimal_Parse_ScientificLargePositiveExp_IsExact()
+        {
+            // 1.5E+3 = 1500; verifies exponent arithmetic stays in int, not int16_t
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local d = Decimal.FromString('1.5E+3')
+                return tostring(tostring(d) == '1500')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Decimal_Format_ZeroWithLargeScale_DoesNotCrash()
+        {
+            // Zero with scale=10 must format correctly without buffer overflow
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local d = Decimal.FromString('0.0000000000')
+                return tostring(d ~= nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_Parse_Feb30_ReturnsNil()
+        {
+            // Feb 30 is not a valid date; parse must reject it
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local dt = DateTime.Parse('2024-02-30T00:00:00Z')
+                return tostring(dt == nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_ToOffset_OutOfRange_Errors()
+        {
+            // An offset outside +-840 minutes must raise a Lua error
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local ok, err = pcall(function()
+                    return DateTime.UtcNow():ToOffset(9999)
+                end)
+                return tostring(not ok and err ~= nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_New_OutOfRangeOffset_Errors()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local ok, err = pcall(function() return DateTime.New(2024, 1, 1, 0, 0, 0, 0, 9999) end)
+                return tostring(not ok and err ~= nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_FromUnixSeconds_OutOfRangeOffset_Errors()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local ok, err = pcall(function() return DateTime.FromUnixSeconds(0, 9999) end)
+                return tostring(not ok and err ~= nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_FromUnixMilliseconds_OutOfRangeOffset_Errors()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local ok, err = pcall(function() return DateTime.FromUnixMilliseconds(0, 9999) end)
+                return tostring(not ok and err ~= nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_Parse_OutOfRangeFallbackOffset_Errors()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local ok, err = pcall(function() return DateTime.Parse('2024-01-01T00:00:00', 9999) end)
+                return tostring(not ok and err ~= nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_New_ValidMaxOffset_Succeeds()
+        {
+            // +14:00 (840 minutes) is the maximum legal UTC offset
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local dt = DateTime.New(2024, 1, 1, 0, 0, 0, 0, 840)
+                return tostring(dt ~= nil and dt:OffsetMinutes() == 840)
+            ");
+            r.String.ShouldBe("true");
+        }
+
         // -- CRC32 ----------------------------------------------------------------
         [Fact]
         public async Task CRC32_IsDeterministic()
@@ -1312,6 +1741,47 @@ namespace KitsuneNet.Tests
                 local full = CRC32('hello world')
                 local inc  = CRC32('world', CRC32('hello '))
                 return tostring(full == inc)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task StringEqual_TolowerDoesNotMistreatHighBytes()
+        {
+            // Characters > 127 must not cause UB through the signed-char tolower path;
+            // two identical non-ASCII strings must compare equal
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local s = 'caf\xc3\xa9'
+                return tostring(string.equal(s, s) == true)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task CSV_SniffDelimiter_FiveFullLines_DoesNotCrash()
+        {
+            // Five complete lines with semicolons exercises the nLines==maxLines boundary
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local data = 'a;b;c\nd;e;f\ng;h;i\nj;k;l\nm;n;o\n'
+                local result = CSV.New(';'):Decode(data)
+                local count = 0
+                for _ in ipairs(result.Rows) do count = count + 1 end
+                return tostring(count == 5)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task CRC64_Stream_RaisesError()
+        {
+            // CRC64 must raise an error when given a stream, not silently return 0
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local st = Stream.Create('hello')
+                local ok, err = pcall(CRC64, st)
+                return tostring(not ok and err ~= nil)
             ");
             r.String.ShouldBe("true");
         }
@@ -1373,15 +1843,16 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task CRC64_WithStream_ReturnsNumber()
+        public async Task CRC64_WithStream_RaisesError()
         {
+            // CRC64 no longer accepts stream input — it was silently computing CRC of
+            // empty input instead of the stream contents. Now it raises an error.
             using KitsuneEngine engine = new();
-
-            // CRC64 accepts a Stream argument and returns a number.
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local s = Stream.Create()
                 s:Write('hello')
-                return tostring(type(CRC64(s)) == 'number')
+                local ok, err = pcall(CRC64, s)
+                return tostring(not ok and err ~= nil)
             ");
             r.String.ShouldBe("true");
         }

@@ -78,7 +78,7 @@ static void ticks_to_fields(int64_t ticks, DtFields* f) {
 
 	int leap = is_leap(f->year);
 	int m = 1;
-	while (m <= 12 && s_days_before_month[leap][m + 1] <= (int)total_days)
+	while (m <= 12 && s_days_before_month[leap][m + 1] <= (int64_t)total_days)
 		m++;
 	f->month = m;
 	f->day = (int)(total_days - s_days_before_month[leap][m] + 1);
@@ -130,9 +130,13 @@ static int16_t get_local_offset_minutes(void) {
 #ifdef _WIN32
 	TIME_ZONE_INFORMATION tz;
 	DWORD r = GetTimeZoneInformation(&tz);
-	// Bias is minutes west of UTC; we store minutes east.
+	// Bias is the base minutes-west-of-UTC offset.
+	// StandardBias and DaylightBias are added on top depending on which period is active.
 	int bias = (int)tz.Bias;
-	if (r == TIME_ZONE_ID_DAYLIGHT) bias += (int)tz.DaylightBias;
+	if (r == TIME_ZONE_ID_DAYLIGHT)
+		bias += (int)tz.DaylightBias;
+	else
+		bias += (int)tz.StandardBias;  // applies in standard time (and unknown)
 	return (int16_t)(-bias);
 #else
 	time_t t = time(NULL);
@@ -181,14 +185,17 @@ void lua_datetime_push_string(lua_State* L, int index) {
 
 // Parses "YYYY-MM-DD[T HH:MM[:SS[.fff]]][Z|+HH:MM|-HH:MM]".
 // Returns 1 on success and fills *out (UTC ticks + offset), 0 on failure.
-static int parse_iso8601(const char* s, LuaDateTime* out) {
+// *has_offset_out is set to 1 if an explicit Z or +/-offset was present.
+static int parse_iso8601(const char* s, LuaDateTime* out, int* has_offset_out) {
 	int y = 0, mo = 0, d = 0, h = 0, mi = 0, sec = 0, ms = 0;
 	int off_h = 0, off_m = 0;
-	int off_sign = 0; // 0 = not set, +1 = east, -1 = west
+	int off_sign = 0; // 0 = not set/Z, +1 = east, -1 = west
+	int has_explicit_offset = 0;  // set for both Z and +/-HH:MM
 	int n = 0;
 
 	if (sscanf(s, "%d-%d-%d%n", &y, &mo, &d, &n) < 3) return 0;
 	if (y < 1 || y > 9999 || mo < 1 || mo > 12 || d < 1 || d > 31) return 0;
+	if (d > s_days_in_month[is_leap(y)][mo]) return 0;
 
 	const char* p = s + n;
 	if (*p == 'T' || *p == ' ') {
@@ -204,10 +211,10 @@ static int parse_iso8601(const char* s, LuaDateTime* out) {
 			if (*p == '.') {
 				p++;
 				int nf = 0;
-				if (sscanf(p, "%d%n", &ms, &nf) == 1) {
-					// Normalize to milliseconds.
-					for (int i = nf; i < 3; i++) ms *= 10;
-					for (int i = nf; i > 3; i--) ms /= 10;
+				if (sscanf(p, "%d%n", &ms, &nf) == 1 && nf > 0) {
+					// Normalise to milliseconds (3 digits).
+					if (nf < 3) { for (int k = nf; k < 3; k++) ms *= 10; }
+					else if (nf > 3) { for (int k = nf; k > 3; k--) ms /= 10; }
 					p += nf;
 				}
 			}
@@ -216,10 +223,12 @@ static int parse_iso8601(const char* s, LuaDateTime* out) {
 
 	if (*p == 'Z') {
 		off_sign = 0;
+		has_explicit_offset = 1;
 		p++;
 	}
 	else if (*p == '+' || *p == '-') {
 		off_sign = (*p == '+') ? 1 : -1;
+		has_explicit_offset = 1;
 		p++;
 		int nz = 0;
 		if (sscanf(p, "%d:%d%n", &off_h, &off_m, &nz) < 2) {
@@ -230,14 +239,18 @@ static int parse_iso8601(const char* s, LuaDateTime* out) {
 
 	if (h < 0 || h > 23 || mi < 0 || mi > 59 || sec < 0 || sec > 60) return 0;
 	if (ms < 0 || ms > 999) return 0;
+	if (off_h < 0 || off_h > 23 || off_m < 0 || off_m > 59) return 0;
+	int total_off = off_h * 60 + off_m;
+	if (total_off > 840) return 0;  // beyond legal UTC offset range
 
-	int16_t offset_min = (int16_t)(off_sign * (off_h * 60 + off_m));
+	int16_t offset_min = (int16_t)(off_sign * total_off);
 	int64_t local_ticks = fields_to_ticks(y, mo, d, h, mi, sec, ms);
 	// Convert to UTC by subtracting the offset.
 	int64_t utc_ticks = local_ticks - (int64_t)offset_min * DT_TICKS_PER_MINUTE;
 
 	out->ticks = utc_ticks;
 	out->offset_minutes = offset_min;
+	*has_offset_out = has_explicit_offset;
 	return 1;
 }
 
@@ -265,13 +278,18 @@ int datetime_new(lua_State* L) {
 	int mi = (int)luaL_optinteger(L, 5, 0);
 	int s = (int)luaL_optinteger(L, 6, 0);
 	int ms = (int)luaL_optinteger(L, 7, 0);
-	int16_t offset_min = (int16_t)luaL_optinteger(L, 8, 0);
+	lua_Integer raw_off = luaL_optinteger(L, 8, 0);
+	if (raw_off < -840 || raw_off > 840)
+		return luaL_error(L, "DateTime.New: offset out of range [-840, 840]");
+	int16_t offset_min = (int16_t)raw_off;
 
-	if (y < 1 || y > 9999 || mo < 1 || mo > 12 || d < 1 || d > 31 ||
+	if (y < 1 || y > 9999 || mo < 1 || mo > 12 || d < 1 ||
 		h < 0 || h > 23 || mi < 0 || mi > 59 || s < 0 || s > 59 ||
 		ms < 0 || ms > 999) {
 		luaL_error(L, "DateTime.New: invalid component value");
 	}
+	if (d > s_days_in_month[is_leap(y)][mo])
+		luaL_error(L, "DateTime.New: day out of range for month");
 
 	LuaDateTime* dt = lua_pushdatetime(L);
 	int64_t local_ticks = fields_to_ticks(y, mo, d, h, mi, s, ms);
@@ -282,7 +300,10 @@ int datetime_new(lua_State* L) {
 
 int datetime_fromunixseconds(lua_State* L) {
 	lua_Number ts = luaL_checknumber(L, 1);
-	int16_t offset_min = (int16_t)luaL_optinteger(L, 2, 0);
+	lua_Integer raw_off = luaL_optinteger(L, 2, 0);
+	if (raw_off < -840 || raw_off > 840)
+		return luaL_error(L, "DateTime.FromUnixSeconds: offset out of range [-840, 840]");
+	int16_t offset_min = (int16_t)raw_off;
 	LuaDateTime* dt = lua_pushdatetime(L);
 	dt->ticks = (int64_t)(ts * DT_TICKS_PER_SECOND) + DT_UNIX_EPOCH_TICKS;
 	dt->offset_minutes = offset_min;
@@ -291,7 +312,10 @@ int datetime_fromunixseconds(lua_State* L) {
 
 int datetime_fromunixmilliseconds(lua_State* L) {
 	lua_Integer ts = luaL_checkinteger(L, 1);
-	int16_t offset_min = (int16_t)luaL_optinteger(L, 2, 0);
+	lua_Integer raw_off = luaL_optinteger(L, 2, 0);
+	if (raw_off < -840 || raw_off > 840)
+		return luaL_error(L, "DateTime.FromUnixMilliseconds: offset out of range [-840, 840]");
+	int16_t offset_min = (int16_t)raw_off;
 	LuaDateTime* dt = lua_pushdatetime(L);
 	dt->ticks = ts * DT_TICKS_PER_MILLISECOND + DT_UNIX_EPOCH_TICKS;
 	dt->offset_minutes = offset_min;
@@ -300,22 +324,27 @@ int datetime_fromunixmilliseconds(lua_State* L) {
 
 // parse_iso8601 is exposed as datetime_parse_c for C callers (MySQL/Postgres).
 int datetime_parse_c(const char* s, LuaDateTime* out) {
-	return parse_iso8601(s, out);
+	int has_offset;
+	return parse_iso8601(s, out, &has_offset);
 }
 
 int datetime_parse(lua_State* L) {
 	size_t len;
 	const char* s = luaL_checklstring(L, 1, &len);
-	int16_t fallback_offset = (int16_t)luaL_optinteger(L, 2, 0);
+	lua_Integer raw_off = luaL_optinteger(L, 2, 0);
+	if (raw_off < -840 || raw_off > 840)
+		return luaL_error(L, "DateTime.Parse: fallback offset out of range [-840, 840]");
+	int16_t fallback_offset = (int16_t)raw_off;
 
 	LuaDateTime tmp;
 	memset(&tmp, 0, sizeof(tmp));
-	if (!parse_iso8601(s, &tmp)) {
+	int has_explicit_offset = 0;
+	if (!parse_iso8601(s, &tmp, &has_explicit_offset)) {
 		lua_pushnil(L);
 		return 1;
 	}
 	// If no offset was embedded in the string, apply the fallback.
-	if (tmp.offset_minutes == 0) {
+	if (!has_explicit_offset) {
 		tmp.ticks -= (int64_t)fallback_offset * DT_TICKS_PER_MINUTE;
 		tmp.offset_minutes = fallback_offset;
 	}
@@ -430,7 +459,10 @@ int datetime_tolocal(lua_State* L) {
 
 int datetime_tooffset(lua_State* L) {
 	LuaDateTime* src = lua_todatetime(L, 1);
-	int16_t new_offset = (int16_t)luaL_checkinteger(L, 2);
+	lua_Integer raw = luaL_checkinteger(L, 2);
+	if (raw < -840 || raw > 840)
+		return luaL_error(L, "DateTime.ToOffset: offset out of range [-840, 840]");
+	int16_t new_offset = (int16_t)raw;
 	LuaDateTime* dst = lua_pushdatetime(L);
 	dst->ticks = src->ticks;
 	dst->offset_minutes = new_offset;
@@ -463,7 +495,18 @@ int datetime_format(lua_State* L) {
 	t.tm_hour = f.hour;
 	t.tm_min = f.minute;
 	t.tm_sec = f.second;
-	t.tm_wday = (int)((dt->ticks / DT_TICKS_PER_DAY + 1) % 7);
+	t.tm_yday = s_days_before_month[is_leap(f.year)][f.month] + (f.day - 1);
+	t.tm_isdst = -1;  // unknown; let strftime decide
+	// Day-of-week: compute from the local (offset-adjusted) date, not raw UTC ticks.
+	// days_before_year(f.year) + s_days_before_month[leap][f.month] + (f.day - 1) gives
+	// the absolute day number; day 0001-01-01 was a Monday (weekday 1 in .NET / 1 in tm).
+	// tm_wday: 0=Sun, 1=Mon, ..., 6=Sat.
+	{
+		int64_t abs_day = days_before_year(f.year)
+			+ s_days_before_month[is_leap(f.year)][f.month]
+			+ (f.day - 1);
+		t.tm_wday = (int)((abs_day + 1) % 7);  // +1: 0001-01-01 was Monday(1), Mon%7=1
+	}
 	strftime(buf, sizeof(buf), fmt, &t);
 	lua_pushstring(L, buf);
 	return 1;

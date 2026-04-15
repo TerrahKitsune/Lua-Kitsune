@@ -59,6 +59,18 @@ set(KITSUNE_ENGINE_SOURCES
 	luawchar.cpp
 	wcharmain.cpp
 
+	# ── Identifier (UUID/OID type) ───────────────────────────────────────────
+	luaidentifier.cpp
+	identifiermain.cpp
+
+	# ── DateTime (UTC/offset date-time type) ─────────────────────────────────
+	luadatetime.cpp
+	datetimemain.cpp
+
+	# ── Decimal (128-bit fixed-point decimal type) ───────────────────────────
+	luadecimal.cpp
+	decimalmain.cpp
+
 	# ── CSV ────────────────────────────────────────────────────────────────
 	luacsv.cpp
 	LuaCsvMain.cpp

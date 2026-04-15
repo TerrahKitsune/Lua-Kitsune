@@ -31,13 +31,17 @@ static int u128_iszero(uint64_t lo, uint64_t hi) {
 
 // a *= 10
 static void u128_mul10(uint64_t* lo, uint64_t* hi) {
-	// (hi:lo) * 10  = hi*10 : lo*10, carrying overflow from lo into hi
-	uint64_t lo_hi = (*lo >> 32) * 10;
+	// Multiply lo by 10 using split halves to avoid overflow.
 	uint64_t lo_lo = (*lo & 0xFFFFFFFFULL) * 10;
-	lo_lo += (lo_hi << 32);
-	uint64_t carry = (lo_hi >> 32) + (lo_lo < (lo_hi << 32) ? 1 : 0);
-	*lo = lo_lo;
-	*hi = (*hi) * 10 + carry;
+	uint64_t lo_hi = (*lo >> 32) * 10;
+	uint64_t new_lo = lo_lo + (lo_hi << 32);
+	uint64_t carry  = (lo_hi >> 32) + (new_lo < lo_lo ? 1ULL : 0ULL);
+	// Multiply hi by 10 the same way to avoid overflow.
+	uint64_t hi_lo = (*hi & 0xFFFFFFFFULL) * 10;
+	uint64_t hi_hi = (*hi >> 32) * 10;
+	uint64_t new_hi = hi_lo + (hi_hi << 32) + carry;
+	*lo = new_lo;
+	*hi = new_hi;
 }
 
 // a += digit (0-9)
@@ -73,37 +77,64 @@ static void u128_add(uint64_t* alo, uint64_t* ahi, uint64_t blo, uint64_t bhi) {
 // a *= b (b is a small uint32)
 static void u128_mul32(uint64_t* lo, uint64_t* hi, uint32_t b) {
 	uint64_t b64 = (uint64_t)b;
-	uint64_t lo0 = (*lo & 0xFFFFFFFFULL) * b64;
-	uint64_t lo1 = (*lo >> 32) * b64;
-	uint64_t hi0 = (*hi & 0xFFFFFFFFULL) * b64;
-	uint64_t hi1 = (*hi >> 32) * b64;
+	// Multiply each 32-bit limb by b64 and accumulate into 128-bit result.
+	uint64_t lo0 = (*lo & 0xFFFFFFFFULL) * b64;  // bits 0-63
+	uint64_t lo1 = (*lo >> 32)           * b64;  // bits 32-95
+	uint64_t hi0 = (*hi & 0xFFFFFFFFULL) * b64;  // bits 64-127
+	uint64_t hi1 = (*hi >> 32)           * b64;  // bits 96-159 (upper half lost)
+	// Assemble low 64: lo0 + (lo1 << 32)
 	uint64_t new_lo = lo0 + (lo1 << 32);
-	uint64_t carry = (new_lo < lo0) ? 1ULL : 0ULL;
-	carry += (lo1 >> 32);
-	carry += hi0 + (hi1 << 32);
+	uint64_t c1 = (new_lo < lo0) ? 1ULL : 0ULL;  // carry from lo
+	// Assemble high 64 with full carry chain.
+	uint64_t h = (lo1 >> 32) + c1;
+	h += hi0; uint64_t c2 = (h < hi0) ? 1ULL : 0ULL;
+	h += (hi1 << 32); c2 += (h < (hi1 << 32)) ? 1ULL : 0ULL;
+	(void)c2;  // c2 would carry into bits 128+ which we discard
 	*lo = new_lo;
-	*hi = carry;
+	*hi = h;
 }
 
-// Full 128x128 → 128 multiply (truncates to 128 bits, sufficient for our scale range)
+// Full 128x128 → 128 multiply (truncates to low 128 bits; upper bits beyond 128 are discarded)
 static void u128_mul128(uint64_t* rlo, uint64_t* rhi,
 	uint64_t alo, uint64_t ahi,
 	uint64_t blo, uint64_t bhi) {
-	// Split a and b into 32-bit limbs and do schoolbook multiplication.
-	// Only keep the low 128 bits of the result.
 	uint64_t a0 = alo & 0xFFFFFFFFULL, a1 = alo >> 32;
 	uint64_t a2 = ahi & 0xFFFFFFFFULL, a3 = ahi >> 32;
 	uint64_t b0 = blo & 0xFFFFFFFFULL, b1 = blo >> 32;
 	uint64_t b2 = bhi & 0xFFFFFFFFULL, b3 = bhi >> 32;
-	// Compute partial products that contribute to the low 128 bits.
-	uint64_t lo = a0 * b0;
-	uint64_t mid = a0 * b1 + a1 * b0;
-	uint64_t hi2 = a0 * b2 + a1 * b1 + a2 * b0;
-	uint64_t hi3 = a0 * b3 + a1 * b2 + a2 * b1 + a3 * b0;
-	// Accumulate into 128-bit result.
-	uint64_t rlo2 = lo + ((mid & 0xFFFFFFFFULL) << 32);
-	uint64_t carry = (rlo2 < lo) ? 1ULL : 0ULL;
-	uint64_t rhi2 = (mid >> 32) + hi2 + (hi3 << 32) + carry;
+	// Partial products at each 32-bit column.
+	uint64_t p00 = a0 * b0;  // col 0
+	uint64_t p01 = a0 * b1;  // col 1
+	uint64_t p10 = a1 * b0;  // col 1
+	uint64_t p02 = a0 * b2;  // col 2
+	uint64_t p11 = a1 * b1;  // col 2
+	uint64_t p20 = a2 * b0;  // col 2
+	uint64_t p03 = a0 * b3;  // col 3
+	uint64_t p12 = a1 * b2;  // col 3
+	uint64_t p21 = a2 * b1;  // col 3
+	uint64_t p30 = a3 * b0;  // col 3
+	// Col 1 (bits 32-63): sum p01+p10, carry into col 2.
+	uint64_t col1   = p01 + p10;
+	uint64_t col1_c = (col1 < p01) ? 1ULL : 0ULL;
+	// Low 64: p00 + (col1 << 32)
+	uint64_t rlo2 = p00 + (col1 << 32);
+	uint64_t lo_c = (rlo2 < p00) ? 1ULL : 0ULL;
+	// Col 2 (bits 64-95): p02+p11+p20 + (col1>>32) + col1_c<<32 + lo_c
+	// Accumulate with carry tracking.
+	uint64_t c2 = (col1 >> 32) + (col1_c << 32) + lo_c;
+	uint64_t s2 = p02; uint64_t ca;
+	s2 += p11; ca  = (s2 < p02)  ? 1ULL : 0ULL;
+	s2 += p20; ca += (s2 < p20)  ? 1ULL : 0ULL;
+	s2 += c2;  ca += (s2 < c2)   ? 1ULL : 0ULL;
+	// Col 3 (bits 96-127): p03+p12+p21+p30+ca; only the low 32 bits land in rhi.
+	// Track carries so overflow within s3 doesn’t lose bits still in our 128-bit window.
+	uint64_t s3 = p03;
+	s3 += p12; uint64_t c3 = (s3 < p12) ? 1ULL : 0ULL;
+	s3 += p21; c3 += (s3 < p21) ? 1ULL : 0ULL;
+	s3 += p30; c3 += (s3 < p30) ? 1ULL : 0ULL;
+	s3 += ca;  c3 += (s3 < ca)  ? 1ULL : 0ULL;
+	(void)c3;  // c3 is in bits 128+ — discard
+	uint64_t rhi2 = s2 + (s3 << 32);
 	*rlo = rlo2;
 	*rhi = rhi2;
 }
@@ -158,7 +189,7 @@ int decimal_parse_c(const char* s, size_t len, LuaDecimal* out) {
 	else if (s[i] == '+') { i++; }
 
 	int has_dot = 0;
-	int16_t scale = 0;
+	int scale = 0;  // use plain int to detect overflow before clamping to int16_t
 	int has_digit = 0;
 
 	// Skip leading zeros (but track them for scale if after dot)
@@ -171,7 +202,10 @@ int decimal_parse_c(const char* s, size_t len, LuaDecimal* out) {
 		}
 		if (!isdigit((unsigned char)c)) break;
 		has_digit = 1;
-		if (has_dot) scale++;
+		if (has_dot) {
+			if (scale >= 32767) return 0;  // too many fractional digits for int16_t scale
+			scale++;
+		}
 		u128_mul10(&out->lo, &out->hi);
 		u128_add_digit(&out->lo, &out->hi, (uint64_t)(c - '0'));
 	}
@@ -183,41 +217,49 @@ int decimal_parse_c(const char* s, size_t len, LuaDecimal* out) {
 		if (i < len && s[i] == '-') { exp_neg = 1; i++; }
 		else if (i < len && s[i] == '+') { i++; }
 		int exp = 0;
-		for (; i < len && isdigit((unsigned char)s[i]); i++)
+		for (; i < len && isdigit((unsigned char)s[i]); i++) {
 			exp = exp * 10 + (s[i] - '0');
+			if (exp > 6200) return 0;  // exceeds int16_t range for scale
+		}
 		if (exp_neg)
-			scale = (int16_t)(scale + exp);
+			scale = scale + exp;
 		else
-			scale = (int16_t)(scale - exp);
+			scale = scale - exp;
 	}
 
 	if (!has_digit) return 0;
 	if (scale < 0) {
-		// Positive exponent: scale the coefficient up
+		// Positive exponent shifted scale below zero: scale up the coefficient.
+		if (-scale > 6200) return 0;
 		u128_scale_up(&out->lo, &out->hi, -scale);
 		scale = 0;
 	}
-	out->scale = scale;
-	// Normalise: -0 → +0
+	if (scale > 32767) return 0;
+	out->scale = (int16_t)scale;
 	if (u128_iszero(out->lo, out->hi)) out->negative = 0;
 	return 1;
 }
 
-// Formats to buf (must be at least 48 bytes). Returns chars written.
+// Formats to buf (must be at least 64 bytes). Returns chars written.
 static int decimal_format(const LuaDecimal* d, char* buf, size_t bufsz) {
 	if (u128_iszero(d->lo, d->hi)) {
 		if (d->scale > 0) {
-			int n = snprintf(buf, bufsz, "0.%0*d", (int)d->scale, 0);
+			// Clamp scale so we never write beyond bufsz.
+			// "0." + scale zeros + NUL; bufsz is 64, so max digits = bufsz - 3.
+			int effective_scale = d->scale;
+			if (effective_scale > (int)bufsz - 3)
+				effective_scale = (int)bufsz - 3;
+			int n = snprintf(buf, bufsz, "0.%0*d", effective_scale, 0);
 			return n;
 		}
 		return snprintf(buf, bufsz, "0");
 	}
 
 	// Extract digits by repeated division
-	char digits[42];
+	char digits[44];  // 2^127 has 39 decimal digits; 44 gives a safe margin
 	int ndigits = 0;
 	uint64_t lo = d->lo, hi = d->hi;
-	while (!u128_iszero(lo, hi)) {
+	while (!u128_iszero(lo, hi) && ndigits < 43) {
 		uint64_t rem = u128_div10(&lo, &hi);
 		digits[ndigits++] = (char)('0' + rem);
 	}
@@ -252,7 +294,7 @@ static int decimal_format(const LuaDecimal* d, char* buf, size_t bufsz) {
 
 void lua_decimal_push_string(lua_State* L, int index) {
 	LuaDecimal* d = (LuaDecimal*)lua_touserdata(L, index);
-	char buf[48];
+	char buf[64];
 	decimal_format(d, buf, sizeof(buf));
 	lua_pushstring(L, buf);
 }
@@ -346,7 +388,7 @@ int decimal_zero(lua_State* L) {
 
 int decimal_tostring(lua_State* L) {
 	LuaDecimal* d = lua_todecimal(L, 1);
-	char buf[48];
+	char buf[64];
 	decimal_format(d, buf, sizeof(buf));
 	lua_pushstring(L, buf);
 	return 1;
@@ -354,7 +396,7 @@ int decimal_tostring(lua_State* L) {
 
 int decimal_tonumber(lua_State* L) {
 	LuaDecimal* d = lua_todecimal(L, 1);
-	char buf[48];
+	char buf[64];
 	decimal_format(d, buf, sizeof(buf));
 	lua_pushnumber(L, (lua_Number)strtod(buf, NULL));
 	return 1;
@@ -441,6 +483,48 @@ static void signed_add(const LuaDecimal* a, const LuaDecimal* b, LuaDecimal* r) 
 
 // ── Arithmetic operations ─────────────────────────────────────────────────────
 
+// u128_divmod: quotient *q = n / d, remainder *rem = n % d.  d must be non-zero.
+static void u128_divmod(
+	uint64_t nlo,  uint64_t nhi,
+	uint64_t dlo,  uint64_t dhi,
+	uint64_t* qlo, uint64_t* qhi,
+	uint64_t* remlo, uint64_t* remhi)
+{
+	*qlo = *qhi = *remlo = *remhi = 0;
+
+	// Find the position of the highest set bit of n (0-based from LSB).
+	// We count from bit 127 downward rather than shifting n to avoid UB.
+	int nbits = 0;
+	if (nhi != 0) {
+		for (int b = 63; b >= 0; b--) {
+			if ((nhi >> b) & 1ULL) { nbits = b + 65; break; }
+		}
+	} else if (nlo != 0) {
+		for (int b = 63; b >= 0; b--) {
+			if ((nlo >> b) & 1ULL) { nbits = b + 1; break; }
+		}
+	}
+	if (nbits == 0) return;  // n == 0
+
+	// Classic binary restoring division: process MSB to LSB of n.
+	for (int i = nbits - 1; i >= 0; i--) {
+		// Shift remainder left 1 and bring in bit i of n.
+		*remhi = (*remhi << 1) | (*remlo >> 63);
+		uint64_t bit;
+		if (i < 64)
+			bit = (nlo >> i) & 1ULL;
+		else
+			bit = (nhi >> (i - 64)) & 1ULL;
+		*remlo = (*remlo << 1) | bit;
+
+		if (u128_cmp(*remlo, *remhi, dlo, dhi) >= 0) {
+			u128_sub(remlo, remhi, dlo, dhi);
+			if (i < 64) *qlo |= (1ULL << i);
+			else        *qhi |= (1ULL << (i - 64));
+		}
+	}
+}
+
 int decimal_add(lua_State* L) {
 	LuaDecimal ta, tb;
 	LuaDecimal* a = coerce_decimal(L, 1, &ta);
@@ -458,7 +542,7 @@ int decimal_sub(lua_State* L) {
 	if (!a || !b) return luaL_error(L, "Decimal expected for subtraction");
 	// negate b then add
 	LuaDecimal nb = *b;
-	if (!u128_iszero(nb.lo, nb.hi)) nb.negative = !nb.negative;
+	if (!u128_iszero(nb.lo, nb.hi)) nb.negative = nb.negative ^ 1;
 	LuaDecimal* r = lua_pushdecimal(L);
 	signed_add(a, &nb, r);
 	return 1;
@@ -471,7 +555,9 @@ int decimal_mul(lua_State* L) {
 	if (!a || !b) return luaL_error(L, "Decimal expected for multiplication");
 	LuaDecimal* r = lua_pushdecimal(L);
 	u128_mul128(&r->lo, &r->hi, a->lo, a->hi, b->lo, b->hi);
-	r->scale = (int16_t)(a->scale + b->scale);
+	int combined_scale = (int)a->scale + (int)b->scale;
+	if (combined_scale > 32767) combined_scale = 32767;  // saturate; high scales lose trailing zeros which is harmless
+	r->scale = (int16_t)combined_scale;
 	r->negative = (a->negative != b->negative) ? 1 : 0;
 	if (u128_iszero(r->lo, r->hi)) r->negative = 0;
 	return 1;
@@ -484,50 +570,30 @@ int decimal_div(lua_State* L) {
 	if (!a || !b) return luaL_error(L, "Decimal expected for division");
 	if (u128_iszero(b->lo, b->hi)) return luaL_error(L, "Decimal division by zero");
 
-	// Scale dividend up for precision: 34 digits max
 	LuaDecimal* r = lua_pushdecimal(L);
-	int16_t target_scale = 10;  // default: 10 decimal places of result
-	if (a->scale > b->scale)
-		target_scale = (int16_t)(a->scale - b->scale + 10);
+	int ts = 10 + (a->scale > b->scale ? (int)a->scale - (int)b->scale : 0);
+	if (ts > 32767) ts = 32767;
+	int16_t target_scale = (int16_t)ts;
 
-	// Shift numerator left by target_scale extra digits
+	// a/b = (a_coeff * 10^-a_scale) / (b_coeff * 10^-b_scale)
+	//      = (a_coeff / b_coeff) * 10^(b_scale - a_scale)
+	// For the integer quotient (a_coeff * 10^S / b_coeff) to represent the answer
+	// with target_scale decimal places:  S = target_scale + b_scale - a_scale
+	int scale_shift = (int)target_scale + (int)b->scale - (int)a->scale;
 	uint64_t nlo = a->lo, nhi = a->hi;
-	u128_scale_up(&nlo, &nhi, target_scale + b->scale);
+	if (scale_shift > 0)
+		u128_scale_up(&nlo, &nhi, scale_shift);
+	else if (scale_shift < 0) {
+		// a has more fractional digits than needed — truncate excess from numerator.
+		for (int i = 0; i < -scale_shift; i++)
+			u128_div10(&nlo, &nhi);
+	}
 
-	// Long divide nlo:nhi by b (portable 128/128 → 128).
-	// We use repeated subtraction shifted by the magnitude difference.
-	uint64_t qlo = 0, qhi = 0;
-	// Find how many bits the divisor needs to shift to align with dividend.
-	uint64_t dlo = b->lo, dhi = b->hi;
-	int shift = 0;
-	// Count leading zeros to find alignment.
-	// Shift divisor left until it is larger than dividend, then back off one.
-	uint64_t tlo = dlo, thi = dhi;
-	while (u128_cmp(tlo, thi, nlo, nhi) <= 0 && shift < 127) {
-		uint64_t old_tlo = tlo;
-		thi = (thi << 1) | (tlo >> 63);
-		tlo = tlo << 1;
-		(void)old_tlo;
-		shift++;
-	}
-	for (int bit = shift; bit >= 0; bit--) {
-		// Shift divisor right by 1 to get 2^bit * original divisor
-		tlo = (tlo >> 1) | (thi << 63);
-		thi = thi >> 1;
-		if (u128_cmp(nlo, nhi, tlo, thi) >= 0) {
-			u128_sub(&nlo, &nhi, tlo, thi);
-			// Set bit 'bit' in quotient
-			if (bit < 64) {
-				qlo |= (1ULL << bit);
-			}
-			else if (bit < 128) {
-				qhi |= (1ULL << (bit - 64));
-			}
-		}
-	}
-	r->lo = qlo;
-	r->hi = qhi;
-	r->scale = (int16_t)(target_scale + b->scale - b->scale + a->scale - a->scale + target_scale - target_scale + target_scale);
+	uint64_t qlo, qhi, remlo, remhi;
+	u128_divmod(nlo, nhi, b->lo, b->hi, &qlo, &qhi, &remlo, &remhi);
+
+	r->lo    = qlo;
+	r->hi    = qhi;
 	r->scale = target_scale;
 	r->negative = (a->negative != b->negative) ? 1 : 0;
 	if (u128_iszero(r->lo, r->hi)) r->negative = 0;
@@ -538,7 +604,7 @@ int decimal_unm(lua_State* L) {
 	LuaDecimal* src = lua_todecimal(L, 1);
 	LuaDecimal* r = lua_pushdecimal(L);
 	*r = *src;
-	if (!u128_iszero(r->lo, r->hi)) r->negative = !r->negative;
+	if (!u128_iszero(r->lo, r->hi)) r->negative = r->negative ^ 1;
 	return 1;
 }
 
@@ -549,37 +615,16 @@ int decimal_mod(lua_State* L) {
 	if (!a || !b) return luaL_error(L, "Decimal expected for modulo");
 	if (u128_iszero(b->lo, b->hi)) return luaL_error(L, "Decimal modulo by zero");
 
-	// Align scales
 	LuaDecimal ca = *a, cb = *b;
 	align_scales(&ca, &cb);
 
-	// Compute remainder via: rem = na - (na/nb)*nb
-	uint64_t nalo = ca.lo, nahi = ca.hi;
-	uint64_t nblo = cb.lo, nbhi = cb.hi;
-	// Quotient via the same bit-shift long division
-	uint64_t qlo = 0, qhi = 0;
-	uint64_t tlo = nblo, thi = nbhi;
-	int shift = 0;
-	while (u128_cmp(tlo, thi, nalo, nahi) <= 0 && shift < 127) {
-		thi = (thi << 1) | (tlo >> 63);
-		tlo = tlo << 1;
-		shift++;
-	}
-	uint64_t remlo = nalo, remhi = nahi;
-	for (int bit = shift; bit >= 0; bit--) {
-		tlo = (tlo >> 1) | (thi << 63);
-		thi = thi >> 1;
-		if (u128_cmp(remlo, remhi, tlo, thi) >= 0) {
-			u128_sub(&remlo, &remhi, tlo, thi);
-			if (bit < 64)  qlo |= (1ULL << bit);
-			else if (bit < 128) qhi |= (1ULL << (bit - 64));
-		}
-	}
+	uint64_t qlo, qhi, remlo, remhi;
+	u128_divmod(ca.lo, ca.hi, cb.lo, cb.hi, &qlo, &qhi, &remlo, &remhi);
 	(void)qlo; (void)qhi;
 
 	LuaDecimal* r = lua_pushdecimal(L);
-	r->lo = remlo;
-	r->hi = remhi;
+	r->lo    = remlo;
+	r->hi    = remhi;
 	r->scale = ca.scale;
 	r->negative = a->negative;
 	if (u128_iszero(r->lo, r->hi)) r->negative = 0;
@@ -638,13 +683,13 @@ int decimal_round(lua_State* L) {
 	LuaDecimal* r = lua_pushdecimal(L);
 	*r = *src;
 	int diff = (int)r->scale - new_scale;
-	if (diff <= 0) return 1;  // already at or finer than requested scale
-	// Remove diff digits from coefficient, round half-up
-	uint64_t last_rem = 0;
-	for (int i = 0; i < diff; i++)
-		last_rem = u128_div10(&r->lo, &r->hi);
+	if (diff <= 0) return 1;  // already at or coarser than requested scale
+	// Remove (diff-1) digits silently, then check the last removed digit for rounding.
+	for (int i = 0; i < diff - 1; i++)
+		u128_div10(&r->lo, &r->hi);
+	uint64_t deciding_rem = u128_div10(&r->lo, &r->hi);
 	r->scale = (int16_t)new_scale;
-	if (last_rem >= 5)
+	if (deciding_rem >= 5)
 		u128_add_digit(&r->lo, &r->hi, 1);
 	if (u128_iszero(r->lo, r->hi)) r->negative = 0;
 	return 1;
