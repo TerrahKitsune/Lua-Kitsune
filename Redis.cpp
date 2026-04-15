@@ -1,6 +1,7 @@
 ﻿#include "Redis.h"
 #include "RedisJson.h"
 #include "luaidentifier.h"
+#include "luadatetime.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -288,6 +289,10 @@ LuaRedis* RedisCommandInternal(lua_State* L) {
 			int argIdx = n + idx + 1;
 			if (lua_isidentifier(L, argIdx)) {
 				lua_identifier_push_string(L, argIdx);
+				lua_replace(L, argIdx);
+			}
+			if (lua_isdatetime(L, argIdx)) {
+				lua_datetime_push_string(L, argIdx);
 				lua_replace(L, argIdx);
 			}
 		}

@@ -6,6 +6,7 @@
 #include "LuaPostgres.h"
 #include "luawchar.h"
 #include "luaidentifier.h"
+#include "luadatetime.h"
 
 // -- Platform helper: set socket non-blocking ----------------------------------
 #ifdef _WIN32
@@ -53,6 +54,21 @@ static void set_fd_nonblocking(int fd) {
 #endif
 #ifndef UUIDOID
 #  define UUIDOID    2950
+#endif
+#ifndef DATEOID
+#  define DATEOID    1082
+#endif
+#ifndef TIMEOID
+#  define TIMEOID    1083
+#endif
+#ifndef TIMETZOID
+#  define TIMETZOID  1266
+#endif
+#ifndef TIMESTAMPOID
+#  define TIMESTAMPOID   1114
+#endif
+#ifndef TIMESTAMPTZOID
+#  define TIMESTAMPTZOID 1184
 #endif
 
 // -- Helper mode constants -----------------------------------------------------
@@ -125,6 +141,9 @@ static void PushAsParamString(lua_State* L, int index) {
 	else if (lua_isidentifier(L, index)) {
 		lua_identifier_push_string(L, index);
 	}
+	else if (lua_isdatetime(L, index)) {
+		lua_datetime_push_string(L, index);
+	}
 	else {
 		luaL_tolstring(L, index, NULL);
 	}
@@ -155,6 +174,19 @@ static void PushPostgresValue(lua_State* L, const char* val, int len, Oid type) 
 		if (!lua_pushidentifier_fromstring(L, val, (size_t)len))
 			lua_pushlstring(L, val, (size_t)len);
 		break;
+	case DATEOID:
+	case TIMEOID:
+	case TIMETZOID:
+	case TIMESTAMPOID:
+	case TIMESTAMPTZOID: {
+		LuaDateTime tmp;
+		memset(&tmp, 0, sizeof(tmp));
+		if (datetime_parse_c(val, &tmp))
+			*lua_pushdatetime(L) = tmp;
+		else
+			lua_pushlstring(L, val, (size_t)len);
+		break;
+	}
 	default:
 		lua_pushlstring(L, val, len);
 		break;

@@ -159,6 +159,9 @@
     <Filter Include="LuaIdentifier\Source Files">
       <UniqueIdentifier>{c3d4e5f6-a7b8-9012-cdef-123456789012}</UniqueIdentifier>
     </Filter>
+    <Filter Include="LuaDateTime">
+      <UniqueIdentifier>{d4e5f6a7-b8c9-0123-def0-1234567890ab}</UniqueIdentifier>
+    </Filter>
     <Filter Include="LuaCSV">
       <UniqueIdentifier>{035b992b-c43a-4798-9516-67392a93ebeb}</UniqueIdentifier>
     </Filter>
@@ -206,6 +209,12 @@
     </Filter>
     <Filter Include="LuaPostgres\Source Files">
       <UniqueIdentifier>{a3c4d5e6-f7a8-9012-3c4d-5e6f7a8b9c0d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaDateTime\Header Files">
+      <UniqueIdentifier>{901c6432-5d3c-4cb5-84e1-3cd353fb5c2c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaDateTime\Source Files">
+      <UniqueIdentifier>{18d328a4-8456-4b12-bc81-a191e02c8230}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -307,6 +316,9 @@
     </ClCompile>
     <ClCompile Include="luawchar.cpp">
       <Filter>LuaWchar\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="datetimemain.cpp">
+      <Filter>LuaDateTime</Filter>
     </ClCompile>
     <ClCompile Include="identifiermain.cpp">
       <Filter>LuaIdentifier</Filter>
@@ -503,6 +515,9 @@
     <ClCompile Include="LuaPostgres.cpp">
       <Filter>LuaPostgres\Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="luadatetime.cpp">
+      <Filter>LuaDateTime\Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="KitsuneEngine.h">
@@ -609,6 +624,9 @@
     </ClInclude>
     <ClInclude Include="luawchar.h">
       <Filter>LuaWchar\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="datetimemain.h">
+      <Filter>LuaDateTime</Filter>
     </ClInclude>
     <ClInclude Include="identifiermain.h">
       <Filter>LuaIdentifier</Filter>
@@ -813,6 +831,9 @@
     </ClInclude>
     <ClInclude Include="SHA1Main.h">
       <Filter>LuaSHA1</Filter>
+    </ClInclude>
+    <ClInclude Include="luadatetime.h">
+      <Filter>LuaDateTime\Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

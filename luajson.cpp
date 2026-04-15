@@ -2,6 +2,7 @@
 #include "stream.h"
 #include "luawchar.h"
 #include "luaidentifier.h"
+#include "luadatetime.h"
 
 // Unique address used as the JSON null sentinel.
 // Both encoder and decoder reference this directly — no registry lookup needed.
@@ -310,6 +311,12 @@ static void enc_value(LuaJson* j, lua_State* L, int depth) {
 		}
 		if (lua_isidentifier(L, -1)) {
 			lua_identifier_push_string(L, -1);
+			enc_string(j, L);
+			lua_pop(L, 1);
+			break;
+		}
+		if (lua_isdatetime(L, -1)) {
+			lua_datetime_push_string(L, -1);
 			enc_string(j, L);
 			lua_pop(L, 1);
 			break;

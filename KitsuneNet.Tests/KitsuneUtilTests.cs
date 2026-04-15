@@ -580,6 +580,406 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
+        // -- DateTime -------------------------------------------------------------
+        [Fact]
+        public async Task DateTime_UtcNow_IsUserdata()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync("return type(DateTime.UtcNow())");
+            r.String.ShouldBe("userdata");
+        }
+
+        [Fact]
+        public async Task DateTime_Now_IsUserdata()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync("return type(DateTime.Now())");
+            r.String.ShouldBe("userdata");
+        }
+
+        [Fact]
+        public async Task DateTime_UtcNow_ToStringIsIso8601()
+        {
+            using KitsuneEngine engine = new();
+            // UTC tostring ends with 'Z'.
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local s = tostring(DateTime.UtcNow())
+                return tostring(#s >= 24 and s:sub(-1) == 'Z')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_New_ComponentsRoundTrip()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local dt = DateTime.New(2024, 3, 15, 10, 30, 45, 123, 0)
+                return tostring(
+                    dt:Year()        == 2024 and
+                    dt:Month()       == 3    and
+                    dt:Day()         == 15   and
+                    dt:Hour()        == 10   and
+                    dt:Minute()      == 30   and
+                    dt:Second()      == 45   and
+                    dt:Millisecond() == 123
+                )
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_New_DateOnly_TimeDefaultsToMidnight()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local dt = DateTime.New(2024, 1, 1)
+                return tostring(dt:Hour() == 0 and dt:Minute() == 0 and dt:Second() == 0 and dt:Millisecond() == 0)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_FromUnixSeconds_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            // Unix 0 = 1970-01-01T00:00:00.000Z
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local dt = DateTime.FromUnixSeconds(0)
+                return tostring(dt:Year() == 1970 and dt:Month() == 1 and dt:Day() == 1 and dt:Hour() == 0)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_FromUnixMilliseconds_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local dt = DateTime.FromUnixMilliseconds(0)
+                return tostring(dt:Year() == 1970 and dt:Month() == 1 and dt:Day() == 1)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_UnixSeconds_MatchesKnownEpoch()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local dt = DateTime.FromUnixSeconds(0)
+                return tostring(dt:UnixSeconds() == 0)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_UnixMilliseconds_MatchesKnownEpoch()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local dt = DateTime.FromUnixMilliseconds(1000)
+                return tostring(dt:UnixMilliseconds() == 1000)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_Parse_ValidIso8601_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local s  = '2024-03-15T10:30:45.123Z'
+                local dt = DateTime.Parse(s)
+                return tostring(dt ~= nil and dt:Year() == 2024 and dt:Month() == 3 and dt:Day() == 15
+                    and dt:Hour() == 10 and dt:Minute() == 30 and dt:Second() == 45 and dt:Millisecond() == 123)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_Parse_WithOffset_UtcTicksCorrect()
+        {
+            using KitsuneEngine engine = new();
+            // 12:00:00+02:00 == 10:00:00 UTC
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local dt  = DateTime.Parse('2024-06-01T12:00:00.000+02:00')
+                local utc = dt:ToUtc()
+                return tostring(utc:Hour() == 10 and utc:OffsetMinutes() == 0)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_Parse_InvalidString_ReturnsNil()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync("return tostring(DateTime.Parse('not a date') == nil)");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_Parse_DateOnly_TimeDefaultsToMidnight()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local dt = DateTime.Parse('2024-07-04')
+                return tostring(dt ~= nil and dt:Hour() == 0 and dt:Minute() == 0 and dt:Second() == 0)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_ToUtc_ClearsOffset()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local dt  = DateTime.New(2024, 1, 1, 12, 0, 0, 0, 120)
+                local utc = dt:ToUtc()
+                return tostring(utc:OffsetMinutes() == 0 and utc:Hour() == 10)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_ToOffset_ChangesDisplayedHour()
+        {
+            using KitsuneEngine engine = new();
+            // UTC noon → +05:30 = 17:30
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local utc  = DateTime.New(2024, 1, 1, 12, 0, 0, 0, 0)
+                local ist  = utc:ToOffset(330)
+                return tostring(ist:Hour() == 17 and ist:Minute() == 30 and ist:OffsetMinutes() == 330)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_AddSeconds_ProducesCorrectResult()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local dt  = DateTime.New(2024, 1, 1, 0, 0, 50, 0, 0)
+                local dt2 = dt:AddSeconds(20)
+                return tostring(dt2:Minute() == 1 and dt2:Second() == 10)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_AddDays_AdvancesDate()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local dt  = DateTime.New(2024, 1, 30, 0, 0, 0, 0, 0)
+                local dt2 = dt:AddDays(3)
+                return tostring(dt2:Month() == 2 and dt2:Day() == 2)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_AddHours_WrapsDay()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local dt  = DateTime.New(2024, 1, 1, 23, 0, 0, 0, 0)
+                local dt2 = dt:AddHours(2)
+                return tostring(dt2:Day() == 2 and dt2:Hour() == 1)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_AddMilliseconds_IncrementsMs()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local dt  = DateTime.New(2024, 1, 1, 0, 0, 0, 900, 0)
+                local dt2 = dt:AddMilliseconds(200)
+                return tostring(dt2:Second() == 1 and dt2:Millisecond() == 100)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_Eq_SameInstant_IsTrue()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local a = DateTime.FromUnixSeconds(1000000)
+                local b = DateTime.FromUnixSeconds(1000000)
+                return tostring(a == b)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_Eq_DifferentOffsetSameInstant_IsTrue()
+        {
+            using KitsuneEngine engine = new();
+            // Same UTC ticks, different display offsets → equal.
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local a = DateTime.FromUnixSeconds(0, 0)
+                local b = DateTime.FromUnixSeconds(0, 60)
+                return tostring(a == b)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_Lt_EarlierIsBefore()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local a = DateTime.FromUnixSeconds(1000)
+                local b = DateTime.FromUnixSeconds(2000)
+                return tostring(a < b and not (b < a))
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_Sub_ReturnsDifferenceInSeconds()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local a = DateTime.FromUnixSeconds(5000)
+                local b = DateTime.FromUnixSeconds(3000)
+                return tostring(a - b == 2000)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_DayOfWeek_KnownDate()
+        {
+            using KitsuneEngine engine = new();
+            // 2024-01-01 was a Monday (.NET DayOfWeek = 1)
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local dt = DateTime.New(2024, 1, 1, 0, 0, 0, 0, 0)
+                return tostring(dt:DayOfWeek() == 1)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_IsEmpty_ZeroTicks_IsTrue()
+        {
+            using KitsuneEngine engine = new();
+            // FromUnixSeconds(0) has ticks == DT_UNIX_EPOCH_TICKS (non-zero),
+            // so we construct the empty sentinel via Parse of epoch 0001-01-01.
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local dt = DateTime.Parse('0001-01-01T00:00:00.000Z')
+                return tostring(dt:IsEmpty())
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_IsEmpty_NormalDate_IsFalse()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync("return tostring(DateTime.UtcNow():IsEmpty())");
+            r.String.ShouldBe("false");
+        }
+
+        [Fact]
+        public async Task DateTime_Format_StrftimePattern()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local dt = DateTime.New(2024, 6, 15, 0, 0, 0, 0, 0)
+                local s  = dt:Format('%Y-%m-%d')
+                return tostring(s == '2024-06-15')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_AsString_MatchesToString()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local dt = DateTime.UtcNow()
+                return tostring(dt:AsString() == tostring(dt))
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_UtcNow_UnixSecondsIsReasonable()
+        {
+            using KitsuneEngine engine = new();
+            // Unix seconds must be > 2024-01-01 (1704067200) and < 2100-01-01 (4102444800)
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local ts = DateTime.UtcNow():UnixSeconds()
+                return tostring(ts > 1704067200 and ts < 4102444800)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_Json_Encode_ProducesIso8601String()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local dt  = DateTime.New(2024, 3, 15, 10, 30, 45, 0, 0)
+                local enc = Json.New():Encode(dt)
+                return tostring(enc == '""2024-03-15T10:30:45.000Z""')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_Json_EncodeInTable_RoundTripsAsString()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local dt  = DateTime.New(2024, 3, 15, 10, 30, 45, 0, 0)
+                local j   = Json.New()
+                local t   = j:Decode(j:Encode({ts = dt}))
+                return tostring(t.ts == tostring(dt))
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_AddMinutes_ChangesTime()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local dt  = DateTime.New(2024, 1, 1, 12, 45, 0, 0, 0)
+                local dt2 = dt:AddMinutes(30)
+                return tostring(dt2:Hour() == 13 and dt2:Minute() == 15)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_LeapYear_Feb29_Valid()
+        {
+            using KitsuneEngine engine = new();
+            // 2024 is a leap year
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local dt = DateTime.New(2024, 2, 29)
+                return tostring(dt:Month() == 2 and dt:Day() == 29)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_Parse_SqlDatetimeFormat()
+        {
+            using KitsuneEngine engine = new();
+            // MySQL/Postgres often return "YYYY-MM-DD HH:MM:SS" (space separator, no offset)
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local dt = DateTime.Parse('2024-03-15 10:30:45')
+                return tostring(dt ~= nil and dt:Year() == 2024 and dt:Hour() == 10 and dt:Minute() == 30)
+            ");
+            r.String.ShouldBe("true");
+        }
+
         // -- CRC32 ----------------------------------------------------------------
         [Fact]
         public async Task CRC32_ReturnsInteger()

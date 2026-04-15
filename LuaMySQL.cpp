@@ -2,6 +2,7 @@
 #include "stream.h"
 #include "luawchar.h"
 #include "luaidentifier.h"
+#include "luadatetime.h"
 #ifdef _WIN32
 #pragma comment(lib, "mysql/libmysql.lib")
 #endif
@@ -69,6 +70,9 @@ static void PushAsParamString(lua_State* L, int index) {
 	else if (lua_isidentifier(L, index)) {
 		lua_identifier_push_string(L, index);
 	}
+	else if (lua_isdatetime(L, index)) {
+		lua_datetime_push_string(L, index);
+	}
 	else {
 		luaL_tolstring(L, index, NULL);
 	}
@@ -101,6 +105,20 @@ static void PushMySQLValue(lua_State* L, const char* data, unsigned long length,
 	case MYSQL_TYPE_BLOB:
 		lua_pushluastream(L, (uint8_t*)data, length);
 		break;
+	case MYSQL_TYPE_DATE:
+	case MYSQL_TYPE_DATETIME:
+	case MYSQL_TYPE_TIMESTAMP:
+	case MYSQL_TYPE_NEWDATE: {
+		LuaDateTime tmp;
+		memset(&tmp, 0, sizeof(tmp));
+		if (data && length > 0 && datetime_parse_c(data, &tmp))
+			*lua_pushdatetime(L) = tmp;
+		else if (data && length > 0)
+			lua_pushlstring(L, data, length);
+		else
+			lua_pushnil(L);
+		break;
+	}
 	default:
 		lua_pushlstring(L, data, length);
 		break;
