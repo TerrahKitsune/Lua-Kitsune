@@ -3,6 +3,7 @@
 #include "luawchar.h"
 #include "luaidentifier.h"
 #include "luadatetime.h"
+#include "luadecimal.h"
 
 // Unique address used as the JSON null sentinel.
 // Both encoder and decoder reference this directly — no registry lookup needed.
@@ -318,6 +319,15 @@ static void enc_value(LuaJson* j, lua_State* L, int depth) {
 		if (lua_isdatetime(L, -1)) {
 			lua_datetime_push_string(L, -1);
 			enc_string(j, L);
+			lua_pop(L, 1);
+			break;
+		}
+		if (lua_isdecimal(L, -1)) {
+			lua_decimal_push_string(L, -1);
+			// Decimals encode as JSON numbers (no quotes) to preserve numeric semantics.
+			size_t dlen;
+			const char* ds = lua_tolstring(L, -1, &dlen);
+			if (ds) jbuf_emit(j, L, ds, dlen);
 			lua_pop(L, 1);
 			break;
 		}

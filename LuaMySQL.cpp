@@ -3,6 +3,7 @@
 #include "luawchar.h"
 #include "luaidentifier.h"
 #include "luadatetime.h"
+#include "luadecimal.h"
 #ifdef _WIN32
 #pragma comment(lib, "mysql/libmysql.lib")
 #endif
@@ -73,6 +74,9 @@ static void PushAsParamString(lua_State* L, int index) {
 	else if (lua_isdatetime(L, index)) {
 		lua_datetime_push_string(L, index);
 	}
+	else if (lua_isdecimal(L, index)) {
+		lua_decimal_push_string(L, index);
+	}
 	else {
 		luaL_tolstring(L, index, NULL);
 	}
@@ -86,9 +90,18 @@ static void PushMySQLValue(lua_State* L, const char* data, unsigned long length,
 		lua_pushnil(L);
 		break;
 	case MYSQL_TYPE_DECIMAL:
+	case MYSQL_TYPE_NEWDECIMAL: {
+		LuaDecimal tmp;
+		if (data && length > 0 && decimal_parse_c(data, (size_t)length, &tmp))
+			*lua_pushdecimal(L) = tmp;
+		else if (data && length > 0)
+			lua_pushlstring(L, data, length);
+		else
+			lua_pushnil(L);
+		break;
+	}
 	case MYSQL_TYPE_FLOAT:
 	case MYSQL_TYPE_BIT:
-	case MYSQL_TYPE_NEWDECIMAL:
 	case MYSQL_TYPE_DOUBLE:
 		lua_pushnumber(L, strtod(data, &endptr));
 		break;

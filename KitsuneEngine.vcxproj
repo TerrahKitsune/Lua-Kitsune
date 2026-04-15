@@ -130,6 +130,7 @@
     <ClCompile Include="luawchar.cpp" />
     <ClCompile Include="luaidentifier.cpp" />
     <ClCompile Include="luadatetime.cpp" />
+    <ClCompile Include="luadecimal.cpp" />
     <ClCompile Include="Lua\lapi.c" />
     <ClCompile Include="Lua\lauxlib.c" />
     <ClCompile Include="Lua\lbaselib.c" />
@@ -186,6 +187,7 @@
     <ClCompile Include="wcharmain.cpp" />
     <ClCompile Include="identifiermain.cpp" />
     <ClCompile Include="datetimemain.cpp" />
+    <ClCompile Include="decimalmain.cpp" />
     <ClCompile Include="LuaFileSystem.cpp" />
     <ClCompile Include="LuaFileSystemMain.cpp" />
     <ClCompile Include="LuaMD5.cpp" />
@@ -237,6 +239,7 @@
     <ClInclude Include="luawchar.h" />
     <ClInclude Include="luaidentifier.h" />
     <ClInclude Include="luadatetime.h" />
+    <ClInclude Include="luadecimal.h" />
     <ClInclude Include="Lua\lapi.h" />
     <ClInclude Include="Lua\lauxlib.h" />
     <ClInclude Include="Lua\lcode.h" />
@@ -292,6 +295,7 @@
     <ClInclude Include="wcharmain.h" />
     <ClInclude Include="identifiermain.h" />
     <ClInclude Include="datetimemain.h" />
+    <ClInclude Include="decimalmain.h" />
     <ClInclude Include="LuaFileSystem.h" />
     <ClInclude Include="LuaFileSystemMain.h" />
     <ClInclude Include="LuaMD5.h" />

@@ -7,6 +7,7 @@
 #include "luawchar.h"
 #include "luaidentifier.h"
 #include "luadatetime.h"
+#include "luadecimal.h"
 
 // -- Platform helper: set socket non-blocking ----------------------------------
 #ifdef _WIN32
@@ -144,6 +145,9 @@ static void PushAsParamString(lua_State* L, int index) {
 	else if (lua_isdatetime(L, index)) {
 		lua_datetime_push_string(L, index);
 	}
+	else if (lua_isdecimal(L, index)) {
+		lua_decimal_push_string(L, index);
+	}
 	else {
 		luaL_tolstring(L, index, NULL);
 	}
@@ -167,9 +171,16 @@ static void PushPostgresValue(lua_State* L, const char* val, int len, Oid type) 
 		break;
 	case FLOAT4OID:
 	case FLOAT8OID:
-	case NUMERICOID:
 		lua_pushnumber(L, strtod(val, &endptr));
 		break;
+	case NUMERICOID: {
+		LuaDecimal tmp;
+		if (decimal_parse_c(val, (size_t)len, &tmp))
+			*lua_pushdecimal(L) = tmp;
+		else
+			lua_pushlstring(L, val, (size_t)len);
+		break;
+	}
 	case UUIDOID:
 		if (!lua_pushidentifier_fromstring(L, val, (size_t)len))
 			lua_pushlstring(L, val, (size_t)len);

@@ -216,6 +216,15 @@
     <Filter Include="LuaDateTime\Source Files">
       <UniqueIdentifier>{18d328a4-8456-4b12-bc81-a191e02c8230}</UniqueIdentifier>
     </Filter>
+    <Filter Include="LuaDecimal">
+      <UniqueIdentifier>{61fa211f-107a-424c-a073-4da09bf930ff}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaDecimal\Header Files">
+      <UniqueIdentifier>{a3c9bee2-99b2-4a94-bdd7-87cbc3e44426}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaDecimal\Source Files">
+      <UniqueIdentifier>{f30c478a-420f-4510-ab5c-38022f94f90b}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="KitsuneEngine.cpp">
@@ -517,6 +526,12 @@
     </ClCompile>
     <ClCompile Include="luadatetime.cpp">
       <Filter>LuaDateTime\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="decimalmain.cpp">
+      <Filter>LuaDecimal</Filter>
+    </ClCompile>
+    <ClCompile Include="luadecimal.cpp">
+      <Filter>LuaDecimal\Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -834,6 +849,12 @@
     </ClInclude>
     <ClInclude Include="luadatetime.h">
       <Filter>LuaDateTime\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="decimalmain.h">
+      <Filter>LuaDecimal</Filter>
+    </ClInclude>
+    <ClInclude Include="luadecimal.h">
+      <Filter>LuaDecimal\Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

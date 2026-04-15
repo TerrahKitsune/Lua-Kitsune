@@ -62,6 +62,8 @@
 #include "luaidentifier.h"
 #include "datetimemain.h"
 #include "luadatetime.h"
+#include "decimalmain.h"
+#include "luadecimal.h"
 #include "luawchar.h"
 #include "LuaCsvMain.h"
 #include "SHA1Main.h"
@@ -434,6 +436,22 @@ static void FillKitsuneVariableFromStack(lua_State* L, int idx, KitsuneVariable*
 			lua_pop(L, 1);
 			break;
 		}
+		// Decimal is bridged as LUA_TSTRING (KITSUNE_TSTRING): canonical decimal string.
+		if (lua_isdecimal(L, abs_idx)) {
+			lua_decimal_push_string(L, abs_idx);
+			size_t slen;
+			const char* s = lua_tolstring(L, -1, &slen);
+			if (s) {
+				out->data = (unsigned char*)kitsune_malloc(slen + 1);
+				if (out->data) {
+					memcpy(out->data, s, slen + 1);
+					out->length = slen;
+					out->type = LUA_TSTRING;
+				}
+			}
+			lua_pop(L, 1);
+			break;
+		}
 		// Wchar is bridged as KITSUNE_TCHAR16: the internal wchar_t* is converted to char16_t*
 		// at the boundary via AllocChar16FromWchar so the native object can be reconstructed on push.
 		if (lua_iswchar(L, abs_idx)) {
@@ -745,6 +763,22 @@ static void SetSlotResult(KitsuneCoroutine* slot, lua_State* T, int idx) {
 		// DateTime is bridged as LUA_TSTRING (KITSUNE_TSTRING): ISO 8601 string.
 		if (lua_isdatetime(T, idx)) {
 			lua_datetime_push_string(T, idx);
+			size_t slen;
+			const char* s = lua_tolstring(T, -1, &slen);
+			if (s) {
+				slot->result.data = (unsigned char*)kitsune_malloc(slen + 1);
+				if (slot->result.data) {
+					memcpy(slot->result.data, s, slen + 1);
+					slot->result.length = slen;
+					slot->result.type = LUA_TSTRING;
+				}
+			}
+			lua_pop(T, 1);
+			break;
+		}
+		// Decimal is bridged as LUA_TSTRING (KITSUNE_TSTRING): canonical decimal string.
+		if (lua_isdecimal(T, idx)) {
+			lua_decimal_push_string(T, idx);
 			size_t slen;
 			const char* s = lua_tolstring(T, -1, &slen);
 			if (s) {
@@ -1385,6 +1419,7 @@ extern "C" {
 		luaopen_wchar(L);        lua_setglobal(L, "Wchar");
 		luaopen_identifier(L);   lua_setglobal(L, "Identifier");
 		luaopen_datetime(L);     lua_setglobal(L, "DateTime");
+		luaopen_decimal(L);      lua_setglobal(L, "Decimal");
 		luaopen_csv(L);          lua_setglobal(L, "CSV");
 		luaopen_sha1(L);         lua_setglobal(L, "SHA1");
 
