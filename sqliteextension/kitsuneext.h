@@ -94,6 +94,15 @@ static inline void kitsune_result_to_sqlite(sqlite3_context* context, KitsuneVar
 	case KITSUNE_TBOOLEAN:
 		sqlite3_result_int(context, result->boolean ? 1 : 0);
 		break;
+	case KITSUNE_TTABLE: {
+		KitsuneVariable* json = KitsuneGetTableContentsAsJson(result);
+		if (json && json->type == KITSUNE_TJSON && json->data)
+			sqlite3_result_text(context, (const char*)json->data, (int)json->length, SQLITE_TRANSIENT);
+		else
+			sqlite3_result_null(context);
+		KitsuneVariableFree(json);
+		break;
+	}
 	default:
 		sqlite3_result_null(context);
 		break;

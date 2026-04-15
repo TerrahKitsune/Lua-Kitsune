@@ -324,7 +324,7 @@ public sealed class SQLiteExtensionTests
         result.String.ShouldBe("hello");
     }
 
-    // SQLiteExt.RegisterAggregate(name, fn) — fn(isFinished, args...); state via closure.
+    // SQLiteExt.RegisterAggregate(name, fn) — fn(ctx, isFinished, args...); state via ctx table.
     [WindowsOnlyFact]
     public async Task SQLiteKitsuneExtension_RegisterAggregate_AccumulatesRowsAndReturnsResult()
     {
@@ -340,10 +340,9 @@ public sealed class SQLiteExtensionTests
                 db:Query("INSERT INTO t VALUES(" .. i .. ")")
                 db:Fetch()
             end
-            local total = 0
-            SQLiteExt.RegisterAggregate("LuaSum", function(isFinished, val)
-                if isFinished then local r = total; total = 0; return r end
-                total = total + (val or 0)
+            SQLiteExt.RegisterAggregate("LuaSum", function(ctx, isFinished, val)
+                if isFinished then return ctx.total or 0 end
+                ctx.total = (ctx.total or 0) + (val or 0)
             end)
             db:Query("SELECT LuaSum(v) FROM t")
             db:Fetch()
@@ -352,6 +351,31 @@ public sealed class SQLiteExtensionTests
             return r
             """);
         result.AsInt64.ShouldBe(15L);
+    }
+
+    // RegisterAggregate GROUP BY — each group gets its own isolated ctx table.
+    [WindowsOnlyFact]
+    public async Task SQLiteKitsuneExtension_RegisterAggregate_GroupBy_IsolatesContextPerGroup()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            db:Query("CREATE TABLE t(grp TEXT, v INTEGER)")
+            db:Fetch()
+            db:Query("INSERT INTO t VALUES('a',1),('a',2),('a',3),('b',10),('b',20)")
+            db:Fetch()
+            SQLiteExt.RegisterAggregate("LuaSum2", function(ctx, isFinished, val)
+                if isFinished then return ctx.total or 0 end
+                ctx.total = (ctx.total or 0) + (val or 0)
+            end)
+            local rows = SQLiteExt.Query("SELECT grp, LuaSum2(v) as s FROM t GROUP BY grp ORDER BY grp")
+            db:Close()
+            return rows[1]["s"] .. "|" .. rows[2]["s"]
+            """);
+        result.String.ShouldBe("6|30");
     }
 
     // RegisterTable — 2-field table, string PKs, full scan returns all rows in PK order.

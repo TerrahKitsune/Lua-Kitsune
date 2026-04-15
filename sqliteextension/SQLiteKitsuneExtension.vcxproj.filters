@@ -68,6 +68,5 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Extension functions.md" />
-    <None Include="RegisterVirtualTable plan.md" />
   </ItemGroup>
 </Project>

@@ -309,24 +309,46 @@ static void lua_registered_func_callback(sqlite3_context* context, int argc, sql
 // -- RegisterAggregate --------------------------------------------------------
 
 // SQLite aggregate xStep: called once per row.
-// Calls funcVar with (false, col1, col2, ...) as direct parameters.
+// Calls funcVar with (ctx, false, col1, col2, ...) as direct parameters.
+// ctx is a per-aggregation-group Lua table stored via sqlite3_aggregate_context.
 // String data in args borrows SQLite-owned memory; valid for the duration of this call.
 static void lua_aggregate_step(sqlite3_context* context, int argc, sqlite3_value** argv) {
 	KitsuneVariable* funcVar = (KitsuneVariable*)sqlite3_user_data(context);
 
-	int luaArgc = argc + 1;
+	// sqlite3_aggregate_context returns the same zeroed block for every xStep/xFinal
+	// call belonging to the same aggregation group.  We store a KitsuneVariable* in it.
+	KitsuneVariable** pCtx = (KitsuneVariable**)sqlite3_aggregate_context(context, sizeof(KitsuneVariable*));
+	if (!pCtx) {
+		sqlite3_result_error_nomem(context);
+		return;
+	}
+	if (!*pCtx) {
+		// First call for this group: create a fresh empty Lua table as the context.
+		KitsuneVariable emptyTable = {};
+		emptyTable.type = KITSUNE_TTABLECONTENTS;
+		*pCtx = KitsuneAnchorVariable(&emptyTable);
+		if (!*pCtx) {
+			sqlite3_result_error_nomem(context);
+			return;
+		}
+	}
+
+	// args: ctx, false, col1, col2, ...
+	int luaArgc = argc + 2;
 	KitsuneVariable* args = (KitsuneVariable*)sqlite3_malloc(sizeof(KitsuneVariable) * luaArgc);
 	if (!args) {
 		sqlite3_result_error_nomem(context);
 		return;
 	}
 
-	memset(&args[0], 0, sizeof(KitsuneVariable));
-	args[0].type = KITSUNE_TBOOLEAN;
-	args[0].boolean = false;
+	args[0] = **pCtx;
+
+	memset(&args[1], 0, sizeof(KitsuneVariable));
+	args[1].type = KITSUNE_TBOOLEAN;
+	args[1].boolean = false;
 
 	for (int i = 0; i < argc; i++)
-		sqlite_val_to_kitsune(argv[i], &args[i + 1]);
+		sqlite_val_to_kitsune(argv[i], &args[i + 2]);
 
 	KitsuneVariable* result = KitsuneExecuteVariable(funcVar, luaArgc, args);
 	sqlite3_free(args);
@@ -343,15 +365,37 @@ static void lua_aggregate_step(sqlite3_context* context, int argc, sqlite3_value
 }
 
 // SQLite aggregate xFinal: called once at end to collect the result.
-// Calls funcVar with (true) as the sole parameter.
+// Calls funcVar with (ctx, true) as the sole parameters, then frees the ctx table.
 static void lua_aggregate_final(sqlite3_context* context) {
 	KitsuneVariable* funcVar = (KitsuneVariable*)sqlite3_user_data(context);
 
-	KitsuneVariable isFinishedArg = {};
-	isFinishedArg.type = KITSUNE_TBOOLEAN;
-	isFinishedArg.boolean = true;
+	// Retrieve the per-group context (may be NULL if no rows were processed).
+	KitsuneVariable** pCtx = (KitsuneVariable**)sqlite3_aggregate_context(context, sizeof(KitsuneVariable*));
 
-	KitsuneVariable* result = KitsuneExecuteVariable(funcVar, 1, &isFinishedArg);
+	KitsuneVariable args[2] = {};
+	int luaArgc;
+
+	if (pCtx && *pCtx) {
+		args[0] = **pCtx;
+		args[1].type = KITSUNE_TBOOLEAN;
+		args[1].boolean = true;
+		luaArgc = 2;
+	}
+	else {
+		// No rows were stepped (empty group): pass nil ctx, true.
+		args[0].type = KITSUNE_TNIL;
+		args[1].type = KITSUNE_TBOOLEAN;
+		args[1].boolean = true;
+		luaArgc = 2;
+	}
+
+	KitsuneVariable* result = KitsuneExecuteVariable(funcVar, luaArgc, args);
+
+	if (pCtx && *pCtx) {
+		KitsuneVariableFree(*pCtx);
+		*pCtx = NULL;
+	}
+
 	kitsune_result_to_sqlite(context, result);
 }
 
