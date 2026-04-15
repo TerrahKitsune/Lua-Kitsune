@@ -889,6 +889,7 @@ public sealed class SQLiteExtensionTests
             db:Close()
             return finalCount
             """);
+
         // Each of the two cursors calls xFilter once (nth=1 increments the shared counter).
         result.AsInt64.ShouldBe(2L);
     }
@@ -1372,4 +1373,3 @@ public sealed class SQLiteExtensionTests
         result.String.ShouldBe("7|Hans Mueller");
     }
 }
-

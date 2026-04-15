@@ -11,14 +11,18 @@ SQLITE_EXTENSION_INIT1
 // in which case the host owns the lifecycle and KitsuneCleanup must not be called here.
 static bool g_kitsuneOwned = false;
 
+// Module handle for this DLL, captured in DllMain for later path resolution.
+static HMODULE g_hModule = NULL;
+
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved) {
 	switch (ul_reason_for_call) {
 	case DLL_PROCESS_ATTACH:
 		DisableThreadLibraryCalls(hModule);
+		g_hModule = hModule;
+		// Initialise only the extension state (malloc only — no KitsuneEngine calls).
+		// Engine init is deferred to sqlite3_sqlitekitsune_init so it runs outside
+		// the loader lock.
 		lua_init_kitsune_state();
-		// KitsuneInit returns true only if it created a new state (we are the owner).
-		// It returns false if the engine was already initialised by another caller.
-		g_kitsuneOwned = KitsuneInit();
 		break;
 	case DLL_PROCESS_DETACH:
 		// lpReserved is non-NULL when the DLL is unloaded due to process exit: all
@@ -48,6 +52,28 @@ extern "C" {
 
 	__declspec(dllexport) int sqlite3_sqlitekitsune_init(sqlite3* db, char** pzErrMsg, const sqlite3_api_routines* pApi) {
 		SQLITE_EXTENSION_INIT2(pApi);
+
+		// Insert this DLL's directory into the DLL search path so that
+		// KitsuneEngine.dll and its dependencies are found via the delay-load.
+		// Called here (not DllMain) so we are outside the loader lock.
+		static bool s_pathSet = false;
+		if (!s_pathSet) {
+			s_pathSet = true;
+			wchar_t szDir[MAX_PATH] = {};
+			if (g_hModule && GetModuleFileNameW(g_hModule, szDir, MAX_PATH)) {
+				wchar_t* lastSlash = wcsrchr(szDir, L'\\');
+				if (lastSlash)
+					*lastSlash = L'\0';
+				if (szDir[0])
+					SetDllDirectoryW(szDir);
+			}
+		}
+
+		// KitsuneInit returns true only if it created a new state (we are the owner).
+		// It returns false if the engine was already initialised by another caller.
+		if (!g_kitsuneOwned)
+			g_kitsuneOwned = KitsuneInit();
+
 		// Special, this isnt related to the kitsune engine.
 		sqlite3_create_function(db, "KitsuneVersion", 0, SQLITE_UTF8 | SQLITE_DIRECTONLY, NULL, kitsune_version_func, NULL, NULL);
 
