@@ -30,6 +30,12 @@
     <ClCompile Include="registerluatable.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="registerluavtable.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="vtabhelpers.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\SQLite\sqlite3.h">
@@ -53,8 +59,15 @@
     <ClInclude Include="registerluatable.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="registerluavtable.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="vtabhelpers.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="Extension functions.md" />
+    <None Include="RegisterVirtualTable plan.md" />
   </ItemGroup>
 </Project>

@@ -1,6 +1,6 @@
 ﻿#include "registerluatable.h"
+#include "vtabhelpers.h"
 #include <string.h>
-#include <ctype.h>
 SQLITE_EXTENSION_INIT3
 #include "kitsuneext.h"
 
@@ -19,10 +19,11 @@ struct LuaTableVTab {
 
 struct LuaTableCursor {
 	sqlite3_vtab_cursor base;
-	KitsuneVariable* entry;    // full-scan: current KitsuneNext result; NULL before first call
-	KitsuneVariable* pkAnchor; // PK-lookup: anchored constraint value; NULL in full-scan mode
-	int isPkLookup;
-	sqlite3_int64 rowid;       // sequential counter for non-integer PKs (full scan only)
+	KitsuneVariable* pkKey;    // anchored PK value for the current row; NULL = eof
+	KitsuneVariable* rowValue; // value side of current row: scalar or sub-table (owned)
+							   // full-scan: owned copy extracted from KitsuneNext entry
+							   // pk-lookup: result of KitsuneGetIndex; NULL if key missing
+	KitsuneVariable* scanPos;  // full-scan only: KitsuneNext cursor; NULL in pk-lookup mode
 	int eof;
 };
 
@@ -41,41 +42,6 @@ static void lua_table_free_module(void* pAux) {
 	sqlite3_free(mod);
 }
 
-// ---- push helper -------------------------------------------------------------
-
-static void push_kv_to_sqlite(sqlite3_context* ctx, const KitsuneVariable* v) {
-	if (!v) {
-		sqlite3_result_null(ctx);
-		return;
-	}
-	switch (v->type) {
-	case KITSUNE_TINTEGER:
-		sqlite3_result_int64(ctx, v->integer);
-		break;
-	case KITSUNE_TNUMBER:
-		sqlite3_result_double(ctx, v->number);
-		break;
-	case KITSUNE_TSTRING:
-		sqlite3_result_text(ctx, (const char*)v->data, (int)v->length, SQLITE_TRANSIENT);
-		break;
-	case KITSUNE_TBOOLEAN:
-		sqlite3_result_int(ctx, v->boolean ? 1 : 0);
-		break;
-	case KITSUNE_TTABLE: {
-		KitsuneVariable* json = KitsuneGetTableContentsAsJson(v);
-		if (json && json->type == KITSUNE_TJSON && json->data)
-			sqlite3_result_text(ctx, (const char*)json->data, (int)json->length, SQLITE_TRANSIENT);
-		else
-			sqlite3_result_null(ctx);
-		KitsuneVariableFree(json);
-		break;
-	}
-	default:
-		sqlite3_result_null(ctx);
-		break;
-	}
-}
-
 // ---- xConnect / xCreate — same function -------------------------------------
 
 static int lua_table_connect(sqlite3* db, void* pAux, int argc, const char* const* argv,
@@ -89,23 +55,11 @@ static int lua_table_connect(sqlite3* db, void* pAux, int argc, const char* cons
 	memset(vtab, 0, sizeof(LuaTableVTab));
 	vtab->mod = mod;
 
-	// Build DDL: "CREATE TABLE x(col1 PRIMARY KEY, col2, ...) WITHOUT ROWID;"
-	// With max 64 fields of max ~64 bytes each, 8 KB is more than enough.
-	char* ddl = (char*)sqlite3_malloc(8192);
+	char* ddl = vtab_build_ddl(mod->fieldNames, mod->fieldCount);
 	if (!ddl) {
 		sqlite3_free(vtab);
 		return SQLITE_NOMEM;
 	}
-
-	strcpy(ddl, "CREATE TABLE x(");
-	for (int i = 0; i < mod->fieldCount; i++) {
-		if (i > 0)
-			strcat(ddl, ",");
-		strcat(ddl, mod->fieldNames[i]);
-		if (i == 0)
-			strcat(ddl, " PRIMARY KEY");
-	}
-	strcat(ddl, ") WITHOUT ROWID;");
 
 	int rc = sqlite3_declare_vtab(db, ddl);
 	sqlite3_free(ddl);
@@ -128,7 +82,8 @@ static int lua_table_best_index(sqlite3_vtab* pVtab, sqlite3_index_info* info) {
 			info->aConstraint[i].usable &&
 			info->aConstraint[i].op == SQLITE_INDEX_CONSTRAINT_EQ) {
 			info->idxNum = 1;
-			info->estimatedCost = 10;
+			info->estimatedCost = 1.0;
+			info->estimatedRows = 1;
 			info->idxFlags = SQLITE_INDEX_SCAN_UNIQUE;
 			info->aConstraintUsage[i].argvIndex = 1;
 			return SQLITE_OK;
@@ -160,13 +115,36 @@ static int lua_table_open(sqlite3_vtab* pVtab, sqlite3_vtab_cursor** ppCursor) {
 
 static int lua_table_close(sqlite3_vtab_cursor* pCursor) {
 	LuaTableCursor* cursor = (LuaTableCursor*)pCursor;
-	KitsuneVariableFree(cursor->entry);
-	KitsuneVariableFree(cursor->pkAnchor);
+	KitsuneVariableFree(cursor->pkKey);
+	KitsuneVariableFree(cursor->rowValue);
+	KitsuneVariableFree(cursor->scanPos);
 	sqlite3_free(cursor);
 	return SQLITE_OK;
 }
 
+// ---- cursor_load_from_entry — extract pkKey+rowValue from a KitsuneNext entry ----
+// Takes ownership of entry (may free it on error); sets eof on the cursor if unusable.
+
+static void cursor_load_from_entry(LuaTableCursor* cursor, KitsuneVariable* entry) {
+	if (!entry || entry->type != KITSUNE_TTABLECONTENTS || !entry->table) {
+		KitsuneVariableFree(entry);
+		cursor->eof = 1;
+		return;
+	}
+	KeyValuePairKitsuneVariableNode* node = entry->table;
+	cursor->pkKey = KitsuneAnchorVariable(&node->key);
+	cursor->rowValue = KitsuneAnchorVariable(&node->value);
+	cursor->scanPos = entry; // takes ownership; passed to next KitsuneNext call
+	if (!cursor->pkKey || !cursor->rowValue)
+		cursor->eof = 1;
+}
+
 // ---- xFilter -----------------------------------------------------------------
+//
+// idxNum == 1: PK equality — anchor the key, fetch the value once, done.
+// idxNum == 0: full scan — load the first entry via KitsuneNext.
+//
+// Either way xColumn sees the same cursor shape: pkKey + rowValue.
 
 static int lua_table_filter(sqlite3_vtab_cursor* pCursor, int idxNum, const char* idxStr,
 	int argc, sqlite3_value** argv) {
@@ -174,33 +152,30 @@ static int lua_table_filter(sqlite3_vtab_cursor* pCursor, int idxNum, const char
 	LuaTableCursor* cursor = (LuaTableCursor*)pCursor;
 	LuaTableVTab* vtab = (LuaTableVTab*)pCursor->pVtab;
 
-	KitsuneVariableFree(cursor->entry);
-	cursor->entry = NULL;
-	KitsuneVariableFree(cursor->pkAnchor);
-	cursor->pkAnchor = NULL;
+	KitsuneVariableFree(cursor->pkKey);    cursor->pkKey = NULL;
+	KitsuneVariableFree(cursor->rowValue); cursor->rowValue = NULL;
+	KitsuneVariableFree(cursor->scanPos);  cursor->scanPos = NULL;
 	cursor->eof = 0;
-	cursor->rowid = 0;
 
 	if (idxNum == 1 && argc == 1) {
-		// PK equality lookup path
+		// PK equality path: anchor the key, fetch the value immediately.
+		// rowValue is cached here — xColumn never calls KitsuneGetIndex again.
 		KitsuneVariable tmp = {};
 		sqlite_val_to_kitsune(argv[0], &tmp);
-		cursor->pkAnchor = KitsuneAnchorVariable(&tmp);
-		if (!cursor->pkAnchor)
+		cursor->pkKey = KitsuneAnchorVariable(&tmp);
+		if (!cursor->pkKey)
 			return SQLITE_NOMEM;
-		cursor->isPkLookup = 1;
-
-		KitsuneVariable* probe = KitsuneGetIndex(vtab->mod->tableVar, cursor->pkAnchor);
-		if (!probe || probe->type == KITSUNE_TNIL || probe->type == KITSUNE_TERROR)
+		cursor->rowValue = KitsuneGetIndex(vtab->mod->tableVar, cursor->pkKey);
+		if (!cursor->rowValue || cursor->rowValue->type == KITSUNE_TNIL ||
+			cursor->rowValue->type == KITSUNE_TERROR) {
+			KitsuneVariableFree(cursor->rowValue);
+			cursor->rowValue = NULL;
 			cursor->eof = 1;
-		KitsuneVariableFree(probe);
+		}
 	}
 	else {
-		// Full scan path
-		cursor->isPkLookup = 0;
-		cursor->entry = KitsuneNext(vtab->mod->tableVar, NULL);
-		if (!cursor->entry || cursor->entry->type != KITSUNE_TTABLECONTENTS)
-			cursor->eof = 1;
+		// Full scan path: load first entry.
+		cursor_load_from_entry(cursor, KitsuneNext(vtab->mod->tableVar, NULL));
 	}
 
 	return SQLITE_OK;
@@ -212,16 +187,19 @@ static int lua_table_next(sqlite3_vtab_cursor* pCursor) {
 	LuaTableCursor* cursor = (LuaTableCursor*)pCursor;
 	LuaTableVTab* vtab = (LuaTableVTab*)pCursor->pVtab;
 
-	if (cursor->isPkLookup) {
+	KitsuneVariableFree(cursor->pkKey);    cursor->pkKey = NULL;
+	KitsuneVariableFree(cursor->rowValue); cursor->rowValue = NULL;
+
+	if (!cursor->scanPos) {
+		// PK lookup — single row; mark eof.
 		cursor->eof = 1;
 		return SQLITE_OK;
 	}
 
-	// entry ownership transfers into KitsuneNext; do not access it after this call
-	cursor->entry = KitsuneNext(vtab->mod->tableVar, cursor->entry);
-	if (!cursor->entry || cursor->entry->type != KITSUNE_TTABLECONTENTS)
-		cursor->eof = 1;
-	cursor->rowid++;
+	// scanPos ownership transfers to KitsuneNext; cursor_load_from_entry takes new ownership.
+	KitsuneVariable* next = KitsuneNext(vtab->mod->tableVar, cursor->scanPos);
+	cursor->scanPos = NULL;
+	cursor_load_from_entry(cursor, next);
 	return SQLITE_OK;
 }
 
@@ -232,67 +210,30 @@ static int lua_table_eof(sqlite3_vtab_cursor* pCursor) {
 }
 
 // ---- xColumn -----------------------------------------------------------------
+// pkKey and rowValue are always pre-loaded by xFilter/xNext.
+// fieldCount == 2: rowValue is the scalar value; col 0 = pk, col 1 = rowValue.
+// fieldCount >  2: rowValue is a sub-table; col 0 = pk, col N = rowValue[N] (1-based).
 
 static int lua_table_column(sqlite3_vtab_cursor* pCursor, sqlite3_context* ctx, int N) {
 	LuaTableCursor* cursor = (LuaTableCursor*)pCursor;
 	LuaTableVTab* vtab = (LuaTableVTab*)pCursor->pVtab;
-	int fieldCount = vtab->mod->fieldCount;
 
-	if (cursor->isPkLookup) {
-		if (N == 0) {
-			push_kv_to_sqlite(ctx, cursor->pkAnchor);
-			return SQLITE_OK;
-		}
-
-		KitsuneVariable* rowVal = KitsuneGetIndex(vtab->mod->tableVar, cursor->pkAnchor);
-		if (!rowVal || rowVal->type == KITSUNE_TERROR) {
-			sqlite3_result_null(ctx);
-			KitsuneVariableFree(rowVal);
-			return SQLITE_OK;
-		}
-		if (fieldCount == 2) {
-			push_kv_to_sqlite(ctx, rowVal);
-			KitsuneVariableFree(rowVal);
-			return SQLITE_OK;
-		}
-		// fieldCount > 2
-		if (rowVal->type != KITSUNE_TTABLE) {
-			if (N == 1)
-				push_kv_to_sqlite(ctx, rowVal);
-			else
-				sqlite3_result_null(ctx);
-			KitsuneVariableFree(rowVal);
-			return SQLITE_OK;
-		}
-		KitsuneVariable intKey = {};
-		intKey.type = KITSUNE_TINTEGER;
-		intKey.integer = N;
-		KitsuneVariable* fieldVal = KitsuneGetIndex(rowVal, &intKey);
-		if (!fieldVal) {
-			sqlite3_result_null(ctx);
-			KitsuneVariableFree(rowVal);
-			return SQLITE_OK;
-		}
-		push_kv_to_sqlite(ctx, fieldVal);
-		KitsuneVariableFree(fieldVal);
-		KitsuneVariableFree(rowVal);
-		return SQLITE_OK;
-	}
-
-	// Full scan path
-	KeyValuePairKitsuneVariableNode* node = cursor->entry->table;
 	if (N == 0) {
-		push_kv_to_sqlite(ctx, &node->key);
+		vtab_push_kv_to_sqlite(ctx, cursor->pkKey);
 		return SQLITE_OK;
 	}
-	if (fieldCount == 2) {
-		push_kv_to_sqlite(ctx, &node->value);
+
+	// fieldCount == 2: the value IS rowValue (scalar).
+	if (vtab->mod->fieldCount == 2) {
+		vtab_push_kv_to_sqlite(ctx, cursor->rowValue);
 		return SQLITE_OK;
 	}
-	// fieldCount > 2
-	if (node->value.type != KITSUNE_TTABLE) {
+
+	// fieldCount > 2: rowValue is a sub-table; index by N (1-based col index).
+	if (!cursor->rowValue || cursor->rowValue->type != KITSUNE_TTABLE) {
+		// Tolerate a malformed row: col 1 gets the scalar, rest get NULL.
 		if (N == 1)
-			push_kv_to_sqlite(ctx, &node->value);
+			vtab_push_kv_to_sqlite(ctx, cursor->rowValue);
 		else
 			sqlite3_result_null(ctx);
 		return SQLITE_OK;
@@ -300,12 +241,8 @@ static int lua_table_column(sqlite3_vtab_cursor* pCursor, sqlite3_context* ctx, 
 	KitsuneVariable intKey = {};
 	intKey.type = KITSUNE_TINTEGER;
 	intKey.integer = N;
-	KitsuneVariable* fieldVal = KitsuneGetIndex(&node->value, &intKey);
-	if (!fieldVal) {
-		sqlite3_result_null(ctx);
-		return SQLITE_OK;
-	}
-	push_kv_to_sqlite(ctx, fieldVal);
+	KitsuneVariable* fieldVal = KitsuneGetIndex(cursor->rowValue, &intKey);
+	vtab_push_kv_to_sqlite(ctx, fieldVal);
 	KitsuneVariableFree(fieldVal);
 	return SQLITE_OK;
 }
@@ -355,7 +292,7 @@ static int set_row_value(sqlite3_vtab* pVtab, LuaTableModule* mod,
 	}
 	// fieldCount > 2: build a new Lua sub-table from the non-PK column values.
 	int valueCount = argc - 3; // = fieldCount - 1
-	KeyValuePairKitsuneVariableNode nodes[63];
+	KeyValuePairKitsuneVariableNode nodes[VTAB_MAX_FIELDS - 1];
 	memset(nodes, 0, sizeof(nodes));
 	for (int i = 0; i < valueCount; i++) {
 		nodes[i].key.type = KITSUNE_TINTEGER;
@@ -391,7 +328,7 @@ static int set_row_value(sqlite3_vtab* pVtab, LuaTableModule* mod,
 //   INSERT  argc == fieldCount + 2,  argv[0] is SQL NULL
 //     argv[0]          NULL  (no old row)
 //     argv[1]          NULL  (no synthetic rowid; WITHOUT ROWID has none)
-//     argv[2]          col0  — PRIMARY KEY column value  ← use this as the key
+//     argv[2]          col0  — PRIMARY KEY column value  ? use this as the key
 //     argv[3..argc-1]  col1, col2, …  (non-PK column values)
 //
 //   UPDATE  argc == fieldCount + 2,  argv[0] is NOT NULL
@@ -529,17 +466,6 @@ static sqlite3_module g_luaTableModule = {
 	NULL                     // xShadowName
 };
 
-// ---- local error helper ------------------------------------------------------
-
-static int rt_error(kitsune_ResultSetter resultSetter, const char* msg) {
-	KitsuneVariable err = {};
-	err.type = KITSUNE_TERROR;
-	err.data = (unsigned char*)msg;
-	err.length = strlen(msg);
-	resultSetter(&err);
-	return 1;
-}
-
 // ---- register_table_cb -------------------------------------------------------
 
 int register_table_cb(int argc, const KitsuneVariable* argv, kitsune_ResultSetter resultSetter, void* userdata) {
@@ -550,7 +476,7 @@ int register_table_cb(int argc, const KitsuneVariable* argv, kitsune_ResultSette
 		argv[0].type != KITSUNE_TSTRING || !argv[0].data ||
 		argv[1].type != KITSUNE_TTABLE ||
 		argv[2].type != KITSUNE_TTABLE)
-		return rt_error(resultSetter, "SQLiteExt.RegisterTable(name, fields, table): invalid arguments");
+		return vtab_cb_error(resultSetter, "SQLiteExt.RegisterTable(name, fields, table): invalid arguments");
 
 	const char* name = (const char*)argv[0].data;
 
@@ -559,7 +485,11 @@ int register_table_cb(int argc, const KitsuneVariable* argv, kitsune_ResultSette
 	KitsuneVariable* lenVar = KitsuneGetLength(&argv[1]);
 	if (!lenVar || lenVar->type != KITSUNE_TINTEGER || lenVar->integer < 2) {
 		KitsuneVariableFree(lenVar);
-		return rt_error(resultSetter, "RegisterTable: fields array must contain at least 2 entries");
+		return vtab_cb_error(resultSetter, "RegisterTable: fields array must contain at least 2 entries");
+	}
+	if (lenVar->integer > VTAB_MAX_FIELDS) {
+		KitsuneVariableFree(lenVar);
+		return vtab_cb_error(resultSetter, "RegisterTable: too many fields (max " VTAB_MAX_FIELDS_STR ")");
 	}
 	int N = (int)lenVar->integer;
 	KitsuneVariableFree(lenVar);
@@ -567,14 +497,14 @@ int register_table_cb(int argc, const KitsuneVariable* argv, kitsune_ResultSette
 	// Allocate the module up front so error paths can use lua_table_free_module.
 	LuaTableModule* mod = (LuaTableModule*)sqlite3_malloc(sizeof(LuaTableModule));
 	if (!mod)
-		return rt_error(resultSetter, "RegisterTable: out of memory");
+		return vtab_cb_error(resultSetter, "RegisterTable: out of memory");
 	memset(mod, 0, sizeof(LuaTableModule));
 	mod->fieldCount = N;
 
 	mod->fieldNames = (char**)sqlite3_malloc(sizeof(char*) * N);
 	if (!mod->fieldNames) {
 		sqlite3_free(mod);
-		return rt_error(resultSetter, "RegisterTable: out of memory");
+		return vtab_cb_error(resultSetter, "RegisterTable: out of memory");
 	}
 	memset(mod->fieldNames, 0, sizeof(char*) * N);
 
@@ -588,26 +518,23 @@ int register_table_cb(int argc, const KitsuneVariable* argv, kitsune_ResultSette
 		if (!fieldVar || fieldVar->type != KITSUNE_TSTRING || !fieldVar->data) {
 			KitsuneVariableFree(fieldVar);
 			lua_table_free_module(mod);
-			return rt_error(resultSetter, "RegisterTable: field names must be strings");
+			return vtab_cb_error(resultSetter, "RegisterTable: field names must be strings");
 		}
 
-		size_t len = fieldVar->length;
-		const unsigned char* data = fieldVar->data;
-		for (size_t c = 0; c < len; c++) {
-			if (!isalpha((unsigned char)data[c])) {
-				KitsuneVariableFree(fieldVar);
-				lua_table_free_module(mod);
-				return rt_error(resultSetter, "RegisterTable: field names may only contain letters");
-			}
+		if (!vtab_valid_field_name(fieldVar->data, fieldVar->length)) {
+			KitsuneVariableFree(fieldVar);
+			lua_table_free_module(mod);
+			return vtab_cb_error(resultSetter, "RegisterTable: field names must start with a letter or underscore and contain only letters, digits, or underscores (max " VTAB_MAX_FIELD_NAME_LEN_STR " chars)");
 		}
+		size_t len = fieldVar->length;
 
 		char* copy = (char*)sqlite3_malloc((int)len + 1);
 		if (!copy) {
 			KitsuneVariableFree(fieldVar);
 			lua_table_free_module(mod);
-			return rt_error(resultSetter, "RegisterTable: out of memory");
+			return vtab_cb_error(resultSetter, "RegisterTable: out of memory");
 		}
-		memcpy(copy, data, len);
+		memcpy(copy, fieldVar->data, len);
 		copy[len] = '\0';
 		mod->fieldNames[i] = copy;
 		KitsuneVariableFree(fieldVar);
@@ -617,7 +544,7 @@ int register_table_cb(int argc, const KitsuneVariable* argv, kitsune_ResultSette
 	mod->tableVar = KitsuneAnchorVariable(&argv[2]);
 	if (!mod->tableVar) {
 		lua_table_free_module(mod);
-		return rt_error(resultSetter, "RegisterTable: failed to anchor table");
+		return vtab_cb_error(resultSetter, "RegisterTable: failed to anchor table");
 	}
 
 	// Drop any existing vtab first. xDestroy only frees the vtab shell (lua_table_disconnect

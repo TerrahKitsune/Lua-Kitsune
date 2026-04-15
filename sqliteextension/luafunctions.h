@@ -9,4 +9,9 @@ void lua_init_kitsune_state();
 // Call from DLL_PROCESS_DETACH (only when lpReserved == NULL).
 void lua_cleanup_kitsune_state();
 
+// Anchors var in the Lua registry and registers it with g_extState for cleanup on DLL unload.
+// Returns the anchored KitsuneVariable* on success; NULL on failure.
+// The caller must NOT free the returned pointer — it is owned by g_extState.
+KitsuneVariable* lua_add_kitsune_state(const KitsuneVariable* var);
+
 int lua_register_kitsune_functions(sqlite3* db, char** pzErrMsg);

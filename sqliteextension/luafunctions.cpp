@@ -1,5 +1,6 @@
 ﻿#include "luafunctions.h"
 #include "registerluatable.h"
+#include "registerluavtable.h"
 #include <stdlib.h>
 #include <string.h>
 SQLITE_EXTENSION_INIT3
@@ -27,7 +28,7 @@ void lua_init_kitsune_state() {
 // Returns a kitsune_malloc'd KitsuneVariable* with its own independent registry ref.
 // The caller must NOT free it — it is owned by g_extState and freed by
 // lua_cleanup_kitsune_state via KitsuneVariableFree. Returns NULL on failure.
-static KitsuneVariable* lua_add_kitsune_state(const KitsuneVariable* var) {
+KitsuneVariable* lua_add_kitsune_state(const KitsuneVariable* var) {
 	if (!g_extState || !var) return NULL;
 
 	KitsuneVariable* funcVar = KitsuneAnchorVariable(var);
@@ -404,5 +405,6 @@ int lua_register_kitsune_functions(sqlite3* db, char** pzErrMsg) {
 	KitsuneRegisterFunction("SQLiteExt.Query", query_cb, g_extState);
 	KitsuneRegisterFunction("SQLiteExt.Scalar", scalar_cb, g_extState);
 	KitsuneRegisterFunction("SQLiteExt.RegisterTable", register_table_cb, g_extState);
+	KitsuneRegisterFunction("SQLiteExt.RegisterVirtualTable", register_virtual_table_cb, g_extState);
 	return SQLITE_OK;
 }

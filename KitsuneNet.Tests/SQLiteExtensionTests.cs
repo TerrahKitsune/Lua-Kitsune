@@ -772,5 +772,580 @@ public sealed class SQLiteExtensionTests
             """);
         result.String.ShouldBe("2|2|Jane|9|Hans");
     }
+
+    // ---- RegisterVirtualTable tests -----------------------------------------
+
+    // Reader returns {name, points} rows; SELECT returns expected results (2-field).
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterVirtualTable_ReadOnly_TwoField()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            SQLiteExt.RegisterVirtualTable("RVT2", {"Name", "Points"}, function(ctx, nth)
+                local data = {{"alice", 100}, {"bob", 200}, {"carol", 300}}
+                return data[nth]
+            end)
+            local rows = SQLiteExt.Query("SELECT Name, Points FROM RVT2 ORDER BY Name")
+            db:Close()
+            return #rows .. "|" .. rows[1]["Name"] .. "|" .. rows[2]["Points"] .. "|" .. rows[3]["Name"]
+            """);
+        result.String.ShouldBe("3|alice|200|carol");
+    }
+
+    // Reader returns {id, first, last} rows; SELECT returns expected results (3-field).
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterVirtualTable_ReadOnly_ThreeField()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            SQLiteExt.RegisterVirtualTable("RVT3", {"Id", "First", "Last"}, function(ctx, nth)
+                local data = {{1, "John", "Doe"}, {2, "Jane", "Smith"}}
+                return data[nth]
+            end)
+            local rows = SQLiteExt.Query("SELECT Id, First, Last FROM RVT3 ORDER BY Id")
+            db:Close()
+            return rows[1]["First"] .. " " .. rows[1]["Last"] .. "|" ..
+                   rows[2]["First"] .. " " .. rows[2]["Last"]
+            """);
+        result.String.ShouldBe("John Doe|Jane Smith");
+    }
+
+    // nth is 1 on the first reader call and increments on each subsequent call.
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterVirtualTable_NthCounter()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            local calls = {}
+            SQLiteExt.RegisterVirtualTable("NthVT", {"Id", "Val"}, function(ctx, nth)
+                calls[#calls + 1] = nth
+                if nth > 3 then return nil end
+                return {nth, nth * 10}
+            end)
+            SQLiteExt.Query("SELECT * FROM NthVT")
+            db:Close()
+            return calls[1] .. "|" .. calls[2] .. "|" .. calls[3] .. "|" .. calls[4]
+            """);
+        result.String.ShouldBe("1|2|3|4");
+    }
+
+    // All cursors on the same vtable share the vtable-level context.
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterVirtualTable_ContextPerCursor()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            local finalCount = 0
+            SQLiteExt.RegisterVirtualTable("CtxVT", {"Id", "Val"}, function(ctx, nth)
+                if nth == 1 then
+                    ctx.openCount = (ctx.openCount or 0) + 1
+                    finalCount = ctx.openCount
+                end
+                if nth > 1 then return nil end
+                return {nth, nth}
+            end)
+            -- Cross join opens two cursors; both share the same vtable context.
+            SQLiteExt.Query("SELECT a.Id FROM CtxVT a, CtxVT b LIMIT 4")
+            db:Close()
+            return finalCount
+            """);
+        // Each of the two cursors calls xFilter once (nth=1 increments the shared counter).
+        result.AsInt64.ShouldBe(2L);
+    }
+
+    // No update function provided; INSERT returns an error containing "Readonly".
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterVirtualTable_ReadOnly_RejectWrite()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            SQLiteExt.RegisterVirtualTable("RdOnlyVT", {"Id", "Val"}, function(ctx, nth)
+                if nth > 1 then return nil end
+                return {1, "one"}
+            end)
+            local ok, err = db:Query("INSERT INTO RdOnlyVT VALUES(2, 'two')")
+            db:Close()
+            if ok then return "unexpected_success" end
+            return err or "(no message)"
+            """);
+        result.String.ShouldNotBeNull();
+        result.String.ShouldContain("Readonly");
+    }
+
+    // Update function called with pk=nil on INSERT; new row visible in reader output.
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterVirtualTable_Insert()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            local store = {{"a", 1}, {"b", 2}}
+            SQLiteExt.RegisterVirtualTable("InsertVT", {"Key", "Val"},
+                function(ctx, nth) return store[nth] end,
+                nil,
+                function(ctx, pk, data)
+                    if pk == nil then store[#store + 1] = {data[1], data[2]} end
+                end
+            )
+            local ok, err = db:Query("INSERT INTO InsertVT VALUES('c', 3)")
+            assert(ok, err)
+            db:Fetch()
+            local rows = SQLiteExt.Query("SELECT Key, Val FROM InsertVT ORDER BY Key")
+            db:Close()
+            return #rows .. "|" .. rows[3]["Key"] .. "|" .. tostring(rows[3]["Val"])
+            """);
+        result.String.ShouldBe("3|c|3");
+    }
+
+    // Update function called with data=nil on DELETE; row gone from subsequent reads.
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterVirtualTable_Delete()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            local store = {{"a", 1}, {"b", 2}, {"c", 3}}
+            SQLiteExt.RegisterVirtualTable("DeleteVT", {"Key", "Val"},
+                function(ctx, nth) return store[nth] end,
+                nil,
+                function(ctx, pk, data)
+                    if data == nil then
+                        for i, row in ipairs(store) do
+                            if row[1] == pk then table.remove(store, i); return end
+                        end
+                    end
+                end
+            )
+            local ok, err = db:Query("DELETE FROM DeleteVT WHERE Key='b'")
+            assert(ok, err)
+            db:Fetch()
+            local rows = SQLiteExt.Query("SELECT Key FROM DeleteVT ORDER BY Key")
+            db:Close()
+            return #rows .. "|" .. rows[1]["Key"] .. "|" .. rows[2]["Key"]
+            """);
+        result.String.ShouldBe("2|a|c");
+    }
+
+    // data[1] == pk (same PK); non-PK field values updated.
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterVirtualTable_Update_SamePK()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            local store = {{"a", 100}, {"b", 200}}
+            SQLiteExt.RegisterVirtualTable("UpdateSameVT", {"Key", "Val"},
+                function(ctx, nth) return store[nth] end,
+                nil,
+                function(ctx, pk, data)
+                    if pk ~= nil and data ~= nil then
+                        for _, row in ipairs(store) do
+                            if row[1] == pk then row[2] = data[2]; return end
+                        end
+                    end
+                end
+            )
+            local ok, err = db:Query("UPDATE UpdateSameVT SET Val=999 WHERE Key='a'")
+            assert(ok, err)
+            db:Fetch()
+            local rows = SQLiteExt.Query("SELECT Key, Val FROM UpdateSameVT ORDER BY Key")
+            db:Close()
+            return rows[1]["Key"] .. "|" .. tostring(rows[1]["Val"]) .. "|" ..
+                   rows[2]["Key"] .. "|" .. tostring(rows[2]["Val"])
+            """);
+        result.String.ShouldBe("a|999|b|200");
+    }
+
+    // data[1] ~= pk (PK rename); PK and field values both change.
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterVirtualTable_Update_RenamePK()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            local store = {{"a", 100}, {"b", 200}}
+            SQLiteExt.RegisterVirtualTable("RenameVT", {"Key", "Val"},
+                function(ctx, nth) return store[nth] end,
+                nil,
+                function(ctx, pk, data)
+                    if pk ~= nil and data ~= nil then
+                        for i, row in ipairs(store) do
+                            if row[1] == pk then store[i] = {data[1], data[2]}; return end
+                        end
+                    end
+                end
+            )
+            local ok, err = db:Query("UPDATE RenameVT SET Key='z', Val=777 WHERE Key='a'")
+            assert(ok, err)
+            db:Fetch()
+            local rows = SQLiteExt.Query("SELECT Key, Val FROM RenameVT ORDER BY Key")
+            db:Close()
+            return #rows .. "|" .. rows[1]["Key"] .. "|" .. tostring(rows[1]["Val"]) .. "|" .. rows[2]["Key"]
+            """);
+        result.String.ShouldBe("2|b|200|z");
+    }
+
+    // Update function calls error(); SQLite surfaces that message as an error.
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterVirtualTable_UpdateError()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            SQLiteExt.RegisterVirtualTable("ErrVT", {"Id", "Val"},
+                function(ctx, nth)
+                    if nth > 1 then return nil end
+                    return {1, "one"}
+                end,
+                nil,
+                function(ctx, pk, data) error("Forbidden key") end
+            )
+            local ok, err = db:Query("INSERT INTO ErrVT VALUES(2, 'two')")
+            db:Close()
+            if ok then return "unexpected_success" end
+            return err or "(no message)"
+            """);
+        result.String.ShouldNotBeNull();
+        result.String.ShouldContain("Forbidden key");
+    }
+
+    // Index function returns true (unique) for EQ on Key; reader receives index, no full scan.
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterVirtualTable_Index_EqLookup()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            local gotIndex = false
+            local lookupMap = {a=100, b=200, c=300}
+            SQLiteExt.RegisterVirtualTable("IdxEqVT", {"Key", "Val"},
+                function(ctx, nth, index)
+                    if index then
+                        gotIndex = true
+                        if nth > 1 then return nil end
+                        local k = index[1].Value
+                        if lookupMap[k] then return {k, lookupMap[k]} end
+                        return nil
+                    end
+                    local keys = {"a", "b", "c"}
+                    local k = keys[nth]
+                    if not k then return nil end
+                    return {k, lookupMap[k]}
+                end,
+                function(ctx, op, col)
+                    if col == "Key" and op == "=" then return true end
+                    return nil
+                end
+            )
+            local rows = SQLiteExt.Query("SELECT Val FROM IdxEqVT WHERE Key='b'")
+            db:Close()
+            return tostring(gotIndex) .. "|" .. tostring(rows[1]["Val"])
+            """);
+        result.String.ShouldBe("true|200");
+    }
+
+    // Index function returns nil; full scan is used and reader receives nil index.
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterVirtualTable_Index_FallbackFullScan()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            local wasFullScan = false
+            SQLiteExt.RegisterVirtualTable("IdxFallbackVT", {"Key", "Val"},
+                function(ctx, nth, index)
+                    if nth == 1 then wasFullScan = (index == nil) end
+                    local data = {{"a", 1}, {"b", 2}, {"c", 3}}
+                    return data[nth]
+                end,
+                function(ctx, op, col) return nil end
+            )
+            local rows = SQLiteExt.Query("SELECT Val FROM IdxFallbackVT WHERE Key='b'")
+            db:Close()
+            return tostring(wasFullScan) .. "|" .. #rows .. "|" .. tostring(rows[1]["Val"])
+            """);
+        result.String.ShouldBe("true|1|2");
+    }
+
+    // Returning 0 from indexFunc is treated as decline; scan falls back to full scan.
+    // This verifies 0 and negative are NOT treated as unique — only true is unique.
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterVirtualTable_Index_ZeroCostDeclines()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            local wasFullScan = false
+            SQLiteExt.RegisterVirtualTable("ZeroCostVT", {"Key", "Val"},
+                function(ctx, nth, index)
+                    if nth == 1 then wasFullScan = (index == nil) end
+                    local data = {{"a", 1}, {"b", 2}, {"c", 3}}
+                    return data[nth]
+                end,
+                function(ctx, op, col)
+                    return 0  -- 0 = decline, not unique
+                end
+            )
+            local rows = SQLiteExt.Query("SELECT Val FROM ZeroCostVT WHERE Key='b'")
+            db:Close()
+            return tostring(wasFullScan) .. "|" .. #rows
+            """);
+        result.String.ShouldBe("true|1");
+    }
+
+    // Returning a negative integer from indexFunc is also treated as decline.
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterVirtualTable_Index_NegativeCostDeclines()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            local wasFullScan = false
+            SQLiteExt.RegisterVirtualTable("NegCostVT", {"Key", "Val"},
+                function(ctx, nth, index)
+                    if nth == 1 then wasFullScan = (index == nil) end
+                    local data = {{"a", 1}, {"b", 2}, {"c", 3}}
+                    return data[nth]
+                end,
+                function(ctx, op, col)
+                    return -5  -- negative integer = decline
+                end
+            )
+            local rows = SQLiteExt.Query("SELECT Val FROM NegCostVT WHERE Key='b'")
+            db:Close()
+            return tostring(wasFullScan) .. "|" .. #rows
+            """);
+        result.String.ShouldBe("true|1");
+    }
+
+    // Returning a positive float from indexFunc is accepted as a cost (KITSUNE_TNUMBER path).
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterVirtualTable_Index_FloatCostAccepted()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            local gotIndex = false
+            local lookupMap = {a=1, b=2, c=3}
+            SQLiteExt.RegisterVirtualTable("FloatCostVT", {"Key", "Val"},
+                function(ctx, nth, index)
+                    if index then
+                        gotIndex = true
+                        if nth > 1 then return nil end
+                        local k = index[1].Value
+                        return {k, lookupMap[k]}
+                    end
+                    local keys = {"a", "b", "c"}
+                    if not keys[nth] then return nil end
+                    return {keys[nth], lookupMap[keys[nth]]}
+                end,
+                function(ctx, op, col)
+                    if col == "Key" and op == "=" then return 0.5 end  -- float cost, not unique
+                    return nil
+                end
+            )
+            local rows = SQLiteExt.Query("SELECT Val FROM FloatCostVT WHERE Key='c'")
+            db:Close()
+            return tostring(gotIndex) .. "|" .. tostring(rows[1]["Val"])
+            """);
+        result.String.ShouldBe("true|3");
+    }
+
+    // index sub-table entries have the correct Column, Op, and Value fields.
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterVirtualTable_Index_ConstraintShape()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            local captured = nil
+            SQLiteExt.RegisterVirtualTable("ShapeVT", {"Key", "Val"},
+                function(ctx, nth, index)
+                    if nth == 1 and index then captured = index end
+                    if index then
+                        if nth > 1 then return nil end
+                        return {index[1].Value, 99}
+                    end
+                    if nth > 1 then return nil end
+                    return {"a", 99}
+                end,
+                function(ctx, op, col)
+                    if col == "Key" and op == "=" then return 10 end
+                    return nil
+                end
+            )
+            SQLiteExt.Query("SELECT * FROM ShapeVT WHERE Key='testkey'")
+            db:Close()
+            if not captured then return "no_index" end
+            local c = captured[1]
+            return c.Column .. "|" .. c.Op .. "|" .. tostring(c.Value)
+            """);
+        result.String.ShouldBe("Key|=|testkey");
+    }
+
+    // Context table persists across xFilter re-scans (JOIN); nth resets to 1 each scan.
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterVirtualTable_ContextPreservedOnRescan()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            -- Outer vtable: 2 rows, forces inner to be rescanned twice.
+            SQLiteExt.RegisterVirtualTable("RescanOuter", {"N", "V"}, function(ctx, nth)
+                if nth > 2 then return nil end
+                return {nth, nth}
+            end)
+            -- Inner vtable: increments ctx.scanCount on each new scan (nth==1).
+            -- ctx.scanCount accumulates across rescans, confirming context survives.
+            local lastScanCount = 0
+            SQLiteExt.RegisterVirtualTable("RescanInner", {"N", "V"}, function(ctx, nth)
+                if nth == 1 then
+                    ctx.scanCount = (ctx.scanCount or 0) + 1
+                    lastScanCount = ctx.scanCount
+                end
+                if nth > 1 then return nil end
+                return {nth, nth}
+            end)
+            -- Cross join: outer has 2 rows → inner xFilter called twice.
+            SQLiteExt.Query("SELECT * FROM RescanOuter, RescanInner")
+            db:Close()
+            return lastScanCount
+            """);
+        result.AsInt64.ShouldBe(2L);
+    }
+
+    // Reader returns nil on the very first call; SELECT returns zero rows.
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterVirtualTable_EmptyReader_ReturnsNoRows()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            SQLiteExt.RegisterVirtualTable("EmptyRVT", {"Id", "Val"}, function(ctx, nth)
+                return nil
+            end)
+            local rows = SQLiteExt.Query("SELECT * FROM EmptyRVT") or {}
+            db:Close()
+            return #rows
+            """);
+        result.AsInt64.ShouldBe(0L);
+    }
+
+    // Calling RegisterVirtualTable twice with the same name replaces the first reader.
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterVirtualTable_Reregistration_ReplacesReader()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            SQLiteExt.RegisterVirtualTable("ReregVT", {"Id", "Val"}, function(ctx, nth)
+                if nth > 1 then return nil end
+                return {1, "first"}
+            end)
+            local r1 = SQLiteExt.Query("SELECT Val FROM ReregVT")
+            -- Re-register with a different reader under the same name.
+            SQLiteExt.RegisterVirtualTable("ReregVT", {"Id", "Val"}, function(ctx, nth)
+                if nth > 1 then return nil end
+                return {2, "second"}
+            end)
+            local r2 = SQLiteExt.Query("SELECT Val FROM ReregVT")
+            db:Close()
+            return r1[1]["Val"] .. "|" .. r2[1]["Val"]
+            """);
+        result.String.ShouldBe("first|second");
+    }
+
+    // 3-field INSERT: xUpdate builds a 3-element data table; update function receives
+    // data[1]=PK, data[2]=col1, data[3]=col2.
+    [WindowsOnlyFact]
+    public async Task SQLiteExtension_RegisterVirtualTable_ThreeField_Insert()
+    {
+        using KitsuneEngine engine = new();
+        engine.SetString("extPath", ExtensionPath);
+        LuaValue result = await engine.ExecuteStringAsync("""
+            local db = SQLite.Open()
+            db:Query("SELECT load_extension('" .. extPath .. "')")
+            db:Fetch()
+            local store = {}
+            SQLiteExt.RegisterVirtualTable("Insert3VT", {"Id", "First", "Last"},
+                function(ctx, nth) return store[nth] end,
+                nil,
+                function(ctx, pk, data)
+                    if pk == nil then
+                        store[#store + 1] = {data[1], data[2], data[3]}
+                    end
+                end
+            )
+            local ok, err = db:Query("INSERT INTO Insert3VT VALUES(7, 'Hans', 'Mueller')")
+            assert(ok, err)
+            db:Fetch()
+            local rows = SQLiteExt.Query("SELECT Id, First, Last FROM Insert3VT")
+            db:Close()
+            return tostring(rows[1]["Id"]) .. "|" .. rows[1]["First"] .. " " .. rows[1]["Last"]
+            """);
+        result.String.ShouldBe("7|Hans Mueller");
+    }
 }
 
