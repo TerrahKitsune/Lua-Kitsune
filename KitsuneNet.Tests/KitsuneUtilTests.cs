@@ -56,7 +56,7 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
-                local id = UUID()
+                local id = tostring(Identifier.NewUUID())
                 return tostring(type(id) == 'string' and #id == 36
                     and id:sub(9,9) == '-' and id:sub(14,14) == '-'
                     and id:sub(19,19) == '-' and id:sub(24,24) == '-')
@@ -68,7 +68,7 @@ namespace KitsuneNet.Tests
         public async Task UUID_ConsecutiveCalls_AreDistinct()
         {
             using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("return tostring(UUID() ~= UUID())");
+            LuaValue r = await engine.ExecuteStringAsync("return tostring(tostring(Identifier.NewUUID()) ~= tostring(Identifier.NewUUID()))");
             r.String.ShouldBe("true");
         }
 
@@ -78,7 +78,7 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
 
             // The 15th character (the version nibble, after two hyphens) must be '4'.
-            LuaValue r = await engine.ExecuteStringAsync("return UUID():sub(15,15)");
+            LuaValue r = await engine.ExecuteStringAsync("return tostring(Identifier.NewUUID()):sub(15,15)");
             r.String.ShouldBe("4");
         }
 
@@ -87,9 +87,9 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
 
-            // Variant bits 10xx: the 17th character must be 8, 9, a, or b.
+            // Variant bits 10xx: the 20th character must be 8, 9, a, or b.
             LuaValue r = await engine.ExecuteStringAsync(@"
-                local c = UUID():sub(20,20)
+                local c = tostring(Identifier.NewUUID()):sub(20,20)
                 return tostring(c == '8' or c == '9' or c == 'a' or c == 'b')
             ");
             r.String.ShouldBe("true");
@@ -100,7 +100,7 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
-                local id = UUID()
+                local id = tostring(Identifier.NewUUID())
                 return tostring(id:match('^%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x$') ~= nil)
             ");
             r.String.ShouldBe("true");
@@ -111,9 +111,8 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
 
-            // UUID() returns two values: the string and a 16-byte binary blob.
             LuaValue r = await engine.ExecuteStringAsync(@"
-                local _, bin = UUID()
+                local bin = Identifier.NewUUID():AsBytes()
                 return tostring(type(bin) == 'string' and #bin == 16)
             ");
             r.String.ShouldBe("true");
@@ -126,8 +125,7 @@ namespace KitsuneNet.Tests
 
             // Byte 7 (1-based): high nibble must be 0x4.
             LuaValue r = await engine.ExecuteStringAsync(@"
-                local _, bin = UUID()
-                local b = bin:byte(7)
+                local b = Identifier.NewUUID():AsBytes():byte(7)
                 return tostring(b >> 4 == 4)
             ");
             r.String.ShouldBe("true");
@@ -140,8 +138,7 @@ namespace KitsuneNet.Tests
 
             // Byte 9 (1-based): top two bits must be 10xxxxxx (0x80–0xBF).
             LuaValue r = await engine.ExecuteStringAsync(@"
-                local _, bin = UUID()
-                local b = bin:byte(9)
+                local b = Identifier.NewUUID():AsBytes():byte(9)
                 return tostring(b & 0xC0 == 0x80)
             ");
             r.String.ShouldBe("true");
@@ -154,7 +151,9 @@ namespace KitsuneNet.Tests
 
             // The string representation must round-trip consistently with the binary bytes.
             LuaValue r = await engine.ExecuteStringAsync(@"
-                local str, bin = UUID()
+                local id = Identifier.NewUUID()
+                local str = tostring(id)
+                local bin = id:AsBytes()
                 local hex = str:gsub('-', '')
                 local rebuilt = ''
                 for i = 1, 16 do
@@ -174,11 +173,409 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local seen = {}
                 for i = 1, 1000 do
-                    local id = UUID()
+                    local id = tostring(Identifier.NewUUID())
                     if seen[id] then return 'false' end
                     seen[id] = true
                 end
                 return 'true'
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task UUID_GetType_ReturnsUUID()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync("return Identifier.NewUUID():GetType()");
+            r.String.ShouldBe("UUID");
+        }
+
+        [Fact]
+        public async Task UUID_AsString_MatchesToString()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local id = Identifier.NewUUID()
+                return tostring(id:AsString() == tostring(id))
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task UUID_IsEmpty_ReturnsFalseForNewUUID()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync("return tostring(Identifier.NewUUID():IsEmpty())");
+            r.String.ShouldBe("false");
+        }
+
+        [Fact]
+        public async Task UUID_IsEmpty_ReturnsTrueForAllZeroBytes()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local id = Identifier.FromBytes(string.rep('\0', 16))
+                return tostring(id:IsEmpty())
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task UUID_IsEmpty_ReturnsFalseWhenAnyByteNonZero()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local id = Identifier.FromBytes(string.rep('\0', 15) .. '\1')
+                return tostring(id:IsEmpty())
+            ");
+            r.String.ShouldBe("false");
+        }
+
+        // -- OID ------------------------------------------------------------------
+        [Fact]
+        public async Task OID_HasStandardFormat()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local id = tostring(Identifier.NewOID())
+                return tostring(type(id) == 'string' and #id == 24)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task OID_ContainsOnlyHexChars()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local id = tostring(Identifier.NewOID())
+                return tostring(id:match('^%x+$') ~= nil and #id == 24)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task OID_GetType_ReturnsOID()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync("return Identifier.NewOID():GetType()");
+            r.String.ShouldBe("OID");
+        }
+
+        [Fact]
+        public async Task OID_AsBytes_Is12Bytes()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local b = Identifier.NewOID():AsBytes()
+                return tostring(type(b) == 'string' and #b == 12)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task OID_AsString_MatchesToString()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local id = Identifier.NewOID()
+                return tostring(id:AsString() == tostring(id))
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task OID_ConsecutiveCalls_AreDistinct()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync("return tostring(tostring(Identifier.NewOID()) ~= tostring(Identifier.NewOID()))");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task OID_TimestampBytes_AreReasonable()
+        {
+            using KitsuneEngine engine = new();
+
+            // First 4 bytes are big-endian Unix seconds; must be a plausible timestamp.
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local b = Identifier.NewOID():AsBytes()
+                local ts = b:byte(1) * 16777216 + b:byte(2) * 65536 + b:byte(3) * 256 + b:byte(4)
+                return tostring(ts > 1700000000 and ts < 4000000000)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task OID_IsEmpty_ReturnsFalseForNewOID()
+        {
+            using KitsuneEngine engine = new();
+
+            // NewOID always has a non-zero timestamp, so it is never empty.
+            LuaValue r = await engine.ExecuteStringAsync("return tostring(Identifier.NewOID():IsEmpty())");
+            r.String.ShouldBe("false");
+        }
+
+        [Fact]
+        public async Task OID_IsEmpty_ReturnsTrueForAllZeroBytes()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local id = Identifier.FromBytes(string.rep('\0', 12))
+                return tostring(id:IsEmpty())
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        // -- Identifier (FromString) ----------------------------------------------
+        [Fact]
+        public async Task Identifier_FromString_UUID_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local id  = Identifier.NewUUID()
+                local id2 = Identifier.FromString(tostring(id))
+                return tostring(id == id2)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Identifier_FromString_UUID_PreservesType()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                return Identifier.FromString(tostring(Identifier.NewUUID())):GetType()
+            ");
+            r.String.ShouldBe("UUID");
+        }
+
+        [Fact]
+        public async Task Identifier_FromString_OID_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local id  = Identifier.NewOID()
+                local id2 = Identifier.FromString(tostring(id))
+                return tostring(id == id2)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Identifier_FromString_OID_PreservesType()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                return Identifier.FromString(tostring(Identifier.NewOID())):GetType()
+            ");
+            r.String.ShouldBe("OID");
+        }
+
+        [Fact]
+        public async Task Identifier_FromString_InvalidFormat_ReturnsNil()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync("return tostring(Identifier.FromString('not-valid-at-all') == nil)");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Identifier_FromString_InvalidOIDHex_ReturnsNil()
+        {
+            using KitsuneEngine engine = new();
+
+            // Exactly 24 chars but 'z' is not a valid hex digit.
+            LuaValue r = await engine.ExecuteStringAsync("return tostring(Identifier.FromString('zzzzzzzzzzzzzzzzzzzzzzzz') == nil)");
+            r.String.ShouldBe("true");
+        }
+
+        // -- Identifier (FromBytes) -----------------------------------------------
+        [Fact]
+        public async Task Identifier_FromBytes_UUID_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local id  = Identifier.NewUUID()
+                local id2 = Identifier.FromBytes(id:AsBytes())
+                return tostring(id == id2)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Identifier_FromBytes_16Bytes_TypeIsUUID()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local id = Identifier.FromBytes(string.rep('\0', 16))
+                return tostring(id ~= nil and id:GetType() == 'UUID')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Identifier_FromBytes_OID_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local id  = Identifier.NewOID()
+                local id2 = Identifier.FromBytes(id:AsBytes())
+                return tostring(id == id2)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Identifier_FromBytes_12Bytes_TypeIsOID()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local id = Identifier.FromBytes(string.rep('\0', 12))
+                return tostring(id ~= nil and id:GetType() == 'OID')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Identifier_FromBytes_WrongLength_ReturnsNil()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                return tostring(Identifier.FromBytes(string.rep('\0', 8)) == nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        // -- Identifier (Equality) ------------------------------------------------
+        [Fact]
+        public async Task Identifier_Eq_SameUUID_IsTrue()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local id  = Identifier.NewUUID()
+                local id2 = Identifier.FromBytes(id:AsBytes())
+                return tostring(id == id2)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Identifier_Eq_DifferentUUID_IsFalse()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync("return tostring(Identifier.NewUUID() == Identifier.NewUUID())");
+            r.String.ShouldBe("false");
+        }
+
+        [Fact]
+        public async Task Identifier_Eq_SameOID_IsTrue()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local id  = Identifier.NewOID()
+                local id2 = Identifier.FromBytes(id:AsBytes())
+                return tostring(id == id2)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Identifier_Eq_DifferentTypes_IsFalse()
+        {
+            using KitsuneEngine engine = new();
+
+            // 16 zero bytes → UUID; 12 zero bytes → OID; different types, not equal.
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local uuid = Identifier.FromBytes(string.rep('\0', 16))
+                local oid  = Identifier.FromBytes(string.rep('\0', 12))
+                return tostring(uuid == oid)
+            ");
+            r.String.ShouldBe("false");
+        }
+
+        // -- Identifier (IsEmpty) -------------------------------------------------
+        [Fact]
+        public async Task Identifier_IsEmpty_EmptyUUID_IsTrue()
+        {
+            using KitsuneEngine engine = new();
+
+            // 00000000-0000-0000-0000-000000000000 (Guid.Empty equivalent)
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local id = Identifier.FromString('00000000-0000-0000-0000-000000000000')
+                return tostring(id:IsEmpty())
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Identifier_IsEmpty_EmptyOID_IsTrue()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local id = Identifier.FromString('000000000000000000000000')
+                return tostring(id:IsEmpty())
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Identifier_IsEmpty_NonZeroUUID_IsFalse()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local id = Identifier.FromString('00000000-0000-0000-0000-000000000001')
+                return tostring(id:IsEmpty())
+            ");
+            r.String.ShouldBe("false");
+        }
+
+        [Fact]
+        public async Task Identifier_IsEmpty_NonZeroOID_IsFalse()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local id = Identifier.FromString('000000000000000000000001')
+                return tostring(id:IsEmpty())
+            ");
+            r.String.ShouldBe("false");
+        }
+
+        // -- Json encoding of Identifier ------------------------------------------
+        [Fact]
+        public async Task Json_Encode_Identifier_UUID_ProducesJsonString()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local id = Identifier.NewUUID()
+                local encoded = Json.New():Encode(id)
+                return tostring(encoded == '""' .. tostring(id) .. '""')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_Encode_Identifier_OID_ProducesJsonString()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local id = Identifier.NewOID()
+                local encoded = Json.New():Encode(id)
+                return tostring(encoded == '""' .. tostring(id) .. '""')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_Encode_IdentifierInTable_RoundTripsAsString()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local id  = Identifier.NewUUID()
+                local str = tostring(id)
+                local j   = Json.New()
+                local t   = j:Decode(j:Encode({id = id}))
+                return tostring(t.id == str)
             ");
             r.String.ShouldBe("true");
         }

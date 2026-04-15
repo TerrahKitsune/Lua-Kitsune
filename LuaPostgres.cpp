@@ -1,10 +1,11 @@
-#ifdef _WIN32
+ï»¿#ifdef _WIN32
 #include <WinSock2.h>
 #pragma comment(lib, "postgres/lib/libpq.lib")
 #endif
 #include "platform.h"
 #include "LuaPostgres.h"
 #include "luawchar.h"
+#include "luaidentifier.h"
 
 // -- Platform helper: set socket non-blocking ----------------------------------
 #ifdef _WIN32
@@ -49,6 +50,9 @@ static void set_fd_nonblocking(int fd) {
 #endif
 #ifndef NUMERICOID
 #  define NUMERICOID 1700
+#endif
+#ifndef UUIDOID
+#  define UUIDOID    2950
 #endif
 
 // -- Helper mode constants -----------------------------------------------------
@@ -118,6 +122,9 @@ static void PushAsParamString(lua_State* L, int index) {
 		ToUtf8(L);
 		lua_remove(L, -2);
 	}
+	else if (lua_isidentifier(L, index)) {
+		lua_identifier_push_string(L, index);
+	}
 	else {
 		luaL_tolstring(L, index, NULL);
 	}
@@ -143,6 +150,10 @@ static void PushPostgresValue(lua_State* L, const char* val, int len, Oid type) 
 	case FLOAT8OID:
 	case NUMERICOID:
 		lua_pushnumber(L, strtod(val, &endptr));
+		break;
+	case UUIDOID:
+		if (!lua_pushidentifier_fromstring(L, val, (size_t)len))
+			lua_pushlstring(L, val, (size_t)len);
 		break;
 	default:
 		lua_pushlstring(L, val, len);
@@ -613,7 +624,7 @@ static int HelperStreamCont(lua_State* L, int status, lua_KContext ctx) {
 	int rc = lua_resume(T, L, 0, &nr);
 
 	if (rc == LUA_YIELD && nr > 0 && lua_istable(T, -1)) {
-		// q is still alive — T yielded, hasn't called FreeQuery yet
+		// q is still alive â€” T yielded, hasn't called FreeQuery yet
 		lua_xmove(T, L, 1);
 		if (nr > 1)
 			lua_pop(T, nr - 1);
@@ -623,7 +634,7 @@ static int HelperStreamCont(lua_State* L, int status, lua_KContext ctx) {
 		return lua_yieldk(L, 0, ctx, HelperStreamCont);
 	}
 
-	// T returned nil — QueryStreamCont already called FreeQuery
+	// T returned nil â€” QueryStreamCont already called FreeQuery
 	if (nr > 0)
 		lua_pop(T, nr);
 	lua_pushboolean(L, 1);
@@ -680,14 +691,14 @@ static int HelperWaitCont(lua_State* L, int status, lua_KContext ctx) {
 		return 2;
 	}
 
-	// Still polling — T yielded nil
+	// Still polling â€” T yielded nil
 	if (nr == 0 || lua_isnil(T, -1)) {
 		if (nr > 0)
 			lua_pop(T, nr);
 		return lua_yieldk(L, 0, ctx, HelperWaitCont);
 	}
 
-	// Query-level error string — T is now in QueryStreamCont; stop it
+	// Query-level error string â€” T is now in QueryStreamCont; stop it
 	if (lua_type(T, -1) == LUA_TSTRING) {
 		size_t elen;
 		const char* err = lua_tolstring(T, -1, &elen);
@@ -703,7 +714,7 @@ static int HelperWaitCont(lua_State* L, int status, lua_KContext ctx) {
 		return 2;
 	}
 
-	// Rowcount integer — T is now suspended in QueryStreamCont
+	// Rowcount integer â€” T is now suspended in QueryStreamCont
 	lua_Integer rowcount = lua_tointeger(T, -1);
 	lua_pop(T, nr);
 

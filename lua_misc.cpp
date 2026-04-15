@@ -1,4 +1,4 @@
-#include "lua_misc.h"
+ï»¿#include "lua_misc.h"
 #include <time.h>
 #include <stdio.h>
 #include <ctype.h>
@@ -9,7 +9,7 @@
 #ifdef _WIN32
 #include <WinSock2.h>
 #include <ws2tcpip.h>
-#include <objbase.h>
+#include <stdlib.h>
 #include <io.h>
 #include <windowsx.h>
 #include <mmsystem.h>
@@ -24,71 +24,12 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <errno.h>
-#include <sys/random.h>
 #ifdef __x86_64__
 #include <cpuid.h>
 #endif
 #endif
 
 #define DIV 1024
-
-#ifdef _WIN32
-int lua_uuid(lua_State* L) {
-
-	GUID guid;
-	if (CoCreateGuid(&guid) != S_OK) {
-		lua_pushnil(L);
-		return 1;
-	}
-
-	char buffer[37];
-
-	sprintf(buffer, "%08lx-%04hx-%04hx-%02hhx%02hhx-%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx",
-		guid.Data1, guid.Data2, guid.Data3,
-		guid.Data4[0], guid.Data4[1], guid.Data4[2], guid.Data4[3],
-		guid.Data4[4], guid.Data4[5], guid.Data4[6], guid.Data4[7]);
-
-	lua_pushstring(L, buffer);
-
-	unsigned long data1 = _byteswap_ulong(guid.Data1);
-	unsigned short data2 = _byteswap_ushort(guid.Data2);
-	unsigned short data3 = _byteswap_ushort(guid.Data3);
-
-	memcpy(&buffer[0], &data1, sizeof(data1));
-	memcpy(&buffer[sizeof(data1)], &data2, sizeof(data2));
-	memcpy(&buffer[sizeof(data1) + sizeof(data2)], &data3, sizeof(data3));
-	memcpy(&buffer[sizeof(data1) + sizeof(data2) + sizeof(data3)], guid.Data4, sizeof(guid.Data4));
-
-	lua_pushlstring(L, buffer, sizeof(data1) + sizeof(data2) + sizeof(data3) + sizeof(guid.Data4));
-
-	return 2;
-}
-#else
-int lua_uuid(lua_State* L) {
-	uint8_t bytes[16];
-	// getrandom() is a single syscall — no file open/read/close overhead.
-	// For reads <= 256 bytes it never blocks once the entropy pool is seeded.
-	if (getrandom(bytes, sizeof(bytes), 0) != (ssize_t)sizeof(bytes)) {
-		lua_pushnil(L);
-		lua_pushnil(L);
-		return 2;
-	}
-	// RFC 4122 Version 4: version nibble = 0100, variant bits = 10xxxxxx
-	// Identical layout to CoCreateGuid — 16 big-endian bytes, same string format.
-	bytes[6] = (bytes[6] & 0x0F) | 0x40;
-	bytes[8] = (bytes[8] & 0x3F) | 0x80;
-	char buf[37];
-	snprintf(buf, sizeof(buf),
-		"%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
-		bytes[0],  bytes[1],  bytes[2],  bytes[3],
-		bytes[4],  bytes[5],  bytes[6],  bytes[7],
-		bytes[8],  bytes[9],  bytes[10], bytes[11],
-		bytes[12], bytes[13], bytes[14], bytes[15]);
-	lua_pushstring(L, buf);
-	lua_pushlstring(L, (const char*)bytes, 16);
-	return 2;
-}
-#endif
 
 #ifdef _WIN32
 static int GetLastErrorAsMessage(lua_State* L)
@@ -134,8 +75,8 @@ static int GetLastErrorAsMessage(lua_State* L) {
 	lua_pop(L, lua_gettop(L));
 	char buf[256] = {};
 	// strerror_r has two incompatible signatures depending on feature macros:
-	//   GNU  (_GNU_SOURCE):    char* strerror_r(int, char*, size_t)  — returns pointer, may ignore buf
-	//   POSIX (_POSIX_C_SOURCE >= 200112L && !_GNU_SOURCE): int — writes into buf
+	//   GNU  (_GNU_SOURCE):    char* strerror_r(int, char*, size_t)  â€” returns pointer, may ignore buf
+	//   POSIX (_POSIX_C_SOURCE >= 200112L && !_GNU_SOURCE): int â€” writes into buf
 	// Cast the call through (void*) to suppress the "ignoring return value" warning on
 	// the GNU variant, then fall back to strerror() which is always correct here since
 	// Lua scripts run on a single OS thread managed by KitsuneEngine.
@@ -558,8 +499,8 @@ static int L_GetGlobalMemoryStatus(lua_State* L) {
 	case 2: lua_pushinteger(L, (lua_Integer)(memAvail  / DIV)); break;
 	case 3: lua_pushinteger(L, (lua_Integer)(swapTotal / DIV)); break;
 	case 4: lua_pushinteger(L, (lua_Integer)(swapFree  / DIV)); break;
-	case 5: lua_pushinteger(L, (lua_Integer)(memTotal  / DIV)); break;  // virtual ˜ total on Linux
-	case 6: lua_pushinteger(L, (lua_Integer)(memAvail  / DIV)); break;  // virtual avail ˜ avail
+	case 5: lua_pushinteger(L, (lua_Integer)(memTotal  / DIV)); break;  // virtual Ëœ total on Linux
+	case 6: lua_pushinteger(L, (lua_Integer)(memAvail  / DIV)); break;  // virtual avail Ëœ avail
 	default: lua_pushinteger(L, load); break;
 	}
 	return 1;
@@ -801,9 +742,6 @@ int luaopen_misc(lua_State* L) {
 
 	lua_pushcfunction(L, GetIsAdmin);
 	lua_setglobal(L, "GetIsAdmin");
-
-	lua_pushcfunction(L, lua_uuid);
-	lua_setglobal(L, "UUID");
 
 	lua_pushcfunction(L, Time);
 	lua_setglobal(L, "Time");

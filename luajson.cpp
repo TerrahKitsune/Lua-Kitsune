@@ -1,9 +1,10 @@
-#include "luajson.h"
+ï»¿#include "luajson.h"
 #include "stream.h"
 #include "luawchar.h"
+#include "luaidentifier.h"
 
 // Unique address used as the JSON null sentinel.
-// Both encoder and decoder reference this directly — no registry lookup needed.
+// Both encoder and decoder reference this directly â€” no registry lookup needed.
 static char g_json_null;
 // Unique address used as the Lua registry key for the shared bridge LuaJson instance.
 static char g_bridge_json_key;
@@ -60,7 +61,7 @@ int lua_json_new(lua_State* L) {
 }
 
 // =============================================================================
-// Encoder — buffer helpers
+// Encoder â€” buffer helpers
 // =============================================================================
 
 static void jbuf_grow(LuaJson* j, lua_State* L, size_t need) {
@@ -98,11 +99,11 @@ static void jbuf_emitc(LuaJson* j, lua_State* L, char c) {
 	j->out[j->outLen++] = c;
 }
 
-// For string literals only — sizeof gives the compile-time length.
+// For string literals only â€” sizeof gives the compile-time length.
 #define jbuf_emitlit(j, L, s) jbuf_emit(j, L, "" s, sizeof(s) - 1)
 
 // =============================================================================
-// Encoder — anti-recursion
+// Encoder â€” anti-recursion
 // =============================================================================
 
 
@@ -134,7 +135,7 @@ static void rec_pop(LuaJson* j) {
 }
 
 // =============================================================================
-// Encoder — value functions
+// Encoder â€” value functions
 // =============================================================================
 
 static void enc_value(LuaJson* j, lua_State* L, int depth);
@@ -307,6 +308,12 @@ static void enc_value(LuaJson* j, lua_State* L, int depth) {
 			lua_pop(L, 1);
 			break;
 		}
+		if (lua_isidentifier(L, -1)) {
+			lua_identifier_push_string(L, -1);
+			enc_string(j, L);
+			lua_pop(L, 1);
+			break;
+		}
 		if (lua_isstream(L, -1)) {
 			LuaStream* s = lua_toluastream(L, -1);
 			if (s && (s->Caps & STREAM_CAP_READ) && (s->Caps & STREAM_CAP_SEEK)) {
@@ -327,7 +334,7 @@ static void enc_value(LuaJson* j, lua_State* L, int depth) {
 		break;
 	default:
 		// Functions, threads, and non-null userdata are not representable in
-		// JSON — emit null so the output stays valid and callers can detect the
+		// JSON â€” emit null so the output stays valid and callers can detect the
 		// gap from the missing value rather than from a garbage pointer string.
 		jbuf_emitlit(j, L, "null");
 		break;
@@ -335,7 +342,7 @@ static void enc_value(LuaJson* j, lua_State* L, int depth) {
 }
 
 // =============================================================================
-// Decoder — read helpers
+// Decoder â€” read helpers
 // =============================================================================
 
 static char jread_next(LuaJson* j) {
@@ -401,7 +408,7 @@ static char jread_skip(LuaJson* j) {
 }
 
 // =============================================================================
-// Decoder — UTF-8 helper
+// Decoder â€” UTF-8 helper
 // =============================================================================
 
 static int utf8_encode(unsigned int cp, char* out) {
@@ -428,7 +435,7 @@ static int utf8_encode(unsigned int cp, char* out) {
 }
 
 // =============================================================================
-// Decoder — value functions
+// Decoder â€” value functions
 // =============================================================================
 
 static void dec_value(LuaJson* j, lua_State* L);
@@ -638,7 +645,7 @@ static void dec_reset(LuaJson* j, const char* src, size_t len) {
 //   json:Encode(value)              arg 2 = Lua value to encode
 // =============================================================================
 
-// Forward declaration — defined in the Stream I/O section below.
+// Forward declaration â€” defined in the Stream I/O section below.
 static int json_stream_chunk_reader(lua_State* L);
 
 // Async stream decode continuation.
@@ -662,7 +669,7 @@ static int JsonDecodeAsyncContinuation(lua_State* L, int status, lua_KContext ct
 		return JsonDecodeAsyncContinuation(L, LUA_OK, ctx);
 	}
 
-	lua_pop(L, 1);  // pop nil / false — EOF
+	lua_pop(L, 1);  // pop nil / false â€” EOF
 
 	lua_Integer total = accum->vtbl->getlen(accum->native);
 	if (total <= 0) {
@@ -813,7 +820,7 @@ int lua_json_decode_into_stream(lua_State* L) {
 
 	if (st->vtbl && st->vtbl->hasdata) {
 		// Async stream: same accumulate-via-lua_callk path as lua_json_decode.
-		// Seekback is not applicable — async streams are never seekable.
+		// Seekback is not applicable â€” async streams are never seekable.
 		lua_pushluastream(L);           // L[3] = accumulator
 		lua_pushvalue(L, 2);
 		lua_getfield(L, -1, "Read");

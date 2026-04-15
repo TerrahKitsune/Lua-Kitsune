@@ -58,6 +58,8 @@
 #include "luajson.h"
 #include "base64.h"
 #include "wcharmain.h"
+#include "identifiermain.h"
+#include "luaidentifier.h"
 #include "luawchar.h"
 #include "LuaCsvMain.h"
 #include "SHA1Main.h"
@@ -398,6 +400,22 @@ static void FillKitsuneVariableFromStack(lua_State* L, int idx, KitsuneVariable*
 		break;
 	}
 	case LUA_TUSERDATA: {
+		// Identifier is bridged as LUA_TSTRING (KITSUNE_TSTRING): canonical string representation.
+		if (lua_isidentifier(L, abs_idx)) {
+			lua_identifier_push_string(L, abs_idx);
+			size_t slen;
+			const char* s = lua_tolstring(L, -1, &slen);
+			if (s) {
+				out->data = (unsigned char*)kitsune_malloc(slen + 1);
+				if (out->data) {
+					memcpy(out->data, s, slen + 1);
+					out->length = slen;
+					out->type = LUA_TSTRING;
+				}
+			}
+			lua_pop(L, 1);
+			break;
+		}
 		// Wchar is bridged as KITSUNE_TCHAR16: the internal wchar_t* is converted to char16_t*
 		// at the boundary via AllocChar16FromWchar so the native object can be reconstructed on push.
 		if (lua_iswchar(L, abs_idx)) {
@@ -690,6 +708,22 @@ static void SetSlotResult(KitsuneCoroutine* slot, lua_State* T, int idx) {
 	int t = lua_type(T, idx);
 	switch (t) {
 	case LUA_TUSERDATA: {
+		// Identifier is bridged as LUA_TSTRING (KITSUNE_TSTRING): canonical string representation.
+		if (lua_isidentifier(T, idx)) {
+			lua_identifier_push_string(T, idx);
+			size_t slen;
+			const char* s = lua_tolstring(T, -1, &slen);
+			if (s) {
+				slot->result.data = (unsigned char*)kitsune_malloc(slen + 1);
+				if (slot->result.data) {
+					memcpy(slot->result.data, s, slen + 1);
+					slot->result.length = slen;
+					slot->result.type = LUA_TSTRING;
+				}
+			}
+			lua_pop(T, 1);
+			break;
+		}
 		// Wchar is bridged as KITSUNE_TCHAR16: the internal wchar_t* is converted to char16_t*
 		// at the boundary via AllocChar16FromWchar so the native object can be reconstructed on push.
 		if (lua_iswchar(T, idx)) {
@@ -1315,6 +1349,7 @@ extern "C" {
 		lua_rawsetp(L, LUA_REGISTRYINDEX, lua_json_bridge_registry_key());
 		luaopen_base64(L);       lua_setglobal(L, "Base64");
 		luaopen_wchar(L);        lua_setglobal(L, "Wchar");
+		luaopen_identifier(L);   lua_setglobal(L, "Identifier");
 		luaopen_csv(L);          lua_setglobal(L, "CSV");
 		luaopen_sha1(L);         lua_setglobal(L, "SHA1");
 

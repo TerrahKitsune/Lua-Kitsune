@@ -1,6 +1,7 @@
-#include "LuaMySQL.h"
+ï»¿#include "LuaMySQL.h"
 #include "stream.h"
 #include "luawchar.h"
+#include "luaidentifier.h"
 #ifdef _WIN32
 #pragma comment(lib, "mysql/libmysql.lib")
 #endif
@@ -64,6 +65,9 @@ static void PushAsParamString(lua_State* L, int index) {
 		lua_pushvalue(L, index);
 		ToUtf8(L);
 		lua_remove(L, -2);
+	}
+	else if (lua_isidentifier(L, index)) {
+		lua_identifier_push_string(L, index);
 	}
 	else {
 		luaL_tolstring(L, index, NULL);
@@ -338,7 +342,7 @@ int MySqlIsBusy(lua_State* L) {
 	return 1;
 }
 
-// -- QueryStreamCont — shared across Windows and Linux -------------------------
+// -- QueryStreamCont â€” shared across Windows and Linux -------------------------
 // Called when the query coroutine (T) is resumed after yielding the rowcount.
 // Yields one integer-keyed row table per resume; yields nil (returns) when done.
 static int QueryStreamCont(lua_State* L, int status, lua_KContext ctx) {
@@ -505,7 +509,7 @@ static LuaMySQLQuery* SetupQueryCoroutine(lua_State* L, LuaMySQL* m,
 //
 // Correctness rule for FreeQuery ownership:
 //   * Polling phase (QueryRunCont / QueryStoreCont / MySqlQueryBody) never
-//     calls FreeQuery when the stop flag fires — the helper must do it.
+//     calls FreeQuery when the stop flag fires â€” the helper must do it.
 //   * QueryStreamCont ALWAYS calls FreeQuery before returning (stop flag,
 //     nil/error, or natural end of rows).
 
@@ -516,7 +520,7 @@ static int HelperStreamCont(lua_State* L, int status, lua_KContext ctx) {
 	(void)status;
 	LuaMySQLQuery* q = (LuaMySQLQuery*)(intptr_t)ctx;
 
-	// Save accumulator index now — a resume below may cause T to call FreeQuery.
+	// Save accumulator index now â€” a resume below may cause T to call FreeQuery.
 	int accumIdx = q->accumTableIdx;
 
 	// Optional cancel check (q still valid at this point).
@@ -558,7 +562,7 @@ static int HelperStreamCont(lua_State* L, int status, lua_KContext ctx) {
 	int rc = lua_resume(T, L, 0, &nr);
 
 	if (rc == LUA_YIELD && nr > 0 && lua_istable(T, -1)) {
-		// Got a row — q is still alive (T yielded, hasn't called FreeQuery yet).
+		// Got a row â€” q is still alive (T yielded, hasn't called FreeQuery yet).
 		lua_xmove(T, L, 1);
 		if (nr > 1)
 			lua_pop(T, nr - 1);
@@ -566,7 +570,7 @@ static int HelperStreamCont(lua_State* L, int status, lua_KContext ctx) {
 		return lua_yieldk(L, 0, ctx, HelperStreamCont);
 	}
 
-	// T returned nil naturally — QueryStreamCont already called FreeQuery.
+	// T returned nil naturally â€” QueryStreamCont already called FreeQuery.
 	if (nr > 0)
 		lua_pop(T, nr);
 	// q is freed; use saved accumIdx only.
@@ -580,7 +584,7 @@ static int HelperWaitCont(lua_State* L, int status, lua_KContext ctx) {
 	LuaMySQLQuery* q = (LuaMySQLQuery*)(intptr_t)ctx;
 
 	// Cancel check. T is in the polling phase here (QueryRunCont / QueryStoreCont).
-	// Those continuations do NOT call FreeQuery on stop — the helper must.
+	// Those continuations do NOT call FreeQuery on stop â€” the helper must.
 	if (q->cancelFnRef != LUA_NOREF) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, q->cancelFnRef);
 		int cancelled = (lua_pcall_nohook(L, 0, 1, 0) == LUA_OK) && lua_toboolean(L, -1);
@@ -650,12 +654,12 @@ static int HelperWaitCont(lua_State* L, int status, lua_KContext ctx) {
 		return 2;
 	}
 
-	// Rowcount integer — T is now suspended in QueryStreamCont.
+	// Rowcount integer â€” T is now suspended in QueryStreamCont.
 	lua_Integer rowcount = lua_tointeger(T, -1);
 	lua_pop(T, nr);
 
 	if (q->helperMode == MYSQL_HELPER_NONQUERY) {
-		// Stop T — QueryStreamCont calls FreeQuery.
+		// Stop T â€” QueryStreamCont calls FreeQuery.
 		lua_pushboolean(T, 1);
 		int nr2;
 		lua_resume(T, L, 1, &nr2);
@@ -670,20 +674,20 @@ static int HelperWaitCont(lua_State* L, int status, lua_KContext ctx) {
 		int nr2 = 0;
 		int rc2 = lua_resume(T, L, 0, &nr2); // fetch first row
 		if (rc2 == LUA_YIELD && nr2 > 0 && lua_istable(T, -1)) {
-			// Got a row — q still alive.
+			// Got a row â€” q still alive.
 			lua_rawgeti(T, -1, 1);  // col[1] onto T
 			lua_xmove(T, L, 1);     // move col[1] to L
 			lua_pop(T, nr2);        // pop row table
 			lua_pushboolean(T, 1);
 			int nr3;
-			lua_resume(T, L, 1, &nr3); // stop T — QueryStreamCont calls FreeQuery
+			lua_resume(T, L, 1, &nr3); // stop T â€” QueryStreamCont calls FreeQuery
 			if (nr3 > 0)
 				lua_pop(T, nr3);
 			lua_pushboolean(L, 1);
 			lua_insert(L, -2); // true, col1
 			return 2;
 		}
-		// No rows — T returned nil, QueryStreamCont already called FreeQuery.
+		// No rows â€” T returned nil, QueryStreamCont already called FreeQuery.
 		if (nr2 > 0)
 			lua_pop(T, nr2);
 		lua_pushboolean(L, 1);

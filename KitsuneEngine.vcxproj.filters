@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="Source Files">
@@ -150,6 +150,15 @@
     <Filter Include="LuaWchar\Source Files">
       <UniqueIdentifier>{5152b899-2bcf-47db-bb32-93b6dca0ed23}</UniqueIdentifier>
     </Filter>
+    <Filter Include="LuaIdentifier">
+      <UniqueIdentifier>{a1b2c3d4-e5f6-7890-abcd-ef1234567890}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaIdentifier\Header Files">
+      <UniqueIdentifier>{b2c3d4e5-f6a7-8901-bcde-f12345678901}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaIdentifier\Source Files">
+      <UniqueIdentifier>{c3d4e5f6-a7b8-9012-cdef-123456789012}</UniqueIdentifier>
+    </Filter>
     <Filter Include="LuaCSV">
       <UniqueIdentifier>{035b992b-c43a-4798-9516-67392a93ebeb}</UniqueIdentifier>
     </Filter>
@@ -298,6 +307,12 @@
     </ClCompile>
     <ClCompile Include="luawchar.cpp">
       <Filter>LuaWchar\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="identifiermain.cpp">
+      <Filter>LuaIdentifier</Filter>
+    </ClCompile>
+    <ClCompile Include="luaidentifier.cpp">
+      <Filter>LuaIdentifier\Source Files</Filter>
     </ClCompile>
     <ClCompile Include="luacsv.cpp">
       <Filter>LuaCSV\Source Files</Filter>
@@ -461,9 +476,6 @@
     <ClCompile Include="miniz.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="LuaPostgres.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="LuaProcess.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -487,6 +499,9 @@
     </ClCompile>
     <ClCompile Include="kitsuneuserdata.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaPostgres.cpp">
+      <Filter>LuaPostgres\Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -594,6 +609,12 @@
     </ClInclude>
     <ClInclude Include="luawchar.h">
       <Filter>LuaWchar\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="identifiermain.h">
+      <Filter>LuaIdentifier</Filter>
+    </ClInclude>
+    <ClInclude Include="luaidentifier.h">
+      <Filter>LuaIdentifier\Header Files</Filter>
     </ClInclude>
     <ClInclude Include="luacsv.h">
       <Filter>LuaCSV\Header Files</Filter>

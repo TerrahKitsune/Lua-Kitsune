@@ -25,17 +25,11 @@ A comprehensive reference for all available functions in the Lua environment.
 - [SQLite](#sqlite)
 - [Json](#json)
 - [Wchar](#wchar)
+- [Identifier](#identifier)
 - [FileSystem](#filesystem)
 ---
 
 ## Global Functions
-
-### UUID Generation
-
-```lua
-string, raw16bytestring UUID()
-```
-Returns a UUID. On Windows uses `CoCreateGuid`; on Linux uses `getrandom`. Returns `nil` on failure.
 
 ### CRC Functions
 
@@ -1534,6 +1528,41 @@ int Wchar:Find(substring, opt offset)
 - `..` (concat): returns new Wchar
 - `#` (length): returns length
 - `==` (equal): compares Wchars
+
+---
+
+## Identifier
+
+A typed userdata for unique identifiers. Supports UUID (RFC 4122 v4, 16 bytes) and OID (MongoDB ObjectID, 12 bytes).
+
+### Constructors
+
+```lua
+Identifier Identifier.NewUUID()
+Identifier Identifier.NewOID()
+Identifier Identifier.FromString(str)
+Identifier Identifier.FromBytes(bytes)
+```
+
+- `NewUUID`: generates a new RFC 4122 v4 UUID. On Windows uses `CoCreateGuid`; on Linux uses `getrandom`.
+- `NewOID`: generates a new MongoDB-compatible ObjectID (4-byte Unix timestamp + 5 random bytes + 3-byte counter).
+- `FromString`: parses a 36-character UUID string (`xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`) or a 24-character hex OID string.
+- `FromBytes`: wraps a 16-byte (UUID) or 12-byte (OID) binary string into an Identifier.
+
+### Methods
+
+```lua
+string  id:GetType()    -- "UUID" or "OID"
+string  id:AsBytes()    -- raw bytes (16 for UUID, 12 for OID)
+string  id:AsString()   -- same as tostring(id)
+```
+
+### Metamethods
+
+```lua
+tostring(id)   -- canonical string representation
+id == other    -- true when type, length, and bytes all match
+```
 
 ---
 

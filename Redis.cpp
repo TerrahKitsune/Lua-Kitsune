@@ -1,5 +1,6 @@
-#include "Redis.h"
+﻿#include "Redis.h"
 #include "RedisJson.h"
+#include "luaidentifier.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -283,6 +284,14 @@ LuaRedis* RedisCommandInternal(lua_State* L) {
 
 	if (top > 0)
 	{
+		for (int n = 0; n < top; n++) {
+			int argIdx = n + idx + 1;
+			if (lua_isidentifier(L, argIdx)) {
+				lua_identifier_push_string(L, argIdx);
+				lua_replace(L, argIdx);
+			}
+		}
+
 		luaRedis->argv = (char**)kitsune_calloc(top, sizeof(char*));
 		luaRedis->argvlen = (size_t*)kitsune_calloc(top, sizeof(size_t));
 
