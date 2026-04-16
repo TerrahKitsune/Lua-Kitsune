@@ -53,7 +53,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(SolutionDir)libarchive\include;$(SolutionDir)mysql\include;$(SolutionDir)postgres\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)hiredis;$(SolutionDir)curl\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)libarchive\include;$(SolutionDir)mysql\include;$(SolutionDir)postgres\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)hiredis;$(SolutionDir)curl\include;$(SolutionDir)mongodb\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4703;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <PreprocessorDefinitions>KITSUNE_HTTP;KITSUNE_KAFKA;KITSUNE_REDIS;KITSUNE_ENGINE_EXPORTS;KITSUNE_ALL;STANDALONEGFF;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
@@ -63,7 +63,7 @@
     <Link>
       <LinkIncremental>false</LinkIncremental>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>$(SolutionDir)mysql\libmysql.lib;ws2_32.lib;archive.lib;bz2d.lib;lzma.lib;zlibd.lib;zstd.lib;Cabinet.lib;$(SolutionDir)curl\lib\libcurl.lib;$(SolutionDir)hiredis\hiredis.lib;$(SolutionDir)hiredis\hiredis_ssl.lib;$(SolutionDir)OpenSSL\libssl.lib;$(SolutionDir)OpenSSL\libcrypto.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(SolutionDir)mysql\libmysql.lib;ws2_32.lib;archive.lib;bz2d.lib;lzma.lib;zlibd.lib;zstd.lib;Cabinet.lib;$(SolutionDir)mongodb\debug\lib\mongoc2.lib;$(SolutionDir)mongodb\debug\lib\bson2.lib;$(SolutionDir)mongodb\debug\lib\utf8proc_static.lib;Dnsapi.lib;Bcrypt.lib;Secur32.lib;Ncrypt.lib;Crypt32.lib;ws2_32.lib;$(SolutionDir)curl\lib\libcurl.lib;$(SolutionDir)hiredis\hiredis.lib;$(SolutionDir)hiredis\hiredis_ssl.lib;$(SolutionDir)OpenSSL\libssl.lib;$(SolutionDir)OpenSSL\libcrypto.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(SolutionDir)libarchive\debug\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <LargeAddressAware>true</LargeAddressAware>
       <IgnoreSpecificDefaultLibraries>msvcrt.lib;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
@@ -79,7 +79,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(SolutionDir)libarchive\include;$(SolutionDir)mysql\include;$(SolutionDir)postgres\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)hiredis;$(SolutionDir)curl\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)libarchive\include;$(SolutionDir)mysql\include;$(SolutionDir)postgres\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)hiredis;$(SolutionDir)curl\include;$(SolutionDir)mongodb\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4703;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <PreprocessorDefinitions>KITSUNE_HTTP;KITSUNE_KAFKA;KITSUNE_REDIS;KITSUNE_ENGINE_EXPORTS;KITSUNE_ALL;STANDALONEGFF;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
@@ -91,7 +91,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>$(SolutionDir)mysql\libmysql.lib;ws2_32.lib;archive.lib;bz2.lib;lzma.lib;zlib.lib;zstd.lib;Cabinet.lib;$(SolutionDir)curl\lib\libcurl.lib;$(SolutionDir)hiredis\hiredis.lib;$(SolutionDir)hiredis\hiredis_ssl.lib;$(SolutionDir)OpenSSL\libssl.lib;$(SolutionDir)OpenSSL\libcrypto.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(SolutionDir)mysql\libmysql.lib;ws2_32.lib;archive.lib;bz2.lib;lzma.lib;zlib.lib;zstd.lib;Cabinet.lib;$(SolutionDir)mongodb\lib\mongoc2.lib;$(SolutionDir)mongodb\lib\bson2.lib;$(SolutionDir)mongodb\lib\utf8proc_static.lib;Dnsapi.lib;Bcrypt.lib;Secur32.lib;Ncrypt.lib;Crypt32.lib;ws2_32.lib;$(SolutionDir)curl\lib\libcurl.lib;$(SolutionDir)hiredis\hiredis.lib;$(SolutionDir)hiredis\hiredis_ssl.lib;$(SolutionDir)OpenSSL\libssl.lib;$(SolutionDir)OpenSSL\libcrypto.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(SolutionDir)libarchive\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <LargeAddressAware>true</LargeAddressAware>
     </Link>
@@ -197,6 +197,8 @@
     <ClCompile Include="md5.c" />
     <ClCompile Include="MD5Main.cpp" />
     <ClCompile Include="MySQLMain.cpp" />
+    <ClCompile Include="LuaMongo.cpp" />
+    <ClCompile Include="MongoMain.cpp" />
     <ClCompile Include="PostgresMain.cpp" />
     <ClCompile Include="ProcessMain.cpp" />
     <ClCompile Include="SQLite\sqlite3.c" />
@@ -306,6 +308,8 @@
     <ClInclude Include="md5.h" />
     <ClInclude Include="MD5Main.h" />
     <ClInclude Include="MySQLMain.h" />
+    <ClInclude Include="LuaMongo.h" />
+    <ClInclude Include="MongoMain.h" />
     <ClInclude Include="PostgresMain.h" />
     <ClInclude Include="ProcessMain.h" />
     <ClInclude Include="SQLite\sqlite3.h" />

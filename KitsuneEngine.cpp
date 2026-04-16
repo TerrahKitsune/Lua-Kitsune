@@ -42,6 +42,9 @@
 #ifdef KITSUNE_REDIS
 #include "RedisMain.h"
 #endif
+#ifdef KITSUNE_MONGO
+#include "MongoMain.h"
+#endif
 
 #include "LuaMutexMain.h"
 
@@ -1397,6 +1400,9 @@ extern "C" {
 #endif
 #ifdef KITSUNE_REDIS
 		luaopen_redis(L);        lua_setglobal(L, "Redis");
+#endif
+#ifdef KITSUNE_MONGO
+		luaopen_mongo(L);        lua_setglobal(L, "MongoDB");
 #endif
 		luaopen_process(L);      lua_setglobal(L, "Process");
 		luaopen_luaaes(L);       lua_setglobal(L, "Aes");
