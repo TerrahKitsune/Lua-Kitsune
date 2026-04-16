@@ -366,7 +366,7 @@ public sealed class MySqlTests
             coroutine.resume(co, true)
             return tostring(type(row[1])) .. ':' .. tostring(type(row[2])) .. ':' .. tostring(type(row[3]))
         ");
-        r.String.ShouldBe("number:number:number");
+        r.String.ShouldBe("number:number:userdata");
     }
 
     [MySqlFact]
@@ -445,7 +445,7 @@ public sealed class MySqlTests
             coroutine.resume(co, true)
             return tostring(type(row[1])) .. ':' .. tostring(type(row[2]))
         ");
-        r.String.ShouldBe("string:string");
+        r.String.ShouldBe("userdata:string");
     }
 
     // -- NonQuery --------------------------------------------------------------
