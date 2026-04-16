@@ -3702,4 +3702,28 @@ extern "C" {
 		return block;
 	}
 
+	KITSUNE_API KitsuneVariable* KitsuneToString(const KitsuneVariable* var) {
+		KitsuneState* state = g_state;
+		if (!state || !state->L || !var)
+			return MakeNoneVariable();
+
+		LuaAccessGuard lock(state);
+		int stackBefore = lua_gettop(state->L);
+
+		PushKitsuneVariable(state->L, var);
+		size_t len = 0;
+		const char* str = luaL_tolstring(state->L, -1, &len);
+		KitsuneVariable* out;
+		if (str) {
+			out = MakeStringVariable(KITSUNE_TSTRING, str, len);
+			if (!out)
+				out = MakeErrorVariable("out of memory");
+		}
+		else {
+			out = MakeNilVariable();
+		}
+		lua_settop(state->L, stackBefore);
+		return out;
+	}
+
 } // extern "C"

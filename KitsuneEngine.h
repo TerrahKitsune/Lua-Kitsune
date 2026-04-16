@@ -467,4 +467,8 @@ extern "C" {
 	// The JSON string is UTF-8 encoded and null-terminated, with byte length in .length (excluding null terminator).
 	// KITSUNE_TNONE = var is not a table; KITSUNE_TERROR = serialization error (message in .data). Returns NULL on OOM. Thread-safe.
 	KITSUNE_API KitsuneVariable* KitsuneGetTableContentsAsJson(const KitsuneVariable* var);
+	// Returns the kitsune variable as a string. For tables, this is the same as luaL_tolstring (invoking metamethod) or the same as passing a value through luas tostring().
+	// For other types, it's a reasonable string representation (e.g. numbers are converted to their literal string form).
+	// Returns NULL on OOM. Thread-safe.
+	KITSUNE_API KitsuneVariable* KitsuneToString(const KitsuneVariable* var);
 }

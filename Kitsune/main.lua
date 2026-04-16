@@ -136,48 +136,7 @@ local function CreateGCPrint()
 end
 CreateGCPrint();
 collectgarbage();
+GetKey = Session.Console.GetKey;
 
 SetTitle("Kitsune: ".._VERSION);
-
-print(Test(1, "a", 3.14));
-
-local test=[[{
-  "NullableGuid": {
-    "HasValue": false,
-    "Value": "SomeGuidBlablabla"
-  },
-  "OtherProperties": null,
-  "TestArray": [
-    {"Id": 1, "Name": "Cake"},
-    {"Id": 2, "Name": "Also Cake"}
-  ]
-}]]
-
-local j = Json.Create(true):Decode(test);
-
-print(Json.Create(true):Encode(j));
-for k,v in pairs(Kafka) do
-	print(k, v);
-end
-
 GetKey();
-
---dofile("tests/run_all.lua");
---dofile("tests/imgui_simple.lua");
-if true then return VERSION; end
-
-local function HexToString(hexString)
-    local str = ""
-    for i = 1, #hexString, 2 do
-        local byte = tonumber(hexString:sub(i, i+1), 16)
-        str = str .. string.char(byte)
-    end
-    return str
-end
-
-local sqlite = SQLite.Open();
-
-assert(sqlite:Query([[SELECT load_extension("C:/Users/Terrah/Documents/GitHub/Lua-Kitsune/x64/Debug/SQLiteKitsune.dll");]]));
-assert(sqlite:Query([[SELECT LuaFunction('dofile', 'C:/Users/Terrah/Documents/GitHub/Lua-Kitsune/sqlitemain.lua');]]));
-
-return VERSION;

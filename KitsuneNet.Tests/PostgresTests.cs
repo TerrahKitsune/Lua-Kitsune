@@ -284,7 +284,7 @@ public sealed class PostgresTests
 			coroutine.resume(co, true)
 			return tostring(type(v[1])) .. ':' .. tostring(type(v[2])) .. ':' .. tostring(type(v[3]))
 		");
-		r.String.ShouldBe("number:number:userdata");
+        r.String.ShouldBe("number:number:userdata");
     }
 
     [PostgresFact]

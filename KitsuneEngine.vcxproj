@@ -318,6 +318,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Lua functions.md" />
+    <None Include="plans\imgui-integration.md" />
     <None Include="testEnvironments.json" />
     <None Include="triplets\x64-windows-static-md.cmake" />
     <None Include="vcpkg.json" />

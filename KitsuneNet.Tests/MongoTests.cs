@@ -183,7 +183,7 @@ public sealed class MongoTests
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
             local db = assert({ConnectLua()})
-            local tag = 'copilot_page_' .. tostring(os.time())
+            local tag = 'test_page_' .. tostring(os.time())
             for i=1,5 do
                 db:InsertOne({Db()}, {Coll()}, {{tag=tag, n=i}})
                 db:Wait(); db:GetResult()
@@ -205,7 +205,7 @@ public sealed class MongoTests
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
             local db = assert({ConnectLua()})
-            local tag = 'copilot_cnt_' .. tostring(os.time())
+            local tag = 'test_cnt_' .. tostring(os.time())
             for i=1,3 do
                 db:InsertOne({Db()}, {Coll()}, {{tag=tag}})
                 db:Wait(); db:GetResult()
@@ -280,7 +280,7 @@ public sealed class MongoTests
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
             local db = assert({ConnectLua()})
-            local tag = 'copilot_im_' .. tostring(os.time())
+            local tag = 'test_im_' .. tostring(os.time())
             db:InsertMany({Db()}, {Coll()}, {{{{tag=tag,n=1}},{{tag=tag,n=2}},{{tag=tag,n=3}}}})
             db:Wait()
             local _, err = db:GetResult()
@@ -327,7 +327,7 @@ public sealed class MongoTests
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
             local db = assert({ConnectLua()})
-            db:Find({Db()}, 'copilot_no_such_collection_xyz', {{}})
+            db:Find({Db()}, 'test_no_such_collection_xyz', {{}})
             db:Wait()
             local res, err = db:GetResult()
             return tostring(err == nil) .. ':' .. tostring(type(res) == 'table')
@@ -371,7 +371,7 @@ public sealed class MongoTests
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
             local db = assert({ConnectLua()})
-            local tag = 'copilot_um_' .. tostring(os.time())
+            local tag = 'test_um_' .. tostring(os.time())
             for i=1,3 do
                 db:InsertOne({Db()}, {Coll()}, {{tag=tag, v=0}})
                 db:Wait(); db:GetResult()
@@ -397,7 +397,7 @@ public sealed class MongoTests
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
             local db = assert({ConnectLua()})
-            local tag = 'copilot_dm_' .. tostring(os.time())
+            local tag = 'test_dm_' .. tostring(os.time())
             for i=1,4 do
                 db:InsertOne({Db()}, {Coll()}, {{tag=tag}})
                 db:Wait(); db:GetResult()
@@ -422,7 +422,7 @@ public sealed class MongoTests
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
             local db = assert({ConnectLua()})
-            local tag = 'copilot_empty_' .. tostring(os.time())
+            local tag = 'test_empty_' .. tostring(os.time())
             db:Find({Db()}, {Coll()}, {{tag=tag}})
             db:Wait()
             local res, err = db:GetResult()
@@ -479,7 +479,7 @@ public sealed class MongoTests
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
             local db = assert({ConnectLua()})
-            local tag = 'copilot_agg_' .. tostring(os.time())
+            local tag = 'test_agg_' .. tostring(os.time())
             for i=1,3 do
                 db:InsertOne({Db()}, {Coll()}, {{tag=tag, v=i}})
                 db:Wait(); db:GetResult()
@@ -719,7 +719,7 @@ public sealed class MongoTests
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
             local db = assert({ConnectLua()})
-            local tag = 'copilot_sort_' .. tostring(os.time())
+            local tag = 'test_sort_' .. tostring(os.time())
             for i=1,3 do
                 db:InsertOne({Db()}, {Coll()}, {{tag=tag, n=i}})
                 db:Wait(); db:GetResult()
@@ -878,7 +878,7 @@ public sealed class MongoTests
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
             local db = assert({ConnectLua()})
-            local tag = 'copilot_im2_' .. tostring(os.time())
+            local tag = 'test_im2_' .. tostring(os.time())
             db:InsertMany({Db()}, {Coll()}, {{{{tag=tag,n=1}},{{tag=tag,n=2}}}})
             db:Wait()
             local reply, err = db:GetResult()
@@ -955,7 +955,7 @@ public sealed class MongoTests
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
             local db = assert({ConnectLua()})
-            local tag = 'copilot_large_' .. tostring(os.time())
+            local tag = 'test_large_' .. tostring(os.time())
             for i=1,70 do
                 db:InsertOne({Db()}, {Coll()}, {{tag=tag, n=i}})
                 db:Wait(); db:GetResult()
@@ -998,7 +998,7 @@ public sealed class MongoTests
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
             local db = assert({ConnectLua()})
-            local tag = 'copilot_cancel_anchor_' .. tostring(os.time())
+            local tag = 'test_cancel_anchor_' .. tostring(os.time())
             db:Find({Db()}, {Coll()}, {{tag=tag}})
             collectgarbage('collect')
             db:Cancel()
@@ -1219,7 +1219,7 @@ public sealed class MongoTests
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
             local db = assert({ConnectLua()})
-            local tag = 'copilot_count_' .. tostring(os.time())
+            local tag = 'test_count_' .. tostring(os.time())
             for i=1,5 do
                 db:InsertOne({Db()}, {Coll()}, {{tag=tag, even=(i % 2 == 0)}})
                 db:Wait(); db:GetResult()
@@ -1268,7 +1268,7 @@ public sealed class MongoTests
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
             local db = assert({ConnectLua()})
-            local tag = 'copilot_lss_' .. tostring(os.time())
+            local tag = 'test_lss_' .. tostring(os.time())
             for i=1,5 do
                 db:InsertOne({Db()}, {Coll()}, {{tag=tag, n=i}})
                 db:Wait(); db:GetResult()
@@ -1314,7 +1314,7 @@ public sealed class MongoTests
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
             local db = assert({ConnectLua()})
-            local tag = 'copilot_noopt_' .. tostring(os.time())
+            local tag = 'test_noopt_' .. tostring(os.time())
             db:InsertOne({Db()}, {Coll()}, {{tag=tag, v=1}})
             db:Wait(); db:GetResult()
             db:Find({Db()}, {Coll()}, {{tag=tag}})
@@ -1356,7 +1356,7 @@ public sealed class MongoTests
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
             local db = assert({ConnectLua()})
-            local tag = 'copilot_agg2_' .. tostring(os.time())
+            local tag = 'test_agg2_' .. tostring(os.time())
             for i=1,4 do
                 db:InsertOne({Db()}, {Coll()}, {{tag=tag, v=i}})
                 db:Wait(); db:GetResult()
@@ -1476,7 +1476,7 @@ public sealed class MongoTests
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
             local db = assert({ConnectLua()})
-            local tag = 'copilot_intls_' .. tostring(os.time())
+            local tag = 'test_intls_' .. tostring(os.time())
             for i=1,3 do
                 db:InsertOne({Db()}, {Coll()}, {{tag=tag, n=i}})
                 db:Wait(); db:GetResult()
@@ -1542,7 +1542,7 @@ public sealed class MongoTests
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
             local db = assert({ConnectLua()})
-            local tag = 'copilot_seq_' .. tostring(os.time())
+            local tag = 'test_seq_' .. tostring(os.time())
             for i=1,5 do
                 db:InsertOne({Db()}, {Coll()}, {{tag=tag, n=i}})
                 db:Wait(); db:GetResult()

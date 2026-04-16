@@ -883,6 +883,7 @@
     <None Include="testEnvironments.json" />
     <None Include="vcpkg.json" />
     <None Include="triplets\x64-windows-static-md.cmake" />
+    <None Include="plans\imgui-integration.md" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />
