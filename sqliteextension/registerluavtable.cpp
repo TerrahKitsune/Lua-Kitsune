@@ -1,4 +1,4 @@
-ï»¿#include "registerluavtable.h"
+#include "registerluavtable.h"
 #include "luafunctions.h"
 #include "vtabhelpers.h"
 #include <string.h>
@@ -32,7 +32,7 @@ struct LuaVTabCursor {
 	int eof;
 };
 
-// ---- module destructor â€” sole cleanup path for LuaVTabModule ----------------
+// ---- module destructor — sole cleanup path for LuaVTabModule ----------------
 
 static void lua_vtab_free_module(void* pAux) {
 	LuaVTabModule* mod = (LuaVTabModule*)pAux;
@@ -87,7 +87,7 @@ static void lua_vtab_call_reader(LuaVTabCursor* cursor, LuaVTabModule* mod) {
 	}
 }
 
-// ---- xConnect / xCreate â€” same function -------------------------------------
+// ---- xConnect / xCreate — same function -------------------------------------
 
 static int lua_vtab_connect(sqlite3* db, void* pAux, int argc, const char* const* argv,
 	sqlite3_vtab** ppVtab, char** pzErr) {
@@ -156,7 +156,7 @@ static int lua_vtab_best_index(sqlite3_vtab* pVtab, sqlite3_index_info* info) {
 			continue;
 		const char* colName = mod->fieldNames[colIdx];
 
-		// Call indexFunc(ctx, op, colName) â€” once per constraint candidate.
+		// Call indexFunc(ctx, op, colName) — once per constraint candidate.
 		// Return value convention:
 		//   nil / false / 0 / negative  ? decline this constraint
 		//   true                        ? accept, unique (SQLITE_INDEX_SCAN_UNIQUE, estimatedRows=1)
@@ -211,7 +211,7 @@ static int lua_vtab_best_index(sqlite3_vtab* pVtab, sqlite3_index_info* info) {
 	}
 
 	if (argvIdx == 1) {
-		// No constraints accepted â€” full scan.
+		// No constraints accepted — full scan.
 		sqlite3_free(idxStr);
 		return SQLITE_OK;
 	}
@@ -262,8 +262,8 @@ static int lua_vtab_close(sqlite3_vtab_cursor* pCursor) {
 
 // ---- xFilter -----------------------------------------------------------------
 //
-// idxNum == 0: full scan â€” reader called with (ctx, nth, nil).
-// idxNum == 1: index scan â€” parse idxStr ("colnum:op," pairs) + argv values to
+// idxNum == 0: full scan — reader called with (ctx, nth, nil).
+// idxNum == 1: index scan — parse idxStr ("colnum:op," pairs) + argv values to
 //              build the anchored index table {[1]={Column=name,Op=op,Value=v},...},
 //              reader called with (ctx, nth, index).
 //
@@ -286,9 +286,9 @@ static int lua_vtab_filter(sqlite3_vtab_cursor* pCursor, int idxNum, const char*
 		// Build nested KITSUNE_TTABLECONTENTS: each entry {column=N, op="=", value=v}.
 		// Inner nodes borrow SQLite-owned memory for string values; KitsuneAnchorVariable
 		// copies everything into the Lua heap before returning.
-		KeyValuePairKitsuneVariableNode innerNodes[VTAB_MAX_FIELDS][3]; // column, op, value per entry
+		KitsuneKeyValuePairVariableNode innerNodes[VTAB_MAX_FIELDS][3]; // column, op, value per entry
 		KitsuneVariable innerVars[VTAB_MAX_FIELDS];
-		KeyValuePairKitsuneVariableNode outerNodes[VTAB_MAX_FIELDS];
+		KitsuneKeyValuePairVariableNode outerNodes[VTAB_MAX_FIELDS];
 		char opBufs[VTAB_MAX_FIELDS][4]; // null-terminated op string per entry (max ">=" + null)
 		memset(innerNodes, 0, sizeof(innerNodes));
 		memset(innerVars, 0, sizeof(innerVars));
@@ -454,9 +454,9 @@ static int lua_vtab_update(sqlite3_vtab* pVtab, int argc, sqlite3_value** argv,
 		args[2] = nil;
 	}
 	else {
-		// INSERT or UPDATE â€” build data table from argv[2..argc-1] on the stack.
+		// INSERT or UPDATE — build data table from argv[2..argc-1] on the stack.
 		int dataCount = argc - 2;
-		KeyValuePairKitsuneVariableNode dataNodes[VTAB_MAX_FIELDS];
+		KitsuneKeyValuePairVariableNode dataNodes[VTAB_MAX_FIELDS];
 		memset(dataNodes, 0, sizeof(dataNodes));
 		int nodeCount = dataCount < VTAB_MAX_FIELDS ? dataCount : VTAB_MAX_FIELDS;
 		for (int i = 0; i < nodeCount; i++) {

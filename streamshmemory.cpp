@@ -13,7 +13,7 @@ static inline void flags_atomic_or(uint8_t* flags, uint8_t mask) {
 }
 
 struct InSharedMemoryStream {
-	SharedMemoryBlock* block;
+	KitsuneSharedMemoryBlock* block;
 	size_t             pos;
 };
 
@@ -106,7 +106,7 @@ static const LuaStreamVtable g_shmem_vtbl = {
 
 // -- Inbound public constructor ------------------------------------------------
 
-LuaStream* lua_push_sharedmemory_stream(lua_State* L, SharedMemoryBlock* block) {
+LuaStream* lua_push_sharedmemory_stream(lua_State* L, KitsuneSharedMemoryBlock* block) {
 	LuaStream* stream = (LuaStream*)lua_newuserdata(L, sizeof(LuaStream));
 	luaL_getmetatable(L, STREAM);
 	lua_setmetatable(L, -2);
@@ -134,14 +134,14 @@ LuaStream* lua_push_sharedmemory_stream(lua_State* L, SharedMemoryBlock* block) 
 
 
 // -- Global block registry -----------------------------------------------------
-// Every SharedMemoryBlock lives in this intrusive linked list from allocation
+// Every KitsuneSharedMemoryBlock lives in this intrusive linked list from allocation
 // until both OWNER_DISPOSED and ACCESSOR_DISPOSED flags are set, at which point
 // lua_shmem_sweep_disposed_blocks (called by the scheduler each cycle) frees it.
 
 static std::mutex    g_shmem_lock;
-static SharedMemoryBlock* g_shmem_head = NULL;
+static KitsuneSharedMemoryBlock* g_shmem_head = NULL;
 
-void lua_shmem_list_add(SharedMemoryBlock* block) {
+void lua_shmem_list_add(KitsuneSharedMemoryBlock* block) {
 	g_shmem_lock.lock();
 	block->next  = g_shmem_head;
 	g_shmem_head = block;
@@ -152,12 +152,12 @@ void lua_shmem_sweep_disposed_blocks() {
 	// Phase 1 (under lock): unlink fully-disposed blocks into a local list.
 	const BYTE mask = KITSUNE_SHARED_MEMORY_FLAG_OWNER_DISPOSED
 					| KITSUNE_SHARED_MEMORY_FLAG_ACCESSOR_DISPOSED;
-	SharedMemoryBlock* free_list = NULL;
+	KitsuneSharedMemoryBlock* free_list = NULL;
 	g_shmem_lock.lock();
-	SharedMemoryBlock** prev  = &g_shmem_head;
-	SharedMemoryBlock*  block = g_shmem_head;
+	KitsuneSharedMemoryBlock** prev  = &g_shmem_head;
+	KitsuneSharedMemoryBlock*  block = g_shmem_head;
 	while (block) {
-		SharedMemoryBlock* next = block->next;
+		KitsuneSharedMemoryBlock* next = block->next;
 		if ((block->flags & mask) == mask) {
 			*prev         = next;
 			block->next   = free_list;
@@ -170,7 +170,7 @@ void lua_shmem_sweep_disposed_blocks() {
 	g_shmem_lock.unlock();
 	// Phase 2 (outside lock): free collected blocks.
 	while (free_list) {
-		SharedMemoryBlock* next = free_list->next;
+		KitsuneSharedMemoryBlock* next = free_list->next;
 		kitsune_free(free_list);
 		free_list = next;
 	}
@@ -209,12 +209,12 @@ static const LuaStreamVtable g_shmem_out_vtbl = {
 // -- Outbound public constructor -----------------------------------------------
 
 LuaStream* lua_push_sharedmemory_stream_outbound(lua_State* L, size_t size) {
-	SharedMemoryBlock* block = (SharedMemoryBlock*)kitsune_malloc(sizeof(SharedMemoryBlock) + size);
+	KitsuneSharedMemoryBlock* block = (KitsuneSharedMemoryBlock*)kitsune_malloc(sizeof(KitsuneSharedMemoryBlock) + size);
 	if (!block) {
 		luaL_error(L, "Out of memory");
 		return NULL;
 	}
-	memset(block, 0, sizeof(SharedMemoryBlock) + size);
+	memset(block, 0, sizeof(KitsuneSharedMemoryBlock) + size);
 	block->size  = size;
 	// ACCESSOR_DISPOSED=1: no C# accessor yet. LUA_REFERENCED=1: Lua owns this stream.
 	block->flags = KITSUNE_SHARED_MEMORY_FLAG_ACCESSOR_DISPOSED
@@ -246,15 +246,15 @@ bool lua_is_outbound_sharedmemory_stream(const LuaStream* stream) {
 	return stream && stream->vtbl == &g_shmem_out_vtbl;
 }
 
-SharedMemoryBlock* lua_get_outbound_sharedmemory_block(const LuaStream* stream) {
+KitsuneSharedMemoryBlock* lua_get_outbound_sharedmemory_block(const LuaStream* stream) {
 	return ((InSharedMemoryStream*)stream->native)->block;
 }
 
 LuaStream* lua_try_push_sharedmemory_stream_outbound_copy(lua_State* L, const void* data, size_t size) {
-	SharedMemoryBlock* block = (SharedMemoryBlock*)kitsune_malloc(sizeof(SharedMemoryBlock) + size);
+	KitsuneSharedMemoryBlock* block = (KitsuneSharedMemoryBlock*)kitsune_malloc(sizeof(KitsuneSharedMemoryBlock) + size);
 	if (!block)
 		return NULL;
-	memset(block, 0, sizeof(SharedMemoryBlock) + size);
+	memset(block, 0, sizeof(KitsuneSharedMemoryBlock) + size);
 	block->size  = size;
 	block->flags = KITSUNE_SHARED_MEMORY_FLAG_ACCESSOR_DISPOSED
 				 | KITSUNE_SHARED_MEMORY_FLAG_LUA_REFERENCED;

@@ -1,4 +1,4 @@
-﻿using System.Runtime.CompilerServices;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
 
@@ -6,14 +6,14 @@ namespace KitsuneNet
 {
     /// <summary>
     /// A <see cref="System.IO.Stream"/> that directly addresses a native
-    /// <c>SharedMemoryBlock</c> without copying.
+    /// <c>KitsuneSharedMemoryBlock</c> without copying.
     /// <para>
-    /// <b>Inbound (Lua → C#):</b> created by <see cref="KitsuneEngine"/> when a Lua coroutine
+    /// <b>Inbound (Lua ? C#):</b> created by <see cref="KitsuneEngine"/> when a Lua coroutine
     /// returns a stream result.  <see cref="Dispose"/> sets <see cref="FlagAccessorDisposed"/> on
     /// the block; the engine's ticker frees it once Lua's GC also sets <see cref="FlagOwnerDisposed"/>.
     /// </para>
     /// <para>
-    /// <b>Managed (C# → Lua):</b> created via <see cref="KitsuneEngine.CreateStream"/>.
+    /// <b>Managed (C# ? Lua):</b> created via <see cref="KitsuneEngine.CreateStream"/>.
     /// Always read-write.  Pass to Lua via <see cref="KitsuneEngine.SetVariable"/> or as a
     /// coroutine argument.  C# may continue accessing the stream after the handoff for concurrent
     /// shared-memory use; call <see cref="Dispose"/> when done.  If never passed to Lua,
@@ -22,17 +22,17 @@ namespace KitsuneNet
     /// <para>
     /// All read and write operations set and clear <see cref="FlagLocked"/> on the block's
     /// <c>flags</c> byte around each access (skipped for read-only blocks).
-    /// This is a cooperative advisory signal — see <see cref="FlagLocked"/> for the full caveat.
+    /// This is a cooperative advisory signal � see <see cref="FlagLocked"/> for the full caveat.
     /// </para>
     /// </summary>
     public sealed class LuaStream : System.IO.UnmanagedMemoryStream
     {
-        // ── Flag constants (mirror KitsuneEngine.h KITSUNE_SHARED_MEMORY_FLAG_*) ──
+        // -- Flag constants (mirror KitsuneEngine.h KITSUNE_SHARED_MEMORY_FLAG_*) --
 
         /// <summary>Cooperative advisory lock bit.  Set by an accessor (including this class)
         /// before each read or write, cleared immediately after.
         /// Other accessors should spin until this bit is clear before accessing the data.
-        /// <para>⚠ Not a true mutex: the underlying byte RMW is non-atomic on x86-64
+        /// <para>? Not a true mutex: the underlying byte RMW is non-atomic on x86-64
         /// (movzx / or / mov), so two concurrent writers can both believe they hold the lock.
         /// For hard mutual exclusion use a real synchronisation primitive alongside this signal.
         /// </para></summary>
@@ -86,13 +86,13 @@ namespace KitsuneNet
         ~LuaStream() => Dispose(false);
 
         /// <summary>
-        /// Reads the <c>flags</c> byte of the underlying <c>SharedMemoryBlock</c> header.
+        /// Reads the <c>flags</c> byte of the underlying <c>KitsuneSharedMemoryBlock</c> header.
         /// Check against <see cref="FlagLocked"/>, <see cref="FlagReadOnly"/>, etc.
         /// Returns 0 if the block pointer has been cleared (after <see cref="Dispose"/>).
         /// </summary>
         public byte Flags => _blockPtr != IntPtr.Zero ? Marshal.ReadByte(_blockPtr, 0) : (byte)0;
 
-        // ── Read overrides ────────────────────────────────────────────────────────────────────
+        // -- Read overrides --------------------------------------------------------------------
 
         /// <inheritdoc/>
         public override int Read(byte[] buffer, int offset, int count)
@@ -136,7 +136,7 @@ namespace KitsuneNet
             }
         }
 
-        // ── Write overrides ───────────────────────────────────────────────────────────────────
+        // -- Write overrides -------------------------------------------------------------------
 
         /// <inheritdoc/>
         public override void Write(byte[] buffer, int offset, int count)
@@ -248,7 +248,7 @@ namespace KitsuneNet
                     // same byte. A plain read-modify-write would silently clear that bit if the
                     // GC write lands between our read and our write. Using Interlocked.Or on the
                     // 4-byte word at offset 0 (flags byte + 3 padding bytes) is safe on little-
-                    // endian x86/x64: toSet ≤ 0x7F so it only affects byte 0, and the padding
+                    // endian x86/x64: toSet = 0x7F so it only affects byte 0, and the padding
                     // bytes are always zeroed at allocation time.
                     unsafe
                     {
@@ -259,7 +259,7 @@ namespace KitsuneNet
             }
         }
 
-        // ── LOCKED-flag helpers ───────────────────────────────────────────────────────────────
+        // -- LOCKED-flag helpers ---------------------------------------------------------------
         // Sets FlagLocked before an access and clears it after (skipped on read-only blocks).
         // Non-atomic: see FlagLocked caveat above.
         private void AcquireLock()

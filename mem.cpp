@@ -9,6 +9,7 @@
 // ── Debug allocation counter ───────────────────────────────────────────────────
 #ifdef _DEBUG
 static std::atomic<size_t> g_live_allocs{ 0 };
+static std::atomic<size_t> g_permanent_allocs{ 0 };
 #endif
 
 // ── Base allocator function pointers ──────────────────────────────────────────
@@ -53,7 +54,9 @@ size_t EndMemoryManager() {
 	memState = NULL;
 	return result;
 #elif defined(_DEBUG)
-	return g_live_allocs.load();
+	size_t live = g_live_allocs.load();
+	size_t perm = g_permanent_allocs.load();
+	return live > perm ? live - perm : 0;
 #else
 	return 0;
 #endif
@@ -77,6 +80,13 @@ void InitMemoryManager() {
 #endif
 #ifdef _DEBUG
 	g_live_allocs.store(0);
+	g_permanent_allocs.store(0);
+#endif
+}
+
+void kitsune_snapshot_permanent_allocs() {
+#ifdef _DEBUG
+	g_permanent_allocs.store(g_live_allocs.load());
 #endif
 }
 

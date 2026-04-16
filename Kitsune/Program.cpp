@@ -104,6 +104,8 @@ int main(int argc, char* argv[]) {
     _CrtMemCheckpoint(&sOld);
 #endif
 
+    KitsuneInternals* internals = KitsuneGetInternals();
+
     if (!KitsuneInit()) {
         fprintf(stderr, "KitsuneInit failed\n");
         return -1;
@@ -187,7 +189,10 @@ int main(int argc, char* argv[]) {
 
     KitsuneCleanup();
 
-#if defined(_WIN32) && defined(_DEBUG)
+    if (internals && internals->MongoDbCleanUp)
+        internals->MongoDbCleanUp();
+
+#if defined(_WIN32) && defined(_DEBUG) 
     _CrtMemCheckpoint(&sNew);
     if (_CrtMemDifference(&sDiff, &sOld, &sNew)) {
         OutputDebugString("-----------_CrtMemDumpStatistics ---------");

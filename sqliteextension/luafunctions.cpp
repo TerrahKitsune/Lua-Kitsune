@@ -1,4 +1,4 @@
-ï»¿#include "luafunctions.h"
+#include "luafunctions.h"
 #include "registerluatable.h"
 #include "registerluavtable.h"
 #include <stdlib.h>
@@ -26,7 +26,7 @@ void lua_init_kitsune_state() {
 
 // Anchors a Lua function variable in the registry and adds it to the extension state.
 // Returns a kitsune_malloc'd KitsuneVariable* with its own independent registry ref.
-// The caller must NOT free it â€” it is owned by g_extState and freed by
+// The caller must NOT free it — it is owned by g_extState and freed by
 // lua_cleanup_kitsune_state via KitsuneVariableFree. Returns NULL on failure.
 KitsuneVariable* lua_add_kitsune_state(const KitsuneVariable* var) {
 	if (!g_extState || !var) return NULL;
@@ -136,9 +136,9 @@ static void free_sqlite_kv_tree(KitsuneVariable* v) {
 		v->data = NULL;
 	}
 	else if (v->type == KITSUNE_TTABLECONTENTS && v->table) {
-		KeyValuePairKitsuneVariableNode* node = v->table;
+		KitsuneKeyValuePairVariableNode* node = v->table;
 		while (node) {
-			KeyValuePairKitsuneVariableNode* next = node->next;
+			KitsuneKeyValuePairVariableNode* next = node->next;
 			free_sqlite_kv_tree(&node->key);
 			free_sqlite_kv_tree(&node->value);
 			sqlite3_free(node);
@@ -155,7 +155,7 @@ static void free_sqlite_kv_tree(KitsuneVariable* v) {
 static int execute_query_into_kv(sqlite3_stmt* stmt, KitsuneVariable* out_result) {
 	memset(out_result, 0, sizeof(KitsuneVariable));
 	out_result->type = KITSUNE_TTABLECONTENTS;
-	KeyValuePairKitsuneVariableNode** result_tail = &out_result->table;
+	KitsuneKeyValuePairVariableNode** result_tail = &out_result->table;
 	int col_count = sqlite3_column_count(stmt);
 	int row_num = 0;
 	int step_rc;
@@ -165,13 +165,13 @@ static int execute_query_into_kv(sqlite3_stmt* stmt, KitsuneVariable* out_result
 
 		KitsuneVariable row = {};
 		row.type = KITSUNE_TTABLECONTENTS;
-		KeyValuePairKitsuneVariableNode** row_tail = &row.table;
+		KitsuneKeyValuePairVariableNode** row_tail = &row.table;
 
 		for (int i = 0; i < col_count; i++) {
-			KeyValuePairKitsuneVariableNode* cell =
-				(KeyValuePairKitsuneVariableNode*)sqlite3_malloc(sizeof(KeyValuePairKitsuneVariableNode));
+			KitsuneKeyValuePairVariableNode* cell =
+				(KitsuneKeyValuePairVariableNode*)sqlite3_malloc(sizeof(KitsuneKeyValuePairVariableNode));
 			if (!cell) continue;
-			memset(cell, 0, sizeof(KeyValuePairKitsuneVariableNode));
+			memset(cell, 0, sizeof(KitsuneKeyValuePairVariableNode));
 
 			const char* colname = sqlite3_column_name(stmt, i);
 			if (!colname) {
@@ -188,10 +188,10 @@ static int execute_query_into_kv(sqlite3_stmt* stmt, KitsuneVariable* out_result
 			row_tail = &cell->next;
 		}
 
-		KeyValuePairKitsuneVariableNode* row_node =
-			(KeyValuePairKitsuneVariableNode*)sqlite3_malloc(sizeof(KeyValuePairKitsuneVariableNode));
+		KitsuneKeyValuePairVariableNode* row_node =
+			(KitsuneKeyValuePairVariableNode*)sqlite3_malloc(sizeof(KitsuneKeyValuePairVariableNode));
 		if (row_node) {
-			memset(row_node, 0, sizeof(KeyValuePairKitsuneVariableNode));
+			memset(row_node, 0, sizeof(KitsuneKeyValuePairVariableNode));
 			row_node->key.type = KITSUNE_TINTEGER;
 			row_node->key.integer = row_num;
 			row_node->value = row;
@@ -206,8 +206,8 @@ static int execute_query_into_kv(sqlite3_stmt* stmt, KitsuneVariable* out_result
 }
 
 // Bind @paramName parameters from a KitsuneVariable table to a prepared statement.
-static void bind_params_from_table(sqlite3_stmt* stmt, KeyValuePairKitsuneVariableNode* params) {
-	for (KeyValuePairKitsuneVariableNode* node = params; node; node = node->next) {
+static void bind_params_from_table(sqlite3_stmt* stmt, KitsuneKeyValuePairVariableNode* params) {
+	for (KitsuneKeyValuePairVariableNode* node = params; node; node = node->next) {
 		if (node->key.type != KITSUNE_TSTRING || !node->key.data) continue;
 		char* pname = (char*)sqlite3_malloc((int)node->key.length + 2);
 		if (!pname) continue;
@@ -220,7 +220,7 @@ static void bind_params_from_table(sqlite3_stmt* stmt, KeyValuePairKitsuneVariab
 	}
 }
 
-// SQLiteExt.Query(sql[, params]) â€” executes a SQL query and returns all rows as a table.
+// SQLiteExt.Query(sql[, params]) — executes a SQL query and returns all rows as a table.
 // params: optional {paramName = value} table for @paramName placeholders.
 // Returns: { [1] = { col = val, ... }, [2] = { ... }, ... }
 static int query_cb(int argc, const KitsuneVariable* argv, kitsune_ResultSetter resultSetter, void* userdata) {
@@ -256,7 +256,7 @@ static int query_cb(int argc, const KitsuneVariable* argv, kitsune_ResultSetter 
 	return 1;
 }
 
-// SQLiteExt.Scalar(sql[, params]) â€” executes a SQL query and returns the first column of the first row.
+// SQLiteExt.Scalar(sql[, params]) — executes a SQL query and returns the first column of the first row.
 // Returns nil if the query produces no rows. params follow the same @paramName convention as Query.
 static int scalar_cb(int argc, const KitsuneVariable* argv, kitsune_ResultSetter resultSetter, void* userdata) {
 	sqlite3* db = ((KitsuneExtState*)userdata)->db;

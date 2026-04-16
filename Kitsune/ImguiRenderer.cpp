@@ -1,4 +1,4 @@
-﻿#ifndef _CRT_SECURE_NO_WARNINGS
+#ifndef _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 #ifdef KITSUNE_IMGUI
@@ -18,7 +18,7 @@
 // Use these macros in every kitsune_CFunction in this file.
 #define IMGUI_ARGC  (argc - 1)
 #define IMGUI_ARGV  (argc > 0 ? argv + 1 : argv)
-// Extract ImguiWindowContext* from self (argv[0]) — works even when ud is null
+// Extract ImguiWindowContext* from self (argv[0]) � works even when ud is null
 // because hand-written overrides are registered with userdata=nullptr.
 #define IMGUI_CTX   ((ImguiWindowContext*)(argc > 0 && argv[0].type == KITSUNE_TUSERDATA && argv[0].userdata ? argv[0].userdata->userdata : ud))
 // Guard: return a TERROR if ctx is null.
@@ -55,19 +55,19 @@ static int imgui_gc(int argc, const KitsuneVariable* argv,
     if (ctx->context)  { KitsuneVariableFree(ctx->context);  ctx->context  = nullptr; }
     if (ctx->onError)  { KitsuneVariableFree(ctx->onError);  ctx->onError  = nullptr; }
 
-    // Free NamedKitsuneFunction nodes in reg.Functions
-    NamedKitsuneFunction* fn = ctx->reg.Functions;
+    // Free KitsuneNamedFunction nodes in reg.Functions
+    KitsuneNamedFunction* fn = ctx->reg.Functions;
     while (fn) {
-        NamedKitsuneFunction* next = fn->Next;
+        KitsuneNamedFunction* next = fn->Next;
         free(fn);
         fn = next;
     }
     ctx->reg.Functions = nullptr;
 
-    // Free NamedKitsuneFunction nodes in reg.MetaTableFunctions
+    // Free KitsuneNamedFunction nodes in reg.MetaTableFunctions
     fn = ctx->reg.MetaTableFunctions;
     while (fn) {
-        NamedKitsuneFunction* next = fn->Next;
+        KitsuneNamedFunction* next = fn->Next;
         free(fn);
         fn = next;
     }
@@ -422,7 +422,7 @@ static int ImguiRenderer_Combo(int argc, const KitsuneVariable* argv,
 
     int currentItem = (int)_argv[1].integer;
 
-    const KeyValuePairKitsuneVariableNode* node = _argv[2].table;
+    const KitsuneKeyValuePairVariableNode* node = _argv[2].table;
     int count = (int)_argv[2].length;
 
     const char** items = count > 0 ? (const char**)alloca(count * sizeof(const char*)) : nullptr;
@@ -468,7 +468,7 @@ static int ImguiRenderer_ListBox(int argc, const KitsuneVariable* argv,
 
     int currentItem = (int)_argv[1].integer;
 
-    const KeyValuePairKitsuneVariableNode* node = _argv[2].table;
+    const KitsuneKeyValuePairVariableNode* node = _argv[2].table;
     int count = (int)_argv[2].length;
 
     const char** items = count > 0 ? (const char**)alloca(count * sizeof(const char*)) : nullptr;
@@ -496,7 +496,7 @@ static int ImguiRenderer_ListBox(int argc, const KitsuneVariable* argv,
 
 static void prepend_meta(KitsuneUserDataRegistration* reg,
     const char* name, kitsune_CFunction func) {
-    NamedKitsuneFunction* node = (NamedKitsuneFunction*)malloc(sizeof(NamedKitsuneFunction));
+    KitsuneNamedFunction* node = (KitsuneNamedFunction*)malloc(sizeof(KitsuneNamedFunction));
     if (!node) return;
     node->name     = (char*)name;
     node->func     = func;
@@ -507,7 +507,7 @@ static void prepend_meta(KitsuneUserDataRegistration* reg,
 
 static void prepend_fn(KitsuneUserDataRegistration* reg,
     const char* name, kitsune_CFunction func) {
-    NamedKitsuneFunction* node = (NamedKitsuneFunction*)malloc(sizeof(NamedKitsuneFunction));
+    KitsuneNamedFunction* node = (KitsuneNamedFunction*)malloc(sizeof(KitsuneNamedFunction));
     if (!node) return;
     node->name     = (char*)name;
     node->func     = func;

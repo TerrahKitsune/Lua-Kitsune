@@ -1,4 +1,4 @@
-﻿#include "kitsuneuserdata.h"
+#include "kitsuneuserdata.h"
 
 bool lua_registerkitsuneuserdata(lua_State* L, const char* name, const KitsuneUserDataRegistration* registration, lua_CFunction cfunctionWrapper) {
 	if (!L || !name || !registration || !cfunctionWrapper)
@@ -10,7 +10,7 @@ bool lua_registerkitsuneuserdata(lua_State* L, const char* name, const KitsuneUs
 	// registry so there is no partial registration to clean up.
 	bool hasGc = false;
 	bool hasToString = false;
-	const NamedKitsuneFunction* check = registration->MetaTableFunctions;
+	const KitsuneNamedFunction* check = registration->MetaTableFunctions;
 	while (check) {
 		if (strcmp(check->name, "__gc") == 0)
 			hasGc = true;
@@ -49,7 +49,7 @@ bool lua_registerkitsuneuserdata(lua_State* L, const char* name, const KitsuneUs
 	// Stack: [..., metatable, methods]
 	int methods_idx = lua_gettop(L);
 
-	const NamedKitsuneFunction* fn = registration->Functions;
+	const KitsuneNamedFunction* fn = registration->Functions;
 	while (fn) {
 		lua_pushstring(L, fn->name);
 		lua_pushlightuserdata(L, (void*)fn->func);

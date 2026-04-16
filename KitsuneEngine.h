@@ -14,10 +14,10 @@
 // KitsuneVariable type constants — values 0–8 match Lua's LUA_T* constants for direct comparison.
 // KITSUNE_TNONE (-1) matches LUA_TNONE. KITSUNE_TERROR (-2) is a Kitsune extension not present
 // in Lua; it is used exclusively with kitsune_ResultSetter to signal a Lua error from a
-#define KITSUNE_TTABLECONTENTS  (-9) // Kitsune extension: snapshot of a Lua table's key-value pairs; table field points to a KeyValuePairKitsuneVariableNode linked list. Produced by KitsuneGetTableContents; consumed by KitsuneSetTableContents. KitsuneVariableFree recursively releases the list.
+#define KITSUNE_TTABLECONTENTS  (-9) // Kitsune extension: snapshot of a Lua table's key-value pairs; table field points to a KitsuneKeyValuePairVariableNode linked list. Produced by KitsuneGetTableContents; consumed by KitsuneSetTableContents. KitsuneVariableFree recursively releases the list.
 #define KITSUNE_TITERATOR      (-8) // Kitsune extension: iterator type; data is a pointer to a kitsune_Iterator struct containing the iteration state. Not a value returned by lua_type() — only used in KitsuneVariable for iterating tables with KitsuneGetAll, and never appears in Lua or in a variable returned by the engine. Data should be a pointer to a kitsune_Iterator.
 #define KITSUNE_TCFUNCTION     (-7) // Kitsune extension: C function pointer type; data is a pointer to a kitsune_CFunctionData struct containing the function pointer and its userdata. Not a value returned by lua_type() — only used in KitsuneVariable for passing C function pointers to Lua, and never appears in Lua or in a variable returned by the engine. Data should be a pointer to a kitsune_CFunctionData.
-#define KITSUNE_TSTREAM        (-6) // Kitsune extension: pointer to a SharedMemoryBlock that Lua always owns.
+#define KITSUNE_TSTREAM        (-6) // Kitsune extension: pointer to a KitsuneSharedMemoryBlock that Lua always owns.
 									// The block MUST have been obtained via KitsuneCreateMemoryBlock.
 									// Passing a block not created by KitsuneCreateMemoryBlock is an error
 									// and will push nil to Lua.
@@ -65,13 +65,13 @@
 #pragma warning(push)
 #pragma warning(disable: 4200) // nonstandard extension: zero-sized array; intentional flexible array member
 #endif
-struct SharedMemoryBlock {
+struct KitsuneSharedMemoryBlock {
 	uint8_t flags; // Bitfield of KITSUNE_SHARED_MEMORY_FLAG_* values.
 	// KITSUNE_SHARED_MEMORY_FLAG_LOCKED:        set by an accessor during a read or write; other accessors should wait.
 	// KITSUNE_SHARED_MEMORY_FLAG_READONLY:      data must not be modified; write operations are rejected.
 	// KITSUNE_SHARED_MEMORY_FLAG_KITSUNE_OWNED: block was created by KitsuneCreateMemoryBlock.
 	void* userdata;          // Reserved; not used by the engine.
-	SharedMemoryBlock* next; // Intrusive linked-list link for the global block registry. Written only under g_shmem_lock.
+	KitsuneSharedMemoryBlock* next; // Intrusive linked-list link for the global block registry. Written only under g_shmem_lock.
 	size_t size;             // Size of the data region in bytes. The data block immediately follows the header in memory.
 	uint8_t data[]; // Continous data block of the specified size. The entire struct is allocated as a single block on the heap, so freeing the struct pointer also frees the data block.
 };
@@ -80,7 +80,7 @@ struct SharedMemoryBlock {
 #endif
 
 // Forward declaration required so KitsuneVariable can hold a pointer to the node in its union.
-struct KeyValuePairKitsuneVariableNode;
+struct KitsuneKeyValuePairVariableNode;
 // Forward declaration required so KitsuneVariable can hold a kitsune_CFunctionData* in its union;
 // the full definition follows after kitsune_CFunction is declared.
 struct kitsune_CFunctionData;
@@ -101,8 +101,8 @@ struct KitsuneVariable {
 		bool boolean;                          // KITSUNE_TBOOLEAN
 		unsigned char* data;                   // KITSUNE_TSTRING: heap-allocated UTF-8 bytes; caller-owned on Set
 		char16_t* char16data;                  // KITSUNE_TCHAR16: heap-allocated char16_t string; length = number of char16_t code units (excl. null terminator)
-		KeyValuePairKitsuneVariableNode* table; // KITSUNE_TTABLECONTENTS: head of linked list (NULL = empty snapshot)
-		SharedMemoryBlock* stream; // KITSUNE_TSTREAM: pointer to a SharedMemoryBlock representing the stream; caller-owned on Set
+		KitsuneKeyValuePairVariableNode* table; // KITSUNE_TTABLECONTENTS: head of linked list (NULL = empty snapshot)
+		KitsuneSharedMemoryBlock* stream; // KITSUNE_TSTREAM: pointer to a KitsuneSharedMemoryBlock representing the stream; caller-owned on Set
 		kitsune_CFunctionData* cfunction; // KITSUNE_TCFUNCTION: pointer to a kitsune_CFunctionData struct containing the function pointer and its userdata; caller-owned on Set
 		KitsuneIterator* iterator; // KITSUNE_TITERATOR: pointer to a kitsune_Iterator struct containing the iteration state; caller-owned on Set
 		void* lightuserdata; // KITSUNE_TLIGHTUSERDATA: opaque pointer; caller-owned on Set
@@ -131,10 +131,10 @@ struct KitsuneIterator {
 // When a KitsuneVariable has type == KITSUNE_TTABLECONTENTS, its table field points to the head of this list.
 // Keys and values are bridged the same way as FillKitsuneVariableFromStack: nested tables appear as
 // live KITSUNE_TTABLE registry refs. Call KitsuneVariableFree to recursively release the list.
-struct KeyValuePairKitsuneVariableNode {
+struct KitsuneKeyValuePairVariableNode {
 	KitsuneVariable key;
 	KitsuneVariable value;
-	KeyValuePairKitsuneVariableNode* next;
+	KitsuneKeyValuePairVariableNode* next;
 };
 
 // Called once per key-value entry during a KitsuneGetAll traversal.
@@ -204,31 +204,74 @@ struct kitsune_CFunctionData {
 };
 
 // A named entry in a userdata's method or metamethod table.
-struct NamedKitsuneFunction {
+struct KitsuneNamedFunction {
 	char* name;
 	kitsune_CFunction func;
 	void* userdata; // Opaque pointer passed to func when this method is called
-	NamedKitsuneFunction* Next;
+	KitsuneNamedFunction* Next;
 };
 
 // Passed to KitsuneRegisterUserdata to describe the methods and metamethods of a userdata type.
 struct KitsuneUserDataRegistration {
-	NamedKitsuneFunction* MetaTableFunctions; // Meta functions names should match lua https://www.lua.org/pil/13.html
-	NamedKitsuneFunction* Functions; // Functions added to the userdata metatable
+	KitsuneNamedFunction* MetaTableFunctions; // Meta functions names should match lua https://www.lua.org/pil/13.html
+	KitsuneNamedFunction* Functions; // Functions added to the userdata metatable
 };
 
-struct MemoryAllocator {
+struct KitsuneMemoryAllocator {
 	void* (*malloc)(size_t);
 	void* (*realloc)(void*, size_t);
 	void  (*free)(void*);
 };
 
+struct KitsuneInternals {
+	KitsuneMemoryAllocator KitsuneMemoryAllocator; // The *current* memory allocator in use by the engine. Initially set to the standard malloc/realloc/free, but can be overridden by passing a custom allocator to KitsuneInit. The engine does not take ownership of the function pointers; they must remain valid for the duration of the engine's lifecycle.
+	void(*MongoDbInit)(); // Holds the internal function pointer to mongodb init, if this is called from the outside you must also call MongoDbCleanUp when cleaning up the engine, otherwise you will leak memory and other resources used by the MongoDB client.
+	void(*MongoDbCleanUp)();
+};
+
 extern "C" {
+
+	// Returns a pointer to the engine's internal state, including the active memory allocator
+	// and optional module lifecycle hooks. The returned pointer is to a static struct and is
+	// always valid — it does not require the engine to be initialised first and never needs
+	// to be freed.
+	//
+	// Usage is entirely optional. The most common reasons to call this are:
+	//
+	//   1. Sharing the engine's allocator with your own code:
+	//        KitsuneInternals* internals = KitsuneGetInternals();
+	//        void* buf = internals->memoryAllocator.malloc(size);
+	//        internals->memoryAllocator.free(buf);
+	//      This ensures your allocations come from the same heap as the engine, which matters
+	//      when USEMEMORYMANAGER or USEHEAPALLOC is defined or a custom allocator was provided.
+	//
+	//   2. Overriding the allocator before KitsuneInit:
+	//        KitsuneMemoryAllocator alloc = { my_malloc, my_realloc, my_free };
+	//        KitsuneGetInternals(&alloc); // installs alloc; call KitsuneInit as normal afterwards
+	//      Equivalent to passing the allocator directly to KitsuneInit, but lets you install it
+	//      before any other initialisation (e.g. before MongoDB's one-time init runs).
+	//
+	//   3. Explicit MongoDB lifecycle management (debug / hosted-process scenarios):
+	//      In a single-session executable the CRT debug heap will report MongoDB's 9 one-time
+	//      init allocations as leaks because mongoc_cleanup() normally runs via DLL atexit, after
+	//      _CrtDumpMemoryLeaks. Calling MongoDbInit / MongoDbCleanUp manually brackets the
+	//      allocations inside the CRT diff window so the check stays clean:
+	//
+	//        KitsuneInternals* internals = KitsuneGetInternals();
+	//        // ... KitsuneInit, run, KitsuneCleanup ...
+	//        if (internals->MongoDbCleanUp) internals->MongoDbCleanUp();
+	//        // now take the sNew CRT checkpoint — MongoDB allocs are already freed
+	//
+	//      Multi-session hosts (e.g. the test runner) should NOT call MongoDbCleanUp between
+	//      sessions; MongoDB cannot be re-initialised after cleanup. Omitting the call is safe —
+	//      the engine's own allocator exempts the init allocations from its leak counter.
+	KITSUNE_API KitsuneInternals* KitsuneGetInternals(KitsuneMemoryAllocator* KitsuneMemoryAllocator = nullptr);
+
 	// Initialise the engine and create the Lua state.
 	// Returns true if the engine was just initialised by this call (the caller owns the lifecycle).
 	// Returns false if the engine was already initialised by another caller, or on failure.
 	// Callers that receive false must not call KitsuneCleanup.
-	KITSUNE_API bool KitsuneInit(MemoryAllocator* memoryAllocator = nullptr);
+	KITSUNE_API bool KitsuneInit(KitsuneMemoryAllocator* KitsuneMemoryAllocator = nullptr);
 
 	// Destroy the Lua state and clean up the engine.
 	KITSUNE_API size_t KitsuneCleanup();
@@ -270,7 +313,7 @@ extern "C" {
 	//   the next ticker sweep.
 	// Do NOT call free() or any other allocator on the block.
 	// Returns NULL on failure.
-	KITSUNE_API SharedMemoryBlock* KitsuneCreateMemoryBlock(size_t size);
+	KITSUNE_API KitsuneSharedMemoryBlock* KitsuneCreateMemoryBlock(size_t size);
 
 	// -- Execution --------------------------------------------------------------
 	// All four functions execute synchronously: they block the calling thread until
@@ -479,7 +522,7 @@ extern "C" {
 // ---------------------------------------------------------------------------
 #include <cstdlib>
 
-// Coerce to float. Integer→cast, number→cast, string→strtof, else→fallback.
+// Coerce to float. Integer?cast, number?cast, string?strtof, else?fallback.
 static inline float KitsuneAsFloat(const KitsuneVariable* v, float fallback) {
 	if (!v) return fallback;
 	if (v->type == KITSUNE_TINTEGER) return (float)v->integer;
@@ -492,7 +535,7 @@ static inline float KitsuneAsFloat(const KitsuneVariable* v, float fallback) {
 	return fallback;
 }
 
-// Coerce to double. Integer→cast, number→pass-through, string→strtod, else→fallback.
+// Coerce to double. Integer?cast, number?pass-through, string?strtod, else?fallback.
 static inline double KitsuneAsDouble(const KitsuneVariable* v, double fallback) {
 	if (!v) return fallback;
 	if (v->type == KITSUNE_TINTEGER) return (double)v->integer;
@@ -505,8 +548,8 @@ static inline double KitsuneAsDouble(const KitsuneVariable* v, double fallback) 
 	return fallback;
 }
 
-// Coerce to long long. Integer→pass-through, number→truncate, boolean→0/1,
-// string→strtoll base-10, else→fallback.
+// Coerce to long long. Integer?pass-through, number?truncate, boolean?0/1,
+// string?strtoll base-10, else?fallback.
 static inline long long KitsuneAsInt(const KitsuneVariable* v, long long fallback) {
 	if (!v) return fallback;
 	if (v->type == KITSUNE_TINTEGER) return v->integer;

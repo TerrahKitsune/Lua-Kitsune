@@ -1,4 +1,4 @@
-ï»¿#include "registerluatable.h"
+#include "registerluatable.h"
 #include "vtabhelpers.h"
 #include <string.h>
 SQLITE_EXTENSION_INIT3
@@ -27,7 +27,7 @@ struct LuaTableCursor {
 	int eof;
 };
 
-// ---- module destructor â€” sole cleanup path for LuaTableModule ---------------
+// ---- module destructor — sole cleanup path for LuaTableModule ---------------
 
 static void lua_table_free_module(void* pAux) {
 	LuaTableModule* mod = (LuaTableModule*)pAux;
@@ -42,7 +42,7 @@ static void lua_table_free_module(void* pAux) {
 	sqlite3_free(mod);
 }
 
-// ---- xConnect / xCreate â€” same function -------------------------------------
+// ---- xConnect / xCreate — same function -------------------------------------
 
 static int lua_table_connect(sqlite3* db, void* pAux, int argc, const char* const* argv,
 	sqlite3_vtab** ppVtab, char** pzErr) {
@@ -92,7 +92,7 @@ static int lua_table_best_index(sqlite3_vtab* pVtab, sqlite3_index_info* info) {
 	return SQLITE_OK;
 }
 
-// ---- xDisconnect / xDestroy â€” same function ---------------------------------
+// ---- xDisconnect / xDestroy — same function ---------------------------------
 
 static int lua_table_disconnect(sqlite3_vtab* pVtab) {
 	sqlite3_free(pVtab); // free vtab shell only; mod is owned by the module destructor
@@ -122,7 +122,7 @@ static int lua_table_close(sqlite3_vtab_cursor* pCursor) {
 	return SQLITE_OK;
 }
 
-// ---- cursor_load_from_entry â€” extract pkKey+rowValue from a KitsuneNext entry ----
+// ---- cursor_load_from_entry — extract pkKey+rowValue from a KitsuneNext entry ----
 // Takes ownership of entry (may free it on error); sets eof on the cursor if unusable.
 
 static void cursor_load_from_entry(LuaTableCursor* cursor, KitsuneVariable* entry) {
@@ -131,7 +131,7 @@ static void cursor_load_from_entry(LuaTableCursor* cursor, KitsuneVariable* entr
 		cursor->eof = 1;
 		return;
 	}
-	KeyValuePairKitsuneVariableNode* node = entry->table;
+	KitsuneKeyValuePairVariableNode* node = entry->table;
 	cursor->pkKey = KitsuneAnchorVariable(&node->key);
 	cursor->rowValue = KitsuneAnchorVariable(&node->value);
 	cursor->scanPos = entry; // takes ownership; passed to next KitsuneNext call
@@ -141,8 +141,8 @@ static void cursor_load_from_entry(LuaTableCursor* cursor, KitsuneVariable* entr
 
 // ---- xFilter -----------------------------------------------------------------
 //
-// idxNum == 1: PK equality â€” anchor the key, fetch the value once, done.
-// idxNum == 0: full scan â€” load the first entry via KitsuneNext.
+// idxNum == 1: PK equality — anchor the key, fetch the value once, done.
+// idxNum == 0: full scan — load the first entry via KitsuneNext.
 //
 // Either way xColumn sees the same cursor shape: pkKey + rowValue.
 
@@ -159,7 +159,7 @@ static int lua_table_filter(sqlite3_vtab_cursor* pCursor, int idxNum, const char
 
 	if (idxNum == 1 && argc == 1) {
 		// PK equality path: anchor the key, fetch the value immediately.
-		// rowValue is cached here â€” xColumn never calls KitsuneGetIndex again.
+		// rowValue is cached here — xColumn never calls KitsuneGetIndex again.
 		KitsuneVariable tmp = {};
 		sqlite_val_to_kitsune(argv[0], &tmp);
 		cursor->pkKey = KitsuneAnchorVariable(&tmp);
@@ -191,7 +191,7 @@ static int lua_table_next(sqlite3_vtab_cursor* pCursor) {
 	KitsuneVariableFree(cursor->rowValue); cursor->rowValue = NULL;
 
 	if (!cursor->scanPos) {
-		// PK lookup â€” single row; mark eof.
+		// PK lookup — single row; mark eof.
 		cursor->eof = 1;
 		return SQLITE_OK;
 	}
@@ -247,7 +247,7 @@ static int lua_table_column(sqlite3_vtab_cursor* pCursor, sqlite3_context* ctx, 
 	return SQLITE_OK;
 }
 
-// ---- xRowid â€” no-op for WITHOUT ROWID tables --------------------------------
+// ---- xRowid — no-op for WITHOUT ROWID tables --------------------------------
 
 static int lua_table_rowid(sqlite3_vtab_cursor* pCursor, sqlite_int64* pRowid) {
 	(void)pCursor;
@@ -255,7 +255,7 @@ static int lua_table_rowid(sqlite3_vtab_cursor* pCursor, sqlite_int64* pRowid) {
 	return SQLITE_OK;
 }
 
-// ---- pks_equal â€” compare two sqlite3_value PK values for equality -----------
+// ---- pks_equal — compare two sqlite3_value PK values for equality -----------
 
 static int pks_equal(sqlite3_value* a, sqlite3_value* b) {
 	int ta = sqlite3_value_type(a);
@@ -274,7 +274,7 @@ static int pks_equal(sqlite3_value* a, sqlite3_value* b) {
 	}
 }
 
-// ---- set_row_value â€” write tableVar[pkVar] = row value from argv ------------
+// ---- set_row_value — write tableVar[pkVar] = row value from argv ------------
 // fieldCount == 2: scalar argv[3]; fieldCount > 2: new Lua sub-table.
 // String data in nodes[].value borrows SQLite-owned memory valid for xUpdate;
 // KitsuneAnchorVariable copies it into the Lua heap before returning.
@@ -292,7 +292,7 @@ static int set_row_value(sqlite3_vtab* pVtab, LuaTableModule* mod,
 	}
 	// fieldCount > 2: build a new Lua sub-table from the non-PK column values.
 	int valueCount = argc - 3; // = fieldCount - 1
-	KeyValuePairKitsuneVariableNode nodes[VTAB_MAX_FIELDS - 1];
+	KitsuneKeyValuePairVariableNode nodes[VTAB_MAX_FIELDS - 1];
 	memset(nodes, 0, sizeof(nodes));
 	for (int i = 0; i < valueCount; i++) {
 		nodes[i].key.type = KITSUNE_TINTEGER;
@@ -328,15 +328,15 @@ static int set_row_value(sqlite3_vtab* pVtab, LuaTableModule* mod,
 //   INSERT  argc == fieldCount + 2,  argv[0] is SQL NULL
 //     argv[0]          NULL  (no old row)
 //     argv[1]          NULL  (no synthetic rowid; WITHOUT ROWID has none)
-//     argv[2]          col0  â€” PRIMARY KEY column value  ? use this as the key
-//     argv[3..argc-1]  col1, col2, â€¦  (non-PK column values)
+//     argv[2]          col0  — PRIMARY KEY column value  ? use this as the key
+//     argv[3..argc-1]  col1, col2, …  (non-PK column values)
 //
 //   UPDATE  argc == fieldCount + 2,  argv[0] is NOT NULL
 //     argv[0]          old PK  (= old "rowid" for WITHOUT ROWID)
 //     argv[1]          new PK  (= new "rowid" for WITHOUT ROWID; equals argv[0]
 //                              when the PK is unchanged, differs on PK rename)
-//     argv[2]          col0  â€” new PRIMARY KEY column value  (equals argv[1])
-//     argv[3..argc-1]  col1, col2, â€¦  (new non-PK column values)
+//     argv[2]          col0  — new PRIMARY KEY column value  (equals argv[1])
+//     argv[3..argc-1]  col1, col2, …  (new non-PK column values)
 //
 // Non-PK column values always live at argv[3..argc-1] (= fieldCount - 1 values)
 // regardless of operation.
@@ -402,7 +402,7 @@ static int lua_table_update(sqlite3_vtab* pVtab, int argc, sqlite3_value** argv,
 		// ---- UPDATE (argv[0] is NOT NULL) ------------------------------------
 		// argv[0] = old PK, argv[1] = new PK.
 		// argv[0] == argv[1]: value-only update (PK unchanged).
-		// argv[0] != argv[1]: PK rename â€” write new key, then delete old key.
+		// argv[0] != argv[1]: PK rename — write new key, then delete old key.
 		// Safe order: set new key first so the old row survives any write failure.
 		KitsuneVariable oldPK = {};
 		sqlite_val_to_kitsune(argv[0], &oldPK);
@@ -429,7 +429,7 @@ static int lua_table_update(sqlite3_vtab* pVtab, int argc, sqlite3_value** argv,
 		}
 		KitsuneVariableFree(existing);
 
-		// Write new value at newPK first â€” old row stays intact if this fails.
+		// Write new value at newPK first — old row stays intact if this fails.
 		int rc = set_row_value(pVtab, mod, &newPK, argc, argv);
 		if (rc != SQLITE_OK)
 			return rc;
@@ -549,7 +549,7 @@ int register_table_cb(int argc, const KitsuneVariable* argv, kitsune_ResultSette
 
 	// Drop any existing vtab first. xDestroy only frees the vtab shell (lua_table_disconnect
 	// never touches mod), so this is safe even if the old module is about to be replaced.
-	// This ensures the subsequent CREATE always runs xConnect with the fresh mod â€” without
+	// This ensures the subsequent CREATE always runs xConnect with the fresh mod — without
 	// the DROP, "IF NOT EXISTS" would leave the vtab shell pointing at a freed old mod.
 	char* dropSql = sqlite3_mprintf("DROP TABLE IF EXISTS \"%w\"", name);
 	if (dropSql) {

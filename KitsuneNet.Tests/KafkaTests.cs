@@ -1381,12 +1381,13 @@ public sealed class KafkaTests
 
             local consumer = Kafka.NewConsumer({{
                 ['bootstrap.servers'] = '{Bootstrap()}',
-                ['group.id']          = 'stress-{guid}',
+                ['group.id']          = 'test_kitsune',
+                ['auto.offset.reset'] = 'earliest',
             }})
-            -- Use Assign rather than Subscribe to bypass group-coordinator rebalancing.
-            -- The topic has exactly one partition; earliest starts from offset 0 on this
-            -- fresh GUID-keyed topic so no old messages can slip through.
-            local co = consumer:Assign({{'{stressTopic}:0:earliest'}})
+            -- Subscribe with auto.offset.reset=earliest so the consumer receives
+            -- all messages from the start of this fresh GUID-keyed topic, whether
+            -- they arrive before or after the subscription is established.
+            local co = consumer:Subscribe({{'{stressTopic}'}})
 
             local seen     = {{}}
             local found    = 0

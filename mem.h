@@ -4,6 +4,11 @@
 void InitMemoryManager();
 size_t EndMemoryManager();
 
+// Mark all currently live allocations as permanent (process-lifetime).
+// EndMemoryManager will not count them as leaks.
+// Call once after a third-party library completes its one-time global init.
+void kitsune_snapshot_permanent_allocs();
+
 void* kitsune_malloc(size_t size);
 void* kitsune_calloc(size_t num, size_t size);
 void* kitsune_realloc(void* ptr, size_t size);

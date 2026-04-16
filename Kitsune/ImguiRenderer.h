@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #ifdef KITSUNE_IMGUI
 
 #include "KitsuneEngine.h"
@@ -15,7 +15,7 @@ struct ImguiScheduledCall {
 struct ImguiWindowContext {
     SDL_Window*                window;
     SDL_GLContext               glContext;
-    void*                       imguiContext;  // ImGuiContext* — typed as void* to avoid pulling imgui.h into all headers
+    void*                       imguiContext;  // ImGuiContext* � typed as void* to avoid pulling imgui.h into all headers
     char*                       title;         // heap copy of window title
     int                         width;
     int                         height;
@@ -28,7 +28,7 @@ struct ImguiWindowContext {
     KitsuneUserDataRegistration reg;           // renderer userdata registration; nodes freed on teardown
 };
 
-// Populates reg->Functions with heap-allocated NamedKitsuneFunction nodes for
+// Populates reg->Functions with heap-allocated KitsuneNamedFunction nodes for
 // all auto-generated ImGui bindings. Called once in RunImguiSession before the
 // render loop starts. After KitsuneRegisterUserdata returns the nodes are kept
 // alive in ctx->reg and freed in __gc.

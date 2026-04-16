@@ -5025,7 +5025,7 @@ void add_imgui_bindings(KitsuneUserDataRegistration* reg) {
 		{ "PopAllowKeyboardFocus", ImguiRenderer_PopAllowKeyboardFocus },
 	};
 	for (size_t i = 0; i < sizeof(entries)/sizeof(entries[0]); i++) {
-		NamedKitsuneFunction* node = (NamedKitsuneFunction*)malloc(sizeof(NamedKitsuneFunction));
+		KitsuneNamedFunction* node = (KitsuneNamedFunction*)malloc(sizeof(KitsuneNamedFunction));
 		if (!node) continue;
 		node->name     = (char*)entries[i].name;
 		node->func     = entries[i].func;

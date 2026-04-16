@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -49,11 +49,11 @@ namespace KitsuneNet
         public LuaUserdataRef? UserdataRef { get; init; }
 
         /// <summary>Stream for <see cref="LuaType.Stream"/> values.
-        /// Inbound (Lua → C#): a <see cref="LuaStream"/> wrapping native block memory directly.
+        /// Inbound (Lua ? C#): a <see cref="LuaStream"/> wrapping native block memory directly.
         /// Read-only when <c>KITSUNE_SHARED_MEMORY_FLAG_READONLY</c> is set on the block;
         /// read-write otherwise.  <see cref="LuaStream.Dispose"/> calls the block's close callback
         /// to release the Lua registry anchor.
-        /// Outbound (C# → Lua): any <see cref="System.IO.Stream"/> whose bytes are copied into
+        /// Outbound (C# ? Lua): any <see cref="System.IO.Stream"/> whose bytes are copied into
         /// a native block; a <see cref="System.IO.MemoryStream"/> or <see cref="LuaStream"/>
         /// avoids a double-copy. Null for all other types.</summary>
         public System.IO.Stream? StreamValue { get; init; }
@@ -139,7 +139,7 @@ namespace KitsuneNet
         /// <list type="bullet">
         /// <item><see cref="LuaType.Json"/>: returns the already-parsed node directly.</item>
         /// <item><see cref="LuaType.Table"/>: walks the linked list; sequential integer keys
-        ///   (1, 2, … n) produce a <see cref="JsonArray"/>; all other keys produce a
+        ///   (1, 2, � n) produce a <see cref="JsonArray"/>; all other keys produce a
         ///   <see cref="JsonObject"/> keyed by the string representation of each key.</item>
         /// <item>Scalar types: wrapped in the appropriate <see cref="JsonValue"/>.</item>
         /// <item><see cref="LuaType.Nil"/> / <see cref="LuaType.None"/>: returns <c>null</c>.</item>
@@ -171,7 +171,7 @@ namespace KitsuneNet
             {
                 if (TableRef is { } tr)
                 {
-                    // Live ref — snapshot contents on demand.
+                    // Live ref � snapshot contents on demand.
                     return TableContentsToJsonNode(tr.GetContents());
                 }
 
@@ -225,7 +225,7 @@ namespace KitsuneNet
             node is null ? None : new() { Type = LuaType.Json, JsonNode = node };
 
         /// <summary>Creates a stream value from a raw byte array. The bytes are copied into
-        /// a native <c>SharedMemoryBlock</c> when passed across the bridge.</summary>
+        /// a native <c>KitsuneSharedMemoryBlock</c> when passed across the bridge.</summary>
         public static LuaValue FromStream(byte[] data)
             => new() { Type = LuaType.Stream, StreamValue = new System.IO.MemoryStream(data, writable: false) };
 
