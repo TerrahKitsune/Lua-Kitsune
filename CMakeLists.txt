@@ -260,6 +260,7 @@ set_target_properties(KitsuneEngine PROPERTIES
 target_link_libraries(KitsuneEngine PRIVATE lua_core pthread dl)
 
 # ── kitsune host executable ───────────────────────────────────────────────────
+# ── kitsune host executable ───────────────────────────────────────────────────
 add_executable(kitsune Kitsune/Program.cpp Kitsune/Session.cpp)
 
 target_include_directories(kitsune PRIVATE
@@ -269,3 +270,52 @@ target_include_directories(kitsune PRIVATE
 )
 
 target_link_libraries(kitsune PRIVATE KitsuneEngine)
+
+# ── ImGui (SDL2 + OpenGL3, Windows and Linux) ─────────────────────────────────
+option(KITSUNE_IMGUI "Build with ImGui support (requires SDL2 and OpenGL)" OFF)
+if(KITSUNE_IMGUI)
+	find_package(OpenGL REQUIRED)
+
+	# SDL2: use the pre-built binaries in SDL2/ (mirrors the hiredis/postgres pattern).
+	# On Linux, fall back to system SDL2 via pkg-config if the local folder is absent.
+	if(EXISTS "${CMAKE_SOURCE_DIR}/Kitsune/SDL2/include/SDL.h")
+		set(SDL2_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/Kitsune/SDL2/include")
+		if(WIN32)
+			set(SDL2_LIBRARIES "${CMAKE_SOURCE_DIR}/Kitsune/SDL2/lib/x64/SDL2.lib"
+							   "${CMAKE_SOURCE_DIR}/Kitsune/SDL2/lib/x64/SDL2main.lib")
+		else()
+			find_library(SDL2_LIB SDL2 PATHS "${CMAKE_SOURCE_DIR}/Kitsune/SDL2/lib" NO_DEFAULT_PATH)
+			set(SDL2_LIBRARIES ${SDL2_LIB})
+		endif()
+	else()
+		find_package(PkgConfig REQUIRED)
+		pkg_check_modules(SDL2 REQUIRED sdl2)
+	endif()
+
+	target_sources(kitsune PRIVATE
+		Kitsune/ImguiSession.cpp
+		Kitsune/ImguiRenderer.cpp
+		Kitsune/ImguiEnums.cpp
+		Kitsune/ImguiRenderer_generated.cpp
+		Kitsune/ImguiEnums_generated.cpp
+		Kitsune/Imgui/imgui.cpp
+		Kitsune/Imgui/imgui_draw.cpp
+		Kitsune/Imgui/imgui_tables.cpp
+		Kitsune/Imgui/imgui_widgets.cpp
+		Kitsune/Imgui/imgui_demo.cpp
+		Kitsune/Imgui/imgui_impl_sdl2.cpp
+		Kitsune/Imgui/imgui_impl_opengl3.cpp
+	)
+
+	target_compile_definitions(kitsune PRIVATE KITSUNE_IMGUI)
+
+	target_include_directories(kitsune PRIVATE
+		"${CMAKE_SOURCE_DIR}/Kitsune/Imgui"
+		${SDL2_INCLUDE_DIRS}
+	)
+
+	target_link_libraries(kitsune PRIVATE
+		${SDL2_LIBRARIES}
+		OpenGL::GL
+	)
+endif()

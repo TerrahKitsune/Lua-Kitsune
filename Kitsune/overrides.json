@@ -1,0 +1,23 @@
+﻿{
+  "comment": "Functions excluded from auto-generation in generate_imgui_bindings.py. These are implemented by hand in ImguiRenderer.cpp, or are internal frame lifecycle calls managed by RunImguiSession.",
+  "overrides": [
+    "InputText",
+    "InputTextMultiline",
+    "PlotLines",
+    "PlotLinesEx",
+    "PlotHistogram",
+    "PlotHistogramEx",
+    "Combo",
+    "ListBox",
+    "ColorConvertRGBtoHSV",
+    "ColorConvertHSVtoRGB",
+    "NewFrame",
+    "EndFrame",
+    "Render",
+    "RenderPlatformWindowsDefault",
+    "Text",
+    "TextColored",
+    "TextDisabled",
+    "TextWrapped"
+  ]
+}

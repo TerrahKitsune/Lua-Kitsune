@@ -1,4 +1,4 @@
-#if defined(_WIN32) && defined(_DEBUG)
+﻿#if defined(_WIN32) && defined(_DEBUG)
 #define _CRTDBG_MAP_ALLOC
 #endif
 #ifndef _CRT_SECURE_NO_WARNINGS
@@ -17,6 +17,9 @@
 #include <crtdbg.h>
 #endif
 #include "Session.h"
+#ifdef KITSUNE_IMGUI
+#include "ImguiSession.h"
+#endif
 
 #ifdef _DEBUG
 int Test(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter resultSetter, void* userdata) {
@@ -97,6 +100,9 @@ int main(int argc, char* argv[]) {
     }
     else {
         RegisterSessionFunctions();
+#ifdef KITSUNE_IMGUI
+        RegisterImguiFunctions();
+#endif
     }
 
 #ifdef _WIN32
@@ -163,6 +169,11 @@ int main(int argc, char* argv[]) {
             printf("(type %d)\n", result->type);
         KitsuneVariableFree(result);
     }
+
+#ifdef KITSUNE_IMGUI
+    if (g_imguiCtx)
+        RunImguiSession();
+#endif
 
     KitsuneCleanup();
 

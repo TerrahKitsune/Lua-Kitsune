@@ -272,7 +272,7 @@ extern "C" {
 	// Returns NULL on failure.
 	KITSUNE_API SharedMemoryBlock* KitsuneCreateMemoryBlock(size_t size);
 
-	// ── Execution ──────────────────────────────────────────────────────────────
+	// -- Execution --------------------------------------------------------------
 	// All four functions execute synchronously: they block the calling thread until
 	// the script finishes and return the typed result directly. Returns NULL on start
 	// failure (e.g. engine not initialised, no slots available). On success the caller
@@ -289,7 +289,7 @@ extern "C" {
 	KITSUNE_API KitsuneVariable* KitsuneExecuteFunction(const char* functionName, int argc, const KitsuneVariable* argv);
 	KITSUNE_API KitsuneVariable* KitsuneExecuteVariable(const KitsuneVariable* var, int argc, const KitsuneVariable* argv);
 
-	// ── Async Execution ────────────────────────────────────────────────────────
+	// -- Async Execution --------------------------------------------------------
 	// All four functions start execution as a Lua coroutine managed by the scheduler.
 	// Returns a positive coroutine ID on success, or -1 on failure.
 	// KitsuneExecuteFunctionAsync still returns a positive ID when the named function does not exist;
@@ -301,7 +301,7 @@ extern "C" {
 	KITSUNE_API int KitsuneExecuteFunctionAsync(const char* functionName, int argc, const KitsuneVariable* argv, bool fireAndForget = false);
 	KITSUNE_API int KitsuneExecuteVariableAsync(const KitsuneVariable* var, int argc, const KitsuneVariable* argv, bool fireAndForget = false);
 
-	// ── Per-coroutine queries (id = value returned by KitsuneExecuteFileAsync/StringAsync) ──
+	// -- Per-coroutine queries (id = value returned by KitsuneExecuteFileAsync/StringAsync) --
 	// Returns true once the coroutine has finished (success or error).
 	// If len is not NULL it is set to the byte length of the string result, or 0 if the result
 	// is absent or is not a string type (number, boolean, table, etc. all yield len == 0).
@@ -336,7 +336,7 @@ extern "C" {
 	// Thread-safe.
 	KITSUNE_API int KitsuneGetStatus(int id);
 
-	// ── Global control ────────────────────────────────────────────────────────
+	// -- Global control --------------------------------------------------------
 	// Returns true if any coroutine slot exists (running, sleeping, idle, or finished but not yet released). Thread-safe.
 	KITSUNE_API bool KitsuneIsRunning();
 	// Returns the ID of the first coroutine that is still running, or 0 if none are active. Thread-safe.
@@ -350,7 +350,7 @@ extern "C" {
 	// Pass a NULL buffer to query the count without filling. Thread-safe.
 	KITSUNE_API int KitsuneGetActiveIds(int* buffer, int bufferSize);
 
-	// ── Variable bridge ───────────────────────────────────────────────────────
+	// -- Variable bridge -------------------------------------------------------
 	// Sets a Lua global at the given dot-separated path (e.g. "foo" or "foo.bar.baz").
 	// The Lua global environment is the root; intermediate tables are created automatically.
 	// Pass NULL or KITSUNE_TNONE to remove the key. Pass type==KITSUNE_TTABLE to set an empty table.
@@ -423,14 +423,14 @@ extern "C" {
 	// obj must be KITSUNE_TTABLE (ref > 0) or KITSUNE_TUSERDATA (non-null userdata).
 	// Return semantics (always non-NULL on a valid obj):
 	//   KITSUNE_TINTEGER or KITSUNE_TNUMBER — the length value
-	//   KITSUNE_TERROR                       — __len raised a Lua error (message in .data)
+	//   KITSUNE_TERROR — __len raised a Lua error (message in .data)
 	// Returns NULL only on OOM or invalid obj. Heap-allocated; free with KitsuneVariableFree. Thread-safe.
 	KITSUNE_API KitsuneVariable* KitsuneGetLength(const KitsuneVariable* obj);
 	// Advances iteration over a live KITSUNE_TTABLE by one raw step (no metamethods; mirrors lua_next).
 	// tableVar: must be KITSUNE_TTABLE (ref > 0).
 	// key ownership/cursor rules:
-	//   NULL or type != KITSUNE_TTABLECONTENTS → start from the beginning; key is not consumed.
-	//   KITSUNE_TTABLECONTENTS (result of a prior KitsuneNext call) → advance one step; key is
+	//   NULL or type != KITSUNE_TTABLECONTENTS ? start from the beginning; key is not consumed.
+	//   KITSUNE_TTABLECONTENTS (result of a prior KitsuneNext call) ? advance one step; key is
 	//     consumed (freed by this call). Do NOT use or free key after passing it here.
 	// Return semantics:
 	//   KITSUNE_TTABLECONTENTS (1 entry, node->next == NULL) — next key-value pair. The embedded
@@ -471,4 +471,51 @@ extern "C" {
 	// For other types, it's a reasonable string representation (e.g. numbers are converted to their literal string form).
 	// Returns NULL on OOM. Thread-safe.
 	KITSUNE_API KitsuneVariable* KitsuneToString(const KitsuneVariable* var);
+}
+
+// ---------------------------------------------------------------------------
+// Numeric coercion helpers — safe to call from any context including kitsune_CFunction.
+// These mirror Lua's own coercion rules: integer beats number beats string.
+// ---------------------------------------------------------------------------
+#include <cstdlib>
+
+// Coerce to float. Integer→cast, number→cast, string→strtof, else→fallback.
+static inline float KitsuneAsFloat(const KitsuneVariable* v, float fallback) {
+	if (!v) return fallback;
+	if (v->type == KITSUNE_TINTEGER) return (float)v->integer;
+	if (v->type == KITSUNE_TNUMBER)  return (float)v->number;
+	if (v->type == KITSUNE_TSTRING && v->data && v->length > 0) {
+		char* end = nullptr;
+		float f = strtof((const char*)v->data, &end);
+		return (end != (const char*)v->data) ? f : fallback;
+	}
+	return fallback;
+}
+
+// Coerce to double. Integer→cast, number→pass-through, string→strtod, else→fallback.
+static inline double KitsuneAsDouble(const KitsuneVariable* v, double fallback) {
+	if (!v) return fallback;
+	if (v->type == KITSUNE_TINTEGER) return (double)v->integer;
+	if (v->type == KITSUNE_TNUMBER)  return v->number;
+	if (v->type == KITSUNE_TSTRING && v->data && v->length > 0) {
+		char* end = nullptr;
+		double d = strtod((const char*)v->data, &end);
+		return (end != (const char*)v->data) ? d : fallback;
+	}
+	return fallback;
+}
+
+// Coerce to long long. Integer→pass-through, number→truncate, boolean→0/1,
+// string→strtoll base-10, else→fallback.
+static inline long long KitsuneAsInt(const KitsuneVariable* v, long long fallback) {
+	if (!v) return fallback;
+	if (v->type == KITSUNE_TINTEGER) return v->integer;
+	if (v->type == KITSUNE_TNUMBER)  return (long long)v->number;
+	if (v->type == KITSUNE_TBOOLEAN) return v->boolean ? 1LL : 0LL;
+	if (v->type == KITSUNE_TSTRING && v->data && v->length > 0) {
+		char* end = nullptr;
+		long long i = strtoll((const char*)v->data, &end, 10);
+		return (end != (const char*)v->data) ? i : fallback;
+	}
+	return fallback;
 }

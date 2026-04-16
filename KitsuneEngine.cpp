@@ -573,6 +573,7 @@ static void PushKitsuneVariable(lua_State* L, const KitsuneVariable* v) {
 		lua_pushboolean(L, v->boolean ? 1 : 0);
 		break;
 	case LUA_TSTRING:
+	case KITSUNE_TERROR:
 		if (v->data && v->length > 0)
 			lua_pushlstring(L, (const char*)v->data, v->length);
 		else
@@ -2916,7 +2917,7 @@ extern "C" {
 			return 0;  // unreachable
 		}
 
-		if (rc <= 0) {
+		if (rc < 0) {
 			lua_pushstring(L, "delegate function error");
 			lua_error(L);
 			return 0;  // unreachable

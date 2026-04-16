@@ -140,3 +140,5 @@ GetKey = Session.Console.GetKey;
 
 SetTitle("Kitsune: ".._VERSION);
 GetKey();
+Session.Console.Clear();
+dofile("imgui_test.lua");
