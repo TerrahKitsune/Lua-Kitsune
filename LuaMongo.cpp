@@ -305,8 +305,13 @@ struct BsonWriteCtx {
 
 static void bson_rec_push(lua_State* L, BsonWriteCtx* ctx, uintptr_t addr) {
 	for (int i = 0; i < ctx->recLen; i++) {
-		if (ctx->rec[i] == addr)
+		if (ctx->rec[i] == addr) {
+			kitsune_free(ctx->rec);
+			ctx->rec = NULL;
+			ctx->recLen = 0;
+			ctx->recCap = 0;
 			luaL_error(L, "MongoDB: circular reference detected in table");
+		}
 	}
 	if (ctx->recLen == ctx->recCap) {
 		int cap = ctx->recCap ? ctx->recCap * 2 : 8;

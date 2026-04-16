@@ -139,6 +139,11 @@ collectgarbage();
 GetKey = Session.Console.GetKey;
 
 SetTitle("Kitsune: ".._VERSION);
+if Imgui then
+	print("Imgui is detected");
+end
 GetKey();
-Session.Console.Clear();
-dofile("imgui_test.lua");
+if Imgui then
+	Session.Console.Clear();
+	dofile("imgui_test.lua");
+end

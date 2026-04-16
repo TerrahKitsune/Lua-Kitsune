@@ -330,9 +330,10 @@ static void free_ctx(ImguiWindowContext* ctx) {
     if (ctx->renderFn) { KitsuneVariableFree(ctx->renderFn); ctx->renderFn = nullptr; }
     if (ctx->context)  { KitsuneVariableFree(ctx->context);  ctx->context  = nullptr; }
     if (ctx->onError)  { KitsuneVariableFree(ctx->onError);  ctx->onError  = nullptr; }
-    free(ctx->inputBuf);
-    free(ctx->title);
-    free(ctx);
+    free(ctx->inputBuf);  ctx->inputBuf  = nullptr; ctx->inputBufSize = 0;
+    free(ctx->title);     ctx->title     = nullptr;
+    // Do NOT free(ctx) here — imgui_gc owns the ctx allocation via the Lua userdata GC.
+    // Null g_imguiCtx so imgui_gc skips the double teardown of SDL/ImGui.
     g_imguiCtx = nullptr;
 }
 
@@ -398,12 +399,25 @@ void RunImguiSession() {
     ImGui_ImplSDL2_InitForOpenGL(ctx->window, ctx->glContext);
     ImGui_ImplOpenGL3_Init("#version 130");
 
-    // Disable asserts on recoverable errors (missing End() etc.) so the error handler
+    // Disable asserts on recoverable errors (missing End() etc.) so the Lua error handler
     // can keep the loop alive instead of crashing. Errors are still logged.
-    ImGui::GetIO().ConfigErrorRecoveryEnableAssert = false;
+    ImGui::GetIO().ConfigErrorRecoveryEnableAssert   = false;
+    ImGui::GetIO().ConfigErrorRecoveryEnableDebugLog = false;
+
+    // Create the renderer userdata once and anchor it in the Lua registry so
+    // imgui_gc fires exactly once (when KitsuneCleanup runs) and not once per frame.
+    KitsuneUserData rendererUD = {};
+    rendererUD.name     = (char*)"ImguiRenderer";
+    rendererUD.ref      = 0;
+    rendererUD.userdata = ctx;
+    KitsuneVariable rendererVar = {};
+    rendererVar.type     = KITSUNE_TUSERDATA;
+    rendererVar.length   = strlen(rendererUD.name);
+    rendererVar.userdata = &rendererUD;
+    KitsuneVariable* anchoredRenderer = KitsuneAnchorVariable(&rendererVar);
 
     // Render loop
-    bool running = true;
+    bool running = (anchoredRenderer != nullptr);
     while (running) {
         // Process SDL events
         SDL_Event event;
@@ -421,16 +435,9 @@ void RunImguiSession() {
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
 
-        // Build renderer userdata pointing directly to ctx
-        KitsuneUserData ud = {};
-        ud.name     = (char*)"ImguiRenderer";
-        ud.ref      = 0;
-        ud.userdata = ctx;
-
+        // Pass the anchored renderer userdata and context to the render function
         KitsuneVariable args[2] = {};
-        args[0].type     = KITSUNE_TUSERDATA;
-        args[0].length   = 0;
-        args[0].userdata = &ud;
+        args[0] = *anchoredRenderer;
         if (ctx->context) {
             args[1] = *ctx->context;
         } else {
@@ -495,6 +502,9 @@ void RunImguiSession() {
 
     // Drain any remaining scheduled calls without executing them
     drain_scheduled_calls(ctx);
+
+    // Release the anchored renderer — this triggers imgui_gc exactly once via Lua GC.
+    KitsuneVariableFree(anchoredRenderer);
 }
 
 // ---------------------------------------------------------------------------

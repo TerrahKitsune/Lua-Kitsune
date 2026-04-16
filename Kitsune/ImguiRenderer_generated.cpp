@@ -22,10 +22,13 @@ static int ImguiRenderer_ShowDemoWindow(int argc, const KitsuneVariable* argv,
 	const int _argc = argc - 1;
 	const KitsuneVariable* _argv = argc > 0 ? argv + 1 : argv;
 	(void)ctx;
-	bool p_open_v = _argc > 0 ? (bool)_argv[0].boolean : false;
-	bool* p_open = &p_open_v;
+	bool p_open_v = false;
+	bool* p_open = (_argc > 0 && _argv[0].type == KITSUNE_TBOOLEAN) ? &p_open_v : nullptr;
+	if (p_open) p_open_v = KitsuneAsBool(&_argv[0]);
 	ImGui::ShowDemoWindow(p_open);
-	KitsuneVariable ro0 = {}; ro0.type = KITSUNE_TBOOLEAN; ro0.boolean = p_open_v; setter(&ro0);
+	if (p_open) {
+		KitsuneVariable ro0 = {}; ro0.type = KITSUNE_TBOOLEAN; ro0.boolean = p_open_v; setter(&ro0);
+	}
 	return 1;
 }
 
@@ -35,10 +38,13 @@ static int ImguiRenderer_ShowMetricsWindow(int argc, const KitsuneVariable* argv
 	const int _argc = argc - 1;
 	const KitsuneVariable* _argv = argc > 0 ? argv + 1 : argv;
 	(void)ctx;
-	bool p_open_v = _argc > 0 ? (bool)_argv[0].boolean : false;
-	bool* p_open = &p_open_v;
+	bool p_open_v = false;
+	bool* p_open = (_argc > 0 && _argv[0].type == KITSUNE_TBOOLEAN) ? &p_open_v : nullptr;
+	if (p_open) p_open_v = KitsuneAsBool(&_argv[0]);
 	ImGui::ShowMetricsWindow(p_open);
-	KitsuneVariable ro0 = {}; ro0.type = KITSUNE_TBOOLEAN; ro0.boolean = p_open_v; setter(&ro0);
+	if (p_open) {
+		KitsuneVariable ro0 = {}; ro0.type = KITSUNE_TBOOLEAN; ro0.boolean = p_open_v; setter(&ro0);
+	}
 	return 1;
 }
 
@@ -48,10 +54,13 @@ static int ImguiRenderer_ShowDebugLogWindow(int argc, const KitsuneVariable* arg
 	const int _argc = argc - 1;
 	const KitsuneVariable* _argv = argc > 0 ? argv + 1 : argv;
 	(void)ctx;
-	bool p_open_v = _argc > 0 ? (bool)_argv[0].boolean : false;
-	bool* p_open = &p_open_v;
+	bool p_open_v = false;
+	bool* p_open = (_argc > 0 && _argv[0].type == KITSUNE_TBOOLEAN) ? &p_open_v : nullptr;
+	if (p_open) p_open_v = KitsuneAsBool(&_argv[0]);
 	ImGui::ShowDebugLogWindow(p_open);
-	KitsuneVariable ro0 = {}; ro0.type = KITSUNE_TBOOLEAN; ro0.boolean = p_open_v; setter(&ro0);
+	if (p_open) {
+		KitsuneVariable ro0 = {}; ro0.type = KITSUNE_TBOOLEAN; ro0.boolean = p_open_v; setter(&ro0);
+	}
 	return 1;
 }
 
@@ -71,10 +80,13 @@ static int ImguiRenderer_ShowAboutWindow(int argc, const KitsuneVariable* argv,
 	const int _argc = argc - 1;
 	const KitsuneVariable* _argv = argc > 0 ? argv + 1 : argv;
 	(void)ctx;
-	bool p_open_v = _argc > 0 ? (bool)_argv[0].boolean : false;
-	bool* p_open = &p_open_v;
+	bool p_open_v = false;
+	bool* p_open = (_argc > 0 && _argv[0].type == KITSUNE_TBOOLEAN) ? &p_open_v : nullptr;
+	if (p_open) p_open_v = KitsuneAsBool(&_argv[0]);
 	ImGui::ShowAboutWindow(p_open);
-	KitsuneVariable ro0 = {}; ro0.type = KITSUNE_TBOOLEAN; ro0.boolean = p_open_v; setter(&ro0);
+	if (p_open) {
+		KitsuneVariable ro0 = {}; ro0.type = KITSUNE_TBOOLEAN; ro0.boolean = p_open_v; setter(&ro0);
+	}
 	return 1;
 }
 
@@ -177,14 +189,17 @@ static int ImguiRenderer_Begin(int argc, const KitsuneVariable* argv,
 		name = nameOwned ? (const char*)nameOwned->data : "";
 	}
 
-	bool p_open_v = _argc > 1 ? (bool)_argv[1].boolean : false;
-	bool* p_open = &p_open_v;
+	bool p_open_v = false;
+	bool* p_open = (_argc > 1 && _argv[1].type == KITSUNE_TBOOLEAN) ? &p_open_v : nullptr;
+	if (p_open) p_open_v = KitsuneAsBool(&_argv[1]);
 	int flags = _argc > 2 ? (int)KitsuneAsInt(&_argv[2], 0) : 0;
 	bool _ret = ImGui::Begin(name, p_open, flags);
 	KitsuneVariable r0 = {}; r0.type = KITSUNE_TBOOLEAN; r0.boolean = _ret;
 	setter(&r0);
 	if (nameOwned) KitsuneVariableFree(nameOwned);
-	KitsuneVariable ro0 = {}; ro0.type = KITSUNE_TBOOLEAN; ro0.boolean = p_open_v; setter(&ro0);
+	if (p_open) {
+		KitsuneVariable ro0 = {}; ro0.type = KITSUNE_TBOOLEAN; ro0.boolean = p_open_v; setter(&ro0);
+	}
 	return 2;
 }
 
@@ -450,7 +465,7 @@ static int ImguiRenderer_SetNextWindowCollapsed(int argc, const KitsuneVariable*
 		err.type = KITSUNE_TERROR; err.data = (unsigned char*)msg; err.length = strlen(msg);
 		setter(&err); return 1;
 	}
-	bool collapsed = (bool)_argv[0].boolean;
+	bool collapsed = KitsuneAsBool(&_argv[0]);
 	ImGuiCond cond = _argc > 1 ? (ImGuiCond)(int)KitsuneAsInt(&_argv[1], 0) : (ImGuiCond)0;
 	ImGui::SetNextWindowCollapsed(collapsed, cond);
 	return 0;
@@ -584,7 +599,7 @@ static int ImguiRenderer_SetWindowCollapsed(int argc, const KitsuneVariable* arg
 		err.type = KITSUNE_TERROR; err.data = (unsigned char*)msg; err.length = strlen(msg);
 		setter(&err); return 1;
 	}
-	bool collapsed = (bool)_argv[0].boolean;
+	bool collapsed = KitsuneAsBool(&_argv[0]);
 	ImGuiCond cond = _argc > 1 ? (ImGuiCond)(int)KitsuneAsInt(&_argv[1], 0) : (ImGuiCond)0;
 	ImGui::SetWindowCollapsed(collapsed, cond);
 	return 0;
@@ -819,7 +834,7 @@ static int ImguiRenderer_PushItemFlag(int argc, const KitsuneVariable* argv,
 		setter(&err); return 1;
 	}
 	int option = (int)KitsuneAsInt(&_argv[0], 0);
-	bool enabled = (bool)_argv[1].boolean;
+	bool enabled = KitsuneAsBool(&_argv[1]);
 	ImGui::PushItemFlag(option, enabled);
 	return 0;
 }
@@ -1549,13 +1564,16 @@ static int ImguiRenderer_Checkbox(int argc, const KitsuneVariable* argv,
 		label = labelOwned ? (const char*)labelOwned->data : "";
 	}
 
-	bool v_v = _argc > 1 ? (bool)_argv[1].boolean : false;
-	bool* v = &v_v;
+	bool v_v = false;
+	bool* v = (_argc > 1 && _argv[1].type == KITSUNE_TBOOLEAN) ? &v_v : nullptr;
+	if (v) v_v = KitsuneAsBool(&_argv[1]);
 	bool _ret = ImGui::Checkbox(label, v);
 	KitsuneVariable r0 = {}; r0.type = KITSUNE_TBOOLEAN; r0.boolean = _ret;
 	setter(&r0);
 	if (labelOwned) KitsuneVariableFree(labelOwned);
-	KitsuneVariable ro0 = {}; ro0.type = KITSUNE_TBOOLEAN; ro0.boolean = v_v; setter(&ro0);
+	if (v) {
+		KitsuneVariable ro0 = {}; ro0.type = KITSUNE_TBOOLEAN; ro0.boolean = v_v; setter(&ro0);
+	}
 	return 2;
 }
 
@@ -1612,7 +1630,7 @@ static int ImguiRenderer_RadioButton(int argc, const KitsuneVariable* argv,
 		label = labelOwned ? (const char*)labelOwned->data : "";
 	}
 
-	bool active = (bool)_argv[1].boolean;
+	bool active = KitsuneAsBool(&_argv[1]);
 	bool _ret = ImGui::RadioButton(label, active);
 	KitsuneVariable r0 = {}; r0.type = KITSUNE_TBOOLEAN; r0.boolean = _ret;
 	setter(&r0);
@@ -2389,7 +2407,7 @@ static int ImguiRenderer_SetNextItemOpen(int argc, const KitsuneVariable* argv,
 		err.type = KITSUNE_TERROR; err.data = (unsigned char*)msg; err.length = strlen(msg);
 		setter(&err); return 1;
 	}
-	bool is_open = (bool)_argv[0].boolean;
+	bool is_open = KitsuneAsBool(&_argv[0]);
 	ImGuiCond cond = _argc > 1 ? (ImGuiCond)(int)KitsuneAsInt(&_argv[1], 0) : (ImGuiCond)0;
 	ImGui::SetNextItemOpen(is_open, cond);
 	return 0;
@@ -2698,14 +2716,17 @@ static int ImguiRenderer_BeginPopupModal(int argc, const KitsuneVariable* argv,
 		name = nameOwned ? (const char*)nameOwned->data : "";
 	}
 
-	bool p_open_v = _argc > 1 ? (bool)_argv[1].boolean : false;
-	bool* p_open = &p_open_v;
+	bool p_open_v = false;
+	bool* p_open = (_argc > 1 && _argv[1].type == KITSUNE_TBOOLEAN) ? &p_open_v : nullptr;
+	if (p_open) p_open_v = KitsuneAsBool(&_argv[1]);
 	int flags = _argc > 2 ? (int)KitsuneAsInt(&_argv[2], 0) : 0;
 	bool _ret = ImGui::BeginPopupModal(name, p_open, flags);
 	KitsuneVariable r0 = {}; r0.type = KITSUNE_TBOOLEAN; r0.boolean = _ret;
 	setter(&r0);
 	if (nameOwned) KitsuneVariableFree(nameOwned);
-	KitsuneVariable ro0 = {}; ro0.type = KITSUNE_TBOOLEAN; ro0.boolean = p_open_v; setter(&ro0);
+	if (p_open) {
+		KitsuneVariable ro0 = {}; ro0.type = KITSUNE_TBOOLEAN; ro0.boolean = p_open_v; setter(&ro0);
+	}
 	return 2;
 }
 
@@ -3089,7 +3110,7 @@ static int ImguiRenderer_TableSetColumnEnabled(int argc, const KitsuneVariable* 
 		setter(&err); return 1;
 	}
 	int column_n = (int)KitsuneAsInt(&_argv[0], 0);
-	bool v = (bool)_argv[1].boolean;
+	bool v = KitsuneAsBool(&_argv[1]);
 	ImGui::TableSetColumnEnabled(column_n, v);
 	return 0;
 }
@@ -3272,14 +3293,17 @@ static int ImguiRenderer_BeginTabItem(int argc, const KitsuneVariable* argv,
 		label = labelOwned ? (const char*)labelOwned->data : "";
 	}
 
-	bool p_open_v = _argc > 1 ? (bool)_argv[1].boolean : false;
-	bool* p_open = &p_open_v;
+	bool p_open_v = false;
+	bool* p_open = (_argc > 1 && _argv[1].type == KITSUNE_TBOOLEAN) ? &p_open_v : nullptr;
+	if (p_open) p_open_v = KitsuneAsBool(&_argv[1]);
 	int flags = _argc > 2 ? (int)KitsuneAsInt(&_argv[2], 0) : 0;
 	bool _ret = ImGui::BeginTabItem(label, p_open, flags);
 	KitsuneVariable r0 = {}; r0.type = KITSUNE_TBOOLEAN; r0.boolean = _ret;
 	setter(&r0);
 	if (labelOwned) KitsuneVariableFree(labelOwned);
-	KitsuneVariable ro0 = {}; ro0.type = KITSUNE_TBOOLEAN; ro0.boolean = p_open_v; setter(&ro0);
+	if (p_open) {
+		KitsuneVariable ro0 = {}; ro0.type = KITSUNE_TBOOLEAN; ro0.boolean = p_open_v; setter(&ro0);
+	}
 	return 2;
 }
 
@@ -3460,7 +3484,7 @@ static int ImguiRenderer_BeginDisabled(int argc, const KitsuneVariable* argv,
 	const int _argc = argc - 1;
 	const KitsuneVariable* _argv = argc > 0 ? argv + 1 : argv;
 	(void)ctx;
-	bool disabled = _argc > 0 ? (bool)_argv[0].boolean : true;
+	bool disabled = _argc > 0 ? KitsuneAsBool(&_argv[0]) : true;
 	ImGui::BeginDisabled(disabled);
 	return 0;
 }
@@ -3513,7 +3537,7 @@ static int ImguiRenderer_PushClipRect(int argc, const KitsuneVariable* argv,
 		clip_rect_max.x = KitsuneAsFloat(&_argv[2], 0.0f);
 		clip_rect_max.y = _argc > 3 ? KitsuneAsFloat(&_argv[3], 0.0f) : 0.0f;
 	}
-	bool intersect_with_current_clip_rect = (bool)_argv[4].boolean;
+	bool intersect_with_current_clip_rect = KitsuneAsBool(&_argv[4]);
 	ImGui::PushClipRect(clip_rect_min, clip_rect_max, intersect_with_current_clip_rect);
 	return 0;
 }
@@ -3560,7 +3584,7 @@ static int ImguiRenderer_SetNavCursorVisible(int argc, const KitsuneVariable* ar
 		err.type = KITSUNE_TERROR; err.data = (unsigned char*)msg; err.length = strlen(msg);
 		setter(&err); return 1;
 	}
-	bool visible = (bool)_argv[0].boolean;
+	bool visible = KitsuneAsBool(&_argv[0]);
 	ImGui::SetNavCursorVisible(visible);
 	return 0;
 }
@@ -4057,7 +4081,7 @@ static int ImguiRenderer_SetNextFrameWantCaptureKeyboard(int argc, const Kitsune
 		err.type = KITSUNE_TERROR; err.data = (unsigned char*)msg; err.length = strlen(msg);
 		setter(&err); return 1;
 	}
-	bool want_capture_keyboard = (bool)_argv[0].boolean;
+	bool want_capture_keyboard = KitsuneAsBool(&_argv[0]);
 	ImGui::SetNextFrameWantCaptureKeyboard(want_capture_keyboard);
 	return 0;
 }
@@ -4397,7 +4421,7 @@ static int ImguiRenderer_SetNextFrameWantCaptureMouse(int argc, const KitsuneVar
 		err.type = KITSUNE_TERROR; err.data = (unsigned char*)msg; err.length = strlen(msg);
 		setter(&err); return 1;
 	}
-	bool want_capture_mouse = (bool)_argv[0].boolean;
+	bool want_capture_mouse = KitsuneAsBool(&_argv[0]);
 	ImGui::SetNextFrameWantCaptureMouse(want_capture_mouse);
 	return 0;
 }
@@ -4559,7 +4583,7 @@ static int ImguiRenderer_PushButtonRepeat(int argc, const KitsuneVariable* argv,
 		err.type = KITSUNE_TERROR; err.data = (unsigned char*)msg; err.length = strlen(msg);
 		setter(&err); return 1;
 	}
-	bool repeat = (bool)_argv[0].boolean;
+	bool repeat = KitsuneAsBool(&_argv[0]);
 	ImGui::PushButtonRepeat(repeat);
 	return 0;
 }
@@ -4586,7 +4610,7 @@ static int ImguiRenderer_PushTabStop(int argc, const KitsuneVariable* argv,
 		err.type = KITSUNE_TERROR; err.data = (unsigned char*)msg; err.length = strlen(msg);
 		setter(&err); return 1;
 	}
-	bool tab_stop = (bool)_argv[0].boolean;
+	bool tab_stop = KitsuneAsBool(&_argv[0]);
 	ImGui::PushTabStop(tab_stop);
 	return 0;
 }
@@ -4686,10 +4710,13 @@ static int ImguiRenderer_ShowStackToolWindow(int argc, const KitsuneVariable* ar
 	const int _argc = argc - 1;
 	const KitsuneVariable* _argv = argc > 0 ? argv + 1 : argv;
 	(void)ctx;
-	bool p_open_v = _argc > 0 ? (bool)_argv[0].boolean : false;
-	bool* p_open = &p_open_v;
+	bool p_open_v = false;
+	bool* p_open = (_argc > 0 && _argv[0].type == KITSUNE_TBOOLEAN) ? &p_open_v : nullptr;
+	if (p_open) p_open_v = KitsuneAsBool(&_argv[0]);
 	ImGui::ShowStackToolWindow(p_open);
-	KitsuneVariable ro0 = {}; ro0.type = KITSUNE_TBOOLEAN; ro0.boolean = p_open_v; setter(&ro0);
+	if (p_open) {
+		KitsuneVariable ro0 = {}; ro0.type = KITSUNE_TBOOLEAN; ro0.boolean = p_open_v; setter(&ro0);
+	}
 	return 1;
 }
 
@@ -4715,7 +4742,7 @@ static int ImguiRenderer_PushAllowKeyboardFocus(int argc, const KitsuneVariable*
 		err.type = KITSUNE_TERROR; err.data = (unsigned char*)msg; err.length = strlen(msg);
 		setter(&err); return 1;
 	}
-	bool tab_stop = (bool)_argv[0].boolean;
+	bool tab_stop = KitsuneAsBool(&_argv[0]);
 	ImGui::PushAllowKeyboardFocus(tab_stop);
 	return 0;
 }

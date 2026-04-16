@@ -18,6 +18,16 @@
 // Use these macros in every kitsune_CFunction in this file.
 #define IMGUI_ARGC  (argc - 1)
 #define IMGUI_ARGV  (argc > 0 ? argv + 1 : argv)
+// Extract ImguiWindowContext* from self (argv[0]) — works even when ud is null
+// because hand-written overrides are registered with userdata=nullptr.
+#define IMGUI_CTX   ((ImguiWindowContext*)(argc > 0 && argv[0].type == KITSUNE_TUSERDATA && argv[0].userdata ? argv[0].userdata->userdata : ud))
+// Guard: return a TERROR if ctx is null.
+#define IMGUI_REQUIRE_CTX(ctx) \
+    do { if (!(ctx)) { \
+        KitsuneVariable _e = {}; const char* _m = "renderer: invalid context"; \
+        _e.type = KITSUNE_TERROR; _e.data = (unsigned char*)_m; _e.length = strlen(_m); \
+        setter(&_e); return 1; \
+    } } while(0)
 
 // ---------------------------------------------------------------------------
 // Metamethods
@@ -25,7 +35,7 @@
 
 static int imgui_gc(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud) {
-    ImguiWindowContext* ctx = (ImguiWindowContext*)ud;
+    ImguiWindowContext* ctx = IMGUI_CTX;
     if (!ctx)
         return 0;
 
@@ -84,9 +94,9 @@ static int imgui_gc(int argc, const KitsuneVariable* argv,
 
     SDL_Quit();
 
-    // Free heap buffers
-    free(ctx->inputBuf);
-    free(ctx->title);
+    // Free heap buffers (may already be null if free_ctx ran first)
+    free(ctx->inputBuf);  ctx->inputBuf  = nullptr;
+    free(ctx->title);     ctx->title     = nullptr;
     free(ctx);
 
     extern ImguiWindowContext* g_imguiCtx;
@@ -187,13 +197,32 @@ static int ImguiRenderer_TextWrapped(int argc, const KitsuneVariable* argv,
     return 0;
 }
 
+static int ImguiRenderer_BulletText(int argc, const KitsuneVariable* argv,
+    const kitsune_ResultSetter setter, void* ud) {
+    const int _argc = IMGUI_ARGC;
+    const KitsuneVariable* _argv = IMGUI_ARGV;
+    if (_argc < 1) return 0;
+    KitsuneVariable* owned = nullptr;
+    const char* str = nullptr;
+    if (_argv[0].type == KITSUNE_TSTRING) {
+        str = (const char*)_argv[0].data;
+    } else {
+        owned = KitsuneToString(&_argv[0]);
+        str = owned ? (const char*)owned->data : "";
+    }
+    ImGui::BulletText("%s", str);
+    if (owned) KitsuneVariableFree(owned);
+    return 0;
+}
+
 // ---------------------------------------------------------------------------
 // Hand-written override: InputText
 // ---------------------------------------------------------------------------
 
 static int ImguiRenderer_InputText(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud) {
-    ImguiWindowContext* ctx = (ImguiWindowContext*)ud;
+    ImguiWindowContext* ctx = IMGUI_CTX;
+    IMGUI_REQUIRE_CTX(ctx);
     const int _argc = IMGUI_ARGC;
     const KitsuneVariable* _argv = IMGUI_ARGV;
 
@@ -206,21 +235,30 @@ static int ImguiRenderer_InputText(int argc, const KitsuneVariable* argv,
     }
 
     size_t needed = (_argc > 2 ? (size_t)_argv[2].integer : 256) + 1;
-    if (_argv[1].length + 1 > needed)
-        needed = _argv[1].length + 1;
+
+    const char* value = nullptr;
+    KitsuneVariable* valueOwned = nullptr;
+    if (_argv[1].type == KITSUNE_TSTRING) {
+        value = (const char*)_argv[1].data;
+        if (_argv[1].length + 1 > needed) needed = _argv[1].length + 1;
+    } else {
+        valueOwned = KitsuneToString(&_argv[1]);
+        value = valueOwned ? (const char*)valueOwned->data : "";
+        if (valueOwned && valueOwned->length + 1 > needed) needed = valueOwned->length + 1;
+    }
 
     if (needed > ctx->inputBufSize) {
         char* grown = (char*)realloc(ctx->inputBuf, needed);
-        if (!grown)
-            return 0;
+        if (!grown) { if (valueOwned) KitsuneVariableFree(valueOwned); return 0; }
         ctx->inputBuf     = grown;
         ctx->inputBufSize = needed;
     }
 
-    size_t len = _argv[1].length < ctx->inputBufSize - 1
-        ? _argv[1].length : ctx->inputBufSize - 1;
-    memcpy(ctx->inputBuf, _argv[1].data, len);
-    ctx->inputBuf[len] = '\0';
+    size_t vlen = value ? strlen(value) : 0;
+    if (vlen >= ctx->inputBufSize) vlen = ctx->inputBufSize - 1;
+    if (vlen > 0) memcpy(ctx->inputBuf, value, vlen);
+    ctx->inputBuf[vlen] = '\0';
+    if (valueOwned) KitsuneVariableFree(valueOwned);
 
     const char* label = _argv[0].type == KITSUNE_TSTRING
         ? (const char*)_argv[0].data : "";
@@ -249,7 +287,8 @@ static int ImguiRenderer_InputText(int argc, const KitsuneVariable* argv,
 
 static int ImguiRenderer_InputTextMultiline(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud) {
-    ImguiWindowContext* ctx = (ImguiWindowContext*)ud;
+    ImguiWindowContext* ctx = IMGUI_CTX;
+    IMGUI_REQUIRE_CTX(ctx);
     const int _argc = IMGUI_ARGC;
     const KitsuneVariable* _argv = IMGUI_ARGV;
 
@@ -262,21 +301,30 @@ static int ImguiRenderer_InputTextMultiline(int argc, const KitsuneVariable* arg
     }
 
     size_t needed = (_argc > 4 ? (size_t)_argv[4].integer : 256) + 1;
-    if (_argv[1].length + 1 > needed)
-        needed = _argv[1].length + 1;
+
+    const char* value = nullptr;
+    KitsuneVariable* valueOwned = nullptr;
+    if (_argv[1].type == KITSUNE_TSTRING) {
+        value = (const char*)_argv[1].data;
+        if (_argv[1].length + 1 > needed) needed = _argv[1].length + 1;
+    } else {
+        valueOwned = KitsuneToString(&_argv[1]);
+        value = valueOwned ? (const char*)valueOwned->data : "";
+        if (valueOwned && valueOwned->length + 1 > needed) needed = valueOwned->length + 1;
+    }
 
     if (needed > ctx->inputBufSize) {
         char* grown = (char*)realloc(ctx->inputBuf, needed);
-        if (!grown)
-            return 0;
+        if (!grown) { if (valueOwned) KitsuneVariableFree(valueOwned); return 0; }
         ctx->inputBuf     = grown;
         ctx->inputBufSize = needed;
     }
 
-    size_t len = _argv[1].length < ctx->inputBufSize - 1
-        ? _argv[1].length : ctx->inputBufSize - 1;
-    memcpy(ctx->inputBuf, _argv[1].data, len);
-    ctx->inputBuf[len] = '\0';
+    size_t vlen = value ? strlen(value) : 0;
+    if (vlen >= ctx->inputBufSize) vlen = ctx->inputBufSize - 1;
+    if (vlen > 0) memcpy(ctx->inputBuf, value, vlen);
+    ctx->inputBuf[vlen] = '\0';
+    if (valueOwned) KitsuneVariableFree(valueOwned);
 
     float w = _argc > 2 ? (float)_argv[2].number : 0.0f;
     float h = _argc > 3 ? (float)_argv[3].number : 0.0f;
@@ -476,6 +524,7 @@ void add_imgui_meta_bindings(KitsuneUserDataRegistration* reg) {
     prepend_fn(reg, "TextColored",        ImguiRenderer_TextColored);
     prepend_fn(reg, "TextDisabled",       ImguiRenderer_TextDisabled);
     prepend_fn(reg, "TextWrapped",        ImguiRenderer_TextWrapped);
+    prepend_fn(reg, "BulletText",         ImguiRenderer_BulletText);
     prepend_fn(reg, "InputText",          ImguiRenderer_InputText);
     prepend_fn(reg, "InputTextMultiline", ImguiRenderer_InputTextMultiline);
     prepend_fn(reg, "PlotLines",          ImguiRenderer_PlotLines);

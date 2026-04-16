@@ -3653,6 +3653,9 @@ extern "C" {
 					state->lastCallError = nullptr;
 				}
 				lua_gc(state->L, LUA_GCCOLLECT, 0);
+				// GC finalizers (__gc) may have queued more deferred KitsuneVariableFree calls
+				// (e.g. imgui_gc freeing renderFn/context/onError). Drain again before lua_close.
+				DrainPendingVariableChain(state->L);
 				lua_close(state->L);
 				state->L = nullptr;
 			}
@@ -3666,6 +3669,9 @@ extern "C" {
 
 #ifdef KITSUNE_HTTP
 		curl_global_cleanup();
+#endif
+#ifdef KITSUNE_MONGO
+		MongoGlobalCleanup();
 #endif
 #ifdef _WIN32
 		WSACleanup();

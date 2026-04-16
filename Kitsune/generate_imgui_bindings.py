@@ -281,9 +281,9 @@ def generate_wrapper(func, overrides):
 
         elif ts == "bool":
             if dflt is not None:
-                lines.append(f"\tbool {pname} = {has_arg} ? (bool)argv[{i}].boolean : {dflt};")
+                lines.append(f"\tbool {pname} = {has_arg} ? KitsuneAsBool(&argv[{i}]) : {dflt};")
             else:
-                lines.append(f"\tbool {pname} = (bool)argv[{i}].boolean;")
+                lines.append(f"\tbool {pname} = KitsuneAsBool(&argv[{i}]);")
             call_args.append(pname)
 
         elif ts in ("int", "unsigned int") or ts.endswith("Flags") or ts.endswith("Flags_"):
@@ -386,15 +386,12 @@ def generate_wrapper(func, overrides):
             call_args.append(pname)
 
         elif ts == "bool*":
-            if nullable:
-                lines.append(f"\tbool {pname}_v = false;")
-                lines.append(f"\tbool* {pname} = ({has_arg} && argv[{i}].type != KITSUNE_TNIL) ? &{pname}_v : nullptr;")
-                lines.append(f"\tif ({pname}) {pname}_v = (bool)argv[{i}].boolean;")
-                out_vars.append((f"{pname}", "KITSUNE_TBOOLEAN", "boolean", f"{pname}_v", nullable))
-            else:
-                lines.append(f"\tbool {pname}_v = {has_arg} ? (bool)argv[{i}].boolean : false;")
-                lines.append(f"\tbool* {pname} = &{pname}_v;")
-                out_vars.append((f"{pname}", "KITSUNE_TBOOLEAN", "boolean", f"{pname}_v", False))
+            # Always treat bool* as nullable — passing nullptr is always valid for ImGui bool* params.
+            # Only create a non-null pointer if the caller explicitly passes a boolean.
+            lines.append(f"\tbool {pname}_v = false;")
+            lines.append(f"\tbool* {pname} = ({has_arg} && _argv[{i}].type == KITSUNE_TBOOLEAN) ? &{pname}_v : nullptr;")
+            lines.append(f"\tif ({pname}) {pname}_v = KitsuneAsBool(&_argv[{i}]);")
+            out_vars.append((f"{pname}", "KITSUNE_TBOOLEAN", "boolean", f"{pname}_v", True))
             call_args.append(pname)
 
         elif ts == "float*":

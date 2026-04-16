@@ -519,3 +519,20 @@ static inline long long KitsuneAsInt(const KitsuneVariable* v, long long fallbac
 	}
 	return fallback;
 }
+
+// Coerce to bool. Mirrors Lua truthiness but also treats 0/0.0/"" as false.
+//   nil / none            -> false
+//   boolean               -> as-is
+//   integer               -> false if 0, true otherwise
+//   number                -> false if 0.0, true otherwise
+//   string                -> false if empty, true otherwise
+//   anything else (table, function, userdata) -> true
+static inline bool KitsuneAsBool(const KitsuneVariable* v) {
+	if (!v) return false;
+	if (v->type == KITSUNE_TNIL || v->type == KITSUNE_TNONE) return false;
+	if (v->type == KITSUNE_TBOOLEAN) return v->boolean;
+	if (v->type == KITSUNE_TINTEGER) return v->integer != 0;
+	if (v->type == KITSUNE_TNUMBER)  return v->number != 0.0;
+	if (v->type == KITSUNE_TSTRING)  return v->length > 0;
+	return true;
+}

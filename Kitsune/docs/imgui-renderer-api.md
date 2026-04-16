@@ -317,6 +317,7 @@ All return `nil` if called before `Imgui.Start`.
 
 These functions are implemented manually in `ImguiRenderer.cpp`:
 
+- `renderer:BulletText(...)`
 - `renderer:ColorConvertHSVtoRGB(...)`
 - `renderer:ColorConvertRGBtoHSV(...)`
 - `renderer:Combo(...)`
@@ -398,7 +399,7 @@ These functions are implemented manually in `ImguiRenderer.cpp`:
 | `TextWrappedV` | unsupported parameter type: va_list |
 | `LabelText` | unsupported parameter type:  |
 | `LabelTextV` | unsupported parameter type: va_list |
-| `BulletText` | unsupported parameter type:  |
+| `BulletText` | hand-written override |
 | `BulletTextV` | unsupported parameter type: va_list |
 | `ButtonEx` | duplicate variant of ImGui::Button |
 | `CheckboxFlagsUintPtr` | duplicate variant of ImGui::CheckboxFlags |

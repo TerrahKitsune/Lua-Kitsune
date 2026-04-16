@@ -7,22 +7,30 @@
 #include <mongoc/mongoc.h>
 #include <mutex>
 
-// =============================================================================
-// BSON allocator vtable — routes all libbson heap calls through kitsune_malloc
-// so the g_live_allocs counter detects any bson object leaks.
-// aligned_alloc is left NULL; bson_mem_set_vtable falls back to malloc for it.
-// =============================================================================
-
-static const bson_mem_vtable_t s_bson_vtable = {
-    kitsune_malloc,
-    kitsune_calloc,
-    kitsune_realloc,
-    kitsune_free,
-    NULL,           // aligned_alloc: bson falls back to malloc when NULL
-    { NULL, NULL, NULL }
-};
-
 #endif // KITSUNE_MONGO
+
+void MongoGlobalCleanup() {
+    // mongoc_init/mongoc_cleanup are designed to be called exactly once per
+    // process lifetime.  Cleanup is registered via atexit in MongoGlobalInit
+    // and must not be called again here; doing so would leave the library
+    // torn-down mid-process, crashing any subsequent engine session that
+    // tries to use MongoDB.
+}
+
+static void MongoGlobalInit() {
+#ifdef KITSUNE_MONGO
+    // mongoc_init must be called exactly once per process.  We do NOT set
+    // bson_mem_set_vtable here: mongoc manages its own internal allocations
+    // independently of kitsune_malloc, so those allocations do not affect
+    // g_live_allocs and will not cause false "memory leak" reports at the
+    // end of a session.
+    static std::once_flag s_init_flag;
+    std::call_once(s_init_flag, []() {
+        mongoc_init();
+        atexit([]() { mongoc_cleanup(); });
+    });
+#endif
+}
 
 static const luaL_Reg mongofunctions[] = {
     { "Connect",        MongoConnect        },
@@ -53,14 +61,7 @@ static const luaL_Reg mongometa[] = {
 
 int luaopen_mongo(lua_State* L) {
 #ifdef KITSUNE_MONGO
-    // Set vtable first so all mongoc_init() allocations go through kitsune_malloc.
-    // Both calls must happen exactly once per process; guard with once_flag.
-    static std::once_flag s_init_flag;
-    std::call_once(s_init_flag, []() {
-        bson_mem_set_vtable(&s_bson_vtable);
-        mongoc_init();
-        atexit(mongoc_cleanup);
-    });
+    MongoGlobalInit();
 #endif
 
     luaL_newlibtable(L, mongofunctions);

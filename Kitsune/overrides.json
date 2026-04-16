@@ -18,6 +18,7 @@
     "Text",
     "TextColored",
     "TextDisabled",
-    "TextWrapped"
+    "TextWrapped",
+    "BulletText"
   ]
 }

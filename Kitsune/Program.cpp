@@ -6,6 +6,11 @@
 #endif
 #define KITSUNE_ALL
 
+#ifdef KITSUNE_IMGUI
+#undef KITSUNE_IMGUI
+#endif
+
+
 #include <atomic>
 #include <chrono>
 #include <csignal>
@@ -87,11 +92,16 @@ int main(int argc, char* argv[]) {
     _CrtMemState sOld;
     _CrtMemState sNew;
     _CrtMemState sDiff;
-    _CrtMemCheckpoint(&sOld);
+    // Snapshot taken after init so one-time CRT/locale allocations are excluded.
 #endif
 
 #ifdef _WIN32
     SetConsoleOutputCP(65001);
+#endif
+
+#if defined(_WIN32) && defined(_DEBUG)
+    // Baseline after all one-time CRT/locale/engine init to avoid false positives.
+    _CrtMemCheckpoint(&sOld);
 #endif
 
     if (!KitsuneInit()) {
