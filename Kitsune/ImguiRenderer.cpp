@@ -1,4 +1,4 @@
-#ifndef _CRT_SECURE_NO_WARNINGS
+﻿#ifndef _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 #ifdef KITSUNE_IMGUI
@@ -18,7 +18,7 @@
 // Use these macros in every kitsune_CFunction in this file.
 #define IMGUI_ARGC  (argc - 1)
 #define IMGUI_ARGV  (argc > 0 ? argv + 1 : argv)
-// Extract ImguiWindowContext* from self (argv[0]) � works even when ud is null
+// Extract ImguiWindowContext* from self (argv[0]) — works even when ud is null
 // because hand-written overrides are registered with userdata=nullptr.
 #define IMGUI_CTX   ((ImguiWindowContext*)(argc > 0 && argv[0].type == KITSUNE_TUSERDATA && argv[0].userdata ? argv[0].userdata->userdata : ud))
 // Guard: return a TERROR if ctx is null.
@@ -55,26 +55,12 @@ static int imgui_gc(int argc, const KitsuneVariable* argv,
     if (ctx->context)  { KitsuneVariableFree(ctx->context);  ctx->context  = nullptr; }
     if (ctx->onError)  { KitsuneVariableFree(ctx->onError);  ctx->onError  = nullptr; }
 
-    // Free KitsuneNamedFunction nodes in reg.Functions
-    KitsuneNamedFunction* fn = ctx->reg.Functions;
-    while (fn) {
-        KitsuneNamedFunction* next = fn->Next;
-        free(fn);
-        fn = next;
-    }
-    ctx->reg.Functions = nullptr;
-
-    // Free KitsuneNamedFunction nodes in reg.MetaTableFunctions
-    fn = ctx->reg.MetaTableFunctions;
-    while (fn) {
-        KitsuneNamedFunction* next = fn->Next;
-        free(fn);
-        fn = next;
-    }
-    ctx->reg.MetaTableFunctions = nullptr;
-
     // SDL2 / ImGui teardown
     if (ctx->imguiContext) {
+        // Ensure the GL context is current before calling any OpenGL teardown
+        // (ImGui_ImplOpenGL3_Shutdown calls glDeleteBuffers etc.).
+        if (ctx->window && ctx->glContext)
+            SDL_GL_MakeCurrent(ctx->window, ctx->glContext);
         ImGui::SetCurrentContext((ImGuiContext*)ctx->imguiContext);
         ImGui_ImplOpenGL3_Shutdown();
         ImGui_ImplSDL2_Shutdown();
@@ -422,18 +408,29 @@ static int ImguiRenderer_Combo(int argc, const KitsuneVariable* argv,
 
     int currentItem = (int)_argv[1].integer;
 
-    const KitsuneKeyValuePairVariableNode* node = _argv[2].table;
-    int count = (int)_argv[2].length;
-
-    const char** items = count > 0 ? (const char**)alloca(count * sizeof(const char*)) : nullptr;
-    int idx = 0;
-    while (node && idx < count) {
-        items[idx++] = (node->value.type == KITSUNE_TSTRING)
-            ? (const char*)node->value.data : "";
-        node = node->next;
+    int count = 0;
+    KitsuneVariable** itemVars = nullptr;
+    const char** items = nullptr;
+    if (_argv[2].type == KITSUNE_TTABLE) {
+        KitsuneVariable* lenVar = KitsuneGetLength(&_argv[2]);
+        count = lenVar ? (int)lenVar->integer : 0;
+        KitsuneVariableFree(lenVar);
+        if (count > 0) {
+            itemVars = (KitsuneVariable**)alloca(count * sizeof(KitsuneVariable*));
+            items    = (const char**)    alloca(count * sizeof(const char*));
+            for (int k = 0; k < count; k++) {
+                KitsuneVariable ki = {}; ki.type = KITSUNE_TINTEGER; ki.integer = k + 1;
+                itemVars[k] = KitsuneGetIndex(&_argv[2], &ki);
+                items[k] = (itemVars[k] && itemVars[k]->type == KITSUNE_TSTRING)
+                    ? (const char*)itemVars[k]->data : "";
+            }
+        }
     }
 
-    bool changed = ImGui::Combo(label, &currentItem, items, idx);
+    bool changed = ImGui::Combo(label, &currentItem, items, count);
+
+    for (int k = 0; k < count; k++)
+        KitsuneVariableFree(itemVars[k]);
 
     if (labelOwned)
         KitsuneVariableFree(labelOwned);
@@ -468,18 +465,29 @@ static int ImguiRenderer_ListBox(int argc, const KitsuneVariable* argv,
 
     int currentItem = (int)_argv[1].integer;
 
-    const KitsuneKeyValuePairVariableNode* node = _argv[2].table;
-    int count = (int)_argv[2].length;
-
-    const char** items = count > 0 ? (const char**)alloca(count * sizeof(const char*)) : nullptr;
-    int idx = 0;
-    while (node && idx < count) {
-        items[idx++] = (node->value.type == KITSUNE_TSTRING)
-            ? (const char*)node->value.data : "";
-        node = node->next;
+    int count = 0;
+    KitsuneVariable** itemVars = nullptr;
+    const char** items = nullptr;
+    if (_argv[2].type == KITSUNE_TTABLE) {
+        KitsuneVariable* lenVar = KitsuneGetLength(&_argv[2]);
+        count = lenVar ? (int)lenVar->integer : 0;
+        KitsuneVariableFree(lenVar);
+        if (count > 0) {
+            itemVars = (KitsuneVariable**)alloca(count * sizeof(KitsuneVariable*));
+            items    = (const char**)     alloca(count * sizeof(const char*));
+            for (int k = 0; k < count; k++) {
+                KitsuneVariable ki = {}; ki.type = KITSUNE_TINTEGER; ki.integer = k + 1;
+                itemVars[k] = KitsuneGetIndex(&_argv[2], &ki);
+                items[k] = (itemVars[k] && itemVars[k]->type == KITSUNE_TSTRING)
+                    ? (const char*)itemVars[k]->data : "";
+            }
+        }
     }
 
-    bool changed = ImGui::ListBox(label, &currentItem, items, idx);
+    bool changed = ImGui::ListBox(label, &currentItem, items, count);
+
+    for (int k = 0; k < count; k++)
+        KitsuneVariableFree(itemVars[k]);
 
     if (labelOwned) KitsuneVariableFree(labelOwned);
 

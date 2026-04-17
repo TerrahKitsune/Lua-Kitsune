@@ -46,13 +46,33 @@ static void drain_scheduled_calls(ImguiWindowContext* ctx) {
         ImguiScheduledCall* call = ctx->scheduledHead;
         ctx->scheduledHead = call->next;
 
-        KitsuneVariable* values = call->argc > 0
-            ? (KitsuneVariable*)alloca(call->argc * sizeof(KitsuneVariable)) : nullptr;
+        if (call->argc > 0) {
+            KitsuneVariable* values = (KitsuneVariable*)malloc(call->argc * sizeof(KitsuneVariable));
+            if (values) {
+                for (int i = 0; i < call->argc; i++)
+                    values[i] = *call->argv[i];
+                KitsuneExecuteVariableAsync(call->fn, call->argc, values, true);
+                free(values);
+            }
+        } else {
+            KitsuneExecuteVariableAsync(call->fn, 0, nullptr, true);
+        }
+
         for (int i = 0; i < call->argc; i++)
-            values[i] = *call->argv[i];
+            KitsuneVariableFree(call->argv[i]);
+        KitsuneVariableFree(call->fn);
+        free(call->argv);
+        free(call);
+    }
+}
 
-        KitsuneExecuteVariableAsync(call->fn, call->argc, values, true);
-
+// Free remaining scheduled calls without dispatching them.
+// Used after the render loop exits so callbacks that captured the renderer
+// do not run against a window/GL context that is being torn down.
+static void free_scheduled_calls(ImguiWindowContext* ctx) {
+    while (ctx->scheduledHead) {
+        ImguiScheduledCall* call = ctx->scheduledHead;
+        ctx->scheduledHead = call->next;
         for (int i = 0; i < call->argc; i++)
             KitsuneVariableFree(call->argv[i]);
         KitsuneVariableFree(call->fn);
@@ -137,20 +157,50 @@ static int ImguiStart(int argc, const KitsuneVariable* argv,
 }
 
 // ---------------------------------------------------------------------------
-// Imgui.Console
+// Imgui.Console / Imgui.OwnsConsole
 // ---------------------------------------------------------------------------
+
+// Cached at registration time: true if this process was the sole owner of
+// its console when it started (launched standalone or from VS), false if a
+// parent shell (cmd, PowerShell, Windows Terminal) was also attached.
+// Stays true even after FreeConsole() so the toggle button remains usable.
+static bool g_ownsConsole = false;
+
+static int ImguiOwnsConsole(int argc, const KitsuneVariable* argv,
+    const kitsune_ResultSetter setter, void* userdata) {
+    KitsuneVariable r = {}; r.type = KITSUNE_TBOOLEAN; r.boolean = g_ownsConsole;
+    setter(&r);
+    return 1;
+}
 
 static int ImguiConsole(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* userdata) {
 #ifdef _WIN32
     HWND hwnd = GetConsoleWindow();
     if (hwnd) {
-        bool visible = argc > 0 && argv[0].boolean;
-        ShowWindow(hwnd, visible ? SW_SHOW : SW_HIDE);
+        bool show = argc > 0 && argv[0].type == KITSUNE_TBOOLEAN && argv[0].boolean;
+        ShowWindow(hwnd, show ? SW_SHOWNOACTIVATE : SW_MINIMIZE);
+        bool isShown = IsWindowVisible(hwnd) && !IsIconic(hwnd);
+        KitsuneVariable r = {}; r.type = KITSUNE_TBOOLEAN; r.boolean = isShown;
+        setter(&r);
+        return 1;
     }
 #endif
-    // No-op on Linux
     return 0;
+}
+
+// Permanently destroys the console window. Only valid when this process owns
+// its console (g_ownsConsole == true).
+static int ImguiDestroyConsole(int argc, const KitsuneVariable* argv,
+    const kitsune_ResultSetter setter, void* userdata) {
+    bool ok = false;
+#ifdef _WIN32
+    if (g_ownsConsole && GetConsoleWindow())
+        ok = FreeConsole() != 0;
+#endif
+    KitsuneVariable r = {}; r.type = KITSUNE_TBOOLEAN; r.boolean = ok;
+    setter(&r);
+    return 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -332,8 +382,9 @@ static void free_ctx(ImguiWindowContext* ctx) {
     if (ctx->onError)  { KitsuneVariableFree(ctx->onError);  ctx->onError  = nullptr; }
     free(ctx->inputBuf);  ctx->inputBuf  = nullptr; ctx->inputBufSize = 0;
     free(ctx->title);     ctx->title     = nullptr;
-    // Do NOT free(ctx) here — imgui_gc owns the ctx allocation via the Lua userdata GC.
-    // Null g_imguiCtx so imgui_gc skips the double teardown of SDL/ImGui.
+    // These early-exit paths are reached before the renderer userdata is ever
+    // anchored, so imgui_gc will never fire. Free ctx itself here.
+    free(ctx);
     g_imguiCtx = nullptr;
 }
 
@@ -387,6 +438,17 @@ void RunImguiSession() {
     add_imgui_meta_bindings(&ctx->reg);
     add_imgui_bindings(&ctx->reg);
     KitsuneRegisterUserdata("ImguiRenderer", &ctx->reg);
+
+    // lua_registerkitsuneuserdata copies fn->func and fn->userdata as light-userdata
+    // upvalues into Lua closures — the NamedKitsuneFunction nodes are never touched by
+    // Lua again after this point. Free them now rather than carrying them until imgui_gc.
+    auto free_reg_nodes = [](KitsuneNamedFunction*& head) {
+        KitsuneNamedFunction* n = head;
+        while (n) { KitsuneNamedFunction* next = n->Next; free(n); n = next; }
+        head = nullptr;
+    };
+    free_reg_nodes(ctx->reg.Functions);
+    free_reg_nodes(ctx->reg.MetaTableFunctions);
 
     // ImGui init
     IMGUI_CHECKVERSION();
@@ -450,21 +512,22 @@ void RunImguiSession() {
 
             if (ctx->onError) {
                 KitsuneVariable* keepRunning = KitsuneExecuteVariable(ctx->onError, 1, result);
-                fprintf(stderr, "Imgui render error: %.*s\n",
-                    (int)result->length, (char*)result->data);
-                KitsuneVariableFree(result);
                 if (!keepRunning || keepRunning->type == KITSUNE_TERROR) {
+                    fprintf(stderr, "Imgui render error: %.*s\n",
+                        (int)result->length, (char*)result->data);
                     fprintf(stderr, "Imgui onError handler failed: %.*s\n",
                         (int)(keepRunning ? keepRunning->length : 0),
                         keepRunning ? (char*)keepRunning->data : "");
+                    KitsuneVariableFree(result);
                     KitsuneVariableFree(keepRunning);
                     running = false;
                 }
                 else {
                     bool cont = keepRunning->type == KITSUNE_TBOOLEAN && keepRunning->boolean;
                     if (!cont)
-                        fprintf(stderr, "Imgui render error (handled): %.*s\n",
+                        fprintf(stderr, "Imgui render error: %.*s\n",
                             (int)result->length, (char*)result->data);
+                    KitsuneVariableFree(result);
                     KitsuneVariableFree(keepRunning);
                     if (!cont)
                         running = false;
@@ -500,11 +563,28 @@ void RunImguiSession() {
         SDL_GL_SwapWindow(ctx->window);
     }
 
-    // Drain any remaining scheduled calls without executing them
-    drain_scheduled_calls(ctx);
+    // Free any remaining scheduled calls without dispatching them — the render
+    // loop has exited so any callbacks that captured the renderer would run
+    // against a window/GL context that is about to be torn down.
+    free_scheduled_calls(ctx);
 
     // Release the anchored renderer — this triggers imgui_gc exactly once via Lua GC.
-    KitsuneVariableFree(anchoredRenderer);
+    if (anchoredRenderer) {
+        KitsuneVariableFree(anchoredRenderer);
+    } else {
+        // Anchoring failed: imgui_gc will never fire, so clean up manually.
+        if (ctx->imguiContext) {
+            ImGui::SetCurrentContext((ImGuiContext*)ctx->imguiContext);
+            ImGui_ImplOpenGL3_Shutdown();
+            ImGui_ImplSDL2_Shutdown();
+            ImGui::DestroyContext((ImGuiContext*)ctx->imguiContext);
+            ctx->imguiContext = nullptr;
+        }
+        if (ctx->glContext) { SDL_GL_DeleteContext(ctx->glContext); ctx->glContext = nullptr; }
+        if (ctx->window)    { SDL_DestroyWindow(ctx->window);       ctx->window    = nullptr; }
+        SDL_Quit();
+        free_ctx(ctx);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -512,8 +592,14 @@ void RunImguiSession() {
 // ---------------------------------------------------------------------------
 
 void RegisterImguiFunctions() {
+#ifdef _WIN32
+    DWORD pids[2];
+    g_ownsConsole = (GetConsoleProcessList(pids, 2) == 1);
+#endif
     KitsuneRegisterFunction("Imgui.Start",           ImguiStart,           nullptr);
     KitsuneRegisterFunction("Imgui.Console",         ImguiConsole,         nullptr);
+    KitsuneRegisterFunction("Imgui.OwnsConsole",     ImguiOwnsConsole,     nullptr);
+    KitsuneRegisterFunction("Imgui.DestroyConsole",  ImguiDestroyConsole,  nullptr);
     KitsuneRegisterFunction("Imgui.Schedule",        ImguiSchedule,        nullptr);
     KitsuneRegisterFunction("Imgui.GetWindowWidth",  ImguiGetWindowWidth,  nullptr);
     KitsuneRegisterFunction("Imgui.GetWindowHeight", ImguiGetWindowHeight, nullptr);
