@@ -3505,6 +3505,67 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
+        public async Task RegisterUserdata_MetaMethod_GCIsCalled()
+        {
+            Counter counter = new Counter { Value = 69 };
+            using KitsuneEngine engine = new();
+            engine.RegisterUserdata<Counter>();
+            engine.SetVariable("c", engine.CreateUserdata(counter));
+            LuaValue result = await engine.ExecuteStringAsync("local v = c; c=nil; return tostring(v);");
+            result.String.ShouldBe("Counter(69)");
+            engine.CollectGarbage();
+            engine.GetActiveIds().ShouldBeEmpty();
+            counter.DidGc.ShouldBeTrue();
+        }
+
+        // This particular test needs to run solo, if it run with multiple tests it will not properly test dispose on kitsuneengine.
+        [Fact]
+        public async Task RegisterUserdata_MetaMethod_DoesntLeak()
+        {
+            Counter counter = new Counter { Value = 69 };
+            using (KitsuneEngine engine = new())
+            {
+                engine.RegisterUserdata<Counter>();
+                engine.SetVariable("c", engine.CreateUserdata(counter));
+                LuaValue result = await engine.ExecuteStringAsync("local v = c; c=nil; return v;");
+                result.UserdataRef.ShouldNotBeNull();
+                engine.CollectGarbage();
+                counter.DidGc.ShouldBeFalse();
+                result.UserdataRef?.Dispose();
+                if (KitsuneEngine.GetReferences() != 1)
+                {
+                    engine.CollectGarbage();
+                }
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+
+            if (KitsuneEngine.GetReferences() == 0)
+            {
+                counter.DidGc.ShouldBeTrue();
+            }
+        }
+
+        [Fact]
+        public async Task RegisterUserdata_MetaMethod_GCIsCalledOnClose()
+        {
+            Counter counter = new Counter { Value = 420 };
+            using (KitsuneEngine engine = new())
+            {
+                engine.RegisterUserdata<Counter>();
+                engine.SetVariable("c", engine.CreateUserdata(counter));
+                LuaValue result = await engine.ExecuteStringAsync("local v = c; c=nil; return tostring(v);");
+                result.String.ShouldBe("Counter(420)");
+                engine.GetActiveIds().ShouldBeEmpty();
+            }
+
+            // This test only works if its run solo, otherwise references might not be 0 which means the KitsuneCleanup has not been called
+            if (KitsuneEngine.GetReferences() == 0)
+            {
+                counter.DidGc.ShouldBeTrue();
+            }
+        }
+
+        [Fact]
         public async Task RegisterUserdata_NoToStringMetaMethod_DefaultUsesObjectToString()
         {
             // Widget has no [LuaMetaMethod("__tostring")], so the injected default must
@@ -7283,6 +7344,8 @@ namespace KitsuneNet.Tests
 
         private sealed class Counter
         {
+            public bool DidGc = false;
+
             public int Value;
 
             [LuaMethod]
@@ -7317,6 +7380,12 @@ namespace KitsuneNet.Tests
 
             [LuaMetaMethod("__tostring")]
             public LuaValue ToStr(IReadOnlyList<LuaValue> val) => $"Counter({Value})";
+
+            [LuaMetaMethod("__gc")]
+            public void GC(IReadOnlyList<LuaValue> val)
+            {
+                DidGc = true;
+            }
         }
 
         // Used by RegisterUserdata_DuplicateMethodName_ThrowsInvalidOperationException.

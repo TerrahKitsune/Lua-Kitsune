@@ -1,4 +1,4 @@
-using System.Reflection;
+ï»¿using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -21,7 +21,7 @@ namespace KitsuneNet
         // only called when the last instance is disposed; calling it earlier would
         // null g_state and break any concurrently running scripts (e.g. the stress
         // test runs a producer and a consumer as two independent engine instances).
-        private static int _refCount;
+        private static long _refCount;
 
         // Set to true on the scheduler thread while a LuaFunctionTrampoline call is executing.
         // Used to detect and reject recursive Execute* / Run* calls from within a registered function.
@@ -56,6 +56,8 @@ namespace KitsuneNet
 
         /// <summary>Returns the ID of the first coroutine that is still running, or 0 if none are active.</summary>
         public int RunningCoroutineId => KitsuneGetRunningId();
+
+        public static long GetReferences() => Interlocked.Read(ref _refCount);
 
         /// <summary>Starts a Lua script file as a background coroutine (fire-and-forget).</summary>
         /// <exception cref="LuaException">Thrown if called from within a registered function callback.</exception>
@@ -311,9 +313,9 @@ namespace KitsuneNet
 
         /// <summary>Starts execution of a <see cref="LuaValue"/> as a background coroutine (fire-and-forget).
         /// <list type="bullet">
-        /// <item><see cref="LuaType.Function"/> — calls the Lua function with <paramref name="args"/> as direct parameters.</item>
-        /// <item><see cref="LuaType.String"/> — loads the string as a Lua chunk; <paramref name="args"/> are exposed as <c>ARGS[1..n]</c>.</item>
-        /// <item>Anything else — no-op (silently ignored).</item>
+        /// <item><see cref="LuaType.Function"/> â€” calls the Lua function with <paramref name="args"/> as direct parameters.</item>
+        /// <item><see cref="LuaType.String"/> â€” loads the string as a Lua chunk; <paramref name="args"/> are exposed as <c>ARGS[1..n]</c>.</item>
+        /// <item>Anything else â€” no-op (silently ignored).</item>
         /// </list></summary>
         /// <exception cref="LuaException">Thrown if called from within a registered function callback.</exception>
         public void ExecuteVariable(LuaValue variable, params LuaValue[]? args)
@@ -382,7 +384,7 @@ namespace KitsuneNet
 
         /// <summary>Executes a <see cref="LuaValue"/> synchronously and returns the typed result.
         /// Returns <see cref="LuaValue.None"/> on start failure, if execution returned nothing,
-        /// or if the Lua code raised an error (silent variant — use
+        /// or if the Lua code raised an error (silent variant â€” use
         /// <see cref="ExecuteVariableAsync"/> for error details).
         /// When called from within a registered function callback the call executes via a re-entrant
         /// tight loop; Sleep() and Yield() inside the nested call are no-ops in that context.
@@ -421,7 +423,7 @@ namespace KitsuneNet
         public void Interrupt() => KitsuneInterrupt();
 
         /// <summary>
-        /// Returns the IDs of all coroutines that are currently alive — either still running
+        /// Returns the IDs of all coroutines that are currently alive â€” either still running
         /// or finished but not yet released via <see cref="GetResult"/> or <see cref="ReleaseResult"/>.
         /// </summary>
         public int[] GetActiveIds()
@@ -869,12 +871,12 @@ namespace KitsuneNet
         /// <summary>
         /// Performs a Lua garbage collection operation and returns current heap usage in bytes.
         /// <list type="bullet">
-        /// <item><paramref name="mode"/> 0 — query only; no collection performed.</item>
-        /// <item><paramref name="mode"/> 1 (default) — full collection cycle (<c>LUA_GCCOLLECT</c>).</item>
-        /// <item><paramref name="mode"/> 2 — single incremental step (<c>LUA_GCSTEP</c>).</item>
-        /// <item><paramref name="mode"/> 3 — pause the GC (<c>LUA_GCSTOP</c>). Memory grows without
+        /// <item><paramref name="mode"/> 0 â€” query only; no collection performed.</item>
+        /// <item><paramref name="mode"/> 1 (default) â€” full collection cycle (<c>LUA_GCCOLLECT</c>).</item>
+        /// <item><paramref name="mode"/> 2 â€” single incremental step (<c>LUA_GCSTEP</c>).</item>
+        /// <item><paramref name="mode"/> 3 â€” pause the GC (<c>LUA_GCSTOP</c>). Memory grows without
         /// bound until mode 1, 2, or 4 is called.</item>
-        /// <item><paramref name="mode"/> 4 — restart a paused GC (<c>LUA_GCRESTART</c>).</item>
+        /// <item><paramref name="mode"/> 4 â€” restart a paused GC (<c>LUA_GCRESTART</c>).</item>
         /// </list>
         /// <para>Drains any pending deferred frees from disposed <see cref="LuaFunctionRef"/> /
         /// <see cref="LuaThreadRef"/> instances before the cycle. Holds the Lua scheduler lock
@@ -1618,7 +1620,7 @@ namespace KitsuneNet
 
             // Function / Thread / Table / Userdata: transfer the native pointer to a ref object;
             // the ref keeps the Lua registry entry alive until Dispose() calls KitsuneVariableFree.
-            // KitsuneVariableFree must NOT be called here — the ref's Dispose() does it.
+            // KitsuneVariableFree must NOT be called here â€” the ref's Dispose() does it.
             if (t == LuaType.Function)
             {
                 return new LuaValue { Type = LuaType.Function, FunctionRef = new LuaFunctionRef(ptr) };
@@ -1664,12 +1666,12 @@ namespace KitsuneNet
         }
 
         // Converts a by-value KitsuneVariable (already marshaled into managed memory) to a LuaValue.
-        // Does NOT free any native memory — use this for embedded struct members, not heap pointers.
+        // Does NOT free any native memory â€” use this for embedded struct members, not heap pointers.
         // Function/Thread values are returned as opaque (Type only, no ref) since the variable
         // is embedded inside a larger allocation (table node or callback args array).
         // When allowTableSnapshot is true (default), table values with a live ref are snapshotted inline
         // via KitsuneGetTableContents.  Pass false from GetAll callbacks, which already hold
-        // AcquireLuaAccess — calling KitsuneGetTableContents there would deadlock.
+        // AcquireLuaAccess â€” calling KitsuneGetTableContents there would deadlock.
         private static LuaValue NativeVariableToLuaValue(KitsuneVariable nv, bool allowTableSnapshot = true)
         {
             LuaType t = (LuaType)nv.Type;
@@ -1677,7 +1679,7 @@ namespace KitsuneNet
             {
                 // The embedded variable holds a live luaL_ref (valid for the duration of the
                 // enclosing native call). Snapshot it immediately so the returned LuaValue has
-                // .Table populated — restoring the behaviour callers expect for callback args.
+                // .Table populated â€” restoring the behaviour callers expect for callback args.
                 unsafe
                 {
                     KitsuneVariable local = nv;
@@ -1864,7 +1866,7 @@ namespace KitsuneNet
                     }
                 case LuaType.Stream when v.StreamValue is not null:
                     {
-                        // Fast path: CreateStream block — pass the existing block directly (zero copy).
+                        // Fast path: CreateStream block â€” pass the existing block directly (zero copy).
                         // MarkPassedToLua flips _isManaged=false to prevent a second fast-pass of the
                         // same block. The C++ lua_push_sharedmemory_stream call sets FlagLuaReferenced
                         // on the block so Dispose knows Lua's GC will eventually set OWNER_DISPOSED.
@@ -1901,7 +1903,7 @@ namespace KitsuneNet
 
                         nv.Data = block;
 
-                        // NOT added to ptrs — the block is owned by the global list; freed by ticker.
+                        // NOT added to ptrs â€” the block is owned by the global list; freed by ticker.
                         break;
                     }
                 case LuaType.CFunction when v.CFunctionValue is LuaFunction luaFunc:
@@ -1967,7 +1969,7 @@ namespace KitsuneNet
                         iterState.StepHandle = GCHandle.Alloc(stepFunc);
                         iterState.FinalizeHandle = GCHandle.Alloc(finalizeFunc);
 
-                        // kitsune_CFunctionData for step — first and next share the same struct
+                        // kitsune_CFunctionData for step â€” first and next share the same struct
                         // because IEnumerator.MoveNext() is already stateful.
                         IntPtr stepCFD = Marshal.AllocHGlobal(IntPtr.Size * 2);
                         Marshal.WriteIntPtr(stepCFD, 0, GetTrampolinePtr());
@@ -1991,14 +1993,14 @@ namespace KitsuneNet
 
                         nv.Data = iterStruct;
 
-                        // GCHandles intentionally NOT in ptrs — freed by finalizeFunc.
+                        // GCHandles intentionally NOT in ptrs â€” freed by finalizeFunc.
                         break;
                     }
                 case LuaType.Userdata when v.UserdataRef is { } ur && ur.NativePtr != IntPtr.Zero:
                     {
                         // Copy the KitsuneUserData* pointer directly from the held KitsuneVariable.
                         // PushKitsuneVariable reads ud->ref and calls lua_rawgeti to push the
-                        // original Lua userdata — preserving identity.
+                        // original Lua userdata â€” preserving identity.
                         // The pointer is owned by LuaUserdataRef; do NOT add it to ptrs.
                         var tnv = Marshal.PtrToStructure<KitsuneVariable>(ur.NativePtr);
                         nv.Data = tnv.Data;
@@ -2028,7 +2030,7 @@ namespace KitsuneNet
             }
         }
 
-        // Wraps an inbound KitsuneSharedMemoryBlock* in a LuaStream — zero copy.
+        // Wraps an inbound KitsuneSharedMemoryBlock* in a LuaStream â€” zero copy.
         // The LuaStream clears ACCESSOR_DISPOSED on the block, taking ownership of the accessor
         // role. Disposing sets ACCESSOR_DISPOSED; the engine's ticker frees the block once Lua
         // also sets OWNER_DISPOSED via shmem_close.
@@ -2284,7 +2286,7 @@ namespace KitsuneNet
             }
             finally
             {
-                // Free temporary structs — the engine copied method info into Lua metatables.
+                // Free temporary structs â€” the engine copied method info into Lua metatables.
                 // GCHandles for the LuaFunction delegates remain alive in GlobalHandles.
                 FreeNamedFunctionList(funcHead);
                 FreeNamedFunctionList(metaHead);
@@ -2399,9 +2401,9 @@ namespace KitsuneNet
         // Mirrors the x64 layout of KitsuneSharedMemoryBlock (see KitsuneEngine.h):
         //   offset  0: BYTE              flags    (1 byte + 7 padding)
         //   offset  8: void*             userdata (8 bytes, reserved)
-        //   offset 16: KitsuneSharedMemoryBlock* next    (8 bytes, intrusive list link — do NOT read/write from C#)
+        //   offset 16: KitsuneSharedMemoryBlock* next    (8 bytes, intrusive list link â€” do NOT read/write from C#)
         //   offset 24: size_t            size     (8 bytes)
-        //   offset 32: BYTE              data[]   (variable — NOT part of this header struct)
+        //   offset 32: BYTE              data[]   (variable â€” NOT part of this header struct)
         [StructLayout(LayoutKind.Explicit, Size = 32)]
         private struct SharedMemoryBlockHeader
         {
@@ -2412,7 +2414,7 @@ namespace KitsuneNet
             public IntPtr UserData;
 
             [FieldOffset(16)]
-            public IntPtr Next; // intrusive list pointer — not used by C#
+            public IntPtr Next; // intrusive list pointer â€” not used by C#
 
             [FieldOffset(24)]
             public nuint Size;

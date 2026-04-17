@@ -122,6 +122,10 @@ end
 local function render(renderer, ctx)
     ctx.frameCount = ctx.frameCount + 1
 
+    if ctx.frameCount > 100 then
+        return false;
+    end
+
     if not ctx.scheduled then
         ctx.scheduled = true
         Imgui.Schedule(function()
