@@ -319,6 +319,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Lua functions.md" />
+    <None Include="plans\imgui-api-namespace-refactor.md" />
     <None Include="plans\imgui-integration.md" />
     <None Include="plans\imgui-markdown.md" />
     <None Include="testEnvironments.json" />

@@ -39,7 +39,8 @@
     showMetrics    = false,
     showMenuDemo   = false,
     consoleVisible = true,
-    ownsConsole    = Imgui.OwnsConsole(),
+    ownsConsole    = Win32.OwnsConsole(),
+    mdDoc          = Stream.Open('./docs/markdown-test.md', 'rb'),
 }
 
 local function onError(err)
@@ -69,11 +70,11 @@ local function tabInfo(renderer, ctx)
     renderer:Text("Schedule:    " .. ctx.scheduleResult)
     renderer:Text("Last error:  " .. ctx.lastError)
     renderer:Separator()
-    renderer:Text("Window size: " .. Imgui.GetWindowWidth() .. " x " .. Imgui.GetWindowHeight())
-    renderer:Text("Window pos:  " .. Imgui.GetWindowX() .. ", " .. Imgui.GetWindowY())
-    renderer:Text("Focused:     " .. tostring(Imgui.IsFocused()))
-    renderer:Text("Minimized:   " .. tostring(Imgui.IsMinimized()))
-    local idx, name, mx, my, mw, mh, hz = Imgui.GetMonitor()
+    renderer:Text("Window size: " .. SDL.GetWindowWidth() .. " x " .. SDL.GetWindowHeight())
+    renderer:Text("Window pos:  " .. SDL.GetWindowX() .. ", " .. SDL.GetWindowY())
+    renderer:Text("Focused:     " .. tostring(SDL.IsFocused()))
+    renderer:Text("Minimized:   " .. tostring(SDL.IsMinimized()))
+    local idx, name, mx, my, mw, mh, hz = SDL.GetMonitor()
     if idx then
         renderer:Text("Monitor " .. idx .. ": " .. name .. " (" .. mw .. "x" .. mh .. " @" .. hz .. "Hz)")
     end
@@ -567,13 +568,13 @@ local function tabSystem(renderer, ctx)
     if ctx.ownsConsole then
         if renderer:Button("Toggle (minimize/restore)") then
             ctx.consoleVisible = not ctx.consoleVisible
-            local actual = Imgui.Console(ctx.consoleVisible)
+            local actual = Win32.Console(ctx.consoleVisible)
             if actual ~= nil then ctx.consoleVisible = actual end
         end
         renderer:SameLine()
         renderer:Text(ctx.consoleVisible and "visible" or "minimized")
         if renderer:Button("Destroy Console") then
-            Imgui.DestroyConsole()
+            Win32.DestroyConsole()
             ctx.consoleVisible = false
         end
     else
@@ -581,6 +582,14 @@ local function tabSystem(renderer, ctx)
     end
     if ctx.showDemo    then ctx.showDemo    = renderer:ShowDemoWindow(ctx.showDemo)       == true end
     if ctx.showMetrics then ctx.showMetrics = renderer:ShowMetricsWindow(ctx.showMetrics) == true end
+end
+
+local function tabMarkdown(renderer, ctx)
+    local refresh = renderer:Button('Reload')
+    renderer:SameLine()
+    renderer:Text('docs/markdown-test.md')
+    renderer:Separator()
+    renderer:MarkdownRender(ctx.mdDoc, refresh)
 end
 
 local function render(renderer, ctx)
@@ -593,8 +602,8 @@ local function render(renderer, ctx)
         end)
     end
 
-    local winW = Imgui.GetWindowWidth()
-    local winH = Imgui.GetWindowHeight()
+    local winW = SDL.GetWindowWidth()
+    local winH = SDL.GetWindowHeight()
     renderer:SetNextWindowPos(0, 0, condAlways)
     renderer:SetNextWindowSize(winW, winH, condAlways)
 
@@ -662,8 +671,12 @@ local function render(renderer, ctx)
             tabCursor(renderer, ctx)
             renderer:EndTabItem()
         end
-        if renderer:BeginTabItem("System") then
+        if renderer:BeginTabItem('System') then
             tabSystem(renderer, ctx)
+            renderer:EndTabItem()
+        end
+        if renderer:BeginTabItem('Markdown') then
+            tabMarkdown(renderer, ctx)
             renderer:EndTabItem()
         end
         renderer:EndTabBar()

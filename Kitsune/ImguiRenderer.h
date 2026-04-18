@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #ifdef KITSUNE_IMGUI
 
 #include "KitsuneEngine.h"
@@ -15,7 +15,7 @@ struct ImguiScheduledCall {
 struct ImguiWindowContext {
     SDL_Window*                window;
     SDL_GLContext               glContext;
-    void*                       imguiContext;  // ImGuiContext* � typed as void* to avoid pulling imgui.h into all headers
+    void*                       imguiContext;  // ImGuiContext* — typed as void* to avoid pulling imgui.h into all headers
     char*                       title;         // heap copy of window title
     int                         width;
     int                         height;
@@ -26,6 +26,14 @@ struct ImguiWindowContext {
     KitsuneVariable*            onError;
     ImguiScheduledCall*         scheduledHead; // linked list of pending scheduled calls
     KitsuneUserDataRegistration reg;           // renderer userdata registration; nodes freed on teardown
+    // Markdown cache — rebuilt only when stream id changes or refresh is forced
+    uint64_t                    mdCacheId;     // lua_stream_getid() of last parsed stream; 0 = empty
+    char*                       mdContent;     // heap copy of full stream content; NULL when empty
+    size_t                      mdContentLen;
+    struct MarkdownNode*        mdNodes;       // flat dynamic array; NULL when empty
+    int                         mdNodeCount;   // number of valid nodes
+    int                         mdNodeAlloc;   // allocated capacity; always >= mdNodeCount
+    const char*                 mdCacheError;  // non-NULL = last read/parse failed; always a string literal, never freed
 };
 
 // Populates reg->Functions with heap-allocated KitsuneNamedFunction nodes for

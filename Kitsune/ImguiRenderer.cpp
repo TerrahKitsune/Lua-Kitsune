@@ -4,6 +4,7 @@
 #ifdef KITSUNE_IMGUI
 
 #include "ImguiRenderer.h"
+#include "ImguiMarkdown.h"
 
 #include "Imgui/imgui.h"
 #include "Imgui/imgui_impl_sdl2.h"
@@ -81,6 +82,7 @@ static int imgui_gc(int argc, const KitsuneVariable* argv,
     SDL_Quit();
 
     // Free heap buffers (may already be null if free_ctx ran first)
+    FreeMarkdownCache(ctx);
     free(ctx->inputBuf);  ctx->inputBuf  = nullptr;
     free(ctx->title);     ctx->title     = nullptr;
     free(ctx);
@@ -499,6 +501,54 @@ static int ImguiRenderer_ListBox(int argc, const KitsuneVariable* argv,
 }
 
 // ---------------------------------------------------------------------------
+// MarkdownRender
+// renderer:MarkdownRender(stream [, refresh [, w [, h]]])
+// ---------------------------------------------------------------------------
+
+static int ImguiRenderer_MarkdownRender(int argc, const KitsuneVariable* argv,
+    const kitsune_ResultSetter setter, void* ud) {
+    ImguiWindowContext* ctx = IMGUI_CTX;
+    IMGUI_REQUIRE_CTX(ctx);
+
+    // argv[0] = self, argv[1] = stream
+    if (IMGUI_ARGC < 1 || argv[1].type != KITSUNE_TUSERDATA || !argv[1].userdata
+        || !argv[1].userdata->name || strcmp(argv[1].userdata->name, "STREAM") != 0) {
+        KitsuneVariable e = {}; const char* m = "MarkdownRender: expected stream userdata";
+        e.type = KITSUNE_TERROR; e.data = (unsigned char*)m; e.length = strlen(m);
+        setter(&e); return 1;
+    }
+
+    // Validate it has Seek and Read by calling stream:Id() — if Id() returns a number
+    // we know it's a stream. Also gives us the cache key.
+    KitsuneVariable* idVar = KitsuneCallMethod(&argv[1], "Id", 0, nullptr);
+    if (!idVar || (idVar->type != KITSUNE_TINTEGER && idVar->type != KITSUNE_TNUMBER)) {
+        KitsuneVariableFree(idVar);
+        KitsuneVariable e = {}; const char* m = "MarkdownRender: argument is not a stream";
+        e.type = KITSUNE_TERROR; e.data = (unsigned char*)m; e.length = strlen(m);
+        setter(&e); return 1;
+    }
+    uint64_t id = (idVar->type == KITSUNE_TINTEGER)
+        ? (uint64_t)idVar->integer
+        : (uint64_t)idVar->number;
+    KitsuneVariableFree(idVar);
+
+    bool  refresh = IMGUI_ARGC >= 2 && argv[2].type == KITSUNE_TBOOLEAN && argv[2].boolean;
+    float w       = IMGUI_ARGC >= 3 ? (float)KitsuneAsDouble(&argv[3], 0.0) : 0.0f;
+    float h       = IMGUI_ARGC >= 4 ? (float)KitsuneAsDouble(&argv[4], 0.0) : 0.0f;
+
+    if (refresh || id != ctx->mdCacheId) {
+        FreeMarkdownCache(ctx);
+        ReadStreamIntoCache(&argv[1], ctx);
+        if (!ctx->mdCacheError)
+            ParseContentIntoNodes(ctx);
+        ctx->mdCacheId = id;
+    }
+
+    RenderFromNodes(ctx, w, h);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
 // Registration helpers
 // ---------------------------------------------------------------------------
 
@@ -538,6 +588,7 @@ void add_imgui_meta_bindings(KitsuneUserDataRegistration* reg) {
     prepend_fn(reg, "PlotLines",          ImguiRenderer_PlotLines);
     prepend_fn(reg, "Combo",              ImguiRenderer_Combo);
     prepend_fn(reg, "ListBox",            ImguiRenderer_ListBox);
+    prepend_fn(reg, "MarkdownRender",     ImguiRenderer_MarkdownRender);
 }
 
 #endif // KITSUNE_IMGUI

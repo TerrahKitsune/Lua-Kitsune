@@ -888,6 +888,7 @@
     <None Include="triplets\x64-windows-static-md.cmake" />
     <None Include="plans\imgui-integration.md" />
     <None Include="plans\imgui-markdown.md" />
+    <None Include="plans\imgui-api-namespace-refactor.md" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />

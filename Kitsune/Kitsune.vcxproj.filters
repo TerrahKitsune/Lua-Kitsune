@@ -63,6 +63,9 @@
     <ClCompile Include="Imgui\imgui.cpp">
       <Filter>Imgui</Filter>
     </ClCompile>
+    <ClCompile Include="ImguiMarkdown.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\KitsuneEngine.h">
@@ -94,6 +97,9 @@
     </ClInclude>
     <ClInclude Include="Imgui\dcimgui.h">
       <Filter>Imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="ImguiMarkdown.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -128,6 +134,7 @@
       <Filter>Documentation</Filter>
     </None>
     <None Include="imgui_test.lua" />
+    <None Include="docs\markdown-test.md" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="main.lua" />

@@ -599,21 +599,25 @@ void RegisterImguiFunctions() {
     g_ownsConsole = (GetConsoleProcessList(pids, 2) == 1);
 #endif
     KitsuneRegisterFunction("Imgui.Start",           ImguiStart,           nullptr);
-    KitsuneRegisterFunction("Imgui.Console",         ImguiConsole,         nullptr);
-    KitsuneRegisterFunction("Imgui.OwnsConsole",     ImguiOwnsConsole,     nullptr);
-    KitsuneRegisterFunction("Imgui.DestroyConsole",  ImguiDestroyConsole,  nullptr);
     KitsuneRegisterFunction("Imgui.Schedule",        ImguiSchedule,        nullptr);
-    KitsuneRegisterFunction("Imgui.GetWindowWidth",  ImguiGetWindowWidth,  nullptr);
-    KitsuneRegisterFunction("Imgui.GetWindowHeight", ImguiGetWindowHeight, nullptr);
-    KitsuneRegisterFunction("Imgui.GetWindowX",      ImguiGetWindowX,      nullptr);
-    KitsuneRegisterFunction("Imgui.GetWindowY",      ImguiGetWindowY,      nullptr);
-    KitsuneRegisterFunction("Imgui.SetWindowSize",   ImguiSetWindowSize,   nullptr);
-    KitsuneRegisterFunction("Imgui.SetWindowPosition", ImguiSetWindowPosition, nullptr);
-    KitsuneRegisterFunction("Imgui.SetWindowTitle",  ImguiSetWindowTitle,  nullptr);
-    KitsuneRegisterFunction("Imgui.IsMinimized",     ImguiIsMinimized,     nullptr);
-    KitsuneRegisterFunction("Imgui.IsFocused",       ImguiIsFocused,       nullptr);
-    KitsuneRegisterFunction("Imgui.SetFullscreen",   ImguiSetFullscreen,   nullptr);
-    KitsuneRegisterFunction("Imgui.GetMonitor",      ImguiGetMonitor,      nullptr);
+
+    // SDL.* — window and display functions (SDL owns these)
+    KitsuneRegisterFunction("SDL.GetWindowWidth",    ImguiGetWindowWidth,  nullptr);
+    KitsuneRegisterFunction("SDL.GetWindowHeight",   ImguiGetWindowHeight, nullptr);
+    KitsuneRegisterFunction("SDL.GetWindowX",        ImguiGetWindowX,      nullptr);
+    KitsuneRegisterFunction("SDL.GetWindowY",        ImguiGetWindowY,      nullptr);
+    KitsuneRegisterFunction("SDL.SetWindowSize",     ImguiSetWindowSize,   nullptr);
+    KitsuneRegisterFunction("SDL.SetWindowPosition", ImguiSetWindowPosition, nullptr);
+    KitsuneRegisterFunction("SDL.SetWindowTitle",    ImguiSetWindowTitle,  nullptr);
+    KitsuneRegisterFunction("SDL.IsMinimized",       ImguiIsMinimized,     nullptr);
+    KitsuneRegisterFunction("SDL.IsFocused",         ImguiIsFocused,       nullptr);
+    KitsuneRegisterFunction("SDL.SetFullscreen",     ImguiSetFullscreen,   nullptr);
+    KitsuneRegisterFunction("SDL.GetMonitor",        ImguiGetMonitor,      nullptr);
+
+    // Win32.* — console window functions (Win32 owns these; impls are no-op on Linux via #ifdef _WIN32)
+    KitsuneRegisterFunction("Win32.Console",         ImguiConsole,         nullptr);
+    KitsuneRegisterFunction("Win32.OwnsConsole",     ImguiOwnsConsole,     nullptr);
+    KitsuneRegisterFunction("Win32.DestroyConsole",  ImguiDestroyConsole,  nullptr);
     register_imgui_enums();
 }
 

@@ -91,6 +91,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="ImguiMarkdown.cpp" />
     <ClCompile Include="Program.cpp" />
     <ClCompile Include="Session.cpp" />
     <ClCompile Include="ImguiSession.cpp" />
@@ -112,6 +113,7 @@
     <ClInclude Include="Session.h" />
     <ClInclude Include="ImguiSession.h" />
     <ClInclude Include="ImguiRenderer.h" />
+    <ClInclude Include="ImguiMarkdown.h" />
     <ClInclude Include="ImguiEnums.h" />
     <ClInclude Include="Imgui\imgui.h" />
     <ClInclude Include="Imgui\imgui_impl_sdl2.h" />
@@ -139,6 +141,7 @@
     <None Include="..\Lua functions.md" />
     <None Include="..\Lua\Makefile" />
     <None Include="docs\imgui-renderer-api.md" />
+    <None Include="docs\markdown-test.md" />
     <None Include="imgui_test.lua" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

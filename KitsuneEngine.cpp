@@ -474,6 +474,7 @@ static void FillKitsuneVariableFromStack(lua_State* L, int idx, KitsuneVariable*
 			}
 			lua_pop(L, 2);  // pop __name and metatable
 		}
+
 		out->type = LUA_TUSERDATA;
 		break;
 	}

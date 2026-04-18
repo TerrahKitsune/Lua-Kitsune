@@ -22,27 +22,33 @@ Can only be called once per script run. Removes itself after the first call.
 
 Queues `fn` to start as a fire-and-forget coroutine at the end of the current frame. Safe to call from inside `renderFn`. Do not use the `renderer` inside a scheduled function — it is only valid during the frame callback.
 
-### `Imgui.Console(visible)`
+## SDL API
 
-Shows or hides the console window. **Windows only** — no-op on Linux.
-
-### Window functions
-
-All return `nil` if called before `Imgui.Start`.
+Window and display functions. All return `nil` if called before `Imgui.Start`.
 
 | Function | Parameters | Returns | Notes |
 |---|---|---|---|
-| `Imgui.GetWindowWidth()` | — | `integer` | Current window width in pixels |
-| `Imgui.GetWindowHeight()` | — | `integer` | Current window height in pixels |
-| `Imgui.GetWindowX()` | — | `integer` | Window X position on screen |
-| `Imgui.GetWindowY()` | — | `integer` | Window Y position on screen |
-| `Imgui.SetWindowSize(w, h)` | `integer, integer` | — | Resize the window |
-| `Imgui.SetWindowPosition(x, y)` | `integer, integer` | — | Move the window |
-| `Imgui.SetWindowTitle(title)` | `string` | — | Change the window title bar text |
-| `Imgui.IsMinimized()` | — | `boolean` | Whether the window is minimised |
-| `Imgui.IsFocused()` | — | `boolean` | Whether the window has input focus |
-| `Imgui.SetFullscreen(enabled)` | `boolean` | — | Toggle borderless fullscreen |
-| `Imgui.GetMonitor()` | — | `index, name, x, y, width, height, refreshRate` | Info about the monitor the window is currently on |
+| `SDL.GetWindowWidth()` | — | `integer` | Current window width in pixels |
+| `SDL.GetWindowHeight()` | — | `integer` | Current window height in pixels |
+| `SDL.GetWindowX()` | — | `integer` | Window X position on screen |
+| `SDL.GetWindowY()` | — | `integer` | Window Y position on screen |
+| `SDL.SetWindowSize(w, h)` | `integer, integer` | — | Resize the window |
+| `SDL.SetWindowPosition(x, y)` | `integer, integer` | — | Move the window |
+| `SDL.SetWindowTitle(title)` | `string` | — | Change the window title bar text |
+| `SDL.IsMinimized()` | — | `boolean` | Whether the window is minimised |
+| `SDL.IsFocused()` | — | `boolean` | Whether the window has input focus |
+| `SDL.SetFullscreen(enabled)` | `boolean` | — | Toggle borderless fullscreen |
+| `SDL.GetMonitor()` | — | `index, name, x, y, width, height, refreshRate` | Info about the monitor the window is currently on |
+
+## Win32 API
+
+Console window functions. All are no-op on Linux.
+
+| Function | Parameters | Returns | Notes |
+|---|---|---|---|
+| `Win32.Console(visible)` | `boolean` | `boolean` | Show or hide the console window. Returns actual visibility state |
+| `Win32.OwnsConsole()` | — | `boolean` | Whether this process owns its console (not launched from a shell) |
+| `Win32.DestroyConsole()` | — | `boolean` | Permanently detach the console window. Only valid when `Win32.OwnsConsole()` is true |
 
 ## Supported Methods
 
