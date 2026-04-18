@@ -7,7 +7,6 @@ A comprehensive reference for all available functions in the Lua environment.
 ## Table of Contents
 
 - [Global Functions](#global-functions)
-- [Session](#session)
 - [Mutex](#mutex)
 - [Redis](#redis)
 - [CSV](#csv)
@@ -26,6 +25,9 @@ A comprehensive reference for all available functions in the Lua environment.
 - [Json](#json)
 - [Wchar](#wchar)
 - [Identifier](#identifier)
+- [DateTime](#datetime)
+- [Decimal](#decimal)
+- [MongoDB](#mongodb)
 - [FileSystem](#filesystem)
 ---
 
@@ -44,10 +46,12 @@ int CRC64(data)
 
 ```lua
 nil Sleep(opt int)
+nil Yield()
 int Time()
 ms Runtime()
 ```
 - `Sleep`: Yield the current coroutine for the specified ms (default 0). Falls back to a blocking OS sleep when called outside a scheduler-managed coroutine.
+- `Yield`: Cooperatively yield the current coroutine back to the scheduler immediately (no sleep delay). For inline sync calls, this briefly releases Lua access so the scheduler and variable bridge can service their queues before the call is resumed.
 - `Time`: Get current Unix epoch in milliseconds
 - `Runtime`: Get runtime in milliseconds
 
@@ -140,82 +144,6 @@ bool GetIsAdmin()
 | `VERSION` | Engine version string (e.g. `"1.0.0"`) |
 | `CPUID` | CPU identifier string returned by the CPUID instruction |
 | `DEBUG` | `true` in debug builds; not defined in release builds |
-
----
-
-## Session
-
-The `Session` global table groups interactive environment functions into three subtables.
-
-### Session.Console
-
-> **Note:** `Create`, `Destroy`, `Attach`, `SetCursorPosition`, `Clear`, `Write`, `Print`, `ReadKey`, `SetColor`, `GetColor`, `SetVisible`, `SetTitle`, and `GetInfo` are Windows-only. `Put`, `GetKey`, `HasKeyDown`, and `GetKeyState` are available on all platforms.
-
-```lua
-bool   Session.Console.Create()                                              -- Windows only
-bool   Session.Console.Destroy()                                             -- Windows only
-bool   Session.Console.Attach(opt processId)                                 -- Windows only
-cursorx, cursory, sizex, sizey, maxsizex, maxsizey Session.Console.GetInfo() -- Windows only
-nil    Session.Console.SetCursorPosition(x, y)                               -- Windows only
-nil    Session.Console.Clear()                                               -- Windows only
-nil    Session.Console.Put(text)
-characterswritten Session.Console.Write(data)                                -- Windows only
-charactersprinted Session.Console.Print(...)                                 -- Windows only
-key    Session.Console.ReadKey()                                             -- Windows only
-int    Session.Console.GetKey()
-bool   Session.Console.HasKeyDown()
-bool   Session.Console.GetKeyState(key)
-nil    Session.Console.SetColor(Background, Foreground)                      -- Windows only
-Background, Foreground Session.Console.GetColor()
-nil    Session.Console.SetVisible(toggle)                                    -- Windows only
-nil    Session.Console.SetTitle(newtitle)                                    -- Windows only
-```
-
-| Function | Description |
-|----------|-------------|
-| `Create` | Creates a new console if none exists |
-| `Destroy` | Deallocates the console |
-| `Attach` | Attaches to existing console (parent process if no `processId` given) |
-| `GetInfo` | Get console cursor position and window/buffer sizes |
-| `SetCursorPosition` | Move cursor to new location |
-| `Clear` | Empty the console |
-| `Put` | Write text character-by-character, translating CR to newline and handling backspace |
-| `Write` | Write data directly to the console via `WriteConsole`; returns characters written |
-| `Print` | Print tab-separated values followed by a newline (like `print` but to the console handle) |
-| `ReadKey` | Returns the next key code, or `nil` if no key is currently pressed |
-| `GetKey` | Block until a key is pressed and return its character code |
-| `HasKeyDown` | Returns `true` if a key is currently pressed |
-| `GetKeyState` | Check an async key state — [Virtual Key Codes](https://docs.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes) |
-| `SetColor` | Set background and foreground colors |
-| `GetColor` | Get current background and foreground colors |
-| `SetVisible` | Show or hide the console window |
-| `SetTitle` | Set the console window title |
-
-### Session.Display
-
-```lua
-x, y          Session.Display.GetScreenSize()
-x, y          Session.Display.GetCursorPoint()
-x, y, monitor Session.Display.GetCursorPosition()
-```
-
-| Function | Description |
-|----------|-------------|
-| `GetScreenSize` | Returns the width and height of the primary screen in pixels |
-| `GetCursorPoint` | Returns the raw cursor position as absolute screen coordinates |
-| `GetCursorPosition` | Returns cursor coordinates relative to the monitor it is on, plus a 1-based monitor index |
-
-### Session.Clipboard
-
-```lua
-bool   Session.Clipboard.Set(data)
-Wchar  Session.Clipboard.Get()
-```
-
-| Function | Description |
-|----------|-------------|
-| `Set` | Write `data` to the system clipboard. Pass an empty string or `nil` to clear it. Returns `true` on success |
-| `Get` | Read the current clipboard content as a `Wchar`, or `nil` if empty or unavailable |
 
 ---
 
@@ -734,12 +662,15 @@ Returns (and optionally saves to file) the accumulated librdkafka log output.
 
 ```lua
 Archive Archive.OpenRead(filename, opt usewchar)
-array Archive:Entries()
+array   Archive:Entries()
 file, size Archive:SetEntry(index)
-data Archive:Read(opt buffer)
+data    Archive:Read(opt buffer)
+string  Archive:ReadAll()
 ```
 
 **Entries returns:** Array of tables with `Name` and `Size`
+
+- **`ReadAll`** — reads the entire current entry into a single Lua string in one call. More convenient than looping with `Read` for entries that must be consumed completely.
 
 ---
 
@@ -751,16 +682,12 @@ data Archive:Read(opt buffer)
 Stream Stream.Create(opt string)
 Stream Stream.Create(backendfunction)
 Stream Stream.Open(filename, mode)
-Stream Stream.OpenSharedMemory(size)
-Stream Stream.CreateChunked(chunks)
 ```
 
 - **No argument** — creates a new empty in-memory stream.
 - **String argument** — creates an in-memory stream pre-loaded with the string contents, with the position reset to 0.
 - **Function argument** — creates a stream backed by the provided Lua function. The function is called with an opcode as its first argument and must handle all `STREAM_OP_*` operations it wishes to support. It must return the capability bitmask when called with `STREAM_OP_OPEN` (0).
 - **`Open(filename, mode)`** — opens a file as a stream. `mode` follows standard C `fopen` conventions: `"rb"`, `"wb"`, `"r"`, `"w"`, `"ab"`, etc. Raises an error if the file cannot be opened.
-- **`OpenSharedMemory(size)`** — creates a new outbound shared-memory stream of the given byte size. The block is owned by Lua's GC; pass it to a C# host via `KITSUNE_TSTREAM`.
-- **`CreateChunked(chunks)`** — creates a read-only async stream from an array of strings. Each `Read()` call yields the coroutine once before delivering the next chunk, simulating asynchronous data arrival (e.g. a network socket). Returns `nil` at EOF. Requires a coroutine context — `pos()` always returns `nil` (no seek capability) and `len()` returns the size of the currently-buffered chunk (0 before the first yield, non-zero after).
 
 ### Custom Backend Functions
 
@@ -843,14 +770,6 @@ print(s:Read())   -- "world"
 print(s:pos())    -- 11
 ```
 
-### File Operations
-
-```lua
-nil Stream:Save(filename)
-nil Stream:WriteToFile(filename, pos, len)
-nil Stream:ReadFromFile(filename, pos, len)
-```
-
 ### Read/Write Operations
 
 ```lua
@@ -862,13 +781,9 @@ int         Stream:Write(string or Wchar, opt size)
 bool        Stream:WriteUtf8(str)
 string, int Stream:ReadUtf8()
 Wchar       Stream:ReadWchar(opt n)
-int         Stream:Buffer(str)
-void        Stream:Shrink()
 string      Stream:Read(opt length)
-string      Stream:ReadUntil(opt tofind)
-pos         Stream:IndexOf(string or byte)
 bool/int    Stream:HasData()
-Stream      Stream:ToSharedMemory(opt dispose)
+int         Stream:Id()
 nil         Stream:Close()
 ```
 
@@ -876,14 +791,13 @@ nil         Stream:Close()
 - **`WriteUtf8`** converts a Lua string from Latin-1/byte values to proper UTF-8 before writing.
 - **`ReadWchar`** reads `n` UTF-16 LE code units (each 2 bytes) from the current position and returns a `Wchar`. If `n` is omitted or `nil`, reads all remaining bytes. Returns `nil` if the stream is not readable or there are no complete code units available.
 - **`HasData`** — non-blocking availability check. For sync (seekable) streams returns the number of bytes remaining as an integer, or `false` at EOF. For async streams (vtable with `hasdata`) returns `true` if data is ready in the buffer, `false` if nothing is available yet (more may arrive later — `false` is **not** EOF for async streams). For fn backends dispatches `STREAM_OP_HASDATA`; returns `nil`/`false` if the backend has no handler. **Never yields.**
-- **`ToSharedMemory(opt dispose)`** — snapshots the stream contents into a new outbound shared-memory block and returns it as a new `Stream`. The source must be both readable and seekable. If `dispose` is `true`, the source stream's caps are zeroed after the snapshot so it can no longer be used. Raises an error if the source is not readable+seekable.
+- **`Id`** — returns a stable integer identity value for this stream, suitable for use as a cache key or for distinguishing two stream references. Calls the backend's `getid` if available; otherwise falls back to the native pointer value.
 - **`Close`** — explicitly frees the stream's resources and marks it unusable. Called automatically by the GC; safe to call early when resources should be released promptly.
 
 ### Stream Info
 
 ```lua
 capsTable, backendInfo Stream:GetInfo()
-void Stream:SetLength(newlength)
 length Stream:len()
 pos Stream:pos()
 void Stream:Seek(opt pos)
@@ -916,7 +830,7 @@ Stream          Stream.Decompress(source, opt level, opt deststream)
 Both functions work on **Windows and Linux** and accept **sync or async** source streams. Both read the source from position **0** in 64 KB chunks, yielding cooperatively for async sources, and write the result to the destination.
 
 - The instance form (`stream:Compress()`) uses the stream itself as the source.
-- The static module form (`Stream.Compress(source)`) accepts any readable stream — including async streams created with `Stream.CreateChunked` or a custom function backend.
+- The static module form (`Stream.Compress(source)`) accepts any readable stream — including async streams created with a custom function backend.
 - If `deststream` is omitted or `nil`, a new in-memory stream is created, written to, rewound to position 0, and returned.
 - If `deststream` is provided it is written to **at its current position** and returned as-is (no automatic seek).
 - On failure (non-readable source, non-writable destination, or internal error) both return `nil, errmsg`.
@@ -1392,102 +1306,134 @@ number Timer:Elapsed()
 ```lua
 SQLite SQLite.Open(opt filename, opt mode)
 bool, txt SQLite:Query(querystring, preparedstatements)
-nil SQLite:Finish()
-bool SQLite:Fetch()
+nil   SQLite:Finish()
+bool  SQLite:Fetch()
 table SQLite:GetRow(opt index)
-nil SQLite:RegisterFunction(function, name, args)
-nil SQLite:RegisterAggregateFunction(function, name, args)
-nil SQLite:ToggleWidechar(bool)
-nil SQLite:Close()
+nil   SQLite:RegisterFunction(function, name, args)
+nil   SQLite:RegisterAggregateFunction(function, name, args)
+nil   SQLite:ToggleWidechar(bool)
+nil   SQLite:SetBusyHandler(opt fn)
+nil   SQLite:Close()
 ```
 
 **Mode:** 0=single thread, 1=multithreaded, 2=serialized
+
+- **`SetBusyHandler(opt fn)`** — registers a callback invoked when a table is locked. The function receives the SQLite instance and the retry count; return truthy to retry, falsy to abort. Pass no argument or `nil` to remove an existing handler.
 
 ---
 
 ## Json
 
 ```lua
-Json     Json.Create(opt pretty)
-value    Json:SetNullValue(opt value)
-string   Json:Encode(table_or_coroutine)
-table    Json:Decode(jsonstring)
-nil      Json:EncodeToFile(filename, table_or_coroutine)
-table    Json:DecodeFromFile(filename)
-nil      Json:EncodeToFunction(func, table_or_coroutine)
-table    Json:DecodeFromFunction(func)
-nil      Json:Dispose()
-coroutine Json:Iterator(function)
+Json    Json.New(opt pretty)          -- primary constructor
+Json    Json.Create(opt pretty)       -- alias for New (backward compat)
+value   Json.Null                     -- unique null sentinel (lightuserdata)
+string  json:Encode(value)
+value   json:Decode(string | fn | stream)
+bool    json:EncodeIntoStream(stream, value)
+value   json:DecodeIntoStream(stream)
+nil     json:Dispose()
 ```
 
 | Function | Description |
 |----------|-------------|
-| `Create` | Create a new Json instance. Pass `true` for pretty-printed output |
-| `SetNullValue` | Get/set the null sentinel. When a sentinel is set, encoding a value that equals the sentinel produces JSON `null`, and decoding JSON `null` returns the sentinel instead of `nil`. Calling with no argument or `nil` clears the sentinel. **Always returns the previous value** (or `nil` if none was set) |
-| `Encode` | Encode a Lua table or coroutine to a JSON string |
-| `Decode` | Decode a JSON string to a Lua table |
-| `EncodeToFile` | Write JSON directly to a file |
-| `DecodeFromFile` | Read and decode JSON from a file |
-| `EncodeToFunction` | Stream JSON output to a callback function |
-| `DecodeFromFunction` | Read JSON input from a callback function |
-| `Dispose` | Explicitly free the Json context |
-| `Iterator` | Iterate a large JSON document incrementally via a coroutine |
+| `New` / `Create` | Create a new Json instance. Pass `true` for pretty-printed output (2 spaces per indent level) |
+| `Json.Null` | The unique lightuserdata sentinel that encodes to/decodes from JSON `null`. Compare with `== Json.Null` |
+| `Encode` | Encode a Lua value to a JSON string |
+| `Decode` | Decode JSON from a string, a chunk-reader function, or a `Stream`. Returns the decoded value |
+| `EncodeIntoStream` | Encode `value` and write the JSON bytes directly into `stream`. Returns `true` on success, or `false, errmsg` if the stream is not writable |
+| `DecodeIntoStream` | Decode one JSON value from `stream`. Returns the decoded value, or `nil, errmsg` if the stream is not readable |
+| `Dispose` | Explicitly free the internal output buffer; called automatically by the GC |
 
 ### Null Sentinel
 
-By default JSON `null` decodes to Lua `nil` (which cannot be stored in a table). Use `SetNullValue` to map `null` to a distinguishable sentinel:
+JSON `null` decodes to Lua `nil` by default (and `nil` cannot be stored in a table). Use `Json.Null` as a distinguishable sentinel:
 
 ```lua
-local json = Json.Create()
-json:SetNullValue("__NULL__")
+local json = Json.New()
 
-local encoded = json:Encode({value = "__NULL__"})  -- {"value":null}
-local decoded = json:Decode(encoded)
-print(decoded.value)  -- "__NULL__"
+-- Encoding: Json.Null → null
+local s = json:Encode({value = Json.Null})  -- {"value":null}
 
--- Clear the sentinel; returns the old value
-local old = json:SetNullValue(nil)  -- old == "__NULL__"
+-- Decoding: null → Json.Null
+local t = json:Decode(s)
+if t.value == Json.Null then
+    print("was null")
+end
+```
+
+### Decode Input Forms
+
+```lua
+-- From string
+local t = json:Decode('{"x":1}')
+
+-- From a chunk-reader function (called repeatedly; return nil/empty to stop)
+local t = json:Decode(function() return file:read(4096) end)
+
+-- From a Stream (sync or async)
+local t = json:Decode(myStream)
 ```
 
 ### Type Mapping
 
 | Lua type | JSON type |
 |----------|-----------|
-| `nil` | `null` (omitted from tables) |
-| sentinel value | `null` |
+| `nil` | `null` (omitted from object fields) |
+| `Json.Null` | `null` |
 | `boolean` | `true` / `false` |
 | integer | number (no decimal point) |
-| float | number (trailing zeros trimmed, e.g. `3.5` not `3.500…`) |
+| float | number (trailing zeros trimmed, e.g. `3.5`) |
 | `string` | string |
-| `Wchar` | string (UTF-8 encoded via `ToUtf8`) |
-| `LuaStream` | string (all bytes read from offset 0; stream position is preserved after encoding; `null` if not both readable and seekable) |
+| `Wchar` | string (UTF-8 via `ToUtf8`) |
+| `Identifier` | string (canonical UUID or OID hex) |
+| `DateTime` | string (ISO 8601, e.g. `"2024-06-01T12:00:00.000Z"`) |
+| `Decimal` | number (no quotes — preserves numeric semantics) |
+| `LuaStream` | string (all bytes from offset 0; stream position preserved; `null` if not readable+seekable) |
 | `table` | object `{}` or array `[]` depending on keys |
 | `NaN` | `null` |
-| `±Infinity` | `1e+9999` / `-1e+9999` |
+| `±Infinity` | `null` |
 
 ### Notes
 
-- **Circular references** are detected automatically. Encoding a table that directly or indirectly references itself raises an error: `Recursion detected`
-- **Table iteration** uses Lua's `pairs()`, so `__pairs` metamethods **are** respected during encoding. Custom iterators set via `__pairs` control what gets serialized
-- **UTF-8 strings** pass through the encoder unescaped. Only control characters (U+0000–U+001F) are hex-escaped as `\uXXXX`; all other bytes including multi-byte UTF-8 sequences appear literally in the output
-- **`Wchar` values** are converted to UTF-8 via `ToUtf8` before encoding; the resulting bytes are then JSON-escaped the same way as regular strings
-- **`LuaStream` values** are rewound to offset 0 and all bytes are read into a JSON string; the stream's original position is restored afterwards. A stream that is not both readable and seekable encodes as `null`
+- **Circular references** raise an error: `Json: recursion detected`
+- **Table classification**: pure sequential integer-keyed tables (`{1, 2, 3}`) encode as JSON arrays; all others encode as objects
+- **UTF-8 strings** pass through the encoder unescaped. Only control characters (U+0000–U+001F) are hex-escaped as `\uXXXX`
+- **`Wchar` values** are converted to UTF-8 before encoding
+- **`LuaStream`** must be both readable and seekable; unreachable streams encode as `null`
 
-### Coroutine Example
+### Examples
 
 ```lua
-local json = Json.Create()
-local s = json:Encode(coroutine.create(function()
-    coroutine.yield(nil, {})        -- root object
-    coroutine.yield("MyTable", {})  -- nested array
-    for n = 1, 10 do
-        coroutine.yield(n, "Hello")
-    end
-    coroutine.yield(nil, nil)       -- close array
-    coroutine.yield("Cake", "Is good")
-    coroutine.yield(nil, nil)       -- finish
-end))
--- Result: {"MyTable":["Hello","Hello",...], "Cake":"Is good"}
+local json = Json.New()
+
+-- Basic encode/decode
+local s = json:Encode({name = "Alice", scores = {10, 20, 30}})
+local t = json:Decode(s)
+print(t.name, t.scores[1])
+
+-- Null sentinel
+local t2 = json:Decode('{"x":null}')
+print(t2.x == Json.Null)   -- true
+
+-- Pretty print
+local pretty = Json.New(true)
+print(pretty:Encode({a = 1, b = {2, 3}}))
+
+-- Stream encode
+local s = Stream.Create()
+json:EncodeIntoStream(s, {hello = "world"})
+s:Seek(0)
+print(s:Read())
+
+-- Stream decode
+local s2 = Stream.Create('{"key":"val"}')
+print(json:DecodeIntoStream(s2).key)
+
+-- Chunked decode from file
+local f = io.open("data.json", "r")
+local t = json:Decode(function() return f:read(4096) end)
+f:close()
 ```
 
 ---
@@ -1555,6 +1501,7 @@ Identifier Identifier.FromBytes(bytes)
 string  id:GetType()    -- "UUID" or "OID"
 string  id:AsBytes()    -- raw bytes (16 for UUID, 12 for OID)
 string  id:AsString()   -- same as tostring(id)
+bool    id:IsEmpty()    -- true when all bytes are zero
 ```
 
 ### Metamethods
@@ -1562,6 +1509,272 @@ string  id:AsString()   -- same as tostring(id)
 ```lua
 tostring(id)   -- canonical string representation
 id == other    -- true when type, length, and bytes all match
+```
+
+---
+
+## DateTime
+
+A typed userdata representing a point in time with an associated UTC offset. Internally stored as 100-nanosecond ticks since `0001-01-01 00:00:00 UTC` (identical to the .NET `DateTime`/`DateTimeOffset` epoch). All comparisons operate on UTC ticks; the offset is display information only.
+
+### Constructors
+
+```lua
+DateTime  DateTime.Now()
+DateTime  DateTime.UtcNow()
+DateTime  DateTime.New(year, month, day, opt hour, opt minute, opt second, opt millisecond, opt offsetMinutes)
+DateTime  DateTime.FromUnixSeconds(ts [, offsetMinutes])
+DateTime  DateTime.FromUnixMilliseconds(ms [, offsetMinutes])
+DateTime  DateTime.Parse(str [, fallbackOffsetMinutes])   -- returns nil on failure
+```
+
+| Function | Description |
+|----------|-------------|
+| `Now` | Current local time with the system's UTC offset |
+| `UtcNow` | Current UTC time (offset = 0) |
+| `New` | Construct from individual components. `offsetMinutes` is the UTC offset in minutes `[-840, +840]`; defaults to 0 (UTC) |
+| `FromUnixSeconds` | Wrap a Unix timestamp (seconds, may be fractional) into a DateTime |
+| `FromUnixMilliseconds` | Wrap a Unix timestamp in integer milliseconds |
+| `Parse` | Parse an ISO 8601 / SQL datetime string (`YYYY-MM-DD[T HH:MM[:SS[.fff]]][Z\|±HH:MM]`). If no offset is embedded in the string the optional `fallbackOffsetMinutes` is applied. Returns `nil` on parse failure |
+
+### Component Getters
+
+```lua
+int  dt:Year()
+int  dt:Month()
+int  dt:Day()
+int  dt:Hour()
+int  dt:Minute()
+int  dt:Second()
+int  dt:Millisecond()
+int  dt:DayOfWeek()        -- 0=Sunday, 1=Monday, ..., 6=Saturday
+int  dt:OffsetMinutes()    -- UTC offset in minutes
+bool dt:IsEmpty()          -- true when ticks == 0
+```
+
+### Conversion
+
+```lua
+number    dt:UnixSeconds()          -- fractional Unix timestamp in seconds
+int       dt:UnixMilliseconds()     -- Unix timestamp in integer milliseconds
+DateTime  dt:ToUtc()                -- same instant, offset forced to 0
+DateTime  dt:ToLocal()              -- same instant, offset set to system local offset
+DateTime  dt:ToOffset(minutes)      -- same instant, offset changed to given minutes
+string    dt:Format(opt fmt)        -- strftime format string; ISO 8601 when omitted
+string    dt:AsString(opt fmt)      -- alias for Format
+```
+
+### Arithmetic
+
+```lua
+DateTime  dt:AddDays(n)
+DateTime  dt:AddHours(n)
+DateTime  dt:AddMinutes(n)
+DateTime  dt:AddSeconds(n)
+DateTime  dt:AddMilliseconds(n)
+```
+
+All `Add*` functions accept fractional numbers and return a new `DateTime` with the same offset.
+
+### Metamethods
+
+| Metamethod | Behaviour |
+|------------|-----------|
+| `tostring(dt)` | ISO 8601 string, e.g. `"2024-06-01T12:00:00.000Z"` or with offset `"...+02:00"` |
+| `dt1 == dt2` | `true` when UTC ticks are equal (offset is ignored) |
+| `dt1 < dt2` | UTC tick comparison |
+| `dt1 <= dt2` | UTC tick comparison |
+| `dt1 - dt2` | Difference in **seconds** as a `number` |
+
+### Examples
+
+```lua
+local now = DateTime.Now()
+print(now)                          -- "2024-06-01T14:30:00.000+02:00"
+print(now:UnixMilliseconds())       -- Unix ms integer
+
+local utc = DateTime.UtcNow()
+print(utc:Year(), utc:Month(), utc:Day())
+
+local dt = DateTime.New(2024, 1, 15, 9, 0, 0, 0, 60)  -- +01:00
+print(dt:ToUtc())                   -- "2024-01-15T08:00:00.000Z"
+
+local parsed = DateTime.Parse("2024-06-01T12:00:00Z")
+print(parsed - DateTime.UtcNow())   -- seconds until/since that moment
+
+local tomorrow = DateTime.Now():AddDays(1)
+print(tomorrow:Format("%Y-%m-%d"))  -- strftime format
+```
+
+---
+
+## Decimal
+
+A typed userdata for exact base-10 arithmetic with up to 34 significant digits. Backed by a 128-bit coefficient + sign + scale representation (equivalent to .NET `decimal` / MongoDB `Decimal128`). All arithmetic operators are overloaded so `Decimal` values can be used with `+`, `-`, `*`, `/`, `%`, and unary `-` directly.
+
+### Constructors
+
+```lua
+Decimal  Decimal.FromString(str)   -- e.g. "123.456", "-0.001"; nil on failure
+Decimal  Decimal.FromNumber(n)     -- convert Lua number (lossy for floats)
+Decimal  Decimal.Zero()            -- returns 0
+```
+
+### Methods
+
+```lua
+string   dec:ToString()    -- canonical decimal string, alias: AsString()
+string   dec:AsString()
+number   dec:ToNumber()    -- convert to Lua number (lossy)
+int      dec:Scale()       -- digits after decimal point
+int      dec:Precision()   -- total significant digits
+bool     dec:IsEmpty()     -- true when value is zero
+bool     dec:IsNegative()  -- true when value < 0
+Decimal  dec:Abs()         -- absolute value
+Decimal  dec:Round(scale)  -- round to given decimal places
+Decimal  dec:Truncate(scale) -- truncate to given decimal places
+Decimal  dec:Add(other)
+Decimal  dec:Sub(other)
+Decimal  dec:Mul(other)
+Decimal  dec:Div(other)
+```
+
+### Metamethods
+
+| Metamethod | Behaviour |
+|------------|-----------|
+| `tostring(dec)` | Same as `ToString()` |
+| `dec1 == dec2` | Value equality |
+| `dec1 < dec2` | Less-than comparison |
+| `dec1 <= dec2` | Less-or-equal comparison |
+| `dec1 + dec2` | Addition |
+| `dec1 - dec2` | Subtraction |
+| `dec1 * dec2` | Multiplication |
+| `dec1 / dec2` | Division |
+| `dec1 % dec2` | Modulo |
+| `-dec` | Unary negation |
+
+### Examples
+
+```lua
+local a = Decimal.FromString("123.456")
+local b = Decimal.FromString("0.001")
+print(a + b)             -- "123.457"
+print(a * b)             -- "0.123456"
+print(a:Round(2))        -- "123.46"
+print(a:Scale())         -- 3
+print(a:Precision())     -- 6
+print(Decimal.FromNumber(math.pi):ToString())  -- "3.14159265358979..."
+```
+
+---
+
+## MongoDB
+
+Connects to a MongoDB server using the [libmongoc](https://mongoc.org/) driver. All CRUD operations are dispatched to a **persistent background worker thread** and the calling coroutine yields cooperatively while the operation is in flight — no blocking of the Lua scheduler. Requires the engine to be compiled with `KITSUNE_MONGO`.
+
+### Connection
+
+```lua
+Mongo, errmsg  Mongo.Connect(uri)
+```
+
+`uri` is a standard [MongoDB connection string](https://www.mongodb.com/docs/manual/reference/connection-string/) (e.g. `"mongodb://localhost:27017"`). Performs an eager ping to verify connectivity. Returns the connection on success, or `nil, errmsg` on failure.
+
+### CRUD Operations
+
+All operations are **asynchronous**: they validate arguments, queue the work on the background thread, and return immediately. Call `Wait()` or `GetResult()` to retrieve the outcome. Only one operation may be in flight per connection at a time.
+
+```lua
+bool, errmsg  mongo:Find(db, collection, filter [, limit [, skip [, opts]]])
+bool, errmsg  mongo:FindOne(db, collection, filter [, opts])
+bool, errmsg  mongo:InsertOne(db, collection, document)
+bool, errmsg  mongo:InsertMany(db, collection, documents)
+bool, errmsg  mongo:UpdateOne(db, collection, filter, update [, opts])
+bool, errmsg  mongo:UpdateMany(db, collection, filter, update [, opts])
+bool, errmsg  mongo:DeleteOne(db, collection, filter)
+bool, errmsg  mongo:DeleteMany(db, collection, filter)
+bool, errmsg  mongo:Aggregate(db, collection, pipeline [, opts])
+bool, errmsg  mongo:Command(db, command)
+bool, errmsg  mongo:CountDocuments(db, collection, filter [, opts])
+```
+
+- All `filter`, `update`, `opts`, `document`, `command` arguments are Lua tables that are converted to BSON automatically.
+- `documents` for `InsertMany` is an array of tables.
+- `pipeline` for `Aggregate` is an array of stage tables.
+- `limit` and `skip` are optional integers.
+- Returns `true, nil` on successful dispatch, or `false, errmsg` if the connection is closed or already busy.
+
+### Async Control
+
+```lua
+bool          mongo:IsFinished()   -- true when no operation is running
+nil           mongo:Wait()         -- yield until current operation completes
+nil           mongo:Cancel()       -- request cancellation; yields until done
+result, errmsg mongo:GetResult()   -- yield if needed, then return the result
+nil           mongo:Close()        -- close connection and free resources
+```
+
+**`GetResult` return values by operation:**
+
+| Operation | `result` on success |
+|-----------|---------------------|
+| `Find`, `Aggregate` | Array of document tables |
+| `FindOne` | Single document table, or `nil` if not found |
+| `CountDocuments` | Integer count |
+| `InsertOne`, `InsertMany`, `UpdateOne`, `UpdateMany`, `DeleteOne`, `DeleteMany`, `Command` | Reply document table |
+
+On error: `nil, errmsg`.
+
+### BSON ↔ Lua Type Mapping
+
+| BSON type | Lua type |
+|-----------|----------|
+| `UTF8` | string |
+| `INT32`, `INT64` | integer |
+| `DOUBLE` | number |
+| `BOOL` | boolean |
+| `NULL` | nil |
+| `DOCUMENT` | table (string keys) |
+| `ARRAY` | table (integer keys, 1-based) |
+| `OID` (12 bytes) | `Identifier` (OID) |
+| `UUID` binary (16 bytes) | `Identifier` (UUID) |
+| `DATE_TIME` | `DateTime` (UTC, offset = 0) |
+| `DECIMAL128` | `Decimal` |
+| `BINARY` (other subtypes) | `LuaStream` |
+| `TIMESTAMP` | table `{t=ordinal, i=increment}` |
+| `REGEX` | string `"/pattern/options"` |
+
+When writing Lua → BSON, `Identifier`, `DateTime`, `Decimal`, `Wchar`, and `LuaStream` values are also recognised and serialised to their corresponding BSON types.
+
+### Example
+
+```lua
+local mongo = assert(Mongo.Connect("mongodb://localhost:27017"))
+
+-- Insert
+mongo:InsertOne("mydb", "users", {name = "Alice", age = 30})
+local reply, err = mongo:GetResult()
+if not reply then error(err) end
+
+-- Find
+mongo:Find("mydb", "users", {age = {["$gte"] = 18}}, 10)
+local docs, err = mongo:GetResult()
+if not docs then error(err) end
+for i, doc in ipairs(docs) do
+    print(doc.name, doc.age)
+end
+
+-- CountDocuments
+mongo:CountDocuments("mydb", "users", {})
+local count = assert(mongo:GetResult())
+print(count .. " users")
+
+-- Cancel a slow find
+mongo:Find("mydb", "big_collection", {})
+mongo:Cancel()   -- yields until cancelled
+
+mongo:Close()
 ```
 
 ---
