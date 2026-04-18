@@ -54,34 +54,26 @@ namespace KitsuneNet
         /// <see cref="LuaValue.AsJsonNode"/>.</summary>
         Json = -5,
 
-        /// <summary>Shared-memory stream block (KITSUNE_TSTREAM = -6).
-        /// When received from the engine the value's <see cref="LuaValue.StreamValue"/> is a
-        /// <see cref="LuaStream"/> that directly addresses the native block with zero copy;
-        /// <see cref="LuaStream.Dispose"/> calls the block's close callback to release the
-        /// Lua registry anchor. Use <see cref="LuaValue.FromStream(byte[])"/> or
-        /// <see cref="LuaValue.FromStream(System.IO.Stream)"/> to send a stream to Lua.</summary>
-        Stream = -6,
-
-        /// <summary>Inline C# function value (KITSUNE_TCFUNCTION = -7).
+        /// <summary>Inline C# function value (KITSUNE_TCFUNCTION = -6).
         /// When passed to the engine the function is wrapped as an anonymous Lua closure
         /// without being registered in the global table.
         /// Never returned by the engine; only valid for inbound (C# → Lua) use via
         /// <see cref="LuaValue.FromCFunction"/>.</summary>
-        CFunction = -7,
+        CFunction = -6,
 
-        /// <summary>Stateful iterator (KITSUNE_TITERATOR = -8).
+        /// <summary>Stateful iterator (KITSUNE_TITERATOR = -7).
         /// Outbound (C# → Lua) only. Lua receives a callable closure consumable with
         /// <c>for v in iter do</c>. <see cref="IEnumerator{T}.GetEnumerator"/> is called
         /// lazily when Lua invokes the closure for the first time.
         /// Never returned by the engine. Create via <see cref="LuaValue.FromIterator"/>.</summary>
-        Iterator = -8,
+        Iterator = -7,
 
-        /// <summary>Snapshot of a Lua table's key-value pairs (KITSUNE_TTABLECONTENTS = -9).
+        /// <summary>Snapshot of a Lua table's key-value pairs (KITSUNE_TTABLECONTENTS = -8).
         /// Produced by <see cref="LuaTableRef.GetContents"/> and consumed by
         /// <see cref="LuaTableRef.SetContents"/>.  <see cref="LuaValue.Table"/> holds the entries.
         /// Passing a <see cref="LuaValue"/> with this type to the engine creates a new Lua table
         /// populated from the snapshot.</summary>
-        TableContents = -9,
+        TableContents = -8,
 
         /// <summary>Error returned by the blocking execute functions (KITSUNE_TERROR = -2) when
         /// the call was rejected — e.g. called from the scheduler thread, from a

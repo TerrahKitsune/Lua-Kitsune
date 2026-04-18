@@ -6,8 +6,6 @@ static const struct luaL_Reg streamfunctions[] = {
 	{ "Close",  luastream_gc },
 	{ "Create",  NewStream },
 	{ "Open",  OpenFile },
-	{ "OpenSharedMemory",  OpenSharedMemory },
-	{ "ToSharedMemory",  ToSharedMemory },
 	{ "len",  StreamLen },
 	{ "pos",  StreamPos },
 	{ "WriteByte",  WriteStreamByte },

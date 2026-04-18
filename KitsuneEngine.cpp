@@ -55,7 +55,7 @@
 #include "TimerMain.h"
 #include "LuaFileSystemMain.h"
 #include "StreamMain.h"
-#include "streamshmemory.h"
+#include "stream.h"
 #include "Sha256Main.h"
 #include "luajsonmain.h"
 #include "luajson.h"
@@ -280,12 +280,6 @@ static void FreeVariableData(KitsuneVariable* var, lua_State* L) {
 		FreeKVNode(var->table, L);
 		var->table = NULL;
 	}
-	else if (var->type == KITSUNE_TSTREAM) {
-		// Signal the global-list sweeper that this slot's accessor reference is released.
-		if (var->stream)
-			var->stream->flags |= KITSUNE_SHARED_MEMORY_FLAG_ACCESSOR_DISPOSED;
-		var->stream = NULL;
-	}
 	else if (var->type == KITSUNE_TITERATOR) {
 		// KitsuneIterator* is caller-owned; the engine only nulls the pointer.
 		var->iterator = nullptr;
@@ -335,10 +329,20 @@ struct KitsuneIteratorUD {
 	int state;              // 0=uncalled, 1=first called, 2=next, 3=finalized/dead
 };
 
+// KitsuneGCHookUD — Lua-owned full userdata; GC'd via "KitsuneGCHook" metatable.
+// General-purpose lifetime anchor: when the Lua object owning this is collected,
+// finalizer(userdata) is called exactly once.  Use PushGCHook to create instances.
+struct KitsuneGCHookUD {
+	void* userdata;
+	kitsune_Finalizer finalizer;
+};
+
 // Forward declarations — defined inside extern "C" below alongside LuaCFunctionWrapper.
 extern "C" {
 	static int KitsuneIteratorUD_gc(lua_State* L);
 	static int KitsuneIteratorWrapper(lua_State* L);
+	static int KitsuneGCHookUD_gc(lua_State* L);
+	static void PushGCHook(lua_State* L, void* userdata, kitsune_Finalizer finalizer);
 }
 
 // Fills a KitsuneVariable from the Lua stack at the given index.
@@ -613,12 +617,6 @@ static void PushKitsuneVariable(lua_State* L, const KitsuneVariable* v) {
 			}
 		}
 		break;
-	case KITSUNE_TSTREAM:
-		if (v->stream && (v->stream->flags & KITSUNE_SHARED_MEMORY_FLAG_KITSUNE_OWNED))
-			lua_push_sharedmemory_stream(L, v->stream);
-		else
-			lua_pushnil(L);  // NULL or not created via KitsuneCreateMemoryBlock — push nil
-		break;
 	case LUA_TFUNCTION:
 		// Push the function from the Lua registry using the stored ref.
 		// Pushing via rawgeti does not consume the ref; the caller retains ownership.
@@ -648,11 +646,18 @@ static void PushKitsuneVariable(lua_State* L, const KitsuneVariable* v) {
 		// Create an anonymous Lua closure from the kitsune_CFunctionData pointed to by data.
 		// func and userdata are stored by value as light-userdata upvalues so the struct
 		// is not referenced after this case returns.
+		// If a finalizer is provided a KitsuneGCHook full-userdata is pushed as upvalue 3;
+		// when Lua GCs the closure it GCs the upvalue which fires the finalizer.
 		const kitsune_CFunctionData* cfd = (const kitsune_CFunctionData*)v->data;
 		if (cfd && cfd->func) {
 			lua_pushlightuserdata(L, (void*)cfd->func);
 			lua_pushlightuserdata(L, cfd->userdata);
-			lua_pushcclosure(L, LuaCFunctionWrapper, 2);
+			int nupvals = 2;
+			if (cfd->finalizer) {
+				PushGCHook(L, cfd->userdata, cfd->finalizer);
+				nupvals = 3;
+			}
+			lua_pushcclosure(L, LuaCFunctionWrapper, nupvals);
 		}
 		else {
 			lua_pushnil(L);
@@ -778,36 +783,6 @@ static void SetSlotResult(KitsuneCoroutine* slot, lua_State* T, int idx) {
 				slot->result.char16data = AllocChar16FromWchar(wch->str, wch->len, &slot->result.length);
 			}
 			slot->result.type = KITSUNE_TCHAR16;
-			break;
-		}
-		// Streams are bridged as KITSUNE_TSTREAM, but only outbound shared-memory streams
-		// (created with Stream.OpenSharedMemory) may cross the boundary.  Any other stream
-		// type is an error: the host cannot meaningfully own a file or in-memory stream.
-		if (lua_isstream(T, idx)) {
-			LuaStream* s = (LuaStream*)lua_touserdata(T, idx);
-			if (lua_is_outbound_sharedmemory_stream(s)) {
-				KitsuneSharedMemoryBlock* block = lua_get_outbound_sharedmemory_block(s);
-				slot->result.type = KITSUNE_TSTREAM;
-				slot->result.stream = block;
-				// Clear ACCESSOR_DISPOSED: the result slot holds the accessor reference for C#.
-				block->flags &= ~KITSUNE_SHARED_MEMORY_FLAG_ACCESSOR_DISPOSED;
-			}
-			else if ((s->Caps & STREAM_CAP_READ) && (s->Caps & STREAM_CAP_SEEK)) {
-				// Snapshot the full contents into a new outbound shared-memory block.
-				LuaStream* outStream = lua_try_push_sharedmemory_stream_outbound_from_stream(T, s);
-				if (!outStream) {
-					SetSlotError(slot, "failed to snapshot stream for result");
-					break;
-				}
-				KitsuneSharedMemoryBlock* block = lua_get_outbound_sharedmemory_block(outStream);
-				slot->result.type = KITSUNE_TSTREAM;
-				slot->result.stream = block;
-				block->flags &= ~KITSUNE_SHARED_MEMORY_FLAG_ACCESSOR_DISPOSED;
-				lua_pop(T, 1);  // pop the outbound userdata
-			}
-			else {
-				SetSlotError(slot, "stream result must be readable and seekable");
-			}
 			break;
 		}
 		// All other userdata types: bridge as KITSUNE_TUSERDATA with a KitsuneUserData*.
@@ -1010,9 +985,6 @@ static void SchedulerProc(KitsuneState* state) {
 		if (state->schedulerStop.load())
 			break;  // KitsuneCleanup called while paused
 
-		// Sweep the global shared-memory block registry: free any block where both
-		// OWNER_DISPOSED and ACCESSOR_DISPOSED flags are set.
-		lua_shmem_sweep_disposed_blocks();
 		// Drain variables queued for deferred release by KitsuneVariableFree.
 		DrainPendingVariableChain(state->L);
 
@@ -1031,8 +1003,7 @@ static void SchedulerProc(KitsuneState* state) {
 					slot->done.store(1);
 					--state->runningCount;
 					state->doneCV.notify_all();
-					if (slot->fireAndForget.load())
-						slot->released.store(1);
+					slot->released.store(1);
 				}
 			}
 		}
@@ -1436,6 +1407,12 @@ extern "C" {
 		// Register the KitsuneIterator metatable used by KITSUNE_TITERATOR closures.
 		luaL_newmetatable(L, "KitsuneIterator");
 		lua_pushcfunction(L, KitsuneIteratorUD_gc);
+		lua_setfield(L, -2, "__gc");
+		lua_pop(L, 1);
+
+		// Register the KitsuneGCHook metatable — general-purpose finalizer anchor.
+		luaL_newmetatable(L, "KitsuneGCHook");
+		lua_pushcfunction(L, KitsuneGCHookUD_gc);
 		lua_setfield(L, -2, "__gc");
 		lua_pop(L, 1);
 
@@ -2458,11 +2435,6 @@ extern "C" {
 			slot->result.data = nullptr;
 			slot->result.length = 0;
 		}
-		else if (slot->result.type == KITSUNE_TSTREAM && slot->result.stream) {
-			out->type = KITSUNE_TSTREAM;
-			out->stream = slot->result.stream;
-			slot->result.stream = nullptr;
-		}
 		else if (slot->result.type == LUA_TFUNCTION || slot->result.type == LUA_TTHREAD || slot->result.type == LUA_TTABLE) {
 			// Transfer the registry ref; zero the slot field so no stale ref remains.
 			out->type = slot->result.type;
@@ -2620,10 +2592,6 @@ extern "C" {
 
 	KITSUNE_API void KitsuneVariableFree(KitsuneVariable* var) {
 		if (!var) return;
-		// TSTREAM: null the pointer before FreeVariableData so the accessor-dispose path is not
-		// triggered — that path is only correct for unconsumed slots, not host-owned blocks.
-		if (var->type == KITSUNE_TSTREAM)
-			var->stream = NULL;
 		// TFUNCTION, TTHREAD, and TTABLE (with nodes): need the Lua state to luaL_unref registry
 		// entries.  On the scheduler thread Lua access is already owned so call directly.
 		// On any other thread, enqueue the variable for the scheduler to drain — this avoids
@@ -2744,10 +2712,6 @@ extern "C" {
 	KITSUNE_API bool KitsuneSetVariable(const char* path, const KitsuneVariable* var) {
 		KitsuneState* state = g_state;
 		if (!state || !state->L || !path || !*path) return false;
-		if (var && var->type == KITSUNE_TSTREAM) {
-			if (!var->stream || !(var->stream->flags & KITSUNE_SHARED_MEMORY_FLAG_KITSUNE_OWNED))
-				return false;  // stream block was not created by KitsuneCreateMemoryBlock
-		}
 		LuaAccessGuard lock(state);
 		bool ok = false;
 		const char* finalKey = NavigateGlobalParent(state->L, path, true);
@@ -2979,6 +2943,32 @@ extern "C" {
 		return lua_error(L);
 	}
 
+	// Called by Lua GC when a KitsuneGCHookUD full-userdata is collected.
+	// Calls finalizer(userdata) once then nulls both fields to prevent double-fire.
+	static int KitsuneGCHookUD_gc(lua_State* L) {
+		KitsuneGCHookUD* ud = (KitsuneGCHookUD*)lua_touserdata(L, 1);
+		if (!ud || !ud->finalizer)
+			return 0;
+		kitsune_Finalizer fin = ud->finalizer;
+		void* udata = ud->userdata;
+		ud->finalizer = nullptr;
+		ud->userdata = nullptr;
+		fin(udata);
+		return 0;
+	}
+
+	// Pushes a KitsuneGCHookUD full-userdata onto L with the "KitsuneGCHook" metatable.
+	// When Lua GCs it, finalizer(userdata) is called exactly once.
+	// Does nothing (pushes nothing) if finalizer is NULL.
+	static void PushGCHook(lua_State* L, void* userdata, kitsune_Finalizer finalizer) {
+		if (!finalizer)
+			return;
+		KitsuneGCHookUD* ud = (KitsuneGCHookUD*)lua_newuserdata(L, sizeof(KitsuneGCHookUD));
+		ud->userdata = userdata;
+		ud->finalizer = finalizer;
+		luaL_setmetatable(L, "KitsuneGCHook");
+	}
+
 	// Called by Lua GC when the KitsuneIteratorUD upvalue is collected.
 	// Sets state=3 before calling finalized so any reentrant call is a no-op.
 	// Passes a no-op resultSetter — never nullptr — to avoid a null-pointer crash
@@ -3057,7 +3047,7 @@ extern "C" {
 		return lua_gettop(L);
 	}
 
-	KITSUNE_API void KitsuneRegisterFunction(const char* name, kitsune_CFunction func, void* userdata) {
+	KITSUNE_API void KitsuneRegisterFunction(const char* name, kitsune_CFunction func, void* userdata, kitsune_Finalizer finalizer) {
 		KitsuneState* state = g_state;
 		if (!state || !state->L || !name || !*name || !func) return;
 
@@ -3070,7 +3060,12 @@ extern "C" {
 		if (finalKey) {
 			lua_pushlightuserdata(state->L, (void*)func);
 			lua_pushlightuserdata(state->L, userdata);
-			lua_pushcclosure(state->L, LuaCFunctionWrapper, 2);
+			int nupvals = 2;
+			if (finalizer) {
+				PushGCHook(state->L, userdata, finalizer);
+				nupvals = 3;
+			}
+			lua_pushcclosure(state->L, LuaCFunctionWrapper, nupvals);
 			lua_setfield(state->L, -2, finalKey);  // parent[finalKey] = closure
 			lua_pop(state->L, 1);  // pop parent table
 		}
@@ -3080,7 +3075,7 @@ extern "C" {
 		KitsuneState* state = g_state;
 		if (!state || !state->L || !name || !*name || !registration) return false;
 		LuaAccessGuard lock(state);
-		return lua_registerkitsuneuserdata(state->L, name, registration, LuaCFunctionWrapper);
+		return lua_registerkitsuneuserdata(state->L, name, registration, LuaCFunctionWrapper, PushGCHook);
 	}
 
 	KITSUNE_API int KitsuneRegister(const KitsuneVariable* var) {
@@ -3681,11 +3676,6 @@ extern "C" {
 				lua_close(state->L);
 				state->L = nullptr;
 			}
-			// After lua_close all Lua streams are GC'd (OWNER_DISPOSED set).
-			// Sweep the block registry to free completed blocks.
-			// Blocks still held by live C# LuaStream instances remain until C# Dispose.
-			lua_shmem_sweep_disposed_blocks();
-
 			delete state;
 		}
 
@@ -3714,21 +3704,6 @@ extern "C" {
 		}
 #endif
 		return leaked;
-	}
-
-	KITSUNE_API KitsuneSharedMemoryBlock* KitsuneCreateMemoryBlock(size_t size) {
-		if (!g_state || size == 0) return NULL;
-
-		KitsuneSharedMemoryBlock* block = (KitsuneSharedMemoryBlock*)kitsune_malloc(sizeof(KitsuneSharedMemoryBlock) + size);
-		if (!block) return NULL;
-		memset(block, 0, sizeof(KitsuneSharedMemoryBlock) + size);
-		block->size = size;
-		// KITSUNE_OWNED: accepted by PushKitsuneVariable.
-		// ACCESSOR_DISPOSED=1: cleared by LuaStream constructor when C# takes ownership.
-		block->flags = KITSUNE_SHARED_MEMORY_FLAG_KITSUNE_OWNED
-			| KITSUNE_SHARED_MEMORY_FLAG_ACCESSOR_DISPOSED;
-		lua_shmem_list_add(block);
-		return block;
 	}
 
 	KITSUNE_API KitsuneVariable* KitsuneToString(const KitsuneVariable* var) {

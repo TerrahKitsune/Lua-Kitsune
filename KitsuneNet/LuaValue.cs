@@ -1,4 +1,4 @@
-using System;
+ï»¿using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -49,15 +49,6 @@ namespace KitsuneNet
         public LuaUserdataRef? UserdataRef { get; init; }
 
         /// <summary>Stream for <see cref="LuaType.Stream"/> values.
-        /// Inbound (Lua ? C#): a <see cref="LuaStream"/> wrapping native block memory directly.
-        /// Read-only when <c>KITSUNE_SHARED_MEMORY_FLAG_READONLY</c> is set on the block;
-        /// read-write otherwise.  <see cref="LuaStream.Dispose"/> calls the block's close callback
-        /// to release the Lua registry anchor.
-        /// Outbound (C# ? Lua): any <see cref="System.IO.Stream"/> whose bytes are copied into
-        /// a native block; a <see cref="System.IO.MemoryStream"/> or <see cref="LuaStream"/>
-        /// avoids a double-copy. Null for all other types.</summary>
-        public System.IO.Stream? StreamValue { get; init; }
-
         /// <summary>Delegate for <see cref="LuaType.CFunction"/> values.
         /// When passed to the engine the delegate is wrapped as an anonymous Lua closure
         /// without being registered in the global table. Null for all other types.</summary>
@@ -124,7 +115,6 @@ namespace KitsuneNet
             LuaType.Nil => "nil",
             LuaType.Table => Table is not null ? $"table({Table.Count})" : "table",
             LuaType.Json => JsonNode?.ToJsonString() ?? "null",
-            LuaType.Stream => StreamValue?.ToString() ?? "stream(null)",
             LuaType.CFunction => "cfunction",
             LuaType.Iterator => "iterator",
             LuaType.Function => "function",
@@ -139,7 +129,7 @@ namespace KitsuneNet
         /// <list type="bullet">
         /// <item><see cref="LuaType.Json"/>: returns the already-parsed node directly.</item>
         /// <item><see cref="LuaType.Table"/>: walks the linked list; sequential integer keys
-        ///   (1, 2, … n) produce a <see cref="JsonArray"/>; all other keys produce a
+        ///   (1, 2, â€¦ n) produce a <see cref="JsonArray"/>; all other keys produce a
         ///   <see cref="JsonObject"/> keyed by the string representation of each key.</item>
         /// <item>Scalar types: wrapped in the appropriate <see cref="JsonValue"/>.</item>
         /// <item><see cref="LuaType.Nil"/> / <see cref="LuaType.None"/>: returns <c>null</c>.</item>
@@ -171,7 +161,7 @@ namespace KitsuneNet
             {
                 if (TableRef is { } tr)
                 {
-                    // Live ref — snapshot contents on demand.
+                    // Live ref â€” snapshot contents on demand.
                     return TableContentsToJsonNode(tr.GetContents());
                 }
 
@@ -223,17 +213,6 @@ namespace KitsuneNet
         /// marshalled across the bridge.</summary>
         public static LuaValue FromJson(JsonNode? node) =>
             node is null ? None : new() { Type = LuaType.Json, JsonNode = node };
-
-        /// <summary>Creates a stream value from a raw byte array. The bytes are copied into
-        /// a native <c>KitsuneSharedMemoryBlock</c> when passed across the bridge.</summary>
-        public static LuaValue FromStream(byte[] data)
-            => new() { Type = LuaType.Stream, StreamValue = new System.IO.MemoryStream(data, writable: false) };
-
-        /// <summary>Creates a stream value from any <see cref="System.IO.Stream"/>.
-        /// The stream is read from its current position (or from the beginning when seekable)
-        /// and the bytes are copied into a native block when passed across the bridge.</summary>
-        public static LuaValue FromStream(System.IO.Stream stream)
-            => new() { Type = LuaType.Stream, StreamValue = stream };
 
         /// <summary>Creates an anonymous Lua function value from a C# delegate.
         /// When passed to the engine the delegate is wrapped as an anonymous Lua closure
@@ -287,7 +266,6 @@ namespace KitsuneNet
             ReferenceEquals(JsonNode, other.JsonNode) &&
             ReferenceEquals(FunctionRef, other.FunctionRef) &&
             ReferenceEquals(ThreadRef, other.ThreadRef) &&
-            ReferenceEquals(StreamValue, other.StreamValue) &&
             ReferenceEquals(CFunctionValue, other.CFunctionValue) &&
             ReferenceEquals(IteratorValue, other.IteratorValue) &&
             UserdataGCHandlePtr == other.UserdataGCHandlePtr;
@@ -310,7 +288,6 @@ namespace KitsuneNet
             hash.Add(JsonNode);
             hash.Add(FunctionRef);
             hash.Add(ThreadRef);
-            hash.Add(StreamValue);
             hash.Add(CFunctionValue);
             hash.Add(IteratorValue);
             hash.Add(UserdataGCHandlePtr);

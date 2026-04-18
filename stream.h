@@ -107,8 +107,6 @@ uint64_t lua_stream_getid(const LuaStream* s);
 // ── Stream construction
 int NewStream(lua_State* L);
 int OpenFile(lua_State* L);
-int OpenSharedMemory(lua_State* L);
-int ToSharedMemory(lua_State* L);
 
 // ── Stream info
 int StreamPos(lua_State* L);

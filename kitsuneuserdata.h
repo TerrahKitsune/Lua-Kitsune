@@ -14,4 +14,6 @@ struct LuaKitsuneUserdata {
 // output from Lua's tostring() and print().  The C# RegisterUserdata<T> layer always
 // injects defaults for both so this check mainly guards direct C++ callers.
 // cfunctionWrapper must be the LuaCFunctionWrapper trampoline from KitsuneEngine.cpp.
-bool lua_registerkitsuneuserdata(lua_State* L, const char* name, const KitsuneUserDataRegistration* registration, lua_CFunction cfunctionWrapper);
+// pushGCHook must be the PushGCHook helper from KitsuneEngine.cpp; it is called for each
+// named function that has a non-NULL finalizer, pushing a KitsuneGCHookUD as upvalue 3.
+bool lua_registerkitsuneuserdata(lua_State* L, const char* name, const KitsuneUserDataRegistration* registration, lua_CFunction cfunctionWrapper, void (*pushGCHook)(lua_State*, void*, kitsune_Finalizer));

@@ -50,19 +50,14 @@
        that MSBuild may skip when C# files are up-to-date, whereas this Tests project is
        always the top-level build entry point for WSL remote-test runs.
        Document order before CopyNativeSo guarantees cmake completes first. -->
-  <Target Name="BuildLinuxNative" BeforeTargets="Build"
-          Condition="$([MSBuild]::IsOSPlatform('Windows'))">
-    <Exec Command="wsl bash -c &quot;set -e; mkdir -p '$(_WslRepoPath)/build-linux'; cd '$(_WslRepoPath)/build-linux'; if [ ! -f CMakeCache.txt ]; then cmake .. -DCMAKE_BUILD_TYPE=Release -DKITSUNE_ALL=ON; fi; cmake --build . --parallel&quot;"
-          ContinueOnError="WarnAndContinue" />
+  <Target Name="BuildLinuxNative" BeforeTargets="Build" Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+    <Exec Command="wsl bash -c &quot;set -e; mkdir -p '$(_WslRepoPath)/build-linux'; cd '$(_WslRepoPath)/build-linux'; if [ ! -f CMakeCache.txt ]; then cmake .. -DCMAKE_BUILD_TYPE=Release -DKITSUNE_ALL=ON; fi; cmake --build . --parallel&quot;" ContinueOnError="WarnAndContinue" />
   </Target>
 
   <!-- Copy libKitsuneEngine.so whenever it exists (Linux build or Windows with pre-built .so).
        Inputs/Outputs let MSBuild re-run this target whenever build-linux produces a newer .so,
        even when the C# project itself is otherwise up-to-date. -->
-  <Target Name="CopyNativeSo" BeforeTargets="Build"
-          Condition="Exists('$(ProjectDir)../build-linux/libKitsuneEngine.so')"
-          Inputs="$(ProjectDir)../build-linux/libKitsuneEngine.so"
-          Outputs="$(OutputPath)libKitsuneEngine.so">
+  <Target Name="CopyNativeSo" BeforeTargets="Build" Condition="Exists('$(ProjectDir)../build-linux/libKitsuneEngine.so')" Inputs="$(ProjectDir)../build-linux/libKitsuneEngine.so" Outputs="$(OutputPath)libKitsuneEngine.so">
     <Copy SourceFiles="$(ProjectDir)../build-linux/libKitsuneEngine.so" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
   </Target>
 
@@ -105,10 +100,7 @@
        Inputs/Outputs enable MSBuild incremental build; UpToDateCheckBuilt tells VS's fast
        up-to-date check to compare the native source against the output copy so a C++-only
        rebuild triggers a re-copy even when no C# files have changed. -->
-  <Target Name="CopyNativeSqliteDll" BeforeTargets="Build"
-          Condition="$([MSBuild]::IsOSPlatform('Windows')) and Exists('$(NativeOutputDir)SQLiteKitsune.dll')"
-          Inputs="$(NativeOutputDir)SQLiteKitsune.dll"
-          Outputs="$(OutputPath)SQLiteKitsune.dll">
+  <Target Name="CopyNativeSqliteDll" BeforeTargets="Build" Condition="$([MSBuild]::IsOSPlatform('Windows')) and Exists('$(NativeOutputDir)SQLiteKitsune.dll')" Inputs="$(NativeOutputDir)SQLiteKitsune.dll" Outputs="$(OutputPath)SQLiteKitsune.dll">
     <Copy SourceFiles="$(NativeOutputDir)SQLiteKitsune.dll" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
   </Target>
 

@@ -1,6 +1,6 @@
 ﻿#include "kitsuneuserdata.h"
 
-bool lua_registerkitsuneuserdata(lua_State* L, const char* name, const KitsuneUserDataRegistration* registration, lua_CFunction cfunctionWrapper) {
+bool lua_registerkitsuneuserdata(lua_State* L, const char* name, const KitsuneUserDataRegistration* registration, lua_CFunction cfunctionWrapper, void (*pushGCHook)(lua_State*, void*, kitsune_Finalizer)) {
 	if (!L || !name || !registration || !cfunctionWrapper)
 		return false;
 
@@ -54,7 +54,12 @@ bool lua_registerkitsuneuserdata(lua_State* L, const char* name, const KitsuneUs
 		lua_pushstring(L, fn->name);
 		lua_pushlightuserdata(L, (void*)fn->func);
 		lua_pushlightuserdata(L, fn->userdata);
-		lua_pushcclosure(L, cfunctionWrapper, 2);
+		int nupvals = 2;
+		if (pushGCHook && fn->finalizer) {
+			pushGCHook(L, fn->userdata, fn->finalizer);
+			nupvals = 3;
+		}
+		lua_pushcclosure(L, cfunctionWrapper, nupvals);
 		lua_rawset(L, methods_idx);
 		fn = fn->Next;
 	}
@@ -72,7 +77,12 @@ bool lua_registerkitsuneuserdata(lua_State* L, const char* name, const KitsuneUs
 		lua_pushstring(L, fn->name);
 		lua_pushlightuserdata(L, (void*)fn->func);
 		lua_pushlightuserdata(L, fn->userdata);
-		lua_pushcclosure(L, cfunctionWrapper, 2);
+		int nupvals = 2;
+		if (pushGCHook && fn->finalizer) {
+			pushGCHook(L, fn->userdata, fn->finalizer);
+			nupvals = 3;
+		}
+		lua_pushcclosure(L, cfunctionWrapper, nupvals);
 		lua_rawset(L, meta_idx);
 		fn = fn->Next;
 	}

@@ -11,12 +11,6 @@ namespace KitsuneNet
     {
         private const string DllName = "KitsuneEngine";
 
-        // GCHandle roots for every C# object whose address has been handed to the native Lua
-        // state as an upvalue (registered function delegates, method delegates, userdata instance
-        // pins, and anonymous CFunction closures).  All are freed after lua_close fires on the
-        // last engine dispose, at which point no Lua code can call back into managed memory.
-        private static readonly System.Collections.Concurrent.ConcurrentBag<GCHandle> GlobalHandles = new();
-
         // Tracks the number of live KitsuneEngine instances.  KitsuneCleanup is
         // only called when the last instance is disposed; calling it earlier would
         // null g_state and break any concurrently running scripts (e.g. the stress
@@ -537,36 +531,6 @@ namespace KitsuneNet
             return NativePtrToLuaValue(KitsuneGetVariable(name));
         }
 
-        /// <summary>
-        /// Allocates a shared-memory <see cref="LuaStream"/> of <paramref name="size"/> bytes
-        /// backed by <c>KitsuneCreateMemoryBlock</c>.  The block is tracked by the engine's
-        /// global registry and freed automatically once both C# and Lua are done with it.
-        /// <para>
-        /// Write to the stream before passing it to Lua via <see cref="SetVariable"/> or as a
-        /// coroutine argument.  After the handoff the stream remains valid for concurrent
-        /// read/write access while Lua holds its inbound stream.  Calling
-        /// <see cref="LuaStream.Dispose"/> after the handoff is safe and simply signals C#'s
-        /// side is done; the block is freed by the engine's ticker when Lua's GC also disposes.
-        /// </para>
-        /// <para>
-        /// If the stream is never passed to Lua, disposing it frees the block immediately
-        /// (on the next ticker cycle).
-        /// </para>
-        /// </summary>
-        /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="size"/> is zero or negative.</exception>
-        /// <exception cref="OutOfMemoryException">Thrown when the native allocation fails.</exception>
-        public LuaStream CreateStream(int size)
-        {
-            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(size);
-            IntPtr block = KitsuneCreateMemoryBlock((nuint)size);
-            if (block == IntPtr.Zero)
-            {
-                throw new OutOfMemoryException("KitsuneCreateMemoryBlock failed.");
-            }
-            var header = Marshal.PtrToStructure<SharedMemoryBlockHeader>(block);
-            return new LuaStream(block, (long)header.Size, managed: true);
-        }
-
         // Convenience shims for common types (path is dot-separated, e.g. "foo" or "foo.bar")
         public bool SetString(string name, string value) => SetVariable(name, value);
 
@@ -721,8 +685,7 @@ namespace KitsuneNet
             }
 
             var handle = GCHandle.Alloc(func);
-            GlobalHandles.Add(handle);
-            KitsuneRegisterFunction(name, GetTrampolinePtr(), (nint)GCHandle.ToIntPtr(handle));
+            KitsuneRegisterFunction(name, GetTrampolinePtr(), GCHandle.ToIntPtr(handle), GetFinalizerPtr());
         }
 
         /// <summary>
@@ -853,7 +816,11 @@ namespace KitsuneNet
             ArgumentNullException.ThrowIfNull(instance);
 
             var handle = GCHandle.Alloc(instance);
-            GlobalHandles.Add(handle);
+
+            // Do NOT add to GlobalHandles — userdata instance pins are owned exclusively
+            // by the Lua __gc metamethod injected in RegisterUserdataCore.  Adding them
+            // here would cause premature double-free when a concurrent engine's Dispose
+            // drains GlobalHandles while another engine's Lua state still holds the pin.
             return new LuaValue
             {
                 Type = LuaType.Userdata,
@@ -1484,10 +1451,7 @@ namespace KitsuneNet
 
         // func is a delegate* unmanaged[Cdecl] cast to nint; userdata is a GCHandle address.
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern void KitsuneRegisterFunction([MarshalAs(UnmanagedType.LPUTF8Str)] string name, nint func, nint userdata);
-
-        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern IntPtr KitsuneCreateMemoryBlock(nuint size);
+        private static extern void KitsuneRegisterFunction([MarshalAs(UnmanagedType.LPUTF8Str)] string name, nint func, nint userdata, nint finalizer);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         [return: MarshalAs(UnmanagedType.I1)]
@@ -1497,6 +1461,21 @@ namespace KitsuneNet
 
         private static unsafe nint GetTrampolinePtr() =>
             (nint)(delegate* unmanaged[Cdecl]<int, KitsuneVariable*, nint, void*, int>)&LuaFunctionTrampoline;
+
+        private static unsafe nint GetFinalizerPtr() =>
+            (nint)(delegate* unmanaged[Cdecl]<void*, void>)&LuaDelegateFinalizer;
+
+        // Called by the native KitsuneGCHookUD __gc when Lua collects a closure that wraps
+        // a C# delegate.  Frees the GCHandle so the delegate object can be collected.
+        [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+        private static unsafe void LuaDelegateFinalizer(void* userdata)
+        {
+            var handle = GCHandle.FromIntPtr((nint)userdata);
+            if (handle.IsAllocated)
+            {
+                handle.Free();
+            }
+        }
 
         // Converts a LuaValue[] to a KitsuneVariable[] suitable for P/Invoke.
         // String data is heap-allocated; caller MUST call FreeNativeArgs when done.
@@ -1655,7 +1634,6 @@ namespace KitsuneNet
                 LuaType.String when nv.Data != IntPtr.Zero => NativeCopyBytes(nv.Data, nv.Length),
                 LuaType.Char16 when nv.Data != IntPtr.Zero => NativeCopyChar16(nv.Data, nv.Length),
                 LuaType.Json when nv.Data != IntPtr.Zero && nv.Length > 0 => NativeParseJson(nv.Data, nv.Length),
-                LuaType.Stream when nv.Data != IntPtr.Zero => NativeWrapSharedMemory(nv.Data),
                 LuaType.TableContents => ReadNativeTable(nv.Data),  // snapshot from KitsuneGetTableContents
                 LuaType.Error when nv.Data != IntPtr.Zero => NativeCopyBytes(nv.Data, nv.Length) with { Type = LuaType.Error },
                 LuaType.None => LuaValue.None,
@@ -1704,7 +1682,6 @@ namespace KitsuneNet
                 LuaType.Char16 when nv.Data != IntPtr.Zero => NativeCopyChar16(nv.Data, nv.Length),
                 LuaType.Userdata when nv.Data != IntPtr.Zero => NativeUnmarshalUserdata(nv.Data, nv.Length),
                 LuaType.Json when nv.Data != IntPtr.Zero && nv.Length > 0 => NativeParseJson(nv.Data, nv.Length),
-                LuaType.Stream when nv.Data != IntPtr.Zero => NativeWrapSharedMemory(nv.Data),
                 LuaType.TableContents => ReadNativeTable(nv.Data),  // snapshot linked list inside a node
                 LuaType.None => LuaValue.None,
                 _ => new LuaValue { Type = t },  // Nil/Table(no-ref or no-snapshot)/Function/Thread/Userdata/LightUserdata
@@ -1864,62 +1841,19 @@ namespace KitsuneNet
                         nv.Length = (nuint)json.Length;
                         break;
                     }
-                case LuaType.Stream when v.StreamValue is not null:
-                    {
-                        // Fast path: CreateStream block — pass the existing block directly (zero copy).
-                        // MarkPassedToLua flips _isManaged=false to prevent a second fast-pass of the
-                        // same block. The C++ lua_push_sharedmemory_stream call sets FlagLuaReferenced
-                        // on the block so Dispose knows Lua's GC will eventually set OWNER_DISPOSED.
-                        if (v.StreamValue is LuaStream managedLs)
-                        {
-                            IntPtr sharedPtr = managedLs.GetSharedBlockPtr();
-                            if (sharedPtr != IntPtr.Zero)
-                            {
-                                managedLs.MarkPassedToLua(); // disable fast path for future calls
-                                nv.Data = sharedPtr;
-                                break;
-                            }
-                        }
-
-                        // Copy path: allocate a new block and fill it with the stream's bytes.
-                        byte[] data = v.StreamValue switch
-                        {
-                            LuaStream ls => ls.ToArray(),
-                            System.IO.MemoryStream ms => ms.ToArray(),
-                            _ => ReadStreamToBytes(v.StreamValue),
-                        };
-
-                        // Returns NULL on allocation failure; stream arg is silently skipped.
-                        IntPtr block = KitsuneCreateMemoryBlock((nuint)data.Length);
-                        if (block == IntPtr.Zero)
-                        {
-                            break;
-                        }
-
-                        if (data.Length > 0)
-                        {
-                            Marshal.Copy(data, 0, IntPtr.Add(block, 32), data.Length);
-                        }
-
-                        nv.Data = block;
-
-                        // NOT added to ptrs — the block is owned by the global list; freed by ticker.
-                        break;
-                    }
                 case LuaType.CFunction when v.CFunctionValue is LuaFunction luaFunc:
                     {
                         // Allocate a GCHandle to keep the delegate alive while Lua may call the closure.
-                        // The handle is added to s_globalCFunctionHandles and freed when the last engine
-                        // is disposed (same lifetime as the Lua state that owns the closure).
+                        // The handle is freed by the KitsuneGCHook __gc when Lua collects the closure.
                         var handle = GCHandle.Alloc(luaFunc);
-                        GlobalHandles.Add(handle);
 
-                        // Allocate a kitsune_CFunctionData { func, userdata } on the unmanaged heap.
-                        // PushKitsuneVariable copies the two pointer values into Lua upvalue slots, so
+                        // Allocate a kitsune_CFunctionData { func, userdata, finalizer } on the unmanaged heap.
+                        // PushKitsuneVariable copies the three pointer values into Lua upvalue slots, so
                         // this struct only needs to survive until the native call returns.
-                        IntPtr structPtr = Marshal.AllocHGlobal(IntPtr.Size * 2);
+                        IntPtr structPtr = Marshal.AllocHGlobal(IntPtr.Size * 3);
                         Marshal.WriteIntPtr(structPtr, 0, GetTrampolinePtr());
                         Marshal.WriteIntPtr(structPtr, IntPtr.Size, GCHandle.ToIntPtr(handle));
+                        Marshal.WriteIntPtr(structPtr, IntPtr.Size * 2, GetFinalizerPtr());
                         ptrs ??= new List<IntPtr>();
                         ptrs.Add(structPtr);
                         nv.Data = structPtr;
@@ -1969,18 +1903,22 @@ namespace KitsuneNet
                         iterState.StepHandle = GCHandle.Alloc(stepFunc);
                         iterState.FinalizeHandle = GCHandle.Alloc(finalizeFunc);
 
-                        // kitsune_CFunctionData for step — first and next share the same struct
-                        // because IEnumerator.MoveNext() is already stateful.
-                        IntPtr stepCFD = Marshal.AllocHGlobal(IntPtr.Size * 2);
+                        // kitsune_CFunctionData { func, userdata, finalizer } for step.
+                        // first and next share the same struct because IEnumerator.MoveNext() is stateful.
+                        // finalizer is NULL — the iterator manages its own lifetime via finalizeFunc/__gc.
+                        IntPtr stepCFD = Marshal.AllocHGlobal(IntPtr.Size * 3);
                         Marshal.WriteIntPtr(stepCFD, 0, GetTrampolinePtr());
                         Marshal.WriteIntPtr(stepCFD, IntPtr.Size, GCHandle.ToIntPtr(iterState.StepHandle));
+                        Marshal.WriteIntPtr(stepCFD, IntPtr.Size * 2, IntPtr.Zero);
                         ptrs ??= new List<IntPtr>();
                         ptrs.Add(stepCFD);
 
-                        // kitsune_CFunctionData for finalized
-                        IntPtr finCFD = Marshal.AllocHGlobal(IntPtr.Size * 2);
+                        // kitsune_CFunctionData { func, userdata, finalizer } for finalized.
+                        // finalizer is NULL — the finalizeFunc itself does cleanup, no extra hook needed.
+                        IntPtr finCFD = Marshal.AllocHGlobal(IntPtr.Size * 3);
                         Marshal.WriteIntPtr(finCFD, 0, GetTrampolinePtr());
                         Marshal.WriteIntPtr(finCFD, IntPtr.Size, GCHandle.ToIntPtr(iterState.FinalizeHandle));
+                        Marshal.WriteIntPtr(finCFD, IntPtr.Size * 2, IntPtr.Zero);
                         ptrs.Add(finCFD);
 
                         // KitsuneIterator { first*, next*, finalized*, userdata }
@@ -2028,41 +1966,6 @@ namespace KitsuneNet
                         break;
                     }
             }
-        }
-
-        // Wraps an inbound KitsuneSharedMemoryBlock* in a LuaStream — zero copy.
-        // The LuaStream clears ACCESSOR_DISPOSED on the block, taking ownership of the accessor
-        // role. Disposing sets ACCESSOR_DISPOSED; the engine's ticker frees the block once Lua
-        // also sets OWNER_DISPOSED via shmem_close.
-        private static LuaValue NativeWrapSharedMemory(IntPtr blockPtr)
-        {
-            if (blockPtr == IntPtr.Zero)
-            {
-                return LuaValue.None;
-            }
-            var header = Marshal.PtrToStructure<SharedMemoryBlockHeader>(blockPtr);
-            if ((ulong)header.Size > (ulong)long.MaxValue)
-            {
-                throw new InvalidOperationException($"Stream block size {header.Size} exceeds the addressable range.");
-            }
-            return new LuaValue { Type = LuaType.Stream, StreamValue = new LuaStream(blockPtr, (long)header.Size) };
-        }
-
-        // Reads a System.IO.Stream into a byte array, seeking from the start when possible.
-        private static byte[] ReadStreamToBytes(System.IO.Stream stream)
-        {
-            if (stream.CanSeek)
-            {
-                long saved = stream.Position;
-                stream.Position = 0;
-                byte[] buf = new byte[checked((int)stream.Length)];
-                stream.ReadExactly(buf);
-                stream.Position = saved;
-                return buf;
-            }
-            using var ms = new System.IO.MemoryStream();
-            stream.CopyTo(ms);
-            return ms.ToArray();
         }
 
         // Fills a single KitsuneVariable for the variable-to-execute and its argument list.
@@ -2181,7 +2084,7 @@ namespace KitsuneNet
             while (head != IntPtr.Zero)
             {
                 IntPtr namePtr = Marshal.ReadIntPtr(head, 0);
-                IntPtr next = Marshal.ReadIntPtr(head, IntPtr.Size * 3);
+                IntPtr next = Marshal.ReadIntPtr(head, IntPtr.Size * 4);
                 Marshal.FreeHGlobal(namePtr);
                 Marshal.FreeHGlobal(head);
                 head = next;
@@ -2287,7 +2190,7 @@ namespace KitsuneNet
             finally
             {
                 // Free temporary structs — the engine copied method info into Lua metatables.
-                // GCHandles for the LuaFunction delegates remain alive in GlobalHandles.
+                // GCHandles for LuaFunction delegates are freed by KitsuneGCHook __gc callbacks.
                 FreeNamedFunctionList(funcHead);
                 FreeNamedFunctionList(metaHead);
                 if (reg != IntPtr.Zero)
@@ -2297,26 +2200,26 @@ namespace KitsuneNet
             }
         }
 
-        // Allocates a KitsuneNamedFunction { char* name, func, void* userdata, Next* } node.
-        // The LuaFunction delegate is rooted in GlobalHandles; the name string and node itself
-        // are freed by FreeNamedFunctionList once KitsuneRegisterUserdata has consumed them.
+        // Allocates a KitsuneNamedFunction { char* name, func, void* userdata, kitsune_Finalizer finalizer, Next* } node.
+        // The LuaFunction delegate GCHandle is freed by the KitsuneGCHook __gc when Lua collects the closure.
+        // The name string and node itself are freed by FreeNamedFunctionList once KitsuneRegisterUserdata has consumed them.
         private IntPtr AllocNamedFunction(string name, LuaFunction func, IntPtr next)
         {
             var handle = GCHandle.Alloc(func);
-            GlobalHandles.Add(handle);
 
             byte[] nameBytes = Encoding.UTF8.GetBytes(name);
             IntPtr namePtr = Marshal.AllocHGlobal(nameBytes.Length + 1);
             Marshal.Copy(nameBytes, 0, namePtr, nameBytes.Length);
             Marshal.WriteByte(namePtr, nameBytes.Length, 0);
 
-            // KitsuneNamedFunction { char* name, kitsune_CFunction func, void* userdata, KitsuneNamedFunction* Next }
-            // Each field is pointer-sized on x64 (32 bytes total).
-            IntPtr node = Marshal.AllocHGlobal(IntPtr.Size * 4);
+            // KitsuneNamedFunction { char* name, kitsune_CFunction func, void* userdata, kitsune_Finalizer finalizer, KitsuneNamedFunction* Next }
+            // Each field is pointer-sized on x64 (40 bytes total).
+            IntPtr node = Marshal.AllocHGlobal(IntPtr.Size * 5);
             Marshal.WriteIntPtr(node, 0, namePtr);
             Marshal.WriteIntPtr(node, IntPtr.Size, GetTrampolinePtr());
             Marshal.WriteIntPtr(node, IntPtr.Size * 2, GCHandle.ToIntPtr(handle));
-            Marshal.WriteIntPtr(node, IntPtr.Size * 3, next);
+            Marshal.WriteIntPtr(node, IntPtr.Size * 3, GetFinalizerPtr());
+            Marshal.WriteIntPtr(node, IntPtr.Size * 4, next);
             return node;
         }
 
@@ -2335,17 +2238,6 @@ namespace KitsuneNet
                     if (disposing && sessionLeaks != 0)
                     {
                         throw new ApplicationException($"Native memory leak: {sessionLeaks} unfreed allocation(s)");
-                    }
-
-                    // Safe to free all accumulated handles now that the Lua state is gone.
-                    // Userdata instance pins may already be freed by their __gc callbacks;
-                    // IsAllocated guards against double-free.
-                    while (GlobalHandles.TryTake(out var h))
-                    {
-                        if (h.IsAllocated)
-                        {
-                            h.Free();
-                        }
                     }
                 }
             }
@@ -2396,28 +2288,6 @@ namespace KitsuneNet
 
             // 4 bytes padding (implicit, to align Userdata to pointer boundary)
             public IntPtr Userdata; // GCHandle address for Kitsune-registered userdatas; IntPtr.Zero otherwise
-        }
-
-        // Mirrors the x64 layout of KitsuneSharedMemoryBlock (see KitsuneEngine.h):
-        //   offset  0: BYTE              flags    (1 byte + 7 padding)
-        //   offset  8: void*             userdata (8 bytes, reserved)
-        //   offset 16: KitsuneSharedMemoryBlock* next    (8 bytes, intrusive list link — do NOT read/write from C#)
-        //   offset 24: size_t            size     (8 bytes)
-        //   offset 32: BYTE              data[]   (variable — NOT part of this header struct)
-        [StructLayout(LayoutKind.Explicit, Size = 32)]
-        private struct SharedMemoryBlockHeader
-        {
-            [FieldOffset(0)]
-            public byte Flags;
-
-            [FieldOffset(8)]
-            public IntPtr UserData;
-
-            [FieldOffset(16)]
-            public IntPtr Next; // intrusive list pointer — not used by C#
-
-            [FieldOffset(24)]
-            public nuint Size;
         }
 
         // Holds the lazy enumerator and GCHandles for a KITSUNE_TITERATOR marshal.

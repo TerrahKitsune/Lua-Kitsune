@@ -1,4 +1,4 @@
-#include "stream.h"
+ï»¿#include "stream.h"
 #include "luawchar.h"
 #include <string.h>
 #include <stdlib.h>
@@ -6,7 +6,6 @@
 #include "miniz.h"
 #include "streammemory.h"
 #include "streamfile.h"
-#include "streamshmemory.h"
 
 // Forward declarations for the centralized dispatch helpers defined later.
 static bool        StreamWrite(lua_State* L, LuaStream* s, const BYTE* data, size_t len);
@@ -59,7 +58,7 @@ static bool StreamWrite(lua_State* L, LuaStream* s, const BYTE* data, size_t len
 }
 
 // -- Centralized C-level helpers for pos/len/setpos ----------------------------
-// These never push to the Lua stack — they return C values directly.
+// These never push to the Lua stack â€” they return C values directly.
 // All Lua API functions and internal operations route through these so call
 // sites stay clean regardless of whether the stream uses a vtable or Lua fn.
 
@@ -142,42 +141,6 @@ int OpenFile(lua_State* L) {
 	return 1;
 }
 
-int OpenSharedMemory(lua_State* L) {
-	lua_Integer size = luaL_checkinteger(L, 1);
-	if (size <= 0)
-		luaL_error(L, "size must be greater than zero");
-	lua_push_sharedmemory_stream_outbound(L, (size_t)size);
-	return 1;
-}
-
-int ToSharedMemory(lua_State* L) {
-	LuaStream* s = lua_toluastream(L, 1);
-	if (!(s->Caps & STREAM_CAP_READ) || !(s->Caps & STREAM_CAP_SEEK))
-		return luaL_error(L, "stream must be readable and seekable");
-
-	bool dispose = lua_toboolean(L, 2) != 0;
-
-	LuaStream* outStream = lua_try_push_sharedmemory_stream_outbound_from_stream(L, s);
-	if (!outStream)
-		return luaL_error(L, "failed to copy stream contents");
-
-	if (dispose) {
-		LuaStream* orig = (LuaStream*)lua_touserdata(L, 1);
-		if (orig->vtbl) {
-			orig->vtbl->close(orig->native, L);
-		} else if (orig->backendRef != LUA_NOREF) {
-			lua_rawgeti(L, LUA_REGISTRYINDEX, orig->backendRef);
-			lua_pushinteger(L, STREAM_OP_CLOSE);
-			lua_pcall_nohook(L, 1, 0, 0);
-			luaL_unref(L, LUA_REGISTRYINDEX, orig->backendRef);
-		}
-		memset(orig, 0, sizeof(LuaStream));
-		orig->backendRef = LUA_NOREF;
-	}
-
-	return 1;
-}
-
 int NewStream(lua_State* L) {
 	if (lua_type(L, 1) == LUA_TFUNCTION) {
 
@@ -241,13 +204,13 @@ int GetStreamInfo(lua_State* L) {
 	LuaStream* s = lua_toluastream(L, 1);
 	if (s->vtbl && s->vtbl->hasdata) {
 		// Async/network streams: info may yield (e.g. HTTP waits for response headers).
-		// Returns 1 value — the stream-specific info table.
+		// Returns 1 value â€” the stream-specific info table.
 		if (s->vtbl->info)
 			return s->vtbl->info(s->native, L);
 		lua_pushnil(L);
 		return 1;
 	}
-	// Sync streams: returns 2 values — caps table + backend info table.
+	// Sync streams: returns 2 values â€” caps table + backend info table.
 	lua_createtable(L, 0, 1);
 	lua_pushinteger(L, s->Caps);
 	lua_setfield(L, -2, "Caps");
@@ -880,18 +843,18 @@ int WriteUtf8(lua_State* L) {
 // -- Compress / Decompress -----------------------------------------------------
 // Unified implementation using miniz (cross-platform, no system dependency).
 //
-// Wire format — a stream of zero or more chunks, each:
+// Wire format â€” a stream of zero or more chunks, each:
 //   [uint32_le uncompressedSize][uint32_le compressedSize][compressedBytes]
 // An empty uncompressedSize or compressedSize field signals end-of-stream.
 // compressedBytes are zlib-format (deflate + 2-byte header + 4-byte Adler32).
 //
-// The second Lua argument is now a compression level (0–9, default MZ_DEFAULT_COMPRESSION).
+// The second Lua argument is now a compression level (0â€“9, default MZ_DEFAULT_COMPRESSION).
 // The Windows COMPRESS_ALGORITHM_* integer is no longer accepted.
 
 static const size_t STREAM_COMPRESS_CHUNK = 65536u;
 
 // ctx packing for CompressContinuation:
-//   bits 0-3: compression level clamped to [0,15] — miniz treats any value >9 as default (-1)
+//   bits 0-3: compression level clamped to [0,15] â€” miniz treats any value >9 as default (-1)
 //   bit    8: ownDst flag
 // Using only 4 bits for the level avoids the classic MZ_DEFAULT_COMPRESSION = -1 bug:
 // (unsigned int)(-1) = 0xFFFFFFFF would set bit 8 and corrupt the ownDst flag.
@@ -1006,7 +969,7 @@ static int DecompressAsyncAccumulateContinuation(lua_State* L, int status, lua_K
 		return DecompressAsyncAccumulateContinuation(L, LUA_OK, ctx);
 	}
 	lua_pop(L, 1);
-	// EOF — reset accum to 0 and call synchronous DecompressStream on it.
+	// EOF â€” reset accum to 0 and call synchronous DecompressStream on it.
 	accumIdx = lua_gettop(L);  // re-derive: now accum is at the top
 	LuaStream* accum = lua_toluastream(L, accumIdx);
 	StreamSetPosC(L, accum, 0);

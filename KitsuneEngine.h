@@ -14,13 +14,9 @@
 // KitsuneVariable type constants — values 0–8 match Lua's LUA_T* constants for direct comparison.
 // KITSUNE_TNONE (-1) matches LUA_TNONE. KITSUNE_TERROR (-2) is a Kitsune extension not present
 // in Lua; it is used exclusively with kitsune_ResultSetter to signal a Lua error from a
-#define KITSUNE_TTABLECONTENTS  (-9) // Kitsune extension: snapshot of a Lua table's key-value pairs; table field points to a KitsuneKeyValuePairVariableNode linked list. Produced by KitsuneGetTableContents; consumed by KitsuneSetTableContents. KitsuneVariableFree recursively releases the list.
-#define KITSUNE_TITERATOR      (-8) // Kitsune extension: iterator type; data is a pointer to a kitsune_Iterator struct containing the iteration state. Not a value returned by lua_type() — only used in KitsuneVariable for iterating tables with KitsuneGetAll, and never appears in Lua or in a variable returned by the engine. Data should be a pointer to a kitsune_Iterator.
-#define KITSUNE_TCFUNCTION     (-7) // Kitsune extension: C function pointer type; data is a pointer to a kitsune_CFunctionData struct containing the function pointer and its userdata. Not a value returned by lua_type() — only used in KitsuneVariable for passing C function pointers to Lua, and never appears in Lua or in a variable returned by the engine. Data should be a pointer to a kitsune_CFunctionData.
-#define KITSUNE_TSTREAM        (-6) // Kitsune extension: pointer to a KitsuneSharedMemoryBlock that Lua always owns.
-									// The block MUST have been obtained via KitsuneCreateMemoryBlock.
-									// Passing a block not created by KitsuneCreateMemoryBlock is an error
-									// and will push nil to Lua.
+#define KITSUNE_TTABLECONTENTS  (-8) // Kitsune extension: snapshot of a Lua table's key-value pairs; table field points to a KitsuneKeyValuePairVariableNode linked list. Produced by KitsuneGetTableContents; consumed by KitsuneSetTableContents. KitsuneVariableFree recursively releases the list.
+#define KITSUNE_TITERATOR      (-7) // Kitsune extension: iterator type; data is a pointer to a kitsune_Iterator struct containing the iteration state. Not a value returned by lua_type() — only used in KitsuneVariable for iterating tables with KitsuneGetAll, and never appears in Lua or in a variable returned by the engine. Data should be a pointer to a kitsune_Iterator.
+#define KITSUNE_TCFUNCTION     (-6) // Kitsune extension: C function pointer type; data is a pointer to a kitsune_CFunctionData struct containing the function pointer and its userdata. Not a value returned by lua_type() — only used in KitsuneVariable for passing C function pointers to Lua, and never appears in Lua or in a variable returned by the engine. Data should be a pointer to a kitsune_CFunctionData.
 #define KITSUNE_TJSON          (-5) // Kitsune extension: JSON string type; data is a UTF-8 char* and length is in bytes (excluding null terminator). Not a value returned by lua_type().
 #define KITSUNE_TCHAR16        (-4) // Kitsune extension: UTF-16 string type; data is a char16_t* and length is in char16_t code units (excluding null terminator). Not a value returned by lua_type().
 #define KITSUNE_TINTEGER       (-3) // Kitsune extension: Lua 5.3+ integer subtype (lua_isinteger); not a value returned by lua_type()
@@ -52,34 +48,7 @@
 #define KITSUNE_STATUS_CANCELLED (6)  // stopped by an explicit KitsuneCancel(id) call, or cancel is pending
 #define KITSUNE_STATUS_INLINE    (7)  // inline sync call paused in cooperative yield window; calling thread will resume imminently
 
-#define KITSUNE_SHARED_MEMORY_FLAG_LOCKED (1 << 0) // Set by an accessor while it is reading or writing the block to signal concurrent usage.
-														// Other accessors should check this flag and wait or retry before accessing the block.
-														// The Lua stream vtable sets and clears this flag automatically around each read/write.
-#define KITSUNE_SHARED_MEMORY_FLAG_READONLY (1 << 2) // The block is read-only; write operations are rejected by the stream vtable.
-#define KITSUNE_SHARED_MEMORY_FLAG_KITSUNE_OWNED    (1 << 3) // Set by KitsuneCreateMemoryBlock; required for a block to be accepted as KITSUNE_TSTREAM.
-#define KITSUNE_SHARED_MEMORY_FLAG_OWNER_DISPOSED    (1 << 4) // Set when all Lua streams referencing this block have been GC'd. Once set, never cleared.
-#define KITSUNE_SHARED_MEMORY_FLAG_ACCESSOR_DISPOSED (1 << 5) // Cleared when C# takes ownership (LuaStream constructor); set when C# disposes. Starts at 1 (no accessor).
-#define KITSUNE_SHARED_MEMORY_FLAG_LUA_REFERENCED    (1 << 6) // Set when any Lua stream is created from this block. Once set, never cleared.
-
-#ifdef _MSC_VER
-#pragma warning(push)
-#pragma warning(disable: 4200) // nonstandard extension: zero-sized array; intentional flexible array member
-#endif
-struct KitsuneSharedMemoryBlock {
-	uint8_t flags; // Bitfield of KITSUNE_SHARED_MEMORY_FLAG_* values.
-	// KITSUNE_SHARED_MEMORY_FLAG_LOCKED:        set by an accessor during a read or write; other accessors should wait.
-	// KITSUNE_SHARED_MEMORY_FLAG_READONLY:      data must not be modified; write operations are rejected.
-	// KITSUNE_SHARED_MEMORY_FLAG_KITSUNE_OWNED: block was created by KitsuneCreateMemoryBlock.
-	void* userdata;          // Reserved; not used by the engine.
-	KitsuneSharedMemoryBlock* next; // Intrusive linked-list link for the global block registry. Written only under g_shmem_lock.
-	size_t size;             // Size of the data region in bytes. The data block immediately follows the header in memory.
-	uint8_t data[]; // Continous data block of the specified size. The entire struct is allocated as a single block on the heap, so freeing the struct pointer also frees the data block.
-};
-#ifdef _MSC_VER
-#pragma warning(pop)
-#endif
-
-// Forward declaration required so KitsuneVariable can hold a pointer to the node in its union.
+// Forward declaration
 struct KitsuneKeyValuePairVariableNode;
 // Forward declaration required so KitsuneVariable can hold a kitsune_CFunctionData* in its union;
 // the full definition follows after kitsune_CFunction is declared.
@@ -102,8 +71,7 @@ struct KitsuneVariable {
 		unsigned char* data;                   // KITSUNE_TSTRING: heap-allocated UTF-8 bytes; caller-owned on Set
 		char16_t* char16data;                  // KITSUNE_TCHAR16: heap-allocated char16_t string; length = number of char16_t code units (excl. null terminator)
 		KitsuneKeyValuePairVariableNode* table; // KITSUNE_TTABLECONTENTS: head of linked list (NULL = empty snapshot)
-		KitsuneSharedMemoryBlock* stream; // KITSUNE_TSTREAM: pointer to a KitsuneSharedMemoryBlock representing the stream; caller-owned on Set
-		kitsune_CFunctionData* cfunction; // KITSUNE_TCFUNCTION: pointer to a kitsune_CFunctionData struct containing the function pointer and its userdata; caller-owned on Set
+		kitsune_CFunctionData* cfunction;
 		KitsuneIterator* iterator; // KITSUNE_TITERATOR: pointer to a kitsune_Iterator struct containing the iteration state; caller-owned on Set
 		void* lightuserdata; // KITSUNE_TLIGHTUSERDATA: opaque pointer; caller-owned on Set
 		KitsuneUserData* userdata; // KITSUNE_TUSERDATA: pointer to a KitsuneUserData struct containing the name and userdata pointer; caller-owned on Set
@@ -193,6 +161,8 @@ typedef int (*kitsune_ResultSetter) (const KitsuneVariable* result);
 // lua_State* is intentionally not exposed.
 typedef int (*kitsune_CFunction) (int argc, const KitsuneVariable* argv, const kitsune_ResultSetter resultSetter, void* userdata);
 
+typedef void (*kitsune_Finalizer) (void* userdata);
+
 // Holds the function pointer and userdata for a KITSUNE_TCFUNCTION variable.
 // Set KitsuneVariable.data to a pointer to one of these to pass an anonymous C function to Lua
 // without registering it in the global table. The struct only needs to be alive for the duration
@@ -200,7 +170,8 @@ typedef int (*kitsune_CFunction) (int argc, const KitsuneVariable* argv, const k
 // in Lua closure upvalues and the struct itself is no longer referenced.
 struct kitsune_CFunctionData {
 	kitsune_CFunction func; // C function to wrap as a Lua closure
-	void* userdata;         // opaque userdata passed to func on each call
+	void* userdata; // opaque userdata passed to func on each call
+	kitsune_Finalizer finalizer; // optional finalizer called when the Lua closure is garbage collected; receives the same userdata pointer. Set to NULL if no finalizer is needed.
 };
 
 // A named entry in a userdata's method or metamethod table.
@@ -208,6 +179,7 @@ struct KitsuneNamedFunction {
 	char* name;
 	kitsune_CFunction func;
 	void* userdata; // Opaque pointer passed to func when this method is called
+	kitsune_Finalizer finalizer; // Optional: called with userdata when the Lua closure is GC'd. Set to NULL if not needed.
 	KitsuneNamedFunction* Next;
 };
 
@@ -291,31 +263,15 @@ extern "C" {
 	// Registers a C function as a global callable from Lua.
 	// name is a dot-separated path (e.g. "Foo" or "Ns.Foo"); intermediate tables are created.
 	// See kitsune_CFunction for the full list of constraints on what may be called from within func.
-	KITSUNE_API void KitsuneRegisterFunction(const char* name, kitsune_CFunction func, void* userdata = nullptr);
+	// finalizer is optional: called with userdata when the Lua closure is garbage collected.
+	KITSUNE_API void KitsuneRegisterFunction(const char* name, kitsune_CFunction func, void* userdata = nullptr, kitsune_Finalizer finalizer = nullptr);
 
 	// Registers a userdata type with the engine, allowing Lua to recognise it and call its metamethods.
 	// Fails if the name is already taken, or if registration->MetaTableFunctions is missing
 	// a __gc entry (releases the managed GCHandle) or a __tostring entry (enables tostring()).
 	KITSUNE_API bool KitsuneRegisterUserdata(const char* name, const KitsuneUserDataRegistration* registration);
 
-	// Allocates a memory block of the given size, anchors it in the Lua registry,
-	// and returns a pointer to the block for the host to read from or write into.
-	// block->data[] is zero-initialised and its length is block->size.
-	// Block lifecycle (dual-flag ownership):
-	//   a) Pass to Lua as KITSUNE_TSTREAM — Lua takes the owner role.
-	//      KITSUNE_SHARED_MEMORY_FLAG_OWNER_DISPOSED is set by the engine when Lua's GC
-	//      collects the last stream referencing the block.
-	//   b) The host (C#) holds the accessor role: KITSUNE_SHARED_MEMORY_FLAG_ACCESSOR_DISPOSED
-	//      starts set (no accessor); clear it to claim the accessor role, set it when done.
-	//   When both OWNER_DISPOSED and ACCESSOR_DISPOSED are set the engine's ticker sweeps
-	//   the block free on its next cycle.
-	//   If the block is never passed to Lua, setting both flags releases it immediately on
-	//   the next ticker sweep.
-	// Do NOT call free() or any other allocator on the block.
-	// Returns NULL on failure.
-	KITSUNE_API KitsuneSharedMemoryBlock* KitsuneCreateMemoryBlock(size_t size);
-
-	// -- Execution --------------------------------------------------------------
+	// -- Execution
 	// All four functions execute synchronously: they block the calling thread until
 	// the script finishes and return the typed result directly. Returns NULL on start
 	// failure (e.g. engine not initialised, no slots available). On success the caller

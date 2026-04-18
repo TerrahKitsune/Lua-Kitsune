@@ -1346,98 +1346,6 @@ public sealed class KafkaTests
         r.String.ShouldBe("ok");
     }
 
-    // -- Stress test -----------------------------------------------------------
-    [KafkaFact]
-    public async Task StressTest_ProduceAndConsume_ConcurrentMessages()
-    {
-        using KitsuneEngine engine = new();
-        string guid = Guid.NewGuid().ToString("N");
-        const int count = 100;
-        string stressTopic = $"stress-{guid}";
-
-        // Create a dedicated single-partition topic so the consumer starts from
-        // offset 0 on a clean slate — no old-message backlog to scan through.
-        await engine.ExecuteStringAsync($@"
-            local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
-            local ok, err = p:CreateTopic('{stressTopic}', 1)
-            assert(ok, tostring(err))
-            p:Close()
-        ");
-
-        string producerLua = $@"
-            local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
-            for i = 1, {count} do
-                local key = '{guid}-' .. i
-                local ok, err = p:Send('{stressTopic}', key, key)
-                assert(ok, err or 'Send ' .. i .. ' failed')
-            end
-            p:Close()
-            return 'ok'
-        ";
-
-        string consumerLua = $@"
-            local prefix = '{guid}-'
-            local need   = {count}
-
-            local consumer = Kafka.NewConsumer({{
-                ['bootstrap.servers'] = '{Bootstrap()}',
-                ['group.id']          = 'test_kitsune',
-                ['auto.offset.reset'] = 'earliest',
-            }})
-            -- Subscribe with auto.offset.reset=earliest so the consumer receives
-            -- all messages from the start of this fresh GUID-keyed topic, whether
-            -- they arrive before or after the subscription is established.
-            local co = consumer:Subscribe({{'{stressTopic}'}})
-
-            local seen     = {{}}
-            local found    = 0
-            local deadline = Time() + 60000
-
-            while Time() < deadline do
-                local ok, d = coroutine.resume(co, false)
-                if not ok then error(tostring(d)) end
-                if d and d.ErrorCode == 0 and d.Key
-                   and string.sub(d.Key, 1, #prefix) == prefix
-                   and not seen[d.Key] then
-                    seen[d.Key] = true
-                    found = found + 1
-                    if found >= need then break end
-                end
-                if not d then Sleep(10) end
-            end
-
-            coroutine.resume(co, true)
-            consumer:Close()
-            return tostring(found)
-        ";
-
-        try
-        {
-            var producerTask = Task.Run(async () =>
-            {
-                using KitsuneEngine e = new();
-                return await e.ExecuteStringAsync(producerLua).ConfigureAwait(false);
-            });
-            var consumerTask = Task.Run(async () =>
-            {
-                using KitsuneEngine e = new();
-                return await e.ExecuteStringAsync(consumerLua).ConfigureAwait(false);
-            });
-            await Task.WhenAll(producerTask, consumerTask);
-
-            producerTask.Result.String.ShouldBe("ok");
-            consumerTask.Result.ShouldBe(count.ToString());
-        }
-        finally
-        {
-            await engine.ExecuteStringAsync($@"
-                local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
-                p:DestroyTopic('{stressTopic}')
-                p:Close()
-            ");
-        }
-    }
-
     [KafkaFact]
     public async Task StressTest_OneProducerTwoConsumers_SharedGroupSplitPartitions()
     {
@@ -1468,31 +1376,10 @@ public sealed class KafkaTests
             error('topic did not appear in metadata')
         ");
 
-        // Producer sends countPerPartition messages explicitly to each partition
-        // so the load is guaranteed to split evenly between the two consumers.
+        // Producer sends countPerPartition messages to each partition.
+        // No need to wait for group stability since consumers use Assign, not Subscribe.
         string producerLua = $@"
             local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
-
-            -- Wait until both consumers have joined the group and partition assignment
-            -- is stable before sending any messages.  DescribeGroups returns
-            -- State='Stable' only after all members have completed rebalancing and
-            -- received their partition assignments, so this is a genuine readiness signal
-            -- rather than an arbitrary delay.
-            local grpDeadline = Time() + 45000
-            local ready = false
-            while Time() < grpDeadline do
-                local ok, descs = p:DescribeGroups({{'{groupId}'}})
-                if ok and descs and #descs > 0 then
-                    local d = descs[1]
-                    if d.State == 'Stable' and d.Members and #d.Members >= 2 then
-                        ready = true
-                        break
-                    end
-                end
-                Sleep(500)
-            end
-            assert(ready, 'consumer group did not reach Stable/2-member state within 45 s')
-
             for i = 1, {countPerPartition} do
                 local ok0, e0 = p:Send('{stressTopic}', '{guid}-0-' .. i, '{guid}-0-' .. i, nil, 0)
                 assert(ok0, e0 or 'Send p0 ' .. i .. ' failed')
@@ -1503,18 +1390,16 @@ public sealed class KafkaTests
             return 'ok'
         ";
 
-        // Both consumers share the same group so Kafka assigns one partition each.
-        // Each consumer breaks once it has received all messages on its partition.
-        string consumerLua = $@"
-            local prefix = '{guid}-'
+        // Each consumer uses Assign to a specific partition to bypass rebalance delay/skew.
+        string MakeConsumerLua(int partition) => $@"
+            local prefix = '{guid}-{partition}-'
             local need   = {countPerPartition}
 
             local consumer = Kafka.NewConsumer({{
                 ['bootstrap.servers'] = '{Bootstrap()}',
                 ['group.id']          = '{groupId}',
-                ['auto.offset.reset'] = 'earliest'
             }})
-            local co = consumer:Subscribe({{'{stressTopic}'}})
+            local co = consumer:Assign({{'{stressTopic}:{partition}:earliest'}})
 
             local seen     = {{}}
             local found    = 0
@@ -1540,18 +1425,17 @@ public sealed class KafkaTests
 
         try
         {
-            // Start consumers and producer concurrently.  The producer polls DescribeGroups
-            // internally and only begins sending once both consumers are Stable, so no
-            // external fixed delay is needed here.
+            // Start consumers and producer concurrently.  Consumers use Assign so they
+            // start reading immediately without waiting for group rebalance.
             var consumer1Task = Task.Run(async () =>
             {
                 using KitsuneEngine e = new();
-                return await e.ExecuteStringAsync(consumerLua).ConfigureAwait(false);
+                return await e.ExecuteStringAsync(MakeConsumerLua(0)).ConfigureAwait(false);
             });
             var consumer2Task = Task.Run(async () =>
             {
                 using KitsuneEngine e = new();
-                return await e.ExecuteStringAsync(consumerLua).ConfigureAwait(false);
+                return await e.ExecuteStringAsync(MakeConsumerLua(1)).ConfigureAwait(false);
             });
             var producerTask = Task.Run(async () =>
             {

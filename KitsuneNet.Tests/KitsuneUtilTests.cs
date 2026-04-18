@@ -6019,6 +6019,7 @@ namespace KitsuneNet.Tests
         public async Task Stream_Id_DifferentStreams_ReturnDifferentValues()
         {
             using KitsuneEngine engine = new();
+
             // Write to both so their internal buffers are allocated, making ids meaningful.
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local a = Stream.Create()
@@ -6034,6 +6035,7 @@ namespace KitsuneNet.Tests
         public async Task Stream_Id_MemoryStream_ChangesAfterNewStream()
         {
             using KitsuneEngine engine = new();
+
             // Two distinct stream objects must never share an id, even if one is
             // created shortly after the other.
             LuaValue r = await engine.ExecuteStringAsync(@"
@@ -6068,23 +6070,10 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task Stream_Id_SharedMemory_IsStable()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local s = Stream.OpenSharedMemory(32)
-                local id1 = s:Id()
-                s:Write('data')
-                local id2 = s:Id()
-                return tostring(id1 == id2 and math.type(id1) == 'integer')
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
         public async Task Stream_Id_LuaFnBackend_IsNonZero()
         {
             using KitsuneEngine engine = new();
+
             // Lua fn backends have no vtbl->getid; the fallback is the LuaStream*
             // userdata pointer itself, which must be non-zero.
             LuaValue r = await engine.ExecuteStringAsync(@"
@@ -6623,220 +6612,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("memory");
         }
 
-        // -- SharedMemory (ToSharedMemory / OpenSharedMemory) ---------------------
-        [Fact]
-        public async Task SharedMemory_OpenSharedMemory_InfoType_IsSharedMemoryOut()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local s = Stream.OpenSharedMemory(64)
-                local _, info = s:GetInfo()
-                return info.type
-            ");
-            r.String.ShouldBe("sharedmemory_out");
-        }
-
-        [Fact]
-        public async Task SharedMemory_OpenSharedMemory_SizeMatchesRequested()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local s = Stream.OpenSharedMemory(128)
-                local _, info = s:GetInfo()
-                return tostring(info.size == 128)
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task SharedMemory_OpenSharedMemory_IsReadWriteAndSeekable()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local CAP_READ, CAP_WRITE, CAP_SEEK = 1, 2, 4
-                local s = Stream.OpenSharedMemory(16)
-                local caps, _ = s:GetInfo()
-                return tostring(
-                    (caps.Caps & CAP_READ)  ~= 0 and
-                    (caps.Caps & CAP_WRITE) ~= 0 and
-                    (caps.Caps & CAP_SEEK)  ~= 0
-                )
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task SharedMemory_OpenSharedMemory_WriteAndRead_RoundTrip()
-        {
-            using KitsuneEngine engine = new();
-
-            // Size the block exactly to the payload so Read() returns only the written bytes.
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local payload = 'hello shmem'
-                local s = Stream.OpenSharedMemory(#payload)
-                s:Write(payload)
-                s:Seek(0)
-                return s:Read()
-            ");
-            r.String.ShouldBe("hello shmem");
-        }
-
-        [Fact]
-        public async Task SharedMemory_OpenSharedMemory_ZeroSize_RaisesError()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local ok, err = pcall(Stream.OpenSharedMemory, 0)
-                return tostring(not ok and type(err) == 'string')
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task SharedMemory_ToSharedMemory_PreservesStreamContents()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local src = Stream.Create()
-                src:Write('snapshot data')
-                local snap = src:ToSharedMemory()
-                snap:Seek(0)
-                return snap:Read()
-            ");
-            r.String.ShouldBe("snapshot data");
-        }
-
-        [Fact]
-        public async Task SharedMemory_ToSharedMemory_InfoType_IsSharedMemoryOut()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local src = Stream.Create()
-                src:Write('test')
-                local snap = src:ToSharedMemory()
-                local _, info = snap:GetInfo()
-                return info.type
-            ");
-            r.String.ShouldBe("sharedmemory_out");
-        }
-
-        [Fact]
-        public async Task SharedMemory_ToSharedMemory_SizeMatchesSourceLength()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local src = Stream.Create()
-                src:Write('hello')
-                local snap = src:ToSharedMemory()
-                local _, info = snap:GetInfo()
-                return tostring(info.size == 5)
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task SharedMemory_ToSharedMemory_IsIndependentOfSource()
-        {
-            using KitsuneEngine engine = new();
-
-            // ToSharedMemory produces a deep copy; mutating the source afterward
-            // must not alter the snapshot.
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local src = Stream.Create()
-                src:Write('original')
-                local snap = src:ToSharedMemory()
-                src:Seek(0)
-                src:Write('modified')
-                snap:Seek(0)
-                return snap:Read()
-            ");
-            r.String.ShouldBe("original");
-        }
-
-        [Fact]
-        public async Task SharedMemory_ToSharedMemory_CapturesFromPositionZero()
-        {
-            using KitsuneEngine engine = new();
-
-            // ToSharedMemory internally seeks the source to 0 before snapshotting,
-            // so the full content is captured regardless of the current cursor.
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local src = Stream.Create()
-                src:Write('full content')
-                src:Seek(5)
-                local snap = src:ToSharedMemory()
-                snap:Seek(0)
-                return snap:Read()
-            ");
-            r.String.ShouldBe("full content");
-        }
-
-        [Fact]
-        public async Task SharedMemory_ToSharedMemory_WithDispose_OriginalIsZeroed()
-        {
-            using KitsuneEngine engine = new();
-
-            // After ToSharedMemory(true) the original stream is disposed: its Caps
-            // are zeroed, so pos() returns nil (no STREAM_CAP_SEEK).
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local src = Stream.Create()
-                src:Write('bye')
-                local snap = src:ToSharedMemory(true)
-                return tostring(src:pos() == nil)
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task SharedMemory_ToSharedMemory_WithDispose_SnapshotContentsIntact()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local src = Stream.Create()
-                src:Write('preserve me')
-                local snap = src:ToSharedMemory(true)
-                snap:Seek(0)
-                return snap:Read()
-            ");
-            r.String.ShouldBe("preserve me");
-        }
-
-        [Fact]
-        public async Task SharedMemory_ToSharedMemory_NonReadableStream_RaisesError()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local OPEN, CLOSE, CAP_WRITE = 0, 1, 2
-                local s = Stream.Create(function(op)
-                    if op == OPEN  then return CAP_WRITE end
-                    if op == CLOSE then return true end
-                end)
-                local ok, err = pcall(function() s:ToSharedMemory() end)
-                return tostring(not ok and type(err) == 'string')
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task SharedMemory_ToSharedMemory_NonSeekableStream_RaisesError()
-        {
-            using KitsuneEngine engine = new();
-
-            // A read-only backend without CAP_SEEK must also be rejected.
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local OPEN, CLOSE, READ, CAP_READ = 0, 1, 2, 1
-                local s = Stream.Create(function(op, len)
-                    if op == OPEN  then return CAP_READ end
-                    if op == CLOSE then return true end
-                    if op == READ  then return 'data' end
-                end)
-                local ok, err = pcall(function() s:ToSharedMemory() end)
-                return tostring(not ok and type(err) == 'string')
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        // -- Process --------------------------------------------------------------
+        // -- Process
         [Fact]
         public async Task Process_All_ReturnsTableWithAtLeastOneEntry()
         {
