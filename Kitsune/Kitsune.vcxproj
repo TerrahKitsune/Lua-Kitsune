@@ -92,6 +92,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="ImguiMarkdown.cpp" />
+    <ClCompile Include="ImguiOpenGL.cpp" />
     <ClCompile Include="Program.cpp" />
     <ClCompile Include="Session.cpp" />
     <ClCompile Include="ImguiSession.cpp" />
@@ -114,6 +115,8 @@
     <ClInclude Include="ImguiSession.h" />
     <ClInclude Include="ImguiRenderer.h" />
     <ClInclude Include="ImguiMarkdown.h" />
+    <ClInclude Include="ImguiOpenGL.h" />
+    <ClInclude Include="stb_image.h" />
     <ClInclude Include="ImguiEnums.h" />
     <ClInclude Include="Imgui\imgui.h" />
     <ClInclude Include="Imgui\imgui_impl_sdl2.h" />

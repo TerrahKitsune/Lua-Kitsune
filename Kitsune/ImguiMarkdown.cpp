@@ -4,6 +4,7 @@
 #ifdef KITSUNE_IMGUI
 
 #include "ImguiMarkdown.h"
+#include "ImguiOpenGL.h"
 #include "Imgui/imgui.h"
 #include <SDL.h>
 #include <cstdlib>
@@ -495,34 +496,21 @@ static void render_spans(ImguiWindowContext* ctx, int lineIdx) {
             break;
         }
         case MD_IMAGE: {
-            // FUTURE: texture rendering goes here.
-            //
-            // n.urlOffset / n.urlLen point to the image id string in mdContent
-            // (e.g. "sample.png" from ![alt](sample.png)).
-            // n.offset / n.len point to the alt text.
-            //
-            // When texture support is added:
-            //   1. renderer:MarkdownRender gains an optional imageCallback Lua arg:
-            //        function(id) return textureHandle end
-            //      where textureHandle is a GLuint returned by renderer:LoadTexture(stream).
-            //   2. Call the callback here to resolve the id to a GLuint:
-            //        char id[512]; snprintf(id, 512, "%.*s", n.urlLen, base + n.urlOffset);
-            //        GLuint texId = invoke_image_callback(ctx, id);
-            //   3. If texId is valid, draw with ImGui::Image:
-            //        ImTextureID imTex = (ImTextureID)(intptr_t)texId;
-            //        ImVec2 contentAvail = ImGui::GetContentRegionAvail();
-            //        // query actual texture dimensions via glGetTexLevelParameter or store
-            //        // them alongside the GLuint in the texture userdata, then scale to fit:
-            //        ImGui::Image(imTex, ImVec2(imageWidth, imageHeight));
-            //   4. If texId is 0 / callback absent, fall through to the placeholder below.
-            //
-            // Until then, render a grey placeholder so documents with images don't break.
-            char buf[512];
-            int ilen = n.urlLen < 511 ? (int)n.urlLen : 511;
-            snprintf(buf, sizeof(buf), "[Image: %.*s]", ilen, base + n.urlOffset);
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
-            ImGui::TextUnformatted(buf);
-            ImGui::PopStyleColor();
+            const ImguiTexture* tex = resolve_texture(
+                ctx,
+                base + n.urlOffset, (int)n.urlLen);
+            if (tex && tex->glId != 0) {
+                ImGui::Image(
+                    (ImTextureID)(uintptr_t)tex->glId,
+                    ImVec2((float)tex->width, (float)tex->height));
+            } else {
+                char buf[512];
+                int  ilen = n.urlLen < 511 ? (int)n.urlLen : 511;
+                snprintf(buf, sizeof(buf), "[Image: %.*s]", ilen, base + n.urlOffset);
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
+                ImGui::TextUnformatted(buf);
+                ImGui::PopStyleColor();
+            }
             break;
         }
         default: break;
@@ -684,21 +672,24 @@ void RenderFromNodes(ImguiWindowContext* ctx, float w, float h) {
                             ImGui::TextUnformatted(base + sn.offset, base + sn.offset + sn.len);
                             ImGui::PopStyleColor();
                             break;
-                        case MD_IMAGE:
-                            // FUTURE: same texture rendering as in render_spans case MD_IMAGE.
-                            // Resolve sn.urlOffset/urlLen via imageCallback to a GLuint,
-                            // cast to ImTextureID and call ImGui::Image(imTex, size).
-                            // For now fall through to the greyed-out placeholder.
-                            {
+                        case MD_IMAGE: {
+                            const ImguiTexture* tex = resolve_texture(
+                                ctx,
+                                base + sn.urlOffset, (int)sn.urlLen);
+                            if (tex && tex->glId != 0) {
+                                ImGui::Image(
+                                    (ImTextureID)(uintptr_t)tex->glId,
+                                    ImVec2((float)tex->width, (float)tex->height));
+                            } else {
                                 char buf[512];
-                                int ilen = sn.urlLen < 511 ? (int)sn.urlLen : 511;
+                                int  ilen = sn.urlLen < 511 ? (int)sn.urlLen : 511;
                                 snprintf(buf, sizeof(buf), "[Image: %.*s]", ilen, base + sn.urlOffset);
                                 ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
                                 ImGui::TextUnformatted(buf);
                                 ImGui::PopStyleColor();
                             }
                             break;
-                        default:
+                        }
                             ImGui::TextUnformatted(base + sn.offset, base + sn.offset + sn.len);
                             break;
                         }

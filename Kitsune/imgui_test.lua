@@ -43,6 +43,16 @@
     mdDoc          = Stream.Open('./docs/markdown-test.md', 'rb'),
 }
 
+local function onResourceLoad(path)
+
+    if path == "sample.png" then
+        return Stream.Open("./docs/sample.png", 'rb');
+    else
+        print("Unknown resource requested: " .. path)
+        return nil;
+    end
+end
+
 local function onError(err)
     ctx.lastError = tostring(err)
     return true
@@ -710,4 +720,9 @@ local function render(renderer, ctx)
     return ctx.windowOpen and not shouldClose
 end
 
+-- ---------------------------------------------------------------------------
+-- Start Point
+-- ---------------------------------------------------------------------------
+
 Imgui.Start("Kitsune ImGui Test", 800, 600, render, ctx, onError)
+OpenGL.SetResourceLoader(onResourceLoad);

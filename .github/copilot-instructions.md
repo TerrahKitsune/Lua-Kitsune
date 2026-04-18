@@ -52,6 +52,13 @@
   }
   ```
 
+### Statement Separation
+- Never put multiple statements on the same line in C++ code. Each statement must be on its own line. This applies everywhere including variable declarations, error setup, and inline patterns like:
+  ```cpp
+  KitsuneVariable e = {};
+  const char* m = "...";
+  ```
+
 ### Lua module registration
 - Follow the **wchar pattern**: one `functions[]` table containing all callable methods, one `meta[]` table containing only metamethods (`__gc`, `__tostring`, etc.), and `__index = module table` so all functions are reachable both as `Module.Xxx()` and `instance:Xxx()`.
 - Do **not** create a separate `__index` subtable with a filtered subset of methods.

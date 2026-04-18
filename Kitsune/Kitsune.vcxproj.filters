@@ -66,6 +66,9 @@
     <ClCompile Include="ImguiMarkdown.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="ImguiOpenGL.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\KitsuneEngine.h">
@@ -99,6 +102,12 @@
       <Filter>Imgui</Filter>
     </ClInclude>
     <ClInclude Include="ImguiMarkdown.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ImguiOpenGL.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="stb_image.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

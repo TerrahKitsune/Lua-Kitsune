@@ -12,6 +12,27 @@ struct ImguiScheduledCall {
     ImguiScheduledCall* next;
 };
 
+// One slot in the texture cache. luaId == 0 means the slot is free and reusable.
+struct ImguiTexture {
+    unsigned int glId;    // GL texture object; 0 = free/invalid slot
+    int          luaId;   // opaque Lua handle (monotonic, never 0); 0 = free slot
+    int          width;   // pixel width stored at upload time
+    int          height;  // pixel height stored at upload time
+    char*        source;  // heap copy of the file path used to load this texture;
+                          // nullptr for stream-loaded textures. Used for deduplication:
+                          // ResolveOrLoadTextureByPath checks this before uploading again.
+};
+
+// Flat dynamic array of texture slots. Slots with luaId==0 are tombstoned and
+// reused before the array is grown. nextId is a monotonic counter that ensures
+// no two textures ever share the same Lua handle.
+struct ImguiTextureCache {
+    ImguiTexture* slots;
+    int           count;
+    int           alloc;
+    int           nextId;  // starts at 1; incremented on every successful LoadTexture
+};
+
 struct ImguiWindowContext {
     SDL_Window*                window;
     SDL_GLContext               glContext;
@@ -26,6 +47,9 @@ struct ImguiWindowContext {
     KitsuneVariable*            onError;
     ImguiScheduledCall*         scheduledHead; // linked list of pending scheduled calls
     KitsuneUserDataRegistration reg;           // renderer userdata registration; nodes freed on teardown
+    ImguiTextureCache           textures;       // OpenGL texture cache; freed in imgui_gc
+    KitsuneVariable*            resourceLoader; // anchored Lua fn: function(source) -> stream | nil
+                                                // set by OpenGL.SetResourceLoader; nil = texture path loading disabled
     // Markdown cache — rebuilt only when stream id changes or refresh is forced
     uint64_t                    mdCacheId;     // lua_stream_getid() of last parsed stream; 0 = empty
     char*                       mdContent;     // heap copy of full stream content; NULL when empty
