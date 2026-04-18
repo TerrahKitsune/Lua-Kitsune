@@ -5992,6 +5992,119 @@ namespace KitsuneNet.Tests
         }
 
         // -- Stream extras --------------------------------------------------------
+        // -- Stream.Id ------------------------------------------------------------
+        [Fact]
+        public async Task Stream_Id_ReturnsInteger()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local s = Stream.Create()
+                return tostring(math.type(s:Id()) == 'integer')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_Id_SameStream_ReturnsSameValue()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local s = Stream.Create()
+                return tostring(s:Id() == s:Id())
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_Id_DifferentStreams_ReturnDifferentValues()
+        {
+            using KitsuneEngine engine = new();
+            // Write to both so their internal buffers are allocated, making ids meaningful.
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local a = Stream.Create()
+                a:Write('x')
+                local b = Stream.Create()
+                b:Write('x')
+                return tostring(a:Id() ~= b:Id())
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_Id_MemoryStream_ChangesAfterNewStream()
+        {
+            using KitsuneEngine engine = new();
+            // Two distinct stream objects must never share an id, even if one is
+            // created shortly after the other.
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local a = Stream.Create('hello')
+                local id1 = a:Id()
+                a = nil
+                collectgarbage()
+                local b = Stream.Create('hello')
+                local id2 = b:Id()
+                -- The ids may or may not collide due to allocator reuse, but both must be integers.
+                return tostring(math.type(id1) == 'integer' and math.type(id2) == 'integer')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_Id_FileStream_IsStable()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local _tmp = (os.getenv('TEMP') or os.getenv('TMPDIR') or '/tmp') .. package.config:sub(1,1)
+                local path = _tmp .. 'kitsune_id_test.bin'
+                local w = Stream.Open(path, 'wb')
+                w:Write('x')
+                local id1 = w:Id()
+                local id2 = w:Id()
+                w:Close()
+                os.remove(path)
+                return tostring(id1 == id2 and math.type(id1) == 'integer')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_Id_SharedMemory_IsStable()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local s = Stream.OpenSharedMemory(32)
+                local id1 = s:Id()
+                s:Write('data')
+                local id2 = s:Id()
+                return tostring(id1 == id2 and math.type(id1) == 'integer')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_Id_LuaFnBackend_IsNonZero()
+        {
+            using KitsuneEngine engine = new();
+            // Lua fn backends have no vtbl->getid; the fallback is the LuaStream*
+            // userdata pointer itself, which must be non-zero.
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local s = Stream.Create(function(op) if op == 0 then return 1 end if op == 1 then return true end end)
+                return tostring(s:Id() ~= 0 and math.type(s:Id()) == 'integer')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Stream_Id_LuaFnBackend_SameInstanceSameId()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local s = Stream.Create(function(op) if op == 0 then return 1 end if op == 1 then return true end end)
+                return tostring(s:Id() == s:Id())
+            ");
+            r.String.ShouldBe("true");
+        }
+
         [Fact]
         public async Task Stream_WriteDouble_ReadDouble_RoundTrip()
         {

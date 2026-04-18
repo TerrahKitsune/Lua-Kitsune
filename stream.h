@@ -56,6 +56,9 @@ typedef struct LuaStreamVtable {
 	// hasdata: non-blocking availability check. 1 = data ready; 0 = not yet.
 	//   Must never yield or call any Lua API that may yield.
 	int         (*hasdata) (void* native);
+	// getid: returns a stable identity value for cache-key comparison.
+	//   NULL = fall back to (uint64_t)native, or (uint64_t)stream for Lua fn backends.
+	uint64_t    (*getid)   (void* native);
 } LuaStreamVtable;
 
 typedef struct LuaStream {
@@ -97,7 +100,11 @@ bool lua_stream_setpos(lua_State* L, LuaStream* s, lua_Integer pos);
 // Returns the total data length of a stream without touching the Lua stack.
 lua_Integer lua_stream_getlen(lua_State* L, LuaStream* s);
 
-// ── Stream construction ───────────────────────────────────────────────────────
+// Returns a stable identity value for the stream suitable for cache-key comparison.
+// Calls vtbl->getid if available; falls back to (uint64_t)native, then (uint64_t)stream.
+uint64_t lua_stream_getid(const LuaStream* s);
+
+// ── Stream construction
 int NewStream(lua_State* L);
 int OpenFile(lua_State* L);
 int OpenSharedMemory(lua_State* L);
@@ -108,6 +115,7 @@ int StreamPos(lua_State* L);
 int StreamLen(lua_State* L);
 int StreamSetPos(lua_State* L);
 int GetStreamInfo(lua_State* L);
+int StreamId(lua_State* L);
 
 // ── Read operations ───────────────────────────────────────────────────────────
 int ReadLuaStream(lua_State* L);

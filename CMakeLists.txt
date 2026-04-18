@@ -139,6 +139,7 @@ if(KITSUNE_ALL)
 	set(KITSUNE_ARCHIVE  ON CACHE BOOL "Enabled by KITSUNE_ALL" FORCE)
 	set(KITSUNE_REDIS    ON CACHE BOOL "Enabled by KITSUNE_ALL" FORCE)
 	set(KITSUNE_HTTP     ON CACHE BOOL "Enabled by KITSUNE_ALL" FORCE)
+	set(KITSUNE_MONGO    ON CACHE BOOL "Enabled by KITSUNE_ALL" FORCE)
 	target_compile_definitions(KitsuneEngine PRIVATE KITSUNE_ALL)
 endif()
 
@@ -239,6 +240,22 @@ if(KITSUNE_REDIS)
 		OpenSSL::SSL
 		OpenSSL::Crypto
 	)
+endif()
+
+option(KITSUNE_MONGO "Build with MongoDB support (requires libmongoc-1.0 >= 1.17)" OFF)
+
+if(KITSUNE_MONGO)
+	find_package(PkgConfig REQUIRED)
+	pkg_check_modules(MONGOC REQUIRED libmongoc-1.0)
+
+	target_sources(KitsuneEngine PRIVATE
+		LuaMongo.cpp
+		MongoMain.cpp
+	)
+
+	target_compile_definitions(KitsuneEngine PRIVATE KITSUNE_MONGO)
+	target_include_directories(KitsuneEngine PRIVATE ${MONGOC_INCLUDE_DIRS})
+	target_link_libraries(KitsuneEngine PRIVATE ${MONGOC_LIBRARIES})
 endif()
 
 target_compile_definitions(KitsuneEngine PRIVATE

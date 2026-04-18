@@ -1,4 +1,4 @@
-#include "streamfile.h"
+﻿#include "streamfile.h"
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
@@ -161,6 +161,10 @@ static int file_info(void* native, lua_State* L) {
 	return 1;
 }
 
+static uint64_t file_getid(void* native) {
+	return (uint64_t)((InFileStream*)native)->file;
+}
+
 static const LuaStreamVtable g_file_vtbl = {
 	file_read,
 	file_write,
@@ -169,6 +173,8 @@ static const LuaStreamVtable g_file_vtbl = {
 	file_getlen,
 	file_close,
 	file_info,
+	NULL,
+	file_getid,
 };
 
 // -- Public constructor helper -------------------------------------------------

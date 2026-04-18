@@ -215,6 +215,7 @@
     <ClInclude Include="hiredis\read.h" />
     <ClInclude Include="hiredis\sds.h" />
     <ClInclude Include="KitsuneEngine.h" />
+    <ClInclude Include="KitsuneEngine\stream.h" />
     <ClInclude Include="kitsuneuserdata.h" />
     <ClInclude Include="LuaArchive.h" />
     <ClInclude Include="LuaArchiveMain.h" />
@@ -319,6 +320,7 @@
   <ItemGroup>
     <None Include="Lua functions.md" />
     <None Include="plans\imgui-integration.md" />
+    <None Include="plans\imgui-markdown.md" />
     <None Include="testEnvironments.json" />
     <None Include="triplets\x64-windows-static-md.cmake" />
     <None Include="vcpkg.json" />

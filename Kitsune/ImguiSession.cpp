@@ -4,7 +4,9 @@
 #ifdef KITSUNE_IMGUI
 
 // Prevent SDL from redefining main() as SDL_main on Windows.
+#ifndef SDL_MAIN_HANDLED
 #define SDL_MAIN_HANDLED
+#endif
 
 #include "ImguiSession.h"
 #include "ImguiRenderer.h"

@@ -13,6 +13,7 @@ const char* LUAMONGO = "LuaMongo";
 
 #include <mongoc/mongoc.h>
 #include <thread>
+#include <system_error>
 #include <atomic>
 #include <mutex>
 #include <condition_variable>
@@ -23,33 +24,6 @@ const char* LUAMONGO = "LuaMongo";
 #else
 #include <pthread.h>
 #endif
-
-// =============================================================================
-// PlatformEvent — portable auto-reset event (reused from KitsuneEngine pattern)
-// =============================================================================
-
-struct PlatformEvent {
-	std::mutex              mtx;
-	std::condition_variable cv;
-	bool                    signaled = false;
-
-	void Set() {
-		{ std::lock_guard<std::mutex> lk(mtx); signaled = true; }
-		cv.notify_one();
-	}
-	void Wait() {
-		std::unique_lock<std::mutex> lk(mtx);
-		cv.wait(lk, [this] { return signaled; });
-		signaled = false;
-	}
-	bool WaitFor(uint32_t ms) {
-		std::unique_lock<std::mutex> lk(mtx);
-		bool r = cv.wait_for(lk, std::chrono::milliseconds(ms), [this] { return signaled; });
-		if (r)
-			signaled = false;
-		return r;
-	}
-};
 
 // =============================================================================
 // Op types and states

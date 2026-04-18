@@ -113,3 +113,36 @@ static inline void Sleep(unsigned long ms) {
 #endif
 
 #endif // _WIN32
+
+// =============================================================================
+// PlatformEvent — portable auto-reset event
+// Uses std::condition_variable; works on all platforms without any OS handle.
+// The default constructor initialises the event to un-signaled.
+// =============================================================================
+#include <chrono>
+#include <condition_variable>
+#include <cstdint>
+#include <mutex>
+
+struct PlatformEvent {
+	std::mutex              mtx;
+	std::condition_variable cv;
+	bool                    signaled = false;
+
+	void Set() {
+		{ std::lock_guard<std::mutex> lk(mtx); signaled = true; }
+		cv.notify_one();
+	}
+	void Wait() {
+		std::unique_lock<std::mutex> lk(mtx);
+		cv.wait(lk, [this] { return signaled; });
+		signaled = false;
+	}
+	bool WaitFor(uint32_t ms) {
+		std::unique_lock<std::mutex> lk(mtx);
+		bool r = cv.wait_for(lk, std::chrono::milliseconds(ms), [this] { return signaled; });
+		if (r)
+			signaled = false;
+		return r;
+	}
+};

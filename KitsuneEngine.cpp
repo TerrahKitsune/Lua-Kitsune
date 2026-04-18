@@ -78,33 +78,6 @@
 // Unique address used as the Lua registry key for the shared bridge LuaJson instance.
 // Defined in luajson.cpp; accessed via lua_json_bridge_registry_key().
 
-// -- Portable auto-reset event (replaces Win32 HANDLE-based WinEvent) ---------
-// Uses std::condition_variable so it works on all platforms without any
-// OS handle.  The default constructor initialises the event to un-signaled;
-// no separate Create() call is required.
-struct PlatformEvent {
-	std::mutex              mtx;
-	std::condition_variable cv;
-	bool                    signaled = false;
-
-	void Set() {
-		{ std::lock_guard<std::mutex> lk(mtx); signaled = true; }
-		cv.notify_one();
-	}
-	void Wait() {
-		std::unique_lock<std::mutex> lk(mtx);
-		cv.wait(lk, [this] { return signaled; });
-		signaled = false;
-	}
-	bool WaitFor(uint32_t ms) {
-		std::unique_lock<std::mutex> lk(mtx);
-		bool r = cv.wait_for(lk, std::chrono::milliseconds(ms), [this] { return signaled; });
-		if (r)
-			signaled = false;
-		return r;
-	}
-};
-
 // -- Per-coroutine slot --------------------------------------------------------
 struct KitsuneCoroutine {
 	int           id;

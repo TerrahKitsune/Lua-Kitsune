@@ -1,4 +1,4 @@
-#include "streamshmemory.h"
+﻿#include "streamshmemory.h"
 #include <atomic>
 #include <mutex>
 #include <string.h>
@@ -94,6 +94,10 @@ static int shmem_info(void* native, lua_State* L) {
 	return 1;
 }
 
+static uint64_t shmem_getid(void* native) {
+	return (uint64_t)((InSharedMemoryStream*)native)->block;
+}
+
 static const LuaStreamVtable g_shmem_vtbl = {
 	shmem_read,
 	shmem_write,
@@ -102,6 +106,8 @@ static const LuaStreamVtable g_shmem_vtbl = {
 	shmem_getlen,
 	shmem_close,
 	shmem_info,
+	NULL,
+	shmem_getid,
 };
 
 // -- Inbound public constructor ------------------------------------------------
@@ -176,7 +182,7 @@ void lua_shmem_sweep_disposed_blocks() {
 	}
 }
 
-// shmem_out_close: same as shmem_close � set OWNER_DISPOSED and free the native struct.
+// shmem_out_close: same as shmem_close — set OWNER_DISPOSED and free the native struct.
 // The block itself is freed by lua_shmem_sweep_disposed_blocks once the accessor also disposes.
 static void shmem_out_close(void* native, lua_State* L) {
 	shmem_close(native, NULL);

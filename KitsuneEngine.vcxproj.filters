@@ -877,6 +877,9 @@
     <ClInclude Include="luadecimal.h">
       <Filter>LuaDecimal\Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="KitsuneEngine\stream.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="Lua functions.md" />
@@ -884,6 +887,7 @@
     <None Include="vcpkg.json" />
     <None Include="triplets\x64-windows-static-md.cmake" />
     <None Include="plans\imgui-integration.md" />
+    <None Include="plans\imgui-markdown.md" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />

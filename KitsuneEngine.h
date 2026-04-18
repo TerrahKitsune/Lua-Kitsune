@@ -224,7 +224,7 @@ struct KitsuneMemoryAllocator {
 };
 
 struct KitsuneInternals {
-	KitsuneMemoryAllocator KitsuneMemoryAllocator; // The *current* memory allocator in use by the engine. Initially set to the standard malloc/realloc/free, but can be overridden by passing a custom allocator to KitsuneInit. The engine does not take ownership of the function pointers; they must remain valid for the duration of the engine's lifecycle.
+	KitsuneMemoryAllocator Allocator; // The *current* memory allocator in use by the engine. Initially set to the standard malloc/realloc/free, but can be overridden by passing a custom allocator to KitsuneInit. The engine does not take ownership of the function pointers; they must remain valid for the duration of the engine's lifecycle.
 	void(*MongoDbInit)(); // Holds the internal function pointer to mongodb init, if this is called from the outside you must also call MongoDbCleanUp when cleaning up the engine, otherwise you will leak memory and other resources used by the MongoDB client.
 	void(*MongoDbCleanUp)();
 };

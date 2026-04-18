@@ -9,6 +9,19 @@
   </PropertyGroup>
 
   <PropertyGroup>
+    <PackageId>KitsuneNet</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>TerrahKitsune</Authors>
+    <Description>Managed .NET bindings for the Kitsune Lua scripting engine. Requires the native KitsuneEngine library (win-x64 and linux-x64 included).</Description>
+    <PackageTags>lua;scripting;kitsune;coroutine</PackageTags>
+    <RepositoryUrl>https://github.com/TerrahKitsune/Lua-Kitsune</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <!-- Add <PackageReadmeFile>README.md</PackageReadmeFile> once a README.md exists at the repo root -->
+    <!-- Suppress NuGet warnings for missing optional pack metadata -->
+    <NoWarn>$(NoWarn);NU5125</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup>
     <NativeVcxProj>$(ProjectDir)..\KitsuneEngine.vcxproj</NativeVcxProj>
     <NativeOutputDir>$(ProjectDir)..\x64\$(Configuration)\</NativeOutputDir>
     <NativeRootDir>$(ProjectDir)..\</NativeRootDir>
@@ -79,6 +92,35 @@
        not up-to-date, so a full build is triggered and BuildLinuxNative runs. -->
   <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
     <UpToDateCheckBuilt Include="$(MSBuildProjectDirectory)\..\build-linux\libKitsuneEngine.so" />
+  </ItemGroup>
+
+  <!-- ── NuGet native packaging ──────────────────────────────────────────────────────
+       Native DLLs are placed under runtimes/{rid}/native/ inside the .nupkg so that the
+       .NET SDK copies the correct binary to the consuming project's output directory.
+       The build/KitsuneNet.targets file is included so consuming projects also get an
+       explicit CopyToOutputDirectory item when the SDK's RID-based copy is not enough
+       (e.g. framework-dependent builds without an explicit RuntimeIdentifier).       -->
+
+  <!-- Windows x64 native DLL (built by KitsuneEngine.vcxproj) -->
+  <ItemGroup Condition="Exists('$(NativeOutputDir)KitsuneEngine.dll')">
+    <None Include="$(NativeOutputDir)KitsuneEngine.dll"
+          Pack="true"
+          PackagePath="runtimes/win-x64/native/KitsuneEngine.dll" />
+  </ItemGroup>
+
+  <!-- Linux x64 shared library (built by CMake / WSL) -->
+  <ItemGroup Condition="Exists('$(NativeRootDir)build-linux/libKitsuneEngine.so')">
+    <None Include="$(NativeRootDir)build-linux/libKitsuneEngine.so"
+          Pack="true"
+          PackagePath="runtimes/linux-x64/native/libKitsuneEngine.so" />
+  </ItemGroup>
+
+  <!-- MSBuild targets file that consumers automatically import.
+       NuGet convention: build/{PackageId}.targets is auto-imported by the SDK. -->
+  <ItemGroup>
+    <None Include="build\KitsuneNet.targets"
+          Pack="true"
+          PackagePath="build/KitsuneNet.targets" />
   </ItemGroup>
 
 </Project>

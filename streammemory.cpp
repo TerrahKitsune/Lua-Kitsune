@@ -1,4 +1,4 @@
-#include "streammemory.h"
+﻿#include "streammemory.h"
 #include <string.h>
 
 struct InMemoryStream {
@@ -83,6 +83,10 @@ static int inmem_info(void* native, lua_State* L) {
 	return 1;
 }
 
+static uint64_t inmem_getid(void* native) {
+	return (uint64_t)((InMemoryStream*)native)->data;
+}
+
 static const LuaStreamVtable g_inmem_vtbl = {
 	inmem_read,
 	inmem_write,
@@ -91,6 +95,8 @@ static const LuaStreamVtable g_inmem_vtbl = {
 	inmem_getlen,
 	inmem_close,
 	inmem_info,
+	NULL,
+	inmem_getid,
 };
 
 // -- Public constructor helper -------------------------------------------------
