@@ -80,6 +80,8 @@ local function tabInfo(renderer, ctx)
     renderer:Text("Schedule:    " .. ctx.scheduleResult)
     renderer:Text("Last error:  " .. ctx.lastError)
     renderer:Separator()
+
+    -- Window / display
     renderer:Text("Window size: " .. SDL.GetWindowWidth() .. " x " .. SDL.GetWindowHeight())
     renderer:Text("Window pos:  " .. SDL.GetWindowX() .. ", " .. SDL.GetWindowY())
     renderer:Text("Focused:     " .. tostring(SDL.IsFocused()))
@@ -87,6 +89,55 @@ local function tabInfo(renderer, ctx)
     local idx, name, mx, my, mw, mh, hz = SDL.GetMonitor()
     if idx then
         renderer:Text("Monitor " .. idx .. ": " .. name .. " (" .. mw .. "x" .. mh .. " @" .. hz .. "Hz)")
+    end
+    renderer:Separator()
+
+    -- Timing
+    local ticks    = SDL.GetTicks()
+    local freq     = SDL.GetPerformanceFrequency()
+    local dt, fps  = SDL.GetFrameTime()
+    renderer:Text("SDL.GetTicks():               " .. ticks .. " ms")
+    renderer:Text("SDL.GetPerformanceFrequency(): " .. freq)
+    renderer:Text("SDL.GetPerformanceCounter():   " .. SDL.GetPerformanceCounter())
+    renderer:Text(string.format("SDL.GetFrameTime() dt:         %.4f s", dt))
+    renderer:Text(string.format("SDL.GetFrameTime() fps:        %.1f fps", fps))
+    renderer:Separator()
+
+    -- Input state
+    local mx2, my2, mb = SDL.GetMouseState()
+    renderer:Text("Mouse pos:     " .. mx2 .. ", " .. my2)
+    renderer:Text("Mouse buttons: " .. mb .. "  (bit0=L bit1=M bit2=R)")
+    local mods = SDL.GetModState()
+    renderer:Text("Mod state:     shift=" .. tostring(mods.shift) ..
+        "  ctrl=" .. tostring(mods.ctrl) ..
+        "  alt=" .. tostring(mods.alt))
+    renderer:Text("W key held:    " .. tostring(SDL.GetKeyState(26)))   -- SDL_SCANCODE_W = 26
+    renderer:Text("Space held:    " .. tostring(SDL.GetKeyState(44)))   -- SDL_SCANCODE_SPACE = 44
+    renderer:Separator()
+
+    -- Gamepad
+    local npads = SDL.GetNumJoysticks()
+    renderer:Text("Joysticks: " .. npads)
+    if npads > 0 then
+        renderer:Text("  Axis 0 (LX): " .. string.format("%.3f", SDL.GetGamepadAxis(0, 0)))
+        renderer:Text("  Axis 1 (LY): " .. string.format("%.3f", SDL.GetGamepadAxis(0, 1)))
+        renderer:Text("  Button A:    " .. tostring(SDL.GetGamepadButton(0, 0)))
+    end
+    renderer:Separator()
+
+    -- Texture cache
+    local count, bytes = OpenGL.GetTextureCount()
+    renderer:Text("OpenGL textures: " .. count .. "  (~" .. math.floor(bytes / 1024) .. " KB GPU)")
+    local ids = OpenGL.GetAllLoadedTextures()
+    for i = 1, #ids do
+        local id   = ids[i]
+        local data = OpenGL.GetData(id)
+        if data then
+            renderer:Text(string.format("  [%d] id=%-3d  %4dx%-4d  loaded=%-5s  source=%s",
+                i, id, data.width, data.height,
+                tostring(data.isLoaded),
+                data.source or "(none)"))
+        end
     end
 end
 
@@ -602,6 +653,61 @@ local function tabMarkdown(renderer, ctx)
     renderer:MarkdownRender(ctx.mdDoc, refresh)
 end
 
+local function tabTextures(renderer, ctx)
+    if not ctx.texOriginal then
+        ctx.texOriginal  = OpenGL.LoadTexture(Stream.Open('./docs/sample.png', 'rb'), 'sample.png')
+        ctx.texThumbnail = OpenGL.ResizeTexture(ctx.texOriginal, 100, 100, 'sample.png:thumb')
+        ctx.texSheet     = OpenGL.LoadTexture(Stream.Open('./docs/samplespritesheet.png', 'rb'), 'samplespritesheet.png')
+        ctx.sheetFrame   = 1
+        ctx.sheetTimer   = 0.0
+    end
+
+    local function showTexture(label, id)
+        if not id then
+            renderer:Text(label .. ': not loaded')
+            return
+        end
+        local data = OpenGL.GetData(id)
+        renderer:Text(label)
+        renderer:Text('  id     : ' .. tostring(id))
+        renderer:Text('  width  : ' .. tostring(data and data.width  or '?'))
+        renderer:Text('  height : ' .. tostring(data and data.height or '?'))
+        renderer:Text('  source : ' .. tostring(data and data.source or 'none'))
+        if data then
+            renderer:Image(id, data.width, data.height)
+        end
+        renderer:Separator()
+    end
+
+    showTexture('Original (sample.png)', ctx.texOriginal)
+    showTexture('Thumbnail (100x100)',    ctx.texThumbnail)
+
+    -- Sprite sheet: 512x512, 8 cols x 8 rows = 64 frames, each cell 64x64
+    if ctx.texSheet then
+        local cols    = 8
+        local rows    = 8
+        local fps     = 12
+        local total   = 60  -- sheet is 8x8 but last 4 frames are empty
+
+        ctx.sheetTimer = ctx.sheetTimer + (1.0 / 60.0)
+        if ctx.sheetTimer >= 1.0 / fps then
+            ctx.sheetTimer = ctx.sheetTimer - (1.0 / fps)
+            ctx.sheetFrame = (ctx.sheetFrame % total) + 1
+        end
+
+        renderer:Text('Sprite sheet (samplespritesheet.png) — frame ' .. ctx.sheetFrame .. ' / ' .. total)
+        renderer:Text('  id : ' .. tostring(ctx.texSheet))
+        renderer:ImageFrame(ctx.texSheet, 64, 64, ctx.sheetFrame, cols, rows)
+        renderer:SameLine()
+        renderer:ImageFrame(ctx.texSheet, 64, 64, ctx.sheetFrame, cols, rows, true, false)
+        renderer:Text('  normal  mirrored (flipX)')
+        renderer:Separator()
+
+        renderer:Text('Full sheet preview (512x512):')
+        renderer:Image(ctx.texSheet, 512, 512)
+    end
+end
+
 local function render(renderer, ctx)
     ctx.frameCount = ctx.frameCount + 1
 
@@ -687,6 +793,10 @@ local function render(renderer, ctx)
         end
         if renderer:BeginTabItem('Markdown') then
             tabMarkdown(renderer, ctx)
+            renderer:EndTabItem()
+        end
+        if renderer:BeginTabItem('Textures') then
+            tabTextures(renderer, ctx)
             renderer:EndTabItem()
         end
         renderer:EndTabBar()

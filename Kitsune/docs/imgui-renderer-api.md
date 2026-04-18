@@ -24,7 +24,11 @@ Queues `fn` to start as a fire-and-forget coroutine at the end of the current fr
 
 ## SDL API
 
-Window and display functions. All return `nil` if called before `Imgui.Start`.
+SDL functions are only available inside an active session (after `Imgui.Start`).
+
+### SDL Window
+
+Window and display management. All return `nil` if the window does not exist yet.
 
 | Function | Parameters | Returns | Notes |
 |---|---|---|---|
@@ -38,11 +42,36 @@ Window and display functions. All return `nil` if called before `Imgui.Start`.
 | `SDL.IsMinimized()` | — | `boolean` | Whether the window is minimised |
 | `SDL.IsFocused()` | — | `boolean` | Whether the window has input focus |
 | `SDL.SetFullscreen(enabled)` | `boolean` | — | Toggle borderless fullscreen |
-| `SDL.GetMonitor()` | — | `index, name, x, y, width, height, refreshRate` | Info about the monitor the window is currently on |
+| `SDL.GetMonitor()` | — | `index, name, x, y, width, height, refreshRate` | Info about the monitor the window is on |
+
+### SDL Input
+
+Polled each frame — not event-based. Safe to call at any point inside `renderFn`.
+
+| Function | Parameters | Returns | Notes |
+|---|---|---|---|
+| `SDL.GetKeyState(scancode)` | `integer` | `boolean` | Whether a key is currently held. Uses physical SDL_Scancode values (e.g. W=26, Space=44, Up=82, Left=80, Right=79, Down=81) |
+| `SDL.GetModState()` | — | `table` | `{ shift, ctrl, alt, gui, capslock, numlock }` — boolean fields |
+| `SDL.GetMouseState()` | — | `x, y, buttons` | Cursor position in window pixels and button bitmask. bit0=left, bit1=middle, bit2=right |
+| `SDL.GetRelativeMouseState()` | — | `dx, dy, buttons` | Pixel delta since last call and button bitmask. Resets to 0,0 each call |
+| `SDL.SetRelativeMouseMode(enabled)` | `boolean` | — | Capture and hide the cursor. Use `GetRelativeMouseState` for deltas |
+| `SDL.WarpMouse(x, y)` | `integer, integer` | — | Move the cursor to a window-relative position |
+| `SDL.GetNumJoysticks()` | — | `integer` | Number of connected joystick/gamepad devices |
+| `SDL.GetGamepadAxis(index, axis)` | `integer, integer` | `number` | Axis value normalised to -1.0..1.0. index is 0-based. Axis values match SDL_GameControllerAxis (0=LeftX, 1=LeftY, 2=RightX, 3=RightY, 4=TriggerLeft, 5=TriggerRight) |
+| `SDL.GetGamepadButton(index, button)` | `integer, integer` | `boolean` | Whether a button is held. index is 0-based. Button values match SDL_GameControllerButton (0=A, 1=B, 2=X, 3=Y) |
+
+### SDL Timing
+
+| Function | Parameters | Returns | Notes |
+|---|---|---|---|
+| `SDL.GetTicks()` | — | `integer` | Milliseconds since SDL was initialised |
+| `SDL.GetPerformanceCounter()` | — | `integer` | High-resolution timer counter value |
+| `SDL.GetPerformanceFrequency()` | — | `integer` | Ticks per second for the performance counter. Use with `GetPerformanceCounter` for sub-millisecond timing |
+| `SDL.GetFrameTime()` | — | `dt, fps` | `dt` = seconds since last frame (number). `fps` = exponential moving average frame rate. Both values are computed once at the start of each frame by the render loop — safe to call multiple times per frame |
 
 ## Win32 API
 
-Console window functions. All are no-op on Linux.
+Console window management. These functions are only compiled on Windows — they do not exist on other platforms.
 
 | Function | Parameters | Returns | Notes |
 |---|---|---|---|
@@ -50,7 +79,85 @@ Console window functions. All are no-op on Linux.
 | `Win32.OwnsConsole()` | — | `boolean` | Whether this process owns its console (not launched from a shell) |
 | `Win32.DestroyConsole()` | — | `boolean` | Permanently detach the console window. Only valid when `Win32.OwnsConsole()` is true |
 
-## Supported Methods
+## OpenGL API
+
+Texture management. All functions require an active session (called after `Imgui.Start`). Texture ids (`luaId`) are stable integers assigned by the resource cache.
+
+### State Machine
+
+| `luaId` | `glId` | State | Meaning |
+|---|---|---|---|
+| `0` | `0` | **Tombstone** | Free slot |
+| `!= 0` | `!= 0` | **Live** | Valid GPU texture |
+| `!= 0` | `0` | **Sentinel** | Load attempted and failed or `UnloadTexture` called — no retry |
+
+### Resource Loader
+
+```lua
+OpenGL.SetResourceLoader(
+    function(source) return Stream.OpenFile(source) end,
+    function(id, source)  -- optional post-load callback
+        local data = OpenGL.GetData(id)
+        if data.width > 1024 then
+            OpenGL.UnloadTexture(id)  -- sentinel; caller sees placeholder
+        end
+    end
+)
+```
+
+### Loading & Lifecycle
+
+| Function | Parameters | Returns | Notes |
+|---|---|---|---|
+| `OpenGL.LoadTexture(stream [, source])` | stream, `string?` | `integer` | Decode and upload. If source matches a cached slot, replaces its GL texture keeping the same id |
+| `OpenGL.ResolveTexture(source)` | `string` | `integer\|nil` | Cache-hit (live or sentinel) returns id immediately. On miss calls resource loader. Returns `nil` only if source is completely unknown |
+| `OpenGL.UnloadTexture(id)` | `integer` | — | Free GPU memory, keep slot as sentinel. `ResolveTexture` returns the id without retrying the loader |
+| `OpenGL.DestroyTexture(id)` | `integer` | — | Full tombstone — slot freed for reuse. Caller responsible for re-load loops if called from post-loader |
+| `OpenGL.DestroyAllTextures()` | — | — | Free all textures and zero the resource cache |
+| `OpenGL.SetResourceLoader(loader [, postLoader])` | `function, function?` | — | Set the session-wide resource loader and optional post-load callback |
+
+### Queries
+
+| Function | Parameters | Returns | Notes |
+|---|---|---|---|
+| `OpenGL.GetId(source)` | `string` | `integer\|nil` | Cached id for source without triggering a load |
+| `OpenGL.GetData(id)` | `integer` | `table\|nil` | `{ width, height, source, isLoaded }`. `isLoaded` is false for sentinels |
+| `OpenGL.IsLoaded(id)` | `integer` | `boolean` | True if live (`glId != 0`). False for sentinel or unknown id |
+| `OpenGL.GetTextureCount()` | — | `count, bytes` | Live+sentinel slot count and approximate GPU byte usage (w×h×4 per live slot) |
+| `OpenGL.GetAllLoadedTextures()` | — | `table` | Sequential table of all valid luaIds (live and sentinel) |
+
+### Manipulation
+
+| Function | Parameters | Returns | Notes |
+|---|---|---|---|
+| `OpenGL.ResizeTexture(id, newW, newH [, source])` | `integer, integer, integer, string?` | `integer\|nil` | GPU blit. No source = in-place. With source = new slot. Source already cached = return existing id |
+| `OpenGL.CopyTexture(id, newSource)` | `integer, string` | `integer\|nil` | Blit to newSource. If newSource exists its GL texture is replaced. Error if newSource matches id's own source |
+
+### Sprite Sheets
+
+| Function | Parameters | Returns | Notes |
+|---|---|---|---|
+| `OpenGL.GetFrameUVs(id, frameIndex, cols, rows)` | `integer, integer, integer, integer` | `u0, v0, u1, v1` | Normalised UV coordinates for a frame. frameIndex is 1-based. Works on sentinels |
+
+```lua
+-- Typical sprite sheet animation
+renderer:ImageFrame(sheetId, 64, 64, frame, 8, 2)            -- normal
+renderer:ImageFrame(sheetId, 64, 64, frame, 8, 2, true)      -- flipX (mirror)
+renderer:ImageFrame(sheetId, 64, 64, frame, 8, 2, false, true) -- flipY
+```
+
+## renderer Methods
+
+Available inside the `renderFn` callback. The renderer userdata is only valid during that callback.
+
+### Image Methods
+
+| Function | Parameters | Returns | Notes |
+|---|---|---|---|
+| `renderer:Image(id, w, h [, u0, v0, u1, v1])` | `integer, number, number, number?, number?, number?, number?` | — | Render a texture. UV defaults to full texture (0,0,1,1). Silently renders blank if id is invalid or sentinel |
+| `renderer:ImageFrame(id, w, h, frameIndex, cols, rows [, flipX [, flipY]])` | `integer, number, number, integer, integer, integer, boolean?, boolean?` | — | Render one frame of a sprite sheet. flipX mirrors horizontally, flipY mirrors vertically |
+
+### Auto-generated ImGui Methods
 
 | Signature | Returns |
 |---|---|
@@ -319,9 +426,9 @@ Console window functions. All are no-op on Linux.
 | `renderer:PushAllowKeyboardFocus(tab_stop: boolean)` | `—` |
 | `renderer:PopAllowKeyboardFocus()` | `—` |
 
-## Hand-written Overrides
+## Hand-written ImGui Overrides
 
-These functions are implemented manually in `ImguiRenderer.cpp`:
+These ImGui renderer methods are implemented manually in `ImguiRenderer.cpp`:
 
 - `renderer:BulletText(...)`
 - `renderer:ColorConvertHSVtoRGB(...)`

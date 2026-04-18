@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "KitsuneEngine.h"
 
 // Registers Session.Console, Session.Display and Session.Clipboard into Lua.

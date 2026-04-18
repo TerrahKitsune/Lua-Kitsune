@@ -35,12 +35,12 @@
 // ---------------------------------------------------------------------------
 
 struct MarkdownNode {
-    uint32_t offset;    // byte offset into mdContent
-    uint32_t len;       // byte length in mdContent
-    uint32_t urlOffset; // for MD_SPAN_LINK / MD_IMAGE: offset of URL/id in mdContent; 0 otherwise
-    uint16_t urlLen;
-    uint8_t  type;      // MD_* constant above
-    uint8_t  level;     // nesting level for lists; 0 otherwise
+	uint32_t offset;    // byte offset into mdContent
+	uint32_t len;       // byte length in mdContent
+	uint32_t urlOffset; // for MD_SPAN_LINK / MD_IMAGE: offset of URL/id in mdContent; 0 otherwise
+	uint16_t urlLen;
+	uint8_t  type;      // MD_* constant above
+	uint8_t  level;     // nesting level for lists; 0 otherwise
 };
 
 // ---------------------------------------------------------------------------

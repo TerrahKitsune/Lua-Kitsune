@@ -5,7 +5,7 @@
 
 #include "ImguiRenderer.h"
 #include "ImguiMarkdown.h"
-#include "ImguiOpenGL.h"
+#include "OpenGL.h"
 
 #include "Imgui/imgui.h"
 #include "Imgui/imgui_impl_sdl2.h"
@@ -69,15 +69,15 @@ static int imgui_gc(int argc, const KitsuneVariable* argv,
 		KitsuneVariableFree(ctx->resourceLoader);
 		ctx->resourceLoader = nullptr;
 	}
+	if (ctx->postLoader) {
+		KitsuneVariableFree(ctx->postLoader);
+		ctx->postLoader = nullptr;
+	}
 
 	// SDL2 / ImGui teardown
 	if (ctx->imguiContext) {
-		// Ensure the GL context is current before calling any OpenGL teardown
-		// (ImGui_ImplOpenGL3_Shutdown calls glDeleteBuffers etc.).
 		if (ctx->window && ctx->glContext)
 			SDL_GL_MakeCurrent(ctx->window, ctx->glContext);
-		// Free all cached textures while the GL context is still current.
-		FreeTextureCache(ctx);
 		ImGui::SetCurrentContext((ImGuiContext*)ctx->imguiContext);
 		ImGui_ImplOpenGL3_Shutdown();
 		ImGui_ImplSDL2_Shutdown();
@@ -577,7 +577,7 @@ static int ImguiRenderer_MarkdownRender(int argc, const KitsuneVariable* argv,
 
 static void prepend_meta(KitsuneUserDataRegistration* reg,
 	const char* name, kitsune_CFunction func) {
-	KitsuneNamedFunction* node = (KitsuneNamedFunction*)malloc(sizeof(KitsuneNamedFunction));
+	KitsuneNamedFunction* node = (KitsuneNamedFunction*)calloc(1, sizeof(KitsuneNamedFunction));
 	if (!node) return;
 	node->name = (char*)name;
 	node->func = func;
@@ -588,7 +588,7 @@ static void prepend_meta(KitsuneUserDataRegistration* reg,
 
 static void prepend_fn(KitsuneUserDataRegistration* reg,
 	const char* name, kitsune_CFunction func) {
-	KitsuneNamedFunction* node = (KitsuneNamedFunction*)malloc(sizeof(KitsuneNamedFunction));
+	KitsuneNamedFunction* node = (KitsuneNamedFunction*)calloc(1, sizeof(KitsuneNamedFunction));
 	if (!node) return;
 	node->name = (char*)name;
 	node->func = func;
@@ -613,6 +613,84 @@ void add_imgui_meta_bindings(KitsuneUserDataRegistration* reg) {
 	prepend_fn(reg, "ListBox", ImguiRenderer_ListBox);
 	prepend_fn(reg, "MarkdownRender", ImguiRenderer_MarkdownRender);
 	prepend_fn(reg, "Image", ImguiRenderer_Image);
+	prepend_fn(reg, "ImageFrame", ImguiRenderer_ImageFrame);
+}
+
+// ---------------------------------------------------------------------------
+// renderer:Image(handle, width, height [, uv0x, uv0y, uv1x, uv1y])
+// ---------------------------------------------------------------------------
+
+int ImguiRenderer_Image(int argc, const KitsuneVariable* argv,
+	const kitsune_ResultSetter setter, void* ud) {
+	const int              _argc = IMGUI_ARGC;
+	const KitsuneVariable* _argv = IMGUI_ARGV;
+	ImguiWindowContext* ctx = IMGUI_CTX;
+	IMGUI_REQUIRE_CTX(ctx);
+	if (_argc < 3)
+		return 0;
+
+	int   luaId = (int)KitsuneAsInt(&_argv[0], 0);
+	float w = KitsuneAsFloat(&_argv[1], 0.0f);
+	float h = KitsuneAsFloat(&_argv[2], 0.0f);
+
+	unsigned int glId = ResolveTextureGlId(luaId);
+	ImVec2 uv0(
+		_argc > 4 ? KitsuneAsFloat(&_argv[3], 0.0f) : 0.0f,
+		_argc > 4 ? KitsuneAsFloat(&_argv[4], 0.0f) : 0.0f);
+	ImVec2 uv1(
+		_argc > 6 ? KitsuneAsFloat(&_argv[5], 1.0f) : 1.0f,
+		_argc > 6 ? KitsuneAsFloat(&_argv[6], 1.0f) : 1.0f);
+	ImGui::Image((ImTextureID)(uintptr_t)glId, ImVec2(w, h), uv0, uv1);
+	return 0;
+}
+
+// ---------------------------------------------------------------------------
+// renderer:ImageFrame(id, w, h, frameIndex, cols, rows [, flipX [, flipY]])
+// ---------------------------------------------------------------------------
+
+int ImguiRenderer_ImageFrame(int argc, const KitsuneVariable* argv,
+	const kitsune_ResultSetter setter, void* ud) {
+	const int              _argc = IMGUI_ARGC;
+	const KitsuneVariable* _argv = IMGUI_ARGV;
+	ImguiWindowContext* ctx = IMGUI_CTX;
+	IMGUI_REQUIRE_CTX(ctx);
+	if (_argc < 6)
+		return 0;
+
+	int   luaId = (int)KitsuneAsInt(&_argv[0], 0);
+	float w = KitsuneAsFloat(&_argv[1], 0.0f);
+	float h = KitsuneAsFloat(&_argv[2], 0.0f);
+	int   frameIndex = (int)KitsuneAsInt(&_argv[3], 1);
+	int   cols = (int)KitsuneAsInt(&_argv[4], 1);
+	int   rows = (int)KitsuneAsInt(&_argv[5], 1);
+	bool  flipX = _argc > 6 ? KitsuneAsBool(&_argv[6]) : false;
+	bool  flipY = _argc > 7 ? KitsuneAsBool(&_argv[7]) : false;
+
+	if (cols <= 0 || rows <= 0 || frameIndex < 1 || frameIndex > cols * rows)
+		return 0;
+
+	int col = (frameIndex - 1) % cols;
+	int row = (frameIndex - 1) / cols;
+
+	float u0 = (float)col / (float)cols;
+	float v0 = (float)row / (float)rows;
+	float u1 = (float)(col + 1) / (float)cols;
+	float v1 = (float)(row + 1) / (float)rows;
+
+	if (flipX) {
+		float tmp = u0;
+		u0 = u1;
+		u1 = tmp;
+	}
+	if (flipY) {
+		float tmp = v0;
+		v0 = v1;
+		v1 = tmp;
+	}
+
+	unsigned int glId = ResolveTextureGlId(luaId);
+	ImGui::Image((ImTextureID)(uintptr_t)glId, ImVec2(w, h), ImVec2(u0, v0), ImVec2(u1, v1));
+	return 0;
 }
 
 #endif // KITSUNE_IMGUI

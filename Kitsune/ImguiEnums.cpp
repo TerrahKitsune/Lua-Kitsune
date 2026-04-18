@@ -1,4 +1,4 @@
-﻿#ifdef KITSUNE_IMGUI
+#ifdef KITSUNE_IMGUI
 
 #include "ImguiEnums.h"
 

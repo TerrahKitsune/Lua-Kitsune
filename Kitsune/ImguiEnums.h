@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #ifdef KITSUNE_IMGUI
 
 // Declares the generated registration function.

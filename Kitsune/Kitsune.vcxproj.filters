@@ -19,6 +19,12 @@
     <Filter Include="Imgui">
       <UniqueIdentifier>{72986ac9-8bcb-4cb0-84c0-a4834367ddd4}</UniqueIdentifier>
     </Filter>
+    <Filter Include="SDL">
+      <UniqueIdentifier>{2f8b6ea4-507b-47b8-921f-c1cb12b2e9b5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="OpenGL">
+      <UniqueIdentifier>{fbdf43af-8de0-4732-b606-a486c325581f}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Program.cpp">
@@ -57,16 +63,31 @@
     <ClCompile Include="ImguiRenderer_generated.cpp">
       <Filter>Imgui</Filter>
     </ClCompile>
-    <ClCompile Include="ImguiSession.cpp">
-      <Filter>Imgui</Filter>
-    </ClCompile>
     <ClCompile Include="Imgui\imgui.cpp">
       <Filter>Imgui</Filter>
     </ClCompile>
-    <ClCompile Include="ImguiMarkdown.cpp">
+    <ClCompile Include="Win32Console.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="ImguiOpenGL.cpp">
+    <ClCompile Include="SDLWindow.cpp">
+      <Filter>SDL</Filter>
+    </ClCompile>
+    <ClCompile Include="SDLInput.cpp">
+      <Filter>SDL</Filter>
+    </ClCompile>
+    <ClCompile Include="ImguiMarkdown.cpp">
+      <Filter>Imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="ImguiSession.cpp">
+      <Filter>Imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="RenderLoop.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ResourceCache.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="OpenGL.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -101,13 +122,28 @@
     <ClInclude Include="Imgui\dcimgui.h">
       <Filter>Imgui</Filter>
     </ClInclude>
-    <ClInclude Include="ImguiMarkdown.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="ImguiOpenGL.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="stb_image.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Win32Console.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ImguiMarkdown.h">
+      <Filter>Imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="SDLInput.h">
+      <Filter>SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="SDLWindow.h">
+      <Filter>SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="RenderLoop.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ResourceCache.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="OpenGL.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
