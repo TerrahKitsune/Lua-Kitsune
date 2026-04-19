@@ -36,8 +36,6 @@ struct ImguiWindowContext {
 	KitsuneVariable*            onError;
 	ImguiScheduledCall*         scheduledHead;
 	KitsuneUserDataRegistration reg;
-	KitsuneVariable*            resourceLoader;
-	KitsuneVariable*            postLoader;
 	// Markdown cache
 	uint64_t                    mdCacheId;
 	char*                       mdContent;

@@ -185,17 +185,17 @@ static int SDLGetMonitor(int argc, const KitsuneVariable* argv,
 // ---------------------------------------------------------------------------
 
 void RegisterSDLWindowFunctions() {
-	KitsuneRegisterFunction("SDL.GetWindowWidth", SDLGetWindowWidth, nullptr);
-	KitsuneRegisterFunction("SDL.GetWindowHeight", SDLGetWindowHeight, nullptr);
-	KitsuneRegisterFunction("SDL.GetWindowX", SDLGetWindowX, nullptr);
-	KitsuneRegisterFunction("SDL.GetWindowY", SDLGetWindowY, nullptr);
-	KitsuneRegisterFunction("SDL.SetWindowSize", SDLSetWindowSize, nullptr);
-	KitsuneRegisterFunction("SDL.SetWindowPosition", SDLSetWindowPosition, nullptr);
-	KitsuneRegisterFunction("SDL.SetWindowTitle", SDLSetWindowTitle, nullptr);
-	KitsuneRegisterFunction("SDL.IsMinimized", SDLIsMinimized, nullptr);
-	KitsuneRegisterFunction("SDL.IsFocused", SDLIsFocused, nullptr);
-	KitsuneRegisterFunction("SDL.SetFullscreen", SDLSetFullscreen, nullptr);
-	KitsuneRegisterFunction("SDL.GetMonitor", SDLGetMonitor, nullptr);
+	KitsuneRegisterFunction("SDL.Window.GetWindowWidth", SDLGetWindowWidth, nullptr);
+	KitsuneRegisterFunction("SDL.Window.GetWindowHeight", SDLGetWindowHeight, nullptr);
+	KitsuneRegisterFunction("SDL.Window.GetWindowX", SDLGetWindowX, nullptr);
+	KitsuneRegisterFunction("SDL.Window.GetWindowY", SDLGetWindowY, nullptr);
+	KitsuneRegisterFunction("SDL.Window.SetWindowSize", SDLSetWindowSize, nullptr);
+	KitsuneRegisterFunction("SDL.Window.SetWindowPosition", SDLSetWindowPosition, nullptr);
+	KitsuneRegisterFunction("SDL.Window.SetWindowTitle", SDLSetWindowTitle, nullptr);
+	KitsuneRegisterFunction("SDL.Window.IsMinimized", SDLIsMinimized, nullptr);
+	KitsuneRegisterFunction("SDL.Window.IsFocused", SDLIsFocused, nullptr);
+	KitsuneRegisterFunction("SDL.Window.SetFullscreen", SDLSetFullscreen, nullptr);
+	KitsuneRegisterFunction("SDL.Window.GetMonitor", SDLGetMonitor, nullptr);
 }
 
 #endif // KITSUNE_IMGUI

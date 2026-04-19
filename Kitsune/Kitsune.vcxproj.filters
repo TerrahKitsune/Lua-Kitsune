@@ -90,6 +90,9 @@
     <ClCompile Include="OpenGL.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="SDLAudio.cpp">
+      <Filter>SDL</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\KitsuneEngine.h">
@@ -146,6 +149,9 @@
     <ClInclude Include="OpenGL.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="SDLAudio.h">
+      <Filter>SDL</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Kitsune.rc">
@@ -169,9 +175,6 @@
     <None Include="..\Extension functions.md">
       <Filter>Documentation</Filter>
     </None>
-    <None Include="..\Lua functions.md">
-      <Filter>Documentation</Filter>
-    </None>
     <None Include="..\Lua\Makefile">
       <Filter>Documentation</Filter>
     </None>
@@ -180,6 +183,12 @@
     </None>
     <None Include="imgui_test.lua" />
     <None Include="docs\markdown-test.md" />
+    <None Include="generate_imgui_bindings.py">
+      <Filter>Documentation</Filter>
+    </None>
+    <None Include="..\kitsuneengine-lua-functions.md">
+      <Filter>Documentation</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Text Include="main.lua" />

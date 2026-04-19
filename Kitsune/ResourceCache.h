@@ -1,10 +1,12 @@
 ﻿#pragma once
 #include <stdbool.h>
 #include <stddef.h>
+#include "KitsuneEngine.h"
 
-#define RESOURCE_INVALID 0
-#define RESOURCE_TEXTURE 1
-#define RESOURCE_AUDIO   2
+#define RESOURCE_INVALID     0
+#define RESOURCE_TEXTURE     1
+#define RESOURCE_AUDIO_SFX   2
+#define RESOURCE_AUDIO_MUSIC 3
 
 // Forward declaration
 struct Resource;
@@ -66,3 +68,35 @@ void ResourceCacheIterate(ResourceCacheIteratorFn fn, const void* userdata);
 
 // Returns the next available luaId without consuming it. Useful for previewing.
 int ResourceCachePeekNextId();
+
+// ---------------------------------------------------------------------------
+// Resource loader
+//
+// A single session-wide loader handles all resource types so Lua has one place
+// to route load requests regardless of subsystem.
+//
+// Lua signatures:
+//   loader(type, source)              -> stream | nil
+//   postLoader(type, luaId, source)   -- optional, called after successful load
+//
+// type is a RESOURCE_* integer constant so the script knows what is being
+// requested and can return the correct stream or nil to signal unknown.
+// ---------------------------------------------------------------------------
+
+// Registers Resource.SetLoader into Lua. Called from RegisterImguiFunctions().
+void ResourceCacheRegisterLoaderFunction();
+
+// Frees the anchored loader/postLoader Lua variables. Called at session teardown
+// before ResourceCacheShutdown so no callbacks fire during finalizers.
+void ResourceCacheShutdownLoader();
+
+// Returns true if a loader function is currently set.
+bool ResourceCacheLoaderIsSet();
+
+// Calls loader(type, source) -> stream | nil.
+// Returns an anchored KitsuneVariable on success; caller must KitsuneVariableFree it.
+// Returns nullptr if no loader is set, source is null, or loader returned nil/none/error.
+KitsuneVariable* ResourceCacheCallLoader(int type, const char* source, int sourceLen);
+
+// Calls postLoader(type, luaId, source) if one is set. No-op otherwise.
+void ResourceCacheCallPostLoader(int type, int luaId, const char* source, int sourceLen);

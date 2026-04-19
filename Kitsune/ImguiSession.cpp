@@ -14,6 +14,8 @@
 #include "Win32Console.h"
 #include "ImguiEnums.h"
 #include "OpenGL.h"
+#include "SDLAudio.h"
+#include "ResourceCache.h"
 
 // ---------------------------------------------------------------------------
 // Global session pointer — shared across all Imgui* / SDL* / OpenGL* files
@@ -31,6 +33,8 @@ void RegisterImguiFunctions() {
 	RegisterSDLInputFunctions();
 	RegisterWin32ConsoleFunctions();
 	RegisterOpenGLFunctions();
+	RegisterSDLAudioFunctions();
+	ResourceCacheRegisterLoaderFunction();
 	register_imgui_enums();
 }
 

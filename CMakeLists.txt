@@ -335,4 +335,33 @@ if(KITSUNE_IMGUI)
 		${SDL2_LIBRARIES}
 		OpenGL::GL
 	)
+
+	# ── Optional SDL_mixer audio support (requires KITSUNE_IMGUI) ─────────────
+	option(KITSUNE_AUDIO "Build with audio support via SDL_mixer (requires KITSUNE_IMGUI)" OFF)
+	if(KITSUNE_AUDIO)
+		target_sources(kitsune PRIVATE Kitsune/SDLAudio.cpp)
+		target_compile_definitions(kitsune PRIVATE KITSUNE_IMGUI)
+
+		if(WIN32)
+			# Expect pre-built SDL2_mixer binaries mirroring the SDL2 layout:
+			#   Kitsune/SDL2_mixer/include/SDL_mixer.h
+			#   Kitsune/SDL2_mixer/lib/x64/SDL2_mixer.lib
+			if(EXISTS "${CMAKE_SOURCE_DIR}/Kitsune/SDL2_mixer/include/SDL_mixer.h")
+				target_include_directories(kitsune PRIVATE
+					"${CMAKE_SOURCE_DIR}/Kitsune/SDL2_mixer/include")
+				target_link_libraries(kitsune PRIVATE
+					"${CMAKE_SOURCE_DIR}/Kitsune/SDL2_mixer/lib/x64/SDL2_mixer.lib")
+			else()
+				message(FATAL_ERROR
+					"KITSUNE_AUDIO requires SDL2_mixer. "
+					"Place SDL_mixer.h under Kitsune/SDL2_mixer/include/ and "
+					"SDL2_mixer.lib under Kitsune/SDL2_mixer/lib/x64/.")
+			endif()
+		else()
+			find_package(PkgConfig REQUIRED)
+			pkg_check_modules(SDL2_MIXER REQUIRED SDL2_mixer)
+			target_include_directories(kitsune PRIVATE ${SDL2_MIXER_INCLUDE_DIRS})
+			target_link_libraries(kitsune PRIVATE ${SDL2_MIXER_LINK_LIBRARIES})
+		endif()
+	endif()
 endif()

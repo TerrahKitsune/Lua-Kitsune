@@ -207,7 +207,7 @@ static int SDLGetGamepadButton(int argc, const KitsuneVariable* argv,
 }
 
 // ---------------------------------------------------------------------------
-// SDL.GetTicks() -> integer (milliseconds)
+// SDL.Time.GetTicks() -> integer (milliseconds)
 // ---------------------------------------------------------------------------
 
 static int SDLGetTicks(int argc, const KitsuneVariable* argv,
@@ -220,7 +220,7 @@ static int SDLGetTicks(int argc, const KitsuneVariable* argv,
 }
 
 // ---------------------------------------------------------------------------
-// SDL.GetPerformanceCounter() / SDL.GetPerformanceFrequency()
+// SDL.Time.GetPerformanceCounter() / SDL.Time.GetPerformanceFrequency()
 // ---------------------------------------------------------------------------
 
 static int SDLGetPerformanceCounter(int argc, const KitsuneVariable* argv,
@@ -246,36 +246,36 @@ static int SDLGetPerformanceFrequency(int argc, const KitsuneVariable* argv,
 // ---------------------------------------------------------------------------
 
 static Uint64 s_lastCounter = 0;
-static double s_deltaTime   = 0.0;
-static double s_fps         = 0.0;
+static double s_deltaTime = 0.0;
+static double s_fps = 0.0;
 
 void UpdateFrameTiming() {
-	Uint64 now  = SDL_GetPerformanceCounter();
+	Uint64 now = SDL_GetPerformanceCounter();
 	Uint64 freq = SDL_GetPerformanceFrequency();
 	if (s_lastCounter == 0 || freq == 0) {
 		s_lastCounter = now;
-		s_deltaTime   = 0.0;
-		s_fps         = 0.0;
+		s_deltaTime = 0.0;
+		s_fps = 0.0;
 		return;
 	}
-	s_deltaTime   = (double)(now - s_lastCounter) / (double)freq;
+	s_deltaTime = (double)(now - s_lastCounter) / (double)freq;
 	s_lastCounter = now;
 	if (s_deltaTime > 0.0)
 		s_fps = 0.9 * s_fps + 0.1 * (1.0 / s_deltaTime);
 }
 
 // ---------------------------------------------------------------------------
-// SDL.GetFrameTime() -> dt, fps
+// SDL.Time.GetFrameTime() -> dt, fps
 // ---------------------------------------------------------------------------
 
 static int SDLGetFrameTime(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
 	KitsuneVariable rdt = {};
-	rdt.type   = KITSUNE_TNUMBER;
+	rdt.type = KITSUNE_TNUMBER;
 	rdt.number = s_deltaTime;
 	setter(&rdt);
 	KitsuneVariable rfps = {};
-	rfps.type   = KITSUNE_TNUMBER;
+	rfps.type = KITSUNE_TNUMBER;
 	rfps.number = s_fps;
 	setter(&rfps);
 	return 2;
@@ -286,19 +286,19 @@ static int SDLGetFrameTime(int argc, const KitsuneVariable* argv,
 // ---------------------------------------------------------------------------
 
 void RegisterSDLInputFunctions() {
-	KitsuneRegisterFunction("SDL.GetKeyState", SDLGetKeyState, nullptr);
-	KitsuneRegisterFunction("SDL.GetModState", SDLGetModState, nullptr);
-	KitsuneRegisterFunction("SDL.GetMouseState", SDLGetMouseState, nullptr);
-	KitsuneRegisterFunction("SDL.GetRelativeMouseState", SDLGetRelativeMouseState, nullptr);
-	KitsuneRegisterFunction("SDL.SetRelativeMouseMode", SDLSetRelativeMouseMode, nullptr);
-	KitsuneRegisterFunction("SDL.WarpMouse", SDLWarpMouse, nullptr);
-	KitsuneRegisterFunction("SDL.GetNumJoysticks", SDLGetNumJoysticks, nullptr);
-	KitsuneRegisterFunction("SDL.GetGamepadAxis", SDLGetGamepadAxis, nullptr);
-	KitsuneRegisterFunction("SDL.GetGamepadButton", SDLGetGamepadButton, nullptr);
-	KitsuneRegisterFunction("SDL.GetTicks",                SDLGetTicks,                nullptr);
-	KitsuneRegisterFunction("SDL.GetPerformanceCounter",   SDLGetPerformanceCounter,   nullptr);
-	KitsuneRegisterFunction("SDL.GetPerformanceFrequency", SDLGetPerformanceFrequency, nullptr);
-	KitsuneRegisterFunction("SDL.GetFrameTime",            SDLGetFrameTime,            nullptr);
+	KitsuneRegisterFunction("SDL.Input.GetKeyState", SDLGetKeyState, nullptr);
+	KitsuneRegisterFunction("SDL.Input.GetModState", SDLGetModState, nullptr);
+	KitsuneRegisterFunction("SDL.Input.GetMouseState", SDLGetMouseState, nullptr);
+	KitsuneRegisterFunction("SDL.Input.GetRelativeMouseState", SDLGetRelativeMouseState, nullptr);
+	KitsuneRegisterFunction("SDL.Input.SetRelativeMouseMode", SDLSetRelativeMouseMode, nullptr);
+	KitsuneRegisterFunction("SDL.Input.WarpMouse", SDLWarpMouse, nullptr);
+	KitsuneRegisterFunction("SDL.Input.GetNumJoysticks", SDLGetNumJoysticks, nullptr);
+	KitsuneRegisterFunction("SDL.Input.GetGamepadAxis", SDLGetGamepadAxis, nullptr);
+	KitsuneRegisterFunction("SDL.Input.GetGamepadButton", SDLGetGamepadButton, nullptr);
+	KitsuneRegisterFunction("SDL.Time.GetTicks",                SDLGetTicks,                nullptr);
+	KitsuneRegisterFunction("SDL.Time.GetPerformanceCounter",   SDLGetPerformanceCounter,   nullptr);
+	KitsuneRegisterFunction("SDL.Time.GetPerformanceFrequency", SDLGetPerformanceFrequency, nullptr);
+	KitsuneRegisterFunction("SDL.Time.GetFrameTime",            SDLGetFrameTime,            nullptr);
 }
 
 #endif // KITSUNE_IMGUI

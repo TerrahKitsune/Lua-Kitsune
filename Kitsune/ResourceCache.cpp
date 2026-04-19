@@ -5,6 +5,7 @@
 #include "ResourceCache.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 // ---------------------------------------------------------------------------
 // Global cache state — not exposed externally
@@ -208,4 +209,104 @@ void ResourceCacheIterate(ResourceCacheIteratorFn fn, const void* userdata) {
 
 int ResourceCachePeekNextId() {
 	return s_nextId;
+}
+
+// ---------------------------------------------------------------------------
+// Resource loader state
+// ---------------------------------------------------------------------------
+
+static KitsuneVariable* s_loader     = nullptr;
+static KitsuneVariable* s_postLoader = nullptr;
+
+static int ResourceSetLoader(int argc, const KitsuneVariable* argv,
+	const kitsune_ResultSetter setter, void* ud) {
+	if (s_loader) {
+		KitsuneVariableFree(s_loader);
+		s_loader = nullptr;
+	}
+	if (s_postLoader) {
+		KitsuneVariableFree(s_postLoader);
+		s_postLoader = nullptr;
+	}
+	if (argc > 0 && argv[0].type == KITSUNE_TFUNCTION)
+		s_loader = KitsuneAnchorVariable(&argv[0]);
+	if (argc > 1 && argv[1].type == KITSUNE_TFUNCTION)
+		s_postLoader = KitsuneAnchorVariable(&argv[1]);
+	return 0;
+}
+
+void ResourceCacheRegisterLoaderFunction() {
+	KitsuneRegisterFunction("Resource.SetLoader", ResourceSetLoader, nullptr);
+}
+
+void ResourceCacheShutdownLoader() {
+	if (s_loader) {
+		KitsuneVariableFree(s_loader);
+		s_loader = nullptr;
+	}
+	if (s_postLoader) {
+		KitsuneVariableFree(s_postLoader);
+		s_postLoader = nullptr;
+	}
+}
+
+bool ResourceCacheLoaderIsSet() {
+	return s_loader != nullptr;
+}
+
+KitsuneVariable* ResourceCacheCallLoader(int type, const char* source, int sourceLen) {
+	if (!s_loader || !source || sourceLen <= 0)
+		return nullptr;
+
+	KitsuneVariable typeArg = {};
+	typeArg.type = KITSUNE_TINTEGER;
+	typeArg.integer = type;
+
+	KitsuneVariable sourceArg = {};
+	sourceArg.type = KITSUNE_TSTRING;
+	sourceArg.data = (unsigned char*)source;
+	sourceArg.length = (unsigned int)sourceLen;
+
+	KitsuneVariable args[2];
+	args[0] = typeArg;
+	args[1] = sourceArg;
+
+	KitsuneVariable* result = KitsuneExecuteVariable(s_loader, 2, args);
+	if (!result || result->type == KITSUNE_TNIL || result->type == KITSUNE_TNONE) {
+		KitsuneVariableFree(result);
+		return nullptr;
+	}
+	if (result->type == KITSUNE_TERROR) {
+		fprintf(stderr, "Resource.SetLoader error for type %d '%.*s': %.*s\n",
+			type, sourceLen, source, (int)result->length, (char*)result->data);
+		KitsuneVariableFree(result);
+		return nullptr;
+	}
+	return result;
+}
+
+void ResourceCacheCallPostLoader(int type, int luaId, const char* source, int sourceLen) {
+	if (!s_postLoader)
+		return;
+
+	KitsuneVariable typeArg = {};
+	typeArg.type = KITSUNE_TINTEGER;
+	typeArg.integer = type;
+
+	KitsuneVariable idArg = {};
+	idArg.type = KITSUNE_TINTEGER;
+	idArg.integer = luaId;
+
+	KitsuneVariable sourceArg = {};
+	sourceArg.type = KITSUNE_TSTRING;
+	sourceArg.data = (unsigned char*)(source ? source : "");
+	sourceArg.length = (unsigned int)(source ? sourceLen : 0);
+
+	KitsuneVariable args[3];
+	args[0] = typeArg;
+	args[1] = idArg;
+	args[2] = sourceArg;
+
+	KitsuneVariable* result = KitsuneExecuteVariable(s_postLoader, 3, args);
+	KitsuneVariableFree(result);
 }

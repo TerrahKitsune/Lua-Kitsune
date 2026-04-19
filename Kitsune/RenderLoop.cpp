@@ -12,6 +12,7 @@
 #include "ImguiRenderer.h"
 #include "ImguiEnums.h"
 #include "OpenGL.h"
+#include "SDLAudio.h"
 #include "ResourceCache.h"
 #include "SDLInput.h"
 
@@ -212,6 +213,9 @@ void RunImguiSession() {
 
 	ResourceCacheInit();
 
+	if (!SDLAudioInit())
+		fprintf(stderr, "SDLAudioInit failed - audio will be unavailable\n");
+
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
@@ -367,6 +371,12 @@ void RunImguiSession() {
 	}
 
 	free_scheduled_calls(ctx);
+
+	// Shut down audio before ResourceCacheShutdown so finalizers run while mixer is open.
+	SDLAudioShutdown();
+
+	// Free loader callbacks before cache shutdown so no Lua calls fire during finalizers.
+	ResourceCacheShutdownLoader();
 
 	// Free all resources before GL teardown so finalizers can call glDeleteTextures
 	ResourceCacheShutdown();

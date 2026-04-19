@@ -20,7 +20,6 @@ unsigned int ResolveTextureGlId(int luaId);
 void RegisterOpenGLFunctions();
 
 // OpenGL.* Lua function declarations
-int OpenGL_SetResourceLoader(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter setter, void* ud);
 int OpenGL_ResolveTexture(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter setter, void* ud);
 int OpenGL_LoadTexture(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter setter, void* ud);
 int OpenGL_UnloadTexture(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter setter, void* ud);

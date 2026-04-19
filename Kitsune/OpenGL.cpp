@@ -120,30 +120,10 @@ static KitsuneVariable* read_stream(const KitsuneVariable* streamVar) {
 	return readResult;
 }
 
-// Calls ctx->postLoader(luaId, source) if set.
+// Calls the post-loader with RESOURCE_TEXTURE type.
 // Re-looks up by luaId after the call — post-loader may have mutated the cache.
-// Returns nullptr if the texture was tombstoned, otherwise the current slot.
-static ImguiTexture* call_post_loader(ImguiWindowContext* ctx, int luaId,
-	const char* source, int sourceLen) {
-	if (!ctx->postLoader)
-		return (ImguiTexture*)ResourceCacheGetById(luaId, RESOURCE_TEXTURE);
-
-	KitsuneVariable idArg = {};
-	idArg.type = KITSUNE_TINTEGER;
-	idArg.integer = luaId;
-
-	KitsuneVariable sourceArg = {};
-	sourceArg.type = KITSUNE_TSTRING;
-	sourceArg.data = (unsigned char*)source;
-	sourceArg.length = (unsigned int)sourceLen;
-
-	KitsuneVariable args[2];
-	args[0] = idArg;
-	args[1] = sourceArg;
-
-	KitsuneVariable* result = KitsuneExecuteVariable(ctx->postLoader, 2, args);
-	KitsuneVariableFree(result);
-
+static ImguiTexture* call_post_loader(int luaId, const char* source, int sourceLen) {
+	ResourceCacheCallPostLoader(RESOURCE_TEXTURE, luaId, source, sourceLen);
 	return (ImguiTexture*)ResourceCacheGetById(luaId, RESOURCE_TEXTURE);
 }
 
@@ -228,12 +208,11 @@ static GLuint blit_texture(GLuint srcGlId, int srcW, int srcH, int dstW, int dst
 // resolve_texture — used by OpenGL.ResolveTexture and markdown renderer
 // ---------------------------------------------------------------------------
 
-// Cache hit on live or sentinel → return it (sentinel means "tried, don't retry").
-// No hit → call resourceLoader → decode → upload → store (sentinel on failure).
-// After successful upload, calls postLoader if set.
+// Cache hit on live or sentinel -> return it (sentinel means "tried, don't retry").
+// No hit -> call Resource.SetLoader -> decode -> upload -> store (sentinel on failure).
 const ImguiTexture* resolve_texture(ImguiWindowContext* ctx,
 	const char* source, int sourceLen) {
-	if (!ctx || !source || sourceLen <= 0 || !ctx->resourceLoader)
+	if (!ctx || !source || sourceLen <= 0 || !ResourceCacheLoaderIsSet())
 		return nullptr;
 
 	char key[2048];
@@ -246,29 +225,16 @@ const ImguiTexture* resolve_texture(ImguiWindowContext* ctx,
 	if (existing)
 		return (ImguiTexture*)existing;
 
-	// Call loader
-	KitsuneVariable sourceArg = {};
-	sourceArg.type = KITSUNE_TSTRING;
-	sourceArg.data = (unsigned char*)key;
-	sourceArg.length = (unsigned int)keyLen;
+	KitsuneVariable* streamVar = ResourceCacheCallLoader(RESOURCE_TEXTURE, key, keyLen);
+	if (!streamVar)
+		return nullptr;
 
-	KitsuneVariable* streamVar = KitsuneExecuteVariable(ctx->resourceLoader, 1, &sourceArg);
-	if (!streamVar || streamVar->type == KITSUNE_TNIL || streamVar->type == KITSUNE_TNONE) {
-		KitsuneVariableFree(streamVar);
-		return nullptr;
-	}
-	if (streamVar->type == KITSUNE_TERROR) {
-		fprintf(stderr, "OpenGL resource loader error for '%.*s': %.*s\n",
-			keyLen, key, (int)streamVar->length, (char*)streamVar->data);
-		KitsuneVariableFree(streamVar);
-		return nullptr;
-	}
 	if (streamVar->type != KITSUNE_TUSERDATA ||
 		!streamVar->userdata ||
 		!streamVar->userdata->name ||
 		strcmp(streamVar->userdata->name, "STREAM") != 0) {
-		fprintf(stderr, "OpenGL resource loader for '%.*s' did not return a stream\n",
-			keyLen, key);
+		fprintf(stderr, "Resource.SetLoader for type %d '%.*s' did not return a stream\n",
+			RESOURCE_TEXTURE, keyLen, key);
 		KitsuneVariableFree(streamVar);
 		return nullptr;
 	}
@@ -305,8 +271,7 @@ const ImguiTexture* resolve_texture(ImguiWindowContext* ctx,
 	}
 
 	if (tex->glId != 0) {
-		ImguiTexture* live = call_post_loader(ctx, tex->resource.luaId, key, keyLen);
-		// post-loader may have tombstoned it
+		ImguiTexture* live = call_post_loader(tex->resource.luaId, key, keyLen);
 		return live;
 	}
 
@@ -325,25 +290,6 @@ unsigned int ResolveTextureGlId(int luaId) {
 // ---------------------------------------------------------------------------
 // OpenGL.SetResourceLoader(loader [, postLoader])
 // ---------------------------------------------------------------------------
-
-int OpenGL_SetResourceLoader(int argc, const KitsuneVariable* argv,
-	const kitsune_ResultSetter setter, void* ud) {
-	if (!g_imguiCtx)
-		return 0;
-	if (g_imguiCtx->resourceLoader) {
-		KitsuneVariableFree(g_imguiCtx->resourceLoader);
-		g_imguiCtx->resourceLoader = nullptr;
-	}
-	if (g_imguiCtx->postLoader) {
-		KitsuneVariableFree(g_imguiCtx->postLoader);
-		g_imguiCtx->postLoader = nullptr;
-	}
-	if (argc > 0 && argv[0].type == KITSUNE_TFUNCTION)
-		g_imguiCtx->resourceLoader = KitsuneAnchorVariable(&argv[0]);
-	if (argc > 1 && argv[1].type == KITSUNE_TFUNCTION)
-		g_imguiCtx->postLoader = KitsuneAnchorVariable(&argv[1]);
-	return 0;
-}
 
 // ---------------------------------------------------------------------------
 // OpenGL.ResolveTexture(source) -> integer | nil
@@ -424,8 +370,7 @@ int OpenGL_LoadTexture(int argc, const KitsuneVariable* argv,
 	}
 
 	int luaId = tex->resource.luaId;
-	if (g_imguiCtx->postLoader)
-		call_post_loader(g_imguiCtx, luaId, source ? source : "", sourceLen);
+	ResourceCacheCallPostLoader(RESOURCE_TEXTURE, luaId, source ? source : "", sourceLen);
 
 	KitsuneVariable r = {};
 	r.type = KITSUNE_TINTEGER;
@@ -876,19 +821,18 @@ int OpenGL_GetFrameUVs(int argc, const KitsuneVariable* argv,
 // ---------------------------------------------------------------------------
 
 void RegisterOpenGLFunctions() {
-	KitsuneRegisterFunction("OpenGL.LoadTexture", OpenGL_LoadTexture, nullptr);
-	KitsuneRegisterFunction("OpenGL.UnloadTexture", OpenGL_UnloadTexture, nullptr);
-	KitsuneRegisterFunction("OpenGL.DestroyTexture", OpenGL_DestroyTexture, nullptr);
-	KitsuneRegisterFunction("OpenGL.DestroyAllTextures", OpenGL_DestroyAllTextures, nullptr);
-	KitsuneRegisterFunction("OpenGL.SetResourceLoader", OpenGL_SetResourceLoader, nullptr);
-	KitsuneRegisterFunction("OpenGL.ResolveTexture", OpenGL_ResolveTexture, nullptr);
-	KitsuneRegisterFunction("OpenGL.ResizeTexture", OpenGL_ResizeTexture, nullptr);
-	KitsuneRegisterFunction("OpenGL.CopyTexture", OpenGL_CopyTexture, nullptr);
-	KitsuneRegisterFunction("OpenGL.GetId", OpenGL_GetId, nullptr);
-	KitsuneRegisterFunction("OpenGL.GetData", OpenGL_GetData, nullptr);
-	KitsuneRegisterFunction("OpenGL.IsLoaded", OpenGL_IsLoaded, nullptr);
-	KitsuneRegisterFunction("OpenGL.GetTextureCount", OpenGL_GetTextureCount, nullptr);
-	KitsuneRegisterFunction("OpenGL.GetFrameUVs", OpenGL_GetFrameUVs, nullptr);
+	KitsuneRegisterFunction("OpenGL.LoadTexture",          OpenGL_LoadTexture,          nullptr);
+	KitsuneRegisterFunction("OpenGL.UnloadTexture",        OpenGL_UnloadTexture,        nullptr);
+	KitsuneRegisterFunction("OpenGL.DestroyTexture",       OpenGL_DestroyTexture,       nullptr);
+	KitsuneRegisterFunction("OpenGL.DestroyAllTextures",   OpenGL_DestroyAllTextures,   nullptr);
+	KitsuneRegisterFunction("OpenGL.ResolveTexture",       OpenGL_ResolveTexture,       nullptr);
+	KitsuneRegisterFunction("OpenGL.ResizeTexture",        OpenGL_ResizeTexture,        nullptr);
+	KitsuneRegisterFunction("OpenGL.CopyTexture",          OpenGL_CopyTexture,          nullptr);
+	KitsuneRegisterFunction("OpenGL.GetId",                OpenGL_GetId,                nullptr);
+	KitsuneRegisterFunction("OpenGL.GetData",              OpenGL_GetData,              nullptr);
+	KitsuneRegisterFunction("OpenGL.IsLoaded",             OpenGL_IsLoaded,             nullptr);
+	KitsuneRegisterFunction("OpenGL.GetTextureCount",      OpenGL_GetTextureCount,      nullptr);
+	KitsuneRegisterFunction("OpenGL.GetFrameUVs",          OpenGL_GetFrameUVs,          nullptr);
 	KitsuneRegisterFunction("OpenGL.GetAllLoadedTextures", OpenGL_GetAllLoadedTextures, nullptr);
 }
 

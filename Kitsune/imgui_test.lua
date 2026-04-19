@@ -41,16 +41,23 @@
     consoleVisible = true,
     ownsConsole    = Win32.OwnsConsole(),
     mdDoc          = Stream.Open('./docs/markdown-test.md', 'rb'),
+    -- Audio (nil = not yet attempted, false = unavailable)
+    audioSfxId    = nil,
+    audioSfxId2   = nil,
+    audioMusicId  = nil,
+    audioMusicId2 = nil,
+    audioSfxVol   = 128,
+    audioMusicVol = 128,
 }
 
-local function onResourceLoad(path)
-
-    if path == "sample.png" then
-        return Stream.Open("./docs/sample.png", 'rb');
-    else
-        print("Unknown resource requested: " .. path)
-        return nil;
+local function onResourceLoad(type, path)
+    if type == 1 then -- RESOURCE_TEXTURE
+        if path == "sample.png" then
+            return Stream.Open("./docs/sample.png", 'rb')
+        end
     end
+    print("Unknown resource requested: type=" .. tostring(type) .. " path=" .. tostring(path))
+    return nil
 end
 
 local function onError(err)
@@ -82,46 +89,46 @@ local function tabInfo(renderer, ctx)
     renderer:Separator()
 
     -- Window / display
-    renderer:Text("Window size: " .. SDL.GetWindowWidth() .. " x " .. SDL.GetWindowHeight())
-    renderer:Text("Window pos:  " .. SDL.GetWindowX() .. ", " .. SDL.GetWindowY())
-    renderer:Text("Focused:     " .. tostring(SDL.IsFocused()))
-    renderer:Text("Minimized:   " .. tostring(SDL.IsMinimized()))
-    local idx, name, mx, my, mw, mh, hz = SDL.GetMonitor()
+    renderer:Text("Window size: " .. SDL.Window.GetWindowWidth() .. " x " .. SDL.Window.GetWindowHeight())
+    renderer:Text("Window pos:  " .. SDL.Window.GetWindowX() .. ", " .. SDL.Window.GetWindowY())
+    renderer:Text("Focused:     " .. tostring(SDL.Window.IsFocused()))
+    renderer:Text("Minimized:   " .. tostring(SDL.Window.IsMinimized()))
+    local idx, name, mx, my, mw, mh, hz = SDL.Window.GetMonitor()
     if idx then
         renderer:Text("Monitor " .. idx .. ": " .. name .. " (" .. mw .. "x" .. mh .. " @" .. hz .. "Hz)")
     end
     renderer:Separator()
 
     -- Timing
-    local ticks    = SDL.GetTicks()
-    local freq     = SDL.GetPerformanceFrequency()
-    local dt, fps  = SDL.GetFrameTime()
-    renderer:Text("SDL.GetTicks():               " .. ticks .. " ms")
-    renderer:Text("SDL.GetPerformanceFrequency(): " .. freq)
-    renderer:Text("SDL.GetPerformanceCounter():   " .. SDL.GetPerformanceCounter())
-    renderer:Text(string.format("SDL.GetFrameTime() dt:         %.4f s", dt))
-    renderer:Text(string.format("SDL.GetFrameTime() fps:        %.1f fps", fps))
+    local ticks    = SDL.Time.GetTicks()
+    local freq     = SDL.Time.GetPerformanceFrequency()
+    local dt, fps  = SDL.Time.GetFrameTime()
+    renderer:Text("SDL.Time.GetTicks():               " .. ticks .. " ms")
+    renderer:Text("SDL.Time.GetPerformanceFrequency(): " .. freq)
+    renderer:Text("SDL.Time.GetPerformanceCounter():   " .. SDL.Time.GetPerformanceCounter())
+    renderer:Text(string.format("SDL.Time.GetFrameTime() dt:         %.4f s", dt))
+    renderer:Text(string.format("SDL.Time.GetFrameTime() fps:        %.1f fps", fps))
     renderer:Separator()
 
     -- Input state
-    local mx2, my2, mb = SDL.GetMouseState()
+    local mx2, my2, mb = SDL.Input.GetMouseState()
     renderer:Text("Mouse pos:     " .. mx2 .. ", " .. my2)
     renderer:Text("Mouse buttons: " .. mb .. "  (bit0=L bit1=M bit2=R)")
-    local mods = SDL.GetModState()
+    local mods = SDL.Input.GetModState()
     renderer:Text("Mod state:     shift=" .. tostring(mods.shift) ..
         "  ctrl=" .. tostring(mods.ctrl) ..
         "  alt=" .. tostring(mods.alt))
-    renderer:Text("W key held:    " .. tostring(SDL.GetKeyState(26)))   -- SDL_SCANCODE_W = 26
-    renderer:Text("Space held:    " .. tostring(SDL.GetKeyState(44)))   -- SDL_SCANCODE_SPACE = 44
+    renderer:Text("W key held:    " .. tostring(SDL.Input.GetKeyState(26)))   -- SDL_SCANCODE_W = 26
+    renderer:Text("Space held:    " .. tostring(SDL.Input.GetKeyState(44)))   -- SDL_SCANCODE_SPACE = 44
     renderer:Separator()
 
     -- Gamepad
-    local npads = SDL.GetNumJoysticks()
+    local npads = SDL.Input.GetNumJoysticks()
     renderer:Text("Joysticks: " .. npads)
     if npads > 0 then
-        renderer:Text("  Axis 0 (LX): " .. string.format("%.3f", SDL.GetGamepadAxis(0, 0)))
-        renderer:Text("  Axis 1 (LY): " .. string.format("%.3f", SDL.GetGamepadAxis(0, 1)))
-        renderer:Text("  Button A:    " .. tostring(SDL.GetGamepadButton(0, 0)))
+        renderer:Text("  Axis 0 (LX): " .. string.format("%.3f", SDL.Input.GetGamepadAxis(0, 0)))
+        renderer:Text("  Axis 1 (LY): " .. string.format("%.3f", SDL.Input.GetGamepadAxis(0, 1)))
+        renderer:Text("  Button A:    " .. tostring(SDL.Input.GetGamepadButton(0, 0)))
     end
     renderer:Separator()
 
@@ -645,6 +652,145 @@ local function tabSystem(renderer, ctx)
     if ctx.showMetrics then ctx.showMetrics = renderer:ShowMetricsWindow(ctx.showMetrics) == true end
 end
 
+local function tabAudio(renderer, ctx)
+    -- Lazy-load on first visit
+    if ctx.audioSfxId == nil then
+        local stream = Stream.Open('./docs/sample.wav', 'rb')
+        ctx.audioSfxId = stream and SDL.Audio.Load(stream, 'sample.wav') or false
+    end
+    if ctx.audioSfxId2 == nil then
+        local stream = Stream.Open('./docs/sample2.wav', 'rb')
+        ctx.audioSfxId2 = stream and SDL.Audio.Load(stream, 'sample2.wav') or false
+    end
+    if ctx.audioMusicId == nil then
+        local stream = Stream.Open('./docs/sample.ogg', 'rb')
+        ctx.audioMusicId = stream and SDL.Audio.LoadMusic(stream, 'sample.ogg') or false
+    end
+    if ctx.audioMusicId2 == nil then
+        local stream = Stream.Open('./docs/sample2.ogg', 'rb')
+        ctx.audioMusicId2 = stream and SDL.Audio.LoadMusic(stream, 'sample2.ogg') or false
+    end
+
+    -- ---------------------------------------------------------------------------
+    -- Sound Effects
+    -- ---------------------------------------------------------------------------
+    renderer:SeparatorText("Sound Effects")
+
+    local function sfxRow(label, id)
+        if not id then
+            renderer:TextDisabled(label .. ": not found in docs/")
+            return
+        end
+        local data = SDL.Audio.GetData(id)
+        renderer:Text(string.format("%-14s  id=%-3d  loaded=%-5s  playing=%s",
+            label, id,
+            tostring(data and data.isLoaded),
+            tostring(SDL.Audio.IsPlaying(id))))
+        renderer:SameLine()
+        if renderer:Button("Play##" .. label) then SDL.Audio.Play(id) end
+        renderer:SameLine()
+        if renderer:Button("x3##" .. label) then SDL.Audio.Play(id, 2) end
+        renderer:SameLine()
+        if renderer:Button("Stop##" .. label) then SDL.Audio.Stop(id) end
+        renderer:SameLine()
+        if renderer:Button("FadeIn##" .. label) then SDL.Audio.FadeIn(id, 500) end
+        renderer:SameLine()
+        if renderer:Button("FadeOut##" .. label) then SDL.Audio.FadeOut(id, 500) end
+        renderer:SameLine()
+        if renderer:Button("Destroy##" .. label) then
+            SDL.Audio.Destroy(id)
+            if id == ctx.audioSfxId  then ctx.audioSfxId  = nil end
+            if id == ctx.audioSfxId2 then ctx.audioSfxId2 = nil end
+        end
+    end
+
+    sfxRow("sample.wav",  ctx.audioSfxId)
+    sfxRow("sample2.wav", ctx.audioSfxId2)
+
+    if ctx.audioSfxId then
+        renderer:Text("Volume (0-128):")
+        renderer:SameLine()
+        local vc, vv = renderer:SliderInt("##sfxvol", ctx.audioSfxVol, 0, 128)
+        if vc then
+            ctx.audioSfxVol = vv
+            SDL.Audio.SetVolume(ctx.audioSfxId, vv)
+        end
+    end
+
+    if renderer:Button("Stop All SFX") then SDL.Audio.Stop() end
+
+    -- ---------------------------------------------------------------------------
+    -- Music
+    -- ---------------------------------------------------------------------------
+    renderer:SeparatorText("Music")
+
+    local currentMusic = SDL.Audio.GetCurrentMusic()
+    renderer:Text("playing:        " .. tostring(SDL.Audio.IsMusicPlaying()))
+    renderer:Text("paused:         " .. tostring(SDL.Audio.IsMusicPaused()))
+    renderer:Text("GetCurrentMusic: " .. tostring(currentMusic))
+    renderer:Separator()
+
+    local function musicRow(label, id)
+        if not id then
+            renderer:TextDisabled(label .. ": not found in docs/")
+            return
+        end
+        local data   = SDL.Audio.GetData(id)
+        local active = currentMusic == id
+        renderer:Text(string.format("%-14s  id=%-3d  loaded=%-5s  %s",
+            label, id,
+            tostring(data and data.isLoaded),
+            active and "[ACTIVE]" or ""))
+        renderer:SameLine()
+        if renderer:Button("Play loop##" .. label) then SDL.Audio.PlayMusic(id, -1) end
+        renderer:SameLine()
+        if renderer:Button("Play once##" .. label) then SDL.Audio.PlayMusic(id, 1) end
+        renderer:SameLine()
+        if renderer:Button("Destroy##" .. label) then
+            SDL.Audio.DestroyMusic(id)
+            if id == ctx.audioMusicId  then ctx.audioMusicId  = nil end
+            if id == ctx.audioMusicId2 then ctx.audioMusicId2 = nil end
+        end
+    end
+
+    musicRow("sample.ogg",  ctx.audioMusicId)
+    musicRow("sample2.ogg", ctx.audioMusicId2)
+
+    renderer:Spacing()
+    if renderer:Button("Stop##music")   then SDL.Audio.StopMusic() end
+    renderer:SameLine()
+    if renderer:Button("Pause##music")  then SDL.Audio.PauseMusic() end
+    renderer:SameLine()
+    if renderer:Button("Resume##music") then SDL.Audio.ResumeMusic() end
+
+    renderer:Text("Music Volume (0-128):")
+    renderer:SameLine()
+    local mvc, mvv = renderer:SliderInt("##musicvol", ctx.audioMusicVol, 0, 128)
+    if mvc then
+        ctx.audioMusicVol = mvv
+        SDL.Audio.SetMusicVolume(mvv)
+    end
+
+    -- ---------------------------------------------------------------------------
+    -- Cache queries
+    -- ---------------------------------------------------------------------------
+    renderer:SeparatorText("Cache")
+    renderer:Text("GetId('sample.wav'):  " .. tostring(SDL.Audio.GetId('sample.wav')))
+    renderer:Text("GetId('sample2.wav'): " .. tostring(SDL.Audio.GetId('sample2.wav')))
+    renderer:Text("GetId('sample.ogg'):  " .. tostring(SDL.Audio.GetId('sample.ogg')))
+    renderer:Text("GetId('sample2.ogg'): " .. tostring(SDL.Audio.GetId('sample2.ogg')))
+    renderer:Spacing()
+    if renderer:Button("DestroyAll") then
+        SDL.Audio.DestroyAll()
+        ctx.audioSfxId    = nil
+        ctx.audioSfxId2   = nil
+        ctx.audioMusicId  = nil
+        ctx.audioMusicId2 = nil
+        ctx.audioSfxVol   = 128
+        ctx.audioMusicVol = 128
+    end
+end
+
 local function tabMarkdown(renderer, ctx)
     local refresh = renderer:Button('Reload')
     renderer:SameLine()
@@ -718,8 +864,8 @@ local function render(renderer, ctx)
         end)
     end
 
-    local winW = SDL.GetWindowWidth()
-    local winH = SDL.GetWindowHeight()
+    local winW = SDL.Window.GetWindowWidth()
+    local winH = SDL.Window.GetWindowHeight()
     renderer:SetNextWindowPos(0, 0, condAlways)
     renderer:SetNextWindowSize(winW, winH, condAlways)
 
@@ -799,6 +945,10 @@ local function render(renderer, ctx)
             tabTextures(renderer, ctx)
             renderer:EndTabItem()
         end
+        if renderer:BeginTabItem('Audio') then
+            tabAudio(renderer, ctx)
+            renderer:EndTabItem()
+        end
         renderer:EndTabBar()
     end
 
@@ -835,4 +985,4 @@ end
 -- ---------------------------------------------------------------------------
 
 Imgui.Start("Kitsune ImGui Test", 800, 600, render, ctx, onError)
-OpenGL.SetResourceLoader(onResourceLoad);
+Resource.SetLoader(onResourceLoad)

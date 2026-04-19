@@ -65,14 +65,6 @@ static int imgui_gc(int argc, const KitsuneVariable* argv,
 		KitsuneVariableFree(ctx->onError);
 		ctx->onError = nullptr;
 	}
-	if (ctx->resourceLoader) {
-		KitsuneVariableFree(ctx->resourceLoader);
-		ctx->resourceLoader = nullptr;
-	}
-	if (ctx->postLoader) {
-		KitsuneVariableFree(ctx->postLoader);
-		ctx->postLoader = nullptr;
-	}
 
 	// SDL2 / ImGui teardown
 	if (ctx->imguiContext) {
