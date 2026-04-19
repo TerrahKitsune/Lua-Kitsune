@@ -1169,7 +1169,19 @@ coroutine.resume(co, true)
 
 ### Parameterized queries
 
-Pass an array table as the second argument to `Query`, `NonQuery`, `Scalar`, or `QueryAll`. `?` placeholders are substituted in order. Missing or `nil` entries become SQL `NULL`. `table` values are JSON-encoded. `Wchar` values are UTF-8 encoded.
+Pass an array table as the second argument to `Query`, `NonQuery`, `Scalar`, or `QueryAll`. `?` placeholders are substituted in order. Missing or `nil` entries become SQL `NULL`. The following Lua types are accepted as parameter values:
+
+| Parameter type | Sent as |
+|----------------|---------|
+| `nil` | SQL `NULL` |
+| `string` | escaped string |
+| `number` / `integer` | stringified |
+| `boolean` | `"1"` / `"0"` |
+| `Wchar` | UTF-8 encoded string |
+| `Identifier` | canonical string (`xxxxxxxx-xxxx-…` or 24-char hex) |
+| `DateTime` | ISO 8601 string (`YYYY-MM-DDTHH:MM:SS.mmmZ`) |
+| `Decimal` | decimal string (e.g. `"123.456"`) |
+| `table` | JSON-encoded string |
 
 ```lua
 conn:NonQuery("INSERT INTO t (a, b, c) VALUES (?, ?, ?)", {"hello", nil, 3.14})
@@ -1181,9 +1193,13 @@ conn:Scalar("SELECT name FROM users WHERE id = ?", {42})
 | MySQL type | Lua type |
 |------------|----------|
 | TINYINT, SMALLINT, MEDIUMINT, INT, BIGINT | integer |
-| FLOAT, DOUBLE, DECIMAL | number |
-| TINYBLOB, BLOB, MEDIUMBLOB, LONGBLOB | LuaStream (userdata) |
-| all others (VARCHAR, TEXT, DATE, JSON, …) | string |
+| FLOAT, DOUBLE, BIT | number |
+| DECIMAL, NEWDECIMAL | `Decimal` ¹ |
+| TINYBLOB, BLOB, MEDIUMBLOB, LONGBLOB | `LuaStream` |
+| DATE, DATETIME, TIMESTAMP | `DateTime` ¹ |
+| all others (VARCHAR, TEXT, YEAR, TIME, ENUM, JSON, …) | string |
+
+> ¹ Falls back to a plain string when parsing fails (e.g. non-standard server format).
 
 > **Note:** MySQL has no native boolean type. `TINYINT(1)` columns return integer `1` or `0`.
 
@@ -1266,7 +1282,19 @@ Pass a truthy value as the **first argument** of any `coroutine.resume` call to 
 
 ### Parameterized Queries
 
-Pass an array table as the second argument to `Query`, `NonQuery`, `Scalar`, or `QueryAll`. Uses PostgreSQL native `$1`, `$2`, … placeholders. Missing or `nil` entries are sent as SQL `NULL`. `table` values are JSON-encoded. `Wchar` values are UTF-8 encoded.
+Pass an array table as the second argument to `Query`, `NonQuery`, `Scalar`, or `QueryAll`. Uses PostgreSQL native `$1`, `$2`, … placeholders. Missing or `nil` entries are sent as SQL `NULL`. The following Lua types are accepted as parameter values:
+
+| Parameter type | Sent as |
+|----------------|---------|
+| `nil` | SQL `NULL` |
+| `string` | string |
+| `number` / `integer` | stringified |
+| `boolean` | `"true"` / `"false"` |
+| `Wchar` | UTF-8 encoded string |
+| `Identifier` | canonical string (`xxxxxxxx-xxxx-…` or 24-char hex) |
+| `DateTime` | ISO 8601 string (`YYYY-MM-DDTHH:MM:SS.mmmZ`) |
+| `Decimal` | decimal string (e.g. `"123.456"`) |
+| `table` | JSON-encoded string |
 
 ```lua
 conn:Query("SELECT * FROM users WHERE id = $1", {42})
@@ -1283,8 +1311,16 @@ conn:NonQuery("INSERT INTO t (a, b, c) VALUES ($1, $2, $3)", {"hello", nil, 3.14
 | 23 | INT4 (integer) | integer |
 | 700 | FLOAT4 (real) | number |
 | 701 | FLOAT8 (double precision) | number |
-| 1700 | NUMERIC | number |
-| all others | TEXT, VARCHAR, DATE, JSON, etc. | string |
+| 1700 | NUMERIC | `Decimal` ¹ |
+| 2950 | UUID | `Identifier` ¹ |
+| 1082 | DATE | `DateTime` ¹ |
+| 1083 | TIME | `DateTime` ¹ |
+| 1266 | TIMETZ | `DateTime` ¹ |
+| 1114 | TIMESTAMP | `DateTime` ¹ |
+| 1184 | TIMESTAMPTZ | `DateTime` ¹ |
+| all others | TEXT, VARCHAR, BYTEA, JSON, etc. | string |
+
+> ¹ Falls back to a plain string when parsing fails (e.g. non-standard server format).
 
 ---
 
