@@ -58,6 +58,7 @@
 #include "stream.h"
 #include "Sha256Main.h"
 #include "luajsonmain.h"
+#include "luamsgpackmain.h"
 #include "luajson.h"
 #include "base64.h"
 #include "wcharmain.h"
@@ -1384,6 +1385,7 @@ extern "C" {
 		// when decoding KITSUNE_TJSON values — avoids one GC allocation per bridge call.
 		lua_json_push(L);
 		lua_rawsetp(L, LUA_REGISTRYINDEX, lua_json_bridge_registry_key());
+		luaopen_msgpack(L);      lua_setglobal(L, "MsgPack");
 		luaopen_base64(L);       lua_setglobal(L, "Base64");
 		luaopen_wchar(L);        lua_setglobal(L, "Wchar");
 		luaopen_identifier(L);   lua_setglobal(L, "Identifier");

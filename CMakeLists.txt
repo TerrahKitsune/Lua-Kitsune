@@ -55,6 +55,15 @@ set(KITSUNE_ENGINE_SOURCES
 	luajson.cpp
 	luajsonmain.cpp
 
+	# ── MsgPack ─────────────────────────────────────────────────────────────
+	luamsgpack.cpp
+	luamsgpackmain.cpp
+	msgpack/src/objectc.c
+	msgpack/src/unpack.c
+	msgpack/src/version.c
+	msgpack/src/vrefbuffer.c
+	msgpack/src/zone.c
+
 	# ── WChar (wide-string type) ────────────────────────────────────────────
 	luawchar.cpp
 	wcharmain.cpp
@@ -265,6 +274,7 @@ target_compile_definitions(KitsuneEngine PRIVATE
 target_include_directories(KitsuneEngine PRIVATE
 	"${CMAKE_SOURCE_DIR}"
 	"${CMAKE_SOURCE_DIR}/Lua"
+	"${CMAKE_SOURCE_DIR}/msgpack/include"
 )
 
 # Export all symbols by default on Linux (mirrors Windows DLL behaviour).

@@ -817,11 +817,11 @@ int lua_json_encode_into_stream(lua_State* L) {
 	return 1;
 }
 
-// json:DecodeIntoStream(stream)
+// json:DecodeFromStream(stream)
 // Decodes one JSON value from a stream.  For seekable sync streams, seeks back
 // past any over-read bytes so consecutive calls each get one value.  Async
 // streams use the same accumulate-then-parse path as json:Decode(stream).
-int lua_json_decode_into_stream(lua_State* L) {
+int lua_json_decode_from_stream(lua_State* L) {
 	LuaJson*   j  = lua_json_check(L, 1);
 	int streamIdx = 2;
 
@@ -862,7 +862,7 @@ int lua_json_decode_into_stream(lua_State* L) {
 
 	// The chunk reader fetches 4 KiB at a time, so it may have read bytes that
 	// belong to the NEXT value in the stream.  Seek back past the unconsumed bytes
-	// so consecutive DecodeIntoStream calls each get one value.
+	// so consecutive DecodeFromStream calls each get one value.
 	if (st->Caps & STREAM_CAP_SEEK) {
 		size_t unconsumed = (j->srcLen - j->srcPos) + (size_t)j->ungetLen;
 		if (unconsumed > 0) {

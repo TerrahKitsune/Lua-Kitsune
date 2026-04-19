@@ -89,4 +89,4 @@ int lua_json_new(lua_State* L);                 // Json.New([pretty])
 int lua_json_decode(lua_State* L);
 int lua_json_encode(lua_State* L);
 int lua_json_encode_into_stream(lua_State* L);
-int lua_json_decode_into_stream(lua_State* L);
+int lua_json_decode_from_stream(lua_State* L);

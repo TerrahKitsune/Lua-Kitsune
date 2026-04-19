@@ -1,4 +1,4 @@
-﻿using KitsuneNet;
+using KitsuneNet;
 using Shouldly;
 using Xunit;
 
@@ -2927,7 +2927,7 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task Json_DecodeIntoStream_RoundTrip()
+        public async Task Json_DecodeFromStream_RoundTrip()
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
@@ -2935,7 +2935,7 @@ namespace KitsuneNet.Tests
                 local s = Stream.Create()
                 j:EncodeIntoStream(s, {x=99, y='hello', z=true})
                 s:Seek(0)
-                local t = j:DecodeIntoStream(s)
+                local t = j:DecodeFromStream(s)
                 return tostring(t.x == 99 and t.y == 'hello' and t.z == true)
             ");
             r.String.ShouldBe("true");
@@ -2973,7 +2973,7 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task Json_DecodeIntoStream_NonReadableStream_ReturnsNilAndError()
+        public async Task Json_DecodeFromStream_NonReadableStream_ReturnsNilAndError()
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
@@ -2983,14 +2983,14 @@ namespace KitsuneNet.Tests
                     if op == OPEN  then return CAP_WRITE end
                     if op == CLOSE then return true end
                 end)
-                local val, err = j:DecodeIntoStream(s)
+                local val, err = j:DecodeFromStream(s)
                 return tostring(val == nil and type(err) == 'string')
             ");
             r.String.ShouldBe("true");
         }
 
         [Fact]
-        public async Task Json_EncodeDecodeIntoStream_LargePayload_AllValuesCorrect()
+        public async Task Json_EncodeDecodeFromStream_LargePayload_AllValuesCorrect()
         {
             using KitsuneEngine engine = new();
 
@@ -3003,7 +3003,7 @@ namespace KitsuneNet.Tests
                 local s = Stream.Create()
                 j:EncodeIntoStream(s, data)
                 s:Seek(0)
-                local t = j:DecodeIntoStream(s)
+                local t = j:DecodeFromStream(s)
                 return tostring(#t == 1000 and t[1] == 1 and t[500] == 500 and t[1000] == 1000)
             ");
             r.String.ShouldBe("true");
@@ -3018,19 +3018,19 @@ namespace KitsuneNet.Tests
                 local s = Stream.Create()
                 j:EncodeIntoStream(s, {v = Json.Null})
                 s:Seek(0)
-                local t = j:DecodeIntoStream(s)
+                local t = j:DecodeFromStream(s)
                 return tostring(t.v == Json.Null)
             ");
             r.String.ShouldBe("true");
         }
 
         [Fact]
-        public async Task Json_DecodeIntoStream_ReadsFromCurrentPosition()
+        public async Task Json_DecodeFromStream_ReadsFromCurrentPosition()
         {
             using KitsuneEngine engine = new();
 
             // Encode two values back-to-back; seek to the boundary and verify
-            // DecodeIntoStream picks up only the second value.
+            // DecodeFromStream picks up only the second value.
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local j = Json.New()
                 local s = Stream.Create()
@@ -3038,7 +3038,7 @@ namespace KitsuneNet.Tests
                 local split = s:pos()
                 j:EncodeIntoStream(s, 'second')
                 s:Seek(split)
-                local v = j:DecodeIntoStream(s)
+                local v = j:DecodeFromStream(s)
                 return tostring(v == 'second')
             ");
             r.String.ShouldBe("true");
@@ -3058,12 +3058,12 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task Json_DecodeIntoStream_PackedObjects_DecodesSequentially()
+        public async Task Json_DecodeFromStream_PackedObjects_DecodesSequentially()
         {
             using KitsuneEngine engine = new();
 
             // Three JSON objects written end-to-end with no separator; each
-            // DecodeIntoStream call must return exactly one object and leave
+            // DecodeFromStream call must return exactly one object and leave
             // the stream positioned at the start of the next one.
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local j = Json.New()
@@ -3072,16 +3072,16 @@ namespace KitsuneNet.Tests
                 j:EncodeIntoStream(s, {n=2})
                 j:EncodeIntoStream(s, {n=3})
                 s:Seek(0)
-                local a = j:DecodeIntoStream(s)
-                local b = j:DecodeIntoStream(s)
-                local c = j:DecodeIntoStream(s)
+                local a = j:DecodeFromStream(s)
+                local b = j:DecodeFromStream(s)
+                local c = j:DecodeFromStream(s)
                 return tostring(a.n==1 and b.n==2 and c.n==3)
             ");
             r.String.ShouldBe("true");
         }
 
         [Fact]
-        public async Task Json_DecodeIntoStream_PackedWithWhitespace_DecodesSequentially()
+        public async Task Json_DecodeFromStream_PackedWithWhitespace_DecodesSequentially()
         {
             using KitsuneEngine engine = new();
 
@@ -3092,8 +3092,8 @@ namespace KitsuneNet.Tests
                 local s = Stream.Create()
                 s:Write('{""a"":1}' .. '\n\n' .. '{""b"":2}')
                 s:Seek(0)
-                local t1 = j:DecodeIntoStream(s)
-                local t2 = j:DecodeIntoStream(s)
+                local t1 = j:DecodeFromStream(s)
+                local t2 = j:DecodeFromStream(s)
                 return tostring(t1.a == 1 and t2.b == 2)
             ");
             r.String.ShouldBe("true");
@@ -7352,11 +7352,11 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task Json_FunctionBackendSocket_DecodeIntoStream_ParsesChunkedJson()
+        public async Task Json_FunctionBackendSocket_DecodeFromStream_ParsesChunkedJson()
         {
             using KitsuneEngine engine = new();
 
-            // DecodeIntoStream calls lua_stream_read_chunk ? StreamRead in a loop.
+            // DecodeFromStream calls lua_stream_read_chunk ? StreamRead in a loop.
             // The backend returns 6 bytes per call so the decoder must assemble the
             // full JSON object across many reads.
             LuaValue r = await engine.ExecuteStringAsync(SocketPrologue + @"
@@ -7373,7 +7373,7 @@ namespace KitsuneNet.Tests
                     end
                 end)
                 local j = Json.New()
-                local t = j:DecodeIntoStream(s)
+                local t = j:DecodeFromStream(s)
                 return tostring(t.name == 'kitsune' and t.version == 4 and t.active == true)
             ");
             r.String.ShouldBe("true");
@@ -7474,6 +7474,741 @@ namespace KitsuneNet.Tests
                 return 'ok'
             ");
             r.String.ShouldBe("ok");
+        }
+
+        // -- MsgPack --------------------------------------------------------------
+        // All operations require an instance (MsgPack.New() or MsgPack.Create()).
+
+        // -- Instance creation ----------------------------------------------------
+        [Fact]
+        public async Task MsgPack_New_ReturnsUserdata()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync("return type(MsgPack.New())");
+            r.String.ShouldBe("userdata");
+        }
+
+        [Fact]
+        public async Task MsgPack_Create_AliasWorksIdenticallyToNew()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = MsgPack.Create()
+                local t = m:Decode(m:Encode({1, 2, 3}))
+                return tostring(t[3] == 3)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_Tostring_ReturnsNonEmptyString()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync("return tostring(type(tostring(MsgPack.New())) == 'string' and #tostring(MsgPack.New()) > 0)");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_Dispose_CanBeCalledExplicitly()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = MsgPack.New()
+                m:Dispose()
+                return 'ok'
+            ");
+            r.String.ShouldBe("ok");
+        }
+
+        // -- Basic type round-trips -----------------------------------------------
+        [Fact]
+        public async Task MsgPack_Nil_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = MsgPack.New()
+                return tostring(m:Decode(m:Encode(nil)) == nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_BooleanTrue_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = MsgPack.New()
+                return tostring(m:Decode(m:Encode(true)) == true)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_BooleanFalse_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = MsgPack.New()
+                return tostring(m:Decode(m:Encode(false)) == false)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_Integer_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = MsgPack.New()
+                local v = m:Decode(m:Encode(42))
+                return tostring(v == 42 and math.type(v) == 'integer')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_NegativeInteger_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = MsgPack.New()
+                return tostring(m:Decode(m:Encode(-1000)) == -1000)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_MaxInt64_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m   = MsgPack.New()
+                local max = math.maxinteger
+                return tostring(m:Decode(m:Encode(max)) == max)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_MinInt64_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m   = MsgPack.New()
+                local min = math.mininteger
+                return tostring(m:Decode(m:Encode(min)) == min)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_Float_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = MsgPack.New()
+                local v = m:Decode(m:Encode(3.14))
+                return tostring(math.type(v) == 'float' and math.abs(v - 3.14) < 1e-10)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_String_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = MsgPack.New()
+                return tostring(m:Decode(m:Encode('hello')) == 'hello')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_EmptyString_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = MsgPack.New()
+                return tostring(m:Decode(m:Encode('')) == '')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_StringWithNullBytes_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = MsgPack.New()
+                local s = 'a\0b\0c'
+                return tostring(m:Decode(m:Encode(s)) == s)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        // -- Table round-trips ----------------------------------------------------
+        [Fact]
+        public async Task MsgPack_SequenceTable_EncodesAsArray()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = MsgPack.New()
+                local t = m:Decode(m:Encode({10, 20, 30}))
+                return tostring(t[1] == 10 and t[2] == 20 and t[3] == 30)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_StringKeyTable_EncodesAsMap()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = MsgPack.New()
+                local t = m:Decode(m:Encode({name = 'kitsune', version = 1}))
+                return tostring(t.name == 'kitsune' and t.version == 1)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_EmptyTable_EncodesAsEmptyArray()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = MsgPack.New()
+                local t = m:Decode(m:Encode({}))
+                return tostring(type(t) == 'table')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_NestedTable_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = MsgPack.New()
+                local t = m:Decode(m:Encode({a = {b = {c = 99}}}))
+                return tostring(t.a.b.c == 99)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_AllBasicTypes_RoundTrip()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m    = MsgPack.New()
+                local orig = {
+                    s   = 'hello',
+                    n   = 42,
+                    f   = 3.14,
+                    bt  = true,
+                    bf  = false,
+                    arr = {1, 2, 3},
+                    obj = {nested = 'value'},
+                }
+                local t = m:Decode(m:Encode(orig))
+                return tostring(
+                    t.s == 'hello'       and
+                    t.n == 42            and
+                    math.abs(t.f - 3.14) < 1e-10 and
+                    t.bt == true         and
+                    t.bf == false        and
+                    #t.arr == 3          and t.arr[2] == 2 and
+                    t.obj.nested == 'value'
+                )
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_InstanceReuse_MultipleCalls()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m  = MsgPack.New()
+                local s1 = m:Encode({a = 1})
+                local s2 = m:Encode({b = 2})
+                local t1 = m:Decode(s1)
+                local t2 = m:Decode(s2)
+                return tostring(t1.a == 1 and t2.b == 2 and t1.b == nil and t2.a == nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        // -- Encode returns binary string -----------------------------------------
+        [Fact]
+        public async Task MsgPack_Encode_ReturnsString()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync("return type(MsgPack.New():Encode(42))");
+            r.String.ShouldBe("string");
+        }
+
+        [Fact]
+        public async Task MsgPack_Encode_DifferentValues_ProduceDifferentBytes()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = MsgPack.New()
+                return tostring(m:Encode(1) ~= m:Encode(2))
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_Encode_IsDeterministic()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = MsgPack.New()
+                return tostring(m:Encode('hello') == m:Encode('hello'))
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        // -- Unrepresentable types encode as nil ----------------------------------
+        [Fact]
+        public async Task MsgPack_Function_EncodesAsNil()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = MsgPack.New()
+                return tostring(m:Decode(m:Encode(function() end)) == nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_Thread_EncodesAsNil()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = MsgPack.New()
+                return tostring(m:Decode(m:Encode(coroutine.create(function() end))) == nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_UnserializableInArray_EncodesSlotAsNil()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = MsgPack.New()
+                local t = m:Decode(m:Encode({1, function() end, 3}))
+                return tostring(t[1] == 1 and t[2] == nil and t[3] == 3)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        // -- Wchar encoding -------------------------------------------------------
+        [Fact]
+        public async Task MsgPack_Wchar_AsciiContent_EncodesAsStr()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = MsgPack.New()
+                local w = Wchar.FromUtf8('hello')
+                return tostring(m:Decode(m:Encode(w)) == 'hello')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_Wchar_NonAscii_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            // é = U+00E9, UTF-8: \xC3\xA9
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = MsgPack.New()
+                local w = Wchar.FromUtf8('\xC3\xa9')
+                return tostring(m:Decode(m:Encode(w)) == '\xC3\xa9')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_Wchar_EmptyWchar_EncodesAsEmptyStr()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = MsgPack.New()
+                local w = Wchar.FromUtf8('')
+                return tostring(m:Decode(m:Encode(w)) == '')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        // -- Typed userdata encoding as string ------------------------------------
+        [Fact]
+        public async Task MsgPack_Identifier_UUID_EncodesAsCanonicalString()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m  = MsgPack.New()
+                local id = Identifier.NewUUID()
+                return tostring(m:Decode(m:Encode(id)) == tostring(id))
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_Identifier_OID_EncodesAsCanonicalString()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m  = MsgPack.New()
+                local id = Identifier.NewOID()
+                return tostring(m:Decode(m:Encode(id)) == tostring(id))
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_DateTime_EncodesAsIso8601String()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m  = MsgPack.New()
+                local dt = DateTime.New(2024, 3, 15, 10, 30, 45, 0, 0)
+                return tostring(m:Decode(m:Encode(dt)) == tostring(dt))
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_Decimal_EncodesAsString()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = MsgPack.New()
+                local d = Decimal.FromString('99.95')
+                return tostring(m:Decode(m:Encode(d)) == tostring(d))
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        // -- Stream value encoding as bin -----------------------------------------
+        [Fact]
+        public async Task MsgPack_Stream_ReadableSeekable_EncodesAsBin()
+        {
+            using KitsuneEngine engine = new();
+            // bin decodes to an in-memory Stream
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m   = MsgPack.New()
+                local src = Stream.Create('hello')
+                local out = m:Decode(m:Encode(src))
+                return tostring(type(out) == 'userdata')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_Stream_BinDecodes_ToStreamWithCorrectBytes()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m   = MsgPack.New()
+                local src = Stream.Create('hello bin')
+                local out = m:Decode(m:Encode(src))
+                out:Seek(0)
+                return out:Read()
+            ");
+            r.String.ShouldBe("hello bin");
+        }
+
+        [Fact]
+        public async Task MsgPack_Stream_BinDecodes_PositionAtZero()
+        {
+            using KitsuneEngine engine = new();
+            // Decoded bin stream must be seeked to 0 so the caller can read immediately.
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m   = MsgPack.New()
+                local src = Stream.Create('abc')
+                local out = m:Decode(m:Encode(src))
+                return tostring(out:pos() == 0)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_Stream_NonReadableSeekable_EncodesAsNil()
+        {
+            using KitsuneEngine engine = new();
+            // A write-only stream has no CAP_READ; must encode as nil.
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = MsgPack.New()
+                local s = Stream.Create(function(op)
+                    if op == 0 then return 2 end   -- CAP_WRITE only
+                    if op == 1 then return true end
+                end)
+                return tostring(m:Decode(m:Encode(s)) == nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_Stream_EncodePreservesReadPosition()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m   = MsgPack.New()
+                local src = Stream.Create('ABCDE')
+                src:Seek(3)
+                m:Encode(src)
+                return tostring(src:pos() == 3)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        // -- Recursion detection --------------------------------------------------
+        [Fact]
+        public async Task MsgPack_RecursionDetected_ThrowsError()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = MsgPack.New()
+                local t = {}
+                t.self = t
+                local ok, err = pcall(function() m:Encode(t) end)
+                return tostring(not ok and err:find('recursion') ~= nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        // -- Decode error handling ------------------------------------------------
+        [Fact]
+        public async Task MsgPack_Decode_InvalidBytes_ReturnsNilAndError()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = MsgPack.New()
+                local v, err = m:Decode('\xC1')   -- 0xC1 is never-used in msgpack
+                return tostring(v == nil and type(err) == 'string')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_Decode_EmptyString_ReturnsNilAndError()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = MsgPack.New()
+                local v, err = m:Decode('')
+                return tostring(v == nil and type(err) == 'string')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_Decode_TruncatedBytes_ReturnsNilAndError()
+        {
+            using KitsuneEngine engine = new();
+            // Encode a 3-element array then truncate to 1 byte (just the header).
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m    = MsgPack.New()
+                local full = m:Encode({1, 2, 3})
+                local v, err = m:Decode(full:sub(1, 1))
+                return tostring(v == nil and type(err) == 'string')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_Decode_ExtraBytes_StillDecodesFirstValue()
+        {
+            using KitsuneEngine engine = new();
+            // msgpack_unpack_next returns EXTRA_BYTES when more data follows;
+            // our decode must still return the first value successfully.
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m  = MsgPack.New()
+                local s1 = m:Encode(42)
+                local s2 = m:Encode('hello')
+                local v  = m:Decode(s1 .. s2)
+                return tostring(v == 42)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        // -- Stream I/O -----------------------------------------------------------
+        [Fact]
+        public async Task MsgPack_EncodeIntoStream_StreamContainsValidBytes()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = MsgPack.New()
+                local s = Stream.Create()
+                m:EncodeIntoStream(s, {a = 1, b = 2})
+                s:Seek(0)
+                local t = m:Decode(s:Read())
+                return tostring(t.a == 1 and t.b == 2)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_EncodeIntoStream_ReturnsTrueOnSuccess()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m  = MsgPack.New()
+                local s  = Stream.Create()
+                local ok = m:EncodeIntoStream(s, 42)
+                return tostring(ok == true)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_EncodeIntoStream_NonWritableStream_ReturnsFalse()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = MsgPack.New()
+                local s = Stream.Create(function(op)
+                    if op == 0 then return 1 end   -- CAP_READ only
+                    if op == 1 then return true end
+                end)
+                local ok, err = m:EncodeIntoStream(s, 'test')
+                return tostring(ok == false and type(err) == 'string')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_DecodeFromStream_RoundTrip()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = MsgPack.New()
+                local s = Stream.Create()
+                m:EncodeIntoStream(s, {x = 99, y = 'hello', z = true})
+                s:Seek(0)
+                local t = m:DecodeFromStream(s)
+                return tostring(t.x == 99 and t.y == 'hello' and t.z == true)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_DecodeFromStream_NonReadableStream_ReturnsNilAndError()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = MsgPack.New()
+                local s = Stream.Create(function(op)
+                    if op == 0 then return 2 end   -- CAP_WRITE only
+                    if op == 1 then return true end
+                end)
+                local v, err = m:DecodeFromStream(s)
+                return tostring(v == nil and type(err) == 'string')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_EncodeIntoStream_AdvancesStreamPosition()
+        {
+            using KitsuneEngine engine = new();
+            // msgpack integer 42 encodes as 1 byte (positive fixint).
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = MsgPack.New()
+                local s = Stream.Create()
+                m:EncodeIntoStream(s, 42)
+                return tostring(s:pos() == 1)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_DecodeFromStream_SeeksBackUnconsumedBytes()
+        {
+            using KitsuneEngine engine = new();
+            // Write two values back-to-back; DecodeFromStream must leave the stream
+            // positioned at the start of the second value.
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = MsgPack.New()
+                local s = Stream.Create()
+                m:EncodeIntoStream(s, 'first')
+                local split = s:pos()
+                m:EncodeIntoStream(s, 'second')
+                s:Seek(split)
+                local v = m:DecodeFromStream(s)
+                return tostring(v == 'second')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_DecodeFromStream_PackedValues_DecodesSequentially()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = MsgPack.New()
+                local s = Stream.Create()
+                m:EncodeIntoStream(s, {n = 1})
+                m:EncodeIntoStream(s, {n = 2})
+                m:EncodeIntoStream(s, {n = 3})
+                s:Seek(0)
+                local a = m:DecodeFromStream(s)
+                local b = m:DecodeFromStream(s)
+                local c = m:DecodeFromStream(s)
+                return tostring(a.n == 1 and b.n == 2 and c.n == 3)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task MsgPack_EncodeDecodeFromStream_LargePayload_AllValuesCorrect()
+        {
+            using KitsuneEngine engine = new();
+            // 1000 integers exercise the encoder across a non-trivial payload size.
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m    = MsgPack.New()
+                local data = {}
+                for i = 1, 1000 do data[i] = i end
+                local s = Stream.Create()
+                m:EncodeIntoStream(s, data)
+                s:Seek(0)
+                local t = m:DecodeFromStream(s)
+                return tostring(#t == 1000 and t[1] == 1 and t[500] == 500 and t[1000] == 1000)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        // -- Decode via stream (Decode(stream) delegates to DecodeFromStream) -----
+        [Fact]
+        public async Task MsgPack_Decode_AcceptsStream()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = MsgPack.New()
+                local s = Stream.Create()
+                m:EncodeIntoStream(s, 'from stream')
+                s:Seek(0)
+                return tostring(m:Decode(s) == 'from stream')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        // -- New called on instance ------------------------------------------------
+        [Fact]
+        public async Task MsgPack_New_CalledOnInstance_ReturnsNewInstance()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local a = MsgPack.New()
+                local b = a:New()
+                local s = b:Encode('hello')
+                return tostring(b:Decode(s) == 'hello')
+            ");
+            r.String.ShouldBe("true");
         }
     }
 }

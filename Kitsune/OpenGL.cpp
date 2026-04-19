@@ -713,6 +713,8 @@ int OpenGL_IsLoaded(int argc, const KitsuneVariable* argv,
 struct CountState { int count; long long bytes; };
 
 static bool count_iter(Resource* res, const void* ud) {
+	if (res->type != RESOURCE_TEXTURE)
+		return true;
 	CountState* s = (CountState*)ud;
 	s->count++;
 	ImguiTexture* tex = (ImguiTexture*)res;
@@ -743,6 +745,8 @@ int OpenGL_GetTextureCount(int argc, const KitsuneVariable* argv,
 struct CollectState { KitsuneVariable* tbl; int seq; };
 
 static bool collect_iter(Resource* res, const void* ud) {
+	if (res->type != RESOURCE_TEXTURE)
+		return true;
 	CollectState* s = (CollectState*)ud;
 	KitsuneVariable k = {};
 	k.type = KITSUNE_TINTEGER;

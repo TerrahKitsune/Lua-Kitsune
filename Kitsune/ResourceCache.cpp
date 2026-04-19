@@ -215,7 +215,7 @@ int ResourceCachePeekNextId() {
 // Resource loader state
 // ---------------------------------------------------------------------------
 
-static KitsuneVariable* s_loader     = nullptr;
+static KitsuneVariable* s_loader = nullptr;
 static KitsuneVariable* s_postLoader = nullptr;
 
 static int ResourceSetLoader(int argc, const KitsuneVariable* argv,
@@ -233,10 +233,6 @@ static int ResourceSetLoader(int argc, const KitsuneVariable* argv,
 	if (argc > 1 && argv[1].type == KITSUNE_TFUNCTION)
 		s_postLoader = KitsuneAnchorVariable(&argv[1]);
 	return 0;
-}
-
-void ResourceCacheRegisterLoaderFunction() {
-	KitsuneRegisterFunction("Resource.SetLoader", ResourceSetLoader, nullptr);
 }
 
 void ResourceCacheShutdownLoader() {
@@ -309,4 +305,171 @@ void ResourceCacheCallPostLoader(int type, int luaId, const char* source, int so
 
 	KitsuneVariable* result = KitsuneExecuteVariable(s_postLoader, 3, args);
 	KitsuneVariableFree(result);
+}
+
+// ---------------------------------------------------------------------------
+// Resource.GetType(id) -> integer (0 = invalid/unknown)
+// ---------------------------------------------------------------------------
+
+static int ResourceGetType(int argc, const KitsuneVariable* argv,
+	const kitsune_ResultSetter setter, void* ud) {
+	KitsuneVariable r = {};
+	r.type = KITSUNE_TINTEGER;
+	r.integer = 0;
+	if (argc >= 1) {
+		int luaId = (int)KitsuneAsInt(&argv[0], 0);
+		if (luaId > 0) {
+			// Check each known type
+			const int types[] = { RESOURCE_TEXTURE, RESOURCE_AUDIO_SFX, RESOURCE_AUDIO_MUSIC };
+			for (int i = 0; i < (int)(sizeof(types) / sizeof(types[0])); i++) {
+				Resource* res = ResourceCacheGetById(luaId, types[i]);
+				if (res) {
+					r.integer = res->type;
+					break;
+				}
+			}
+		}
+	}
+	setter(&r);
+	return 1;
+}
+
+// ---------------------------------------------------------------------------
+// Resource.GetSource(id) -> string | nil
+// ---------------------------------------------------------------------------
+
+static int ResourceGetSource(int argc, const KitsuneVariable* argv,
+	const kitsune_ResultSetter setter, void* ud) {
+	if (argc < 1) {
+		KitsuneVariable r = {};
+		r.type = KITSUNE_TNIL;
+		setter(&r);
+		return 1;
+	}
+	int luaId = (int)KitsuneAsInt(&argv[0], 0);
+	Resource* res = nullptr;
+	if (luaId > 0) {
+		const int types[] = { RESOURCE_TEXTURE, RESOURCE_AUDIO_SFX, RESOURCE_AUDIO_MUSIC };
+		for (int i = 0; i < (int)(sizeof(types) / sizeof(types[0])); i++) {
+			res = ResourceCacheGetById(luaId, types[i]);
+			if (res)
+				break;
+		}
+	}
+	KitsuneVariable r = {};
+	if (res && res->source) {
+		r.type = KITSUNE_TSTRING;
+		r.data = (unsigned char*)res->source;
+		r.length = strlen(res->source);
+	}
+	else {
+		r.type = KITSUNE_TNIL;
+	}
+	setter(&r);
+	return 1;
+}
+
+// ---------------------------------------------------------------------------
+// Resource.Destroy(id) — removes and finalizes any resource type by luaId
+// ---------------------------------------------------------------------------
+
+static int ResourceDestroy(int argc, const KitsuneVariable* argv,
+	const kitsune_ResultSetter setter, void* ud) {
+	if (argc < 1)
+		return 0;
+	int luaId = (int)KitsuneAsInt(&argv[0], 0);
+	if (luaId <= 0)
+		return 0;
+	const int types[] = { RESOURCE_TEXTURE, RESOURCE_AUDIO_SFX, RESOURCE_AUDIO_MUSIC };
+	for (int i = 0; i < (int)(sizeof(types) / sizeof(types[0])); i++) {
+		if (ResourceCacheRemoveById(luaId, types[i]))
+			break;
+	}
+	return 0;
+}
+
+// ---------------------------------------------------------------------------
+// Resource.GetAll() -> table of { id, type, source } tables
+// ---------------------------------------------------------------------------
+
+struct GetAllState { KitsuneVariable* tbl; int seq; };
+
+static bool get_all_iter(Resource* res, const void* ud) {
+	GetAllState* s = (GetAllState*)ud;
+
+	KitsuneVariable entryVar = {};
+	entryVar.type = KITSUNE_TTABLECONTENTS;
+	entryVar.table = nullptr;
+	KitsuneVariable* entry = KitsuneAnchorVariable(&entryVar);
+	if (!entry)
+		return true;
+
+	KitsuneVariable idKey = {};
+	idKey.type = KITSUNE_TSTRING;
+	idKey.data = (unsigned char*)"id";
+	idKey.length = 2;
+
+	KitsuneVariable typeKey = {};
+	typeKey.type = KITSUNE_TSTRING;
+	typeKey.data = (unsigned char*)"type";
+	typeKey.length = 4;
+
+	KitsuneVariable sourceKey = {};
+	sourceKey.type = KITSUNE_TSTRING;
+	sourceKey.data = (unsigned char*)"source";
+	sourceKey.length = 6;
+
+	KitsuneVariable idVal = {};
+	idVal.type = KITSUNE_TINTEGER;
+	idVal.integer = res->luaId;
+
+	KitsuneVariable typeVal = {};
+	typeVal.type = KITSUNE_TINTEGER;
+	typeVal.integer = res->type;
+
+	KitsuneVariable sourceVal = {};
+	if (res->source) {
+		sourceVal.type = KITSUNE_TSTRING;
+		sourceVal.data = (unsigned char*)res->source;
+		sourceVal.length = strlen(res->source);
+	}
+	else {
+		sourceVal.type = KITSUNE_TNIL;
+	}
+
+	KitsuneSetIndex(entry, &idKey, &idVal);
+	KitsuneSetIndex(entry, &typeKey, &typeVal);
+	KitsuneSetIndex(entry, &sourceKey, &sourceVal);
+
+	KitsuneVariable seqKey = {};
+	seqKey.type = KITSUNE_TINTEGER;
+	seqKey.integer = s->seq++;
+	KitsuneSetIndex(s->tbl, &seqKey, entry);
+	KitsuneVariableFree(entry);
+	return true;
+}
+
+static int ResourceGetAll(int argc, const KitsuneVariable* argv,
+	const kitsune_ResultSetter setter, void* ud) {
+	KitsuneVariable tableVar = {};
+	tableVar.type = KITSUNE_TTABLECONTENTS;
+	tableVar.table = nullptr;
+	KitsuneVariable* tbl = KitsuneAnchorVariable(&tableVar);
+	if (!tbl)
+		return 0;
+
+	GetAllState s = { tbl, 1 };
+	ResourceCacheIterate(get_all_iter, &s);
+
+	setter(tbl);
+	KitsuneVariableFree(tbl);
+	return 1;
+}
+
+void ResourceCacheRegisterLoaderFunction() {
+	KitsuneRegisterFunction("Resource.SetLoader", ResourceSetLoader, nullptr);
+	KitsuneRegisterFunction("Resource.GetType", ResourceGetType, nullptr);
+	KitsuneRegisterFunction("Resource.GetSource", ResourceGetSource, nullptr);
+	KitsuneRegisterFunction("Resource.Destroy", ResourceDestroy, nullptr);
+	KitsuneRegisterFunction("Resource.GetAll", ResourceGetAll, nullptr);
 }

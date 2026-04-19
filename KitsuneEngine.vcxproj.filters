@@ -234,6 +234,15 @@
     <Filter Include="LuaDecimal\Source Files">
       <UniqueIdentifier>{f30c478a-420f-4510-ab5c-38022f94f90b}</UniqueIdentifier>
     </Filter>
+    <Filter Include="LuaMsgPack">
+      <UniqueIdentifier>{c90a71d3-d90d-4719-8f1b-6c071ecd1eca}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaMsgPack\Header Files">
+      <UniqueIdentifier>{f99d8f96-b150-45aa-90ff-f9be040300f7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaMsgPack\Source Files">
+      <UniqueIdentifier>{514b926c-ce5a-42d9-b137-faac593a0756}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="KitsuneEngine.cpp">
@@ -547,6 +556,12 @@
     </ClCompile>
     <ClCompile Include="luadecimal.cpp">
       <Filter>LuaDecimal\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="luamsgpack.cpp">
+      <Filter>LuaMsgPack\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="luamsgpackmain.cpp">
+      <Filter>LuaMsgPack</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -879,6 +894,12 @@
     </ClInclude>
     <ClInclude Include="KitsuneEngine\stream.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="luamsgpack.h">
+      <Filter>LuaMsgPack\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="luamsgpackmain.h">
+      <Filter>LuaMsgPack</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

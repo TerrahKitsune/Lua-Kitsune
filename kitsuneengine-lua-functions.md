@@ -1367,7 +1367,7 @@ value   Json.Null                     -- unique null sentinel (lightuserdata)
 string  json:Encode(value)
 value   json:Decode(string | fn | stream)
 bool    json:EncodeIntoStream(stream, value)
-value   json:DecodeIntoStream(stream)
+value   json:DecodeFromStream(stream)
 nil     json:Dispose()
 ```
 
@@ -1378,7 +1378,7 @@ nil     json:Dispose()
 | `Encode` | Encode a Lua value to a JSON string |
 | `Decode` | Decode JSON from a string, a chunk-reader function, or a `Stream`. Returns the decoded value |
 | `EncodeIntoStream` | Encode `value` and write the JSON bytes directly into `stream`. Returns `true` on success, or `false, errmsg` if the stream is not writable |
-| `DecodeIntoStream` | Decode one JSON value from `stream`. Returns the decoded value, or `nil, errmsg` if the stream is not readable |
+| `DecodeFromStream` | Decode one JSON value from `stream`. Returns the decoded value, or `nil, errmsg` if the stream is not readable |
 | `Dispose` | Explicitly free the internal output buffer; called automatically by the GC |
 
 ### Null Sentinel
@@ -1464,7 +1464,7 @@ print(s:Read())
 
 -- Stream decode
 local s2 = Stream.Create('{"key":"val"}')
-print(json:DecodeIntoStream(s2).key)
+print(json:DecodeFromStream(s2).key)
 
 -- Chunked decode from file
 local f = io.open("data.json", "r")
