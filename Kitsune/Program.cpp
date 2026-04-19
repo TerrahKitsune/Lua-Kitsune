@@ -181,7 +181,7 @@ int main(int argc, char* argv[]) {
 			KitsuneVariableFree(result);
 		}
 	}
-#elif
+#else
 	KitsuneVariable* result = KitsuneGetResult(id);
 	if (result) {
 		if (result->type == KITSUNE_TSTRING && result->data && result->length > 0)
