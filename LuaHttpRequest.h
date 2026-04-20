@@ -1,16 +1,17 @@
 ﻿#pragma once
 #include "lua_main_incl.h"
 #include "stream.h"
-#include "mongoose.h"
+#include <event2/http.h>
 
 #define LUAHTTPREQUEST  "HTTPREQUEST"
 #define LUAHTTPRESPONSE "HTTPRESPONSE"
 #define LUAHTTPSERVER   "HTTPSERVER"
 
 /* Forward declarations */
-typedef struct LuaHttpResponse LuaHttpResponse;
-typedef struct LuaHttpRequest  LuaHttpRequest;
+typedef struct LuaHttpResponse    LuaHttpResponse;
+typedef struct LuaHttpRequest     LuaHttpRequest;
 typedef struct HttpOpenConnection HttpOpenConnection;
+typedef struct LuaHttpServer      LuaHttpServer;
 
 /*
  * Per-event queue node — lives on LuaHttpServer.queue_head/tail and
@@ -23,36 +24,39 @@ typedef struct HttpOpenConnection {
 } HttpOpenConnection;
 
 /*
- * One LuaHttpRequest per connection, created on first event, updated in-place.
- * Stored in Lua registry keyed by conn*.
+ * One LuaHttpRequest per HTTP request.  Stored in the Lua registry keyed by
+ * the evhttp_request pointer.  evhttp_request_own() is called on arrival so
+ * the request stays alive until we call evhttp_request_free().
  */
 typedef struct LuaHttpRequest {
-    struct mg_connection* conn;
-    char*                 url;
-    char*                 method;
-    char*                 body;
-    size_t                body_len;
-    bool                  is_finished;
-    bool                  is_error;
-    char*                 error_msg;
-    int                   headers_ref; /* luaL_ref to {[name]=value} table, LUA_NOREF initially */
-    int                   context_ref; /* luaL_ref to context table,  LUA_NOREF initially */
-    int                   response_ref;/* luaL_ref to LuaHttpResponse, LUA_NOREF initially */
+    struct evhttp_request*    req;    /* owned — evhttp_request_own() was called;
+                                        NULL after response sent (evhttp_send_done frees it) */
+    struct evhttp_connection* con;    /* stable connection pointer kept for disconnect tracking;
+                                        NULL after conn_close_cb fires                        */
+    LuaHttpServer*            server; /* back-pointer to owning server                       */
+    char*                  url;
+    char*                  method;
+    char*                  body;
+    size_t                 body_len;
+    bool                   is_finished;
+    bool                   is_error;
+    char*                  error_msg;
+    int                    headers_ref; /* luaL_ref to {[name]=value} table */
+    int                    context_ref; /* luaL_ref to context table        */
+    int                    response_ref;/* luaL_ref to LuaHttpResponse      */
 } LuaHttpRequest;
 
 /*
- * One LuaHttpResponse per connection, reached via request->response_ref.
- * conn->fn_data points to the owning LuaHttpServer so Send(Stream) can
- * enqueue into senders without needing a separate server reference.
+ * One LuaHttpResponse per request, reached via request->response_ref.
+ * Headers are set directly on the evhttp_request output headers via
+ * evhttp_add_header(), so no extra_headers buffer is needed here.
  */
 typedef struct LuaHttpResponse {
-    LuaStream*       stream;        /* NULL = not streaming; non-NULL = active sender */
-    bool             chunked;       /* true = Transfer-Encoding: chunked */
-    bool             finalized;
-    int              status_code;   /* HTTP status, default 200 */
-    char*            extra_headers; /* heap-allocated "Name: Value\r\n" pairs, NULL initially */
-    LuaHttpRequest*  connection;    /* back-pointer — nulled in LuaHttpRequest.__gc before
-                                       response_ref is unref'd; every method checks != NULL */
+    LuaStream*      stream;      /* NULL = not streaming; non-NULL = active sender */
+    bool            chunked;     /* true = evhttp_send_reply_start/chunk/end path  */
+    bool            finalized;
+    int             status_code; /* HTTP status, default 200                       */
+    LuaHttpRequest* connection;  /* back-pointer, nulled before response_ref unref */
 } LuaHttpResponse;
 
 /* push/check helpers */

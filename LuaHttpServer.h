@@ -1,15 +1,19 @@
 ﻿#pragma once
 #include "lua_main_incl.h"
 #include "LuaHttpRequest.h"
+#include <event2/event.h>
+#include <event2/http.h>
 
 typedef struct LuaHttpServer {
-    struct mg_mgr        mgr;
-    HttpOpenConnection*  queue_head;    /* oldest event — dequeue from here */
-    HttpOpenConnection*  queue_tail;    /* newest event  — enqueue here     */
-    HttpOpenConnection*  senders;       /* connections with active stream send */
-    int                  coroutine_ref; /* LUA_NOREF until Accept() first called */
+    struct event_base*   base;
+    struct evhttp*       http;
+    lua_State*           L;            /* stored for use inside libevent callbacks */
+    HttpOpenConnection*  queue_head;   /* oldest event — dequeue from here */
+    HttpOpenConnection*  queue_tail;   /* newest event  — enqueue here     */
+    HttpOpenConnection*  senders;      /* connections with active stream send */
+    int                  coroutine_ref;/* LUA_NOREF until Accept() first called */
     int                  disconnect_ref;/* LUA_NOREF or server-wide disconnect fn */
-    bool                 mgr_init;      /* true after mg_mgr_init, guards double-free */
+    bool                 http_init;    /* true after evhttp_new, guards double-free */
 } LuaHttpServer;
 
 LuaHttpServer* lua_pushhttpserver (lua_State* L);

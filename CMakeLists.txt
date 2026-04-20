@@ -171,9 +171,20 @@ option(KITSUNE_HTTP "Build with HTTP/WebSocket support (requires libcurl >= 7.86
 
 if(KITSUNE_HTTP)
 	find_package(CURL 7.86.0 REQUIRED)
-	target_sources(KitsuneEngine PRIVATE HttpCurl.cpp HttpCurlMain.cpp)
+	find_package(PkgConfig REQUIRED)
+	pkg_check_modules(LIBEVENT REQUIRED libevent)
+
+	target_sources(KitsuneEngine PRIVATE
+		HttpCurl.cpp HttpCurlMain.cpp
+		LuaHttpRequest.cpp LuaHttpResponse.cpp
+		LuaHttpServer.cpp LuaHttpServerMain.cpp)
+
 	target_compile_definitions(KitsuneEngine PRIVATE KITSUNE_HTTP)
-	target_link_libraries(KitsuneEngine PRIVATE CURL::libcurl)
+	# Suppress _strdup deprecation on Linux — consistent with Windows build flags
+	target_compile_definitions(KitsuneEngine PRIVATE _CRT_SECURE_NO_WARNINGS)
+
+	target_include_directories(KitsuneEngine PRIVATE ${LIBEVENT_INCLUDE_DIRS})
+	target_link_libraries(KitsuneEngine PRIVATE CURL::libcurl ${LIBEVENT_LINK_LIBRARIES})
 endif()
 
 # ── Optional PostgreSQL support ───────────────────────────────────────────────

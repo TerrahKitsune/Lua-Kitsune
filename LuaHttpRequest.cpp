@@ -58,7 +58,7 @@ static void safe_unref(lua_State* L, int* ref) {
 
 int HttpRequest_GetId(lua_State* L) {
     LuaHttpRequest* r = lua_checkhttprequest(L, 1);
-    lua_pushinteger(L, (lua_Integer)(uintptr_t)r->conn);
+    lua_pushinteger(L, (lua_Integer)(uintptr_t)r->req);
     return 1;
 }
 
@@ -86,12 +86,23 @@ int HttpRequest_GetHeaders(lua_State* L) {
 
 int HttpRequest_GetIp(lua_State* L) {
     LuaHttpRequest* r = lua_checkhttprequest(L, 1);
-    if (!r->conn) {
+    if (!r->req) {
         lua_pushstring(L, "");
         return 1;
     }
-    char buf[64];
-    mg_snprintf(buf, sizeof(buf), "%M", mg_print_ip_port, &r->conn->rem);
+    struct evhttp_connection* con = evhttp_request_get_connection(r->req);
+    if (!con) {
+        lua_pushstring(L, "");
+        return 1;
+    }
+    const char*  host = NULL;
+    ev_uint16_t  port = 0;
+    evhttp_connection_get_peer(con, &host, &port);
+    char buf[256];
+    if (host)
+        snprintf(buf, sizeof(buf), "%s:%u", host, (unsigned)port);
+    else
+        buf[0] = '\0';
     lua_pushstring(L, buf);
     return 1;
 }
@@ -160,7 +171,14 @@ void HttpRequest_Cleanup(lua_State* L, LuaHttpRequest* r) {
     }
 
     safe_unref(L, &r->context_ref);
-    r->conn = NULL;
+
+    /* Do NOT call evhttp_request_free here.
+       Send paths null r->req immediately so evhttp_send_done handles the free.
+       Teardown drain loops explicitly free orphaned requests after evhttp_free
+       has done TAILQ_REMOVE, making the memory-only free safe. */
+    r->req    = NULL;
+    r->con    = NULL;
+    r->server = NULL;
 }
 
 int HttpRequest_GC(lua_State* L) {
@@ -182,10 +200,6 @@ int HttpRequest_ToString(lua_State* L) {
 void HttpResponse_Cleanup(lua_State* L, LuaHttpResponse* r) {
     r->connection = NULL;
     r->stream     = NULL;
-    if (r->extra_headers) {
-        free(r->extra_headers);
-        r->extra_headers = NULL;
-    }
 }
 
 int HttpResponse_GC(lua_State* L) {

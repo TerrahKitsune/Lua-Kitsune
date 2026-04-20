@@ -1,5 +1,7 @@
 ﻿# SQLiteKitsune Extension Functions
 
+> **Windows only.** `SQLiteKitsune.dll` is a Windows DLL. It uses `DllMain`, delay-loads `KitsuneEngine.dll`, and has no Linux build at this time.
+
 The SQLiteKitsune extension bridges SQLite and the Kitsune Lua engine in both directions.  Load it with `load_extension` from SQL, or from Lua using the `SQLite` module:
 
 ```lua
@@ -636,3 +638,23 @@ SQLiteExt.RegisterVirtualTable("KV", {"Key", "Val"},
 - The extension DLL is loaded once per process.  If the host (e.g. the Kitsune engine) has already initialised a Lua state before `load_extension` is called, the extension attaches to that existing state rather than creating a new one.
 - Function references registered with `RegisterFunction`, `RegisterAggregate`, and `RegisterVirtualTable` are freed on `DLL_PROCESS_DETACH` (graceful unload only; OS-exit skips cleanup).
 - The extension stores a single `sqlite3*` handle (the first database that called `load_extension`).  All `SQLiteExt.*` Lua functions operate against that handle.
+
+---
+
+## Third-Party Notices
+
+SQLiteKitsune links against two external components:
+
+- **KitsuneEngine** — delay-loaded at runtime.  All copyright notices for KitsuneEngine and its own dependencies are in the [KitsuneEngine Third-Party Notices](../kitsuneengine-lua-functions.md#third-party-notices).
+
+- **SQLite** — compiled directly into `SQLiteKitsune.dll` as `sqlite3.c` / `sqlite3.h`.
+
+### SQLite
+
+The author disclaims copyright to the SQLite source code.  In place of a legal notice:
+
+> May you do good and not evil.  
+> May you find forgiveness for yourself and forgive others.  
+> May you share freely, never taking more than you give.
+
+*License: [Public Domain](https://www.sqlite.org/copyright.html)*

@@ -599,8 +599,11 @@
     <ClCompile Include="LuaHttpServer.cpp">
       <Filter>LuaHttpServer\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="mongoose.c">
-      <Filter>LuaHttpServer\Source Files</Filter>
+    <ClCompile Include="LuaHttpServer_new.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaHttpResponse_new.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -947,9 +950,6 @@
       <Filter>LuaHttpServer\Header Files</Filter>
     </ClInclude>
     <ClInclude Include="LuaHttpServer.h">
-      <Filter>LuaHttpServer\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="mongoose.h">
       <Filter>LuaHttpServer\Header Files</Filter>
     </ClInclude>
   </ItemGroup>

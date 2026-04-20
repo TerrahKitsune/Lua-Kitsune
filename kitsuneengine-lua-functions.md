@@ -1045,31 +1045,18 @@ ws:Close()
 
 ## HttpServer
 
-An embedded HTTP/1.1 server backed by [Mongoose](https://github.com/cesanta/mongoose). The server runs entirely inside the Lua coroutine that drives its `Accept()` loop — no background threads are created. TLS is supported via Mongoose's built-in mbedTLS integration.
+An embedded HTTP/1.1 server backed by [libevent](https://libevent.org/). The server runs entirely inside the Lua coroutine that drives its `Accept()` loop — no background threads are created.
 
 ### Creation
 
 ```lua
-HttpServer, errmsg  HttpServer.Listen(address [, tlsOpts])
+HttpServer, errmsg  HttpServer.Listen(address)
 ```
 
-Binds to `address` (e.g. `"0.0.0.0:8080"` or `"127.0.0.1:443"`). Returns the server on success, or `nil, errmsg` on failure. The optional `tlsOpts` table enables TLS:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `cert` | string | Path to PEM certificate file |
-| `key` | string | Path to PEM private key file |
-| `ca` | string | Path to CA certificate file (optional, for mutual TLS) |
+Binds to `address` (e.g. `"0.0.0.0:8080"` or `"127.0.0.1:9000"`). Returns the server on success, or `nil, errmsg` on failure.
 
 ```lua
--- Plain HTTP
 local server = assert(HttpServer.Listen("0.0.0.0:8080"))
-
--- HTTPS
-local server = assert(HttpServer.Listen("0.0.0.0:443", {
-    cert = "/etc/ssl/cert.pem",
-    key  = "/etc/ssl/key.pem",
-}))
 ```
 
 ### Coroutine pump
@@ -2189,14 +2176,20 @@ Distributed under the Boost Software License, Version 1.0.
 
 ---
 
-### Mongoose (HttpServer)
+### libevent
 
-**Copyright © 2004–2013 Sergey Lyubka**  
-**Copyright © 2013–2025 Cesanta Software Limited**
+**Copyright © 2000–2007 Niels Provos**
+**Copyright © 2007–2012 Niels Provos and Nick Mathewson**
 
-This software is used under the GNU General Public License version 2. For the terms of this license, see <https://www.gnu.org/licenses/>.
+Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
 
-*License: [GPL v2](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html)*
+1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
+3. The name of the author may not be used to endorse or promote products derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE AUTHOR "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+*License: [BSD 3-Clause](https://opensource.org/licenses/BSD-3-Clause)*
 
 ---
 

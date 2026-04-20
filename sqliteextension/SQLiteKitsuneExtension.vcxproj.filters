@@ -67,6 +67,6 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <None Include="Extension functions.md" />
+    <None Include="SQLiteKitsuneExtension-functions.md" />
   </ItemGroup>
 </Project>

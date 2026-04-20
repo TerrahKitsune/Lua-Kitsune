@@ -156,6 +156,7 @@
     <None Include="..\kitsuneengine-lua-functions.md" />
     <None Include="..\Lua\Makefile" />
     <None Include="docs\imgui-renderer-api.md" />
+    <None Include="docs\kitsune-exe.md" />
     <None Include="docs\markdown-test.md" />
     <None Include="generate_imgui_bindings.py" />
     <None Include="imgui_test.lua" />

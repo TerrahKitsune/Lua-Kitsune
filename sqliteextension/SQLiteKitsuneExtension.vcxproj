@@ -125,7 +125,7 @@ if exist "$(TargetDir)$(TargetName).pdb" copy /Y "$(TargetDir)$(TargetName).pdb"
     <ClInclude Include="vtabhelpers.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="Extension functions.md" />
+    <None Include="SQLiteKitsuneExtension-functions.md" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

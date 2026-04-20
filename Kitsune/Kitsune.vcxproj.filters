@@ -189,6 +189,7 @@
     <None Include="..\kitsuneengine-lua-functions.md">
       <Filter>Documentation</Filter>
     </None>
+    <None Include="docs\kitsune-exe.md" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="main.lua" />
