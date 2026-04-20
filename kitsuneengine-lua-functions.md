@@ -16,7 +16,8 @@ A comprehensive reference for all available functions in the Lua environment.
 - [Base64](#base64)
 - [Aes](#aes)
 - [Process](#process)
-- [HTTP](#http)
+- [HttpClient](#httpclient)
+- [HttpServer](#httpserver)
 - [Hashing (SHA256, MD5, SHA1)](#hashing)
 - [MySQL](#mysql)
 - [Postgres](#postgres)
@@ -921,16 +922,16 @@ array Process:Threads()              -- Windows only
 
 ---
 
-## HTTP
+## HttpClient
 
-The `Http` global
+The `HttpClient` global
 
 ### Creation and utilities
 
 ```lua
-HttpClient Http.Create()
-string     Http.UrlEncode(str)
-string     Http.UrlDecode(str)
+HttpClient HttpClient.Create()
+string     HttpClient.UrlEncode(str)
+string     HttpClient.UrlDecode(str)
 ```
 
 | Function | Description |
@@ -1013,7 +1014,7 @@ Binary frame mode is controlled per-client: call `client:SetBinary(true)` before
 
 ```lua
 -- Buffered GET
-local client = Http.Create()
+local client = HttpClient.Create()
 client:SetTimeout(8000)
 local co = client:Request('GET', 'https://httpbin.org/get')
 local ok, result
@@ -1037,6 +1038,221 @@ client:SetBinary(true)
 ws:Write('\xDE\xAD\xBE\xEF')    -- binary frame
 client:SetBinary(false)
 ws:Close()
+```
+
+---
+
+## HttpServer
+
+An embedded HTTP/1.1 server backed by [Mongoose](https://github.com/cesanta/mongoose). The server runs entirely inside the Lua coroutine that drives its `Accept()` loop — no background threads are created. TLS is supported via Mongoose's built-in mbedTLS integration.
+
+### Creation
+
+```lua
+HttpServer, errmsg  HttpServer.Listen(address [, tlsOpts])
+```
+
+Binds to `address` (e.g. `"0.0.0.0:8080"` or `"127.0.0.1:443"`). Returns the server on success, or `nil, errmsg` on failure. The optional `tlsOpts` table enables TLS:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `cert` | string | Path to PEM certificate file |
+| `key` | string | Path to PEM private key file |
+| `ca` | string | Path to CA certificate file (optional, for mutual TLS) |
+
+```lua
+-- Plain HTTP
+local server = assert(HttpServer.Listen("0.0.0.0:8080"))
+
+-- HTTPS
+local server = assert(HttpServer.Listen("0.0.0.0:443", {
+    cert = "/etc/ssl/cert.pem",
+    key  = "/etc/ssl/key.pem",
+}))
+```
+
+### Coroutine pump
+
+```lua
+coroutine  server:Accept()
+```
+
+Returns a coroutine (the same one on repeated calls — idempotent). Drive it with `coroutine.resume`:
+
+- `coroutine.resume(co)` — polls Mongoose, advances any active stream senders, and yields one pending `HttpRequest` when available. Returns `true, HttpRequest` when a request is ready, or `true` with no second value when idle.
+- `coroutine.resume(co, true)` — **stop flag**: tears down the server and lets the coroutine die cleanly.
+
+```lua
+local co = server:Accept()
+while coroutine.status(co) == 'suspended' do
+    local ok, req = coroutine.resume(co)
+    if req and req:IsFinished() then
+        req:GetResponse():Send('hello')
+    end
+end
+```
+
+### Server methods
+
+```lua
+nil  server:SetOnDisconnect(fn)
+nil  server:Close()
+```
+
+| Method | Description |
+|--------|-------------|
+| `SetOnDisconnect` | Register a `function(req)` called when a connection closes (after the response is sent or on error) |
+| `Close` | Tear down the server immediately. Idempotent — safe to call more than once. `__gc` calls this automatically |
+
+---
+
+### HttpRequest
+
+One `HttpRequest` object exists per connection for its lifetime. It is updated in-place on each HTTP message and queued to the `Accept()` coroutine.
+
+```lua
+string   req:GetUrl()        -- full path + query string, e.g. "/api/items?id=1"
+string   req:GetMethod()     -- HTTP verb: "GET", "POST", "PUT", "DELETE", …
+string   req:GetBody()       -- request body (empty string when none)
+table    req:GetHeaders()    -- lowercase header names → values
+string   req:GetIp()         -- remote address + port, e.g. "127.0.0.1:54321"
+integer  req:GetId()         -- unique integer identity (the connection pointer)
+bool     req:IsFinished()    -- true once headers and body have been fully received
+table    req:GetContext()    -- per-connection Lua table; created lazily, persists across resumes
+HttpResponse req:GetResponse() -- returns the paired response object
+string   req:GetError()      -- error message string, or nil when no error
+```
+
+---
+
+### HttpResponse
+
+```lua
+nil   resp:SetCode(code)
+nil   resp:SetHeader(name, value)
+bool  resp:Send(opt body)
+bool  resp:Reject(code, message)
+```
+
+| Method | Description |
+|--------|-------------|
+| `SetCode(code)` | Override the HTTP status code. Default: `200` |
+| `SetHeader(name, value)` | Add a response header. May be called multiple times |
+| `Send(opt body)` | Send the response. `body` may be omitted (no body), a `string`, or a readable `Stream`. Returns `false` when the request is not yet finished |
+| `Reject(code, message)` | Send a minimal error response with the given status code and plain-text body |
+
+#### Stream responses
+
+When `body` is a `Stream`:
+
+- **Seekable stream** (`CAP_READ + CAP_SEEK`): `Content-Length` is determined from `stream:len()` and the body is sent with a known length.
+- **Non-seekable stream** (`CAP_READ` only): `Transfer-Encoding: chunked` is used. The coroutine pump reads 64 KB chunks per iteration until the stream returns empty or `nil`.
+
+```lua
+-- Non-seekable → chunked
+local function make_stream(data)
+    local pos = 0
+    return Stream.Create(function(op, arg)
+        if op == 0 then return 1   -- CAP_READ only, no CAP_SEEK
+        elseif op == 2 then
+            local chunk = data:sub(pos + 1, pos + arg)
+            pos = pos + #chunk
+            return chunk
+        end
+    end)
+end
+resp:Send(make_stream('hello world'))
+
+-- Seekable → Content-Length
+local s = Stream.Create('hello world')
+resp:Send(s)
+```
+
+---
+
+### Examples
+
+#### Simple GET handler
+
+```lua
+local server = assert(HttpServer.Listen("0.0.0.0:8080"))
+local co = server:Accept()
+while coroutine.status(co) == 'suspended' do
+    local ok, req = coroutine.resume(co)
+    if not ok then error(req) end
+    if req and req:IsFinished() then
+        local resp = req:GetResponse()
+        resp:SetHeader('Content-Type', 'application/json')
+        resp:Send('{"status":"ok"}')
+    end
+end
+```
+
+#### POST echo with status code
+
+```lua
+local server = assert(HttpServer.Listen("0.0.0.0:8080"))
+local co = server:Accept()
+while coroutine.status(co) == 'suspended' do
+    local ok, req = coroutine.resume(co)
+    if req and req:IsFinished() then
+        if req:GetMethod() == 'POST' then
+            req:GetResponse():Send(req:GetBody())
+        else
+            req:GetResponse():Reject(405, 'Method Not Allowed')
+        end
+    end
+end
+```
+
+#### Disconnect callback
+
+```lua
+local server = assert(HttpServer.Listen("0.0.0.0:8080"))
+server:SetOnDisconnect(function(req)
+    print('disconnected', req:GetIp())
+end)
+local co = server:Accept()
+while coroutine.status(co) == 'suspended' do
+    local ok, req = coroutine.resume(co)
+    if req and req:IsFinished() then
+        req:GetResponse():Send('bye')
+    end
+end
+```
+
+#### Graceful stop via stop flag
+
+```lua
+local server = assert(HttpServer.Listen("0.0.0.0:8080"))
+local co = server:Accept()
+coroutine.resume(co)          -- start the pump
+-- ... handle requests ...
+coroutine.resume(co, true)    -- stop: tears down the server, coroutine dies
+```
+
+#### Chunked streaming response
+
+```lua
+local server = assert(HttpServer.Listen("0.0.0.0:8080"))
+local co = server:Accept()
+while coroutine.status(co) == 'suspended' do
+    local ok, req = coroutine.resume(co)
+    if req and req:IsFinished() then
+        -- A non-seekable stream triggers Transfer-Encoding: chunked
+        local data = string.rep('x', 200000)
+        local pos  = 0
+        local stream = Stream.Create(function(op, arg)
+            if op == 0 then return 1  -- CAP_READ only
+            elseif op == 2 then
+                local chunk = data:sub(pos + 1, pos + arg)
+                pos = pos + #chunk
+                return chunk
+            end
+        end)
+        req:GetResponse():Send(stream)
+    end
+end
 ```
 
 ---

@@ -243,6 +243,15 @@
     <Filter Include="LuaMsgPack\Source Files">
       <UniqueIdentifier>{514b926c-ce5a-42d9-b137-faac593a0756}</UniqueIdentifier>
     </Filter>
+    <Filter Include="LuaHttpServer">
+      <UniqueIdentifier>{4882ca08-7333-41af-a38e-b9831b8cad8b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaHttpServer\Header Files">
+      <UniqueIdentifier>{87137bdf-31fb-4e5f-b82a-ca2c115efd09}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaHttpServer\Source Files">
+      <UniqueIdentifier>{398bddc5-5f1d-4b23-82ac-08139a52fecb}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="KitsuneEngine.cpp">
@@ -562,6 +571,36 @@
     </ClCompile>
     <ClCompile Include="luamsgpackmain.cpp">
       <Filter>LuaMsgPack</Filter>
+    </ClCompile>
+    <ClCompile Include="msgpack\src\objectc.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="msgpack\src\unpack.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="msgpack\src\version.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="msgpack\src\vrefbuffer.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="msgpack\src\zone.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaHttpServerMain.cpp">
+      <Filter>LuaHttpServer</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaHttpRequest.cpp">
+      <Filter>LuaHttpServer\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaHttpResponse.cpp">
+      <Filter>LuaHttpServer\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaHttpServer.cpp">
+      <Filter>LuaHttpServer\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="mongoose.c">
+      <Filter>LuaHttpServer\Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -901,6 +940,18 @@
     <ClInclude Include="luamsgpackmain.h">
       <Filter>LuaMsgPack</Filter>
     </ClInclude>
+    <ClInclude Include="LuaHttpServerMain.h">
+      <Filter>LuaHttpServer</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaHttpRequest.h">
+      <Filter>LuaHttpServer\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaHttpServer.h">
+      <Filter>LuaHttpServer\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="mongoose.h">
+      <Filter>LuaHttpServer\Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="Lua functions.md" />
@@ -910,6 +961,7 @@
     <None Include="plans\imgui-integration.md" />
     <None Include="plans\imgui-markdown.md" />
     <None Include="plans\imgui-api-namespace-refactor.md" />
+    <None Include="plans\httpserver-integration.md" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />

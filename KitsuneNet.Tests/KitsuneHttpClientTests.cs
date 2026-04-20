@@ -14,7 +14,7 @@ namespace KitsuneNet.Tests
     /// Buffered tests use httpbin.org; streaming and WebSocket tests also use
     /// httpbin.org and wss://echo.websocket.org respectively.
     /// </summary>
-    public sealed class KitsuneHttpTests
+    public sealed class KitsuneHttpClientTests
     {
         private const string WsUrl = "wss://echo.websocket.org";
 
@@ -56,19 +56,19 @@ namespace KitsuneNet.Tests
         public async Task Http_Module_IsTableWhenAvailable()
         {
             using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("if Http == nil then return 'skip' end; return type(Http)");
+            LuaValue r = await engine.ExecuteStringAsync("if HttpClient == nil then return 'skip' end; return type(HttpClient)");
             if (r != "skip")
             {
                 r.String.ShouldBe("table");
             }
         }
 
-        // -- Http.Create -------------------------------------------------------
+        // -- HttpClient.Create -------------------------------------------------------
         [Fact]
         public async Task Http_Create_ReturnsNonNil()
         {
             using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("if Http == nil then return 'skip' end; return tostring(Http.Create() ~= nil)");
+            LuaValue r = await engine.ExecuteStringAsync("if HttpClient == nil then return 'skip' end; return tostring(HttpClient.Create() ~= nil)");
             if (r != "skip")
             {
                 r.String.ShouldBe("true");
@@ -80,8 +80,8 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
-                if Http == nil then return 'skip' end
-                local s = tostring(Http.Create())
+                if HttpClient == nil then return 'skip' end
+                local s = tostring(HttpClient.Create())
                 return tostring(type(s) == 'string' and #s > 0)
             ");
             if (r != "skip")
@@ -95,8 +95,8 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
-                if Http == nil then return 'skip' end
-                local c = Http.Create()
+                if HttpClient == nil then return 'skip' end
+                local c = HttpClient.Create()
                 c:SetTimeout(5000)
                 c:SetFollowRedirects(true)
                 c:SetVerifySSL(false)
@@ -109,14 +109,14 @@ namespace KitsuneNet.Tests
             }
         }
 
-        // -- Http.UrlEncode / Http.UrlDecode (no network required) -------------
+        // -- HttpClient.UrlEncode / HttpClient.UrlDecode (no network required) -------------
         [Fact]
         public async Task Http_UrlEncode_SpacesAreEncoded()
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
-                if Http == nil then return 'skip' end
-                return tostring(Http.UrlEncode('hello world'):find(' ') == nil)
+                if HttpClient == nil then return 'skip' end
+                return tostring(HttpClient.UrlEncode('hello world'):find(' ') == nil)
             ");
             if (r != "skip")
             {
@@ -129,8 +129,8 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
-                if Http == nil then return 'skip' end
-                return tostring(Http.UrlEncode('a&b'):find('%%26') ~= nil)
+                if HttpClient == nil then return 'skip' end
+                return tostring(HttpClient.UrlEncode('a&b'):find('%%26') ~= nil)
             ");
             if (r != "skip")
             {
@@ -143,9 +143,9 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
-                if Http == nil then return 'skip' end
+                if HttpClient == nil then return 'skip' end
                 local orig = 'hello world & foo=bar'
-                return tostring(Http.UrlDecode(Http.UrlEncode(orig)) == orig)
+                return tostring(HttpClient.UrlDecode(HttpClient.UrlEncode(orig)) == orig)
             ");
             if (r != "skip")
             {
@@ -158,9 +158,9 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
-                if Http == nil then return 'skip' end
+                if HttpClient == nil then return 'skip' end
                 local safe = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.~'
-                return tostring(Http.UrlEncode(safe) == safe)
+                return tostring(HttpClient.UrlEncode(safe) == safe)
             ");
             if (r != "skip")
             {
@@ -173,8 +173,8 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
-                if Http == nil then return 'skip' end
-                return tostring(Http.UrlDecode('hello+world') == 'hello world')
+                if HttpClient == nil then return 'skip' end
+                return tostring(HttpClient.UrlDecode('hello+world') == 'hello world')
             ");
             if (r != "skip")
             {
@@ -187,8 +187,8 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
-                if Http == nil then return 'skip' end
-                return tostring(Http.UrlEncode('') == '' and Http.UrlDecode('') == '')
+                if HttpClient == nil then return 'skip' end
+                return tostring(HttpClient.UrlEncode('') == '' and HttpClient.UrlDecode('') == '')
             ");
             if (r != "skip")
             {
@@ -202,8 +202,8 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
-                if Http == nil then return 'skip' end
-                local client = Http.Create()
+                if HttpClient == nil then return 'skip' end
+                local client = HttpClient.Create()
                 client:SetTimeout(8000)
                 client:SetVerifySSL(true)
                 local co, err = client:Request('GET', 'https://httpbin.org/get')
@@ -221,8 +221,8 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
-                if Http == nil then return 'skip' end
-                local client = Http.Create()
+                if HttpClient == nil then return 'skip' end
+                local client = HttpClient.Create()
                 client:SetTimeout(8000)
                 local co, err = client:Request('GET', 'https://httpbin.org/get')
                 local ok, result = drain(co)
@@ -239,8 +239,8 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
-                if Http == nil then return 'skip' end
-                local client = Http.Create()
+                if HttpClient == nil then return 'skip' end
+                local client = HttpClient.Create()
                 client:SetTimeout(8000)
                 local co, err = client:Request('GET', 'https://httpbin.org/get')
                 local ok, result = drain(co)
@@ -257,8 +257,8 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
-                if Http == nil then return 'skip' end
-                local client = Http.Create()
+                if HttpClient == nil then return 'skip' end
+                local client = HttpClient.Create()
                 client:SetTimeout(8000)
                 local co, err = client:Request('GET', 'https://httpbin.org/get')
                 local ok, result = drain(co)
@@ -276,8 +276,8 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
-                if Http == nil then return 'skip' end
-                local client = Http.Create()
+                if HttpClient == nil then return 'skip' end
+                local client = HttpClient.Create()
                 client:SetTimeout(8000)
                 local body = '{""key"":""kitsune""}'
                 local co, err = client:Request('POST', 'https://httpbin.org/post', body,
@@ -300,8 +300,8 @@ namespace KitsuneNet.Tests
             // 50 ms is far shorter than the 10 s delay endpoint will ever respond.
             // If the network is unreachable, DNS failure also produces nil Code.
             LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
-                if Http == nil then return 'skip' end
-                local client = Http.Create()
+                if HttpClient == nil then return 'skip' end
+                local client = HttpClient.Create()
                 client:SetTimeout(50)
                 local co, err = client:Request('GET', 'https://httpbin.org/delay/10')
                 if not co then return 'true' end
@@ -320,8 +320,8 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
-                if Http == nil then return 'skip' end
-                local client = Http.Create()
+                if HttpClient == nil then return 'skip' end
+                local client = HttpClient.Create()
                 client:SetTimeout(50)
                 local co, err = client:Request('GET', 'https://httpbin.org/delay/10')
                 if not co then return 'true' end
@@ -342,8 +342,8 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
-                if Http == nil then return 'skip' end
-                local client = Http.Create()
+                if HttpClient == nil then return 'skip' end
+                local client = HttpClient.Create()
                 client:SetTimeout(8000)
                 local sink = Stream.Create()
                 local co, err = client:Request('GET', 'https://httpbin.org/get', nil, nil, sink)
@@ -363,8 +363,8 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(StreamHelper + @"
                 run_http(function()
-                    if Http == nil then skip() end
-                    local client = Http.Create()
+                    if HttpClient == nil then skip() end
+                    local client = HttpClient.Create()
                     client:SetTimeout(8000)
                     local stream, err = client:Stream('GET', 'https://httpbin.org/get')
                     local info = stream:GetInfo()
@@ -385,8 +385,8 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(StreamHelper + @"
                 run_http(function()
-                    if Http == nil then skip() end
-                    local client = Http.Create()
+                    if HttpClient == nil then skip() end
+                    local client = HttpClient.Create()
                     client:SetTimeout(8000)
                     local stream, err = client:Stream('GET', 'https://httpbin.org/get')
                     local info = stream:GetInfo()
@@ -407,8 +407,8 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(StreamHelper + @"
                 run_http(function()
-                    if Http == nil then skip() end
-                    local client = Http.Create()
+                    if HttpClient == nil then skip() end
+                    local client = HttpClient.Create()
                     client:SetTimeout(8000)
                     local stream, err = client:Stream('GET', 'https://httpbin.org/get')
                     local info = stream:GetInfo()
@@ -435,8 +435,8 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(StreamHelper + @"
                 run_http(function()
-                    if Http == nil then skip() end
-                    local client = Http.Create()
+                    if HttpClient == nil then skip() end
+                    local client = HttpClient.Create()
                     client:SetTimeout(8000)
                     local stream, err = client:Stream('GET', 'https://httpbin.org/get')
                     local info = stream:GetInfo()
@@ -463,8 +463,8 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
-                if Http == nil then return 'skip' end
-                local client = Http.Create()
+                if HttpClient == nil then return 'skip' end
+                local client = HttpClient.Create()
                 client:SetTimeout(8000)
                 local co, err = client:Request('DELETE', 'https://httpbin.org/delete')
                 local ok, result = drain(co)
@@ -481,8 +481,8 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
-                if Http == nil then return 'skip' end
-                local client = Http.Create()
+                if HttpClient == nil then return 'skip' end
+                local client = HttpClient.Create()
                 client:SetTimeout(8000)
                 local co, err = client:Request('DELETE', 'https://httpbin.org/delete')
                 local ok, result = drain(co)
@@ -500,8 +500,8 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
-                if Http == nil then return 'skip' end
-                local client = Http.Create()
+                if HttpClient == nil then return 'skip' end
+                local client = HttpClient.Create()
                 client:SetTimeout(8000)
                 local body = '{""item"":""kitsune_put""}'
                 local co, err = client:Request('PUT', 'https://httpbin.org/put', body,
@@ -520,8 +520,8 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
-                if Http == nil then return 'skip' end
-                local client = Http.Create()
+                if HttpClient == nil then return 'skip' end
+                local client = HttpClient.Create()
                 client:SetTimeout(8000)
                 local body = '{""item"":""kitsune_put""}'
                 local co, err = client:Request('PUT', 'https://httpbin.org/put', body,
@@ -541,8 +541,8 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
-                if Http == nil then return 'skip' end
-                local client = Http.Create()
+                if HttpClient == nil then return 'skip' end
+                local client = HttpClient.Create()
                 client:SetTimeout(8000)
                 local body = '{""field"":""kitsune_patch""}'
                 local co, err = client:Request('PATCH', 'https://httpbin.org/patch', body,
@@ -561,8 +561,8 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
-                if Http == nil then return 'skip' end
-                local client = Http.Create()
+                if HttpClient == nil then return 'skip' end
+                local client = HttpClient.Create()
                 client:SetTimeout(8000)
                 local body = '{""field"":""kitsune_patch""}'
                 local co, err = client:Request('PATCH', 'https://httpbin.org/patch', body,
@@ -582,8 +582,8 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
-                if Http == nil then return 'skip' end
-                local client = Http.Create()
+                if HttpClient == nil then return 'skip' end
+                local client = HttpClient.Create()
                 client:SetTimeout(8000)
                 local co, err = client:Request('GET', 'https://httpbin.org/get?kitsune=engine&version=4')
                 local ok, result = drain(co)
@@ -603,10 +603,10 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
-                if Http == nil then return 'skip' end
-                local client = Http.Create()
+                if HttpClient == nil then return 'skip' end
+                local client = HttpClient.Create()
                 client:SetTimeout(8000)
-                local encoded = Http.UrlEncode('hello world')
+                local encoded = HttpClient.UrlEncode('hello world')
                 local co, err = client:Request('GET', 'https://httpbin.org/get?q=' .. encoded)
                 local ok, result = drain(co)
                 return tostring(result.Code == 200 and result.Contents:find('hello world') ~= nil)
@@ -623,8 +623,8 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
-                if Http == nil then return 'skip' end
-                local client = Http.Create()
+                if HttpClient == nil then return 'skip' end
+                local client = HttpClient.Create()
                 client:SetTimeout(8000)
                 client:SetDefaultHeader('X-Kitsune-Id', 'kitsune_default_hdr')
                 local co, err = client:Request('GET', 'https://httpbin.org/get')
@@ -642,8 +642,8 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
-                if Http == nil then return 'skip' end
-                local client = Http.Create()
+                if HttpClient == nil then return 'skip' end
+                local client = HttpClient.Create()
                 client:SetTimeout(8000)
                 local co, err = client:Request('GET', 'https://httpbin.org/get', nil,
                     { ['X-Kitsune-Req'] = 'kitsune_per_req_hdr' })
@@ -661,8 +661,8 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
-                if Http == nil then return 'skip' end
-                local client = Http.Create()
+                if HttpClient == nil then return 'skip' end
+                local client = HttpClient.Create()
                 client:SetTimeout(8000)
                 client:SetDefaultHeader('X-Kitsune-Default', 'val_default')
                 local co, err = client:Request('GET', 'https://httpbin.org/get', nil,
@@ -685,8 +685,8 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
-                if Http == nil then return 'skip' end
-                local client = Http.Create()
+                if HttpClient == nil then return 'skip' end
+                local client = HttpClient.Create()
                 client:SetTimeout(8000)
                 local body = 'engine=kitsune&version=4'
                 local co, err = client:Request('POST', 'https://httpbin.org/post', body,
@@ -707,8 +707,8 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(StreamHelper + @"
                 run_http(function()
-                    if Http == nil then skip() end
-                    local client = Http.Create()
+                    if HttpClient == nil then skip() end
+                    local client = HttpClient.Create()
                     client:SetTimeout(8000)
                     local stream, err = client:Stream('POST', 'https://httpbin.org/post',
                         '{""msg"":""kitsune_stream_post""}',
@@ -731,8 +731,8 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(StreamHelper + @"
                 run_http(function()
-                    if Http == nil then skip() end
-                    local client = Http.Create()
+                    if HttpClient == nil then skip() end
+                    local client = HttpClient.Create()
                     client:SetTimeout(8000)
                     local stream, err = client:Stream('POST', 'https://httpbin.org/post',
                         '{""msg"":""kitsune_stream_post""}',
@@ -758,8 +758,8 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(StreamHelper + @"
                 run_http(function()
-                    if Http == nil then skip() end
-                    local client = Http.Create()
+                    if HttpClient == nil then skip() end
+                    local client = HttpClient.Create()
                     client:SetTimeout(8000)
                     local stream, err = client:Stream('PUT', 'https://httpbin.org/put',
                         '{""msg"":""kitsune_stream_put""}',
@@ -782,8 +782,8 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(StreamHelper + @"
                 run_http(function()
-                    if Http == nil then skip() end
-                    local client = Http.Create()
+                    if HttpClient == nil then skip() end
+                    local client = HttpClient.Create()
                     client:SetTimeout(8000)
                     local stream, err = client:Stream('PATCH', 'https://httpbin.org/patch',
                         '{""msg"":""kitsune_stream_patch""}',
@@ -806,8 +806,8 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(StreamHelper + @"
                 run_http(function()
-                    if Http == nil then skip() end
-                    local client = Http.Create()
+                    if HttpClient == nil then skip() end
+                    local client = HttpClient.Create()
                     client:SetTimeout(8000)
                     local stream, err = client:Stream('DELETE', 'https://httpbin.org/delete')
                     local info = stream:GetInfo()
@@ -829,8 +829,8 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(StreamHelper + $@"
                 run_http(function()
-                    if Http == nil then skip() end
-                    local client = Http.Create()
+                    if HttpClient == nil then skip() end
+                    local client = HttpClient.Create()
                     client:SetTimeout(8000)
                     local ws, err = client:Connect('{WsUrl}')
                     if not ws then error('connect failed: ' .. tostring(err)) end
@@ -851,8 +851,8 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(StreamHelper + $@"
                 run_http(function()
-                    if Http == nil then skip() end
-                    local client = Http.Create()
+                    if HttpClient == nil then skip() end
+                    local client = HttpClient.Create()
                     client:SetTimeout(8000)
                     local ws = ws_connect(client, '{WsUrl}')
                     ws:Write('hello kitsune')
@@ -874,8 +874,8 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(StreamHelper + $@"
                 run_http(function()
-                    if Http == nil then skip() end
-                    local client = Http.Create()
+                    if HttpClient == nil then skip() end
+                    local client = HttpClient.Create()
                     client:SetTimeout(8000)
                     local ws = ws_connect(client, '{WsUrl}')
                     ws:Write('opcode_test')
@@ -898,8 +898,8 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(StreamHelper + $@"
                 run_http(function()
-                    if Http == nil then skip() end
-                    local client = Http.Create()
+                    if HttpClient == nil then skip() end
+                    local client = HttpClient.Create()
                     client:SetTimeout(8000)
                     local ws = ws_connect(client, '{WsUrl}')
                     local payload = '\1\2\3\4\5'
@@ -923,8 +923,8 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(StreamHelper + $@"
                 run_http(function()
-                    if Http == nil then skip() end
-                    local client = Http.Create()
+                    if HttpClient == nil then skip() end
+                    local client = HttpClient.Create()
                     client:SetTimeout(8000)
                     local ws = ws_connect(client, '{WsUrl}')
                     client:SetBinary(true)
@@ -948,8 +948,8 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(StreamHelper + $@"
                 run_http(function()
-                    if Http == nil then skip() end
-                    local client = Http.Create()
+                    if HttpClient == nil then skip() end
+                    local client = HttpClient.Create()
                     client:SetTimeout(8000)
                     local ws = ws_connect(client, '{WsUrl}')
                     ws:Write('complete')
@@ -972,8 +972,8 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(StreamHelper + $@"
                 run_http(function()
-                    if Http == nil then skip() end
-                    local client = Http.Create()
+                    if HttpClient == nil then skip() end
+                    local client = HttpClient.Create()
                     client:SetTimeout(8000)
                     local ws = ws_connect(client, '{WsUrl}')
                     ws:Write('frame1')
@@ -999,8 +999,8 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(StreamHelper + $@"
                 run_http(function()
-                    if Http == nil then skip() end
-                    local client = Http.Create()
+                    if HttpClient == nil then skip() end
+                    local client = HttpClient.Create()
                     client:SetTimeout(8000)
                     local ws = ws_connect(client, '{WsUrl}')
                     ws:Write('text_payload')
@@ -1030,8 +1030,8 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(StreamHelper + $@"
                 run_http(function()
-                    if Http == nil then skip() end
-                    local client = Http.Create()
+                    if HttpClient == nil then skip() end
+                    local client = HttpClient.Create()
                     client:SetTimeout(8000)
                     local ws, err = client:Connect('{WsUrl}')
                     if not ws then error('connect failed: ' .. tostring(err)) end
@@ -1053,8 +1053,8 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(StreamHelper + $@"
                 run_http(function()
-                    if Http == nil then skip() end
-                    local client = Http.Create()
+                    if HttpClient == nil then skip() end
+                    local client = HttpClient.Create()
                     client:SetTimeout(8000)
                     local ws, err = client:Connect('{WsUrl}')
                     if not ws then error('connect failed: ' .. tostring(err)) end
@@ -1077,8 +1077,8 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(StreamHelper + $@"
                 run_http(function()
-                    if Http == nil then skip() end
-                    local client = Http.Create()
+                    if HttpClient == nil then skip() end
+                    local client = HttpClient.Create()
                     client:SetTimeout(8000)
                     local ws = ws_connect(client, '{WsUrl}')
                     local payload = string.rep('kitsune_ws_', 400)

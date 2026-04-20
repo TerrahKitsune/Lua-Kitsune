@@ -71,6 +71,7 @@
 #include "luawchar.h"
 #include "LuaCsvMain.h"
 #include "SHA1Main.h"
+#include "LuaHttpServerMain.h"
 
 #include "KitsuneEngine.h"
 #include "LuaEngineBuiltins.h"
@@ -1376,7 +1377,7 @@ extern "C" {
 		luaopen_md5(L);          lua_setglobal(L, "MD5");
 		luaopen_stream(L);       lua_setglobal(L, "Stream");
 #ifdef KITSUNE_HTTP
-		luaopen_http(L);         lua_setglobal(L, "Http");
+		luaopen_http(L);         lua_setglobal(L, "HttpClient");
 #endif
 		luaopen_sha256(L);       lua_setglobal(L, "SHA256");
 		luaopen_mutex(L);        lua_setglobal(L, "Mutex");
@@ -1393,6 +1394,7 @@ extern "C" {
 		luaopen_decimal(L);      lua_setglobal(L, "Decimal");
 		luaopen_csv(L);          lua_setglobal(L, "CSV");
 		luaopen_sha1(L);         lua_setglobal(L, "SHA1");
+		luaopen_httpserver(L);   lua_setglobal(L, "HttpServer");
 
 		lua_pushcfunction(L, L_GetRuntime);    lua_setglobal(L, "Runtime");
 #ifdef _WIN32
