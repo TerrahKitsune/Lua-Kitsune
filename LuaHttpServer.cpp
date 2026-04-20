@@ -9,6 +9,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <ctype.h>
+#ifndef _WIN32
+#define _strdup strdup
+#endif
 
 /* ── defensive helpers ────────────────────────────────────────────────────── */
 
@@ -284,6 +287,7 @@ static const char* cmd_to_str(enum evhttp_cmd_type t) {
 	case EVHTTP_REQ_TRACE:    return "TRACE";
 	case EVHTTP_REQ_CONNECT:  return "CONNECT";
 	case EVHTTP_REQ_PATCH:    return "PATCH";
+	#ifdef EVHTTP_REQ_PROPFIND
 	case EVHTTP_REQ_PROPFIND: return "PROPFIND";
 	case EVHTTP_REQ_PROPPATCH:return "PROPPATCH";
 	case EVHTTP_REQ_MKCOL:    return "MKCOL";
@@ -291,6 +295,7 @@ static const char* cmd_to_str(enum evhttp_cmd_type t) {
 	case EVHTTP_REQ_UNLOCK:   return "UNLOCK";
 	case EVHTTP_REQ_COPY:     return "COPY";
 	case EVHTTP_REQ_MOVE:     return "MOVE";
+#endif
 	default:                  return "UNKNOWN";
 	}
 }
@@ -667,9 +672,13 @@ int HttpServer_Listen(lua_State* L) {
 	evhttp_set_allowed_methods(s->http,
 		EVHTTP_REQ_GET | EVHTTP_REQ_POST | EVHTTP_REQ_PUT | EVHTTP_REQ_DELETE |
 		EVHTTP_REQ_HEAD | EVHTTP_REQ_OPTIONS | EVHTTP_REQ_PATCH | EVHTTP_REQ_TRACE |
-		EVHTTP_REQ_CONNECT | EVHTTP_REQ_PROPFIND | EVHTTP_REQ_PROPPATCH |
-		EVHTTP_REQ_MKCOL | EVHTTP_REQ_LOCK | EVHTTP_REQ_UNLOCK |
-		EVHTTP_REQ_COPY | EVHTTP_REQ_MOVE);
+		EVHTTP_REQ_CONNECT
+#ifdef EVHTTP_REQ_PROPFIND
+		| EVHTTP_REQ_PROPFIND | EVHTTP_REQ_PROPPATCH
+		| EVHTTP_REQ_MKCOL | EVHTTP_REQ_LOCK | EVHTTP_REQ_UNLOCK
+		| EVHTTP_REQ_COPY | EVHTTP_REQ_MOVE
+#endif
+	);
 
 	evhttp_set_gencb(s->http, http_request_cb, s);
 

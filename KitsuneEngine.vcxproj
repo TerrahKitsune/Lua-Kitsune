@@ -109,8 +109,6 @@
     <ClCompile Include="LuaArchive.cpp" />
     <ClCompile Include="LuaArchiveMain.cpp" />
     <ClCompile Include="base64.cpp" />
-    <ClCompile Include="LuaHttpResponse_new.cpp" />
-    <ClCompile Include="LuaHttpServer_new.cpp" />
     <ClCompile Include="luajson.cpp" />
     <ClCompile Include="luajsonmain.cpp" />
     <ClCompile Include="kafkahelpers.cpp" />

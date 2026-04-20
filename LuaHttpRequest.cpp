@@ -97,7 +97,7 @@ int HttpRequest_GetIp(lua_State* L) {
     }
     const char*  host = NULL;
     ev_uint16_t  port = 0;
-    evhttp_connection_get_peer(con, &host, &port);
+    evhttp_connection_get_peer(con, (char**)&host, &port);
     char buf[256];
     if (host)
         snprintf(buf, sizeof(buf), "%s:%u", host, (unsigned)port);

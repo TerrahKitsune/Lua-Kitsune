@@ -599,12 +599,6 @@
     <ClCompile Include="LuaHttpServer.cpp">
       <Filter>LuaHttpServer\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="LuaHttpServer_new.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaHttpResponse_new.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="KitsuneEngine.h">

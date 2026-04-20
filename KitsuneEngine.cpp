@@ -1394,7 +1394,9 @@ extern "C" {
 		luaopen_decimal(L);      lua_setglobal(L, "Decimal");
 		luaopen_csv(L);          lua_setglobal(L, "CSV");
 		luaopen_sha1(L);         lua_setglobal(L, "SHA1");
+#ifdef KITSUNE_HTTP
 		luaopen_httpserver(L);   lua_setglobal(L, "HttpServer");
+#endif
 
 		lua_pushcfunction(L, L_GetRuntime);    lua_setglobal(L, "Runtime");
 #ifdef _WIN32
