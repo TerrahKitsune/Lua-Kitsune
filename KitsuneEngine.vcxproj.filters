@@ -956,6 +956,7 @@
     <None Include="plans\imgui-markdown.md" />
     <None Include="plans\imgui-api-namespace-refactor.md" />
     <None Include="plans\httpserver-integration.md" />
+    <None Include="plans\imgui-html.md" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />

@@ -53,8 +53,19 @@
 local function onResourceLoad(type, path)
     if type == 1 then -- RESOURCE_TEXTURE
         if path == "sample.png" then
-            return Stream.Open("./docs/sample.png", 'rb')
+            local ok, stream = pcall(Stream.Open, "./docs/sample.png", 'rb')
+            return ok and stream or nil
         end
+    elseif type == 4 then -- RESOURCE_FONT ("FaceName:size:style")
+        -- No custom fonts configured — return nil to use ImGui default
+        return nil
+    elseif type == 5 then -- RESOURCE_GENERIC (HTML, CSS, misc)
+        if not path or path == '' then return nil end
+        local ok, stream = pcall(Stream.Open, './' .. path, 'rb')
+        if ok and stream then return stream end
+        ok, stream = pcall(Stream.Open, './docs/' .. path, 'rb')
+        if ok and stream then return stream end
+        return nil
     end
     print("Unknown resource requested: type=" .. tostring(type) .. " path=" .. tostring(path))
     return nil
@@ -791,6 +802,70 @@ local function tabAudio(renderer, ctx)
     end
 end
 
+local function tabHtml(renderer, ctx)
+    -- Lazy-load the document once per session
+    if ctx.htmlDocId == nil then
+        ctx.htmlDocId = Resource.Resolve('docs/sample.html') or false
+    end
+    if ctx.htmlDocId and ctx.htmlDoc == nil then
+        ctx.htmlDoc = Html.Parse(ctx.htmlDocId)
+        if ctx.htmlDoc then
+            ctx.htmlLastEvent = 'none'
+            ctx.htmlLastHandle = 0
+            ctx.htmlDoc:SetEventHandler(function(eventtype, doc, handle)
+                ctx.htmlLastEvent  = eventtype
+                ctx.htmlLastHandle = handle
+                local el = doc:QueryByHandle(handle)
+                if el and eventtype == 'click' then
+                    if el.attrs and el.attrs['data-action'] == 'hello' then
+                        ctx.htmlMsg = 'Hello from Lua!'
+                    elseif el.attrs and el.attrs['data-action'] == 'world' then
+                        ctx.htmlMsg = 'World!'
+                    elseif el.tag == 'a' and el.href then
+                        ctx.htmlMsg = 'Link: ' .. el.href
+                    else
+                        ctx.htmlMsg = string.format('click id=%s tag=%s', tostring(el.id), tostring(el.tag))
+                    end
+                end
+            end)
+        end
+    end
+
+    if not ctx.htmlDoc then
+        renderer:TextColored(1, 0.4, 0.4, 1, 'HTML document not loaded (docs/sample.html)')
+        renderer:Text('Make sure Resource.SetLoader can open docs/ files.')
+        return
+    end
+
+    -- Status bar
+    renderer:Text(string.format('Last event: %-10s  handle: %d',
+        ctx.htmlLastEvent or 'none', ctx.htmlLastHandle or 0))
+    if ctx.htmlMsg then
+        renderer:SameLine()
+        renderer:Text('  =>  ' .. ctx.htmlMsg)
+    end
+
+    if renderer:Button('Reload HTML') then
+        ctx.htmlDocId = nil
+        ctx.htmlDoc   = nil
+        ctx.htmlMsg   = nil
+        return
+    end
+    renderer:SameLine()
+    if renderer:Button('Invalidate') then
+        ctx.htmlDoc:Invalidate()
+    end
+
+    renderer:Separator()
+
+    -- Render into a child region so it scrolls independently
+    local cw, ch = renderer:GetContentRegionAvail()
+    if renderer:BeginChild('##html_view', cw, ch - 4, false) then
+        renderer:Html(ctx.htmlDoc)
+    end
+    renderer:EndChild()
+end
+
 local function tabMarkdown(renderer, ctx)
     local refresh = renderer:Button('Reload')
     renderer:SameLine()
@@ -939,6 +1014,10 @@ local function render(renderer, ctx)
         end
         if renderer:BeginTabItem('Markdown') then
             tabMarkdown(renderer, ctx)
+            renderer:EndTabItem()
+        end
+        if renderer:BeginTabItem('Html') then
+            tabHtml(renderer, ctx)
             renderer:EndTabItem()
         end
         if renderer:BeginTabItem('Textures') then

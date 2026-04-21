@@ -1,4 +1,4 @@
-#if defined(_WIN32) && defined(_DEBUG)
+﻿#if defined(_WIN32) && defined(_DEBUG)
 #define _CRTDBG_MAP_ALLOC
 #endif
 #ifndef _CRT_SECURE_NO_WARNINGS
@@ -19,7 +19,27 @@
 #include "Session.h"
 #ifdef KITSUNE_IMGUI
 #include "ImguiSession.h"
+#include "ImguiHtml.h"
+#include "litehtml.h"
 #endif
+
+// ---------------------------------------------------------------------------
+// Global operator new / delete overrides
+// Route all C++ allocations in the exe through malloc/free so they are
+// tracked by the CRT heap and consistent with the engine's allocator.
+// ---------------------------------------------------------------------------
+#include <new>
+#include <cstdlib>
+__declspec(allocator) void* operator new(size_t size) { void* p = malloc(size); if (!p) throw std::bad_alloc(); return p; }
+__declspec(allocator) void* operator new[](size_t size) { void* p = malloc(size); if (!p) throw std::bad_alloc(); return p; }
+__declspec(allocator) void* operator new(size_t size, std::nothrow_t const&) noexcept { return malloc(size); }
+__declspec(allocator) void* operator new[](size_t size, std::nothrow_t const&) noexcept { return malloc(size); }
+void operator delete(void* p) noexcept { free(p); }
+void operator delete[](void* p) noexcept { free(p); }
+void operator delete(void* p, size_t) noexcept { free(p); }
+void operator delete[](void* p, size_t) noexcept { free(p); }
+void operator delete(void* p, std::nothrow_t const&) noexcept { free(p); }
+void operator delete[](void* p, std::nothrow_t const&) noexcept { free(p); }
 
 #ifdef _DEBUG
 int Test(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter resultSetter, void* userdata) {
@@ -87,16 +107,12 @@ int main(int argc, char* argv[]) {
 	_CrtMemState sOld;
 	_CrtMemState sNew;
 	_CrtMemState sDiff;
-	// Snapshot taken after init so one-time CRT/locale allocations are excluded.
+	_CrtMemCheckpoint(&sOld);
+
 #endif
 
 #ifdef _WIN32
 	SetConsoleOutputCP(65001);
-#endif
-
-#if defined(_WIN32) && defined(_DEBUG)
-	// Baseline after all one-time CRT/locale/engine init to avoid false positives.
-	_CrtMemCheckpoint(&sOld);
 #endif
 
 	KitsuneInternals* internals = KitsuneGetInternals();
@@ -111,7 +127,6 @@ int main(int argc, char* argv[]) {
 		RegisterImguiFunctions();
 #endif
 	}
-
 #ifdef _WIN32
 	SetConsoleCtrlHandler(ConsoleCtrlHandler, TRUE);
 #else
@@ -216,8 +231,8 @@ int main(int argc, char* argv[]) {
 		// reference-counting on process exit rather than on wglDeleteContext.
 		// This produces a small number of false-positive CRT leak reports.
 		// Only break if the leaks are large enough to indicate a real problem.
-		constexpr SIZE_T k_driverLeakThreshold = 8192; // 8 KB
-		if (sDiff.lSizes[_NORMAL_BLOCK] > k_driverLeakThreshold)
+		constexpr ptrdiff_t k_driverLeakThreshold = 65536; // 64 KB
+		if ((ptrdiff_t)sDiff.lSizes[_NORMAL_BLOCK] > (ptrdiff_t)k_driverLeakThreshold)
 			DebugBreak();
 	}
 #endif

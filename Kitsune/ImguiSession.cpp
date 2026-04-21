@@ -14,6 +14,8 @@
 #include "Win32Console.h"
 #include "ImguiEnums.h"
 #include "OpenGL.h"
+#include "Font.h"
+#include "ImguiHtml.h"
 #include "SDLAudio.h"
 #include "ResourceCache.h"
 
@@ -33,6 +35,8 @@ void RegisterImguiFunctions() {
 	RegisterSDLInputFunctions();
 	RegisterWin32ConsoleFunctions();
 	RegisterOpenGLFunctions();
+	RegisterFontFunctions();
+	RegisterHtmlFunctions();
 	RegisterSDLAudioFunctions();
 	ResourceCacheRegisterLoaderFunction();
 	register_imgui_enums();

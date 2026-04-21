@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
@@ -55,11 +55,12 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>SDL_MAIN_HANDLED;KITSUNE_IMGUI;SQLITE_ENABLE_LOAD_EXTENSION;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NOMINMAX;SDL_MAIN_HANDLED;KITSUNE_IMGUI;SQLITE_ENABLE_LOAD_EXTENSION;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
-      <AdditionalIncludeDirectories>$(ProjectDir)Imgui;$(ProjectDir)SDL2\include;$(ProjectDir)SDL2_mixer\include;$(ProjectDir)..;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)Imgui;$(ProjectDir)litehtml\include;$(ProjectDir)litehtml\include\litehtml;$(ProjectDir)litehtml\src;$(ProjectDir)litehtml\src\gumbo;$(ProjectDir)litehtml\src\gumbo\include;$(ProjectDir)litehtml\src\gumbo\include\gumbo;$(ProjectDir)litehtml\src\gumbo\visualc\include;$(ProjectDir)SDL2\include;$(ProjectDir)SDL2_mixer\include;$(ProjectDir)..;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -75,11 +76,12 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>SDL_MAIN_HANDLED;KITSUNE_IMGUI;SQLITE_ENABLE_LOAD_EXTENSION;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NOMINMAX;SDL_MAIN_HANDLED;KITSUNE_IMGUI;SQLITE_ENABLE_LOAD_EXTENSION;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
-      <AdditionalIncludeDirectories>$(ProjectDir)Imgui;$(ProjectDir)SDL2\include;$(ProjectDir)SDL2_mixer\include;$(ProjectDir)..;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)Imgui;$(ProjectDir)litehtml\include;$(ProjectDir)litehtml\include\litehtml;$(ProjectDir)litehtml\src;$(ProjectDir)litehtml\src\gumbo;$(ProjectDir)litehtml\src\gumbo\include;$(ProjectDir)litehtml\src\gumbo\include\gumbo;$(ProjectDir)litehtml\src\gumbo\visualc\include;$(ProjectDir)SDL2\include;$(ProjectDir)SDL2_mixer\include;$(ProjectDir)..;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -91,6 +93,8 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Font.cpp" />
+    <ClCompile Include="ImguiHtml.cpp" />
     <ClCompile Include="OpenGL.cpp" />
     <ClCompile Include="RenderLoop.cpp" />
     <ClCompile Include="ImguiMarkdown.cpp" />
@@ -116,6 +120,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\KitsuneEngine.h" />
+    <ClInclude Include="Font.h" />
+    <ClInclude Include="ImguiHtml.h" />
+    <ClInclude Include="litehtml\include\litehtml.h" />
     <ClInclude Include="OpenGL.h" />
     <ClInclude Include="RenderLoop.h" />
     <ClInclude Include="resource.h" />
@@ -166,5 +173,77 @@
       <Command>xcopy /y /d "$(ProjectDir)SDL2_mixer\lib\x64\SDL2_mixer.dll" "$(OutDir)"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="litehtml\src\background.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\codepoint.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\css_borders.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\css_length.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\css_parser.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\css_properties.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\css_selector.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\css_tokenizer.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\document.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\document_container.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\el_anchor.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\el_base.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\el_before_after.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\el_body.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\el_break.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\el_cdata.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\el_comment.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\el_div.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\el_font.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\el_image.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\el_link.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\el_para.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\el_script.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\el_space.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\el_style.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\el_table.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\el_td.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\el_text.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\el_title.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\el_tr.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\element.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\encodings.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\flex_item.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\flex_line.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\formatting_context.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\gradient.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\html.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\html_microsyntaxes.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\html_tag.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\iterators.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\line_box.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\media_query.cpp"><AdditionalOptions>/permissive- /utf-8 %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\num_cvt.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\render_block.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\render_block_context.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\render_flex.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\render_image.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\render_inline_context.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\render_item.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\render_table.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\string_id.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\style.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\stylesheet.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\table.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\tstring_view.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\url.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\url_path.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\utf8_strings.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\web_color.cpp"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\gumbo\attribute.c"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\gumbo\char_ref.c"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\gumbo\error.c"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\gumbo\parser.c"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\gumbo\string_buffer.c"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\gumbo\string_piece.c"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\gumbo\tag.c"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\gumbo\tokenizer.c"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\gumbo\utf8.c"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\gumbo\util.c"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+    <ClCompile Include="litehtml\src\gumbo\vector.c"><AdditionalOptions>/permissive- %(AdditionalOptions)</AdditionalOptions></ClCompile>
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

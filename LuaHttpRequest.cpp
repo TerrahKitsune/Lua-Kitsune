@@ -95,9 +95,15 @@ int HttpRequest_GetIp(lua_State* L) {
         lua_pushstring(L, "");
         return 1;
     }
-    const char*  host = NULL;
-    ev_uint16_t  port = 0;
-    evhttp_connection_get_peer(con, (char**)&host, &port);
+    /* libevent < 2.2 declares get_peer with (char**); >= 2.2 uses (const char**).
+       Use const char* and suppress the const drop on older Linux libevent. */
+        const char* host = NULL;
+        ev_uint16_t port = 0;
+    #if defined(_WIN32) || defined(EVHTTP_CON_PEER_CONST)
+        evhttp_connection_get_peer(con, &host, &port);
+    #else
+        evhttp_connection_get_peer(con, (char**)&host, &port);
+    #endif
     char buf[256];
     if (host)
         snprintf(buf, sizeof(buf), "%s:%u", host, (unsigned)port);

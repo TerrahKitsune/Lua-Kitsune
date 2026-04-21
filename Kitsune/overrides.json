@@ -19,6 +19,7 @@
     "TextColored",
     "TextDisabled",
     "TextWrapped",
-    "BulletText"
+    "BulletText",
+    "PushFont"
   ]
 }

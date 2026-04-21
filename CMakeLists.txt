@@ -314,6 +314,11 @@ option(KITSUNE_IMGUI "Build with ImGui support (requires SDL2 and OpenGL)" OFF)
 if(KITSUNE_IMGUI)
 	find_package(OpenGL REQUIRED)
 
+	# ── litehtml (bundled) ────────────────────────────────────────────────────
+	set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+	add_subdirectory("${CMAKE_SOURCE_DIR}/Kitsune/litehtml" litehtml EXCLUDE_FROM_ALL)
+	set_target_properties(litehtml PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 	# SDL2: use the pre-built binaries in SDL2/ (mirrors the hiredis/postgres pattern).
 	# On Linux, fall back to system SDL2 via pkg-config if the local folder is absent.
 	if(EXISTS "${CMAKE_SOURCE_DIR}/Kitsune/SDL2/include/SDL.h")
@@ -336,6 +341,8 @@ if(KITSUNE_IMGUI)
 		Kitsune/ImguiEnums.cpp
 		Kitsune/ImguiRenderer_generated.cpp
 		Kitsune/ImguiEnums_generated.cpp
+		Kitsune/Font.cpp
+		Kitsune/ImguiHtml.cpp
 		Kitsune/Imgui/imgui.cpp
 		Kitsune/Imgui/imgui_draw.cpp
 		Kitsune/Imgui/imgui_tables.cpp
@@ -349,12 +356,14 @@ if(KITSUNE_IMGUI)
 
 	target_include_directories(kitsune PRIVATE
 		"${CMAKE_SOURCE_DIR}/Kitsune/Imgui"
+		"${CMAKE_SOURCE_DIR}/Kitsune/litehtml/include"
 		${SDL2_INCLUDE_DIRS}
 	)
 
 	target_link_libraries(kitsune PRIVATE
 		${SDL2_LIBRARIES}
 		OpenGL::GL
+		litehtml
 	)
 
 	# ── Optional SDL_mixer audio support (requires KITSUNE_IMGUI) ─────────────

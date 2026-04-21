@@ -12,6 +12,8 @@
 #include "ImguiRenderer.h"
 #include "ImguiEnums.h"
 #include "OpenGL.h"
+#include "Font.h"
+#include "ImguiHtml.h"
 #include "SDLAudio.h"
 #include "ResourceCache.h"
 #include "SDLInput.h"
@@ -301,6 +303,12 @@ void RunImguiSession() {
 
 		UpdateFrameTiming();
 
+		if (FontAtlasRebuildPending()) {
+			ImGui::GetIO().Fonts->Build();
+			ImGui_ImplOpenGL3_CreateFontsTexture();
+			FontClearRebuildFlag();
+		}
+
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplSDL2_NewFrame();
 		ImGui::NewFrame();
@@ -377,6 +385,9 @@ void RunImguiSession() {
 
 	// Free loader callbacks before cache shutdown so no Lua calls fire during finalizers.
 	ResourceCacheShutdownLoader();
+
+	// Destroy all live HtmlDocuments before GL/resource teardown.
+	HtmlShutdown();
 
 	// Free all resources before GL teardown so finalizers can call glDeleteTextures
 	ResourceCacheShutdown();

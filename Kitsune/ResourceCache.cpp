@@ -311,6 +311,58 @@ void ResourceCacheCallPostLoader(int type, int luaId, const char* source, int so
 // Resource.GetType(id) -> integer (0 = invalid/unknown)
 // ---------------------------------------------------------------------------
 
+// Finalizer for GenericResource nodes.
+static void generic_free(Resource* node) {
+	GenericResource* g = (GenericResource*)node;
+	free(g->data);
+	free(g->resource.source);
+	free(g);
+}
+
+// Read bytes from a stream or string argument into a heap buffer.
+// argv[i] may be a KITSUNE_TUSERDATA stream or a KITSUNE_TSTRING.
+// Returns heap-allocated buffer and sets *outLen on success; returns nullptr on failure.
+static uint8_t* read_generic_input(const KitsuneVariable* arg, size_t* outLen) {
+	*outLen = 0;
+	if (!arg)
+		return nullptr;
+	if (arg->type == KITSUNE_TSTRING) {
+		if (arg->length == 0)
+			return nullptr;
+		uint8_t* buf = (uint8_t*)malloc(arg->length);
+		if (!buf)
+			return nullptr;
+		memcpy(buf, arg->data, arg->length);
+		*outLen = arg->length;
+		return buf;
+	}
+	if (arg->type == KITSUNE_TUSERDATA) {
+		KitsuneVariable seekArg = {};
+		seekArg.type = KITSUNE_TINTEGER;
+		seekArg.integer = 0;
+		KitsuneVariable* r = KitsuneCallMethod(arg, "Seek", 1, &seekArg);
+		bool ok = r && r->type != KITSUNE_TERROR;
+		KitsuneVariableFree(r);
+		if (!ok)
+			return nullptr;
+		KitsuneVariable* readResult = KitsuneCallMethod(arg, "Read", 0, nullptr);
+		if (!readResult || readResult->type != KITSUNE_TSTRING || readResult->length == 0) {
+			KitsuneVariableFree(readResult);
+			return nullptr;
+		}
+		uint8_t* buf = (uint8_t*)malloc(readResult->length);
+		if (!buf) {
+			KitsuneVariableFree(readResult);
+			return nullptr;
+		}
+		memcpy(buf, readResult->data, readResult->length);
+		*outLen = readResult->length;
+		KitsuneVariableFree(readResult);
+		return buf;
+	}
+	return nullptr;
+}
+
 static int ResourceGetType(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
 	KitsuneVariable r = {};
@@ -320,7 +372,7 @@ static int ResourceGetType(int argc, const KitsuneVariable* argv,
 		int luaId = (int)KitsuneAsInt(&argv[0], 0);
 		if (luaId > 0) {
 			// Check each known type
-			const int types[] = { RESOURCE_TEXTURE, RESOURCE_AUDIO_SFX, RESOURCE_AUDIO_MUSIC };
+			const int types[] = { RESOURCE_TEXTURE, RESOURCE_AUDIO_SFX, RESOURCE_AUDIO_MUSIC, RESOURCE_FONT, RESOURCE_GENERIC };
 			for (int i = 0; i < (int)(sizeof(types) / sizeof(types[0])); i++) {
 				Resource* res = ResourceCacheGetById(luaId, types[i]);
 				if (res) {
@@ -349,7 +401,7 @@ static int ResourceGetSource(int argc, const KitsuneVariable* argv,
 	int luaId = (int)KitsuneAsInt(&argv[0], 0);
 	Resource* res = nullptr;
 	if (luaId > 0) {
-		const int types[] = { RESOURCE_TEXTURE, RESOURCE_AUDIO_SFX, RESOURCE_AUDIO_MUSIC };
+		const int types[] = { RESOURCE_TEXTURE, RESOURCE_AUDIO_SFX, RESOURCE_AUDIO_MUSIC, RESOURCE_FONT, RESOURCE_GENERIC };
 		for (int i = 0; i < (int)(sizeof(types) / sizeof(types[0])); i++) {
 			res = ResourceCacheGetById(luaId, types[i]);
 			if (res)
@@ -380,7 +432,7 @@ static int ResourceDestroy(int argc, const KitsuneVariable* argv,
 	int luaId = (int)KitsuneAsInt(&argv[0], 0);
 	if (luaId <= 0)
 		return 0;
-	const int types[] = { RESOURCE_TEXTURE, RESOURCE_AUDIO_SFX, RESOURCE_AUDIO_MUSIC };
+	const int types[] = { RESOURCE_TEXTURE, RESOURCE_AUDIO_SFX, RESOURCE_AUDIO_MUSIC, RESOURCE_FONT, RESOURCE_GENERIC };
 	for (int i = 0; i < (int)(sizeof(types) / sizeof(types[0])); i++) {
 		if (ResourceCacheRemoveById(luaId, types[i]))
 			break;
@@ -394,15 +446,15 @@ static int ResourceDestroy(int argc, const KitsuneVariable* argv,
 
 struct GetAllState { KitsuneVariable* tbl; int seq; };
 
-static bool get_all_iter(Resource* res, const void* ud) {
-	GetAllState* s = (GetAllState*)ud;
-
+// Builds a single { id, type, source } table for res into an anchored variable.
+// Caller must KitsuneVariableFree the returned pointer. Returns nullptr on OOM.
+static KitsuneVariable* build_resource_entry(const Resource* res) {
 	KitsuneVariable entryVar = {};
 	entryVar.type = KITSUNE_TTABLECONTENTS;
 	entryVar.table = nullptr;
 	KitsuneVariable* entry = KitsuneAnchorVariable(&entryVar);
 	if (!entry)
-		return true;
+		return nullptr;
 
 	KitsuneVariable idKey = {};
 	idKey.type = KITSUNE_TSTRING;
@@ -440,7 +492,14 @@ static bool get_all_iter(Resource* res, const void* ud) {
 	KitsuneSetIndex(entry, &idKey, &idVal);
 	KitsuneSetIndex(entry, &typeKey, &typeVal);
 	KitsuneSetIndex(entry, &sourceKey, &sourceVal);
+	return entry;
+}
 
+static bool get_all_iter(Resource* res, const void* ud) {
+	GetAllState* s = (GetAllState*)ud;
+	KitsuneVariable* entry = build_resource_entry(res);
+	if (!entry)
+		return true;
 	KitsuneVariable seqKey = {};
 	seqKey.type = KITSUNE_TINTEGER;
 	seqKey.integer = s->seq++;
@@ -466,10 +525,313 @@ static int ResourceGetAll(int argc, const KitsuneVariable* argv,
 	return 1;
 }
 
+// ---------------------------------------------------------------------------
+// Resource.Resolve(source) -> luaId | nil
+// Looks up RESOURCE_GENERIC by source. On miss calls the loader; if the loader
+// returns a stream or string the bytes are stored as a new GenericResource.
+// Safe to call every frame — returns the cached id on hit with no allocation.
+// ---------------------------------------------------------------------------
+
+static int ResourceResolve(int argc, const KitsuneVariable* argv,
+	const kitsune_ResultSetter setter, void* ud) {
+	KitsuneVariable r = {};
+	r.type = KITSUNE_TNIL;
+	if (argc < 1 || argv[0].type != KITSUNE_TSTRING || argv[0].length == 0) {
+		setter(&r);
+		return 1;
+	}
+	const char* source = (const char*)argv[0].data;
+	int sourceLen = (int)argv[0].length;
+	Resource* existing = ResourceCacheGetBySource(source, RESOURCE_GENERIC);
+	if (existing) {
+		r.type = KITSUNE_TINTEGER;
+		r.integer = existing->luaId;
+		setter(&r);
+		return 1;
+	}
+	KitsuneVariable* streamVar = ResourceCacheCallLoader(RESOURCE_GENERIC, source, sourceLen);
+	if (!streamVar) {
+		setter(&r);
+		return 1;
+	}
+	size_t len = 0;
+	uint8_t* buf = read_generic_input(streamVar, &len);
+	KitsuneVariableFree(streamVar);
+	if (!buf) {
+		setter(&r);
+		return 1;
+	}
+	GenericResource* g = (GenericResource*)calloc(1, sizeof(GenericResource));
+	if (!g) {
+		free(buf);
+		setter(&r);
+		return 1;
+	}
+	g->resource.type = RESOURCE_GENERIC;
+	g->resource.source = (char*)malloc(sourceLen + 1);
+	if (g->resource.source) {
+		memcpy(g->resource.source, source, sourceLen);
+		g->resource.source[sourceLen] = '\0';
+	}
+	g->resource.fn = generic_free;
+	g->data = buf;
+	g->length = len;
+	if (!ResourceCacheAdd(&g->resource)) {
+		generic_free(&g->resource);
+		setter(&r);
+		return 1;
+	}
+	ResourceCacheCallPostLoader(RESOURCE_GENERIC, g->resource.luaId, source, sourceLen);
+	r.type = KITSUNE_TINTEGER;
+	r.integer = g->resource.luaId;
+	setter(&r);
+	return 1;
+}
+
+// ---------------------------------------------------------------------------
+// Resource.Load(stream_or_string, source) -> luaId | nil
+// Stores bytes directly as RESOURCE_GENERIC. If a node with the same source
+// already exists it is replaced (same luaId). source is optional.
+// ---------------------------------------------------------------------------
+
+static int ResourceLoad(int argc, const KitsuneVariable* argv,
+	const kitsune_ResultSetter setter, void* ud) {
+	KitsuneVariable r = {};
+	r.type = KITSUNE_TNIL;
+	if (argc < 1) {
+		setter(&r);
+		return 1;
+	}
+	size_t len = 0;
+	uint8_t* buf = read_generic_input(&argv[0], &len);
+	if (!buf) {
+		setter(&r);
+		return 1;
+	}
+	const char* source = nullptr;
+	int sourceLen = 0;
+	if (argc >= 2 && argv[1].type == KITSUNE_TSTRING && argv[1].length > 0) {
+		source = (const char*)argv[1].data;
+		sourceLen = (int)argv[1].length;
+	}
+	GenericResource* g = (GenericResource*)calloc(1, sizeof(GenericResource));
+	if (!g) {
+		free(buf);
+		setter(&r);
+		return 1;
+	}
+	g->resource.type = RESOURCE_GENERIC;
+	if (source) {
+		g->resource.source = (char*)malloc(sourceLen + 1);
+		if (g->resource.source) {
+			memcpy(g->resource.source, source, sourceLen);
+			g->resource.source[sourceLen] = '\0';
+		}
+	}
+	g->resource.fn = generic_free;
+	g->data = buf;
+	g->length = len;
+	if (!ResourceCacheUpsert(&g->resource)) {
+		generic_free(&g->resource);
+		setter(&r);
+		return 1;
+	}
+	r.type = KITSUNE_TINTEGER;
+	r.integer = g->resource.luaId;
+	setter(&r);
+	return 1;
+}
+
+// ---------------------------------------------------------------------------
+// Resource.Replace(luaId, stream_or_string_or_nil) -> true | false
+// Replaces the data of an existing RESOURCE_GENERIC in place, preserving its
+// luaId and source. Passing nil zeroes the buffer (data=nullptr, length=0) —
+// the node remains in the cache as an empty sentinel; callers must check data.
+// ---------------------------------------------------------------------------
+
+static int ResourceReplace(int argc, const KitsuneVariable* argv,
+	const kitsune_ResultSetter setter, void* ud) {
+	KitsuneVariable r = {};
+	r.type = KITSUNE_TBOOLEAN;
+	r.boolean = false;
+	if (argc < 1) {
+		setter(&r);
+		return 1;
+	}
+	int luaId = (int)KitsuneAsInt(&argv[0], 0);
+	if (luaId <= 0) {
+		setter(&r);
+		return 1;
+	}
+	GenericResource* g = (GenericResource*)ResourceCacheGetById(luaId, RESOURCE_GENERIC);
+	if (!g) {
+		setter(&r);
+		return 1;
+	}
+	free(g->data);
+	g->data = nullptr;
+	g->length = 0;
+	if (argc >= 2 && argv[1].type != KITSUNE_TNIL && argv[1].type != KITSUNE_TNONE) {
+		size_t len = 0;
+		uint8_t* buf = read_generic_input(&argv[1], &len);
+		if (!buf) {
+			setter(&r);
+			return 1;
+		}
+		g->data = buf;
+		g->length = len;
+	}
+	r.boolean = true;
+	setter(&r);
+	return 1;
+}
+
+// ---------------------------------------------------------------------------
+// Resource.Get(luaId) -> string | "" | nil
+// Returns RESOURCE_GENERIC contents as a Lua string.
+// Returns "" if the node exists but data is nullptr (empty sentinel).
+// Returns nil if luaId is not a RESOURCE_GENERIC or does not exist.
+// ---------------------------------------------------------------------------
+
+static int ResourceGet(int argc, const KitsuneVariable* argv,
+	const kitsune_ResultSetter setter, void* ud) {
+	KitsuneVariable r = {};
+	r.type = KITSUNE_TNIL;
+	if (argc < 1) {
+		setter(&r);
+		return 1;
+	}
+	int luaId = (int)KitsuneAsInt(&argv[0], 0);
+	if (luaId <= 0) {
+		setter(&r);
+		return 1;
+	}
+	GenericResource* g = (GenericResource*)ResourceCacheGetById(luaId, RESOURCE_GENERIC);
+	if (!g) {
+		setter(&r);
+		return 1;
+	}
+	r.type = KITSUNE_TSTRING;
+	r.data = g->data ? g->data : (unsigned char*)"";
+	r.length = g->data ? (unsigned int)g->length : 0;
+	setter(&r);
+	return 1;
+}
+
+// ---------------------------------------------------------------------------
+// Resource.Info(luaId) -> { id, type, source } | nil
+// Returns a single entry table for any resource type, or nil if not found.
+// ---------------------------------------------------------------------------
+
+static int ResourceInfo(int argc, const KitsuneVariable* argv,
+	const kitsune_ResultSetter setter, void* ud) {
+	KitsuneVariable r = {};
+	r.type = KITSUNE_TNIL;
+	if (argc < 1) {
+		setter(&r);
+		return 1;
+	}
+	int luaId = (int)KitsuneAsInt(&argv[0], 0);
+	if (luaId <= 0) {
+		setter(&r);
+		return 1;
+	}
+	const int types[] = { RESOURCE_TEXTURE, RESOURCE_AUDIO_SFX, RESOURCE_AUDIO_MUSIC, RESOURCE_FONT, RESOURCE_GENERIC };
+	Resource* res = nullptr;
+	for (int i = 0; i < (int)(sizeof(types) / sizeof(types[0])); i++) {
+		res = ResourceCacheGetById(luaId, types[i]);
+		if (res)
+			break;
+	}
+	if (!res) {
+		setter(&r);
+		return 1;
+	}
+	KitsuneVariable* entry = build_resource_entry(res);
+	if (!entry) {
+		setter(&r);
+		return 1;
+	}
+	setter(entry);
+	KitsuneVariableFree(entry);
+	return 1;
+}
+
+// ---------------------------------------------------------------------------
+// Resource.GetIdBySource(source, opt type) -> luaId | nil
+// Looks up a resource by source string. type defaults to RESOURCE_GENERIC.
+// ---------------------------------------------------------------------------
+
+static int ResourceGetIdBySource(int argc, const KitsuneVariable* argv,
+	const kitsune_ResultSetter setter, void* ud) {
+	KitsuneVariable r = {};
+	r.type = KITSUNE_TNIL;
+	if (argc < 1 || argv[0].type != KITSUNE_TSTRING || argv[0].length == 0) {
+		setter(&r);
+		return 1;
+	}
+	const char* source = (const char*)argv[0].data;
+	int type = RESOURCE_GENERIC;
+	if (argc >= 2 && (argv[1].type == KITSUNE_TINTEGER || argv[1].type == KITSUNE_TNUMBER))
+		type = (int)KitsuneAsInt(&argv[1], RESOURCE_GENERIC);
+	Resource* res = ResourceCacheGetBySource(source, type);
+	if (res) {
+		r.type = KITSUNE_TINTEGER;
+		r.integer = res->luaId;
+	}
+	setter(&r);
+	return 1;
+}
+
+// ---------------------------------------------------------------------------
+// Resource.GetAllIds(opt allTypes) -> flat integer array of luaIds
+// allTypes=true returns ids for all resource types.
+// allTypes=false/nil (default) returns only RESOURCE_GENERIC ids.
+// ---------------------------------------------------------------------------
+
+struct GetAllIdsState { KitsuneVariable* tbl; int seq; bool allTypes; };
+
+static bool get_all_ids_iter(Resource* res, const void* ud) {
+	GetAllIdsState* s = (GetAllIdsState*)ud;
+	if (!s->allTypes && res->type != RESOURCE_GENERIC)
+		return true;
+	KitsuneVariable seqKey = {};
+	seqKey.type = KITSUNE_TINTEGER;
+	seqKey.integer = s->seq++;
+	KitsuneVariable val = {};
+	val.type = KITSUNE_TINTEGER;
+	val.integer = res->luaId;
+	KitsuneSetIndex(s->tbl, &seqKey, &val);
+	return true;
+}
+
+static int ResourceGetAllIds(int argc, const KitsuneVariable* argv,
+	const kitsune_ResultSetter setter, void* ud) {
+	bool allTypes = argc >= 1 && KitsuneAsBool(&argv[0]);
+	KitsuneVariable tableVar = {};
+	tableVar.type = KITSUNE_TTABLECONTENTS;
+	tableVar.table = nullptr;
+	KitsuneVariable* tbl = KitsuneAnchorVariable(&tableVar);
+	if (!tbl)
+		return 0;
+	GetAllIdsState s = { tbl, 1, allTypes };
+	ResourceCacheIterate(get_all_ids_iter, &s);
+	setter(tbl);
+	KitsuneVariableFree(tbl);
+	return 1;
+}
+
 void ResourceCacheRegisterLoaderFunction() {
 	KitsuneRegisterFunction("Resource.SetLoader", ResourceSetLoader, nullptr);
 	KitsuneRegisterFunction("Resource.GetType", ResourceGetType, nullptr);
 	KitsuneRegisterFunction("Resource.GetSource", ResourceGetSource, nullptr);
 	KitsuneRegisterFunction("Resource.Destroy", ResourceDestroy, nullptr);
 	KitsuneRegisterFunction("Resource.GetAll", ResourceGetAll, nullptr);
+	KitsuneRegisterFunction("Resource.Resolve", ResourceResolve, nullptr);
+	KitsuneRegisterFunction("Resource.Load", ResourceLoad, nullptr);
+	KitsuneRegisterFunction("Resource.Replace", ResourceReplace, nullptr);
+	KitsuneRegisterFunction("Resource.Get", ResourceGet, nullptr);
+	KitsuneRegisterFunction("Resource.Info", ResourceInfo, nullptr);
+	KitsuneRegisterFunction("Resource.GetIdBySource", ResourceGetIdBySource, nullptr);
+	KitsuneRegisterFunction("Resource.GetAllIds", ResourceGetAllIds, nullptr);
 }

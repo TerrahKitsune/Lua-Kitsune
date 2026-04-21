@@ -7,6 +7,8 @@
 #define RESOURCE_TEXTURE     1
 #define RESOURCE_AUDIO_SFX   2
 #define RESOURCE_AUDIO_MUSIC 3
+#define RESOURCE_FONT        4
+#define RESOURCE_GENERIC     5
 
 // Forward declaration
 struct Resource;
@@ -22,6 +24,14 @@ struct Resource {
 	int               luaId;   // assigned by cache on Add/Upsert; 0 = not yet assigned
 	char* source;  // heap-owned; nullptr for unsourced resources
 	ResourceFinalizer fn;      // called by ResourceCacheRemove; must free node
+};
+
+// Generic raw-bytes resource. data may be nullptr when the resource exists as
+// a sentinel (Replace called with nil) — callers must check before using data.
+struct GenericResource {
+	Resource  resource;   // type=RESOURCE_GENERIC; luaId and source live here
+	uint8_t*  data;       // heap-owned byte buffer; nullptr = empty sentinel
+	size_t    length;     // byte count; 0 when data is nullptr
 };
 
 // ---------------------------------------------------------------------------

@@ -6,6 +6,8 @@
 #include "ImguiRenderer.h"
 #include "ImguiMarkdown.h"
 #include "OpenGL.h"
+#include "Font.h"
+#include "ImguiHtml.h"
 
 #include "Imgui/imgui.h"
 #include "Imgui/imgui_impl_sdl2.h"
@@ -589,6 +591,23 @@ static void prepend_fn(KitsuneUserDataRegistration* reg,
 	reg->Functions = node;
 }
 
+static int ImguiRenderer_PushFont(int argc, const KitsuneVariable* argv,
+	const kitsune_ResultSetter setter, void* ud) {
+	const int _argc = argc - 1;
+	const KitsuneVariable* _argv = argc > 0 ? argv + 1 : argv;
+	ImFont* font = nullptr;
+	if (_argc >= 1 && _argv[0].type == KITSUNE_TINTEGER) {
+		int luaId = (int)KitsuneAsInt(&_argv[0], 0);
+		if (luaId > 0) {
+			FontResource* res = (FontResource*)ResourceCacheGetById(luaId, RESOURCE_FONT);
+			if (res)
+				font = res->imFont;
+		}
+	}
+	FontPush(font);
+	return 0;
+}
+
 void add_imgui_meta_bindings(KitsuneUserDataRegistration* reg) {
 	prepend_meta(reg, "__gc", imgui_gc);
 	prepend_meta(reg, "__tostring", imgui_tostring);
@@ -603,6 +622,8 @@ void add_imgui_meta_bindings(KitsuneUserDataRegistration* reg) {
 	prepend_fn(reg, "PlotLines", ImguiRenderer_PlotLines);
 	prepend_fn(reg, "Combo", ImguiRenderer_Combo);
 	prepend_fn(reg, "ListBox", ImguiRenderer_ListBox);
+	prepend_fn(reg, "PushFont", ImguiRenderer_PushFont);
+	prepend_fn(reg, "Html", ImguiRenderer_Html);
 	prepend_fn(reg, "MarkdownRender", ImguiRenderer_MarkdownRender);
 	prepend_fn(reg, "Image", ImguiRenderer_Image);
 	prepend_fn(reg, "ImageFrame", ImguiRenderer_ImageFrame);

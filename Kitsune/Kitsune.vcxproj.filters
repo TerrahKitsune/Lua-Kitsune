@@ -25,6 +25,9 @@
     <Filter Include="OpenGL">
       <UniqueIdentifier>{fbdf43af-8de0-4732-b606-a486c325581f}</UniqueIdentifier>
     </Filter>
+    <Filter Include="litehtml">
+      <UniqueIdentifier>{beb1c75c-e8a9-4be2-94bf-887cdd40f0cd}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Program.cpp">
@@ -87,11 +90,227 @@
     <ClCompile Include="ResourceCache.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="OpenGL.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="SDLAudio.cpp">
       <Filter>SDL</Filter>
+    </ClCompile>
+    <ClCompile Include="OpenGL.cpp">
+      <Filter>OpenGL</Filter>
+    </ClCompile>
+    <ClCompile Include="Font.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ImguiHtml.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\gumbo\attribute.c">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\background.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\gumbo\char_ref.c">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\codepoint.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\css_borders.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\css_length.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\css_parser.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\css_properties.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\css_selector.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\css_tokenizer.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\document.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\document_container.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\el_anchor.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\el_base.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\el_before_after.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\el_body.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\el_break.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\el_cdata.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\el_comment.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\el_div.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\el_font.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\el_image.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\el_link.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\el_para.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\el_script.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\el_space.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\el_style.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\el_table.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\el_td.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\el_text.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\el_title.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\el_tr.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\element.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\encodings.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\gumbo\error.c">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\flex_item.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\flex_line.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\formatting_context.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\gradient.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\html.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\html_microsyntaxes.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\html_tag.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\media_query.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\num_cvt.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\gumbo\parser.c">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\render_block.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\render_block_context.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\render_flex.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\render_image.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\render_inline_context.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\render_item.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\render_table.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\gumbo\string_buffer.c">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\string_id.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\gumbo\string_piece.c">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\style.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\stylesheet.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\table.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\gumbo\tag.c">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\gumbo\tokenizer.c">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\tstring_view.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\url.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\url_path.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\gumbo\utf8.c">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\utf8_strings.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\gumbo\util.c">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\gumbo\vector.c">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\web_color.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\iterators.cpp">
+      <Filter>litehtml</Filter>
+    </ClCompile>
+    <ClCompile Include="litehtml\src\line_box.cpp">
+      <Filter>litehtml</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -146,11 +365,20 @@
     <ClInclude Include="ResourceCache.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="OpenGL.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="SDLAudio.h">
       <Filter>SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="OpenGL.h">
+      <Filter>OpenGL</Filter>
+    </ClInclude>
+    <ClInclude Include="litehtml\include\litehtml.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Font.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ImguiHtml.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
