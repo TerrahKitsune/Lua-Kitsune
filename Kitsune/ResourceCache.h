@@ -20,10 +20,11 @@ typedef void (*ResourceFinalizer)(struct Resource* node);
 // Base struct for all resource types. Must be the first field in every subtype
 // so a Resource* can be safely cast to the subtype pointer.
 struct Resource {
-	int               type;    // RESOURCE_* constant
-	int               luaId;   // assigned by cache on Add/Upsert; 0 = not yet assigned
-	char* source;  // heap-owned; nullptr for unsourced resources
-	ResourceFinalizer fn;      // called by ResourceCacheRemove; must free node
+	int               type;      // RESOURCE_* constant
+	int               luaId;     // assigned by cache on Add/Upsert; 0 = not yet assigned
+	char*             source;    // heap-owned; nullptr for unsourced resources
+	ResourceFinalizer fn;        // called by ResourceCacheRemove; must free node
+	bool              permanent; // if true, Remove functions are no-ops; freed only at shutdown
 };
 
 // Generic raw-bytes resource. data may be nullptr when the resource exists as

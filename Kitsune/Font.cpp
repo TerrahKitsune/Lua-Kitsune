@@ -8,6 +8,7 @@
 #include "KitsuneEngine.h"
 #include "Imgui/imgui.h"
 #include "Imgui/imgui_impl_opengl3.h"
+#include "ImguiRenderer.h"
 #include <cstdlib>
 #include <cstring>
 #include <cstdio>
@@ -18,8 +19,28 @@
 
 static bool s_rebuildPending = false;
 
+// Forward declaration
+static void font_free(Resource* node);
+
 bool FontAtlasRebuildPending() {
     return s_rebuildPending;
+}
+
+void FontLoadPending() {
+    ResourceCacheIterate([](Resource* res, const void*) -> bool {
+        if (res->type != RESOURCE_FONT)
+            return true;
+        FontResource* f = (FontResource*)res;
+        if (!f->atlasLoaded && f->ttfData) {
+            ImFontConfig cfg = {};
+            cfg.FontDataOwnedByAtlas = false;
+            f->imFont = ImGui::GetIO().Fonts->AddFontFromMemoryTTF(
+                f->ttfData, (int)f->ttfLength, f->size, &cfg);
+            f->atlasLoaded = true;
+            f->resource.permanent = true;
+        }
+        return true;
+    }, nullptr);
 }
 
 void FontClearRebuildFlag() {
@@ -45,12 +66,8 @@ static int font_error(const kitsune_ResultSetter setter, const char* msg) {
 
 static void font_free(Resource* node) {
     FontResource* f = (FontResource*)node;
-    // Do NOT free f->ttfData here — ImGui holds a live pointer into it until
-    // the atlas is rebuilt without this font. Safe to free only after the atlas
-    // no longer references it. For simplicity we leak on destroy; the atlas
-    // rebuild path (via Font.SetDefault(nil) + forced rebuild) is the safe exit.
-    // In practice fonts are session-lived and freed at ResourceCacheShutdown
-    // after ImGui has been torn down.
+    // ttfData is safe to free here because ImGui is torn down before ResourceCacheShutdown.
+    free(f->ttfData);
     free(f->resource.source);
     free(f);
 }
@@ -81,7 +98,7 @@ ImFont* FontResolveInternal(const char* face, float size, int style) {
 
     FontResource* existing = (FontResource*)ResourceCacheGetBySource(key, RESOURCE_FONT);
     if (existing)
-        return existing->imFont;
+        return existing->atlasLoaded ? existing->imFont : nullptr;
 
     // Not cached — call the loader to get TTF bytes.
     KitsuneVariable* streamVar = ResourceCacheCallLoader(RESOURCE_FONT, key, keyLen);
@@ -124,20 +141,25 @@ ImFont* FontResolveInternal(const char* face, float size, int style) {
     KitsuneVariableFree(streamVar);
 
     if (!ttfData) {
-        // Store a sentinel (ttfData=null, imFont=null) so we never hit the loader
-        // again for this key. The sentinel is a valid cache entry that returns nullptr.
-        FontResource* sentinel = (FontResource*)calloc(1, sizeof(FontResource));
-        if (sentinel) {
-            sentinel->resource.type = RESOURCE_FONT;
-            sentinel->resource.source = (char*)malloc(keyLen + 1);
-            if (sentinel->resource.source) {
-                memcpy(sentinel->resource.source, key, keyLen);
-                sentinel->resource.source[keyLen] = '\0';
+        // Store a sentinel so we never hit the loader again for this key.
+        // But only if the atlas is not locked — if it is, we'll retry next frame.
+        // Only store a sentinel (don't retry loader) when atlas is not locked.
+        // If locked, we'll retry next frame since no cache entry exists yet.
+        if (!ImGui::GetIO().Fonts->Locked) {
+            FontResource* sentinel = (FontResource*)calloc(1, sizeof(FontResource));
+            if (sentinel) {
+                sentinel->resource.type = RESOURCE_FONT;
+                sentinel->resource.source = (char*)malloc(keyLen + 1);
+                if (sentinel->resource.source) {
+                    memcpy(sentinel->resource.source, key, keyLen);
+                    sentinel->resource.source[keyLen] = '\0';
+                }
+                sentinel->resource.fn  = font_free;
+                sentinel->ttfData      = nullptr;
+                sentinel->imFont       = nullptr;
+                sentinel->atlasLoaded  = true; // sentinel — no bytes, no retry
+                ResourceCacheAdd(&sentinel->resource);
             }
-            sentinel->resource.fn = font_free;
-            sentinel->ttfData = nullptr;
-            sentinel->imFont  = nullptr;
-            ResourceCacheAdd(&sentinel->resource);
         }
         return nullptr;
     }
@@ -155,21 +177,33 @@ ImFont* FontResolveInternal(const char* face, float size, int style) {
         f->resource.source[keyLen] = '\0';
     }
     f->resource.fn = font_free;
-    f->ttfData = ttfData;
-    f->ttfLength = ttfLength;
-    f->size = size;
-    f->style = style;
-    f->imFont = nullptr; // set after atlas rebuild
+    f->ttfData     = ttfData;
+    f->ttfLength   = ttfLength;
+    f->size        = size;
+    f->style       = style;
+    f->imFont      = nullptr;
 
-    // Register into ImGui atlas. ImGui keeps a pointer into ttfData — do not free.
+    // If the atlas is locked (mid-frame), store with atlasLoaded=false.
+    // FontDrainPendingLoads() will call AddFontFromMemoryTTF next frame.
+    if (ImGui::GetIO().Fonts->Locked) {
+        f->atlasLoaded = false;
+        if (!ResourceCacheAdd(&f->resource)) {
+            free(f->resource.source);
+            free(f->ttfData);
+            free(f);
+            return nullptr;
+        }
+        s_rebuildPending = true;
+        return nullptr;
+    }
+
+    // Atlas is unlocked — register immediately.
     ImFontConfig cfg = {};
-    cfg.FontDataOwnedByAtlas = false; // we own the memory
-    f->imFont = ImGui::GetIO().Fonts->AddFontFromMemoryTTF(
-        ttfData, (int)ttfLength, size, &cfg);
+    cfg.FontDataOwnedByAtlas = false;
+    f->imFont      = ImGui::GetIO().Fonts->AddFontFromMemoryTTF(ttfData, (int)ttfLength, size, &cfg);
+    f->atlasLoaded = true;
 
     if (!ResourceCacheAdd(&f->resource)) {
-        // Atlas already has the font registered — can't undo that, but at least
-        // free the node. The atlas entry will be a no-op orphan until next rebuild.
         free(f->resource.source);
         free(f);
         s_rebuildPending = true;
@@ -177,7 +211,7 @@ ImFont* FontResolveInternal(const char* face, float size, int style) {
     }
 
     s_rebuildPending = true;
-    return f->imFont; // valid after next NewFrame atlas rebuild
+    return f->imFont;
 }
 
 // ---------------------------------------------------------------------------
@@ -244,20 +278,6 @@ int Font_Resolve(int argc, const KitsuneVariable* argv,
     }
     setter(&r);
     return 1;
-}
-
-// ---------------------------------------------------------------------------
-// Font.Destroy(luaId)
-// ---------------------------------------------------------------------------
-
-int Font_Destroy(int argc, const KitsuneVariable* argv,
-    const kitsune_ResultSetter setter, void* ud) {
-    if (argc < 1)
-        return 0;
-    int luaId = (int)KitsuneAsInt(&argv[0], 0);
-    if (luaId > 0)
-        ResourceCacheRemoveById(luaId, RESOURCE_FONT);
-    return 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -378,6 +398,27 @@ int Font_GetId(int argc, const KitsuneVariable* argv,
 }
 
 // ---------------------------------------------------------------------------
+// Font.SetDefaultColor(color, style)
+// Sets the fallback text color used by PushBold/PushItalic when the styled
+// font variant is not loaded. color is ImU32 (0xAABBGGRR). style is
+// FONT_STYLE_BOLD (1), FONT_STYLE_ITALIC (2), or both (3).
+// ---------------------------------------------------------------------------
+
+int Font_SetDefaultStyleColor(int argc, const KitsuneVariable* argv,
+    const kitsune_ResultSetter setter, void* ud) {
+    if (argc < 2)
+        return 0;
+    ImU32 col = (ImU32)(unsigned int)KitsuneAsInt(&argv[0], 0);
+    int style = (int)KitsuneAsInt(&argv[1], 0);
+    float r = ((col >>  0) & 0xFF) / 255.0f;
+    float g = ((col >>  8) & 0xFF) / 255.0f;
+    float b = ((col >> 16) & 0xFF) / 255.0f;
+    float a = ((col >> 24) & 0xFF) / 255.0f;
+    ImguiSetFontStyleFallback(style, r, g, b, a);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
 // Font.SetDefault(opt luaId)
 // Sets the ImGui default font to the given FontResource.
 // Pass 0 or nil to restore the built-in default.
@@ -407,10 +448,10 @@ int Font_SetDefault(int argc, const KitsuneVariable* argv,
 
 void RegisterFontFunctions() {
     KitsuneRegisterFunction("Font.Resolve", Font_Resolve, nullptr);
-    KitsuneRegisterFunction("Font.Destroy", Font_Destroy, nullptr);
     KitsuneRegisterFunction("Font.GetData", Font_GetData, nullptr);
     KitsuneRegisterFunction("Font.GetId", Font_GetId, nullptr);
     KitsuneRegisterFunction("Font.SetDefault", Font_SetDefault, nullptr);
+    KitsuneRegisterFunction("Font.SetDefaultStyleColor", Font_SetDefaultStyleColor, nullptr);
 }
 
 #endif // KITSUNE_IMGUI

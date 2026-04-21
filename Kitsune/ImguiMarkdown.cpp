@@ -6,6 +6,8 @@
 #include "ImguiMarkdown.h"
 #include "OpenGL.h"
 #include "Imgui/imgui.h"
+#include "Font.h"
+#include "RenderLoop.h"
 #include <SDL.h>
 #include <cstdlib>
 #include <cstring>
@@ -451,26 +453,16 @@ static void render_spans(ImguiWindowContext* ctx, int lineIdx) {
 			render_span_text(base, n.offset, n.len);
 			break;
 		case MD_SPAN_BOLD:
-			// ImGui has no runtime bold/italic — bold and italic are entirely separate
-			// TTF files rasterized into separate ImFont* atlas slots at startup.
-			// To render true bold you call PushFont(font_bold) / PopFont(), but that
-			// requires a bold TTF to have been loaded into ImguiWindowContext during
-			// session init (font_bold field, see Open Questions in plans/imgui-markdown.md).
-			// Until that TTF loading work is done we use a gold accent colour as a
-			// visible stand-in. When font_bold is available, replace PushStyleColor
-			// with PushFont(ctx->font_bold) and PopFont() — no other changes needed.
-			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.85f, 0.4f, 1.0f));
+			ImguiPushFontStyle(IMGUI_STACK_BOLD, FONT_STYLE_BOLD,
+				IMGUI_BOLD_FALLBACK_R, IMGUI_BOLD_FALLBACK_G, IMGUI_BOLD_FALLBACK_B, IMGUI_BOLD_FALLBACK_A);
 			render_span_text(base, n.offset, n.len);
-			ImGui::PopStyleColor();
+			ImguiPopFontStyle(IMGUI_STACK_BOLD);
 			break;
 		case MD_SPAN_ITALIC:
-			// Same constraint as bold above — italic requires a separate italic TTF
-			// loaded into ctx->font_italic at startup. Dimmed colour used as stand-in.
-			// Replace PushStyleColor with PushFont(ctx->font_italic) / PopFont() once
-			// the TTF loading plan step is implemented.
-			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.75f, 0.75f, 0.75f, 1.0f));
+			ImguiPushFontStyle(IMGUI_STACK_ITALIC, FONT_STYLE_ITALIC,
+				IMGUI_ITALIC_FALLBACK_R, IMGUI_ITALIC_FALLBACK_G, IMGUI_ITALIC_FALLBACK_B, IMGUI_ITALIC_FALLBACK_A);
 			render_span_text(base, n.offset, n.len);
-			ImGui::PopStyleColor();
+			ImguiPopFontStyle(IMGUI_STACK_ITALIC);
 			break;
 		case MD_SPAN_CODE:
 			render_inline_code_bg(base, n.offset, n.len);

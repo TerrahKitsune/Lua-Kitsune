@@ -21,6 +21,11 @@ struct HtmlDocument {
     int                      generation;    // incremented on Reload(); stale handle guard
     litehtml::element::ptr   hoveredEl;     // element under cursor last frame
     bool                     shutdown;      // true after HtmlShutdown(); __gc skips delete
+    // Source for re-parsing after font atlas rebuild.
+    // Exactly one of these is set: sourceGenericId != 0 OR sourceBytes != nullptr.
+    int                      sourceGenericId; // resource cache id (Html.Parse path)
+    uint8_t*                 sourceBytes;     // heap-owned copy (Html.ParseString path)
+    size_t                   sourceLength;
 };
 
 // ---------------------------------------------------------------------------
@@ -117,6 +122,8 @@ KitsuneHtmlContainer* HtmlGetContainer();
 
 void RegisterHtmlFunctions();
 void HtmlShutdown();
+// Force all live documents to re-layout next render (e.g. after atlas rebuild).
+void HtmlInvalidateAll();
 
 // ---------------------------------------------------------------------------
 // renderer:Html binding — declared here, registered in add_imgui_meta_bindings

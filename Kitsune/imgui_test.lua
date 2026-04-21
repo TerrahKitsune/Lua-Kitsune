@@ -57,7 +57,31 @@ local function onResourceLoad(type, path)
             return ok and stream or nil
         end
     elseif type == 4 then -- RESOURCE_FONT ("FaceName:size:style")
-        -- No custom fonts configured — return nil to use ImGui default
+        local face, style = path:match('^([^:]+):[^:]+:(%d+)$')
+        style = tonumber(style) or 0
+        local bold   = (style & 1) ~= 0
+        local italic = (style & 2) ~= 0
+        -- libra-sans: all variants share the face name "libra-sans", style bits select the file
+        if face == 'libra-sans' then
+            local file
+            if bold and italic then
+                file = './docs/libra-sans.bold-italic.ttf'
+            elseif bold then
+                file = './docs/libra-sans.bold.ttf'
+            elseif italic then
+                file = './docs/libra-sans.italic.ttf'
+            else
+                file = './docs/libra-sans.regular.ttf'
+            end
+            local ok, stream = pcall(Stream.Open, file, 'rb')
+            return ok and stream or nil
+        elseif face == '00209 Regular' then
+            local ok, stream = pcall(Stream.Open, './docs/00209 Regular.ttf', 'rb')
+            return ok and stream or nil
+        elseif face == 'Galahad Std Regular14' then
+            local ok, stream = pcall(Stream.Open, './docs/Galahad Std Regular14.otf', 'rb')
+            return ok and stream or nil
+        end
         return nil
     elseif type == 5 then -- RESOURCE_GENERIC (HTML, CSS, misc)
         if not path or path == '' then return nil end
@@ -413,6 +437,69 @@ local function tabStyle(renderer, ctx)
     else
         renderer:Text("Hover the gap (60x20 after Small)")
     end
+    renderer:Separator()
+    renderer:Text("--- Fonts (libra-sans, size 18) ---")
+    if not ctx.fontRegular then
+        ctx.fontRegular    = Font.Resolve('libra-sans', 18, false, false)
+        ctx.fontBold       = Font.Resolve('libra-sans', 18, true,  false)
+        ctx.fontItalic     = Font.Resolve('libra-sans', 18, false, true)
+        ctx.fontBoldItalic = Font.Resolve('libra-sans', 18, true,  true)
+    end
+    local function fontRow(label, id)
+        if id then
+            renderer:PushFont(id)
+            renderer:Text(label)
+            renderer:PopFont()
+        else
+            renderer:TextDisabled(label .. ' (not loaded)')
+        end
+    end
+    fontRow('Regular — The quick brown fox jumps over the lazy dog',     ctx.fontRegular)
+    fontRow('Bold — The quick brown fox jumps over the lazy dog',        ctx.fontBold)
+    fontRow('Italic — The quick brown fox jumps over the lazy dog',      ctx.fontItalic)
+    fontRow('Bold-Italic — The quick brown fox jumps over the lazy dog', ctx.fontBoldItalic)
+    renderer:Separator()
+    renderer:Text("--- PushBold / PushItalic (auto-resolve from current font) ---")
+    if ctx.fontRegular then
+        renderer:PushFont(ctx.fontRegular)
+        renderer:Text('Using libra-sans as base:')
+        renderer:PushBold()
+        renderer:Text('  Bold via PushBold — should match the Bold row above')
+        renderer:PopBold()
+        renderer:PushItalic()
+        renderer:Text('  Italic via PushItalic — should match the Italic row above')
+        renderer:PopItalic()
+        renderer:PopFont()
+        renderer:Text('Using default ImGui font as base (no libra-sans push):')
+        renderer:PushBold()
+        renderer:Text('  Bold via PushBold — gold fallback if no bold variant for default font')
+        renderer:PopBold()
+        renderer:PushItalic()
+        renderer:Text('  Italic via PushItalic — grey fallback if no italic variant for default font')
+        renderer:PopItalic()
+    else
+        renderer:TextDisabled('Fonts not loaded — PushBold/PushItalic demo skipped')
+    end
+    renderer:Separator()
+    renderer:Text("--- Default Font (libra-sans, size 18) ---")
+    renderer:Text("Current default: " .. tostring(ctx.defaultFontName or 'ImGui built-in'))
+    if renderer:Button("Set libra-sans as default font") then
+        if not ctx.fontRegular then
+            ctx.fontRegular = Font.Resolve('libra-sans', 18, false, false)
+        end
+        if ctx.fontRegular then
+            Font.SetDefault(ctx.fontRegular)
+            ctx.defaultFontName = 'libra-sans.regular 18'
+        else
+            ctx.defaultFontName = 'libra-sans.regular 18 (pending atlas build)'
+        end
+    end
+    renderer:SameLine()
+    if renderer:Button("Restore built-in default") then
+        Font.SetDefault(nil)
+        ctx.defaultFontName = 'ImGui built-in'
+    end
+    renderer:Text("Once libra-sans is default, PushBold/PushItalic resolve bold/italic automatically.")
 end
 
 local function tabPopups(renderer, ctx)

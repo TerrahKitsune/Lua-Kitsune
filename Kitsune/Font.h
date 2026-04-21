@@ -19,6 +19,7 @@ struct FontResource {
     float     size;        // pixel size
     int       style;       // FONT_STYLE_* bitmask
     ImFont*   imFont;      // nullptr until next atlas build
+    bool      atlasLoaded; // false = bytes are in cache but not yet in the atlas
 };
 
 #define FONT_STYLE_REGULAR  0
@@ -32,6 +33,7 @@ struct FontResource {
 // ---------------------------------------------------------------------------
 
 bool FontAtlasRebuildPending();
+void FontLoadPending();
 void FontClearRebuildFlag();
 
 // ---------------------------------------------------------------------------
@@ -58,9 +60,9 @@ void RegisterFontFunctions();
 // ---------------------------------------------------------------------------
 
 int Font_Resolve(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter setter, void* ud);
-int Font_Destroy(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter setter, void* ud);
 int Font_GetData(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter setter, void* ud);
 int Font_GetId(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter setter, void* ud);
 int Font_SetDefault(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter setter, void* ud);
+int Font_SetDefaultColor(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter setter, void* ud);
 
 #endif // KITSUNE_IMGUI

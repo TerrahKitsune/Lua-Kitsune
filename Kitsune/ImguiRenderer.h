@@ -36,6 +36,13 @@ struct ImguiWindowContext {
 	KitsuneVariable*            onError;
 	ImguiScheduledCall*         scheduledHead;
 	KitsuneUserDataRegistration reg;
+	// Optional bold/italic fonts for markdown rendering.
+	// Set via renderer:SetBoldFont(luaId) / renderer:SetItalicFont(luaId).
+	// nullptr = fall back to colour stand-in.
+	struct ImFont*              font_bold;
+	struct ImFont*              font_italic;
+	// ImguiStack — linked list of push/pop entries; drained before each frame
+	struct ImguiStackEntry*     stackHead;
 	// Markdown cache
 	uint64_t                    mdCacheId;
 	char*                       mdContent;
@@ -64,5 +71,33 @@ int ImguiRenderer_Image(int argc, const KitsuneVariable* argv,
 // flipX mirrors horizontally; flipY mirrors vertically. Both default to false.
 int ImguiRenderer_ImageFrame(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud);
+
+// Stack IDs for bold/italic entries — used by ImguiPushFontStyle and ImguiMarkdown.
+#define IMGUI_STACK_BOLD   1
+#define IMGUI_STACK_ITALIC 2
+
+// Fallback text colors used when the bold/italic font variant is not loaded.
+// Applied as PushStyleColor(ImGuiCol_Text) stand-ins in both the renderer
+// functions and the markdown renderer so they always match.
+#define IMGUI_BOLD_FALLBACK_R   1.0f
+#define IMGUI_BOLD_FALLBACK_G   0.85f
+#define IMGUI_BOLD_FALLBACK_B   0.4f
+#define IMGUI_BOLD_FALLBACK_A   1.0f
+#define IMGUI_ITALIC_FALLBACK_R 0.75f
+#define IMGUI_ITALIC_FALLBACK_G 0.75f
+#define IMGUI_ITALIC_FALLBACK_B 0.75f
+#define IMGUI_ITALIC_FALLBACK_A 1.0f
+
+// Pushes a font style (bold or italic) onto the ImguiStack.
+// Tries to resolve the current font + styleBit; falls back to a color if the
+// styled font variant has not been loaded. r/g/b/a are the fallback text color.
+void ImguiPushFontStyle(int stackId, int styleBit, float r, float g, float b, float a);
+
+// Pops the innermost entry with the given stackId, calling its finalizer.
+void ImguiPopFontStyle(int stackId);
+
+// Sets the mutable fallback color for the given style bit (FONT_STYLE_BOLD or
+// FONT_STYLE_ITALIC) used when the styled font variant is not loaded.
+void ImguiSetFontStyleFallback(int styleBit, float r, float g, float b, float a);
 
 #endif // KITSUNE_IMGUI

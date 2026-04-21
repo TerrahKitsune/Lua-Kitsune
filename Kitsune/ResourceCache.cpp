@@ -137,6 +137,8 @@ bool ResourceCacheRemoveById(int luaId, int type) {
 		if (s_slots[i] &&
 			s_slots[i]->type == type &&
 			s_slots[i]->luaId == luaId) {
+			if (s_slots[i]->permanent)
+				return false;
 			Resource* node = s_slots[i];
 			s_slots[i] = nullptr;
 			free_node(node);
@@ -153,6 +155,8 @@ bool ResourceCacheRemoveBySource(const char* source, int type) {
 		if (s_slots[i] &&
 			s_slots[i]->type == type &&
 			sources_match(s_slots[i], source)) {
+			if (s_slots[i]->permanent)
+				return false;
 			Resource* node = s_slots[i];
 			s_slots[i] = nullptr;
 			free_node(node);
@@ -427,17 +431,27 @@ static int ResourceGetSource(int argc, const KitsuneVariable* argv,
 
 static int ResourceDestroy(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
-	if (argc < 1)
-		return 0;
+	KitsuneVariable r = {};
+	r.type = KITSUNE_TBOOLEAN;
+	r.boolean = false;
+	if (argc < 1) {
+		setter(&r);
+		return 1;
+	}
 	int luaId = (int)KitsuneAsInt(&argv[0], 0);
-	if (luaId <= 0)
-		return 0;
+	if (luaId <= 0) {
+		setter(&r);
+		return 1;
+	}
 	const int types[] = { RESOURCE_TEXTURE, RESOURCE_AUDIO_SFX, RESOURCE_AUDIO_MUSIC, RESOURCE_FONT, RESOURCE_GENERIC };
 	for (int i = 0; i < (int)(sizeof(types) / sizeof(types[0])); i++) {
-		if (ResourceCacheRemoveById(luaId, types[i]))
+		if (ResourceCacheRemoveById(luaId, types[i])) {
+			r.boolean = true;
 			break;
+		}
 	}
-	return 0;
+	setter(&r);
+	return 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -489,9 +503,19 @@ static KitsuneVariable* build_resource_entry(const Resource* res) {
 		sourceVal.type = KITSUNE_TNIL;
 	}
 
+	KitsuneVariable permanentKey = {};
+	permanentKey.type = KITSUNE_TSTRING;
+	permanentKey.data = (unsigned char*)"permanent";
+	permanentKey.length = 9;
+
+	KitsuneVariable permanentVal = {};
+	permanentVal.type = KITSUNE_TBOOLEAN;
+	permanentVal.boolean = res->permanent;
+
 	KitsuneSetIndex(entry, &idKey, &idVal);
 	KitsuneSetIndex(entry, &typeKey, &typeVal);
 	KitsuneSetIndex(entry, &sourceKey, &sourceVal);
+	KitsuneSetIndex(entry, &permanentKey, &permanentVal);
 	return entry;
 }
 
@@ -821,11 +845,45 @@ static int ResourceGetAllIds(int argc, const KitsuneVariable* argv,
 	return 1;
 }
 
+// ---------------------------------------------------------------------------
+// Resource.SetPermanent(id) -> true | false
+// Marks a resource as permanent so Resource.Destroy cannot remove it.
+// Cannot be used to unset permanent — once permanent, always permanent.
+// ---------------------------------------------------------------------------
+
+static int ResourceSetPermanent(int argc, const KitsuneVariable* argv,
+	const kitsune_ResultSetter setter, void* ud) {
+	KitsuneVariable r = {};
+	r.type = KITSUNE_TBOOLEAN;
+	r.boolean = false;
+	if (argc < 1) {
+		setter(&r);
+		return 1;
+	}
+	int luaId = (int)KitsuneAsInt(&argv[0], 0);
+	if (luaId <= 0) {
+		setter(&r);
+		return 1;
+	}
+	const int types[] = { RESOURCE_TEXTURE, RESOURCE_AUDIO_SFX, RESOURCE_AUDIO_MUSIC, RESOURCE_FONT, RESOURCE_GENERIC };
+	for (int i = 0; i < (int)(sizeof(types) / sizeof(types[0])); i++) {
+		Resource* res = ResourceCacheGetById(luaId, types[i]);
+		if (res) {
+			res->permanent = true;
+			r.boolean = true;
+			break;
+		}
+	}
+	setter(&r);
+	return 1;
+}
+
 void ResourceCacheRegisterLoaderFunction() {
 	KitsuneRegisterFunction("Resource.SetLoader", ResourceSetLoader, nullptr);
 	KitsuneRegisterFunction("Resource.GetType", ResourceGetType, nullptr);
 	KitsuneRegisterFunction("Resource.GetSource", ResourceGetSource, nullptr);
 	KitsuneRegisterFunction("Resource.Destroy", ResourceDestroy, nullptr);
+	KitsuneRegisterFunction("Resource.SetPermanent", ResourceSetPermanent, nullptr);
 	KitsuneRegisterFunction("Resource.GetAll", ResourceGetAll, nullptr);
 	KitsuneRegisterFunction("Resource.Resolve", ResourceResolve, nullptr);
 	KitsuneRegisterFunction("Resource.Load", ResourceLoad, nullptr);

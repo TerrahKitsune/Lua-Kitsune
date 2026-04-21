@@ -591,6 +591,115 @@ static void prepend_fn(KitsuneUserDataRegistration* reg,
 	reg->Functions = node;
 }
 
+// Mutable fallback colors for PushBold/PushItalic when the styled font is not loaded.
+// Defaults match the IMGUI_*_FALLBACK_* compile-time values in ImguiRenderer.h.
+// Written by Font_SetDefaultColor; read by ImguiPushFontStyle.
+static ImVec4 s_boldFallback(IMGUI_BOLD_FALLBACK_R, IMGUI_BOLD_FALLBACK_G,
+	IMGUI_BOLD_FALLBACK_B, IMGUI_BOLD_FALLBACK_A);
+static ImVec4 s_italicFallback(IMGUI_ITALIC_FALLBACK_R, IMGUI_ITALIC_FALLBACK_G,
+	IMGUI_ITALIC_FALLBACK_B, IMGUI_ITALIC_FALLBACK_A);
+
+void ImguiSetFontStyleFallback(int styleBit, float r, float g, float b, float a) {
+	if (styleBit & FONT_STYLE_BOLD)
+		s_boldFallback = ImVec4(r, g, b, a);
+	if (styleBit & FONT_STYLE_ITALIC)
+		s_italicFallback = ImVec4(r, g, b, a);
+}
+
+#include "RenderLoop.h"
+
+// Stack IDs for bold/italic push entries
+#define IMGUI_STACK_BOLD   1
+#define IMGUI_STACK_ITALIC 2
+
+// ---------------------------------------------------------------------------
+// FontStyle stack helpers — shared by renderer functions and markdown renderer
+// ---------------------------------------------------------------------------
+
+struct FontStyleData {
+	bool usedFont; // true = FontPop(), false = ImGui::PopStyleColor()
+};
+
+static void font_style_finalizer(void* data) {
+	FontStyleData* d = (FontStyleData*)data;
+	if (d->usedFont)
+		FontPop();
+	else
+		ImGui::PopStyleColor();
+	free(d);
+}
+
+// Finds the FontResource whose imFont matches the given ImFont*.
+// Returns nullptr if not found (e.g. default ImGui font, no resource registered).
+static FontResource* find_font_resource(ImFont* target) {
+	if (!target)
+		return nullptr;
+	struct FindCtx { ImFont* target; FontResource* result; };
+	FindCtx fc = { target, nullptr };
+	ResourceCacheIterate([](Resource* res, const void* ud) -> bool {
+		if (res->type != RESOURCE_FONT)
+			return true;
+		FontResource* f = (FontResource*)res;
+		FindCtx* fc2 = (FindCtx*)ud;
+		if (f->imFont == fc2->target) {
+			fc2->result = f;
+			return false;
+		}
+		return true;
+	}, &fc);
+	return fc.result;
+}
+
+// Core push: resolves face+size with added style bit, pushes font or color fallback.
+void ImguiPushFontStyle(int stackId, int styleBit, float r, float g, float b, float a) {
+	// Use the mutable per-style global if set, otherwise use the caller's defaults.
+	ImVec4 fallbackColor;
+	if (styleBit & FONT_STYLE_BOLD)
+		fallbackColor = s_boldFallback;
+	else if (styleBit & FONT_STYLE_ITALIC)
+		fallbackColor = s_italicFallback;
+	else
+		fallbackColor = ImVec4(r, g, b, a);
+	FontResource* cur = find_font_resource(ImGui::GetFont());
+	ImFont* styled = nullptr;
+	if (cur) {
+		const char* src = cur->resource.source ? cur->resource.source : "";
+		const char* c1 = strchr(src, ':');
+		if (c1) {
+			int faceLen = (int)(c1 - src);
+			char face[256];
+			if (faceLen > 0 && faceLen < (int)sizeof(face)) {
+				memcpy(face, src, faceLen);
+				face[faceLen] = '\0';
+				styled = FontResolveInternal(face, cur->size, cur->style | styleBit);
+			}
+		}
+	}
+	FontStyleData* d = (FontStyleData*)malloc(sizeof(FontStyleData));
+	if (!d)
+		return;
+	if (styled) {
+		d->usedFont = true;
+		FontPush(styled);
+	}
+	else {
+		d->usedFont = false;
+		ImGui::PushStyleColor(ImGuiCol_Text, fallbackColor);
+	}
+	if (!ImguiStackPush(stackId, d, font_style_finalizer)) {
+		// OOM — undo the push we just did
+		if (d->usedFont)
+			FontPop();
+		else
+			ImGui::PopStyleColor();
+		free(d);
+	}
+}
+
+void ImguiPopFontStyle(int stackId) {
+	ImguiStackPop(stackId);
+}
+
 static int ImguiRenderer_PushFont(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
 	const int _argc = argc - 1;
@@ -605,6 +714,32 @@ static int ImguiRenderer_PushFont(int argc, const KitsuneVariable* argv,
 		}
 	}
 	FontPush(font);
+	return 0;
+}
+
+static int ImguiRenderer_PushBold(int argc, const KitsuneVariable* argv,
+	const kitsune_ResultSetter setter, void* ud) {
+	ImguiPushFontStyle(IMGUI_STACK_BOLD, FONT_STYLE_BOLD,
+		IMGUI_BOLD_FALLBACK_R, IMGUI_BOLD_FALLBACK_G, IMGUI_BOLD_FALLBACK_B, IMGUI_BOLD_FALLBACK_A);
+	return 0;
+}
+
+static int ImguiRenderer_PopBold(int argc, const KitsuneVariable* argv,
+	const kitsune_ResultSetter setter, void* ud) {
+	ImguiPopFontStyle(IMGUI_STACK_BOLD);
+	return 0;
+}
+
+static int ImguiRenderer_PushItalic(int argc, const KitsuneVariable* argv,
+	const kitsune_ResultSetter setter, void* ud) {
+	ImguiPushFontStyle(IMGUI_STACK_ITALIC, FONT_STYLE_ITALIC,
+		IMGUI_ITALIC_FALLBACK_R, IMGUI_ITALIC_FALLBACK_G, IMGUI_ITALIC_FALLBACK_B, IMGUI_ITALIC_FALLBACK_A);
+	return 0;
+}
+
+static int ImguiRenderer_PopItalic(int argc, const KitsuneVariable* argv,
+	const kitsune_ResultSetter setter, void* ud) {
+	ImguiPopFontStyle(IMGUI_STACK_ITALIC);
 	return 0;
 }
 
@@ -623,6 +758,10 @@ void add_imgui_meta_bindings(KitsuneUserDataRegistration* reg) {
 	prepend_fn(reg, "Combo", ImguiRenderer_Combo);
 	prepend_fn(reg, "ListBox", ImguiRenderer_ListBox);
 	prepend_fn(reg, "PushFont", ImguiRenderer_PushFont);
+	prepend_fn(reg, "PushBold", ImguiRenderer_PushBold);
+	prepend_fn(reg, "PopBold", ImguiRenderer_PopBold);
+	prepend_fn(reg, "PushItalic", ImguiRenderer_PushItalic);
+	prepend_fn(reg, "PopItalic", ImguiRenderer_PopItalic);
 	prepend_fn(reg, "Html", ImguiRenderer_Html);
 	prepend_fn(reg, "MarkdownRender", ImguiRenderer_MarkdownRender);
 	prepend_fn(reg, "Image", ImguiRenderer_Image);

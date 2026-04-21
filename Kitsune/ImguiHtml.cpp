@@ -99,10 +99,9 @@ void KitsuneHtmlContainer::delete_font(litehtml::uint_ptr hFont) {
 
 litehtml::pixel_t KitsuneHtmlContainer::text_width(const char* text, litehtml::uint_ptr hFont) {
     ImFont* font = hFont ? (ImFont*)hFont : ImGui::GetIO().FontDefault;
-    FontPush(font);
-    float w = ImGui::CalcTextSize(text).x;
-    FontPop();
-    return w;
+    if (!font || !font->IsLoaded())
+        return 0;
+    return font->CalcTextSizeA(font->FontSize, FLT_MAX, 0.0f, text).x;
 }
 
 void KitsuneHtmlContainer::draw_text(
@@ -157,12 +156,8 @@ void KitsuneHtmlContainer::load_image(
 {
     if (!src || !src[0])
         return;
-    // Trigger load into texture cache; result used in draw_image / get_image_size
-    Resource* res = ResourceCacheGetBySource(src, RESOURCE_TEXTURE);
-    if (!res) {
-        KitsuneVariable* streamVar = ResourceCacheCallLoader(RESOURCE_TEXTURE, src, (int)strlen(src));
-        KitsuneVariableFree(streamVar); // OpenGL.ResolveTexture handles actual decode
-    }
+    // Fully resolve: call loader, decode, upload to GL — same pipeline as renderer:Image
+    resolve_texture(g_imguiCtx, src, (int)strlen(src));
 }
 
 void KitsuneHtmlContainer::get_image_size(
@@ -501,6 +496,8 @@ static int html_doc_gc(int argc, const KitsuneVariable* argv,
         free(d->eventHandler);
         d->eventHandler = nullptr;
     }
+    free(d->sourceBytes);
+    d->sourceBytes = nullptr;
     d->hoveredEl.reset();
     s_container.pendingClickEl.reset();
     if (d->doc)
@@ -573,8 +570,9 @@ int Html_Parse(int argc, const KitsuneVariable* argv,
         setter(&r);
         return 1;
     }
-    d->generation = 1;
-    d->lastWidth  = -1;
+    d->generation        = 1;
+    d->lastWidth         = -1;
+    d->sourceGenericId   = genericId;
     s_liveDocs.push_back(d);
 
     KitsuneVariable* var = make_html_doc_var(d);
@@ -610,8 +608,13 @@ int Html_ParseString(int argc, const KitsuneVariable* argv,
         setter(&r);
         return 1;
     }
-    d->generation = 1;
-    d->lastWidth  = -1;
+    d->generation  = 1;
+    d->lastWidth   = -1;
+    d->sourceBytes = (uint8_t*)malloc(argv[0].length);
+    if (d->sourceBytes) {
+        memcpy(d->sourceBytes, argv[0].data, argv[0].length);
+        d->sourceLength = argv[0].length;
+    }
     s_liveDocs.push_back(d);
 
     KitsuneVariable* var = make_html_doc_var(d);
@@ -799,6 +802,10 @@ static int html_Dispose(int argc, const KitsuneVariable* argv,
     if (!d)
         return 0;
     d->doc.reset();
+    free(d->sourceBytes);
+    d->sourceBytes = nullptr;
+    d->sourceLength = 0;
+    d->sourceGenericId = 0;
     if (d->eventHandler) {
         KitsuneVariableFree(d->eventHandler);
         d->eventHandler = nullptr;
@@ -966,12 +973,42 @@ static void prepend_html_fn(KitsuneUserDataRegistration* reg,
     reg->Functions = node;
 }
 
+void HtmlInvalidateAll() {
+    for (HtmlDocument* d : s_liveDocs) {
+        if (!d || !d->doc)
+            continue;
+        // Re-parse so litehtml re-calls create_font with the newly built atlas.
+        // A simple lastWidth reset only re-renders; font handles are baked into
+        // the element tree during parsing and are not refreshed on re-render.
+        litehtml::document::ptr fresh;
+        if (d->sourceGenericId != 0) {
+            GenericResource* gen = (GenericResource*)ResourceCacheGetById(d->sourceGenericId, RESOURCE_GENERIC);
+            if (gen && gen->data && gen->length > 0)
+                fresh = parse_html_from_bytes(gen->data, gen->length);
+        }
+        else if (d->sourceBytes && d->sourceLength > 0) {
+            fresh = parse_html_from_bytes(d->sourceBytes, d->sourceLength);
+        }
+        if (fresh) {
+            d->doc = fresh;
+            d->generation++;
+            d->lastWidth = -1;
+            d->hoveredEl.reset();
+        }
+        else {
+            d->lastWidth = -1;
+        }
+    }
+}
+
 void HtmlShutdown() {
     for (HtmlDocument* d : s_liveDocs) {
         if (d->eventHandler) {
             free(d->eventHandler);
             d->eventHandler = nullptr;
         }
+        free(d->sourceBytes);
+        d->sourceBytes = nullptr;
         d->hoveredEl.reset();
         s_container.pendingClickEl.reset();
         if (d->doc)

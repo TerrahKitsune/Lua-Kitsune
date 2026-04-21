@@ -88,3 +88,49 @@ td {
 tr:nth-child(even) td {
     background-color: #181825;
 }
+
+img {
+    vertical-align: middle;
+    border: 1px solid #45475a;
+    border-radius: 4px;
+    margin-right: 8px;
+}
+
+code {
+    font-family: monospace;
+    font-size: 13px;
+    background-color: #313244;
+    color: #a6e3a1;
+    padding: 1px 4px;
+    border-radius: 3px;
+}
+
+.callout {
+    background-color: #1e3a5f;
+    border-left: 3px solid #89b4fa;
+    color: #cdd6f4;
+    padding: 6px 10px;
+    margin: 6px 0;
+    border-radius: 0 4px 4px 0;
+    font-size: 13px;
+}
+
+hr {
+    border: none;
+    border-top: 1px solid #45475a;
+    margin: 10px 0;
+}
+
+.font-numerals {
+    font-family: '00209 Regular';
+    font-size: 18px;
+    color: #a6e3a1;
+    margin: 4px 0;
+}
+
+.font-galahad {
+    font-family: 'Galahad Std Regular14';
+    font-size: 18px;
+    color: #f9e2af;
+    margin: 4px 0;
+}

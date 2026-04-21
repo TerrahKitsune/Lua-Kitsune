@@ -76,6 +76,8 @@ static void free_scheduled_calls(ImguiWindowContext* ctx) {
 	}
 }
 
+static void drain_imgui_stack(ImguiWindowContext* ctx);
+
 static void free_ctx(ImguiWindowContext* ctx) {
 	if (!ctx)
 		return;
@@ -91,6 +93,7 @@ static void free_ctx(ImguiWindowContext* ctx) {
 		KitsuneVariableFree(ctx->onError);
 		ctx->onError = nullptr;
 	}
+	drain_imgui_stack(ctx);
 	free(ctx->inputBuf);
 	ctx->inputBuf = nullptr;
 	ctx->inputBufSize = 0;
@@ -98,6 +101,61 @@ static void free_ctx(ImguiWindowContext* ctx) {
 	ctx->title = nullptr;
 	free(ctx);
 	g_imguiCtx = nullptr;
+}
+
+static void drain_imgui_stack(ImguiWindowContext* ctx) {
+	ImguiStackEntry* node = ctx->stackHead;
+	while (node) {
+		ImguiStackEntry* next = node->next;
+		if (node->finalizer)
+			node->finalizer(node->data);
+		else
+			free(node->data);
+		free(node);
+		node = next;
+	}
+	ctx->stackHead = nullptr;
+}
+
+bool ImguiStackPush(int id, void* data, ImguiStackEntryFinalizer fn) {
+	if (!g_imguiCtx)
+		return false;
+	ImguiStackEntry* node = (ImguiStackEntry*)malloc(sizeof(ImguiStackEntry));
+	if (!node)
+		return false;
+	node->id = id;
+	node->data = data;
+	node->finalizer = fn;
+	node->prev = nullptr;
+	node->next = g_imguiCtx->stackHead;
+	if (g_imguiCtx->stackHead)
+		g_imguiCtx->stackHead->prev = node;
+	g_imguiCtx->stackHead = node;
+	return true;
+}
+
+bool ImguiStackPop(int id) {
+	if (!g_imguiCtx)
+		return false;
+	ImguiStackEntry* node = g_imguiCtx->stackHead;
+	while (node) {
+		if (node->id == id) {
+			if (node->prev)
+				node->prev->next = node->next;
+			else
+				g_imguiCtx->stackHead = node->next;
+			if (node->next)
+				node->next->prev = node->prev;
+			if (node->finalizer)
+				node->finalizer(node->data);
+			else
+				free(node->data);
+			free(node);
+			return true;
+		}
+		node = node->next;
+	}
+	return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -304,9 +362,11 @@ void RunImguiSession() {
 		UpdateFrameTiming();
 
 		if (FontAtlasRebuildPending()) {
+			FontLoadPending();
 			ImGui::GetIO().Fonts->Build();
 			ImGui_ImplOpenGL3_CreateFontsTexture();
 			FontClearRebuildFlag();
+			HtmlInvalidateAll();
 		}
 
 		ImGui_ImplOpenGL3_NewFrame();
@@ -365,6 +425,7 @@ void RunImguiSession() {
 		}
 
 		drain_scheduled_calls(ctx);
+		drain_imgui_stack(ctx);
 
 		ImGui::EndFrame();
 		ImGui::Render();
@@ -379,6 +440,18 @@ void RunImguiSession() {
 	}
 
 	free_scheduled_calls(ctx);
+
+	// Tear down ImGui and SDL before the resource cache so that font_free can
+	// safely free ttfData (the atlas no longer references it after DestroyContext).
+	if (ctx->imguiContext) {
+		if (ctx->window && ctx->glContext)
+			SDL_GL_MakeCurrent(ctx->window, ctx->glContext);
+		ImGui::SetCurrentContext((ImGuiContext*)ctx->imguiContext);
+		ImGui_ImplOpenGL3_Shutdown();
+		ImGui_ImplSDL2_Shutdown();
+		ImGui::DestroyContext((ImGuiContext*)ctx->imguiContext);
+		ctx->imguiContext = nullptr;
+	}
 
 	// Shut down audio before ResourceCacheShutdown so finalizers run while mixer is open.
 	SDLAudioShutdown();
