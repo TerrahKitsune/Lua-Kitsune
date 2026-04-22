@@ -4,10 +4,6 @@
 #ifdef KITSUNE_IMGUI
 
 #define STB_IMAGE_IMPLEMENTATION
-#define STBI_ONLY_PNG
-#define STBI_ONLY_JPEG
-#define STBI_ONLY_BMP
-#define STBI_ONLY_TGA
 #include "stb_image.h"
 
 #include "OpenGL.h"
@@ -39,7 +35,17 @@
 
 static void texture_finalizer(Resource* res) {
 	ImguiTexture* tex = (ImguiTexture*)res;
-	if (tex->glId != 0) {
+	if (tex->frameGlIds && tex->frameCount > 0) {
+		for (int i = 0; i < tex->frameCount; i++) {
+			if (tex->frameGlIds[i] != 0) {
+				GLuint id = (GLuint)tex->frameGlIds[i];
+				glDeleteTextures(1, &id);
+			}
+		}
+		free(tex->frameGlIds);
+		free(tex->frameDelays);
+	}
+	else if (tex->glId != 0) {
 		GLuint id = (GLuint)tex->glId;
 		glDeleteTextures(1, &id);
 	}
@@ -103,6 +109,62 @@ static GLuint upload_texture_from_bytes(const unsigned char* data, int dataLen,
 	return glId;
 }
 
+static bool upload_gif_from_bytes(const unsigned char* data, int dataLen,
+	unsigned int** outGlIds, int** outDelays, int* outFrameCount,
+	int* outW, int* outH) {
+	int  w = 0;
+	int  h = 0;
+	int  frameCount = 0;
+	int  channels = 0;
+	int* delays = nullptr;
+
+	unsigned char* pixels = stbi_load_gif_from_memory(
+		(const stbi_uc*)data, dataLen, &delays, &w, &h, &frameCount, &channels, 4);
+	if (!pixels || frameCount <= 0) {
+		stbi_image_free(pixels);
+		free(delays);
+		return false;
+	}
+
+	unsigned int* glIds = (unsigned int*)calloc(frameCount, sizeof(unsigned int));
+	int*          msCopy = (int*)calloc(frameCount, sizeof(int));
+	if (!glIds || !msCopy) {
+		free(glIds);
+		free(msCopy);
+		stbi_image_free(pixels);
+		free(delays);
+		return false;
+	}
+
+	size_t frameBytes = (size_t)w * h * 4;
+	for (int i = 0; i < frameCount; i++) {
+		GLuint id = 0;
+		glGenTextures(1, &id);
+		glBindTexture(GL_TEXTURE_2D, id);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+			pixels + (size_t)i * frameBytes);
+		glIds[i] = (unsigned int)id;
+		// stbi stores delay in 1/1000ths of a second (already ms)
+		msCopy[i] = delays ? delays[i] : 100;
+		if (msCopy[i] <= 0)
+			msCopy[i] = 100;
+	}
+
+	stbi_image_free(pixels);
+	free(delays);
+
+	*outGlIds = glIds;
+	*outDelays = msCopy;
+	*outFrameCount = frameCount;
+	*outW = w;
+	*outH = h;
+	return true;
+}
+
 static KitsuneVariable* read_stream(const KitsuneVariable* streamVar) {
 	KitsuneVariable seekArg = {};
 	seekArg.type = KITSUNE_TINTEGER;
@@ -125,6 +187,62 @@ static KitsuneVariable* read_stream(const KitsuneVariable* streamVar) {
 static ImguiTexture* call_post_loader(int luaId, const char* source, int sourceLen) {
 	ResourceCacheCallPostLoader(RESOURCE_TEXTURE, luaId, source, sourceLen);
 	return (ImguiTexture*)ResourceCacheGetById(luaId, RESOURCE_TEXTURE);
+}
+
+static bool is_gif(const unsigned char* data, int len) {
+	return len >= 6 &&
+		data[0] == 'G' && data[1] == 'I' && data[2] == 'F' &&
+		data[3] == '8' && (data[4] == '7' || data[4] == '9') && data[5] == 'a';
+}
+
+static const char* detect_format(const unsigned char* data, int len) {
+	if (len >= 6 &&
+		data[0] == 'G' && data[1] == 'I' && data[2] == 'F' &&
+		data[3] == '8' && (data[4] == '7' || data[4] == '9') && data[5] == 'a')
+		return "gif";
+	if (len >= 4 &&
+		data[0] == 0x89 && data[1] == 'P' && data[2] == 'N' && data[3] == 'G')
+		return "png";
+	if (len >= 3 &&
+		data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF)
+		return "jpeg";
+	if (len >= 2 && data[0] == 'B' && data[1] == 'M')
+		return "bmp";
+	return "unknown";
+}
+
+// Decodes bytes into tex, auto-detecting GIF vs static image.
+// On success tex is fully populated (glId or frameGlIds). Returns false on failure.
+static bool load_texture_from_bytes(const unsigned char* data, int dataLen, ImguiTexture* tex) {
+	tex->format = detect_format(data, dataLen);
+	if (is_gif(data, dataLen)) {
+		unsigned int* glIds = nullptr;
+		int*          delays = nullptr;
+		int           frameCount = 0;
+		int           w = 0;
+		int           h = 0;
+		if (!upload_gif_from_bytes(data, dataLen, &glIds, &delays, &frameCount, &w, &h))
+			return false;
+		tex->glId = glIds[0];
+		tex->width = w;
+		tex->height = h;
+		tex->frameGlIds = glIds;
+		tex->frameDelays = delays;
+		tex->frameCount = frameCount;
+		tex->currentFrame = 0;
+		tex->frameTimer = 0.0;
+	}
+	else {
+		int    w = 0;
+		int    h = 0;
+		GLuint glId = upload_texture_from_bytes(data, dataLen, &w, &h);
+		if (!glId)
+			return false;
+		tex->glId = (unsigned int)glId;
+		tex->width = w;
+		tex->height = h;
+	}
+	return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -254,14 +372,8 @@ const ImguiTexture* resolve_texture(ImguiWindowContext* ctx,
 	}
 
 	if (readResult) {
-		int    w = 0;
-		int    h = 0;
-		GLuint glId = upload_texture_from_bytes(
-			readResult->data, (int)readResult->length, &w, &h);
+		load_texture_from_bytes(readResult->data, (int)readResult->length, tex);
 		KitsuneVariableFree(readResult);
-		tex->glId = (unsigned int)glId;
-		tex->width = w;
-		tex->height = h;
 	}
 	// glId==0 here means sentinel — load was attempted but failed
 
@@ -280,11 +392,23 @@ const ImguiTexture* resolve_texture(ImguiWindowContext* ctx,
 
 // ---------------------------------------------------------------------------
 // ResolveTextureGlId — used by renderer:Image / renderer:ImageFrame
+// Advances GIF animation by the current frame's delta time before returning.
 // ---------------------------------------------------------------------------
 
 unsigned int ResolveTextureGlId(int luaId) {
 	ImguiTexture* tex = (ImguiTexture*)ResourceCacheGetById(luaId, RESOURCE_TEXTURE);
-	return tex ? tex->glId : 0;
+	if (!tex)
+		return 0;
+	if (tex->frameGlIds && tex->frameCount > 0) {
+		double elapsedMs = (double)ImGui::GetIO().DeltaTime * 1000.0;
+		tex->frameTimer += elapsedMs;
+		while (tex->frameTimer >= tex->frameDelays[tex->currentFrame]) {
+			tex->frameTimer -= tex->frameDelays[tex->currentFrame];
+			tex->currentFrame = (tex->currentFrame + 1) % tex->frameCount;
+		}
+		tex->glId = tex->frameGlIds[tex->currentFrame];
+	}
+	return tex->glId;
 }
 
 // ---------------------------------------------------------------------------
@@ -342,27 +466,23 @@ int OpenGL_LoadTexture(int argc, const KitsuneVariable* argv,
 	if (!readResult)
 		return terror(setter, "OpenGL.LoadTexture: stream read failed");
 
-	int    w = 0;
-	int    h = 0;
-	GLuint glId = upload_texture_from_bytes(
-		readResult->data, (int)readResult->length, &w, &h);
-	KitsuneVariableFree(readResult);
-	if (!glId)
-		return terror(setter, "OpenGL.LoadTexture: image decode failed");
-
 	ImguiTexture* tex = alloc_texture();
 	if (!tex) {
-		glDeleteTextures(1, &glId);
+		KitsuneVariableFree(readResult);
 		return terror(setter, "OpenGL.LoadTexture: out of memory");
 	}
 	if (!set_source(&tex->resource, source, sourceLen)) {
-		glDeleteTextures(1, &glId);
+		KitsuneVariableFree(readResult);
 		free(tex);
 		return terror(setter, "OpenGL.LoadTexture: out of memory");
 	}
-	tex->glId = (unsigned int)glId;
-	tex->width = w;
-	tex->height = h;
+
+	bool ok = load_texture_from_bytes(readResult->data, (int)readResult->length, tex);
+	KitsuneVariableFree(readResult);
+	if (!ok) {
+		texture_finalizer(&tex->resource);
+		return terror(setter, "OpenGL.LoadTexture: image decode failed");
+	}
 
 	if (!ResourceCacheUpsert(&tex->resource)) {
 		texture_finalizer(&tex->resource);
@@ -391,12 +511,23 @@ int OpenGL_UnloadTexture(int argc, const KitsuneVariable* argv,
 	if (luaId == 0)
 		return 0;
 	ImguiTexture* tex = (ImguiTexture*)ResourceCacheGetById(luaId, RESOURCE_TEXTURE);
-	if (tex && tex->glId != 0) {
-		GLuint id = (GLuint)tex->glId;
-		glDeleteTextures(1, &id);
-		tex->glId = 0;
-		tex->width = 0;
-		tex->height = 0;
+	if (tex) {
+		if (tex->frameGlIds && tex->frameCount > 0) {
+			for (int i = 0; i < tex->frameCount; i++) {
+				if (tex->frameGlIds[i] != 0) {
+					GLuint id = (GLuint)tex->frameGlIds[i];
+					glDeleteTextures(1, &id);
+					tex->frameGlIds[i] = 0;
+				}
+			}
+		}
+		else if (tex->glId != 0) {
+			GLuint id = (GLuint)tex->glId;
+			glDeleteTextures(1, &id);
+			tex->glId = 0;
+			tex->width = 0;
+			tex->height = 0;
+		}
 	}
 	return 0;
 }
@@ -467,11 +598,12 @@ int OpenGL_ResizeTexture(int argc, const KitsuneVariable* argv,
 	if (src->glId == 0)
 		return terror(setter, "OpenGL.ResizeTexture: texture is unloaded (sentinel); reload before resizing");
 
-	GLuint dstGlId = blit_texture((GLuint)src->glId, src->width, src->height, newW, newH);
-	if (!dstGlId)
-		return terror(setter, "OpenGL.ResizeTexture: framebuffer blit failed");
-
 	if (source && sourceLen > 0) {
+		// New named resource — blit current frame (glId) as a static texture
+		GLuint dstGlId = blit_texture((GLuint)src->glId, src->width, src->height, newW, newH);
+		if (!dstGlId)
+			return terror(setter, "OpenGL.ResizeTexture: framebuffer blit failed");
+
 		ImguiTexture* dst = alloc_texture();
 		if (!dst) {
 			glDeleteTextures(1, &dstGlId);
@@ -496,10 +628,26 @@ int OpenGL_ResizeTexture(int argc, const KitsuneVariable* argv,
 		return 1;
 	}
 
-	// In-place resize
-	GLuint old = (GLuint)src->glId;
-	glDeleteTextures(1, &old);
-	src->glId = (unsigned int)dstGlId;
+	// In-place resize — handle all GIF frames
+	if (src->frameGlIds && src->frameCount > 0) {
+		for (int i = 0; i < src->frameCount; i++) {
+			if (src->frameGlIds[i] == 0)
+				continue;
+			GLuint newId = blit_texture((GLuint)src->frameGlIds[i], src->width, src->height, newW, newH);
+			GLuint old = (GLuint)src->frameGlIds[i];
+			glDeleteTextures(1, &old);
+			src->frameGlIds[i] = newId ? (unsigned int)newId : 0;
+		}
+		src->glId = src->frameGlIds[src->currentFrame];
+	}
+	else {
+		GLuint dstGlId = blit_texture((GLuint)src->glId, src->width, src->height, newW, newH);
+		if (!dstGlId)
+			return terror(setter, "OpenGL.ResizeTexture: framebuffer blit failed");
+		GLuint old = (GLuint)src->glId;
+		glDeleteTextures(1, &old);
+		src->glId = (unsigned int)dstGlId;
+	}
 	src->width = newW;
 	src->height = newH;
 	KitsuneVariable r = {};
@@ -510,7 +658,10 @@ int OpenGL_ResizeTexture(int argc, const KitsuneVariable* argv,
 }
 
 // ---------------------------------------------------------------------------
-// OpenGL.CopyTexture(id, newSource) -> integer | nil
+// OpenGL.CopyTexture(id, newSource [, frame]) -> integer | nil
+// Copies a texture into a new static resource under newSource.
+// For GIFs: if frame is given (1-based), copies that specific frame.
+//           if frame is nil/omitted, copies the current animated frame (src->glId).
 // ---------------------------------------------------------------------------
 
 int OpenGL_CopyTexture(int argc, const KitsuneVariable* argv,
@@ -518,7 +669,7 @@ int OpenGL_CopyTexture(int argc, const KitsuneVariable* argv,
 	if (!g_imguiCtx)
 		return terror(setter, "OpenGL.CopyTexture: no active session");
 	if (argc < 2 || argv[1].type != KITSUNE_TSTRING)
-		return terror(setter, "OpenGL.CopyTexture(id, newSource): string newSource expected");
+		return terror(setter, "OpenGL.CopyTexture(id, newSource [, frame]): string newSource expected");
 
 	int         luaId = (int)KitsuneAsInt(&argv[0], 0);
 	const char* newSource = (const char*)argv[1].data;
@@ -536,7 +687,24 @@ int OpenGL_CopyTexture(int argc, const KitsuneVariable* argv,
 		strncmp(src->resource.source, newSource, newLen) == 0)
 		return terror(setter, "OpenGL.CopyTexture: cannot copy texture to its own source");
 
-	GLuint dstGlId = blit_texture((GLuint)src->glId, src->width, src->height, src->width, src->height);
+	// Resolve which GL id to blit — default to current frame (src->glId)
+	GLuint srcGlId = (GLuint)src->glId;
+	if (argc > 2 && argv[2].type == KITSUNE_TINTEGER) {
+		int frame = (int)argv[2].integer;
+		if (src->frameGlIds && src->frameCount > 0) {
+			if (frame < 1 || frame > src->frameCount)
+				return terror(setter, "OpenGL.CopyTexture: frame out of range");
+			srcGlId = (GLuint)src->frameGlIds[frame - 1];
+		}
+		else if (frame != 1) {
+			return terror(setter, "OpenGL.CopyTexture: frame out of range");
+		}
+	}
+
+	if (!srcGlId)
+		return terror(setter, "OpenGL.CopyTexture: source frame is not loaded");
+
+	GLuint dstGlId = blit_texture(srcGlId, src->width, src->height, src->width, src->height);
 	if (!dstGlId) {
 		KitsuneVariable r = {};
 		r.type = KITSUNE_TNIL;
@@ -654,6 +822,16 @@ int OpenGL_GetData(int argc, const KitsuneVariable* argv,
 	isLoadedKey.data = (unsigned char*)"isLoaded";
 	isLoadedKey.length = 8;
 
+	KitsuneVariable frameCountKey = {};
+	frameCountKey.type = KITSUNE_TSTRING;
+	frameCountKey.data = (unsigned char*)"frameCount";
+	frameCountKey.length = 10;
+
+	KitsuneVariable formatKey = {};
+	formatKey.type = KITSUNE_TSTRING;
+	formatKey.data = (unsigned char*)"format";
+	formatKey.length = 6;
+
 	KitsuneVariable widthVal = {};
 	widthVal.type = KITSUNE_TINTEGER;
 	widthVal.integer = tex->width;
@@ -676,10 +854,26 @@ int OpenGL_GetData(int argc, const KitsuneVariable* argv,
 	isLoadedVal.type = KITSUNE_TBOOLEAN;
 	isLoadedVal.boolean = tex->glId != 0;
 
+	KitsuneVariable frameCountVal = {};
+	frameCountVal.type = KITSUNE_TINTEGER;
+	frameCountVal.integer = tex->frameCount > 0 ? tex->frameCount : 1;
+
+	KitsuneVariable formatVal = {};
+	if (tex->format) {
+		formatVal.type = KITSUNE_TSTRING;
+		formatVal.data = (unsigned char*)tex->format;
+		formatVal.length = strlen(tex->format);
+	}
+	else {
+		formatVal.type = KITSUNE_TNIL;
+	}
+
 	KitsuneSetIndex(tbl, &widthKey, &widthVal);
 	KitsuneSetIndex(tbl, &heightKey, &heightVal);
 	KitsuneSetIndex(tbl, &sourceKey, &sourceVal);
 	KitsuneSetIndex(tbl, &isLoadedKey, &isLoadedVal);
+	KitsuneSetIndex(tbl, &frameCountKey, &frameCountVal);
+	KitsuneSetIndex(tbl, &formatKey, &formatVal);
 
 	setter(tbl);
 	KitsuneVariableFree(tbl);
@@ -718,8 +912,10 @@ static bool count_iter(Resource* res, const void* ud) {
 	CountState* s = (CountState*)ud;
 	s->count++;
 	ImguiTexture* tex = (ImguiTexture*)res;
-	if (tex->glId != 0)
-		s->bytes += (long long)tex->width * tex->height * 4;
+	if (tex->glId != 0) {
+		int frames = tex->frameCount > 0 ? tex->frameCount : 1;
+		s->bytes += (long long)tex->width * tex->height * 4 * frames;
+	}
 	return true;
 }
 

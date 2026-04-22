@@ -252,6 +252,15 @@
     <Filter Include="LuaHttpServer\Source Files">
       <UniqueIdentifier>{398bddc5-5f1d-4b23-82ac-08139a52fecb}</UniqueIdentifier>
     </Filter>
+    <Filter Include="LuaXml">
+      <UniqueIdentifier>{9f3619e9-6a26-4a08-a154-8c55ae02b007}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaXml\Header Files">
+      <UniqueIdentifier>{14317451-7d30-4d62-bc97-df874085e950}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaXml\Source Files">
+      <UniqueIdentifier>{8f4c62b9-cf25-4c6f-8c9c-338935e15f4a}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="KitsuneEngine.cpp">
@@ -599,6 +608,15 @@
     <ClCompile Include="LuaHttpServer.cpp">
       <Filter>LuaHttpServer\Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="luaxmlmain.cpp">
+      <Filter>LuaXml</Filter>
+    </ClCompile>
+    <ClCompile Include="luaxml.cpp">
+      <Filter>LuaXml\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="pugixml\pugixml.cpp">
+      <Filter>LuaXml\Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="KitsuneEngine.h">
@@ -945,6 +963,18 @@
     </ClInclude>
     <ClInclude Include="LuaHttpServer.h">
       <Filter>LuaHttpServer\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="luaxmlmain.h">
+      <Filter>LuaXml</Filter>
+    </ClInclude>
+    <ClInclude Include="luaxml.h">
+      <Filter>LuaXml\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="pugixml\pugiconfig.hpp">
+      <Filter>LuaXml\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="pugixml\pugixml.hpp">
+      <Filter>LuaXml\Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

@@ -398,7 +398,7 @@ int Font_GetId(int argc, const KitsuneVariable* argv,
 }
 
 // ---------------------------------------------------------------------------
-// Font.SetDefaultColor(color, style)
+// Font.SetDefaultStyleColor(color, style)
 // Sets the fallback text color used by PushBold/PushItalic when the styled
 // font variant is not loaded. color is ImU32 (0xAABBGGRR). style is
 // FONT_STYLE_BOLD (1), FONT_STYLE_ITALIC (2), or both (3).

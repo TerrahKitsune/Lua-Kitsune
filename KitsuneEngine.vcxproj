@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
@@ -53,7 +53,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(SolutionDir)msgpack\include;$(SolutionDir)libarchive\include;$(SolutionDir)mysql\include;$(SolutionDir)postgres\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)hiredis;$(SolutionDir)curl\include;$(SolutionDir)mongodb\include;$(SolutionDir)libevent\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)msgpack\include;$(SolutionDir)pugixml;$(SolutionDir)libarchive\include;$(SolutionDir)mysql\include;$(SolutionDir)postgres\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)hiredis;$(SolutionDir)curl\include;$(SolutionDir)mongodb\include;$(SolutionDir)libevent\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4703;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <PreprocessorDefinitions>KITSUNE_HTTP;KITSUNE_KAFKA;KITSUNE_REDIS;KITSUNE_ENGINE_EXPORTS;KITSUNE_ALL;STANDALONEGFF;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
@@ -79,7 +79,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(SolutionDir)msgpack\include;$(SolutionDir)libarchive\include;$(SolutionDir)mysql\include;$(SolutionDir)postgres\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)hiredis;$(SolutionDir)curl\include;$(SolutionDir)mongodb\include;$(SolutionDir)libevent\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)msgpack\include;$(SolutionDir)pugixml;$(SolutionDir)libarchive\include;$(SolutionDir)mysql\include;$(SolutionDir)postgres\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)hiredis;$(SolutionDir)curl\include;$(SolutionDir)mongodb\include;$(SolutionDir)libevent\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4703;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <PreprocessorDefinitions>KITSUNE_HTTP;KITSUNE_KAFKA;KITSUNE_REDIS;KITSUNE_ENGINE_EXPORTS;KITSUNE_ALL;STANDALONEGFF;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
@@ -123,6 +123,9 @@
     <ClCompile Include="luakafkaproducer.cpp" />
     <ClCompile Include="luamsgpack.cpp" />
     <ClCompile Include="luamsgpackmain.cpp" />
+    <ClCompile Include="luaxml.cpp" />
+    <ClCompile Include="luaxmlmain.cpp" />
+    <ClCompile Include="pugixml\pugixml.cpp" />
     <ClCompile Include="LuaMutex.cpp" />
     <ClCompile Include="LuaMutexMain.cpp" />
     <ClCompile Include="LuaPostgres.cpp" />
@@ -247,6 +250,10 @@
     <ClInclude Include="luakafkaproducer.h" />
     <ClInclude Include="luamsgpack.h" />
     <ClInclude Include="luamsgpackmain.h" />
+    <ClInclude Include="luaxml.h" />
+    <ClInclude Include="luaxmlmain.h" />
+    <ClInclude Include="pugixml\pugixml.hpp" />
+    <ClInclude Include="pugixml\pugiconfig.hpp" />
     <ClInclude Include="LuaMutex.h" />
     <ClInclude Include="LuaMutexMain.h" />
     <ClInclude Include="LuaProcess.h" />

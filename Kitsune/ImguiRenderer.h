@@ -17,9 +17,16 @@ struct ImguiScheduledCall {
 // glId==0 with luaId!=0 means sentinel (load attempted, failed or unloaded).
 struct ImguiTexture {
 	Resource     resource;  // type=RESOURCE_TEXTURE; luaId and source live here
-	unsigned int glId;      // GL texture object; 0 = sentinel
+	unsigned int glId;      // GL texture object; 0 = sentinel (or use frameGlIds[currentFrame] for GIFs)
 	int          width;
 	int          height;
+	const char*  format;    // static string literal: "gif", "png", "jpeg", "bmp", or "unknown"
+	// GIF animation — nullptr/0 when not a GIF
+	unsigned int* frameGlIds;   // heap array of per-frame GL texture ids
+	int*          frameDelays;  // per-frame delay in ms (from stbi)
+	int           frameCount;
+	int           currentFrame; // 0-based index of the frame currently shown
+	double        frameTimer;   // accumulated time in ms since last frame advance
 };
 
 struct ImguiWindowContext {

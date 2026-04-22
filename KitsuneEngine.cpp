@@ -1,9 +1,9 @@
-ï»¿#ifdef _DEBUG
+#ifdef _DEBUG
 #define _CRTDBG_MAP_ALLOC
 #endif
 
 #include <cassert>  // assert() is a no-op in release builds (NDEBUG defined by MSVC /MD /MT)
-#include <clocale>  // setlocale â€” force LC_NUMERIC to "C" so Lua number formatting uses '.' not ','
+#include <clocale>  // setlocale — force LC_NUMERIC to "C" so Lua number formatting uses '.' not ','
 #include <cstdint>  // int64_t
 #include <atomic>   // std::atomic
 #include <chrono>   // portable timing fallback
@@ -59,6 +59,7 @@
 #include "Sha256Main.h"
 #include "luajsonmain.h"
 #include "luamsgpackmain.h"
+#include "luaxmlmain.h"
 #include "luajson.h"
 #include "base64.h"
 #include "wcharmain.h"
@@ -126,7 +127,7 @@ struct KitsuneState {
 	PlatformEvent         workEvent;     // signaled when a new coroutine is ready to run
 	// Signalled by SchedulerProc just before it returns (all work done, state no longer
 	// accessed). KitsuneCleanup waits on this instead of join() so that the thread can
-	// acquire the loader lock for DLL_THREAD_DETACH independently â€” avoiding the DllMain
+	// acquire the loader lock for DLL_THREAD_DETACH independently — avoiding the DllMain
 	// loader-lock deadlock that join() causes when called from FreeLibrary/DLL_PROCESS_DETACH.
 	PlatformEvent         schedulerDoneEvent;
 
@@ -192,7 +193,7 @@ static void SetSlotError(KitsuneCoroutine* slot, const char* msg) {
 	}
 }
 
-// Forward declaration â€” defined after FillKitsuneVariableFromStack.
+// Forward declaration — defined after FillKitsuneVariableFromStack.
 static KitsuneKeyValuePairVariableNode* TableToLinkedList(lua_State* L, int idx);
 
 // -- Deferred variable-free queue ---------------------------------------------
@@ -208,7 +209,7 @@ static std::atomic<KitsuneVariableChain*> g_pendingVariableChainHead{ nullptr };
 // Suppresses the Ticker's pause-park so AcquireLuaAccess on the same thread doesn't deadlock.
 static thread_local bool g_inlineExecution = false;
 
-// Forward declaration â€” FreeVariableData is defined after FreeKVNode below.
+// Forward declaration — FreeVariableData is defined after FreeKVNode below.
 static void FreeVariableData(KitsuneVariable* var, lua_State* L);
 
 
@@ -297,7 +298,7 @@ static void FreeVariableData(KitsuneVariable* var, lua_State* L) {
 // internal Lua representation (wchar_t, used by LuaWChar) is confined here.
 // On Windows, wchar_t is 2 bytes (UTF-16 LE), so both helpers are zero-cost operations.
 // A future non-Windows port replaces these two functions with real UTF-32 <-> UTF-16
-// converters and adds the appropriate #ifdef guard â€” nothing outside these helpers changes.
+// converters and adds the appropriate #ifdef guard — nothing outside these helpers changes.
 
 // Allocates a char16_t* copy of a wchar_t* src (len code units, excluding null terminator).
 // The caller owns the result; free with kitsune_free.
@@ -312,7 +313,7 @@ static inline const wchar_t* Char16AsWchar(const char16_t* p) {
 	return reinterpret_cast<const wchar_t*>(p);
 }
 
-// Forward declaration â€” LuaCFunctionWrapper is defined inside the extern "C" block below;
+// Forward declaration — LuaCFunctionWrapper is defined inside the extern "C" block below;
 // wrapping in extern "C" here matches the definition's C language linkage and avoids C2732.
 extern "C" { static int LuaCFunctionWrapper(lua_State* L); }
 // Native single-step function for LUA_TTHREAD execution (replaces THREAD_STEP_SCRIPT).
@@ -322,7 +323,7 @@ extern "C" { static int LuaCFunctionWrapper(lua_State* L); }
 // nothing (KITSUNE_TNONE) if dead with no return; raises a Lua error on failure.
 extern "C" { static int ThreadStepNative(lua_State* L); }
 
-// KitsuneIteratorUD â€” Lua-owned (lua_newuserdata) memory; GC'd via "KitsuneIterator" metatable.
+// KitsuneIteratorUD — Lua-owned (lua_newuserdata) memory; GC'd via "KitsuneIterator" metatable.
 struct KitsuneIteratorUD {
 	kitsune_CFunctionData first;
 	kitsune_CFunctionData next;
@@ -331,7 +332,7 @@ struct KitsuneIteratorUD {
 	int state;              // 0=uncalled, 1=first called, 2=next, 3=finalized/dead
 };
 
-// KitsuneGCHookUD â€” Lua-owned full userdata; GC'd via "KitsuneGCHook" metatable.
+// KitsuneGCHookUD — Lua-owned full userdata; GC'd via "KitsuneGCHook" metatable.
 // General-purpose lifetime anchor: when the Lua object owning this is collected,
 // finalizer(userdata) is called exactly once.  Use PushGCHook to create instances.
 struct KitsuneGCHookUD {
@@ -339,7 +340,7 @@ struct KitsuneGCHookUD {
 	kitsune_Finalizer finalizer;
 };
 
-// Forward declarations â€” defined inside extern "C" below alongside LuaCFunctionWrapper.
+// Forward declarations — defined inside extern "C" below alongside LuaCFunctionWrapper.
 extern "C" {
 	static int KitsuneIteratorUD_gc(lua_State* L);
 	static int KitsuneIteratorWrapper(lua_State* L);
@@ -595,7 +596,7 @@ static void PushKitsuneVariable(lua_State* L, const KitsuneVariable* v) {
 		break;
 	}
 	case LUA_TTABLE:
-		// Live ref â€” push the actual Lua table from the registry.
+		// Live ref — push the actual Lua table from the registry.
 		if (v->ref > 0) {  // valid luaL_ref is always positive; 0 and LUA_NOREF(-2) mean no ref
 			lua_rawgeti(L, LUA_REGISTRYINDEX, v->ref);
 			if (lua_type(L, -1) != LUA_TTABLE) {
@@ -607,7 +608,7 @@ static void PushKitsuneVariable(lua_State* L, const KitsuneVariable* v) {
 			lua_newtable(L);  // no ref: push a fresh empty table
 		break;
 	case KITSUNE_TTABLECONTENTS:
-		// Snapshot â€” create a new Lua table and populate it from the linked list.
+		// Snapshot — create a new Lua table and populate it from the linked list.
 		lua_newtable(L);
 		if (v->table) {
 			const KitsuneKeyValuePairVariableNode* node = v->table;
@@ -914,7 +915,7 @@ static void Ticker(lua_State* L, lua_Debug* ar) {
 	// Only yield when the scheduler initiated this resume and there are other coroutines waiting.
 	// lua_isyieldable guards against metamethods triggered by C functions: luaT_callTM uses
 	// luaD_callnoyield (non-yieldable) when L->ci is a C frame, so lua_yield would raise
-	// "attempt to yield across a C-call boundary".  Skipping the yield here is safe â€” the
+	// "attempt to yield across a C-call boundary".  Skipping the yield here is safe — the
 	// coroutine will be preempted at the next hook firing that lands in a yieldable Lua frame.
 	if (state->runningCount.load() > 1 && state->currentCoroutineId.load() && lua_isyieldable(L))
 		lua_yield(L, 0);
@@ -1013,7 +1014,7 @@ static void SchedulerProc(KitsuneState* state) {
 			// -- Step 2: Resume each active coroutine once ---------------------
 			for (int i = 0; i < state->slotCount; i++) {
 				// Service any pause request between coroutine resumes.
-				// Without this, an external caller (AcquireLuaAccess â€” variable bridge,
+				// Without this, an external caller (AcquireLuaAccess — variable bridge,
 				// StartCoroutine) must wait for every remaining coroutine in the batch to
 				// complete its current time-slice before the pause is acknowledged.
 				// With this check the worst case is a single 1000-instruction time-slice.
@@ -1028,7 +1029,7 @@ static void SchedulerProc(KitsuneState* state) {
 				if (slot->id == 0 || slot->done.load())
 					continue;
 				if (slot->isInline.load())
-					continue;  // inline slot â€” managed by calling thread, not the scheduler
+					continue;  // inline slot — managed by calling thread, not the scheduler
 				// Per-coroutine cancel: terminate before the next resume (or wake from sleep).
 				if (slot->interrupted.load()) {
 					SetSlotError(slot, "cancelled");
@@ -1081,7 +1082,7 @@ static void SchedulerProc(KitsuneState* state) {
 		if (state->runningCount.load() == 0)
 			state->interrupt.store(0);
 
-		// -- Step 4: Release done + released slots â€“ zero the struct for reuse -
+		// -- Step 4: Release done + released slots – zero the struct for reuse -
 		{
 			// Phase 1 (under slotsLock): collect registry refs and slot results, then zero each slot.
 			// All luaL_unref calls (pendingArgs, pendingThreads, and any TFUNCTION/TTABLE result)
@@ -1168,14 +1169,14 @@ static int L_SleepContinuation(lua_State* L, int status, lua_KContext ctx) {
 	return 0;
 }
 
-// Yield() â€” cooperatively yields the calling coroutine back to the scheduler.
+// Yield() — cooperatively yields the calling coroutine back to the scheduler.
 // For inline sync calls this triggers the yield loop: access is released briefly so the
 // scheduler and variable bridge can service their queues before the call is resumed.
 static int L_Yield(lua_State* L) {
 	return lua_yield(L, 0);
 }
 
-// Sleep(ms) â€” yields the calling coroutine for at least ms milliseconds without blocking any OS thread.
+// Sleep(ms) — yields the calling coroutine for at least ms milliseconds without blocking any OS thread.
 // The scheduler uses the GetCounter clock to skip this coroutine until its deadline has passed.
 // If called outside a scheduler-managed coroutine, falls back to a blocking Win32 Sleep.
 static int L_Sleep(lua_State* L) {
@@ -1195,7 +1196,7 @@ static int L_Sleep(lua_State* L) {
 	}
 
 	// Fall back to a blocking OS sleep when: (a) not a scheduler-managed coroutine,
-	// or (b) lua_isyieldable(L) is false â€” we are inside a luaD_callnoyield boundary
+	// or (b) lua_isyieldable(L) is false — we are inside a luaD_callnoyield boundary
 	// (lua_pcall_nohook, lua_call_nohook, or a metamethod triggered from C code)
 	// and lua_yieldk would raise "attempt to yield across a C-call boundary".
 	if (ms > 0.0)
@@ -1283,7 +1284,7 @@ extern "C" {
 			return false;
 
 		// Apply custom allocators before InitMemoryManager so every subsequent
-		// allocation â€” including the KitsuneState itself â€” uses the caller's heap.
+		// allocation — including the KitsuneState itself — uses the caller's heap.
 		if (KitsuneMemoryAllocator)
 			kitsune_set_allocators(KitsuneMemoryAllocator->malloc, KitsuneMemoryAllocator->realloc, KitsuneMemoryAllocator->free);
 
@@ -1383,10 +1384,11 @@ extern "C" {
 		luaopen_mutex(L);        lua_setglobal(L, "Mutex");
 		luaopen_json(L);         lua_setglobal(L, "Json");
 		// Store a single LuaJson instance in the registry for the C bridge to reuse
-		// when decoding KITSUNE_TJSON values â€” avoids one GC allocation per bridge call.
+		// when decoding KITSUNE_TJSON values — avoids one GC allocation per bridge call.
 		lua_json_push(L);
 		lua_rawsetp(L, LUA_REGISTRYINDEX, lua_json_bridge_registry_key());
 		luaopen_msgpack(L);      lua_setglobal(L, "MsgPack");
+luaopen_xml(L);          lua_setglobal(L, "Xml");
 		luaopen_base64(L);       lua_setglobal(L, "Base64");
 		luaopen_wchar(L);        lua_setglobal(L, "Wchar");
 		luaopen_identifier(L);   lua_setglobal(L, "Identifier");
@@ -1416,7 +1418,7 @@ extern "C" {
 		lua_setfield(L, -2, "__gc");
 		lua_pop(L, 1);
 
-		// Register the KitsuneGCHook metatable â€” general-purpose finalizer anchor.
+		// Register the KitsuneGCHook metatable — general-purpose finalizer anchor.
 		luaL_newmetatable(L, "KitsuneGCHook");
 		lua_pushcfunction(L, KitsuneGCHookUD_gc);
 		lua_setfield(L, -2, "__gc");
@@ -1655,9 +1657,9 @@ extern "C" {
 	}
 
 	// Executes a KitsuneVariable as a coroutine:
-	//   LUA_TFUNCTION â€” pushes the function from the Lua registry and calls it with argc/argv as direct parameters.
-	//   LUA_TSTRING   â€” loads the string as a Lua chunk and runs it; argv is exposed as ARGS[1..argc].
-	//   Anything else â€” the slot is created in done/faulted state with a descriptive error.
+	//   LUA_TFUNCTION — pushes the function from the Lua registry and calls it with argc/argv as direct parameters.
+	//   LUA_TSTRING   — loads the string as a Lua chunk and runs it; argv is exposed as ARGS[1..argc].
+	//   Anything else — the slot is created in done/faulted state with a descriptive error.
 	static int StartCoroutineVariable(KitsuneState* state, const KitsuneVariable* var,
 		int argc, const KitsuneVariable* argv, bool fireAndForget) {
 		if (!state || !var) return -1;
@@ -1726,7 +1728,7 @@ extern "C" {
 			}
 			else {
 				lua_sethook(targetT, Ticker, LUA_MASKCOUNT, 1000);
-				// Pre-push argv onto targetT â€” these become resume args for this step.
+				// Pre-push argv onto targetT — these become resume args for this step.
 				for (int n = 0; n < argc; n++)
 					PushKitsuneVariable(targetT, argv ? &argv[n] : nullptr);
 				// Push ThreadStepNative closure onto wrapper T.
@@ -1890,7 +1892,7 @@ extern "C" {
 	// In all cases Lua access is already owned; Sleep/Yield in the called function are no-ops
 	// (the coroutine is immediately re-resumed on each LUA_YIELD without releasing Lua access).
 	// Saves and restores currentCoroutineId and g_inlineExecution so the outer context is undisturbed.
-	// Does NOT call ReleaseLuaAccess â€” the caller never acquired it.
+	// Does NOT call ReleaseLuaAccess — the caller never acquired it.
 	static KitsuneVariable* RunInlineTight(KitsuneState* state, KitsuneCoroutine* slot,
 		lua_State* T, int initialNArgs) {
 		int id = slot->id;
@@ -2353,7 +2355,7 @@ extern "C" {
 			}
 
 			lua_sethook(targetT, Ticker, LUA_MASKCOUNT, 1000);
-			// Pre-push argv onto targetT â€” these become resume args for this step.
+			// Pre-push argv onto targetT — these become resume args for this step.
 			for (int n = 0; n < argc; n++)
 				PushKitsuneVariable(targetT, argv ? &argv[n] : nullptr);
 			// Push ThreadStepNative closure onto wrapper T.
@@ -2600,7 +2602,7 @@ extern "C" {
 		if (!var) return;
 		// TFUNCTION, TTHREAD, and TTABLE (with nodes): need the Lua state to luaL_unref registry
 		// entries.  On the scheduler thread Lua access is already owned so call directly.
-		// On any other thread, enqueue the variable for the scheduler to drain â€” this avoids
+		// On any other thread, enqueue the variable for the scheduler to drain — this avoids
 		// blocking the caller while a coroutine is running (same pattern as stream sweep).
 		if (var->type == LUA_TFUNCTION || var->type == LUA_TTHREAD
 			|| (var->type == LUA_TTABLE && var->ref > 0)
@@ -2699,7 +2701,7 @@ extern "C" {
 
 	// RAII guard that acquires the Lua access lock when the calling thread does not already
 	// own it (i.e. is not the scheduler or an inline-execution thread), and releases it in
-	// the destructor.  All exit paths â€” including early returns â€” release automatically,
+	// the destructor.  All exit paths — including early returns — release automatically,
 	// eliminating the manual `bool hasAccess` pattern in every variable-bridge API function.
 	struct LuaAccessGuard {
 		KitsuneState* const state;
@@ -2775,7 +2777,7 @@ extern "C" {
 	// Protected body for KitsuneGetAll: receives the table at index 1, iterates it via
 	// lua_next, and invokes the callback for each key-value pair.
 	// Running inside lua_pcall means any error from lua_next (e.g. invalid key, OOM)
-	// is caught and returned to the caller â€” ReleaseLuaAccess is always reached.
+	// is caught and returned to the caller — ReleaseLuaAccess is always reached.
 	static int GetAllIteratorBody(lua_State* L) {
 		KitsuneGetAllCtx* ctx = (KitsuneGetAllCtx*)lua_touserdata(L, lua_upvalueindex(1));
 		lua_pushnil(L);  // first key
@@ -2977,7 +2979,7 @@ extern "C" {
 
 	// Called by Lua GC when the KitsuneIteratorUD upvalue is collected.
 	// Sets state=3 before calling finalized so any reentrant call is a no-op.
-	// Passes a no-op resultSetter â€” never nullptr â€” to avoid a null-pointer crash
+	// Passes a no-op resultSetter — never nullptr — to avoid a null-pointer crash
 	// in LuaFunctionTrampoline when finalized tries to return a value.
 	static int KitsuneIteratorUD_gc(lua_State* L) {
 		KitsuneIteratorUD* ud = (KitsuneIteratorUD*)lua_touserdata(L, 1);
@@ -2994,7 +2996,7 @@ extern "C" {
 	// Lua closure pushed by PushKitsuneVariable for KITSUNE_TITERATOR values.
 	// Upvalue 1 is the KitsuneIteratorUD full userdata.
 	// On state==0 calls first; on state==1/2 calls next.
-	// Returning KITSUNE_TNONE or rc<=0 signals end-of-iteration (pushes nil) â€” NOT a Lua error.
+	// Returning KITSUNE_TNONE or rc<=0 signals end-of-iteration (pushes nil) — NOT a Lua error.
 	static int KitsuneIteratorWrapper(lua_State* L) {
 		KitsuneIteratorUD* ud = (KitsuneIteratorUD*)lua_touserdata(L, lua_upvalueindex(1));
 		if (!ud || ud->state == 3) {
@@ -3396,7 +3398,7 @@ extern "C" {
 		lua_pushcfunction(state->L, DoNext);
 		PushKitsuneVariable(state->L, tableVar);  // arg 1: table
 
-		// arg 2: cursor key â€” either nil (start) or the embedded key from the previous result
+		// arg 2: cursor key — either nil (start) or the embedded key from the previous result
 		if (key && key->type == KITSUNE_TTABLECONTENTS && key->table) {
 			PushKitsuneVariable(state->L, &key->table->key);
 			// Ownership transfer: free the previous result now that its key is on the stack.
@@ -3457,7 +3459,7 @@ extern "C" {
 		int objIdx = lua_absindex(state->L, -1);
 		int stackBefore = objIdx - 1;  // stack depth before any of our pushes
 
-		// luaL_getmetafield uses lua_rawget internally â€” safe without a pcall.
+		// luaL_getmetafield uses lua_rawget internally — safe without a pcall.
 		int mtype = luaL_getmetafield(state->L, -1, metamethod);
 		if (mtype == LUA_TNIL) {
 			lua_pop(state->L, 1);  // pop obj
@@ -3496,9 +3498,9 @@ extern "C" {
 		return out;
 	}
 
-	// Protected body for KitsuneCallMethod â€” step 1: field lookup via __index.
+	// Protected body for KitsuneCallMethod — step 1: field lookup via __index.
 	// Upvalue 1: method name (Lua string). Stack on entry: [obj].
-	// Returns the value found at obj[method]; never errors here â€” errors in __index become
+	// Returns the value found at obj[method]; never errors here — errors in __index become
 	// pcall failures surfaced as KITSUNE_TERROR by the caller.
 	static int DoLookupMethod(lua_State* L) {
 		const char* method = lua_tostring(L, lua_upvalueindex(1));

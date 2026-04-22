@@ -1,4 +1,4 @@
-using KitsuneNet;
+﻿using KitsuneNet;
 using Shouldly;
 using Xunit;
 
@@ -7474,6 +7474,737 @@ namespace KitsuneNet.Tests
                 return 'ok'
             ");
             r.String.ShouldBe("ok");
+        }
+
+        // -- Xml ------------------------------------------------------------------
+        // All operations require an instance (Xml.New() or Xml.Create()).
+
+        // -- Instance creation ----------------------------------------------------
+        [Fact]
+        public async Task Xml_New_ReturnsUserdata()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync("return type(Xml.New())");
+            r.String.ShouldBe("userdata");
+        }
+
+        [Fact]
+        public async Task Xml_Create_AliasWorksIdenticallyToNew()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml = Xml.Create()
+                local doc = xml:Decode('<r/>')
+                return tostring(doc ~= nil and doc.tag == 'r')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Xml_Tostring_ReturnsNonEmptyString()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync("return tostring(type(tostring(Xml.New())) == 'string' and #tostring(Xml.New()) > 0)");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Xml_Dispose_CanBeCalledExplicitly()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml = Xml.New()
+                xml:Dispose()
+                return 'ok'
+            ");
+            r.String.ShouldBe("ok");
+        }
+
+        [Fact]
+        public async Task Xml_New_CalledOnInstance_ReturnsNewInstance()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local a = Xml.New()
+                local b = a:New()
+                local doc = b:Decode('<hello/>')
+                return tostring(doc ~= nil and doc.tag == 'hello')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        // -- Decode ---------------------------------------------------------------
+        [Fact]
+        public async Task Xml_Decode_SimpleElement_ReturnsTable()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml = Xml.New()
+                local doc = xml:Decode('<root/>')
+                return tostring(type(doc) == 'table')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Xml_Decode_Tag_IsCorrect()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml = Xml.New()
+                local doc = xml:Decode('<person/>')
+                return doc.tag
+            ");
+            r.String.ShouldBe("person");
+        }
+
+        [Fact]
+        public async Task Xml_Decode_NoAttributes_AttrIsEmptyTable()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml = Xml.New()
+                local doc = xml:Decode('<root/>')
+                return tostring(type(doc.attr) == 'table' and #doc.attr == 0)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Xml_Decode_SingleAttribute_KeyAndValueCorrect()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml = Xml.New()
+                local doc = xml:Decode('<item id=""42""/>')
+                return tostring(doc.attr[1].key == 'id' and doc.attr[1].value == '42')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Xml_Decode_MultipleAttributes_AllPresent()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml = Xml.New()
+                local doc = xml:Decode('<item id=""1"" active=""true""/>')
+                return tostring(#doc.attr == 2)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Xml_Decode_TextContent_IsCorrect()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml = Xml.New()
+                local doc = xml:Decode('<name>Alice</name>')
+                return doc.text
+            ");
+            r.String.ShouldBe("Alice");
+        }
+
+        [Fact]
+        public async Task Xml_Decode_NoTextContent_TextIsEmptyString()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml = Xml.New()
+                local doc = xml:Decode('<empty/>')
+                return tostring(doc.text == '')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Xml_Decode_NoChildren_ChildrenIsEmptyTable()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml = Xml.New()
+                local doc = xml:Decode('<leaf/>')
+                return tostring(type(doc.children) == 'table' and #doc.children == 0)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Xml_Decode_SingleChild_ChildTagCorrect()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml = Xml.New()
+                local doc = xml:Decode('<root><child/></root>')
+                return doc.children[1].tag
+            ");
+            r.String.ShouldBe("child");
+        }
+
+        [Fact]
+        public async Task Xml_Decode_MultipleChildren_CountIsCorrect()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml = Xml.New()
+                local doc = xml:Decode('<root><a/><b/><c/></root>')
+                return tostring(#doc.children == 3)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Xml_Decode_NestedChildren_DeepAccess()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml = Xml.New()
+                local doc = xml:Decode('<a><b><c>deep</c></b></a>')
+                return doc.children[1].children[1].text
+            ");
+            r.String.ShouldBe("deep");
+        }
+
+        [Fact]
+        public async Task Xml_Decode_FullNode_AllFieldsPresent()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml = Xml.New()
+                local doc = xml:Decode('<person id=""1"" active=""true""><name>Alice</name><score>42</score></person>')
+                return tostring(
+                    doc.tag == 'person' and
+                    #doc.attr == 2 and
+                    doc.attr[1].key == 'id' and
+                    doc.attr[1].value == '1' and
+                    #doc.children == 2 and
+                    doc.children[1].tag == 'name' and
+                    doc.children[1].text == 'Alice' and
+                    doc.children[2].tag == 'score' and
+                    doc.children[2].text == '42'
+                )
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Xml_Decode_InvalidXml_ReturnsNilAndError()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml = Xml.New()
+                local doc, err = xml:Decode('not < valid > xml <<<')
+                return tostring(doc == nil and type(err) == 'string')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Xml_Decode_EmptyString_ReturnsNilAndError()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml = Xml.New()
+                local doc, err = xml:Decode('')
+                return tostring(doc == nil and type(err) == 'string')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Xml_Decode_WithXmlDeclaration_ReturnsRootElement()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml = Xml.New()
+                local doc = xml:Decode('<?xml version=""1.0"" encoding=""UTF-8""?><root/>')
+                return doc.tag
+            ");
+            r.String.ShouldBe("root");
+        }
+
+        [Fact]
+        public async Task Xml_Decode_CommentsIgnored_NotInChildren()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml = Xml.New()
+                local doc = xml:Decode('<root><!-- comment --><child/></root>')
+                return tostring(#doc.children == 1 and doc.children[1].tag == 'child')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Xml_Decode_AttributeOrder_Preserved()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml = Xml.New()
+                local doc = xml:Decode('<item a=""1"" b=""2"" c=""3""/>')
+                return tostring(doc.attr[1].key == 'a' and doc.attr[2].key == 'b' and doc.attr[3].key == 'c')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Xml_Decode_ChildrenOrder_Preserved()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml = Xml.New()
+                local doc = xml:Decode('<root><first/><second/><third/></root>')
+                return tostring(doc.children[1].tag == 'first' and doc.children[2].tag == 'second' and doc.children[3].tag == 'third')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Xml_Decode_InstanceReuse_MultipleCalls()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml = Xml.New()
+                local d1  = xml:Decode('<a/>')
+                local d2  = xml:Decode('<b/>')
+                return tostring(d1.tag == 'a' and d2.tag == 'b')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        // -- Encode ---------------------------------------------------------------
+        [Fact]
+        public async Task Xml_Encode_ReturnsString()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml = Xml.New()
+                local s   = xml:Encode({ tag='root', attr={}, text='', children={} })
+                return tostring(type(s) == 'string' and #s > 0)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Xml_Encode_ContainsXmlDeclaration()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml = Xml.New()
+                local s   = xml:Encode({ tag='root', attr={}, text='', children={} })
+                return tostring(s:find('<?xml') ~= nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Xml_Encode_ContainsTag()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml = Xml.New()
+                local s   = xml:Encode({ tag='person', attr={}, text='', children={} })
+                return tostring(s:find('<person') ~= nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Xml_Encode_SingleAttribute_AppearsInOutput()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml = Xml.New()
+                local s   = xml:Encode({ tag='item', attr={{ key='id', value='42' }}, text='', children={} })
+                return tostring(s:find('id=""42""') ~= nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Xml_Encode_TextContent_AppearsInOutput()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml = Xml.New()
+                local s   = xml:Encode({ tag='name', attr={}, text='Alice', children={} })
+                return tostring(s:find('Alice') ~= nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Xml_Encode_MissingTag_RaisesError()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml = Xml.New()
+                local ok, err = pcall(function()
+                    xml:Encode({ tag='', attr={}, text='', children={} })
+                end)
+                return tostring(not ok and type(err) == 'string')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Xml_Encode_NonTableArg_RaisesError()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml = Xml.New()
+                local ok, err = pcall(function() xml:Encode('not a table') end)
+                return tostring(not ok)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Xml_Encode_IndentFlag_ProducesNewlines()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml = Xml.New(true)
+                local s   = xml:Encode({ tag='root', attr={}, text='', children={
+                    { tag='child', attr={}, text='', children={} }
+                }})
+                return tostring(s:find('\n') ~= nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Xml_Encode_CompactFlag_NoIndentNewlines()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml = Xml.New(false)
+                local s   = xml:Encode({ tag='root', attr={}, text='', children={
+                    { tag='child', attr={}, text='', children={} }
+                }})
+                -- compact may still have a newline after the declaration line;
+                -- check that there is no indentation whitespace (tab or leading spaces before <child)
+                return tostring(s:find('\t<child') == nil and s:find('  <child') == nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Xml_Encode_IsDeterministic()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml = Xml.New()
+                local node = { tag='root', attr={{ key='x', value='1' }}, text='hello', children={} }
+                return tostring(xml:Encode(node) == xml:Encode(node))
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        // -- Round-trip (Encode then Decode) --------------------------------------
+        [Fact]
+        public async Task Xml_RoundTrip_Tag_Preserved()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml  = Xml.New()
+                local node = { tag='person', attr={}, text='', children={} }
+                local doc  = xml:Decode(xml:Encode(node))
+                return doc.tag
+            ");
+            r.String.ShouldBe("person");
+        }
+
+        [Fact]
+        public async Task Xml_RoundTrip_SingleAttribute_Preserved()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml  = Xml.New()
+                local node = { tag='item', attr={{ key='id', value='7' }}, text='', children={} }
+                local doc  = xml:Decode(xml:Encode(node))
+                return tostring(doc.attr[1].key == 'id' and doc.attr[1].value == '7')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Xml_RoundTrip_MultipleAttributes_AllPreserved()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml  = Xml.New()
+                local node = { tag='item', attr={{ key='a', value='1' }, { key='b', value='2' }}, text='', children={} }
+                local doc  = xml:Decode(xml:Encode(node))
+                return tostring(#doc.attr == 2 and doc.attr[1].key == 'a' and doc.attr[2].key == 'b')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Xml_RoundTrip_TextContent_Preserved()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml  = Xml.New()
+                local node = { tag='name', attr={}, text='Alice', children={} }
+                local doc  = xml:Decode(xml:Encode(node))
+                return doc.text
+            ");
+            r.String.ShouldBe("Alice");
+        }
+
+        [Fact]
+        public async Task Xml_RoundTrip_SingleChild_Preserved()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml  = Xml.New()
+                local node = { tag='root', attr={}, text='', children={
+                    { tag='child', attr={}, text='value', children={} }
+                }}
+                local doc = xml:Decode(xml:Encode(node))
+                return tostring(#doc.children == 1 and doc.children[1].tag == 'child' and doc.children[1].text == 'value')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Xml_RoundTrip_MultipleChildren_AllPreserved()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml  = Xml.New()
+                local node = { tag='root', attr={}, text='', children={
+                    { tag='a', attr={}, text='1', children={} },
+                    { tag='b', attr={}, text='2', children={} },
+                    { tag='c', attr={}, text='3', children={} },
+                }}
+                local doc = xml:Decode(xml:Encode(node))
+                return tostring(#doc.children == 3 and doc.children[2].tag == 'b' and doc.children[2].text == '2')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Xml_RoundTrip_NestedChildren_Preserved()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml  = Xml.New()
+                local node = { tag='a', attr={}, text='', children={
+                    { tag='b', attr={}, text='', children={
+                        { tag='c', attr={}, text='deep', children={} }
+                    }}
+                }}
+                local doc = xml:Decode(xml:Encode(node))
+                return doc.children[1].children[1].text
+            ");
+            r.String.ShouldBe("deep");
+        }
+
+        [Fact]
+        public async Task Xml_RoundTrip_FullNode_AllFieldsCorrect()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml  = Xml.New()
+                local node = {
+                    tag  = 'person',
+                    attr = { {key='id', value='1'}, {key='active', value='true'} },
+                    text = '',
+                    children = {
+                        { tag='name',  attr={}, text='Alice', children={} },
+                        { tag='score', attr={}, text='42',    children={} },
+                    }
+                }
+                local doc = xml:Decode(xml:Encode(node))
+                return tostring(
+                    doc.tag == 'person'          and
+                    #doc.attr == 2               and
+                    doc.attr[1].key == 'id'      and
+                    doc.attr[1].value == '1'     and
+                    #doc.children == 2           and
+                    doc.children[1].tag == 'name' and
+                    doc.children[1].text == 'Alice' and
+                    doc.children[2].text == '42'
+                )
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Xml_RoundTrip_InstanceReuse_BothCorrect()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml = Xml.New()
+                local n1  = { tag='first',  attr={}, text='one', children={} }
+                local n2  = { tag='second', attr={}, text='two', children={} }
+                local d1  = xml:Decode(xml:Encode(n1))
+                local d2  = xml:Decode(xml:Encode(n2))
+                return tostring(d1.tag == 'first' and d1.text == 'one' and d2.tag == 'second' and d2.text == 'two')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Xml_RoundTrip_EmptyTextAndChildren_Preserved()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml  = Xml.New()
+                local node = { tag='empty', attr={}, text='', children={} }
+                local doc  = xml:Decode(xml:Encode(node))
+                return tostring(doc.text == '' and #doc.children == 0)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Xml_New_CalledOnInstance_WithTrue_ProducesIndented()
+        {
+            // Regression: xml:New(true) must pass indent=true even though arg1 is the userdata.
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local a    = Xml.New()
+                local b    = a:New(true)
+                local node = { tag='root', attr={}, text='', children={
+                    { tag='child', attr={}, text='', children={} }
+                }}
+                return tostring(b:Encode(node):find('\n') ~= nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Xml_Encode_DeeplyNested_RaisesError()
+        {
+            // Regression: encode must raise an error rather than C-stack-overflow
+            // when nesting exceeds the 512-level guard.
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml = Xml.New()
+                local root = { tag='a', attr={}, text='', children={} }
+                local cur = root
+                for i = 1, 520 do
+                    local child = { tag='a', attr={}, text='', children={} }
+                    cur.children = { child }
+                    cur = child
+                end
+                local ok, err = pcall(function() xml:Encode(root) end)
+                return tostring(not ok and type(err) == 'string')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Xml_Decode_DeeplyNested_RaisesError()
+        {
+            // Regression: decode must raise an error rather than C-stack-overflow
+            // when nesting exceeds the 512-level guard.
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml   = Xml.New()
+                local open  = string.rep('<a>', 520)
+                local close = string.rep('</a>', 520)
+                local ok, err = pcall(function() xml:Decode(open .. close) end)
+                return tostring(not ok and type(err) == 'string')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Xml_Encode_MissingTagOnChild_RaisesError()
+        {
+            // The longjmp-safe encode_protected path must propagate child errors cleanly.
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml  = Xml.New()
+                local node = { tag='root', attr={}, text='', children={
+                    { tag='', attr={}, text='', children={} }
+                }}
+                local ok, err = pcall(function() xml:Encode(node) end)
+                return tostring(not ok and type(err) == 'string')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Xml_Decode_NonStringArg_RaisesError()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml = Xml.New()
+                local ok, err = pcall(function() xml:Decode(42) end)
+                return tostring(not ok and type(err) == 'string')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Xml_Decode_WhitespaceOnly_ReturnsNilAndError()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml = Xml.New()
+                local doc, err = xml:Decode('   ')
+                return tostring(doc == nil and type(err) == 'string')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Xml_Encode_TextWithSpecialChars_EscapedCorrectly()
+        {
+            // < > & in text must be XML-escaped so the output round-trips.
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml  = Xml.New()
+                local node = { tag='data', attr={}, text='a < b & c > d', children={} }
+                local doc  = xml:Decode(xml:Encode(node))
+                return doc.text
+            ");
+            r.String.ShouldBe("a < b & c > d");
+        }
+
+        [Fact]
+        public async Task Xml_Encode_AttributeWithSpecialChars_EscapedCorrectly()
+        {
+            // Attribute values containing quotes must survive a round-trip.
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml  = Xml.New()
+                local node = { tag='item', attr={{ key='note', value='a&b' }}, text='', children={} }
+                local doc  = xml:Decode(xml:Encode(node))
+                return doc.attr[1].value
+            ");
+            r.String.ShouldBe("a&b");
+        }
+
+        [Fact]
+        public async Task Xml_Decode_CdataSection_IncludedInText()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml = Xml.New()
+                local doc = xml:Decode('<root><![CDATA[hello cdata]]></root>')
+                return doc.text
+            ");
+            r.String.ShouldBe("hello cdata");
+        }
+
+        [Fact]
+        public async Task Xml_Decode_MixedPcdataAndCdata_Concatenated()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local xml = Xml.New()
+                local doc = xml:Decode('<root>hello <![CDATA[world]]></root>')
+                return doc.text
+            ");
+            r.String.ShouldBe("hello world");
         }
 
         // -- MsgPack --------------------------------------------------------------

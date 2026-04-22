@@ -30,6 +30,7 @@ A comprehensive reference for all available functions in the Lua environment.
 - [Decimal](#decimal)
 - [MongoDB](#mongodb)
 - [FileSystem](#filesystem)
+- [Xml](#xml)
 - [Third-Party Notices](#third-party-notices)
 ---
 
@@ -2019,6 +2020,87 @@ mongo:Close()
 
 ---
 
+## Xml
+
+An XML serialization module backed by [pugixml](https://pugixml.org/). Supports encoding Lua tables to XML strings and decoding XML strings back to Lua tables.
+
+```lua
+Xml    Xml.New(opt indent)    -- primary constructor
+Xml    Xml.Create(opt indent) -- alias for New (backward compat)
+string xml:Encode(table)      -- encode a Lua node table to an XML string
+table  xml:Decode(string)     -- decode an XML string to a Lua node table
+nil    xml:Dispose()          -- explicitly free the instance (also called by GC)
+```
+
+| Function | Description |
+|----------|-------------|
+| `New` / `Create` | Create a new Xml instance. Pass `true` for indented output (one tab per level); default is compact (no indentation) |
+| `Encode` | Encode a Lua node table to an XML string. Always prepends an `<?xml version="1.0" encoding="UTF-8"?>` declaration |
+| `Decode` | Parse an XML string and return the root element as a Lua node table. Returns `nil, errmsg` on parse failure |
+| `Dispose` | Explicitly release the instance; called automatically by the GC |
+
+### Node Table Structure
+
+Every XML element is represented as a Lua table with four fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `tag` | string | The element name (e.g. `"person"`) |
+| `attr` | array | Sequential array of `{key, value}` tables — one per attribute, in document order |
+| `text` | string | Concatenated text content of the element (PCDATA and CDATA nodes), or `""` when none |
+| `children` | array | Sequential array of child element node tables, in document order |
+
+### Examples
+
+```lua
+local xml = Xml.New()
+
+-- Decode
+local doc = xml:Decode([[
+<person id="1" active="true">
+    <name>Alice</name>
+    <score>42</score>
+</person>
+]])
+print(doc.tag)              -- "person"
+print(doc.attr[1].key)      -- "id"
+print(doc.attr[1].value)    -- "1"
+print(doc.children[1].tag)  -- "name"
+print(doc.children[1].text) -- "Alice"
+
+-- Encode
+local node = {
+    tag  = "person",
+    attr = { {key="id", value="1"} },
+    text = "",
+    children = {
+        { tag="name", attr={}, text="Alice", children={} },
+        { tag="score", attr={}, text="42", children={} },
+    },
+}
+local s = xml:Encode(node)
+print(s)
+-- <?xml version="1.0" encoding="UTF-8"?><person id="1"><name>Alice</name><score>42</score></person>
+
+-- Indented output
+local pretty = Xml.New(true)
+print(pretty:Encode(node))
+
+-- Error handling
+local doc, err = xml:Decode("not < valid > xml <<<")
+if not doc then print("Parse error:", err) end
+```
+
+### Notes
+
+- `Encode` expects every node table to have a non-empty `tag` field; an error is raised otherwise.
+- Attributes are written in the order they appear in the `attr` array.
+- Mixed content (elements that have both `text` and `children`) is supported: `text` is appended as a PCDATA node before the child elements.
+- `Decode` returns only the first root element; XML comments, processing instructions, and the XML declaration are ignored in the output table.
+- Input must be UTF-8 encoded. The encoder always writes UTF-8.
+
+---
+
 ## FileSystem
 
 All path arguments accept either a plain Lua `string` (UTF-8) or a `Wchar` object.
@@ -2117,6 +2199,20 @@ Wchar   FileSystem.GetSpecialFolder(csidl)   -- Windows only
 ## Third-Party Notices
 
 KitsuneEngine incorporates the following open-source libraries. Their copyright notices and license terms are reproduced below as required.
+
+---
+
+### pugixml
+
+**Copyright © 2006–2026 Arseny Kapoulkine**
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+*License: [MIT](https://opensource.org/licenses/MIT)*
 
 ---
 

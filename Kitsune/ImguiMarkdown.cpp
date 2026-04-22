@@ -493,8 +493,9 @@ static void render_spans(ImguiWindowContext* ctx, int lineIdx) {
 				ctx,
 				base + n.urlOffset, (int)n.urlLen);
 			if (tex && tex->glId != 0) {
+				unsigned int glId = ResolveTextureGlId(tex->resource.luaId);
 				ImGui::Image(
-					(ImTextureID)(uintptr_t)tex->glId,
+					(ImTextureID)(uintptr_t)glId,
 					ImVec2((float)tex->width, (float)tex->height));
 			}
 			else {
@@ -671,8 +672,9 @@ void RenderFromNodes(ImguiWindowContext* ctx, float w, float h) {
 								ctx,
 								base + sn.urlOffset, (int)sn.urlLen);
 							if (tex && tex->glId != 0) {
+								unsigned int glId = ResolveTextureGlId(tex->resource.luaId);
 								ImGui::Image(
-									(ImTextureID)(uintptr_t)tex->glId,
+									(ImTextureID)(uintptr_t)glId,
 									ImVec2((float)tex->width, (float)tex->height));
 							}
 							else {

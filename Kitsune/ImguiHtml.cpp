@@ -188,9 +188,10 @@ void KitsuneHtmlContainer::draw_image(
     ImguiTexture* tex = (ImguiTexture*)ResourceCacheGetBySource(url.c_str(), RESOURCE_TEXTURE);
     if (!tex || !tex->glId)
         return;
+    unsigned int glId = ResolveTextureGlId(tex->resource.luaId);
     ImVec2 p0(origin.x + layer.border_box.x, origin.y + layer.border_box.y);
     ImVec2 p1(p0.x + layer.border_box.width, p0.y + layer.border_box.height);
-    drawList->AddImage((ImTextureID)(uintptr_t)tex->glId, p0, p1);
+    drawList->AddImage((ImTextureID)(uintptr_t)glId, p0, p1);
 }
 
 void KitsuneHtmlContainer::draw_solid_fill(

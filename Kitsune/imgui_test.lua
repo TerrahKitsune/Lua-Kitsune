@@ -966,6 +966,7 @@ local function tabTextures(renderer, ctx)
         ctx.texOriginal  = OpenGL.LoadTexture(Stream.Open('./docs/sample.png', 'rb'), 'sample.png')
         ctx.texThumbnail = OpenGL.ResizeTexture(ctx.texOriginal, 100, 100, 'sample.png:thumb')
         ctx.texSheet     = OpenGL.LoadTexture(Stream.Open('./docs/samplespritesheet.png', 'rb'), 'samplespritesheet.png')
+        ctx.texGif       = OpenGL.LoadTexture(Stream.Open('./docs/sample.gif', 'rb'), 'sample.gif')
         ctx.sheetFrame   = 1
         ctx.sheetTimer   = 0.0
     end
@@ -977,10 +978,12 @@ local function tabTextures(renderer, ctx)
         end
         local data = OpenGL.GetData(id)
         renderer:Text(label)
-        renderer:Text('  id     : ' .. tostring(id))
-        renderer:Text('  width  : ' .. tostring(data and data.width  or '?'))
-        renderer:Text('  height : ' .. tostring(data and data.height or '?'))
-        renderer:Text('  source : ' .. tostring(data and data.source or 'none'))
+        renderer:Text('  id         : ' .. tostring(id))
+        renderer:Text('  width      : ' .. tostring(data and data.width      or '?'))
+        renderer:Text('  height     : ' .. tostring(data and data.height     or '?'))
+        renderer:Text('  format     : ' .. tostring(data and data.format     or 'none'))
+        renderer:Text('  frameCount : ' .. tostring(data and data.frameCount or '?'))
+        renderer:Text('  source     : ' .. tostring(data and data.source     or 'none'))
         if data then
             renderer:Image(id, data.width, data.height)
         end
@@ -989,6 +992,7 @@ local function tabTextures(renderer, ctx)
 
     showTexture('Original (sample.png)', ctx.texOriginal)
     showTexture('Thumbnail (100x100)',    ctx.texThumbnail)
+    showTexture('Animated GIF (sample.gif)', ctx.texGif)
 
     -- Sprite sheet: 512x512, 8 cols x 8 rows = 64 frames, each cell 64x64
     if ctx.texSheet then
