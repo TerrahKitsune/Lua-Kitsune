@@ -31,6 +31,8 @@ A comprehensive reference for all available functions in the Lua environment.
 - [MongoDB](#mongodb)
 - [FileSystem](#filesystem)
 - [Xml](#xml)
+- [Yaml](#yaml)
+- [Toml](#toml)
 - [Third-Party Notices](#third-party-notices)
 ---
 
@@ -2196,6 +2198,224 @@ Wchar   FileSystem.GetSpecialFolder(csidl)   -- Windows only
 
 ---
 
+## Yaml
+
+A YAML serialization module backed by [libyaml](https://github.com/yaml/libyaml). Supports encoding Lua tables to YAML strings and decoding YAML strings back to Lua values. Implements YAML 1.1.
+
+```lua
+Yaml    Yaml.New(opt pretty)    -- primary constructor
+Yaml    Yaml.Create(opt pretty) -- alias for New (backward compat)
+string  yaml:Encode(value)      -- encode a Lua value to a YAML string
+value   yaml:Decode(string)     -- decode a YAML string to a Lua value
+nil     yaml:Dispose()          -- explicitly free the instance (also called by GC)
+```
+
+| Function | Description |
+|----------|-------------|
+| `New` / `Create` | Create a new Yaml instance. Pass `true` for block/pretty style (one entry per line); default is flow style (compact, inline) |
+| `Encode` | Encode a Lua value to a YAML string |
+| `Decode` | Parse a YAML string and return the decoded Lua value |
+| `Dispose` | Explicitly release the instance; called automatically by the GC |
+
+### Scalar Type Coercion (Decode)
+
+Plain (unquoted) scalars are coerced to Lua types using YAML 1.1 rules:
+
+| YAML scalar | Lua type |
+|-------------|----------|
+| `null`, `~`, `Null`, `NULL`, empty | `nil` |
+| `true`, `True`, `TRUE`, `yes`, `Yes`, `YES`, `on`, `On`, `ON` | `boolean` `true` |
+| `false`, `False`, `FALSE`, `no`, `No`, `NO`, `off`, `Off`, `OFF` | `boolean` `false` |
+| Valid integer literal (`0`, `-1`, `0xFF`, `0777`) | `integer` |
+| Valid float literal (`3.14`, `1e10`) | `number` |
+| Anything else | `string` |
+
+Quoted scalars (`"..."` or `'...'`) are always decoded as strings regardless of content.
+
+### Type Mapping (Encode)
+
+| Lua type | YAML output |
+|----------|-------------|
+| `nil` | `null` |
+| `boolean` | `true` / `false` |
+| integer | plain scalar (e.g. `42`) |
+| float | plain scalar (e.g. `3.14`) |
+| `string` | double-quoted scalar |
+| `Wchar` | double-quoted scalar (UTF-8 encoded) |
+| `Identifier` | double-quoted scalar (canonical string) |
+| `DateTime` | double-quoted scalar (ISO 8601) |
+| `Decimal` | double-quoted scalar (decimal string) |
+| `table` (sequential integer keys) | sequence (`[]` / block `- ` style) |
+| `table` (other keys) | mapping (`{}` / block `key: value` style) |
+| functions, threads, unsupported userdata | `null` |
+
+### Notes
+
+- **Circular references** raise an error: `Yaml: recursion detected`
+- **Table classification**: pure sequential integer-keyed tables (`{1, 2, 3}`) encode as YAML sequences; all others encode as mappings
+- **Style**: `Yaml.New()` (flow) produces compact single-line output; `Yaml.New(true)` (block) produces human-readable multi-line output. Both styles decode correctly by the other instance
+- **Anchors and aliases** in input YAML are resolved transparently by libyaml before the binding layer ever sees them
+- **Multi-document YAML** — only the first document is decoded
+
+### Examples
+
+```lua
+local yaml = Yaml.New()
+
+-- Basic encode/decode
+local s = yaml:Encode({name = 'Alice', scores = {10, 20, 30}})
+local t = yaml:Decode(s)
+print(t.name, t.scores[1])   -- Alice  10
+
+-- Decode a hand-written YAML string
+local cfg = yaml:Decode([[
+host: localhost
+port: 5432
+debug: true
+]])
+print(cfg.host, cfg.port, cfg.debug)  -- localhost  5432  true
+
+-- Block/pretty style
+local pretty = Yaml.New(true)
+print(pretty:Encode({a = 1, b = {2, 3}}))
+-- a: 1
+-- b:
+-- - 2
+-- - 3
+
+-- Round-trip all basic types
+local orig = {s='hello', n=42, f=3.14, bt=true, bf=false, arr={1,2,3}}
+local t2 = yaml:Decode(yaml:Encode(orig))
+print(t2.s, t2.n, t2.bt)   -- hello  42  true
+
+-- Instance reuse
+local s1 = yaml:Encode({a=1})
+local s2 = yaml:Encode({b=2})
+print(yaml:Decode(s1).a)   -- 1
+print(yaml:Decode(s2).b)   -- 2
+```
+
+---
+
+## Toml
+
+A TOML serialization module. Decoding is backed by [tomlc99](https://github.com/cktan/tomlc99); encoding is a hand-written C implementation. Supports the full TOML v1.0 specification for decoding and all common types for encoding.
+
+```lua
+Toml    Toml.New(opt pretty)    -- primary constructor
+Toml    Toml.Create(opt pretty) -- alias for New (backward compat)
+string  toml:Encode(table)      -- encode a Lua table to a TOML string
+table   toml:Decode(string)     -- decode a TOML string to a Lua table
+nil     toml:Dispose()          -- explicitly free the instance (also called by GC)
+```
+
+| Function | Description |
+|----------|-------------|
+| `New` / `Create` | Create a new Toml instance. Pass `true` for indented output (2 spaces per level); default is compact |
+| `Encode` | Encode a Lua table to a TOML string. The top-level value **must** be a table (TOML always has a root mapping) |
+| `Decode` | Parse a TOML string and return a Lua table. Returns `nil, errmsg` on parse failure |
+| `Dispose` | Explicitly release the instance; called automatically by the GC |
+
+### Type Mapping
+
+#### Decode (TOML → Lua)
+
+| TOML type | Lua type |
+|-----------|----------|
+| String | `string` |
+| Integer | `integer` |
+| Float (`inf`, `-inf`, `nan` included) | `number` |
+| Boolean | `boolean` |
+| Array | table (sequential integer keys, 1-based) |
+| Table / inline table | table (string keys) |
+| Array of tables (`[[section]]`) | table (sequential integer keys, each element a table) |
+| Datetime / Date / Time | `string` (ISO 8601 format, e.g. `"2024-06-01T12:00:00Z"`) |
+
+#### Encode (Lua → TOML)
+
+| Lua type | TOML output |
+|----------|-------------|
+| `boolean` | `true` / `false` |
+| `integer` | integer scalar |
+| `float` | float scalar (always includes `.` or `e` so TOML recognises it as float) |
+| `string` | basic string (double-quoted, with escapes) |
+| `Wchar` | basic string (UTF-8 encoded) |
+| `Identifier` | basic string (canonical UUID or OID hex) |
+| `DateTime` | bare datetime scalar (no quotes — native TOML datetime type) |
+| `Decimal` | basic string |
+| `table` (sequential integer keys) used as value | inline array `[...]` |
+| `table` (string keys) at root or as sub-key | `[section]` header block |
+| `table` used as array-of-tables element | `[[section]]` header block |
+| `nil`, functions, unsupported types | empty string `""` |
+
+### Key Quoting
+
+Keys that consist only of `A–Z a–z 0–9 - _` are written as bare keys. All other keys are written as double-quoted basic strings.
+
+### Notes
+
+- **Circular references** raise an error: `Toml: recursion detected`
+- **Top-level value must be a table** — `Encode` raises an error if passed a non-table value, because TOML documents always have a root mapping
+- **Sub-tables** are emitted as `[dotted.path]` section headers after all scalar keys at the current level
+- **Arrays of tables** are emitted as `[[dotted.path]]` blocks, one per element
+- **Datetime** values are emitted without quotes as native TOML datetimes; decoded datetimes come back as ISO 8601 strings
+- **Parse errors** are returned as `nil, errmsg` rather than raised as Lua errors
+
+### Examples
+
+```lua
+local toml = Toml.New()
+
+-- Basic encode/decode
+local s = toml:Encode({host = 'localhost', port = 5432, debug = true})
+local t = toml:Decode(s)
+print(t.host, t.port, t.debug)  -- localhost  5432  true
+
+-- Decode a hand-written TOML string
+local cfg = toml:Decode([[
+title = "My App"
+
+[database]
+host = "localhost"
+port   = 5432
+
+[server]
+debug = true
+tags  = ["web", "api"]
+]])
+print(cfg.title)             -- My App
+print(cfg.database.host)     -- localhost
+print(cfg.server.tags[1])    -- web
+
+-- Nested tables encode as section headers
+local s2 = toml:Encode({
+    app = { name = 'kitsune', version = '1.0' },
+    log = { level = 'info' },
+})
+print(s2)
+-- [app]
+-- name = "kitsune"
+-- version = "1.0"
+-- [log]
+-- level = "info"
+
+-- Indented output
+local pretty = Toml.New(true)
+print(pretty:Encode({x = 1, y = 2}))
+
+-- Error handling
+local v, err = toml:Decode('this is !!! not toml')
+if not v then print('Parse error:', err) end
+
+-- Instance reuse
+local s1 = toml:Encode({a=1})
+local s3 = toml:Encode({b=2})
+print(toml:Decode(s1).a)   -- 1
+print(toml:Decode(s3).b)   -- 2
+```
+
+---
+
 ## Third-Party Notices
 
 KitsuneEngine incorporates the following open-source libraries. Their copyright notices and license terms are reproduced below as required.
@@ -2395,9 +2615,38 @@ THIS SOFTWARE IS PROVIDED BY THE AUTHOR "AS IS" AND ANY EXPRESS OR IMPLIED WARRA
 
 ---
 
+### tomlc99
+
+**Copyright © CK Tan**
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+*License: [MIT](https://opensource.org/licenses/MIT)*
+
+---
+
+### libyaml
+
+**Copyright
+**Copyright © 2006–2016 Kirill Simonov**
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+*License: [MIT](https://opensource.org/licenses/MIT)*
+
+---
+
 ### libarchive
 
-**Copyright © Tim Kientzle. All rights reserved.**
+**Copyright © Tim Kientzle.
 
 Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
 

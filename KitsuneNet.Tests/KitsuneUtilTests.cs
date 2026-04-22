@@ -8941,5 +8941,628 @@ namespace KitsuneNet.Tests
             ");
             r.String.ShouldBe("true");
         }
+
+        // -- Yaml ------------------------------------------------------------------
+        // All operations require an instance (Yaml.New() or Yaml.Create()).
+        // Yaml.New(true) selects block/pretty style; Yaml.New() defaults to flow style.
+
+        [Fact]
+        public async Task Yaml_New_ReturnsUserdata()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync("return type(Yaml.New())");
+            r.String.ShouldBe("userdata");
+        }
+
+        [Fact]
+        public async Task Yaml_Create_AliasWorksIdenticallyToNew()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local y = Yaml.Create()
+                return tostring(y:Decode(y:Encode({x=1})).x == 1)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Yaml_Tostring_ReturnsNonEmptyString()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync("return tostring(type(tostring(Yaml.New())) == 'string' and #tostring(Yaml.New()) > 0)");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Yaml_Dispose_CanBeCalledExplicitly()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local y = Yaml.New()
+                y:Dispose()
+                return 'ok'
+            ");
+            r.String.ShouldBe("ok");
+        }
+
+        [Fact]
+        public async Task Yaml_New_CalledOnInstance_ReturnsNewInstance()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local a = Yaml.New()
+                local b = a:New()
+                local s = b:Encode('hello')
+                return tostring(b:Decode(s) == 'hello')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        // -- Basic type round-trips ------------------------------------------------
+        [Fact]
+        public async Task Yaml_Nil_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local y = Yaml.New()
+                return tostring(y:Decode(y:Encode(nil)) == nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Yaml_BooleanTrue_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local y = Yaml.New()
+                return tostring(y:Decode(y:Encode(true)) == true)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Yaml_BooleanFalse_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local y = Yaml.New()
+                return tostring(y:Decode(y:Encode(false)) == false)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Yaml_Integer_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local y = Yaml.New()
+                local v = y:Decode(y:Encode(42))
+                return tostring(v == 42 and math.type(v) == 'integer')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Yaml_NegativeInteger_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local y = Yaml.New()
+                return tostring(y:Decode(y:Encode(-1000)) == -1000)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Yaml_Float_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local y = Yaml.New()
+                local v = y:Decode(y:Encode(3.14))
+                return tostring(math.type(v) == 'float' and math.abs(v - 3.14) < 1e-10)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Yaml_String_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local y = Yaml.New()
+                return tostring(y:Decode(y:Encode('hello')) == 'hello')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Yaml_StringWithSpecialChars_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local y = Yaml.New()
+                local s = 'line1\nline2\ttabbed'
+                return tostring(y:Decode(y:Encode(s)) == s)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        // -- Table round-trips -----------------------------------------------------
+        [Fact]
+        public async Task Yaml_Encode_ProducesString()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local y = Yaml.New()
+                local s = y:Encode({x=1, y='hello', z=true})
+                return tostring(type(s) == 'string' and #s > 0)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Yaml_Table_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local y = Yaml.New()
+                local t = y:Decode(y:Encode({x=1, y='hello', z=true}))
+                return tostring(t.x==1 and t.y=='hello' and t.z==true)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Yaml_Array_PreservesOrder()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local y = Yaml.New()
+                local t = y:Decode(y:Encode({10, 20, 30}))
+                return tostring(t[1]==10 and t[2]==20 and t[3]==30)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Yaml_NestedTable_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local y = Yaml.New()
+                local orig = {a={b={c=42}}}
+                local t = y:Decode(y:Encode(orig))
+                return tostring(t.a.b.c == 42)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Yaml_AllBasicTypes_RoundTrip()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local y = Yaml.New()
+                local orig = {
+                    s   = 'hello',
+                    n   = 42,
+                    f   = 3.14,
+                    bt  = true,
+                    bf  = false,
+                    arr = {1, 2, 3},
+                    obj = {nested = 'value'},
+                }
+                local t = y:Decode(y:Encode(orig))
+                return tostring(
+                    t.s == 'hello'   and
+                    t.n == 42        and
+                    t.f == 3.14      and
+                    t.bt == true     and
+                    t.bf == false    and
+                    #t.arr == 3      and t.arr[2] == 2 and
+                    t.obj.nested == 'value'
+                )
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Yaml_InstanceReuse_MultipleCalls()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local y = Yaml.New()
+                local s1 = y:Encode({a=1})
+                local s2 = y:Encode({b=2})
+                local t1 = y:Decode(s1)
+                local t2 = y:Decode(s2)
+                return tostring(t1.a==1 and t2.b==2 and t1.b==nil and t2.a==nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        // -- YAML-specific decode -------------------------------------------------
+        [Fact]
+        public async Task Yaml_Decode_BlockStyle_String()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local y = Yaml.New()
+                local t = y:Decode('key: value')
+                return tostring(t.key == 'value')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Yaml_Decode_Sequence_FromBlockStyle()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local y = Yaml.New()
+                local t = y:Decode('- 1\n- 2\n- 3\n')
+                return tostring(t[1]==1 and t[2]==2 and t[3]==3)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Yaml_Decode_NullScalar_BecomesNil()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local y = Yaml.New()
+                local t = y:Decode('v: null')
+                return tostring(t.v == nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Yaml_Decode_BoolScalars_Coerced()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local y = Yaml.New()
+                local t = y:Decode('a: true\nb: false\nc: yes\nd: no\n')
+                return tostring(t.a==true and t.b==false and t.c==true and t.d==false)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Yaml_Decode_IntegerScalar_BecomesInteger()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local y = Yaml.New()
+                local t = y:Decode('n: 99')
+                return tostring(t.n == 99 and math.type(t.n) == 'integer')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Yaml_Decode_FloatScalar_BecomesFloat()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local y = Yaml.New()
+                local t = y:Decode('f: 1.5')
+                return tostring(math.type(t.f) == 'float' and t.f == 1.5)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        // -- Pretty / block style --------------------------------------------------
+        [Fact]
+        public async Task Yaml_PrettyNew_ProducesBlockStyle()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local y = Yaml.New(true)
+                local s = y:Encode({a=1, b=2})
+                return tostring(s:find('\n') ~= nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Yaml_PrettyEncoded_DecodesCorrectly()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local yp = Yaml.New(true)
+                local yf = Yaml.New()
+                local t = yf:Decode(yp:Encode({x=10, y=20}))
+                return tostring(t.x==10 and t.y==20)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        // -- Toml ------------------------------------------------------------------
+        // All operations require an instance (Toml.New() or Toml.Create()).
+        // Toml.New(true) selects indented output; Toml.New() defaults to compact.
+        // Encode requires a table (TOML always has a root mapping).
+        // Decode returns nil, errmsg on parse failure.
+
+        [Fact]
+        public async Task Toml_New_ReturnsUserdata()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync("return type(Toml.New())");
+            r.String.ShouldBe("userdata");
+        }
+
+        [Fact]
+        public async Task Toml_Create_AliasWorksIdenticallyToNew()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Toml.Create()
+                return tostring(t:Decode(t:Encode({x=1})).x == 1)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Toml_Tostring_ReturnsNonEmptyString()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync("return tostring(type(tostring(Toml.New())) == 'string' and #tostring(Toml.New()) > 0)");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Toml_Dispose_CanBeCalledExplicitly()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Toml.New()
+                t:Dispose()
+                return 'ok'
+            ");
+            r.String.ShouldBe("ok");
+        }
+
+        [Fact]
+        public async Task Toml_New_CalledOnInstance_ReturnsNewInstance()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local a = Toml.New()
+                local b = a:New()
+                local s = b:Encode({x='hello'})
+                return tostring(b:Decode(s).x == 'hello')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        // -- Basic type round-trips ------------------------------------------------
+        [Fact]
+        public async Task Toml_Boolean_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Toml.New()
+                local v = t:Decode(t:Encode({a=true, b=false}))
+                return tostring(v.a==true and v.b==false)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Toml_Integer_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Toml.New()
+                local v = t:Decode(t:Encode({n=42}))
+                return tostring(v.n == 42 and math.type(v.n) == 'integer')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Toml_NegativeInteger_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Toml.New()
+                return tostring(t:Decode(t:Encode({n=-1000})).n == -1000)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Toml_Float_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Toml.New()
+                local v = t:Decode(t:Encode({f=3.14}))
+                return tostring(math.type(v.f) == 'float' and math.abs(v.f - 3.14) < 1e-10)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Toml_String_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Toml.New()
+                return tostring(t:Decode(t:Encode({s='hello'})).s == 'hello')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Toml_StringWithSpecialChars_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Toml.New()
+                local s = 'line1\nline2\ttabbed'
+                return tostring(t:Decode(t:Encode({s=s})).s == s)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        // -- Table round-trips -----------------------------------------------------
+        [Fact]
+        public async Task Toml_FlatTable_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Toml.New()
+                local v = t:Decode(t:Encode({x=1, y='hello', z=true}))
+                return tostring(v.x==1 and v.y=='hello' and v.z==true)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Toml_NestedTable_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Toml.New()
+                local orig = {database={host='localhost', port=5432}}
+                local v = t:Decode(t:Encode(orig))
+                return tostring(v.database.host == 'localhost' and v.database.port == 5432)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Toml_Array_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Toml.New()
+                local v = t:Decode(t:Encode({tags={1,2,3}}))
+                return tostring(v.tags[1]==1 and v.tags[2]==2 and v.tags[3]==3)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Toml_AllBasicTypes_RoundTrip()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Toml.New()
+                local orig = {
+                    s  = 'hello',
+                    n  = 42,
+                    f  = 3.14,
+                    bt = true,
+                    bf = false,
+                }
+                local v = t:Decode(t:Encode(orig))
+                return tostring(
+                    v.s  == 'hello' and
+                    v.n  == 42      and
+                    v.f  == 3.14    and
+                    v.bt == true    and
+                    v.bf == false
+                )
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Toml_InstanceReuse_MultipleCalls()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Toml.New()
+                local s1 = t:Encode({a=1})
+                local s2 = t:Encode({b=2})
+                local v1 = t:Decode(s1)
+                local v2 = t:Decode(s2)
+                return tostring(v1.a==1 and v2.b==2 and v1.b==nil and v2.a==nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        // -- TOML-specific decode --------------------------------------------------
+        [Fact]
+        public async Task Toml_Decode_HandwrittenString()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Toml.New()
+                local v = t:Decode('host = ""localhost""\nport = 5432\n')
+                return tostring(v.host == 'localhost' and v.port == 5432)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Toml_Decode_BooleanScalars()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Toml.New()
+                local v = t:Decode('a = true\nb = false\n')
+                return tostring(v.a == true and v.b == false)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Toml_Decode_SectionHeader()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Toml.New()
+                local v = t:Decode('[database]\nhost = ""localhost""\nport = 5432\n')
+                return tostring(v.database.host == 'localhost' and v.database.port == 5432)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Toml_Decode_InvalidToml_ReturnsNilAndError()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Toml.New()
+                local v, err = t:Decode('this is not valid toml !!!@#$')
+                return tostring(v == nil and type(err) == 'string' and #err > 0)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        // -- Indented output -------------------------------------------------------
+        [Fact]
+        public async Task Toml_PrettyNew_ProducesNewlines()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Toml.New(true)
+                local s = t:Encode({a=1, b=2})
+                return tostring(s:find('\n') ~= nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Toml_PrettyEncoded_DecodesCorrectly()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local tp = Toml.New(true)
+                local tf = Toml.New()
+                local v = tf:Decode(tp:Encode({x=10, y=20}))
+                return tostring(v.x==10 and v.y==20)
+            ");
+            r.String.ShouldBe("true");
+        }
     }
 }

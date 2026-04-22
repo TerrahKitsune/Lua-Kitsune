@@ -261,6 +261,15 @@
     <Filter Include="LuaXml\Source Files">
       <UniqueIdentifier>{8f4c62b9-cf25-4c6f-8c9c-338935e15f4a}</UniqueIdentifier>
     </Filter>
+    <Filter Include="LuaYaml">
+      <UniqueIdentifier>{c58d5a2b-7e51-4a3c-bfc1-b1c219ed34f0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaYaml\Header Files">
+      <UniqueIdentifier>{2468b443-fc3a-47f7-a433-86b26aa3729a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaYaml\Source Files">
+      <UniqueIdentifier>{43fd7786-235b-4cf1-91c6-71e8bcaa8deb}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="KitsuneEngine.cpp">
@@ -616,6 +625,42 @@
     </ClCompile>
     <ClCompile Include="pugixml\pugixml.cpp">
       <Filter>LuaXml\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="luayamlmain.cpp">
+      <Filter>LuaYaml</Filter>
+    </ClCompile>
+    <ClCompile Include="libyaml\src\parser.c">
+      <Filter>LuaYaml\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="libyaml\src\reader.c">
+      <Filter>LuaYaml\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="libyaml\src\scanner.c">
+      <Filter>LuaYaml\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="libyaml\src\writer.c">
+      <Filter>LuaYaml\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="libyaml\src\api.c">
+      <Filter>LuaYaml\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="libyaml\src\dumper.c">
+      <Filter>LuaYaml\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="libyaml\src\emitter.c">
+      <Filter>LuaYaml\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="libyaml\src\loader.c">
+      <Filter>LuaYaml\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="luayaml.cpp">
+      <Filter>LuaYaml\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="luatoml.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="luatomlmain.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -975,6 +1020,21 @@
     </ClInclude>
     <ClInclude Include="pugixml\pugixml.hpp">
       <Filter>LuaXml\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="libyaml\src\config.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="luayamlmain.h">
+      <Filter>LuaYaml</Filter>
+    </ClInclude>
+    <ClInclude Include="luayaml.h">
+      <Filter>LuaYaml\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="luatoml.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="luatomlmain.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
