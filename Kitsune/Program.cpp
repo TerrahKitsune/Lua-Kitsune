@@ -30,10 +30,15 @@
 // ---------------------------------------------------------------------------
 #include <new>
 #include <cstdlib>
-__declspec(allocator) void* operator new(size_t size) { void* p = malloc(size); if (!p) throw std::bad_alloc(); return p; }
-__declspec(allocator) void* operator new[](size_t size) { void* p = malloc(size); if (!p) throw std::bad_alloc(); return p; }
-__declspec(allocator) void* operator new(size_t size, std::nothrow_t const&) noexcept { return malloc(size); }
-__declspec(allocator) void* operator new[](size_t size, std::nothrow_t const&) noexcept { return malloc(size); }
+#ifdef _MSC_VER
+#define KITSUNE_ALLOCATOR __declspec(allocator)
+#else
+#define KITSUNE_ALLOCATOR
+#endif
+KITSUNE_ALLOCATOR void* operator new(size_t size) { void* p = malloc(size); if (!p) throw std::bad_alloc(); return p; }
+KITSUNE_ALLOCATOR void* operator new[](size_t size) { void* p = malloc(size); if (!p) throw std::bad_alloc(); return p; }
+KITSUNE_ALLOCATOR void* operator new(size_t size, std::nothrow_t const&) noexcept { return malloc(size); }
+KITSUNE_ALLOCATOR void* operator new[](size_t size, std::nothrow_t const&) noexcept { return malloc(size); }
 void operator delete(void* p) noexcept { free(p); }
 void operator delete[](void* p) noexcept { free(p); }
 void operator delete(void* p, size_t) noexcept { free(p); }

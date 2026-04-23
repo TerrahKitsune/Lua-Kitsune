@@ -1,10 +1,10 @@
-#include "luaaes.h"
+﻿#include "luaaes.h"
 #include "LuaAesMain.h"
 
 static const struct luaL_Reg luaaesfunctions[] = {
 	{ "Encrypt", LuaAesEncrypt },
 	{ "Decrypt", LuaAesDecrypt },
-	{ "Create",  LuaCreateContext },
+	{ "New",     LuaCreateContext },
 	{ "SetIV",  LuaSetIV },
 	{ NULL, NULL }
 };

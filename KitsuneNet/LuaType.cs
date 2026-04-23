@@ -75,6 +75,36 @@ namespace KitsuneNet
         /// populated from the snapshot.</summary>
         TableContents = -8,
 
+        /// <summary>Unsigned 64-bit integer (KITSUNE_TUINT = -9). The raw uint64 bit pattern is
+        /// stored in <see cref="LuaValue.UInt64"/>. Values that fit in a signed int64 can also
+        /// be read via <see cref="LuaValue.Int64"/> (same bit pattern). Pushes a Lua UInt userdata
+        /// back into the engine.</summary>
+        UInt = -9,
+
+        /// <summary>DateTime userdata (KITSUNE_TDATETIME = -10). Bridged via a heap-allocated
+        /// <c>KitsuneDateTime { int64_t ticks; int16_t offset_minutes }</c> struct.
+        /// Use <see cref="LuaValue.AsDateTimeOffset"/> to decode. Pushes a Lua DateTime
+        /// userdata back into the engine.</summary>
+        DateTime = -10,
+
+        /// <summary>TimeSpan userdata (KITSUNE_TTIMESPAN = -11). Bridged via a heap-allocated
+        /// <c>KitsuneTimeSpan { int64_t ticks }</c> struct.
+        /// Use <see cref="LuaValue.AsTimeSpan"/> to decode. Pushes a Lua TimeSpan userdata
+        /// back into the engine.</summary>
+        TimeSpan = -11,
+
+        /// <summary>Decimal userdata (KITSUNE_TDECIMAL = -12). Bridged via a heap-allocated
+        /// <c>KitsuneDecimal { uint64_t lo; uint64_t hi; int16_t scale; uint8_t negative }</c> struct.
+        /// Use <see cref="LuaValue.AsDecimal"/> to decode to a <see cref="decimal"/>.
+        /// Pushes a Lua Decimal userdata back into the engine.</summary>
+        Decimal = -12,
+
+        /// <summary>Identifier userdata (KITSUNE_TIDENTIFIER = -13). Bridged via a heap-allocated
+        /// <c>KitsuneIdentifier { uint8_t type; uint8_t bytes[16] }</c> struct where type 0=UUID, 1=OID.
+        /// Use <see cref="LuaValue.AsGuid"/> for UUID or <see cref="LuaValue.AsIdentifierBytes"/>
+        /// for raw access. Pushes a Lua Identifier userdata back into the engine.</summary>
+        Identifier = -13,
+
         /// <summary>Error returned by the blocking execute functions (KITSUNE_TERROR = -2) when
         /// the call was rejected — e.g. called from the scheduler thread, from a
         /// <c>kitsune_CFunction</c> callback, or re-entrantly from the same thread.

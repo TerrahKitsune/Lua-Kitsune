@@ -19,7 +19,12 @@ LuaDecimal* lua_todecimal(lua_State* L, int index) {
 }
 
 int lua_isdecimal(lua_State* L, int index) {
-	return luaL_testudata(L, index, LUADECIMAL) != NULL;
+	if (lua_type(L, index) != LUA_TUSERDATA) return 0;
+	if (!lua_getmetatable(L, index)) return 0;
+	luaL_getmetatable(L, LUADECIMAL);
+	int result = lua_rawequal(L, -1, -2);
+	lua_pop(L, 2);
+	return result;
 }
 
 // ── 128-bit unsigned integer arithmetic ──────────────────────────────────────

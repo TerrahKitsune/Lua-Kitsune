@@ -271,7 +271,12 @@ int identifier_tostring(lua_State* L) {
 }
 
 int lua_isidentifier(lua_State* L, int index) {
-    return luaL_testudata(L, index, LUAIDENTIFIER) != NULL;
+    if (lua_type(L, index) != LUA_TUSERDATA) return 0;
+    if (!lua_getmetatable(L, index)) return 0;
+    luaL_getmetatable(L, LUAIDENTIFIER);
+    int result = lua_rawequal(L, -1, -2);
+    lua_pop(L, 2);
+    return result;
 }
 
 void lua_identifier_push_string(lua_State* L, int index) {

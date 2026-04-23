@@ -1331,7 +1331,7 @@ namespace KitsuneNet
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         [return: MarshalAs(UnmanagedType.I1)]
-        private static extern bool KitsuneInit(IntPtr KitsuneMemoryAllocator);
+        private static extern bool KitsuneInit(IntPtr kitsuneMemoryAllocator);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern void KitsuneVariableFree(IntPtr var);
@@ -1540,6 +1540,66 @@ namespace KitsuneNet
             return new LuaValue { Type = LuaType.Char16, Bytes = bytes };
         }
 
+        private static LuaValue NativeMarshalDateTime(IntPtr ptr)
+        {
+            var s = Marshal.PtrToStructure<NativeDateTime>(ptr);
+            return LuaValue.FromDateTime(new DateTimeOffset(s.Ticks, TimeSpan.FromMinutes(s.OffsetMinutes)));
+        }
+
+        private static LuaValue NativeMarshalDecimal(IntPtr ptr)
+        {
+            var s = Marshal.PtrToStructure<NativeDecimal>(ptr);
+            int lo32 = (int)(s.Lo & 0xFFFFFFFF);
+            int mid32 = (int)(s.Lo >> 32);
+            int hi32 = (int)(s.Hi & 0xFFFFFFFF);
+            byte scale = s.Scale < 0 ? (byte)0 : s.Scale > 28 ? (byte)28 : (byte)s.Scale;
+            return LuaValue.FromDecimal(new decimal(lo32, mid32, hi32, s.Negative != 0, scale));
+        }
+
+        private static unsafe LuaValue NativeMarshalIdentifier(IntPtr ptr)
+        {
+            var s = (NativeIdentifier*)ptr;
+            var blob = new byte[17];
+            blob[0] = s->Type;
+            for (int i = 0; i < 16; i++)
+            {
+                blob[i + 1] = s->Bytes[i];
+            }
+
+            return new LuaValue { Type = LuaType.Identifier, Bytes = blob };
+        }
+
+        private static NativeDecimal DecimalToNative(decimal v)
+        {
+            int[] bits = decimal.GetBits(v);
+            return new NativeDecimal
+            {
+                Lo = (uint)bits[0] | ((ulong)(uint)bits[1] << 32),
+                Hi = (uint)bits[2],
+                Scale = (short)((bits[3] >> 16) & 0xFF),
+                Negative = (bits[3] & unchecked((int)0x80000000)) != 0 ? (byte)1 : (byte)0,
+            };
+        }
+
+        private static unsafe void WriteNativeIdentifier(IntPtr ptr, LuaValue v)
+        {
+            var s = (NativeIdentifier*)ptr;
+            s->Type = 0;
+            for (int i = 0; i < 16; i++)
+            {
+                s->Bytes[i] = 0;
+            }
+
+            if (v.Bytes is { Length: >= 17 })
+            {
+                s->Type = v.Bytes[0];
+                for (int i = 0; i < 16; i++)
+                {
+                    s->Bytes[i] = v.Bytes[i + 1];
+                }
+            }
+        }
+
         // Unmarshals a KitsuneUserDataNative { char* name, void* userdata } pointed to by ptr.
         // nv.Length carries the name byte count so the name string can be copied without strlen.
         private static LuaValue NativeUnmarshalUserdata(IntPtr ptr, nuint nameLen)
@@ -1630,6 +1690,11 @@ namespace KitsuneNet
             {
                 LuaType.Number => LuaValue.FromNumber(nv.Number),
                 LuaType.Integer => LuaValue.FromInt64(nv.Integer),
+                LuaType.UInt => LuaValue.FromUInt64((ulong)nv.Integer),
+                LuaType.TimeSpan when nv.Data != IntPtr.Zero => LuaValue.FromTimeSpan(System.TimeSpan.FromTicks(Marshal.PtrToStructure<NativeTimeSpan>(nv.Data).Ticks)),
+                LuaType.DateTime when nv.Data != IntPtr.Zero => NativeMarshalDateTime(nv.Data),
+                LuaType.Decimal when nv.Data != IntPtr.Zero => NativeMarshalDecimal(nv.Data),
+                LuaType.Identifier when nv.Data != IntPtr.Zero => NativeMarshalIdentifier(nv.Data),
                 LuaType.Boolean => LuaValue.FromBool(nv.BoolByte != 0),
                 LuaType.String when nv.Data != IntPtr.Zero => NativeCopyBytes(nv.Data, nv.Length),
                 LuaType.Char16 when nv.Data != IntPtr.Zero => NativeCopyChar16(nv.Data, nv.Length),
@@ -1677,6 +1742,11 @@ namespace KitsuneNet
             {
                 LuaType.Number => LuaValue.FromNumber(nv.Number),
                 LuaType.Integer => LuaValue.FromInt64(nv.Integer),
+                LuaType.UInt => LuaValue.FromUInt64((ulong)nv.Integer),
+                LuaType.TimeSpan when nv.Data != IntPtr.Zero => LuaValue.FromTimeSpan(System.TimeSpan.FromTicks(Marshal.PtrToStructure<NativeTimeSpan>(nv.Data).Ticks)),
+                LuaType.DateTime when nv.Data != IntPtr.Zero => NativeMarshalDateTime(nv.Data),
+                LuaType.Decimal when nv.Data != IntPtr.Zero => NativeMarshalDecimal(nv.Data),
+                LuaType.Identifier when nv.Data != IntPtr.Zero => NativeMarshalIdentifier(nv.Data),
                 LuaType.Boolean => LuaValue.FromBool(nv.BoolByte != 0),
                 LuaType.String when nv.Data != IntPtr.Zero => NativeCopyBytes(nv.Data, nv.Length),
                 LuaType.Char16 when nv.Data != IntPtr.Zero => NativeCopyChar16(nv.Data, nv.Length),
@@ -1749,6 +1819,52 @@ namespace KitsuneNet
                 case LuaType.Integer:
                     nv.Integer = v.Int64;
                     break;
+                case LuaType.UInt:
+                    nv.Integer = v.Int64;  // same bit pattern; native reads as uint64
+                    break;
+                case LuaType.TimeSpan:
+                    {
+                        var s = new NativeTimeSpan { Ticks = v.AsTimeSpan.Ticks };
+                        IntPtr p = Marshal.AllocHGlobal(Marshal.SizeOf<NativeTimeSpan>());
+                        Marshal.StructureToPtr(s, p, false);
+                        ptrs ??= new List<IntPtr>();
+                        ptrs.Add(p);
+                        nv.Data = p;
+                        break;
+                    }
+
+                case LuaType.DateTime:
+                    {
+                        var dto = v.AsDateTimeOffset;
+                        var s = new NativeDateTime { Ticks = dto.Ticks, OffsetMinutes = (short)dto.Offset.TotalMinutes };
+                        IntPtr p = Marshal.AllocHGlobal(Marshal.SizeOf<NativeDateTime>());
+                        Marshal.StructureToPtr(s, p, false);
+                        ptrs ??= new List<IntPtr>();
+                        ptrs.Add(p);
+                        nv.Data = p;
+                        break;
+                    }
+
+                case LuaType.Decimal:
+                    {
+                        var s = DecimalToNative(v.AsDecimal);
+                        IntPtr p = Marshal.AllocHGlobal(Marshal.SizeOf<NativeDecimal>());
+                        Marshal.StructureToPtr(s, p, false);
+                        ptrs ??= new List<IntPtr>();
+                        ptrs.Add(p);
+                        nv.Data = p;
+                        break;
+                    }
+
+                case LuaType.Identifier:
+                    {
+                        IntPtr p = Marshal.AllocHGlobal(Marshal.SizeOf<NativeIdentifier>());
+                        WriteNativeIdentifier(p, v);
+                        ptrs ??= new List<IntPtr>();
+                        ptrs.Add(p);
+                        nv.Data = p;
+                        break;
+                    }
                 case LuaType.Boolean:
                     nv.BoolByte = v.Boolean ? (byte)1 : (byte)0;
                     break;
@@ -2288,6 +2404,39 @@ namespace KitsuneNet
 
             // 4 bytes padding (implicit, to align Userdata to pointer boundary)
             public IntPtr Userdata; // GCHandle address for Kitsune-registered userdatas; IntPtr.Zero otherwise
+        }
+
+        // Mirrors KitsuneDateTime { int64_t ticks; int16_t offset_minutes; }
+        [StructLayout(LayoutKind.Sequential)]
+        private struct NativeDateTime
+        {
+            public long Ticks;
+            public short OffsetMinutes;
+        }
+
+        // Mirrors KitsuneTimeSpan { int64_t ticks; }
+        [StructLayout(LayoutKind.Sequential)]
+        private struct NativeTimeSpan
+        {
+            public long Ticks;
+        }
+
+        // Mirrors KitsuneDecimal { uint64_t lo; uint64_t hi; int16_t scale; uint8_t negative; }
+        [StructLayout(LayoutKind.Sequential)]
+        private struct NativeDecimal
+        {
+            public ulong Lo;
+            public ulong Hi;
+            public short Scale;
+            public byte Negative;
+        }
+
+        // Mirrors KitsuneIdentifier { uint8_t type; uint8_t bytes[16]; }
+        [StructLayout(LayoutKind.Sequential)]
+        private unsafe struct NativeIdentifier
+        {
+            public byte Type;
+            public fixed byte Bytes[16];
         }
 
         // Holds the lazy enumerator and GCHandles for a KITSUNE_TITERATOR marshal.

@@ -4,6 +4,8 @@
 #include "luaidentifier.h"
 #include "luadatetime.h"
 #include "luadecimal.h"
+#include "luauint.h"
+#include "luatimespan.h"
 
 // =============================================================================
 // Instance management
@@ -165,6 +167,19 @@ static void enc_value(LuaMsgPack* m, msgpack_packer* pk, lua_State* L) {
         enc_table(m, pk, L);
         break;
     case LUA_TUSERDATA:
+        if (lua_isuint(L, -1)) {
+            msgpack_pack_uint64(pk, lua_touint(L, -1)->value);
+            break;
+        }
+        if (lua_istimespan(L, -1)) {
+            // Encode as a string so the receiver can reconstruct the duration from the canonical form.
+            lua_timespan_push_string(L, -1);
+            size_t len;
+            const char* s = lua_tolstring(L, -1, &len);
+            if (s) msgpack_pack_str_with_body(pk, s, len);
+            lua_pop(L, 1);
+            break;
+        }
         if (lua_iswchar(L, -1)) {
             ToUtf8(L);
             size_t      len;
@@ -239,11 +254,11 @@ static void dec_object(lua_State* L, const msgpack_object* obj) {
         lua_pushboolean(L, obj->via.boolean ? 1 : 0);
         break;
     case MSGPACK_OBJECT_POSITIVE_INTEGER:
-        // Best-effort: fit into lua_Integer if possible, otherwise degrade to number
+        // Fit into lua_Integer if possible; otherwise push a LuaUInt to preserve the full uint64 range.
         if (obj->via.u64 <= (uint64_t)LUA_MAXINTEGER)
             lua_pushinteger(L, (lua_Integer)obj->via.u64);
         else
-            lua_pushnumber(L, (lua_Number)obj->via.u64);
+            lua_pushuint(L)->value = obj->via.u64;
         break;
     case MSGPACK_OBJECT_NEGATIVE_INTEGER:
         lua_pushinteger(L, (lua_Integer)obj->via.i64);

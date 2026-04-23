@@ -73,6 +73,7 @@ int datetime_addhours(lua_State* L);
 int datetime_addminutes(lua_State* L);
 int datetime_addseconds(lua_State* L);
 int datetime_addmilliseconds(lua_State* L);
+int datetime_addtimespan(lua_State* L); // __add(DateTime, TimeSpan) -> DateTime
 
 // Metamethods
 int datetime_tostring(lua_State* L);

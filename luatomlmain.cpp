@@ -3,7 +3,6 @@
 
 static const struct luaL_Reg toml_functions[] = {
     { "New",     lua_toml_new    },  // Toml.New([pretty])
-    { "Create",  lua_toml_new    },  // backward-compat alias
     { "Decode",  lua_toml_decode },  // toml:Decode(str) -> table, or nil, errmsg
     { "Encode",  lua_toml_encode },  // toml:Encode(table) -> str
     { "Dispose", lua_toml_gc     },  // toml:Dispose()

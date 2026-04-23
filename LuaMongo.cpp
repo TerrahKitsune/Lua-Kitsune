@@ -5,7 +5,8 @@
 #include "luaidentifier.h"
 #include "luadatetime.h"
 #include "luadecimal.h"
-#include "mem.h"
+#include "luauint.h"
+#include "luatimespan.h"
 
 #ifdef KITSUNE_MONGO
 
@@ -369,6 +370,23 @@ static void LuaToBsonValue(lua_State* L, int idx, bson_t* doc, const char* key, 
 		return;
 	}
 
+	if (lua_isuint(L, idx)) {
+		BSON_APPEND_INT64(doc, key, (int64_t)lua_touint(L, idx)->value);
+		return;
+	}
+
+	if (lua_isuint(L, idx)) {
+		BSON_APPEND_INT64(doc, key, (int64_t)lua_touint(L, idx)->value);
+		return;
+	}
+
+	if (lua_istimespan(L, idx)) {
+		// BSON has no duration type; store as int64 milliseconds for maximum interop.
+		int64_t ms = lua_totimespan(L, idx)->ticks / 10000LL;
+		BSON_APPEND_INT64(doc, key, ms);
+		return;
+	}
+
 	if (lua_isstream(L, idx)) {
 		LuaStream* s = lua_toluastream(L, idx);
 		lua_Integer pos = lua_stream_curpos(L, s);
@@ -489,7 +507,7 @@ static void LuaToBson(lua_State* L, int idx, bson_t* doc, BsonWriteCtx* ctx) {
 		}
 		else if (lua_type(L, -2) == LUA_TNUMBER && lua_isinteger(L, -2)) {
 			char keybuf[32];
-			snprintf(keybuf, sizeof(keybuf), "%" LUA_INTEGER_FMT, lua_tointeger(L, -2));
+			snprintf(keybuf, sizeof(keybuf), LUA_INTEGER_FMT, lua_tointeger(L, -2));
 			LuaToBsonValue(L, -1, doc, keybuf, ctx);
 		}
 		lua_pop(L, 1);

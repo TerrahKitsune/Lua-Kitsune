@@ -10,7 +10,7 @@
 // The table is returned as the Http global so both Http.Create() and
 // client:Request() resolve through the same __index chain.
 static const luaL_Reg httpclient_functions[] = {
-	{ "Create",             http_create },
+	{ "New",               http_create },
 	{ "UrlEncode",          UrlEncode },
 	{ "UrlDecode",          UrlDecode },
 	{ "Request",            client_request },

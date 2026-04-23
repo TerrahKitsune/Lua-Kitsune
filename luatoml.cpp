@@ -3,6 +3,9 @@
 #include "luaidentifier.h"
 #include "luadatetime.h"
 #include "luadecimal.h"
+#include "luauint.h"
+#include "luatimespan.h"
+#include <math.h>
 
 // =============================================================================
 // Instance management
@@ -287,6 +290,20 @@ static void enc_value(LuaToml* t, lua_State* L, int depth, int is_inline) {
         }
         if (lua_isdecimal(L, -1)) {
             lua_decimal_push_string(L, -1);
+            size_t      len;
+            const char* s = lua_tolstring(L, -1, &len);
+            enc_string(t, L, s, len);
+            lua_pop(L, 1);
+            break;
+        }
+        if (lua_isuint(L, -1)) {
+            char buf[21];
+            int  n = snprintf(buf, sizeof(buf), "%llu", (unsigned long long)lua_touint(L, -1)->value);
+            tbuf_emit(t, L, buf, (size_t)n);
+            break;
+        }
+        if (lua_istimespan(L, -1)) {
+            lua_timespan_push_string(L, -1);
             size_t      len;
             const char* s = lua_tolstring(L, -1, &len);
             enc_string(t, L, s, len);

@@ -270,6 +270,12 @@
     <Filter Include="LuaYaml\Source Files">
       <UniqueIdentifier>{43fd7786-235b-4cf1-91c6-71e8bcaa8deb}</UniqueIdentifier>
     </Filter>
+    <Filter Include="LuaToml">
+      <UniqueIdentifier>{553e513d-ecb0-4921-bddd-ca863eaf01cd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaIni">
+      <UniqueIdentifier>{a475aaf5-e1f4-46be-951c-c874024cbb54}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="KitsuneEngine.cpp">
@@ -542,9 +548,6 @@
     <ClCompile Include="streamfile.cpp">
       <Filter>LuaStream\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="streamshmemory.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="miniz.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -589,21 +592,6 @@
     </ClCompile>
     <ClCompile Include="luamsgpackmain.cpp">
       <Filter>LuaMsgPack</Filter>
-    </ClCompile>
-    <ClCompile Include="msgpack\src\objectc.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="msgpack\src\unpack.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="msgpack\src\version.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="msgpack\src\vrefbuffer.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="msgpack\src\zone.c">
-      <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="LuaHttpServerMain.cpp">
       <Filter>LuaHttpServer</Filter>
@@ -657,9 +645,48 @@
       <Filter>LuaYaml\Source Files</Filter>
     </ClCompile>
     <ClCompile Include="luatoml.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>LuaToml</Filter>
     </ClCompile>
     <ClCompile Include="luatomlmain.cpp">
+      <Filter>LuaToml</Filter>
+    </ClCompile>
+    <ClCompile Include="msgpack\src\zone.c">
+      <Filter>LuaMsgPack\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="msgpack\src\unpack.c">
+      <Filter>LuaMsgPack\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="msgpack\src\version.c">
+      <Filter>LuaMsgPack\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="msgpack\src\vrefbuffer.c">
+      <Filter>LuaMsgPack\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="msgpack\src\objectc.c">
+      <Filter>LuaMsgPack\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="tomlc99\toml.c">
+      <Filter>LuaMsgPack\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="luaini.cpp">
+      <Filter>LuaIni</Filter>
+    </ClCompile>
+    <ClCompile Include="luainimain.cpp">
+      <Filter>LuaIni</Filter>
+    </ClCompile>
+    <ClCompile Include="luauint.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="uintmain.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="luatimespan.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="timespanmain.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="sizeof_check.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -717,9 +744,6 @@
     </ClInclude>
     <ClInclude Include="ProcessMain.h">
       <Filter>LuaProcess</Filter>
-    </ClInclude>
-    <ClInclude Include="stream.h">
-      <Filter>LuaStream\Header Files</Filter>
     </ClInclude>
     <ClInclude Include="StreamMain.h">
       <Filter>LuaStream</Filter>
@@ -946,9 +970,6 @@
     <ClInclude Include="streamfile.h">
       <Filter>LuaStream\Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="streamshmemory.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="platform.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -963,12 +984,6 @@
     </ClInclude>
     <ClInclude Include="HttpCurl.h">
       <Filter>LuaHTTP\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="luakafkaproducer.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="luakafkaconsumer.h">
-      <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="RedisPubSub.h">
       <Filter>LuaRedis\Header Files</Filter>
@@ -990,9 +1005,6 @@
     </ClInclude>
     <ClInclude Include="luadecimal.h">
       <Filter>LuaDecimal\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="KitsuneEngine\stream.h">
-      <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="luamsgpack.h">
       <Filter>LuaMsgPack\Header Files</Filter>
@@ -1030,10 +1042,37 @@
     <ClInclude Include="luayaml.h">
       <Filter>LuaYaml\Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="luatomlmain.h">
+      <Filter>LuaToml</Filter>
+    </ClInclude>
     <ClInclude Include="luatoml.h">
+      <Filter>LuaToml</Filter>
+    </ClInclude>
+    <ClInclude Include="luakafkaproducer.h">
+      <Filter>LuaKafka\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="luakafkaconsumer.h">
+      <Filter>LuaKafka\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="stream.h">
+      <Filter>LuaStream\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="luainimain.h">
+      <Filter>LuaIni</Filter>
+    </ClInclude>
+    <ClInclude Include="luaini.h">
+      <Filter>LuaIni</Filter>
+    </ClInclude>
+    <ClInclude Include="luauint.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="luatomlmain.h">
+    <ClInclude Include="uintmain.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="luatimespan.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="timespanmain.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -1047,6 +1086,14 @@
     <None Include="plans\imgui-api-namespace-refactor.md" />
     <None Include="plans\httpserver-integration.md" />
     <None Include="plans\imgui-html.md" />
+    <None Include="debug_types.lua" />
+    <None Include="debug_types2.lua" />
+    <None Include="debug_types3.lua" />
+    <None Include="debug_types4.lua" />
+    <None Include="debug_msgpack.lua" />
+    <None Include="debug_registry.lua" />
+    <None Include="debug_datetime.lua" />
+    <None Include="debug_decimal.lua" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />

@@ -4,6 +4,8 @@
 #include "luaidentifier.h"
 #include "luadatetime.h"
 #include "luadecimal.h"
+#include "luauint.h"
+#include "luatimespan.h"
 #ifdef _WIN32
 #pragma comment(lib, "mysql/libmysql.lib")
 #endif
@@ -77,13 +79,19 @@ static void PushAsParamString(lua_State* L, int index) {
 	else if (lua_isdecimal(L, index)) {
 		lua_decimal_push_string(L, index);
 	}
+	else if (lua_isuint(L, index)) {
+		lua_uint_push_string(L, index);
+	}
+	else if (lua_istimespan(L, index)) {
+		lua_timespan_push_string(L, index);
+	}
 	else {
 		luaL_tolstring(L, index, NULL);
 	}
 }
 
 // -- PushMySQLValue ------------------------------------------------------------
-static void PushMySQLValue(lua_State* L, const char* data, unsigned long length, enum_field_types type) {
+static void PushMySQLValue(lua_State* L, const char* data, unsigned long length, enum_field_types type, unsigned int flags) {
 	char* endptr;
 	switch (type) {
 	case MYSQL_TYPE_NULL:
@@ -106,11 +114,22 @@ static void PushMySQLValue(lua_State* L, const char* data, unsigned long length,
 		lua_pushnumber(L, strtod(data, &endptr));
 		break;
 	case MYSQL_TYPE_SHORT:
-	case MYSQL_TYPE_LONGLONG:
 	case MYSQL_TYPE_TINY:
 	case MYSQL_TYPE_LONG:
 	case MYSQL_TYPE_INT24:
 		lua_pushinteger(L, strtoll(data, &endptr, 10));
+		break;
+	case MYSQL_TYPE_LONGLONG:
+		if (flags & UNSIGNED_FLAG) {
+			uint64_t uv = (uint64_t)strtoull(data, &endptr, 10);
+			if (uv <= (uint64_t)LUA_MAXINTEGER)
+				lua_pushinteger(L, (lua_Integer)uv);
+			else
+				lua_pushuint(L)->value = uv;
+		}
+		else {
+			lua_pushinteger(L, strtoll(data, &endptr, 10));
+		}
 		break;
 	case MYSQL_TYPE_TINY_BLOB:
 	case MYSQL_TYPE_MEDIUM_BLOB:
@@ -407,7 +426,7 @@ static int QueryStreamCont(lua_State* L, int status, lua_KContext ctx) {
 		if (!row[i])
 			lua_pushnil(L);
 		else
-			PushMySQLValue(L, row[i], lens[i], fields[i].type);
+			PushMySQLValue(L, row[i], lens[i], fields[i].type, fields[i].flags);
 		lua_rawseti(L, -2, i + 1);
 	}
 	return lua_yieldk(L, 1, ctx, QueryStreamCont);

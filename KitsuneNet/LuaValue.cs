@@ -14,6 +14,85 @@ namespace KitsuneNet
 
         public long Int64 { get; init; }
 
+        /// <summary>Raw uint64 bit pattern for <see cref="LuaType.UInt"/> values. Zero for all other types.
+        /// Stored in the same union field as <see cref="Int64"/>; cast accordingly.</summary>
+        public ulong UInt64 => (ulong)Int64;
+
+        /// <summary>Decodes the 10-byte blob for <see cref="LuaType.DateTime"/> values into a
+        /// <see cref="DateTimeOffset"/>. The blob is { int64 ticks LE, int16 offset_minutes LE }.
+        /// Returns <see cref="DateTimeOffset.MinValue"/> for non-DateTime types or malformed blobs.</summary>
+        public DateTimeOffset AsDateTimeOffset
+        {
+            get
+            {
+                if (Type != LuaType.DateTime || Bytes is null || Bytes.Length < 10)
+                {
+                    return DateTimeOffset.MinValue;
+                }
+
+                long ticks = System.Runtime.InteropServices.MemoryMarshal.Read<long>(Bytes.AsSpan(0, 8));
+                short offsetMinutes = System.Runtime.InteropServices.MemoryMarshal.Read<short>(Bytes.AsSpan(8, 2));
+
+                // Ticks are stored relative to 0001-01-01 (same as .NET DateTime).
+                var dto = new DateTimeOffset(ticks, TimeSpan.FromMinutes(offsetMinutes));
+                return dto;
+            }
+        }
+
+        /// <summary>Decodes the inline int64 tick count for <see cref="LuaType.TimeSpan"/> values
+        /// into a <see cref="System.TimeSpan"/>. Returns <see cref="System.TimeSpan.Zero"/> for
+        /// non-TimeSpan types.</summary>
+        public System.TimeSpan AsTimeSpan => Type == LuaType.TimeSpan
+            ? System.TimeSpan.FromTicks(Int64)
+            : System.TimeSpan.Zero;
+
+        /// <summary>Decodes the 16-byte raw LuaDecimal blob for <see cref="LuaType.Decimal"/> values
+        /// into a .NET <see cref="decimal"/>. Layout: uint64 lo, uint64 hi, int16 scale, uint8 negative.
+        /// Returns <c>0m</c> for non-Decimal types or malformed blobs.</summary>
+        public decimal AsDecimal
+        {
+            get
+            {
+                if (Type != LuaType.Decimal || Bytes is null || Bytes.Length < 19)
+                {
+                    return 0m;
+                }
+
+                ulong lo64 = System.Runtime.InteropServices.MemoryMarshal.Read<ulong>(Bytes.AsSpan(0, 8));
+                ulong hi64 = System.Runtime.InteropServices.MemoryMarshal.Read<ulong>(Bytes.AsSpan(8, 8));
+                short scale = System.Runtime.InteropServices.MemoryMarshal.Read<short>(Bytes.AsSpan(16, 2));
+                byte neg = Bytes[18];
+                int lo32 = (int)(lo64 & 0xFFFFFFFF);
+                int mid32 = (int)(lo64 >> 32);
+                int hi32 = (int)(hi64 & 0xFFFFFFFF);
+                byte clampedScale = scale < 0 ? (byte)0 : scale > 28 ? (byte)28 : (byte)scale;
+                return new decimal(lo32, mid32, hi32, neg != 0, clampedScale);
+            }
+        }
+
+        /// <summary>Decodes the 17-byte blob for <see cref="LuaType.Identifier"/> values (type=UUID)
+        /// into a <see cref="Guid"/>. Returns <see cref="Guid.Empty"/> for OID types, non-Identifier
+        /// types, or malformed blobs.</summary>
+        public Guid AsGuid
+        {
+            get
+            {
+                if (Type != LuaType.Identifier || Bytes is null || Bytes.Length < 17 || Bytes[0] != 0)
+                {
+                    return Guid.Empty;
+                }
+
+                return new Guid(Bytes.AsSpan(1, 16));
+            }
+        }
+
+        /// <summary>Returns the raw identifier bytes (16 bytes) for <see cref="LuaType.Identifier"/>
+        /// values, or <c>null</c> for other types. Byte 0 of <see cref="Bytes"/> is the type
+        /// discriminator (0=UUID, 1=OID); bytes 1–16 are the raw identifier data.</summary>
+        public byte[]? AsIdentifierBytes => Type == LuaType.Identifier && Bytes is { Length: >= 17 }
+            ? Bytes[1..17]
+            : null;
+
         public bool Boolean { get; init; }
 
         /// <summary>Raw bytes for <see cref="LuaType.String"/> values. Not guaranteed to be valid UTF-8.</summary>
@@ -68,12 +147,13 @@ namespace KitsuneNet
         /// <summary>Returns the numeric value as <c>double</c>, bridging both
         /// <see cref="LuaType.Number"/> (float) and <see cref="LuaType.Integer"/> subtypes.
         /// Zero for all other types.</summary>
-        public double AsDouble => Type == LuaType.Integer ? (double)Int64 : Number;
+        public double AsDouble => Type == LuaType.Integer ? (double)Int64 : Type == LuaType.UInt ? (double)UInt64 : Type == LuaType.TimeSpan ? (double)Int64 : Number;
 
         /// <summary>Returns the numeric value as <c>long</c>, bridging both
         /// <see cref="LuaType.Integer"/> and <see cref="LuaType.Number"/> (float) subtypes.
+        /// For <see cref="LuaType.TimeSpan"/> returns the raw tick count.
         /// Zero for all other types.</summary>
-        public long AsInt64 => Type == LuaType.Integer ? Int64 : (long)Number;
+        public long AsInt64 => Type == LuaType.Integer ? Int64 : Type == LuaType.UInt ? Int64 : Type == LuaType.TimeSpan ? Int64 : (long)Number;
 
         /// <summary>No value / not set.</summary>
         public static LuaValue None => new() { Type = LuaType.None };
@@ -111,6 +191,11 @@ namespace KitsuneNet
             LuaType.Char16 => String ?? string.Empty,
             LuaType.Number => Number.ToString(System.Globalization.CultureInfo.InvariantCulture),
             LuaType.Integer => Int64.ToString(),
+            LuaType.UInt => UInt64.ToString(),
+            LuaType.TimeSpan => AsTimeSpan.ToString("c", System.Globalization.CultureInfo.InvariantCulture),
+            LuaType.DateTime => AsDateTimeOffset.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
+            LuaType.Decimal => AsDecimal.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            LuaType.Identifier => AsGuid.ToString("D"),
             LuaType.Boolean => Boolean.ToString(),
             LuaType.Nil => "nil",
             LuaType.Table => Table is not null ? $"table({Table.Count})" : "table",
@@ -183,6 +268,58 @@ namespace KitsuneNet
         public static LuaValue FromBool(bool v) => new() { Type = LuaType.Boolean, Boolean = v };
 
         public static LuaValue FromInt64(long v) => new() { Type = LuaType.Integer, Int64 = v };
+
+        /// <summary>Creates an unsigned 64-bit integer value. Pushes a Lua UInt userdata into the engine.
+        /// Values that fit in a signed int64 can also be created via <see cref="FromInt64"/>.</summary>
+        public static LuaValue FromUInt64(ulong v) => new() { Type = LuaType.UInt, Int64 = (long)v };
+
+        /// <summary>Creates a DateTime value from a <see cref="DateTimeOffset"/>.
+        /// Pushes a Lua DateTime userdata into the engine with the full tick precision and UTC offset.</summary>
+        public static LuaValue FromDateTime(DateTimeOffset v)
+        {
+            var blob = new byte[10];
+            System.Runtime.InteropServices.MemoryMarshal.Write(blob.AsSpan(0, 8), v.Ticks);
+            short offsetMinutes = (short)v.Offset.TotalMinutes;
+            System.Runtime.InteropServices.MemoryMarshal.Write(blob.AsSpan(8, 2), offsetMinutes);
+            return new() { Type = LuaType.DateTime, Bytes = blob };
+        }
+
+        /// <summary>Creates a TimeSpan value from a <see cref="System.TimeSpan"/>.
+        /// Pushes a Lua TimeSpan userdata into the engine. Stored inline (no heap allocation).</summary>
+        public static LuaValue FromTimeSpan(System.TimeSpan v) =>
+            new() { Type = LuaType.TimeSpan, Int64 = v.Ticks };
+
+        /// <summary>Creates a Decimal value from a <see cref="decimal"/>.
+        /// Pushes a Lua Decimal userdata into the engine. The .NET decimal is encoded as the
+        /// 16-byte LuaDecimal binary format.</summary>
+        public static LuaValue FromDecimal(decimal v)
+        {
+            var ints = decimal.GetBits(v);
+
+            // sizeof(LuaDecimal) in MSVC x64 = 24 (uint64 lo+hi at offsets 0,8; int16 scale at 16; uint8 neg at 18; 5 pad bytes to align to 8)
+            var blob = new byte[24];
+            ulong lo64 = (uint)ints[0] | ((ulong)(uint)ints[1] << 32);
+            ulong hi64 = (uint)ints[2]; // hi32 only; top 32 bits unused by .NET decimal
+            byte neg = (ints[3] & unchecked((int)0x80000000)) != 0 ? (byte)1 : (byte)0;
+            short scale = (short)((ints[3] >> 16) & 0xFF);
+            System.Runtime.InteropServices.MemoryMarshal.Write(blob.AsSpan(0, 8), lo64);
+            System.Runtime.InteropServices.MemoryMarshal.Write(blob.AsSpan(8, 8), hi64);
+            System.Runtime.InteropServices.MemoryMarshal.Write(blob.AsSpan(16, 2), scale);
+            blob[18] = neg;
+
+            // bytes 19-23 = padding, already 0
+            return new() { Type = LuaType.Decimal, Bytes = blob };
+        }
+
+        /// <summary>Creates an Identifier value from a <see cref="Guid"/> (UUID type).
+        /// Pushes a Lua Identifier userdata into the engine.</summary>
+        public static LuaValue FromGuid(Guid v)
+        {
+            var blob = new byte[17];
+            blob[0] = 0; // IDENTIFIER_UUID
+            v.TryWriteBytes(blob.AsSpan(1, 16));
+            return new() { Type = LuaType.Identifier, Bytes = blob };
+        }
 
         /// <summary>Creates a string value by UTF-8 encoding <paramref name="v"/>.</summary>
         public static LuaValue FromString(string? v) =>

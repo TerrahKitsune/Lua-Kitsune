@@ -1,4 +1,5 @@
 ﻿#include "luadatetime.h"
+#include "luatimespan.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,7 +23,12 @@ LuaDateTime* lua_todatetime(lua_State* L, int index) {
 }
 
 int lua_isdatetime(lua_State* L, int index) {
-	return luaL_testudata(L, index, LUADATETIME) != NULL;
+	if (lua_type(L, index) != LUA_TUSERDATA) return 0;
+	if (!lua_getmetatable(L, index)) return 0;
+	luaL_getmetatable(L, LUADATETIME);
+	int result = lua_rawequal(L, -1, -2);
+	lua_pop(L, 2);
+	return result;
 }
 
 // ── Internal calendar helpers ─────────────────────────────────────────────────
@@ -586,11 +592,47 @@ int datetime_le(lua_State* L) {
 	return 1;
 }
 
-// Returns difference in seconds as a number.
-int datetime_sub(lua_State* L) {
-	LuaDateTime* a = lua_todatetime(L, 1);
-	LuaDateTime* b = lua_todatetime(L, 2);
-	lua_Number diff = (lua_Number)(a->ticks - b->ticks) / (lua_Number)DT_TICKS_PER_SECOND;
-	lua_pushnumber(L, diff);
+// ── DateTime + TimeSpan arithmetic ───────────────────────────────────────────
+
+// __add: DateTime + TimeSpan → DateTime
+int datetime_addtimespan(lua_State* L) {
+	LuaDateTime* dt = NULL;
+	LuaTimeSpan* ts = NULL;
+	// Support both orderings: dt + span and span + dt (commutative for add).
+	if (lua_isdatetime(L, 1) && lua_istimespan(L, 2)) {
+		dt = lua_todatetime(L, 1);
+		ts = lua_totimespan(L, 2);
+	}
+	else if (lua_istimespan(L, 1) && lua_isdatetime(L, 2)) {
+		ts = lua_totimespan(L, 1);
+		dt = lua_todatetime(L, 2);
+	}
+	else {
+		return luaL_error(L, "DateTime: __add requires a DateTime and a TimeSpan");
+	}
+	LuaDateTime* result = lua_pushdatetime(L);
+	result->ticks          = dt->ticks + ts->ticks;
+	result->offset_minutes = dt->offset_minutes;
 	return 1;
+}
+
+// __sub: DateTime - DateTime → TimeSpan; DateTime - TimeSpan → DateTime
+int datetime_sub(lua_State* L) {
+	if (lua_isdatetime(L, 1) && lua_isdatetime(L, 2)) {
+		// DateTime - DateTime → LuaTimeSpan
+		LuaDateTime* a = lua_todatetime(L, 1);
+		LuaDateTime* b = lua_todatetime(L, 2);
+		lua_pushtimespan(L)->ticks = a->ticks - b->ticks;
+		return 1;
+	}
+	if (lua_isdatetime(L, 1) && lua_istimespan(L, 2)) {
+		// DateTime - TimeSpan → DateTime
+		LuaDateTime* dt = lua_todatetime(L, 1);
+		LuaTimeSpan* ts = lua_totimespan(L, 2);
+		LuaDateTime* result = lua_pushdatetime(L);
+		result->ticks          = dt->ticks - ts->ticks;
+		result->offset_minutes = dt->offset_minutes;
+		return 1;
+	}
+	return luaL_error(L, "DateTime: __sub requires DateTime-DateTime or DateTime-TimeSpan");
 }

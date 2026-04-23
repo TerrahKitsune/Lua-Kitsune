@@ -33,6 +33,7 @@ A comprehensive reference for all available functions in the Lua environment.
 - [Xml](#xml)
 - [Yaml](#yaml)
 - [Toml](#toml)
+- [Ini](#ini)
 - [Third-Party Notices](#third-party-notices)
 ---
 
@@ -347,7 +348,7 @@ object  CSV.New([delimiter])
 | `Decode` | Decode a complete CSV string or Wchar into a result table |
 | `Encode` | Encode an array-of-arrays into a UTF-8 CSV string |
 | `DecodeFromFunction` | Return a generic-`for` iterator that streams rows from a supplier function |
-| `New` | Return a CSV object with a bound delimiter (or auto-detect when omitted) |
+| `New` | Return a CSV object with a bound delimiter (or auto-detect when omitted) || `New` | Return a CSV object with a bound delimiter (or auto-detect when omitted) |
 
 The optional `delimiter` argument accepts:
 - A single-character string: `","` `";"` `"|"` `"\t"`
@@ -684,15 +685,15 @@ string  Archive:ReadAll()
 ### Creation
 
 ```lua
-Stream Stream.Create(opt string)
-Stream Stream.Create(backendfunction)
+Stream Stream.New(opt string)
+Stream Stream.New(backendfunction)
 Stream Stream.Open(filename, mode)
 ```
 
 - **No argument** — creates a new empty in-memory stream.
 - **String argument** — creates an in-memory stream pre-loaded with the string contents, with the position reset to 0.
 - **Function argument** — creates a stream backed by the provided Lua function. The function is called with an opcode as its first argument and must handle all `STREAM_OP_*` operations it wishes to support. It must return the capability bitmask when called with `STREAM_OP_OPEN` (0).
-- **`Open(filename, mode)`** — opens a file as a stream. `mode` follows standard C `fopen` conventions: `"rb"`, `"wb"`, `"r"`, `"w"`, `"ab"`, etc. Raises an error if the file cannot be opened.
+- **`Open(filename, mode)`** — opens a file as a stream.
 
 ### Custom Backend Functions
 
@@ -731,7 +732,7 @@ local function makeStream()
     local buf = ''
     local pos = 0
 
-    return Stream.Create(function(op, arg)
+    return Stream.New(function(op, arg)
         if op == OPEN then
             return CAP_READ + CAP_WRITE + CAP_SEEK
 
@@ -819,7 +820,7 @@ void Stream:Seek(opt pos)
 | 2 | `STREAM_CAP_WRITE` | Stream supports write operations |
 | 4 | `STREAM_CAP_SEEK` | Stream supports seeking (`Seek`, `pos`) |
 
-In-memory streams created with `Stream.Create()` have all three flags set (`Caps = 7`).
+In-memory streams created with `Stream.New()` have all three flags set (`Caps = 7`).
 
 ### Compression
 
@@ -894,7 +895,7 @@ void Base64.SetEncodeTable(encodetablestring)
 ## Aes
 
 ```lua
-Aes Aes.Create(key, opt iv, opt usectr)
+Aes Aes.New(key, opt iv, opt usectr)
 data Aes:Encrypt(data)
 data Aes:Decrypt(data)
 nil Aes:SetIV(opt iv)
@@ -933,14 +934,14 @@ The `HttpClient` global
 ### Creation and utilities
 
 ```lua
-HttpClient HttpClient.Create()
+HttpClient HttpClient.New()
 string     HttpClient.UrlEncode(str)
 string     HttpClient.UrlDecode(str)
 ```
 
 | Function | Description |
 |----------|-------------|
-| `Create` | Create a new HTTP client |
+| `New` | Create a new HTTP client |
 | `UrlEncode` | Percent-encode a string; unreserved characters (`A–Z a–z 0–9 - _ . ~`) pass through unchanged |
 | `UrlDecode` | Decode a percent-encoded string; `+` is decoded as a space |
 
@@ -1018,7 +1019,7 @@ Binary frame mode is controlled per-client: call `client:SetBinary(true)` before
 
 ```lua
 -- Buffered GET
-local client = HttpClient.Create()
+local client = HttpClient.New()
 client:SetTimeout(8000)
 local co = client:Request('GET', 'https://httpbin.org/get')
 local ok, result
@@ -1143,7 +1144,7 @@ When `body` is a `Stream`:
 -- Non-seekable → chunked
 local function make_stream(data)
     local pos = 0
-    return Stream.Create(function(op, arg)
+    return Stream.New(function(op, arg)
         if op == 0 then return 1   -- CAP_READ only, no CAP_SEEK
         elseif op == 2 then
             local chunk = data:sub(pos + 1, pos + arg)
@@ -1155,7 +1156,7 @@ end
 resp:Send(make_stream('hello world'))
 
 -- Seekable → Content-Length
-local s = Stream.Create('hello world')
+local s = Stream.New('hello world')
 resp:Send(s)
 ```
 
@@ -1233,7 +1234,7 @@ while coroutine.status(co) == 'suspended' do
         -- A non-seekable stream triggers Transfer-Encoding: chunked
         local data = string.rep('x', 200000)
         local pos  = 0
-        local stream = Stream.Create(function(op, arg)
+        local stream = Stream.New(function(op, arg)
             if op == 0 then return 1  -- CAP_READ only
             elseif op == 2 then
                 local chunk = data:sub(pos + 1, pos + arg)
@@ -1569,7 +1570,6 @@ nil   SQLite:Close()
 
 ```lua
 Json    Json.New(opt pretty)          -- primary constructor
-Json    Json.Create(opt pretty)       -- alias for New (backward compat)
 value   Json.Null                     -- unique null sentinel (lightuserdata)
 string  json:Encode(value)
 value   json:Decode(string | fn | stream)
@@ -1580,7 +1580,7 @@ nil     json:Dispose()
 
 | Function | Description |
 |----------|-------------|
-| `New` / `Create` | Create a new Json instance. Pass `true` for pretty-printed output (2 spaces per indent level) |
+| `New` | Create a new Json instance. Pass `true` for pretty-printed output (2 spaces per indent level) |
 | `Json.Null` | The unique lightuserdata sentinel that encodes to/decodes from JSON `null`. Compare with `== Json.Null` |
 | `Encode` | Encode a Lua value to a JSON string |
 | `Decode` | Decode JSON from a string, a chunk-reader function, or a `Stream`. Returns the decoded value |
@@ -1664,13 +1664,13 @@ local pretty = Json.New(true)
 print(pretty:Encode({a = 1, b = {2, 3}}))
 
 -- Stream encode
-local s = Stream.Create()
+local s = Stream.New()
 json:EncodeIntoStream(s, {hello = "world"})
 s:Seek(0)
 print(s:Read())
 
 -- Stream decode
-local s2 = Stream.Create('{"key":"val"}')
+local s2 = Stream.New('{"key":"val"}')
 print(json:DecodeFromStream(s2).key)
 
 -- Chunked decode from file
@@ -2028,7 +2028,6 @@ An XML serialization module backed by [pugixml](https://pugixml.org/). Supports 
 
 ```lua
 Xml    Xml.New(opt indent)    -- primary constructor
-Xml    Xml.Create(opt indent) -- alias for New (backward compat)
 string xml:Encode(table)      -- encode a Lua node table to an XML string
 table  xml:Decode(string)     -- decode an XML string to a Lua node table
 nil    xml:Dispose()          -- explicitly free the instance (also called by GC)
@@ -2036,7 +2035,7 @@ nil    xml:Dispose()          -- explicitly free the instance (also called by GC
 
 | Function | Description |
 |----------|-------------|
-| `New` / `Create` | Create a new Xml instance. Pass `true` for indented output (one tab per level); default is compact (no indentation) |
+| `New` | Create a new Xml instance. Pass `true` for indented output (one tab per level); default is compact (no indentation) |
 | `Encode` | Encode a Lua node table to an XML string. Always prepends an `<?xml version="1.0" encoding="UTF-8"?>` declaration |
 | `Decode` | Parse an XML string and return the root element as a Lua node table. Returns `nil, errmsg` on parse failure |
 | `Dispose` | Explicitly release the instance; called automatically by the GC |
@@ -2204,7 +2203,6 @@ A YAML serialization module backed by [libyaml](https://github.com/yaml/libyaml)
 
 ```lua
 Yaml    Yaml.New(opt pretty)    -- primary constructor
-Yaml    Yaml.Create(opt pretty) -- alias for New (backward compat)
 string  yaml:Encode(value)      -- encode a Lua value to a YAML string
 value   yaml:Decode(string)     -- decode a YAML string to a Lua value
 nil     yaml:Dispose()          -- explicitly free the instance (also called by GC)
@@ -2212,7 +2210,7 @@ nil     yaml:Dispose()          -- explicitly free the instance (also called by 
 
 | Function | Description |
 |----------|-------------|
-| `New` / `Create` | Create a new Yaml instance. Pass `true` for block/pretty style (one entry per line); default is flow style (compact, inline) |
+| `New` | Create a new Yaml instance. Pass `true` for block/pretty style (one entry per line); default is flow style (compact, inline) |
 | `Encode` | Encode a Lua value to a YAML string |
 | `Decode` | Parse a YAML string and return the decoded Lua value |
 | `Dispose` | Explicitly release the instance; called automatically by the GC |
@@ -2303,7 +2301,6 @@ A TOML serialization module. Decoding is backed by [tomlc99](https://github.com/
 
 ```lua
 Toml    Toml.New(opt pretty)    -- primary constructor
-Toml    Toml.Create(opt pretty) -- alias for New (backward compat)
 string  toml:Encode(table)      -- encode a Lua table to a TOML string
 table   toml:Decode(string)     -- decode a TOML string to a Lua table
 nil     toml:Dispose()          -- explicitly free the instance (also called by GC)
@@ -2311,7 +2308,7 @@ nil     toml:Dispose()          -- explicitly free the instance (also called by 
 
 | Function | Description |
 |----------|-------------|
-| `New` / `Create` | Create a new Toml instance. Pass `true` for indented output (2 spaces per level); default is compact |
+| `New` | Create a new Toml instance. Pass `true` for indented output (2 spaces per level); default is compact |
 | `Encode` | Encode a Lua table to a TOML string. The top-level value **must** be a table (TOML always has a root mapping) |
 | `Decode` | Parse a TOML string and return a Lua table. Returns `nil, errmsg` on parse failure |
 | `Dispose` | Explicitly release the instance; called automatically by the GC |
@@ -2413,6 +2410,121 @@ local s3 = toml:Encode({b=2})
 print(toml:Decode(s1).a)   -- 1
 print(toml:Decode(s3).b)   -- 2
 ```
+
+---
+
+## Ini
+
+A pure C INI file encoder and decoder with no third-party dependencies. Supports the common INI conventions used by Windows applications, game configs, and legacy tools — sections, key/value pairs, comments, quoted values, and inline comments.
+
+```lua
+Ini    Ini.New()           -- primary constructor
+string ini:Encode(table)   -- encode a two-level Lua table to an INI string
+table  ini:Decode(string)  -- decode an INI string to a two-level Lua table
+nil    ini:Dispose()       -- explicitly free the instance (also called by GC)
+```
+
+| Function | Description |
+|----------|-------------|
+| `New` | Create a new Ini instance |
+| `Encode` | Encode a two-level Lua table to an INI string. Top-level keys are section names; their values must be tables of string key/value pairs |
+| `Decode` | Parse an INI string and return a two-level Lua table |
+| `Dispose` | Explicitly release the instance; called automatically by the GC |
+
+### Table Structure
+
+Both `Encode` and `Decode` use a consistent two-level structure:
+
+```lua
+{
+    __global = { key = "value", ... },  -- keys before any section header
+    sectionName = { key = "value", ... },
+    ...
+}
+```
+
+The `"__global"` pseudo-section holds any key/value pairs that appear before the first `[section]` header in the file. When encoding, bare scalar values at the top level of the table are also treated as global keys.
+
+### Decode Behaviour
+
+| Feature | Behaviour |
+|---------|-----------|
+| Comment lines | Lines starting with `;` or `#` are ignored |
+| Inline comments | Text after `;` or `#` (outside quotes) is stripped |
+| Quoted values | Double-quoted values (`"hello world"`) have their quotes stripped |
+| Separator | Both `=` and `:` are accepted as key/value separators |
+| Whitespace | Leading/trailing whitespace around keys and values is trimmed |
+| Empty lines | Ignored |
+| All values | Always returned as `string` — no type coercion |
+
+### Encode Behaviour
+
+| Lua type | INI output |
+|----------|------------|
+| `string` | written as-is |
+| `integer` | stringified (e.g. `42`) |
+| `float` | stringified (e.g. `3.14`) |
+| `boolean` | `true` or `false` |
+| `table` (nested) | not supported as a value — skipped silently |
+| other types | skipped silently |
+
+Section headers are emitted as `[sectionName]` followed by `key = value` lines. A blank line is appended after each section.
+
+### Examples
+
+```lua
+local ini = Ini.New()
+
+-- Decode a hand-written INI string
+local t = ini:Decode([[
+; Application config
+[database]
+host = localhost
+port = 5432
+debug = false
+
+[server]
+name = myapp
+mode = production
+]])
+print(t.database.host)   -- localhost
+print(t.database.port)   -- 5432  (always a string)
+print(t.server.name)     -- myapp
+
+-- Encode a Lua table
+local s = ini:Encode({
+    database = { host = 'localhost', port = 5432 },
+    server   = { name = 'myapp', debug = false },
+})
+print(s)
+-- [database]
+-- host = localhost
+-- port = 5432
+-- ...
+
+-- Global keys (before any section)
+local t2 = ini:Decode('version=1\nname=app\n[db]\nhost=localhost\n')
+print(t2.__global.version)  -- 1
+print(t2.__global.name)     -- app
+print(t2.db.host)           -- localhost
+
+-- Encode global keys via __global pseudo-section
+local s2 = ini:Encode({
+    __global = { version = '1', name = 'app' },
+    db       = { host = 'localhost' },
+})
+
+-- Inline comments and quoted values
+local t3 = ini:Decode('[s]\npath="C:/my files" ; root dir\n')
+print(t3.s.path)  -- C:/my files
+```
+
+### Notes
+
+- **All decoded values are strings** — INI has no type system. Compare with `== '5432'` not `== 5432`
+- **No nesting** — INI supports exactly two levels: section → key → value. Sub-tables inside a section are skipped during encode
+- **No standard** — the parser is lenient and accepts the most common conventions. It does not enforce any particular INI dialect
+- **Instance reuse** — the same instance can be used for multiple `Encode`/`Decode` calls
 
 ---
 
@@ -2675,3 +2787,6 @@ This software also contains data derived from the Unicode Character Database, wh
 *License: [MIT](https://opensource.org/licenses/MIT)*
 
 ---
+
+
+

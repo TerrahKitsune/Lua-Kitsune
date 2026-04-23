@@ -3,7 +3,6 @@
 
 static const struct luaL_Reg yaml_functions[] = {
     { "New",     lua_yaml_new    },  // Yaml.New([pretty])
-    { "Create",  lua_yaml_new    },  // backward-compat alias
     { "Decode",  lua_yaml_decode },  // yaml:Decode(str)
     { "Encode",  lua_yaml_encode },  // yaml:Encode(value)
     { "Dispose", lua_yaml_gc     },  // yaml:Dispose()

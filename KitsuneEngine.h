@@ -14,6 +14,11 @@
 // KitsuneVariable type constants — values 0–8 match Lua's LUA_T* constants for direct comparison.
 // KITSUNE_TNONE (-1) matches LUA_TNONE. KITSUNE_TERROR (-2) is a Kitsune extension not present
 // in Lua; it is used exclusively with kitsune_ResultSetter to signal a Lua error from a
+#define KITSUNE_TUINT          (-9) // Kitsune extension: unsigned 64-bit integer (LuaUInt userdata). The raw uint64_t bit pattern is stored in the integer union field. Values <= INT64_MAX round-trip via KITSUNE_TINTEGER; values > INT64_MAX require this type to avoid sign loss.
+#define KITSUNE_TDATETIME     (-10) // Kitsune extension: DateTime userdata. datetime → heap-allocated KitsuneDateTime { int64_t ticks; int16_t offset_minutes; }. Free via KitsuneVariableFree.
+#define KITSUNE_TTIMESPAN     (-11) // Kitsune extension: TimeSpan userdata. timespan → heap-allocated KitsuneTimeSpan { int64_t ticks; }. Free via KitsuneVariableFree.
+#define KITSUNE_TDECIMAL      (-12) // Kitsune extension: Decimal userdata. decimal → heap-allocated KitsuneDecimal { uint64_t lo; uint64_t hi; int16_t scale; uint8_t negative; }. Free via KitsuneVariableFree.
+#define KITSUNE_TIDENTIFIER   (-13) // Kitsune extension: Identifier userdata. identifier → heap-allocated KitsuneIdentifier { uint8_t type; uint8_t bytes[16]; } where type 0=UUID, 1=OID. Free via KitsuneVariableFree.
 #define KITSUNE_TTABLECONTENTS  (-8) // Kitsune extension: snapshot of a Lua table's key-value pairs; table field points to a KitsuneKeyValuePairVariableNode linked list. Produced by KitsuneGetTableContents; consumed by KitsuneSetTableContents. KitsuneVariableFree recursively releases the list.
 #define KITSUNE_TITERATOR      (-7) // Kitsune extension: iterator type; data is a pointer to a kitsune_Iterator struct containing the iteration state. Not a value returned by lua_type() — only used in KitsuneVariable for iterating tables with KitsuneGetAll, and never appears in Lua or in a variable returned by the engine. Data should be a pointer to a kitsune_Iterator.
 #define KITSUNE_TCFUNCTION     (-6) // Kitsune extension: C function pointer type; data is a pointer to a kitsune_CFunctionData struct containing the function pointer and its userdata. Not a value returned by lua_type() — only used in KitsuneVariable for passing C function pointers to Lua, and never appears in Lua or in a variable returned by the engine. Data should be a pointer to a kitsune_CFunctionData.
@@ -59,22 +64,31 @@ struct KitsuneIterator;
 // Forward declaration required so KitsuneVariable can hold a KitsuneUserData* in its union;
 // the full definition follows below.
 struct KitsuneUserData;
+// Forward declarations for typed structured value types stored in the union.
+struct KitsuneDateTime;
+struct KitsuneTimeSpan;
+struct KitsuneDecimal;
+struct KitsuneIdentifier;
 
 struct KitsuneVariable {
 	int type; // see KITSUNE_T* constants above
 	size_t length; // byte count for KITSUNE_TSTRING and KITSUNE_TUSERDATA __name; char16_t count for KITSUNE_TCHAR16; entry count for KITSUNE_TTABLE; 0 for all other types
 	union {
-		int ref;							   // Objects that are references such as KITSUNE_TTHREAD, KITSUNE_TFUNCTION, KITSUNE_TTABLE.
-		double number;                         // KITSUNE_TNUMBER
-		long long integer;                     // KITSUNE_TINTEGER
-		bool boolean;                          // KITSUNE_TBOOLEAN
-		unsigned char* data;                   // KITSUNE_TSTRING: heap-allocated UTF-8 bytes; caller-owned on Set
-		char16_t* char16data;                  // KITSUNE_TCHAR16: heap-allocated char16_t string; length = number of char16_t code units (excl. null terminator)
-		KitsuneKeyValuePairVariableNode* table; // KITSUNE_TTABLECONTENTS: head of linked list (NULL = empty snapshot)
-		kitsune_CFunctionData* cfunction;
-		KitsuneIterator* iterator; // KITSUNE_TITERATOR: pointer to a kitsune_Iterator struct containing the iteration state; caller-owned on Set
-		void* lightuserdata; // KITSUNE_TLIGHTUSERDATA: opaque pointer; caller-owned on Set
-		KitsuneUserData* userdata; // KITSUNE_TUSERDATA: pointer to a KitsuneUserData struct containing the name and userdata pointer; caller-owned on Set
+		int ref;                                   // LUA_TTHREAD, LUA_TFUNCTION, LUA_TTABLE: Lua registry reference
+		double number;                             // LUA_TNUMBER
+		long long integer;                         // KITSUNE_TINTEGER, KITSUNE_TUINT
+		bool boolean;                              // LUA_TBOOLEAN
+		unsigned char* data;                       // KITSUNE_TSTRING, KITSUNE_TJSON, KITSUNE_TERROR: heap-allocated UTF-8 bytes
+		char16_t* char16data;                      // KITSUNE_TCHAR16: heap-allocated char16_t string
+		KitsuneKeyValuePairVariableNode* table;    // KITSUNE_TTABLECONTENTS: head of linked list
+		kitsune_CFunctionData* cfunction;          // KITSUNE_TCFUNCTION
+		KitsuneIterator* iterator;                 // KITSUNE_TITERATOR
+		void* lightuserdata;                       // LUA_TLIGHTUSERDATA
+		KitsuneUserData* userdata;                 // LUA_TUSERDATA
+		KitsuneDateTime* datetime;                 // KITSUNE_TDATETIME
+		KitsuneTimeSpan* timespan;                 // KITSUNE_TTIMESPAN
+		KitsuneDecimal* decimal;                   // KITSUNE_TDECIMAL
+		KitsuneIdentifier* identifier;             // KITSUNE_TIDENTIFIER
 	};
 };
 
@@ -82,6 +96,32 @@ struct KitsuneUserData {
 	char* name; // Name of the userdata
 	int ref; // luaL_ref registry reference anchoring the userdata in Lua; release with luaL_unref in KitsuneVariableFree when type == KITSUNE_TUSERDATA
 	void* userdata; // Opaque pointer passed to C functions registered in this userdata's metatable; null if it its userdata that was not registered by KitsuneRegisterUserdata
+};
+
+// 100-nanosecond ticks since 0001-01-01 (same epoch as .NET DateTime), plus a signed UTC offset.
+struct KitsuneDateTime {
+	int64_t ticks;          // 100-ns intervals since 0001-01-01 00:00:00 UTC
+	int16_t offset_minutes; // UTC offset in minutes; 0 = UTC
+};
+
+// Signed duration in 100-nanosecond ticks (same representation as .NET TimeSpan).
+struct KitsuneTimeSpan {
+	int64_t ticks; // 100-ns signed duration; negative = directed backwards
+};
+
+// 128-bit decimal value matching the LuaDecimal internal layout.
+// Coefficient = hi:lo (unsigned 128-bit); value = (-1)^negative * (hi:lo) * 10^(-scale).
+struct KitsuneDecimal {
+	uint64_t lo;       // Low 64 bits of coefficient
+	uint64_t hi;       // High 64 bits of coefficient
+	int16_t  scale;    // Decimal digits after the point
+	uint8_t  negative; // 1 = negative, 0 = positive
+};
+
+// Identifier (UUID or MongoDB ObjectID).
+struct KitsuneIdentifier {
+	uint8_t type;      // 0 = UUID (16 bytes used), 1 = OID (12 bytes used)
+	uint8_t bytes[16]; // Raw identifier bytes; for OID only bytes[0..11] are meaningful
 };
 
 // Iterator struct for KITSUNE_TITERATOR values.
@@ -482,6 +522,7 @@ extern "C" {
 static inline float KitsuneAsFloat(const KitsuneVariable* v, float fallback) {
 	if (!v) return fallback;
 	if (v->type == KITSUNE_TINTEGER) return (float)v->integer;
+	if (v->type == KITSUNE_TUINT)    return (float)(unsigned long long)v->integer;
 	if (v->type == KITSUNE_TNUMBER)  return (float)v->number;
 	if (v->type == KITSUNE_TSTRING && v->data && v->length > 0) {
 		char* end = nullptr;
@@ -495,6 +536,7 @@ static inline float KitsuneAsFloat(const KitsuneVariable* v, float fallback) {
 static inline double KitsuneAsDouble(const KitsuneVariable* v, double fallback) {
 	if (!v) return fallback;
 	if (v->type == KITSUNE_TINTEGER) return (double)v->integer;
+	if (v->type == KITSUNE_TUINT)    return (double)(unsigned long long)v->integer;
 	if (v->type == KITSUNE_TNUMBER)  return v->number;
 	if (v->type == KITSUNE_TSTRING && v->data && v->length > 0) {
 		char* end = nullptr;
@@ -509,6 +551,7 @@ static inline double KitsuneAsDouble(const KitsuneVariable* v, double fallback) 
 static inline long long KitsuneAsInt(const KitsuneVariable* v, long long fallback) {
 	if (!v) return fallback;
 	if (v->type == KITSUNE_TINTEGER) return v->integer;
+	if (v->type == KITSUNE_TUINT)    return v->integer;  // same bit pattern — caller interprets as signed
 	if (v->type == KITSUNE_TNUMBER)  return (long long)v->number;
 	if (v->type == KITSUNE_TBOOLEAN) return v->boolean ? 1LL : 0LL;
 	if (v->type == KITSUNE_TSTRING && v->data && v->length > 0) {

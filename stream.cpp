@@ -1,5 +1,10 @@
 ﻿#include "stream.h"
 #include "luawchar.h"
+#include "luadecimal.h"
+#include "luaidentifier.h"
+#include "luadatetime.h"
+#include "luauint.h"
+#include "luatimespan.h"
 #include <string.h>
 #include <stdlib.h>
 #include "platform.h"
@@ -541,7 +546,12 @@ int ReadUnsignedLong(lua_State* L) {
 	unsigned long long v;
 	memcpy(&v, lua_tolstring(L, -1, NULL), sizeof(unsigned long long));
 	lua_pop(L, 1);
-	lua_pushinteger(L, (lua_Integer)v);
+	// Values that exceed LUA_MAXINTEGER cannot be represented faithfully as a signed integer;
+	// push a LuaUInt so the caller gets the full uint64 range without silent truncation.
+	if (v > (unsigned long long)LUA_MAXINTEGER)
+		lua_pushuint(L)->value = (uint64_t)v;
+	else
+		lua_pushinteger(L, (lua_Integer)v);
 	return 1;
 }
 
@@ -582,6 +592,128 @@ int ReadWchar(lua_State* L) {
 	LuaWChar* wch = lua_pushwchar(L);
 	wch->str = wstr;
 	wch->len = wcharLen;
+	return 1;
+}
+
+// Reads 8 bytes and pushes a LuaUInt. Returns nil on EOF/short read.
+int ReadUInt64(lua_State* L) {
+	LuaStream* s = lua_toluastream(L, 1);
+	if (!(s->Caps & STREAM_CAP_READ)) {
+		lua_pushnil(L);
+		return 1;
+	}
+	StreamRead(L, s, sizeof(uint64_t));
+	if (lua_type(L, -1) != LUA_TSTRING || lua_rawlen(L, -1) != sizeof(uint64_t)) {
+		lua_pop(L, 1);
+		lua_pushnil(L);
+		return 1;
+	}
+	uint64_t v;
+	memcpy(&v, lua_tolstring(L, -1, NULL), sizeof(uint64_t));
+	lua_pop(L, 1);
+	lua_pushuint(L)->value = v;
+	return 1;
+}
+
+// Reads a null-terminated decimal string from the stream and pushes a LuaDecimal.
+// Reads until a NUL byte, newline, or EOF. Returns nil on parse failure.
+int ReadDecimal(lua_State* L) {
+	LuaStream* s = lua_toluastream(L, 1);
+	if (!(s->Caps & STREAM_CAP_READ)) {
+		lua_pushnil(L);
+		return 1;
+	}
+	// Read bytes one at a time until NUL, newline, or EOF.
+	char buf[64];
+	size_t pos = 0;
+	while (pos < sizeof(buf) - 1) {
+		StreamRead(L, s, 1);
+		if (lua_type(L, -1) != LUA_TSTRING || lua_rawlen(L, -1) < 1) {
+			lua_pop(L, 1);
+			break;
+		}
+		char c = lua_tolstring(L, -1, NULL)[0];
+		lua_pop(L, 1);
+		if (c == '\0' || c == '\n')
+			break;
+		buf[pos++] = c;
+	}
+	buf[pos] = '\0';
+	if (pos == 0) {
+		lua_pushnil(L);
+		return 1;
+	}
+	LuaDecimal* d = lua_pushdecimal(L);
+	if (!decimal_parse_c(buf, pos, d)) {
+		lua_pop(L, 1);
+		lua_pushnil(L);
+	}
+	return 1;
+}
+
+// Reads exactly 16 bytes and pushes a LuaIdentifier (UUID). Returns nil on short read.
+int ReadIdentifier(lua_State* L) {
+	LuaStream* s = lua_toluastream(L, 1);
+	if (!(s->Caps & STREAM_CAP_READ)) {
+		lua_pushnil(L);
+		return 1;
+	}
+	StreamRead(L, s, 16);
+	if (lua_type(L, -1) != LUA_TSTRING || lua_rawlen(L, -1) != 16) {
+		lua_pop(L, 1);
+		lua_pushnil(L);
+		return 1;
+	}
+	const char* raw = lua_tolstring(L, -1, NULL);
+	LuaIdentifier* id = lua_pushidentifier(L);
+	id->type = IDENTIFIER_UUID;
+	id->len  = 16;
+	memcpy(id->bytes, raw, 16);
+	lua_remove(L, -2); // pop the string
+	return 1;
+}
+
+int ReadDateTime(lua_State* L) {
+	LuaStream* s = lua_toluastream(L, 1);
+	if (!(s->Caps & STREAM_CAP_READ)) {
+		lua_pushnil(L);
+		return 1;
+	}
+	StreamRead(L, s, 10);
+	if (lua_type(L, -1) != LUA_TSTRING || lua_rawlen(L, -1) != 10) {
+		lua_pop(L, 1);
+		lua_pushnil(L);
+		return 1;
+	}
+	const char* raw = lua_tolstring(L, -1, NULL);
+	int64_t  ticks;
+	int16_t  offset_minutes;
+	memcpy(&ticks,          raw,     sizeof(int64_t));
+	memcpy(&offset_minutes, raw + 8, sizeof(int16_t));
+	lua_pop(L, 1);
+	LuaDateTime* dt = lua_pushdatetime(L);
+	dt->ticks          = ticks;
+	dt->offset_minutes = offset_minutes;
+	return 1;
+}
+
+// Reads 8 bytes (int64 ticks) and pushes a LuaTimeSpan. Returns nil on short read.
+int ReadTimeSpan(lua_State* L) {
+	LuaStream* s = lua_toluastream(L, 1);
+	if (!(s->Caps & STREAM_CAP_READ)) {
+		lua_pushnil(L);
+		return 1;
+	}
+	StreamRead(L, s, sizeof(int64_t));
+	if (lua_type(L, -1) != LUA_TSTRING || lua_rawlen(L, -1) != sizeof(int64_t)) {
+		lua_pop(L, 1);
+		lua_pushnil(L);
+		return 1;
+	}
+	int64_t ticks;
+	memcpy(&ticks, lua_tolstring(L, -1, NULL), sizeof(int64_t));
+	lua_pop(L, 1);
+	lua_pushtimespan(L)->ticks = ticks;
 	return 1;
 }
 
@@ -797,6 +929,58 @@ int WriteLuaValue(lua_State* L) {
 				lua_pushinteger(L, ok ? (lua_Integer)byteLen : 0);
 				return 1;
 			}
+			lua_pushinteger(L, 0);
+			return 1;
+		}
+		if (lua_isdecimal(L, 2)) {
+			// Write the canonical decimal string (UTF-8 bytes, no null terminator).
+			lua_decimal_push_string(L, 2);
+			size_t dlen;
+			const char* ds = lua_tolstring(L, -1, &dlen);
+			if (limit > 0 && limit < dlen) dlen = limit;
+			bool ok = ds && dlen > 0 && StreamWrite(L, stream, (const BYTE*)ds, dlen);
+			lua_pop(L, 1);
+			lua_pushinteger(L, ok ? (lua_Integer)dlen : 0);
+			return 1;
+		}
+		if (lua_isidentifier(L, 2)) {
+			// Write the raw identifier bytes (16 bytes for UUID, 12 for OID).
+			LuaIdentifier* id = lua_toidentifier(L, 2);
+			size_t idlen = (size_t)id->len;
+			if (limit > 0 && limit < idlen) idlen = limit;
+			bool ok = idlen > 0 && StreamWrite(L, stream, id->bytes, idlen);
+			lua_pushinteger(L, ok ? (lua_Integer)idlen : 0);
+			return 1;
+		}
+		if (lua_isdatetime(L, 2)) {
+			// Write ticks (int64, 8 bytes) + offset_minutes (int16, 2 bytes) = 10 bytes total.
+			LuaDateTime* dt = lua_todatetime(L, 2);
+			unsigned char buf[10];
+			memcpy(buf,     &dt->ticks,          sizeof(int64_t));
+			memcpy(buf + 8, &dt->offset_minutes, sizeof(int16_t));
+			size_t dtlen = 10;
+			if (limit > 0 && limit < dtlen) dtlen = limit;
+			bool ok = StreamWrite(L, stream, buf, dtlen);
+			lua_pushinteger(L, ok ? (lua_Integer)dtlen : 0);
+			return 1;
+		}
+		if (lua_isuint(L, 2)) {
+			// Write the uint64 value (8 bytes, native endian).
+			uint64_t uv = lua_touint(L, 2)->value;
+			size_t uvlen = sizeof(uint64_t);
+			if (limit > 0 && limit < uvlen) uvlen = limit;
+			bool ok = StreamWrite(L, stream, (const BYTE*)&uv, uvlen);
+			lua_pushinteger(L, ok ? (lua_Integer)uvlen : 0);
+			return 1;
+		}
+		if (lua_istimespan(L, 2)) {
+			// Write the int64 tick count (8 bytes, native endian).
+			int64_t ticks = lua_totimespan(L, 2)->ticks;
+			size_t tslen = sizeof(int64_t);
+			if (limit > 0 && limit < tslen) tslen = limit;
+			bool ok = StreamWrite(L, stream, (const BYTE*)&ticks, tslen);
+			lua_pushinteger(L, ok ? (lua_Integer)tslen : 0);
+			return 1;
 		}
 		break;
 	default:

@@ -3,7 +3,6 @@
 
 static const struct luaL_Reg csv_functions[] = {
 	{ "New",               lua_csv_new                   },  // CSV.New([delim])
-	{ "Create",            lua_csv_new                   },  // backward-compat alias
 	{ "Decode",            lua_csv_decode                },  // csv:Decode(str)
 	{ "Encode",            lua_csv_encode                },  // csv:Encode(rows)
 	{ "DecodeFromFunction", lua_csv_decode_from_function },  // csv:DecodeFromFunction(fn_or_stream)

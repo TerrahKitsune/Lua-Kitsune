@@ -3,6 +3,8 @@
 #include "luaidentifier.h"
 #include "luadatetime.h"
 #include "luadecimal.h"
+#include "luauint.h"
+#include "luatimespan.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -298,6 +300,14 @@ LuaRedis* RedisCommandInternal(lua_State* L) {
 			}
 			if (lua_isdecimal(L, argIdx)) {
 				lua_decimal_push_string(L, argIdx);
+				lua_replace(L, argIdx);
+			}
+			if (lua_isuint(L, argIdx)) {
+				lua_uint_push_string(L, argIdx);
+				lua_replace(L, argIdx);
+			}
+			if (lua_istimespan(L, argIdx)) {
+				lua_timespan_push_string(L, argIdx);
 				lua_replace(L, argIdx);
 			}
 		}

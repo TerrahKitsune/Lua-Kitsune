@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
@@ -123,9 +123,15 @@
     <ClCompile Include="luakafkaproducer.cpp" />
     <ClCompile Include="luamsgpack.cpp" />
     <ClCompile Include="luamsgpackmain.cpp" />
+    <ClCompile Include="luatimespan.cpp" />
     <ClCompile Include="luatoml.cpp" />
+    <ClCompile Include="luauint.cpp" />
+    <ClCompile Include="sizeof_check.c" />
+    <ClCompile Include="timespanmain.cpp" />
     <ClCompile Include="tomlc99\toml.c" />
     <ClCompile Include="luatomlmain.cpp" />
+    <ClCompile Include="luaini.cpp" />
+    <ClCompile Include="luainimain.cpp" />
     <ClCompile Include="luayaml.cpp" />
     <ClCompile Include="luayamlmain.cpp" />
     <ClCompile Include="libyaml\src\api.c" />
@@ -205,7 +211,7 @@
     <ClCompile Include="streamfile.cpp" />
     <ClCompile Include="streammemory.cpp" />
     <ClCompile Include="StreamMain.cpp" />
-    <ClCompile Include="streamshmemory.cpp" />
+    <ClCompile Include="uintmain.cpp" />
     <ClCompile Include="wcharmain.cpp" />
     <ClCompile Include="identifiermain.cpp" />
     <ClCompile Include="datetimemain.cpp" />
@@ -242,7 +248,6 @@
     <ClInclude Include="hiredis\read.h" />
     <ClInclude Include="hiredis\sds.h" />
     <ClInclude Include="KitsuneEngine.h" />
-    <ClInclude Include="KitsuneEngine\stream.h" />
     <ClInclude Include="kitsuneuserdata.h" />
     <ClInclude Include="libyaml\src\config.h" />
     <ClInclude Include="LuaArchive.h" />
@@ -264,8 +269,12 @@
     <ClInclude Include="luakafkaproducer.h" />
     <ClInclude Include="luamsgpack.h" />
     <ClInclude Include="luamsgpackmain.h" />
+    <ClInclude Include="luatimespan.h" />
     <ClInclude Include="luatoml.h" />
     <ClInclude Include="luatomlmain.h" />
+    <ClInclude Include="luaini.h" />
+    <ClInclude Include="luainimain.h" />
+    <ClInclude Include="luauint.h" />
     <ClInclude Include="luayaml.h" />
     <ClInclude Include="luayamlmain.h" />
     <ClInclude Include="luaxml.h" />
@@ -330,12 +339,13 @@
     <ClInclude Include="SHA1Main.h" />
     <ClInclude Include="sha256.h" />
     <ClInclude Include="Sha256Main.h" />
-    <ClInclude Include="stream.h" />
     <ClInclude Include="miniz.h" />
+    <ClInclude Include="stream.h" />
     <ClInclude Include="streamfile.h" />
     <ClInclude Include="StreamMain.h" />
     <ClInclude Include="streammemory.h" />
-    <ClInclude Include="streamshmemory.h" />
+    <ClInclude Include="timespanmain.h" />
+    <ClInclude Include="uintmain.h" />
     <ClInclude Include="wcharmain.h" />
     <ClInclude Include="identifiermain.h" />
     <ClInclude Include="datetimemain.h" />
@@ -359,6 +369,14 @@
     <ClInclude Include="TimerMain.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="debug_datetime.lua" />
+    <None Include="debug_decimal.lua" />
+    <None Include="debug_msgpack.lua" />
+    <None Include="debug_registry.lua" />
+    <None Include="debug_types.lua" />
+    <None Include="debug_types2.lua" />
+    <None Include="debug_types3.lua" />
+    <None Include="debug_types4.lua" />
     <None Include="Lua functions.md" />
     <None Include="plans\httpserver-integration.md" />
     <None Include="plans\imgui-api-namespace-refactor.md" />

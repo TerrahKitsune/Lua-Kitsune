@@ -8,6 +8,8 @@
 #include "luaidentifier.h"
 #include "luadatetime.h"
 #include "luadecimal.h"
+#include "luauint.h"
+#include "luatimespan.h"
 
 // -- Platform helper: set socket non-blocking ----------------------------------
 #ifdef _WIN32
@@ -147,6 +149,12 @@ static void PushAsParamString(lua_State* L, int index) {
 	}
 	else if (lua_isdecimal(L, index)) {
 		lua_decimal_push_string(L, index);
+	}
+	else if (lua_isuint(L, index)) {
+		lua_uint_push_string(L, index);
+	}
+	else if (lua_istimespan(L, index)) {
+		lua_timespan_push_string(L, index);
 	}
 	else {
 		luaL_tolstring(L, index, NULL);

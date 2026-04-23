@@ -3,6 +3,8 @@
 #include "luaidentifier.h"
 #include "luadatetime.h"
 #include "luadecimal.h"
+#include "luauint.h"
+#include "luatimespan.h"
 
 // =============================================================================
 // Instance management
@@ -235,6 +237,20 @@ static void enc_value(LuaYaml* y, yaml_emitter_t* em, lua_State* L) {
         }
         if (lua_isdecimal(L, -1)) {
             lua_decimal_push_string(L, -1);
+            size_t      len;
+            const char* s = lua_tolstring(L, -1, &len);
+            enc_string_scalar(em, L, s, len, YAML_DOUBLE_QUOTED_SCALAR_STYLE);
+            lua_pop(L, 1);
+            break;
+        }
+        if (lua_isuint(L, -1)) {
+            char buf[21];
+            int  n = snprintf(buf, sizeof(buf), "%llu", (unsigned long long)lua_touint(L, -1)->value);
+            enc_string_scalar(em, L, buf, (size_t)n, YAML_PLAIN_SCALAR_STYLE);
+            break;
+        }
+        if (lua_istimespan(L, -1)) {
+            lua_timespan_push_string(L, -1);
             size_t      len;
             const char* s = lua_tolstring(L, -1, &len);
             enc_string_scalar(em, L, s, len, YAML_DOUBLE_QUOTED_SCALAR_STYLE);

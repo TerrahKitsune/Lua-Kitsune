@@ -6647,111 +6647,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        private static void SpinUntilRunning(KitsuneEngine engine, int timeoutMs = 2000)
-        {
-            DateTime deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
-            while (!engine.IsRunning && DateTime.UtcNow < deadline)
-            {
-                Thread.Sleep(1);
-            }
-        }
-
-        // SpinUntilActive returns as soon as the coroutine has been assigned a slot
-        // (appears in GetActiveIds), which happens synchronously with ExecuteString.
-        // Use this instead of SpinUntilRunning when the coroutine sleeps immediately,
-        // because IsRunning transiently drops to false between scheduler ticks while
-        // a coroutine is sleeping and SpinUntilRunning would burn the full 2-second
-        // timeout before the subsequent GetActiveIds()[0] call.
-        private static void SpinUntilActive(KitsuneEngine engine, int timeoutMs = 5000)
-        {
-            DateTime deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
-            while (engine.GetActiveIds().Length == 0 && DateTime.UtcNow < deadline)
-            {
-                Thread.Sleep(1);
-            }
-        }
-
-        private sealed class Widget
-        {
-            public Widget(string name)
-            {
-                Name = name;
-            }
-
-            public string Name { get; }
-
-            [LuaMethod]
-            public LuaValue GetName(IReadOnlyList<LuaValue> val) => LuaValue.FromString(Name);
-        }
-
-        private sealed class Counter
-        {
-            public bool DidGc = false;
-
-            public int Value;
-
-            [LuaMethod]
-            public LuaValue Increment(IReadOnlyList<LuaValue> val)
-            {
-                Value++;
-                return LuaValue.None;
-            }
-
-            // args[0] = self, args[1] = amount to add
-            [LuaMethod]
-            public LuaValue Add(IReadOnlyList<LuaValue> args)
-            {
-                Value += (int)args[1].AsInt64;
-                return LuaValue.None;
-            }
-
-            // Throws when Value is negative so error-propagation tests can use it.
-            [LuaMethod]
-            public LuaValue BangIfNegative(IReadOnlyList<LuaValue> args)
-            {
-                if (Value < 0)
-                {
-                    throw new LuaException("Counter value is negative");
-                }
-
-                return LuaValue.None;
-            }
-
-            [LuaMethod(Name = "Get")]
-            public LuaValue GetValue(IReadOnlyList<LuaValue> val) => LuaValue.FromInt64(Value);
-
-            [LuaMetaMethod("__tostring")]
-            public LuaValue ToStr(IReadOnlyList<LuaValue> val) => $"Counter({Value})";
-
-            [LuaMetaMethod("__gc")]
-            public void GC(IReadOnlyList<LuaValue> val)
-            {
-                DidGc = true;
-            }
-        }
-
-        // Used by RegisterUserdata_DuplicateMethodName_ThrowsInvalidOperationException.
-        private sealed class TypeWithDuplicateLuaMethod
-        {
-            [LuaMethod]
-            public LuaValue Foo(IReadOnlyList<LuaValue> args) => LuaValue.None;
-
-            [LuaMethod(Name = "Foo")]
-            public LuaValue AlsoFoo(IReadOnlyList<LuaValue> args) => LuaValue.None;
-        }
-
-        // Used by RegisterUserdata_DuplicateMetaMethodName_ThrowsInvalidOperationException.
-        private sealed class TypeWithDuplicateLuaMetaMethod
-        {
-            [LuaMetaMethod("__tostring")]
-            public LuaValue ToStr1(IReadOnlyList<LuaValue> args) => LuaValue.None;
-
-            [LuaMetaMethod("__tostring")]
-            public LuaValue ToStr2(IReadOnlyList<LuaValue> args) => LuaValue.None;
-        }
-
         // -- KitsuneGCHook / delegate-lifetime tests ---------------------------
-
         [Fact]
         public void GCHook_RegisterFunction_DelegateFreedAfterGlobalNilledAndCollected()
         {
@@ -6858,6 +6754,109 @@ namespace KitsuneNet.Tests
                 "c2:Increment(); c2:Increment(); return c2:Get()");
             result2.AsInt64.ShouldBe(12);
             engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        private static void SpinUntilRunning(KitsuneEngine engine, int timeoutMs = 2000)
+        {
+            DateTime deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+            while (!engine.IsRunning && DateTime.UtcNow < deadline)
+            {
+                Thread.Sleep(1);
+            }
+        }
+
+        // SpinUntilActive returns as soon as the coroutine has been assigned a slot
+        // (appears in GetActiveIds), which happens synchronously with ExecuteString.
+        // Use this instead of SpinUntilRunning when the coroutine sleeps immediately,
+        // because IsRunning transiently drops to false between scheduler ticks while
+        // a coroutine is sleeping and SpinUntilRunning would burn the full 2-second
+        // timeout before the subsequent GetActiveIds()[0] call.
+        private static void SpinUntilActive(KitsuneEngine engine, int timeoutMs = 5000)
+        {
+            DateTime deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+            while (engine.GetActiveIds().Length == 0 && DateTime.UtcNow < deadline)
+            {
+                Thread.Sleep(1);
+            }
+        }
+
+        // Used by RegisterUserdata_DuplicateMethodName_ThrowsInvalidOperationException.
+        private sealed class TypeWithDuplicateLuaMethod
+        {
+            [LuaMethod]
+            public LuaValue Foo(IReadOnlyList<LuaValue> args) => LuaValue.None;
+
+            [LuaMethod(Name = "Foo")]
+            public LuaValue AlsoFoo(IReadOnlyList<LuaValue> args) => LuaValue.None;
+        }
+
+        // Used by RegisterUserdata_DuplicateMetaMethodName_ThrowsInvalidOperationException.
+        private sealed class TypeWithDuplicateLuaMetaMethod
+        {
+            [LuaMetaMethod("__tostring")]
+            public LuaValue ToStr1(IReadOnlyList<LuaValue> args) => LuaValue.None;
+
+            [LuaMetaMethod("__tostring")]
+            public LuaValue ToStr2(IReadOnlyList<LuaValue> args) => LuaValue.None;
+        }
+
+        private sealed class Widget
+        {
+            public Widget(string name)
+            {
+                Name = name;
+            }
+
+            public string Name { get; }
+
+            [LuaMethod]
+            public LuaValue GetName(IReadOnlyList<LuaValue> val) => LuaValue.FromString(Name);
+        }
+
+        private sealed class Counter
+        {
+            public bool DidGc = false;
+
+            public int Value;
+
+            [LuaMethod]
+            public LuaValue Increment(IReadOnlyList<LuaValue> val)
+            {
+                Value++;
+                return LuaValue.None;
+            }
+
+            // args[0] = self, args[1] = amount to add
+            [LuaMethod]
+            public LuaValue Add(IReadOnlyList<LuaValue> args)
+            {
+                Value += (int)args[1].AsInt64;
+                return LuaValue.None;
+            }
+
+            // Throws when Value is negative so error-propagation tests can use it.
+            [LuaMethod]
+            public LuaValue BangIfNegative(IReadOnlyList<LuaValue> args)
+            {
+                if (Value < 0)
+                {
+                    throw new LuaException("Counter value is negative");
+                }
+
+                return LuaValue.None;
+            }
+
+            [LuaMethod(Name = "Get")]
+            public LuaValue GetValue(IReadOnlyList<LuaValue> val) => LuaValue.FromInt64(Value);
+
+            [LuaMetaMethod("__tostring")]
+            public LuaValue ToStr(IReadOnlyList<LuaValue> val) => $"Counter({Value})";
+
+            [LuaMetaMethod("__gc")]
+            public void GC(IReadOnlyList<LuaValue> val)
+            {
+                DidGc = true;
+            }
         }
     }
 }

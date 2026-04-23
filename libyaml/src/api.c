@@ -63,7 +63,13 @@ yaml_strdup(const yaml_char_t *str)
     if (!str)
         return NULL;
 
-    return (yaml_char_t *)_strdup((char *)str);
+    return (yaml_char_t *)
+#ifdef _MSC_VER
+        _strdup
+#else
+        strdup
+#endif
+        ((char *)str);
 }
 
 /*

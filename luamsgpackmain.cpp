@@ -3,7 +3,6 @@
 
 static const struct luaL_Reg msgpack_functions[] = {
     { "New",              lua_msgpack_new               },  // MsgPack.New()
-    { "Create",           lua_msgpack_new               },  // backward-compat alias
     { "Decode",           lua_msgpack_decode            },  // msgpack:Decode(str | stream)
     { "Encode",           lua_msgpack_encode            },  // msgpack:Encode(value)
     { "EncodeIntoStream", lua_msgpack_encode_into_stream },  // msgpack:EncodeIntoStream(stream, value)

@@ -1,5 +1,11 @@
 ﻿#include "luaxml.h"
-#include "pugixml.hpp"
+#include "luadecimal.h"
+#include "luaidentifier.h"
+#include "luadatetime.h"
+#include "luawchar.h"
+#include "luauint.h"
+#include "luatimespan.h"
+#include "pugixml/pugixml.hpp"
 
 // =============================================================================
 // Custom pugixml allocator
@@ -363,8 +369,57 @@ int lua_xml_encode(lua_State* L) {
 
 			lua_getfield(L, tbl, "text");
 			if (!lua_isnil(L, -1)) {
+				const char* tv = NULL;
 				size_t      tlen = 0;
-				const char* tv   = lua_tolstring(L, -1, &tlen);
+				char        ubuf[21];
+				if (lua_isuint(L, -1)) {
+					int n = snprintf(ubuf, sizeof(ubuf), "%llu", (unsigned long long)lua_touint(L, -1)->value);
+					tv   = ubuf;
+					tlen = (size_t)n;
+				}
+				else if (lua_isdecimal(L, -1)) {
+					lua_decimal_push_string(L, -1);
+					tv = lua_tolstring(L, -1, &tlen);
+					if (tv && tlen > 0)
+						elem.append_child(pugi::node_pcdata).set_value(tv);
+					lua_pop(L, 1);
+					tv = NULL;
+				}
+				else if (lua_isidentifier(L, -1)) {
+					lua_identifier_push_string(L, -1);
+					tv = lua_tolstring(L, -1, &tlen);
+					if (tv && tlen > 0)
+						elem.append_child(pugi::node_pcdata).set_value(tv);
+					lua_pop(L, 1);
+					tv = NULL;
+				}
+				else if (lua_isdatetime(L, -1)) {
+					lua_datetime_push_string(L, -1);
+					tv = lua_tolstring(L, -1, &tlen);
+					if (tv && tlen > 0)
+						elem.append_child(pugi::node_pcdata).set_value(tv);
+					lua_pop(L, 1);
+					tv = NULL;
+				}
+				else if (lua_iswchar(L, -1)) {
+					ToUtf8(L);
+					tv = lua_tolstring(L, -1, &tlen);
+					if (tv && tlen > 0)
+						elem.append_child(pugi::node_pcdata).set_value(tv);
+					lua_pop(L, 1);
+					tv = NULL;
+				}
+				else if (lua_istimespan(L, -1)) {
+					lua_timespan_push_string(L, -1);
+					tv = lua_tolstring(L, -1, &tlen);
+					if (tv && tlen > 0)
+						elem.append_child(pugi::node_pcdata).set_value(tv);
+					lua_pop(L, 1);
+					tv = NULL;
+				}
+				else {
+					tv = lua_tolstring(L, -1, &tlen);
+				}
 				if (tv && tlen > 0)
 					elem.append_child(pugi::node_pcdata).set_value(tv);
 			}

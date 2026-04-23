@@ -28,6 +28,9 @@
     <Filter Include="litehtml">
       <UniqueIdentifier>{beb1c75c-e8a9-4be2-94bf-887cdd40f0cd}</UniqueIdentifier>
     </Filter>
+    <Filter Include="LuaToml">
+      <UniqueIdentifier>{0332c62a-76cf-4f2e-ab40-b3949fd2e7c7}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Program.cpp">

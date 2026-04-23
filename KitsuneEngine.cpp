@@ -62,6 +62,7 @@
 #include "luaxmlmain.h"
 #include "luayamlmain.h"
 #include "luatomlmain.h"
+#include "luainimain.h"
 #include "luajson.h"
 #include "base64.h"
 #include "wcharmain.h"
@@ -69,8 +70,12 @@
 #include "luaidentifier.h"
 #include "datetimemain.h"
 #include "luadatetime.h"
+#include "luatimespan.h"
+#include "timespanmain.h"
 #include "decimalmain.h"
 #include "luadecimal.h"
+#include "uintmain.h"
+#include "luauint.h"
 #include "luawchar.h"
 #include "LuaCsvMain.h"
 #include "SHA1Main.h"
@@ -265,33 +270,75 @@ static void FreeKVNode(KitsuneKeyValuePairVariableNode* node, lua_State* L) {
 // Nulls the data pointer after freeing to prevent double-free. Does NOT free var itself.
 // L must be non-NULL when var may be LUA_TFUNCTION, LUA_TTHREAD, or LUA_TTABLE containing functions.
 static void FreeVariableData(KitsuneVariable* var, lua_State* L) {
-	if (!var) return;
-	if ((var->type == LUA_TSTRING || var->type == KITSUNE_TJSON || var->type == KITSUNE_TERROR) && var->data) {
-		kitsune_free(var->data);
-		var->data = NULL;
-	}
-	else if (var->type == LUA_TUSERDATA && var->userdata) {
-		kitsune_free(var->userdata->name);
-		if (L && var->userdata->ref > 0)
-			luaL_unref(L, LUA_REGISTRYINDEX, var->userdata->ref);
-		kitsune_free(var->userdata);
-		var->userdata = NULL;
-	}
-	else if (var->type == KITSUNE_TCHAR16 && var->char16data) {
-		kitsune_free(var->char16data);
-		var->char16data = NULL;
-	}
-	else if (var->type == KITSUNE_TTABLECONTENTS && var->table) {
-		FreeKVNode(var->table, L);
-		var->table = NULL;
-	}
-	else if (var->type == KITSUNE_TITERATOR) {
-		// KitsuneIterator* is caller-owned; the engine only nulls the pointer.
+	if (!var)
+		return;
+	switch (var->type) {
+	case LUA_TSTRING:
+	case KITSUNE_TJSON:
+	case KITSUNE_TERROR:
+		if (var->data) {
+			kitsune_free(var->data);
+			var->data = NULL;
+		}
+		break;
+	case KITSUNE_TCHAR16:
+		if (var->char16data) {
+			kitsune_free(var->char16data);
+			var->char16data = NULL;
+		}
+		break;
+	case KITSUNE_TDATETIME:
+		if (var->datetime) {
+			kitsune_free(var->datetime);
+			var->datetime = NULL;
+		}
+		break;
+	case KITSUNE_TTIMESPAN:
+		if (var->timespan) {
+			kitsune_free(var->timespan);
+			var->timespan = NULL;
+		}
+		break;
+	case KITSUNE_TDECIMAL:
+		if (var->decimal) {
+			kitsune_free(var->decimal);
+			var->decimal = NULL;
+		}
+		break;
+	case KITSUNE_TIDENTIFIER:
+		if (var->identifier) {
+			kitsune_free(var->identifier);
+			var->identifier = NULL;
+		}
+		break;
+	case LUA_TUSERDATA:
+		if (var->userdata) {
+			kitsune_free(var->userdata->name);
+			if (L && var->userdata->ref > 0)
+				luaL_unref(L, LUA_REGISTRYINDEX, var->userdata->ref);
+			kitsune_free(var->userdata);
+			var->userdata = NULL;
+		}
+		break;
+	case KITSUNE_TTABLECONTENTS:
+		if (var->table) {
+			FreeKVNode(var->table, L);
+			var->table = NULL;
+		}
+		break;
+	case KITSUNE_TITERATOR:
 		var->iterator = nullptr;
-	}
-	else if ((var->type == LUA_TTABLE || var->type == LUA_TFUNCTION || var->type == LUA_TTHREAD) && L && var->ref > 0) {
-		luaL_unref(L, LUA_REGISTRYINDEX, var->ref);
-		var->ref = LUA_NOREF;
+		break;
+	case LUA_TTABLE:
+	case LUA_TFUNCTION:
+	case LUA_TTHREAD:
+		if (L && var->ref > 0) {
+			luaL_unref(L, LUA_REGISTRYINDEX, var->ref);
+			var->ref = LUA_NOREF;
+		}
+		break;
+	default:
+		break;
 	}
 }
 
@@ -389,52 +436,62 @@ static void FillKitsuneVariableFromStack(lua_State* L, int idx, KitsuneVariable*
 		break;
 	}
 	case LUA_TUSERDATA: {
-		// Identifier is bridged as LUA_TSTRING (KITSUNE_TSTRING): canonical string representation.
+		// Identifier → KITSUNE_TIDENTIFIER: heap-allocated KitsuneIdentifier
 		if (lua_isidentifier(L, abs_idx)) {
-			lua_identifier_push_string(L, abs_idx);
-			size_t slen;
-			const char* s = lua_tolstring(L, -1, &slen);
-			if (s) {
-				out->data = (unsigned char*)kitsune_malloc(slen + 1);
-				if (out->data) {
-					memcpy(out->data, s, slen + 1);
-					out->length = slen;
-					out->type = LUA_TSTRING;
-				}
+			LuaIdentifier* id = lua_toidentifier(L, abs_idx);
+			KitsuneIdentifier* kid = (KitsuneIdentifier*)kitsune_malloc(sizeof(KitsuneIdentifier));
+			if (kid) {
+				memset(kid, 0, sizeof(KitsuneIdentifier));
+				kid->type = (uint8_t)id->type;
+				if (id->len > 0)
+					memcpy(kid->bytes, id->bytes, (size_t)id->len < 16 ? (size_t)id->len : 16);
+				out->identifier = kid;
+				out->type       = KITSUNE_TIDENTIFIER;
 			}
-			lua_pop(L, 1);
 			break;
 		}
-		// DateTime is bridged as LUA_TSTRING (KITSUNE_TSTRING): ISO 8601 string.
+		// DateTime → KITSUNE_TDATETIME: heap-allocated KitsuneDateTime
 		if (lua_isdatetime(L, abs_idx)) {
-			lua_datetime_push_string(L, abs_idx);
-			size_t slen;
-			const char* s = lua_tolstring(L, -1, &slen);
-			if (s) {
-				out->data = (unsigned char*)kitsune_malloc(slen + 1);
-				if (out->data) {
-					memcpy(out->data, s, slen + 1);
-					out->length = slen;
-					out->type = LUA_TSTRING;
-				}
+			LuaDateTime* dt = lua_todatetime(L, abs_idx);
+			KitsuneDateTime* kdt = (KitsuneDateTime*)kitsune_malloc(sizeof(KitsuneDateTime));
+			if (kdt) {
+				kdt->ticks          = dt->ticks;
+				kdt->offset_minutes = dt->offset_minutes;
+				out->datetime = kdt;
+				out->type     = KITSUNE_TDATETIME;
 			}
-			lua_pop(L, 1);
 			break;
 		}
-		// Decimal is bridged as LUA_TSTRING (KITSUNE_TSTRING): canonical decimal string.
-		if (lua_isdecimal(L, abs_idx)) {
-			lua_decimal_push_string(L, abs_idx);
-			size_t slen;
-			const char* s = lua_tolstring(L, -1, &slen);
-			if (s) {
-				out->data = (unsigned char*)kitsune_malloc(slen + 1);
-				if (out->data) {
-					memcpy(out->data, s, slen + 1);
-					out->length = slen;
-					out->type = LUA_TSTRING;
-				}
+		// TimeSpan → KITSUNE_TTIMESPAN: heap-allocated KitsuneTimeSpan
+		if (lua_istimespan(L, abs_idx)) {
+			LuaTimeSpan* ts = lua_totimespan(L, abs_idx);
+			KitsuneTimeSpan* kts = (KitsuneTimeSpan*)kitsune_malloc(sizeof(KitsuneTimeSpan));
+			if (kts) {
+				kts->ticks    = ts->ticks;
+				out->timespan = kts;
+				out->type     = KITSUNE_TTIMESPAN;
 			}
-			lua_pop(L, 1);
+			break;
+		}
+		// Decimal → KITSUNE_TDECIMAL: heap-allocated KitsuneDecimal
+		if (lua_isdecimal(L, abs_idx)) {
+			LuaDecimal* dec = (LuaDecimal*)lua_touserdata(L, abs_idx);
+			KitsuneDecimal* kdec = (KitsuneDecimal*)kitsune_malloc(sizeof(KitsuneDecimal));
+			if (kdec) {
+				kdec->lo       = dec->lo;
+				kdec->hi       = dec->hi;
+				kdec->scale    = dec->scale;
+				kdec->negative = dec->negative;
+				out->decimal = kdec;
+				out->type    = KITSUNE_TDECIMAL;
+			}
+			break;
+		}
+		// UInt is bridged as KITSUNE_TUINT: the uint64_t value is stored in the integer field.
+		if (lua_isuint(L, abs_idx)) {
+			LuaUInt* u = (LuaUInt*)lua_touserdata(L, abs_idx);
+			out->integer = (long long)u->value;
+			out->type = KITSUNE_TUINT;
 			break;
 		}
 		// Wchar is bridged as KITSUNE_TCHAR16: the internal wchar_t* is converted to char16_t*
@@ -551,6 +608,50 @@ static void PushKitsuneVariable(lua_State* L, const KitsuneVariable* v) {
 		break;
 	case KITSUNE_TINTEGER:
 		lua_pushinteger(L, (lua_Integer)v->integer);
+		break;
+	case KITSUNE_TUINT:
+		lua_pushuint(L)->value = (uint64_t)v->integer;
+		break;
+	case KITSUNE_TTIMESPAN:
+		if (v->timespan) {
+			lua_pushtimespan(L)->ticks = v->timespan->ticks;
+		}
+		else {
+			lua_pushnil(L);
+		}
+		break;
+	case KITSUNE_TDATETIME:
+		if (v->datetime) {
+			LuaDateTime* dt = lua_pushdatetime(L);
+			dt->ticks          = v->datetime->ticks;
+			dt->offset_minutes = v->datetime->offset_minutes;
+		}
+		else {
+			lua_pushnil(L);
+		}
+		break;
+	case KITSUNE_TDECIMAL:
+		if (v->decimal) {
+			LuaDecimal* dec = lua_pushdecimal(L);
+			dec->lo       = v->decimal->lo;
+			dec->hi       = v->decimal->hi;
+			dec->scale    = v->decimal->scale;
+			dec->negative = v->decimal->negative;
+		}
+		else {
+			lua_pushnil(L);
+		}
+		break;
+	case KITSUNE_TIDENTIFIER:
+		if (v->identifier) {
+			LuaIdentifier* id = lua_pushidentifier(L);
+			id->type = (IdentifierType)v->identifier->type;
+			id->len  = (id->type == IDENTIFIER_OID) ? 12 : 16;
+			memcpy(id->bytes, v->identifier->bytes, 16);
+		}
+		else {
+			lua_pushnil(L);
+		}
 		break;
 	case LUA_TBOOLEAN:
 		lua_pushboolean(L, v->boolean ? 1 : 0);
@@ -732,52 +833,62 @@ static void SetSlotResult(KitsuneCoroutine* slot, lua_State* T, int idx) {
 	int t = lua_type(T, idx);
 	switch (t) {
 	case LUA_TUSERDATA: {
-		// Identifier is bridged as LUA_TSTRING (KITSUNE_TSTRING): canonical string representation.
+		// Identifier → KITSUNE_TIDENTIFIER: heap-allocated KitsuneIdentifier
 		if (lua_isidentifier(T, idx)) {
-			lua_identifier_push_string(T, idx);
-			size_t slen;
-			const char* s = lua_tolstring(T, -1, &slen);
-			if (s) {
-				slot->result.data = (unsigned char*)kitsune_malloc(slen + 1);
-				if (slot->result.data) {
-					memcpy(slot->result.data, s, slen + 1);
-					slot->result.length = slen;
-					slot->result.type = LUA_TSTRING;
-				}
+			LuaIdentifier* id = lua_toidentifier(T, idx);
+			KitsuneIdentifier* kid = (KitsuneIdentifier*)kitsune_malloc(sizeof(KitsuneIdentifier));
+			if (kid) {
+				memset(kid, 0, sizeof(KitsuneIdentifier));
+				kid->type = (uint8_t)id->type;
+				if (id->len > 0)
+					memcpy(kid->bytes, id->bytes, (size_t)id->len < 16 ? (size_t)id->len : 16);
+				slot->result.identifier = kid;
+				slot->result.type       = KITSUNE_TIDENTIFIER;
 			}
-			lua_pop(T, 1);
 			break;
 		}
-		// DateTime is bridged as LUA_TSTRING (KITSUNE_TSTRING): ISO 8601 string.
+		// DateTime → KITSUNE_TDATETIME: heap-allocated KitsuneDateTime
 		if (lua_isdatetime(T, idx)) {
-			lua_datetime_push_string(T, idx);
-			size_t slen;
-			const char* s = lua_tolstring(T, -1, &slen);
-			if (s) {
-				slot->result.data = (unsigned char*)kitsune_malloc(slen + 1);
-				if (slot->result.data) {
-					memcpy(slot->result.data, s, slen + 1);
-					slot->result.length = slen;
-					slot->result.type = LUA_TSTRING;
-				}
+			LuaDateTime* dt = lua_todatetime(T, idx);
+			KitsuneDateTime* kdt = (KitsuneDateTime*)kitsune_malloc(sizeof(KitsuneDateTime));
+			if (kdt) {
+				kdt->ticks              = dt->ticks;
+				kdt->offset_minutes     = dt->offset_minutes;
+				slot->result.datetime   = kdt;
+				slot->result.type       = KITSUNE_TDATETIME;
 			}
-			lua_pop(T, 1);
 			break;
 		}
-		// Decimal is bridged as LUA_TSTRING (KITSUNE_TSTRING): canonical decimal string.
-		if (lua_isdecimal(T, idx)) {
-			lua_decimal_push_string(T, idx);
-			size_t slen;
-			const char* s = lua_tolstring(T, -1, &slen);
-			if (s) {
-				slot->result.data = (unsigned char*)kitsune_malloc(slen + 1);
-				if (slot->result.data) {
-					memcpy(slot->result.data, s, slen + 1);
-					slot->result.length = slen;
-					slot->result.type = LUA_TSTRING;
-				}
+		// TimeSpan → KITSUNE_TTIMESPAN: heap-allocated KitsuneTimeSpan
+		if (lua_istimespan(T, idx)) {
+			LuaTimeSpan* ts = lua_totimespan(T, idx);
+			KitsuneTimeSpan* kts = (KitsuneTimeSpan*)kitsune_malloc(sizeof(KitsuneTimeSpan));
+			if (kts) {
+				kts->ticks            = ts->ticks;
+				slot->result.timespan = kts;
+				slot->result.type     = KITSUNE_TTIMESPAN;
 			}
-			lua_pop(T, 1);
+			break;
+		}
+		// Decimal → KITSUNE_TDECIMAL: heap-allocated KitsuneDecimal
+		if (lua_isdecimal(T, idx)) {
+			LuaDecimal* dec = (LuaDecimal*)lua_touserdata(T, idx);
+			KitsuneDecimal* kdec = (KitsuneDecimal*)kitsune_malloc(sizeof(KitsuneDecimal));
+			if (kdec) {
+				kdec->lo              = dec->lo;
+				kdec->hi              = dec->hi;
+				kdec->scale           = dec->scale;
+				kdec->negative        = dec->negative;
+				slot->result.decimal  = kdec;
+				slot->result.type     = KITSUNE_TDECIMAL;
+			}
+			break;
+		}
+		// UInt is bridged as KITSUNE_TUINT: the uint64_t value is stored in the integer field.
+		if (lua_isuint(T, idx)) {
+			LuaUInt* u = (LuaUInt*)lua_touserdata(T, idx);
+			slot->result.integer = (long long)u->value;
+			slot->result.type = KITSUNE_TUINT;
 			break;
 		}
 		// Wchar is bridged as KITSUNE_TCHAR16: the internal wchar_t* is converted to char16_t*
@@ -1393,11 +1504,14 @@ extern "C" {
 		luaopen_xml(L);          lua_setglobal(L, "Xml");
 		luaopen_yaml(L);         lua_setglobal(L, "Yaml");
 		luaopen_toml(L);         lua_setglobal(L, "Toml");
+		luaopen_ini(L);          lua_setglobal(L, "Ini");
 		luaopen_base64(L);       lua_setglobal(L, "Base64");
 		luaopen_wchar(L);        lua_setglobal(L, "Wchar");
 		luaopen_identifier(L);   lua_setglobal(L, "Identifier");
 		luaopen_datetime(L);     lua_setglobal(L, "DateTime");
 		luaopen_decimal(L);      lua_setglobal(L, "Decimal");
+		luaopen_uint(L);         lua_setglobal(L, "UInt");
+		luaopen_timespan(L);     lua_setglobal(L, "TimeSpan");
 		luaopen_csv(L);          lua_setglobal(L, "CSV");
 		luaopen_sha1(L);         lua_setglobal(L, "SHA1");
 #ifdef KITSUNE_HTTP

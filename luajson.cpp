@@ -4,6 +4,8 @@
 #include "luaidentifier.h"
 #include "luadatetime.h"
 #include "luadecimal.h"
+#include "luauint.h"
+#include "luatimespan.h"
 
 // Unique address used as the JSON null sentinel.
 // Both encoder and decoder reference this directly — no registry lookup needed.
@@ -328,6 +330,19 @@ static void enc_value(LuaJson* j, lua_State* L, int depth) {
 			size_t dlen;
 			const char* ds = lua_tolstring(L, -1, &dlen);
 			if (ds) jbuf_emit(j, L, ds, dlen);
+			lua_pop(L, 1);
+			break;
+		}
+		if (lua_isuint(L, -1)) {
+			char buf[21];
+			int  n = snprintf(buf, sizeof(buf), "%llu", (unsigned long long)lua_touint(L, -1)->value);
+			jbuf_emit(j, L, buf, (size_t)n);
+			break;
+		}
+		if (lua_istimespan(L, -1)) {
+			// Emit as a quoted ISO 8601-style duration string.
+			lua_timespan_push_string(L, -1);
+			enc_string(j, L);
 			lua_pop(L, 1);
 			break;
 		}

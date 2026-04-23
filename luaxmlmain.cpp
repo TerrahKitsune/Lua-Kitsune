@@ -3,7 +3,6 @@
 
 static const struct luaL_Reg xml_functions[] = {
     { "New",     lua_xml_new    },  // Xml.New([indent])
-    { "Create",  lua_xml_new    },  // backward-compat alias
     { "Decode",  lua_xml_decode },  // xml:Decode(string)
     { "Encode",  lua_xml_encode },  // xml:Encode(table)
     { "Dispose", lua_xml_gc     },  // xml:Dispose()

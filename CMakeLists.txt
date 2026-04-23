@@ -68,6 +68,10 @@ set(KITSUNE_ENGINE_SOURCES
 	luawchar.cpp
 	wcharmain.cpp
 
+	# ── UInt (unsigned 64-bit integer type) ──────────────────────────────────
+	luauint.cpp
+	uintmain.cpp
+
 	# ── Identifier (UUID/OID type) ───────────────────────────────────────────
 	luaidentifier.cpp
 	identifiermain.cpp
@@ -80,13 +84,42 @@ set(KITSUNE_ENGINE_SOURCES
 	luadecimal.cpp
 	decimalmain.cpp
 
+	# ── TimeSpan (signed duration type) ──────────────────────────────────────
+	luatimespan.cpp
+	timespanmain.cpp
+
 	# ── CSV ────────────────────────────────────────────────────────────────
 	luacsv.cpp
 	LuaCsvMain.cpp
 
+	# ── XML (pugixml, bundled) ───────────────────────────────────────────────
+	luaxml.cpp
+	luaxmlmain.cpp
+	pugixml/pugixml.cpp
+
+	# ── YAML (libyaml, bundled) ──────────────────────────────────────────────
+	luayaml.cpp
+	luayamlmain.cpp
+	libyaml/src/api.c
+	libyaml/src/dumper.c
+	libyaml/src/emitter.c
+	libyaml/src/loader.c
+	libyaml/src/parser.c
+	libyaml/src/reader.c
+	libyaml/src/scanner.c
+	libyaml/src/writer.c
+
+	# ── TOML (tomlc99, bundled) ───────────────────────────────────────────────
+	luatoml.cpp
+	luatomlmain.cpp
+	tomlc99/toml.c
+
+	# ── INI (pure C, no library) ─────────────────────────────────────────────
+	luaini.cpp
+	luainimain.cpp
+
 	# ── Stream infrastructure (used by the variable bridge) ─────────────────
 	stream.cpp
-	streamshmemory.cpp
 	streammemory.cpp
 	streamfile.cpp
 	StreamMain.cpp
@@ -286,6 +319,8 @@ target_include_directories(KitsuneEngine PRIVATE
 	"${CMAKE_SOURCE_DIR}"
 	"${CMAKE_SOURCE_DIR}/Lua"
 	"${CMAKE_SOURCE_DIR}/msgpack/include"
+	"${CMAKE_SOURCE_DIR}/libyaml/include"
+	"${CMAKE_SOURCE_DIR}/tomlc99"
 )
 
 # Export all symbols by default on Linux (mirrors Windows DLL behaviour).

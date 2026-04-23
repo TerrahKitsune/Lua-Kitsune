@@ -30,15 +30,17 @@ static const struct luaL_Reg datetimefunctions[] = {
 	{ "AddMinutes",           datetime_addminutes          },
 	{ "AddSeconds",           datetime_addseconds          },
 	{ "AddMilliseconds",      datetime_addmilliseconds     },
+	{ "AddTimeSpan",          datetime_addtimespan         },
 	{ NULL, NULL }
 };
 
 static const struct luaL_Reg datetimemeta[] = {
-	{ "__tostring", datetime_tostring },
-	{ "__eq",       datetime_eq       },
-	{ "__lt",       datetime_lt       },
-	{ "__le",       datetime_le       },
-	{ "__sub",      datetime_sub      },
+	{ "__tostring", datetime_tostring   },
+	{ "__eq",       datetime_eq         },
+	{ "__lt",       datetime_lt         },
+	{ "__le",       datetime_le         },
+	{ "__add",      datetime_addtimespan},
+	{ "__sub",      datetime_sub        },
 	{ NULL, NULL }
 };
 
