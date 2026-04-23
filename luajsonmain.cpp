@@ -8,6 +8,7 @@ static const struct luaL_Reg json_functions[] = {
 	{ "EncodeIntoStream", lua_json_encode_into_stream },  // json:EncodeIntoStream(stream, value)
 	{ "DecodeFromStream", lua_json_decode_from_stream },  // json:DecodeFromStream(stream)
 	{ "Dispose",          lua_json_gc                },  // json:Dispose()
+	{ "SetDecodeNull",    lua_json_set_decode_null   },  // json:SetDecodeNull(bool)
 	{ NULL, NULL }
 };
 

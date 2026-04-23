@@ -1,4 +1,4 @@
-﻿using KitsuneNet;
+using KitsuneNet;
 using Shouldly;
 using Xunit;
 
@@ -323,7 +323,7 @@ public sealed class MongoTests
     [MongoFact]
     public async Task Find_NonexistentCollection_ReturnsEmptyNotError()
     {
-        // A collection that doesn't exist is not an error in MongoDB — returns empty
+        // A collection that doesn't exist is not an error in MongoDB � returns empty
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
             local db = assert({ConnectLua()})
@@ -815,7 +815,7 @@ public sealed class MongoTests
         // The registry anchor prevents the GC from collecting the LuaMongo
         // userdata while a coroutine is suspended inside Wait.  This test
         // creates an op, starts waiting in a coroutine, then lets the engine
-        // run GC before the result is collected — the connection must survive.
+        // run GC before the result is collected � the connection must survive.
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
             local db = assert({ConnectLua()})
@@ -855,7 +855,7 @@ public sealed class MongoTests
     public async Task NewOp_WhileResultPending_DiscardsPreviousResult()
     {
         // MONGO_GUARD calls FreeOp on a pending uncollected result before
-        // dispatching a new op — old result must be discarded cleanly (no leak,
+        // dispatching a new op � old result must be discarded cleanly (no leak,
         // no crash) and the new op must succeed.
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
@@ -1060,7 +1060,7 @@ public sealed class MongoTests
         // bson_rec_pop was skipped on throw, leaving addresses in the rec stack.
         // A non-circular nested table that shared an ancestor address with a
         // previously converted sibling would false-positive as circular.
-        // This test reuses the same sub-table object in two sibling fields —
+        // This test reuses the same sub-table object in two sibling fields �
         // which IS circular only if the same object appears in its own ancestry;
         // here we just verify deeply nested but non-circular tables work.
         using KitsuneEngine engine = new();
@@ -1089,7 +1089,7 @@ public sealed class MongoTests
         LuaValue r = await engine.ExecuteStringAsync($@"
             local db = assert({ConnectLua()})
             local id = Identifier.NewOID()
-            local s = Stream.Create('hello')
+            local s = Stream.New('hello')
             db:InsertOne({Db()}, {Coll()}, {{_id=id, data=s}})
             db:Wait(); db:GetResult()
             db:FindOne({Db()}, {Coll()}, {{_id=id}})
@@ -1114,7 +1114,7 @@ public sealed class MongoTests
         LuaValue r = await engine.ExecuteStringAsync($@"
             local db = assert({ConnectLua()})
             local id = Identifier.NewOID()
-            local s = Stream.Create('')
+            local s = Stream.New('')
             local ok, err = pcall(function()
                 db:InsertOne({Db()}, {Coll()}, {{_id=id, empty=s}})
                 db:Wait(); db:GetResult()
@@ -1279,7 +1279,7 @@ public sealed class MongoTests
             local rows, err = db:GetResult()
             if err then error(err) end
             db:DeleteMany({Db()}, {Coll()}, {{tag=tag}}); db:Wait(); db:GetResult()
-            -- sorted desc [5,4,3,2,1], skip 1 → start at 4, limit 2 → [4,3]
+            -- sorted desc [5,4,3,2,1], skip 1 ? start at 4, limit 2 ? [4,3]
             return tostring(#rows) .. ':' .. tostring(rows[1].n) .. ':' .. tostring(rows[2].n)
         ");
         r.String.ShouldBe("2:4:3");
@@ -1330,7 +1330,7 @@ public sealed class MongoTests
     [MongoFact]
     public async Task InsertOne_NullValueInDoc_RoundTrips()
     {
-        // Exercises the LUA_TNIL → BSON_APPEND_NULL path and the default
+        // Exercises the LUA_TNIL ? BSON_APPEND_NULL path and the default
         // BsonIterValueToLua path returning nil for unknown BSON types.
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"

@@ -1,4 +1,5 @@
 ﻿#include "LuaHttpRequest.h"
+#include "mem.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -28,6 +29,7 @@ LuaHttpResponse* lua_pushhttpresponse(lua_State* L) {
     lua_setmetatable(L, -2);
     memset(r, 0, sizeof(LuaHttpResponse));
     r->status_code = 200;
+    r->stream_ref  = LUA_NOREF;
     return r;
 }
 
@@ -162,7 +164,9 @@ int HttpRequest_GetError(lua_State* L) {
 void HttpRequest_Cleanup(lua_State* L, LuaHttpRequest* r) {
     safe_free(&r->url);
     safe_free(&r->method);
-    safe_free(&r->body);
+    // body is allocated via kitsune_malloc, not strdup — must match
+    kitsune_free(r->body);
+    r->body = NULL;
     safe_free(&r->error_msg);
     safe_unref(L, &r->headers_ref);
 
@@ -206,6 +210,7 @@ int HttpRequest_ToString(lua_State* L) {
 void HttpResponse_Cleanup(lua_State* L, LuaHttpResponse* r) {
     r->connection = NULL;
     r->stream     = NULL;
+    safe_unref(L, &r->stream_ref);
 }
 
 int HttpResponse_GC(lua_State* L) {

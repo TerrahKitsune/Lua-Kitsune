@@ -1,6 +1,7 @@
 ﻿#include "LuaHttpServer.h"
 #include "LuaHttpRequest.h"
 #include "stream.h"
+#include "mem.h"
 #include <event2/event.h>
 #include <event2/http.h>
 #include <event2/buffer.h>
@@ -35,7 +36,7 @@ static void release_node(lua_State* L, HttpOpenConnection* node) {
 		luaL_unref(L, LUA_REGISTRYINDEX, node->request_ref);
 		node->request_ref = LUA_NOREF;
 	}
-	free(node);
+	kitsune_free(node);
 }
 
 /* ── push / check ─────────────────────────────────────────────────────────── */
@@ -152,7 +153,7 @@ static void conn_close_cleanup(LuaHttpServer* s, lua_State* L,
 			lua_pushlightuserdata(L, (void*)req);
 			lua_rawget(L, LUA_REGISTRYINDEX);
 			int ref = luaL_ref(L, LUA_REGISTRYINDEX);
-			HttpOpenConnection* node = (HttpOpenConnection*)malloc(sizeof(HttpOpenConnection));
+			HttpOpenConnection* node = (HttpOpenConnection*)kitsune_malloc(sizeof(HttpOpenConnection));
 			if (node) {
 				node->request_ref = ref;
 				node->next = NULL;
@@ -366,7 +367,7 @@ static void http_request_cb(struct evhttp_request* req, void* arg) {
 	struct evbuffer* in_buf = evhttp_request_get_input_buffer(req);
 	size_t           body_len = in_buf ? evbuffer_get_length(in_buf) : 0;
 	if (body_len > 0) {
-		r->body = (char*)malloc(body_len);
+		r->body = (char*)kitsune_malloc(body_len);
 		if (r->body) {
 			evbuffer_copyout(in_buf, r->body, body_len);
 			r->body_len = body_len;
@@ -425,7 +426,7 @@ static void http_request_cb(struct evhttp_request* req, void* arg) {
 	lua_rawget(L, LUA_REGISTRYINDEX);                              /* [req_ud] */
 	int ref = luaL_ref(L, LUA_REGISTRYINDEX);                      /* [] */
 
-	HttpOpenConnection* node = (HttpOpenConnection*)malloc(sizeof(HttpOpenConnection));
+	HttpOpenConnection* node = (HttpOpenConnection*)kitsune_malloc(sizeof(HttpOpenConnection));
 	if (node) {
 		node->request_ref = ref;
 		node->next = NULL;
@@ -580,6 +581,12 @@ static int accept_cont(lua_State* L, int status, lua_KContext ctx) {
 					/* evhttp_send_done will free req when the write drains.
 					   Null now so HttpRequest_Cleanup does not double-free. */
 					req->req = NULL;
+					/* Release the stream ref now that streaming is complete */
+					if (resp->stream_ref != LUA_NOREF) {
+						luaL_unref(L, LUA_REGISTRYINDEX, resp->stream_ref);
+						resp->stream_ref = LUA_NOREF;
+					}
+					resp->stream = NULL;
 					remove = true;
 				}
 			}
@@ -621,7 +628,7 @@ static int accept_cont(lua_State* L, int status, lua_KContext ctx) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, node->request_ref);
 		luaL_unref(L, LUA_REGISTRYINDEX, node->request_ref);
 		node->request_ref = LUA_NOREF;
-		free(node);
+		kitsune_free(node);
 		return lua_yieldk(L, 1, ctx, accept_cont);
 	}
 

@@ -41,6 +41,18 @@
     consoleVisible = true,
     ownsConsole    = Win32.OwnsConsole(),
     mdDoc          = Stream.Open('./docs/markdown-test.md', 'rb'),
+    -- Hardware sensor cache (refreshed every 60 frames)
+    hw_cpuName     = Hardware.CpuName() or "n/a",
+    hw_cpuLoad     = "priming...",
+    hw_mem         = Hardware.Memory(),
+    hw_cpuTemps    = Hardware.CpuTemp(),
+    hw_threads_load = Hardware.CpuThreadsLoad(),
+    hw_battery     = Hardware.Battery(),
+    hw_gpuMemory   = Hardware.GpuMemory(),
+    hw_gpuLoad     = Hardware.GpuLoad(),
+    hw_diskIO      = Hardware.DiskIO(),
+    hw_networkIO   = Hardware.NetworkIO(),
+    hw_lastRefresh = -60,
     -- Audio (nil = not yet attempted, false = unavailable)
     audioSfxId    = nil,
     audioSfxId2   = nil,
@@ -100,6 +112,32 @@ local function onError(err)
     return true
 end
 
+local function hardwareQuery(ctx)
+
+    Hardware.CpuLoad()  -- prime / advance baseline
+    Sleep(100)
+    ctx.hw_mem      = Hardware.Memory()
+    Sleep(100)
+    ctx.hw_cpuTemps = Hardware.CpuTemp()
+    Sleep(100)
+    ctx.hw_threads_load = Hardware.CpuThreadsLoad()
+    Sleep(100)
+    ctx.hw_battery  = Hardware.Battery()
+    Sleep(100)
+    ctx.hw_gpuMemory = Hardware.GpuMemory()
+    Sleep(100)
+    ctx.hw_gpuLoad   = Hardware.GpuLoad()
+    Sleep(100)
+    ctx.hw_diskIO    = Hardware.DiskIO()
+    Sleep(100)
+    ctx.hw_networkIO = Hardware.NetworkIO()
+    Sleep(100)
+    local load = Hardware.CpuLoad()
+    ctx.hw_cpuLoad = load and string.format("%.1f%%", load) or "n/a"
+    Sleep(100)
+    ctx.hw_block = false;    
+end
+
 local noResize   = Imgui.Enum.ImGuiWindowFlags.NoResize
                  + Imgui.Enum.ImGuiWindowFlags.NoMove
                  + Imgui.Enum.ImGuiWindowFlags.NoCollapse
@@ -118,9 +156,18 @@ local comboItems   = { "Apple", "Banana", "Cherry", "Date", "Elderberry" }
 local listboxItems = { "Red", "Green", "Blue", "Yellow", "Magenta" }
 
 local function tabInfo(renderer, ctx)
+
+    -- Refresh hardware sensors
+    if not ctx.hw_block then
+        ctx.hw_block = true; -- Block until our scheduled query is done
+        Imgui.Schedule(hardwareQuery, ctx)
+    end
+
     renderer:Text("Frame:       " .. ctx.frameCount)
     renderer:Text("Schedule:    " .. ctx.scheduleResult)
-    renderer:Text("Last error:  " .. ctx.lastError)
+    if renderer:SmallButton("Last error:  " .. ctx.lastError) then
+        Session.Clipboard.Set(ctx.lastError)
+    end
     renderer:Separator()
 
     -- Window / display
@@ -180,6 +227,177 @@ local function tabInfo(renderer, ctx)
                 tostring(data.isLoaded),
                 data.source or "(none)"))
         end
+    end
+    renderer:Separator()
+
+    -- Hardware (summary only)
+    renderer:Text("--- Hardware ---")
+    renderer:Text("CPU:         " .. (ctx.hw_cpuName or "n/a"))
+    renderer:Text("CPU load:    " .. (ctx.hw_cpuLoad or "n/a"))
+    local mem = ctx.hw_mem
+    if mem then
+        renderer:Text(string.format("RAM:         %d MB used / %d MB total (%d%%)",
+            mem.TotalPhys - mem.AvailPhys, mem.TotalPhys, mem.LoadPercent))
+        renderer:Text(string.format("Swap:        %d MB free / %d MB total",
+            mem.AvailSwap, mem.TotalSwap))
+    else
+        renderer:Text("RAM:         n/a")
+    end
+    local cpuTemps = ctx.hw_cpuTemps
+    if cpuTemps and #cpuTemps > 0 then
+        for _, t in ipairs(cpuTemps) do
+            renderer:Text(string.format("  %-28s %.1f°C", t.Name, t.Value))
+        end
+    else
+        renderer:Text("CPU temp:    n/a")
+    end
+    local bat = ctx.hw_battery
+    if bat then
+        local pct    = bat.Percent and (bat.Percent .. "%") or "?"
+        local status = bat.Charging and "Charging" or (bat.ACLine and "Plugged in" or "Discharging")
+        local remain = ""
+        if bat.SecondsRemaining then
+            local h = math.floor(bat.SecondsRemaining / 3600)
+            local m = math.floor((bat.SecondsRemaining % 3600) / 60)
+            remain = string.format("  (%dh %02dm remaining)", h, m)
+        end
+        renderer:Text(string.format("Battery:     %s  %s%s", pct, status, remain))
+    else
+        renderer:Text("Battery:     n/a")
+    end
+end
+
+local function fmtBytes(n)
+    if n >= 1073741824 then return string.format("%.2f GB", n / 1073741824)
+    elseif n >= 1048576 then return string.format("%.2f MB", n / 1048576)
+    elseif n >= 1024    then return string.format("%.1f KB", n / 1024)
+    else                     return string.format("%d B",    math.floor(n))
+    end
+end
+
+local function tabHardware(renderer, ctx)
+
+    -- Refresh hardware sensors
+    if not ctx.hw_block then
+        ctx.hw_block = true; -- Block until our scheduled query is done
+        Imgui.Schedule(hardwareQuery, ctx)
+    end
+
+    -- Per-thread CPU load
+    renderer:Text("--- Thread Load ---")
+    local threads = ctx.hw_threads_load
+    if threads then
+        local tkeys = {}
+        for k in pairs(threads) do tkeys[#tkeys+1] = k end
+        table.sort(tkeys)
+        if #tkeys > 0 then
+            renderer:Text(string.format("%d threads", #tkeys))
+            for _, k in ipairs(tkeys) do
+                renderer:Text(string.format("Cpu thread %-12s %.1f%%", k, threads[k]))
+            end
+        else
+            renderer:Text("  none")
+        end
+    else
+        renderer:Text("  n/a")
+    end
+    renderer:Separator()
+
+    -- GPU memory per adapter
+    renderer:Text("--- GPU Memory ---")
+    local gpuMem = ctx.hw_gpuMemory
+    if gpuMem then
+        local adapters = {}
+        for k in pairs(gpuMem) do adapters[#adapters+1] = k end
+        table.sort(adapters)
+        if #adapters > 0 then
+            for _, name in ipairs(adapters) do
+                local m = gpuMem[name]
+                renderer:Text(string.format("  %s", name))
+                renderer:Text(string.format("    Dedicated: %d MB  Shared: %d MB  Total: %d MB",
+                    m.DedicatedUsageMB or 0, m.SharedUsageMB or 0, m.TotalCommittedMB or 0))
+            end
+        else
+            renderer:Text("  none")
+        end
+    else
+        renderer:Text("  n/a")
+    end
+    renderer:Separator()
+
+    -- GPU engine load per adapter
+    renderer:Text("--- GPU Load ---")
+    local gpuLoad = ctx.hw_gpuLoad
+    if gpuLoad then
+        local adapters = {}
+        for k in pairs(gpuLoad) do adapters[#adapters+1] = k end
+        table.sort(adapters)
+        if #adapters > 0 then
+            for _, name in ipairs(adapters) do
+                local eng = gpuLoad[name]
+                renderer:Text(string.format("  %s", name))
+                local etypes = {}
+                for e in pairs(eng) do etypes[#etypes+1] = e end
+                table.sort(etypes)
+                for _, e in ipairs(etypes) do
+                    if eng[e] > 0 then
+                        renderer:Text(string.format("    %-20s %.1f%%", e, eng[e]))
+                    end
+                end
+            end
+        else
+            renderer:Text("  none")
+        end
+    else
+        renderer:Text("  n/a")
+    end
+    renderer:Separator()
+
+    -- Disk I/O
+    renderer:Text("--- Disk I/O ---")
+    local diskIO = ctx.hw_diskIO
+    if diskIO then
+        local disks = {}
+        for k in pairs(diskIO) do disks[#disks+1] = k end
+        table.sort(disks)
+        if #disks > 0 then
+            for _, name in ipairs(disks) do
+                local d = diskIO[name]
+                renderer:Text(string.format("  %s", name))
+                renderer:Text(string.format("    Read: %s/s  Write: %s/s%s",
+                    fmtBytes(d.ReadBytesPerSec  or 0),
+                    fmtBytes(d.WriteBytesPerSec or 0),
+                    d.ActivePercent and string.format("  Active: %.1f%%", d.ActivePercent) or ""))
+            end
+        else
+            renderer:Text("  none")
+        end
+    else
+        renderer:Text("  n/a")
+    end
+    renderer:Separator()
+
+    -- Network I/O
+    renderer:Text("--- Network I/O ---")
+    local netIO = ctx.hw_networkIO
+    if netIO then
+        local nics = {}
+        for k in pairs(netIO) do nics[#nics+1] = k end
+        table.sort(nics)
+        if #nics > 0 then
+            for _, name in ipairs(nics) do
+                local n = netIO[name]
+                renderer:Text(string.format("  %s", name))
+                renderer:Text(string.format("    Recv: %s/s  Send: %s/s  Total: %s/s",
+                    fmtBytes(n.RecvBytesPerSec   or 0),
+                    fmtBytes(n.SendBytesPerSec   or 0),
+                    fmtBytes(n.TotalBytesPerSec  or 0)))
+            end
+        else
+            renderer:Text("  none")
+        end
+    else
+        renderer:Text("  n/a")
     end
 end
 
@@ -1045,6 +1263,10 @@ local function render(renderer, ctx)
     if renderer:BeginTabBar("MainTabs", tabFlags) then
         if renderer:BeginTabItem("Info") then
             tabInfo(renderer, ctx)
+            renderer:EndTabItem()
+        end
+        if renderer:BeginTabItem("Hardware") then
+            tabHardware(renderer, ctx)
             renderer:EndTabItem()
         end
         if renderer:BeginTabItem("Widgets") then

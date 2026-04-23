@@ -14,6 +14,7 @@ static const luaL_Reg httpclient_functions[] = {
 	{ "UrlEncode",          UrlEncode },
 	{ "UrlDecode",          UrlDecode },
 	{ "Request",            client_request },
+	{ "Call",               client_call },
 	{ "Stream",             client_stream },
 	{ "Connect",            client_connect },
 	{ "SetTimeout",         client_set_timeout },
@@ -21,6 +22,7 @@ static const luaL_Reg httpclient_functions[] = {
 	{ "SetFollowRedirects", client_set_follow_redirects },
 	{ "SetVerifySSL",       client_set_verify_ssl },
 	{ "SetBinary",          client_set_binary },
+	{ "GetTimestamp",       client_get_timestamp },
 	{ NULL, NULL }
 };
 

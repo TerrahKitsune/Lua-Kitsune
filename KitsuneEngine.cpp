@@ -47,6 +47,7 @@
 #endif
 
 #include "LuaMutexMain.h"
+#include "LuaHardwareMain.h"
 
 #include "lua_misc.h"
 #include "MD5Main.h"
@@ -1484,6 +1485,7 @@ extern "C" {
 		luaopen_mongo(L);        lua_setglobal(L, "MongoDB");
 #endif
 		luaopen_process(L);      lua_setglobal(L, "Process");
+		luaopen_hardware(L);     lua_setglobal(L, "Hardware");
 		luaopen_luaaes(L);       lua_setglobal(L, "Aes");
 		luaopen_sqlite(L);       lua_setglobal(L, "SQLite");
 		luaopen_timer(L);        lua_setglobal(L, "Timer");

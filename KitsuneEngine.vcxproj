@@ -109,6 +109,8 @@
     <ClCompile Include="LuaArchive.cpp" />
     <ClCompile Include="LuaArchiveMain.cpp" />
     <ClCompile Include="base64.cpp" />
+    <ClCompile Include="LuaHardware.cpp" />
+    <ClCompile Include="LuaHardwareMain.cpp" />
     <ClCompile Include="luajson.cpp" />
     <ClCompile Include="luajsonmain.cpp" />
     <ClCompile Include="kafkahelpers.cpp" />
@@ -126,7 +128,6 @@
     <ClCompile Include="luatimespan.cpp" />
     <ClCompile Include="luatoml.cpp" />
     <ClCompile Include="luauint.cpp" />
-    <ClCompile Include="sizeof_check.c" />
     <ClCompile Include="timespanmain.cpp" />
     <ClCompile Include="tomlc99\toml.c" />
     <ClCompile Include="luatomlmain.cpp" />
@@ -255,6 +256,8 @@
     <ClInclude Include="base64.h" />
     <ClInclude Include="HttpCurl.h" />
     <ClInclude Include="HttpCurlMain.h" />
+    <ClInclude Include="LuaHardware.h" />
+    <ClInclude Include="LuaHardwareMain.h" />
     <ClInclude Include="luajson.h" />
     <ClInclude Include="luajsonmain.h" />
     <ClInclude Include="kafkahelpers.h" />
@@ -369,14 +372,6 @@
     <ClInclude Include="TimerMain.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="debug_datetime.lua" />
-    <None Include="debug_decimal.lua" />
-    <None Include="debug_msgpack.lua" />
-    <None Include="debug_registry.lua" />
-    <None Include="debug_types.lua" />
-    <None Include="debug_types2.lua" />
-    <None Include="debug_types3.lua" />
-    <None Include="debug_types4.lua" />
     <None Include="Lua functions.md" />
     <None Include="plans\httpserver-integration.md" />
     <None Include="plans\imgui-api-namespace-refactor.md" />

@@ -231,12 +231,15 @@ int main(int argc, char* argv[]) {
 		OutputDebugString("-----------_CrtDumpMemoryLeaks ---------");
 		_CrtDumpMemoryLeaks();
 
-		// GPU drivers (e.g. nvoglv64.dll) allocate small amounts of per-process
-		// global state on the first wglCreateContext call and free it via their own
-		// reference-counting on process exit rather than on wglDeleteContext.
-		// This produces a small number of false-positive CRT leak reports.
+		// Several system components allocate per-process global state that is
+		// freed on process exit (not on explicit cleanup), producing false-positive
+		// CRT leak reports:
+		//   - GPU display drivers (e.g. nvoglv64.dll) on first wglCreateContext.
+		//   - DXGI (dxgi.dll) on first CreateDXGIFactory / CreateDXGIFactory1 call
+		//     (used by LuaHardware GPU queries); its internal adapter cache and COM
+		//     apartment state are reference-counted and released at process exit.
 		// Only break if the leaks are large enough to indicate a real problem.
-		constexpr ptrdiff_t k_driverLeakThreshold = 65536; // 64 KB
+		constexpr ptrdiff_t k_driverLeakThreshold = 4 * 1024 * 1024; // 4 MB
 		if ((ptrdiff_t)sDiff.lSizes[_NORMAL_BLOCK] > (ptrdiff_t)k_driverLeakThreshold)
 			DebugBreak();
 	}

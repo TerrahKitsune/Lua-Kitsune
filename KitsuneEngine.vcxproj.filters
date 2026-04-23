@@ -276,6 +276,15 @@
     <Filter Include="LuaIni">
       <UniqueIdentifier>{a475aaf5-e1f4-46be-951c-c874024cbb54}</UniqueIdentifier>
     </Filter>
+    <Filter Include="LuaHardware">
+      <UniqueIdentifier>{1662154a-5bd1-4e8d-aa17-9aa4a019809f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaUint">
+      <UniqueIdentifier>{d5e91a93-e04b-4627-822d-e1632b1d26b9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaTimespan">
+      <UniqueIdentifier>{a094c2ea-a6e3-4542-9bd2-c7ea51c731c6}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="KitsuneEngine.cpp">
@@ -674,20 +683,23 @@
     <ClCompile Include="luainimain.cpp">
       <Filter>LuaIni</Filter>
     </ClCompile>
+    <ClCompile Include="LuaHardware.cpp">
+      <Filter>LuaHardware</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaHardwareMain.cpp">
+      <Filter>LuaHardware</Filter>
+    </ClCompile>
     <ClCompile Include="luauint.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>LuaUint</Filter>
     </ClCompile>
     <ClCompile Include="uintmain.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>LuaUint</Filter>
     </ClCompile>
     <ClCompile Include="luatimespan.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>LuaTimespan</Filter>
     </ClCompile>
     <ClCompile Include="timespanmain.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="sizeof_check.c">
-      <Filter>Source Files</Filter>
+      <Filter>LuaTimespan</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -1063,17 +1075,23 @@
     <ClInclude Include="luaini.h">
       <Filter>LuaIni</Filter>
     </ClInclude>
-    <ClInclude Include="luauint.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="LuaHardwareMain.h">
+      <Filter>LuaHardware</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaHardware.h">
+      <Filter>LuaHardware</Filter>
     </ClInclude>
     <ClInclude Include="uintmain.h">
-      <Filter>Header Files</Filter>
+      <Filter>LuaUint</Filter>
+    </ClInclude>
+    <ClInclude Include="luauint.h">
+      <Filter>LuaUint</Filter>
     </ClInclude>
     <ClInclude Include="luatimespan.h">
-      <Filter>Header Files</Filter>
+      <Filter>LuaTimespan</Filter>
     </ClInclude>
     <ClInclude Include="timespanmain.h">
-      <Filter>Header Files</Filter>
+      <Filter>LuaTimespan</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -1086,14 +1104,6 @@
     <None Include="plans\imgui-api-namespace-refactor.md" />
     <None Include="plans\httpserver-integration.md" />
     <None Include="plans\imgui-html.md" />
-    <None Include="debug_types.lua" />
-    <None Include="debug_types2.lua" />
-    <None Include="debug_types3.lua" />
-    <None Include="debug_types4.lua" />
-    <None Include="debug_msgpack.lua" />
-    <None Include="debug_registry.lua" />
-    <None Include="debug_datetime.lua" />
-    <None Include="debug_decimal.lua" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />

@@ -1,4 +1,5 @@
 ﻿#include "Timer.h"
+#include "luatimespan.h"
 #include <string.h>
 #include <chrono>
 
@@ -101,6 +102,24 @@ int TimerGetElapsed(lua_State *L) {
 		lua_pop(L, 1);
 		lua_pushnumber(L, timer->StoredTime + (double)(timer->CounterStop - timer->CounterStart) / TIMER_NS_PER_MS);
 	}
+	return 1;
+}
+
+int TimerGetElapsedTimeSpan(lua_State *L) {
+	Timer * timer = luaL_checktimer(L, 1);
+	double elapsed_ms;
+	if (timer->CounterStart <= 0) {
+		elapsed_ms = 0.0;
+	}
+	else if (timer->CounterStop <= 0) {
+		elapsed_ms = timer->StoredTime + (double)(timer_now_ns() - timer->CounterStart) / TIMER_NS_PER_MS;
+	}
+	else {
+		elapsed_ms = timer->StoredTime + (double)(timer->CounterStop - timer->CounterStart) / TIMER_NS_PER_MS;
+	}
+	// 1 ms = 10,000 ticks (100-nanosecond units, same as .NET TimeSpan)
+	lua_pop(L, 1);
+	lua_pushtimespan(L)->ticks = (int64_t)(elapsed_ms * 10000.0);
 	return 1;
 }
 

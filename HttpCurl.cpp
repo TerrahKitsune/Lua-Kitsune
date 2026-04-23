@@ -1,12 +1,20 @@
-#ifdef KITSUNE_HTTP
+﻿#ifdef KITSUNE_HTTP
 
 #include "HttpCurl.h"
 #include "stream.h"
 #include "mem.h"
 #include "platform.h"
+#include "luatimespan.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <chrono>
+
+static inline int64_t http_now_ns() {
+	return (int64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(
+		std::chrono::steady_clock::now().time_since_epoch()
+	).count();
+}
 
 // -- Registry anchor keys (static-address trick) -------------------------------
 const char g_curlm_key    = 0;
@@ -368,6 +376,11 @@ static int HttpRequestContinuation(lua_State* L, int status, lua_KContext ctx) {
 			req->addedToMulti = false;
 			curl_multi_remove_handle(req->multi, req->easy);
 			curl_easy_getinfo(req->easy, CURLINFO_RESPONSE_CODE, &req->httpCode);
+			if (req->client && req->startNs > 0) {
+				int64_t elapsedNs = http_now_ns() - req->startNs;
+				// Convert ns to 100-ns ticks (same unit as TimeSpan)
+				req->client->lastRequestElapsedTicks = elapsedNs / 100;
+			}
 			return BuildHttpResultTable(L, req);
 		}
 	}
@@ -488,6 +501,8 @@ int client_request(lua_State* L) {
 
 	curl_multi_add_handle(multi, req->easy);
 	req->addedToMulti = true;
+	req->client       = client;
+	req->startNs      = http_now_ns();
 
 	// Create the coroutine; prime it so the first user coroutine.resume resumes
 	// from the yieldk point rather than trying to call req as a function.
@@ -862,7 +877,7 @@ int client_stream(lua_State* L) {
 	if (client->timeoutMs > 0)
 		curl_easy_setopt(h->easy, CURLOPT_TIMEOUT_MS, (long)client->timeoutMs);
 
-	// Keep hdrs alive for the lifetime of the easy handle � curl does NOT copy it.
+	// Keep hdrs alive for the lifetime of the easy handle — curl does NOT copy it.
 	h->requestHdrs = hdrs;
 
 	if (streamIn) {
@@ -1002,7 +1017,114 @@ int client_set_binary(lua_State* L) {
 }
 
 // -----------------------------------------------------------------------------
-// T7d � ws_stream_info (synchronous; returns last frame metadata)
+// client_call — simplified blocking helper.
+// Signature (mirrors Request but yields the outer coroutine until done):
+//   result        = client:Call(method, url [, headers [, body]])
+//   nil, errmsg   = client:Call(...)   on transport failure
+//
+// The inner Request coroutine is driven transparently; the caller sees neither
+// the coroutine nor the pump loop.  On success returns the same result table
+// as Request.  On transport failure (curl error, timeout, disconnect) returns
+// nil + a short error string.
+// -----------------------------------------------------------------------------
+
+// Continuation: resumes the inner Request thread (at top of L's stack) until
+// it finishes, then extracts and post-processes the result.
+static int client_call_continuation(lua_State* L, int status, lua_KContext ctx) {
+	// The inner polling thread is always at the top of L's stack.
+	lua_State* T = lua_tothread(L, -1);
+	if (!T) {
+		lua_pushnil(L);
+		lua_pushstring(L, "internal error: lost inner thread");
+		return 2;
+	}
+
+	int nres = 0;
+	int rc = lua_resume(T, L, 0, &nres);
+
+	if (rc == LUA_YIELD) {
+		// Still polling — yield the outer coroutine too.
+		return lua_yieldk(L, 0, ctx, client_call_continuation);
+	}
+
+	if (rc == LUA_OK && nres > 0) {
+		// Move result table from inner thread to outer state.
+		lua_xmove(T, L, 1);
+
+		// Transport errors (DNS failure, timeout, etc.) come back as a result
+		// table with Code == nil.  Convert these to nil, errmsg so the caller
+		// can reliably distinguish them from HTTP-level error codes.
+		lua_getfield(L, -1, "Code");
+		int codeIsNil = lua_isnil(L, -1);
+		lua_pop(L, 1);
+
+		if (codeIsNil) {
+			lua_getfield(L, -1, "Status");
+			const char* errmsg = lua_tostring(L, -1);
+			if (!errmsg || *errmsg == '\0')
+				errmsg = "request failed";
+			lua_pop(L, 1);   // pop Status
+			lua_pop(L, 1);   // pop result table
+			lua_pushnil(L);
+			lua_pushstring(L, errmsg);
+			return 2;
+		}
+		return 1;  // result table on top
+	}
+
+	// LUA_ERRRUN or no result — propagate as nil, errmsg.
+	const char* errmsg = "request failed";
+	if (nres > 0 && lua_type(T, -1) == LUA_TSTRING)
+		errmsg = lua_tostring(T, -1);
+	lua_pushnil(L);
+	lua_pushstring(L, errmsg);
+	return 2;
+}
+
+int client_call(lua_State* L) {
+	// Expected args: client(1), method(2), url(3), opt headers(4), opt body(5)
+	// client_request expects: client(1), method(2), url(3), opt body(4), opt headers(5)
+	luaL_checkudata(L, 1, LUAHTTPCLIENT);
+	luaL_checkstring(L, 2);
+	luaL_checkstring(L, 3);
+
+	lua_settop(L, 5);   // ensure 5 slots, padding with nil if args were omitted
+
+	// Swap positions 4 (headers) and 5 (body) to match client_request's order.
+	lua_pushvalue(L, 4);   // push copy of headers at index 6:  [c,m,u,h,b,h]
+	lua_copy(L, 5, 4);     // overwrite index 4 with body:       [c,m,u,b,b,h]
+	lua_replace(L, 5);     // pop top (headers copy) into index 5:[c,m,u,b,h]
+
+	// Call client_request directly on L's stack.  It reads self/method/url/body/headers
+	// from indices 1-5, pushes the inner polling thread, and returns 1.
+	// On failure (curl init error etc.) it pushes nil + errmsg and returns 2.
+	int nresults = client_request(L);
+	if (nresults != 1) {
+		// Immediate failure — nil + errmsg already on the stack.
+		return nresults;
+	}
+
+	// The inner request thread is now at the top of L's stack.
+	// Yield the outer coroutine and drive the inner one poll-by-poll.
+	return lua_yieldk(L, 0, 0, client_call_continuation);
+}
+
+// -----------------------------------------------------------------------------
+// client_get_timestamp — returns the round-trip duration of the last completed
+// Request() call as a TimeSpan.  The clock starts just before curl_multi_add_handle
+// and stops as soon as CURLMSG_DONE is received (i.e. after the last response byte
+// has been received but before the coroutine resumes the caller).
+// Returns a zero TimeSpan when no request has completed yet on this client.
+// -----------------------------------------------------------------------------
+
+int client_get_timestamp(lua_State* L) {
+	LuaHttpClient* client = (LuaHttpClient*)luaL_checkudata(L, 1, LUAHTTPCLIENT);
+	lua_pushtimespan(L)->ticks = client->lastRequestElapsedTicks;
+	return 1;
+}
+
+// -----------------------------------------------------------------------------
+// T7d — ws_stream_info (synchronous; returns last frame metadata)
 // -----------------------------------------------------------------------------
 
 static int ws_stream_info(void* native, lua_State* L) {
@@ -1023,7 +1145,7 @@ static int ws_stream_info(void* native, lua_State* L) {
 }
 
 // -----------------------------------------------------------------------------
-// T7e � ws_stream_hasdata
+// T7e — ws_stream_hasdata
 // -----------------------------------------------------------------------------
 
 static int ws_stream_hasdata(void* native) {
@@ -1034,7 +1156,7 @@ static int ws_stream_hasdata(void* native) {
 }
 
 // -----------------------------------------------------------------------------
-// T7f � ws_stream_close
+// T7f — ws_stream_close
 // -----------------------------------------------------------------------------
 
 static void ws_stream_close(void* native, lua_State* L) {

@@ -64,6 +64,13 @@ int lua_json_new(lua_State* L) {
 	return 1;
 }
 
+int lua_json_set_decode_null(lua_State* L) {
+	LuaJson* j       = lua_json_check(L, 1);
+	j->nullAsSentinel = lua_toboolean(L, 2);
+	lua_pushvalue(L, 1);
+	return 1;
+}
+
 // =============================================================================
 // Encoder — buffer helpers
 // =============================================================================
@@ -636,7 +643,10 @@ static void dec_value(LuaJson* j, lua_State* L) {
 		char u = jread_next(j), l1 = jread_next(j), l2 = jread_next(j);
 		if (u != 'u' || l1 != 'l' || l2 != 'l')
 			luaL_error(L, "Json: invalid token at line %zu", j->errLine + 1);
-		lua_pushlightuserdata(L, lua_json_null());
+		if (j->nullAsSentinel)
+			lua_pushlightuserdata(L, lua_json_null());
+		else
+			lua_pushnil(L);
 		break;
 	}
 	case '\0':

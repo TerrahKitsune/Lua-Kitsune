@@ -1,4 +1,4 @@
-ï»¿using KitsuneNet;
+using KitsuneNet;
 using Shouldly;
 using System.Diagnostics;
 using System.Text;
@@ -111,7 +111,7 @@ namespace KitsuneNet.Tests
 
             Task disposeTask = Task.Run(engine.Dispose);
             Task winner = await Task.WhenAny(disposeTask, Task.Delay(TimeSpan.FromSeconds(5)));
-            winner.ShouldBe(disposeTask, "Dispose hung â€” KitsuneCleanup did not interrupt the stuck coroutine");
+            winner.ShouldBe(disposeTask, "Dispose hung — KitsuneCleanup did not interrupt the stuck coroutine");
             await disposeTask;
         }
 
@@ -952,7 +952,7 @@ namespace KitsuneNet.Tests
             Task timeout = Task.Delay(TimeSpan.FromSeconds(5));
             Task winner = await Task.WhenAny(Task.WhenAll(waitTask, disposeTask), timeout);
             winner.ShouldNotBe(timeout,
-                "Wait(id) did not unblock â€” doneCV.notify_all from KitsuneCleanup was not received");
+                "Wait(id) did not unblock — doneCV.notify_all from KitsuneCleanup was not received");
             await Task.WhenAll(waitTask, disposeTask);
         }
 
@@ -1130,7 +1130,7 @@ namespace KitsuneNet.Tests
                 engine.ExecuteString("Sleep(50)");
             }
 
-            // Poll until all 8 coroutines are active â€” more reliable than SpinUntilRunning
+            // Poll until all 8 coroutines are active — more reliable than SpinUntilRunning
             // followed by a bare assertion, which races if a fast machine sees IsRunning before
             // all coroutines are queued.
             DateTime ready = DateTime.UtcNow.AddSeconds(5);
@@ -1254,7 +1254,7 @@ namespace KitsuneNet.Tests
             LuaValue fastResult = await engine.ExecuteStringAsync("return 'fast'");
             sw.Stop();
             sw.ElapsedMilliseconds.ShouldBeLessThan(1000,
-                "Fast coroutine took too long â€” Sleep() may be blocking the scheduler");
+                "Fast coroutine took too long — Sleep() may be blocking the scheduler");
             fastResult.String.ShouldBe("fast");
             sleepingTask.IsCompleted.ShouldBeFalse();
             (await sleepingTask).ShouldBe("slept");
@@ -1698,7 +1698,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Stress_HighThroughput_SequentialBatches_AllCorrect()
         {
-            // 1000 coroutines in batches of 100 â€” verifies high-throughput execution
+            // 1000 coroutines in batches of 100 — verifies high-throughput execution
             // produces the correct result for every single coroutine with no data loss.
             using KitsuneEngine engine = new();
             const int total = 1000;
@@ -1722,9 +1722,9 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Stress_SlotRecycling_SustainedLoadBeyondSlotLimit()
         {
-            // Submits 4Ã— the 256-slot limit through a semaphore-throttled pipeline
+            // Submits 4× the 256-slot limit through a semaphore-throttled pipeline
             // (max 64 concurrent) so slots are continuously recycled while new ones
-            // are being admitted â€” verifies every result is correct under recycling pressure.
+            // are being admitted — verifies every result is correct under recycling pressure.
             using KitsuneEngine engine = new();
             const int total = 1000;
             const int maxConcurrent = 64;
@@ -1758,7 +1758,7 @@ namespace KitsuneNet.Tests
         public async Task Stress_ConcurrentVariableBridge_NoCorruptionOrDeadlock()
         {
             // 8 threads simultaneously hammer SetNumber/GetNumber on a shared key
-            // while 10 Lua coroutines read the same Vars table â€” verifies
+            // while 10 Lua coroutines read the same Vars table — verifies
             // AcquireLuaAccess serialises every access with no deadlock, null reads,
             // or scheduler starvation under real write/write/read contention.
             using KitsuneEngine engine = new();
@@ -1799,7 +1799,7 @@ namespace KitsuneNet.Tests
         public async Task Stress_ConcurrentFunctionExecution_AllReturnCorrectResults()
         {
             // Defines 50 distinct functions then calls them all concurrently via
-            // ExecuteFunctionAsync â€” stresses the function-call async path under load.
+            // ExecuteFunctionAsync — stresses the function-call async path under load.
             using KitsuneEngine engine = new();
             const int count = 50;
 
@@ -1827,7 +1827,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Stress_AsyncCoroutinesWritingVars_CSharpReadsAllBack()
         {
-            // 30 concurrent async coroutines each write a unique Vars key while running â€”
+            // 30 concurrent async coroutines each write a unique Vars key while running —
             // verifies that async execution and variable bridge writes are both correct
             // under simultaneous scheduler pressure.
             using KitsuneEngine engine = new();
@@ -2313,7 +2313,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Thread_IterateAsync_NilYield_ContinuesIteration()
         {
-            // coroutine.yield(nil) produces LuaType.Nil â€” iteration must NOT stop.
+            // coroutine.yield(nil) produces LuaType.Nil — iteration must NOT stop.
             // Only coroutine.yield() with no args produces TNONE, which stops iteration.
             using KitsuneEngine engine = new();
             LuaValue thread = await engine.ExecuteStringAsync(
@@ -2588,7 +2588,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public void Thread_Iterate_NilYield_ContinuesIteration()
         {
-            // coroutine.yield(nil) produces LuaType.Nil â€” iteration must NOT stop.
+            // coroutine.yield(nil) produces LuaType.Nil — iteration must NOT stop.
             using KitsuneEngine engine = new();
             LuaValue thread = engine.RunString(
                 "return coroutine.create(function() coroutine.yield(nil) coroutine.yield(1) end)");
@@ -2811,7 +2811,7 @@ namespace KitsuneNet.Tests
         public void GetVariable_TableValue_IsOpaqueWithNoContents()
         {
             // GetVariable returns type=Table with .Table (old snapshot) null.
-            // The live registry ref is in .TableRef â€” use .TableRef!.GetContents() to access.
+            // The live registry ref is in .TableRef — use .TableRef!.GetContents() to access.
             using KitsuneEngine engine = new();
             engine.ExecuteString("t = {x=1, y=2}");
             engine.Wait();
@@ -2828,7 +2828,7 @@ namespace KitsuneNet.Tests
         {
             // GetAll is shallow: iterating a table whose values include a sub-table yields
             // an opaque Table entry (type=Table, Table==null) for that value.
-            // Unlike GetVariable, GetAll returns no TableRef either â€” both are null.
+            // Unlike GetVariable, GetAll returns no TableRef either — both are null.
             using KitsuneEngine engine = new();
             engine.ExecuteString("outer = { scalar = 42, inner = {a=1, b=2} }");
             engine.Wait();
@@ -2838,7 +2838,7 @@ namespace KitsuneNet.Tests
             var innerEntry = all.Single(kvp => kvp.Key.String == "inner");
             innerEntry.Value.Type.ShouldBe(LuaType.Table);
             innerEntry.Value.Table.ShouldBeNull();    // no snapshot
-            innerEntry.Value.TableRef.ShouldBeNull(); // and no live ref â€” truly opaque from GetAll
+            innerEntry.Value.TableRef.ShouldBeNull(); // and no live ref — truly opaque from GetAll
         }
 
         [Fact]
@@ -3022,7 +3022,7 @@ namespace KitsuneNet.Tests
         public async Task SetVariable_WithTableRef_AliasesLiveLuaTable()
         {
             // Passing a LuaValue with a live TableRef to SetVariable pushes the same
-            // Lua table object â€” mutations through the alias are visible via the original.
+            // Lua table object — mutations through the alias are visible via the original.
             using KitsuneEngine engine = new();
             LuaValue result = engine.RunString("return {val=42}");
             engine.SetVariable("alias", result);
@@ -3369,7 +3369,7 @@ namespace KitsuneNet.Tests
         public void Wchar_RoundTrip_SetAndGet_PreservesContent()
         {
             using KitsuneEngine engine = new();
-            engine.SetVariable("wRound", LuaValue.FromWchar("round trip \u00e9"));  // Ã© is non-ASCII
+            engine.SetVariable("wRound", LuaValue.FromWchar("round trip \u00e9"));  // é is non-ASCII
             LuaValue back = engine.GetVariable("wRound");
             back.Type.ShouldBe(LuaType.Char16);
             back.String.ShouldBe("round trip \u00e9");
@@ -3436,7 +3436,7 @@ namespace KitsuneNet.Tests
                 received = args[0];
                 return LuaValue.None;
             });
-            engine.ExecuteString("CaptureJson(Json.Create())");
+            engine.ExecuteString("CaptureJson(Json.New())");
             engine.Wait();
             received.ShouldNotBeNull();
             received!.Value.Type.ShouldBe(LuaType.Userdata);
@@ -3451,7 +3451,7 @@ namespace KitsuneNet.Tests
             // An unrecognised userdata returned from a coroutine arrives via GetResultVariable
             // with Type == Userdata and Bytes holding the metatable __name.
             using KitsuneEngine engine = new();
-            LuaValue v = engine.RunString("return Json.Create()");
+            LuaValue v = engine.RunString("return Json.New()");
             v.Type.ShouldBe(LuaType.Userdata);
             v.Bytes.ShouldNotBeNull();
             v.String.ShouldBe("LUAJSON");
@@ -3462,8 +3462,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Userdata_DifferentType_TypeNameMatchesMetatable()
         {
-            // Verifies the __name lookup is not hard-coded: Stream.Create() carries a
-            // different metatable name ("STREAM") from Json.Create() ("LUAJSON").
+            // Verifies the __name lookup is not hard-coded: Stream.New() carries a
+            // different metatable name ("STREAM") from Json.New() ("LUAJSON").
             using KitsuneEngine engine = new();
             LuaValue? received = null;
             engine.RegisterFunction("CaptureStream", args =>
@@ -3471,7 +3471,7 @@ namespace KitsuneNet.Tests
                 received = args[0];
                 return LuaValue.None;
             });
-            engine.ExecuteString("CaptureStream(Stream.Create())");
+            engine.ExecuteString("CaptureStream(Stream.New())");
             engine.Wait();
             received.ShouldNotBeNull();
             received!.Value.Type.ShouldBe(LuaType.Userdata);
@@ -3569,7 +3569,7 @@ namespace KitsuneNet.Tests
         public async Task RegisterUserdata_NoToStringMetaMethod_DefaultUsesObjectToString()
         {
             // Widget has no [LuaMetaMethod("__tostring")], so the injected default must
-            // call inst.ToString() â€” the standard C# Object.ToString() override.
+            // call inst.ToString() — the standard C# Object.ToString() override.
             // The user-defined Counter case above confirms the user's method is NOT
             // replaced; this case confirms the fallback fires only when nothing is defined.
             using KitsuneEngine engine = new();
@@ -3834,7 +3834,7 @@ namespace KitsuneNet.Tests
         public void RegisterUserdata_HandleFreedByDisposeWithoutGc_DoesNotCrash()
         {
             // If the engine is disposed before Lua GC fires __gc, the _userdataHandles
-            // fallback frees the GCHandle safely â€” no ObjectDisposedException or double-free.
+            // fallback frees the GCHandle safely — no ObjectDisposedException or double-free.
             KitsuneEngine engine = new();
             engine.RegisterUserdata<Counter>();
             engine.SetVariable("c", engine.CreateUserdata(new Counter()));
@@ -3975,7 +3975,7 @@ namespace KitsuneNet.Tests
             }
 
             engine.GetActiveIds().ShouldNotContain(id,
-                "Cancel timed out â€” Ticker hook may have been lost after pcall caught the nohook callback error");
+                "Cancel timed out — Ticker hook may have been lost after pcall caught the nohook callback error");
         }
 
         [Fact]
@@ -4013,7 +4013,7 @@ namespace KitsuneNet.Tests
                 "local n = 0; for _ = 1, 1000000 do n = n + 1 end; return tostring(n)");
 
             // Calls tostring() on an object with __tostring; dispatched via a non-yieldable
-            // C boundary â€” the Ticker must handle this without crashing.
+            // C boundary — the Ticker must handle this without crashing.
             Task<LuaValue> fgTask = engine.ExecuteStringAsync(@"
                 local obj = setmetatable({}, {
                     __tostring = function()
@@ -4037,7 +4037,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public void Json_FromJson_Null_ReturnsNone()
         {
-            // null JsonNode produces LuaValue.None â€” nothing is pushed to Lua.
+            // null JsonNode produces LuaValue.None — nothing is pushed to Lua.
             LuaValue.FromJson(null).Type.ShouldBe(LuaType.None);
         }
 
@@ -4092,7 +4092,7 @@ namespace KitsuneNet.Tests
         public void Json_TableResult_AsJsonNode_ProducesJsonObject()
         {
             // Lua returns a string-keyed table; AsJsonNode() converts the LuaType.Table
-            // linked list to a JsonObject â€” no native-side JSON encoding involved.
+            // linked list to a JsonObject — no native-side JSON encoding involved.
             using KitsuneEngine engine = new();
             LuaValue result = engine.RunString("return {name='bob', score=42}");
             result.Type.ShouldBe(LuaType.Table);
@@ -4198,7 +4198,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public void Json_AsJsonNode_OnJsonType_ReturnsSameNode()
         {
-            // When Type == Json, AsJsonNode() returns the stored node directly â€” no re-parse.
+            // When Type == Json, AsJsonNode() returns the stored node directly — no re-parse.
             var node = JsonNode.Parse("""{"direct":true}""")!;
             LuaValue v = LuaValue.FromJson(node);
             v.Type.ShouldBe(LuaType.Json);
@@ -4501,7 +4501,7 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             Task<LuaValue> asyncTask = engine.ExecuteStringAsync("return 'async done'");
 
-            // No spin needed â€” ExecuteStringAsync submits the coroutine synchronously;
+            // No spin needed — ExecuteStringAsync submits the coroutine synchronously;
             // the subsequent RunString(Sleep(50)) yields the scheduler enough cycles
             // to complete it regardless of when it was picked up.
 
@@ -4989,7 +4989,7 @@ namespace KitsuneNet.Tests
                 }
 
                 sw.Stop();
-                _output.WriteLine($"Elapsed time: {sw.ElapsedMilliseconds} ms  |  {sw.Elapsed.TotalMicroseconds / 1_000_000.0:F2} Âµs/call");
+                _output.WriteLine($"Elapsed time: {sw.ElapsedMilliseconds} ms  |  {sw.Elapsed.TotalMicroseconds / 1_000_000.0:F2} µs/call");
             }
         }
 
@@ -5009,14 +5009,14 @@ namespace KitsuneNet.Tests
             }
 
             sw.Stop();
-            _output.WriteLine($"Elapsed time: {sw.ElapsedMilliseconds} ms  |  {sw.Elapsed.TotalMicroseconds / 1_000_000.0:F2} Âµs/call");
+            _output.WriteLine($"Elapsed time: {sw.ElapsedMilliseconds} ms  |  {sw.Elapsed.TotalMicroseconds / 1_000_000.0:F2} µs/call");
         }
 
         [Fact]
         public void Spam_RunString_TimeTaken()
         {
             // Measures the per-call cost of RunString including Lua compilation on each call.
-            // Uses fewer iterations than the function-ref test because compilation adds ~2-5 Âµs.
+            // Uses fewer iterations than the function-ref test because compilation adds ~2-5 µs.
             using KitsuneEngine engine = new();
             engine.SetInt64("count", 0);
 
@@ -5028,7 +5028,7 @@ namespace KitsuneNet.Tests
             }
 
             sw.Stop();
-            _output.WriteLine($"Elapsed time: {sw.ElapsedMilliseconds} ms  |  {sw.Elapsed.TotalMicroseconds / 100_000.0:F2} Âµs/call");
+            _output.WriteLine($"Elapsed time: {sw.ElapsedMilliseconds} ms  |  {sw.Elapsed.TotalMicroseconds / 100_000.0:F2} µs/call");
         }
 
         [Fact]
@@ -5166,7 +5166,7 @@ namespace KitsuneNet.Tests
         public async Task ExecuteVariable_ConcurrentFunctionCalls_AllReturnCorrectResults()
         {
             // Multiple concurrent ExecuteVariableAsync calls on the same function ref must
-            // each receive the correct result â€” the ref is never consumed by the call.
+            // each receive the correct result — the ref is never consumed by the call.
             using KitsuneEngine engine = new();
             LuaValue fn = engine.RunString("return function(n) return tostring(n) end");
 
@@ -5340,7 +5340,7 @@ namespace KitsuneNet.Tests
                     refs.Add(await engine.ExecuteStringAsync("return function() end"));
                 }
 
-                // Dispose while the background coroutine is still running â€” each Dispose
+                // Dispose while the background coroutine is still running — each Dispose
                 // enqueues to g_pendingVariableChainHead (non-scheduler-thread deferred path).
                 foreach (var r in refs)
                 {
@@ -5374,7 +5374,7 @@ namespace KitsuneNet.Tests
                 refs.Add(engine.RunString("return function() end"));
             }
 
-            // Dispose all refs â€” each enqueues to g_pendingVariableChainHead for deferred luaL_unref.
+            // Dispose all refs — each enqueues to g_pendingVariableChainHead for deferred luaL_unref.
             foreach (var r in refs)
             {
                 r.FunctionRef?.Dispose();
@@ -5390,7 +5390,7 @@ namespace KitsuneNet.Tests
         public async Task Stress_FunctionResults_ManyReleasedViaScheduler_NoLeak()
         {
             // 50 concurrent coroutines each returning a function; refs are explicitly disposed
-            // before the drain cycle â€” stresses pendingResults compaction across many scheduler cycles.
+            // before the drain cycle — stresses pendingResults compaction across many scheduler cycles.
             var engine = new KitsuneEngine();
             try
             {
@@ -5402,7 +5402,7 @@ namespace KitsuneNet.Tests
                 })).ToArray();
                 await Task.WhenAll(tasks);
 
-                // Dispose all function refs â€” each enqueues to g_pendingVariableChainHead.
+                // Dispose all function refs — each enqueues to g_pendingVariableChainHead.
                 foreach (var r in results)
                 {
                     r.FunctionRef?.Dispose();
@@ -5629,19 +5629,19 @@ namespace KitsuneNet.Tests
         [Fact]
         public void Userdata_LuaNativeRoundTrip_OriginalObjectPushedBack()
         {
-            // A Lua-native userdata (Json.Create()) returned by RunString must carry a
+            // A Lua-native userdata (Json.New()) returned by RunString must carry a
             // live LuaUserdataRef so that passing it back to a second script calls methods
             // on the original Lua object rather than pushing nil or creating a broken wrapper.
             using KitsuneEngine engine = new();
 
             // Step 1: obtain a Lua-native userdata from the engine.
-            LuaValue jsonObj = engine.RunString("return Json.Create()");
+            LuaValue jsonObj = engine.RunString("return Json.New()");
             jsonObj.Type.ShouldBe(LuaType.Userdata);
             using LuaUserdataRef udRef = jsonObj.UserdataRef!;
             udRef.ShouldNotBeNull();
 
             // Step 2: pass it back as ARGS[1] and call a method on the original object.
-            // PushKitsuneVariable uses ud->ref (non-LUA_NOREF) to push from the registry â€”
+            // PushKitsuneVariable uses ud->ref (non-LUA_NOREF) to push from the registry —
             // giving Lua the exact same object, not a new wrapper with a null instance pointer.
             LuaValue result = engine.RunString("return ARGS[1]:Encode({Test=1})", jsonObj);
 
@@ -5765,7 +5765,7 @@ namespace KitsuneNet.Tests
                   collectgarbage('collect')
                   collectgarbage('collect')");
 
-            _iteratorEnumeratorDisposed.ShouldBeTrue("Dispose was not called â€” finalizeFunc did not fire via __gc");
+            _iteratorEnumeratorDisposed.ShouldBeTrue("Dispose was not called — finalizeFunc did not fire via __gc");
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
@@ -5866,7 +5866,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Iterator_AsyncSource_LuaIteratesBlocking()
         {
-            // IAsyncEnumerable source passed to Lua â€” consumed via ToBlockingEnumerable().
+            // IAsyncEnumerable source passed to Lua — consumed via ToBlockingEnumerable().
             async IAsyncEnumerable<LuaValue> AsyncSource(
                 [System.Runtime.CompilerServices.EnumeratorCancellation] System.Threading.CancellationToken ct = default)
             {
@@ -6004,7 +6004,7 @@ namespace KitsuneNet.Tests
             int @ref = engine.Register(fn);
             @ref.ShouldNotBe(-2);
 
-            // Release the original â€” the registered pin keeps the function alive.
+            // Release the original — the registered pin keeps the function alive.
             fn.FunctionRef!.Dispose();
 
             LuaValue pinned = engine.GetByReference(@ref);
@@ -6022,7 +6022,7 @@ namespace KitsuneNet.Tests
         public void Thread_Step_PassesArgAndReceivesYieldedValue()
         {
             // The coroutine loops: each resume delivers a new number and yields number-1.
-            // First step: number=1 â†’ yields 0. Second step: number=10 â†’ yields 9.
+            // First step: number=1 ? yields 0. Second step: number=10 ? yields 9.
             using KitsuneEngine engine = new();
             LuaValue thread = engine.RunString(@"
                 return coroutine.create(function(number)
@@ -6123,16 +6123,16 @@ namespace KitsuneNet.Tests
                     coroutine.yield(a + b + c)
                 end)");
 
-            // Step 1 â€” initial arg=10, yields 10.
+            // Step 1 — initial arg=10, yields 10.
             thread.ThreadRef!.Step(LuaValue.FromInt64(10)).AsInt64.ShouldBe(10L);
 
-            // Step 2 â€” arg=5, yields 10+5=15.
+            // Step 2 — arg=5, yields 10+5=15.
             thread.ThreadRef!.Step(LuaValue.FromInt64(5)).AsInt64.ShouldBe(15L);
 
-            // Step 3 â€” arg=3, yields 10+5+3=18.
+            // Step 3 — arg=3, yields 10+5+3=18.
             thread.ThreadRef!.Step(LuaValue.FromInt64(3)).AsInt64.ShouldBe(18L);
 
-            // Step 4 â€” thread dead.
+            // Step 4 — thread dead.
             thread.ThreadRef!.Step().Type.ShouldBe(LuaType.None);
 
             thread.ThreadRef?.Dispose();
@@ -6336,7 +6336,7 @@ namespace KitsuneNet.Tests
         public void UserdataRef_CallMetamethod_Tostring_ReturnsString()
         {
             using KitsuneEngine engine = new();
-            LuaValue jsonObj = engine.RunString("return Json.Create()");
+            LuaValue jsonObj = engine.RunString("return Json.New()");
             using LuaUserdataRef ur = jsonObj.UserdataRef!;
 
             LuaValue result = ur.CallMetamethod("__tostring");
@@ -6350,7 +6350,7 @@ namespace KitsuneNet.Tests
         public void UserdataRef_CallMetamethod_AbsentMetamethod_ReturnsNone()
         {
             using KitsuneEngine engine = new();
-            LuaValue jsonObj = engine.RunString("return Json.Create()");
+            LuaValue jsonObj = engine.RunString("return Json.New()");
             using LuaUserdataRef ur = jsonObj.UserdataRef!;
 
             ur.CallMetamethod("__nonexistent_metamethod__").ShouldBe(LuaValue.None);
@@ -6363,10 +6363,10 @@ namespace KitsuneNet.Tests
         public void UserdataRef_CallMethod_InvokesMethodWithSelf()
         {
             using KitsuneEngine engine = new();
-            LuaValue jsonObj = engine.RunString("return Json.Create()");
+            LuaValue jsonObj = engine.RunString("return Json.New()");
             using LuaUserdataRef ur = jsonObj.UserdataRef!;
 
-            // Json:Encode({val = 99}) â€” method is resolved via __index on the userdata
+            // Json:Encode({val = 99}) — method is resolved via __index on the userdata
             LuaValue tableArg = engine.RunString("return {val = 99}");
             LuaValue result = ur.CallMethod("Encode", tableArg);
             tableArg.TableRef?.Dispose();
@@ -6398,7 +6398,7 @@ namespace KitsuneNet.Tests
         public void UserdataRef_CallMethod_MissingMethod_ReturnsNone()
         {
             using KitsuneEngine engine = new();
-            LuaValue jsonObj = engine.RunString("return Json.Create()");
+            LuaValue jsonObj = engine.RunString("return Json.New()");
             using LuaUserdataRef ur = jsonObj.UserdataRef!;
 
             ur.CallMethod("__nonexistent_method__").ShouldBe(LuaValue.None);
@@ -6445,7 +6445,7 @@ namespace KitsuneNet.Tests
             ");
             using LuaTableRef tr = table.TableRef!;
 
-            // __len ran but returned nothing â†’ TNIL (ran, no data)
+            // __len ran but returned nothing ? TNIL (ran, no data)
             tr.CallMetamethod("__len").Type.ShouldBe(LuaType.Nil);
 
             engine.GetActiveIds().ShouldBeEmpty();
@@ -6460,7 +6460,7 @@ namespace KitsuneNet.Tests
             ");
             using LuaTableRef tr = table.TableRef!;
 
-            // noop ran but returned nothing â†’ TNIL
+            // noop ran but returned nothing ? TNIL
             tr.CallMethod("noop").Type.ShouldBe(LuaType.Nil);
 
             engine.GetActiveIds().ShouldBeEmpty();
@@ -6572,7 +6572,7 @@ namespace KitsuneNet.Tests
         public void UserdataRef_GetIndex_ReturnsMethod()
         {
             using KitsuneEngine engine = new();
-            LuaValue jsonObj = engine.RunString("return Json.Create()");
+            LuaValue jsonObj = engine.RunString("return Json.New()");
             using LuaUserdataRef ur = jsonObj.UserdataRef!;
 
             // __index on Json userdata points to the module table; Encode is a function
@@ -6587,7 +6587,7 @@ namespace KitsuneNet.Tests
         public void UserdataRef_GetIndex_NonexistentField_ReturnsNil()
         {
             using KitsuneEngine engine = new();
-            LuaValue jsonObj = engine.RunString("return Json.Create()");
+            LuaValue jsonObj = engine.RunString("return Json.New()");
             using LuaUserdataRef ur = jsonObj.UserdataRef!;
 
             ur.GetIndex(LuaValue.FromString("__nonexistent_field__")).Type.ShouldBe(LuaType.Nil);
@@ -6748,7 +6748,7 @@ namespace KitsuneNet.Tests
             engine.CollectGarbage();
             engine.CollectGarbage();
 
-            // Re-create an instance and verify methods still work â€” metatable closures intact.
+            // Re-create an instance and verify methods still work — metatable closures intact.
             engine.SetVariable("c2", engine.CreateUserdata(new Counter { Value = 10 }));
             LuaValue result2 = await engine.ExecuteStringAsync(
                 "c2:Increment(); c2:Increment(); return c2:Get()");

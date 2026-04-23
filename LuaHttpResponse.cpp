@@ -1,10 +1,10 @@
 ﻿#include "LuaHttpRequest.h"
 #include "LuaHttpServer.h"
 #include "stream.h"
+#include "mem.h"
 #include <event2/http.h>
 #include <event2/buffer.h>
 #include <string.h>
-#include <stdlib.h>
 #include <stdio.h>
 
 /* ── internal guard ───────────────────────────────────────────────────────── */
@@ -101,6 +101,11 @@ int HttpResponse_Send(lua_State* L) {
         r->chunked   = true;
         r->finalized = true; /* headers sent; body in progress */
 
+        /* Keep the stream userdata alive in the Lua registry so GC cannot
+           collect it while chunked sending is still in progress. */
+        lua_pushvalue(L, 2);
+        r->stream_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+
         /* Enqueue into server senders so accept_cont pumps chunks each tick */
         LuaHttpServer* server = r->connection->server;
         if (server) {
@@ -108,7 +113,7 @@ int HttpResponse_Send(lua_State* L) {
             lua_rawget(L, LUA_REGISTRYINDEX);
             int req_ref = luaL_ref(L, LUA_REGISTRYINDEX);
 
-            HttpOpenConnection* node = (HttpOpenConnection*)malloc(sizeof(HttpOpenConnection));
+            HttpOpenConnection* node = (HttpOpenConnection*)kitsune_malloc(sizeof(HttpOpenConnection));
             if (node) {
                 node->request_ref = req_ref;
                 node->next        = server->senders;

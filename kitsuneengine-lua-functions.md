@@ -7,6 +7,7 @@ A comprehensive reference for all available functions in the Lua environment.
 ## Table of Contents
 
 - [Global Functions](#global-functions)
+- [Hardware](#hardware)
 - [Mutex](#mutex)
 - [Redis](#redis)
 - [CSV](#csv)
@@ -25,6 +26,8 @@ A comprehensive reference for all available functions in the Lua environment.
 - [SQLite](#sqlite)
 - [Json](#json)
 - [Wchar](#wchar)
+- [UInt](#uint)
+- [TimeSpan](#timespan)
 - [Identifier](#identifier)
 - [DateTime](#datetime)
 - [Decimal](#decimal)
@@ -150,6 +153,209 @@ bool GetIsAdmin()
 | `VERSION` | Engine version string (e.g. `"1.0.0"`) |
 | `CPUID` | CPU identifier string returned by the CPUID instruction |
 | `DEBUG` | `true` in debug builds; not defined in release builds |
+
+---
+
+## Hardware
+
+Read-only hardware sensor and system information module. On **Windows**, temperature and CPU load data come from PDH (`\Thermal Zone Information` and `\Processor`); battery uses `GetSystemPowerStatus`. On **Linux**, all sensors are read from `/sys/class/hwmon/`, `/proc/`, and `/sys/class/power_supply/`.
+
+> **Note:** On Windows, temperature data comes from the PDH `\Thermal Zone Information` counter (no admin rights required). Fan RPM and voltage sensors are not available on Windows without vendor drivers.
+
+```lua
+table or nil  Hardware.CpuTemp()
+table         Hardware.CpuThreadsLoad()
+number or nil Hardware.CpuLoad()
+table or nil  Hardware.Memory()
+string or nil Hardware.CpuName()
+table or nil  Hardware.Battery()
+table or nil  Hardware.GpuMemory()   -- Windows only; nil on Linux
+table or nil  Hardware.GpuLoad()     -- Windows only; nil on Linux
+```
+
+### Hardware.CpuTemp
+
+```lua
+table or nil Hardware.CpuTemp()
+```
+
+Returns an array of tables — one per thermal zone found — each with `Name` (string) and `Value` (°C, number). Returns `nil` when no valid thermal zones are found.
+
+- **Windows:** Tries `\Thermal Zone Information(*)\High Precision Temperature` first, then `\Temperature`. Both counters report tenths of Kelvin; zones below 200 K (uninitialised) are filtered out.
+- **Linux:** Reads from `/sys/class/hwmon/` chips named `coretemp`, `k10temp`, `zenpower`, or `cpu_thermal`.
+
+```lua
+local temps = Hardware.CpuTemp()
+if temps then
+    for _, t in ipairs(temps) do
+        print(string.format("%s: %.1f°C", t.Name, t.Value))
+    end
+end
+```
+
+### Hardware.CpuThreadsLoad
+
+```lua
+table Hardware.CpuThreadsLoad()
+```
+
+Returns a flat `{[ThreadKey] = percent}` table with the load percentage (0–100) for every hardware thread.
+
+- **Windows:** Keys are processor group/index strings (e.g. `"0,0"`, `"0,1"`). Uses a persistent PDH query — no sleep needed between calls.
+- **Linux:** Keys are `"cpu0"`, `"cpu1"`, etc., computed from `/proc/stat` deltas between consecutive calls. The first call always returns 0 for all threads (no prior baseline).
+
+```lua
+local t = Hardware.CpuThreadsLoad()
+local keys = {}
+for k in pairs(t) do keys[#keys+1] = k end
+table.sort(keys)
+for _, k in ipairs(keys) do
+    print(string.format("%-8s %.1f%%", k, t[k]))
+end
+```
+
+### Hardware.CpuLoad
+
+```lua
+number or nil Hardware.CpuLoad()
+```
+
+Returns overall CPU utilisation as a percentage (0–100).
+
+- **Windows:** Uses PDH (`\Processor(_Total)\% Processor Time`). The **first call** always returns `0` (baseline collection); subsequent calls return the delta since the previous call.
+- **Linux:** Reads `/proc/stat` and computes the delta between consecutive calls. The first call returns `0`.
+
+```lua
+Hardware.CpuLoad()          -- prime the baseline
+Sleep(1000)
+local pct = Hardware.CpuLoad()
+print(string.format("CPU: %.1f%%", pct))
+```
+
+### Hardware.Memory
+
+```lua
+table or nil Hardware.Memory()
+```
+
+Returns a table with system memory statistics (all values in **MB** except `LoadPercent`):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `TotalPhys` | integer | Total physical RAM |
+| `AvailPhys` | integer | Available physical RAM |
+| `TotalSwap` | integer | Total page/swap file size |
+| `AvailSwap` | integer | Available page/swap space |
+| `LoadPercent` | integer | Memory load percentage (0–100) |
+
+```lua
+local m = Hardware.Memory()
+if m then
+    print(string.format("RAM: %d MB used / %d MB total (%d%%)",
+        m.TotalPhys - m.AvailPhys, m.TotalPhys, m.LoadPercent))
+end
+```
+
+### Hardware.CpuName
+
+```lua
+string or nil Hardware.CpuName()
+```
+
+Returns the CPU brand string (e.g. `"Intel(R) Core(TM) i7-9700K @ 3.60GHz"`).
+
+- **Windows / Linux x86-64:** Uses the CPUID instruction leaf `0x80000002–4`.
+- **Linux non-x86:** Reads the `model name` field from `/proc/cpuinfo`.
+
+```lua
+print("CPU:", Hardware.CpuName())
+```
+
+### Hardware.Battery
+
+```lua
+table or nil Hardware.Battery()
+```
+
+Returns a table with battery status, or `nil` if no battery is present (desktop machine).
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `Percent` | integer or nil | Charge level 0–100; `nil` if unknown |
+| `ACLine` | boolean | `true` when plugged in (AC power or full) |
+| `Charging` | boolean | `true` when actively charging |
+| `SecondsRemaining` | integer or nil | Estimated seconds of battery life remaining; `nil` if unknown or plugged in |
+
+- **Windows:** Uses `GetSystemPowerStatus`.
+- **Linux:** Reads from `/sys/class/power_supply/` (first device with `type == "Battery"`).
+
+```lua
+local bat = Hardware.Battery()
+if bat then
+    local h = bat.SecondsRemaining and math.floor(bat.SecondsRemaining / 3600) or 0
+    local m = bat.SecondsRemaining and math.floor((bat.SecondsRemaining % 3600) / 60) or 0
+    print(string.format("Battery: %s%%  %s  (%dh %02dm)",
+        tostring(bat.Percent),
+        bat.Charging and "Charging" or (bat.ACLine and "Plugged in" or "Discharging"),
+        h, m))
+else
+    print("No battery")
+end
+```
+
+### Hardware.GpuMemory
+
+```lua
+table or nil Hardware.GpuMemory()
+```
+
+**Windows only** — returns `nil` on Linux.
+
+Returns a table keyed by adapter friendly name. Each value is a table with memory usage in **MB**:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `DedicatedUsageMB` | integer | Dedicated GPU VRAM currently in use |
+| `SharedUsageMB` | integer | Shared system memory used by the GPU |
+| `TotalCommittedMB` | integer | Total committed GPU memory (dedicated + shared) |
+
+Uses `GPU Adapter Memory` PDH counters — the same source as Windows Task Manager's GPU memory bars. Each adapter is identified by its DXGI `AdapterLuid`, resolved to the friendly adapter description string.
+
+```lua
+local mem = Hardware.GpuMemory()
+if mem then
+    for adapter, m in pairs(mem) do
+        print(string.format("%s: %d MB dedicated, %d MB shared",
+            adapter, m.DedicatedUsageMB, m.SharedUsageMB))
+    end
+end
+```
+
+### Hardware.GpuLoad
+
+```lua
+table or nil Hardware.GpuLoad()
+```
+
+**Windows only** — returns `nil` on Linux.
+
+Returns a table keyed by adapter friendly name. Each value is a table mapping engine type strings to utilisation percentages (0–100). Engine types include `"3d"`, `"copy"`, `"videoencode"`, `"videodecode"`, `"compute 0"`, etc. — exactly what the driver exposes.
+
+Uses a **persistent PDH query** on `GPU Engine\Utilization Percentage`, aggregating all per-process per-engine instances into a single per-adapter total for each engine type. No sleep is needed between calls.
+
+```lua
+local load = Hardware.GpuLoad()
+if load then
+    for adapter, engines in pairs(load) do
+        print(adapter)
+        for etype, pct in pairs(engines) do
+            if pct > 0 then
+                print(string.format("  %-20s %.1f%%", etype, pct))
+            end
+        end
+    end
+end
+```
 
 ---
 
@@ -879,6 +1085,28 @@ bool Stream:WriteUnsignedLong() / int Stream:ReadUnsignedLong()
 Wchar Stream:ReadWchar(opt n)
 ```
 
+### Custom-type Reads
+
+Custom userdata types can be written with `Stream:Write(value)` and read back with dedicated typed-read functions. All reads return `nil` on a short read or non-readable stream.
+
+```lua
+UInt       Stream:ReadUInt()        -- reads 8 bytes (uint64, native endian)
+Decimal    Stream:ReadDecimal()     -- reads 24 bytes (LuaDecimal struct layout)
+Identifier Stream:ReadIdentifier()  -- reads 16 bytes (UUID raw bytes)
+DateTime   Stream:ReadDateTime()    -- reads 10 bytes (int64 ticks + int16 offset_minutes)
+TimeSpan   Stream:ReadTimeSpan()    -- reads 8 bytes (int64 ticks)
+```
+
+**`Write` wire formats for custom types:**
+
+| Type | Bytes written | Format |
+|------|--------------|--------|
+| `UInt` | 8 | `uint64_t`, native endian |
+| `Decimal` | 24 | `LuaDecimal` struct (`uint64 lo`, `uint64 hi`, `int16 scale`, `uint8 negative`, 5 pad) |
+| `Identifier` | 12 or 16 | raw bytes — 16 for UUID, 12 for OID |
+| `DateTime` | 10 | `int64_t ticks` + `int16_t offset_minutes` |
+| `TimeSpan` | 8 | `int64_t ticks` |
+
 ---
 
 ## Base64
@@ -948,11 +1176,12 @@ string     HttpClient.UrlDecode(str)
 ### Client configuration
 
 ```lua
-nil client:SetTimeout(ms)
-nil client:SetFollowRedirects(bool)
-nil client:SetVerifySSL(bool)
-nil client:SetDefaultHeader(name, value)
-nil client:SetBinary(bool)
+nil      client:SetTimeout(ms)
+nil      client:SetFollowRedirects(bool)
+nil      client:SetVerifySSL(bool)
+nil      client:SetDefaultHeader(name, value)
+nil      client:SetBinary(bool)
+TimeSpan client:GetTimestamp()
 ```
 
 | Function | Description |
@@ -962,6 +1191,7 @@ nil client:SetBinary(bool)
 | `SetVerifySSL` | Verify SSL certificates. Default `true` |
 | `SetDefaultHeader` | Add a header sent with every request on this client |
 | `SetBinary` | When `true`, `Write` calls on WebSocket connections from this client send binary frames instead of text frames. Default `false` |
+| `GetTimestamp` | Returns the round-trip duration of the most recently **completed** `Request()` call as a `TimeSpan`. The clock starts just before the request is submitted to curl and stops when the last response byte is received. Returns a zero `TimeSpan` if no request has completed yet on this client |
 
 ### Buffered request
 
@@ -971,13 +1201,52 @@ coroutine, errmsg client:Request(method, url, opt body, opt headers, opt outStre
 
 Returns a coroutine immediately. Drive it with `coroutine.resume` until a non-nil result table is returned. `body` is an optional string. `headers` is an optional per-request header table. `outStream` is an optional writable `Stream`; when provided the response body is written there and `Contents` in the result is `nil`.
 
+### Simple blocking call
+
+```lua
+result        = client:Call(method, url [, headers [, body]])
+nil, errmsg   = client:Call(...)   -- on transport failure
+```
+
+Drives the request to completion internally, yielding the outer coroutine cooperatively on each poll. Returns the same result table as `Request` on success, or `nil, errmsg` on transport failure (e.g. `"Timeout"`, `"Could not resolve host"`, curl error text).
+
+Argument order is optimised for the common case where headers are needed more often than a body:
+
+| Arg | Type | Description |
+|-----|------|-------------|
+| `method` | string | HTTP verb: `"GET"`, `"POST"`, etc. |
+| `url` | string | Target URL |
+| `headers` | table (opt) | Per-request header table `{["X-Key"]="value"}` |
+| `body` | string (opt) | Request body |
+
+```lua
+-- Simple GET — no coroutine boilerplate
+local result = HttpClient.New():Call("GET", "https://httpbin.org/get")
+print(result.Code, result.Contents)
+
+-- POST with headers and body
+local client = HttpClient.New()
+client:SetTimeout(5000)
+local result, err = client:Call("POST", "https://api.example.com/data",
+    {["Content-Type"] = "application/json"},
+    '{"key":"value"}')
+if not result then
+    print("failed:", err)   -- e.g. "Timeout", "Could not resolve host: ..."
+else
+    print(result.Code, result.Contents)
+    print("round-trip:", client:GetTimestamp():TotalMilliseconds(), "ms")
+end
+```
+
+> **Note:** `Call` must be used from inside a Kitsune-managed coroutine (the scheduler, or a coroutine driven by `coroutine.resume`). It yields cooperatively while waiting — it does not block the OS thread.
+
 **Result table:**
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `Code` | integer or nil | HTTP status code; `nil` on transport error |
 | `Status` | string | Status text (e.g. `"OK"`) or transport error message |
-| `Contents` | string or nil | Response body; `nil` when `outStream` was provided |
+| `Contents` | string or nil | Response body |
 | `Headers` | table | Response headers keyed by header name |
 
 ### Streaming request
@@ -1535,13 +1804,24 @@ conn:NonQuery("INSERT INTO t (a, b, c) VALUES ($1, $2, $3)", {"hello", nil, 3.14
 ## Timer
 
 ```lua
-Timer Timer.New()
-bool Timer:IsRunning()
-nil Timer:Reset()
-nil Timer:Start()
-nil Timer:Stop()
+Timer  Timer.New()
+bool   Timer:IsRunning()
+nil    Timer:Reset()
+nil    Timer:Start()
+number Timer:Stop()
 number Timer:Elapsed()
+TimeSpan Timer:ElapsedTimeSpan()
 ```
+
+| Function | Description |
+|----------|-------------|
+| `New` | Create a new timer (not started) |
+| `IsRunning` | Returns `true` while the timer is running |
+| `Reset` | Stop and zero all counters |
+| `Start` | Start (or resume) the timer. If already started, the current interval is accumulated first |
+| `Stop` | Stop the timer and return elapsed ms for the last interval |
+| `Elapsed` | Total accumulated elapsed time in milliseconds as a `number`. Returns `0` if never started |
+| `ElapsedTimeSpan` | Same duration as `Elapsed` but returned as a `TimeSpan` userdata. Returns a zero `TimeSpan` if never started |
 
 ---
 
@@ -1586,23 +1866,33 @@ nil     json:Dispose()
 | `Decode` | Decode JSON from a string, a chunk-reader function, or a `Stream`. Returns the decoded value |
 | `EncodeIntoStream` | Encode `value` and write the JSON bytes directly into `stream`. Returns `true` on success, or `false, errmsg` if the stream is not writable |
 | `DecodeFromStream` | Decode one JSON value from `stream`. Returns the decoded value, or `nil, errmsg` if the stream is not readable |
+| `SetDecodeNull(bool)` | Control how JSON `null` is decoded. Default `false` — decodes as Lua `nil` (falsy, coalescing works). Pass `true` to decode as the `Json.Null` sentinel instead (truthy, round-trip safe but lossy on re-encode if value was nil) |
 | `Dispose` | Explicitly free the internal output buffer; called automatically by the GC |
 
 ### Null Sentinel
 
-JSON `null` decodes to Lua `nil` by default (and `nil` cannot be stored in a table). Use `Json.Null` as a distinguishable sentinel:
+By default JSON `null` decodes to Lua `nil` — falsy, so coalescing with `or` works naturally. Call `json:SetDecodeNull(true)` to decode `null` as the `Json.Null` sentinel instead, which is **truthy** and survives a round-trip through `Encode`. Without `SetDecodeNull(true)`, re-encoding a decoded object will omit any keys whose value was `null` (since `nil` in a Lua table means absent).
 
 ```lua
 local json = Json.New()
 
--- Encoding: Json.Null → null
-local s = json:Encode({value = Json.Null})  -- {"value":null}
+-- Default behaviour: null → nil (falsy, coalescing works)
+local t = json:Decode('{"value":null}')
+print(t.value or "default")     -- "default"  ✓
 
--- Decoding: null → Json.Null
-local t = json:Decode(s)
-if t.value == Json.Null then
-    print("was null")
+-- WARNING: round-trip is lossy by default — nil keys are omitted
+print(json:Encode(t))           -- []  (empty table encodes as array)
+
+-- SetDecodeNull(true): null → Json.Null (truthy, round-trip safe)
+local json2 = Json.New():SetDecodeNull(true)
+local t2 = json2:Decode('{"value":null}')
+if t2.value == Json.Null then
+    print("was null")           -- prints
 end
+print(t2.value or "default")   -- prints Json.Null userdata, NOT "default"
+
+-- Re-encode preserves null
+print(json2:Encode(t2))         -- {"value":null}
 ```
 
 ### Decode Input Forms
@@ -1717,6 +2007,139 @@ int Wchar:Find(substring, opt offset)
 - `..` (concat): returns new Wchar
 - `#` (length): returns length
 - `==` (equal): compares Wchars
+
+---
+
+## UInt
+
+A typed userdata for unsigned 64-bit integers. Covers values above `2^63 - 1` that cannot be represented losslessly as a Lua integer or `number`. All arithmetic operators are overloaded so `UInt` values work with `+`, `-`, `*`, `/`, `%`, `&`, `|`, `~`, `^`, `<<`, `>>`, and unary `~` directly. Comparisons (`==`, `<`, `<=`) are also overloaded.
+
+### Constructors
+
+```lua
+UInt  UInt.FromString(str)      -- parse decimal string; nil on failure
+UInt  UInt.FromNumber(n)        -- convert Lua number (truncates to uint64)
+UInt  UInt.FromUnsigned(n)      -- reinterpret raw bit pattern of a Lua integer as uint64
+UInt  UInt.Zero()               -- returns 0
+```
+
+### Methods
+
+```lua
+string  u:ToString()     -- decimal string representation, alias: AsString()
+string  u:AsString()
+number  u:ToNumber()     -- convert to Lua number (lossy above 2^53)
+int     u:ToInteger()    -- reinterpret as signed int64 (bit pattern preserved)
+uint    u:ToUnsigned()   -- same value as a Lua integer (wraps for values > INT64_MAX)
+bool    u:IsZero()       -- true when value is 0
+```
+
+### Arithmetic & Bitwise Metamethods
+
+| Metamethod | Behaviour |
+|------------|-----------|
+| `tostring(u)` | Same as `ToString()` |
+| `u1 == u2` | Value equality |
+| `u1 < u2` | Less-than comparison |
+| `u1 <= u2` | Less-or-equal comparison |
+| `u1 + u2` | Addition (wraps on overflow) |
+| `u1 - u2` | Subtraction (wraps on underflow) |
+| `u1 * u2` | Multiplication (wraps) |
+| `u1 / u2` | Integer division |
+| `u1 % u2` | Modulo |
+| `u1 & u2` | Bitwise AND |
+| `u1 \| u2` | Bitwise OR |
+| `u1 ~ u2` | Bitwise XOR |
+| `~u` | Bitwise NOT |
+| `u1 << n` | Left shift |
+| `u1 >> n` | Right shift |
+
+### Examples
+
+```lua
+local max = UInt.FromString('18446744073709551615')
+print(max)                        -- "18446744073709551615"
+print(max + UInt.FromString('1')) -- "0"  (wraps)
+
+local u = UInt.FromNumber(255)
+print(u & UInt.FromNumber(0xF0))  -- "240"
+print(u:ToNumber())               -- 255.0
+```
+
+---
+
+## TimeSpan
+
+A typed userdata representing a signed duration in 100-nanosecond ticks (identical to the .NET `TimeSpan` representation). All comparison operators are overloaded; arithmetic (`+`, `-`, `*`, `/`) and unary negation are also supported.
+
+### Constructors
+
+```lua
+TimeSpan  TimeSpan.FromDays(n)
+TimeSpan  TimeSpan.FromHours(n)
+TimeSpan  TimeSpan.FromMinutes(n)
+TimeSpan  TimeSpan.FromSeconds(n)
+TimeSpan  TimeSpan.FromMilliseconds(n)
+TimeSpan  TimeSpan.FromTicks(n)       -- raw 100-ns tick count
+TimeSpan  TimeSpan.Zero()
+```
+
+All constructors accept fractional `number` arguments.
+
+### Component Getters
+
+```lua
+int     ts:Days()
+int     ts:Hours()
+int     ts:Minutes()
+int     ts:Seconds()
+int     ts:Milliseconds()
+int     ts:Ticks()           -- raw 100-ns signed tick count
+bool    ts:IsNegative()      -- true when duration < 0
+bool    ts:IsEmpty()         -- true when ticks == 0
+```
+
+### Conversion
+
+```lua
+number  ts:TotalDays()
+number  ts:TotalHours()
+number  ts:TotalMinutes()
+number  ts:TotalSeconds()
+number  ts:TotalMilliseconds()
+```
+
+### Metamethods
+
+| Metamethod | Behaviour |
+|------------|-----------|
+| `tostring(ts)` | Canonical string, e.g. `"01:30:00.000"` or `"-00:00:30.000"` |
+| `ts1 == ts2` | Tick equality |
+| `ts1 < ts2` | Less-than comparison |
+| `ts1 <= ts2` | Less-or-equal comparison |
+| `ts1 + ts2` | Duration addition |
+| `ts1 - ts2` | Duration subtraction |
+| `ts * n` | Scale by a number |
+| `ts / n` | Divide by a number |
+| `-ts` | Negate the duration |
+
+### Examples
+
+```lua
+local hour = TimeSpan.FromHours(1)
+local min  = TimeSpan.FromMinutes(90)
+print(hour + min)               -- "02:30:00.000"
+print(-TimeSpan.FromSeconds(5)) -- "-00:00:05.000"
+print(min:TotalHours())         -- 1.5
+print(min:Hours(), min:Minutes()) -- 1  30
+
+-- Measure elapsed time with a Timer
+local t = Timer.New()
+t:Start()
+Sleep(100)
+local elapsed = t:ElapsedTimeSpan()
+print(elapsed:TotalMilliseconds())  -- ~100
+```
 
 ---
 
@@ -2465,6 +2888,11 @@ The `"__global"` pseudo-section holds any key/value pairs that appear before the
 | `integer` | stringified (e.g. `42`) |
 | `float` | stringified (e.g. `3.14`) |
 | `boolean` | `true` or `false` |
+| `UInt` | decimal string (e.g. `18446744073709551615`) |
+| `Identifier` | canonical string (UUID or OID hex) |
+| `DateTime` | ISO 8601 string (e.g. `2024-06-01T12:00:00.000Z`) |
+| `Decimal` | decimal string (e.g. `123.456`) |
+| `TimeSpan` | canonical string (e.g. `01:30:00.000`) |
 | `table` (nested) | not supported as a value — skipped silently |
 | other types | skipped silently |
 

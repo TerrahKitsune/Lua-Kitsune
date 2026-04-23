@@ -56,6 +56,7 @@ typedef struct LuaHttpResponse {
     bool            chunked;     /* true = evhttp_send_reply_start/chunk/end path  */
     bool            finalized;
     int             status_code; /* HTTP status, default 200                       */
+    int             stream_ref;  /* luaL_ref keeping stream userdata alive during chunked send */
     LuaHttpRequest* connection;  /* back-pointer, nulled before response_ref unref */
 } LuaHttpResponse;
 

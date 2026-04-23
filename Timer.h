@@ -19,5 +19,6 @@ int TimerReset(lua_State *L);
 int TimerStart(lua_State *L);
 int TimerStop(lua_State *L);
 int TimerGetElapsed(lua_State *L);
+int TimerGetElapsedTimeSpan(lua_State *L);
 int Timer_gc(lua_State *L);
 int Timer_tostring(lua_State *L);

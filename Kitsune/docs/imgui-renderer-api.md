@@ -26,48 +26,135 @@ Queues `fn` to start as a fire-and-forget coroutine at the end of the current fr
 
 SDL functions are only available inside an active session (after `Imgui.Start`).
 
-### SDL Window
+### SDL.Window
 
 Window and display management. All return `nil` if the window does not exist yet.
 
 | Function | Parameters | Returns | Notes |
 |---|---|---|---|
-| `SDL.GetWindowWidth()` | — | `integer` | Current window width in pixels |
-| `SDL.GetWindowHeight()` | — | `integer` | Current window height in pixels |
-| `SDL.GetWindowX()` | — | `integer` | Window X position on screen |
-| `SDL.GetWindowY()` | — | `integer` | Window Y position on screen |
-| `SDL.SetWindowSize(w, h)` | `integer, integer` | — | Resize the window |
-| `SDL.SetWindowPosition(x, y)` | `integer, integer` | — | Move the window |
-| `SDL.SetWindowTitle(title)` | `string` | — | Change the window title bar text |
-| `SDL.IsMinimized()` | — | `boolean` | Whether the window is minimised |
-| `SDL.IsFocused()` | — | `boolean` | Whether the window has input focus |
-| `SDL.SetFullscreen(enabled)` | `boolean` | — | Toggle borderless fullscreen |
-| `SDL.GetMonitor()` | — | `index, name, x, y, width, height, refreshRate` | Info about the monitor the window is on |
+| `SDL.Window.GetWindowWidth()` | — | `integer` | Current window width in pixels |
+| `SDL.Window.GetWindowHeight()` | — | `integer` | Current window height in pixels |
+| `SDL.Window.GetWindowX()` | — | `integer` | Window X position on screen |
+| `SDL.Window.GetWindowY()` | — | `integer` | Window Y position on screen |
+| `SDL.Window.SetWindowSize(w, h)` | `integer, integer` | — | Resize the window |
+| `SDL.Window.SetWindowPosition(x, y)` | `integer, integer` | — | Move the window |
+| `SDL.Window.SetWindowTitle(title)` | `string` | — | Change the window title bar text |
+| `SDL.Window.IsMinimized()` | — | `boolean` | Whether the window is minimised |
+| `SDL.Window.IsFocused()` | — | `boolean` | Whether the window has input focus |
+| `SDL.Window.SetFullscreen(enabled)` | `boolean` | — | Toggle borderless fullscreen |
+| `SDL.Window.GetMonitor()` | — | `index, name, x, y, width, height, refreshRate` | Info about the monitor the window is on |
 
-### SDL Input
+### SDL.Input
 
 Polled each frame — not event-based. Safe to call at any point inside `renderFn`.
 
 | Function | Parameters | Returns | Notes |
 |---|---|---|---|
-| `SDL.GetKeyState(scancode)` | `integer` | `boolean` | Whether a key is currently held. Uses physical SDL_Scancode values (e.g. W=26, Space=44, Up=82, Left=80, Right=79, Down=81) |
-| `SDL.GetModState()` | — | `table` | `{ shift, ctrl, alt, gui, capslock, numlock }` — boolean fields |
-| `SDL.GetMouseState()` | — | `x, y, buttons` | Cursor position in window pixels and button bitmask. bit0=left, bit1=middle, bit2=right |
-| `SDL.GetRelativeMouseState()` | — | `dx, dy, buttons` | Pixel delta since last call and button bitmask. Resets to 0,0 each call |
-| `SDL.SetRelativeMouseMode(enabled)` | `boolean` | — | Capture and hide the cursor. Use `GetRelativeMouseState` for deltas |
-| `SDL.WarpMouse(x, y)` | `integer, integer` | — | Move the cursor to a window-relative position |
-| `SDL.GetNumJoysticks()` | — | `integer` | Number of connected joystick/gamepad devices |
-| `SDL.GetGamepadAxis(index, axis)` | `integer, integer` | `number` | Axis value normalised to -1.0..1.0. index is 0-based. Axis values match SDL_GameControllerAxis (0=LeftX, 1=LeftY, 2=RightX, 3=RightY, 4=TriggerLeft, 5=TriggerRight) |
-| `SDL.GetGamepadButton(index, button)` | `integer, integer` | `boolean` | Whether a button is held. index is 0-based. Button values match SDL_GameControllerButton (0=A, 1=B, 2=X, 3=Y) |
+| `SDL.Input.GetKeyState(scancode)` | `integer` | `boolean` | Whether a key is currently held. Uses physical SDL_Scancode values (e.g. W=26, Space=44, Up=82, Left=80, Right=79, Down=81) |
+| `SDL.Input.GetModState()` | — | `table` | `{ shift, ctrl, alt, gui, capslock, numlock }` — boolean fields |
+| `SDL.Input.GetMouseState()` | — | `x, y, buttons` | Cursor position in window pixels and button bitmask. bit0=left, bit1=middle, bit2=right |
+| `SDL.Input.GetRelativeMouseState()` | — | `dx, dy, buttons` | Pixel delta since last call and button bitmask. Resets to 0,0 each call |
+| `SDL.Input.SetRelativeMouseMode(enabled)` | `boolean` | — | Capture and hide the cursor. Use `GetRelativeMouseState` for deltas |
+| `SDL.Input.WarpMouse(x, y)` | `integer, integer` | — | Move the cursor to a window-relative position |
+| `SDL.Input.GetNumJoysticks()` | — | `integer` | Number of connected joystick/gamepad devices |
+| `SDL.Input.GetGamepadAxis(index, axis)` | `integer, integer` | `number` | Axis value normalised to -1.0..1.0. index is 0-based. Axis values match SDL_GameControllerAxis (0=LeftX, 1=LeftY, 2=RightX, 3=RightY, 4=TriggerLeft, 5=TriggerRight) |
+| `SDL.Input.GetGamepadButton(index, button)` | `integer, integer` | `boolean` | Whether a button is held. index is 0-based. Button values match SDL_GameControllerButton (0=A, 1=B, 2=X, 3=Y) |
 
-### SDL Timing
+### SDL.Time
+
+Frame and high-resolution timing. Safe to call at any point inside `renderFn`.
 
 | Function | Parameters | Returns | Notes |
 |---|---|---|---|
-| `SDL.GetTicks()` | — | `integer` | Milliseconds since SDL was initialised |
-| `SDL.GetPerformanceCounter()` | — | `integer` | High-resolution timer counter value |
-| `SDL.GetPerformanceFrequency()` | — | `integer` | Ticks per second for the performance counter. Use with `GetPerformanceCounter` for sub-millisecond timing |
-| `SDL.GetFrameTime()` | — | `dt, fps` | `dt` = seconds since last frame (number). `fps` = exponential moving average frame rate. Both values are computed once at the start of each frame by the render loop — safe to call multiple times per frame |
+| `SDL.Time.GetTicks()` | — | `integer` | Milliseconds since SDL was initialised |
+| `SDL.Time.GetPerformanceCounter()` | — | `integer` | High-resolution timer counter value |
+| `SDL.Time.GetPerformanceFrequency()` | — | `integer` | Ticks per second for the performance counter. Use with `GetPerformanceCounter` for sub-millisecond timing |
+| `SDL.Time.GetFrameTime()` | — | `dt, fps` | `dt` = seconds since last frame (number). `fps` = exponential moving average frame rate. Both values are computed once at the start of each frame by the render loop — safe to call multiple times per frame |
+
+### SDL.Audio
+
+Audio playback via SDL_mixer. Requires the engine to be compiled with `KITSUNE_AUDIO`. All functions require an active session (called after `Imgui.Start`). Audio ids (`luaId`) are stable integers assigned by the resource cache.
+
+Sound effects (`SDL.Audio.Load`) are decoded fully into memory as `Mix_Chunk` and played on mixer channels. Music (`SDL.Audio.LoadMusic`) is streamed from memory as `Mix_Music` — only one music track plays at a time.
+
+#### Loading & Lifecycle
+
+| Function | Parameters | Returns | Notes |
+|---|---|---|---|
+| `SDL.Audio.Load(stream [, source])` | stream, `string?` | `integer` | Decode a sound effect from a stream (WAV, OGG, MP3, FLAC). If source matches a cached slot, replaces it keeping the same id |
+| `SDL.Audio.LoadRaw(data [, source])` | `string`, `string?` | `integer` | Same as Load but accepts raw byte string instead of a stream |
+| `SDL.Audio.LoadMusic(stream [, source])` | stream, `string?` | `integer` | Load a streaming music track from a stream |
+| `SDL.Audio.Unload(luaId)` | `integer` | — | Free the `Mix_Chunk` but keep the cache slot as a sentinel |
+| `SDL.Audio.Destroy(luaId)` | `integer` | — | Fully remove a sound-effect resource from the cache |
+| `SDL.Audio.DestroyMusic(luaId)` | `integer` | — | Fully remove a music resource from the cache |
+| `SDL.Audio.DestroyAll()` | — | — | Halt all playback and free every audio resource |
+
+#### Playback
+
+| Function | Parameters | Returns | Notes |
+|---|---|---|---|
+| `SDL.Audio.Play(luaId [, loops])` | `integer, integer?` | `channel\|nil` | Play a sound effect. `loops`: 0=once (default), -1=infinite, n=repeat n extra times. Returns the mixer channel or nil on failure |
+| `SDL.Audio.PlayMusic(luaId [, loops])` | `integer, integer?` | `boolean` | Play a music track. `loops`: -1=infinite (default), 1=once |
+| `SDL.Audio.Stop([luaId])` | `integer?` | — | Stop the channel the sfx is playing on. No argument stops all channels |
+| `SDL.Audio.StopMusic()` | — | — | Stop music playback immediately |
+| `SDL.Audio.FadeIn(luaId, ms [, loops])` | `integer, integer, integer?` | `channel\|nil` | Fade in a sound effect over `ms` milliseconds |
+| `SDL.Audio.FadeOut(luaId, ms)` | `integer, integer` | — | Fade out the channel the sfx is playing on over `ms` milliseconds |
+| `SDL.Audio.PauseMusic()` | — | — | Pause the current music track |
+| `SDL.Audio.ResumeMusic()` | — | — | Resume a paused music track |
+
+#### Volume
+
+| Function | Parameters | Returns | Notes |
+|---|---|---|---|
+| `SDL.Audio.SetVolume(luaId, volume)` | `integer, integer` | — | Set per-chunk volume. Range 0–128 (`MIX_MAX_VOLUME`) |
+| `SDL.Audio.SetMusicVolume(volume)` | `integer` | — | Set global music volume. Range 0–128 |
+
+#### Queries
+
+| Function | Parameters | Returns | Notes |
+|---|---|---|---|
+| `SDL.Audio.IsPlaying(luaId)` | `integer` | `boolean` | Whether the channel this sfx last played on is still active |
+| `SDL.Audio.IsMusicPlaying()` | — | `boolean` | Whether a music track is currently playing |
+| `SDL.Audio.IsMusicPaused()` | — | `boolean` | Whether the current music track is paused |
+| `SDL.Audio.GetId(source)` | `string` | `integer\|nil` | Cached luaId for a source string. Checks sfx first, then music |
+| `SDL.Audio.GetData(luaId)` | `integer` | `table\|nil` | `{ source, isLoaded, type }` where `type` is `"sfx"` or `"music"` |
+
+## Resource API
+
+Session-wide resource loader. Handles all resource types through a single callback so one function routes load requests for textures, audio, and any future resource types.
+
+```lua
+Resource.SetLoader(
+    function(type, source)
+        if type == 1 then -- RESOURCE_TEXTURE
+            return Stream.Open(source, 'rb')
+        elseif type == 2 then -- RESOURCE_AUDIO_SFX
+            return Stream.Open(source, 'rb')
+        end
+        return nil
+    end,
+    function(type, luaId, source)  -- optional post-load callback
+        if type == 1 then
+            local data = OpenGL.GetData(luaId)
+            if data and data.width > 1024 then
+                OpenGL.UnloadTexture(luaId)
+            end
+        end
+    end
+)
+```
+
+| Function | Parameters | Returns | Notes |
+|---|---|---|---|
+| `Resource.SetLoader(loader [, postLoader])` | `function, function?` | — | Set the session-wide loader. `loader(type, source)` must return a stream or nil. `postLoader(type, luaId, source)` is called after a successful load |
+
+**Resource type constants passed to loader/postLoader:**
+
+| Constant | Value | Consumer |
+|---|---|---|
+| `RESOURCE_TEXTURE` | 1 | `OpenGL.LoadTexture`, `OpenGL.ResolveTexture` |
+| `RESOURCE_AUDIO_SFX` | 2 | `SDL.Audio.Load` |
+| `RESOURCE_AUDIO_MUSIC` | 3 | `SDL.Audio.LoadMusic` |
 
 ## Win32 API
 
@@ -91,30 +178,15 @@ Texture management. All functions require an active session (called after `Imgui
 | `!= 0` | `!= 0` | **Live** | Valid GPU texture |
 | `!= 0` | `0` | **Sentinel** | Load attempted and failed or `UnloadTexture` called — no retry |
 
-### Resource Loader
-
-```lua
-OpenGL.SetResourceLoader(
-    function(source) return Stream.OpenFile(source) end,
-    function(id, source)  -- optional post-load callback
-        local data = OpenGL.GetData(id)
-        if data.width > 1024 then
-            OpenGL.UnloadTexture(id)  -- sentinel; caller sees placeholder
-        end
-    end
-)
-```
-
 ### Loading & Lifecycle
 
 | Function | Parameters | Returns | Notes |
 |---|---|---|---|
 | `OpenGL.LoadTexture(stream [, source])` | stream, `string?` | `integer` | Decode and upload. If source matches a cached slot, replaces its GL texture keeping the same id |
-| `OpenGL.ResolveTexture(source)` | `string` | `integer\|nil` | Cache-hit (live or sentinel) returns id immediately. On miss calls resource loader. Returns `nil` only if source is completely unknown |
+| `OpenGL.ResolveTexture(source)` | `string` | `integer\|nil` | Cache-hit (live or sentinel) returns id immediately. On miss calls `Resource.SetLoader`. Returns `nil` only if source is completely unknown |
 | `OpenGL.UnloadTexture(id)` | `integer` | — | Free GPU memory, keep slot as sentinel. `ResolveTexture` returns the id without retrying the loader |
 | `OpenGL.DestroyTexture(id)` | `integer` | — | Full tombstone — slot freed for reuse. Caller responsible for re-load loops if called from post-loader |
 | `OpenGL.DestroyAllTextures()` | — | — | Free all textures and zero the resource cache |
-| `OpenGL.SetResourceLoader(loader [, postLoader])` | `function, function?` | — | Set the session-wide resource loader and optional post-load callback |
 
 ### Queries
 
@@ -443,6 +515,7 @@ These ImGui renderer methods are implemented manually in `ImguiRenderer.cpp`:
 - `renderer:PlotHistogramEx(...)`
 - `renderer:PlotLines(...)`
 - `renderer:PlotLinesEx(...)`
+- `renderer:PushFont(...)`
 - `renderer:Render(...)`
 - `renderer:RenderPlatformWindowsDefault(...)`
 - `renderer:Text(...)`
@@ -478,7 +551,7 @@ These ImGui renderer methods are implemented manually in `ImguiRenderer.cpp`:
 | `SetWindowSizeStr` | duplicate variant of ImGui::SetWindowSize |
 | `SetWindowCollapsedStr` | duplicate variant of ImGui::SetWindowCollapsed |
 | `SetWindowFocusStr` | duplicate variant of ImGui::SetWindowFocus |
-| `PushFont` | unsupported parameter type: ImFont* |
+| `PushFont` | hand-written override |
 | `PushStyleColorImVec4` | duplicate variant of ImGui::PushStyleColor |
 | `PopStyleColorEx` | duplicate variant of ImGui::PopStyleColor |
 | `PushStyleVar` | unsupported parameter type: ImGuiStyleVar |

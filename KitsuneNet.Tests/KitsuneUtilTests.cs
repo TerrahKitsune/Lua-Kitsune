@@ -2783,6 +2783,7 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local j   = Json.New()
+                j:SetDecodeNull(true)
                 local enc = j:Encode({v=Json.Null})
                 local dec = j:Decode(enc)
                 return tostring(dec.v == Json.Null and enc:find('null') ~= nil)
@@ -2807,10 +2808,10 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task Json_DecodeNull_ReturnsJsonNull()
+        public async Task Json_DecodeNull_ReturnsNilByDefault()
         {
             using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("return tostring(Json.New():Decode('null') == Json.Null)");
+            LuaValue r = await engine.ExecuteStringAsync("return tostring(Json.New():Decode('null') == nil)");
             r.String.ShouldBe("true");
         }
 
@@ -2823,13 +2824,13 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task Json_NullInArray_RoundTrips()
+        public async Task Json_NullInArray_DefaultDecodesAsNil()
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local j = Json.New()
                 local t = j:Decode('[1,null,3]')
-                return tostring(t[1]==1 and t[2]==Json.Null and t[3]==3)
+                return tostring(t[1]==1 and t[2]==nil and t[3]==3)
             ");
             r.String.ShouldBe("true");
         }
@@ -3016,6 +3017,7 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local j = Json.New()
+                j:SetDecodeNull(true)
                 local s = Stream.New()
                 j:EncodeIntoStream(s, {v = Json.Null})
                 s:Seek(0)
@@ -3874,6 +3876,49 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = Timer.New(); t:Start(); Sleep(10); t:Stop(); t:Reset()
                 return tostring(t:Elapsed() == 0 and not t:IsRunning())
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Timer_ElapsedTimeSpan_ReturnsTimeSpanType()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Timer.New()
+                t:Start()
+                Sleep(20)
+                local ts = t:ElapsedTimeSpan()
+                return tostring(type(ts) == 'userdata' and ts:TotalMilliseconds() > 0)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Timer_ElapsedTimeSpan_NotStarted_IsZero()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Timer.New()
+                local ts = t:ElapsedTimeSpan()
+                return tostring(ts:TotalMilliseconds() == 0)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Timer_ElapsedTimeSpan_MatchesElapsed()
+        {
+            using KitsuneEngine engine = new();
+            // ElapsedTimeSpan and Elapsed should agree to within 1ms
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Timer.New()
+                t:Start()
+                Sleep(30)
+                t:Stop()
+                local ms  = t:Elapsed()
+                local ts  = t:ElapsedTimeSpan()
+                return tostring(math.abs(ts:TotalMilliseconds() - ms) < 1)
             ");
             r.String.ShouldBe("true");
         }
@@ -5968,6 +6013,136 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
+        // -- Json SetDecodeNull ---------------------------------------------------
+
+        [Fact]
+        public async Task SetDecodeNull_DefaultFalse_NullDecodesAsNil()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local json = Json.New()
+                local t = json:Decode('{""value"":null}')
+                return tostring(t.value == nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task SetDecodeNull_DefaultFalse_NullIsFalsy_CoalescingWorks()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local json = Json.New()
+                local t = json:Decode('{""value"":null}')
+                local result = t.value and 'truthy' or 'falsy'
+                return result
+            ");
+            r.String.ShouldBe("falsy");
+        }
+
+        [Fact]
+        public async Task SetDecodeNull_DefaultFalse_RoundTripIsLossy()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local json = Json.New()
+                local t = json:Decode('{""value"":null}')
+                return json:Encode(t)
+            ");
+            // nil key is omitted — the table is now empty, encodes as []
+            r.String.ShouldBe("[]");
+        }
+
+        [Fact]
+        public async Task SetDecodeNull_True_NullDecodesAsJsonNull()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local json = Json.New()
+                json:SetDecodeNull(true)
+                local t = json:Decode('{""value"":null}')
+                return tostring(t.value == Json.Null)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task SetDecodeNull_True_JsonNullIsTruthy_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local json = Json.New()
+                json:SetDecodeNull(true)
+                local t = json:Decode('{""value"":null}')
+                return json:Encode(t)
+            ");
+            r.String.ShouldBe("{\"value\":null}");
+        }
+
+        [Fact]
+        public async Task SetDecodeNull_True_RoundTripPreservesNull()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local json = Json.New()
+                json:SetDecodeNull(true)
+                local t = json:Decode('{""value"":null}')
+                return json:Encode(t)
+            ");
+            r.String.ShouldBe("{\"value\":null}");
+        }
+
+        [Fact]
+        public async Task SetDecodeNull_ReturnsSelf_AllowsChaining()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local json = Json.New():SetDecodeNull(true)
+                local t = json:Decode('{""x"":null}')
+                return tostring(t.x == Json.Null)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task SetDecodeNull_False_AfterTrue_RestoresNil()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local json = Json.New()
+                json:SetDecodeNull(true)
+                json:SetDecodeNull(false)
+                local t = json:Decode('{""value"":null}')
+                return tostring(t.value == nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task SetDecodeNull_True_NonNullValuesUnaffected()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local json = Json.New()
+                json:SetDecodeNull(true)
+                local t = json:Decode('{""a"":1,""b"":""hello"",""c"":true,""d"":null}')
+                return tostring(t.a) .. ',' .. t.b .. ',' .. tostring(t.c) .. ',' .. tostring(t.d == Json.Null)
+            ");
+            r.String.ShouldBe("1,hello,true,true");
+        }
+
+        [Fact]
+        public async Task SetDecodeNull_DefaultFalse_NullInArray_BecomesNil()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local json = Json.New()
+                local t = json:Decode('[1,null,3]')
+                return tostring(t[1]) .. ',' .. tostring(t[2]) .. ',' .. tostring(t[3])
+            ");
+            r.String.ShouldBe("1,nil,3");
+        }
+
         // -- Stream extras --------------------------------------------------------
         // -- Stream.Id ------------------------------------------------------------
         [Fact]
@@ -6587,6 +6762,232 @@ namespace KitsuneNet.Tests
                 return info.type
             ");
             r.String.ShouldBe("memory");
+        }
+
+        // -- Hardware -------------------------------------------------------------
+        [Fact]
+        public async Task Hardware_CpuName_ReturnsNonEmptyStringOrNil()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local n = Hardware.CpuName()
+                return tostring(n == nil or (type(n) == 'string' and #n > 0))
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Hardware_Memory_ReturnsTableWithExpectedFields()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = Hardware.Memory()
+                if m == nil then return 'nil' end
+                return tostring(
+                    type(m.TotalPhys)   == 'number' and m.TotalPhys   > 0 and
+                    type(m.AvailPhys)   == 'number' and m.AvailPhys   >= 0 and
+                    type(m.TotalSwap)   == 'number' and m.TotalSwap   >= 0 and
+                    type(m.AvailSwap)   == 'number' and m.AvailSwap   >= 0 and
+                    type(m.LoadPercent) == 'number' and
+                    m.LoadPercent >= 0 and m.LoadPercent <= 100
+                )
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Hardware_Memory_TotalPhysIsPositive()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = Hardware.Memory()
+                return tostring(m ~= nil and m.TotalPhys > 0)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Hardware_Memory_AvailPhysLessThanOrEqualTotalPhys()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = Hardware.Memory()
+                return tostring(m ~= nil and m.AvailPhys <= m.TotalPhys)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Hardware_CpuLoad_ReturnsNumberOrNil()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local v = Hardware.CpuLoad()
+                return tostring(v == nil or type(v) == 'number')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Hardware_CpuLoad_SecondCallInRange()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                Hardware.CpuLoad()   -- prime baseline
+                Sleep(100)
+                local v = Hardware.CpuLoad()
+                return tostring(v == nil or (v >= 0 and v <= 100))
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Hardware_CpuThreadsLoad_ReturnsTable()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Hardware.CpuThreadsLoad()
+                return tostring(type(t) == 'table')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Hardware_CpuThreadsLoad_ValuesArePercentages()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Hardware.CpuThreadsLoad()
+                for k, v in pairs(t) do
+                    if type(k) ~= 'string' then return 'bad key' end
+                    if type(v) ~= 'number' then return 'bad value' end
+                    if v < 0 or v > 100 then return 'out of range' end
+                end
+                return 'true'
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Hardware_GpuMemory_ReturnsTableOrNil()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Hardware.GpuMemory()
+                return tostring(t == nil or type(t) == 'table')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Hardware_GpuMemory_AdapterEntriesHaveMemoryFields()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Hardware.GpuMemory()
+                if t == nil then return 'true' end
+                for adapter, m in pairs(t) do
+                    if type(adapter) ~= 'string' then return 'bad adapter key' end
+                    if type(m) ~= 'table' then return 'bad adapter value' end
+                    if type(m.DedicatedUsageMB) ~= 'number' then return 'bad DedicatedUsageMB' end
+                    if type(m.SharedUsageMB)    ~= 'number' then return 'bad SharedUsageMB' end
+                    if type(m.TotalCommittedMB) ~= 'number' then return 'bad TotalCommittedMB' end
+                end
+                return 'true'
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Hardware_GpuLoad_ReturnsTableOrNil()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Hardware.GpuLoad()
+                return tostring(t == nil or type(t) == 'table')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Hardware_GpuLoad_EngineValuesArePercentages()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Hardware.GpuLoad()
+                if t == nil then return 'true' end
+                for adapter, engines in pairs(t) do
+                    if type(adapter) ~= 'string' then return 'bad adapter key' end
+                    if type(engines) ~= 'table'  then return 'bad engines value' end
+                    for etype, pct in pairs(engines) do
+                        if type(etype) ~= 'string' then return 'bad engine key' end
+                        if type(pct)   ~= 'number' then return 'bad engine value' end
+                        if pct < 0 or pct > 100    then return 'out of range' end
+                    end
+                end
+                return 'true'
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Hardware_CpuTemp_ReturnsTableOrNil()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Hardware.CpuTemp()
+                return tostring(t == nil or type(t) == 'table')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Hardware_CpuTemp_ValuesAreReasonableWhenPresent()
+        {
+            using KitsuneEngine engine = new();
+            // Each entry is {Name=string, Value=number} in -10..150°C
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Hardware.CpuTemp()
+                if t == nil then return 'true' end
+                for _, entry in ipairs(t) do
+                    if type(entry.Name)  ~= 'string' then return 'false' end
+                    if type(entry.Value) ~= 'number' then return 'false' end
+                    if entry.Value < -10 or entry.Value > 150 then return 'false' end
+                end
+                return 'true'
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Hardware_Battery_ReturnsTableOrNil()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local b = Hardware.Battery()
+                return tostring(b == nil or type(b) == 'table')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Hardware_Battery_FieldTypesAreCorrectWhenPresent()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local b = Hardware.Battery()
+                if b == nil then return 'true' end
+                if type(b.ACLine)   ~= 'boolean' then return 'bad ACLine'   end
+                if type(b.Charging) ~= 'boolean' then return 'bad Charging' end
+                if b.Percent ~= nil and (type(b.Percent) ~= 'number' or b.Percent < 0 or b.Percent > 100) then
+                    return 'bad Percent'
+                end
+                if b.SecondsRemaining ~= nil and type(b.SecondsRemaining) ~= 'number' then
+                    return 'bad SecondsRemaining'
+                end
+                return 'true'
+            ");
+            r.String.ShouldBe("true");
         }
 
         // -- Process

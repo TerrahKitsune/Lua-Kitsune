@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #ifdef KITSUNE_HTTP
 
@@ -9,7 +9,7 @@
 #define LUAHTTPCLIENT  "LuaHTTPClient"
 #define LUAHTTPREQUEST "LuaHTTPRequest"
 
-// -- ChunkNode — streaming chunk queue ----------------------------------------
+// -- ChunkNode â€” streaming chunk queue ----------------------------------------
 typedef struct ChunkNode {
 	char*             data;
 	size_t            len;
@@ -23,6 +23,7 @@ typedef struct LuaHttpClient {
 	bool   followRedirects;
 	bool   verifySsl;
 	bool   binaryMode;      // true = subsequent WebSocket writes use CURLWS_BINARY
+	int64_t lastRequestElapsedTicks; // 100-ns ticks of the most recently completed request; 0 if none
 } LuaHttpClient;
 
 // -- LuaHttpRequest ------------------------------------------------------------
@@ -33,7 +34,9 @@ typedef struct LuaHttpRequest {
 	// can call vtbl->read.  Always valid during callbacks because Kitsune is
 	// single-threaded and curl_multi_perform is only called from within a Lua continuation.
 	lua_State*         callbackL;
-	// Response body — one of the two is active, never both
+	LuaHttpClient*     client;          // borrowed; used to write lastRequestElapsedTicks on completion
+	int64_t            startNs;         // steady_clock ns when the request was submitted
+	// Response body â€” one of the two is active, never both
 	char*              body;            // NULL when streamOutput is set
 	size_t             bodyLen;
 	size_t             bodyAlloc;
@@ -111,8 +114,10 @@ int luahttpclient_gc(lua_State* L);
 int luahttpclient_tostring(lua_State* L);
 int luahttprequest_gc(lua_State* L);
 int client_request(lua_State* L);
+int client_call(lua_State* L);     // blocking helper: drives Request and returns the result table directly
 int client_stream(lua_State* L);
 int client_connect(lua_State* L);
-int client_set_binary(lua_State* L);   // called as client:SetBinary(bool)
+int client_set_binary(lua_State* L);    // called as client:SetBinary(bool)
+int client_get_timestamp(lua_State* L); // returns last request duration as a TimeSpan
 
 #endif  // KITSUNE_HTTP

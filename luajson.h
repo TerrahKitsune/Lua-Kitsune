@@ -49,6 +49,10 @@ typedef struct LuaJson {
     // Streaming encode: when non-NULL, jbuf_grow flushes the output buffer to
     // this stream before allocating more memory, keeping usage bounded.
     struct LuaStream* encStream;
+
+    // When non-zero, JSON null is decoded as the Json.Null sentinel instead of Lua nil.
+    // Default 0 (nil — Lua falsy). Set to 1 via SetDecodeNull(true) for round-trip safety.
+    int nullAsSentinel;
 } LuaJson;
 
 // Returns the unique pointer address used as the JSON null sentinel.
@@ -74,6 +78,7 @@ int      lua_json_decode(lua_State* L);
 int lua_json_gc(lua_State* L);
 int lua_json_tostring(lua_State* L);
 int lua_json_new(lua_State* L);                 // Json.New([pretty])
+int lua_json_set_decode_null(lua_State* L);     // json:SetDecodeNull(bool)
 
 // Both functions handle the static and instance calling conventions:
 //   Json.Decode(str)             /  json:Decode(str)

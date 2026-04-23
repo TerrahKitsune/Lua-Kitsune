@@ -1,4 +1,4 @@
-#include "TimerMain.h"
+﻿#include "TimerMain.h"
 #include "Timer.h"
 
 static const struct luaL_Reg timerfunctions[] = {
@@ -8,6 +8,7 @@ static const struct luaL_Reg timerfunctions[] = {
 	{ "Start", TimerStart },
 	{ "Stop", TimerStop },
 	{ "Elapsed", TimerGetElapsed },
+	{ "ElapsedTimeSpan", TimerGetElapsedTimeSpan },
 	{ NULL, NULL }
 };
 

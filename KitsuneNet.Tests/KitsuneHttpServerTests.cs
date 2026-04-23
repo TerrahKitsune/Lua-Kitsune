@@ -1,4 +1,4 @@
-ï»¿using KitsuneNet;
+using KitsuneNet;
 using Shouldly;
 using System;
 using System.Net.Http;
@@ -12,7 +12,7 @@ namespace KitsuneNet.Tests;
 
 /// <summary>
 /// Tests for the HttpServer module.
-/// Spins up a real HttpServer inside a Lua coroutine, uses HttpClient.Create() to
+/// Spins up a real HttpServer inside a Lua coroutine, uses HttpClient.New() to
 /// send requests against it, and verifies responses. No external services required.
 /// Each test uses a unique port to avoid cross-test conflicts.
 /// Tests skip when Http is unavailable (needed to send requests).
@@ -47,14 +47,14 @@ public sealed class KitsuneHttpServerTests
     ";
 
     // A non-seekable read-only stream forces Transfer-Encoding: chunked.
-    // Stream.Create(string) is seekable, so we use a function-backend stream
-    // that only advertises CAP_READ (1) â€” no CAP_SEEK (4).
+    // Stream.New(string) is seekable, so we use a function-backend stream
+    // that only advertises CAP_READ (1) — no CAP_SEEK (4).
     private const string MakeChunkedStream = """
         local function make_chunked_stream(data)
             local OPEN, CLOSE, READ = 0, 1, 2
             local CAP_READ = 1
             local pos = 0
-            return Stream.Create(function(op, arg)
+            return Stream.New(function(op, arg)
                 if op == OPEN then
                     return CAP_READ
                 elseif op == READ then
@@ -73,7 +73,7 @@ public sealed class KitsuneHttpServerTests
     //                        client is guaranteed to find an open port.
     //   Script 2 (background Task): pumps _server:Accept() until _stop is set.
     //   C# client:           fires the real HTTP request.
-    //   Script 3 (awaited):  _stop = true  â€” unblocks the pump loop.
+    //   Script 3 (awaited):  _stop = true  — unblocks the pump loop.
     private const string PumpScript = """
         local co = _server:Accept()
         while not _stop do
@@ -163,7 +163,7 @@ public sealed class KitsuneHttpServerTests
             local port = '127.0.0.1:19803'
             local server = assert(HttpServer.Listen(port))
             local server_co = server:Accept()
-            local c = HttpClient.Create()
+            local c = HttpClient.New()
             c:SetVerifySSL(false)
             local client_co = c:Request('GET', 'http://' .. port .. '/hello')
             local result = run(server_co, client_co, function(req)
@@ -191,7 +191,7 @@ public sealed class KitsuneHttpServerTests
             local port = '127.0.0.1:19804'
             local server = assert(HttpServer.Listen(port))
             local server_co = server:Accept()
-            local c = HttpClient.Create()
+            local c = HttpClient.New()
             c:SetVerifySSL(false)
             local client_co = c:Request('GET', 'http://' .. port .. '/body')
             local result = run(server_co, client_co, function(req)
@@ -218,7 +218,7 @@ public sealed class KitsuneHttpServerTests
             local port = '127.0.0.1:19805'
             local server = assert(HttpServer.Listen(port))
             local server_co = server:Accept()
-            local c = HttpClient.Create()
+            local c = HttpClient.New()
             c:SetVerifySSL(false)
             local client_co = c:Request('GET', 'http://' .. port .. '/test/path')
             local result = run(server_co, client_co, function(req)
@@ -245,7 +245,7 @@ public sealed class KitsuneHttpServerTests
             local port = '127.0.0.1:19806'
             local server = assert(HttpServer.Listen(port))
             local server_co = server:Accept()
-            local c = HttpClient.Create()
+            local c = HttpClient.New()
             c:SetVerifySSL(false)
             local client_co = c:Request('POST', 'http://' .. port .. '/echo', 'ping payload')
             local result = run(server_co, client_co, function(req)
@@ -272,7 +272,7 @@ public sealed class KitsuneHttpServerTests
             local port = '127.0.0.1:19807'
             local server = assert(HttpServer.Listen(port))
             local server_co = server:Accept()
-            local c = HttpClient.Create()
+            local c = HttpClient.New()
             c:SetVerifySSL(false)
             local client_co = c:Request('GET', 'http://' .. port .. '/gone')
             local result = run(server_co, client_co, function(req)
@@ -299,7 +299,7 @@ public sealed class KitsuneHttpServerTests
             local port = '127.0.0.1:19808'
             local server = assert(HttpServer.Listen(port))
             local server_co = server:Accept()
-            local c = HttpClient.Create()
+            local c = HttpClient.New()
             c:SetVerifySSL(false)
             local client_co = c:Request('GET', 'http://' .. port .. '/ctx')
             local result = run(server_co, client_co, function(req)
@@ -327,7 +327,7 @@ public sealed class KitsuneHttpServerTests
             local port = '127.0.0.1:19809'
             local server = assert(HttpServer.Listen(port))
             local server_co = server:Accept()
-            local c = HttpClient.Create()
+            local c = HttpClient.New()
             c:SetVerifySSL(false)
             c:SetDefaultHeader('X-Kitsune', 'testvalue')
             local client_co = c:Request('GET', 'http://' .. port .. '/headers')
@@ -355,11 +355,11 @@ public sealed class KitsuneHttpServerTests
             local port = '127.0.0.1:19810'
             local server = assert(HttpServer.Listen(port))
             local server_co = server:Accept()
-            local c = HttpClient.Create()
+            local c = HttpClient.New()
             c:SetVerifySSL(false)
             local client_co = c:Request('GET', 'http://' .. port .. '/stream')
             local result = run(server_co, client_co, function(req)
-                local stream = Stream.Create('stream body content')
+                local stream = Stream.New('stream body content')
                 req:GetResponse():SetHeader('Content-Type', 'text/plain')
                 req:GetResponse():Send(stream)
             end)
@@ -384,7 +384,7 @@ public sealed class KitsuneHttpServerTests
             local port = '127.0.0.1:19811'
             local server = assert(HttpServer.Listen(port))
             local server_co = server:Accept()
-            local c = HttpClient.Create()
+            local c = HttpClient.New()
             c:SetVerifySSL(false)
             local client_co = c:Request('GET', 'http://' .. port .. '/dbl')
             local double_send_errored = false
@@ -419,7 +419,7 @@ public sealed class KitsuneHttpServerTests
                 disconnected = true
             end)
             local server_co = server:Accept()
-            local c = HttpClient.Create()
+            local c = HttpClient.New()
             c:SetVerifySSL(false)
             local client_co = c:Request('GET', 'http://' .. port .. '/disc')
             local result = run(server_co, client_co, function(req)
@@ -508,7 +508,7 @@ public sealed class KitsuneHttpServerTests
             local port = '127.0.0.1:19824'
             local server = assert(HttpServer.Listen(port))
             local server_co = server:Accept()
-            local c = HttpClient.Create()
+            local c = HttpClient.New()
             c:SetVerifySSL(false)
             local client_co = c:Request('GET', 'http://' .. port .. '/stale')
             local saved_resp = nil
@@ -538,7 +538,7 @@ public sealed class KitsuneHttpServerTests
             local port = '127.0.0.1:19825'
             local server = assert(HttpServer.Listen(port))
             local server_co = server:Accept()
-            local c = HttpClient.Create()
+            local c = HttpClient.New()
             c:SetVerifySSL(false)
             local client_co = c:Request('GET', 'http://' .. port .. '/drop')
             local deadline = os.clock() * 1000 + 1000
@@ -699,7 +699,7 @@ public sealed class KitsuneHttpServerTests
             local port = '127.0.0.1:19850'
             local server = assert(HttpServer.Listen(port))
             local server_co = server:Accept()
-            local c = HttpClient.Create()
+            local c = HttpClient.New()
             c:SetVerifySSL(false)
             local client_co = c:Request('GET', 'http://' .. port .. '/chunked')
             local result = run(server_co, client_co, function(req)
@@ -721,7 +721,7 @@ public sealed class KitsuneHttpServerTests
     {
         // The Lua HttpClient (libcurl) transparently decodes chunked transfer
         // encoding and does not expose Transfer-Encoding in result.Headers.
-        // Verify chunked delivery via the C# client instead â€” this test just
+        // Verify chunked delivery via the C# client instead — this test just
         // confirms the body arrives intact when the stream has no CAP_SEEK.
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($$"""
@@ -731,7 +731,7 @@ public sealed class KitsuneHttpServerTests
             local port = '127.0.0.1:19851'
             local server = assert(HttpServer.Listen(port))
             local server_co = server:Accept()
-            local c = HttpClient.Create()
+            local c = HttpClient.New()
             c:SetVerifySSL(false)
             local client_co = c:Request('GET', 'http://' .. port .. '/chunked')
             local result = run(server_co, client_co, function(req)
@@ -761,7 +761,7 @@ public sealed class KitsuneHttpServerTests
             local port = '127.0.0.1:19852'
             local server = assert(HttpServer.Listen(port))
             local server_co = server:Accept()
-            local c = HttpClient.Create()
+            local c = HttpClient.New()
             c:SetVerifySSL(false)
             local client_co = c:Request('GET', 'http://' .. port .. '/big')
             local big = string.rep('x', 200000)
@@ -786,7 +786,7 @@ public sealed class KitsuneHttpServerTests
         var (engine, pump) = await StartLuaServer("127.0.0.1:19853", """
             local function make_chunked_stream(data)
                 local pos = 0
-                return Stream.Create(function(op, arg)
+                return Stream.New(function(op, arg)
                     if op == 0 then return 1
                     elseif op == 2 then
                         local chunk = data:sub(pos + 1, pos + arg)
@@ -809,7 +809,7 @@ public sealed class KitsuneHttpServerTests
         var (engine, pump) = await StartLuaServer("127.0.0.1:19854", """
             local function make_chunked_stream(data)
                 local pos = 0
-                return Stream.Create(function(op, arg)
+                return Stream.New(function(op, arg)
                     if op == 0 then return 1
                     elseif op == 2 then
                         local chunk = data:sub(pos + 1, pos + arg)
@@ -833,7 +833,7 @@ public sealed class KitsuneHttpServerTests
     {
         var engine = new KitsuneEngine();
 
-        // Script 1: bind the server â€” completes synchronously once the port is open.
+        // Script 1: bind the server — completes synchronously once the port is open.
         await engine.ExecuteStringAsync($$"""
             _stop   = false
             _server = assert(HttpServer.Listen('{{port}}'))
