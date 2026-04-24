@@ -9,6 +9,7 @@ typedef struct LuaRedisPubSubState {
 	redisSSLContext* ssl;       // borrowed from parent LuaRedis; not freed here
 	bool             is_pattern;
 	int              redis_ref; // registry ref keeping parent LuaRedis alive while context uses its ssl
+	int              aliveTokenRef; // LUA_NOREF when not set
 } LuaRedisPubSubState;
 
 int RedisSubscribe(lua_State* L);
@@ -16,3 +17,4 @@ int RedisPSubscribe(lua_State* L);
 int PubSubCoroutineBody(lua_State* L);
 int PubSubCoroutineGC(lua_State* L);
 int PubSubStateGC(lua_State* L);
+int PubSubSetAliveToken(lua_State* L);

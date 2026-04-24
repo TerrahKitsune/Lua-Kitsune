@@ -1,15 +1,17 @@
 ﻿#include "PostgresMain.h"
 #include "LuaPostgres.h"
+#include "luaalivetoken.h"
 
 static const luaL_Reg postgresfunctions[] = {
-	{ "Connect",     PostgresConnect     },
-	{ "IsBusy",      PostgresIsBusy      },
-	{ "EscapeValue", PostgresEscapeValue },
-	{ "Query",       PostgresQuery       },
-	{ "NonQuery",    PostgresNonQuery    },
-	{ "Scalar",      PostgresScalar      },
-	{ "QueryAll",    PostgresQueryAll    },
-	{ "Close",       luapostgres_gc      },
+	{ "Connect",        PostgresConnect        },
+	{ "IsBusy",         PostgresIsBusy         },
+	{ "EscapeValue",    PostgresEscapeValue    },
+	{ "Query",          PostgresQuery          },
+	{ "NonQuery",       PostgresNonQuery       },
+	{ "Scalar",         PostgresScalar         },
+	{ "QueryAll",       PostgresQueryAll       },
+	{ "SetAliveToken",  PostgresSetAliveToken  },
+	{ "Close",          luapostgres_gc         },
 	{ NULL, NULL }
 };
 

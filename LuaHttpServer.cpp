@@ -2,6 +2,7 @@
 #include "LuaHttpRequest.h"
 #include "stream.h"
 #include "mem.h"
+#include "luaalivetoken.h"
 #include <event2/event.h>
 #include <event2/http.h>
 #include <event2/buffer.h>
@@ -48,6 +49,7 @@ LuaHttpServer* lua_pushhttpserver(lua_State* L) {
 	memset(s, 0, sizeof(LuaHttpServer));
 	s->coroutine_ref = LUA_NOREF;
 	s->disconnect_ref = LUA_NOREF;
+	s->aliveTokenRef = LUA_NOREF;
 	return s;
 }
 
@@ -532,6 +534,11 @@ static void server_teardown(LuaHttpServer* s, lua_State* L) {
 		luaL_unref(L, LUA_REGISTRYINDEX, s->disconnect_ref);
 		s->disconnect_ref = LUA_NOREF;
 	}
+
+	if (s->aliveTokenRef != LUA_NOREF) {
+		luaL_unref(L, LUA_REGISTRYINDEX, s->aliveTokenRef);
+		s->aliveTokenRef = LUA_NOREF;
+	}
 }
 
 /* ── coroutine continuation ───────────────────────────────────────────────── */
@@ -543,6 +550,17 @@ static int accept_cont(lua_State* L, int status, lua_KContext ctx) {
 	if (lua_toboolean(L, 1)) {
 		server_teardown(s, L);
 		return 0;
+	}
+
+	/* AliveToken check — treat a disposed token as a stop flag */
+	if (s->aliveTokenRef != LUA_NOREF) {
+		lua_rawgeti(L, LUA_REGISTRYINDEX, s->aliveTokenRef);
+		int alive = lua_alivetoken_isalive(L, -1);
+		lua_pop(L, 1);
+		if (alive == 0) {
+			server_teardown(s, L);
+			return 0;
+		}
 	}
 
 	/* Step 1 — advance active stream senders */
@@ -753,6 +771,22 @@ int HttpServer_SetOnDisconnect(lua_State* L) {
 	}
 	lua_pushvalue(L, 2);
 	s->disconnect_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+	return 0;
+}
+
+/* ── server:SetAliveToken ─────────────────────────────────────────────────── */
+
+int HttpServer_SetAliveToken(lua_State* L) {
+	LuaHttpServer* s = lua_checkhttpserver(L, 1);
+	if (s->aliveTokenRef != LUA_NOREF) {
+		luaL_unref(L, LUA_REGISTRYINDEX, s->aliveTokenRef);
+		s->aliveTokenRef = LUA_NOREF;
+	}
+	if (!lua_isnil(L, 2) && !lua_isnone(L, 2)) {
+		luaL_checkudata(L, 2, LUAALIVETOKEN);
+		lua_pushvalue(L, 2);
+		s->aliveTokenRef = luaL_ref(L, LUA_REGISTRYINDEX);
+	}
 	return 0;
 }
 

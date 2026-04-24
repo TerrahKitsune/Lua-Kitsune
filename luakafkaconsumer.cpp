@@ -1,6 +1,7 @@
 ﻿#include "luakafkaconsumer.h"
 #include "kafkahelpers.h"
 #include "luakafka.h"
+#include "luaalivetoken.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -118,7 +119,12 @@ static int consume_cont(lua_State* L, int status, lua_KContext ctx) {
 
 	// shouldQuit is the first argument from the current resume
 	if (lua_toboolean(L, 1)) {
-		// Stop path: has_pending is left intact so consumer:Commit() can
+		// Stop path: release alive token ref if set
+		if (state->aliveTokenRef != LUA_NOREF) {
+			luaL_unref(L, LUA_REGISTRYINDEX, state->aliveTokenRef);
+			state->aliveTokenRef = LUA_NOREF;
+		}
+		// has_pending is left intact so consumer:Commit() can
 		// still be called after the coroutine is stopped.
 		lua_pushlightuserdata(L, (void*)state);
 		lua_pushnil(L);
@@ -127,6 +133,24 @@ static int consume_cont(lua_State* L, int status, lua_KContext ctx) {
 		lua_pushnil(L);
 		lua_rawset(L, LUA_REGISTRYINDEX);
 		return 0;
+	}
+
+	// AliveToken check — treat a disposed token the same as a stop flag
+	if (state->aliveTokenRef != LUA_NOREF) {
+		lua_rawgeti(L, LUA_REGISTRYINDEX, state->aliveTokenRef);
+		int alive = lua_alivetoken_isalive(L, -1);
+		lua_pop(L, 1);
+		if (alive == 0) {
+			luaL_unref(L, LUA_REGISTRYINDEX, state->aliveTokenRef);
+			state->aliveTokenRef = LUA_NOREF;
+			lua_pushlightuserdata(L, (void*)state);
+			lua_pushnil(L);
+			lua_rawset(L, LUA_REGISTRYINDEX);
+			lua_pushlightuserdata(L, (void*)L);
+			lua_pushnil(L);
+			lua_rawset(L, LUA_REGISTRYINDEX);
+			return 0;
+		}
 	}
 
 	// Close the previous commit window — the caller had one resume to call Commit
@@ -173,6 +197,30 @@ int ConsumeAutoCommit(lua_State* L) {
 	return 0;
 }
 
+// co:SetAliveToken(token | nil) — attach or detach an AliveToken.
+// Arg 1 is the coroutine thread; arg 2 is the AliveToken or nil.
+int ConsumerSetAliveToken(lua_State* L) {
+	lua_State* co = lua_tothread(L, 1);
+	if (!co)
+		return luaL_argerror(L, 1, "expected coroutine");
+	lua_pushlightuserdata(L, (void*)co);
+	lua_rawget(L, LUA_REGISTRYINDEX);
+	LuaKafkaConsumeState* state = (LuaKafkaConsumeState*)lua_touserdata(L, -1);
+	lua_pop(L, 1);
+	if (!state)
+		return 0;
+	if (state->aliveTokenRef != LUA_NOREF) {
+		luaL_unref(L, LUA_REGISTRYINDEX, state->aliveTokenRef);
+		state->aliveTokenRef = LUA_NOREF;
+	}
+	if (!lua_isnil(L, 2) && !lua_isnone(L, 2)) {
+		luaL_checkudata(L, 2, LUAALIVETOKEN);
+		lua_pushvalue(L, 2);
+		state->aliveTokenRef = luaL_ref(L, LUA_REGISTRYINDEX);
+	}
+	return 0;
+}
+
 // __gc for the coroutine thread metatable.
 // Cleans up the registry entry and any pending message.
 int ConsumeCoroutineGC(lua_State* L) {
@@ -183,6 +231,10 @@ int ConsumeCoroutineGC(lua_State* L) {
 	lua_rawget(L, LUA_REGISTRYINDEX);
 	LuaKafkaConsumeState* state = (LuaKafkaConsumeState*)lua_touserdata(L, -1);
 	if (state) {
+		if (state->aliveTokenRef != LUA_NOREF) {
+			luaL_unref(L, LUA_REGISTRYINDEX, state->aliveTokenRef);
+			state->aliveTokenRef = LUA_NOREF;
+		}
 		// consumer->pending is owned by the consumer, not the coroutine.
 		// ConsumerGC will free it; we only release the registry anchors here.
 		lua_pushlightuserdata(L, (void*)state);
@@ -309,6 +361,7 @@ static int make_consume_coroutine(lua_State* L, LuaKafkaConsumer* consumer) {
 	state->consumer = consumer;
 	state->autocommit = true;
 	state->poll_timeout_ms = 0;
+	state->aliveTokenRef = LUA_NOREF;
 	// state is now at the top of L's stack; remember its absolute index
 	int state_idx = lua_gettop(L);
 

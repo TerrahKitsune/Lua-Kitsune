@@ -64,6 +64,7 @@
 #include "luayamlmain.h"
 #include "luatomlmain.h"
 #include "luainimain.h"
+#include "luaalivetoken.h"
 #include "luajson.h"
 #include "base64.h"
 #include "wcharmain.h"
@@ -1501,12 +1502,14 @@ extern "C" {
 		// Store a single LuaJson instance in the registry for the C bridge to reuse
 		// when decoding KITSUNE_TJSON values — avoids one GC allocation per bridge call.
 		lua_json_push(L);
+		lua_json_check(L, -1)->nullAsSentinel = true; // Bridge uses nullAsSentinel = true
 		lua_rawsetp(L, LUA_REGISTRYINDEX, lua_json_bridge_registry_key());
 		luaopen_msgpack(L);      lua_setglobal(L, "MsgPack");
 		luaopen_xml(L);          lua_setglobal(L, "Xml");
 		luaopen_yaml(L);         lua_setglobal(L, "Yaml");
 		luaopen_toml(L);         lua_setglobal(L, "Toml");
 		luaopen_ini(L);          lua_setglobal(L, "Ini");
+		luaopen_alivetoken(L);   lua_setglobal(L, "AliveToken");
 		luaopen_base64(L);       lua_setglobal(L, "Base64");
 		luaopen_wchar(L);        lua_setglobal(L, "Wchar");
 		luaopen_identifier(L);   lua_setglobal(L, "Identifier");

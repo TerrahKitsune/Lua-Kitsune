@@ -24,6 +24,7 @@ typedef struct LuaHttpClient {
 	bool   verifySsl;
 	bool   binaryMode;      // true = subsequent WebSocket writes use CURLWS_BINARY
 	int64_t lastRequestElapsedTicks; // 100-ns ticks of the most recently completed request; 0 if none
+	int    aliveTokenRef;   // LUA_NOREF when not set; registry ref to an AliveToken userdata
 } LuaHttpClient;
 
 // -- LuaHttpRequest ------------------------------------------------------------
@@ -118,6 +119,7 @@ int client_call(lua_State* L);     // blocking helper: drives Request and return
 int client_stream(lua_State* L);
 int client_connect(lua_State* L);
 int client_set_binary(lua_State* L);    // called as client:SetBinary(bool)
+int client_set_alive_token(lua_State* L); // called as client:SetAliveToken(token)
 int client_get_timestamp(lua_State* L); // returns last request duration as a TimeSpan
 
 #endif  // KITSUNE_HTTP

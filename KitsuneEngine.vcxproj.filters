@@ -285,6 +285,9 @@
     <Filter Include="LuaTimespan">
       <UniqueIdentifier>{a094c2ea-a6e3-4542-9bd2-c7ea51c731c6}</UniqueIdentifier>
     </Filter>
+    <Filter Include="LuaAliveToken">
+      <UniqueIdentifier>{67d27bd3-dca7-4d41-bbf4-05a2467911ba}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="KitsuneEngine.cpp">
@@ -701,6 +704,12 @@
     <ClCompile Include="timespanmain.cpp">
       <Filter>LuaTimespan</Filter>
     </ClCompile>
+    <ClCompile Include="luaalivtokenmain.cpp">
+      <Filter>LuaAliveToken</Filter>
+    </ClCompile>
+    <ClCompile Include="luaalivetoken.cpp">
+      <Filter>LuaAliveToken</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="KitsuneEngine.h">
@@ -1092,6 +1101,9 @@
     </ClInclude>
     <ClInclude Include="timespanmain.h">
       <Filter>LuaTimespan</Filter>
+    </ClInclude>
+    <ClInclude Include="luaalivetoken.h">
+      <Filter>LuaAliveToken</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

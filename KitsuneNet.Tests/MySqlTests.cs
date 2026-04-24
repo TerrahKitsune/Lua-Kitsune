@@ -597,6 +597,66 @@ public sealed class MySqlTests
         r.String.ShouldBe("false");
     }
 
+    // -- AliveToken integration -----------------------------------------------
+    [MySqlFact]
+    public async Task MySQL_SetAliveToken_DoesNotRaise()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
+            local conn = assert({ConnectLua()})
+            conn:SetAliveToken(AliveToken.New())
+            conn:Close()
+            return 'ok'
+        ");
+        r.String.ShouldBe("ok");
+    }
+
+    [MySqlFact]
+    public async Task MySQL_SetAliveToken_NilDetaches()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
+            local conn = assert({ConnectLua()})
+            local token = AliveToken.New()
+            conn:SetAliveToken(token)
+            conn:SetAliveToken(nil)
+            conn:Close()
+            return 'ok'
+        ");
+        r.String.ShouldBe("ok");
+    }
+
+    [MySqlFact]
+    public async Task MySQL_AliveToken_LiveToken_NonQueryCompletes()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
+            local conn = assert({ConnectLua()})
+            local token = AliveToken.New()
+            conn:SetAliveToken(token)
+            local ok, n = conn:NonQuery('SELECT 1')
+            conn:Close()
+            return tostring(ok)
+        ");
+        r.String.ShouldBe("true");
+    }
+
+    [MySqlFact]
+    public async Task MySQL_AliveToken_DisposedBeforeCall_ReturnsCancelled()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
+            local conn = assert({ConnectLua()})
+            local token = AliveToken.New()
+            conn:SetAliveToken(token)
+            token:Dispose()
+            local ok, err = conn:NonQuery('SELECT 1')
+            conn:Close()
+            return tostring(ok) .. '|' .. tostring(err)
+        ");
+        r.String.ShouldBe("false|cancelled");
+    }
+
     // Parses KITSUNE_MYSQL_TEST=host:port:user:pass:db
     private static string ConnectLua()
     {

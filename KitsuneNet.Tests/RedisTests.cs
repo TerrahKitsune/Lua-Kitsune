@@ -2313,6 +2313,55 @@ public sealed class RedisTests
         r.String.ShouldBe("2");
     }
 
+    // -- AliveToken integration -----------------------------------------------
+    [RedisFact]
+    public async Task Redis_Subscribe_SetAliveToken_DoesNotRaise()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
+            local redis = {Open()}
+            local co = assert(redis:Subscribe('kitsune_test_alive'))
+            co:SetAliveToken(AliveToken.New())
+            coroutine.resume(co, true)
+            return 'ok'
+            """);
+        r.String.ShouldBe("ok");
+    }
+
+    [RedisFact]
+    public async Task Redis_Subscribe_AliveToken_DisposedToken_StopsCoroutine()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
+            local redis = {Open()}
+            local co = assert(redis:Subscribe('kitsune_test_alive'))
+            local token = AliveToken.New()
+            co:SetAliveToken(token)
+            coroutine.resume(co)        -- first poll
+            token:Dispose()
+            coroutine.resume(co)        -- should stop
+            return tostring(coroutine.status(co) == 'dead')
+            """);
+        r.String.ShouldBe("true");
+    }
+
+    [RedisFact]
+    public async Task Redis_Subscribe_AliveToken_LiveToken_PumpContinues()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($"""
+            local redis = {Open()}
+            local co = assert(redis:Subscribe('kitsune_test_alive'))
+            local token = AliveToken.New()
+            co:SetAliveToken(token)
+            for i = 1, 5 do coroutine.resume(co) end
+            local alive = coroutine.status(co) == 'suspended'
+            coroutine.resume(co, true)
+            return tostring(alive)
+            """);
+        r.String.ShouldBe("true");
+    }
+
     // Parses KITSUNE_REDIS_TEST=host:port[:password]
     private static string Host()
     {

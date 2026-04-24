@@ -1,4 +1,4 @@
-using KitsuneNet;
+ï»¿using KitsuneNet;
 using Shouldly;
 using Xunit;
 
@@ -323,7 +323,7 @@ public sealed class MongoTests
     [MongoFact]
     public async Task Find_NonexistentCollection_ReturnsEmptyNotError()
     {
-        // A collection that doesn't exist is not an error in MongoDB — returns empty
+        // A collection that doesn't exist is not an error in MongoDB â€” returns empty
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
             local db = assert({ConnectLua()})
@@ -815,7 +815,7 @@ public sealed class MongoTests
         // The registry anchor prevents the GC from collecting the LuaMongo
         // userdata while a coroutine is suspended inside Wait.  This test
         // creates an op, starts waiting in a coroutine, then lets the engine
-        // run GC before the result is collected — the connection must survive.
+        // run GC before the result is collected â€” the connection must survive.
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
             local db = assert({ConnectLua()})
@@ -855,7 +855,7 @@ public sealed class MongoTests
     public async Task NewOp_WhileResultPending_DiscardsPreviousResult()
     {
         // MONGO_GUARD calls FreeOp on a pending uncollected result before
-        // dispatching a new op — old result must be discarded cleanly (no leak,
+        // dispatching a new op â€” old result must be discarded cleanly (no leak,
         // no crash) and the new op must succeed.
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
@@ -1060,7 +1060,7 @@ public sealed class MongoTests
         // bson_rec_pop was skipped on throw, leaving addresses in the rec stack.
         // A non-circular nested table that shared an ancestor address with a
         // previously converted sibling would false-positive as circular.
-        // This test reuses the same sub-table object in two sibling fields —
+        // This test reuses the same sub-table object in two sibling fields â€”
         // which IS circular only if the same object appears in its own ancestry;
         // here we just verify deeply nested but non-circular tables work.
         using KitsuneEngine engine = new();
@@ -1640,6 +1640,76 @@ public sealed class MongoTests
             return tostring(doc ~= nil) .. ':' .. tostring(doc.v == 1)
         ");
         r.String.ShouldBe("true:true");
+    }
+
+    // -- AliveToken integration -----------------------------------------------
+    [MongoFact]
+    public async Task Mongo_SetAliveToken_DoesNotRaise()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
+            local db = assert({ConnectLua()})
+            local token = AliveToken.New()
+            db:SetAliveToken(token)
+            db:Close()
+            return 'ok'
+        ");
+        r.String.ShouldBe("ok");
+    }
+
+    [MongoFact]
+    public async Task Mongo_SetAliveToken_NilDetaches()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
+            local db = assert({ConnectLua()})
+            local token = AliveToken.New()
+            db:SetAliveToken(token)
+            db:SetAliveToken(nil)
+            db:Close()
+            return 'ok'
+        ");
+        r.String.ShouldBe("ok");
+    }
+
+    [MongoFact]
+    public async Task Mongo_AliveToken_LiveToken_GetResultCompletes()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
+            local db = assert({ConnectLua()})
+            local token = AliveToken.New()
+            db:SetAliveToken(token)
+            db:CountDocuments({Db()}, {Coll()}, {{}})
+            local count, err = db:GetResult()
+            db:Close()
+            return tostring(err == nil and count ~= nil)
+        ");
+        r.String.ShouldBe("true");
+    }
+
+    [MongoFact]
+    public async Task Mongo_AliveToken_DisposedDuringWait_CoroutineDies()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
+            local db = assert({ConnectLua()})
+            local token = AliveToken.New()
+            db:SetAliveToken(token)
+            -- dispatch an op so the worker is running
+            db:CountDocuments({Db()}, {Coll()}, {{}})
+            token:Dispose()
+            -- GetResult will see the dead token on first poll and cancel
+            local co = coroutine.create(function()
+                db:GetResult()
+            end)
+            while coroutine.status(co) == 'suspended' do
+                coroutine.resume(co)
+            end
+            db:Close()
+            return tostring(coroutine.status(co) == 'dead')
+        ");
+        r.String.ShouldBe("true");
     }
 
     private static string ConnectLua() =>

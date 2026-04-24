@@ -22,6 +22,7 @@ static const luaL_Reg httpclient_functions[] = {
 	{ "SetFollowRedirects", client_set_follow_redirects },
 	{ "SetVerifySSL",       client_set_verify_ssl },
 	{ "SetBinary",          client_set_binary },
+	{ "SetAliveToken",      client_set_alive_token },
 	{ "GetTimestamp",       client_get_timestamp },
 	{ NULL, NULL }
 };

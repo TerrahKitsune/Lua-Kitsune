@@ -7,6 +7,9 @@
 #include "mem.h"
 #include <stdio.h>
 #include <string.h>
+#ifndef _WIN32
+#include <dirent.h>
+#endif
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Windows implementation

@@ -1,5 +1,6 @@
 ﻿#include "MongoMain.h"
 #include "LuaMongo.h"
+#include "luaalivetoken.h"
 #include "mem.h"
 #include "platform.h"
 
@@ -82,6 +83,7 @@ static const luaL_Reg mongofunctions[] = {
     { "IsFinished",     MongoIsFinished     },
     { "Wait",           MongoWait           },
     { "Cancel",         MongoCancel         },
+    { "SetAliveToken",  MongoSetAliveToken  },
     { "GetResult",      MongoGetResult      },
     { "Find",           MongoFind           },
     { "FindOne",        MongoFindOne        },

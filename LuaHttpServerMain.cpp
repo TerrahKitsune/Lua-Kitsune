@@ -16,6 +16,7 @@ static const luaL_Reg httpserver_meta[] = {
 static const luaL_Reg httpserver_methods[] = {
     { "Accept",          HttpServer_Accept          },
     { "SetOnDisconnect", HttpServer_SetOnDisconnect },
+    { "SetAliveToken",   HttpServer_SetAliveToken   },
     { "Close",           HttpServer_Close           },
     { NULL, NULL }
 };

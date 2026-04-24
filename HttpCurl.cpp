@@ -5,6 +5,7 @@
 #include "mem.h"
 #include "platform.h"
 #include "luatimespan.h"
+#include "luaalivetoken.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -147,6 +148,10 @@ int luahttpclient_gc(lua_State* L) {
 	if (client->defaultHeadersRef != LUA_NOREF) {
 		luaL_unref(L, LUA_REGISTRYINDEX, client->defaultHeadersRef);
 		client->defaultHeadersRef = LUA_NOREF;
+	}
+	if (client->aliveTokenRef != LUA_NOREF) {
+		luaL_unref(L, LUA_REGISTRYINDEX, client->aliveTokenRef);
+		client->aliveTokenRef = LUA_NOREF;
 	}
 	return 0;
 }
@@ -365,6 +370,15 @@ static int BuildHttpResultTable(lua_State* L, LuaHttpRequest* req) {
 
 static int HttpRequestContinuation(lua_State* L, int status, lua_KContext ctx) {
 	LuaHttpRequest* req = (LuaHttpRequest*)luaL_checkudata(L, 1, LUAHTTPREQUEST);
+	// Check AliveToken: if the client has one and it's been disposed, let the
+	// coroutine die silently so the caller's drive loop exits via status check.
+	if (req->client && req->client->aliveTokenRef != LUA_NOREF) {
+		lua_rawgeti(L, LUA_REGISTRYINDEX, req->client->aliveTokenRef);
+		int alive = lua_alivetoken_isalive(L, -1);
+		lua_pop(L, 1);
+		if (alive == 0)
+			return 0;
+	}
 	int running = 0;
 	req->callbackL = L;
 	curl_multi_perform(req->multi, &running);
@@ -397,6 +411,17 @@ static int HttpRequestEntry(lua_State* L) {
 
 int client_request(lua_State* L) {
 	LuaHttpClient* client = (LuaHttpClient*)luaL_checkudata(L, 1, LUAHTTPCLIENT);
+	// Early-out: if a token is attached and already dead, abort before any curl setup.
+	if (client->aliveTokenRef != LUA_NOREF) {
+		lua_rawgeti(L, LUA_REGISTRYINDEX, client->aliveTokenRef);
+		int alive = lua_alivetoken_isalive(L, -1);
+		lua_pop(L, 1);
+		if (alive == 0) {
+			lua_pushnil(L);
+			lua_pushliteral(L, "aborted");
+			return 2;
+		}
+	}
 	const char* method = luaL_checkstring(L, 2);
 	const char* url    = luaL_checkstring(L, 3);
 
@@ -1016,6 +1041,20 @@ int client_set_binary(lua_State* L) {
 	return 0;
 }
 
+int client_set_alive_token(lua_State* L) {
+	LuaHttpClient* client = (LuaHttpClient*)luaL_checkudata(L, 1, LUAHTTPCLIENT);
+	if (client->aliveTokenRef != LUA_NOREF) {
+		luaL_unref(L, LUA_REGISTRYINDEX, client->aliveTokenRef);
+		client->aliveTokenRef = LUA_NOREF;
+	}
+	if (!lua_isnil(L, 2) && !lua_isnone(L, 2)) {
+		luaL_checkudata(L, 2, LUAALIVETOKEN);
+		lua_pushvalue(L, 2);
+		client->aliveTokenRef = luaL_ref(L, LUA_REGISTRYINDEX);
+	}
+	return 0;
+}
+
 // -----------------------------------------------------------------------------
 // client_call — simplified blocking helper.
 // Signature (mirrors Request but yields the outer coroutine until done):
@@ -1031,6 +1070,18 @@ int client_set_binary(lua_State* L) {
 // Continuation: resumes the inner Request thread (at top of L's stack) until
 // it finishes, then extracts and post-processes the result.
 static int client_call_continuation(lua_State* L, int status, lua_KContext ctx) {
+	// Check AliveToken before driving the inner thread another step.
+	LuaHttpClient* client = (LuaHttpClient*)luaL_testudata(L, 1, LUAHTTPCLIENT);
+	if (client && client->aliveTokenRef != LUA_NOREF) {
+		lua_rawgeti(L, LUA_REGISTRYINDEX, client->aliveTokenRef);
+		int alive = lua_alivetoken_isalive(L, -1);
+		lua_pop(L, 1);
+		if (alive == 0) {
+			lua_pushnil(L);
+			lua_pushliteral(L, "aborted");
+			return 2;
+		}
+	}
 	// The inner polling thread is always at the top of L's stack.
 	lua_State* T = lua_tothread(L, -1);
 	if (!T) {

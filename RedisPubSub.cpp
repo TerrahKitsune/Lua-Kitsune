@@ -1,4 +1,5 @@
-#include "RedisPubSub.h"
+﻿#include "RedisPubSub.h"
+#include "luaalivetoken.h"
 #include <string.h>
 
 #ifndef _WIN32
@@ -32,6 +33,10 @@ static int pubsub_cont(lua_State* L, int status, lua_KContext ctx) {
 
 	// shouldQuit is passed as the first resume argument.
 	if (lua_toboolean(L, 1)) {
+		if (state->aliveTokenRef != LUA_NOREF) {
+			luaL_unref(L, LUA_REGISTRYINDEX, state->aliveTokenRef);
+			state->aliveTokenRef = LUA_NOREF;
+		}
 		if (state->context) {
 			redisReply* r = (redisReply*)redisCommand(state->context,
 				state->is_pattern ? "PUNSUBSCRIBE" : "UNSUBSCRIBE");
@@ -46,6 +51,30 @@ static int pubsub_cont(lua_State* L, int status, lua_KContext ctx) {
 		lua_pushnil(L);
 		lua_rawset(L, LUA_REGISTRYINDEX);
 		return 0;
+	}
+
+	// AliveToken check — treat a disposed token as a stop flag
+	if (state->aliveTokenRef != LUA_NOREF) {
+		lua_rawgeti(L, LUA_REGISTRYINDEX, state->aliveTokenRef);
+		int alive = lua_alivetoken_isalive(L, -1);
+		lua_pop(L, 1);
+		if (alive == 0) {
+			luaL_unref(L, LUA_REGISTRYINDEX, state->aliveTokenRef);
+			state->aliveTokenRef = LUA_NOREF;
+			if (state->context) {
+				redisReply* r = (redisReply*)redisCommand(state->context,
+					state->is_pattern ? "PUNSUBSCRIBE" : "UNSUBSCRIBE");
+				if (r)
+					freeReplyObject(r);
+			}
+			lua_pushlightuserdata(L, (void*)state);
+			lua_pushnil(L);
+			lua_rawset(L, LUA_REGISTRYINDEX);
+			lua_pushlightuserdata(L, (void*)L);
+			lua_pushnil(L);
+			lua_rawset(L, LUA_REGISTRYINDEX);
+			return 0;
+		}
 	}
 
 	lua_settop(L, 0);
@@ -109,6 +138,10 @@ int PubSubCoroutineGC(lua_State* L) {
 	lua_rawget(L, LUA_REGISTRYINDEX);
 	LuaRedisPubSubState* state = (LuaRedisPubSubState*)lua_touserdata(L, -1);
 	if (state) {
+		if (state->aliveTokenRef != LUA_NOREF) {
+			luaL_unref(L, LUA_REGISTRYINDEX, state->aliveTokenRef);
+			state->aliveTokenRef = LUA_NOREF;
+		}
 		lua_pushlightuserdata(L, (void*)state);
 		lua_pushnil(L);
 		lua_rawset(L, LUA_REGISTRYINDEX);
@@ -131,6 +164,10 @@ int PubSubStateGC(lua_State* L) {
 		luaL_unref(L, LUA_REGISTRYINDEX, state->redis_ref);
 		state->redis_ref = LUA_NOREF;
 	}
+	if (state->aliveTokenRef != LUA_NOREF) {
+		luaL_unref(L, LUA_REGISTRYINDEX, state->aliveTokenRef);
+		state->aliveTokenRef = LUA_NOREF;
+	}
 	return 0;
 }
 
@@ -147,12 +184,12 @@ static int make_subscribe_coroutine(lua_State* L, LuaRedisPubSubState* state) {
 	// co stack: [PubSubCoroutineBody_closure]
 	// L stack:  [..., state, co_thread]
 
-	// registry[co] = state � PubSubCoroutineGC uses this to clear registry[state].
+	// registry[co] = state — PubSubCoroutineGC uses this to clear registry[state].
 	lua_pushlightuserdata(L, (void*)co);
 	lua_pushvalue(L, state_idx);
 	lua_rawset(L, LUA_REGISTRYINDEX);
 
-	// registry[state] = state � keeps state alive as long as co is alive.
+	// registry[state] = state — keeps state alive as long as co is alive.
 	lua_pushlightuserdata(L, (void*)state);
 	lua_pushvalue(L, state_idx);
 	lua_rawset(L, LUA_REGISTRYINDEX);
@@ -285,12 +322,36 @@ static int internal_subscribe(lua_State* L, bool is_pattern) {
 	state->ssl        = redis->ssl;  // borrowed; not freed by state GC
 	state->is_pattern = is_pattern;
 	state->redis_ref  = LUA_NOREF;
+	state->aliveTokenRef = LUA_NOREF;
 
 	// Anchor the parent LuaRedis so its ssl context outlives this pub/sub connection.
 	lua_pushvalue(L, 1);
 	state->redis_ref = luaL_ref(L, LUA_REGISTRYINDEX);
 
 	return make_subscribe_coroutine(L, state);
+}
+
+// co:SetAliveToken(token | nil) — arg 1 is the coroutine thread, arg 2 is the token or nil.
+int PubSubSetAliveToken(lua_State* L) {
+	lua_State* co = lua_tothread(L, 1);
+	if (!co)
+		return luaL_argerror(L, 1, "expected coroutine");
+	lua_pushlightuserdata(L, (void*)co);
+	lua_rawget(L, LUA_REGISTRYINDEX);
+	LuaRedisPubSubState* state = (LuaRedisPubSubState*)lua_touserdata(L, -1);
+	lua_pop(L, 1);
+	if (!state)
+		return 0;
+	if (state->aliveTokenRef != LUA_NOREF) {
+		luaL_unref(L, LUA_REGISTRYINDEX, state->aliveTokenRef);
+		state->aliveTokenRef = LUA_NOREF;
+	}
+	if (!lua_isnil(L, 2) && !lua_isnone(L, 2)) {
+		luaL_checkudata(L, 2, LUAALIVETOKEN);
+		lua_pushvalue(L, 2);
+		state->aliveTokenRef = luaL_ref(L, LUA_REGISTRYINDEX);
+	}
+	return 0;
 }
 
 int RedisSubscribe(lua_State* L) {

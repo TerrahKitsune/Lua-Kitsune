@@ -7,6 +7,7 @@
 #include "luadecimal.h"
 #include "luauint.h"
 #include "luatimespan.h"
+#include "luaalivetoken.h"
 
 #ifdef KITSUNE_MONGO
 
@@ -889,6 +890,7 @@ LuaMongo* lua_tomongo(lua_State* L, int index) {
 LuaMongo* lua_pushmongo(lua_State* L) {
 	LuaMongo* m = (LuaMongo*)lua_newuserdata(L, sizeof(LuaMongo));
 	memset(m, 0, sizeof(LuaMongo));
+	m->aliveTokenRef = LUA_NOREF;
 	luaL_getmetatable(L, LUAMONGO);
 	lua_setmetatable(L, -2);
 	return m;
@@ -934,10 +936,32 @@ int luamongo_gc(lua_State* L) {
 	delete w;
 	m->worker = NULL;
 	m->client = NULL;
+	if (m->aliveTokenRef != LUA_NOREF) {
+		luaL_unref(L, LUA_REGISTRYINDEX, m->aliveTokenRef);
+		m->aliveTokenRef = LUA_NOREF;
+	}
 	return 0;
 }
 
-// MongoClose is the Lua-callable Close() method.  Unlike luamongo_gc (which
+// MongoSetAliveToken — attach or detach an AliveToken from this connection.
+// When the token is disposed while a Wait or GetResult is polling, the
+// operation is cancelled (same as calling mongo:Cancel()) and the coroutine
+// dies cleanly after the worker thread acknowledges the cancellation.
+int MongoSetAliveToken(lua_State* L) {
+	LuaMongo* m = lua_tomongo(L, 1);
+	if (m->aliveTokenRef != LUA_NOREF) {
+		luaL_unref(L, LUA_REGISTRYINDEX, m->aliveTokenRef);
+		m->aliveTokenRef = LUA_NOREF;
+	}
+	if (!lua_isnil(L, 2) && !lua_isnone(L, 2)) {
+		luaL_checkudata(L, 2, LUAALIVETOKEN);
+		lua_pushvalue(L, 2);
+		m->aliveTokenRef = luaL_ref(L, LUA_REGISTRYINDEX);
+	}
+	return 0;
+}
+
+// MongoClose is the Lua-callable Close() method.
 // is called by the GC and must not error), this validates that arg 1 is
 // actually a LuaMongo userdata so MongoDB.Close(wrong_value) raises a clear
 // type error instead of silently returning.
@@ -1091,11 +1115,24 @@ int MongoIsFinished(lua_State* L) {
 	return 1;
 }
 
+static int MongoCancelCont(lua_State* L, int status, lua_KContext ctx);
+
 static int MongoWaitCont(lua_State* L, int status, lua_KContext ctx) {
 	LuaMongoWorker* w = (LuaMongoWorker*)(intptr_t)ctx;
 	if (w->state.load(std::memory_order_acquire) != MONGO_STATE_RUNNING) {
 		MongoUnanchor(L, w);
 		return 0;
+	}
+	// AliveToken check — redirect into the cancel path when disposed
+	LuaMongo* m = (LuaMongo*)luaL_testudata(L, 1, LUAMONGO);
+	if (m && m->aliveTokenRef != LUA_NOREF) {
+		lua_rawgeti(L, LUA_REGISTRYINDEX, m->aliveTokenRef);
+		int alive = lua_alivetoken_isalive(L, -1);
+		lua_pop(L, 1);
+		if (alive == 0) {
+			w->cancelled.store(true, std::memory_order_release);
+			return lua_yieldk(L, 0, ctx, MongoCancelCont);
+		}
 	}
 	return lua_yieldk(L, 0, ctx, MongoWaitCont);
 }
@@ -1204,15 +1241,20 @@ static int PushOpResult(lua_State* L, LuaMongoWorker* w) {
 static int MongoGetResultCont(lua_State* L, int status, lua_KContext ctx) {
 	LuaMongoWorker* w = (LuaMongoWorker*)(intptr_t)ctx;
 	if (w->state.load(std::memory_order_acquire) != MONGO_STATE_RUNNING) {
-		// Unanchor AFTER PushOpResult: if BsonToLua throws inside PushOpResult
-		// the Lua error unwind handles the stack, and w->op has already been
-		// NULLed and its fields freed up to the throw point.  The remaining
-		// op shell (resultDocs array + op itself) will leak on a depth>32 throw
-		// but that path is unreachable for documents we stored (they already
-		// passed through LuaToBson with the same depth limit).
 		int n = PushOpResult(L, w);
 		MongoUnanchor(L, w);
 		return n;
+	}
+	// AliveToken check — redirect into the cancel path when disposed
+	LuaMongo* m = (LuaMongo*)luaL_testudata(L, 1, LUAMONGO);
+	if (m && m->aliveTokenRef != LUA_NOREF) {
+		lua_rawgeti(L, LUA_REGISTRYINDEX, m->aliveTokenRef);
+		int alive = lua_alivetoken_isalive(L, -1);
+		lua_pop(L, 1);
+		if (alive == 0) {
+			w->cancelled.store(true, std::memory_order_release);
+			return lua_yieldk(L, 0, ctx, MongoCancelCont);
+		}
 	}
 	return lua_yieldk(L, 0, ctx, MongoGetResultCont);
 }

@@ -133,6 +133,8 @@
     <ClCompile Include="luatomlmain.cpp" />
     <ClCompile Include="luaini.cpp" />
     <ClCompile Include="luainimain.cpp" />
+    <ClCompile Include="luaalivetoken.cpp" />
+    <ClCompile Include="luaalivtokenmain.cpp" />
     <ClCompile Include="luayaml.cpp" />
     <ClCompile Include="luayamlmain.cpp" />
     <ClCompile Include="libyaml\src\api.c" />
@@ -277,6 +279,7 @@
     <ClInclude Include="luatomlmain.h" />
     <ClInclude Include="luaini.h" />
     <ClInclude Include="luainimain.h" />
+    <ClInclude Include="luaalivetoken.h" />
     <ClInclude Include="luauint.h" />
     <ClInclude Include="luayaml.h" />
     <ClInclude Include="luayamlmain.h" />

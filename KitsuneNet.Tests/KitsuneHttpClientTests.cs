@@ -1,4 +1,4 @@
-using KitsuneNet;
+﻿using KitsuneNet;
 using Shouldly;
 using Xunit;
 
@@ -10,7 +10,7 @@ namespace KitsuneNet.Tests
     /// <summary>
     /// Tests for the Http module.
     /// Tests skip only when KITSUNE_HTTP was not compiled in (Http global is nil).
-    /// Network failures cause test failures � not skips.
+    /// Network failures cause test failures — not skips.
     /// Buffered tests use httpbin.org; streaming and WebSocket tests also use
     /// httpbin.org and wss://echo.websocket.org respectively.
     /// </summary>
@@ -1096,7 +1096,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- Call (simplified blocking helper) ---------------------------------
-
         [Fact]
         public async Task Http_Call_GET_Returns200()
         {
@@ -1254,6 +1253,128 @@ namespace KitsuneNet.Tests
                 if HttpClient == nil then return 'skip' end
                 local client = HttpClient.New()
                 return tostring(client:GetTimestamp():TotalMilliseconds() == 0)
+            ");
+            if (r != "skip")
+            {
+                r.String.ShouldBe("true");
+            }
+        }
+
+        // -- AliveToken integration --------------------------------------------
+        [Fact]
+        public async Task Http_SetAliveToken_DoesNotRaise()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                if HttpClient == nil then return 'skip' end
+                local client = HttpClient.New()
+                local token = AliveToken.New()
+                client:SetAliveToken(token)
+                return 'ok'
+            ");
+            if (r != "skip")
+            {
+                r.String.ShouldBe("ok");
+            }
+        }
+
+        [Fact]
+        public async Task Http_SetAliveToken_NilDetaches()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                if HttpClient == nil then return 'skip' end
+                local client = HttpClient.New()
+                local token = AliveToken.New()
+                client:SetAliveToken(token)
+                client:SetAliveToken(nil)
+                return 'ok'
+            ");
+            if (r != "skip")
+            {
+                r.String.ShouldBe("ok");
+            }
+        }
+
+        [Fact]
+        public async Task Http_Request_AliveToken_LiveToken_CompletesNormally()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
+                if HttpClient == nil then return 'skip' end
+                local client = HttpClient.New()
+                client:SetTimeout(8000)
+                local token = AliveToken.New()
+                client:SetAliveToken(token)
+                local co = client:Request('GET', 'https://httpbin.org/get')
+                local ok, result = drain(co)
+                return tostring(ok and result ~= nil and result.Code == 200)
+            ");
+            if (r != "skip")
+            {
+                r.String.ShouldBe("true");
+            }
+        }
+
+        [Fact]
+        public async Task Http_Request_AliveToken_DisposedBeforeStart_ReturnsNilAborted()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                if HttpClient == nil then return 'skip' end
+                local client = HttpClient.New()
+                client:SetTimeout(8000)
+                local token = AliveToken.New()
+                client:SetAliveToken(token)
+                token:Dispose()
+                local co, err = client:Request('GET', 'https://httpbin.org/get')
+                return tostring(co == nil and err == 'aborted')
+            ");
+            if (r != "skip")
+            {
+                r.String.ShouldBe("true");
+            }
+        }
+
+        [Fact]
+        public async Task Http_Call_AliveToken_LiveToken_CompletesNormally()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(StreamHelper + @"
+                run_http(function()
+                    if HttpClient == nil then skip() end
+                    local client = HttpClient.New()
+                    client:SetTimeout(8000)
+                    local token = AliveToken.New()
+                    client:SetAliveToken(token)
+                    local result, err = client:Call('GET', 'https://httpbin.org/get')
+                    if not result then error('Call failed: ' .. tostring(err)) end
+                    _outcome = tostring(result.Code == 200)
+                end)
+                return _outcome or 'skip'
+            ");
+            if (r != "skip")
+            {
+                r.String.ShouldBe("true");
+            }
+        }
+
+        [Fact]
+        public async Task Http_Call_AliveToken_DisposedBeforeStart_ReturnsNilAborted()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(StreamHelper + @"
+                run_http(function()
+                    if HttpClient == nil then skip() end
+                    local client = HttpClient.New()
+                    client:SetTimeout(8000)
+                    local token = AliveToken.New()
+                    client:SetAliveToken(token)
+                    token:Dispose()
+                    local result, err = client:Call('GET', 'https://httpbin.org/get')
+                    _outcome = tostring(result == nil and err == 'aborted')
+                end)
+                return _outcome or 'skip'
             ");
             if (r != "skip")
             {

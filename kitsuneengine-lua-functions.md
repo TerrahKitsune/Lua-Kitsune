@@ -37,6 +37,7 @@ A comprehensive reference for all available functions in the Lua environment.
 - [Yaml](#yaml)
 - [Toml](#toml)
 - [Ini](#ini)
+- [AliveToken](#alivetoken)
 - [Third-Party Notices](#third-party-notices)
 ---
 
@@ -494,6 +495,12 @@ Drive the coroutine with `coroutine.resume(co, stop_flag)`:
 | `true` (no extra values) | Subscribe/unsubscribe acknowledgement — resume again |
 | `true, nil, errmsg` | Connection error; coroutine is now dead |
 
+#### Coroutine methods
+
+```lua
+co:SetAliveToken(token)  -- attach an AliveToken; when disposed the coroutine unsubscribes and dies cleanly (same as resuming with true). Pass nil to detach
+```
+
 ```lua
 -- Subscribe example
 local co = assert(redis:Subscribe('news', 'alerts'))
@@ -835,7 +842,8 @@ ok, data = coroutine.resume(co, stop_flag)
 #### Coroutine methods
 
 ```lua
-co:AutoCommit(bool)   -- enable (true) or disable (false) automatic offset commit
+co:AutoCommit(bool)      -- enable (true) or disable (false) automatic offset commit
+co:SetAliveToken(token)  -- attach an AliveToken; when disposed the coroutine stops cleanly (same as resuming with true). Pass nil to detach
 ```
 
 #### Manual commit
@@ -1181,6 +1189,7 @@ nil      client:SetFollowRedirects(bool)
 nil      client:SetVerifySSL(bool)
 nil      client:SetDefaultHeader(name, value)
 nil      client:SetBinary(bool)
+nil      client:SetAliveToken(token)
 TimeSpan client:GetTimestamp()
 ```
 
@@ -1191,6 +1200,7 @@ TimeSpan client:GetTimestamp()
 | `SetVerifySSL` | Verify SSL certificates. Default `true` |
 | `SetDefaultHeader` | Add a header sent with every request on this client |
 | `SetBinary` | When `true`, `Write` calls on WebSocket connections from this client send binary frames instead of text frames. Default `false` |
+| `SetAliveToken(token)` | Attach an `AliveToken` to this client. While the token is alive requests proceed normally. When disposed: `Request` returns `nil, "aborted"` immediately (no coroutine is created); `Call` returns `nil, "aborted"`. Pass `nil` to detach |
 | `GetTimestamp` | Returns the round-trip duration of the most recently **completed** `Request()` call as a `TimeSpan`. The clock starts just before the request is submitted to curl and stops when the last response byte is received. Returns a zero `TimeSpan` if no request has completed yet on this client |
 
 ### Buffered request
@@ -1357,12 +1367,14 @@ end
 
 ```lua
 nil  server:SetOnDisconnect(fn)
+nil  server:SetAliveToken(token)
 nil  server:Close()
 ```
 
 | Method | Description |
 |--------|-------------|
 | `SetOnDisconnect` | Register a `function(req)` called when a connection closes (after the response is sent or on error) |
+| `SetAliveToken` | Attach an `AliveToken` to this server. When the token is disposed the `Accept()` coroutine tears down the server and dies cleanly — identical to `coroutine.resume(co, true)`. Pass `nil` to detach |
 | `Close` | Tear down the server immediately. Idempotent — safe to call more than once. `__gc` calls this automatically |
 
 ---
@@ -1553,11 +1565,12 @@ Connects to a MySQL/MariaDB database. All I/O is driven by the MySQL 8.0 nonbloc
 ```lua
 conn, errmsg  MySQL.Connect(host, user, password, database, opt port, opt timeout)
 co, errmsg    conn:Query(sql, opt params)
-ok, n|errmsg  conn:NonQuery(sql, opt params, opt cancelFn)
-ok, v|errmsg  conn:Scalar(sql, opt params, opt cancelFn)
-ok, rows|errmsg conn:QueryAll(sql, opt params, opt cancelFn)
+ok, n|errmsg  conn:NonQuery(sql, opt params)
+ok, v|errmsg  conn:Scalar(sql, opt params)
+ok, rows|errmsg conn:QueryAll(sql, opt params)
 bool          conn:IsBusy()
 string        conn:EscapeValue(value)
+nil           conn:SetAliveToken(token)
 nil           conn:Close()
 ```
 
@@ -1568,13 +1581,14 @@ nil           conn:Close()
 | `NonQuery` | Helper — drives a query to completion and returns `true, rowcount` (integer), or `false, errmsg` on error. Designed for INSERT / UPDATE / DELETE |
 | `Scalar` | Helper — returns `true, col1value` (first column of the first row), or `true, nil` when no rows matched, or `false, errmsg` on error |
 | `QueryAll` | Helper — collects every row into an array of integer-keyed row arrays and returns `true, rows`, or `false, errmsg` on error |
+| `SetAliveToken` | Attach an `AliveToken` to this connection. If the token is disposed while a helper is polling, it stops early and returns `false, "cancelled"`. Pass `nil` to detach |
 | `IsBusy` | Returns `true` while a query coroutine is still alive on this connection |
 | `EscapeValue` | Escape a string with `mysql_real_escape_string`. Returns the escaped value **without** surrounding quotes |
 | `Close` | Close the connection and free all resources. Safe to call multiple times |
 
 ### Helper methods (recommended API)
 
-All three helpers yield the **outer** Kitsune coroutine cooperatively during the async wait, so other coroutines continue to run. An optional zero-argument `cancelFn` is called between each poll; if it returns truthy the query is stopped early and the helper returns `false, "cancelled"`.
+All three helpers yield the **outer** Kitsune coroutine cooperatively during the async wait, so other coroutines continue to run. Attach an `AliveToken` via `conn:SetAliveToken(token)` to cancel any in-progress helper early; it returns `false, "cancelled"` when the token is disposed.
 
 ```lua
 local conn = assert(MySQL.Connect("127.0.0.1", "user", "pass", "mydb"))
@@ -1597,10 +1611,12 @@ for i = 1, #rows do
     print(rows[i][1], rows[i][2])
 end
 
--- Cancel mid-stream
-local stop = false
-local ok, rows = conn:QueryAll("SELECT id FROM big_table", nil,
-    function() return stop end)
+-- Cancel mid-stream with an AliveToken
+local token = AliveToken.New()
+conn:SetAliveToken(token)
+-- disposing the token from another coroutine will stop the helper early
+local ok, rows = conn:QueryAll("SELECT id FROM big_table")
+-- returns false, "cancelled" if token was disposed during the query
 ```
 
 ### Raw coroutine protocol (advanced)
@@ -1694,6 +1710,7 @@ ok, v|errmsg    conn:Scalar(sql, opt params)
 ok, rows|errmsg conn:QueryAll(sql, opt params)
 bool            conn:IsBusy()
 string          conn:EscapeValue(value)
+nil             conn:SetAliveToken(token)
 nil             conn:Close()
 ```
 
@@ -1704,6 +1721,7 @@ nil             conn:Close()
 | `NonQuery` | Helper — drives a query to completion and returns `true, rowcount` (integer), or `false, errmsg` on error. Designed for INSERT / UPDATE / DELETE |
 | `Scalar` | Helper — returns `true, col1value` (first column of the first row), or `true, nil` when no rows matched, or `false, errmsg` on error |
 | `QueryAll` | Helper — collects every row into an array of integer-keyed row arrays and returns `true, rows`, or `false, errmsg` on error |
+| `SetAliveToken` | Attach an `AliveToken` to this connection. If the token is disposed while a helper is polling, it stops early and returns `false, "cancelled"`. Pass `nil` to detach |
 | `IsBusy` | Returns `true` while a query coroutine is still alive on this connection |
 | `EscapeValue` | Escape a string using `PQescapeLiteral`. The result **includes** surrounding single quotes (e.g. `'O''Reilly'`) |
 | `Close` | Close the connection and free all resources. Safe to call multiple times |
@@ -1716,7 +1734,7 @@ nil             conn:Close()
 
 ### Helper methods (recommended API)
 
-All three helpers yield the **outer** Kitsune coroutine cooperatively during the async wait, so other coroutines continue to run.
+All three helpers yield the **outer** Kitsune coroutine cooperatively during the async wait, so other coroutines continue to run. Attach an `AliveToken` via `conn:SetAliveToken(token)` to cancel any in-progress helper early; it returns `false, "cancelled"` when the token is disposed.
 
 ```lua
 local conn = assert(Postgres.Connect("host=127.0.0.1 user=postgres password=secret dbname=mydb"))
@@ -2374,11 +2392,12 @@ bool, errmsg  mongo:CountDocuments(db, collection, filter [, opts])
 ### Async Control
 
 ```lua
-bool          mongo:IsFinished()   -- true when no operation is running
-nil           mongo:Wait()         -- yield until current operation completes
-nil           mongo:Cancel()       -- request cancellation; yields until done
-result, errmsg mongo:GetResult()   -- yield if needed, then return the result
-nil           mongo:Close()        -- close connection and free resources
+bool          mongo:IsFinished()       -- true when no operation is running
+nil           mongo:Wait()             -- yield until current operation completes
+nil           mongo:Cancel()           -- request cancellation; yields until done
+nil           mongo:SetAliveToken(token) -- attach an AliveToken; cancels automatically when disposed. Pass nil to detach
+result, errmsg mongo:GetResult()       -- yield if needed, then return the result
+nil           mongo:Close()            -- close connection and free resources
 ```
 
 **`GetResult` return values by operation:**
@@ -2436,9 +2455,16 @@ mongo:CountDocuments("mydb", "users", {})
 local count = assert(mongo:GetResult())
 print(count .. " users")
 
--- Cancel a slow find
+-- Cancel a slow find explicitly
 mongo:Find("mydb", "big_collection", {})
 mongo:Cancel()   -- yields until cancelled
+
+-- Or use an AliveToken for automatic cancellation
+local token = AliveToken.New()
+mongo:SetAliveToken(token)
+mongo:Find("mydb", "big_collection", {})
+token:Dispose()          -- cancels mid-wait; GetResult/Wait redirects into cancel path
+mongo:GetResult()        -- coroutine dies cleanly once worker acknowledges
 
 mongo:Close()
 ```
@@ -2833,6 +2859,46 @@ local s3 = toml:Encode({b=2})
 print(toml:Decode(s1).a)   -- 1
 print(toml:Decode(s3).b)   -- 2
 ```
+
+---
+
+## AliveToken
+
+A lightweight cancellation-token userdata. One token can be shared across multiple coroutines and tasks; calling `Dispose` on any reference immediately makes `IsAlive()` return `false` everywhere that holds the same token. Tokens become disposed automatically when garbage-collected.
+
+```lua
+AliveToken  AliveToken.New()              -- create a live token
+bool        token:IsAlive()               -- true while not disposed
+nil         token:Dispose()               -- cancel / dispose the token
+nil         token:ErrorIfDead(opt msg)    -- luaL_error if disposed (default message: "Cancellation token was cancelled")
+```
+
+### Example — cooperative cancellation across coroutines
+
+```lua
+local token = AliveToken.New()
+
+-- Worker coroutine: polls until cancelled
+local worker = coroutine.create(function()
+    while token:IsAlive() do
+        SomeWork()
+        Sleep(100)
+    end
+end)
+
+-- Somewhere else: cancel and the worker loop exits on its next iteration
+token:Dispose()
+
+-- Guard pattern: raise an error if the token was cancelled
+token:ErrorIfDead()                          -- default message
+token:ErrorIfDead("operation was aborted")   -- custom message
+```
+
+### Notes
+
+- `Dispose` is idempotent — calling it multiple times is safe.
+- `__gc` calls `Dispose` automatically, so tokens created inside a scope that exits will cancel themselves when collected.
+- `tostring(token)` returns `"AliveToken(alive)"` or `"AliveToken(disposed)"`.
 
 ---
 

@@ -1,4 +1,4 @@
-using KitsuneNet;
+ï»¿using KitsuneNet;
 using Shouldly;
 using System;
 using System.Net.Http;
@@ -48,7 +48,7 @@ public sealed class KitsuneHttpServerTests
 
     // A non-seekable read-only stream forces Transfer-Encoding: chunked.
     // Stream.New(string) is seekable, so we use a function-backend stream
-    // that only advertises CAP_READ (1) — no CAP_SEEK (4).
+    // that only advertises CAP_READ (1) â€” no CAP_SEEK (4).
     private const string MakeChunkedStream = """
         local function make_chunked_stream(data)
             local OPEN, CLOSE, READ = 0, 1, 2
@@ -73,7 +73,7 @@ public sealed class KitsuneHttpServerTests
     //                        client is guaranteed to find an open port.
     //   Script 2 (background Task): pumps _server:Accept() until _stop is set.
     //   C# client:           fires the real HTTP request.
-    //   Script 3 (awaited):  _stop = true  — unblocks the pump loop.
+    //   Script 3 (awaited):  _stop = true  â€” unblocks the pump loop.
     private const string PumpScript = """
         local co = _server:Accept()
         while not _stop do
@@ -721,7 +721,7 @@ public sealed class KitsuneHttpServerTests
     {
         // The Lua HttpClient (libcurl) transparently decodes chunked transfer
         // encoding and does not expose Transfer-Encoding in result.Headers.
-        // Verify chunked delivery via the C# client instead — this test just
+        // Verify chunked delivery via the C# client instead â€” this test just
         // confirms the body arrives intact when the stream has no CAP_SEEK.
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($$"""
@@ -828,12 +828,81 @@ public sealed class KitsuneHttpServerTests
         response.Headers.TransferEncodingChunked.ShouldBe(true);
     }
 
+    // -- AliveToken integration -----------------------------------------------
+    [Fact]
+    public async Task Server_SetAliveToken_DoesNotRaise()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync("""
+            local server = assert(HttpServer.Listen('0.0.0.0:19870'))
+            local token = AliveToken.New()
+            server:SetAliveToken(token)
+            server:Close()
+            return 'ok'
+            """);
+        r.String.ShouldBe("ok");
+    }
+
+    [Fact]
+    public async Task Server_SetAliveToken_NilDetaches()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync("""
+            local server = assert(HttpServer.Listen('0.0.0.0:19871'))
+            local token = AliveToken.New()
+            server:SetAliveToken(token)
+            server:SetAliveToken(nil)
+            server:Close()
+            return 'ok'
+            """);
+        r.String.ShouldBe("ok");
+    }
+
+    [Fact]
+    public async Task Server_AliveToken_DisposedToken_StopsAcceptLoop()
+    {
+        using KitsuneEngine engine = new();
+
+        // Start the server, run one pump iteration to prime it, dispose the token,
+        // then resume â€” the coroutine should die without hanging.
+        LuaValue r = await engine.ExecuteStringAsync("""
+            local server = assert(HttpServer.Listen('0.0.0.0:19872'))
+            local token = AliveToken.New()
+            server:SetAliveToken(token)
+            local co = server:Accept()
+            coroutine.resume(co)        -- prime the pump
+            token:Dispose()
+            coroutine.resume(co)        -- should trigger teardown
+            return tostring(coroutine.status(co) == 'dead')
+            """);
+        r.String.ShouldBe("true");
+    }
+
+    [Fact]
+    public async Task Server_AliveToken_LiveToken_PumpContinues()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync("""
+            local server = assert(HttpServer.Listen('0.0.0.0:19873'))
+            local token = AliveToken.New()
+            server:SetAliveToken(token)
+            local co = server:Accept()
+            -- resume several times with a live token â€” coroutine should stay alive
+            for i = 1, 5 do coroutine.resume(co) end
+            local alive = coroutine.status(co) == 'suspended'
+            coroutine.resume(co, true)  -- stop cleanly
+            server:Close()
+            return tostring(alive)
+            """);
+        r.String.ShouldBe("true");
+    }
+
     private static async Task<(KitsuneEngine Engine, Task PumpTask)> StartLuaServer(
         string port, string handlerLua)
     {
         var engine = new KitsuneEngine();
 
-        // Script 1: bind the server — completes synchronously once the port is open.
+        // Script 1: bind the server â€” completes synchronously once the port is open.
         await engine.ExecuteStringAsync($$"""
             _stop   = false
             _server = assert(HttpServer.Listen('{{port}}'))

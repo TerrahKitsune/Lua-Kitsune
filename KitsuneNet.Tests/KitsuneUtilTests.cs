@@ -3910,6 +3910,7 @@ namespace KitsuneNet.Tests
         public async Task Timer_ElapsedTimeSpan_MatchesElapsed()
         {
             using KitsuneEngine engine = new();
+
             // ElapsedTimeSpan and Elapsed should agree to within 1ms
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = Timer.New()
@@ -6014,7 +6015,6 @@ namespace KitsuneNet.Tests
         }
 
         // -- Json SetDecodeNull ---------------------------------------------------
-
         [Fact]
         public async Task SetDecodeNull_DefaultFalse_NullDecodesAsNil()
         {
@@ -6049,6 +6049,7 @@ namespace KitsuneNet.Tests
                 local t = json:Decode('{""value"":null}')
                 return json:Encode(t)
             ");
+
             // nil key is omitted — the table is now empty, encodes as []
             r.String.ShouldBe("[]");
         }
@@ -6945,6 +6946,7 @@ namespace KitsuneNet.Tests
         public async Task Hardware_CpuTemp_ValuesAreReasonableWhenPresent()
         {
             using KitsuneEngine engine = new();
+
             // Each entry is {Name=string, Value=number} in -10..150°C
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = Hardware.CpuTemp()
@@ -10128,6 +10130,154 @@ namespace KitsuneNet.Tests
                 return tostring(t.db.host=='db.local' and t.app.name=='myapp')
             ");
             r.String.ShouldBe("true");
+        }
+
+        // -- AliveToken -----------------------------------------------------------
+        [Fact]
+        public async Task AliveToken_New_ReturnsUserdata()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync("return type(AliveToken.New())");
+            r.String.ShouldBe("userdata");
+        }
+
+        [Fact]
+        public async Task AliveToken_IsAlive_ReturnsTrueOnNew()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync("return tostring(AliveToken.New():IsAlive())");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task AliveToken_IsAlive_ReturnsFalseAfterDispose()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = AliveToken.New()
+                t:Dispose()
+                return tostring(t:IsAlive())
+            ");
+            r.String.ShouldBe("false");
+        }
+
+        [Fact]
+        public async Task AliveToken_Dispose_IsIdempotent()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = AliveToken.New()
+                t:Dispose()
+                t:Dispose()
+                return tostring(t:IsAlive())
+            ");
+            r.String.ShouldBe("false");
+        }
+
+        [Fact]
+        public async Task AliveToken_ErrorIfDead_DoesNotErrorWhenAlive()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = AliveToken.New()
+                t:ErrorIfDead()
+                return 'ok'
+            ");
+            r.String.ShouldBe("ok");
+        }
+
+        [Fact]
+        public async Task AliveToken_ErrorIfDead_ErrorsWhenDisposed()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = AliveToken.New()
+                t:Dispose()
+                local ok, err = pcall(function() t:ErrorIfDead() end)
+                return tostring(ok) .. '|' .. tostring(err ~= nil)
+            ");
+            r.String.ShouldBe("false|true");
+        }
+
+        [Fact]
+        public async Task AliveToken_ErrorIfDead_DefaultMessage()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = AliveToken.New()
+                t:Dispose()
+                local ok, err = pcall(function() t:ErrorIfDead() end)
+                return tostring(err:find('Cancellation token was cancelled') ~= nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task AliveToken_ErrorIfDead_CustomMessage()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = AliveToken.New()
+                t:Dispose()
+                local ok, err = pcall(function() t:ErrorIfDead('my custom msg') end)
+                return tostring(err:find('my custom msg') ~= nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task AliveToken_Tostring_AliveContainsAlive()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                return tostring(AliveToken.New())
+            ");
+
+            r.String!.ShouldContain("alive");
+        }
+
+        [Fact]
+        public async Task AliveToken_Tostring_DisposedContainsDisposed()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = AliveToken.New()
+                t:Dispose()
+                return tostring(t)
+            ");
+
+            r.String!.ShouldContain("disposed");
+        }
+
+        [Fact]
+        public async Task AliveToken_SharedAcrossReferences_DisposeThroughOneAffectsOther()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t1 = AliveToken.New()
+                local t2 = t1
+                t1:Dispose()
+                return tostring(t2:IsAlive())
+            ");
+
+            r.String.ShouldBe("false");
+        }
+
+        [Fact]
+        public async Task AliveToken_UsedAsLoopGuard_ExitsWhenDisposed()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local token = AliveToken.New()
+                local count = 0
+                for i = 1, 10 do
+                    if not token:IsAlive() then break end
+                    count = count + 1
+                    if i == 3 then token:Dispose() end
+                end
+                return tostring(count)
+            ");
+            r.String.ShouldBe("3");
         }
 
         // -- UInt -----------------------------------------------------------------

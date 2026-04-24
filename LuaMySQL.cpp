@@ -6,6 +6,7 @@
 #include "luadecimal.h"
 #include "luauint.h"
 #include "luatimespan.h"
+#include "luaalivetoken.h"
 #ifdef _WIN32
 #pragma comment(lib, "mysql/libmysql.lib")
 #endif
@@ -23,7 +24,6 @@ typedef struct LuaMySQLQuery {
 	size_t     sqllen;
 	MYSQL_RES* result;
 	char*      error;
-	int        cancelFnRef;   // LUA_NOREF if none
 	int        helperMode;    // MYSQL_HELPER_* or 0 for raw Query
 	int        accumTableIdx; // QueryAll: absolute L stack index of row accumulator
 	int        accumRowIdx;   // QueryAll: 1-based row counter
@@ -320,11 +320,6 @@ static void FreeQuery(lua_State* L, LuaMySQLQuery* q) {
 		q->connRef = LUA_NOREF;
 	}
 
-	if (q->cancelFnRef != LUA_NOREF) {
-		luaL_unref(L, LUA_REGISTRYINDEX, q->cancelFnRef);
-		q->cancelFnRef = LUA_NOREF;
-	}
-
 	if (q->sql)
 		kitsune_free(q->sql);
 	if (q->error)
@@ -351,7 +346,8 @@ LuaMySQL* lua_pushmysql(lua_State* L) {
 	luaL_getmetatable(L, LUAMYSQL);
 	lua_setmetatable(L, -2);
 	memset(luamysql, 0, sizeof(LuaMySQL));
-	luamysql->queryRef = LUA_NOREF;
+	luamysql->queryRef      = LUA_NOREF;
+	luamysql->aliveTokenRef = LUA_NOREF;
 	return luamysql;
 }
 
@@ -573,12 +569,12 @@ static int HelperStreamCont(lua_State* L, int status, lua_KContext ctx) {
 	// Save accumulator index now — a resume below may cause T to call FreeQuery.
 	int accumIdx = q->accumTableIdx;
 
-	// Optional cancel check (q still valid at this point).
-	if (q->cancelFnRef != LUA_NOREF) {
-		lua_rawgeti(L, LUA_REGISTRYINDEX, q->cancelFnRef);
-		int cancelled = (lua_pcall_nohook(L, 0, 1, 0) == LUA_OK) && lua_toboolean(L, -1);
+	// Optional AliveToken check (q still valid at this point).
+	if (q->conn->aliveTokenRef != LUA_NOREF) {
+		lua_rawgeti(L, LUA_REGISTRYINDEX, q->conn->aliveTokenRef);
+		int alive = lua_alivetoken_isalive(L, -1);
 		lua_pop(L, 1);
-		if (cancelled) {
+		if (alive == 0) {
 			// T is in QueryStreamCont: stop flag causes it to call FreeQuery.
 			lua_rawgeti(L, LUA_REGISTRYINDEX, q->conn->queryRef);
 			lua_State* T = lua_tothread(L, -1);
@@ -635,15 +631,18 @@ static int HelperWaitCont(lua_State* L, int status, lua_KContext ctx) {
 
 	// Cancel check. T is in the polling phase here (QueryRunCont / QueryStoreCont).
 	// Those continuations do NOT call FreeQuery on stop — the helper must.
-	if (q->cancelFnRef != LUA_NOREF) {
-		lua_rawgeti(L, LUA_REGISTRYINDEX, q->cancelFnRef);
-		int cancelled = (lua_pcall_nohook(L, 0, 1, 0) == LUA_OK) && lua_toboolean(L, -1);
+	if (q->conn->aliveTokenRef != LUA_NOREF) {
+		lua_rawgeti(L, LUA_REGISTRYINDEX, q->conn->aliveTokenRef);
+		int alive = lua_alivetoken_isalive(L, -1);
 		lua_pop(L, 1);
-		if (cancelled) {
+		if (alive == 0) {
 			lua_rawgeti(L, LUA_REGISTRYINDEX, q->conn->queryRef);
 			lua_State* T = lua_tothread(L, -1);
 			lua_pop(L, 1);
-			if (T) {
+			// Only send the stop flag if T has already been started (LUA_YIELD).
+			// If T is unstarted (LUA_OK), no query has been dispatched yet;
+			// FreeQuery alone is sufficient and safe.
+			if (T && lua_status(T) == LUA_YIELD) {
 				lua_pushboolean(T, 1);
 				int nr2;
 				lua_resume(T, L, 1, &nr2);
@@ -749,9 +748,20 @@ static int HelperWaitCont(lua_State* L, int status, lua_KContext ctx) {
 	return lua_yieldk(L, 0, ctx, HelperStreamCont);
 }
 
-// -- Shared helper entry point ------------------------------------------------
 static int MySqlHelperRun(lua_State* L, int mode) {
 	LuaMySQL* m = lua_tomysql(L, 1);
+
+	// Early-out: if a token is attached and already disposed, abort before setup.
+	if (m->aliveTokenRef != LUA_NOREF) {
+		lua_rawgeti(L, LUA_REGISTRYINDEX, m->aliveTokenRef);
+		int alive = lua_alivetoken_isalive(L, -1);
+		lua_pop(L, 1);
+		if (alive == 0) {
+			lua_pushboolean(L, 0);
+			lua_pushliteral(L, "cancelled");
+			return 2;
+		}
+	}
 
 	if (!m->connection) {
 		luaL_error(L, "Connection is closed");
@@ -772,14 +782,8 @@ static int MySqlHelperRun(lua_State* L, int mode) {
 
 	LuaMySQLQuery* q = (LuaMySQLQuery*)m->activeQuery;
 	q->helperMode    = mode;
-	q->cancelFnRef   = LUA_NOREF;
 	q->accumTableIdx = 0;
 	q->accumRowIdx   = 0;
-
-	if (!lua_isnoneornil(L, 4) && lua_isfunction(L, 4)) {
-		lua_pushvalue(L, 4);
-		q->cancelFnRef = luaL_ref(L, LUA_REGISTRYINDEX);
-	}
 
 	if (mode == MYSQL_HELPER_QUERYALL) {
 		lua_newtable(L);
@@ -887,6 +891,21 @@ int MySqlConnect(lua_State* L) {
 	return lua_yieldk(L, 0, (lua_KContext)(intptr_t)connIdx, MySqlConnectCont);
 }
 
+// -- MySqlSetAliveToken -------------------------------------------------------
+int MySqlSetAliveToken(lua_State* L) {
+	LuaMySQL* m = lua_tomysql(L, 1);
+	if (m->aliveTokenRef != LUA_NOREF) {
+		luaL_unref(L, LUA_REGISTRYINDEX, m->aliveTokenRef);
+		m->aliveTokenRef = LUA_NOREF;
+	}
+	if (!lua_isnil(L, 2) && !lua_isnone(L, 2)) {
+		luaL_checkudata(L, 2, LUAALIVETOKEN);
+		lua_pushvalue(L, 2);
+		m->aliveTokenRef = luaL_ref(L, LUA_REGISTRYINDEX);
+	}
+	return 0;
+}
+
 // -- luamysql_gc ---------------------------------------------------------------
 int luamysql_gc(lua_State* L) {
 	LuaMySQL* m = (LuaMySQL*)lua_touserdata(L, 1);
@@ -900,6 +919,11 @@ int luamysql_gc(lua_State* L) {
 	if (m->queryRef != LUA_NOREF) {
 		luaL_unref(L, LUA_REGISTRYINDEX, m->queryRef);
 		m->queryRef = LUA_NOREF;
+	}
+
+	if (m->aliveTokenRef != LUA_NOREF) {
+		luaL_unref(L, LUA_REGISTRYINDEX, m->aliveTokenRef);
+		m->aliveTokenRef = LUA_NOREF;
 	}
 
 	if (m->connection) {

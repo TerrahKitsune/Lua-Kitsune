@@ -117,6 +117,8 @@ set(KITSUNE_ENGINE_SOURCES
 	# ── INI (pure C, no library) ─────────────────────────────────────────────
 	luaini.cpp
 	luainimain.cpp
+	luaalivetoken.cpp
+	luaalivtokenmain.cpp
 
 	# ── Stream infrastructure (used by the variable bridge) ─────────────────
 	stream.cpp

@@ -1459,6 +1459,57 @@ public sealed class KafkaTests
         }
     }
 
+    // -- AliveToken integration -----------------------------------------------
+    [KafkaFact]
+    public async Task Consumer_SetAliveToken_DoesNotRaise()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
+            local c = Kafka.NewConsumer({{['bootstrap.servers']='{Bootstrap()}', ['group.id']='test_alive_noerr'}})
+            local co = c:Subscribe({{'{Topic()}'}})
+            co:SetAliveToken(AliveToken.New())
+            coroutine.resume(co, true)
+            c:Close()
+            return 'ok'
+        ");
+        r.String.ShouldBe("ok");
+    }
+
+    [KafkaFact]
+    public async Task Consumer_AliveToken_DisposedToken_StopsCoroutine()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
+            local c = Kafka.NewConsumer({{['bootstrap.servers']='{Bootstrap()}', ['group.id']='test_alive_stop'}})
+            local co = c:Subscribe({{'{Topic()}'}})
+            local token = AliveToken.New()
+            co:SetAliveToken(token)
+            coroutine.resume(co)
+            token:Dispose()
+            coroutine.resume(co)
+            return tostring(coroutine.status(co) == 'dead')
+        ");
+        r.String.ShouldBe("true");
+    }
+
+    [KafkaFact]
+    public async Task Consumer_AliveToken_LiveToken_PumpContinues()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
+            local c = Kafka.NewConsumer({{['bootstrap.servers']='{Bootstrap()}', ['group.id']='test_alive_live'}})
+            local co = c:Subscribe({{'{Topic()}'}})
+            local token = AliveToken.New()
+            co:SetAliveToken(token)
+            for i = 1, 5 do coroutine.resume(co) end
+            local alive = coroutine.status(co) == 'suspended'
+            coroutine.resume(co, true)
+            c:Close()
+            return tostring(alive)
+        ");
+        r.String.ShouldBe("true");
+    }
+
     // -- Cleanup utility -------------------------------------------------------
     [KafkaFact]
     public async Task Cleanup_DeleteTestConsumerGroups()

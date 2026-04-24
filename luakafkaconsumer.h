@@ -23,6 +23,7 @@ typedef struct LuaKafkaConsumeState {
 	LuaKafkaConsumer* consumer;
 	bool autocommit;
 	int poll_timeout_ms;
+	int aliveTokenRef;  // LUA_NOREF when not set
 } LuaKafkaConsumeState;
 
 LuaKafkaConsumer* lua_pushkafkaconsumer(lua_State* L);
@@ -49,3 +50,4 @@ int ConsumerToString(lua_State* L);
 int ConsumeCoroutineBody(lua_State* L);
 int ConsumeAutoCommit(lua_State* L);
 int ConsumeCoroutineGC(lua_State* L);
+int ConsumerSetAliveToken(lua_State* L);

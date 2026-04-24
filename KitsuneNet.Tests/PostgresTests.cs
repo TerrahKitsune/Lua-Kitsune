@@ -484,6 +484,66 @@ public sealed class PostgresTests
         r.String.ShouldBe("false");
     }
 
+    // -- AliveToken integration -----------------------------------------------
+    [PostgresFact]
+    public async Task Postgres_SetAliveToken_DoesNotRaise()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
+			local conn = assert({ConnectLua()})
+			conn:SetAliveToken(AliveToken.New())
+			conn:Close()
+			return 'ok'
+		");
+        r.String.ShouldBe("ok");
+    }
+
+    [PostgresFact]
+    public async Task Postgres_SetAliveToken_NilDetaches()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
+			local conn = assert({ConnectLua()})
+			local token = AliveToken.New()
+			conn:SetAliveToken(token)
+			conn:SetAliveToken(nil)
+			conn:Close()
+			return 'ok'
+		");
+        r.String.ShouldBe("ok");
+    }
+
+    [PostgresFact]
+    public async Task Postgres_AliveToken_LiveToken_NonQueryCompletes()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
+			local conn = assert({ConnectLua()})
+			local token = AliveToken.New()
+			conn:SetAliveToken(token)
+			local ok, n = conn:NonQuery('SELECT 1')
+			conn:Close()
+			return tostring(ok)
+		");
+        r.String.ShouldBe("true");
+    }
+
+    [PostgresFact]
+    public async Task Postgres_AliveToken_DisposedBeforeCall_ReturnsCancelled()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
+			local conn = assert({ConnectLua()})
+			local token = AliveToken.New()
+			conn:SetAliveToken(token)
+			token:Dispose()
+			local ok, err = conn:NonQuery('SELECT 1')
+			conn:Close()
+			return tostring(ok) .. '|' .. tostring(err)
+		");
+        r.String.ShouldBe("false|cancelled");
+    }
+
     // Reads KITSUNE_POSTGRES_TEST=<libpq conninfo>
     private static string ConnectLua()
     {

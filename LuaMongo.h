@@ -5,8 +5,9 @@
 extern const char* LUAMONGO;
 
 typedef struct LuaMongo {
-    void* worker;   // LuaMongoWorker* — persistent thread, lives for connection lifetime
-    void* client;   // mongoc_client_t* convenience alias; worker owns lifetime
+    void* worker;        // LuaMongoWorker* — persistent thread, lives for connection lifetime
+    void* client;        // mongoc_client_t* convenience alias; worker owns lifetime
+    int   aliveTokenRef; // LUA_NOREF when not set
 } LuaMongo;
 
 LuaMongo* lua_tomongo(lua_State* L, int index);
@@ -16,6 +17,7 @@ int MongoConnect(lua_State* L);
 int MongoIsFinished(lua_State* L);
 int MongoWait(lua_State* L);
 int MongoCancel(lua_State* L);
+int MongoSetAliveToken(lua_State* L);
 int MongoGetResult(lua_State* L);
 int MongoFind(lua_State* L);
 int MongoFindOne(lua_State* L);

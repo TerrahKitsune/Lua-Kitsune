@@ -53,7 +53,8 @@ static const luaL_Reg kafkaconsumermeta[] = {
 };
 
 static const luaL_Reg kafkacoroutinemethods[] = {
-    { "AutoCommit", ConsumeAutoCommit },
+    { "AutoCommit",     ConsumeAutoCommit      },
+    { "SetAliveToken",  ConsumerSetAliveToken  },
     { NULL, NULL }
 };
 

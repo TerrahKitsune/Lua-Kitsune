@@ -68,11 +68,20 @@ int luaopen_redis(lua_State* L) {
 	lua_setfield(L, -2, "__gc");
 	lua_pop(L, 1);
 
-	// REDISPUBSUBCOROUTINE — coroutine thread metatable; only needs __gc
+	// REDISPUBSUBCOROUTINE — coroutine thread metatable
+	// Methods table so co:SetAliveToken() is reachable on the thread.
+	lua_newtable(L);                              // methods table
+	lua_pushcfunction(L, PubSubSetAliveToken);
+	lua_setfield(L, -2, "SetAliveToken");
+	int methods_idx = lua_gettop(L);
+
 	luaL_newmetatable(L, REDISPUBSUBCOROUTINE);
 	lua_pushcfunction(L, PubSubCoroutineGC);
 	lua_setfield(L, -2, "__gc");
-	lua_pop(L, 1);
+	lua_pushvalue(L, methods_idx);                // __index = methods table
+	lua_setfield(L, -2, "__index");
+	lua_pop(L, 1);   // pop metatable
+	lua_pop(L, 1);   // pop methods table
 
 	return 1;
 }

@@ -1,15 +1,17 @@
 ﻿#include "MySQLMain.h"
 #include "LuaMySQL.h"
+#include "luaalivetoken.h"
 
 static const luaL_Reg connfunctions[] = {
-	{ "Connect",     MySqlConnect     },
-	{ "IsBusy",      MySqlIsBusy      },
-	{ "EscapeValue", MySqlEscapeValue },
-	{ "Query",       MySqlQuery       },
-	{ "NonQuery",    MySqlNonQuery    },
-	{ "Scalar",      MySqlScalar      },
-	{ "QueryAll",    MySqlQueryAll    },
-	{ "Close",       luamysql_gc      },
+	{ "Connect",        MySqlConnect        },
+	{ "IsBusy",         MySqlIsBusy         },
+	{ "EscapeValue",    MySqlEscapeValue    },
+	{ "Query",          MySqlQuery          },
+	{ "NonQuery",       MySqlNonQuery       },
+	{ "Scalar",         MySqlScalar         },
+	{ "QueryAll",       MySqlQueryAll       },
+	{ "SetAliveToken",  MySqlSetAliveToken  },
+	{ "Close",          luamysql_gc         },
 	{ NULL, NULL }
 };
 
