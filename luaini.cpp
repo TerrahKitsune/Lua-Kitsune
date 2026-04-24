@@ -1,4 +1,5 @@
 ﻿#include "luaini.h"
+#include "utf8bom.h"
 #include "luadecimal.h"
 #include "luaidentifier.h"
 #include "luadatetime.h"
@@ -317,6 +318,7 @@ int lua_ini_decode(lua_State* L) {
     lua_ini_check(L, 1);
     size_t      srcLen;
     const char* src = luaL_checklstring(L, 2, &srcLen);
+    skip_utf8_bom(&src, &srcLen);
 
     // Result table.
     lua_newtable(L);

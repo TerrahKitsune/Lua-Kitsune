@@ -237,7 +237,22 @@ static int ImguiRenderer_InputText(int argc, const KitsuneVariable* argv,
 		return 1;
 	}
 
-	size_t needed = (_argc > 2 ? (size_t)_argv[2].integer : 256) + 1;
+	size_t needed = 256 + 1;
+	ImGuiInputTextFlags flags = ImGuiInputTextFlags_None;
+
+	if (_argc > 2) {
+		// Arg 2 is flags if it looks like an integer flag value, otherwise treat
+		// legacy callers that passed a numeric buffer-size as before.
+		// ImGuiInputTextFlags values are small bit-masks; a value >= 65536 is
+		// almost certainly a requested buffer size rather than a flag.
+		long long arg2 = _argv[2].integer;
+		if (_argv[2].type == KITSUNE_TNUMBER && arg2 >= 65536) {
+			needed = (size_t)arg2 + 1;
+		}
+		else if (_argv[2].type == KITSUNE_TNUMBER || _argv[2].type == KITSUNE_TINTEGER) {
+			flags = (ImGuiInputTextFlags)arg2;
+		}
+	}
 
 	const char* value = nullptr;
 	KitsuneVariable* valueOwned = nullptr;
@@ -272,7 +287,7 @@ static int ImguiRenderer_InputText(int argc, const KitsuneVariable* argv,
 		label = labelOwned ? (const char*)labelOwned->data : "";
 	}
 
-	bool changed = ImGui::InputText(label, ctx->inputBuf, ctx->inputBufSize);
+	bool changed = ImGui::InputText(label, ctx->inputBuf, ctx->inputBufSize, flags);
 
 	if (labelOwned) KitsuneVariableFree(labelOwned);
 

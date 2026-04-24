@@ -1105,6 +1105,9 @@
     <ClInclude Include="luaalivetoken.h">
       <Filter>LuaAliveToken</Filter>
     </ClInclude>
+    <ClInclude Include="utf8bom.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="Lua functions.md" />
@@ -1116,6 +1119,7 @@
     <None Include="plans\imgui-api-namespace-refactor.md" />
     <None Include="plans\httpserver-integration.md" />
     <None Include="plans\imgui-html.md" />
+    <None Include="build-linux-and-test.ps1" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />

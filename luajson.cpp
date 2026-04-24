@@ -1,5 +1,6 @@
 ﻿#include "luajson.h"
 #include "stream.h"
+#include "utf8bom.h"
 #include "luawchar.h"
 #include "luaidentifier.h"
 #include "luadatetime.h"
@@ -728,6 +729,7 @@ static int JsonDecodeAsyncContinuation(lua_State* L, int status, lua_KContext ct
 
 	size_t srcLen = 0;
 	const char* src = lua_tolstring(L, -1, &srcLen);
+	skip_utf8_bom(&src, &srcLen);
 	LuaJson* j = lua_json_check(L, 1);
 	dec_reset(j, src, srcLen);
 	dec_value(j, L);  // pushes decoded value; accumulated string stays rooted below it
@@ -773,6 +775,7 @@ int lua_json_decode(lua_State* L) {
 		j->chunkL     = L;
 	} else {
 		s = luaL_checklstring(L, 2, &len);
+		skip_utf8_bom(&s, &len);
 		dec_reset(j, s, len);
 	}
 

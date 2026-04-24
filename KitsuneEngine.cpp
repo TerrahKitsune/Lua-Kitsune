@@ -104,7 +104,8 @@ struct KitsuneCoroutine {
 	std::atomic<long> interrupted{ 0 }; // set to 1 by KitsuneCancel; observed by the scheduler before resuming this coroutine
 	char* error;
 	KitsuneVariable  result;
-	double        sleepUntil;   // GetCounter deadline (ms) before which the coroutine must not be resumed; 0 = not sleeping
+	double        sleepUntil;      // GetCounter deadline (ms) before which the coroutine must not be resumed; 0 = not sleeping, -1 = wait for token only
+	int           sleepTokenRef;   // LUA_NOREF, or registry ref to an AliveToken to wake on when it dies
 	double        startTime;    // GetCounter value recorded when the coroutine was created
 	int           initialNArgs; // number of args already on the thread stack for the first lua_resume; 0 for file/string coroutines
 	std::atomic<long> isInline{ 0 }; // 1 = inline sync call; scheduler skips Step 2 resume
@@ -448,7 +449,7 @@ static void FillKitsuneVariableFromStack(lua_State* L, int idx, KitsuneVariable*
 				if (id->len > 0)
 					memcpy(kid->bytes, id->bytes, (size_t)id->len < 16 ? (size_t)id->len : 16);
 				out->identifier = kid;
-				out->type       = KITSUNE_TIDENTIFIER;
+				out->type = KITSUNE_TIDENTIFIER;
 			}
 			break;
 		}
@@ -457,10 +458,10 @@ static void FillKitsuneVariableFromStack(lua_State* L, int idx, KitsuneVariable*
 			LuaDateTime* dt = lua_todatetime(L, abs_idx);
 			KitsuneDateTime* kdt = (KitsuneDateTime*)kitsune_malloc(sizeof(KitsuneDateTime));
 			if (kdt) {
-				kdt->ticks          = dt->ticks;
+				kdt->ticks = dt->ticks;
 				kdt->offset_minutes = dt->offset_minutes;
 				out->datetime = kdt;
-				out->type     = KITSUNE_TDATETIME;
+				out->type = KITSUNE_TDATETIME;
 			}
 			break;
 		}
@@ -469,9 +470,9 @@ static void FillKitsuneVariableFromStack(lua_State* L, int idx, KitsuneVariable*
 			LuaTimeSpan* ts = lua_totimespan(L, abs_idx);
 			KitsuneTimeSpan* kts = (KitsuneTimeSpan*)kitsune_malloc(sizeof(KitsuneTimeSpan));
 			if (kts) {
-				kts->ticks    = ts->ticks;
+				kts->ticks = ts->ticks;
 				out->timespan = kts;
-				out->type     = KITSUNE_TTIMESPAN;
+				out->type = KITSUNE_TTIMESPAN;
 			}
 			break;
 		}
@@ -480,12 +481,12 @@ static void FillKitsuneVariableFromStack(lua_State* L, int idx, KitsuneVariable*
 			LuaDecimal* dec = (LuaDecimal*)lua_touserdata(L, abs_idx);
 			KitsuneDecimal* kdec = (KitsuneDecimal*)kitsune_malloc(sizeof(KitsuneDecimal));
 			if (kdec) {
-				kdec->lo       = dec->lo;
-				kdec->hi       = dec->hi;
-				kdec->scale    = dec->scale;
+				kdec->lo = dec->lo;
+				kdec->hi = dec->hi;
+				kdec->scale = dec->scale;
 				kdec->negative = dec->negative;
 				out->decimal = kdec;
-				out->type    = KITSUNE_TDECIMAL;
+				out->type = KITSUNE_TDECIMAL;
 			}
 			break;
 		}
@@ -625,7 +626,7 @@ static void PushKitsuneVariable(lua_State* L, const KitsuneVariable* v) {
 	case KITSUNE_TDATETIME:
 		if (v->datetime) {
 			LuaDateTime* dt = lua_pushdatetime(L);
-			dt->ticks          = v->datetime->ticks;
+			dt->ticks = v->datetime->ticks;
 			dt->offset_minutes = v->datetime->offset_minutes;
 		}
 		else {
@@ -635,9 +636,9 @@ static void PushKitsuneVariable(lua_State* L, const KitsuneVariable* v) {
 	case KITSUNE_TDECIMAL:
 		if (v->decimal) {
 			LuaDecimal* dec = lua_pushdecimal(L);
-			dec->lo       = v->decimal->lo;
-			dec->hi       = v->decimal->hi;
-			dec->scale    = v->decimal->scale;
+			dec->lo = v->decimal->lo;
+			dec->hi = v->decimal->hi;
+			dec->scale = v->decimal->scale;
 			dec->negative = v->decimal->negative;
 		}
 		else {
@@ -648,7 +649,7 @@ static void PushKitsuneVariable(lua_State* L, const KitsuneVariable* v) {
 		if (v->identifier) {
 			LuaIdentifier* id = lua_pushidentifier(L);
 			id->type = (IdentifierType)v->identifier->type;
-			id->len  = (id->type == IDENTIFIER_OID) ? 12 : 16;
+			id->len = (id->type == IDENTIFIER_OID) ? 12 : 16;
 			memcpy(id->bytes, v->identifier->bytes, 16);
 		}
 		else {
@@ -702,7 +703,7 @@ static void PushKitsuneVariable(lua_State* L, const KitsuneVariable* v) {
 	}
 	case LUA_TTABLE:
 		// Live ref — push the actual Lua table from the registry.
-		if (v->ref > 0) {  // valid luaL_ref is always positive; 0 and LUA_NOREF(-2) mean no ref
+		if (v->ref > 0) {  // valid luaL_ref is always positive; 0, LUA_REFNIL(-1) and LUA_NOREF(-2) are all invalid
 			lua_rawgeti(L, LUA_REGISTRYINDEX, v->ref);
 			if (lua_type(L, -1) != LUA_TTABLE) {
 				lua_pop(L, 1);
@@ -845,7 +846,7 @@ static void SetSlotResult(KitsuneCoroutine* slot, lua_State* T, int idx) {
 				if (id->len > 0)
 					memcpy(kid->bytes, id->bytes, (size_t)id->len < 16 ? (size_t)id->len : 16);
 				slot->result.identifier = kid;
-				slot->result.type       = KITSUNE_TIDENTIFIER;
+				slot->result.type = KITSUNE_TIDENTIFIER;
 			}
 			break;
 		}
@@ -854,10 +855,10 @@ static void SetSlotResult(KitsuneCoroutine* slot, lua_State* T, int idx) {
 			LuaDateTime* dt = lua_todatetime(T, idx);
 			KitsuneDateTime* kdt = (KitsuneDateTime*)kitsune_malloc(sizeof(KitsuneDateTime));
 			if (kdt) {
-				kdt->ticks              = dt->ticks;
-				kdt->offset_minutes     = dt->offset_minutes;
-				slot->result.datetime   = kdt;
-				slot->result.type       = KITSUNE_TDATETIME;
+				kdt->ticks = dt->ticks;
+				kdt->offset_minutes = dt->offset_minutes;
+				slot->result.datetime = kdt;
+				slot->result.type = KITSUNE_TDATETIME;
 			}
 			break;
 		}
@@ -866,9 +867,9 @@ static void SetSlotResult(KitsuneCoroutine* slot, lua_State* T, int idx) {
 			LuaTimeSpan* ts = lua_totimespan(T, idx);
 			KitsuneTimeSpan* kts = (KitsuneTimeSpan*)kitsune_malloc(sizeof(KitsuneTimeSpan));
 			if (kts) {
-				kts->ticks            = ts->ticks;
+				kts->ticks = ts->ticks;
 				slot->result.timespan = kts;
-				slot->result.type     = KITSUNE_TTIMESPAN;
+				slot->result.type = KITSUNE_TTIMESPAN;
 			}
 			break;
 		}
@@ -877,12 +878,12 @@ static void SetSlotResult(KitsuneCoroutine* slot, lua_State* T, int idx) {
 			LuaDecimal* dec = (LuaDecimal*)lua_touserdata(T, idx);
 			KitsuneDecimal* kdec = (KitsuneDecimal*)kitsune_malloc(sizeof(KitsuneDecimal));
 			if (kdec) {
-				kdec->lo              = dec->lo;
-				kdec->hi              = dec->hi;
-				kdec->scale           = dec->scale;
-				kdec->negative        = dec->negative;
-				slot->result.decimal  = kdec;
-				slot->result.type     = KITSUNE_TDECIMAL;
+				kdec->lo = dec->lo;
+				kdec->hi = dec->hi;
+				kdec->scale = dec->scale;
+				kdec->negative = dec->negative;
+				slot->result.decimal = kdec;
+				slot->result.type = KITSUNE_TDECIMAL;
 			}
 			break;
 		}
@@ -1081,7 +1082,7 @@ static thread_local bool g_isSchedulerThread = false;
 
 // Sets the ARGS and ID globals on a coroutine's lua_State before each lua_resume.
 static void SetCoroutineGlobals(lua_State* T, int id, int argsRef) {
-	if (argsRef != LUA_NOREF) {
+	if (argsRef > 0) {
 		lua_rawgeti(T, LUA_REGISTRYINDEX, argsRef);
 		lua_setglobal(T, "ARGS");
 	}
@@ -1159,10 +1160,32 @@ static void SchedulerProc(KitsuneState* state) {
 					continue;
 				}
 				// Skip coroutines that are waiting out a Sleep() call.
-				if (slot->sleepUntil > 0.0) {
-					if (GetCounter(state) < slot->sleepUntil)
-						continue;
-					slot->sleepUntil = 0.0;
+				if (slot->sleepUntil != 0.0 || slot->sleepTokenRef > 0) {
+				bool tokenDead = false;
+				if (slot->sleepTokenRef > 0) {
+					lua_rawgeti(state->L, LUA_REGISTRYINDEX, slot->sleepTokenRef);
+					tokenDead = (lua_alivetoken_isalive(state->L, -1) == 0);
+					lua_pop(state->L, 1);
+					if (tokenDead) {
+						luaL_unref(state->L, LUA_REGISTRYINDEX, slot->sleepTokenRef);
+						slot->sleepTokenRef = LUA_NOREF;
+						slot->sleepUntil = 0.0;
+					}
+				}
+				if (!tokenDead) {
+					if (slot->sleepUntil > 0.0 && GetCounter(state) >= slot->sleepUntil) {
+						// Deadline expired — wake, clear everything
+						slot->sleepUntil = 0.0;
+						if (slot->sleepTokenRef > 0) {
+							luaL_unref(state->L, LUA_REGISTRYINDEX, slot->sleepTokenRef);
+							slot->sleepTokenRef = LUA_NOREF;
+						}
+					}
+						else {
+							// Still waiting (token alive and no deadline or deadline not reached)
+							continue;
+						}
+					}
 				}
 				anyActive = true;
 
@@ -1205,6 +1228,7 @@ static void SchedulerProc(KitsuneState* state) {
 			// callers while Lua's internal allocator is running.
 			int pendingArgs[KITSUNE_MAX_COROUTINES];
 			int pendingThreads[KITSUNE_MAX_COROUTINES];
+			int pendingSleepTokens[KITSUNE_MAX_COROUTINES];
 			KitsuneVariable pendingResults[KITSUNE_MAX_COROUTINES];
 			int pendingCount = 0;
 
@@ -1216,20 +1240,25 @@ static void SchedulerProc(KitsuneState* state) {
 					pendingArgs[pendingCount] = slot->argsRef;
 					pendingThreads[pendingCount] = slot->threadRef;
 					pendingResults[pendingCount] = slot->result;  // shallow copy; ownership transferred
+					pendingSleepTokens[pendingCount] = slot->sleepTokenRef;
+					slot->sleepTokenRef = LUA_NOREF;
 					pendingCount++;
 					slot->thread = NULL;  // invariant: null before memset so the pointer is never stale
 					kitsune_free(slot->error);
 					memset(slot, 0, sizeof(KitsuneCoroutine));  // id = 0 marks the slot as reusable
+					slot->sleepTokenRef = LUA_NOREF;
 				}
 			}
 			state->slotsLock.unlock();
 
 			// Phase 2 (outside slotsLock): release all Lua registry references.
 			for (int i = 0; i < pendingCount; i++) {
-				if (pendingArgs[i] != LUA_NOREF)
+				if (pendingArgs[i] > 0)
 					luaL_unref(state->L, LUA_REGISTRYINDEX, pendingArgs[i]);
-				if (pendingThreads[i] != LUA_NOREF)
+				if (pendingThreads[i] > 0)
 					luaL_unref(state->L, LUA_REGISTRYINDEX, pendingThreads[i]);
+				if (pendingSleepTokens[i] > 0)
+					luaL_unref(state->L, LUA_REGISTRYINDEX, pendingSleepTokens[i]);
 				FreeVariableData(&pendingResults[i], state->L);
 			}
 			if (pendingCount > 0)
@@ -1246,7 +1275,8 @@ static void SchedulerProc(KitsuneState* state) {
 			bool hasSleeping = false;
 			for (int i = 0; i < state->slotCount; i++) {
 				KitsuneCoroutine* slot = state->slots[i];
-				if (slot->id != 0 && !slot->done.load() && slot->sleepUntil > 0.0) {
+				if (slot->id != 0 && !slot->done.load() &&
+					(slot->sleepUntil != 0.0 || slot->sleepTokenRef > 0)) {
 					hasSleeping = true;
 					break;
 				}
@@ -1281,6 +1311,16 @@ static int L_GetRuntime(lua_State* L) {
 
 static int L_SleepContinuation(lua_State* L, int status, lua_KContext ctx) {
 	(void)status; (void)ctx;
+	// Clear the token ref if it is still set (woken by deadline rather than token death).
+	void* ud;
+	lua_getallocf(L, &ud);
+	KitsuneState* state = (KitsuneState*)ud;
+	int id = (int)state->currentCoroutineId.load();
+	KitsuneCoroutine* slot = FindSlot(state, id);
+	if (slot && slot->sleepTokenRef > 0) {
+		luaL_unref(L, LUA_REGISTRYINDEX, slot->sleepTokenRef);
+		slot->sleepTokenRef = LUA_NOREF;
+	}
 	return 0;
 }
 
@@ -1291,29 +1331,47 @@ static int L_Yield(lua_State* L) {
 	return lua_yield(L, 0);
 }
 
-// Sleep(ms) — yields the calling coroutine for at least ms milliseconds without blocking any OS thread.
-// The scheduler uses the GetCounter clock to skip this coroutine until its deadline has passed.
-// If called outside a scheduler-managed coroutine, falls back to a blocking Win32 Sleep.
+// Sleep(ms) — yields for at least ms milliseconds.
+// Sleep(token) — yields until the AliveToken is disposed/expired.
+// Sleep(token, ms) or Sleep(ms, token) — yields until whichever comes first.
+// If called outside a scheduler-managed coroutine, falls back to a blocking OS sleep.
 static int L_Sleep(lua_State* L) {
-	lua_Number ms = luaL_optnumber(L, 1, 0);
+	int nargs = lua_gettop(L);
+
+	lua_Number ms = 0.0;
+	int tokenIdx = 0;  // 1-based stack index of the token arg, or 0 if none
+
+	for (int i = 1; i <= nargs; i++) {
+		if (lua_type(L, i) == LUA_TNUMBER) {
+			ms = lua_tonumber(L, i);
+		}
+		else if (luaL_testudata(L, i, LUAALIVETOKEN)) {
+			tokenIdx = i;
+		}
+	}
 
 	void* ud;
 	lua_getallocf(L, &ud);
 	KitsuneState* state = (KitsuneState*)ud;
 	int id = (int)state->currentCoroutineId.load();
-	KitsuneCoroutine* slot = FindSlot(state, id);  // NULL when id==0 (not inside scheduler's lua_resume)
+	KitsuneCoroutine* slot = FindSlot(state, id);
 
 	if (slot && lua_isyieldable(L)) {
-		// Scheduler-managed coroutine with a yieldable call stack: yield cooperatively.
-		if (ms > 0.0)
-			slot->sleepUntil = GetCounter(state) + (double)ms;
+		if (tokenIdx > 0) {
+			LuaAliveToken* token = (LuaAliveToken*)luaL_testudata(L, tokenIdx, LUAALIVETOKEN);
+			// Tick immediately — if already dead, return without sleeping.
+			alivetoken_tick(token, L);
+			if (!token->alive)
+				return 0;
+			lua_pushvalue(L, tokenIdx);
+			slot->sleepTokenRef = luaL_ref(L, LUA_REGISTRYINDEX);
+		}
+		// -1.0 = token-only wait (no deadline); positive = deadline
+		slot->sleepUntil = (ms > 0.0) ? GetCounter(state) + ms : (tokenIdx > 0 ? -1.0 : 0.0);
 		return lua_yieldk(L, 0, 0, L_SleepContinuation);
 	}
 
-	// Fall back to a blocking OS sleep when: (a) not a scheduler-managed coroutine,
-	// or (b) lua_isyieldable(L) is false — we are inside a luaD_callnoyield boundary
-	// (lua_pcall_nohook, lua_call_nohook, or a metamethod triggered from C code)
-	// and lua_yieldk would raise "attempt to yield across a C-call boundary".
+	// Fallback: blocking sleep (no token support in non-scheduler context)
 	if (ms > 0.0)
 		::Sleep((unsigned long)(ms > (lua_Number)MAXDWORD ? MAXDWORD : (unsigned long)ms));
 	return 0;
@@ -1610,6 +1668,7 @@ extern "C" {
 		KitsuneCoroutine* slot = new (std::nothrow) KitsuneCoroutine{};
 		if (!slot)
 			return NULL;
+		slot->sleepTokenRef = LUA_NOREF;
 		slot->fireAndForget.store(fireAndForget ? 1 : 0);
 		isNewSlot = true;
 		return slot;
@@ -1621,11 +1680,11 @@ extern "C" {
 		if (err)
 			SetSlotError(slot, err);
 		slot->result.type = LUA_TNONE;
-		if (slot->argsRef != LUA_NOREF) {
+		if (slot->argsRef > 0) {
 			luaL_unref(state->L, LUA_REGISTRYINDEX, slot->argsRef);
 			slot->argsRef = LUA_NOREF;
 		}
-		if (slot->threadRef != LUA_NOREF) {
+		if (slot->threadRef > 0) {
 			luaL_unref(state->L, LUA_REGISTRYINDEX, slot->threadRef);
 			slot->threadRef = LUA_NOREF;
 			slot->thread = NULL;
@@ -1836,7 +1895,7 @@ extern "C" {
 				loadOk = true;
 			}
 		}
-		else if (var->type == LUA_TTHREAD && var->ref != LUA_NOREF) {
+		else if (var->type == LUA_TTHREAD && var->ref > 0) {
 			// Native single-step: resume the target thread exactly once with argc/argv as args.
 			// The first yielded or returned value is surfaced as the result.
 			lua_rawgeti(state->L, LUA_REGISTRYINDEX, var->ref);
@@ -1912,18 +1971,23 @@ extern "C" {
 	// releases registry refs, zeroes the slot for reuse, and notifies waiters.
 	static void CleanupInlineSlot(KitsuneState* state, KitsuneCoroutine* slot) {
 		--state->runningCount;
-		if (slot->threadRef != LUA_NOREF) {
+		if (slot->threadRef > 0) {
 			luaL_unref(state->L, LUA_REGISTRYINDEX, slot->threadRef);
 			slot->threadRef = LUA_NOREF;
 			slot->thread = NULL;
 		}
-		if (slot->argsRef != LUA_NOREF) {
+		if (slot->argsRef > 0) {
 			luaL_unref(state->L, LUA_REGISTRYINDEX, slot->argsRef);
 			slot->argsRef = LUA_NOREF;
+		}
+		if (slot->sleepTokenRef > 0) {
+			luaL_unref(state->L, LUA_REGISTRYINDEX, slot->sleepTokenRef);
+			slot->sleepTokenRef = LUA_NOREF;
 		}
 		state->slotsLock.lock();
 		kitsune_free(slot->error);
 		memset(slot, 0, sizeof(KitsuneCoroutine));
+		slot->sleepTokenRef = LUA_NOREF;
 		state->slotsLock.unlock();
 		state->doneCV.notify_all();
 	}
@@ -1962,17 +2026,41 @@ extern "C" {
 				sleepMs = slot->sleepUntil - GetCounter(state);
 				slot->sleepUntil = 0.0;
 			}
+			// Capture and clear the token ref so we can poll it outside Lua access.
+			int sleepTokenRef = slot->sleepTokenRef;
+			slot->sleepTokenRef = LUA_NOREF;
 
 			state->currentCoroutineId.store(0);
 
 			ReleaseLuaAccess(state);
 
-			unsigned long sleepDur = (sleepMs > 1.0)
-				? (unsigned long)(sleepMs > (double)MAXDWORD ? MAXDWORD : sleepMs)
-				: 1;
-			Sleep(sleepDur);
-
-			AcquireLuaAccess(state);
+			if (sleepTokenRef > 0) {
+				// Token-sleep: poll the token in 1 ms increments until it dies or
+				// the deadline (if any) expires.  We hold no Lua lock here so we
+				// re-acquire briefly each iteration to call alivetoken_isalive.
+				double deadline = (sleepMs > 0.0) ? (GetCounter(state) + sleepMs) : -1.0;
+				while (true) {
+					::Sleep(1);
+					AcquireLuaAccess(state);
+					lua_rawgeti(state->L, LUA_REGISTRYINDEX, sleepTokenRef);
+					int alive = lua_alivetoken_isalive(state->L, -1);
+					lua_pop(state->L, 1);
+					ReleaseLuaAccess(state);
+					if (alive == 0)
+						break;
+					if (deadline >= 0.0 && GetCounter(state) >= deadline)
+						break;
+				}
+				AcquireLuaAccess(state);
+				luaL_unref(state->L, LUA_REGISTRYINDEX, sleepTokenRef);
+			}
+			else {
+				unsigned long sleepDur = (sleepMs > 1.0)
+					? (unsigned long)(sleepMs > (double)MAXDWORD ? MAXDWORD : sleepMs)
+					: 1;
+				::Sleep(sleepDur);
+				AcquireLuaAccess(state);
+			}
 
 			// Check for a per-coroutine cancel that arrived during the yield/sleep window.
 			// KitsuneCancel sets interrupted without holding accessLock, so it may fire while the
@@ -2068,6 +2156,7 @@ extern "C" {
 		if (!slot)
 			return NULL;
 
+		slot->sleepTokenRef = LUA_NOREF;
 		slot->isInline.store(1);
 		isNewSlot = true;
 		return slot;
@@ -2088,12 +2177,12 @@ extern "C" {
 	static void ReleaseFailedInlineSlot(KitsuneState* state, KitsuneCoroutine* slot,
 		bool isNewSlot) {
 		slot->isInline.store(0);
-		if (slot->threadRef != LUA_NOREF) {
+		if (slot->threadRef > 0) {
 			luaL_unref(state->L, LUA_REGISTRYINDEX, slot->threadRef);
 			slot->threadRef = LUA_NOREF;
 			slot->thread = NULL;
 		}
-		if (slot->argsRef != LUA_NOREF) {
+		if (slot->argsRef > 0) {
 			luaL_unref(state->L, LUA_REGISTRYINDEX, slot->argsRef);
 			slot->argsRef = LUA_NOREF;
 		}
@@ -2556,24 +2645,20 @@ extern "C" {
 			state->slotsLock.unlock();
 			return NULL;
 		}
-		memset(out, 0, sizeof(KitsuneVariable));
-
-		// Transfer owned data (string or table linked list) atomically to prevent double-free.
-		if ((slot->result.type == LUA_TSTRING || slot->result.type == KITSUNE_TCHAR16 || slot->result.type == LUA_TUSERDATA) && slot->result.data) {
-			out->type = slot->result.type;
-			out->length = slot->result.length;
-			out->data = slot->result.data;
-			slot->result.data = nullptr;
-			slot->result.length = 0;
-		}
-		else if (slot->result.type == LUA_TFUNCTION || slot->result.type == LUA_TTHREAD || slot->result.type == LUA_TTABLE) {
-			// Transfer the registry ref; zero the slot field so no stale ref remains.
-			out->type = slot->result.type;
-			out->ref = slot->result.ref;
-			slot->result.ref = LUA_NOREF;
+		if (slot->error) {
+			size_t errLen = strlen(slot->error);
+			out->type = KITSUNE_TERROR;
+			out->data = (unsigned char*)kitsune_malloc(errLen + 1);
+			if (out->data) {
+				memcpy(out->data, slot->error, errLen + 1);
+				out->length = errLen;
+			}
 		}
 		else {
-			*out = slot->result;  // inline copy for number / bool / none
+			// Transfer full ownership to out; zero slot->result so the scheduler's cleanup
+			// phase does not double-free any owned pointers (strings, refs, table nodes, etc.).
+			memcpy(out, &slot->result, sizeof(KitsuneVariable));
+			memset(&slot->result, 0, sizeof(KitsuneVariable));
 		}
 		slot->result.type = LUA_TNONE;  // mark consumed; prevents stale reads before scheduler compacts
 
@@ -3777,9 +3862,9 @@ extern "C" {
 				KitsuneCoroutine* slot = state->slots[i];
 				if (slot->id != 0) {
 					if (state->L) {
-						if (slot->argsRef != LUA_NOREF)
+						if (slot->argsRef > 0)
 							luaL_unref(state->L, LUA_REGISTRYINDEX, slot->argsRef);
-						if (slot->threadRef != LUA_NOREF)
+						if (slot->threadRef > 0)
 							luaL_unref(state->L, LUA_REGISTRYINDEX, slot->threadRef);
 					}
 					kitsune_free(slot->error);

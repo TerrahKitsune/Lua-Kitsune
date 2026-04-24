@@ -47,6 +47,8 @@
     <ItemGroup>
       <_NativeDlls Include="$(NativeOutputDir)*.dll" Condition="Exists('$(NativeOutputDir)')" />
       <_NativeDlls Include="$(NativeRootDir)*.dll" Condition="Exists('$(NativeRootDir)')" />
+      <!-- Bundled libcurl (WebSocket-enabled build stored in curl\lib\) -->
+      <_NativeDlls Include="$(NativeRootDir)curl\lib\*.dll" Condition="Exists('$(NativeRootDir)curl\lib\')" />
       <_NativePdbs Include="$(NativeOutputDir)*.pdb" Condition="Exists('$(NativeOutputDir)')" />
     </ItemGroup>
     <Copy SourceFiles="@(_NativeDlls)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />

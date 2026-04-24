@@ -8,6 +8,7 @@
 
 struct ImguiScheduledCall {
 	KitsuneVariable*    fn;
+	int                 runningId; // The kitsune engines running id, 0 on not started
 	int                 argc;
 	KitsuneVariable**   argv;
 	ImguiScheduledCall* next;
@@ -41,7 +42,7 @@ struct ImguiWindowContext {
 	KitsuneVariable*            renderFn;
 	KitsuneVariable*            context;
 	KitsuneVariable*            onError;
-	ImguiScheduledCall*         scheduledHead;
+	ImguiScheduledCall*         scheduledHead; // pending (runningId==0) and running (runningId>0)
 	KitsuneUserDataRegistration reg;
 	// Optional bold/italic fonts for markdown rendering.
 	// Set via renderer:SetBoldFont(luaId) / renderer:SetItalicFont(luaId).

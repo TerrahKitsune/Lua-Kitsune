@@ -38,29 +38,68 @@
 // Scheduled call helpers
 // ---------------------------------------------------------------------------
 
+// Single function handles both submission and completion polling.
+// Calls with runningId==0 are submitted (fireAndForget=false so we own the result).
+// Calls with runningId>0 are polled; finished ones invoke onError on fault then are freed.
+// Long-running coroutines stay on the list until they finish.
 static void drain_scheduled_calls(ImguiWindowContext* ctx) {
-	while (ctx->scheduledHead) {
-		ImguiScheduledCall* call = ctx->scheduledHead;
-		ctx->scheduledHead = call->next;
+	ImguiScheduledCall** prev = &ctx->scheduledHead;
+	ImguiScheduledCall*  call = ctx->scheduledHead;
+	while (call) {
+		if (call->runningId == 0) {
+			// Not yet submitted — launch it now.
+			if (call->argc > 0) {
+				KitsuneVariable* values = (KitsuneVariable*)malloc(call->argc * sizeof(KitsuneVariable));
+				if (values) {
+					for (int i = 0; i < call->argc; i++)
+						values[i] = *call->argv[i];
+					call->runningId = KitsuneExecuteVariableAsync(call->fn, call->argc, values, false);
+					free(values);
+				}
+			}
+			else {
+				call->runningId = KitsuneExecuteVariableAsync(call->fn, 0, nullptr, false);
+			}
+			for (int i = 0; i < call->argc; i++)
+				KitsuneVariableFree(call->argv[i]);
+			free(call->argv);
+			call->argv = nullptr;
+			call->argc = 0;
+			KitsuneVariableFree(call->fn);
+			call->fn = nullptr;
 
-		if (call->argc > 0) {
-			KitsuneVariable* values = (KitsuneVariable*)malloc(call->argc * sizeof(KitsuneVariable));
-			if (values) {
-				for (int i = 0; i < call->argc; i++)
-					values[i] = *call->argv[i];
-				KitsuneExecuteVariableAsync(call->fn, call->argc, values, true);
-				free(values);
+			if (call->runningId <= 0) {
+				// Failed to submit — drop it.
+				*prev = call->next;
+				ImguiScheduledCall* next = call->next;
+				free(call);
+				call = next;
+				continue;
 			}
 		}
-		else {
-			KitsuneExecuteVariableAsync(call->fn, 0, nullptr, true);
+		else if (KitsuneHasResult(call->runningId)) {
+			// Finished — check for errors, release, free.
+			KitsuneVariable* result = KitsuneGetResult(call->runningId);
+			if (result && result->type == KITSUNE_TERROR) {
+				if (ctx->onError) {
+					KitsuneVariable* ret = KitsuneExecuteVariable(ctx->onError, 1, result);
+					KitsuneVariableFree(ret);
+				}
+				else {
+					fprintf(stderr, "[Imgui.Schedule] error: %.*s\n",
+						(int)result->length, (char*)result->data);
+				}
+			}
+			KitsuneVariableFree(result);
+			*prev = call->next;
+			ImguiScheduledCall* next = call->next;
+			free(call);
+			call = next;
+			continue;
 		}
 
-		for (int i = 0; i < call->argc; i++)
-			KitsuneVariableFree(call->argv[i]);
-		KitsuneVariableFree(call->fn);
-		free(call->argv);
-		free(call);
+		prev = &call->next;
+		call = call->next;
 	}
 }
 
@@ -68,10 +107,16 @@ static void free_scheduled_calls(ImguiWindowContext* ctx) {
 	while (ctx->scheduledHead) {
 		ImguiScheduledCall* call = ctx->scheduledHead;
 		ctx->scheduledHead = call->next;
-		for (int i = 0; i < call->argc; i++)
-			KitsuneVariableFree(call->argv[i]);
-		KitsuneVariableFree(call->fn);
-		free(call->argv);
+		if (call->runningId > 0) {
+			KitsuneVariable* result = KitsuneGetResult(call->runningId);
+			KitsuneVariableFree(result);
+		}
+		else {
+			for (int i = 0; i < call->argc; i++)
+				KitsuneVariableFree(call->argv[i]);
+			KitsuneVariableFree(call->fn);
+			free(call->argv);
+		}
 		free(call);
 	}
 }

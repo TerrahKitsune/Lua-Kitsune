@@ -1381,5 +1381,172 @@ namespace KitsuneNet.Tests
                 r.String.ShouldBe("true");
             }
         }
+
+        // -- Concurrent requests (shared CURLM* drain bug regression) ----------
+        // These tests specifically exercise the fix for the shared-CURLM* race
+        // where concurrent coroutines could steal each other's CURLMSG_DONE and
+        // stall forever.  Each test fires two or more requests simultaneously
+        // inside the same Lua coroutine drive loop and asserts both complete.
+
+        [Fact]
+        public async Task Http_Concurrent_TwoRequests_BothComplete()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
+                if HttpClient == nil then return 'skip' end
+                local c1 = HttpClient.New()
+                c1:SetTimeout(15000)
+                local c2 = HttpClient.New()
+                c2:SetTimeout(15000)
+                local co1 = c1:Request('GET', 'https://httpbin.org/get?id=1')
+                local co2 = c2:Request('GET', 'https://httpbin.org/get?id=2')
+                local r1, r2
+                while not r1 or not r2 do
+                    if not r1 then
+                        local ok, v = coroutine.resume(co1)
+                        if v ~= nil then r1 = v end
+                    end
+                    if not r2 then
+                        local ok, v = coroutine.resume(co2)
+                        if v ~= nil then r2 = v end
+                    end
+                end
+                return tostring(r1.Code == 200 and r2.Code == 200)
+            ");
+            if (r != "skip")
+            {
+                r.String.ShouldBe("true");
+            }
+        }
+
+        [Fact]
+        public async Task Http_Concurrent_TwoRequests_BothReturnCorrectBody()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
+                if HttpClient == nil then return 'skip' end
+                local c1 = HttpClient.New()
+                c1:SetTimeout(15000)
+                local c2 = HttpClient.New()
+                c2:SetTimeout(15000)
+                local co1 = c1:Request('GET', 'https://httpbin.org/get?tag=alpha')
+                local co2 = c2:Request('GET', 'https://httpbin.org/get?tag=beta')
+                local r1, r2
+                while not r1 or not r2 do
+                    if not r1 then
+                        local ok, v = coroutine.resume(co1)
+                        if v ~= nil then r1 = v end
+                    end
+                    if not r2 then
+                        local ok, v = coroutine.resume(co2)
+                        if v ~= nil then r2 = v end
+                    end
+                end
+                return tostring(
+                    r1.Code == 200 and r1.Contents:find('alpha') ~= nil and
+                    r2.Code == 200 and r2.Contents:find('beta')  ~= nil)
+            ");
+            if (r != "skip")
+            {
+                r.String.ShouldBe("true");
+            }
+        }
+
+        [Fact]
+        public async Task Http_Concurrent_ThreeRequests_AllComplete()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
+                if HttpClient == nil then return 'skip' end
+                local function make(tag)
+                    local c = HttpClient.New()
+                    c:SetTimeout(15000)
+                    return c:Request('GET', 'https://httpbin.org/get?tag=' .. tag)
+                end
+                local co1, co2, co3 = make('one'), make('two'), make('three')
+                local r1, r2, r3
+                while not r1 or not r2 or not r3 do
+                    local function pump(co, prev)
+                        if prev then return prev end
+                        local ok, v = coroutine.resume(co)
+                        return v
+                    end
+                    r1 = pump(co1, r1)
+                    r2 = pump(co2, r2)
+                    r3 = pump(co3, r3)
+                end
+                return tostring(r1.Code == 200 and r2.Code == 200 and r3.Code == 200)
+            ");
+            if (r != "skip")
+            {
+                r.String.ShouldBe("true");
+            }
+        }
+
+        [Fact]
+        public async Task Http_Concurrent_Call_TwoCallsInParallel_BothComplete()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(StreamHelper + @"
+                if HttpClient == nil then return 'skip' end
+                -- Run two Call() coroutines interleaved on the same engine tick.
+                local results = {}
+                local function run_call(tag)
+                    local c = HttpClient.New()
+                    c:SetTimeout(15000)
+                    local res, err = c:Call('GET', 'https://httpbin.org/get?tag=' .. tag)
+                    table.insert(results, res)
+                end
+                local co1 = coroutine.create(run_call)
+                local co2 = coroutine.create(run_call)
+                coroutine.resume(co1, 'concurrent_a')
+                coroutine.resume(co2, 'concurrent_b')
+                while coroutine.status(co1) ~= 'dead' or coroutine.status(co2) ~= 'dead' do
+                    if coroutine.status(co1) ~= 'dead' then coroutine.resume(co1) end
+                    if coroutine.status(co2) ~= 'dead' then coroutine.resume(co2) end
+                end
+                return tostring(
+                    #results == 2 and
+                    results[1] ~= nil and results[1].Code == 200 and
+                    results[2] ~= nil and results[2].Code == 200)
+            ");
+            if (r != "skip")
+            {
+                r.String.ShouldBe("true");
+            }
+        }
+
+        [Fact]
+        public async Task Http_Concurrent_PostAndGet_BothComplete()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"
+                if HttpClient == nil then return 'skip' end
+                local cGet = HttpClient.New()
+                cGet:SetTimeout(15000)
+                local cPost = HttpClient.New()
+                cPost:SetTimeout(15000)
+                local coGet  = cGet:Request('GET', 'https://httpbin.org/get')
+                local coPost = cPost:Request('POST', 'https://httpbin.org/post',
+                    '{""concurrent"":true}',
+                    { ['Content-Type'] = 'application/json' })
+                local rGet, rPost
+                while not rGet or not rPost do
+                    if not rGet then
+                        local ok, v = coroutine.resume(coGet)
+                        if v ~= nil then rGet = v end
+                    end
+                    if not rPost then
+                        local ok, v = coroutine.resume(coPost)
+                        if v ~= nil then rPost = v end
+                    end
+                end
+                return tostring(rGet.Code == 200 and rPost.Code == 200)
+            ");
+            if (r != "skip")
+            {
+                r.String.ShouldBe("true");
+            }
+        }
     }
 }

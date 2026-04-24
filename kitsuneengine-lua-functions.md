@@ -55,15 +55,20 @@ int CRC64(data)
 ### Time & Sleep
 
 ```lua
-nil Sleep(opt int)
+nil Sleep(opt ms)
+nil Sleep(token)
+nil Sleep(token, ms)
 nil Yield()
 int Time()
 ms Runtime()
 ```
-- `Sleep`: Yield the current coroutine for the specified ms (default 0). Falls back to a blocking OS sleep when called outside a scheduler-managed coroutine.
+- `Sleep`: Yield the current coroutine cooperatively without blocking any OS thread. Falls back to a blocking OS sleep when called outside a scheduler-managed coroutine.
+  - `Sleep(ms)` — sleep for at least `ms` milliseconds (default `0`).
+  - `Sleep(token)` — sleep until the `AliveToken` is disposed, expired, or a linked parent dies. Returns immediately if the token is already dead.
+  - `Sleep(token, ms)` or `Sleep(ms, token)` — sleep until whichever comes first: token death or the millisecond deadline.
 - `Yield`: Cooperatively yield the current coroutine back to the scheduler immediately (no sleep delay). For inline sync calls, this briefly releases Lua access so the scheduler and variable bridge can service their queues before the call is resumed.
-- `Time`: Get current Unix epoch in milliseconds
-- `Runtime`: Get runtime in milliseconds
+- `Time`: Get current Unix epoch in milliseconds.
+- `Runtime`: Get runtime in milliseconds.
 
 ### Error Handling
 
@@ -1891,6 +1896,8 @@ nil     json:Dispose()
 
 By default JSON `null` decodes to Lua `nil` — falsy, so coalescing with `or` works naturally. Call `json:SetDecodeNull(true)` to decode `null` as the `Json.Null` sentinel instead, which is **truthy** and survives a round-trip through `Encode`. Without `SetDecodeNull(true)`, re-encoding a decoded object will omit any keys whose value was `null` (since `nil` in a Lua table means absent).
 
+> **Internal modules always use the sentinel.** The Kitsune engine bridge and all built-in integrations (MySQL, Postgres, Redis/RedisJSON, MongoDB, etc.) decode JSON with `nullAsSentinel = true` internally. This means any JSON `null` that arrives through those modules is already the `Json.Null` sentinel — no `SetDecodeNull` call is required on your side. This behaviour is intentional: when JSON comes from a database or protocol layer, preserving the distinction between "field is null" and "field is absent" is almost always the right default.
+
 ```lua
 local json = Json.New()
 
@@ -1911,6 +1918,9 @@ print(t2.value or "default")   -- prints Json.Null userdata, NOT "default"
 
 -- Re-encode preserves null
 print(json2:Encode(t2))         -- {"value":null}
+
+-- Values from internal modules already use the sentinel:
+-- local row = mysql_result_row  →  row.nullable_col == Json.Null  (not nil)
 ```
 
 ### Decode Input Forms
@@ -2864,13 +2874,41 @@ print(toml:Decode(s3).b)   -- 2
 
 ## AliveToken
 
-A lightweight cancellation-token userdata. One token can be shared across multiple coroutines and tasks; calling `Dispose` on any reference immediately makes `IsAlive()` return `false` everywhere that holds the same token. Tokens become disposed automatically when garbage-collected.
+A lightweight cancellation-token userdata. One token can be shared across multiple coroutines and tasks; calling `Dispose` on any reference immediately makes `IsAlive()` return `false` everywhere that holds the same token. Tokens become disposed automatically when garbage-collected. An optional timeout makes the token expire automatically after a fixed number of milliseconds.
 
 ```lua
-AliveToken  AliveToken.New()              -- create a live token
-bool        token:IsAlive()               -- true while not disposed
-nil         token:Dispose()               -- cancel / dispose the token
-nil         token:ErrorIfDead(opt msg)    -- luaL_error if disposed (default message: "Cancellation token was cancelled")
+AliveToken  AliveToken.New(opt timeoutMs)          -- create a live token; optional timeout in ms
+bool        token:IsAlive()                        -- true while not disposed and not timed out
+nil         token:Dispose()                        -- cancel / dispose the token immediately
+nil         token:ErrorIfDead(opt msg)             -- luaL_error if disposed or timed out
+nil         token:Link(parent1, parent2, ...)      -- die when any linked parent dies
+```
+
+| Function | Description |
+|----------|-------------|
+| `New(opt timeoutMs)` | Create a live token. Pass a positive integer to set an automatic timeout in milliseconds; the token expires after that duration when `IsAlive`, `ErrorIfDead`, or any internal poll point checks it. Pass nothing (or `0`) for a token that only expires via `Dispose` |
+| `IsAlive` | Returns `true` while the token is alive. Checks the timeout and all linked parents on every call |
+| `Dispose` | Marks the token as disposed immediately, regardless of timeout. Idempotent |
+| `ErrorIfDead` | Raises a Lua error if the token is disposed or timed out |
+| `Link` | Attach one or more parent tokens. The child token becomes dead whenever any linked parent is disposed, timed out, or itself has a dead parent. Can be called multiple times to add more parents incrementally. Propagates through chains (grandparent → parent → child) |
+
+### Timeout
+
+When `timeoutMs` is given, liveness is checked lazily on every call to `IsAlive`, `ErrorIfDead`, or any internal C++ poll point (`HelperWaitCont`, `consume_cont`, `accept_body`, `pubsub_cont`, etc.). The token's `alive` flag is set to `0` the first time the deadline is found to have passed — there is no background timer or thread.
+
+```lua
+-- Expires automatically after 5 seconds
+local token = AliveToken.New(5000)
+
+-- Without timeout — only Dispose() stops it
+local token = AliveToken.New()
+```
+
+`tostring` on a timed token includes the remaining milliseconds while alive:
+
+```
+AliveToken(alive, 4823 ms remaining)
+AliveToken(disposed)
 ```
 
 ### Example — cooperative cancellation across coroutines
@@ -2892,13 +2930,36 @@ token:Dispose()
 -- Guard pattern: raise an error if the token was cancelled
 token:ErrorIfDead()                          -- default message
 token:ErrorIfDead("operation was aborted")   -- custom message
+
+-- Deadline pattern: auto-cancel after 30 seconds
+local deadline = AliveToken.New(30000)
+conn:SetAliveToken(deadline)
+local ok, rows = conn:QueryAll("SELECT * FROM big_table")
+-- returns false, "cancelled" if query takes more than 30 s
+
+-- Linked tokens: child dies when any parent dies
+local appToken   = AliveToken.New()   -- global shutdown token
+local reqToken   = AliveToken.New()   -- per-request timeout token
+local childToken = AliveToken.New()
+childToken:Link(appToken, reqToken)   -- dies if either parent dies
+conn:SetAliveToken(childToken)
+
+-- Chain: grandparent -> parent -> child
+local gp = AliveToken.New()
+local parent = AliveToken.New()
+local child  = AliveToken.New()
+parent:Link(gp)
+child:Link(parent)
+gp:Dispose()              -- child is now dead too
 ```
 
 ### Notes
 
 - `Dispose` is idempotent — calling it multiple times is safe.
 - `__gc` calls `Dispose` automatically, so tokens created inside a scope that exits will cancel themselves when collected.
-- `tostring(token)` returns `"AliveToken(alive)"` or `"AliveToken(disposed)"`.
+- `Link` stores references to parent tokens in the registry — parents are kept alive for at least as long as the child.
+- Linked parents are checked lazily on every `IsAlive` / `ErrorIfDead` / poll call; there is no background thread.
+- All modules that accept `SetAliveToken` (`HttpClient`, `HttpServer`, `MySQL`, `Postgres`, `MongoDB`, `Redis Subscribe`, `Kafka consumer`) check the token through the same `alivetoken_tick` function — linking, timeout, and dispose all work transparently.
 
 ---
 

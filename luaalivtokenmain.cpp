@@ -5,6 +5,7 @@ static const struct luaL_Reg alivetoken_functions[] = {
     { "IsAlive",     lua_alivetoken_isalive_method },
     { "Dispose",     lua_alivetoken_dispose       },
     { "ErrorIfDead", lua_alivetoken_error_if_dead  },
+    { "Link",        lua_alivetoken_link          },
     { NULL, NULL }
 };
 

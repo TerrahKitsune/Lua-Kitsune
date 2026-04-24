@@ -10280,6 +10280,296 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("3");
         }
 
+        [Fact]
+        public async Task AliveToken_Timeout_ZeroMs_IsAlreadyDead()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = AliveToken.New(0)
+                return tostring(t:IsAlive())
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task AliveToken_Timeout_LargeMs_StillAlive()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = AliveToken.New(60000)
+                return tostring(t:IsAlive())
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task AliveToken_Timeout_1Ms_ExpiresAfterSleep()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = AliveToken.New(1)
+                Sleep(50)
+                return tostring(t:IsAlive())
+            ");
+            r.String.ShouldBe("false");
+        }
+
+        [Fact]
+        public async Task AliveToken_Timeout_ErrorIfDead_ErrorsAfterExpiry()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = AliveToken.New(1)
+                Sleep(50)
+                local ok, err = pcall(function() t:ErrorIfDead() end)
+                return tostring(ok) .. '|' .. tostring(err ~= nil)
+            ");
+            r.String.ShouldBe("false|true");
+        }
+
+        [Fact]
+        public async Task AliveToken_Timeout_ToStringContainsRemaining()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = AliveToken.New(60000)
+                local s = tostring(t)
+                return tostring(s:find('remaining') ~= nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task AliveToken_Timeout_ToStringDisposedAfterExpiry()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = AliveToken.New(1)
+                Sleep(50)
+                return tostring(t)
+            ");
+            r.String!.ShouldContain("disposed");
+        }
+
+        [Fact]
+        public async Task AliveToken_Timeout_NoArg_StillWorks()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = AliveToken.New()
+                Sleep(50)
+                return tostring(t:IsAlive())
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task AliveToken_Link_ChildAliveWhenParentAlive()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local parent = AliveToken.New()
+                local child  = AliveToken.New()
+                child:Link(parent)
+                return tostring(child:IsAlive())
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task AliveToken_Link_ChildDiesWhenParentDisposed()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local parent = AliveToken.New()
+                local child  = AliveToken.New()
+                child:Link(parent)
+                parent:Dispose()
+                return tostring(child:IsAlive())
+            ");
+            r.String.ShouldBe("false");
+        }
+
+        [Fact]
+        public async Task AliveToken_Link_ChildAliveWhenOnlyOneOfTwoParentsDisposed_False()
+        {
+            // Disposing ANY linked parent kills the child
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local p1 = AliveToken.New()
+                local p2 = AliveToken.New()
+                local child = AliveToken.New()
+                child:Link(p1, p2)
+                p1:Dispose()
+                return tostring(child:IsAlive())
+            ");
+            r.String.ShouldBe("false");
+        }
+
+        [Fact]
+        public async Task AliveToken_Link_ChildDeadDoesNotRevive()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local parent = AliveToken.New()
+                local child  = AliveToken.New()
+                child:Link(parent)
+                parent:Dispose()
+                child:IsAlive()  -- tick to propagate
+                -- even if we create a new token and link it, child stays dead
+                return tostring(child:IsAlive())
+            ");
+            r.String.ShouldBe("false");
+        }
+
+        [Fact]
+        public async Task AliveToken_Link_ChainPropagates()
+        {
+            // grandparent -> parent -> child: disposing grandparent kills child
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local gp     = AliveToken.New()
+                local parent = AliveToken.New()
+                local child  = AliveToken.New()
+                parent:Link(gp)
+                child:Link(parent)
+                gp:Dispose()
+                return tostring(child:IsAlive())
+            ");
+            r.String.ShouldBe("false");
+        }
+
+        [Fact]
+        public async Task AliveToken_Link_MultipleParentsAllAliveKeepsChild()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local p1 = AliveToken.New()
+                local p2 = AliveToken.New()
+                local p3 = AliveToken.New()
+                local child = AliveToken.New()
+                child:Link(p1, p2, p3)
+                return tostring(child:IsAlive())
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task AliveToken_Link_IncrementalLinkCalls()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local p1 = AliveToken.New()
+                local p2 = AliveToken.New()
+                local child = AliveToken.New()
+                child:Link(p1)
+                child:Link(p2)
+                p2:Dispose()
+                return tostring(child:IsAlive())
+            ");
+            r.String.ShouldBe("false");
+        }
+
+        [Fact]
+        public async Task AliveToken_Link_ParentWithTimeoutPropagates()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local parent = AliveToken.New(1)
+                local child  = AliveToken.New()
+                child:Link(parent)
+                Sleep(50)
+                return tostring(child:IsAlive())
+            ");
+            r.String.ShouldBe("false");
+        }
+
+        // -- Sleep + AliveToken ---------------------------------------------------
+        [Fact]
+        public async Task Sleep_WithToken_ReturnsWhenTokenDisposed()
+        {
+            using KitsuneEngine engine = new();
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            await engine.ExecuteStringAsync(@"
+                local token = AliveToken.New(50)
+                Sleep(token)
+            ");
+            sw.Stop();
+
+            // Token expires after ~50 ms, should wake well before 1000 ms
+            sw.ElapsedMilliseconds.ShouldBeLessThan(500);
+        }
+
+        [Fact]
+        public async Task Sleep_WithToken_AlreadyDeadReturnsImmediately()
+        {
+            using KitsuneEngine engine = new();
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            await engine.ExecuteStringAsync(@"
+                local token = AliveToken.New()
+                token:Dispose()
+                Sleep(token)
+            ");
+            sw.Stop();
+            sw.ElapsedMilliseconds.ShouldBeLessThan(200);
+        }
+
+        [Fact]
+        public async Task Sleep_WithTokenAndMs_WakesOnDeadlineWhenTokenLives()
+        {
+            using KitsuneEngine engine = new();
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            await engine.ExecuteStringAsync(@"
+                local token = AliveToken.New()
+                Sleep(token, 50)
+            ");
+            sw.Stop();
+
+            // Token stayed alive so deadline (50 ms) should have fired
+            sw.ElapsedMilliseconds.ShouldBeGreaterThanOrEqualTo(40);
+            sw.ElapsedMilliseconds.ShouldBeLessThan(500);
+        }
+
+        [Fact]
+        public async Task Sleep_WithTokenAndMs_WakesOnTokenBeforeDeadline()
+        {
+            using KitsuneEngine engine = new();
+
+            // Set up a token in the engine state
+            await engine.ExecuteStringAsync(@"_token = AliveToken.New()");
+
+            // Start the sleep in the background
+            var sleepTask = engine.ExecuteStringAsync(@"
+                Sleep(_token, 5000)
+            ");
+
+            // Dispose the token from outside after a short delay
+            await Task.Delay(30).ConfigureAwait(false);
+            await engine.ExecuteStringAsync(@"_token:Dispose()").ConfigureAwait(false);
+
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            await sleepTask.ConfigureAwait(false);
+            sw.Stop();
+
+            // Should have woken when token was disposed, well before 5000 ms
+            sw.ElapsedMilliseconds.ShouldBeLessThan(500);
+        }
+
+        [Fact]
+        public async Task Sleep_WithTimeoutToken_WakesWhenTokenExpires()
+        {
+            using KitsuneEngine engine = new();
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            await engine.ExecuteStringAsync(@"
+                local token = AliveToken.New(50)
+                Sleep(token)
+            ");
+            sw.Stop();
+
+            // Token should expire after ~50ms; definitely before 500ms
+            sw.ElapsedMilliseconds.ShouldBeLessThan(500);
+        }
+
         // -- UInt -----------------------------------------------------------------
         [Fact]
         public async Task UInt_Zero_IsUserdata()

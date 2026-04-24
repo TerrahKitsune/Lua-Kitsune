@@ -9,6 +9,15 @@
 #define LUAHTTPCLIENT  "LuaHTTPClient"
 #define LUAHTTPREQUEST "LuaHTTPRequest"
 
+// -- CurlMsg — per-easy-handle completion record ------------------------------
+// Allocated alongside each easy handle; stored as CURLOPT_PRIVATE so that
+// drain_curlm can dispatch CURLMSG_DONE to the correct struct even when
+// multiple concurrent coroutines are pumping the same CURLM*.
+typedef struct CurlMsg {
+	bool     done;    // true once CURLMSG_DONE has been dispatched here
+	CURLcode result;  // the CURLcode from the CURLMSG_DONE message
+} CurlMsg;
+
 // -- ChunkNode — streaming chunk queue ----------------------------------------
 typedef struct ChunkNode {
 	char*             data;
@@ -58,6 +67,7 @@ typedef struct LuaHttpRequest {
 	char               statusText[256]; // reason phrase parsed from the HTTP status line
 	char               errorBuf[CURL_ERROR_SIZE];
 	bool               addedToMulti;
+	CurlMsg*           curlMsg;        // heap-allocated; freed in __gc
 } LuaHttpRequest;
 
 // -- LuaHttpStreamNative -------------------------------------------------------
@@ -77,6 +87,7 @@ typedef struct LuaHttpStreamNative {
 	char               errorBuf[CURL_ERROR_SIZE];
 	bool               addedToMulti;
 	bool               done;            // CURLMSG_DONE received
+	CurlMsg*           curlMsg;        // heap-allocated; freed in http_stream_close
 } LuaHttpStreamNative;
 
 // -- LuaWebSocketNative --------------------------------------------------------
@@ -96,6 +107,7 @@ typedef struct LuaHttpStreamNative {
 	char*              fragBuf;
 	size_t             fragLen;
 	size_t             fragAlloc;
+	CurlMsg*           curlMsg;        // heap-allocated; freed in ws_stream_close
 } LuaWebSocketNative;
 
 int luaopen_http(lua_State* L);

@@ -1,4 +1,5 @@
 ﻿#include "luaxml.h"
+#include "utf8bom.h"
 #include "luadecimal.h"
 #include "luaidentifier.h"
 #include "luadatetime.h"
@@ -186,6 +187,7 @@ int lua_xml_decode(lua_State* L) {
 		luaL_argerror(L, 2, "string expected");
 	size_t      len = 0;
 	const char* src = lua_tolstring(L, 2, &len);
+	skip_utf8_bom(&src, &len);
 
 	x->doc->reset();
 

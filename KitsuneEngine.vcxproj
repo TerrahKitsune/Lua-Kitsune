@@ -352,6 +352,7 @@
     <ClInclude Include="streammemory.h" />
     <ClInclude Include="timespanmain.h" />
     <ClInclude Include="uintmain.h" />
+    <ClInclude Include="utf8bom.h" />
     <ClInclude Include="wcharmain.h" />
     <ClInclude Include="identifiermain.h" />
     <ClInclude Include="datetimemain.h" />
@@ -375,6 +376,7 @@
     <ClInclude Include="TimerMain.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="build-linux-and-test.ps1" />
     <None Include="Lua functions.md" />
     <None Include="plans\httpserver-integration.md" />
     <None Include="plans\imgui-api-namespace-refactor.md" />

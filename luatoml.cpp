@@ -1,4 +1,5 @@
 ﻿#include "luatoml.h"
+#include "utf8bom.h"
 #include "luawchar.h"
 #include "luaidentifier.h"
 #include "luadatetime.h"
@@ -645,6 +646,7 @@ int lua_toml_decode(lua_State* L) {
     lua_toml_check(L, 1);
     size_t      len;
     const char* src = luaL_checklstring(L, 2, &len);
+    skip_utf8_bom(&src, &len);
 
     // toml_parse requires a NUL-terminated, mutable string.
     char* buf = (char*)kitsune_malloc(len + 1);

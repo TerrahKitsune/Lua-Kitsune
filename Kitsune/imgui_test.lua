@@ -8,6 +8,7 @@
     sliderFloat    = 0.5,
     sliderInt      = 5,
     inputText      = "hello",
+    passwordText   = "",
     radioSel       = 0,
     -- Drag inputs
     dragFloat      = 0.5,
@@ -453,6 +454,12 @@ local function tabInput(renderer, ctx)
     local changed, val = renderer:InputText("Text input", ctx.inputText)
     if changed then ctx.inputText = val end
     renderer:Text("Value: " .. ctx.inputText)
+    renderer:Separator()
+    renderer:Text("--- Password masking ---")
+    local pwChanged, pwVal = renderer:InputText("Password", ctx.passwordText, Imgui.Enum.ImGuiInputTextFlags.Password)
+    if pwChanged then ctx.passwordText = pwVal end
+    renderer:Text("Length: " .. #ctx.passwordText .. " char(s)")
+    renderer:Text("Actual: " .. ctx.passwordText)
 end
 
 local function tabLayout(renderer, ctx)
@@ -503,6 +510,12 @@ local function tabSchedule(renderer, ctx)
     if renderer:Button("Re-schedule") then
         Imgui.Schedule(function()
             ctx.scheduleResult = "re-scheduled on frame " .. ctx.frameCount
+        end)
+    end
+
+    if renderer:Button("Schedule error") then
+        Imgui.Schedule(function()
+            error("Oh no there was an error (test)");
         end)
     end
 end

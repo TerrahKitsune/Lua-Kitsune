@@ -1,4 +1,5 @@
 ﻿#include "luayaml.h"
+#include "utf8bom.h"
 #include "luawchar.h"
 #include "luaidentifier.h"
 #include "luadatetime.h"
@@ -490,6 +491,7 @@ int lua_yaml_decode(lua_State* L) {
 
     size_t      len;
     const char* src = luaL_checklstring(L, 2, &len);
+    skip_utf8_bom(&src, &len);
 
     yaml_parser_t parser;
     yaml_parser_initialize(&parser);
