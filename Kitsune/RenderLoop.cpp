@@ -17,6 +17,7 @@
 #include "SDLAudio.h"
 #include "ResourceCache.h"
 #include "SDLInput.h"
+#include "Scheduler.h"
 
 #include "Imgui/imgui.h"
 #include "Imgui/imgui_internal.h"
@@ -42,85 +43,6 @@
 // Calls with runningId==0 are submitted (fireAndForget=false so we own the result).
 // Calls with runningId>0 are polled; finished ones invoke onError on fault then are freed.
 // Long-running coroutines stay on the list until they finish.
-static void drain_scheduled_calls(ImguiWindowContext* ctx) {
-	ImguiScheduledCall** prev = &ctx->scheduledHead;
-	ImguiScheduledCall*  call = ctx->scheduledHead;
-	while (call) {
-		if (call->runningId == 0) {
-			// Not yet submitted — launch it now.
-			if (call->argc > 0) {
-				KitsuneVariable* values = (KitsuneVariable*)malloc(call->argc * sizeof(KitsuneVariable));
-				if (values) {
-					for (int i = 0; i < call->argc; i++)
-						values[i] = *call->argv[i];
-					call->runningId = KitsuneExecuteVariableAsync(call->fn, call->argc, values, false);
-					free(values);
-				}
-			}
-			else {
-				call->runningId = KitsuneExecuteVariableAsync(call->fn, 0, nullptr, false);
-			}
-			for (int i = 0; i < call->argc; i++)
-				KitsuneVariableFree(call->argv[i]);
-			free(call->argv);
-			call->argv = nullptr;
-			call->argc = 0;
-			KitsuneVariableFree(call->fn);
-			call->fn = nullptr;
-
-			if (call->runningId <= 0) {
-				// Failed to submit — drop it.
-				*prev = call->next;
-				ImguiScheduledCall* next = call->next;
-				free(call);
-				call = next;
-				continue;
-			}
-		}
-		else if (KitsuneHasResult(call->runningId)) {
-			// Finished — check for errors, release, free.
-			KitsuneVariable* result = KitsuneGetResult(call->runningId);
-			if (result && result->type == KITSUNE_TERROR) {
-				if (ctx->onError) {
-					KitsuneVariable* ret = KitsuneExecuteVariable(ctx->onError, 1, result);
-					KitsuneVariableFree(ret);
-				}
-				else {
-					fprintf(stderr, "[Imgui.Schedule] error: %.*s\n",
-						(int)result->length, (char*)result->data);
-				}
-			}
-			KitsuneVariableFree(result);
-			*prev = call->next;
-			ImguiScheduledCall* next = call->next;
-			free(call);
-			call = next;
-			continue;
-		}
-
-		prev = &call->next;
-		call = call->next;
-	}
-}
-
-static void free_scheduled_calls(ImguiWindowContext* ctx) {
-	while (ctx->scheduledHead) {
-		ImguiScheduledCall* call = ctx->scheduledHead;
-		ctx->scheduledHead = call->next;
-		if (call->runningId > 0) {
-			KitsuneVariable* result = KitsuneGetResult(call->runningId);
-			KitsuneVariableFree(result);
-		}
-		else {
-			for (int i = 0; i < call->argc; i++)
-				KitsuneVariableFree(call->argv[i]);
-			KitsuneVariableFree(call->fn);
-			free(call->argv);
-		}
-		free(call);
-	}
-}
-
 static void drain_imgui_stack(ImguiWindowContext* ctx);
 
 static void free_ctx(ImguiWindowContext* ctx) {
@@ -277,26 +199,20 @@ static int ImguiSchedule(int argc, const KitsuneVariable* argv,
 	if (!g_imguiCtx || argc < 1 || argv[0].type != KITSUNE_TFUNCTION)
 		return 0;
 
-	ImguiScheduledCall* call = (ImguiScheduledCall*)calloc(1, sizeof(ImguiScheduledCall));
-	if (!call)
-		return 0;
-
-	call->fn = KitsuneAnchorVariable(&argv[0]);
-	call->argc = argc - 1;
-
-	if (call->argc > 0) {
-		call->argv = (KitsuneVariable**)malloc(call->argc * sizeof(KitsuneVariable*));
-		if (!call->argv) {
-			KitsuneVariableFree(call->fn);
-			free(call);
+	KitsuneVariable* fn = KitsuneAnchorVariable(&argv[0]);
+	int extraArgc = argc - 1;
+	KitsuneVariable** extraArgv = nullptr;
+	if (extraArgc > 0) {
+		extraArgv = (KitsuneVariable**)malloc(extraArgc * sizeof(KitsuneVariable*));
+		if (!extraArgv) {
+			KitsuneVariableFree(fn);
 			return 0;
 		}
-		for (int i = 0; i < call->argc; i++)
-			call->argv[i] = KitsuneAnchorVariable(&argv[i + 1]);
+		for (int i = 0; i < extraArgc; i++)
+			extraArgv[i] = KitsuneAnchorVariable(&argv[i + 1]);
 	}
 
-	call->next = g_imguiCtx->scheduledHead;
-	g_imguiCtx->scheduledHead = call;
+	SchedulerPush(g_imguiCtx->scheduler, fn, extraArgc, extraArgv);
 	return 0;
 }
 
@@ -304,14 +220,15 @@ static int ImguiSchedule(int argc, const KitsuneVariable* argv,
 // RunImguiSession
 // ---------------------------------------------------------------------------
 
-void RunImguiSession() {
+void RunImguiSession(SchedulerState* scheduler) {
 	ImguiWindowContext* ctx = g_imguiCtx;
 	if (!ctx)
 		return;
 
+	ctx->scheduler = scheduler;
+
 	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER) != 0) {
 		fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
-		drain_scheduled_calls(ctx);
 		free_ctx(ctx);
 		return;
 	}
@@ -335,7 +252,6 @@ void RunImguiSession() {
 	if (!ctx->window) {
 		fprintf(stderr, "SDL_CreateWindow failed: %s\n", SDL_GetError());
 		SDL_Quit();
-		drain_scheduled_calls(ctx);
 		free_ctx(ctx);
 		return;
 	}
@@ -346,7 +262,6 @@ void RunImguiSession() {
 		SDL_DestroyWindow(ctx->window);
 		ctx->window = nullptr;
 		SDL_Quit();
-		drain_scheduled_calls(ctx);
 		free_ctx(ctx);
 		return;
 	}
@@ -391,6 +306,9 @@ void RunImguiSession() {
 	rendererVar.length = strlen(rendererUD.name);
 	rendererVar.userdata = &rendererUD;
 	KitsuneVariable* anchoredRenderer = KitsuneAnchorVariable(&rendererVar);
+
+	if (ctx->onError)
+		SchedulerSetOnError(ctx->scheduler, KitsuneAnchorVariable(ctx->onError));
 
 	bool running = (anchoredRenderer != nullptr);
 	while (running) {
@@ -469,7 +387,7 @@ void RunImguiSession() {
 			KitsuneVariableFree(result);
 		}
 
-		drain_scheduled_calls(ctx);
+		SchedulerDrain(ctx->scheduler);
 		drain_imgui_stack(ctx);
 
 		ImGui::EndFrame();
@@ -483,8 +401,6 @@ void RunImguiSession() {
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 		SDL_GL_SwapWindow(ctx->window);
 	}
-
-	free_scheduled_calls(ctx);
 
 	// Tear down ImGui and SDL before the resource cache so that font_free can
 	// safely free ttfData (the atlas no longer references it after DestroyContext).

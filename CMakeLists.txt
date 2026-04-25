@@ -340,7 +340,7 @@ target_link_libraries(KitsuneEngine PRIVATE lua_core pthread dl)
 
 # ── kitsune host executable ───────────────────────────────────────────────────
 # ── kitsune host executable ───────────────────────────────────────────────────
-add_executable(kitsune Kitsune/Program.cpp Kitsune/Session.cpp)
+add_executable(kitsune Kitsune/Program.cpp Kitsune/Session.cpp Kitsune/Scheduler.cpp)
 
 target_include_directories(kitsune PRIVATE
 	"${CMAKE_SOURCE_DIR}"

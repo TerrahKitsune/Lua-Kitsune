@@ -12,7 +12,7 @@
 int LuaCreateMutex(lua_State* L) {
 
 	const char* name = luaL_checkstring(L, 1);
-	HANDLE mutex = CreateMutex(NULL, false, name);
+	HANDLE mutex = CreateMutexA(NULL, FALSE, name);
 	lua_pop(L, lua_gettop(L));
 
 	if (mutex == NULL) {
@@ -29,7 +29,7 @@ int LuaCreateMutex(lua_State* L) {
 int LuaLockMutex(lua_State* L) {
 
 	LuaMutex* mutex = lua_tomutex(L, 1);
-	lua_Integer timeout = luaL_optinteger(L, 2, -1);
+	lua_Integer timeout = luaL_optinteger(L, 2, 0);
 
 	if (mutex->istaken) {
 		lua_pop(L, lua_gettop(L));
@@ -37,17 +37,12 @@ int LuaLockMutex(lua_State* L) {
 		return 1;
 	}
 
-	DWORD result = WaitForSingleObject(mutex->mutex, (DWORD)timeout);
+	DWORD dwTimeout = (timeout < 0) ? INFINITE : (DWORD)timeout;
+	DWORD result = WaitForSingleObject(mutex->mutex, dwTimeout);
 
 	if (result == WAIT_ABANDONED) {
-		mutex->istaken = false;
-		result = ReleaseMutex(mutex->mutex);
-		if (!result) {
-			lua_pop(L, lua_gettop(L));
-			lua_pushboolean(L, mutex->istaken);
-			return 1;
-		}
-		result = WaitForSingleObject(mutex->mutex, (DWORD)timeout);
+		ReleaseMutex(mutex->mutex);
+		result = WaitForSingleObject(mutex->mutex, dwTimeout);
 	}
 
 	mutex->istaken = result == WAIT_OBJECT_0;
@@ -148,7 +143,7 @@ int LuaCreateMutex(lua_State* L) {
 int LuaLockMutex(lua_State* L) {
 
 	LuaMutex* m = lua_tomutex(L, 1);
-	lua_Integer timeout_ms = luaL_optinteger(L, 2, -1);
+	lua_Integer timeout_ms = luaL_optinteger(L, 2, 0);
 	lua_pop(L, lua_gettop(L));
 
 	if (m->istaken) {

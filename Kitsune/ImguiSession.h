@@ -1,7 +1,8 @@
-#pragma once
+﻿#pragma once
 #ifdef KITSUNE_IMGUI
 
 #include "ImguiRenderer.h"
+#include "Scheduler.h"
 
 // Global session pointer. Set by Imgui.Run when a session is requested.
 // Checked by Program.cpp after the startup script finishes.
@@ -13,8 +14,9 @@ extern ImguiWindowContext* g_imguiCtx;
 void RegisterImguiFunctions();
 
 // Runs the SDL2+OpenGL render loop using g_imguiCtx.
+// scheduler is the program-level SchedulerState; ctx->scheduler is pointed at it
+// so scheduled calls from the main script keep running inside the imgui loop.
 // Blocks until the window is closed or renderFn returns false.
-// g_imguiCtx is left non-null on exit; __gc frees it during KitsuneCleanup.
-void RunImguiSession();
+void RunImguiSession(SchedulerState* scheduler);
 
 #endif // KITSUNE_IMGUI

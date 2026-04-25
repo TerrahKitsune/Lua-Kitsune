@@ -43,16 +43,7 @@ static int imgui_gc(int argc, const KitsuneVariable* argv,
 	if (!ctx)
 		return 0;
 
-	// Drain any remaining scheduled calls
-	while (ctx->scheduledHead) {
-		ImguiScheduledCall* call = ctx->scheduledHead;
-		ctx->scheduledHead = call->next;
-		for (int i = 0; i < call->argc; i++)
-			KitsuneVariableFree(call->argv[i]);
-		KitsuneVariableFree(call->fn);
-		free(call->argv);
-		free(call);
-	}
+	// The scheduler is owned by the main program; do not free it here.
 
 	// Release anchored Lua variables
 	if (ctx->renderFn) {

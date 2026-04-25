@@ -389,6 +389,19 @@ extern "C" {
 	// Pass a NULL buffer to query the count without filling. Thread-safe.
 	KITSUNE_API int KitsuneGetActiveIds(int* buffer, int bufferSize);
 
+	// -- Coroutine naming ------------------------------------------------------
+	// Associates a human-readable name with the coroutine identified by id.
+	// Returns false if the name is already in use by another coroutine, or if id is not found.
+	// Pass NULL to clear the name. Thread-safe.
+	KITSUNE_API bool KitsuneSetName(int id, const char* name);
+	// Returns the name associated with the coroutine identified by id, copied into buf
+	// (always null-terminated, truncated to bufSize-1 bytes if needed).
+	// Pass buf=NULL / bufSize=0 to query the required byte length (excluding null terminator).
+	// Returns 0 if the id is not found or has no name. Thread-safe.
+	KITSUNE_API size_t KitsuneGetName(int id, char* buf, size_t bufSize);
+	// Returns the coroutine id whose name matches the given name, or 0 if not found. Thread-safe.
+	KITSUNE_API int KitsuneGetId(const char* name);
+
 	// -- Variable bridge -------------------------------------------------------
 	// Sets a Lua global at the given dot-separated path (e.g. "foo" or "foo.bar.baz").
 	// The Lua global environment is the root; intermediate tables are created automatically.

@@ -12,7 +12,7 @@ kitsune.exe [script.lua] [arg1 arg2 ...]
 
 1. Initialises KitsuneEngine and registers all built-in functions.
 2. Executes the supplied Lua script file (defaults to `main.lua` in the working directory) as a coroutine.
-3. Waits for the coroutine to finish or an OS signal (`CTRL+C`, `SIGINT`, `SIGTERM`).
+3. Waits for the coroutine to finish or an OS signal (`CTRL+C`, `SIGINT`, `SIGTERM`). While waiting, any functions enqueued with `Schedule(fn)` are polled each millisecond tick.
 4. If the script called `Imgui.Start(...)` before returning, the render loop is entered and blocks until the window is closed.
 5. Prints the script's return value to stdout (string, number, or boolean) then exits.
 
@@ -169,13 +169,74 @@ end
 
 ---
 
+### `Schedule`
+
+Enqueues a Lua function to run as an independent coroutine. The coroutine is submitted and polled in the background — in headless mode once per millisecond tick, in GUI mode once per rendered frame — without blocking the caller.
+
+```lua
+Schedule(fn, arg1, arg2, ...)
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `fn` | `function` | The coroutine to execute |
+| `arg1..n` | any | Optional arguments forwarded to `fn` |
+
+Errors raised inside `fn` are forwarded to the handler set by `Scheduler.SetOnError`, or printed to stderr if no handler is set.
+
+`Schedule` works identically in both headless and GUI mode. If `Imgui.Start` is called, the same scheduler continues running inside the render loop so any in-flight coroutines from the startup script keep executing.
+
+```lua
+-- Fire-and-forget background work
+Schedule(function()
+    local result = Http.Get("https://example.com")
+    print(result)
+end)
+
+-- With arguments
+Schedule(function(url, timeout)
+    local result = Http.Get(url, timeout)
+    print(result)
+end, "https://example.com", 5000)
+```
+
+---
+
+### `Scheduler.SetOnError`
+
+Sets a global error handler for all coroutines launched via `Schedule`. Replaces any previously set handler. Pass `nil` (or omit the argument) to clear the handler and fall back to stderr output.
+
+```lua
+Scheduler.SetOnError(fn)
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `fn` | `function` or `nil` | Called with the error value when a scheduled coroutine faults. Pass `nil` to clear |
+
+If `Imgui.Start` is called with an `onError` argument, that handler overwrites the one set here for the duration of the render loop.
+
+```lua
+Scheduler.SetOnError(function(err)
+    print("Scheduled task failed:", err)
+end)
+
+Schedule(function()
+    error("something went wrong")
+end)
+```
+
+---
+
 ### `Imgui.Start`
 
 See [imgui-renderer-api.md](imgui-renderer-api.md) — Global API section.
 
 ### `Imgui.Schedule`
 
-See [imgui-renderer-api.md](imgui-renderer-api.md) — Global API section.
+Alias for `Schedule` that is only valid after `Imgui.Start` has been called. Enqueues a coroutine into the same shared scheduler. Prefer `Schedule` for code that must work in both headless and GUI modes.
+
+See [`Schedule`](#schedule) above.
 
 ### SDL Audio
 

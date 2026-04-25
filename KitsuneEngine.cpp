@@ -109,6 +109,13 @@ struct KitsuneCoroutine {
 	double        startTime;    // GetCounter value recorded when the coroutine was created
 	int           initialNArgs; // number of args already on the thread stack for the first lua_resume; 0 for file/string coroutines
 	std::atomic<long> isInline{ 0 }; // 1 = inline sync call; scheduler skips Step 2 resume
+	char* name; // optional human-readable name; heap-allocated, nullptr if not set
+	int  luaRefCount; // number of live LuaTask userdata handles open on this slot (Tasks module only).
+					  // Incremented by Tasks.New (after Start) and Tasks.Open; decremented by __gc.
+					  // When it drops to 0 and apiOwned==false, fireAndForget is set to 1 automatically.
+					  // Always accessed under slotsLock on the scheduler thread; plain int is sufficient.
+	bool apiOwned;    // true when the slot was created via the KitsuneEngine.h public async API.
+					  // Tasks module __gc never modifies fireAndForget on apiOwned slots.
 };
 
 #define KITSUNE_MAX_COROUTINES 256
@@ -1245,6 +1252,7 @@ static void SchedulerProc(KitsuneState* state) {
 					pendingCount++;
 					slot->thread = NULL;  // invariant: null before memset so the pointer is never stale
 					kitsune_free(slot->error);
+					kitsune_free(slot->name);
 					memset(slot, 0, sizeof(KitsuneCoroutine));  // id = 0 marks the slot as reusable
 					slot->sleepTokenRef = LUA_NOREF;
 				}
@@ -1986,6 +1994,7 @@ extern "C" {
 		}
 		state->slotsLock.lock();
 		kitsune_free(slot->error);
+		kitsune_free(slot->name);
 		memset(slot, 0, sizeof(KitsuneCoroutine));
 		slot->sleepTokenRef = LUA_NOREF;
 		state->slotsLock.unlock();
@@ -2188,6 +2197,8 @@ extern "C" {
 		}
 		kitsune_free(slot->error);
 		slot->error = NULL;
+		kitsune_free(slot->name);
+		slot->name = NULL;
 		if (isNewSlot) {
 			state->slotsLock.lock();
 			state->slots[state->slotCount++] = slot;
@@ -2804,6 +2815,72 @@ extern "C" {
 		}
 		state->slotsLock.unlock();
 		return count;
+	}
+
+	KITSUNE_API bool KitsuneSetName(int id, const char* name) {
+		KitsuneState* state = g_state;
+		if (!state) return false;
+		state->slotsLock.lock();
+		// Check for name collision first (skip the target slot itself).
+		if (name) {
+			for (int i = 0; i < state->slotCount; i++) {
+				KitsuneCoroutine* slot = state->slots[i];
+				if (slot->id != 0 && slot->id != id && slot->name && strcmp(slot->name, name) == 0) {
+					state->slotsLock.unlock();
+					return false;
+				}
+			}
+		}
+		KitsuneCoroutine* target = FindSlot(state, id);
+		if (!target) {
+			state->slotsLock.unlock();
+			return false;
+		}
+		kitsune_free(target->name);
+		target->name = NULL;
+		if (name) {
+			size_t len = strlen(name);
+			target->name = (char*)kitsune_malloc(len + 1);
+			if (target->name)
+				memcpy(target->name, name, len + 1);
+		}
+		state->slotsLock.unlock();
+		return true;
+	}
+
+	KITSUNE_API size_t KitsuneGetName(int id, char* buf, size_t bufSize) {
+		KitsuneState* state = g_state;
+		if (!state) return 0;
+		state->slotsLock.lock();
+		KitsuneCoroutine* slot = FindSlot(state, id);
+		if (!slot || !slot->name) {
+			state->slotsLock.unlock();
+			return 0;
+		}
+		size_t len = strlen(slot->name);
+		if (buf && bufSize > 0) {
+			size_t copy = len < bufSize - 1 ? len : bufSize - 1;
+			memcpy(buf, slot->name, copy);
+			buf[copy] = '\0';
+		}
+		state->slotsLock.unlock();
+		return len;
+	}
+
+	KITSUNE_API int KitsuneGetId(const char* name) {
+		KitsuneState* state = g_state;
+		if (!state || !name) return 0;
+		state->slotsLock.lock();
+		int found = 0;
+		for (int i = 0; i < state->slotCount; i++) {
+			KitsuneCoroutine* slot = state->slots[i];
+			if (slot->id != 0 && slot->name && strcmp(slot->name, name) == 0) {
+				found = slot->id;
+				break;
+			}
+		}
+		state->slotsLock.unlock();
+		return found;
 	}
 
 	KITSUNE_API void KitsuneVariableFree(KitsuneVariable* var) {
@@ -3868,6 +3945,7 @@ extern "C" {
 							luaL_unref(state->L, LUA_REGISTRYINDEX, slot->threadRef);
 					}
 					kitsune_free(slot->error);
+					kitsune_free(slot->name);
 					FreeVariableData(&slot->result, state->L);
 				}
 				delete slot;

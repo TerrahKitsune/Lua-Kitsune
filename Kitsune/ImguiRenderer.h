@@ -3,16 +3,9 @@
 
 #include "KitsuneEngine.h"
 #include "ResourceCache.h"
+#include "Scheduler.h"
 #include <SDL.h>
 #include <SDL_opengl.h>
-
-struct ImguiScheduledCall {
-	KitsuneVariable*    fn;
-	int                 runningId; // The kitsune engines running id, 0 on not started
-	int                 argc;
-	KitsuneVariable**   argv;
-	ImguiScheduledCall* next;
-};
 
 // Texture resource — Resource must be first field so Resource* casts work.
 // glId==0 with luaId!=0 means sentinel (load attempted, failed or unloaded).
@@ -42,7 +35,7 @@ struct ImguiWindowContext {
 	KitsuneVariable*            renderFn;
 	KitsuneVariable*            context;
 	KitsuneVariable*            onError;
-	ImguiScheduledCall*         scheduledHead; // pending (runningId==0) and running (runningId>0)
+	SchedulerState*             scheduler;     // shared with the main program scheduler
 	KitsuneUserDataRegistration reg;
 	// Optional bold/italic fonts for markdown rendering.
 	// Set via renderer:SetBoldFont(luaId) / renderer:SetItalicFont(luaId).
