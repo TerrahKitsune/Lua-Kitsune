@@ -405,6 +405,13 @@ namespace KitsuneNet
         public void Cancel(int id) => KitsuneCancel(id);
 
         /// <summary>
+        /// Un-pauses a coroutine that was suspended by <c>Pause()</c>.
+        /// Returns <c>true</c> if the coroutine was found in a paused state and successfully resumed.
+        /// Returns <c>false</c> if the id was not found, not paused, or already running. Thread-safe.
+        /// </summary>
+        public bool Resume(int id) => KitsuneResume(id);
+
+        /// <summary>
         /// Returns how long the coroutine has been alive in milliseconds, measured from when it was created.
         /// Returns 0 if the ID is not found.
         /// </summary>
@@ -1372,6 +1379,10 @@ namespace KitsuneNet
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern void KitsuneCancel(int id);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool KitsuneResume(int id);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern double KitsuneGetRuntime(int id);

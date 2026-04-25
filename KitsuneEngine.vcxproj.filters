@@ -710,6 +710,9 @@
     <ClCompile Include="luaalivetoken.cpp">
       <Filter>LuaAliveToken</Filter>
     </ClCompile>
+    <ClCompile Include="luatask.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="KitsuneEngine.h">
@@ -1106,6 +1109,12 @@
       <Filter>LuaAliveToken</Filter>
     </ClInclude>
     <ClInclude Include="utf8bom.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="kitsune_internal.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="luatask.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -17,7 +17,6 @@
 #include <crtdbg.h>
 #endif
 #include "Session.h"
-#include "Scheduler.h"
 #ifdef KITSUNE_IMGUI
 #include "ImguiSession.h"
 #include "ImguiHtml.h"
@@ -122,7 +121,6 @@ int main(int argc, char* argv[]) {
 #endif
 
 	KitsuneInternals* internals = KitsuneGetInternals();
-	SchedulerState g_scheduler = {};
 
 	if (!KitsuneInit()) {
 		fprintf(stderr, "KitsuneInit failed\n");
@@ -130,8 +128,6 @@ int main(int argc, char* argv[]) {
 	}
 	else {
 		RegisterSessionFunctions();
-		SchedulerInit(&g_scheduler);
-		SchedulerRegister(&g_scheduler);
 #ifdef KITSUNE_IMGUI
 		RegisterImguiFunctions();
 #endif
@@ -172,7 +168,6 @@ int main(int argc, char* argv[]) {
 
 	// Block until the coroutine finishes or an exit signal is received.
 	while (!KitsuneHasResult(id, nullptr) && !g_exitSignaled.load()) {
-		SchedulerDrain(&g_scheduler);
 		std::this_thread::sleep_for(std::chrono::milliseconds(1));
 	}
 
@@ -192,7 +187,7 @@ int main(int argc, char* argv[]) {
 
 #ifdef KITSUNE_IMGUI
 	if (g_imguiCtx)
-		RunImguiSession(&g_scheduler);
+		RunImguiSession();
 	else {
 		KitsuneVariable* result = KitsuneGetResult(id);
 		if (result) {
@@ -222,7 +217,6 @@ int main(int argc, char* argv[]) {
 	}
 #endif
 
-	SchedulerFree(&g_scheduler);
 	KitsuneCleanup();
 
 	if (internals && internals->MongoDbCleanUp)

@@ -86,84 +86,11 @@
 #include "KitsuneEngine.h"
 #include "LuaEngineBuiltins.h"
 #include "kitsuneuserdata.h"
+#include "luatask.h"
+#include "kitsune_internal.h"
 
 // Unique address used as the Lua registry key for the shared bridge LuaJson instance.
 // Defined in luajson.cpp; accessed via lua_json_bridge_registry_key().
-
-// -- Per-coroutine slot --------------------------------------------------------
-struct KitsuneCoroutine {
-	int           id;
-	int           threadRef;    // LUA_REGISTRYINDEX anchor; keeps the thread alive for GC
-	lua_State* thread;       // cached lua_State*; valid iff threadRef != LUA_NOREF.
-	// Must be NULLed whenever threadRef is unref'd.
-	// Written only under AcquireLuaAccess; read only by the scheduler.
-	int               argsRef;        // LUA_REGISTRYINDEX anchor for the ARGS table; retrieved by GetArgs()
-	std::atomic<long> fireAndForget{ 0 };
-	std::atomic<long> done{ 0 };        // 0 = still running / yielded, 1 = finished
-	std::atomic<long> released{ 0 };    // 1 = slot should be freed; scheduler zeros it on next compaction
-	std::atomic<long> interrupted{ 0 }; // set to 1 by KitsuneCancel; observed by the scheduler before resuming this coroutine
-	char* error;
-	KitsuneVariable  result;
-	double        sleepUntil;      // GetCounter deadline (ms) before which the coroutine must not be resumed; 0 = not sleeping, -1 = wait for token only
-	int           sleepTokenRef;   // LUA_NOREF, or registry ref to an AliveToken to wake on when it dies
-	double        startTime;    // GetCounter value recorded when the coroutine was created
-	int           initialNArgs; // number of args already on the thread stack for the first lua_resume; 0 for file/string coroutines
-	std::atomic<long> isInline{ 0 }; // 1 = inline sync call; scheduler skips Step 2 resume
-	char* name; // optional human-readable name; heap-allocated, nullptr if not set
-	int  luaRefCount; // number of live LuaTask userdata handles open on this slot (Tasks module only).
-					  // Incremented by Tasks.New (after Start) and Tasks.Open; decremented by __gc.
-					  // When it drops to 0 and apiOwned==false, fireAndForget is set to 1 automatically.
-					  // Always accessed under slotsLock on the scheduler thread; plain int is sufficient.
-	bool apiOwned;    // true when the slot was created via the KitsuneEngine.h public async API.
-					  // Tasks module __gc never modifies fireAndForget on apiOwned slots.
-};
-
-#define KITSUNE_MAX_COROUTINES 256
-
-// -- Engine state --------------------------------------------------------------
-struct KitsuneState {
-	// -- Lua ------------------------------------------------------------------
-	lua_State* L;
-	double           PCFreq;
-	int64_t          CounterStart;
-	lua_State* DelegateState; // calling coroutine's state during a RegisterFunction call
-	char* lastCallError;  // deferred KITSUNE_TERROR message; freed after args cleanup
-
-	// -- Interrupt / pause ----------------------------------------------------
-	std::atomic<long> interrupt{ 0 };   // set by KitsuneInterrupt; cleared by scheduler when all done
-	std::atomic<long> pauseFlag{ 0 };   // set by AcquireLuaAccess; serviced by hook + scheduler
-	PlatformEvent pausedEvent;   // hook signals this when it parks
-	PlatformEvent resumeEvent;   // AcquireLuaAccess signals this to let hook continue
-
-	// -- SetVariable/GetVariable serialisation --------------------------------
-	std::mutex       accessLock; // serialises concurrent external callers
-
-	// -- Scheduler thread -----------------------------------------------------
-	std::thread           schedulerThread;
-	std::atomic<long>     schedulerStop{ 0 }; // set to 1 by KitsuneCleanup
-	PlatformEvent         workEvent;     // signaled when a new coroutine is ready to run
-	// Signalled by SchedulerProc just before it returns (all work done, state no longer
-	// accessed). KitsuneCleanup waits on this instead of join() so that the thread can
-	// acquire the loader lock for DLL_THREAD_DETACH independently — avoiding the DllMain
-	// loader-lock deadlock that join() causes when called from FreeLibrary/DLL_PROCESS_DETACH.
-	PlatformEvent         schedulerDoneEvent;
-
-	// -- Active coroutine slots (written only by scheduler; read by callers) --
-	KitsuneCoroutine* slots[KITSUNE_MAX_COROUTINES];
-	int               slotCount;
-	std::mutex        slotsLock; // guards add/remove of slots[] entries
-
-	// -- Done notification ----------------------------------------------------
-	// Signalled (notify_all) whenever any slot transitions to done=1 or runningCount reaches 0.
-	// Allows sync Execute* callers and KitsuneWait to block without Sleep(1) polling.
-	std::mutex              doneMtx;
-	std::condition_variable doneCV;
-
-	// -- Counters -------------------------------------------------------------
-	std::atomic<long> nextId{ 0 };             // monotonically increasing coroutine ID
-	std::atomic<long> runningCount{ 0 };       // number of slots where done == 0
-	std::atomic<long> currentCoroutineId{ 0 }; // ID of the coroutine currently inside lua_resume, or 0
-};
 
 #ifdef _WIN32
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved) {
@@ -179,7 +106,7 @@ static void StartCounter(KitsuneState* state) {
 	QueryPerformanceCounter(&li);
 	state->CounterStart = li.QuadPart;
 }
-static double GetCounter(KitsuneState* state) {
+double GetCounter(KitsuneState* state) {
 	LARGE_INTEGER li;
 	QueryPerformanceCounter(&li);
 	return double(li.QuadPart - state->CounterStart) / state->PCFreq;
@@ -192,7 +119,7 @@ static void StartCounter(KitsuneState* state) {
 	state->CounterStart = std::chrono::duration_cast<std::chrono::microseconds>(
 		std::chrono::steady_clock::now().time_since_epoch()).count();
 }
-static double GetCounter(KitsuneState* state) {
+double GetCounter(KitsuneState* state) {
 	const int64_t now = std::chrono::duration_cast<std::chrono::microseconds>(
 		std::chrono::steady_clock::now().time_since_epoch()).count();
 	return double(now - state->CounterStart) / state->PCFreq;
@@ -607,7 +534,7 @@ static KitsuneKeyValuePairVariableNode* TableToLinkedList(lua_State* L, int idx)
 	return head;
 }
 
-static void PushKitsuneVariable(lua_State* L, const KitsuneVariable* v) {
+void PushKitsuneVariable(lua_State* L, const KitsuneVariable* v) {
 	if (!v) {
 		lua_pushnil(L);
 		return;
@@ -966,7 +893,7 @@ static void SetSlotResult(KitsuneCoroutine* slot, lua_State* T, int idx) {
 }
 
 // Caller must hold slotsLock, or be the scheduler thread.
-static KitsuneCoroutine* FindSlot(KitsuneState* state, int id) {
+KitsuneCoroutine* FindSlot(KitsuneState* state, int id) {
 	for (int i = 0; i < state->slotCount; i++) {
 		if (state->slots[i]->id == id)
 			return state->slots[i];
@@ -1053,7 +980,7 @@ static lua_State* GetCoroutineThread(KitsuneState* state, KitsuneCoroutine* slot
 
 // Create a new coroutine thread, anchor it in the registry, and install the scheduler hook.
 // Caller must hold LuaAccess. Stores the registry ref in slot->threadRef.
-static lua_State* CreateCoroutineThread(KitsuneState* state, KitsuneCoroutine* slot) {
+lua_State* CreateCoroutineThread(KitsuneState* state, KitsuneCoroutine* slot) {
 	lua_State* T = lua_newthread(state->L);
 	slot->thread = T;
 	slot->threadRef = luaL_ref(state->L, LUA_REGISTRYINDEX);
@@ -1079,8 +1006,20 @@ static void FinishCoroutine(KitsuneState* state, KitsuneCoroutine* slot, lua_Sta
 	slot->done.store(1);
 	--state->runningCount;
 	state->doneCV.notify_all();
-	if (slot->fireAndForget.load())
+	if (slot->fireAndForget.load()) {
+		if (slot->error) {
+			if (state->taskErrorHandlerRef != LUA_NOREF) {
+				lua_rawgeti(state->L, LUA_REGISTRYINDEX, state->taskErrorHandlerRef);
+				lua_pushinteger(state->L, slot->id);
+				lua_pushstring(state->L, slot->error);
+				lua_pcall(state->L, 2, 0, 0);
+			}
+			else {
+				fprintf(stderr, "Task %d error: %s\n", slot->id, slot->error);
+			}
+		}
 		slot->released.store(1);
+	}
 }
 
 // True only on the scheduler thread; set once in SchedulerProc and never cleared.
@@ -1153,6 +1092,22 @@ static void SchedulerProc(KitsuneState* state) {
 					continue;
 				if (slot->isInline.load())
 					continue;  // inline slot — managed by calling thread, not the scheduler
+				if (slot->paused.load()) {
+					// Paused coroutine — only cancel if explicitly interrupted.
+					if (slot->interrupted.load()) {
+						lua_State* Tc = GetCoroutineThread(state, slot);
+						if (Tc)
+							lua_settop(Tc, 0);
+						SetSlotError(slot, "cancelled");
+						slot->result.type = LUA_TNONE;
+						slot->done.store(1);
+						slot->paused.store(0);
+						--state->runningCount;
+						state->doneCV.notify_all();
+						slot->released.store(1);
+					}
+					continue;
+				}
 				// Per-coroutine cancel: terminate before the next resume (or wake from sleep).
 				if (slot->interrupted.load()) {
 					SetSlotError(slot, "cancelled");
@@ -1385,6 +1340,29 @@ static int L_Sleep(lua_State* L) {
 	return 0;
 }
 
+// Pause() — suspends the current coroutine until KitsuneResume(id) is called externally.
+// Only valid inside a scheduler-managed async coroutine; no-op (returns immediately) if called
+// inline or re-entrantly, because those paths cannot safely yield.
+static int L_Pause(lua_State* L) {
+	if (g_inlineExecution || g_isSchedulerThread == false)
+		return 0;
+	void* ud;
+	lua_getallocf(L, &ud);
+	KitsuneState* state = (KitsuneState*)ud;
+	int id = (int)state->currentCoroutineId.load();
+	if (id == 0)
+		return 0;
+	state->slotsLock.lock();
+	KitsuneCoroutine* slot = FindSlot(state, id);
+	if (!slot || slot->isInline.load()) {
+		state->slotsLock.unlock();
+		return 0;
+	}
+	slot->paused.store(1);
+	state->slotsLock.unlock();
+	return lua_yield(L, 0);
+}
+
 static void* l_alloc(void* ud, void* ptr, size_t osize, size_t nsize) {
 	if (nsize == 0) {
 		kitsune_free(ptr);
@@ -1436,10 +1414,22 @@ static KitsuneVariable* MakeNilVariable() {
 // Exported API
 // ============================================================
 
-static KitsuneState* g_state = nullptr;
+KitsuneState* g_state = nullptr;
 #ifdef _WIN32
 static bool g_coOwned = false;
 #endif
+
+// Finalises a Tasks.New slot: assigns the id, adds it to slots[], increments runningCount,
+// and wakes the scheduler. Must be called WITHOUT slotsLock held and without Lua access held.
+void LaunchTaskSlot(KitsuneState* state, KitsuneCoroutine* slot, bool isNewSlot) {
+	slot->startTime = GetCounter(state);
+	++state->runningCount;
+	state->slotsLock.lock();
+	if (isNewSlot)
+		state->slots[state->slotCount++] = slot;
+	state->slotsLock.unlock();
+	state->workEvent.Set();
+}
 
 extern "C" {
 
@@ -1460,6 +1450,7 @@ extern "C" {
 		return &internals;
 	}
 
+	
 	KITSUNE_API bool KitsuneInit(KitsuneMemoryAllocator* KitsuneMemoryAllocator) {
 		if (g_state)
 			return false;
@@ -1499,6 +1490,7 @@ extern "C" {
 #endif
 
 		KitsuneState* state = new KitsuneState{};
+		state->taskErrorHandlerRef = LUA_NOREF;
 		// PlatformEvent default ctor initialises all three events; no Create() call needed.
 		StartCounter(state);
 
@@ -1588,6 +1580,7 @@ extern "C" {
 #ifdef KITSUNE_HTTP
 		luaopen_httpserver(L);   lua_setglobal(L, "HttpServer");
 #endif
+		luaopen_tasks(L);        lua_setglobal(L, "Tasks");
 
 		lua_pushcfunction(L, L_GetRuntime);    lua_setglobal(L, "Runtime");
 #ifdef _WIN32
@@ -1600,6 +1593,8 @@ extern "C" {
 		lua_setglobal(L, "Sleep");
 		lua_pushcfunction(L, L_Yield);
 		lua_setglobal(L, "Yield");
+		lua_pushcfunction(L, L_Pause);
+		lua_setglobal(L, "Pause");
 
 		// Register the KitsuneIterator metatable used by KITSUNE_TITERATOR closures.
 		luaL_newmetatable(L, "KitsuneIterator");
@@ -1661,28 +1656,31 @@ extern "C" {
 
 	// Finds or allocates a reusable async (non-inline) slot and sets fireAndForget.
 	// Returns NULL at capacity or on OOM; caller must ReleaseLuaAccess and return -1.
-	static KitsuneCoroutine* AcquireAsyncSlot(KitsuneState* state,
-		bool fireAndForget, bool& isNewSlot) {
-		isNewSlot = false;
-		for (int i = 0; i < state->slotCount; i++) {
-			if (state->slots[i]->id == 0) {
-				KitsuneCoroutine* slot = state->slots[i];
-				slot->fireAndForget.store(fireAndForget ? 1 : 0);
-				return slot;
-			}
-		}
-		if (state->slotCount >= KITSUNE_MAX_COROUTINES)
-			return NULL;
-		KitsuneCoroutine* slot = new (std::nothrow) KitsuneCoroutine{};
-		if (!slot)
-			return NULL;
-		slot->sleepTokenRef = LUA_NOREF;
-		slot->fireAndForget.store(fireAndForget ? 1 : 0);
-		isNewSlot = true;
-		return slot;
-	}
+} 
 
-	// Marks a pre-running async slot as done/failed and releases any held registry refs.
+
+KitsuneCoroutine* AcquireAsyncSlot(KitsuneState* state, bool fireAndForget, bool& isNewSlot) {
+	isNewSlot = false;
+	for (int i = 0; i < state->slotCount; i++) {
+		if (state->slots[i]->id == 0) {
+			KitsuneCoroutine* slot = state->slots[i];
+			slot->fireAndForget.store(fireAndForget ? 1 : 0);
+			return slot;
+		}
+	}
+	if (state->slotCount >= KITSUNE_MAX_COROUTINES)
+		return NULL;
+	KitsuneCoroutine* slot = new (std::nothrow) KitsuneCoroutine{};
+	if (!slot)
+		return NULL;
+	slot->sleepTokenRef = LUA_NOREF;
+	slot->fireAndForget.store(fireAndForget ? 1 : 0);
+	isNewSlot = true;
+	return slot;
+}
+extern "C" {
+
+			// Marks a pre-running async slot as done/failed
 	// err=NULL means the error was already set via SetSlotError (or there is no error).
 	static void FailAsyncSlot(KitsuneState* state, KitsuneCoroutine* slot, const char* err) {
 		if (err)
@@ -1765,6 +1763,7 @@ extern "C" {
 			ReleaseLuaAccess(state);
 			return -1;
 		}
+		slot->apiOwned = true;
 
 		lua_State* T = PrepareSlotThread(state, slot);
 
@@ -1815,6 +1814,7 @@ extern "C" {
 			ReleaseLuaAccess(state);
 			return -1;
 		}
+		slot->apiOwned = true;
 
 		lua_State* T = PrepareSlotThread(state, slot);
 
@@ -1851,7 +1851,7 @@ extern "C" {
 	//   LUA_TSTRING   — loads the string as a Lua chunk and runs it; argv is exposed as ARGS[1..argc].
 	//   Anything else — the slot is created in done/faulted state with a descriptive error.
 	static int StartCoroutineVariable(KitsuneState* state, const KitsuneVariable* var,
-		int argc, const KitsuneVariable* argv, bool fireAndForget) {
+		int argc, const KitsuneVariable* argv, bool fireAndForget, bool apiOwned = true) {
 		if (!state || !var) return -1;
 
 		AcquireLuaAccess(state);
@@ -1862,6 +1862,7 @@ extern "C" {
 			ReleaseLuaAccess(state);
 			return -1;
 		}
+		slot->apiOwned = apiOwned;
 
 		lua_State* T = PrepareSlotThread(state, slot);
 
@@ -2694,6 +2695,21 @@ extern "C" {
 		state->workEvent.Set();  // wake the scheduler to process the cancel promptly
 	}
 
+	KITSUNE_API bool KitsuneResume(int id) {
+		KitsuneState* state = g_state;
+		if (!state) return false;
+		state->slotsLock.lock();
+		KitsuneCoroutine* slot = FindSlot(state, id);
+		if (!slot || !slot->paused.load()) {
+			state->slotsLock.unlock();
+			return false;
+		}
+		slot->paused.store(0);
+		state->slotsLock.unlock();
+		state->workEvent.Set();
+		return true;
+	}
+
 	KITSUNE_API double KitsuneGetRuntime(int id) {
 		KitsuneState* state = g_state;
 		if (!state) return 0.0;
@@ -2704,34 +2720,37 @@ extern "C" {
 		return runtime;
 	}
 
+	// Returns the KITSUNE_STATUS_* constant for a slot without acquiring slotsLock.
+	// Caller must hold slotsLock (or be on the scheduler thread with exclusive access).
+} // end extern "C"
+int GetSlotStatus(KitsuneState* state, KitsuneCoroutine* slot) {
+	if (!slot)
+		return KITSUNE_STATUS_NONE;
+	if (slot->paused.load())
+		return KITSUNE_STATUS_PAUSED;
+	if (slot->done.load()) {
+		if (slot->interrupted.load())
+			return KITSUNE_STATUS_CANCELLED;
+		if (slot->error)
+			return KITSUNE_STATUS_FAULTED;
+		return KITSUNE_STATUS_DONE;
+	}
+	if (slot->interrupted.load())
+		return KITSUNE_STATUS_CANCELLED;
+	if ((int)state->currentCoroutineId.load() == slot->id)
+		return KITSUNE_STATUS_RUNNING;
+	if (slot->sleepUntil > 0.0 && GetCounter(state) < slot->sleepUntil)
+		return KITSUNE_STATUS_SLEEPING;
+	return slot->isInline.load() ? KITSUNE_STATUS_INLINE : KITSUNE_STATUS_IDLE;
+}
+extern "C" {
+
 	KITSUNE_API int KitsuneGetStatus(int id) {
 		KitsuneState* state = g_state;
 		if (!state) return KITSUNE_STATUS_NONE;
 		state->slotsLock.lock();
 		KitsuneCoroutine* slot = FindSlot(state, id);
-		int status = KITSUNE_STATUS_NONE;
-		if (slot) {
-			if (slot->done.load()) {
-				if (slot->interrupted.load())
-					status = KITSUNE_STATUS_CANCELLED;
-				else if (slot->error)
-					status = KITSUNE_STATUS_FAULTED;
-				else
-					status = KITSUNE_STATUS_DONE;
-			}
-			else if (slot->interrupted.load()) {
-				status = KITSUNE_STATUS_CANCELLED;
-			}
-			else if ((int)state->currentCoroutineId.load() == id) {
-				status = KITSUNE_STATUS_RUNNING;
-			}
-			else if (slot->sleepUntil > 0.0 && GetCounter(state) < slot->sleepUntil) {
-				status = KITSUNE_STATUS_SLEEPING;
-			}
-			else {
-				status = slot->isInline.load() ? KITSUNE_STATUS_INLINE : KITSUNE_STATUS_IDLE;
-			}
-		}
+		int status = GetSlotStatus(state, slot);
 		state->slotsLock.unlock();
 		return status;
 	}
@@ -2847,6 +2866,7 @@ extern "C" {
 		state->slotsLock.unlock();
 		return true;
 	}
+
 
 	KITSUNE_API size_t KitsuneGetName(int id, char* buf, size_t bufSize) {
 		KitsuneState* state = g_state;
@@ -3958,6 +3978,10 @@ extern "C" {
 				DrainPendingVariableChain(state->L);
 
 			if (state->L) {
+				if (state->taskErrorHandlerRef != LUA_NOREF) {
+					luaL_unref(state->L, LUA_REGISTRYINDEX, state->taskErrorHandlerRef);
+					state->taskErrorHandlerRef = LUA_NOREF;
+				}
 				if (state->lastCallError) {
 					kitsune_free(state->lastCallError);
 					state->lastCallError = nullptr;

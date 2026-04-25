@@ -38,6 +38,7 @@ A comprehensive reference for all available functions in the Lua environment.
 - [Toml](#toml)
 - [Ini](#ini)
 - [AliveToken](#alivetoken)
+- [Tasks](#tasks)
 - [Third-Party Notices](#third-party-notices)
 ---
 
@@ -59,6 +60,7 @@ nil Sleep(opt ms)
 nil Sleep(token)
 nil Sleep(token, ms)
 nil Yield()
+nil Pause()
 int Time()
 ms Runtime()
 ```
@@ -67,6 +69,7 @@ ms Runtime()
   - `Sleep(token)` — sleep until the `AliveToken` is disposed, expired, or a linked parent dies. Returns immediately if the token is already dead.
   - `Sleep(token, ms)` or `Sleep(ms, token)` — sleep until whichever comes first: token death or the millisecond deadline.
 - `Yield`: Cooperatively yield the current coroutine back to the scheduler immediately (no sleep delay). For inline sync calls, this briefly releases Lua access so the scheduler and variable bridge can service their queues before the call is resumed.
+- `Pause`: Suspend the current coroutine indefinitely until `task:Resume()` is called externally. The coroutine's status becomes `TaskStatus.Paused` and it will not be resumed by the scheduler on its own. A no-op when called outside a scheduler-managed async coroutine (e.g. from an inline call or a registered function callback).
 - `Time`: Get current Unix epoch in milliseconds.
 - `Runtime`: Get runtime in milliseconds.
 
@@ -3080,6 +3083,190 @@ print(t3.s.path)  -- C:/my files
 - **No nesting** — INI supports exactly two levels: section → key → value. Sub-tables inside a section are skipped during encode
 - **No standard** — the parser is lenient and accepts the most common conventions. It does not enforce any particular INI dialect
 - **Instance reuse** — the same instance can be used for multiple `Encode`/`Decode` calls
+
+---
+
+## Tasks
+
+A native task module for spawning and tracking Lua coroutines. `Tasks.New` starts a coroutine immediately and returns a lightweight handle (`LuaTask` userdata). The handle holds only the coroutine's integer `id`; all state lives in the scheduler's slot.
+
+Multiple handles may refer to the same slot (via `Tasks.Open`). The slot is kept alive by a reference count (`luaRefCount`). When the last Lua handle is GC'd or disposed, `fireAndForget` is set on the slot so the scheduler auto-compacts it when the coroutine finishes. The coroutine itself is **not cancelled** — it continues running to completion. Slots created via the public C API (`KitsuneExecuteStringAsync`, etc.) are flagged `apiOwned`; handle GC never touches their lifecycle.
+
+### Error handling for fire-and-forget tasks
+
+When a coroutine runs fire-and-forget (no live handle watching it), any error at completion is routed to the global task error handler if one is set, or printed to `stderr` otherwise.
+
+```lua
+Tasks.SetErrorHandler(function(id, err)
+    print("Task " .. id .. " error: " .. err)
+end)
+
+-- Pass nil to clear the handler (stderr fallback is restored)
+Tasks.SetErrorHandler(nil)
+```
+
+### Status Constants
+
+```lua
+TaskStatus.None      = 0   -- slot has been freed / compacted (id no longer valid)
+TaskStatus.Idle      = 1   -- runnable, waiting for a scheduler tick
+TaskStatus.Sleeping  = 2   -- waiting out a Sleep() deadline or AliveToken
+TaskStatus.Running   = 3   -- currently executing inside lua_resume
+TaskStatus.Done      = 4   -- finished successfully; result available via GetResult
+TaskStatus.Faulted   = 5   -- finished with a runtime or Lua error; call GetError
+TaskStatus.Cancelled = 6   -- interrupted by Cancel() or engine shutdown
+TaskStatus.Inline    = 7   -- running as an inline sync call (RunString / RunFunction etc.)
+TaskStatus.Paused    = 8   -- suspended inside the coroutine via Pause(); waiting for Resume()
+```
+
+### Construction
+
+```lua
+Task   Tasks.New(fn, arg1, arg2, ...)
+Task   Tasks.Open(id)
+```
+
+- **`Tasks.New`** — starts `fn` immediately as an async coroutine with any extra arguments passed as function parameters on the first resume. Returns a `Task` handle with `luaRefCount = 1`. The coroutine is already queued and running — there is no separate `Start()` call.
+- **`Tasks.Open`** — opens an existing coroutine by integer `id` (from `task:GetId()` or the `ID` global). Returns `nil` if the slot does not exist or has already been released. Increments `luaRefCount` and clears `fireAndForget` so the slot is not auto-compacted while the handle is alive.
+
+### Identity
+
+```lua
+int    task:GetId()     -- coroutine id; 0 when the handle has been disposed
+```
+
+### Naming
+
+```lua
+bool   task:SetName(name)   -- false if id==0 or name already taken by another coroutine
+string task:GetName()       -- nil if id==0 or no name set
+```
+
+Names are optional human-readable labels. Name uniqueness is enforced across all live slots.
+
+### Status
+
+```lua
+int    task:GetStatus()   -- one of the TaskStatus constants above
+bool   task:Finished()    -- true when id==0, slot gone, or coroutine reached a terminal state
+```
+
+`task:Finished()` returns `true` when the handle is inert (`id == 0`) or the slot no longer exists. A paused coroutine (`TaskStatus.Paused`) is **not** considered finished.
+
+### Pause / Resume
+
+A running coroutine can suspend itself cooperatively and wait for an external resume signal:
+
+```lua
+-- Inside the coroutine:
+Pause()             -- suspends the coroutine; task:GetStatus() returns TaskStatus.Paused
+
+-- From outside (another coroutine or C#):
+task:Resume()       -- returns true if the task was paused and has been unblocked; false otherwise
+```
+
+`Pause()` is a no-op when called outside a scheduler-managed coroutine (inline path, registered function callbacks, etc.).
+
+### Results
+
+```lua
+string task:GetError()    -- error string, or nil when no error or task still running
+value  task:GetResult()   -- typed result value, or nil when task has not finished yet
+```
+
+Both functions are **non-destructive** — calling them does not consume or release the slot.
+
+### Cancellation
+
+```lua
+task:Cancel()   -- signals the coroutine to be terminated before its next resume; no-op if already done
+```
+
+The coroutine is not stopped immediately; the scheduler sets `interrupted` and terminates it at the next scheduling opportunity. `GetStatus()` will return `TaskStatus.Cancelled` once compacted.
+
+### Handle lifecycle — Dispose and fire-and-forget
+
+```lua
+task:Dispose()   -- marks this handle as unused; identical to letting it be GC'd
+```
+
+**`Dispose` does not cancel or stop the coroutine.** It only releases the handle's reference to the slot. When the last handle referencing a slot is disposed (or GC'd) and the slot is not `apiOwned`, the slot is marked `fireAndForget`:
+
+- If the coroutine is already **done** — the slot is released immediately.
+- If the coroutine is **still running** — it continues until it finishes, then the slot is auto-compacted by the scheduler. Any error is forwarded to `Tasks.SetErrorHandler` (or printed to `stderr` if no handler is set).
+- If the coroutine is **paused** — it is cancelled (interrupted flag set) so it does not hang indefinitely.
+
+Call `Dispose()` (or chain `:Dispose()` immediately) whenever a task is intended to be fire-and-forget. Without it, the handle keeps `luaRefCount` elevated and prevents the slot from being treated as unobserved — errors will not reach the error handler, and the slot stays live until GC collects the handle non-deterministically.
+
+```lua
+-- Fire and forget — errors routed to SetErrorHandler / stderr
+Tasks.New(function() doWork() end):Dispose()
+
+-- Equivalent: let the variable go out of scope and be collected
+-- (but :Dispose() is preferred for deterministic behaviour)
+do
+    local t = Tasks.New(function() doWork() end)
+end  -- t collected on next GC; Dispose() is more explicit
+```
+
+### GetAllIds
+
+```lua
+table   Tasks.GetAllIds()   -- array of all live (non-released) coroutine ids
+```
+
+### Examples
+
+```lua
+-- Observe a task and read its result
+local task = Tasks.New(function(a, b)
+    Sleep(100)
+    return a + b
+end, 10, 32)
+
+while not task:Finished() do
+    Sleep(10)
+end
+print(task:GetError())   -- nil on success
+print(task:GetResult())  -- 42
+task:Dispose()           -- idempotent; handle released
+
+-- Fire and forget with error handler
+Tasks.SetErrorHandler(function(id, err)
+    print("[TASK ERROR] " .. id .. ": " .. err)
+end)
+Tasks.New(function() error("oops") end):Dispose()
+
+-- Pause / Resume pattern
+local task = Tasks.New(function()
+    print("step 1")
+    Pause()        -- suspends here
+    print("step 2")
+end)
+
+while task:GetStatus() ~= TaskStatus.Paused do
+    Sleep(5)
+end
+task:Resume()  -- unblocks step 2
+while not task:Finished() do Sleep(5) end
+task:Dispose()
+
+-- Open a coroutine from its id (e.g. from the ID global inside a running coroutine)
+local watcher = Tasks.Open(someId)
+if watcher then
+    print(watcher:GetStatus())
+    watcher:Dispose()
+end
+
+-- Cancel a running task
+local t = Tasks.New(function()
+    while true do Sleep(10) end
+end)
+Sleep(50)
+t:Cancel()
+while not t:Finished() do Sleep(5) end
+t:Dispose()
+```
 
 ---
 

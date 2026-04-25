@@ -52,6 +52,7 @@
 #define KITSUNE_STATUS_FAULTED   (5)  // finished with a runtime or Lua error; call KitsuneGetError
 #define KITSUNE_STATUS_CANCELLED (6)  // stopped by an explicit KitsuneCancel(id) call, or cancel is pending
 #define KITSUNE_STATUS_INLINE    (7)  // inline sync call paused in cooperative yield window; calling thread will resume imminently
+#define KITSUNE_STATUS_PAUSED    (8)  // suspended inside the coroutine via Pause(); waiting for KitsuneResume(id) / task:Resume()
 
 // Forward declaration
 struct KitsuneKeyValuePairVariableNode;
@@ -368,6 +369,11 @@ extern "C" {
 	// it on the next cycle. After KitsuneCancel the id is invalid: do not call KitsuneGetError,
 	// KitsuneGetResult, or KitsuneHasResult for it. Thread-safe.
 	KITSUNE_API void KitsuneCancel(int id);
+	// Un-pauses a coroutine that was suspended by Pause() or that was created by Tasks.New
+	// but not yet started (task:Start()). Returns true if the coroutine was found and was
+	// in a paused state and was successfully resumed. Returns false if it was not found,
+	// not paused, or already running. Thread-safe.
+	KITSUNE_API bool KitsuneResume(int id);
 	// Returns how long the coroutine has been alive in milliseconds, measured from when it was created.
 	// Returns 0.0 if the id is not found. Thread-safe.
 	KITSUNE_API double KitsuneGetRuntime(int id);

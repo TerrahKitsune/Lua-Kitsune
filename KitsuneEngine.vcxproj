@@ -125,6 +125,7 @@
     <ClCompile Include="luakafkaproducer.cpp" />
     <ClCompile Include="luamsgpack.cpp" />
     <ClCompile Include="luamsgpackmain.cpp" />
+    <ClCompile Include="luatask.cpp" />
     <ClCompile Include="luatimespan.cpp" />
     <ClCompile Include="luatoml.cpp" />
     <ClCompile Include="luauint.cpp" />
@@ -252,6 +253,7 @@
     <ClInclude Include="hiredis\sds.h" />
     <ClInclude Include="KitsuneEngine.h" />
     <ClInclude Include="kitsuneuserdata.h" />
+    <ClInclude Include="kitsune_internal.h" />
     <ClInclude Include="libyaml\src\config.h" />
     <ClInclude Include="LuaArchive.h" />
     <ClInclude Include="LuaArchiveMain.h" />
@@ -274,6 +276,7 @@
     <ClInclude Include="luakafkaproducer.h" />
     <ClInclude Include="luamsgpack.h" />
     <ClInclude Include="luamsgpackmain.h" />
+    <ClInclude Include="luatask.h" />
     <ClInclude Include="luatimespan.h" />
     <ClInclude Include="luatoml.h" />
     <ClInclude Include="luatomlmain.h" />

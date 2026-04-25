@@ -3,7 +3,6 @@
 
 #include "KitsuneEngine.h"
 #include "ResourceCache.h"
-#include "Scheduler.h"
 #include <SDL.h>
 #include <SDL_opengl.h>
 
@@ -35,7 +34,6 @@ struct ImguiWindowContext {
 	KitsuneVariable*            renderFn;
 	KitsuneVariable*            context;
 	KitsuneVariable*            onError;
-	SchedulerState*             scheduler;     // shared with the main program scheduler
 	KitsuneUserDataRegistration reg;
 	// Optional bold/italic fonts for markdown rendering.
 	// Set via renderer:SetBoldFont(luaId) / renderer:SetItalicFont(luaId).

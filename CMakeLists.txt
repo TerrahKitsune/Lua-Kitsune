@@ -33,6 +33,7 @@ set(KITSUNE_ENGINE_SOURCES
 	# ── Core scheduler ─────────────────────────────────────────────────────
 	KitsuneEngine.cpp
 	kitsuneuserdata.cpp
+	luatask.cpp
 	mem.cpp
 	LuaEngineBuiltins.cpp
 	lua_misc.cpp

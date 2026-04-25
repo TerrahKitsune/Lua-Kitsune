@@ -17,7 +17,6 @@
 #include "SDLAudio.h"
 #include "ResourceCache.h"
 #include "SDLInput.h"
-#include "Scheduler.h"
 
 #include "Imgui/imgui.h"
 #include "Imgui/imgui_internal.h"
@@ -191,41 +190,13 @@ static int ImguiStart(int argc, const KitsuneVariable* argv,
 }
 
 // ---------------------------------------------------------------------------
-// Imgui.Schedule
-// ---------------------------------------------------------------------------
-
-static int ImguiSchedule(int argc, const KitsuneVariable* argv,
-	const kitsune_ResultSetter setter, void* userdata) {
-	if (!g_imguiCtx || argc < 1 || argv[0].type != KITSUNE_TFUNCTION)
-		return 0;
-
-	KitsuneVariable* fn = KitsuneAnchorVariable(&argv[0]);
-	int extraArgc = argc - 1;
-	KitsuneVariable** extraArgv = nullptr;
-	if (extraArgc > 0) {
-		extraArgv = (KitsuneVariable**)malloc(extraArgc * sizeof(KitsuneVariable*));
-		if (!extraArgv) {
-			KitsuneVariableFree(fn);
-			return 0;
-		}
-		for (int i = 0; i < extraArgc; i++)
-			extraArgv[i] = KitsuneAnchorVariable(&argv[i + 1]);
-	}
-
-	SchedulerPush(g_imguiCtx->scheduler, fn, extraArgc, extraArgv);
-	return 0;
-}
-
-// ---------------------------------------------------------------------------
 // RunImguiSession
 // ---------------------------------------------------------------------------
 
-void RunImguiSession(SchedulerState* scheduler) {
+void RunImguiSession() {
 	ImguiWindowContext* ctx = g_imguiCtx;
 	if (!ctx)
 		return;
-
-	ctx->scheduler = scheduler;
 
 	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER) != 0) {
 		fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
@@ -307,9 +278,6 @@ void RunImguiSession(SchedulerState* scheduler) {
 	rendererVar.userdata = &rendererUD;
 	KitsuneVariable* anchoredRenderer = KitsuneAnchorVariable(&rendererVar);
 
-	if (ctx->onError)
-		SchedulerSetOnError(ctx->scheduler, KitsuneAnchorVariable(ctx->onError));
-
 	bool running = (anchoredRenderer != nullptr);
 	while (running) {
 		SDL_Event event;
@@ -387,7 +355,6 @@ void RunImguiSession(SchedulerState* scheduler) {
 			KitsuneVariableFree(result);
 		}
 
-		SchedulerDrain(ctx->scheduler);
 		drain_imgui_stack(ctx);
 
 		ImGui::EndFrame();
@@ -456,7 +423,6 @@ void RunImguiSession(SchedulerState* scheduler) {
 
 void RegisterRenderLoopFunctions() {
 	KitsuneRegisterFunction("Imgui.Start", ImguiStart, nullptr);
-	KitsuneRegisterFunction("Imgui.Schedule", ImguiSchedule, nullptr);
 }
 
 #endif // KITSUNE_IMGUI

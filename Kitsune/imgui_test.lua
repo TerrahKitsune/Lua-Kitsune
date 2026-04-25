@@ -161,7 +161,7 @@ local function tabInfo(renderer, ctx)
     -- Refresh hardware sensors
     if not ctx.hw_block then
         ctx.hw_block = true; -- Block until our scheduled query is done
-        Imgui.Schedule(hardwareQuery, ctx)
+        Tasks.New(hardwareQuery, ctx):Dispose()
     end
 
     renderer:Text("Frame:       " .. ctx.frameCount)
@@ -281,7 +281,7 @@ local function tabHardware(renderer, ctx)
     -- Refresh hardware sensors
     if not ctx.hw_block then
         ctx.hw_block = true; -- Block until our scheduled query is done
-        Imgui.Schedule(hardwareQuery, ctx)
+        Tasks.New(hardwareQuery, ctx):Dispose()
     end
 
     -- Per-thread CPU load
@@ -508,15 +508,15 @@ local function tabSchedule(renderer, ctx)
     renderer:Text("Result: " .. ctx.scheduleResult)
     renderer:Separator()
     if renderer:Button("Re-schedule") then
-        Imgui.Schedule(function()
+        Tasks.New(function()
             ctx.scheduleResult = "re-scheduled on frame " .. ctx.frameCount
-        end)
+        end):Dispose()
     end
 
     if renderer:Button("Schedule error") then
-        Imgui.Schedule(function()
+        Tasks.New(function()
             error("Oh no there was an error (test)");
-        end)
+        end):Dispose()
     end
 end
 
@@ -1256,9 +1256,9 @@ local function render(renderer, ctx)
 
     if not ctx.scheduled then
         ctx.scheduled = true
-        Imgui.Schedule(function()
+        Tasks.New(function()
             ctx.scheduleResult = "fired on frame 1"
-        end)
+        end):Dispose()
     end
 
     local winW = SDL.Window.GetWindowWidth()
@@ -1390,4 +1390,5 @@ end
 -- ---------------------------------------------------------------------------
 
 Imgui.Start("Kitsune ImGui Test", 800, 600, render, ctx, onError)
+Tasks.SetErrorHandler(function(id, err) onError("Task " .. tostring(id) .. ": " .. tostring(err)) end)
 Resource.SetLoader(onResourceLoad)

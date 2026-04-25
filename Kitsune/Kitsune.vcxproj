@@ -101,7 +101,6 @@
     <ClCompile Include="ImguiSession.cpp" />
     <ClCompile Include="Program.cpp" />
     <ClCompile Include="ResourceCache.cpp" />
-    <ClCompile Include="Scheduler.cpp" />
     <ClCompile Include="SDLAudio.cpp" />
     <ClCompile Include="SDLInput.cpp" />
     <ClCompile Include="SDLWindow.cpp" />
@@ -128,7 +127,6 @@
     <ClInclude Include="RenderLoop.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="ResourceCache.h" />
-    <ClInclude Include="Scheduler.h" />
     <ClInclude Include="SDLAudio.h" />
     <ClInclude Include="SDLInput.h" />
     <ClInclude Include="SDLWindow.h" />
