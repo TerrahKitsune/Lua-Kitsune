@@ -33,9 +33,14 @@
       <_NativeDlls Include="$(NativeOutputDir)*.dll" Condition="Exists('$(NativeOutputDir)')" />
       <_NativeDlls Include="$(NativeRootDir)*.dll" Condition="Exists('$(NativeRootDir)')" />
       <_NativePdbs Include="$(NativeOutputDir)*.pdb" Condition="Exists('$(NativeOutputDir)')" />
+      <!-- Bundled libcurl (WebSocket/SSL-enabled build stored in curl\lib\).
+           Copied in a separate step AFTER the NativeOutputDir pass so that the
+           newer wss-capable build overwrites any older libcurl from x64\$(Configuration)\. -->
+      <_CurlDlls Include="$(NativeRootDir)curl\lib\*.dll" Condition="Exists('$(NativeRootDir)curl\lib\')" />
     </ItemGroup>
     <Copy SourceFiles="@(_NativeDlls)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(_NativePdbs)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_CurlDlls)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="false" />
   </Target>
 
   <!-- Delete KitsuneEngine.so (no lib prefix) whenever it appears in the output directory.

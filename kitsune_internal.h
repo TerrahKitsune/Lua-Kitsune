@@ -19,7 +19,7 @@
 #define KITSUNE_COROUTINE_STATE_WORKING     1  // alive and being scheduled normally
 #define KITSUNE_COROUTINE_STATE_DONE        2  // finished; result/error can be collected
 #define KITSUNE_COROUTINE_STATE_RELEASED    3  // done and consumed; scheduler will free the slot
-#define KITSUNE_COROUTINE_STATE_INTERRUPTED 4  // will be cancelled on the next scheduler tick
+#define KITSUNE_COROUTINE_STATE_ABORTED     4  // condemned; scheduler will cancel and free it at the next tick
 #define KITSUNE_COROUTINE_STATE_SLEEPING    5  // sleeping until a deadline or token expires
 #define KITSUNE_COROUTINE_STATE_PAUSED      6  // suspended until KitsuneResume is called
 
@@ -29,7 +29,7 @@ struct KitsuneCoroutine {
     int           threadRef;
     lua_State*    thread;
     int           argsRef;
-    std::atomic<long> fireAndForget{ 0 };
+    std::atomic<int>  fireAndForget{ 0 };
     std::atomic<long> state{ 0 };
     char*         error;
     KitsuneVariable result;
@@ -37,7 +37,7 @@ struct KitsuneCoroutine {
     int           sleepTokenRef;
     double        startTime;
     int           initialNArgs;
-    std::atomic<long> isInline{ 0 };
+    std::atomic<int>  isInline{ 0 };
     char*         name;
     int           luaRefCount;
     bool          apiOwned;
@@ -85,9 +85,14 @@ int               GetSlotStatus(KitsuneState* state, KitsuneCoroutine* slot);
 double            GetCounter(KitsuneState* state);
 lua_State*        CreateCoroutineThread(KitsuneState* state, KitsuneCoroutine* slot);
 void              PushKitsuneVariable(lua_State* L, const KitsuneVariable* v);
-KitsuneCoroutine* AcquireAsyncSlot(KitsuneState* state, bool fireAndForget, bool& isNewSlot);
+// Acquires a slot, assigns the next id, increments runningCount, and adds it to slots[] under
+// slotsLock. Sets isInline and fireAndForget as requested. This is the only function allowed to
+// set id to a non-zero value and elevate state to WORKING. Returns NULL if at capacity or OOM.
+KitsuneCoroutine* AcquireSlot(KitsuneState* state, bool isInline, bool fireAndForget);
+// Releases all resources held by slot and memsets it back to the zeroed NOT_USED state.
+// Caller MUST hold slotsLock. This is the only function that sets id back to 0.
+void              FreeSlot(KitsuneState* state, KitsuneCoroutine* slot);
 
 // Finalises a Tasks.New slot after fn+args are on the thread stack.
-// Increments runningCount, adds to slots[], wakes the scheduler.
-// Defined in KitsuneEngine.cpp.
-void LaunchTaskSlot(KitsuneState* state, KitsuneCoroutine* slot, bool isNewSlot);
+// Wakes the scheduler. Defined in KitsuneEngine.cpp.
+void LaunchTaskSlot(KitsuneState* state);

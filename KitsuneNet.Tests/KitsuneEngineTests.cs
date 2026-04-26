@@ -1767,10 +1767,11 @@ namespace KitsuneNet.Tests
         public async Task Resume_AfterDone_ReturnsFalse()
         {
             // Resuming an already-completed coroutine must return false, not crash.
+            // Use a short Sleep so the slot is visible long enough to capture its id.
             using KitsuneEngine engine = new();
-            engine.ExecuteString("return 1");
-            SpinUntilRunning(engine);
-            int id = engine.RunningCoroutineId;
+            engine.ExecuteString("Sleep(1); return 1");
+            SpinUntilActive(engine);
+            int id = engine.GetActiveIds()[0];
             await engine.WaitAsync(id);
             engine.Resume(id).ShouldBeFalse();
         }
@@ -1852,6 +1853,15 @@ namespace KitsuneNet.Tests
             engine.ExecuteString("Sleep(10000); return 'never'");
             SpinUntilActive(engine);
             int id = engine.GetActiveIds()[0];
+            // Wait until the coroutine has actually entered Sleep() before cancelling,
+            // otherwise we may cancel while it's still WORKING and the Ticker fires
+            // at the next 1000-instruction boundary, causing a marginal timing failure.
+            DateTime sleepDeadline = DateTime.UtcNow.AddSeconds(5);
+            while (engine.GetStatus(id) != CoroutineStatus.Sleeping && DateTime.UtcNow < sleepDeadline)
+            {
+                Thread.Sleep(1);
+            }
+
             engine.Cancel(id);
             var sw = System.Diagnostics.Stopwatch.StartNew();
             DateTime deadline = DateTime.UtcNow.AddSeconds(5);

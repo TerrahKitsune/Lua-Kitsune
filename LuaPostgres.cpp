@@ -11,6 +11,7 @@
 #include "luadecimal.h"
 #include "luauint.h"
 #include "luatimespan.h"
+#include "luajson.h"
 
 // -- Platform helper: set socket non-blocking ----------------------------------
 #ifdef _WIN32
@@ -96,41 +97,17 @@ typedef struct LuaPostgresQuery {
 	int          accumRowIdx;   // stream cursor (0-based); QueryAll uses rawlen instead
 } LuaPostgresQuery;
 
-// -- JSON ref for PushAsParamString --------------------------------------------
-static int        s_JsonRef      = LUA_NOREF;
-static lua_State* s_JsonRefState = NULL;
-
-// -- Forward declarations ------------------------------------------------------
-static void FreeQuery(lua_State* L, LuaPostgresQuery* q);
-static int  QueryStreamCont(lua_State* L, int status, lua_KContext ctx);
-static int  HelperWaitCont(lua_State* L, int status, lua_KContext ctx);
-static int  HelperStreamCont(lua_State* L, int status, lua_KContext ctx);
-
 // -- PushAsParamString ---------------------------------------------------------
 static void PushAsParamString(lua_State* L, int index) {
 	if (index < 0)
 		index = lua_gettop(L) + index + 1;
 
 	if (lua_istable(L, index)) {
-		if (s_JsonRef == LUA_NOREF || s_JsonRefState != L) {
-			s_JsonRef      = LUA_NOREF;
-			s_JsonRefState = L;
-			lua_getglobal(L, "Json");
-			lua_pushliteral(L, "Create");
-			lua_gettable(L, -2);
-			if (lua_pcall_nohook(L, 0, 1, 0)) {
-				lua_error(L);
-				return;
-			}
-			s_JsonRef = luaL_ref(L, LUA_REGISTRYINDEX);
-			lua_pop(L, 1);
-		}
-		lua_rawgeti(L, LUA_REGISTRYINDEX, s_JsonRef);
-		lua_pushliteral(L, "Encode");
-		lua_gettable(L, -2);
-		lua_pushvalue(L, -2);
+		// Use the shared bridge LuaJson instance stored in the registry by KitsuneInit.
+		// This is always valid for the current engine session and requires no per-session state.
+		lua_rawgetp(L, LUA_REGISTRYINDEX, lua_json_bridge_registry_key());
 		lua_pushvalue(L, index);
-		if (lua_pcall_nohook(L, 2, 1, 0)) {
+		if (lua_json_encode(L) != 1) {
 			lua_error(L);
 			return;
 		}

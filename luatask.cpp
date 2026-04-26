@@ -1,4 +1,4 @@
-﻿#include "luatask.h"
+#include "luatask.h"
 #include "kitsune_internal.h"
 #include "mem.h"
 #include <cstdio>
@@ -31,8 +31,9 @@ static int task_gc(lua_State* L) {
             long st = slot->state.load();
             if (st == KITSUNE_COROUTINE_STATE_DONE || st == KITSUNE_COROUTINE_STATE_RELEASED)
                 slot->state.store(KITSUNE_COROUTINE_STATE_RELEASED);
-            else if (st == KITSUNE_COROUTINE_STATE_PAUSED)
-                slot->state.store(KITSUNE_COROUTINE_STATE_INTERRUPTED); // paused and abandoned: cancel so it doesn't hang
+            else if (st == KITSUNE_COROUTINE_STATE_PAUSED) {
+                slot->state.store(KITSUNE_COROUTINE_STATE_ABORTED); // paused and abandoned: cancel so it doesn't hang
+            }
             else
                 slot->fireAndForget.store(1);
         }
@@ -61,8 +62,7 @@ static int task_new(lua_State* L) {
     if (!lua_isfunction(L, 1))
         return luaL_error(L, "Tasks.New: first argument must be a function");
     int n = lua_gettop(L); // fn + args
-    bool isNewSlot = false;
-    KitsuneCoroutine* slot = AcquireAsyncSlot(g_state, false, isNewSlot);
+    KitsuneCoroutine* slot = AcquireSlot(g_state, false, false);
     if (!slot)
         return luaL_error(L, "Tasks.New: no available coroutine slots");
     slot->threadRef = LUA_NOREF;
@@ -72,9 +72,8 @@ static int task_new(lua_State* L) {
     slot->initialNArgs = n - 1; // fn is on the stack but not counted as an arg for lua_resume
     lua_State* T = CreateCoroutineThread(g_state, slot);
     lua_xmove(L, T, n);
-    int id = (int)(++g_state->nextId);
-    slot->id = id;
-    LaunchTaskSlot(g_state, slot, isNewSlot);
+    int id = slot->id;
+    LaunchTaskSlot(g_state);
     LuaTask* task = lua_pushtask(L);
     task->id = id;
     return 1;
@@ -197,7 +196,7 @@ static int task_cancel(lua_State* L) {
     KitsuneCoroutine* slot = FindSlot(g_state, task->id);
     long st = slot ? slot->state.load() : KITSUNE_COROUTINE_STATE_NOT_USED;
     if (slot && st != KITSUNE_COROUTINE_STATE_DONE && st != KITSUNE_COROUTINE_STATE_RELEASED)
-        slot->state.store(KITSUNE_COROUTINE_STATE_INTERRUPTED);
+        slot->state.store(KITSUNE_COROUTINE_STATE_ABORTED);
     g_state->slotsLock.unlock();
     g_state->workEvent.Set();
     return 0;

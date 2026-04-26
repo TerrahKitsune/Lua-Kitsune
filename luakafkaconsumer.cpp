@@ -156,7 +156,11 @@ static int consume_cont(lua_State* L, int status, lua_KContext ctx) {
 	// Close the previous commit window — the caller had one resume to call Commit
 	state->consumer->has_pending = false;
 
-	rd_kafka_message_t* msg = rd_kafka_consumer_poll(state->consumer->rd, state->poll_timeout_ms);
+	// Always poll with timeout=0: this coroutine runs on the Kitsune scheduler thread
+	// and blocking rd_kafka_consumer_poll would stall all other coroutines. A positive
+	// poll_timeout_ms is honoured by the Sleep() between each yielded resume that the
+	// Lua caller inserts (or by the scheduler's natural 1ms tick). Never block here.
+	rd_kafka_message_t* msg = rd_kafka_consumer_poll(state->consumer->rd, 0);
 
 	lua_settop(L, 0);
 
