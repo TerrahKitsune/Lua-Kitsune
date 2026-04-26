@@ -28,10 +28,11 @@ static int task_gc(lua_State* L) {
     task->id = 0;
     if (slot && !slot->apiOwned) {
         if (--slot->luaRefCount <= 0) {
-            if (slot->done.load())
-                slot->released.store(1);
-            else if (slot->paused.load())
-                slot->interrupted.store(1); // paused and abandoned: cancel so it doesn't hang
+            long st = slot->state.load();
+            if (st == KITSUNE_COROUTINE_STATE_DONE || st == KITSUNE_COROUTINE_STATE_RELEASED)
+                slot->state.store(KITSUNE_COROUTINE_STATE_RELEASED);
+            else if (st == KITSUNE_COROUTINE_STATE_PAUSED)
+                slot->state.store(KITSUNE_COROUTINE_STATE_INTERRUPTED); // paused and abandoned: cancel so it doesn't hang
             else
                 slot->fireAndForget.store(1);
         }
@@ -93,7 +94,7 @@ static int task_open(lua_State* L) {
     }
     g_state->slotsLock.lock();
     KitsuneCoroutine* slot = FindSlot(g_state, id);
-    if (!slot || slot->released.load()) {
+    if (!slot || slot->state.load() == KITSUNE_COROUTINE_STATE_RELEASED) {
         g_state->slotsLock.unlock();
         lua_pushnil(L);
         return 1;
@@ -179,7 +180,7 @@ static int task_getallids(lua_State* L) {
     int n = 0;
     for (int i = 0; i < g_state->slotCount; i++) {
         KitsuneCoroutine* slot = g_state->slots[i];
-        if (slot->id != 0 && !slot->released.load()) {
+        if (slot->id != 0 && slot->state.load() != KITSUNE_COROUTINE_STATE_RELEASED) {
             lua_pushinteger(L, slot->id);
             lua_rawseti(L, -2, ++n);
         }
@@ -194,8 +195,9 @@ static int task_cancel(lua_State* L) {
         return 0;
     g_state->slotsLock.lock();
     KitsuneCoroutine* slot = FindSlot(g_state, task->id);
-    if (slot && !slot->done.load())
-        slot->interrupted.store(1);
+    long st = slot ? slot->state.load() : KITSUNE_COROUTINE_STATE_NOT_USED;
+    if (slot && st != KITSUNE_COROUTINE_STATE_DONE && st != KITSUNE_COROUTINE_STATE_RELEASED)
+        slot->state.store(KITSUNE_COROUTINE_STATE_INTERRUPTED);
     g_state->slotsLock.unlock();
     g_state->workEvent.Set();
     return 0;
@@ -215,7 +217,8 @@ static int task_finished(lua_State* L) {
     }
     g_state->slotsLock.lock();
     KitsuneCoroutine* slot = FindSlot(g_state, task->id);
-    int finished = (!slot || (slot->done.load() && !slot->paused.load())) ? 1 : 0;
+    long st = slot ? slot->state.load() : KITSUNE_COROUTINE_STATE_NOT_USED;
+    int finished = (!slot || st == KITSUNE_COROUTINE_STATE_DONE || st == KITSUNE_COROUTINE_STATE_RELEASED) ? 1 : 0;
     g_state->slotsLock.unlock();
     lua_pushboolean(L, finished);
     return 1;
@@ -229,7 +232,8 @@ static int task_geterror(lua_State* L) {
     }
     g_state->slotsLock.lock();
     KitsuneCoroutine* slot = FindSlot(g_state, task->id);
-    if (!slot || !slot->done.load() || !slot->error) {
+    long st = slot ? slot->state.load() : KITSUNE_COROUTINE_STATE_NOT_USED;
+    if (!slot || (st != KITSUNE_COROUTINE_STATE_DONE && st != KITSUNE_COROUTINE_STATE_RELEASED) || !slot->error) {
         g_state->slotsLock.unlock();
         lua_pushnil(L);
         return 1;
@@ -247,7 +251,8 @@ static int task_getresult(lua_State* L) {
     }
     g_state->slotsLock.lock();
     KitsuneCoroutine* slot = FindSlot(g_state, task->id);
-    if (!slot || !slot->done.load() || slot->paused.load()) {
+    long st = slot ? slot->state.load() : KITSUNE_COROUTINE_STATE_NOT_USED;
+    if (!slot || (st != KITSUNE_COROUTINE_STATE_DONE && st != KITSUNE_COROUTINE_STATE_RELEASED)) {
         g_state->slotsLock.unlock();
         lua_pushnil(L);
         return 1;

@@ -946,7 +946,7 @@ static void Ticker(lua_State* L, lua_Debug* ar) {
 	int cancelId = (int)state->currentCoroutineId.load();
 	if (cancelId) {
 		KitsuneCoroutine* curSlot = FindSlot(state, cancelId);
-		if (curSlot && curSlot->interrupted.load()) {
+		if (curSlot && curSlot->state.load() == KITSUNE_COROUTINE_STATE_INTERRUPTED) {
 			luaL_error(L, "cancelled");
 			return;
 		}
@@ -1003,7 +1003,7 @@ static void FinishCoroutine(KitsuneState* state, KitsuneCoroutine* slot, lua_Sta
 		SetSlotError(slot, err ? err : "unknown error");
 	}
 	lua_settop(T, 0);
-	slot->done.store(1);
+	slot->state.store(KITSUNE_COROUTINE_STATE_DONE);
 	--state->runningCount;
 	state->doneCV.notify_all();
 	if (slot->fireAndForget.load()) {
@@ -1018,7 +1018,7 @@ static void FinishCoroutine(KitsuneState* state, KitsuneCoroutine* slot, lua_Sta
 				fprintf(stderr, "Task %d error: %s\n", slot->id, slot->error);
 			}
 		}
-		slot->released.store(1);
+		slot->state.store(KITSUNE_COROUTINE_STATE_RELEASED);
 	}
 }
 
@@ -1059,16 +1059,16 @@ static void SchedulerProc(KitsuneState* state) {
 		if (state->interrupt.load()) {
 			for (int i = 0; i < state->slotCount; i++) {
 				KitsuneCoroutine* slot = state->slots[i];
-				if (slot->id != 0 && !slot->done.load() && !slot->isInline.load()) {
+				long st = slot->state.load();
+				if (slot->id != 0 && st != KITSUNE_COROUTINE_STATE_DONE && st != KITSUNE_COROUTINE_STATE_RELEASED && !slot->isInline.load()) {
 					SetSlotError(slot, "interrupted");
 					slot->result.type = LUA_TNONE;
 					lua_State* T = GetCoroutineThread(state, slot);
 					if (T)
 						lua_settop(T, 0);
-					slot->done.store(1);
+					slot->state.store(KITSUNE_COROUTINE_STATE_RELEASED);
 					--state->runningCount;
 					state->doneCV.notify_all();
-					slot->released.store(1);
 				}
 			}
 		}
@@ -1088,37 +1088,25 @@ static void SchedulerProc(KitsuneState* state) {
 					break;
 
 				KitsuneCoroutine* slot = state->slots[i];
-				if (slot->id == 0 || slot->done.load())
+				long slotState = slot->state.load();
+				if (slot->id == 0 || slotState == KITSUNE_COROUTINE_STATE_DONE || slotState == KITSUNE_COROUTINE_STATE_RELEASED)
 					continue;
 				if (slot->isInline.load())
 					continue;  // inline slot — managed by calling thread, not the scheduler
-				if (slot->paused.load()) {
-					// Paused coroutine — only cancel if explicitly interrupted.
-					if (slot->interrupted.load()) {
-						lua_State* Tc = GetCoroutineThread(state, slot);
-						if (Tc)
-							lua_settop(Tc, 0);
-						SetSlotError(slot, "cancelled");
-						slot->result.type = LUA_TNONE;
-						slot->done.store(1);
-						slot->paused.store(0);
-						--state->runningCount;
-						state->doneCV.notify_all();
-						slot->released.store(1);
-					}
+				if (slotState == KITSUNE_COROUTINE_STATE_PAUSED) {
+					// Paused coroutine — skip; KitsuneCancel will move it to INTERRUPTED.
 					continue;
 				}
 				// Per-coroutine cancel: terminate before the next resume (or wake from sleep).
-				if (slot->interrupted.load()) {
+				if (slotState == KITSUNE_COROUTINE_STATE_INTERRUPTED) {
 					SetSlotError(slot, "cancelled");
 					slot->result.type = LUA_TNONE;
 					lua_State* Tc = GetCoroutineThread(state, slot);
 					if (Tc)
 						lua_settop(Tc, 0);
-					slot->done.store(1);
+					slot->state.store(KITSUNE_COROUTINE_STATE_RELEASED);
 					--state->runningCount;
 					state->doneCV.notify_all();
-					slot->released.store(1);
 					continue;
 				}
 				// Skip coroutines that are waiting out a Sleep() call.
@@ -1153,15 +1141,13 @@ static void SchedulerProc(KitsuneState* state) {
 
 				lua_State* T = GetCoroutineThread(state, slot);
 				if (!T) {
-					SetSlotError(slot, "internal: coroutine thread unavailable");
-					slot->result.type = LUA_TNONE;
-					slot->done.store(1);
-					--state->runningCount;
-					state->doneCV.notify_all();
-					if (slot->fireAndForget.load())
-						slot->released.store(1);
-					continue;
-				}
+						SetSlotError(slot, "internal: coroutine thread unavailable");
+						slot->result.type = LUA_TNONE;
+						slot->state.store(KITSUNE_COROUTINE_STATE_RELEASED);
+						--state->runningCount;
+						state->doneCV.notify_all();
+						continue;
+					}
 
 				// Refresh ARGS and ID globals for this coroutine before resuming.
 				SetCoroutineGlobals(T, slot->id, slot->argsRef);
@@ -1197,7 +1183,7 @@ static void SchedulerProc(KitsuneState* state) {
 			state->slotsLock.lock();
 			for (int i = 0; i < state->slotCount; i++) {
 				KitsuneCoroutine* slot = state->slots[i];
-				if (slot->id != 0 && slot->done.load() && slot->released.load()) {
+				if (slot->id != 0 && slot->state.load() == KITSUNE_COROUTINE_STATE_RELEASED) {
 					assert(pendingCount < KITSUNE_MAX_COROUTINES);
 					pendingArgs[pendingCount] = slot->argsRef;
 					pendingThreads[pendingCount] = slot->threadRef;
@@ -1238,7 +1224,8 @@ static void SchedulerProc(KitsuneState* state) {
 			bool hasSleeping = false;
 			for (int i = 0; i < state->slotCount; i++) {
 				KitsuneCoroutine* slot = state->slots[i];
-				if (slot->id != 0 && !slot->done.load() &&
+				long st = slot->state.load();
+				if (slot->id != 0 && st != KITSUNE_COROUTINE_STATE_DONE && st != KITSUNE_COROUTINE_STATE_RELEASED &&
 					(slot->sleepUntil != 0.0 || slot->sleepTokenRef > 0)) {
 					hasSleeping = true;
 					break;
@@ -1358,7 +1345,7 @@ static int L_Pause(lua_State* L) {
 		state->slotsLock.unlock();
 		return 0;
 	}
-	slot->paused.store(1);
+	slot->state.store(KITSUNE_COROUTINE_STATE_PAUSED);
 	state->slotsLock.unlock();
 	return lua_yield(L, 0);
 }
@@ -1665,6 +1652,7 @@ KitsuneCoroutine* AcquireAsyncSlot(KitsuneState* state, bool fireAndForget, bool
 		if (state->slots[i]->id == 0) {
 			KitsuneCoroutine* slot = state->slots[i];
 			slot->fireAndForget.store(fireAndForget ? 1 : 0);
+			slot->state.store(KITSUNE_COROUTINE_STATE_WORKING);
 			return slot;
 		}
 	}
@@ -1675,6 +1663,7 @@ KitsuneCoroutine* AcquireAsyncSlot(KitsuneState* state, bool fireAndForget, bool
 		return NULL;
 	slot->sleepTokenRef = LUA_NOREF;
 	slot->fireAndForget.store(fireAndForget ? 1 : 0);
+	slot->state.store(KITSUNE_COROUTINE_STATE_WORKING);
 	isNewSlot = true;
 	return slot;
 }
@@ -1695,10 +1684,10 @@ extern "C" {
 			slot->threadRef = LUA_NOREF;
 			slot->thread = NULL;
 		}
-		slot->done.store(1);
+		slot->state.store(KITSUNE_COROUTINE_STATE_DONE);
 		state->doneCV.notify_all();
 		if (slot->fireAndForget.load())
-			slot->released.store(1);
+			slot->state.store(KITSUNE_COROUTINE_STATE_RELEASED);
 	}
 
 	// Assigns an id, adds the slot to slots[] if new, releases Lua access, and wakes the scheduler.
@@ -2077,7 +2066,7 @@ extern "C" {
 			// inline call is OS-sleeping.  A short script (e.g. bare Sleep()) might finish in
 			// fewer than 1000 instructions after the resume, so the Ticker never fires; we must
 			// also check here to guarantee cancellation is always honoured promptly.
-			if (slot->interrupted.load()) {
+			if (slot->state.load() == KITSUNE_COROUTINE_STATE_INTERRUPTED) {
 				lua_settop(T, 0);
 				cancelledInYield = true;
 				break;
@@ -2155,6 +2144,7 @@ extern "C" {
 		for (int i = 0; i < state->slotCount; i++) {
 			if (state->slots[i]->id == 0) {
 				state->slots[i]->isInline.store(1);
+				state->slots[i]->state.store(KITSUNE_COROUTINE_STATE_WORKING);
 				return state->slots[i];
 			}
 		}
@@ -2168,6 +2158,7 @@ extern "C" {
 
 		slot->sleepTokenRef = LUA_NOREF;
 		slot->isInline.store(1);
+		slot->state.store(KITSUNE_COROUTINE_STATE_WORKING);
 		isNewSlot = true;
 		return slot;
 	}
@@ -2634,7 +2625,8 @@ extern "C" {
 		}
 		state->slotsLock.lock();
 		KitsuneCoroutine* slot = FindSlot(state, id);
-		bool done = slot ? (slot->done.load() != 0) : false;
+		long st = slot ? slot->state.load() : KITSUNE_COROUTINE_STATE_NOT_USED;
+		bool done = (st == KITSUNE_COROUTINE_STATE_DONE || st == KITSUNE_COROUTINE_STATE_RELEASED);
 		if (len) *len = (done && slot && slot->result.type == LUA_TSTRING) ? slot->result.length : 0;
 		state->slotsLock.unlock();
 		return done;
@@ -2646,14 +2638,15 @@ extern "C" {
 
 		state->slotsLock.lock();
 		KitsuneCoroutine* slot = FindSlot(state, id);
-		if (!slot || !slot->done.load()) {
+		long st = slot ? slot->state.load() : KITSUNE_COROUTINE_STATE_NOT_USED;
+		if (!slot || (st != KITSUNE_COROUTINE_STATE_DONE && st != KITSUNE_COROUTINE_STATE_RELEASED)) {
 			state->slotsLock.unlock();
 			return NULL;
 		}
 
 		KitsuneVariable* out = (KitsuneVariable*)kitsune_malloc(sizeof(KitsuneVariable));
 		if (!out) {
-			slot->released.store(1);
+			slot->state.store(KITSUNE_COROUTINE_STATE_RELEASED);
 			state->slotsLock.unlock();
 			return NULL;
 		}
@@ -2674,7 +2667,7 @@ extern "C" {
 		}
 		slot->result.type = LUA_TNONE;  // mark consumed; prevents stale reads before scheduler compacts
 
-		slot->released.store(1);
+		slot->state.store(KITSUNE_COROUTINE_STATE_RELEASED);
 		state->slotsLock.unlock();
 		return out;
 	}
@@ -2686,10 +2679,11 @@ extern "C" {
 		KitsuneCoroutine* slot = FindSlot(state, id);
 		if (slot) {
 			slot->fireAndForget.store(1);
-			if (slot->done.load())
-				slot->released.store(1);  // already finished, release directly
-			else
-				slot->interrupted.store(1);  // still running, signal per-coroutine cancel
+			long st = slot->state.load();
+			if (st == KITSUNE_COROUTINE_STATE_DONE)
+				slot->state.store(KITSUNE_COROUTINE_STATE_RELEASED);  // already finished, release directly
+			else if (st != KITSUNE_COROUTINE_STATE_RELEASED)
+				slot->state.store(KITSUNE_COROUTINE_STATE_INTERRUPTED);  // still running, signal per-coroutine cancel
 		}
 		state->slotsLock.unlock();
 		state->workEvent.Set();  // wake the scheduler to process the cancel promptly
@@ -2700,11 +2694,11 @@ extern "C" {
 		if (!state) return false;
 		state->slotsLock.lock();
 		KitsuneCoroutine* slot = FindSlot(state, id);
-		if (!slot || !slot->paused.load()) {
+		if (!slot || slot->state.load() != KITSUNE_COROUTINE_STATE_PAUSED) {
 			state->slotsLock.unlock();
 			return false;
 		}
-		slot->paused.store(0);
+		slot->state.store(KITSUNE_COROUTINE_STATE_WORKING);
 		state->slotsLock.unlock();
 		state->workEvent.Set();
 		return true;
@@ -2726,16 +2720,15 @@ extern "C" {
 int GetSlotStatus(KitsuneState* state, KitsuneCoroutine* slot) {
 	if (!slot)
 		return KITSUNE_STATUS_NONE;
-	if (slot->paused.load())
+	long st = slot->state.load();
+	if (st == KITSUNE_COROUTINE_STATE_PAUSED)
 		return KITSUNE_STATUS_PAUSED;
-	if (slot->done.load()) {
-		if (slot->interrupted.load())
-			return KITSUNE_STATUS_CANCELLED;
+	if (st == KITSUNE_COROUTINE_STATE_DONE || st == KITSUNE_COROUTINE_STATE_RELEASED) {
 		if (slot->error)
 			return KITSUNE_STATUS_FAULTED;
 		return KITSUNE_STATUS_DONE;
 	}
-	if (slot->interrupted.load())
+	if (st == KITSUNE_COROUTINE_STATE_INTERRUPTED)
 		return KITSUNE_STATUS_CANCELLED;
 	if ((int)state->currentCoroutineId.load() == slot->id)
 		return KITSUNE_STATUS_RUNNING;
@@ -2761,7 +2754,7 @@ extern "C" {
 		state->slotsLock.lock();
 		bool any = false;
 		for (int i = 0; i < state->slotCount; i++) {
-			if (state->slots[i]->id != 0 && !state->slots[i]->released.load()) {
+			if (state->slots[i]->id != 0 && state->slots[i]->state.load() != KITSUNE_COROUTINE_STATE_RELEASED) {
 				any = true;
 				break;
 			}
@@ -2778,7 +2771,8 @@ extern "C" {
 		state->slotsLock.lock();
 		int id = 0;
 		for (int i = 0; i < state->slotCount; i++) {
-			if (state->slots[i]->id != 0 && !state->slots[i]->done.load()) {
+			long st = state->slots[i]->state.load();
+			if (state->slots[i]->id != 0 && st != KITSUNE_COROUTINE_STATE_DONE && st != KITSUNE_COROUTINE_STATE_RELEASED) {
 				id = state->slots[i]->id;
 				break;
 			}
@@ -2792,8 +2786,8 @@ extern "C" {
 		if (!state) return;
 		state->slotsLock.lock();
 		KitsuneCoroutine* slot = FindSlot(state, id);
-		if (slot && slot->done.load())
-			slot->released.store(1);
+		if (slot && slot->state.load() == KITSUNE_COROUTINE_STATE_DONE)
+			slot->state.store(KITSUNE_COROUTINE_STATE_RELEASED);
 		state->slotsLock.unlock();
 	}
 
@@ -2811,7 +2805,7 @@ extern "C" {
 			if (state->schedulerStop.load()) return true;
 			std::lock_guard<std::mutex> slk(state->slotsLock);
 			for (int i = 0; i < state->slotCount; i++) {
-				if (state->slots[i]->id != 0 && !state->slots[i]->released.load())
+				if (state->slots[i]->id != 0 && state->slots[i]->state.load() != KITSUNE_COROUTINE_STATE_RELEASED)
 					return false;
 			}
 			return true;
@@ -2826,7 +2820,7 @@ extern "C" {
 		int count = 0;
 		for (int i = 0; i < state->slotCount; i++) {
 			KitsuneCoroutine* slot = state->slots[i];
-			if (slot->id != 0 && !slot->released.load()) {
+			if (slot->id != 0 && slot->state.load() != KITSUNE_COROUTINE_STATE_RELEASED) {
 				if (buffer && count < bufferSize)
 					buffer[count] = slot->id;
 				count++;

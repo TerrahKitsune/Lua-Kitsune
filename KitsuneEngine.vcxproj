@@ -386,6 +386,7 @@
     <None Include="plans\imgui-html.md" />
     <None Include="plans\imgui-integration.md" />
     <None Include="plans\imgui-markdown.md" />
+    <None Include="plans\task-improvements.md" />
     <None Include="plans\tasks-lua-module.md" />
     <None Include="testEnvironments.json" />
     <None Include="triplets\x64-windows-static-md.cmake" />

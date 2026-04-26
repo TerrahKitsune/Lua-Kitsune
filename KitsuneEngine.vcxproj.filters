@@ -1130,6 +1130,7 @@
     <None Include="plans\imgui-html.md" />
     <None Include="build-linux-and-test.ps1" />
     <None Include="plans\tasks-lua-module.md" />
+    <None Include="plans\task-improvements.md" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />

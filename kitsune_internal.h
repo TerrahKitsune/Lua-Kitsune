@@ -14,6 +14,15 @@
 
 #define KITSUNE_MAX_COROUTINES 256
 
+// -- KitsuneCoroutine state values --------------------------------------------
+#define KITSUNE_COROUTINE_STATE_NOT_USED    0  // slot is zeroed and ready for reuse
+#define KITSUNE_COROUTINE_STATE_WORKING     1  // alive and being scheduled normally
+#define KITSUNE_COROUTINE_STATE_DONE        2  // finished; result/error can be collected
+#define KITSUNE_COROUTINE_STATE_RELEASED    3  // done and consumed; scheduler will free the slot
+#define KITSUNE_COROUTINE_STATE_INTERRUPTED 4  // will be cancelled on the next scheduler tick
+#define KITSUNE_COROUTINE_STATE_SLEEPING    5  // sleeping until a deadline or token expires
+#define KITSUNE_COROUTINE_STATE_PAUSED      6  // suspended until KitsuneResume is called
+
 // -- Per-coroutine slot -------------------------------------------------------
 struct KitsuneCoroutine {
     int           id;
@@ -21,9 +30,7 @@ struct KitsuneCoroutine {
     lua_State*    thread;
     int           argsRef;
     std::atomic<long> fireAndForget{ 0 };
-    std::atomic<long> done{ 0 };
-    std::atomic<long> released{ 0 };
-    std::atomic<long> interrupted{ 0 };
+    std::atomic<long> state{ 0 };
     char*         error;
     KitsuneVariable result;
     double        sleepUntil;
@@ -31,7 +38,6 @@ struct KitsuneCoroutine {
     double        startTime;
     int           initialNArgs;
     std::atomic<long> isInline{ 0 };
-    std::atomic<long> paused{ 0 };
     char*         name;
     int           luaRefCount;
     bool          apiOwned;
