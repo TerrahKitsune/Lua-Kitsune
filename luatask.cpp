@@ -1,4 +1,4 @@
-#include "luatask.h"
+﻿#include "luatask.h"
 #include "kitsune_internal.h"
 #include "mem.h"
 #include <cstdio>
@@ -208,6 +208,49 @@ static int task_getid(lua_State* L) {
     return 1;
 }
 
+static int task_wait(lua_State* L) {
+    LuaTask* task = lua_totask(L, 1);
+    if (!g_state)
+        return luaL_error(L, "task:Wait: engine not initialized");
+    int callerSlotId = (int)g_state->currentCoroutineId.load();
+    if (callerSlotId == 0)
+        return luaL_error(L, "task:Wait: must be called from a running coroutine");
+    double timeoutMs = luaL_optnumber(L, 2, 0.0);
+    if (task->id == 0) {
+        // Handle is already released — target is done.
+        return 0;
+    }
+    g_state->slotsLock.lock();
+    KitsuneCoroutine* caller = FindSlot(g_state, callerSlotId);
+    KitsuneCoroutine* target = FindSlot(g_state, task->id);
+    if (!caller) {
+        g_state->slotsLock.unlock();
+        return luaL_error(L, "task:Wait: could not find caller slot");
+    }
+    if (caller->isInline.load()) {
+        // Inline (RunString / RunFunction) callers cannot yield — lua_yield would cross
+        // a C-call boundary and crash. Treat as a no-op so the caller can still check
+        // Finished() manually if needed.
+        g_state->slotsLock.unlock();
+        return luaL_error(L, "task:Wait: cannot yield from an inline coroutine");
+    }
+    // Fast path: target already done or gone.
+    if (!target) {
+        g_state->slotsLock.unlock();
+        return 0;
+    }
+    long tst = target->state.load();
+    if (tst == KITSUNE_COROUTINE_STATE_DONE || tst == KITSUNE_COROUTINE_STATE_RELEASED) {
+        g_state->slotsLock.unlock();
+        return 0;
+    }
+    caller->waitingForId = target->id;
+    caller->sleepUntil = (timeoutMs > 0.0) ? (GetCounter(g_state) + timeoutMs) : 0.0;
+    caller->state.store(KITSUNE_COROUTINE_STATE_WAITING);
+    g_state->slotsLock.unlock();
+    return lua_yield(L, 0);
+}
+
 static int task_finished(lua_State* L) {
     LuaTask* task = lua_totask(L, 1);
     if (task->id == 0 || !g_state) {
@@ -285,6 +328,7 @@ int luaopen_tasks(lua_State* L) {
         { "SetName",         task_setname         },
         { "GetName",         task_getname         },
         { "Finished",        task_finished        },
+        { "Wait",            task_wait            },
         { "GetError",        task_geterror        },
         { "GetResult",       task_getresult       },
         { "GetAllIds",       task_getallids       },

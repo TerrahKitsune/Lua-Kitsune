@@ -3167,6 +3167,42 @@ task:Resume()       -- returns true if the task was paused and has been unblocke
 
 `Pause()` is a no-op when called outside a scheduler-managed coroutine (inline path, registered function callbacks, etc.).
 
+### Wait
+
+Suspends the calling coroutine until the target task reaches a terminal state (`Done`, `Faulted`, or `Cancelled`). Eliminates the need for a polling loop.
+
+```lua
+nil  task:Wait()                -- suspend until target finishes (no timeout)
+nil  task:Wait(timeoutMs)       -- suspend until target finishes, or timeoutMs elapses
+```
+
+- Must be called from inside a running scheduler-managed coroutine (i.e. inside `Tasks.New`, `ExecuteString`, etc.).
+- If the target task is already finished when `Wait` is called, it returns immediately without yielding.
+- If the target handle is released (`id == 0`) or the slot no longer exists, it also returns immediately.
+- The optional `timeoutMs` argument is a number of milliseconds after which the wait is abandoned regardless of the target's state. There is no return value indicating whether the wait timed out — call `task:Finished()` afterwards if you need to distinguish.
+- Raises a Lua error if called outside a scheduler-managed coroutine.
+
+```lua
+-- Wait without timeout
+local t = Tasks.New(function() Sleep(500) end)
+t:Wait()            -- caller suspends here until t finishes
+t:Dispose()
+
+-- Wait with timeout
+local t = Tasks.New(function() Sleep(10000) end)
+t:Wait(1000)        -- gives up after 1 second even if t is still running
+if not t:Finished() then
+    t:Cancel()
+end
+t:Dispose()
+
+-- Replace a poll loop:
+-- Before:
+--   while not t:Finished() do Sleep(10) end
+-- After:
+t:Wait()
+```
+
 ### Results
 
 ```lua
@@ -3266,6 +3302,20 @@ Sleep(50)
 t:Cancel()
 while not t:Finished() do Sleep(5) end
 t:Dispose()
+
+-- Wait for a task to finish (no poll loop needed)
+local t = Tasks.New(function() Sleep(200) return 99 end)
+t:Wait()
+print(t:GetResult())  -- 99
+t:Dispose()
+
+-- Wait with a timeout
+local slow = Tasks.New(function() Sleep(10000) end)
+slow:Wait(500)         -- give up after 500 ms
+if not slow:Finished() then
+    slow:Cancel()
+end
+slow:Dispose()
 ```
 
 ---

@@ -1137,10 +1137,35 @@ static void SchedulerProc(KitsuneState* state) {
 						wake = true;
 					}
 					if (!wake)
-						continue;
-					slot->state.store(KITSUNE_COROUTINE_STATE_WORKING);
-				}
-				anyActive = true;
+							continue;
+						slot->state.store(KITSUNE_COROUTINE_STATE_WORKING);
+					}
+					// Waiting coroutine: wake when the target task is done, released, or gone (or timeout).
+					if (slotState == KITSUNE_COROUTINE_STATE_WAITING) {
+						bool wake = false;
+						if (slot->waitingForId != 0) {
+							KitsuneCoroutine* target = FindSlot(state, slot->waitingForId);
+							if (!target) {
+								wake = true; // target slot already freed
+							}
+							else {
+								long tst = target->state.load();
+								if (tst == KITSUNE_COROUTINE_STATE_DONE || tst == KITSUNE_COROUTINE_STATE_RELEASED)
+									wake = true;
+							}
+						}
+						else {
+							wake = true; // no target — shouldn't happen, but don't hang
+						}
+						if (!wake && slot->sleepUntil > 0.0 && GetCounter(state) >= slot->sleepUntil)
+							wake = true;
+						if (!wake)
+							continue;
+						slot->waitingForId = 0;
+						slot->sleepUntil = 0.0;
+						slot->state.store(KITSUNE_COROUTINE_STATE_WORKING);
+					}
+					anyActive = true;
 
 				lua_State* T = GetCoroutineThread(state, slot);
 				if (!T) {
@@ -1197,7 +1222,8 @@ static void SchedulerProc(KitsuneState* state) {
 			// are checked promptly; fall back to 10ms when the engine is truly idle.
 			bool hasSleeping = false;
 			for (int i = 0; i < state->slotCount; i++) {
-				if (state->slots[i]->state.load() == KITSUNE_COROUTINE_STATE_SLEEPING) {
+				long st = state->slots[i]->state.load();
+				if (st == KITSUNE_COROUTINE_STATE_SLEEPING || st == KITSUNE_COROUTINE_STATE_WAITING) {
 					hasSleeping = true;
 					break;
 				}

@@ -7168,6 +7168,183 @@ namespace KitsuneNet.Tests
             public LuaValue GetName(IReadOnlyList<LuaValue> val) => LuaValue.FromString(Name);
         }
 
+        // -- task:Wait ------------------------------------------------------------
+
+        [Fact]
+        public async Task TaskWait_SuspendsCallerUntilTargetFinishes()
+        {
+            // task:Wait() must block the calling coroutine until the target is done.
+            using KitsuneEngine engine = new();
+            engine.SetVariable("result", 0L);
+            engine.ExecuteString(@"
+                local t = Tasks.New(function()
+                    Sleep(100)
+                    return 42
+                end)
+                t:Wait()
+                result = t:GetResult()
+                t:Dispose()
+            ");
+            SpinUntilRunning(engine);
+            int id = engine.RunningCoroutineId;
+            await engine.WaitAsync(id);
+            engine.GetInt64("result").ShouldBe(42);
+        }
+
+        [Fact]
+        public async Task TaskWait_AlreadyFinished_ReturnsImmediately()
+        {
+            // If the target is already done when Wait is called, it must return without hanging.
+            using KitsuneEngine engine = new();
+            engine.SetVariable("result", 0L);
+            engine.ExecuteString(@"
+                local t = Tasks.New(function() return 7 end)
+                while not t:Finished() do Sleep(5) end
+                t:Wait()
+                result = t:GetResult()
+                t:Dispose()
+            ");
+            SpinUntilRunning(engine);
+            int id = engine.RunningCoroutineId;
+            await engine.WaitAsync(id);
+            engine.GetInt64("result").ShouldBe(7);
+        }
+
+        [Fact]
+        public async Task TaskWait_WithTimeout_ReturnsAfterTimeout_WhenTargetStillRunning()
+        {
+            // task:Wait(ms) must return after the timeout even if the target has not finished.
+            using KitsuneEngine engine = new();
+            engine.SetVariable("waitReturned", false);
+            engine.ExecuteString(@"
+                local slow = Tasks.New(function() Sleep(10000) end)
+                slow:Wait(200)
+                waitReturned = true
+                slow:Cancel()
+                slow:Dispose()
+            ");
+            SpinUntilRunning(engine);
+            int id = engine.RunningCoroutineId;
+            using CancellationTokenSource cts1 = new(TimeSpan.FromSeconds(10));
+            await engine.WaitAsync(id, cts1.Token);
+            engine.GetBool("waitReturned").ShouldBe(true);
+        }
+
+        [Fact]
+        public async Task TaskWait_WithTimeout_FinishesBefore_WhenTargetFastEnough()
+        {
+            // task:Wait(ms) must still return promptly when the target finishes before the timeout.
+            using KitsuneEngine engine = new();
+            engine.SetVariable("result", 0L);
+            engine.ExecuteString(@"
+                local t = Tasks.New(function() Sleep(50) return 55 end)
+                t:Wait(5000)
+                result = t:GetResult()
+                t:Dispose()
+            ");
+            using CancellationTokenSource cts2 = new(TimeSpan.FromSeconds(10));
+            await engine.WaitAsync(cts2.Token);
+            engine.GetInt64("result").ShouldBe(55);
+        }
+
+        [Fact]
+        public async Task TaskWait_ReleasedHandle_ReturnsImmediately()
+        {
+            // Calling Wait on a handle whose id is 0 (disposed) must return immediately.
+            using KitsuneEngine engine = new();
+            engine.SetVariable("waitReturned", false);
+            engine.ExecuteString(@"
+                local t = Tasks.New(function() return 1 end)
+                while not t:Finished() do Sleep(5) end
+                t:Dispose()
+                t:Wait()
+                waitReturned = true
+            ");
+            SpinUntilRunning(engine);
+            int id = engine.RunningCoroutineId;
+            await engine.WaitAsync(id);
+            engine.GetBool("waitReturned").ShouldBe(true);
+        }
+
+        [Fact]
+        public async Task TaskWait_MultipleWaiters_AllWakeAfterTargetFinishes()
+        {
+            // Multiple coroutines waiting on the same target must all be unblocked when it finishes.
+            using KitsuneEngine engine = new();
+            engine.SetVariable("count", 0L);
+            engine.ExecuteString(@"
+                local target = Tasks.New(function() Sleep(150) end)
+
+                local w1 = Tasks.New(function() target:Wait() count = count + 1 end)
+                local w2 = Tasks.New(function() target:Wait() count = count + 1 end)
+                local w3 = Tasks.New(function() target:Wait() count = count + 1 end)
+
+                w1:Wait() w2:Wait() w3:Wait()
+                w1:Dispose() w2:Dispose() w3:Dispose()
+                target:Dispose()
+            ");
+            SpinUntilRunning(engine);
+            int id = engine.RunningCoroutineId;
+            using CancellationTokenSource cts3 = new(TimeSpan.FromSeconds(10));
+            await engine.WaitAsync(id, cts3.Token);
+            engine.GetInt64("count").ShouldBe(3);
+        }
+
+        [Fact]
+        public async Task TaskWait_FaultedTarget_UnblocksWaiter()
+        {
+            // A target that errors must still unblock any coroutine waiting on it.
+            using KitsuneEngine engine = new();
+            engine.SetVariable("waitReturned", false);
+            engine.ExecuteString(@"
+                Tasks.SetErrorHandler(function() end)
+                local t = Tasks.New(function() Sleep(50) error('boom') end)
+                t:Wait()
+                waitReturned = true
+                t:Dispose()
+            ");
+            SpinUntilRunning(engine);
+            int id = engine.RunningCoroutineId;
+            using CancellationTokenSource cts4 = new(TimeSpan.FromSeconds(10));
+            await engine.WaitAsync(id, cts4.Token);
+            engine.GetBool("waitReturned").ShouldBe(true);
+        }
+
+        [Fact]
+        public void TaskWait_OutsideCoroutine_RaisesError()
+        {
+            // Calling task:Wait() from an inline (non-scheduler) context must raise a Lua error.
+            using KitsuneEngine engine = new();
+            var ex = Should.Throw<LuaException>(() =>
+                engine.RunString("local t = Tasks.New(function() Sleep(5) end); t:Wait()"));
+            ex.Message.ShouldContain("inline");
+        }
+
+        [Fact]
+        public async Task TaskWait_CancelledTarget_UnblocksWaiter()
+        {
+            // Cancelling the target must unblock a coroutine that is Wait()ing on it.
+            using KitsuneEngine engine = new();
+            engine.SetVariable("waitReturned", false);
+            engine.ExecuteString(@"
+                local t = Tasks.New(function() while true do Sleep(10) end end)
+                local watcher = Tasks.New(function()
+                    t:Wait()
+                    waitReturned = true
+                end)
+                Sleep(100)
+                t:Cancel()
+                watcher:Wait(3000)
+                t:Dispose()
+                watcher:Dispose()
+            ");
+            SpinUntilRunning(engine);
+            int id = engine.RunningCoroutineId;
+            using CancellationTokenSource cts5 = new(TimeSpan.FromSeconds(10));
+            await engine.WaitAsync(id, cts5.Token);
+            engine.GetBool("waitReturned").ShouldBe(true);
+        }
+
         private sealed class Counter
         {
             public bool DidGc = false;

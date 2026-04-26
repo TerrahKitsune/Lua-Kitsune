@@ -22,6 +22,7 @@
 #define KITSUNE_COROUTINE_STATE_ABORTED     4  // condemned; scheduler will cancel and free it at the next tick
 #define KITSUNE_COROUTINE_STATE_SLEEPING    5  // sleeping until a deadline or token expires
 #define KITSUNE_COROUTINE_STATE_PAUSED      6  // suspended until KitsuneResume is called
+#define KITSUNE_COROUTINE_STATE_WAITING     7  // suspended until a target coroutine finishes (or timeout)
 
 // -- Per-coroutine slot -------------------------------------------------------
 struct KitsuneCoroutine {
@@ -35,6 +36,7 @@ struct KitsuneCoroutine {
     KitsuneVariable result;
     double        sleepUntil;
     int           sleepTokenRef;
+    int           waitingForId;
     double        startTime;
     int           initialNArgs;
     std::atomic<int>  isInline{ 0 };
