@@ -55,7 +55,7 @@
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>$(SolutionDir)msgpack\include;$(SolutionDir)pugixml;$(SolutionDir)libyaml\include;$(SolutionDir)libarchive\include;$(SolutionDir)mysql\include;$(SolutionDir)postgres\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)hiredis;$(SolutionDir)curl\include;$(SolutionDir)mongodb\include;$(SolutionDir)libevent\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4703;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <PreprocessorDefinitions>KITSUNE_HTTP;KITSUNE_KAFKA;KITSUNE_REDIS;KITSUNE_ENGINE_EXPORTS;KITSUNE_ALL;STANDALONEGFF;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>KITSUNE_HTTP;KITSUNE_KAFKA;KITSUNE_REDIS;KITSUNE_ENGINE_EXPORTS;KITSUNE_ALL;STANDALONEGFF;SQLITE_ENABLE_MATH_FUNCTIONS;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
@@ -81,7 +81,7 @@
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>$(SolutionDir)msgpack\include;$(SolutionDir)pugixml;$(SolutionDir)libyaml\include;$(SolutionDir)libarchive\include;$(SolutionDir)mysql\include;$(SolutionDir)postgres\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)hiredis;$(SolutionDir)curl\include;$(SolutionDir)mongodb\include;$(SolutionDir)libevent\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4703;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <PreprocessorDefinitions>KITSUNE_HTTP;KITSUNE_KAFKA;KITSUNE_REDIS;KITSUNE_ENGINE_EXPORTS;KITSUNE_ALL;STANDALONEGFF;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>KITSUNE_HTTP;KITSUNE_KAFKA;KITSUNE_REDIS;KITSUNE_ENGINE_EXPORTS;KITSUNE_ALL;STANDALONEGFF;SQLITE_ENABLE_MATH_FUNCTIONS;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>

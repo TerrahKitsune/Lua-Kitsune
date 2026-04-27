@@ -125,6 +125,21 @@ public sealed class SQLiteTests
     }
 
     [Fact]
+    public async Task SQLite_SQRT_Exists()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync(@"
+            local db = SQLite.Open()
+            db:Query('select sqrt(9)')
+            db:Fetch()
+            local row = db:GetRow(1)
+            db:Close()
+            return tostring(row == 3.0)
+        ");
+        r.String.ShouldBe("true");
+    }
+
+    [Fact]
     public async Task SQLite_MultipleRows_FetchAll()
     {
         using KitsuneEngine engine = new();
