@@ -78,7 +78,7 @@ public sealed class SQLiteExtensionTests
             local db = SQLite.Open()
             db:Query("SELECT load_extension('" .. extPath .. "')")
             db:Fetch()
-            db:Query("SELECT LuaString('return ARGS[1]..ARGS[2];', '123', 'abc')")
+            db:Query("SELECT LuaString('local a,b = ...; return a..b;', '123', 'abc')")
             db:Fetch()
             local result = db:GetRow(1)
             db:Close()
@@ -100,7 +100,7 @@ public sealed class SQLiteExtensionTests
             local db = SQLite.Open()
             db:Query("SELECT load_extension('" .. extPath .. "')")
             db:Fetch()
-            db:Query("SELECT LuaString('return ARGS[1]..ARGS[2];', '456', 'xyz')")
+            db:Query("SELECT LuaString('local a,b = ...; return a..b;', '456', 'xyz')")
             db:Fetch()
             local result = db:GetRow(1)
             db:Close()
@@ -141,14 +141,14 @@ public sealed class SQLiteExtensionTests
         }
     }
 
-    // DoFile(path, args...) — KitsuneExecuteFile convention: ARGS[1]=path, ARGS[2..n]=extra args.
+    // DoFile(path, args...) — args are passed as varargs to the script.
     [WindowsOnlyFact]
     public async Task SQLiteKitsuneExtension_DoFile_ExecutesFileWithArgsAndReturnsResult()
     {
         string tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".lua");
         try
         {
-            File.WriteAllText(tempFile, "return ARGS[2] .. ARGS[3]");
+            File.WriteAllText(tempFile, "local _, a, b = ...; return a .. b");
             string luaPath = tempFile.Replace('\\', '/');
 
             using KitsuneEngine engine = new();

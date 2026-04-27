@@ -29,11 +29,11 @@ struct KitsuneCoroutine {
     int           id;
     int           threadRef;
     lua_State*    thread;
-    int           argsRef;
     std::atomic<int>  fireAndForget{ 0 };
     std::atomic<long> state{ 0 };
     char*         error;
     KitsuneVariable result;
+    int           resumeValueRef;  // luaL_ref of value passed by task:Resume(value); LUA_NOREF if none
     double        sleepUntil;
     int           sleepTokenRef;
     int           waitingForId;
@@ -87,6 +87,10 @@ int               GetSlotStatus(KitsuneState* state, KitsuneCoroutine* slot);
 double            GetCounter(KitsuneState* state);
 lua_State*        CreateCoroutineThread(KitsuneState* state, KitsuneCoroutine* slot);
 void              PushKitsuneVariable(lua_State* L, const KitsuneVariable* v);
+// Frees all owned heap/registry data inside var and zeroes the pointer fields.
+// Pass a valid lua_State* to unref Lua registry refs (tables, functions, threads).
+// Pass NULL for L only when no registry refs can be present.
+void              FreeVariableData(KitsuneVariable* var, lua_State* L);
 // Acquires a slot, assigns the next id, increments runningCount, and adds it to slots[] under
 // slotsLock. Sets isInline and fireAndForget as requested. This is the only function allowed to
 // set id to a non-zero value and elevate state to WORKING. Returns NULL if at capacity or OOM.
@@ -98,3 +102,8 @@ void              FreeSlot(KitsuneState* state, KitsuneCoroutine* slot);
 // Finalises a Tasks.New slot after fn+args are on the thread stack.
 // Wakes the scheduler. Defined in KitsuneEngine.cpp.
 void LaunchTaskSlot(KitsuneState* state);
+
+// Like KitsuneResume but takes a pre-created Lua registry ref as the resume value.
+// Pass LUA_NOREF for no value. Takes ownership of the ref (will luaL_unref it on next resume
+// or when the slot is freed). Returns false if the slot was not found or not paused.
+bool KitsuneResumeRef(int id, int luaRef);

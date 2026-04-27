@@ -34,8 +34,13 @@ namespace KitsuneNet
         /// The calling thread will resume it imminently. Not queued for the scheduler.</summary>
         Inline = 7,
 
-        /// <summary>Created by <c>Tasks.New</c> but <c>task:Start()</c> has not been called yet.
-        /// The coroutine exists and has an id, but has not entered the scheduler.</summary>
+        /// <summary>Suspended inside the coroutine via <c>Pause()</c>; waiting for
+        /// <see cref="KitsuneEngine.Resume(int)"/> or <c>task:Resume(value)</c>.
+        /// A value can be delivered and will be returned by <c>Pause()</c>.</summary>
         Paused = 8,
+
+        /// <summary>Suspended inside the coroutine via <c>task:Wait()</c>.
+        /// Can be force-woken early via <see cref="KitsuneEngine.Resume(int)"/> — no value is delivered.</summary>
+        Waiting = 9,
     }
 }

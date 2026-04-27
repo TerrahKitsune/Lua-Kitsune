@@ -340,7 +340,7 @@ set_target_properties(KitsuneEngine PROPERTIES
 target_link_libraries(KitsuneEngine PRIVATE lua_core pthread dl)
 
 # ── kitsune host executable ───────────────────────────────────────────────────
-# ── kitsune host executable ───────────────────────────────────────────────────
+if(EXISTS "${CMAKE_SOURCE_DIR}/Kitsune/Scheduler.cpp")
 add_executable(kitsune Kitsune/Program.cpp Kitsune/Session.cpp Kitsune/Scheduler.cpp)
 
 target_include_directories(kitsune PRIVATE
@@ -350,6 +350,7 @@ target_include_directories(kitsune PRIVATE
 )
 
 target_link_libraries(kitsune PRIVATE KitsuneEngine)
+endif()
 
 # ── ImGui (SDL2 + OpenGL3, Windows and Linux) ─────────────────────────────────
 option(KITSUNE_IMGUI "Build with ImGui support (requires SDL2 and OpenGL)" OFF)

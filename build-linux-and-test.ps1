@@ -87,28 +87,69 @@ if (-not (Test-Path $soPath)) {
 }
 Write-Success "Build succeeded: $soPath"
 
-# ── Run tests ─────────────────────────────────────────────────────────────────
-Write-Header 'Running xUnit tests'
+# ── Rebuild C# test assembly ──────────────────────────────────────────────────
+# The test DLL must be rebuilt from Windows so that any C# source changes are
+# picked up before running tests inside WSL.  Pass BuildingInsideVisualStudio=true
+# to suppress the C++ vcxproj target (which requires VS MSBuild, not dotnet CLI).
+Write-Header 'Building C# test assembly'
+& dotnet build $testProject --configuration $Configuration -p:BuildingInsideVisualStudio=true
+if ($LASTEXITCODE -ne 0) {
+    Write-Failure "ERROR: dotnet build failed (exit $LASTEXITCODE)."
+    exit $LASTEXITCODE
+}
+Write-Success 'C# build succeeded.'
+
+# ── Run tests inside WSL ──────────────────────────────────────────────────────
+# dotnet test must run inside WSL so the Linux runtime loads libKitsuneEngine.so.
+# Running it from Windows PowerShell would load KitsuneEngine.dll instead.
+Write-Header 'Running xUnit tests (inside WSL)'
 
 $null = New-Item -ItemType Directory -Force -Path $trxDir
-$trxFile = Join-Path $trxDir 'results.trx'
-
-# Remove stale result file so we never accidentally read last run's data.
+$wslTrxDir  = "$wslRoot/build-linux/test-results"
+$wslTrxFile = "$wslTrxDir/results.trx"
+$trxFile    = Join-Path $trxDir 'results.trx'
 if (Test-Path $trxFile) { Remove-Item $trxFile -Force }
 
-$dotnetArgs = @(
-    'test', $testProject,
-    '--configuration', $Configuration,
-    '--logger', "trx;LogFileName=$trxFile",
-    '--no-build'         # native .so is already built; skip MSBuild CMake target
-)
+# The test assembly is built by the Windows MSBuild. Locate it.
+$testOutDir    = Join-Path $repoRoot "KitsuneNet.Tests\bin\$Configuration\net10.0"
+$wslTestOutDir = "$wslRoot/KitsuneNet.Tests/bin/$Configuration/net10.0"
+$testDll       = "$wslTestOutDir/KitsuneNet.Tests.dll"
 
-Write-Info "dotnet $($dotnetArgs -join ' ')"
-# dotnet test returns non-zero for test failures; capture it instead of stopping.
+# Copy libKitsuneEngine.so into the test output dir so .NET P/Invoke finds it
+# alongside the test assembly (same-dir lookup before LD_LIBRARY_PATH).
+# Also create a bare KitsuneEngine.so symlink: .NET tries "KitsuneEngine" → 
+# "libKitsuneEngine.so" on Linux, but some runtimes also probe without the lib prefix.
+$wslSo = "$wslRoot/build-linux/libKitsuneEngine.so"
+$copyAndLink = "cp -f '$wslSo' '$wslTestOutDir/libKitsuneEngine.so'; " +
+               "ln -sf '$wslTestOutDir/libKitsuneEngine.so' '$wslTestOutDir/KitsuneEngine.so'"
+
+Write-Info "Copying .so into test output dir..."
+wsl bash -c $copyAndLink
+if ($LASTEXITCODE -ne 0) {
+    Write-Failure "ERROR: Could not copy .so into test output dir."
+    exit $LASTEXITCODE
+}
+
+# Run dotnet test inside WSL. Use the Linux dotnet (must be installed in WSL).
+# Pipe stdout to a log file inside the WSL path so we can read it back.
+$wslLogFile = "$wslRoot/build-linux/test-results/test-output.txt"
+$dotnetCmd  = "set -e; mkdir -p '$wslTrxDir'; " +
+              "dotnet test '$testDll' " +
+              "--logger 'trx;LogFileName=$wslTrxFile' " +
+              "--no-build " +
+              "2>&1 | tee '$wslLogFile'"
+
+Write-Info "Running: wsl bash -c `"$dotnetCmd`""
 $ErrorActionPreference = 'Continue'
-dotnet @dotnetArgs
+wsl bash -c $dotnetCmd
 $testExitCode = $LASTEXITCODE
 $ErrorActionPreference = 'Stop'
+
+# Print the captured output so the caller sees it live (already tee'd in WSL).
+$logFile = Join-Path $trxDir 'test-output.txt'
+if (Test-Path $logFile) {
+    Write-Host (Get-Content $logFile -Raw)
+}
 
 # ── Parse and print TRX results ───────────────────────────────────────────────
 Write-Header 'Test Results'

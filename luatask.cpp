@@ -66,7 +66,7 @@ static int task_new(lua_State* L) {
     if (!slot)
         return luaL_error(L, "Tasks.New: no available coroutine slots");
     slot->threadRef = LUA_NOREF;
-    slot->argsRef = LUA_NOREF;
+    slot->resumeValueRef = LUA_NOREF;
     slot->apiOwned = false;
     slot->luaRefCount = 1;
     slot->initialNArgs = n - 1; // fn is on the stack but not counted as an arg for lua_resume
@@ -81,7 +81,18 @@ static int task_new(lua_State* L) {
 
 static int task_resume(lua_State* L) {
     LuaTask* task = lua_totask(L, 1);
-    lua_pushboolean(L, task->id != 0 && KitsuneResume(task->id) ? 1 : 0);
+    if (task->id == 0) {
+        lua_pushboolean(L, 0);
+        return 1;
+    }
+    // Optional second argument: value delivered as the return value of Pause().
+    int luaRef = LUA_NOREF;
+    if (lua_gettop(L) >= 2 && !lua_isnoneornil(L, 2)) {
+        lua_pushvalue(L, 2);
+        luaRef = luaL_ref(L, LUA_REGISTRYINDEX);
+    }
+    bool ok = KitsuneResumeRef(task->id, luaRef);
+    lua_pushboolean(L, ok ? 1 : 0);
     return 1;
 }
 
@@ -208,6 +219,19 @@ static int task_getid(lua_State* L) {
     return 1;
 }
 
+static int task_getcurrentid(lua_State* L) {
+    if (!g_state) {
+        lua_pushnil(L);
+        return 1;
+    }
+    int id = (int)g_state->currentCoroutineId.load();
+    if (id == 0)
+        lua_pushnil(L);
+    else
+        lua_pushinteger(L, id);
+    return 1;
+}
+
 static int task_wait(lua_State* L) {
     LuaTask* task = lua_totask(L, 1);
     if (!g_state)
@@ -304,6 +328,39 @@ static int task_getresult(lua_State* L) {
     return 1;
 }
 
+static int task_consumeresult(lua_State* L) {
+    LuaTask* task = lua_totask(L, 1);
+    if (task->id == 0 || !g_state) {
+        lua_pushnil(L);
+        return 1;
+    }
+    g_state->slotsLock.lock();
+    KitsuneCoroutine* slot = FindSlot(g_state, task->id);
+    long st = slot ? slot->state.load() : KITSUNE_COROUTINE_STATE_NOT_USED;
+    if (!slot || (st != KITSUNE_COROUTINE_STATE_DONE && st != KITSUNE_COROUTINE_STATE_RELEASED)) {
+        g_state->slotsLock.unlock();
+        lua_pushnil(L);
+        return 1;
+    }
+    // Push first so the Lua stack holds a reference before we unref from the registry.
+    // This prevents the GC from collecting the value between unref and Lua taking ownership.
+    if (slot->error) {
+        // Faulted — push nil and release the slot; caller should have checked GetError first.
+        lua_pushnil(L);
+    }
+    else {
+        PushKitsuneVariable(L, &slot->result);
+    }
+    // Free the pinned result data immediately — Lua now owns the value.
+    FreeVariableData(&slot->result, L);
+    slot->result.type = LUA_TNONE;
+    // Advance to RELEASED so the scheduler compacts this slot on its next tick.
+    slot->state.store(KITSUNE_COROUTINE_STATE_RELEASED);
+    g_state->workEvent.Set();
+    g_state->slotsLock.unlock();
+    return 1;
+}
+
 static int task_seterrorhandler(lua_State* L) {
     if (!g_state)
         return 0;
@@ -331,8 +388,10 @@ int luaopen_tasks(lua_State* L) {
         { "Wait",            task_wait            },
         { "GetError",        task_geterror        },
         { "GetResult",       task_getresult       },
+        { "ConsumeResult",   task_consumeresult   },
         { "GetAllIds",       task_getallids       },
         { "SetErrorHandler", task_seterrorhandler },
+        { "GetCurrentId",    task_getcurrentid    },
         { NULL, NULL }
     };
     static const struct luaL_Reg taskmeta[] = {

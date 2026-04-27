@@ -405,11 +405,35 @@ namespace KitsuneNet
         public void Cancel(int id) => KitsuneCancel(id);
 
         /// <summary>
-        /// Un-pauses a coroutine that was suspended by <c>Pause()</c>.
-        /// Returns <c>true</c> if the coroutine was found in a paused state and successfully resumed.
-        /// Returns <c>false</c> if the id was not found, not paused, or already running. Thread-safe.
+        /// Wakes a coroutine that is suspended by <c>Pause()</c>, <c>Sleep()</c>, or <c>task:Wait()</c>.
+        /// Returns <c>true</c> if the coroutine was found in a resumable state.
+        /// Returns <c>false</c> if the id was not found or not in a resumable state. Thread-safe.
         /// </summary>
-        public bool Resume(int id) => KitsuneResume(id);
+        public bool Resume(int id) => KitsuneResume(id, IntPtr.Zero);
+
+        /// <summary>
+        /// Wakes a coroutine suspended by <c>Pause()</c> and delivers <paramref name="value"/> as
+        /// the return value of <c>Pause()</c>. Also wakes <c>Sleep()</c> and <c>task:Wait()</c>
+        /// coroutines early, but the value is discarded for those states.
+        /// Returns <c>true</c> if the coroutine was found in a resumable state. Thread-safe.
+        /// </summary>
+        public bool Resume(int id, LuaValue value)
+        {
+            List<IntPtr>? ptrs = null;
+            var nv = default(KitsuneVariable);
+            FillNativeVariable(ref nv, value, ref ptrs);
+            IntPtr nvPtr = Marshal.AllocHGlobal(Marshal.SizeOf<KitsuneVariable>());
+            try
+            {
+                Marshal.StructureToPtr(nv, nvPtr, false);
+                return KitsuneResume(id, nvPtr);
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(nvPtr);
+                FreeNativeArgs(ptrs);
+            }
+        }
 
         /// <summary>
         /// Returns how long the coroutine has been alive in milliseconds, measured from when it was created.
@@ -494,6 +518,12 @@ namespace KitsuneNet
         /// </summary>
         public async Task WaitAsync(int id, CancellationToken cancellationToken = default)
         {
+            if (id <= 0)
+            {
+                // Don't wait for id 0, it'll always return HasResult false and CoroutineStatus.None
+                return;
+            }
+
             while (!HasResult(id))
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -1382,7 +1412,7 @@ namespace KitsuneNet
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         [return: MarshalAs(UnmanagedType.I1)]
-        private static extern bool KitsuneResume(int id);
+        private static extern bool KitsuneResume(int id, IntPtr value);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         private static extern double KitsuneGetRuntime(int id);

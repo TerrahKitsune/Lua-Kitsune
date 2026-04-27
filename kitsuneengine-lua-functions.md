@@ -156,12 +156,11 @@ bool GetIsAdmin()
 | Variable | Description |
 |----------|-------------|
 | `c` | Table with special characters 0-31 (e.g., `c.LF = '\n'`) |
-| `ARGS[1]` | The script file being run (or `"cmd"` in REPL mode) |
-| `ARGS[2..n]` | Additional command-line parameters passed after the script name |
-| `ID` | Integer ID of the currently running coroutine (set by the scheduler before each resume) |
 | `VERSION` | Engine version string (e.g. `"1.0.0"`) |
 | `CPUID` | CPU identifier string returned by the CPUID instruction |
 | `DEBUG` | `true` in debug builds; not defined in release builds |
+
+> **Script arguments:** When a Lua script is launched with extra arguments (via `KitsuneExecuteFileAsync`, `ExecuteString`, etc.), those arguments are available as `...` inside the chunk body. For file-based scripts the convention is `local path, arg1, arg2 = ...`. To obtain the current coroutine's integer id from inside the script, call `Tasks.GetCurrentId()`.
 
 ---
 
@@ -3117,6 +3116,7 @@ TaskStatus.Faulted   = 5   -- finished with a runtime or Lua error; call GetErro
 TaskStatus.Cancelled = 6   -- interrupted by Cancel() or engine shutdown
 TaskStatus.Inline    = 7   -- running as an inline sync call (RunString / RunFunction etc.)
 TaskStatus.Paused    = 8   -- suspended inside the coroutine via Pause(); waiting for Resume()
+TaskStatus.Waiting   = 9   -- suspended inside the coroutine via task:Wait(); can be force-woken via Resume()
 ```
 
 ### Construction
@@ -3124,10 +3124,12 @@ TaskStatus.Paused    = 8   -- suspended inside the coroutine via Pause(); waitin
 ```lua
 Task   Tasks.New(fn, arg1, arg2, ...)
 Task   Tasks.Open(id)
+int    Tasks.GetCurrentId()           -- id of the currently executing coroutine, or nil
 ```
 
 - **`Tasks.New`** — starts `fn` immediately as an async coroutine with any extra arguments passed as function parameters on the first resume. Returns a `Task` handle with `luaRefCount = 1`. The coroutine is already queued and running — there is no separate `Start()` call.
-- **`Tasks.Open`** — opens an existing coroutine by integer `id` (from `task:GetId()` or the `ID` global). Returns `nil` if the slot does not exist or has already been released. Increments `luaRefCount` and clears `fireAndForget` so the slot is not auto-compacted while the handle is alive.
+- **`Tasks.Open`** — opens an existing coroutine by integer `id` (from `task:GetId()` or `Tasks.GetCurrentId()`). Returns `nil` if the slot does not exist or has already been released. Increments `luaRefCount` and clears `fireAndForget` so the slot is not auto-compacted while the handle is alive.
+- **`Tasks.GetCurrentId`** — returns the integer id of the coroutine that is currently executing on the scheduler, or `nil` when called outside a scheduler-managed context. Replaces the removed `ID` global.
 
 ### Identity
 
@@ -3151,18 +3153,44 @@ int    task:GetStatus()   -- one of the TaskStatus constants above
 bool   task:Finished()    -- true when id==0, slot gone, or coroutine reached a terminal state
 ```
 
-`task:Finished()` returns `true` when the handle is inert (`id == 0`) or the slot no longer exists. A paused coroutine (`TaskStatus.Paused`) is **not** considered finished.
+`task:Finished()` returns `true` when the handle is inert (`id == 0`) or the slot no longer exists. Paused (`TaskStatus.Paused`) and waiting (`TaskStatus.Waiting`) coroutines are **not** considered finished.
 
 ### Pause / Resume
 
-A running coroutine can suspend itself cooperatively and wait for an external resume signal:
+A running coroutine can suspend itself cooperatively and wait for an external resume signal. An optional value can be passed through the resume, delivered as the return value of `Pause()`.
 
 ```lua
 -- Inside the coroutine:
-Pause()             -- suspends the coroutine; task:GetStatus() returns TaskStatus.Paused
+local val = Pause()         -- suspends until resumed; returns the value passed to Resume(), or nil
 
 -- From outside (another coroutine or C#):
-task:Resume()       -- returns true if the task was paused and has been unblocked; false otherwise
+task:Resume()               -- wake any suspended state (Pause/Sleep/Wait); no value delivered
+task:Resume(value)          -- wake; value delivered only when the target was Paused — discarded for Sleep/Wait
+```
+
+| Suspended state | `Resume()` effect | Value delivered? |
+|---|---|---|
+| `Pause()` | Wakes and continues after `Pause()` | ✅ Yes — returned by `Pause()` |
+| `Sleep(n)` | Wakes before deadline expires | ❌ No — discarded |
+| `task:Wait()` | Wakes before target finishes | ❌ No — discarded |
+
+`task:Resume()` also wakes coroutines suspended by `Sleep()` or `task:Wait()`. When a sleeping or waiting coroutine is force-resumed this way, any value passed to `Resume(value)` is **discarded** — those states do not have a return-value channel. Only `Pause()` delivers the value.
+
+`Pause()` returns whatever value was provided to `task:Resume(value)`. If `Resume()` is called without an argument (or with `nil`), `Pause()` returns `nil`. This enables request/response patterns without shared globals:
+
+```lua
+local worker = Tasks.New(function()
+    while true do
+        local item = Pause()   -- wait for work
+        if item == nil then break end
+        process(item)
+    end
+end)
+
+-- Dispatch work from another coroutine:
+worker:Resume("job-1")
+worker:Resume("job-2")
+worker:Resume(nil)   -- signal shutdown
 ```
 
 `Pause()` is a no-op when called outside a scheduler-managed coroutine (inline path, registered function callbacks, etc.).
@@ -3206,11 +3234,16 @@ t:Wait()
 ### Results
 
 ```lua
-string task:GetError()    -- error string, or nil when no error or task still running
-value  task:GetResult()   -- typed result value, or nil when task has not finished yet
+string task:GetError()        -- error string, or nil when no error or task still running
+value  task:GetResult()       -- typed result value, or nil when task has not finished yet
+value  task:ConsumeResult()   -- like GetResult, but immediately frees the result and releases the slot
 ```
 
-Both functions are **non-destructive** — calling them does not consume or release the slot.
+`GetResult` is non-destructive — the slot and its result stay pinned until all handles are GC'd. Use this when you need to read the result multiple times or keep the slot observable.
+
+`ConsumeResult` frees the result data immediately after pushing it to the Lua stack and advances the slot to `RELEASED` so the scheduler can compact it on the next tick — no waiting for GC. Use this when you want to eagerly release a large result (e.g. a full database query table) as soon as it has been consumed. After calling `ConsumeResult`, `Finished()` returns `true` and `GetResult()` returns `nil`.
+
+If the task faulted (has an error), `ConsumeResult` returns `nil` and still releases the slot — call `GetError()` before `ConsumeResult()` if you need the error message.
 
 ### Cancellation
 

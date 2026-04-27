@@ -51,10 +51,6 @@ function ArrayPrint(arr)
 	end 
 end
 
-for n=1, #ARGS do 
-	print(n, ARGS[n]);
-end
-
 function PrintPixel(px)
 	io.write("{"..px.r.." | ");
 	io.write(px.g .. " | ");

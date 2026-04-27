@@ -1,4 +1,4 @@
-﻿using KitsuneNet;
+using KitsuneNet;
 using Shouldly;
 using Xunit;
 
@@ -20,7 +20,7 @@ public sealed class ArchiveTests
     {
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync("""
-            local arc, err = Archive.OpenRead(ARGS[1])
+            local arc, err = Archive.OpenRead((...))
             assert(arc, err or "failed to open archive")
             local entries = Archive.Entries(arc)
             return tostring(#entries)
@@ -35,7 +35,7 @@ public sealed class ArchiveTests
     {
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync("""
-            local arc, err = Archive.OpenRead(ARGS[1])
+            local arc, err = Archive.OpenRead((...))
             assert(arc, err or "failed to open archive")
             local entries = Archive.Entries(arc)
             local names = {}
@@ -55,7 +55,7 @@ public sealed class ArchiveTests
     {
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync("""
-            local arc, err = Archive.OpenRead(ARGS[1])
+            local arc, err = Archive.OpenRead((...))
             assert(arc, err or "failed to open archive")
             local entries = Archive.Entries(arc)
             for i = 1, #entries do
@@ -74,7 +74,7 @@ public sealed class ArchiveTests
     {
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync("""
-            local arc, err = Archive.OpenRead(ARGS[1])
+            local arc, err = Archive.OpenRead((...))
             assert(arc, err or "failed to open archive")
             local name, size = Archive.SetEntry(arc, 1)
             assert(name, "SetEntry returned nil for entry 1")
@@ -92,7 +92,7 @@ public sealed class ArchiveTests
     {
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync("""
-            local arc, err = Archive.OpenRead(ARGS[1])
+            local arc, err = Archive.OpenRead((...))
             assert(arc, err or "failed to open archive")
             local name, size = Archive.SetEntry(arc, 2)
             assert(name, "SetEntry returned nil for entry 2")
@@ -110,7 +110,7 @@ public sealed class ArchiveTests
     {
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync("""
-            local arc, err = Archive.OpenRead(ARGS[1])
+            local arc, err = Archive.OpenRead((...))
             assert(arc, err or "failed to open archive")
             local entries = Archive.Entries(arc)
             for i = 1, #entries do
@@ -134,7 +134,7 @@ public sealed class ArchiveTests
     {
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync("""
-            local arc, err = Archive.OpenRead(ARGS[1])
+            local arc, err = Archive.OpenRead((...))
             assert(arc, err or "failed to open archive")
             local name, size = Archive.SetEntry(arc, 1)
             assert(name, "SetEntry returned nil")
@@ -158,7 +158,7 @@ public sealed class ArchiveTests
     {
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync("""
-            local arc, err = Archive.OpenRead(ARGS[1])
+            local arc, err = Archive.OpenRead((...))
             return tostring(arc == nil) .. '|' .. tostring(type(err) == 'string')
             """,
             args: [LuaValue.FromString("nonexistent_file_that_does_not_exist.7z")]);

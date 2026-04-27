@@ -46,13 +46,14 @@
 // Return values for KitsuneGetStatus.
 #define KITSUNE_STATUS_NONE      (0)  // id not found (never existed, already released, or compacted)
 #define KITSUNE_STATUS_IDLE      (1)  // alive and queued; waiting to be resumed by the scheduler
-#define KITSUNE_STATUS_SLEEPING  (2)  // alive but waiting out a Sleep() deadline
+#define KITSUNE_STATUS_SLEEPING  (2)  // alive but waiting out a Sleep() deadline; can be force-woken via KitsuneResume(id, NULL) — value discarded
 #define KITSUNE_STATUS_RUNNING   (3)  // currently executing inside lua_resume
 #define KITSUNE_STATUS_DONE      (4)  // finished successfully; result not yet consumed
 #define KITSUNE_STATUS_FAULTED   (5)  // finished with a runtime or Lua error; call KitsuneGetError
 #define KITSUNE_STATUS_CANCELLED (6)  // stopped by an explicit KitsuneCancel(id) call, or cancel is pending
 #define KITSUNE_STATUS_INLINE    (7)  // inline sync call paused in cooperative yield window; calling thread will resume imminently
-#define KITSUNE_STATUS_PAUSED    (8)  // suspended inside the coroutine via Pause(); waiting for KitsuneResume(id) / task:Resume()
+#define KITSUNE_STATUS_PAUSED    (8)  // suspended inside the coroutine via Pause(); waiting for KitsuneResume(id, value) / task:Resume(value)
+#define KITSUNE_STATUS_WAITING   (9)  // suspended inside the coroutine via task:Wait(); can be force-woken via KitsuneResume(id, NULL) — value discarded
 
 // Forward declaration
 struct KitsuneKeyValuePairVariableNode;
@@ -370,10 +371,11 @@ extern "C" {
 	// KitsuneGetResult, or KitsuneHasResult for it. Thread-safe.
 	KITSUNE_API void KitsuneCancel(int id);
 	// Un-pauses a coroutine that was suspended by Pause() or that was created by Tasks.New
-	// but not yet started (task:Start()). Returns true if the coroutine was found and was
-	// in a paused state and was successfully resumed. Returns false if it was not found,
-	// not paused, or already running. Thread-safe.
-	KITSUNE_API bool KitsuneResume(int id);
+	// but not yet started (task:Start()). The optional `value` (may be NULL) is delivered as
+	// the return value of Pause() inside the coroutine on its next resume. Returns true if the
+	// coroutine was found and was in a paused state and was successfully resumed. Returns false
+	// if it was not found, not paused, or already running. Thread-safe.
+	KITSUNE_API bool KitsuneResume(int id, const KitsuneVariable* value);
 	// Returns how long the coroutine has been alive in milliseconds, measured from when it was created.
 	// Returns 0.0 if the id is not found. Thread-safe.
 	KITSUNE_API double KitsuneGetRuntime(int id);
