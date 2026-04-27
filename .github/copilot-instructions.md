@@ -63,6 +63,9 @@
 - Follow the **wchar pattern**: one `functions[]` table containing all callable methods, one `meta[]` table containing only metamethods (`__gc`, `__tostring`, etc.), and `__index = module table` so all functions are reachable both as `Module.Xxx()` and `instance:Xxx()`.
 - Do **not** create a separate `__index` subtable with a filtered subset of methods.
 
+### Lua Registry References
+- In the Lua-Kitsune C++ codebase, Lua registry references (luaL_ref) use the convention: valid = > 0, invalid = 0 or less. Never use LUA_NOREF (-2) as the invalid sentinel; use 0 instead. All validity checks must use `> 0` (valid) and `<= 0` (invalid).
+
 ## C# Code Style
 - When writing C# code for the Lua-Kitsune project, follow the rules defined in `analysis.ruleset`. Key rules include:
   - UseConfigureAwait (Warning)

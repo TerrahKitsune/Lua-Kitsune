@@ -34,6 +34,7 @@ struct KitsuneCoroutine {
     char*         error;
     KitsuneVariable result;
     int           resumeValueRef;  // luaL_ref of value passed by task:Resume(value); LUA_NOREF if none
+    int           onErrorRef;      // luaL_ref of per-task error handler fn(id, err); LUA_NOREF if none
     double        sleepUntil;
     int           sleepTokenRef;
     int           waitingForId;
@@ -75,7 +76,7 @@ struct KitsuneState {
     std::atomic<long> nextId{ 0 };
     std::atomic<long> runningCount{ 0 };
     std::atomic<long> currentCoroutineId{ 0 };
-    int               taskErrorHandlerRef{ LUA_NOREF };
+    int               taskErrorHandlerRef{ 0 };
 };
 
 // -- Global state (defined in KitsuneEngine.cpp) ------------------------------

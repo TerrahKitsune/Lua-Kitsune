@@ -20,6 +20,7 @@
     "TextDisabled",
     "TextWrapped",
     "BulletText",
-    "PushFont"
+    "PushFont",
+    "ImageButton"
   ]
 }

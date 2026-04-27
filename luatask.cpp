@@ -65,8 +65,9 @@ static int task_new(lua_State* L) {
     KitsuneCoroutine* slot = AcquireSlot(g_state, false, false);
     if (!slot)
         return luaL_error(L, "Tasks.New: no available coroutine slots");
-    slot->threadRef = LUA_NOREF;
-    slot->resumeValueRef = LUA_NOREF;
+    slot->threadRef = 0;
+    slot->resumeValueRef = 0;
+    slot->onErrorRef = 0;
     slot->apiOwned = false;
     slot->luaRefCount = 1;
     slot->initialNArgs = n - 1; // fn is on the stack but not counted as an arg for lua_resume
@@ -364,13 +365,51 @@ static int task_consumeresult(lua_State* L) {
 static int task_seterrorhandler(lua_State* L) {
     if (!g_state)
         return 0;
-    if (g_state->taskErrorHandlerRef != LUA_NOREF) {
+    if (g_state->taskErrorHandlerRef > 0) {
         luaL_unref(L, LUA_REGISTRYINDEX, g_state->taskErrorHandlerRef);
-        g_state->taskErrorHandlerRef = LUA_NOREF;
+        g_state->taskErrorHandlerRef = 0;
     }
     if (lua_isfunction(L, 1))
         g_state->taskErrorHandlerRef = luaL_ref(L, LUA_REGISTRYINDEX);
     return 0;
+}
+
+static int task_onerror(lua_State* L) {
+    LuaTask* task = lua_totask(L, 1);
+    if (task->id == 0 || !g_state) {
+        lua_pushvalue(L, 1);
+        return 1;
+    }
+    g_state->slotsLock.lock();
+    KitsuneCoroutine* slot = FindSlot(g_state, task->id);
+    if (slot) {
+        if (slot->onErrorRef > 0) {
+            luaL_unref(L, LUA_REGISTRYINDEX, slot->onErrorRef);
+            slot->onErrorRef = 0;
+        }
+        if (lua_isfunction(L, 2))
+            slot->onErrorRef = luaL_ref(L, LUA_REGISTRYINDEX);
+    }
+    g_state->slotsLock.unlock();
+    // Return self for method chaining.
+    lua_pushvalue(L, 1);
+    return 1;
+}
+
+static int task_activecount(lua_State* L) {
+    if (!g_state) {
+        lua_pushinteger(L, 0);
+        return 1;
+    }
+    g_state->slotsLock.lock();
+    int count = 0;
+    for (int i = 0; i < g_state->slotCount; i++) {
+        if (g_state->slots[i]->id != 0)
+            count++;
+    }
+    g_state->slotsLock.unlock();
+    lua_pushinteger(L, count);
+    return 1;
 }
 
 int luaopen_tasks(lua_State* L) {
@@ -392,6 +431,8 @@ int luaopen_tasks(lua_State* L) {
         { "GetAllIds",       task_getallids       },
         { "SetErrorHandler", task_seterrorhandler },
         { "GetCurrentId",    task_getcurrentid    },
+        { "OnError",         task_onerror         },
+        { "ActiveCount",     task_activecount     },
         { NULL, NULL }
     };
     static const struct luaL_Reg taskmeta[] = {
@@ -422,6 +463,9 @@ int luaopen_tasks(lua_State* L) {
     lua_pushinteger(L, KITSUNE_STATUS_INLINE);    lua_setfield(L, -2, "Inline");
     lua_pushinteger(L, KITSUNE_STATUS_PAUSED);    lua_setfield(L, -2, "Paused");
     lua_setglobal(L, "TaskStatus");
+    // Expose MaxSlots as a constant on the Tasks table itself.
+    lua_pushinteger(L, KITSUNE_MAX_COROUTINES);
+    lua_setfield(L, methods_idx, "MaxSlots");
     lua_pushvalue(L, methods_idx);
     return 1;
 }

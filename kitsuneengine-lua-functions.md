@@ -1853,21 +1853,91 @@ TimeSpan Timer:ElapsedTimeSpan()
 ## SQLite
 
 ```lua
-SQLite SQLite.Open(opt filename, opt mode)
-bool, txt SQLite:Query(querystring, preparedstatements)
-nil   SQLite:Finish()
-bool  SQLite:Fetch()
-table SQLite:GetRow(opt index)
-nil   SQLite:RegisterFunction(function, name, args)
-nil   SQLite:RegisterAggregateFunction(function, name, args)
-nil   SQLite:ToggleWidechar(bool)
-nil   SQLite:SetBusyHandler(opt fn)
-nil   SQLite:Close()
+SQLite      SQLite.Open(opt filename, opt mode)
+bool, txt   SQLite:Query(sql, opt params)
+nil         SQLite:Finish()
+bool        SQLite:Fetch()
+table|value SQLite:GetRow(opt index)
+nil         SQLite:RegisterFunction(function, name, args)
+nil         SQLite:RegisterAggregateFunction(function, name, args)
+nil         SQLite:ToggleWidechar(bool)
+nil         SQLite:SetBusyHandler(opt fn)
+nil         SQLite:Close()
 ```
 
 **Mode:** 0=single thread, 1=multithreaded, 2=serialized
 
-- **`SetBusyHandler(opt fn)`** — registers a callback invoked when a table is locked. The function receives the SQLite instance and the retry count; return truthy to retry, falsy to abort. Pass no argument or `nil` to remove an existing handler.
+| Function | Description |
+|----------|-------------|
+| `Open` | Open an SQLite database. Omit `filename` (or pass `nil`) for an in-memory database |
+| `Query` | Prepare and execute `sql`. Returns `true, "ROW"` if the first row is ready, `true, "DONE"` when there are no rows (DML or empty SELECT), or `false, errmsg` on error. Call `Fetch` / `GetRow` to consume results |
+| `Finish` | Finalize the current prepared statement early, allowing a new `Query` before all rows have been consumed |
+| `Fetch` | Advance to the next result row. Returns `true` while a row is available, `false` when exhausted |
+| `GetRow` | Without arguments (or `0`): returns the current row as a string-keyed table `{columnName = value, ...}` — **not** an integer-indexed array. With a positive 1-based integer index: returns that single column value directly. Returns `nil` if the index is out of range or there is no active row |
+| `RegisterFunction` | Register a scalar Lua function callable from SQL. `args` is the number of expected arguments (-1 for variadic) |
+| `RegisterAggregateFunction` | Register an aggregate Lua function. Called per row with `(false, …args)` and once at the end with `(true)` to collect the final result |
+| `ToggleWidechar` | When `true`, text columns are returned as `Wchar` instead of plain Lua strings |
+| `SetBusyHandler` | Register a callback invoked when a table is locked. Receives `(sqlite, retryCount)`; return truthy to retry, falsy to abort. Pass `nil` or no argument to remove |
+| `Close` | Close the database connection |
+
+### Prepared Statements (named parameters)
+
+`Query` supports named parameters using the `:name` placeholder syntax. **Anonymous positional parameters (`?`) are not supported** and will cause an error.
+
+Pass parameters as a **table** or a **function**:
+
+```lua
+-- Table: keys match parameter names (without the leading colon)
+db:Query('INSERT INTO users VALUES (:id, :name)', {id = 1, name = 'Alice'})
+
+-- Function: called once per parameter with the name (no leading colon),
+-- returns the value to bind
+db:Query('SELECT * FROM users WHERE id = :id', function(param)
+    if param == 'id' then return 42 end
+end)
+```
+
+Supported bind types: `nil` → NULL, integer → INTEGER, float → REAL, boolean → INTEGER (0/1), string → TEXT, `Wchar` → TEXT (UTF-16), `Stream` → NULL.
+
+### Query Workflow
+
+```lua
+local db = SQLite.Open()          -- in-memory database
+
+-- DDL / DML — consume with a single Fetch()
+db:Query('CREATE TABLE t (id INTEGER, name TEXT)')
+db:Fetch()
+
+db:Query('INSERT INTO t VALUES (:id, :name)', {id = 1, name = 'Alice'})
+db:Fetch()
+
+-- SELECT — loop with Fetch(), read each row with GetRow()
+db:Query('SELECT id, name FROM t ORDER BY id')
+while db:Fetch() do
+    local row = db:GetRow()           -- string-keyed table: {id=1, name='Alice'}
+    print(row.id, row.name)
+end
+
+-- GetRow with index (positive 1-based integer) returns a single column value
+db:Query('SELECT name FROM t WHERE id = :id', {id = 1})
+db:Fetch()
+local name = db:GetRow(1)            -- 'Alice'  (index 1 = first column)
+
+-- Finish() discards remaining rows so the next Query can proceed
+db:Query('SELECT id FROM t ORDER BY id')
+db:Fetch()                            -- reads first row only
+db:Finish()                           -- skip the rest
+
+db:Close()
+```
+
+### Return Values from Query
+
+| Second return | Meaning |
+|---------------|---------|
+| `"ROW"` | First row is ready; call `Fetch()` / `GetRow()` to read results |
+| `"DONE"` | Statement completed with no (more) rows (typical for DDL/DML or empty SELECT) |
+| `false, errmsg` | Preparation or execution error |
 
 ---
 
@@ -3253,13 +3323,38 @@ task:Cancel()   -- signals the coroutine to be terminated before its next resume
 
 The coroutine is not stopped immediately; the scheduler sets `interrupted` and terminates it at the next scheduling opportunity. `GetStatus()` will return `TaskStatus.Cancelled` once compacted.
 
-### Handle lifecycle — Dispose and fire-and-forget
+### Per-task error handler — OnError
+
+`task:OnError(fn)` registers a callback that is invoked when **this specific task** faults (finishes with a Lua error). The handler receives the same `(id, err)` arguments as `Tasks.SetErrorHandler` and takes priority over the global handler.
 
 ```lua
-task:Dispose()   -- marks this handle as unused; identical to letting it be GC'd
+Task  task:OnError(fn)   -- returns self for method chaining; pass nil to clear
 ```
 
-**`Dispose` does not cancel or stop the coroutine.** It only releases the handle's reference to the slot. When the last handle referencing a slot is disposed (or GC'd) and the slot is not `apiOwned`, the slot is marked `fireAndForget`:
+- The handler fires whether the task is fire-and-forget or observed — unlike the global handler, which only fires for fire-and-forget tasks.
+- Returns `self` so it can be chained immediately after `Tasks.New(...)`.
+- Calling `OnError(nil)` removes any previously registered handler for this task.
+- If both a per-task handler and the global handler are set, **only the per-task handler is called**.
+
+```lua
+-- Per-task handler (chained) — fires even for non-fire-and-forget
+local t = Tasks.New(function() error("oops") end)
+    :OnError(function(id, err)
+        print("task " .. id .. " failed: " .. err)
+    end)
+t:Wait()
+t:Dispose()
+
+-- Fire-and-forget with per-task handler — no global handler needed
+Tasks.New(function() error("boom") end)
+    :OnError(function(id, err) log("task error", id, err) end)
+    :Dispose()
+
+-- Clear a previously set handler
+t:OnError(nil)
+```
+
+### Handle lifecycle — Dispose and fire-and-forget
 
 - If the coroutine is already **done** — the slot is released immediately.
 - If the coroutine is **still running** — it continues until it finishes, then the slot is auto-compacted by the scheduler. Any error is forwarded to `Tasks.SetErrorHandler` (or printed to `stderr` if no handler is set).
@@ -3281,7 +3376,19 @@ end  -- t collected on next GC; Dispose() is more explicit
 ### GetAllIds
 
 ```lua
-table   Tasks.GetAllIds()   -- array of all live (non-released) coroutine ids
+table   Tasks.GetAllIds()        -- array of all live (non-released) coroutine ids
+int     Tasks.ActiveCount()      -- number of currently live slots (id != 0)
+int     Tasks.MaxSlots           -- maximum number of concurrent coroutine slots (256)
+```
+
+`Tasks.ActiveCount()` returns the number of slots that are currently occupied (have a non-zero id). This includes coroutines in any state — running, sleeping, paused, waiting, done-but-not-yet-compacted, etc. Use it together with `Tasks.MaxSlots` to implement back-pressure before hitting the hard slot limit that causes `Tasks.New` to raise an error.
+
+```lua
+-- Back-pressure: wait until a slot is free before spawning
+while Tasks.ActiveCount() >= Tasks.MaxSlots do
+    Sleep(10)
+end
+Tasks.New(function() doWork() end):Dispose()
 ```
 
 ### Examples
@@ -3305,6 +3412,14 @@ Tasks.SetErrorHandler(function(id, err)
     print("[TASK ERROR] " .. id .. ": " .. err)
 end)
 Tasks.New(function() error("oops") end):Dispose()
+
+-- Per-task error handler — takes priority over the global handler
+local t = Tasks.New(function() error("per-task error") end)
+    :OnError(function(id, err)
+        print("caught by per-task handler: " .. err)
+    end)
+t:Wait()
+t:Dispose()
 
 -- Pause / Resume pattern
 local task = Tasks.New(function()

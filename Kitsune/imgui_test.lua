@@ -403,13 +403,58 @@ local function tabHardware(renderer, ctx)
 end
 
 local function tabWidgets(renderer, ctx)
+    -- Per-tab feedback message
+    if not ctx.widgetMsg then ctx.widgetMsg = "none" end
+    renderer:Text("Last action: " .. ctx.widgetMsg)
+    renderer:Separator()
     renderer:Text("--- Buttons ---")
     if renderer:Button("Click me") then
-        ctx.lastError = "Button clicked on frame " .. ctx.frameCount
+        ctx.widgetMsg = "Button clicked on frame " .. ctx.frameCount
     end
     renderer:SameLine()
     if renderer:Button("Trigger error") then
         error("manual error trigger")
+    end
+    renderer:Separator()
+    renderer:Text("--- Image Buttons ---")
+    -- Lazy-load textures (shared with the Textures tab)
+    if not ctx.texOriginal then
+        ctx.texOriginal  = OpenGL.LoadTexture(Stream.Open('./docs/sample.png', 'rb'), 'sample.png')
+        ctx.texThumbnail = OpenGL.ResizeTexture(ctx.texOriginal, 100, 100, 'sample.png:thumb')
+        ctx.texSheet     = OpenGL.LoadTexture(Stream.Open('./docs/samplespritesheet.png', 'rb'), 'samplespritesheet.png')
+        ctx.texGif       = OpenGL.LoadTexture(Stream.Open('./docs/sample.gif', 'rb'), 'sample.gif')
+        ctx.sheetFrame   = 1
+        ctx.sheetTimer   = 0.0
+    end
+    -- Advance sprite sheet animation
+    local dt = SDL.Time.GetFrameTime()
+    local sheetFps   = 12
+    local sheetTotal = 60
+    ctx.sheetTimer = ctx.sheetTimer + dt
+    if ctx.sheetTimer >= 1.0 / sheetFps then
+        ctx.sheetTimer = ctx.sheetTimer - (1.0 / sheetFps)
+        ctx.sheetFrame = (ctx.sheetFrame % sheetTotal) + 1
+    end
+    if ctx.texOriginal and renderer:ImageButton("##imgbtn_png", ctx.texOriginal, 64, 64) then
+        ctx.widgetMsg = "PNG ImageButton clicked on frame " .. ctx.frameCount
+    end
+    renderer:SameLine()
+    renderer:Text("PNG")
+    if ctx.texGif and renderer:ImageButton("##imgbtn_gif", ctx.texGif, 64, 64) then
+        ctx.widgetMsg = "GIF ImageButton clicked on frame " .. ctx.frameCount
+    end
+    renderer:SameLine()
+    renderer:Text("Animated GIF")
+    if ctx.texSheet then
+        local u0 = ((ctx.sheetFrame - 1) % 8) / 8.0
+        local v0 = math.floor((ctx.sheetFrame - 1) / 8) / 8.0
+        local u1 = u0 + 1.0 / 8.0
+        local v1 = v0 + 1.0 / 8.0
+        if renderer:ImageButton("##imgbtn_sheet", ctx.texSheet, 64, 64, u0, v0, u1, v1) then
+            ctx.widgetMsg = "Sprite sheet ImageButton clicked (frame " .. ctx.sheetFrame .. ") on frame " .. ctx.frameCount
+        end
+        renderer:SameLine()
+        renderer:Text("Sprite sheet (frame " .. ctx.sheetFrame .. ")")
     end
     renderer:Separator()
     renderer:Text("--- Checkbox ---")
@@ -1232,7 +1277,7 @@ local function tabTextures(renderer, ctx)
         local fps     = 12
         local total   = 60  -- sheet is 8x8 but last 4 frames are empty
 
-        ctx.sheetTimer = ctx.sheetTimer + (1.0 / 60.0)
+        ctx.sheetTimer = ctx.sheetTimer + SDL.Time.GetFrameTime()
         if ctx.sheetTimer >= 1.0 / fps then
             ctx.sheetTimer = ctx.sheetTimer - (1.0 / fps)
             ctx.sheetFrame = (ctx.sheetFrame % total) + 1

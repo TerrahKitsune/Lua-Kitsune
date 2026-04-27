@@ -1123,14 +1123,7 @@
     <None Include="testEnvironments.json" />
     <None Include="vcpkg.json" />
     <None Include="triplets\x64-windows-static-md.cmake" />
-    <None Include="plans\imgui-integration.md" />
-    <None Include="plans\imgui-markdown.md" />
-    <None Include="plans\imgui-api-namespace-refactor.md" />
-    <None Include="plans\httpserver-integration.md" />
-    <None Include="plans\imgui-html.md" />
     <None Include="build-linux-and-test.ps1" />
-    <None Include="plans\tasks-lua-module.md" />
-    <None Include="plans\task-improvements.md" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />

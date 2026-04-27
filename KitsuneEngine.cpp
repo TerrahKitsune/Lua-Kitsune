@@ -894,6 +894,11 @@ static void SetSlotResult(KitsuneCoroutine* slot, lua_State* T, int idx) {
 
 // Caller must hold slotsLock, or be the scheduler thread.
 KitsuneCoroutine* FindSlot(KitsuneState* state, int id) {
+
+	// id 0 is never valid
+	if (id == 0)
+		return NULL;
+
 	for (int i = 0; i < state->slotCount; i++) {
 		if (state->slots[i]->id == id)
 			return state->slots[i];
@@ -955,8 +960,15 @@ static void Ticker(lua_State* L, lua_Debug* ar) {
 	}
 
 	if (state->pauseFlag.load() && !g_inlineExecution) {
+		// Save and restore currentCoroutineId: the external thread that acquires Lua
+		// access (e.g. RunInline for Imgui.Start's render callback) will overwrite it
+		// with its own inline slot id and then zero it when done.  Without the restore
+		// the scheduler-managed coroutine resumes with id==0, causing L_Sleep to miss
+		// FindSlot and fall through to a blocking OS sleep.
+		long savedId = state->currentCoroutineId.load();
 		state->pausedEvent.Set();
 		state->resumeEvent.Wait();
+		state->currentCoroutineId.store(savedId);
 		if (state->interrupt.load()) {
 			luaL_error(L, "interrupted");
 			return;
@@ -1007,20 +1019,28 @@ static void FinishCoroutine(KitsuneState* state, KitsuneCoroutine* slot, lua_Sta
 	lua_settop(T, 0);
 	slot->state.store(KITSUNE_COROUTINE_STATE_DONE);
 	state->doneCV.notify_all();
-	if (slot->fireAndForget.load()) {
-		if (slot->error) {
-			if (state->taskErrorHandlerRef != LUA_NOREF) {
-				lua_rawgeti(state->L, LUA_REGISTRYINDEX, state->taskErrorHandlerRef);
-				lua_pushinteger(state->L, slot->id);
-				lua_pushstring(state->L, slot->error);
-				lua_pcall(state->L, 2, 0, 0);
-			}
-			else {
-				fprintf(stderr, "Task %d error: %s\n", slot->id, slot->error);
-			}
+	if (slot->error) {
+		// Per-task handler takes priority over the global one.
+		int handlerRef = (slot->onErrorRef > 0) ? slot->onErrorRef : 0;
+		bool useGlobal = (handlerRef <= 0) && slot->fireAndForget.load() && (state->taskErrorHandlerRef > 0);
+		if (handlerRef > 0) {
+			lua_rawgeti(state->L, LUA_REGISTRYINDEX, handlerRef);
+			lua_pushinteger(state->L, slot->id);
+			lua_pushstring(state->L, slot->error);
+			lua_pcall(state->L, 2, 0, 0);
 		}
-		slot->state.store(KITSUNE_COROUTINE_STATE_RELEASED);
+		else if (useGlobal) {
+			lua_rawgeti(state->L, LUA_REGISTRYINDEX, state->taskErrorHandlerRef); // useGlobal already guards taskErrorHandlerRef > 0
+			lua_pushinteger(state->L, slot->id);
+			lua_pushstring(state->L, slot->error);
+			lua_pcall(state->L, 2, 0, 0);
+		}
+		else if (slot->fireAndForget.load()) {
+			fprintf(stderr, "Task %d error: %s\n", slot->id, slot->error);
+		}
 	}
+	if (slot->fireAndForget.load())
+		slot->state.store(KITSUNE_COROUTINE_STATE_RELEASED);
 }
 
 // True only on the scheduler thread; set once in SchedulerProc and never cleared.
@@ -1127,35 +1147,35 @@ static void SchedulerProc(KitsuneState* state) {
 						wake = true;
 					}
 					if (!wake)
-							continue;
-						slot->state.store(KITSUNE_COROUTINE_STATE_WORKING);
-					}
-					// Waiting coroutine: wake when the target task is done, released, or gone (or timeout).
-					if (slotState == KITSUNE_COROUTINE_STATE_WAITING) {
-						bool wake = false;
-						if (slot->waitingForId != 0) {
-							KitsuneCoroutine* target = FindSlot(state, slot->waitingForId);
-							if (!target) {
-								wake = true; // target slot already freed
-							}
-							else {
-								long tst = target->state.load();
-								if (tst == KITSUNE_COROUTINE_STATE_DONE || tst == KITSUNE_COROUTINE_STATE_RELEASED)
-									wake = true;
-							}
+						continue;
+					slot->state.store(KITSUNE_COROUTINE_STATE_WORKING);
+				}
+				// Waiting coroutine: wake when the target task is done, released, or gone (or timeout).
+				if (slotState == KITSUNE_COROUTINE_STATE_WAITING) {
+					bool wake = false;
+					if (slot->waitingForId != 0) {
+						KitsuneCoroutine* target = FindSlot(state, slot->waitingForId);
+						if (!target) {
+							wake = true; // target slot already freed
 						}
 						else {
-							wake = true; // no target — shouldn't happen, but don't hang
+							long tst = target->state.load();
+							if (tst == KITSUNE_COROUTINE_STATE_DONE || tst == KITSUNE_COROUTINE_STATE_RELEASED)
+								wake = true;
 						}
-						if (!wake && slot->sleepUntil > 0.0 && GetCounter(state) >= slot->sleepUntil)
-							wake = true;
-						if (!wake)
-							continue;
-						slot->waitingForId = 0;
-						slot->sleepUntil = 0.0;
-						slot->state.store(KITSUNE_COROUTINE_STATE_WORKING);
 					}
-					anyActive = true;
+					else {
+						wake = true; // no target — shouldn't happen, but don't hang
+					}
+					if (!wake && slot->sleepUntil > 0.0 && GetCounter(state) >= slot->sleepUntil)
+						wake = true;
+					if (!wake)
+						continue;
+					slot->waitingForId = 0;
+					slot->sleepUntil = 0.0;
+					slot->state.store(KITSUNE_COROUTINE_STATE_WORKING);
+				}
+				anyActive = true;
 
 				lua_State* T = GetCoroutineThread(state, slot);
 				if (!T) {
@@ -1167,17 +1187,17 @@ static void SchedulerProc(KitsuneState* state) {
 				}
 
 				int nresults = 0;
-					int nstart = (lua_status(T) == LUA_OK) ? slot->initialNArgs : 0;
-					// Push resume value if one was set (from task:Resume(value)).
-					// Clear the ref immediately so it is only delivered once.
-					if (slot->resumeValueRef > 0 && nstart == 0) {
-						lua_rawgeti(state->L, LUA_REGISTRYINDEX, slot->resumeValueRef);
-						lua_xmove(state->L, T, 1);
-						luaL_unref(state->L, LUA_REGISTRYINDEX, slot->resumeValueRef);
-						slot->resumeValueRef = LUA_NOREF;
-						nstart = 1;
-					}
-					state->currentCoroutineId.store((long)slot->id);
+				int nstart = (lua_status(T) == LUA_OK) ? slot->initialNArgs : 0;
+				// Push resume value if one was set (from task:Resume(value)).
+				// Clear the ref immediately so it is only delivered once.
+				if (slot->resumeValueRef > 0 && nstart == 0) {
+					lua_rawgeti(state->L, LUA_REGISTRYINDEX, slot->resumeValueRef);
+					lua_xmove(state->L, T, 1);
+					luaL_unref(state->L, LUA_REGISTRYINDEX, slot->resumeValueRef);
+					slot->resumeValueRef = LUA_NOREF;
+					nstart = 1;
+				}
+				state->currentCoroutineId.store((long)slot->id);
 				int rc = lua_resume(T, state->L, nstart, &nresults);
 				state->currentCoroutineId.store(0);
 				if (rc == LUA_YIELD)
@@ -1533,7 +1553,7 @@ extern "C" {
 #endif
 
 		KitsuneState* state = new KitsuneState{};
-		state->taskErrorHandlerRef = LUA_NOREF;
+		state->taskErrorHandlerRef = 0;
 		// PlatformEvent default ctor initialises all three events; no Create() call needed.
 		StartCounter(state);
 
@@ -1673,12 +1693,13 @@ extern "C" {
 	// Initialises a slot's refs to LUA_NOREF and creates the coroutine thread.
 	// Caller must hold AcquireLuaAccess.  Returns the new lua_State*.
 	static lua_State* PrepareSlotThread(KitsuneState* state, KitsuneCoroutine* slot) {
-		slot->threadRef = LUA_NOREF;
-		slot->resumeValueRef = LUA_NOREF;
+		slot->threadRef = 0;
+		slot->resumeValueRef = 0;
+		slot->onErrorRef = 0;
 		return CreateCoroutineThread(state, slot);
 	}
 
-	}
+}
 
 // Releases all resources held by slot and memsets it to the zeroed NOT_USED state.
 // Caller MUST hold slotsLock. This is the only function allowed to set id back to 0.
@@ -1692,11 +1713,12 @@ void FreeSlot(KitsuneState* state, KitsuneCoroutine* slot) {
 	FreeVariableData(&slot->result, state->L);
 	if (slot->resumeValueRef > 0)
 		luaL_unref(state->L, LUA_REGISTRYINDEX, slot->resumeValueRef);
+	if (slot->onErrorRef > 0)
+		luaL_unref(state->L, LUA_REGISTRYINDEX, slot->onErrorRef);
 	kitsune_free(slot->error);
 	kitsune_free(slot->name);
 	--state->runningCount;
 	memset(slot, 0, sizeof(KitsuneCoroutine));
-	slot->sleepTokenRef = LUA_NOREF;
 }
 
 // Acquires a slot (reusing a zeroed one or allocating a new one), assigns the next id,
@@ -3989,9 +4011,9 @@ extern "C" {
 				DrainPendingVariableChain(state->L);
 
 			if (state->L) {
-				if (state->taskErrorHandlerRef != LUA_NOREF) {
+				if (state->taskErrorHandlerRef > 0) {
 					luaL_unref(state->L, LUA_REGISTRYINDEX, state->taskErrorHandlerRef);
-					state->taskErrorHandlerRef = LUA_NOREF;
+					state->taskErrorHandlerRef = 0;
 				}
 				if (state->lastCallError) {
 					kitsune_free(state->lastCallError);

@@ -66,6 +66,10 @@ void add_imgui_meta_bindings(KitsuneUserDataRegistration* reg);
 int ImguiRenderer_Image(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud);
 
+// renderer:ImageButton(label, id, w, h [, uv0x, uv0y, uv1x, uv1y])
+int ImguiRenderer_ImageButton(int argc, const KitsuneVariable* argv,
+	const kitsune_ResultSetter setter, void* ud);
+
 // renderer:ImageFrame(id, w, h, frameIndex, cols, rows [, flipX [, flipY]])
 // flipX mirrors horizontally; flipY mirrors vertically. Both default to false.
 int ImguiRenderer_ImageFrame(int argc, const KitsuneVariable* argv,

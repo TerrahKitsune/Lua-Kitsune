@@ -771,6 +771,7 @@ void add_imgui_meta_bindings(KitsuneUserDataRegistration* reg) {
 	prepend_fn(reg, "Html", ImguiRenderer_Html);
 	prepend_fn(reg, "MarkdownRender", ImguiRenderer_MarkdownRender);
 	prepend_fn(reg, "Image", ImguiRenderer_Image);
+	prepend_fn(reg, "ImageButton", ImguiRenderer_ImageButton);
 	prepend_fn(reg, "ImageFrame", ImguiRenderer_ImageFrame);
 }
 
@@ -800,6 +801,51 @@ int ImguiRenderer_Image(int argc, const KitsuneVariable* argv,
 		_argc > 6 ? KitsuneAsFloat(&_argv[6], 1.0f) : 1.0f);
 	ImGui::Image((ImTextureID)(uintptr_t)glId, ImVec2(w, h), uv0, uv1);
 	return 0;
+}
+
+// ---------------------------------------------------------------------------
+// renderer:ImageButton(label, id, w, h [, uv0x, uv0y, uv1x, uv1y])
+// ---------------------------------------------------------------------------
+
+int ImguiRenderer_ImageButton(int argc, const KitsuneVariable* argv,
+	const kitsune_ResultSetter setter, void* ud) {
+	const int              _argc = IMGUI_ARGC;
+	const KitsuneVariable* _argv = IMGUI_ARGV;
+	ImguiWindowContext* ctx = IMGUI_CTX;
+	IMGUI_REQUIRE_CTX(ctx);
+	if (_argc < 4)
+		return 0;
+
+	const char* label;
+	KitsuneVariable* labelOwned = nullptr;
+	if (_argv[0].type == KITSUNE_TSTRING) {
+		label = (const char*)_argv[0].data;
+	} else {
+		labelOwned = KitsuneToString(&_argv[0]);
+		label = labelOwned ? (const char*)labelOwned->data : "";
+	}
+
+	int   luaId = (int)KitsuneAsInt(&_argv[1], 0);
+	float w = KitsuneAsFloat(&_argv[2], 0.0f);
+	float h = KitsuneAsFloat(&_argv[3], 0.0f);
+
+	unsigned int glId = ResolveTextureGlId(luaId);
+	ImVec2 uv0(
+		_argc > 5 ? KitsuneAsFloat(&_argv[4], 0.0f) : 0.0f,
+		_argc > 5 ? KitsuneAsFloat(&_argv[5], 0.0f) : 0.0f);
+	ImVec2 uv1(
+		_argc > 7 ? KitsuneAsFloat(&_argv[6], 1.0f) : 1.0f,
+		_argc > 7 ? KitsuneAsFloat(&_argv[7], 1.0f) : 1.0f);
+
+	bool _ret = ImGui::ImageButton(label, (ImTextureID)(uintptr_t)glId, ImVec2(w, h), uv0, uv1);
+	KitsuneVariable r0 = {};
+	r0.type = KITSUNE_TBOOLEAN;
+	r0.boolean = _ret;
+	setter(&r0);
+
+	if (labelOwned)
+		KitsuneVariableFree(labelOwned);
+	return 1;
 }
 
 // ---------------------------------------------------------------------------

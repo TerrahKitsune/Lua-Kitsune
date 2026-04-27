@@ -7208,6 +7208,65 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
+        // -- Ticker pause/resume currentCoroutineId regression --------------------
+        [Fact]
+        public async Task Sleep_InsideTask_WhileExternalThreadHoldsLuaAccess_YieldsNotOsSleeps()
+        {
+            // Regression: when an external thread calls AcquireLuaAccess (e.g. SetString)
+            // while a scheduler-managed coroutine is mid-resume, the Ticker parks on
+            // pauseFlag.  The external thread's RunInline overwrites currentCoroutineId
+            // with its own inline slot id and then zeroes it on completion.  Without the
+            // fix the Ticker woke with currentCoroutineId==0, L_Sleep called FindSlot(0)
+            // which returned NULL, and the fallback OS ::Sleep blocked the scheduler for
+            // the full duration instead of yielding.
+            using KitsuneEngine engine = new();
+
+            // Start a task that sleeps for 5 seconds — if it hits OS sleep it blocks
+            // the scheduler for the full 5 s and the test will time out.
+            engine.ExecuteString("Sleep(5000)");
+            SpinUntilActive(engine);
+            int id = engine.GetActiveIds()[0];
+
+            // Wait until the coroutine is confirmed sleeping (not just running).
+            DateTime sleepDeadline = DateTime.UtcNow.AddSeconds(5);
+            while (engine.GetStatus(id) != CoroutineStatus.Sleeping && DateTime.UtcNow < sleepDeadline)
+            {
+                await Task.Delay(1);
+            }
+
+            engine.GetStatus(id).ShouldBe(CoroutineStatus.Sleeping);
+
+            // Hammer AcquireLuaAccess from multiple threads simultaneously to maximise
+            // the chance the Ticker fires exactly during the pause window.
+            Task[] hammers = Enumerable.Range(0, 8).Select(_ => Task.Run(() =>
+            {
+                for (int i = 0; i < 50; i++)
+                {
+                    engine.SetString("_tickerRaceProbe", "x");
+                    Thread.Sleep(1);
+                }
+            })).ToArray();
+
+            await Task.WhenAll(hammers);
+
+            // Cancel the sleeping task — if it had fallen into OS ::Sleep the cancel
+            // would still eventually work but the slot would not be freed for 5 s.
+            var sw = Stopwatch.StartNew();
+            engine.Cancel(id);
+
+            DateTime cancelDeadline = DateTime.UtcNow.AddSeconds(5);
+            while (engine.GetActiveIds().Contains(id) && DateTime.UtcNow < cancelDeadline)
+            {
+                await Task.Delay(1);
+            }
+
+            sw.Stop();
+            sw.ElapsedMilliseconds.ShouldBeLessThan(2000,
+                "Cancel took too long — Sleep() inside a task likely fell through to OS ::Sleep " +
+                "because currentCoroutineId was zeroed by the Ticker pause path");
+            engine.GetActiveIds().ShouldNotContain(id);
+        }
+
         // -- Tasks.GetCurrentId() -------------------------------------------------
         [Fact]
         public async Task GetCurrentId_InsideAsyncCoroutine_ReturnsNonZero()
@@ -7823,6 +7882,203 @@ namespace KitsuneNet.Tests
             int id = engine.RunningCoroutineId;
             await engine.WaitAsync(id);
             engine.GetInt64("second").ShouldBeNull();
+        }
+
+        // -- task:OnError tests -------------------------------------------------------
+        [Fact]
+        public async Task OnError_FireAndForget_CalledOnFault()
+        {
+            // Per-task handler receives (id, err) when a fire-and-forget task faults.
+            using KitsuneEngine engine = new();
+            engine.SetVariable("capturedId", 0);
+            engine.SetVariable("capturedErr", string.Empty);
+
+            engine.RunString(@"
+                Tasks.New(function() error('per-task-boom') end)
+                    :OnError(function(id, err)
+                        capturedId  = id
+                        capturedErr = err
+                    end)
+                    :Dispose()
+            ");
+
+            DateTime deadline = DateTime.UtcNow.AddSeconds(5);
+            while (engine.GetInt64("capturedId") == 0 && DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(5);
+            }
+
+            engine.GetInt64("capturedId").ShouldNotBe(0);
+            engine.GetVariable("capturedErr").String!.ShouldContain("per-task-boom");
+        }
+
+        [Fact]
+        public async Task OnError_Observed_CalledOnFault()
+        {
+            // Per-task handler fires even when the task handle is still alive (non-fire-and-forget).
+            using KitsuneEngine engine = new();
+            engine.SetVariable("capturedErr", string.Empty);
+
+            engine.ExecuteString(@"
+                local t = Tasks.New(function() error('observed-error') end)
+                t:OnError(function(id, err) capturedErr = err end)
+                t:Wait()
+                t:Dispose()
+            ");
+
+            SpinUntilRunning(engine);
+            int id = engine.RunningCoroutineId;
+            await engine.WaitAsync(id);
+
+            DateTime deadline = DateTime.UtcNow.AddSeconds(5);
+            while (string.IsNullOrEmpty(engine.GetVariable("capturedErr").String) && DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(5);
+            }
+
+            engine.GetVariable("capturedErr").String!.ShouldContain("observed-error");
+        }
+
+        [Fact]
+        public async Task OnError_TakesPriorityOverGlobalHandler()
+        {
+            // When both handlers are set, only the per-task handler is called.
+            using KitsuneEngine engine = new();
+            engine.SetVariable("globalCalled", false);
+            engine.SetVariable("perTaskCalled", false);
+
+            engine.RunString(@"
+                Tasks.SetErrorHandler(function(id, err) globalCalled = true end)
+            ");
+
+            engine.RunString(@"
+                Tasks.New(function() error('priority-test') end)
+                    :OnError(function(id, err) perTaskCalled = true end)
+                    :Dispose()
+            ");
+
+            DateTime deadline = DateTime.UtcNow.AddSeconds(5);
+            while (engine.GetBool("perTaskCalled") != true && DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(5);
+            }
+
+            engine.GetBool("perTaskCalled").ShouldBe(true);
+            engine.GetBool("globalCalled").ShouldBe(false);
+        }
+
+        [Fact]
+        public async Task OnError_NotCalledOnSuccess()
+        {
+            // Handler must not be called when the task completes without error.
+            using KitsuneEngine engine = new();
+            engine.SetVariable("handlerCalled", false);
+
+            engine.RunString(@"
+                Tasks.New(function() return 42 end)
+                    :OnError(function(id, err) handlerCalled = true end)
+                    :Dispose()
+            ");
+
+            await Task.Delay(300);
+            engine.GetBool("handlerCalled").ShouldBe(false);
+        }
+
+        [Fact]
+        public async Task OnError_ClearedByNil_DoesNotFire()
+        {
+            // Calling OnError(nil) removes the handler; a subsequent fault must not call it.
+            using KitsuneEngine engine = new();
+            engine.SetVariable("handlerCalled", false);
+
+            engine.RunString(@"
+                local t = Tasks.New(function() error('cleared') end)
+                t:OnError(function(id, err) handlerCalled = true end)
+                t:OnError(nil)
+                t:Dispose()
+            ");
+
+            await Task.Delay(300);
+            engine.GetBool("handlerCalled").ShouldBe(false);
+        }
+
+        [Fact]
+        public async Task OnError_ReturnsSelfForChaining()
+        {
+            // OnError must return the task handle so :Dispose() can be chained.
+            using KitsuneEngine engine = new();
+            engine.SetVariable("capturedErr", string.Empty);
+
+            engine.RunString(@"
+                Tasks.New(function() error('chain-test') end)
+                    :OnError(function(id, err) capturedErr = err end)
+                    :Dispose()
+            ");
+
+            DateTime deadline = DateTime.UtcNow.AddSeconds(5);
+            while (string.IsNullOrEmpty(engine.GetVariable("capturedErr").String) && DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(5);
+            }
+
+            engine.GetVariable("capturedErr").String!.ShouldContain("chain-test");
+        }
+
+        // -- Tasks.ActiveCount / Tasks.MaxSlots tests ---------------------------------
+        [Fact]
+        public async Task ActiveCount_WhileCoroutineRunning_IsPositive()
+        {
+            using KitsuneEngine engine = new();
+            engine.ExecuteString("Sleep(500)");
+            SpinUntilActive(engine);
+            LuaValue count = engine.RunString("return Tasks.ActiveCount()");
+            count.AsInt64.ShouldBeGreaterThan(0);
+            engine.Interrupt();
+            engine.Wait();
+        }
+
+        [Fact]
+        public void ActiveCount_WhenIdle_IsZero()
+        {
+            using KitsuneEngine engine = new();
+            engine.RunString("return 1");
+            engine.GetActiveIds().Length.ShouldBe(0);
+        }
+
+        [Fact]
+        public void MaxSlots_Is256()
+        {
+            using KitsuneEngine engine = new();
+            long max = engine.RunString("return Tasks.MaxSlots").AsInt64;
+            max.ShouldBe(256);
+        }
+
+        [Fact]
+        public async Task ActiveCount_ReflectsMultipleConcurrentCoroutines()
+        {
+            using KitsuneEngine engine = new();
+            engine.SetVariable("countSeen", 0);
+
+            engine.ExecuteString(@"
+                local t1 = Tasks.New(function() Sleep(2000) end)
+                local t2 = Tasks.New(function() Sleep(2000) end)
+                local t3 = Tasks.New(function() Sleep(2000) end)
+                Sleep(50)
+                countSeen = Tasks.ActiveCount()
+                t1:Cancel() t2:Cancel() t3:Cancel()
+            ");
+
+            SpinUntilActive(engine);
+
+            DateTime deadline = DateTime.UtcNow.AddSeconds(5);
+            while (engine.GetInt64("countSeen") == 0 && DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(5);
+            }
+
+            (engine.GetInt64("countSeen") >= 3).ShouldBe(true, "Expected ActiveCount >= 3");
+            engine.Interrupt();
+            engine.Wait();
         }
 
         private static void SpinUntilRunning(KitsuneEngine engine, int timeoutMs = 2000)

@@ -834,6 +834,7 @@ def main():
         f.write("### Image Methods\n\n")
         f.write("| Function | Parameters | Returns | Notes |\n|---|---|---|---|\n")
         f.write("| `renderer:Image(id, w, h [, u0, v0, u1, v1])` | `integer, number, number, number?, number?, number?, number?` | — | Render a texture. UV defaults to full texture (0,0,1,1). Silently renders blank if id is invalid or sentinel |\n")
+        f.write("| `renderer:ImageButton(label, id, w, h [, u0, v0, u1, v1])` | `string, integer, number, number, number?, number?, number?, number?` | `boolean` | Clickable image button. Returns true when clicked. Supports animated GIFs. UV defaults to full texture (0,0,1,1) |\n")
         f.write("| `renderer:ImageFrame(id, w, h, frameIndex, cols, rows [, flipX [, flipY]])` | `integer, number, number, integer, integer, integer, boolean?, boolean?` | — | Render one frame of a sprite sheet. flipX mirrors horizontally, flipY mirrors vertically |\n")
         f.write("\n")
 

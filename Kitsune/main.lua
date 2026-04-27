@@ -134,6 +134,10 @@ CreateGCPrint();
 collectgarbage();
 GetKey = Session.Console.GetKey;
 
+FileSystem.SetCurrentDirectory("B:\\StressTester");
+dofile("main.lua");
+if true then return; end
+
 SetTitle("Kitsune: ".._VERSION);
 if Imgui then
 	print("Imgui is detected");
