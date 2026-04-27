@@ -837,7 +837,36 @@ int ImguiRenderer_ImageButton(int argc, const KitsuneVariable* argv,
 		_argc > 7 ? KitsuneAsFloat(&_argv[6], 1.0f) : 1.0f,
 		_argc > 7 ? KitsuneAsFloat(&_argv[7], 1.0f) : 1.0f);
 
-	bool _ret = ImGui::ImageButton(label, (ImTextureID)(uintptr_t)glId, ImVec2(w, h), uv0, uv1);
+	bool _ret;
+	if (glId == 0) {
+		// No valid texture — fall back to a manually drawn button that wraps text within w x h.
+		// ImageButton sizes itself as (w + pad*2) x (h + pad*2), so match that here.
+		ImVec2 pad     = ImGui::GetStyle().FramePadding;
+		ImVec2 btnPos  = ImGui::GetCursorScreenPos();
+		ImVec2 btnSize = ImVec2(w + pad.x * 2.0f, h + pad.y * 2.0f);
+		_ret = ImGui::InvisibleButton(label, btnSize);
+		ImU32 bgCol;
+		if (ImGui::IsItemActive())
+			bgCol = ImGui::GetColorU32(ImGuiCol_ButtonActive);
+		else if (ImGui::IsItemHovered())
+			bgCol = ImGui::GetColorU32(ImGuiCol_ButtonHovered);
+		else
+			bgCol = ImGui::GetColorU32(ImGuiCol_Button);
+		ImDrawList* dl  = ImGui::GetWindowDrawList();
+		ImVec2 btnMax   = ImVec2(btnPos.x + btnSize.x, btnPos.y + btnSize.y);
+		float  rounding = ImGui::GetStyle().FrameRounding;
+		dl->AddRectFilled(btnPos, btnMax, bgCol, rounding);
+		dl->AddRect(btnPos, btnMax, ImGui::GetColorU32(ImGuiCol_Border), rounding);
+		// Draw wrapped text inside the button, stripping the ## id suffix before rendering.
+		float wrapWidth = w;
+		const char* labelEnd = strstr(label, "##");
+		dl->AddText(ImGui::GetFont(), ImGui::GetFontSize(),
+			ImVec2(btnPos.x + pad.x, btnPos.y + pad.y),
+			ImGui::GetColorU32(ImGuiCol_Text),
+			label, labelEnd, wrapWidth);
+	} else {
+		_ret = ImGui::ImageButton(label, (ImTextureID)(uintptr_t)glId, ImVec2(w, h), uv0, uv1);
+	}
 	KitsuneVariable r0 = {};
 	r0.type = KITSUNE_TBOOLEAN;
 	r0.boolean = _ret;

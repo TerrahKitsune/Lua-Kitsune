@@ -456,6 +456,11 @@ local function tabWidgets(renderer, ctx)
         renderer:SameLine()
         renderer:Text("Sprite sheet (frame " .. ctx.sheetFrame .. ")")
     end
+    if renderer:ImageButton("Missing texture fallback##imgbtn_missing", 0, 64, 64) then
+        ctx.widgetMsg = "Missing texture fallback button clicked on frame " .. ctx.frameCount
+    end
+    renderer:SameLine()
+    renderer:Text("id=0 (no texture)")
     renderer:Separator()
     renderer:Text("--- Checkbox ---")
     local changed, val = renderer:Checkbox("Toggle me", ctx.checkboxVal)
