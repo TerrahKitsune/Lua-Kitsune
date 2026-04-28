@@ -155,6 +155,10 @@ Resource.SetLoader(
 | `RESOURCE_TEXTURE` | 1 | `OpenGL.LoadTexture`, `OpenGL.ResolveTexture` |
 | `RESOURCE_AUDIO_SFX` | 2 | `SDL.Audio.Load` |
 | `RESOURCE_AUDIO_MUSIC` | 3 | `SDL.Audio.LoadMusic` |
+| `RESOURCE_FONT` | 4 | Font loading |
+| `RESOURCE_GENERIC` | 5 | `Resource.Load`, `Resource.Resolve` — raw byte blobs |
+| `RESOURCE_MARKDOWN` | 6 | `Markdown.Parse` |
+| `RESOURCE_HTML` | 7 | `Html.Parse` |
 
 ## Win32 API
 
@@ -218,6 +222,139 @@ renderer:ImageFrame(sheetId, 64, 64, frame, 8, 2, true)      -- flipX (mirror)
 renderer:ImageFrame(sheetId, 64, 64, frame, 8, 2, false, true) -- flipY
 ```
 
+## Markdown API
+
+Parses Markdown text into a `RESOURCE_MARKDOWN` entry in the ResourceCache. The result is an integer `luaId` — the same pattern as textures and audio. Parse once, render as many times per frame as you like. No re-parse overhead.
+
+### Loading
+
+| Function | Parameters | Returns | Notes |
+|---|---|---|---|
+| `Markdown.Parse(text)` | `string` | `integer\|nil` | Parse Markdown from a raw string. Returns a `luaId` or `nil` on OOM |
+| `Markdown.Parse(stream)` | stream | `integer\|nil` | Parse Markdown from a stream userdata (e.g. `Stream.Open`). Returns a `luaId` or `nil` on failure |
+| `Markdown.Destroy(luaId)` | `integer` | — | Remove from the ResourceCache and free all memory |
+
+### `renderer:MarkdownRender(luaId [, w [, h]])`
+
+Renders the parsed Markdown document inside an `ImGui::BeginChild` scrolling region. Safe to call with a `nil` or invalid `luaId` — silently renders nothing.
+
+- `luaId` — integer returned by `Markdown.Parse`.
+- `w`, `h` *(optional, number)* — child region size in pixels. `0` = fill available space. Default `0`.
+
+**Supported syntax:** `# H1` `## H2` `### H3`, `---` horizontal rule, `**bold**`, `*italic*`, `` `inline code` ``, fenced code blocks (` ``` `), bullet lists (`-` / `*`), ordered lists, nested lists, blockquotes (`>`), tables (`| col |`), images (`![alt](resourceId)`), links (`[text](url)`), plain paragraphs.
+
+```lua
+-- Parse once at startup or on first use:
+local readmeId = Markdown.Parse(Stream.Open('README.md', 'rb'))
+
+-- Parse inline strings (e.g. chat messages):
+local messages = {}
+for _, text in ipairs(chatlog) do
+    messages[#messages + 1] = Markdown.Parse(text)
+end
+
+-- Inside renderFn — render multiple independently per frame:
+renderer:MarkdownRender(readmeId)           -- full width
+for i, mdId in ipairs(messages) do
+    renderer:PushID(i)
+    renderer:MarkdownRender(mdId)           -- each in its own scroll region
+    renderer:PopID()
+end
+
+-- Cleanup when done:
+Markdown.Destroy(readmeId)
+for _, mdId in ipairs(messages) do Markdown.Destroy(mdId) end
+```
+
+## HTML API
+
+Full HTML/CSS rendering via [litehtml](https://github.com/litehtml/litehtml). Requires `KITSUNE_IMGUI`. Parsed documents live in the ResourceCache as `RESOURCE_HTML` entries and are identified by an integer `luaId` — same pattern as textures, audio, and Markdown.
+
+### Loading
+
+HTML can be loaded from a raw string or from a `RESOURCE_GENERIC` blob (raw bytes stored by `Resource.Load`). The generic resource path is preferred for large files because it lets you reload/replace content without re-parsing from disk.
+
+| Function | Parameters | Returns | Notes |
+|---|---|---|---|
+| `Html.Parse(html)` | `string` | `integer\|nil` | Parse HTML from a raw string literal. Returns `luaId` or `nil` on failure |
+| `Html.Parse(genericId)` | `integer` | `integer\|nil` | Parse HTML from a `RESOURCE_GENERIC` resource id (from `Resource.Load`). Returns `luaId` or `nil` on failure |
+| `Html.Destroy(luaId)` | `integer` | — | Remove from the ResourceCache, free the litehtml document and all associated memory |
+
+### Document Control
+
+| Function | Parameters | Returns | Notes |
+|---|---|---|---|
+| `Html.Invalidate(luaId)` | `integer` | — | Force a full reflow on the next `renderer:Html()` call (e.g. after font atlas rebuild) |
+| `Html.Reload(luaId, genericId)` | `integer, integer` | — | Re-parse the document from a (possibly updated) `RESOURCE_GENERIC` blob and force reflow |
+
+### Querying the DOM
+
+Element tables returned by query functions have the shape `{ tag, id, class, href, handle, attrs }` where `handle` is an opaque integer used to reference the element in subsequent calls.
+
+| Function | Parameters | Returns | Notes |
+|---|---|---|---|
+| `Html.Query(luaId, selector)` | `integer, string` | `table` | CSS selector — returns a sequential table of element tables |
+| `Html.QueryOne(luaId, selector)` | `integer, string` | `table\|nil` | Returns the first matching element table, or `nil` |
+| `Html.QueryByHandle(luaId, handle)` | `integer, integer` | `table\|nil` | Look up an element by opaque handle integer (as passed to event handlers) |
+| `Html.SetAttr(luaId, handle, attr, value)` | `integer, integer, string, string` | — | Set an attribute on an element and force reflow |
+
+### Events
+
+Events are fired synchronously during `renderer:Html()`. The handler receives the event type, the document `luaId`, and an opaque element `handle` integer.
+
+| Function | Parameters | Notes |
+|---|---|---|
+| `Html.SetEventHandler(luaId, fn)` | `integer, function` | Set callback `fn(eventtype, luaId, handle)`. `eventtype` is `"click"`, `"mouseover"`, or `"mouseout"` |
+
+### `renderer:Html(luaId [, w [, h]])`
+
+Renders an HTML document inside the current ImGui window using the litehtml layout engine.
+
+- `luaId` — integer returned by `Html.Parse`.
+- `w` *(optional, number)* — render width in pixels. Defaults to `GetContentRegionAvail().x`.
+- `h` *(optional, number)* — render height in pixels. `0` = auto (full document height). Default `0`.
+
+Returns `true` on success, or `false, errmsg` on failure.
+
+Reflowing is skipped when width is unchanged. Font handles are baked into the litehtml element tree at parse time — call `Html.Invalidate` after a font atlas rebuild to force a full re-parse.
+
+Click events on non-`<a>` elements fire on the hovered element. `<a>` anchor clicks are routed through litehtml's `on_anchor_click` and fire on the anchor element.
+
+```lua
+-- Load from a file via RESOURCE_GENERIC:
+local genericId = Resource.Load(Stream.Open('page.html', 'rb'), 'page.html')
+local htmlId    = Html.Parse(genericId)
+
+-- Or parse an inline string directly:
+local inlineId = Html.Parse('<h1>Hello</h1><p>World</p>')
+
+-- Attach event handler:
+Html.SetEventHandler(htmlId, function(event, id, handle)
+    if event == 'click' then
+        local el = Html.QueryByHandle(id, handle)
+        print('clicked', el and el.tag, el and el.id)
+    end
+end)
+
+-- Inside renderFn:
+renderer:Html(htmlId)        -- auto height, full width
+renderer:Html(inlineId, 400) -- 400px wide, auto height
+
+-- Multiple independent documents side-by-side:
+local cw, ch = renderer:GetContentRegionAvail()
+renderer:BeginChild('##left', cw/2, ch, true)
+    renderer:Html(htmlId)
+renderer:EndChild()
+renderer:SameLine()
+renderer:BeginChild('##right', cw/2, ch, true)
+    renderer:Html(inlineId)
+renderer:EndChild()
+
+-- Cleanup:
+Html.Destroy(htmlId)
+Html.Destroy(inlineId)
+```
+
 ## renderer Methods
 
 Available inside the `renderFn` callback. The renderer userdata is only valid during that callback.
@@ -227,6 +364,7 @@ Available inside the `renderFn` callback. The renderer userdata is only valid du
 | Function | Parameters | Returns | Notes |
 |---|---|---|---|
 | `renderer:Image(id, w, h [, u0, v0, u1, v1])` | `integer, number, number, number?, number?, number?, number?` | — | Render a texture. UV defaults to full texture (0,0,1,1). Silently renders blank if id is invalid or sentinel |
+| `renderer:ImageButton(label, id, w, h [, u0, v0, u1, v1])` | `string, integer, number, number, number?, number?, number?, number?` | `boolean` | Clickable image button. Returns true when clicked. Supports animated GIFs. UV defaults to full texture (0,0,1,1) |
 | `renderer:ImageFrame(id, w, h, frameIndex, cols, rows [, flipX [, flipY]])` | `integer, number, number, integer, integer, integer, boolean?, boolean?` | — | Render one frame of a sprite sheet. flipX mirrors horizontally, flipY mirrors vertically |
 
 ### Auto-generated ImGui Methods
@@ -507,6 +645,7 @@ These ImGui renderer methods are implemented manually in `ImguiRenderer.cpp`:
 - `renderer:ColorConvertRGBtoHSV(...)`
 - `renderer:Combo(...)`
 - `renderer:EndFrame(...)`
+- `renderer:ImageButton(...)`
 - `renderer:InputText(...)`
 - `renderer:InputTextMultiline(...)`
 - `renderer:ListBox(...)`
@@ -595,7 +734,7 @@ These ImGui renderer methods are implemented manually in `ImguiRenderer.cpp`:
 | `ImageEx` | unsupported parameter type: ImTextureID |
 | `ImageWithBg` | unsupported parameter type: ImTextureID |
 | `ImageWithBgEx` | unsupported parameter type: ImTextureID |
-| `ImageButton` | unsupported parameter type: ImTextureID |
+| `ImageButton` | hand-written override |
 | `ImageButtonEx` | unsupported parameter type: ImTextureID |
 | `ComboChar` | unsupported parameter type: const char*const[] |
 | `ComboCharEx` | unsupported parameter type: const char*const[] |

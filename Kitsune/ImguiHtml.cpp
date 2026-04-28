@@ -22,22 +22,12 @@
 
 static KitsuneHtmlContainer s_container;
 
-// Track all live HtmlDocument allocations so HtmlShutdown can destroy them
-// even if Lua GC hasn't run (e.g. documents still referenced in tables).
-static std::vector<HtmlDocument*> s_liveDocs;
-
 KitsuneHtmlContainer* HtmlGetContainer() {
     return &s_container;
 }
 
 // ---------------------------------------------------------------------------
-// Userdata type name
-// ---------------------------------------------------------------------------
-
-static const char* HTML_DOC_TYPENAME = "HtmlDocument";
-
-// ---------------------------------------------------------------------------
-// Error helper
+// HtmlResource helpers
 // ---------------------------------------------------------------------------
 
 static int html_error(const kitsune_ResultSetter setter, const char* msg) {
@@ -47,6 +37,27 @@ static int html_error(const kitsune_ResultSetter setter, const char* msg) {
     e.length = strlen(msg);
     setter(&e);
     return 1;
+}
+
+static HtmlResource* get_html_res(int luaId) {
+    return (HtmlResource*)ResourceCacheGetById(luaId, RESOURCE_HTML);
+}
+
+static void html_finalizer(Resource* res) {
+    HtmlResource* d = (HtmlResource*)res;
+    if (d->eventHandler) {
+        KitsuneVariableFree(d->eventHandler);
+        d->eventHandler = nullptr;
+    }
+    free(d->sourceBytes);
+    d->sourceBytes = nullptr;
+    d->hoveredEl.reset();
+    d->pendingClickEl.reset();
+    if (d->doc)
+        d->doc->clear_state();
+    d->doc.reset();
+    free(d->resource.source);
+    delete d;
 }
 
 // ---------------------------------------------------------------------------
@@ -262,8 +273,10 @@ void KitsuneHtmlContainer::link(
 void KitsuneHtmlContainer::on_anchor_click(
     const char* url, const litehtml::element::ptr& el)
 {
-    pendingClickEl  = el;
-    hasPendingClick = true;
+    if (activeDoc) {
+        activeDoc->pendingClickEl  = el;
+        activeDoc->hasPendingClick = true;
+    }
 }
 
 void KitsuneHtmlContainer::on_mouse_event(
@@ -382,18 +395,6 @@ void KitsuneHtmlContainer::get_language(
     culture  = "";
 }
 
-// ---------------------------------------------------------------------------
-// HtmlDocument helpers
-// ---------------------------------------------------------------------------
-
-static HtmlDocument* get_html_doc(const KitsuneVariable* argv) {
-    if (!argv || argv->type != KITSUNE_TUSERDATA || !argv->userdata)
-        return nullptr;
-    if (strcmp(argv->userdata->name, HTML_DOC_TYPENAME) != 0)
-        return nullptr;
-    return (HtmlDocument*)argv->userdata->userdata;
-}
-
 // Build a { handle, tag, id, class, href, attrs } table for an element.
 // Returns an anchored KitsuneVariable* the caller must KitsuneVariableFree.
 static KitsuneVariable* build_element_table(const litehtml::element::ptr& el) {
@@ -455,9 +456,9 @@ static KitsuneVariable* build_element_table(const litehtml::element::ptr& el) {
     return tbl;
 }
 
-// Fire the event handler on an HtmlDocument.
-static void fire_event(HtmlDocument* d, const char* eventtype,
-    KitsuneVariable* docVar, const litehtml::element::ptr& el)
+// Fire the event handler on an HtmlResource.
+static void fire_event(HtmlResource* d, int luaId, const char* eventtype,
+    const litehtml::element::ptr& el)
 {
     if (!d->eventHandler || !el)
         return;
@@ -466,7 +467,8 @@ static void fire_event(HtmlDocument* d, const char* eventtype,
     args[0].type = KITSUNE_TSTRING;
     args[0].data = (unsigned char*)eventtype;
     args[0].length = strlen(eventtype);
-    args[1] = *docVar;
+    args[1].type    = KITSUNE_TINTEGER;
+    args[1].integer = (long long)luaId;
     args[2].type    = KITSUNE_TINTEGER;
     args[2].integer = (long long)(intptr_t)el.get();
 
@@ -475,67 +477,8 @@ static void fire_event(HtmlDocument* d, const char* eventtype,
 }
 
 // ---------------------------------------------------------------------------
-// Html.Parse(genericId) -> HtmlDocument userdata | nil
+// parse helpers
 // ---------------------------------------------------------------------------
-
-static KitsuneUserDataRegistration s_htmlDocReg = {};
-
-static int html_doc_gc(int argc, const KitsuneVariable* argv,
-    const kitsune_ResultSetter setter, void* ud)
-{
-    HtmlDocument* d = get_html_doc(argv);
-    if (!d)
-        return 0;
-    // Null the pointer so any further calls on this userdata are no-ops.
-    argv->userdata->userdata = nullptr;
-    if (d->shutdown) {
-        // HtmlShutdown already released resources; just delete the struct now.
-        delete d;
-        return 0;
-    }
-    if (d->eventHandler) {
-        free(d->eventHandler);
-        d->eventHandler = nullptr;
-    }
-    free(d->sourceBytes);
-    d->sourceBytes = nullptr;
-    d->hoveredEl.reset();
-    s_container.pendingClickEl.reset();
-    if (d->doc)
-        d->doc->clear_state();
-    s_liveDocs.erase(std::remove(s_liveDocs.begin(), s_liveDocs.end(), d), s_liveDocs.end());
-    delete d;
-    return 0;
-}
-
-static int html_doc_tostring(int argc, const KitsuneVariable* argv,
-    const kitsune_ResultSetter setter, void* ud)
-{
-    KitsuneVariable r = {};
-    r.type = KITSUNE_TSTRING;
-    r.data = (unsigned char*)"HtmlDocument";
-    r.length = 12;
-    setter(&r);
-    return 1;
-}
-
-static KitsuneVariable* make_html_doc_var(HtmlDocument* d) {
-    KitsuneUserData* ud = (KitsuneUserData*)calloc(1, sizeof(KitsuneUserData));
-    if (!ud)
-        return nullptr;
-    ud->name     = (char*)HTML_DOC_TYPENAME;
-    ud->ref      = 0;
-    ud->userdata = d;
-
-    KitsuneVariable var = {};
-    var.type     = KITSUNE_TUSERDATA;
-    var.length   = strlen(HTML_DOC_TYPENAME);
-    var.userdata = ud;
-
-    KitsuneVariable* anchored = KitsuneAnchorVariable(&var);
-    free(ud);
-    return anchored;
-}
 
 static litehtml::document::ptr parse_html_from_bytes(const uint8_t* data, size_t length) {
     if (!data || length == 0)
@@ -544,6 +487,21 @@ static litehtml::document::ptr parse_html_from_bytes(const uint8_t* data, size_t
     return litehtml::document::createFromString(html, HtmlGetContainer());
 }
 
+static int store_html_resource(HtmlResource* d, const kitsune_ResultSetter setter) {
+    KitsuneVariable r = {};
+    r.type = KITSUNE_TNIL;
+    if (!ResourceCacheAdd(&d->resource)) {
+        html_finalizer(&d->resource);
+        setter(&r);
+        return 1;
+    }
+    r.type    = KITSUNE_TINTEGER;
+    r.integer = d->resource.luaId;
+    setter(&r);
+    return 1;
+}
+
+// Html.Parse(text|genericId) -> integer luaId | nil
 int Html_Parse(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud)
 {
@@ -553,100 +511,67 @@ int Html_Parse(int argc, const KitsuneVariable* argv,
         setter(&r);
         return 1;
     }
+
+    // String path: Html.Parse("<html>...")
+    if (argv[0].type == KITSUNE_TSTRING) {
+        if (argv[0].length == 0) {
+            setter(&r);
+            return 1;
+        }
+        HtmlResource* d = new (std::nothrow) HtmlResource();
+        if (!d) { setter(&r); return 1; }
+        d->resource.type = RESOURCE_HTML;
+        d->resource.fn   = html_finalizer;
+        d->doc = parse_html_from_bytes(argv[0].data, argv[0].length);
+        if (!d->doc) { delete d; setter(&r); return 1; }
+        d->lastWidth     = -1;
+        d->sourceBytes   = (uint8_t*)malloc(argv[0].length);
+        if (d->sourceBytes) {
+            memcpy(d->sourceBytes, argv[0].data, argv[0].length);
+            d->sourceLength = argv[0].length;
+        }
+        return store_html_resource(d, setter);
+    }
+
+    // Integer path: Html.Parse(genericId)
+    if (argv[0].type != KITSUNE_TINTEGER && argv[0].type != KITSUNE_TNUMBER) {
+        setter(&r);
+        return 1;
+    }
     int genericId = (int)KitsuneAsInt(&argv[0], 0);
     GenericResource* gen = (GenericResource*)ResourceCacheGetById(genericId, RESOURCE_GENERIC);
     if (!gen || !gen->data || gen->length == 0) {
         setter(&r);
         return 1;
     }
-
-    HtmlDocument* d = new (std::nothrow) HtmlDocument();
-    if (!d) {
-        setter(&r);
-        return 1;
-    }
+    HtmlResource* d = new (std::nothrow) HtmlResource();
+    if (!d) { setter(&r); return 1; }
+    d->resource.type    = RESOURCE_HTML;
+    d->resource.fn      = html_finalizer;
     d->doc = parse_html_from_bytes(gen->data, gen->length);
-    if (!d->doc) {
-        delete d;
-        setter(&r);
-        return 1;
-    }
-    d->generation        = 1;
-    d->lastWidth         = -1;
-    d->sourceGenericId   = genericId;
-    s_liveDocs.push_back(d);
-
-    KitsuneVariable* var = make_html_doc_var(d);
-    if (!var) {
-        s_liveDocs.erase(std::remove(s_liveDocs.begin(), s_liveDocs.end(), d), s_liveDocs.end());
-        delete d;
-        setter(&r);
-        return 1;
-    }
-    setter(var);
-    KitsuneVariableFree(var);
-    return 1;
-}
-
-int Html_ParseString(int argc, const KitsuneVariable* argv,
-    const kitsune_ResultSetter setter, void* ud)
-{
-    KitsuneVariable r = {};
-    r.type = KITSUNE_TNIL;
-    if (argc < 1 || argv[0].type != KITSUNE_TSTRING || argv[0].length == 0) {
-        setter(&r);
-        return 1;
-    }
-
-    HtmlDocument* d = new (std::nothrow) HtmlDocument();
-    if (!d) {
-        setter(&r);
-        return 1;
-    }
-    d->doc = parse_html_from_bytes(argv[0].data, argv[0].length);
-    if (!d->doc) {
-        delete d;
-        setter(&r);
-        return 1;
-    }
-    d->generation  = 1;
-    d->lastWidth   = -1;
-    d->sourceBytes = (uint8_t*)malloc(argv[0].length);
-    if (d->sourceBytes) {
-        memcpy(d->sourceBytes, argv[0].data, argv[0].length);
-        d->sourceLength = argv[0].length;
-    }
-    s_liveDocs.push_back(d);
-
-    KitsuneVariable* var = make_html_doc_var(d);
-    if (!var) {
-        s_liveDocs.erase(std::remove(s_liveDocs.begin(), s_liveDocs.end(), d), s_liveDocs.end());
-        delete d;
-        setter(&r);
-        return 1;
-    }
-    setter(var);
-    KitsuneVariableFree(var);
-    return 1;
+    if (!d->doc) { delete d; setter(&r); return 1; }
+    d->lastWidth        = -1;
+    d->sourceGenericId  = genericId;
+    return store_html_resource(d, setter);
 }
 
 // ---------------------------------------------------------------------------
-// HtmlDocument methods
+// HtmlDocument methods (flat, id-based)
 // ---------------------------------------------------------------------------
 
 static int html_SetEventHandler(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud)
 {
-    HtmlDocument* d = get_html_doc(argv);
-    if (!d || argc < 2)
-        return 0;
+    if (argc < 2) return 0;
+    int luaId = (int)KitsuneAsInt(&argv[0], 0);
+    HtmlResource* d = get_html_res(luaId);
+    if (!d) return 0;
     if (d->eventHandler) {
         KitsuneVariableFree(d->eventHandler);
         d->eventHandler = nullptr;
     }
-    if (argv[1].type == KITSUNE_TCFUNCTION || argv[1].type == KITSUNE_TFUNCTION) {
+    if (argv[1].type == KITSUNE_TCFUNCTION || argv[1].type == KITSUNE_TFUNCTION)
         d->eventHandler = KitsuneAnchorVariable(&argv[1]);
-    }
     return 0;
 }
 
@@ -655,26 +580,20 @@ static int html_Query(int argc, const KitsuneVariable* argv,
 {
     KitsuneVariable r = {};
     r.type = KITSUNE_TNIL;
-    HtmlDocument* d = get_html_doc(argv);
-    if (!d || !d->doc || argc < 2 || argv[1].type != KITSUNE_TSTRING) {
-        setter(&r);
-        return 1;
-    }
+    if (argc < 2) { setter(&r); return 1; }
+    int luaId = (int)KitsuneAsInt(&argv[0], 0);
+    HtmlResource* d = get_html_res(luaId);
+    if (!d || !d->doc || argv[1].type != KITSUNE_TSTRING) { setter(&r); return 1; }
     std::string selector((const char*)argv[1].data, argv[1].length);
     auto results = d->doc->root()->select_all(selector);
-
     KitsuneVariable tableVar = {};
     tableVar.type = KITSUNE_TTABLECONTENTS;
     KitsuneVariable* tbl = KitsuneAnchorVariable(&tableVar);
-    if (!tbl) {
-        setter(&r);
-        return 1;
-    }
+    if (!tbl) { setter(&r); return 1; }
     int seq = 1;
     for (auto& el : results) {
         KitsuneVariable* entry = build_element_table(el);
-        if (!entry)
-            continue;
+        if (!entry) continue;
         KitsuneVariable k = {};
         k.type = KITSUNE_TINTEGER;
         k.integer = seq++;
@@ -691,22 +610,15 @@ static int html_QueryOne(int argc, const KitsuneVariable* argv,
 {
     KitsuneVariable r = {};
     r.type = KITSUNE_TNIL;
-    HtmlDocument* d = get_html_doc(argv);
-    if (!d || !d->doc || argc < 2 || argv[1].type != KITSUNE_TSTRING) {
-        setter(&r);
-        return 1;
-    }
+    if (argc < 2) { setter(&r); return 1; }
+    int luaId = (int)KitsuneAsInt(&argv[0], 0);
+    HtmlResource* d = get_html_res(luaId);
+    if (!d || !d->doc || argv[1].type != KITSUNE_TSTRING) { setter(&r); return 1; }
     std::string selector((const char*)argv[1].data, argv[1].length);
     auto results = d->doc->root()->select_all(selector);
-    if (results.empty()) {
-        setter(&r);
-        return 1;
-    }
+    if (results.empty()) { setter(&r); return 1; }
     KitsuneVariable* entry = build_element_table(results.front());
-    if (!entry) {
-        setter(&r);
-        return 1;
-    }
+    if (!entry) { setter(&r); return 1; }
     setter(entry);
     KitsuneVariableFree(entry);
     return 1;
@@ -717,25 +629,17 @@ static int html_QueryByHandle(int argc, const KitsuneVariable* argv,
 {
     KitsuneVariable r = {};
     r.type = KITSUNE_TNIL;
-    HtmlDocument* d = get_html_doc(argv);
-    if (!d || !d->doc || argc < 2) {
-        setter(&r);
-        return 1;
-    }
+    if (argc < 2) { setter(&r); return 1; }
+    int luaId = (int)KitsuneAsInt(&argv[0], 0);
+    HtmlResource* d = get_html_res(luaId);
+    if (!d || !d->doc) { setter(&r); return 1; }
     long long handle = KitsuneAsInt(&argv[1], 0);
-    if (!handle) {
-        setter(&r);
-        return 1;
-    }
-    // Walk all elements to find by pointer identity
+    if (!handle) { setter(&r); return 1; }
     auto all = d->doc->root()->select_all("*");
     for (auto& el : all) {
         if ((long long)(intptr_t)el.get() == handle) {
             KitsuneVariable* entry = build_element_table(el);
-            if (!entry) {
-                setter(&r);
-                return 1;
-            }
+            if (!entry) { setter(&r); return 1; }
             setter(entry);
             KitsuneVariableFree(entry);
             return 1;
@@ -748,21 +652,17 @@ static int html_QueryByHandle(int argc, const KitsuneVariable* argv,
 static int html_SetAttr(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud)
 {
-    HtmlDocument* d = get_html_doc(argv);
-    if (!d || !d->doc || argc < 4)
-        return 0;
+    if (argc < 4) return 0;
+    int luaId = (int)KitsuneAsInt(&argv[0], 0);
+    HtmlResource* d = get_html_res(luaId);
+    if (!d || !d->doc) return 0;
     long long handle = KitsuneAsInt(&argv[1], 0);
-    if (!handle || argv[2].type != KITSUNE_TSTRING || argv[3].type != KITSUNE_TSTRING)
-        return 0;
-
-    std::string attrName((const char*)argv[2].data, argv[2].length);
-    std::string attrVal((const char*)argv[3].data, argv[3].length);
-
+    if (!handle || argv[2].type != KITSUNE_TSTRING || argv[3].type != KITSUNE_TSTRING) return 0;
     auto all = d->doc->root()->select_all("*");
     for (auto& el : all) {
         if ((long long)(intptr_t)el.get() == handle) {
             el->refresh_styles();
-            d->lastWidth = -1; // force reflow
+            d->lastWidth = -1;
             break;
         }
     }
@@ -772,17 +672,16 @@ static int html_SetAttr(int argc, const KitsuneVariable* argv,
 static int html_Reload(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud)
 {
-    HtmlDocument* d = get_html_doc(argv);
-    if (!d || argc < 2)
-        return 0;
+    if (argc < 2) return 0;
+    int luaId = (int)KitsuneAsInt(&argv[0], 0);
+    HtmlResource* d = get_html_res(luaId);
+    if (!d) return 0;
     int genericId = (int)KitsuneAsInt(&argv[1], 0);
     GenericResource* gen = (GenericResource*)ResourceCacheGetById(genericId, RESOURCE_GENERIC);
-    if (!gen || !gen->data || gen->length == 0)
-        return 0;
+    if (!gen || !gen->data || gen->length == 0) return 0;
     d->doc.reset();
     d->doc = parse_html_from_bytes(gen->data, gen->length);
-    d->generation++;
-    d->lastWidth  = -1;
+    d->lastWidth = -1;
     d->hoveredEl.reset();
     return 0;
 }
@@ -790,27 +689,20 @@ static int html_Reload(int argc, const KitsuneVariable* argv,
 static int html_Invalidate(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud)
 {
-    HtmlDocument* d = get_html_doc(argv);
-    if (d)
-        d->lastWidth = -1;
+    if (argc < 1) return 0;
+    int luaId = (int)KitsuneAsInt(&argv[0], 0);
+    HtmlResource* d = get_html_res(luaId);
+    if (d) d->lastWidth = -1;
     return 0;
 }
 
-static int html_Dispose(int argc, const KitsuneVariable* argv,
+static int html_Destroy(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud)
 {
-    HtmlDocument* d = get_html_doc(argv);
-    if (!d)
-        return 0;
-    d->doc.reset();
-    free(d->sourceBytes);
-    d->sourceBytes = nullptr;
-    d->sourceLength = 0;
-    d->sourceGenericId = 0;
-    if (d->eventHandler) {
-        KitsuneVariableFree(d->eventHandler);
-        d->eventHandler = nullptr;
-    }
+    if (argc < 1) return 0;
+    int luaId = (int)KitsuneAsInt(&argv[0], 0);
+    if (luaId > 0)
+        ResourceCacheRemoveById(luaId, RESOURCE_HTML);
     return 0;
 }
 
@@ -830,15 +722,13 @@ int ImguiRenderer_Html(int argc, const KitsuneVariable* argv,
     const int _argc = argc - 1;
     const KitsuneVariable* _argv = argc > 0 ? argv + 1 : argv;
 
-    if (_argc < 1 || _argv[0].type != KITSUNE_TUSERDATA)
-        return html_error(setter, "Html: expected HtmlDocument as first argument");
+    if (_argc < 1)
+        return html_error(setter, "Html: expected luaId as first argument");
 
-    HtmlDocument* d = get_html_doc(&_argv[0]);
+    int luaId = (int)KitsuneAsInt(&_argv[0], 0);
+    HtmlResource* d = get_html_res(luaId);
     if (!d || !d->doc)
-        return html_error(setter, "Html: invalid or disposed HtmlDocument");
-
-    // Build the doc var for passing to event handlers
-    KitsuneVariable* docVar = KitsuneAnchorVariable(&_argv[0]);
+        return html_error(setter, "Html: invalid or destroyed HtmlResource id");
 
     ImVec2 contentSize = ImGui::GetContentRegionAvail();
     float w = _argc >= 2 ? KitsuneAsFloat(&_argv[1], contentSize.x) : contentSize.x;
@@ -867,6 +757,7 @@ int ImguiRenderer_Html(int argc, const KitsuneVariable* argv,
     container->drawList   = dl;
     container->origin     = origin;
     container->clientSize = ImVec2(w, h > 0 ? h : renderedH);
+    container->activeDoc  = d;
 
     // Draw
     litehtml::position clip;
@@ -877,7 +768,8 @@ int ImguiRenderer_Html(int argc, const KitsuneVariable* argv,
     d->doc->draw((litehtml::uint_ptr)dl, 0, 0, &clip);
 
     // Clear draw context
-    container->drawList = nullptr;
+    container->drawList  = nullptr;
+    container->activeDoc = nullptr;
     dl->PopClipRect();
 
     // Mouse events — only when window is hovered
@@ -895,10 +787,10 @@ int ImguiRenderer_Html(int argc, const KitsuneVariable* argv,
             // Track hover changes for mouseover/mouseout events
             litehtml::element::ptr curHover = std::const_pointer_cast<litehtml::element>(d->doc->get_over_element());
             if (curHover != d->hoveredEl) {
-                if (d->hoveredEl && docVar)
-                    fire_event(d, "mouseout", docVar, d->hoveredEl);
-                if (curHover && docVar)
-                    fire_event(d, "mouseover", docVar, curHover);
+                if (d->hoveredEl)
+                    fire_event(d, luaId, "mouseout", d->hoveredEl);
+                if (curHover)
+                    fire_event(d, luaId, "mouseover", curHover);
                 d->hoveredEl = curHover;
             }
 
@@ -907,16 +799,16 @@ int ImguiRenderer_Html(int argc, const KitsuneVariable* argv,
                 d->doc->on_lbutton_down(lx, ly, lx, ly, redraw);
             }
             if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
-                container->hasPendingClick = false;
+                d->hasPendingClick = false;
                 d->doc->on_lbutton_up(lx, ly, lx, ly, redraw);
                 // on_anchor_click fires inside on_lbutton_up for <a> elements
-                if (container->hasPendingClick && docVar) {
-                    fire_event(d, "click", docVar, container->pendingClickEl);
-                    container->hasPendingClick = false;
+                if (d->hasPendingClick) {
+                    fire_event(d, luaId, "click", d->pendingClickEl);
+                    d->hasPendingClick = false;
                 }
-                else if (d->hoveredEl && docVar) {
+                else if (d->hoveredEl) {
                     // Non-anchor click — fire on hovered element
-                    fire_event(d, "click", docVar, d->hoveredEl);
+                    fire_event(d, luaId, "click", d->hoveredEl);
                 }
             }
         }
@@ -925,14 +817,11 @@ int ImguiRenderer_Html(int argc, const KitsuneVariable* argv,
             if (d->hoveredEl) {
                 litehtml::position::vector rd;
                 d->doc->on_mouse_leave(rd);
-                if (docVar)
-                    fire_event(d, "mouseout", docVar, d->hoveredEl);
+                fire_event(d, luaId, "mouseout", d->hoveredEl);
                 d->hoveredEl.reset();
             }
         }
     }
-
-    KitsuneVariableFree(docVar);
 
     // Advance cursor
     ImGui::Dummy(ImVec2(w, renderedH));
@@ -945,97 +834,55 @@ int ImguiRenderer_Html(int argc, const KitsuneVariable* argv,
 }
 
 // ---------------------------------------------------------------------------
-// Registration helpers
+// HtmlInvalidateAll — iterate cache and re-parse all HTML resources
 // ---------------------------------------------------------------------------
 
-static void prepend_html_meta(KitsuneUserDataRegistration* reg,
-    const char* name, kitsune_CFunction func)
-{
-    KitsuneNamedFunction* node = (KitsuneNamedFunction*)calloc(1, sizeof(KitsuneNamedFunction));
-    if (!node)
-        return;
-    node->name     = (char*)name;
-    node->func     = func;
-    node->userdata = nullptr;
-    node->Next     = reg->MetaTableFunctions;
-    reg->MetaTableFunctions = node;
-}
-
-static void prepend_html_fn(KitsuneUserDataRegistration* reg,
-    const char* name, kitsune_CFunction func)
-{
-    KitsuneNamedFunction* node = (KitsuneNamedFunction*)calloc(1, sizeof(KitsuneNamedFunction));
-    if (!node)
-        return;
-    node->name     = (char*)name;
-    node->func     = func;
-    node->userdata = nullptr;
-    node->Next     = reg->Functions;
-    reg->Functions = node;
+static bool html_invalidate_iter(Resource* res, const void* ud) {
+    HtmlResource* d = (HtmlResource*)res;
+    if (!d || !d->doc)
+        return true;
+    litehtml::document::ptr fresh;
+    if (d->sourceGenericId != 0) {
+        GenericResource* gen = (GenericResource*)ResourceCacheGetById(d->sourceGenericId, RESOURCE_GENERIC);
+        if (gen && gen->data && gen->length > 0)
+            fresh = parse_html_from_bytes(gen->data, gen->length);
+    }
+    else if (d->sourceBytes && d->sourceLength > 0) {
+        fresh = parse_html_from_bytes(d->sourceBytes, d->sourceLength);
+    }
+    if (fresh) {
+        d->doc = fresh;
+        d->lastWidth = -1;
+        d->hoveredEl.reset();
+    }
+    else {
+        d->lastWidth = -1;
+    }
+    return true;
 }
 
 void HtmlInvalidateAll() {
-    for (HtmlDocument* d : s_liveDocs) {
-        if (!d || !d->doc)
-            continue;
-        // Re-parse so litehtml re-calls create_font with the newly built atlas.
-        // A simple lastWidth reset only re-renders; font handles are baked into
-        // the element tree during parsing and are not refreshed on re-render.
-        litehtml::document::ptr fresh;
-        if (d->sourceGenericId != 0) {
-            GenericResource* gen = (GenericResource*)ResourceCacheGetById(d->sourceGenericId, RESOURCE_GENERIC);
-            if (gen && gen->data && gen->length > 0)
-                fresh = parse_html_from_bytes(gen->data, gen->length);
-        }
-        else if (d->sourceBytes && d->sourceLength > 0) {
-            fresh = parse_html_from_bytes(d->sourceBytes, d->sourceLength);
-        }
-        if (fresh) {
-            d->doc = fresh;
-            d->generation++;
-            d->lastWidth = -1;
-            d->hoveredEl.reset();
-        }
-        else {
-            d->lastWidth = -1;
-        }
-    }
+    ResourceCacheIterate([](Resource* res, const void*) -> bool {
+        if (res->type == RESOURCE_HTML)
+            html_invalidate_iter(res, nullptr);
+        return true;
+    }, nullptr);
 }
 
-void HtmlShutdown() {
-    for (HtmlDocument* d : s_liveDocs) {
-        if (d->eventHandler) {
-            free(d->eventHandler);
-            d->eventHandler = nullptr;
-        }
-        free(d->sourceBytes);
-        d->sourceBytes = nullptr;
-        d->hoveredEl.reset();
-        s_container.pendingClickEl.reset();
-        if (d->doc)
-            d->doc->clear_state();
-        d->doc.reset();
-        d->shutdown = true;
-    }
-    s_liveDocs.clear();
-}
+// ---------------------------------------------------------------------------
+// RegisterHtmlFunctions
+// ---------------------------------------------------------------------------
 
 void RegisterHtmlFunctions() {
-    prepend_html_meta(&s_htmlDocReg, "__gc",       html_doc_gc);
-    prepend_html_meta(&s_htmlDocReg, "__tostring", html_doc_tostring);
-    prepend_html_fn  (&s_htmlDocReg, "SetEventHandler", html_SetEventHandler);
-    prepend_html_fn  (&s_htmlDocReg, "Query",           html_Query);
-    prepend_html_fn  (&s_htmlDocReg, "QueryOne",        html_QueryOne);
-    prepend_html_fn  (&s_htmlDocReg, "QueryByHandle",   html_QueryByHandle);
-    prepend_html_fn  (&s_htmlDocReg, "SetAttr",         html_SetAttr);
-    prepend_html_fn  (&s_htmlDocReg, "Reload",          html_Reload);
-    prepend_html_fn  (&s_htmlDocReg, "Invalidate",      html_Invalidate);
-    prepend_html_fn  (&s_htmlDocReg, "Dispose",         html_Dispose);
-
-    KitsuneRegisterUserdata(HTML_DOC_TYPENAME, &s_htmlDocReg);
-
-    KitsuneRegisterFunction("Html.Parse",       Html_Parse,       nullptr);
-    KitsuneRegisterFunction("Html.ParseString", Html_ParseString, nullptr);
+    KitsuneRegisterFunction("Html.Parse",           Html_Parse,           nullptr);
+    KitsuneRegisterFunction("Html.Destroy",         html_Destroy,         nullptr);
+    KitsuneRegisterFunction("Html.SetEventHandler", html_SetEventHandler, nullptr);
+    KitsuneRegisterFunction("Html.Query",           html_Query,           nullptr);
+    KitsuneRegisterFunction("Html.QueryOne",        html_QueryOne,        nullptr);
+    KitsuneRegisterFunction("Html.QueryByHandle",   html_QueryByHandle,   nullptr);
+    KitsuneRegisterFunction("Html.SetAttr",         html_SetAttr,         nullptr);
+    KitsuneRegisterFunction("Html.Reload",          html_Reload,          nullptr);
+    KitsuneRegisterFunction("Html.Invalidate",      html_Invalidate,      nullptr);
 }
 
 #endif // KITSUNE_IMGUI

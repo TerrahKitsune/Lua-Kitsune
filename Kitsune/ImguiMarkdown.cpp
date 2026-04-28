@@ -17,23 +17,29 @@
 // FreeMarkdownCache
 // ---------------------------------------------------------------------------
 
-void FreeMarkdownCache(ImguiWindowContext* ctx) {
-	free(ctx->mdContent);
-	free(ctx->mdNodes);
-	ctx->mdContent = nullptr;
-	ctx->mdContentLen = 0;
-	ctx->mdNodes = nullptr;
-	ctx->mdNodeCount = 0;
-	ctx->mdNodeAlloc = 0;
-	ctx->mdCacheError = nullptr;
-	ctx->mdCacheId = 0;
+void FreeMarkdownCache(MarkdownResource* md) {
+	free(md->mdContent);
+	free(md->mdNodes);
+	md->mdContent = nullptr;
+	md->mdContentLen = 0;
+	md->mdNodes = nullptr;
+	md->mdNodeCount = 0;
+	md->mdNodeAlloc = 0;
+	md->mdCacheError = nullptr;
+}
+
+static void markdown_finalizer(Resource* res) {
+	MarkdownResource* md = (MarkdownResource*)res;
+	FreeMarkdownCache(md);
+	free(md->resource.source);
+	free(md);
 }
 
 // ---------------------------------------------------------------------------
 // ReadStreamIntoCache — uses KitsuneCallMethod only, no lua_State
 // ---------------------------------------------------------------------------
 
-void ReadStreamIntoCache(const KitsuneVariable* streamVar, ImguiWindowContext* ctx) {
+void ReadStreamIntoCache(const KitsuneVariable* streamVar, MarkdownResource* md) {
 	// stream:Seek(0)
 	{
 		KitsuneVariable seekArg = {};
@@ -41,7 +47,7 @@ void ReadStreamIntoCache(const KitsuneVariable* streamVar, ImguiWindowContext* c
 		seekArg.integer = 0;
 		KitsuneVariable* seekResult = KitsuneCallMethod(streamVar, "Seek", 1, &seekArg);
 		if (!seekResult || seekResult->type == KITSUNE_TERROR) {
-			ctx->mdCacheError = "MarkdownRender: stream:Seek(0) failed";
+			md->mdCacheError = "MarkdownRender: stream:Seek(0) failed";
 			KitsuneVariableFree(seekResult);
 			return;
 		}
@@ -54,21 +60,21 @@ void ReadStreamIntoCache(const KitsuneVariable* streamVar, ImguiWindowContext* c
 		if (!readResult || readResult->type == KITSUNE_TERROR ||
 			readResult->type == KITSUNE_TNIL || readResult->type == KITSUNE_TNONE ||
 			readResult->type != KITSUNE_TSTRING || readResult->length == 0) {
-			ctx->mdCacheError = "MarkdownRender: stream:Read() returned no data";
+			md->mdCacheError = "MarkdownRender: stream:Read() returned no data";
 			KitsuneVariableFree(readResult);
 			return;
 		}
 
 		char* buf = (char*)malloc(readResult->length + 1);
 		if (!buf) {
-			ctx->mdCacheError = "MarkdownRender: out of memory reading stream";
+			md->mdCacheError = "MarkdownRender: out of memory reading stream";
 			KitsuneVariableFree(readResult);
 			return;
 		}
 		memcpy(buf, readResult->data, readResult->length);
 		buf[readResult->length] = '\0';
-		ctx->mdContent = buf;
-		ctx->mdContentLen = readResult->length;
+		md->mdContent = buf;
+		md->mdContentLen = readResult->length;
 		KitsuneVariableFree(readResult);
 	}
 }
@@ -77,22 +83,22 @@ void ReadStreamIntoCache(const KitsuneVariable* streamVar, ImguiWindowContext* c
 // ParseContentIntoNodes — helpers
 // ---------------------------------------------------------------------------
 
-static bool push_node(ImguiWindowContext* ctx, MarkdownNode node) {
-	if (ctx->mdNodeCount + 1 >= ctx->mdNodeAlloc) {
-		int newAlloc = ctx->mdNodeAlloc == 0 ? 64 : ctx->mdNodeAlloc * 2;
-		MarkdownNode* grown = (MarkdownNode*)realloc(ctx->mdNodes, (size_t)newAlloc * sizeof(MarkdownNode));
+static bool push_node(MarkdownResource* md, MarkdownNode node) {
+	if (md->mdNodeCount + 1 >= md->mdNodeAlloc) {
+		int newAlloc = md->mdNodeAlloc == 0 ? 64 : md->mdNodeAlloc * 2;
+		MarkdownNode* grown = (MarkdownNode*)realloc(md->mdNodes, (size_t)newAlloc * sizeof(MarkdownNode));
 		if (!grown) {
-			ctx->mdCacheError = "MarkdownRender: out of memory building node array";
+			md->mdCacheError = "MarkdownRender: out of memory building node array";
 			return false;
 		}
-		ctx->mdNodes = grown;
-		ctx->mdNodeAlloc = newAlloc;
+		md->mdNodes = grown;
+		md->mdNodeAlloc = newAlloc;
 	}
-	ctx->mdNodes[ctx->mdNodeCount++] = node;
+	md->mdNodes[md->mdNodeCount++] = node;
 	return true;
 }
 
-static bool push_span(ImguiWindowContext* ctx, uint8_t type,
+static bool push_span(MarkdownResource* md, uint8_t type,
 	uint32_t start, uint32_t end,
 	uint32_t urlOff = 0, uint16_t urlLen = 0) {
 	if (end <= start)
@@ -103,14 +109,14 @@ static bool push_span(ImguiWindowContext* ctx, uint8_t type,
 	n.len = end - start;
 	n.urlOffset = urlOff;
 	n.urlLen = urlLen;
-	return push_node(ctx, n);
+	return push_node(md, n);
 }
 
 // ---------------------------------------------------------------------------
 // Span parser — emits MD_SPAN_* nodes for a single line region [s, end)
 // ---------------------------------------------------------------------------
 
-static bool parse_spans(ImguiWindowContext* ctx, const char* base,
+static bool parse_spans(MarkdownResource* md, const char* base,
 	uint32_t s, uint32_t end) {
 	uint32_t cur = s;
 
@@ -125,14 +131,14 @@ static bool parse_spans(ImguiWindowContext* ctx, const char* base,
 				uint32_t idStart = altEnd + 2, idEnd = idStart;
 				while (idEnd < end && base[idEnd] != ')') idEnd++;
 				if (idEnd < end) {
-					if (!push_span(ctx, MD_SPAN_TEXT, s, cur)) return false;
+					if (!push_span(md, MD_SPAN_TEXT, s, cur)) return false;
 					MarkdownNode n = {};
 					n.type = MD_IMAGE;
 					n.offset = altStart;
 					n.len = altEnd - altStart;
 					n.urlOffset = idStart;
 					n.urlLen = (uint16_t)((idEnd - idStart) < 65535 ? (idEnd - idStart) : 65535);
-					if (!push_node(ctx, n)) return false;
+					if (!push_node(md, n)) return false;
 					cur = idEnd + 1; s = cur;
 					continue;
 				}
@@ -147,14 +153,14 @@ static bool parse_spans(ImguiWindowContext* ctx, const char* base,
 				uint32_t urlStart = txtEnd + 2, urlEnd = urlStart;
 				while (urlEnd < end && base[urlEnd] != ')') urlEnd++;
 				if (urlEnd < end) {
-					if (!push_span(ctx, MD_SPAN_TEXT, s, cur)) return false;
+					if (!push_span(md, MD_SPAN_TEXT, s, cur)) return false;
 					MarkdownNode n = {};
 					n.type = MD_SPAN_LINK;
 					n.offset = txtStart;
 					n.len = txtEnd - txtStart;
 					n.urlOffset = urlStart;
 					n.urlLen = (uint16_t)((urlEnd - urlStart) < 65535 ? (urlEnd - urlStart) : 65535);
-					if (!push_node(ctx, n)) return false;
+					if (!push_node(md, n)) return false;
 					cur = urlEnd + 1; s = cur;
 					continue;
 				}
@@ -167,8 +173,8 @@ static bool parse_spans(ImguiWindowContext* ctx, const char* base,
 			while (innerEnd + 1 < end && !(base[innerEnd] == c && base[innerEnd + 1] == c))
 				innerEnd++;
 			if (innerEnd + 1 < end) {
-				if (!push_span(ctx, MD_SPAN_TEXT, s, cur)) return false;
-				if (!push_span(ctx, MD_SPAN_BOLD, innerStart, innerEnd)) return false;
+				if (!push_span(md, MD_SPAN_TEXT, s, cur)) return false;
+				if (!push_span(md, MD_SPAN_BOLD, innerStart, innerEnd)) return false;
 				cur = innerEnd + 2; s = cur;
 				continue;
 			}
@@ -179,8 +185,8 @@ static bool parse_spans(ImguiWindowContext* ctx, const char* base,
 			uint32_t innerStart = cur + 1, innerEnd = innerStart;
 			while (innerEnd < end && base[innerEnd] != c) innerEnd++;
 			if (innerEnd < end) {
-				if (!push_span(ctx, MD_SPAN_TEXT, s, cur)) return false;
-				if (!push_span(ctx, MD_SPAN_ITALIC, innerStart, innerEnd)) return false;
+				if (!push_span(md, MD_SPAN_TEXT, s, cur)) return false;
+				if (!push_span(md, MD_SPAN_ITALIC, innerStart, innerEnd)) return false;
 				cur = innerEnd + 1; s = cur;
 				continue;
 			}
@@ -191,8 +197,8 @@ static bool parse_spans(ImguiWindowContext* ctx, const char* base,
 			uint32_t innerStart = cur + 1, innerEnd = innerStart;
 			while (innerEnd < end && base[innerEnd] != '`') innerEnd++;
 			if (innerEnd < end) {
-				if (!push_span(ctx, MD_SPAN_TEXT, s, cur)) return false;
-				if (!push_span(ctx, MD_SPAN_CODE, innerStart, innerEnd)) return false;
+				if (!push_span(md, MD_SPAN_TEXT, s, cur)) return false;
+				if (!push_span(md, MD_SPAN_CODE, innerStart, innerEnd)) return false;
 				cur = innerEnd + 1; s = cur;
 				continue;
 			}
@@ -201,19 +207,19 @@ static bool parse_spans(ImguiWindowContext* ctx, const char* base,
 		cur++;
 	}
 
-	return push_span(ctx, MD_SPAN_TEXT, s, end);
+	return push_span(md, MD_SPAN_TEXT, s, end);
 }
 
 // ---------------------------------------------------------------------------
 // ParseContentIntoNodes
 // ---------------------------------------------------------------------------
 
-void ParseContentIntoNodes(ImguiWindowContext* ctx) {
-	if (!ctx->mdContent || ctx->mdContentLen == 0)
+void ParseContentIntoNodes(MarkdownResource* md) {
+	if (!md->mdContent || md->mdContentLen == 0)
 		return;
 
-	const char* base = ctx->mdContent;
-	uint32_t    total = (uint32_t)ctx->mdContentLen;
+	const char* base = md->mdContent;
+	uint32_t    total = (uint32_t)md->mdContentLen;
 	uint32_t    i = 0;
 
 	// Strip UTF-8 BOM if present
@@ -250,7 +256,7 @@ void ParseContentIntoNodes(ImguiWindowContext* ctx) {
 				n.type = MD_CODE_BLOCK;
 				n.offset = fenceStart;
 				n.len = fenceEnd > fenceStart ? fenceEnd - fenceStart : 0;
-				if (!push_node(ctx, n)) return;
+				if (!push_node(md, n)) return;
 				inFence = false;
 			}
 			continue;
@@ -268,7 +274,7 @@ void ParseContentIntoNodes(ImguiWindowContext* ctx) {
 				n.type = (uint8_t)(MD_H1 + level - 1);
 				n.offset = textStart;
 				n.len = end > textStart ? end - textStart : 0;
-				if (!push_node(ctx, n)) return;
+				if (!push_node(md, n)) return;
 				continue;
 			}
 		}
@@ -284,7 +290,7 @@ void ParseContentIntoNodes(ImguiWindowContext* ctx) {
 				if (isHr) {
 					MarkdownNode n = {};
 					n.type = MD_HR;
-					if (!push_node(ctx, n)) return;
+					if (!push_node(md, n)) return;
 					continue;
 				}
 			}
@@ -293,13 +299,13 @@ void ParseContentIntoNodes(ImguiWindowContext* ctx) {
 		// Blockquote
 		if (line[0] == '>') {
 			uint32_t textStart = lineStart + 1;
-			if (textStart < end&& base[textStart] == ' ') textStart++;
+			if (textStart < end && base[textStart] == ' ') textStart++;
 			MarkdownNode n = {};
 			n.type = MD_BLOCKQUOTE;
 			n.offset = textStart;
 			n.len = end > textStart ? end - textStart : 0;
-			if (!push_node(ctx, n)) return;
-			if (!parse_spans(ctx, base, textStart, end)) return;
+			if (!push_node(md, n)) return;
+			if (!parse_spans(md, base, textStart, end)) return;
 			continue;
 		}
 
@@ -315,8 +321,8 @@ void ParseContentIntoNodes(ImguiWindowContext* ctx) {
 				n.offset = textStart;
 				n.len = end > textStart ? end - textStart : 0;
 				n.level = (uint8_t)(sp / 2);
-				if (!push_node(ctx, n)) return;
-				if (!parse_spans(ctx, base, textStart, end)) return;
+				if (!push_node(md, n)) return;
+				if (!parse_spans(md, base, textStart, end)) return;
 				continue;
 			}
 		}
@@ -334,8 +340,8 @@ void ParseContentIntoNodes(ImguiWindowContext* ctx) {
 				n.offset = textStart;
 				n.len = end > textStart ? end - textStart : 0;
 				n.level = (uint8_t)(sp / 2);
-				if (!push_node(ctx, n)) return;
-				if (!parse_spans(ctx, base, textStart, end)) return;
+				if (!push_node(md, n)) return;
+				if (!parse_spans(md, base, textStart, end)) return;
 				continue;
 			}
 		}
@@ -353,7 +359,7 @@ void ParseContentIntoNodes(ImguiWindowContext* ctx) {
 			if (isSep) {
 				MarkdownNode n = {};
 				n.type = MD_TABLE_SEP;
-				if (!push_node(ctx, n)) return;
+				if (!push_node(md, n)) return;
 				continue;
 			}
 
@@ -380,7 +386,7 @@ void ParseContentIntoNodes(ImguiWindowContext* ctx) {
 				rowNode.offset = lineStart;
 				rowNode.len = end - lineStart;
 				rowNode.level = colCount;
-				if (!push_node(ctx, rowNode)) return;
+				if (!push_node(md, rowNode)) return;
 
 				uint32_t p = lineStart;
 				if (p < end && base[p] == '|') p++;
@@ -396,12 +402,12 @@ void ParseContentIntoNodes(ImguiWindowContext* ctx) {
 						// Cell boundary marker
 						MarkdownNode cellMark = {};
 						cellMark.type = MD_TABLE_CELL;
-						if (!push_node(ctx, cellMark)) return;
+						if (!push_node(md, cellMark)) return;
 					}
 					firstCell = false;
 
 					if (cellEnd > cellStart) {
-						if (!parse_spans(ctx, base, cellStart, cellEnd)) return;
+						if (!parse_spans(md, base, cellStart, cellEnd)) return;
 					}
 					if (p < end) p++;
 				}
@@ -415,8 +421,8 @@ void ParseContentIntoNodes(ImguiWindowContext* ctx) {
 			n.type = MD_PARA;
 			n.offset = lineStart;
 			n.len = end > lineStart ? end - lineStart : 0;
-			if (!push_node(ctx, n)) return;
-			if (!parse_spans(ctx, base, lineStart, end)) return;
+			if (!push_node(md, n)) return;
+			if (!parse_spans(md, base, lineStart, end)) return;
 		}
 	}
 }
@@ -425,8 +431,66 @@ void ParseContentIntoNodes(ImguiWindowContext* ctx) {
 // RenderFromNodes helpers
 // ---------------------------------------------------------------------------
 
-static void render_span_text(const char* base, uint32_t offset, uint32_t len) {
-	ImGui::TextUnformatted(base + offset, base + offset + len);
+// Emit one word-wrapped word using ImGui's draw list directly at the current
+// cursor, advancing the cursor. Returns the new x offset within the line.
+// Returns true if a newline was inserted before drawing (word didn't fit).
+static bool emit_word(const char* word, int len, float startX, float wrapWidth,
+	ImU32 color, ImFont* font, float fontSize, float lineHeight,
+	float* cursorX, float* cursorY) {
+	float wordW = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, word, word + len).x;
+	float spaceW = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, " ", nullptr).x;
+
+	bool wrapped = false;
+	// Wrap if the word (plus a space if not at line start) would exceed wrapWidth
+	float needed = (*cursorX > startX ? spaceW : 0.0f) + wordW;
+	if (*cursorX > startX && *cursorX + needed > wrapWidth) {
+		*cursorX = startX;
+		*cursorY += lineHeight;
+		wrapped = true;
+	}
+	else if (*cursorX > startX) {
+		*cursorX += spaceW;
+	}
+
+	ImVec2 screenOrigin = ImGui::GetWindowPos();
+	screenOrigin.x += ImGui::GetScrollX();
+	screenOrigin.y -= ImGui::GetScrollY();
+	// Actually use GetCursorScreenPos baseline by adding window scroll offset
+	ImVec2 drawPos = ImGui::GetCursorScreenPos();
+	// Correct: draw at (cursorX, cursorY) relative to the window content area
+	ImVec2 winPos = ImGui::GetWindowPos();
+	drawPos.x = winPos.x - ImGui::GetScrollX() + *cursorX;
+	drawPos.y = winPos.y - ImGui::GetScrollY() + *cursorY;
+
+	ImGui::GetWindowDrawList()->AddText(font, fontSize, drawPos, color, word, word + len);
+	*cursorX += wordW;
+	return wrapped;
+}
+
+// Word-wrap a span of text into the available width, drawing directly via
+// the draw list. Advances *cursorX and *cursorY.
+static void wrap_span_text(const char* text, int len, float startX, float wrapWidth,
+	ImU32 color, ImFont* font, float fontSize, float lineHeight,
+	float* cursorX, float* cursorY) {
+	const char* p = text;
+	const char* end = text + len;
+	while (p < end) {
+		// Skip spaces (use them only as wrap opportunities)
+		const char* wordStart = p;
+		while (p < end && *p != ' ' && *p != '\n') p++;
+		int wordLen = (int)(p - wordStart);
+		if (wordLen > 0)
+			emit_word(wordStart, wordLen, startX, wrapWidth, color, font, fontSize, lineHeight, cursorX, cursorY);
+		// Handle explicit newlines
+		if (p < end && *p == '\n') {
+			*cursorX = startX;
+			*cursorY += lineHeight;
+			p++;
+		}
+		else if (p < end && *p == ' ') {
+			p++; // consume space — the gap is added by emit_word on next word
+		}
+	}
 }
 
 static void render_inline_code_bg(const char* base, uint32_t offset, uint32_t len) {
@@ -439,68 +503,86 @@ static void render_inline_code_bg(const char* base, uint32_t offset, uint32_t le
 	ImGui::TextUnformatted(base + offset, base + offset + len);
 }
 
-static void render_spans(ImguiWindowContext* ctx, int lineIdx) {
-	const char* base = ctx->mdContent;
+static void render_spans(MarkdownResource* md, ImguiWindowContext* ctx, int lineIdx) {
+	const char* base = md->mdContent;
 	int i = lineIdx + 1;
-	bool first = true;
-	while (i < ctx->mdNodeCount && ctx->mdNodes[i].type >= MD_SPAN_TEXT) {
-		const MarkdownNode& n = ctx->mdNodes[i];
-		if (!first)
-			ImGui::SameLine(0, 0);
-		first = false;
+
+	// Count spans for this line
+	int spanCount = 0;
+	{
+		int j = i;
+		while (j < md->mdNodeCount && md->mdNodes[j].type >= MD_SPAN_TEXT) { spanCount++; j++; }
+	}
+
+	// Fast path: single plain text span — use TextWrapped which is simple and correct
+	if (spanCount == 1 && md->mdNodes[i].type == MD_SPAN_TEXT) {
+		const MarkdownNode& n = md->mdNodes[i];
+		ImGui::PushTextWrapPos(0.0f);
+		ImGui::TextUnformatted(base + n.offset, base + n.offset + n.len);
+		ImGui::PopTextWrapPos();
+		return;
+	}
+
+	// Multi-span: word-wrap across all spans using direct draw list rendering.
+	// We record the cursor position at the start of the line, draw all spans
+	// word-wrapped, then advance the ImGui cursor past the total height.
+	ImFont* font = ImGui::GetFont();
+	float fontSize   = font->FontSize;
+	float lineHeight = fontSize + ImGui::GetStyle().ItemSpacing.y;
+	float wrapWidth  = ImGui::GetContentRegionAvail().x;
+	float startX     = ImGui::GetCursorPos().x;
+	float startY     = ImGui::GetCursorPos().y;
+	// Convert from window-local to content-local (accounting for window padding)
+	ImVec2 winPad = ImGui::GetStyle().WindowPadding;
+	startX = ImGui::GetCursorPos().x;
+	startY = ImGui::GetCursorPos().y;
+	wrapWidth = startX + wrapWidth;
+
+	float cx = startX;
+	float cy = startY;
+
+	ImU32 defaultColor = ImGui::GetColorU32(ImGuiCol_Text);
+
+	while (i < md->mdNodeCount && md->mdNodes[i].type >= MD_SPAN_TEXT) {
+		const MarkdownNode& n = md->mdNodes[i];
 		switch (n.type) {
 		case MD_SPAN_TEXT:
-			render_span_text(base, n.offset, n.len);
+			wrap_span_text(base + n.offset, (int)n.len, startX, wrapWidth,
+				defaultColor, font, fontSize, lineHeight, &cx, &cy);
 			break;
-		case MD_SPAN_BOLD:
-			ImguiPushFontStyle(IMGUI_STACK_BOLD, FONT_STYLE_BOLD,
-				IMGUI_BOLD_FALLBACK_R, IMGUI_BOLD_FALLBACK_G, IMGUI_BOLD_FALLBACK_B, IMGUI_BOLD_FALLBACK_A);
-			render_span_text(base, n.offset, n.len);
-			ImguiPopFontStyle(IMGUI_STACK_BOLD);
+		case MD_SPAN_BOLD: {
+			ImU32 col = IM_COL32(IMGUI_BOLD_FALLBACK_R * 255, IMGUI_BOLD_FALLBACK_G * 255,
+				IMGUI_BOLD_FALLBACK_B * 255, 255);
+			wrap_span_text(base + n.offset, (int)n.len, startX, wrapWidth,
+				col, font, fontSize, lineHeight, &cx, &cy);
 			break;
-		case MD_SPAN_ITALIC:
-			ImguiPushFontStyle(IMGUI_STACK_ITALIC, FONT_STYLE_ITALIC,
-				IMGUI_ITALIC_FALLBACK_R, IMGUI_ITALIC_FALLBACK_G, IMGUI_ITALIC_FALLBACK_B, IMGUI_ITALIC_FALLBACK_A);
-			render_span_text(base, n.offset, n.len);
-			ImguiPopFontStyle(IMGUI_STACK_ITALIC);
+		}
+		case MD_SPAN_ITALIC: {
+			ImU32 col = IM_COL32(IMGUI_ITALIC_FALLBACK_R * 255, IMGUI_ITALIC_FALLBACK_G * 255,
+				IMGUI_ITALIC_FALLBACK_B * 255, 255);
+			wrap_span_text(base + n.offset, (int)n.len, startX, wrapWidth,
+				col, font, fontSize, lineHeight, &cx, &cy);
 			break;
+		}
 		case MD_SPAN_CODE:
 			render_inline_code_bg(base, n.offset, n.len);
 			break;
 		case MD_SPAN_LINK: {
-			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.3f, 0.7f, 1.0f, 1.0f));
-			render_span_text(base, n.offset, n.len);
-			ImGui::PopStyleColor();
-			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip("%.*s", (int)n.urlLen, base + n.urlOffset);
-				if (ImGui::IsMouseReleased(0)) {
-					char url[2048];
-					int ulen = n.urlLen < 2047 ? (int)n.urlLen : 2047;
-					memcpy(url, base + n.urlOffset, ulen);
-					url[ulen] = '\0';
-					SDL_OpenURL(url);
-				}
-			}
-			ImVec2 rMin = ImGui::GetItemRectMin();
-			ImVec2 rMax = ImGui::GetItemRectMax();
-			ImGui::GetWindowDrawList()->AddLine(
-				ImVec2(rMin.x, rMax.y), ImVec2(rMax.x, rMax.y),
-				IM_COL32(77, 179, 255, 200), 1.0f);
+			ImU32 col = IM_COL32(77, 179, 255, 255);
+			wrap_span_text(base + n.offset, (int)n.len, startX, wrapWidth,
+				col, font, fontSize, lineHeight, &cx, &cy);
 			break;
 		}
 		case MD_IMAGE: {
-			const ImguiTexture* tex = resolve_texture(
-				ctx,
-				base + n.urlOffset, (int)n.urlLen);
+			const ImguiTexture* tex = resolve_texture(ctx, base + n.urlOffset, (int)n.urlLen);
 			if (tex && tex->glId != 0) {
 				unsigned int glId = ResolveTextureGlId(tex->resource.luaId);
-				ImGui::Image(
-					(ImTextureID)(uintptr_t)glId,
+				ImGui::Image((ImTextureID)(uintptr_t)glId,
 					ImVec2((float)tex->width, (float)tex->height));
 			}
 			else {
 				char buf[512];
-				int  ilen = n.urlLen < 511 ? (int)n.urlLen : 511;
+				int ilen = n.urlLen < 511 ? (int)n.urlLen : 511;
 				snprintf(buf, sizeof(buf), "[Image: %.*s]", ilen, base + n.urlOffset);
 				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
 				ImGui::TextUnformatted(buf);
@@ -512,11 +594,15 @@ static void render_spans(ImguiWindowContext* ctx, int lineIdx) {
 		}
 		i++;
 	}
+
+	// Advance ImGui cursor past all the text we drew
+	float totalH = (cy - startY) + lineHeight;
+	ImGui::Dummy(ImVec2(wrapWidth - startX, totalH));
 }
 
-static int next_line_node(ImguiWindowContext* ctx, int idx) {
+static int next_line_node(MarkdownResource* md, int idx) {
 	int i = idx + 1;
-	while (i < ctx->mdNodeCount && ctx->mdNodes[i].type >= MD_SPAN_TEXT)
+	while (i < md->mdNodeCount && md->mdNodes[i].type >= MD_SPAN_TEXT)
 		i++;
 	return i;
 }
@@ -525,26 +611,21 @@ static int next_line_node(ImguiWindowContext* ctx, int idx) {
 // RenderFromNodes
 // ---------------------------------------------------------------------------
 
-void RenderFromNodes(ImguiWindowContext* ctx, float w, float h) {
-	ImGui::BeginChild("##mdrender", ImVec2(w, h));
-
-	if (ctx->mdCacheError) {
+void RenderFromNodes(MarkdownResource* md, ImguiWindowContext* ctx, float w, float h) {
+	if (md->mdCacheError) {
 		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
-		ImGui::TextWrapped("%s", ctx->mdCacheError);
+		ImGui::TextWrapped("%s", md->mdCacheError);
 		ImGui::PopStyleColor();
-		ImGui::EndChild();
 		return;
 	}
 
-	if (!ctx->mdNodes || ctx->mdNodeCount == 0) {
-		ImGui::EndChild();
+	if (!md->mdNodes || md->mdNodeCount == 0)
 		return;
-	}
 
-	const char* base = ctx->mdContent;
+	const char* base = md->mdContent;
 
-	for (int i = 0; i < ctx->mdNodeCount; ) {
-		const MarkdownNode& n = ctx->mdNodes[i];
+	for (int i = 0; i < md->mdNodeCount; ) {
+		const MarkdownNode& n = md->mdNodes[i];
 
 		switch (n.type) {
 		case MD_H1:
@@ -555,7 +636,7 @@ void RenderFromNodes(ImguiWindowContext* ctx, float w, float h) {
 			ImGui::TextUnformatted(base + n.offset, base + n.offset + n.len);
 			ImGui::SetWindowFontScale(1.0f);
 			ImGui::Separator();
-			i = next_line_node(ctx, i);
+			i = next_line_node(md, i);
 			break;
 		}
 		case MD_HR:
@@ -563,22 +644,48 @@ void RenderFromNodes(ImguiWindowContext* ctx, float w, float h) {
 			i++;
 			break;
 		case MD_CODE_BLOCK: {
+			const char* codeStart = base + n.offset;
+			size_t codeLen = n.len;
 			ImVec2 avail = ImGui::GetContentRegionAvail();
-			ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.12f, 0.12f, 0.12f, 1.0f));
-			ImGui::BeginChild("##codeblock", ImVec2(avail.x, 0), true);
-			ImGui::TextUnformatted(base + n.offset, base + n.offset + n.len);
-			ImGui::EndChild();
-			ImGui::PopStyleColor();
+			ImFont* font = ImGui::GetIO().FontDefault;
+			float fontSize   = font ? font->FontSize : ImGui::GetFontSize();
+			float lineHeight = fontSize + ImGui::GetStyle().ItemSpacing.y;
+
+			// Size child to content
+			int lines = 1;
+			for (size_t ci = 0; ci < codeLen; ci++)
+				if (codeStart[ci] == '\n') lines++;
+			float childH = lines * lineHeight + ImGui::GetStyle().FramePadding.y * 4.0f + 4.0f;
+
+			// InputTextMultiline requires a null-terminated buffer; mdContent is one
+			// contiguous block so codeStart is not null-terminated at codeStart+codeLen.
+			char* codeBuf = (char*)malloc(codeLen + 1);
+			if (codeBuf) {
+				memcpy(codeBuf, codeStart, codeLen);
+				codeBuf[codeLen] = '\0';
+
+				char inputId[32];
+				snprintf(inputId, sizeof(inputId), "##cb%d", i);
+				ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.12f, 1.0f));
+				ImGui::InputTextMultiline(
+					inputId,
+					codeBuf,
+					codeLen + 1,
+					ImVec2(avail.x, childH),
+					ImGuiInputTextFlags_ReadOnly);
+				ImGui::PopStyleColor();
+				free(codeBuf);
+			}
 			i++;
 			break;
 		}
 		case MD_BLOCKQUOTE:
 			ImGui::Indent(8.0f);
 			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.7f, 0.7f, 1.0f));
-			render_spans(ctx, i);
+			render_spans(md, ctx, i);
 			ImGui::PopStyleColor();
 			ImGui::Unindent(8.0f);
-			i = next_line_node(ctx, i);
+			i = next_line_node(md, i);
 			break;
 		case MD_LIST_UL:
 		case MD_LIST_OL: {
@@ -586,14 +693,14 @@ void RenderFromNodes(ImguiWindowContext* ctx, float w, float h) {
 			if (indent > 0.0f) ImGui::Indent(indent);
 			ImGui::Bullet();
 			ImGui::SameLine(0, 4);
-			render_spans(ctx, i);
+			render_spans(md, ctx, i);
 			if (indent > 0.0f) ImGui::Unindent(indent);
-			i = next_line_node(ctx, i);
+			i = next_line_node(md, i);
 			break;
 		}
 		case MD_PARA:
-			render_spans(ctx, i);
-			i = next_line_node(ctx, i);
+			render_spans(md, ctx, i);
+			i = next_line_node(md, i);
 			break;
 		case MD_TABLE_SEP:
 			i++;
@@ -606,11 +713,11 @@ void RenderFromNodes(ImguiWindowContext* ctx, float w, float h) {
 
 			// Find the run of table rows/seps to pass to BeginTable once
 			int runEnd = i;
-			while (runEnd < ctx->mdNodeCount &&
-				(ctx->mdNodes[runEnd].type == MD_TABLE_ROW ||
-					ctx->mdNodes[runEnd].type == MD_TABLE_SEP ||
-					ctx->mdNodes[runEnd].type == MD_TABLE_CELL ||
-					ctx->mdNodes[runEnd].type >= MD_SPAN_TEXT))
+			while (runEnd < md->mdNodeCount &&
+				(md->mdNodes[runEnd].type == MD_TABLE_ROW ||
+					md->mdNodes[runEnd].type == MD_TABLE_SEP ||
+					md->mdNodes[runEnd].type == MD_TABLE_CELL ||
+					md->mdNodes[runEnd].type >= MD_SPAN_TEXT))
 				runEnd++;
 
 			ImGuiTableFlags tflags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit;
@@ -618,11 +725,11 @@ void RenderFromNodes(ImguiWindowContext* ctx, float w, float h) {
 				int j = i;
 				bool headerDone = false;
 				while (j < runEnd) {
-					if (ctx->mdNodes[j].type == MD_TABLE_SEP) {
+					if (md->mdNodes[j].type == MD_TABLE_SEP) {
 						j++;
 						continue;
 					}
-					if (ctx->mdNodes[j].type != MD_TABLE_ROW) {
+					if (md->mdNodes[j].type != MD_TABLE_ROW) {
 						j++;
 						continue;
 					}
@@ -633,14 +740,14 @@ void RenderFromNodes(ImguiWindowContext* ctx, float w, float h) {
 					j++; // skip the TABLE_ROW node itself
 
 					// Render spans for each cell, advancing column on TABLE_CELL
-					while (j < runEnd && ctx->mdNodes[j].type != MD_TABLE_ROW && ctx->mdNodes[j].type != MD_TABLE_SEP) {
-						if (ctx->mdNodes[j].type == MD_TABLE_CELL) {
+					while (j < runEnd && md->mdNodes[j].type != MD_TABLE_ROW && md->mdNodes[j].type != MD_TABLE_SEP) {
+						if (md->mdNodes[j].type == MD_TABLE_CELL) {
 							ImGui::TableNextColumn();
 							j++;
 							continue;
 						}
 						// Span node
-						const MarkdownNode& sn = ctx->mdNodes[j];
+						const MarkdownNode& sn = md->mdNodes[j];
 						switch (sn.type) {
 						case MD_SPAN_TEXT:
 							ImGui::TextUnformatted(base + sn.offset, base + sn.offset + sn.len);
@@ -704,7 +811,86 @@ void RenderFromNodes(ImguiWindowContext* ctx, float w, float h) {
 		}
 	}
 
-	ImGui::EndChild();
+	}
+
+	// ---------------------------------------------------------------------------
+	// Markdown.Parse(text|stream) -> luaId  |  Markdown.Destroy(luaId)
+// ---------------------------------------------------------------------------
+
+// Markdown.Parse(text|stream) -> integer luaId | nil
+static int Markdown_Parse(int argc, const KitsuneVariable* argv,
+	const kitsune_ResultSetter setter, void* ud) {
+	KitsuneVariable r = {};
+	r.type = KITSUNE_TNIL;
+	if (argc < 1) {
+		setter(&r);
+		return 1;
+	}
+
+	MarkdownResource* md = (MarkdownResource*)calloc(1, sizeof(MarkdownResource));
+	if (!md) {
+		setter(&r);
+		return 1;
+	}
+	md->resource.type = RESOURCE_MARKDOWN;
+	md->resource.fn   = markdown_finalizer;
+
+	if (argv[0].type == KITSUNE_TSTRING) {
+		if (argv[0].length == 0) {
+			free(md);
+			setter(&r);
+			return 1;
+		}
+		char* buf = (char*)malloc(argv[0].length + 1);
+		if (!buf) {
+			free(md);
+			setter(&r);
+			return 1;
+		}
+		memcpy(buf, argv[0].data, argv[0].length);
+		buf[argv[0].length] = '\0';
+		md->mdContent    = buf;
+		md->mdContentLen = argv[0].length;
+		ParseContentIntoNodes(md);
+	}
+	else if (argv[0].type == KITSUNE_TUSERDATA && argv[0].userdata
+		&& argv[0].userdata->name && strcmp(argv[0].userdata->name, "STREAM") == 0) {
+		ReadStreamIntoCache(&argv[0], md);
+		if (!md->mdCacheError)
+			ParseContentIntoNodes(md);
+	}
+	else {
+		free(md);
+		setter(&r);
+		return 1;
+	}
+
+	if (!ResourceCacheAdd(&md->resource)) {
+		markdown_finalizer(&md->resource);
+		setter(&r);
+		return 1;
+	}
+
+	r.type    = KITSUNE_TINTEGER;
+	r.integer = md->resource.luaId;
+	setter(&r);
+	return 1;
+}
+
+// Markdown.Destroy(luaId) — remove from cache and free
+static int Markdown_Destroy(int argc, const KitsuneVariable* argv,
+	const kitsune_ResultSetter setter, void* ud) {
+	if (argc < 1)
+		return 0;
+	int luaId = (int)KitsuneAsInt(&argv[0], 0);
+	if (luaId > 0)
+		ResourceCacheRemoveById(luaId, RESOURCE_MARKDOWN);
+	return 0;
+}
+
+void RegisterMarkdownFunctions() {
+	KitsuneRegisterFunction("Markdown.Parse",   Markdown_Parse,   nullptr);
+	KitsuneRegisterFunction("Markdown.Destroy", Markdown_Destroy, nullptr);
 }
 
 #endif // KITSUNE_IMGUI

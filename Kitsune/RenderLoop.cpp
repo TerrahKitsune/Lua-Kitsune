@@ -387,10 +387,7 @@ void RunImguiSession() {
 	// Free loader callbacks before cache shutdown so no Lua calls fire during finalizers.
 	ResourceCacheShutdownLoader();
 
-	// Destroy all live HtmlDocuments before GL/resource teardown.
-	HtmlShutdown();
-
-	// Free all resources before GL teardown so finalizers can call glDeleteTextures
+	// Free all resources (textures, audio, HTML, Markdown) before GL teardown.
 	ResourceCacheShutdown();
 
 	if (anchoredRenderer) {

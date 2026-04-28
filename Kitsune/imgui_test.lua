@@ -41,7 +41,6 @@
     showMenuDemo   = false,
     consoleVisible = true,
     ownsConsole    = Win32.OwnsConsole(),
-    mdDoc          = Stream.Open('./docs/markdown-test.md', 'rb'),
     -- Hardware sensor cache (refreshed every 60 frames)
     hw_cpuName     = Hardware.CpuName() or "n/a",
     hw_cpuLoad     = "priming...",
@@ -1171,7 +1170,17 @@ local function tabAudio(renderer, ctx)
 end
 
 local function tabHtml(renderer, ctx)
-    -- Lazy-load the document once per session
+    -- Lazy-load an inline doc parsed from a string (no resource needed)
+    if not ctx.htmlInlineDoc then
+        ctx.htmlInlineDoc = Html.Parse([[<html><body style="font-family:sans-serif;padding:8px">
+<h2>Inline HTML</h2>
+<p>This document was parsed from a <b>string literal</b> using <code>Html.Parse()</code>.</p>
+<ul><li>Item one</li><li>Item two</li><li>Item three</li></ul>
+<p style="color:#88aaff">Multiple HtmlDocuments can exist independently.</p>
+</body></html>]])
+    end
+
+    -- Lazy-load the file-based document once per session
     if ctx.htmlDocId == nil then
         ctx.htmlDocId = Resource.Resolve('docs/sample.html') or false
     end
@@ -1180,10 +1189,10 @@ local function tabHtml(renderer, ctx)
         if ctx.htmlDoc then
             ctx.htmlLastEvent = 'none'
             ctx.htmlLastHandle = 0
-            ctx.htmlDoc:SetEventHandler(function(eventtype, doc, handle)
+            Html.SetEventHandler(ctx.htmlDoc, function(eventtype, docId, handle)
                 ctx.htmlLastEvent  = eventtype
                 ctx.htmlLastHandle = handle
-                local el = doc:QueryByHandle(handle)
+                local el = Html.QueryByHandle(docId, handle)
                 if el and eventtype == 'click' then
                     if el.attrs and el.attrs['data-action'] == 'hello' then
                         ctx.htmlMsg = 'Hello from Lua!'
@@ -1214,32 +1223,77 @@ local function tabHtml(renderer, ctx)
     end
 
     if renderer:Button('Reload HTML') then
-        ctx.htmlDocId = nil
+        Html.Destroy(ctx.htmlDoc)
         ctx.htmlDoc   = nil
+        ctx.htmlDocId = nil
         ctx.htmlMsg   = nil
         return
     end
     renderer:SameLine()
     if renderer:Button('Invalidate') then
-        ctx.htmlDoc:Invalidate()
+        Html.Invalidate(ctx.htmlDoc)
     end
 
     renderer:Separator()
 
-    -- Render into a child region so it scrolls independently
+    -- Render two independent HtmlDocuments side by side
     local cw, ch = renderer:GetContentRegionAvail()
-    if renderer:BeginChild('##html_view', cw, ch - 4, false) then
+    local halfW = math.floor(cw / 2) - 4
+
+    -- Left: file-loaded doc
+    renderer:Text('docs/sample.html  (Html.Parse(genericId))')
+    if renderer:BeginChild('##html_left', halfW, ch - 40, true) then
         renderer:Html(ctx.htmlDoc)
+    end
+    renderer:EndChild()
+
+    renderer:SameLine()
+
+    -- Right: inline string-parsed doc
+    renderer:Text('inline  (Html.Parse(string))')
+    if renderer:BeginChild('##html_right', halfW, ch - 40, true) then
+        if ctx.htmlInlineDoc then
+            renderer:Html(ctx.htmlInlineDoc)
+        end
     end
     renderer:EndChild()
 end
 
 local function tabMarkdown(renderer, ctx)
-    local refresh = renderer:Button('Reload')
-    renderer:SameLine()
-    renderer:Text('docs/markdown-test.md')
+    if not ctx.mdDoc then
+        ctx.mdDoc = Markdown.Parse(Stream.Open('./docs/markdown-test.md', 'rb'))
+    end
+    -- Parse the two per-message docs once
+    if not ctx.mdMessages then
+        ctx.mdMessages = {
+            Markdown.Parse("# Message 1\nThis is **bold**, *italic*, and `inline code`.\n\n- Item A\n- Item B\n\n> A blockquote from Alice"),
+            Markdown.Parse("# Message 2\nA second independent document.\n\n```\ncode block here\n```\n\n| Col A | Col B |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |"),
+        }
+    end
+
+    renderer:Text('Two independently parsed MarkdownDocuments rendered side by side')
     renderer:Separator()
-    renderer:MarkdownRender(ctx.mdDoc, refresh)
+
+    local cw, ch = renderer:GetContentRegionAvail()
+    local halfW = math.floor(cw / 2) - 4
+
+    -- Left panel: file-loaded doc
+    renderer:BeginChild('##md_left', halfW, ch - 40, true)
+        renderer:Text('docs/markdown-test.md')
+        renderer:MarkdownRender(ctx.mdDoc)
+    renderer:EndChild()
+
+    renderer:SameLine()
+
+    -- Right panel: two string-parsed messages stacked
+    renderer:BeginChild('##md_right', halfW, ch - 40, true)
+        for i, doc in ipairs(ctx.mdMessages) do
+            renderer:PushID(i)
+            renderer:MarkdownRender(doc)
+            renderer:PopID()
+            renderer:Separator()
+        end
+    renderer:EndChild()
 end
 
 local function tabTextures(renderer, ctx)

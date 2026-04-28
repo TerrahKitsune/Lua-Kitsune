@@ -9,6 +9,8 @@
 #define RESOURCE_AUDIO_MUSIC 3
 #define RESOURCE_FONT        4
 #define RESOURCE_GENERIC     5
+#define RESOURCE_MARKDOWN    6
+#define RESOURCE_HTML        7
 
 // Forward declaration
 struct Resource;

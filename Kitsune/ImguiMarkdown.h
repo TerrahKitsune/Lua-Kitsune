@@ -2,6 +2,7 @@
 #ifdef KITSUNE_IMGUI
 
 #include "ImguiRenderer.h"
+#include "ResourceCache.h"
 #include "KitsuneEngine.h"
 
 // ---------------------------------------------------------------------------
@@ -44,26 +45,40 @@ struct MarkdownNode {
 };
 
 // ---------------------------------------------------------------------------
+// MarkdownResource — cache-managed parsed document. Resource must be first field.
+// Lifetime is owned by the ResourceCache; luaId is the Lua-facing handle.
+// ---------------------------------------------------------------------------
+
+struct MarkdownResource {
+	Resource       resource;      // type=RESOURCE_MARKDOWN; luaId and source live here
+	char*          mdContent;
+	size_t         mdContentLen;
+	MarkdownNode*  mdNodes;
+	int            mdNodeCount;
+	int            mdNodeAlloc;
+	const char*    mdCacheError;  // points to a static string or nullptr
+};
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
-// Reads the full stream content into ctx->mdContent via KitsuneCallMethod.
-// Calls stream:Seek(0) then stream:Read() using the KitsuneEngine API.
-// Sets ctx->mdCacheError on failure. Does not throw.
-void ReadStreamIntoCache(const KitsuneVariable* streamVar, ImguiWindowContext* ctx);
+// Reads the full stream content into md->mdContent via KitsuneCallMethod.
+void ReadStreamIntoCache(const KitsuneVariable* streamVar, MarkdownResource* md);
 
-// Parses ctx->mdContent into the ctx->mdNodes flat array.
-// Grows the array on demand (doubles when count+1 >= alloc).
-// Sets ctx->mdCacheError and returns early on OOM — does not throw.
-void ParseContentIntoNodes(ImguiWindowContext* ctx);
+// Parses md->mdContent into the md->mdNodes flat array.
+void ParseContentIntoNodes(MarkdownResource* md);
 
-// Walks ctx->mdNodes and issues ImGui draw calls inside a BeginChild/EndChild.
-// w/h are passed to BeginChild; 0,0 fills available space.
-// If ctx->mdCacheError is set, renders it in red and returns early.
-void RenderFromNodes(ImguiWindowContext* ctx, float w, float h);
+// Walks md->mdNodes and issues ImGui draw calls inside a BeginChild/EndChild.
+// ctx is needed for font/image access.
+void RenderFromNodes(MarkdownResource* md, ImguiWindowContext* ctx, float w, float h);
 
-// Frees ctx->mdContent and ctx->mdNodes and zeroes all seven cache fields.
-// Safe to call on a zeroed context (all fields NULL/0).
-void FreeMarkdownCache(ImguiWindowContext* ctx);
+// Frees md->mdContent and md->mdNodes. Does NOT free the MarkdownResource itself.
+void FreeMarkdownCache(MarkdownResource* md);
+
+// Registers Markdown.Parse (string|stream -> luaId) and
+// Markdown.Destroy(luaId) into the Kitsune engine.
+void RegisterMarkdownFunctions();
 
 #endif // KITSUNE_IMGUI
+

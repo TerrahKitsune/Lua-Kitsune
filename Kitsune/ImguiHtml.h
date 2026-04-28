@@ -10,22 +10,24 @@
 #include <SDL.h>
 
 // ---------------------------------------------------------------------------
-// HtmlDocument — Lua userdata wrapping a parsed litehtml document.
-// Not stored in ResourceCache; lifetime is managed by __gc.
+// HtmlResource — cache-managed parsed litehtml document. Resource must be first field.
+// Lifetime is owned by the ResourceCache; luaId is the Lua-facing handle.
 // ---------------------------------------------------------------------------
 
-struct HtmlDocument {
-    litehtml::document::ptr  doc;           // parsed litehtml document; null after Dispose
-    KitsuneVariable*         eventHandler;  // anchored Lua function; nullptr if not set
-    int                      lastWidth;     // width at last render() — reflow detection
-    int                      generation;    // incremented on Reload(); stale handle guard
-    litehtml::element::ptr   hoveredEl;     // element under cursor last frame
-    bool                     shutdown;      // true after HtmlShutdown(); __gc skips delete
-    // Source for re-parsing after font atlas rebuild.
-    // Exactly one of these is set: sourceGenericId != 0 OR sourceBytes != nullptr.
-    int                      sourceGenericId; // resource cache id (Html.Parse path)
-    uint8_t*                 sourceBytes;     // heap-owned copy (Html.ParseString path)
+struct HtmlResource {
+    Resource                 resource;       // type=RESOURCE_HTML; luaId and source live here
+    litehtml::document::ptr  doc;            // parsed litehtml document; null after Dispose
+    KitsuneVariable*         eventHandler;   // anchored Lua function; nullptr if not set
+    int                      lastWidth;      // width at last render() — reflow detection
+    litehtml::element::ptr   hoveredEl;      // element under cursor last frame
+    // Source kept for re-parse after font atlas rebuild.
+    // Exactly one is set: sourceGenericId != 0 OR sourceBytes != nullptr.
+    int                      sourceGenericId;
+    uint8_t*                 sourceBytes;
     size_t                   sourceLength;
+    // Pending anchor click — set by on_anchor_click during on_lbutton_up, consumed immediately after.
+    litehtml::element::ptr   pendingClickEl;
+    bool                     hasPendingClick = false;
 };
 
 // ---------------------------------------------------------------------------
@@ -105,9 +107,9 @@ public:
     void                get_language(litehtml::string& language,
                                      litehtml::string& culture) const override;
 
-    // Pending anchor click — set by on_anchor_click, consumed by renderer:Html
-    litehtml::element::ptr pendingClickEl;
-    bool                   hasPendingClick = false;
+    // Pointer to the HtmlResource currently being rendered — set before draw(), cleared after.
+    // Used by on_anchor_click to route click events to the right document.
+    struct HtmlResource* activeDoc = nullptr;
 };
 
 // ---------------------------------------------------------------------------
@@ -121,8 +123,7 @@ KitsuneHtmlContainer* HtmlGetContainer();
 // ---------------------------------------------------------------------------
 
 void RegisterHtmlFunctions();
-void HtmlShutdown();
-// Force all live documents to re-layout next render (e.g. after atlas rebuild).
+// Force all live HTML documents to re-layout next render (e.g. after atlas rebuild).
 void HtmlInvalidateAll();
 
 // ---------------------------------------------------------------------------

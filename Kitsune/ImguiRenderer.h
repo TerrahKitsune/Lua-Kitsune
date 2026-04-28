@@ -42,14 +42,6 @@ struct ImguiWindowContext {
 	struct ImFont*              font_italic;
 	// ImguiStack — linked list of push/pop entries; drained before each frame
 	struct ImguiStackEntry*     stackHead;
-	// Markdown cache
-	uint64_t                    mdCacheId;
-	char*                       mdContent;
-	size_t                      mdContentLen;
-	struct MarkdownNode*        mdNodes;
-	int                         mdNodeCount;
-	int                         mdNodeAlloc;
-	const char*                 mdCacheError;
 };
 
 // Populates reg->Functions with heap-allocated KitsuneNamedFunction nodes for

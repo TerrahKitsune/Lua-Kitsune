@@ -16,6 +16,7 @@
 #include "OpenGL.h"
 #include "Font.h"
 #include "ImguiHtml.h"
+#include "ImguiMarkdown.h"
 #include "SDLAudio.h"
 #include "ResourceCache.h"
 
@@ -37,6 +38,7 @@ void RegisterImguiFunctions() {
 	RegisterOpenGLFunctions();
 	RegisterFontFunctions();
 	RegisterHtmlFunctions();
+	RegisterMarkdownFunctions();
 	RegisterSDLAudioFunctions();
 	ResourceCacheRegisterLoaderFunction();
 	register_imgui_enums();
