@@ -266,6 +266,7 @@ void ParseContentIntoNodes(MarkdownResource* md) {
 		if (inFence) continue;
 		if (llen == 0) continue;
 
+
 		// Headings
 		if (line[0] == '#') {
 			int level = 0;
@@ -429,6 +430,20 @@ void ParseContentIntoNodes(MarkdownResource* md) {
 			if (!push_node(md, n)) return;
 			if (!parse_spans(md, base, lineStart, end)) return;
 		}
+	}
+
+	// If input ended while still inside an unclosed fenced code block,
+	// emit whatever was accumulated so the content is not silently dropped.
+	if (inFence && total > fenceStart) {
+		uint32_t fenceEnd = total;
+		// strip trailing newline so the code block doesn't have a blank last line
+		if (fenceEnd > fenceStart && base[fenceEnd - 1] == '\n') fenceEnd--;
+		if (fenceEnd > fenceStart && base[fenceEnd - 1] == '\r') fenceEnd--;
+		MarkdownNode n = {};
+		n.type = MD_CODE_BLOCK;
+		n.offset = fenceStart;
+		n.len = fenceEnd > fenceStart ? fenceEnd - fenceStart : 0;
+		push_node(md, n);
 	}
 }
 
