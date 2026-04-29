@@ -22,6 +22,15 @@ static bool s_rebuildPending = false;
 // Forward declaration
 static void font_free(Resource* node);
 
+// Glyph ranges included in every loaded font atlas.
+// Basic Latin + Latin-1 + General Punctuation (em/en dash, smart quotes, ellipsis, bullet…) + Euro.
+static const ImWchar s_glyphRanges[] = {
+    0x0020, 0x00FF,  // Basic Latin + Latin-1 Supplement
+    0x2000, 0x206F,  // General Punctuation
+    0x20AC, 0x20AC,  // Euro sign
+    0,
+};
+
 bool FontAtlasRebuildPending() {
     return s_rebuildPending;
 }
@@ -35,7 +44,7 @@ void FontLoadPending() {
             ImFontConfig cfg = {};
             cfg.FontDataOwnedByAtlas = false;
             f->imFont = ImGui::GetIO().Fonts->AddFontFromMemoryTTF(
-                f->ttfData, (int)f->ttfLength, f->size, &cfg);
+                f->ttfData, (int)f->ttfLength, f->size, &cfg, s_glyphRanges);
             f->atlasLoaded = true;
             f->resource.permanent = true;
         }
@@ -200,7 +209,7 @@ ImFont* FontResolveInternal(const char* face, float size, int style) {
     // Atlas is unlocked — register immediately.
     ImFontConfig cfg = {};
     cfg.FontDataOwnedByAtlas = false;
-    f->imFont      = ImGui::GetIO().Fonts->AddFontFromMemoryTTF(ttfData, (int)ttfLength, size, &cfg);
+    f->imFont      = ImGui::GetIO().Fonts->AddFontFromMemoryTTF(ttfData, (int)ttfLength, size, &cfg, s_glyphRanges);
     f->atlasLoaded = true;
 
     if (!ResourceCacheAdd(&f->resource)) {
@@ -443,6 +452,123 @@ int Font_SetDefault(int argc, const KitsuneVariable* argv,
 }
 
 // ---------------------------------------------------------------------------
+// Font.HasGlyph(codepoint)
+// Returns true if the current default ImGui font contains a glyph for the
+// given Unicode codepoint (integer). Uses FindGlyphNoFallback so the missing-
+// glyph fallback does not mask a missing character.
+// ---------------------------------------------------------------------------
+
+int Font_HasGlyph(int argc, const KitsuneVariable* argv,
+    const kitsune_ResultSetter setter, void* ud) {
+    KitsuneVariable r = {};
+    r.type = KITSUNE_TBOOLEAN;
+    r.boolean = 0;
+    if (argc >= 1) {
+        ImWchar codepoint = (ImWchar)(unsigned int)KitsuneAsInt(&argv[0], 0);
+        ImFont* font = ImGui::GetFont();
+        if (font && font->FindGlyphNoFallback(codepoint))
+            r.boolean = 1;
+    }
+    setter(&r);
+    return 1;
+}
+
+// ---------------------------------------------------------------------------
+// Font.HasGlyphIn(luaId, codepoint)
+// Same as Font.HasGlyph but checks a specific FontResource by luaId rather
+// than the current default font.
+// ---------------------------------------------------------------------------
+
+int Font_HasGlyphIn(int argc, const KitsuneVariable* argv,
+    const kitsune_ResultSetter setter, void* ud) {
+    KitsuneVariable r = {};
+    r.type = KITSUNE_TBOOLEAN;
+    r.boolean = 0;
+    if (argc >= 2) {
+        int luaId = (int)KitsuneAsInt(&argv[0], 0);
+        ImWchar codepoint = (ImWchar)(unsigned int)KitsuneAsInt(&argv[1], 0);
+        FontResource* f = (FontResource*)ResourceCacheGetById(luaId, RESOURCE_FONT);
+        if (f && f->imFont && f->imFont->FindGlyphNoFallback(codepoint))
+            r.boolean = 1;
+    }
+    setter(&r);
+    return 1;
+}
+
+// ---------------------------------------------------------------------------
+// Font.GetGlyphCodepoints()
+// Returns a Lua array of all codepoints that have real glyphs in the current
+// default font, by iterating ImFont::Glyphs directly. This is ground-truth —
+// no fallback masking. Optionally pass a luaId to query a specific font.
+// ---------------------------------------------------------------------------
+
+int Font_GetGlyphCodepoints(int argc, const KitsuneVariable* argv,
+    const kitsune_ResultSetter setter, void* ud) {
+    ImFont* font = nullptr;
+    if (argc >= 1 && argv[0].type != KITSUNE_TNIL && argv[0].type != KITSUNE_TNONE) {
+        int luaId = (int)KitsuneAsInt(&argv[0], 0);
+        FontResource* f = (FontResource*)ResourceCacheGetById(luaId, RESOURCE_FONT);
+        if (f) font = f->imFont;
+    } else {
+        font = ImGui::GetFont();
+    }
+
+    // Return nil if no font is available
+    KitsuneVariable nil = {};
+    nil.type = KITSUNE_TNIL;
+
+    if (!font || font->Glyphs.Size == 0) {
+        setter(&nil);
+        return 1;
+    }
+
+    // Build a KITSUNE_TTABLECONTENTS linked list with sequential integer keys (1-based array).
+    // Each node is heap-allocated; the engine frees nodes it owns; we free the ones we built.
+    int count = font->Glyphs.Size;
+    KitsuneKeyValuePairVariableNode* head = nullptr;
+    KitsuneKeyValuePairVariableNode* tail = nullptr;
+    int written = 0;
+
+    for (int i = 0; i < count; i++) {
+        const ImFontGlyph& g = font->Glyphs[i];
+        // Skip fallback (codepoint 0) and invisible glyphs with no visible area
+        if (g.Codepoint == 0 || (g.X1 - g.X0 < 0.5f && g.Y1 - g.Y0 < 0.5f))
+            continue;
+
+        KitsuneKeyValuePairVariableNode* node =
+            (KitsuneKeyValuePairVariableNode*)calloc(1, sizeof(KitsuneKeyValuePairVariableNode));
+        if (!node) break;
+
+        node->key.type    = KITSUNE_TINTEGER;
+        node->key.integer = (long long)(written + 1); // 1-based Lua array index
+
+        node->value.type    = KITSUNE_TINTEGER;
+        node->value.integer = (long long)g.Codepoint;
+
+        node->next = nullptr;
+
+        if (!head) head = node;
+        if (tail)  tail->next = node;
+        tail = node;
+        written++;
+    }
+
+    KitsuneVariable result = {};
+    result.type  = KITSUNE_TTABLECONTENTS;
+    result.table = head;
+    setter(&result);
+
+    // Free all nodes we allocated
+    KitsuneKeyValuePairVariableNode* cur = head;
+    while (cur) {
+        KitsuneKeyValuePairVariableNode* next = cur->next;
+        free(cur);
+        cur = next;
+    }
+    return 1;
+}
+
+// ---------------------------------------------------------------------------
 // RegisterFontFunctions
 // ---------------------------------------------------------------------------
 
@@ -452,6 +578,9 @@ void RegisterFontFunctions() {
     KitsuneRegisterFunction("Font.GetId", Font_GetId, nullptr);
     KitsuneRegisterFunction("Font.SetDefault", Font_SetDefault, nullptr);
     KitsuneRegisterFunction("Font.SetDefaultStyleColor", Font_SetDefaultStyleColor, nullptr);
+    KitsuneRegisterFunction("Font.HasGlyph", Font_HasGlyph, nullptr);
+    KitsuneRegisterFunction("Font.HasGlyphIn", Font_HasGlyphIn, nullptr);
+    KitsuneRegisterFunction("Font.GetGlyphCodepoints", Font_GetGlyphCodepoints, nullptr);
 }
 
 #endif // KITSUNE_IMGUI

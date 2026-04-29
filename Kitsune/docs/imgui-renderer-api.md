@@ -222,6 +222,72 @@ renderer:ImageFrame(sheetId, 64, 64, frame, 8, 2, true)      -- flipX (mirror)
 renderer:ImageFrame(sheetId, 64, 64, frame, 8, 2, false, true) -- flipY
 ```
 
+## Font API
+
+Custom TTF fonts loaded into the ImGui atlas at runtime. Fonts are `RESOURCE_FONT` entries in the ResourceCache identified by an integer `luaId`. The source key format is `"FaceName:size:style"` (e.g. `"Roboto:18.0:0"`). Because ImGui bakes fonts into a GPU texture atlas, newly loaded fonts take effect on the frame *after* they are registered — the render loop rebuilds the atlas automatically when `FontAtlasRebuildPending()` is true.
+
+Font variants for **bold** and **italic** are separate resources with the same face name but a different style bit. When bold/italic text is rendered and no styled variant is loaded, a fallback text colour is applied instead. Use `Font.SetDefaultStyleColor` to change that colour.
+
+**Style constants:**
+
+| Constant | Value | Meaning |
+|---|---|---|
+| `FONT_STYLE_REGULAR` | `0` | Normal weight, no slant |
+| `FONT_STYLE_BOLD` | `1` | Bold variant |
+| `FONT_STYLE_ITALIC` | `2` | Italic variant |
+
+### Loading & Lifecycle
+
+Fonts are loaded through the session-wide `Resource.SetLoader` callback with `type = RESOURCE_FONT`. The source string passed to the loader is the internal key `"FaceName:size:style"`. The loader must return a stream or raw string containing the TTF file bytes.
+
+| Function | Parameters | Returns | Notes |
+|---|---|---|---|
+| `Font.Resolve(face, size [, bold [, italic]])` | `string, number, boolean?, boolean?` | `integer\|nil` | Load and register a TTF font variant. If already cached returns the existing `luaId`. Returns `nil` if the loader returns nothing. The atlas rebuild happens on the *next* frame |
+| `Font.GetId(face, size [, bold [, italic]])` | `string, number, boolean?, boolean?` | `integer\|nil` | Cache lookup without triggering a load. Returns `nil` if not yet loaded |
+| `Font.GetData(luaId)` | `integer` | `table\|nil` | Returns `{ face, size, style, isBuilt }`. `isBuilt` is `false` for the one transitional frame before the first atlas build |
+
+### Default Font
+
+| Function | Parameters | Returns | Notes |
+|---|---|---|---|
+| `Font.SetDefault([luaId])` | `integer?` | — | Set the ImGui default font to a loaded `FontResource`. Pass `0` or `nil` to restore the built-in default. Takes effect after the next atlas rebuild |
+| `Font.SetDefaultStyleColor(color, style)` | `integer, integer` | — | Set the fallback text colour used when a bold/italic font variant is not loaded. `color` is `ImU32` (`0xAABBGGRR`). `style` is a `FONT_STYLE_*` bitmask |
+
+### Glyph Queries
+
+| Function | Parameters | Returns | Notes |
+|---|---|---|---|
+| `Font.HasGlyph(codepoint)` | `integer` | `boolean` | Whether the current default font contains a glyph for the given Unicode codepoint. Uses `FindGlyphNoFallback` so a missing glyph returns `false` even if ImGui has a fallback character |
+| `Font.HasGlyphIn(luaId, codepoint)` | `integer, integer` | `boolean` | Same as `Font.HasGlyph` but checks a specific `FontResource` by `luaId` rather than the active default font |
+| `Font.GetGlyphCodepoints([luaId])` | `integer?` | `table\|nil` | Returns a 1-based sequential array of all Unicode codepoints that have a real glyph in the font. Skips codepoint 0 and invisible zero-area glyphs. Omit `luaId` or pass `nil` to query the current default font. Returns `nil` if the font is not yet built |
+
+```lua
+-- Register the loader so Font.Resolve can fetch TTF bytes:
+Resource.SetLoader(function(type, source)
+    -- source for fonts is 'FaceName:size:style', e.g. 'Roboto:18.0:0'
+    if type == 4 then -- RESOURCE_FONT
+        local face = source:match('^([^:]+)')
+        return Stream.Open('fonts/' .. face .. '.ttf', 'rb')
+    end
+end)
+
+-- Load regular and bold variants (both must have the same face name):
+local fntId     = Font.Resolve('Roboto', 18)            -- regular
+local fntBoldId = Font.Resolve('Roboto', 18, true)      -- bold
+local fntItId   = Font.Resolve('Roboto', 18, false, true) -- italic
+
+-- Make it the application default (takes effect next frame):
+Font.SetDefault(fntId)
+
+-- Change the fallback colour shown when bold variant is missing:
+Font.SetDefaultStyleColor(0xFFFFD966, 1) -- golden yellow, FONT_STYLE_BOLD
+
+-- Query whether a character is covered by the current font:
+if not Font.HasGlyph(0x2713) then   -- U+2713 CHECK MARK
+    print('check mark glyph missing from default font')
+end
+```
+
 ## Markdown API
 
 Parses Markdown text into a `RESOURCE_MARKDOWN` entry in the ResourceCache. The result is an integer `luaId` — the same pattern as textures and audio. Parse once, render as many times per frame as you like. No re-parse overhead.

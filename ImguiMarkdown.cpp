@@ -317,10 +317,7 @@ void ParseContentIntoNodes(MarkdownResource* md) {
 			while (sp < llen && line[sp] == ' ') sp++;
 			if (sp < llen && (line[sp] == '-' || line[sp] == '*') &&
 				sp + 1 < llen && line[sp + 1] == ' ') {
-				// Skip marker and all following spaces (e.g. "*   text" -> "text")
-				uint32_t after = sp + 1;
-				while (after < llen && line[after] == ' ') after++;
-				uint32_t textStart = lineStart + after;
+				uint32_t textStart = lineStart + sp + 2;
 				MarkdownNode n = {};
 				n.type = MD_LIST_UL;
 				n.offset = textStart;
@@ -431,137 +428,6 @@ void ParseContentIntoNodes(MarkdownResource* md) {
 		}
 	}
 }
-
-// ---------------------------------------------------------------------------
-// RenderFromNodes helpers
-// ---------------------------------------------------------------------------
-
-// Returns the index of the first node after lineIdx that is not a span node.
-static int next_line_node(MarkdownResource* md, int lineIdx) {
-    int i = lineIdx + 1;
-    while (i < md->mdNodeCount && md->mdNodes[i].type >= MD_SPAN_TEXT)
-        i++;
-    return i;
-}
-
-// Draws the background rect for an inline code span, then the text.
-static void render_inline_code_bg(const char* base, uint32_t offset, uint32_t len) {
-    ImVec2 pos = ImGui::GetCursorScreenPos();
-    ImVec2 size = ImGui::CalcTextSize(base + offset, base + offset + len);
-    ImGui::GetWindowDrawList()->AddRectFilled(
-        ImVec2(pos.x - 2, pos.y),
-        ImVec2(pos.x + size.x + 2, pos.y + size.y),
-        IM_COL32(60, 60, 60, 200), 3.0f);
-    ImGui::TextUnformatted(base + offset, base + offset + len);
-}
-
-// Renders text with word-wrap using the same technique as imgui_markdown:
-// CalcWordWrapPositionA gives the split point for the available width,
-// then we TextUnformatted that chunk and loop for the rest at full width.
-// Returns whether any text was rendered (so the caller can SameLine before the next span).
-static bool render_text_wrapped(const char* text, const char* textEnd) {
-	float scale = ImGui::GetIO().FontGlobalScale;
-	float widthLeft = ImGui::GetContentRegionAvail().x;
-	if (widthLeft <= 0.0f)
-		widthLeft = ImGui::GetWindowSize().x;
-
-	const char* endLine = ImGui::GetFont()->CalcWordWrapPositionA(scale, text, textEnd, widthLeft);
-	if (endLine <= text)
-		endLine = text + 1;
-
-	ImGui::TextUnformatted(text, endLine);
-
-	while (endLine < textEnd) {
-		text = endLine;
-		if (*text == ' ')
-			text++;
-		widthLeft = ImGui::GetContentRegionAvail().x;
-		endLine = ImGui::GetFont()->CalcWordWrapPositionA(scale, text, textEnd, widthLeft);
-		if (endLine <= text)
-			endLine = text + 1;
-		ImGui::TextUnformatted(text, endLine);
-	}
-	return true;
-}
-
-// Renders all span nodes following lineIdx.
-// Uses CalcWordWrapPositionA (same as imgui_markdown) so mixed bold/italic/normal
-// text wraps correctly. SameLine(0,0) is used between spans as long as the
-// previous widget was a single-line TextUnformatted (which it always is here).
-static void render_spans(MarkdownResource* md, ImguiWindowContext* ctx, int lineIdx) {
-	const char* base = md->mdContent;
-	int i = lineIdx + 1;
-	bool first = true;
-			while (i < md->mdNodeCount && md->mdNodes[i].type >= MD_SPAN_TEXT) {
-				const MarkdownNode& n = md->mdNodes[i];
-				if (!first)
-					ImGui::SameLine(0, 0);
-				first = false;
-
-				switch (n.type) {
-				case MD_SPAN_TEXT:
-					render_text_wrapped(base + n.offset, base + n.offset + n.len);
-					break;
-				case MD_SPAN_BOLD:
-					ImguiPushFontStyle(IMGUI_STACK_BOLD, FONT_STYLE_BOLD,
-						IMGUI_BOLD_FALLBACK_R, IMGUI_BOLD_FALLBACK_G, IMGUI_BOLD_FALLBACK_B, IMGUI_BOLD_FALLBACK_A);
-					render_text_wrapped(base + n.offset, base + n.offset + n.len);
-					ImguiPopFontStyle(IMGUI_STACK_BOLD);
-					break;
-				case MD_SPAN_ITALIC:
-					ImguiPushFontStyle(IMGUI_STACK_ITALIC, FONT_STYLE_ITALIC,
-						IMGUI_ITALIC_FALLBACK_R, IMGUI_ITALIC_FALLBACK_G, IMGUI_ITALIC_FALLBACK_B, IMGUI_ITALIC_FALLBACK_A);
-					render_text_wrapped(base + n.offset, base + n.offset + n.len);
-					ImguiPopFontStyle(IMGUI_STACK_ITALIC);
-					break;
-				case MD_SPAN_CODE:
-					render_inline_code_bg(base, n.offset, n.len);
-					break;
-				case MD_SPAN_LINK: {
-					ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.3f, 0.7f, 1.0f, 1.0f));
-					render_text_wrapped(base + n.offset, base + n.offset + n.len);
-					ImGui::PopStyleColor();
-					if (ImGui::IsItemHovered()) {
-						ImGui::SetTooltip("%.*s", (int)n.urlLen, base + n.urlOffset);
-						if (ImGui::IsMouseReleased(0)) {
-							char url[2048];
-							int ulen = n.urlLen < 2047 ? (int)n.urlLen : 2047;
-							memcpy(url, base + n.urlOffset, ulen);
-							url[ulen] = '\0';
-							SDL_OpenURL(url);
-						}
-					}
-					ImVec2 rMin = ImGui::GetItemRectMin();
-					ImVec2 rMax = ImGui::GetItemRectMax();
-					ImGui::GetWindowDrawList()->AddLine(
-						ImVec2(rMin.x, rMax.y), ImVec2(rMax.x, rMax.y),
-						IM_COL32(77, 179, 255, 200), 1.0f);
-					break;
-				}
-				case MD_IMAGE: {
-					const ImguiTexture* tex = resolve_texture(ctx, base + n.urlOffset, (int)n.urlLen);
-					if (tex && tex->glId != 0) {
-						unsigned int glId = ResolveTextureGlId(tex->resource.luaId);
-						ImGui::Image((ImTextureID)(uintptr_t)glId,
-							ImVec2((float)tex->width, (float)tex->height));
-					}
-					else {
-						char buf[512];
-						int ilen = n.urlLen < 511 ? (int)n.urlLen : 511;
-						snprintf(buf, sizeof(buf), "[Image: %.*s]", ilen, base + n.urlOffset);
-						ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
-						render_text_wrapped(buf, buf + strlen(buf));
-						ImGui::PopStyleColor();
-					}
-					break;
-				}
-				default:
-					render_text_wrapped(base + n.offset, base + n.offset + n.len);
-					break;
-				}
-				i++;
-			}
-		}
 
 // ---------------------------------------------------------------------------
 // RenderFromNodes
@@ -678,26 +544,13 @@ void RenderFromNodes(MarkdownResource* md, ImguiWindowContext* ctx, float w, flo
 					md->mdNodes[runEnd].type >= MD_SPAN_TEXT))
 				runEnd++;
 
-			// Count rows so we can give BeginChild a stable explicit height.
-				// AutoResizeY + HorizontalScrollbar can feedback-loop; explicit height avoids that.
-				int rowCount = 0;
-				for (int r = i; r < runEnd; r++)
-					if (md->mdNodes[r].type == MD_TABLE_ROW) rowCount++;
-				float rowH = ImGui::GetTextLineHeightWithSpacing()
-					+ ImGui::GetStyle().CellPadding.y * 2.0f;
-				float childH = rowCount * rowH
-					+ ImGui::GetStyle().ScrollbarSize        // room for h-scrollbar if needed
-					+ ImGui::GetStyle().FramePadding.y * 2.0f;
-
-				// BeginChild is self-contained: its inner content width does NOT affect the
-				// parent window's content width, so PushTextWrapPos(0.0f) outside the child
-				// still resolves to the correct parent width for following paragraphs.
+			// Wrap table in a horizontal-scroll child so wide tables scroll
+				// rather than clipping or squeezing columns.
 				char childId[32];
 				snprintf(childId, sizeof(childId), "##mdtbl%d", i);
-				ImGui::BeginChild(childId, ImVec2(0.0f, childH), ImGuiChildFlags_None,
-					ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-				ImGuiTableFlags tflags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg
-					| ImGuiTableFlags_SizingFixedFit;
+				ImGui::BeginChild(childId, ImVec2(0, 0), ImGuiChildFlags_AutoResizeY,
+					ImGuiWindowFlags_HorizontalScrollbar);
+				ImGuiTableFlags tflags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit;
 				if (ImGui::BeginTable("##mdtable", cols, tflags)) {
 					int j = i;
 					while (j < runEnd) {
@@ -775,11 +628,11 @@ void RenderFromNodes(MarkdownResource* md, ImguiWindowContext* ctx, float w, flo
 							j++;
 						}
 					}
-							ImGui::EndTable();
-						}
-						ImGui::EndChild();
-						i = runEnd;
-						break;
+					ImGui::EndTable();
+				}
+				ImGui::EndChild();
+			i = runEnd;
+			break;
 		}
 		default:
 			i++;

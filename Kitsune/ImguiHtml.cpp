@@ -772,7 +772,10 @@ int ImguiRenderer_Html(int argc, const KitsuneVariable* argv,
     container->activeDoc = nullptr;
     dl->PopClipRect();
 
-    // Mouse events — only when window is hovered
+    // Advance the ImGui cursor so subsequent widgets don't overlap the HTML content.
+    // litehtml draws directly into the draw list (bypassing ImGui layout), so we
+    // must tell ImGui how much vertical space was consumed.
+    ImGui::Dummy(ImVec2(w, h > 0 ? h : renderedH));
     if (ImGui::IsWindowHovered(ImGuiHoveredFlags_None)) {
         ImVec2 mouse = ImGui::GetMousePos();
         float lx = mouse.x - origin.x;
