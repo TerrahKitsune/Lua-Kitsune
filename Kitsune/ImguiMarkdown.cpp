@@ -475,6 +475,8 @@ static void render_inline_code_bg(const char* base, uint32_t offset, uint32_t le
 // then we TextUnformatted that chunk and loop for the rest at full width.
 // Returns whether any text was rendered (so the caller can SameLine before the next span).
 static bool render_text_wrapped(const char* text, const char* textEnd) {
+	if (text >= textEnd)
+		return false;
 	float scale = ImGui::GetIO().FontGlobalScale;
 	float widthLeft = ImGui::GetContentRegionAvail().x;
 	if (widthLeft <= 0.0f)
@@ -490,6 +492,8 @@ static bool render_text_wrapped(const char* text, const char* textEnd) {
 		text = endLine;
 		if (*text == ' ')
 			text++;
+		if (text >= textEnd)
+			break;
 		widthLeft = ImGui::GetContentRegionAvail().x;
 		endLine = ImGui::GetFont()->CalcWordWrapPositionA(scale, text, textEnd, widthLeft);
 		if (endLine <= text)
@@ -618,15 +622,21 @@ void RenderFromNodes(MarkdownResource* md, ImguiWindowContext* ctx, float w, flo
 			const char* codeStart = base + n.offset;
 			size_t codeLen = n.len;
 			ImVec2 avail = ImGui::GetContentRegionAvail();
-			ImFont* font = ImGui::GetIO().FontDefault;
-			float fontSize = font ? font->FontSize : ImGui::GetFontSize();
-			float lineHeight = fontSize + ImGui::GetStyle().ItemSpacing.y;
 
-			// Size child to content
+			// Count logical lines, but ignore a trailing newline so we don't
+			// produce a spurious empty last line that inflates the widget height.
 			int lines = 1;
-			for (size_t ci = 0; ci < codeLen; ci++)
+			size_t countLen = codeLen;
+			if (countLen > 0 && codeStart[countLen - 1] == '\n') countLen--;
+			if (countLen > 0 && codeStart[countLen - 1] == '\r') countLen--;
+			for (size_t ci = 0; ci < countLen; ci++)
 				if (codeStart[ci] == '\n') lines++;
-			float childH = lines * lineHeight + ImGui::GetStyle().FramePadding.y * 4.0f + 4.0f;
+
+			// InputTextMultiline renders lines as a continuous text buffer — no
+			// ItemSpacing between lines. Height = lines * FontSize + FramePadding*2.
+			float lineH  = ImGui::GetTextLineHeight();
+			float padY   = ImGui::GetStyle().FramePadding.y;
+			float childH = lines * lineH + padY * 2.0f + 2.0f;
 
 			// InputTextMultiline requires a null-terminated buffer; mdContent is one
 			// contiguous block so codeStart is not null-terminated at codeStart+codeLen.
@@ -635,8 +645,8 @@ void RenderFromNodes(MarkdownResource* md, ImguiWindowContext* ctx, float w, flo
 				memcpy(codeBuf, codeStart, codeLen);
 				codeBuf[codeLen] = '\0';
 
-				char inputId[32];
-				snprintf(inputId, sizeof(inputId), "##cb%d", i);
+				char inputId[48];
+					snprintf(inputId, sizeof(inputId), "##cb%d_%d", md->resource.luaId, i);
 				ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.12f, 1.0f));
 				ImGui::InputTextMultiline(
 					inputId,
@@ -684,14 +694,26 @@ void RenderFromNodes(MarkdownResource* md, ImguiWindowContext* ctx, float w, flo
 			int cols = (int)n.level;
 			if (cols < 1) cols = 1;
 
-			// Find the run of table rows/seps to pass to BeginTable once
+			// Find the contiguous run of nodes that belong to this table.
+			// Stop at any line-level node that is not a table row, cell, separator,
+			// or a span that is a child of a table row. We detect "still in table"
+			// by tracking whether we are inside a row (i.e. saw TABLE_ROW and
+			// haven't finished its spans yet).
 			int runEnd = i;
-			while (runEnd < md->mdNodeCount &&
-				(md->mdNodes[runEnd].type == MD_TABLE_ROW ||
-					md->mdNodes[runEnd].type == MD_TABLE_SEP ||
-					md->mdNodes[runEnd].type == MD_TABLE_CELL ||
-					md->mdNodes[runEnd].type >= MD_SPAN_TEXT))
-				runEnd++;
+			bool inRow = false;
+			while (runEnd < md->mdNodeCount) {
+				uint8_t t = md->mdNodes[runEnd].type;
+				if (t == MD_TABLE_ROW || t == MD_TABLE_SEP) {
+					inRow = (t == MD_TABLE_ROW);
+					runEnd++;
+				}
+				else if (t == MD_TABLE_CELL || (inRow && t >= MD_SPAN_TEXT)) {
+					runEnd++;
+				}
+				else {
+					break;
+				}
+			}
 
 			// Count rows so we can give BeginChild a stable explicit height.
 				// AutoResizeY + HorizontalScrollbar can feedback-loop; explicit height avoids that.
@@ -700,17 +722,22 @@ void RenderFromNodes(MarkdownResource* md, ImguiWindowContext* ctx, float w, flo
 					if (md->mdNodes[r].type == MD_TABLE_ROW) rowCount++;
 				float rowH = ImGui::GetTextLineHeightWithSpacing()
 					+ ImGui::GetStyle().CellPadding.y * 2.0f;
-				float childH = rowCount * rowH
-					+ ImGui::GetStyle().ScrollbarSize        // room for h-scrollbar if needed
+				float idealH = rowCount * rowH
+					+ ImGui::GetStyle().ScrollbarSize
 					+ ImGui::GetStyle().FramePadding.y * 2.0f;
+				// Cap to a fixed number of visible rows so large tables don't consume
+				// the entire parent. 12 rows is a reasonable max before scrolling kicks in.
+				float maxH = rowH * 12.0f + ImGui::GetStyle().ScrollbarSize;
+				float childH = idealH < maxH ? idealH : maxH;
 
 				// BeginChild is self-contained: its inner content width does NOT affect the
-				// parent window's content width, so PushTextWrapPos(0.0f) outside the child
-				// still resolves to the correct parent width for following paragraphs.
-				char childId[32];
-				snprintf(childId, sizeof(childId), "##mdtbl%d", i);
-				ImGui::BeginChild(childId, ImVec2(0.0f, childH), ImGuiChildFlags_None,
-					ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+				// parent window's content width, so wrap pos outside the child is unaffected.
+				char childId[48];
+				snprintf(childId, sizeof(childId), "##mdtbl%d_%d", md->resource.luaId, i);
+				ImGuiWindowFlags childFlags = ImGuiWindowFlags_HorizontalScrollbar;
+				if (idealH > maxH)
+					childFlags |= ImGuiWindowFlags_NoScrollWithMouse; // parent scrolls by default; user scrolls table explicitly
+				ImGui::BeginChild(childId, ImVec2(0.0f, childH), ImGuiChildFlags_None, childFlags);
 				ImGuiTableFlags tflags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg
 					| ImGuiTableFlags_SizingFixedFit;
 				if (ImGui::BeginTable("##mdtable", cols, tflags)) {

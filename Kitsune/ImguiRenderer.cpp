@@ -393,12 +393,17 @@ static int ImguiRenderer_PlotLines(int argc, const KitsuneVariable* argv,
 		values_count = lenVar ? (int)lenVar->integer : 0;
 		KitsuneVariableFree(lenVar);
 		if (values_count > 0) {
-			values = (float*)alloca(values_count * sizeof(float));
-			for (int k = 0; k < values_count; k++) {
-				KitsuneVariable ki = {}; ki.type = KITSUNE_TINTEGER; ki.integer = k + 1;
-				KitsuneVariable* kv = KitsuneGetIndex(&_argv[1], &ki);
-				values[k] = kv ? KitsuneAsFloat(kv, 0.0f) : 0.0f;
-				KitsuneVariableFree(kv);
+			values = (float*)malloc(values_count * sizeof(float));
+			if (values) {
+				for (int k = 0; k < values_count; k++) {
+					KitsuneVariable ki = {}; ki.type = KITSUNE_TINTEGER; ki.integer = k + 1;
+					KitsuneVariable* kv = KitsuneGetIndex(&_argv[1], &ki);
+					values[k] = kv ? KitsuneAsFloat(kv, 0.0f) : 0.0f;
+					KitsuneVariableFree(kv);
+				}
+			}
+			else {
+				values_count = 0;
 			}
 		}
 	}
@@ -406,6 +411,7 @@ static int ImguiRenderer_PlotLines(int argc, const KitsuneVariable* argv,
 	const char* overlay = _argc > 2 && _argv[2].type == KITSUNE_TSTRING ? (const char*)_argv[2].data : nullptr;
 	ImGui::PlotLines(label, values, values_count, 0, overlay);
 
+	free(values);
 	if (labelOwned) KitsuneVariableFree(labelOwned);
 	return 0;
 }
@@ -441,8 +447,13 @@ static int ImguiRenderer_Combo(int argc, const KitsuneVariable* argv,
 		count = lenVar ? (int)lenVar->integer : 0;
 		KitsuneVariableFree(lenVar);
 		if (count > 0) {
-			itemVars = (KitsuneVariable**)alloca(count * sizeof(KitsuneVariable*));
-			items = (const char**)alloca(count * sizeof(const char*));
+			itemVars = (KitsuneVariable**)malloc(count * sizeof(KitsuneVariable*));
+			items    = (const char**)malloc(count * sizeof(const char*));
+			if (!itemVars || !items) {
+				free(itemVars); free(items);
+				if (labelOwned) KitsuneVariableFree(labelOwned);
+				return 0;
+			}
 			for (int k = 0; k < count; k++) {
 				KitsuneVariable ki = {}; ki.type = KITSUNE_TINTEGER; ki.integer = k + 1;
 				itemVars[k] = KitsuneGetIndex(&_argv[2], &ki);
@@ -456,6 +467,8 @@ static int ImguiRenderer_Combo(int argc, const KitsuneVariable* argv,
 
 	for (int k = 0; k < count; k++)
 		KitsuneVariableFree(itemVars[k]);
+	free(itemVars);
+	free(items);
 
 	if (labelOwned)
 		KitsuneVariableFree(labelOwned);
@@ -498,8 +511,15 @@ static int ImguiRenderer_ListBox(int argc, const KitsuneVariable* argv,
 		count = lenVar ? (int)lenVar->integer : 0;
 		KitsuneVariableFree(lenVar);
 		if (count > 0) {
-			itemVars = (KitsuneVariable**)alloca(count * sizeof(KitsuneVariable*));
-			items = (const char**)alloca(count * sizeof(const char*));
+			itemVars = (KitsuneVariable**)malloc(count * sizeof(KitsuneVariable*));
+			items    = (const char**)malloc(count * sizeof(const char*));
+			if (!itemVars || !items) {
+				free(itemVars); 
+				free(items);
+				if (labelOwned)
+					KitsuneVariableFree(labelOwned);
+				return 0;
+			}
 			for (int k = 0; k < count; k++) {
 				KitsuneVariable ki = {}; ki.type = KITSUNE_TINTEGER; ki.integer = k + 1;
 				itemVars[k] = KitsuneGetIndex(&_argv[2], &ki);
@@ -513,6 +533,8 @@ static int ImguiRenderer_ListBox(int argc, const KitsuneVariable* argv,
 
 	for (int k = 0; k < count; k++)
 		KitsuneVariableFree(itemVars[k]);
+	free(itemVars);
+	free(items);
 
 	if (labelOwned) KitsuneVariableFree(labelOwned);
 
