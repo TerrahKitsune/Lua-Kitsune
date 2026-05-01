@@ -53,11 +53,20 @@ typedef struct LuaJson {
     // When non-zero, JSON null is decoded as the Json.Null sentinel instead of Lua nil.
     // Default 0 (nil — Lua falsy). Set to 1 via SetDecodeNull(true) for round-trip safety.
     int nullAsSentinel;
+
+    // When non-zero, an empty Lua table encodes as {} instead of [] and a decoded
+    // {} is returned as the Json.EmptyObject sentinel instead of an empty table.
+    // Default 0 ([] — treats empty tables as arrays). Set to 1 via SetEncodeEmptyObject(true).
+    int emptyObjectAsSentinel;
 } LuaJson;
 
 // Returns the unique pointer address used as the JSON null sentinel.
 // lua_pushlightuserdata(L, lua_json_null()) produces the Json.Null value.
 void*    lua_json_null(void);
+
+// Returns the unique pointer address used as the JSON empty-object sentinel.
+// lua_pushlightuserdata(L, lua_json_empty_object()) produces the Json.EmptyObject value.
+void*    lua_json_empty_object(void);
 
 // Returns the unique pointer address used as the registry key for the shared
 // bridge LuaJson instance stored by KitsuneInit.
@@ -77,8 +86,9 @@ int      lua_json_decode(lua_State* L);
 
 int lua_json_gc(lua_State* L);
 int lua_json_tostring(lua_State* L);
-int lua_json_new(lua_State* L);                 // Json.New([pretty])
-int lua_json_set_decode_null(lua_State* L);     // json:SetDecodeNull(bool)
+int lua_json_new(lua_State* L);                      // Json.New([pretty])
+int lua_json_set_decode_null(lua_State* L);          // json:SetDecodeNull(bool)
+int lua_json_set_encode_empty_object(lua_State* L);  // json:SetEncodeEmptyObject(bool)
 
 // Both functions handle the static and instance calling conventions:
 //   Json.Decode(str)             /  json:Decode(str)

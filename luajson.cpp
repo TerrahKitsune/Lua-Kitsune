@@ -11,6 +11,10 @@
 // Unique address used as the JSON null sentinel.
 // Both encoder and decoder reference this directly — no registry lookup needed.
 static char g_json_null;
+// Unique address used as the JSON empty-object sentinel.
+// When emptyObjectAsSentinel is enabled, empty Lua tables encode as {} and
+// this sentinel decodes back to the lightuserdata so round-trips are lossless.
+static char g_json_empty_object;
 // Unique address used as the Lua registry key for the shared bridge LuaJson instance.
 static char g_bridge_json_key;
 void* lua_json_bridge_registry_key(void) {
@@ -19,6 +23,10 @@ void* lua_json_bridge_registry_key(void) {
 
 void* lua_json_null(void) {
 	return &g_json_null;
+}
+
+void* lua_json_empty_object(void) {
+	return &g_json_empty_object;
 }
 
 // =============================================================================
@@ -66,8 +74,15 @@ int lua_json_new(lua_State* L) {
 }
 
 int lua_json_set_decode_null(lua_State* L) {
-	LuaJson* j       = lua_json_check(L, 1);
+	LuaJson* j        = lua_json_check(L, 1);
 	j->nullAsSentinel = lua_toboolean(L, 2);
+	lua_pushvalue(L, 1);
+	return 1;
+}
+
+int lua_json_set_encode_empty_object(lua_State* L) {
+	LuaJson* j                = lua_json_check(L, 1);
+	j->emptyObjectAsSentinel  = lua_toboolean(L, 2);
 	lua_pushvalue(L, 1);
 	return 1;
 }
@@ -246,6 +261,14 @@ static void enc_table(LuaJson* j, lua_State* L, int depth) {
 	}
 	seq = seq && (count == n);
 
+	// When emptyObjectAsSentinel is enabled, an empty table encodes as {} rather
+	// than [] so it is distinguishable from an empty array on round-trip.
+	if (j->emptyObjectAsSentinel && count == 0 && n == 0) {
+		rec_pop(j);
+		jbuf_emitlit(j, L, "{}");
+		return;
+	}
+
 	// -- Encode ----------------------------------------------------------------
 	if (seq) {
 		jbuf_emitc(j, L, '[');
@@ -291,6 +314,11 @@ static void enc_value(LuaJson* j, lua_State* L, int depth) {
 	// Check null sentinel before anything else
 	if (lua_islightuserdata(L, -1) && lua_topointer(L, -1) == lua_json_null()) {
 		jbuf_emitlit(j, L, "null");
+		return;
+	}
+	// Check empty-object sentinel
+	if (lua_islightuserdata(L, -1) && lua_topointer(L, -1) == lua_json_empty_object()) {
+		jbuf_emitlit(j, L, "{}");
 		return;
 	}
 	switch (lua_type(L, -1)) {
@@ -577,8 +605,15 @@ static void dec_number(LuaJson* j, lua_State* L, char first) {
 static void dec_object(LuaJson* j, lua_State* L) {
 	lua_newtable(L);
 	char c = jread_skip(j);
-	if (c == '}')
+	if (c == '}') {
+		// When the empty-object sentinel is enabled, replace the empty table with
+		// the sentinel lightuserdata so round-trips through Encode/Decode are lossless.
+		if (j->emptyObjectAsSentinel) {
+			lua_pop(L, 1);
+			lua_pushlightuserdata(L, lua_json_empty_object());
+		}
 		return;
+	}
 	jread_unget(j, L, c);
 	for (;;) {
 		c = jread_skip(j);

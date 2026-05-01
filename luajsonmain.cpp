@@ -2,13 +2,14 @@
 #include "luajsonmain.h"
 
 static const struct luaL_Reg json_functions[] = {
-	{ "New",              lua_json_new               },  // Json.New([pretty])
-	{ "Decode",           lua_json_decode            },  // json:Decode(str | fn)
-	{ "Encode",           lua_json_encode            },  // json:Encode(value)
-	{ "EncodeIntoStream", lua_json_encode_into_stream },  // json:EncodeIntoStream(stream, value)
-	{ "DecodeFromStream", lua_json_decode_from_stream },  // json:DecodeFromStream(stream)
-	{ "Dispose",          lua_json_gc                },  // json:Dispose()
-	{ "SetDecodeNull",    lua_json_set_decode_null   },  // json:SetDecodeNull(bool)
+	{ "New",                  lua_json_new                    },  // Json.New([pretty])
+	{ "Decode",               lua_json_decode                 },  // json:Decode(str | fn)
+	{ "Encode",               lua_json_encode                 },  // json:Encode(value)
+	{ "EncodeIntoStream",     lua_json_encode_into_stream     },  // json:EncodeIntoStream(stream, value)
+	{ "DecodeFromStream",     lua_json_decode_from_stream     },  // json:DecodeFromStream(stream)
+	{ "Dispose",              lua_json_gc                     },  // json:Dispose()
+	{ "SetDecodeNull",        lua_json_set_decode_null        },  // json:SetDecodeNull(bool)
+	{ "SetEncodeEmptyObject", lua_json_set_encode_empty_object },  // json:SetEncodeEmptyObject(bool)
 	{ NULL, NULL }
 };
 
@@ -26,6 +27,12 @@ int luaopen_json(lua_State* L) {
 	// Lua code compares with:  if value == Json.Null then
 	lua_pushlightuserdata(L, lua_json_null());
 	lua_setfield(L, -2, "Null");
+
+	// Json.EmptyObject — the unique lightuserdata sentinel for empty JSON objects.
+	// Only produced during decode when SetEncodeEmptyObject(true) is active.
+	// Lua code compares with:  if value == Json.EmptyObject then
+	lua_pushlightuserdata(L, lua_json_empty_object());
+	lua_setfield(L, -2, "EmptyObject");
 
 	// Instance metatable: __gc, __tostring, and __index = module table so all
 	// json_functions are reachable as both Json.Xxx() and json:Xxx().

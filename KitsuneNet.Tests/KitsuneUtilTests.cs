@@ -6144,6 +6144,149 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("1,nil,3");
         }
 
+        // -- SetEncodeEmptyObject -------------------------------------------------
+        [Fact]
+        public async Task SetEncodeEmptyObject_DefaultFalse_EmptyTableEncodesAsArray()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local json = Json.New()
+                return json:Encode({})
+            ");
+            r.String.ShouldBe("[]");
+        }
+
+        [Fact]
+        public async Task SetEncodeEmptyObject_True_EmptyTableEncodesAsObject()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local json = Json.New()
+                json:SetEncodeEmptyObject(true)
+                return json:Encode({})
+            ");
+            r.String.ShouldBe("{}");
+        }
+
+        [Fact]
+        public async Task SetEncodeEmptyObject_True_NonEmptyTableUnaffected()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local json = Json.New()
+                json:SetEncodeEmptyObject(true)
+                return json:Encode({1, 2, 3})
+            ");
+            r.String.ShouldBe("[1,2,3]");
+        }
+
+        [Fact]
+        public async Task SetEncodeEmptyObject_True_EmptyObjectSentinelEncodesAsObject()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local json = Json.New()
+                json:SetEncodeEmptyObject(true)
+                return json:Encode(Json.EmptyObject)
+            ");
+            r.String.ShouldBe("{}");
+        }
+
+        [Fact]
+        public async Task SetEncodeEmptyObject_EmptyObject_IsDistinctFromNull()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                return tostring(Json.EmptyObject ~= Json.Null)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task SetEncodeEmptyObject_EmptyObject_SameReferenceEveryTime()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                return tostring(Json.EmptyObject == Json.EmptyObject)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task SetEncodeEmptyObject_True_DecodeEmptyObjectReturnsSentinel()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local json = Json.New()
+                json:SetEncodeEmptyObject(true)
+                local v = json:Decode('{}')
+                return tostring(v == Json.EmptyObject)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task SetEncodeEmptyObject_False_DecodeEmptyObjectReturnsTable()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local json = Json.New()
+                local v = json:Decode('{}')
+                return tostring(type(v) == 'table')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task SetEncodeEmptyObject_True_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local json = Json.New()
+                json:SetEncodeEmptyObject(true)
+                local encoded = json:Encode({})
+                local decoded = json:Decode(encoded)
+                return tostring(decoded == Json.EmptyObject and encoded == '{}')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task SetEncodeEmptyObject_True_SentinelInTable_EncodesAsObject()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local json = Json.New()
+                json:SetEncodeEmptyObject(true)
+                return json:Encode({empty = Json.EmptyObject})
+            ");
+            r.String.ShouldBe("{\"empty\":{}}");
+        }
+
+        [Fact]
+        public async Task SetEncodeEmptyObject_ReturnsSelf_AllowsChaining()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local json = Json.New():SetEncodeEmptyObject(true)
+                return json:Encode({})
+            ");
+            r.String.ShouldBe("{}");
+        }
+
+        [Fact]
+        public async Task SetEncodeEmptyObject_False_AfterTrue_RestoresArray()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local json = Json.New()
+                json:SetEncodeEmptyObject(true)
+                json:SetEncodeEmptyObject(false)
+                return json:Encode({})
+            ");
+            r.String.ShouldBe("[]");
+        }
+
         // -- Stream extras --------------------------------------------------------
         // -- Stream.Id ------------------------------------------------------------
         [Fact]

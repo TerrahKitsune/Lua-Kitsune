@@ -1946,6 +1946,7 @@ db:Close()
 ```lua
 Json    Json.New(opt pretty)          -- primary constructor
 value   Json.Null                     -- unique null sentinel (lightuserdata)
+value   Json.EmptyObject              -- unique empty-object sentinel (lightuserdata)
 string  json:Encode(value)
 value   json:Decode(string | fn | stream)
 bool    json:EncodeIntoStream(stream, value)
@@ -1957,11 +1958,13 @@ nil     json:Dispose()
 |----------|-------------|
 | `New` | Create a new Json instance. Pass `true` for pretty-printed output (2 spaces per indent level) |
 | `Json.Null` | The unique lightuserdata sentinel that encodes to/decodes from JSON `null`. Compare with `== Json.Null` |
+| `Json.EmptyObject` | The unique lightuserdata sentinel that encodes to/decodes from JSON `{}`. Only produced during decode when `SetEncodeEmptyObject(true)` is active. Compare with `== Json.EmptyObject` |
 | `Encode` | Encode a Lua value to a JSON string |
 | `Decode` | Decode JSON from a string, a chunk-reader function, or a `Stream`. Returns the decoded value |
 | `EncodeIntoStream` | Encode `value` and write the JSON bytes directly into `stream`. Returns `true` on success, or `false, errmsg` if the stream is not writable |
 | `DecodeFromStream` | Decode one JSON value from `stream`. Returns the decoded value, or `nil, errmsg` if the stream is not readable |
 | `SetDecodeNull(bool)` | Control how JSON `null` is decoded. Default `false` — decodes as Lua `nil` (falsy, coalescing works). Pass `true` to decode as the `Json.Null` sentinel instead (truthy, round-trip safe but lossy on re-encode if value was nil) |
+| `SetEncodeEmptyObject(bool)` | Control how empty Lua tables are encoded and how `{}` is decoded. Default `false` — empty tables encode as `[]` and `{}` decodes as an empty Lua table. Pass `true` to encode empty tables as `{}` and decode `{}` as the `Json.EmptyObject` sentinel (round-trip safe) |
 | `Dispose` | Explicitly free the internal output buffer; called automatically by the GC |
 
 ### Null Sentinel
@@ -1993,6 +1996,43 @@ print(json2:Encode(t2))         -- {"value":null}
 
 -- Values from internal modules already use the sentinel:
 -- local row = mysql_result_row  →  row.nullable_col == Json.Null  (not nil)
+```
+
+### EmptyObject Sentinel
+
+By default an empty Lua table (`{}`) encodes as a JSON array (`[]`), which is indistinguishable from an empty JSON object. Call `json:SetEncodeEmptyObject(true)` to opt into the `Json.EmptyObject` sentinel:
+
+- **Encoding** — an empty Lua table encodes as `{}` instead of `[]`. The `Json.EmptyObject` lightuserdata also always encodes as `{}`.
+- **Decoding** — a JSON `{}` (empty object) is decoded as the `Json.EmptyObject` sentinel instead of an empty Lua table, making round-trips lossless.
+
+`Json.EmptyObject` is a distinct lightuserdata address from `Json.Null`. Both can coexist in the same instance.
+
+```lua
+local json = Json.New()
+json:SetEncodeEmptyObject(true)
+
+-- Empty table now encodes as {}
+print(json:Encode({}))                  -- {}
+
+-- Non-empty tables are unaffected
+print(json:Encode({1, 2, 3}))           -- [1,2,3]
+print(json:Encode({x = 1}))             -- {"x":1}
+
+-- Decode {} → Json.EmptyObject sentinel
+local v = json:Decode('{}')
+print(v == Json.EmptyObject)            -- true
+print(v == Json.Null)                   -- false
+
+-- Sentinel in a table round-trips as {}
+print(json:Encode({meta = Json.EmptyObject}))  -- {"meta":{}}
+
+-- Chaining
+local j2 = Json.New():SetEncodeEmptyObject(true)
+print(j2:Encode({}))                    -- {}
+
+-- Restore default ([] for empty tables)
+json:SetEncodeEmptyObject(false)
+print(json:Encode({}))                  -- []
 ```
 
 ### Decode Input Forms
