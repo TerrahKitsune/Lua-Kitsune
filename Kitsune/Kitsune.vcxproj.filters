@@ -383,6 +383,9 @@
     <ClInclude Include="ImguiHtml.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="KitsuneLuaDebug.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Kitsune.rc">

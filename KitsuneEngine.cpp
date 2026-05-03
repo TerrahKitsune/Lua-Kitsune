@@ -24,6 +24,7 @@
 
 #include "mem.h"
 #include "lua_main_incl.h"
+#include "Kitsune/KitsuneLuaDebug.h"
 
 #ifdef KITSUNE_MYSQL
 #include "MySQLMain.h"
@@ -1000,7 +1001,7 @@ lua_State* CreateCoroutineThread(KitsuneState* state, KitsuneCoroutine* slot) {
 	slot->threadRef = luaL_ref(state->L, LUA_REGISTRYINDEX);
 	// The hook is per-thread: lua_newthread does not inherit the parent's hook,
 	// so this call cannot be moved to KitsuneInit.
-	lua_sethook(T, Ticker, LUA_MASKCOUNT, 1000);
+	kitsune_sethook(T, Ticker, LUA_MASKCOUNT, 1000);
 	return T;
 }
 
@@ -1557,7 +1558,9 @@ extern "C" {
 		// PlatformEvent default ctor initialises all three events; no Create() call needed.
 		StartCounter(state);
 
-		state->L = lua_newstate(l_alloc, state);
+		unsigned int seed = (unsigned int)std::chrono::duration_cast<std::chrono::nanoseconds>(
+			std::chrono::steady_clock::now().time_since_epoch()).count();
+		state->L = lua_newstate(l_alloc, state, seed);
 		if (!state->L) {
 			delete state;
 #ifdef _WIN32

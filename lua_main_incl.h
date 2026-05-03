@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include "xp_lua_incl.h"
+#include "Kitsune/KitsuneLuaDebug.h"
 #include "mem.h"
 #ifndef _WIN32
 #include <stdint.h>
@@ -17,23 +18,23 @@
 // The hook is always restored before returning or re-raising, so a Lua-level
 // pcall/xpcall catching the error cannot leave the coroutine hookless.
 static inline void lua_call_nohook(lua_State* L, int nargs, int nresults) {
-	lua_Hook savedHook  = lua_gethook(L);
-	int      savedMask  = lua_gethookmask(L);
-	int      savedCount = lua_gethookcount(L);
-	lua_sethook(L, NULL, 0, 0);
+	lua_Hook savedHook  = kitsune_gethook(L);
+	int      savedMask  = kitsune_gethookmask(L);
+	int      savedCount = kitsune_gethookcount(L);
+	kitsune_sethook(L, NULL, 0, 0);
 	int rc = lua_pcall(L, nargs, nresults, 0);
-	lua_sethook(L, savedHook, savedMask, savedCount);
+	kitsune_sethook(L, savedHook, savedMask, savedCount);
 	if (rc != LUA_OK)
 		lua_error(L);
 }
 
 static inline int lua_pcall_nohook(lua_State* L, int nargs, int nresults, int msgh) {
-	lua_Hook savedHook  = lua_gethook(L);
-	int      savedMask  = lua_gethookmask(L);
-	int      savedCount = lua_gethookcount(L);
-	lua_sethook(L, NULL, 0, 0);
+	lua_Hook savedHook  = kitsune_gethook(L);
+	int      savedMask  = kitsune_gethookmask(L);
+	int      savedCount = kitsune_gethookcount(L);
+	kitsune_sethook(L, NULL, 0, 0);
 	int rc = lua_pcall(L, nargs, nresults, msgh);
-	lua_sethook(L, savedHook, savedMask, savedCount);
+	kitsune_sethook(L, savedHook, savedMask, savedCount);
 	return rc;
 }
 
