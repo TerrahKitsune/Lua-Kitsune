@@ -390,7 +390,7 @@ static int db_sethook (lua_State *L) {
   lua_pushthread(L1); lua_xmove(L1, L, 1);  /* key (thread) */
   lua_pushvalue(L, arg + 1);  /* value (hook function) */
   lua_rawset(L, -3);  /* hooktable[L1] = new Lua hook */
-  lua_sethook_real(L1, func, mask, count);
+  lua_sethook(L1, func, mask, count);
   return 0;
 }
 
@@ -399,8 +399,8 @@ static int db_gethook (lua_State *L) {
   int arg;
   lua_State *L1 = getthread(L, &arg);
   char buff[5];
-  int mask = lua_gethookmask_real(L1);
-  lua_Hook hook = lua_gethook_real(L1);
+  int mask = lua_gethookmask(L1);
+  lua_Hook hook = lua_gethook(L1);
   if (hook == NULL) {  /* no hook? */
     luaL_pushfail(L);
     return 1;
@@ -415,7 +415,7 @@ static int db_gethook (lua_State *L) {
     lua_remove(L, -2);  /* remove hook table */
   }
   lua_pushstring(L, unmakemask(mask, buff));  /* 2nd result = mask */
-  lua_pushinteger(L, lua_gethookcount_real(L1));  /* 3rd result = count */
+  lua_pushinteger(L, lua_gethookcount(L1));  /* 3rd result = count */
   return 3;
 }
 

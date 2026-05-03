@@ -139,17 +139,93 @@ int main(int argc, char* argv[]) {
 	signal(SIGTERM, SigIntHandler);
 #endif
 
-	const char* file = argc > 1 ? argv[1] : "main.lua";
+	// Parse [-e "expr"]... [script] [args...]
+	// Collect all -e expressions, then find the optional script and its trailing args.
+	// This matches the standard Lua CLI convention used by lua-debug:
+	//   kitsune.exe -e "require('debugger').setup()" main.lua arg1 arg2
+	const char** eExprs = (const char**)malloc(argc * sizeof(const char*));
+	memset(eExprs, 0, argc * sizeof(const char*));
+	int eCount = 0;
+	const char* scriptName = nullptr;
+	int scriptArgc = 0;
+	int scriptArgStart = 0;
 
-	// Convert extra command-line args (argv[2..]) to KitsuneVariable array.
-	int extraArgc = argc > 2 ? argc - 2 : 0;
+	{
+		int i = 1;
+		while (i < argc) {
+			if (strcmp(argv[i], "-e") == 0) {
+				i++;
+				if (i < argc)
+					eExprs[eCount++] = argv[i++];
+			}
+			else {
+				scriptName = argv[i++];
+				scriptArgStart = i;
+				scriptArgc = argc - i;
+				break;
+			}
+		}
+	}
+
+	// Fall back to main.lua if no script and no -e expressions given
+	if (!scriptName && eCount == 0)
+		scriptName = "main.lua";
+
+	// arg[0] is the script name, or the last -e string if there is no script
+	const char* arg0 = scriptName ? scriptName : (eCount > 0 ? eExprs[eCount - 1] : "");
+
+	// Build trailing args array (argv[scriptArgStart..])
 	KitsuneVariable* vars = nullptr;
-	if (extraArgc > 0) {
-		vars = new KitsuneVariable[extraArgc]();
-		for (int i = 0; i < extraArgc; i++) {
+	if (scriptArgc > 0) {
+		vars = (KitsuneVariable*)malloc(scriptArgc * sizeof(KitsuneVariable));
+		memset(vars, 0, scriptArgc * sizeof(KitsuneVariable));
+		for (int i = 0; i < scriptArgc; i++) {
 			vars[i].type = KITSUNE_TSTRING;
-			vars[i].length = strlen(argv[i + 2]);
-			vars[i].data = (unsigned char*)argv[i + 2];
+			vars[i].length = strlen(argv[scriptArgStart + i]);
+			vars[i].data = (unsigned char*)argv[scriptArgStart + i];
+		}
+	}
+
+	// Build the standard Lua arg table:
+	//   arg[-1] = executable path
+	//   arg[0]  = script path (or last -e string if no script)
+	//   arg[1..n] = trailing arguments after the script
+	{
+		KitsuneVariable tableVar = {};
+		tableVar.type = KITSUNE_TTABLECONTENTS;
+		KitsuneVariable* argTable = KitsuneAnchorVariable(&tableVar);
+		if (argTable) {
+			KitsuneVariable kNeg1 = {};
+			kNeg1.type = KITSUNE_TINTEGER;
+			kNeg1.integer = -1;
+			KitsuneVariable vExe = {};
+			vExe.type = KITSUNE_TSTRING;
+			vExe.data = (unsigned char*)argv[0];
+			vExe.length = strlen(argv[0]);
+			KitsuneSetIndex(argTable, &kNeg1, &vExe);
+
+			KitsuneVariable k0 = {};
+			k0.type = KITSUNE_TINTEGER;
+			k0.integer = 0;
+			KitsuneVariable v0 = {};
+			v0.type = KITSUNE_TSTRING;
+			v0.data = (unsigned char*)arg0;
+			v0.length = strlen(arg0);
+			KitsuneSetIndex(argTable, &k0, &v0);
+
+			for (int i = 0; i < scriptArgc; i++) {
+				KitsuneVariable ki = {};
+				ki.type = KITSUNE_TINTEGER;
+				ki.integer = i + 1;
+				KitsuneVariable vi = {};
+				vi.type = KITSUNE_TSTRING;
+				vi.data = (unsigned char*)argv[scriptArgStart + i];
+				vi.length = strlen(argv[scriptArgStart + i]);
+				KitsuneSetIndex(argTable, &ki, &vi);
+			}
+
+			KitsuneSetVariable("arg", argTable);
+			KitsuneVariableFree(argTable);
 		}
 	}
 
@@ -157,38 +233,83 @@ int main(int argc, char* argv[]) {
 	KitsuneRegisterFunction("Test", Test);
 #endif
 
-	int id = KitsuneExecuteFileAsync(file, extraArgc, vars);
-	delete[] vars;
+	int ret = 0;
 
-	if (id < 0) {
-		fprintf(stderr, "Failed to start %s\n", file);
+	// Run all -e expressions first, blocking, in order
+	for (int i = 0; i < eCount && ret == 0; i++) {
+		KitsuneVariable* result = KitsuneExecuteString(eExprs[i], 0, nullptr);
+		if (!result) {
+			fprintf(stderr, "Failed to execute -e expression\n");
+			free(eExprs);
+			free(vars);
+			KitsuneCleanup();
+			return -1;
+		}
+		if (result->type == KITSUNE_TERROR) {
+			if (result->data && result->length > 0)
+				fprintf(stderr, "%.*s\n", (int)result->length, (char*)result->data);
+			ret = 1;
+		}
+		KitsuneVariableFree(result);
+	}
+	free(eExprs);
+
+	if (ret != 0) {
+		free(vars);
 		KitsuneCleanup();
-		return -1;
+		return ret;
 	}
 
-	// Block until the coroutine finishes or an exit signal is received.
-	while (!KitsuneHasResult(id, nullptr) && !g_exitSignaled.load()) {
-		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	if (!scriptName) {
+		free(vars);
 	}
+	else {
+		int id = KitsuneExecuteFileAsync(scriptName, scriptArgc, vars);
+		free(vars);
 
-	// If the signal fired before the coroutine reported done, wait for the
-	// interrupt to propagate so KitsuneGetError / KitsuneGetResult are valid.
-	if (!KitsuneHasResult(id, nullptr))
-		KitsuneWait();
+		if (id < 0) {
+			fprintf(stderr, "Failed to start %s\n", scriptName);
+			KitsuneCleanup();
+			return -1;
+		}
 
-	size_t errLen = KitsuneGetError(id, nullptr, 0);
-	int ret = errLen > 0 ? 1 : 0;
-	if (errLen > 0) {
-		char* errBuf = new char[errLen + 1];
-		KitsuneGetError(id, errBuf, errLen + 1);
-		fprintf(stderr, "%s\n", errBuf);
-		delete[] errBuf;
-	}
+		// Block until the coroutine finishes or an exit signal is received.
+		while (!KitsuneHasResult(id, nullptr) && !g_exitSignaled.load()) {
+			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		}
+
+		// If the signal fired before the coroutine reported done, wait for the
+		// interrupt to propagate so KitsuneGetError / KitsuneGetResult are valid.
+		if (!KitsuneHasResult(id, nullptr))
+			KitsuneWait();
+
+		size_t errLen = KitsuneGetError(id, nullptr, 0);
+		ret = errLen > 0 ? 1 : 0;
+		if (errLen > 0) {
+			char* errBuf = (char*)malloc(errLen + 1);
+			KitsuneGetError(id, errBuf, errLen + 1);
+			fprintf(stderr, "%s\n", errBuf);
+			free(errBuf);
+		}
 
 #ifdef KITSUNE_IMGUI
-	if (g_imguiCtx)
-		RunImguiSession();
-	else {
+		if (g_imguiCtx)
+			RunImguiSession();
+		else {
+			KitsuneVariable* result = KitsuneGetResult(id);
+			if (result) {
+				if (result->type == KITSUNE_TSTRING && result->data && result->length > 0)
+					printf("%.*s\n", (int)result->length, (char*)result->data);
+				else if (result->type == KITSUNE_TNUMBER)
+					printf("%f\n", result->number);
+				else if (result->type == KITSUNE_TBOOLEAN)
+					printf("%s\n", result->boolean ? "true" : "false");
+				else if (result->type != KITSUNE_TNIL || result->type != KITSUNE_TNONE)
+					printf("(type %d)\n", result->type);
+				KitsuneVariableFree(result);
+			}
+		}
+#else
 		KitsuneVariable* result = KitsuneGetResult(id);
 		if (result) {
 			if (result->type == KITSUNE_TSTRING && result->data && result->length > 0)
@@ -201,21 +322,8 @@ int main(int argc, char* argv[]) {
 				printf("(type %d)\n", result->type);
 			KitsuneVariableFree(result);
 		}
-	}
-#else
-	KitsuneVariable* result = KitsuneGetResult(id);
-	if (result) {
-		if (result->type == KITSUNE_TSTRING && result->data && result->length > 0)
-			printf("%.*s\n", (int)result->length, (char*)result->data);
-		else if (result->type == KITSUNE_TNUMBER)
-			printf("%f\n", result->number);
-		else if (result->type == KITSUNE_TBOOLEAN)
-			printf("%s\n", result->boolean ? "true" : "false");
-		else if (result->type != KITSUNE_TNIL || result->type != KITSUNE_TNONE)
-			printf("(type %d)\n", result->type);
-		KitsuneVariableFree(result);
-	}
 #endif
+	}
 
 	KitsuneCleanup();
 

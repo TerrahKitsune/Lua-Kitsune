@@ -999,9 +999,12 @@ lua_State* CreateCoroutineThread(KitsuneState* state, KitsuneCoroutine* slot) {
 	lua_State* T = lua_newthread(state->L);
 	slot->thread = T;
 	slot->threadRef = luaL_ref(state->L, LUA_REGISTRYINDEX);
-	// The hook is per-thread: lua_newthread does not inherit the parent's hook,
-	// so this call cannot be moved to KitsuneInit.
+	// The hook is per-thread: lua_newthread does not inherit the parent's hook.
 	kitsune_sethook(T, Ticker, LUA_MASKCOUNT, 1000);
+	// Propagate any external (debugger) hook from the main state to this thread.
+	// luadebug.dll calls lua_sethook on state->L during the -e bootstrap, so new
+	// coroutine threads must inherit that external slot or breakpoints never fire.
+	kitsune_inherit_external_hook(state->L, T);
 	return T;
 }
 
@@ -1557,6 +1560,7 @@ extern "C" {
 		state->taskErrorHandlerRef = 0;
 		// PlatformEvent default ctor initialises all three events; no Create() call needed.
 		StartCounter(state);
+		InitLuaDebug(state);
 
 		unsigned int seed = (unsigned int)std::chrono::duration_cast<std::chrono::nanoseconds>(
 			std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -1707,6 +1711,8 @@ extern "C" {
 // Releases all resources held by slot and memsets it to the zeroed NOT_USED state.
 // Caller MUST hold slotsLock. This is the only function allowed to set id back to 0.
 void FreeSlot(KitsuneState* state, KitsuneCoroutine* slot) {
+	if (slot->thread)
+		kitsune_hook_remove_state(slot->thread);
 	if (slot->threadRef > 0) {
 		luaL_unref(state->L, LUA_REGISTRYINDEX, slot->threadRef);
 	}
@@ -3995,6 +4001,8 @@ extern "C" {
 				KitsuneCoroutine* slot = state->slots[i];
 				if (slot->id != 0) {
 					if (state->L) {
+						if (slot->thread)
+							kitsune_hook_remove_state(slot->thread);
 						if (slot->threadRef > 0)
 							luaL_unref(state->L, LUA_REGISTRYINDEX, slot->threadRef);
 					}
@@ -4027,7 +4035,8 @@ extern "C" {
 				DrainPendingVariableChain(state->L);
 
 				lua_gc(state->L, LUA_GCCOLLECT, 0);
-				lua_close(state->L);
+					kitsune_hook_remove_state(state->L);
+					lua_close(state->L);
 				state->L = nullptr;
 			}
 			delete state;

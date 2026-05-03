@@ -6,6 +6,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <thread>
+#include <unordered_map>
 #include <cstdint>
 #include "platform.h"
 #include "mem.h"
@@ -77,6 +78,12 @@ struct KitsuneState {
     std::atomic<long> runningCount{ 0 };
     std::atomic<long> currentCoroutineId{ 0 };
     int               taskErrorHandlerRef{ 0 };
+
+    // Dual-hook registry: one entry per tracked lua_State*.
+    // Owned here so there are no dangling globals and cleanup is trivially
+    // tied to KitsuneState lifetime.
+    std::mutex                                        hookMtx;
+    std::unordered_map<lua_State*, KitsuneHookState> hookMap;
 };
 
 // -- Global state (defined in KitsuneEngine.cpp) ------------------------------

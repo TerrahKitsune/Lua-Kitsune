@@ -713,6 +713,9 @@
     <ClCompile Include="luatask.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="KitsuneLuaDebug.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="KitsuneEngine.h">
@@ -1115,6 +1118,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="luatask.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Kitsune\KitsuneLuaDebug.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

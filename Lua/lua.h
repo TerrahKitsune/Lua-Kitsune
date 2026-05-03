@@ -483,6 +483,15 @@ LUA_API lua_Hook (lua_gethook_real) (lua_State *L);
 LUA_API int (lua_gethookmask_real) (lua_State *L);
 LUA_API int (lua_gethookcount_real) (lua_State *L);
 
+/* Public merged hook API (routes through KitsuneLuaDebug merge layer).
+** Use these everywhere outside of the Lua core itself.
+** ldblib.c (debug.sethook/gethook) uses these so that debugger hooks
+** and the Kitsune scheduler hook coexist via the merged dispatcher. */
+LUA_API void (lua_sethook) (lua_State *L, lua_Hook func, int mask, int count);
+LUA_API lua_Hook (lua_gethook) (lua_State *L);
+LUA_API int (lua_gethookmask) (lua_State *L);
+LUA_API int (lua_gethookcount) (lua_State *L);
+
 
 struct lua_Debug {
   int event;

@@ -105,6 +105,7 @@
     <ClCompile Include="HttpCurl.cpp" />
     <ClCompile Include="HttpCurlMain.cpp" />
     <ClCompile Include="KitsuneEngine.cpp" />
+    <ClCompile Include="KitsuneLuaDebug.cpp" />
     <ClCompile Include="kitsuneuserdata.cpp" />
     <ClCompile Include="LuaArchive.cpp" />
     <ClCompile Include="LuaArchiveMain.cpp" />
@@ -253,6 +254,7 @@
     <ClInclude Include="hiredis\sds.h" />
     <ClInclude Include="KitsuneEngine.h" />
     <ClInclude Include="kitsuneuserdata.h" />
+    <ClInclude Include="Kitsune\KitsuneLuaDebug.h" />
     <ClInclude Include="kitsune_internal.h" />
     <ClInclude Include="libyaml\src\config.h" />
     <ClInclude Include="LuaArchive.h" />
@@ -379,6 +381,7 @@
     <ClInclude Include="TimerMain.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include=".vscode\launch.json" />
     <None Include="build-linux-and-test.ps1" />
     <None Include="Lua functions.md" />
     <None Include="testEnvironments.json" />
