@@ -130,6 +130,7 @@
     <ClCompile Include="luatimespan.cpp" />
     <ClCompile Include="luatoml.cpp" />
     <ClCompile Include="luauint.cpp" />
+    <ClCompile Include="LuaWebSocket.cpp" />
     <ClCompile Include="timespanmain.cpp" />
     <ClCompile Include="tomlc99\toml.c" />
     <ClCompile Include="luatomlmain.cpp" />
@@ -286,6 +287,7 @@
     <ClInclude Include="luainimain.h" />
     <ClInclude Include="luaalivetoken.h" />
     <ClInclude Include="luauint.h" />
+    <ClInclude Include="LuaWebSocket.h" />
     <ClInclude Include="luayaml.h" />
     <ClInclude Include="luayamlmain.h" />
     <ClInclude Include="luaxml.h" />
@@ -384,6 +386,7 @@
     <None Include=".vscode\launch.json" />
     <None Include="build-linux-and-test.ps1" />
     <None Include="Lua functions.md" />
+    <None Include="plans\websocket-server.md" />
     <None Include="testEnvironments.json" />
     <None Include="triplets\x64-windows-static-md.cmake" />
     <None Include="vcpkg.json" />

@@ -6,8 +6,8 @@
 #include "stream.h"
 #include <curl/curl.h>
 
-#define LUAHTTPCLIENT  "LuaHTTPClient"
-#define LUAHTTPREQUEST "LuaHTTPRequest"
+#define LUAHTTPCLIENT      "LuaHTTPClient"
+#define LUAHTTPCURLREQUEST "LuaHTTPRequest"
 
 // -- CurlMsg — per-easy-handle completion record ------------------------------
 // Allocated alongside each easy handle; stored as CURLOPT_PRIVATE so that
@@ -31,13 +31,13 @@ typedef struct LuaHttpClient {
 	long   timeoutMs;
 	bool   followRedirects;
 	bool   verifySsl;
-	bool   binaryMode;      // true = subsequent WebSocket writes use CURLWS_BINARY
-	int64_t lastRequestElapsedTicks; // 100-ns ticks of the most recently completed request; 0 if none
-	int    aliveTokenRef;   // LUA_NOREF when not set; registry ref to an AliveToken userdata
+
+	int      aliveTokenRef;            // LUA_NOREF when not set; registry ref to an AliveToken userdata
+	int64_t  lastRequestElapsedTicks;  // duration of the last completed request in 100-ns ticks
 } LuaHttpClient;
 
-// -- LuaHttpRequest ------------------------------------------------------------
-typedef struct LuaHttpRequest {
+// -- LuaHttpCurlRequest -------------------------------------------------------
+typedef struct LuaHttpCurlRequest {
 	CURL*              easy;
 	CURLM*             multi;           // borrowed; do NOT free here
 	// callbackL: Lua state set just before curl_multi_perform so ReadBodyCallback
@@ -68,7 +68,7 @@ typedef struct LuaHttpRequest {
 	char               errorBuf[CURL_ERROR_SIZE];
 	bool               addedToMulti;
 	CurlMsg*           curlMsg;        // heap-allocated; freed in __gc
-} LuaHttpRequest;
+} LuaHttpCurlRequest;
 
 // -- LuaHttpStreamNative -------------------------------------------------------
 typedef struct LuaHttpStreamNative {
@@ -90,25 +90,7 @@ typedef struct LuaHttpStreamNative {
 	CurlMsg*           curlMsg;        // heap-allocated; freed in http_stream_close
 } LuaHttpStreamNative;
 
-// -- LuaWebSocketNative --------------------------------------------------------
-		typedef struct LuaWebSocketNative {
-	CURL*              easy;
-	CURLM*             multi;
-	struct curl_slist* requestHdrs;    // owned; freed in ws_stream_close
-	char               errorBuf[CURL_ERROR_SIZE];
-	bool               connected;      // true once WsConnectContinuation returns the stream
-	bool               closed;
-	LuaHttpClient*     client;         // borrowed; kept alive by clientRef
-	int                clientRef;      // registry ref preventing client GC while ws is live
-	// Last received frame metadata (valid after each successful Read)
-	unsigned int       lastFrameFlags;
-	size_t             lastBytesLeft;
-	// Frame reassembly buffer: accumulates curl_ws_recv chunks until bytesleft==0
-	char*              fragBuf;
-	size_t             fragLen;
-	size_t             fragAlloc;
-	CurlMsg*           curlMsg;        // heap-allocated; freed in ws_stream_close
-} LuaWebSocketNative;
+// WebSocket types are defined in LuaWebSocket.h
 
 int luaopen_http(lua_State* L);
 
@@ -129,8 +111,6 @@ int luahttprequest_gc(lua_State* L);
 int client_request(lua_State* L);
 int client_call(lua_State* L);     // blocking helper: drives Request and returns the result table directly
 int client_stream(lua_State* L);
-int client_connect(lua_State* L);
-int client_set_binary(lua_State* L);    // called as client:SetBinary(bool)
 int client_set_alive_token(lua_State* L); // called as client:SetAliveToken(token)
 int client_get_timestamp(lua_State* L); // returns last request duration as a TimeSpan
 

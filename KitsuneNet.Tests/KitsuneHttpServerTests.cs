@@ -1,7 +1,11 @@
 ﻿using KitsuneNet;
 using Shouldly;
 using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Net.Http;
+using System.Net.WebSockets;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
@@ -895,6 +899,287 @@ public sealed class KitsuneHttpServerTests
             return tostring(alive)
             """);
         r.String.ShouldBe("true");
+    }
+
+    // -- WebSocket server tests -----------------------------------------------
+    // All WS server tests use C# ClientWebSocket against a background Lua server
+    // (StartWsServer) so curl and libevent never share a single-threaded pump loop.
+
+    private static async Task<(KitsuneEngine Engine, Task PumpTask)> StartWsServer(
+        string port, string perTickLua)
+    {
+        var engine = new KitsuneEngine();
+        await engine.ExecuteStringAsync($$"""
+            _stop      = false
+            _server_ws = nil
+            _server    = assert(HttpServer.Listen('{{port}}'))
+            """);
+
+        var pumpTask = Task.Run(() => engine.ExecuteStringAsync($$"""
+            local co = _server:Accept()
+            while not _stop do
+                local ok, req = coroutine.resume(co)
+                if req and req:IsFinished() and not _server_ws then
+                    _server_ws = req:GetResponse():UpgradeToWebSocket()
+                end
+                if _server_ws then
+                    {{perTickLua}}
+                end
+            end
+            if _server_ws then _server_ws:Dispose() end
+            coroutine.resume(co, true)
+            """));
+
+        await Task.Delay(50);
+        return (engine, pumpTask);
+    }
+
+    private static async Task StopWsServer(KitsuneEngine engine, Task pumpTask)
+    {
+        await engine.ExecuteStringAsync("_stop = true");
+        await pumpTask;
+        engine.Dispose();
+    }
+
+    private static async Task<(string Data, WebSocketMessageType Type)> WsCsEchoOnce(
+        string url, string message,
+        WebSocketMessageType sendType = WebSocketMessageType.Text)
+    {
+        using var ws = new ClientWebSocket();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await ws.ConnectAsync(new Uri(url), cts.Token);
+        byte[] send = Encoding.UTF8.GetBytes(message);
+        await ws.SendAsync(send, sendType, true, cts.Token);
+        byte[] recv = new byte[4096];
+        var result = await ws.ReceiveAsync(recv, cts.Token);
+        try { await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None); }
+        catch (WebSocketException) { /* libevent drops TCP without echoing a WS CLOSE frame */ }
+        return (Encoding.UTF8.GetString(recv, 0, result.Count), result.MessageType);
+    }
+
+    [Fact]
+    public async Task Server_WebSocket_Upgrade_Succeeds()
+    {
+        var (engine, pump) = await StartWsServer("127.0.0.1:19880", "");
+        var ws = new ClientWebSocket();
+        await ws.ConnectAsync(new Uri("ws://127.0.0.1:19880/"), CancellationToken.None);
+        // Upgrade succeeded if ConnectAsync didn't throw.
+        ws.Dispose();
+        await StopWsServer(engine, pump);
+    }
+
+    [Fact]
+    public async Task Server_WebSocket_Echo_TextFrame_RoundTrips()
+    {
+        var (engine, pump) = await StartWsServer("127.0.0.1:19881", """
+            local msg = _server_ws:Poll()
+            if msg then _server_ws:Send(msg:GetData()) end
+            """);
+        var (data, _) = await WsCsEchoOnce("ws://127.0.0.1:19881/", "hello server");
+        await StopWsServer(engine, pump);
+        data.ShouldBe("hello server");
+    }
+
+    [Fact]
+    public async Task Server_WebSocket_Echo_BinaryFrame_RoundTrips()
+    {
+        var (engine, pump) = await StartWsServer("127.0.0.1:19882", """
+            local msg = _server_ws:Poll()
+            if msg then _server_ws:Send(msg:GetData()) end
+            """);
+        var (data, _) = await WsCsEchoOnce("ws://127.0.0.1:19882/", "bindata",
+            WebSocketMessageType.Binary);
+        await StopWsServer(engine, pump);
+        data.ShouldBe("bindata");
+    }
+
+    [Fact]
+    public async Task Server_WebSocket_IsConnected_TrueAfterUpgrade()
+    {
+        var (engine, pump) = await StartWsServer("127.0.0.1:19884", "");
+        var ws = new ClientWebSocket();
+        await ws.ConnectAsync(new Uri("ws://127.0.0.1:19884/"), CancellationToken.None);
+        await Task.Delay(100); // let the pump see the upgrade
+        LuaValue r = await engine.ExecuteStringAsync(
+            "return tostring(_server_ws ~= nil and _server_ws:IsConnected())");
+        await StopWsServer(engine, pump);
+        ws.Dispose();
+        r.String.ShouldBe("true");
+    }
+
+    [Fact]
+    public async Task Server_WebSocket_GetId_IsNonZero()
+    {
+        var (engine, pump) = await StartWsServer("127.0.0.1:19885", "");
+        using var ws = new ClientWebSocket();
+        await ws.ConnectAsync(new Uri("ws://127.0.0.1:19885/"), CancellationToken.None);
+        await Task.Delay(100); // let the pump see the upgrade
+        LuaValue r = await engine.ExecuteStringAsync("""
+            if _server_ws then
+                local id = _server_ws:GetId()
+                return tostring(type(id) == 'number' and id ~= 0)
+            end
+            return 'false'
+            """);
+        await StopWsServer(engine, pump);
+        r.String.ShouldBe("true");
+    }
+
+    [Fact]
+    public async Task Server_WebSocket_GetContext_ReturnsSameTable()
+    {
+        var (engine, pump) = await StartWsServer("127.0.0.1:19886", "");
+        var ws = new ClientWebSocket();
+        await ws.ConnectAsync(new Uri("ws://127.0.0.1:19886/"), CancellationToken.None);
+        await Task.Delay(100);
+        LuaValue r = await engine.ExecuteStringAsync("""
+            if _server_ws then
+                local ctx1 = _server_ws:GetContext()
+                ctx1.x = 42
+                return tostring(_server_ws:GetContext().x == 42)
+            end
+            return 'false'
+            """);
+        await StopWsServer(engine, pump);
+        ws.Dispose();
+        r.String.ShouldBe("true");
+    }
+
+    [Fact]
+    public async Task Server_WebSocket_Dispose_AfterDispose_ReadReturnsNil()
+    {
+        var (engine, pump) = await StartWsServer("127.0.0.1:19887", "");
+        var ws = new ClientWebSocket();
+        await ws.ConnectAsync(new Uri("ws://127.0.0.1:19887/"), CancellationToken.None);
+        await Task.Delay(100);
+        LuaValue r = await engine.ExecuteStringAsync("""
+            if _server_ws then
+                _server_ws:Dispose()
+                return tostring(_server_ws:Read() == nil)
+            end
+            return 'false'
+            """);
+        // Server already disposed the WS; closing from client side would throw.
+        await StopWsServer(engine, pump);
+        ws.Dispose();
+        r.String.ShouldBe("true");
+    }
+
+    [Fact]
+    public async Task Server_WebSocket_CSharpClient_TextEcho_RoundTrips()
+    {
+        var (engine, pump) = await StartWsServer("127.0.0.1:19888", """
+            local msg = _server_ws:Poll()
+            if msg then _server_ws:Send(msg:GetData()) end
+            """);
+        var (data, _) = await WsCsEchoOnce("ws://127.0.0.1:19888/", "hello from csharp");
+        await StopWsServer(engine, pump);
+        data.ShouldBe("hello from csharp");
+    }
+
+    // -- SSE tests ------------------------------------------------------------
+
+    [Fact]
+    public async Task Server_SSE_EventsDeliveredInOrder()
+    {
+        var (engine, pump) = await StartLuaServer("127.0.0.1:19890", """
+            resp:SetHeader('Content-Type', 'text/event-stream')
+
+            resp:SetHeader('Cache-Control', 'no-cache')
+            local events = { 'one', 'two', 'three' }
+            local i = 0
+            resp:Send(Stream.New(function(op, size)
+                if op == 0 then return 1 end
+                if op == 2 then
+                    i = i + 1
+                    if i > #events then return nil end
+                    return 'data: ' .. events[i] .. '\n\n'
+                end
+            end))
+            """);
+
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+        string body = await client.GetStringAsync("http://127.0.0.1:19890/");
+        await StopLuaServer(engine, pump);
+
+        body.ShouldContain("data: one\n\n");
+        body.ShouldContain("data: two\n\n");
+        body.ShouldContain("data: three\n\n");
+        body.IndexOf("one").ShouldBeLessThan(body.IndexOf("two"));
+        body.IndexOf("two").ShouldBeLessThan(body.IndexOf("three"));
+    }
+
+    [Fact]
+    public async Task Server_SSE_ContentTypeIsEventStream()
+    {
+        var (engine, pump) = await StartLuaServer("127.0.0.1:19891", """
+            resp:SetHeader('Content-Type', 'text/event-stream')
+            resp:SetHeader('Cache-Control', 'no-cache')
+            local done = false
+            resp:Send(Stream.New(function(op, size)
+                if op == 0 then return 1 end
+                if op == 2 then
+                    if done then return nil end
+                    done = true
+                    return 'data: ping\n\n'
+                end
+            end))
+            """);
+
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+        var response = await client.GetAsync("http://127.0.0.1:19891/");
+        await StopLuaServer(engine, pump);
+
+        response.Content.Headers.ContentType?.MediaType.ShouldBe("text/event-stream");
+    }
+
+    [Fact]
+    public async Task Server_SSE_LuaClient_CanConsumeStreamingEvents()
+    {
+        // The server runs as a background scheduler coroutine via StartLuaServer.
+        // The client stream runs as a second scheduler coroutine so both can yield
+        // independently — stream:Read() yields back to the scheduler which resumes
+        // the server pump, advancing the chunked sender between reads.
+        if (new KitsuneEngine().ExecuteStringAsync("return type(HttpClient)").Result.String == "nil")
+            return; // HttpClient not compiled in
+
+        var (engine, pump) = await StartLuaServer("127.0.0.1:19892", """
+            resp:SetHeader('Content-Type', 'text/event-stream')
+            local events = { 'alpha', 'beta' }
+            local i = 0
+            resp:Send(Stream.New(function(op, size)
+                if op == 0 then return 1 end
+                if op == 2 then
+                    i = i + 1
+                    if i > #events then return nil end
+                    return 'data: ' .. events[i] .. '\n\n'
+                end
+            end))
+            """);
+
+        LuaValue r = await engine.ExecuteStringAsync("""
+            local c = HttpClient.New()
+            c:SetVerifySSL(false)
+            -- c:Stream() returns a coroutine; drive it until it yields the stream.
+            local co = c:Stream('GET', 'http://127.0.0.1:19892/sse')
+            local ok, stream = coroutine.resume(co)
+            while ok and type(stream) ~= 'userdata' do
+                ok, stream = coroutine.resume(co)
+            end
+            if not ok or not stream then error('stream connect failed') end
+            local body = ''
+            local chunk = stream:Read()
+            while chunk do
+                body = body .. chunk
+                chunk = stream:Read()
+            end
+            stream:Close()
+            return body
+            """);
+
+        await StopLuaServer(engine, pump);
+        r.String.ShouldContain("data: alpha");
+        r.String.ShouldContain("data: beta");
     }
 
     private static async Task<(KitsuneEngine Engine, Task PumpTask)> StartLuaServer(

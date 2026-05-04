@@ -716,6 +716,9 @@
     <ClCompile Include="KitsuneLuaDebug.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="LuaWebSocket.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="KitsuneEngine.h">
@@ -1123,6 +1126,9 @@
     <ClInclude Include="Kitsune\KitsuneLuaDebug.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="LuaWebSocket.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="Lua functions.md" />
@@ -1130,6 +1136,8 @@
     <None Include="vcpkg.json" />
     <None Include="triplets\x64-windows-static-md.cmake" />
     <None Include="build-linux-and-test.ps1" />
+    <None Include=".vscode\launch.json" />
+    <None Include="plans\websocket-server.md" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />

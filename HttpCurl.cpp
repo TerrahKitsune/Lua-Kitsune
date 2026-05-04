@@ -271,7 +271,7 @@ static struct curl_slist* build_headers(lua_State* L, LuaHttpClient* client, int
 // -----------------------------------------------------------------------------
 
 static size_t WriteBodyCallback(char* ptr, size_t size, size_t nmemb, void* userdata) {
-	LuaHttpRequest* req = (LuaHttpRequest*)userdata;
+	LuaHttpCurlRequest* req = (LuaHttpCurlRequest*)userdata;
 	size_t total = size * nmemb;
 	if (req->streamOutput && req->streamOutput->vtbl && req->streamOutput->vtbl->write) {
 		bool ok = req->streamOutput->vtbl->write(req->streamOutput->native,
@@ -298,7 +298,7 @@ static size_t WriteBodyCallback(char* ptr, size_t size, size_t nmemb, void* user
 // -----------------------------------------------------------------------------
 
 static size_t ReadBodyCallback(char* buffer, size_t size, size_t nitems, void* userdata) {
-	LuaHttpRequest* req = (LuaHttpRequest*)userdata;
+	LuaHttpCurlRequest* req = (LuaHttpCurlRequest*)userdata;
 	if (!req->streamInput || !req->streamInput->vtbl || !req->callbackL)
 		return 0;
 	size_t capacity = size * nitems;
@@ -322,7 +322,7 @@ static size_t ReadBodyCallback(char* buffer, size_t size, size_t nitems, void* u
 // -----------------------------------------------------------------------------
 
 static size_t WriteHeaderCallback(char* buffer, size_t size, size_t nitems, void* userdata) {
-	LuaHttpRequest* req = (LuaHttpRequest*)userdata;
+	LuaHttpCurlRequest* req = (LuaHttpCurlRequest*)userdata;
 	size_t total = size * nitems;
 	// Status line: "HTTP/X.Y CODE REASON\r\n"
 	if (total >= 5 && strncmp(buffer, "HTTP/", 5) == 0) {
@@ -361,7 +361,7 @@ static size_t WriteHeaderCallback(char* buffer, size_t size, size_t nitems, void
 // T5e ? BuildHttpResultTable
 // -----------------------------------------------------------------------------
 
-static int BuildHttpResultTable(lua_State* L, LuaHttpRequest* req) {
+static int BuildHttpResultTable(lua_State* L, LuaHttpCurlRequest* req) {
 	if (req->streamOutputRef != LUA_NOREF) {
 		luaL_unref(L, LUA_REGISTRYINDEX, req->streamOutputRef);
 		req->streamOutputRef = LUA_NOREF;
@@ -399,7 +399,7 @@ static int BuildHttpResultTable(lua_State* L, LuaHttpRequest* req) {
 // -----------------------------------------------------------------------------
 
 static int HttpRequestContinuation(lua_State* L, int status, lua_KContext ctx) {
-	LuaHttpRequest* req = (LuaHttpRequest*)luaL_checkudata(L, 1, LUAHTTPREQUEST);
+	LuaHttpCurlRequest* req = (LuaHttpCurlRequest*)luaL_checkudata(L, 1, LUAHTTPCURLREQUEST);
 	// Check AliveToken: if the client has one and it's been disposed, let the
 	// coroutine die silently so the caller's drive loop exits via status check.
 	if (req->client && req->client->aliveTokenRef != LUA_NOREF) {
@@ -490,10 +490,10 @@ int client_request(lua_State* L) {
 		return 2;
 	}
 
-	// Allocate LuaHttpRequest userdata
-	LuaHttpRequest* req = (LuaHttpRequest*)lua_newuserdata(L, sizeof(LuaHttpRequest));
-	memset(req, 0, sizeof(LuaHttpRequest));
-	luaL_setmetatable(L, LUAHTTPREQUEST);
+	// Allocate LuaHttpCurlRequest userdata
+	LuaHttpCurlRequest* req = (LuaHttpCurlRequest*)lua_newuserdata(L, sizeof(LuaHttpCurlRequest));
+	memset(req, 0, sizeof(LuaHttpCurlRequest));
+	luaL_setmetatable(L, LUAHTTPCURLREQUEST);
 	req->streamOutputRef = LUA_NOREF;
 	req->streamInputRef  = LUA_NOREF;
 	int reqIdx = lua_gettop(L);
@@ -590,7 +590,7 @@ int client_request(lua_State* L) {
 // -----------------------------------------------------------------------------
 
 int luahttprequest_gc(lua_State* L) {
-	LuaHttpRequest* req = (LuaHttpRequest*)luaL_checkudata(L, 1, LUAHTTPREQUEST);
+	LuaHttpCurlRequest* req = (LuaHttpCurlRequest*)luaL_checkudata(L, 1, LUAHTTPCURLREQUEST);
 	if (req->addedToMulti && req->multi && req->easy) {
 		curl_multi_remove_handle(req->multi, req->easy);
 		req->addedToMulti = false;
@@ -838,6 +838,14 @@ static const LuaStreamVtable g_httpStreamVtable = {
 	http_stream_hasdata, // hasdata - non-NULL signals async
 };
 
+static int HttpStreamConnectContinuation(lua_State* L, int status, lua_KContext ctx);
+
+static int HttpStreamEntry(lua_State* L) {
+	// arg 1 is the stream; HttpStreamConnectContinuation expects it at top.
+	lua_settop(L, 1);
+	return HttpStreamConnectContinuation(L, LUA_OK, 0);
+}
+
 static int HttpStreamConnectContinuation(lua_State* L, int status, lua_KContext ctx) {
 	LuaStream* s = lua_toluastream(L, -1);
 	LuaHttpStreamNative* h = (LuaHttpStreamNative*)s->native;
@@ -958,124 +966,49 @@ int client_stream(lua_State* L) {
 	curl_multi_add_handle(multi, h->easy);
 	h->addedToMulti = true;
 
-	// One pass to start the connection; yield until response headers arrive.
+	// One pass to start the connection.
 	curlm_step(multi);
 
+	// Push the stream that HttpStreamEntry/HttpStreamConnectContinuation will operate on.
 	lua_pushluastream_native(L, &g_httpStreamVtable, h, STREAM_CAP_READ);
-	return lua_yieldk(L, 0, 0, HttpStreamConnectContinuation);
-}
+	int streamIdx = lua_gettop(L);
 
-// -----------------------------------------------------------------------------
-// T7a ? ws_stream_read / WsReadContinuation
-// -----------------------------------------------------------------------------
-
-static int WsReadContinuation(lua_State* L, int status, lua_KContext ctx);
-
-static int ws_stream_read(void* native, lua_State* L, size_t len) {
-	(void)len;
-	return WsReadContinuation(L, LUA_OK, 0);
-}
-
-static void ws_frag_reset(LuaWebSocketNative* ws) {
-	if (ws->fragBuf) {
-		kitsune_free(ws->fragBuf);
-		ws->fragBuf  = NULL;
-		ws->fragLen  = 0;
-		ws->fragAlloc = 0;
-	}
-}
-
-static int WsReadContinuation(lua_State* L, int status, lua_KContext ctx) {
-	LuaStream* s = lua_toluastream(L, 1);
-	LuaWebSocketNative* ws = (LuaWebSocketNative*)s->native;
-	if (ws->closed) {
-		ws_frag_reset(ws);
-		lua_pushnil(L);
-		return 1;
-	}
-	// After CURLMSG_DONE the WebSocket socket is in non-blocking mode.
-	// Call curl_ws_recv directly; do NOT call curl_multi_perform here as
-	// driving an already-done handle interferes with the open socket.
-	char buf[65536];
-	size_t nrecv = 0;
-	const struct curl_ws_frame* meta = NULL;
-	CURLcode rc = curl_ws_recv(ws->easy, buf, sizeof(buf), &nrecv, &meta);
-	if (rc == CURLE_AGAIN)
-		return lua_yieldk(L, 0, 0, WsReadContinuation);
-	if (rc != CURLE_OK) {
-		ws_frag_reset(ws);
-		lua_pushnil(L);
-		return 1;
-	}
-	ws->lastFrameFlags = meta->flags;
-	ws->lastBytesLeft  = (size_t)meta->bytesleft;
-	if (meta->flags & CURLWS_CLOSE) {
-		ws->closed = true;
-		// Send close response per RFC 6455.
-		if (ws->easy) {
-			size_t nsent = 0;
-			curl_ws_send(ws->easy, buf, nrecv, &nsent, 0, CURLWS_CLOSE);
+	// Wrap in a thread so the caller can drive it with coroutine.resume,
+	// matching c:Request() behaviour and avoiding deadlock in co-routine pump loops.
+	lua_State* T = lua_newthread(L);
+	lua_pushcfunction(T, HttpStreamEntry);
+	lua_pushvalue(L, streamIdx);
+	lua_xmove(L, T, 1);
+	int nres = 0;
+	int rc = lua_resume(T, L, 1, &nres);
+	if (rc == LUA_OK) {
+		// Headers arrived immediately; T is dead, move the stream result back.
+		if (nres > 0)
+			lua_xmove(T, L, nres);
+		else {
+			lua_pushnil(L);
+			lua_pushstring(L, "stream failed to start");
 		}
-		ws_frag_reset(ws);
+		lua_remove(L, streamIdx);
+		return nres > 0 ? nres : 2;
+	}
+	if (rc != LUA_YIELD) {
+		// Immediate failure.
 		lua_pushnil(L);
-		return 1;
+		if (nres > 0)
+			lua_xmove(T, L, 1);
+		else
+			lua_pushstring(L, "stream failed to start");
+		lua_remove(L, streamIdx);
+		return 2;
 	}
-	if (meta->flags & CURLWS_PING) {
-		// Respond with PONG and keep reading.
-		if (ws->easy) {
-			size_t nsent = 0;
-			curl_ws_send(ws->easy, buf, nrecv, &nsent, 0, CURLWS_PONG);
-		}
-		return lua_yieldk(L, 0, 0, WsReadContinuation);
-	}
-	if (meta->flags & CURLWS_PONG)
-		return lua_yieldk(L, 0, 0, WsReadContinuation);
-	// Optimistic fast path: entire frame arrived in one call.
-	if (meta->bytesleft == 0 && ws->fragLen == 0) {
-		lua_pushlstring(L, buf, nrecv);
-		return 1;
-	}
-	// Fragment path: append chunk to reassembly buffer.
-	if (nrecv > 0) {
-		if (ws->fragLen + nrecv + 1 > ws->fragAlloc) {
-			size_t newAlloc = ws->fragLen + nrecv + 8192;
-			char* nb = (char*)kitsune_realloc(ws->fragBuf, newAlloc);
-			if (!nb) {
-				ws_frag_reset(ws);
-				lua_pushnil(L);
-				return 1;
-			}
-			ws->fragBuf   = nb;
-			ws->fragAlloc = newAlloc;
-		}
-		memcpy(ws->fragBuf + ws->fragLen, buf, nrecv);
-		ws->fragLen += nrecv;
-	}
-	if (meta->bytesleft > 0)
-		return lua_yieldk(L, 0, 0, WsReadContinuation);
-	// All fragments collected.
-	lua_pushlstring(L, ws->fragBuf, ws->fragLen);
-	ws_frag_reset(ws);
-	return 1;
+	// T is suspended waiting for headers; return the thread to the caller.
+	lua_remove(L, streamIdx);
+	return 1;  // T is on top
 }
 
-// -----------------------------------------------------------------------------
-// T7b ? ws_stream_write (vtable; used by Stream:Write())
-// -----------------------------------------------------------------------------
-
-static bool ws_vtable_write(void* native, const BYTE* data, size_t len) {
-	LuaWebSocketNative* ws = (LuaWebSocketNative*)native;
-	if (!ws->connected || ws->closed) return false;
-	size_t nsent = 0;
-	unsigned int wsType = (ws->client && ws->client->binaryMode) ? CURLWS_BINARY : CURLWS_TEXT;
-	return curl_ws_send(ws->easy, data, len, &nsent, 0, wsType) == CURLE_OK;
-}
-
-int client_set_binary(lua_State* L) {
-	LuaHttpClient* client = (LuaHttpClient*)luaL_checkudata(L, 1, LUAHTTPCLIENT);
-	client->binaryMode = lua_toboolean(L, 2) != 0;
-	return 0;
-}
+// WebSocket client connection is implemented in LuaWebSocket.cpp.
+// See ws_client_connect for the yieldk-based connect implementation.
 
 int client_set_alive_token(lua_State* L) {
 	LuaHttpClient* client = (LuaHttpClient*)luaL_checkudata(L, 1, LUAHTTPCLIENT);
@@ -1196,197 +1129,10 @@ int client_call(lua_State* L) {
 	return lua_yieldk(L, 0, 0, client_call_continuation);
 }
 
-// -----------------------------------------------------------------------------
-// client_get_timestamp — returns the round-trip duration of the last completed
-// Request() call as a TimeSpan.  The clock starts just before curl_multi_add_handle
-// and stops as soon as CURLMSG_DONE is received (i.e. after the last response byte
-// has been received but before the coroutine resumes the caller).
-// Returns a zero TimeSpan when no request has completed yet on this client.
-// -----------------------------------------------------------------------------
-
 int client_get_timestamp(lua_State* L) {
 	LuaHttpClient* client = (LuaHttpClient*)luaL_checkudata(L, 1, LUAHTTPCLIENT);
 	lua_pushtimespan(L)->ticks = client->lastRequestElapsedTicks;
 	return 1;
-}
-
-// -----------------------------------------------------------------------------
-// T7d — ws_stream_info (synchronous; returns last frame metadata)
-// -----------------------------------------------------------------------------
-
-static int ws_stream_info(void* native, lua_State* L) {
-	LuaWebSocketNative* ws = (LuaWebSocketNative*)native;
-	lua_newtable(L);
-	lua_pushboolean(L, (ws->lastFrameFlags & CURLWS_BINARY) ? 1 : 0);
-	lua_setfield(L, -2, "Binary");
-	int opcode = 1;
-	if (ws->lastFrameFlags & CURLWS_BINARY)       opcode = 2;
-	else if (ws->lastFrameFlags & CURLWS_CLOSE)   opcode = 8;
-	else if (ws->lastFrameFlags & CURLWS_PING)    opcode = 9;
-	else if (ws->lastFrameFlags & CURLWS_PONG)    opcode = 10;
-	lua_pushinteger(L, opcode);
-	lua_setfield(L, -2, "Opcode");
-	lua_pushinteger(L, (lua_Integer)ws->lastBytesLeft);
-	lua_setfield(L, -2, "BytesLeft");
-	return 1;
-}
-
-// -----------------------------------------------------------------------------
-// T7e — ws_stream_hasdata
-// -----------------------------------------------------------------------------
-
-static int ws_stream_hasdata(void* native) {
-	LuaWebSocketNative* ws = (LuaWebSocketNative*)native;
-	// After the WebSocket upgrade the multi handle is no longer used.
-	// Return 1 (may have data) if connected; caller will try curl_ws_recv.
-	return (ws->connected && !ws->closed) ? 1 : 0;
-}
-
-// -----------------------------------------------------------------------------
-// T7f — ws_stream_close
-// -----------------------------------------------------------------------------
-
-static void ws_stream_close(void* native, lua_State* L) {
-	LuaWebSocketNative* ws = (LuaWebSocketNative*)native;
-	if (!ws->closed) {
-		size_t nsent = 0;
-		curl_ws_send(ws->easy, "", 0, &nsent, 0, CURLWS_CLOSE);
-		ws->closed = true;
-	}
-	if (ws->fragBuf) {
-		kitsune_free(ws->fragBuf);
-		ws->fragBuf  = NULL;
-		ws->fragLen  = 0;
-		ws->fragAlloc = 0;
-	}
-	if (ws->multi && ws->easy)
-		curl_multi_remove_handle(ws->multi, ws->easy);
-	if (ws->requestHdrs) {
-		curl_slist_free_all(ws->requestHdrs);
-		ws->requestHdrs = NULL;
-	}
-	if (ws->easy) {
-		curl_easy_cleanup(ws->easy);
-		ws->easy = NULL;
-	}
-	if (L && ws->clientRef != LUA_NOREF) {
-		luaL_unref(L, LUA_REGISTRYINDEX, ws->clientRef);
-		ws->clientRef = LUA_NOREF;
-	}
-	kitsune_free(ws->curlMsg);
-	ws->curlMsg = NULL;
-	kitsune_free(ws);
-}
-
-// -----------------------------------------------------------------------------
-// T7g ? g_wsStreamVtable
-// -----------------------------------------------------------------------------
-
-static const LuaStreamVtable g_wsStreamVtable = {
-	ws_stream_read,      // read - may call lua_yieldk
-	ws_vtable_write,     // write - CURLWS_TEXT or CURLWS_BINARY per STREAM_WRITE_FLAG_BINARY
-	NULL,                // setpos
-	NULL,                // curpos
-	NULL,                // getlen
-	ws_stream_close,     // close
-	ws_stream_info,      // info - synchronous frame metadata
-	ws_stream_hasdata,   // hasdata - non-NULL signals async
-};
-
-// -----------------------------------------------------------------------------
-// T7h ? WsConnectContinuation
-// -----------------------------------------------------------------------------
-
-static int WsConnectContinuation(lua_State* L, int status, lua_KContext ctx) {
-	LuaStream* s = lua_toluastream(L, -1);
-	LuaWebSocketNative* ws = (LuaWebSocketNative*)s->native;
-
-	curlm_step(ws->multi);
-	if (ws->curlMsg && ws->curlMsg->done) {
-		if (ws->curlMsg->result != CURLE_OK) {
-			lua_pop(L, 1);
-			lua_pushnil(L);
-			lua_pushstring(L, ws->errorBuf[0] ? ws->errorBuf : "WebSocket connect failed");
-			return 2;
-		}
-		ws->connected = true;
-		return 1;
-	}
-	return lua_yieldk(L, 0, 0, WsConnectContinuation);
-}
-
-// -----------------------------------------------------------------------------
-// T7i ? client_connect
-// -----------------------------------------------------------------------------
-
-int client_connect(lua_State* L) {
-	LuaHttpClient* client = (LuaHttpClient*)luaL_checkudata(L, 1, LUAHTTPCLIENT);
-	const char* url = luaL_checkstring(L, 2);
-	int headersIdx  = lua_istable(L, 3) ? 3 : 0;
-
-	lua_rawgetp(L, LUA_REGISTRYINDEX, &g_curlm_key);
-	CURLM* multi = (CURLM*)lua_touserdata(L, -1);
-	lua_pop(L, 1);
-	if (!multi) {
-		lua_pushnil(L);
-		lua_pushstring(L, "HTTP module not initialised");
-		return 2;
-	}
-
-	LuaWebSocketNative* ws = (LuaWebSocketNative*)kitsune_malloc(sizeof(LuaWebSocketNative));
-	if (!ws) {
-		lua_pushnil(L);
-		lua_pushstring(L, "out of memory");
-		return 2;
-	}
-	memset(ws, 0, sizeof(LuaWebSocketNative));
-	ws->multi     = multi;
-	ws->clientRef = LUA_NOREF;
-	ws->client    = client;
-	lua_pushvalue(L, 1);  // push the LuaHttpClient userdata
-	ws->clientRef = luaL_ref(L, LUA_REGISTRYINDEX);
-
-	ws->easy = curl_easy_init();
-	if (!ws->easy) {
-		kitsune_free(ws);
-		lua_pushnil(L);
-		lua_pushstring(L, "curl_easy_init failed");
-		return 2;
-	}
-
-	ws->curlMsg = (CurlMsg*)kitsune_malloc(sizeof(CurlMsg));
-	if (!ws->curlMsg) {
-		curl_easy_cleanup(ws->easy);
-		kitsune_free(ws);
-		lua_pushnil(L);
-		lua_pushstring(L, "out of memory");
-		return 2;
-	}
-	memset(ws->curlMsg, 0, sizeof(CurlMsg));
-
-	struct curl_slist* hdrs = build_headers(L, client, headersIdx);
-
-	curl_easy_setopt(ws->easy, CURLOPT_URL,             url);
-	curl_easy_setopt(ws->easy, CURLOPT_CONNECT_ONLY,    2L);
-	curl_easy_setopt(ws->easy, CURLOPT_HTTP_VERSION,    CURL_HTTP_VERSION_1_1);
-	curl_easy_setopt(ws->easy, CURLOPT_HTTPHEADER,      hdrs);
-	curl_easy_setopt(ws->easy, CURLOPT_ERRORBUFFER,     ws->errorBuf);
-	curl_easy_setopt(ws->easy, CURLOPT_SSL_VERIFYPEER,  client->verifySsl ? 1L : 0L);
-	curl_easy_setopt(ws->easy, CURLOPT_SSL_VERIFYHOST,  client->verifySsl ? 2L : 0L);
-	curl_easy_setopt(ws->easy, CURLOPT_NOSIGNAL,        1L);
-	curl_easy_setopt(ws->easy, CURLOPT_PRIVATE,         ws->curlMsg);
-	if (client->timeoutMs > 0)
-		curl_easy_setopt(ws->easy, CURLOPT_TIMEOUT_MS, (long)client->timeoutMs);
-
-	// Keep hdrs alive for the lifetime of the easy handle ? curl does NOT copy it.
-	ws->requestHdrs = hdrs;
-	curl_multi_add_handle(multi, ws->easy);
-
-	lua_pushluastream_native(L, &g_wsStreamVtable, ws,
-		STREAM_CAP_READ | STREAM_CAP_WRITE);
-
-	// Yield until the WebSocket handshake completes
-	return lua_yieldk(L, 0, 0, WsConnectContinuation);
 }
 
 #endif  // KITSUNE_HTTP

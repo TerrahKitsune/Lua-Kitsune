@@ -1,6 +1,7 @@
 ﻿#include "LuaHttpServerMain.h"
 #include "LuaHttpServer.h"
 #include "LuaHttpRequest.h"
+#include "LuaWebSocket.h"
 
 static const luaL_Reg httpserver_functions[] = {
     { "Listen", HttpServer_Listen },
@@ -48,11 +49,12 @@ static const luaL_Reg httpresponse_meta[] = {
 };
 
 static const luaL_Reg httpresponse_methods[] = {
-    { "SetCode",   HttpResponse_SetCode   },
-    { "SetHeader", HttpResponse_SetHeader },
-    { "Send",      HttpResponse_Send      },
-    { "Reject",    HttpResponse_Reject    },
-    { "Close",     HttpResponse_Close     },
+    { "SetCode",              HttpResponse_SetCode              },
+    { "SetHeader",            HttpResponse_SetHeader            },
+    { "Send",                 HttpResponse_Send                 },
+    { "Reject",               HttpResponse_Reject               },
+    { "Close",                HttpResponse_Close                },
+    { "UpgradeToWebSocket",   ws_server_upgrade                 },
     { NULL, NULL }
 };
 

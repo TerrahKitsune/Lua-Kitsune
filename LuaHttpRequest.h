@@ -44,6 +44,7 @@ typedef struct LuaHttpRequest {
     int                    headers_ref; /* luaL_ref to {[name]=value} table */
     int                    context_ref; /* luaL_ref to context table        */
     int                    response_ref;/* luaL_ref to LuaHttpResponse      */
+    bool                   upgraded;   /* true after UpgradeToWebSocket(); guards cleanup */
 } LuaHttpRequest;
 
 /*

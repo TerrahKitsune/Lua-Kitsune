@@ -19,6 +19,7 @@ A comprehensive reference for all available functions in the Lua environment.
 - [Process](#process)
 - [HttpClient](#httpclient)
 - [HttpServer](#httpserver)
+- [WebSocket](#websocket)
 - [Hashing (SHA256, MD5, SHA1)](#hashing)
 - [MySQL](#mysql)
 - [Postgres](#postgres)
@@ -1195,7 +1196,6 @@ nil      client:SetTimeout(ms)
 nil      client:SetFollowRedirects(bool)
 nil      client:SetVerifySSL(bool)
 nil      client:SetDefaultHeader(name, value)
-nil      client:SetBinary(bool)
 nil      client:SetAliveToken(token)
 TimeSpan client:GetTimestamp()
 ```
@@ -1206,7 +1206,6 @@ TimeSpan client:GetTimestamp()
 | `SetFollowRedirects` | Follow HTTP redirects. Default `true` |
 | `SetVerifySSL` | Verify SSL certificates. Default `true` |
 | `SetDefaultHeader` | Add a header sent with every request on this client |
-| `SetBinary` | When `true`, `Write` calls on WebSocket connections from this client send binary frames instead of text frames. Default `false` |
 | `SetAliveToken(token)` | Attach an `AliveToken` to this client. While the token is alive requests proceed normally. When disposed: `Request` returns `nil, "aborted"` immediately (no coroutine is created); `Call` returns `nil, "aborted"`. Pass `nil` to detach |
 | `GetTimestamp` | Returns the round-trip duration of the most recently **completed** `Request()` call as a `TimeSpan`. The clock starts just before the request is submitted to curl and stops when the last response byte is received. Returns a zero `TimeSpan` if no request has completed yet on this client |
 
@@ -1269,10 +1268,22 @@ end
 ### Streaming request
 
 ```lua
-Stream, errmsg client:Stream(method, url, opt body, opt headers)
+coroutine, errmsg client:Stream(method, url, opt body, opt headers)
 ```
 
-Returns an async read-only `Stream` and yields the calling coroutine until response headers have arrived. Call `stream:GetInfo()` for metadata, then `stream:Read()` in a loop to receive body chunks. Must be driven from inside a coroutine.
+Returns a **coroutine** immediately. Drive it with `coroutine.resume` until it yields a `Stream` userdata — that is the response body stream. Call `stream:GetInfo()` for metadata, then `stream:Read()` in a loop to receive body chunks. Must be driven from inside a coroutine.
+
+```lua
+-- Inside a coroutine:
+local co = client:Stream('GET', 'https://example.com/feed')
+local ok, stream = coroutine.resume(co)
+while ok and type(stream) ~= 'userdata' do
+    ok, stream = coroutine.resume(co)
+end
+local chunk = stream:Read()
+while chunk do io.write(chunk); chunk = stream:Read() end
+stream:Close()
+```
 
 `stream:GetInfo()` returns:
 
@@ -1286,20 +1297,10 @@ Returns an async read-only `Stream` and yields the calling coroutine until respo
 ### WebSocket connection
 
 ```lua
-Stream, errmsg client:Connect(url, opt headers)
+coroutine, errmsg client:Connect(url, opt headers)
 ```
 
-Connects to a WebSocket endpoint and yields the calling coroutine until the HTTP 101 upgrade completes. Returns an async `Stream`. Must be driven from inside a coroutine.
-
-Binary frame mode is controlled per-client: call `client:SetBinary(true)` before writing to send binary frames; `client:SetBinary(false)` to switch back to text frames (the default).
-
-`ws:GetInfo()` returns metadata about the **last received** frame:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `Binary` | boolean | `true` if the last received frame was binary |
-| `Opcode` | integer | WebSocket opcode (1 = text, 2 = binary, 8 = close, 9 = ping, 10 = pong) |
-| `BytesLeft` | integer | Bytes remaining for fragmented frames; `0` for a complete frame |
+Returns a **coroutine** immediately. Drive it with `coroutine.resume` until it yields a `WebSocket` userdata — that is the live connection. Yields the calling coroutine cooperatively until the HTTP 101 upgrade completes. See the [WebSocket](#websocket) section for the full API on the returned object.
 
 ### Examples
 
@@ -1313,22 +1314,26 @@ repeat ok, result = coroutine.resume(co) until result ~= nil
 print(result.Code, result.Contents)
 
 -- Streaming GET (must run inside a coroutine)
-local stream = client:Stream('GET', 'https://httpbin.org/get')
+local co = client:Stream('GET', 'https://httpbin.org/get')
+local ok, stream = coroutine.resume(co)
+while ok and type(stream) ~= 'userdata' do ok, stream = coroutine.resume(co) end
 local info = stream:GetInfo()
 local chunk = stream:Read()
 while chunk do io.write(chunk); chunk = stream:Read() end
 stream:Close()
 
 -- WebSocket echo (must run inside a coroutine)
-local ws = client:Connect('wss://echo.websocket.org')
-ws:Read()                         -- drain server welcome frame
-ws:Write('hello')
-print(ws:Read())                  -- "hello"
+local co = client:Connect('wss://echo.websocket.org')
+local ok, ws = coroutine.resume(co)
+while ok and type(ws) ~= 'userdata' do ok, ws = coroutine.resume(co) end
+local welcome = ws:Poll()   -- drain optional server welcome frame
+ws:Send('hello')
+local msg = ws:Read()       -- yields until message arrives
+if msg then print(msg:GetData()) end  -- "hello"
 
-client:SetBinary(true)
-ws:Write('\xDE\xAD\xBE\xEF')    -- binary frame
-client:SetBinary(false)
-ws:Close()
+-- Binary frame
+ws:Send('\xDE\xAD\xBE\xEF', true)  -- second arg = binary
+ws:Dispose()
 ```
 
 ---
@@ -1408,10 +1413,11 @@ string   req:GetError()      -- error message string, or nil when no error
 ### HttpResponse
 
 ```lua
-nil   resp:SetCode(code)
-nil   resp:SetHeader(name, value)
-bool  resp:Send(opt body)
-bool  resp:Reject(code, message)
+nil        resp:SetCode(code)
+nil        resp:SetHeader(name, value)
+bool       resp:Send(opt body)
+bool       resp:Reject(code, message)
+WebSocket  resp:UpgradeToWebSocket()
 ```
 
 | Method | Description |
@@ -1420,6 +1426,7 @@ bool  resp:Reject(code, message)
 | `SetHeader(name, value)` | Add a response header. May be called multiple times |
 | `Send(opt body)` | Send the response. `body` may be omitted (no body), a `string`, or a readable `Stream`. Returns `false` when the request is not yet finished |
 | `Reject(code, message)` | Send a minimal error response with the given status code and plain-text body |
+| `UpgradeToWebSocket()` | Upgrade the HTTP connection to a WebSocket session. Sends HTTP 101 immediately and returns a `WebSocket` userdata. The `HttpRequest` and `HttpResponse` objects must not be used after this call. See the [WebSocket](#websocket) section for the full API |
 
 #### Stream responses
 
@@ -1531,6 +1538,134 @@ while coroutine.status(co) == 'suspended' do
             end
         end)
         req:GetResponse():Send(stream)
+    end
+end
+```
+
+#### WebSocket server
+
+```lua
+local server = assert(HttpServer.Listen("0.0.0.0:8080"))
+local co = server:Accept()
+local ws = nil
+while coroutine.status(co) == 'suspended' do
+    local ok, req = coroutine.resume(co)
+    if req and req:IsFinished() and not ws then
+        ws = req:GetResponse():UpgradeToWebSocket()
+    end
+    if ws then
+        local msg = ws:Poll()
+        if msg then
+            ws:Send(msg:GetData())  -- echo
+        end
+    end
+end
+```
+
+---
+
+## WebSocket
+
+A unified WebSocket connection handle used for both **client** connections (created via `client:Connect()`) and **server** connections (created via `resp:UpgradeToWebSocket()`). Messages are queued internally by the network layer and consumed through `Poll()` (non-blocking) or `Read()` (yielding).
+
+### WebSocket methods
+
+```lua
+WebSocketMessage  ws:Poll()                   -- non-blocking: dequeue next message or nil
+WebSocketMessage  ws:Read()                   -- yield until next message arrives or connection closes
+bool              ws:Send(data, opt binary)    -- send a text (default) or binary frame
+bool              ws:IsConnected()             -- true while the connection is open
+integer           ws:GetId()                  -- stable non-zero integer identity
+table             ws:GetContext()             -- per-connection Lua table, created lazily
+nil               ws:SetMaxMessageSize(bytes) -- cap incoming message size (0 = uncapped)
+nil               ws:Dispose()               -- close the connection and free resources
+```
+
+| Method | Description |
+|--------|-------------|
+| `Poll()` | Non-blocking. Advances the network layer and dequeues the next `WebSocketMessage` from the internal queue, or returns `nil` if none is ready. Never yields. |
+| `Read()` | Yields the current coroutine until a `WebSocketMessage` is available, then returns it. Returns `nil` when the connection is closed. |
+| `Send(data, opt binary)` | Send `data` (string) as a WebSocket frame. Pass `true` as the second argument to send a binary frame; default is a text frame. Returns `false` if the connection is closed. **Note:** server-side connections only support text frames — pass `binary = false` or omit it. |
+| `IsConnected()` | Returns `true` while the underlying connection is open. |
+| `GetId()` | Returns a stable non-zero integer that uniquely identifies this connection for its lifetime. |
+| `GetContext()` | Returns a per-connection Lua table. Created lazily on first call; persists for the lifetime of the connection. Use it to store per-connection state. |
+| `SetMaxMessageSize(bytes)` | Set the maximum allowed incoming message size in bytes. Messages exceeding the cap are dropped. `0` disables the cap (default). |
+| `Dispose()` | Send a WS CLOSE frame (if still connected), close the underlying connection, and free all resources. Idempotent — safe to call more than once. Called automatically by `__gc`. |
+
+### WebSocketMessage
+
+Returned by `ws:Poll()` and `ws:Read()`.
+
+```lua
+string   msg:GetData()   -- message payload as a Lua string
+integer  msg:GetType()   -- message type constant (see below)
+```
+
+**Message type constants:**
+
+| Value | Meaning |
+|-------|---------|
+| `1` | Text frame |
+| `2` | Binary frame |
+| `8` | Close |
+| `9` | Ping |
+| `10` | Pong |
+
+### Client WebSocket example
+
+```lua
+-- client:Connect() returns a coroutine; drive it until it yields the WebSocket
+local client = HttpClient.New()
+client:SetVerifySSL(false)
+local co = client:Connect('wss://echo.websocket.org')
+local ok, ws = coroutine.resume(co)
+while ok and type(ws) ~= 'userdata' do ok, ws = coroutine.resume(co) end
+
+-- optional: drain server welcome frame
+local welcome = ws:Poll()
+
+-- text echo
+ws:Send('hello')
+local msg = ws:Read()           -- yields until reply arrives
+print(msg:GetData())            -- "hello"
+print(msg:GetType())            -- 1 (text)
+
+-- binary frame
+ws:Send('\xDE\xAD', true)
+local bin = ws:Read()
+print(bin:GetType())            -- 2 (binary)
+
+-- clean up
+ws:Dispose()
+```
+
+### Server WebSocket example
+
+```lua
+-- UpgradeToWebSocket() is called on the HttpResponse once a request arrives.
+-- After the upgrade the HttpRequest/HttpResponse must not be used.
+-- The Accept() pump must keep running to drive libevent I/O.
+local server = assert(HttpServer.Listen('0.0.0.0:8080'))
+local co = server:Accept()
+local ws = nil
+while coroutine.status(co) == 'suspended' do
+    local ok, req = coroutine.resume(co)
+    if not ok then error(req) end
+    -- Upgrade on the first finished request
+    if req and req:IsFinished() and not ws then
+        ws = req:GetResponse():UpgradeToWebSocket()
+    end
+    -- Service the WebSocket connection
+    if ws then
+        local msg = ws:Poll()
+        if msg then
+            if msg:GetType() == 8 then  -- close frame
+                ws:Dispose()
+                ws = nil
+            else
+                ws:Send(msg:GetData())  -- echo back as text
+            end
+        end
     end
 end
 ```

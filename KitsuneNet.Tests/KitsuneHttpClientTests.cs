@@ -43,10 +43,19 @@ namespace KitsuneNet.Tests
                     end
                 end
             end
+            local function stream_open(client, method, url, body, headers)
+                local co = client:Stream(method, url, body, headers)
+                local ok, s = coroutine.resume(co)
+                while ok and type(s) ~= 'userdata' do ok, s = coroutine.resume(co) end
+                if not ok then error(tostring(s)) end
+                return s
+            end
             local function ws_connect(client, url)
-                local ws, err = client:Connect(url)
-                if not ws then error('Connect failed: ' .. tostring(err)) end
-                ws:Read()  -- drain server welcome frame ('Request served by...')
+                local co = client:Connect(url)
+                local ok, ws = coroutine.resume(co)
+                while ok and type(ws) ~= 'userdata' do ok, ws = coroutine.resume(co) end
+                if not ok then error('Connect failed: ' .. tostring(ws)) end
+                ws:Poll()  -- drain server welcome frame if any
                 return ws
             end
         ";
@@ -366,7 +375,7 @@ namespace KitsuneNet.Tests
                     if HttpClient == nil then skip() end
                     local client = HttpClient.New()
                     client:SetTimeout(8000)
-                    local stream, err = client:Stream('GET', 'https://httpbin.org/get')
+                    local stream = stream_open(client, 'GET', 'https://httpbin.org/get')
                     local info = stream:GetInfo()
                     stream:Close()
                     _outcome = tostring(info.Code == 200)
@@ -388,7 +397,7 @@ namespace KitsuneNet.Tests
                     if HttpClient == nil then skip() end
                     local client = HttpClient.New()
                     client:SetTimeout(8000)
-                    local stream, err = client:Stream('GET', 'https://httpbin.org/get')
+                    local stream = stream_open(client, 'GET', 'https://httpbin.org/get')
                     local info = stream:GetInfo()
                     stream:Close()
                     _outcome = tostring(type(info.Headers) == 'table')
@@ -410,7 +419,7 @@ namespace KitsuneNet.Tests
                     if HttpClient == nil then skip() end
                     local client = HttpClient.New()
                     client:SetTimeout(8000)
-                    local stream, err = client:Stream('GET', 'https://httpbin.org/get')
+                    local stream = stream_open(client, 'GET', 'https://httpbin.org/get')
                     local info = stream:GetInfo()
                     local body = ''
                     local chunk = stream:Read()
@@ -438,7 +447,7 @@ namespace KitsuneNet.Tests
                     if HttpClient == nil then skip() end
                     local client = HttpClient.New()
                     client:SetTimeout(8000)
-                    local stream, err = client:Stream('GET', 'https://httpbin.org/get')
+                    local stream = stream_open(client, 'GET', 'https://httpbin.org/get')
                     local info = stream:GetInfo()
                     local body = ''
                     local chunk = stream:Read()
@@ -710,7 +719,7 @@ namespace KitsuneNet.Tests
                     if HttpClient == nil then skip() end
                     local client = HttpClient.New()
                     client:SetTimeout(8000)
-                    local stream, err = client:Stream('POST', 'https://httpbin.org/post',
+                    local stream = stream_open(client, 'POST', 'https://httpbin.org/post',
                         '{""msg"":""kitsune_stream_post""}',
                         { ['Content-Type'] = 'application/json' })
                     local info = stream:GetInfo()
@@ -734,7 +743,7 @@ namespace KitsuneNet.Tests
                     if HttpClient == nil then skip() end
                     local client = HttpClient.New()
                     client:SetTimeout(8000)
-                    local stream, err = client:Stream('POST', 'https://httpbin.org/post',
+                    local stream = stream_open(client, 'POST', 'https://httpbin.org/post',
                         '{""msg"":""kitsune_stream_post""}',
                         { ['Content-Type'] = 'application/json' })
                     local info = stream:GetInfo()
@@ -761,7 +770,7 @@ namespace KitsuneNet.Tests
                     if HttpClient == nil then skip() end
                     local client = HttpClient.New()
                     client:SetTimeout(8000)
-                    local stream, err = client:Stream('PUT', 'https://httpbin.org/put',
+                    local stream = stream_open(client, 'PUT', 'https://httpbin.org/put',
                         '{""msg"":""kitsune_stream_put""}',
                         { ['Content-Type'] = 'application/json' })
                     local info = stream:GetInfo()
@@ -785,7 +794,7 @@ namespace KitsuneNet.Tests
                     if HttpClient == nil then skip() end
                     local client = HttpClient.New()
                     client:SetTimeout(8000)
-                    local stream, err = client:Stream('PATCH', 'https://httpbin.org/patch',
+                    local stream = stream_open(client, 'PATCH', 'https://httpbin.org/patch',
                         '{""msg"":""kitsune_stream_patch""}',
                         { ['Content-Type'] = 'application/json' })
                     local info = stream:GetInfo()
@@ -809,7 +818,7 @@ namespace KitsuneNet.Tests
                     if HttpClient == nil then skip() end
                     local client = HttpClient.New()
                     client:SetTimeout(8000)
-                    local stream, err = client:Stream('DELETE', 'https://httpbin.org/delete')
+                    local stream = stream_open(client, 'DELETE', 'https://httpbin.org/delete')
                     local info = stream:GetInfo()
                     stream:Close()
                     _outcome = tostring(info.Code == 200)
@@ -832,10 +841,91 @@ namespace KitsuneNet.Tests
                     if HttpClient == nil then skip() end
                     local client = HttpClient.New()
                     client:SetTimeout(8000)
-                    local ws, err = client:Connect('{WsUrl}')
-                    if not ws then error('connect failed: ' .. tostring(err)) end
-                    ws:Close()
+                    local co = client:Connect('{WsUrl}')
+                    local ok, ws = coroutine.resume(co)
+                    while ok and type(ws) ~= 'userdata' do ok, ws = coroutine.resume(co) end
+                    if not ok then error('connect failed: ' .. tostring(ws)) end
+                    ws:Dispose()
                     _outcome = 'true'
+                end)
+                return _outcome or 'skip'
+            ");
+            if (r != "skip")
+            {
+                r.String.ShouldBe("true");
+            }
+        }
+
+        [Fact]
+        public async Task Http_WebSocket_IsConnected_TrueAfterConnect()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(StreamHelper + $@"
+                run_http(function()
+                    if HttpClient == nil then skip() end
+                    local client = HttpClient.New()
+                    client:SetTimeout(8000)
+                    local co = client:Connect('{WsUrl}')
+                    local ok, ws = coroutine.resume(co)
+                    while ok and type(ws) ~= 'userdata' do ok, ws = coroutine.resume(co) end
+                    if not ok then error('connect failed: ' .. tostring(ws)) end
+                    local connected = ws:IsConnected()
+                    ws:Dispose()
+                    local after = ws:IsConnected()
+                    _outcome = tostring(connected == true and after == false)
+                end)
+                return _outcome or 'skip'
+            ");
+            if (r != "skip")
+            {
+                r.String.ShouldBe("true");
+            }
+        }
+
+        [Fact]
+        public async Task Http_WebSocket_GetId_StableAcrossCalls()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(StreamHelper + $@"
+                run_http(function()
+                    if HttpClient == nil then skip() end
+                    local client = HttpClient.New()
+                    client:SetTimeout(8000)
+                    local co = client:Connect('{WsUrl}')
+                    local ok, ws = coroutine.resume(co)
+                    while ok and type(ws) ~= 'userdata' do ok, ws = coroutine.resume(co) end
+                    if not ok then error('connect failed: ' .. tostring(ws)) end
+                    local id1 = ws:GetId()
+                    local id2 = ws:GetId()
+                    ws:Dispose()
+                    _outcome = tostring(type(id1) == 'number' and id1 == id2 and id1 > 0)
+                end)
+                return _outcome or 'skip'
+            ");
+            if (r != "skip")
+            {
+                r.String.ShouldBe("true");
+            }
+        }
+
+        [Fact]
+        public async Task Http_WebSocket_GetContext_ReturnsSameTable()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(StreamHelper + $@"
+                run_http(function()
+                    if HttpClient == nil then skip() end
+                    local client = HttpClient.New()
+                    client:SetTimeout(8000)
+                    local co = client:Connect('{WsUrl}')
+                    local ok, ws = coroutine.resume(co)
+                    while ok and type(ws) ~= 'userdata' do ok, ws = coroutine.resume(co) end
+                    if not ok then error('connect failed: ' .. tostring(ws)) end
+                    local ctx1 = ws:GetContext()
+                    ctx1.foo = 'bar'
+                    local ctx2 = ws:GetContext()
+                    ws:Dispose()
+                    _outcome = tostring(ctx2.foo == 'bar')
                 end)
                 return _outcome or 'skip'
             ");
@@ -855,10 +945,10 @@ namespace KitsuneNet.Tests
                     local client = HttpClient.New()
                     client:SetTimeout(8000)
                     local ws = ws_connect(client, '{WsUrl}')
-                    ws:Write('hello kitsune')
-                    local frame = ws:Read()
-                    ws:Close()
-                    _outcome = tostring(frame == 'hello kitsune')
+                    ws:Send('hello kitsune')
+                    local msg = ws:Read()
+                    ws:Dispose()
+                    _outcome = tostring(msg ~= nil and msg:GetData() == 'hello kitsune')
                 end)
                 return _outcome or 'skip'
             ");
@@ -869,7 +959,7 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task Http_WebSocket_Echo_TextFrame_GetInfo_OpcodeIsOne()
+        public async Task Http_WebSocket_Echo_TextFrame_TypeIsOne()
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(StreamHelper + $@"
@@ -878,11 +968,10 @@ namespace KitsuneNet.Tests
                     local client = HttpClient.New()
                     client:SetTimeout(8000)
                     local ws = ws_connect(client, '{WsUrl}')
-                    ws:Write('opcode_test')
-                    local frame = ws:Read()
-                    local meta = ws:GetInfo()
-                    ws:Close()
-                    _outcome = tostring(frame ~= nil and meta.Opcode == 1 and meta.Binary == false)
+                    ws:Send('opcode_test')
+                    local msg = ws:Read()
+                    ws:Dispose()
+                    _outcome = tostring(msg ~= nil and msg:GetType() == 1)
                 end)
                 return _outcome or 'skip'
             ");
@@ -903,11 +992,10 @@ namespace KitsuneNet.Tests
                     client:SetTimeout(8000)
                     local ws = ws_connect(client, '{WsUrl}')
                     local payload = '\1\2\3\4\5'
-                    client:SetBinary(true)
-                    ws:Write(payload)
-                    local frame = ws:Read()
-                    ws:Close()
-                    _outcome = tostring(frame == payload)
+                    ws:Send(payload, true)
+                    local msg = ws:Read()
+                    ws:Dispose()
+                    _outcome = tostring(msg ~= nil and msg:GetData() == payload)
                 end)
                 return _outcome or 'skip'
             ");
@@ -918,7 +1006,7 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task Http_WebSocket_Echo_BinaryFrame_GetInfo_OpcodeIsTwo()
+        public async Task Http_WebSocket_Echo_BinaryFrame_TypeIsTwo()
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(StreamHelper + $@"
@@ -927,36 +1015,10 @@ namespace KitsuneNet.Tests
                     local client = HttpClient.New()
                     client:SetTimeout(8000)
                     local ws = ws_connect(client, '{WsUrl}')
-                    client:SetBinary(true)
-                    ws:Write('\xDE\xAD\xBE\xEF')
-                    local frame = ws:Read()
-                    local meta = ws:GetInfo()
-                    ws:Close()
-                    _outcome = tostring(frame ~= nil and meta.Opcode == 2 and meta.Binary == true)
-                end)
-                return _outcome or 'skip'
-            ");
-            if (r != "skip")
-            {
-                r.String.ShouldBe("true");
-            }
-        }
-
-        [Fact]
-        public async Task Http_WebSocket_Echo_BytesLeft_IsZeroForCompleteFrame()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(StreamHelper + $@"
-                run_http(function()
-                    if HttpClient == nil then skip() end
-                    local client = HttpClient.New()
-                    client:SetTimeout(8000)
-                    local ws = ws_connect(client, '{WsUrl}')
-                    ws:Write('complete')
-                    local frame = ws:Read()
-                    local meta = ws:GetInfo()
-                    ws:Close()
-                    _outcome = tostring(frame ~= nil and meta.BytesLeft == 0)
+                    ws:Send('\xDE\xAD\xBE\xEF', true)
+                    local msg = ws:Read()
+                    ws:Dispose()
+                    _outcome = tostring(msg ~= nil and msg:GetType() == 2)
                 end)
                 return _outcome or 'skip'
             ");
@@ -976,14 +1038,17 @@ namespace KitsuneNet.Tests
                     local client = HttpClient.New()
                     client:SetTimeout(8000)
                     local ws = ws_connect(client, '{WsUrl}')
-                    ws:Write('frame1')
-                    ws:Write('frame2')
-                    ws:Write('frame3')
-                    local f1 = ws:Read()
-                    local f2 = ws:Read()
-                    local f3 = ws:Read()
-                    ws:Close()
-                    _outcome = tostring(f1 == 'frame1' and f2 == 'frame2' and f3 == 'frame3')
+                    ws:Send('frame1')
+                    ws:Send('frame2')
+                    ws:Send('frame3')
+                    local m1 = ws:Read()
+                    local m2 = ws:Read()
+                    local m3 = ws:Read()
+                    ws:Dispose()
+                    _outcome = tostring(
+                        m1 ~= nil and m1:GetData() == 'frame1' and
+                        m2 ~= nil and m2:GetData() == 'frame2' and
+                        m3 ~= nil and m3:GetData() == 'frame3')
                 end)
                 return _outcome or 'skip'
             ");
@@ -994,7 +1059,7 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task Http_WebSocket_MixedFrames_TextAndBinary_EchoedCorrectly()
+        public async Task Http_WebSocket_MixedFrames_TextAndBinary_TypesCorrect()
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(StreamHelper + $@"
@@ -1003,18 +1068,14 @@ namespace KitsuneNet.Tests
                     local client = HttpClient.New()
                     client:SetTimeout(8000)
                     local ws = ws_connect(client, '{WsUrl}')
-                    ws:Write('text_payload')
-                    client:SetBinary(true)
-                    ws:Write('\xAB\xCD')
-                    client:SetBinary(false)
-                    local tf = ws:Read()
-                    local tm = ws:GetInfo()
-                    local bf = ws:Read()
-                    local bm = ws:GetInfo()
-                    ws:Close()
+                    ws:Send('text_payload', false)
+                    ws:Send('\xAB\xCD', true)
+                    local tm = ws:Read()
+                    local bm = ws:Read()
+                    ws:Dispose()
                     _outcome = tostring(
-                        tf == 'text_payload'   and tm.Binary == false and tm.Opcode == 1 and
-                        bf == '\xAB\xCD'        and bm.Binary == true  and bm.Opcode == 2)
+                        tm ~= nil and tm:GetData() == 'text_payload' and tm:GetType() == 1 and
+                        bm ~= nil and bm:GetData() == '\xAB\xCD'     and bm:GetType() == 2)
                 end)
                 return _outcome or 'skip'
             ");
@@ -1025,7 +1086,7 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task Http_WebSocket_Close_AfterClose_ReadReturnsNil()
+        public async Task Http_WebSocket_Dispose_AfterDispose_ReadReturnsNil()
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(StreamHelper + $@"
@@ -1033,11 +1094,13 @@ namespace KitsuneNet.Tests
                     if HttpClient == nil then skip() end
                     local client = HttpClient.New()
                     client:SetTimeout(8000)
-                    local ws, err = client:Connect('{WsUrl}')
-                    if not ws then error('connect failed: ' .. tostring(err)) end
-                    ws:Close()
-                    local frame = ws:Read()
-                    _outcome = tostring(frame == nil)
+                    local co = client:Connect('{WsUrl}')
+                    local ok, ws = coroutine.resume(co)
+                    while ok and type(ws) ~= 'userdata' do ok, ws = coroutine.resume(co) end
+                    if not ok then error('connect failed: ' .. tostring(ws)) end
+                    ws:Dispose()
+                    local msg = ws:Read()
+                    _outcome = tostring(msg == nil)
                 end)
                 return _outcome or 'skip'
             ");
@@ -1048,7 +1111,7 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task Http_WebSocket_HasData_TrueWhenConnected_MinusOneAfterClose()
+        public async Task Http_WebSocket_Poll_ReturnsNilWhenNoMessage()
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(StreamHelper + $@"
@@ -1056,12 +1119,10 @@ namespace KitsuneNet.Tests
                     if HttpClient == nil then skip() end
                     local client = HttpClient.New()
                     client:SetTimeout(8000)
-                    local ws, err = client:Connect('{WsUrl}')
-                    if not ws then error('connect failed: ' .. tostring(err)) end
-                    local when_connected = ws:HasData()
-                    ws:Close()
-                    local after_close = ws:HasData()
-                    _outcome = tostring(when_connected == true and after_close == -1)
+                    local ws = ws_connect(client, '{WsUrl}')
+                    local msg = ws:Poll()
+                    ws:Dispose()
+                    _outcome = tostring(msg == nil)
                 end)
                 return _outcome or 'skip'
             ");
@@ -1082,10 +1143,10 @@ namespace KitsuneNet.Tests
                     client:SetTimeout(8000)
                     local ws = ws_connect(client, '{WsUrl}')
                     local payload = string.rep('kitsune_ws_', 400)
-                    ws:Write(payload)
-                    local frame = ws:Read()
-                    ws:Close()
-                    _outcome = tostring(frame == payload)
+                    ws:Send(payload)
+                    local msg = ws:Read()
+                    ws:Dispose()
+                    _outcome = tostring(msg ~= nil and msg:GetData() == payload)
                 end)
                 return _outcome or 'skip'
             ");
