@@ -46,6 +46,10 @@
 #ifdef KITSUNE_MONGO
 #include "MongoMain.h"
 #endif
+#ifdef KITSUNE_LLAMA
+#include "LuaLlama.h"
+#include "LuaLlamaMain.h"
+#endif
 
 #include "LuaMutexMain.h"
 #include "LuaHardwareMain.h"
@@ -1647,6 +1651,9 @@ extern "C" {
 		luaopen_timespan(L);     lua_setglobal(L, "TimeSpan");
 		luaopen_csv(L);          lua_setglobal(L, "CSV");
 		luaopen_sha1(L);         lua_setglobal(L, "SHA1");
+#ifdef KITSUNE_LLAMA
+		luaopen_llama(L);        lua_setglobal(L, "Llama");
+#endif
 #ifdef KITSUNE_HTTP
 		luaopen_httpserver(L);   lua_setglobal(L, "HttpServer");
 #endif
@@ -4062,6 +4069,14 @@ extern "C" {
 #endif
 #ifdef KITSUNE_MONGO
 		MongoGlobalCleanup();
+#endif
+#ifdef KITSUNE_LLAMA
+		if (g_llama_backend_initialized.load()) {
+			llama_backend_free();
+			g_llama_backend_initialized.store(false);
+			delete g_log_buf;
+			g_log_buf = nullptr;
+		}
 #endif
 #ifdef _WIN32
 		WSACleanup();
