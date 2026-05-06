@@ -396,6 +396,30 @@ static int task_onerror(lua_State* L) {
     return 1;
 }
 
+static int task_getidbyname(lua_State* L) {
+    const char* name = luaL_checkstring(L, 1);
+    if (!g_state) {
+        lua_pushnil(L);
+        return 1;
+    }
+    g_state->slotsLock.lock();
+    int found = 0;
+    for (int i = 0; i < g_state->slotCount; i++) {
+        KitsuneCoroutine* slot = g_state->slots[i];
+        if (slot->id != 0 && slot->name && strcmp(slot->name, name) == 0 && slot->state.load() != KITSUNE_COROUTINE_STATE_RELEASED) {
+            found = slot->id;
+            break;
+        }
+    }
+    g_state->slotsLock.unlock();
+    if (found <= 0) {
+        lua_pushnil(L);
+        return 1;
+    }
+    lua_pushinteger(L, found);
+    return 1;
+}
+
 static int task_activecount(lua_State* L) {
     if (!g_state) {
         lua_pushinteger(L, 0);
@@ -433,6 +457,7 @@ int luaopen_tasks(lua_State* L) {
         { "GetCurrentId",    task_getcurrentid    },
         { "OnError",         task_onerror         },
         { "ActiveCount",     task_activecount     },
+        { "GetIdByName",     task_getidbyname     },
         { NULL, NULL }
     };
     static const struct luaL_Reg taskmeta[] = {

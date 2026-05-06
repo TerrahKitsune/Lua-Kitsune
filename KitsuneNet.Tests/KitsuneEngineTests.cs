@@ -8046,6 +8046,85 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
+        public async Task GetIdByName_NamedRunningTask_ReturnsId()
+        {
+            using KitsuneEngine engine = new();
+            engine.SetVariable("foundId", 0L);
+            engine.ExecuteString(@"
+                local t = Tasks.New(function()
+                    Sleep(5000)
+                end)
+                t:SetName('myTask')
+                Sleep(50)
+                foundId = Tasks.GetIdByName('myTask')
+                t:Cancel()
+                t:Dispose()
+            ");
+            SpinUntilRunning(engine);
+            int id = engine.RunningCoroutineId;
+            await engine.WaitAsync(id);
+            engine.GetInt64("foundId").ShouldNotBeNull();
+            engine.GetInt64("foundId")!.Value.ShouldBeGreaterThan(0);
+        }
+
+        [Fact]
+        public async Task GetIdByName_UnknownName_ReturnsNil()
+        {
+            using KitsuneEngine engine = new();
+            engine.SetVariable("foundId", 99L);
+            engine.ExecuteString(@"
+                foundId = Tasks.GetIdByName('doesNotExist')
+            ");
+            SpinUntilRunning(engine);
+            int id = engine.RunningCoroutineId;
+            await engine.WaitAsync(id);
+            engine.GetInt64("foundId").ShouldBeNull();
+        }
+
+        [Fact]
+        public async Task GetIdByName_AfterTaskFinishes_ReturnsNil()
+        {
+            using KitsuneEngine engine = new();
+            engine.SetVariable("idWhileRunning", 0L);
+            engine.SetVariable("idAfterDone", 99L);
+            engine.ExecuteString(@"
+                local t = Tasks.New(function() Sleep(50) end)
+                t:SetName('shortTask')
+                Sleep(10)
+                idWhileRunning = Tasks.GetIdByName('shortTask')
+                t:Wait()
+                t:Dispose()
+                idAfterDone = Tasks.GetIdByName('shortTask')
+            ");
+            SpinUntilRunning(engine);
+            int id = engine.RunningCoroutineId;
+            await engine.WaitAsync(id);
+            engine.GetInt64("idWhileRunning").ShouldNotBeNull();
+            engine.GetInt64("idWhileRunning")!.Value.ShouldBeGreaterThan(0);
+            engine.GetInt64("idAfterDone").ShouldBeNull();
+        }
+
+        [Fact]
+        public async Task GetIdByName_MatchesTaskGetId()
+        {
+            using KitsuneEngine engine = new();
+            engine.SetVariable("idsMatch", false);
+            engine.ExecuteString(@"
+                local t = Tasks.New(function() Sleep(5000) end)
+                t:SetName('matchTask')
+                Sleep(20)
+                local found = Tasks.GetIdByName('matchTask')
+                idsMatch = (found ~= nil and found == t:GetId())
+                t:Cancel()
+                t:Dispose()
+            ");
+            SpinUntilRunning(engine);
+            int id = engine.RunningCoroutineId;
+            await engine.WaitAsync(id);
+            engine.GetBool("idsMatch").ShouldBe(true);
+        }
+
+        [Fact]
         public void MaxSlots_Is256()
         {
             using KitsuneEngine engine = new();

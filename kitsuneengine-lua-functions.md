@@ -1175,6 +1175,8 @@ array Process:Threads()              -- Windows only
 
 The `HttpClient` global
 
+`HttpClient` has no `Dispose` method — it holds no sockets or connections of its own. Each `Request`, `Call`, `Stream`, and `Connect` creates its own curl handle that is freed when the coroutine completes. The client itself is released by the garbage collector. To cancel in-flight requests early, attach an `AliveToken` via `client:SetAliveToken(token)` and call `token:Dispose()`.
+
 ### Creation and utilities
 
 ```lua
@@ -3387,9 +3389,10 @@ int    task:GetId()     -- coroutine id; 0 when the handle has been disposed
 ```lua
 bool   task:SetName(name)   -- false if id==0 or name already taken by another coroutine
 string task:GetName()       -- nil if id==0 or no name set
+int    Tasks.GetIdByName(name)  -- returns the id of the running task with that name, or nil
 ```
 
-Names are optional human-readable labels. Name uniqueness is enforced across all live slots.
+Names are optional human-readable labels. Name uniqueness is enforced across all live slots. `Tasks.GetIdByName` searches all non-released slots and returns `nil` if no live task with that name exists or if the task's id is 0.
 
 ### Status
 
