@@ -719,12 +719,6 @@
     <ClCompile Include="LuaWebSocket.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="LuaLlamaMain.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaLlama.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="KitsuneEngine.h">
@@ -1135,12 +1129,6 @@
     <ClInclude Include="LuaWebSocket.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="LuaLlama.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="LuaLlamaMain.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="Lua functions.md" />
@@ -1150,10 +1138,6 @@
     <None Include="build-linux-and-test.ps1" />
     <None Include=".vscode\launch.json" />
     <None Include="plans\websocket-server.md" />
-    <None Include="plans\llama_cpp_integration.md" />
-    <None Include="vendor\fetch-llama.ps1" />
-    <None Include="vendor\README.md" />
-    <None Include="tests\fetch-test-model.ps1" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />

@@ -318,32 +318,6 @@ if(KITSUNE_MONGO)
 	target_link_libraries(KitsuneEngine PRIVATE ${MONGOC_LIBRARIES})
 endif()
 
-# ── Optional llama.cpp LLM support (prebuilt vendor binaries) ─────────────────
-# Run vendor/fetch-llama.ps1 before enabling this option.
-# Supports CUDA 12.4 (RTX 20/30/40xx, default) and 13.1 (RTX 50xx).
-option(KITSUNE_LLAMA "Build with llama.cpp LLM support (run vendor/fetch-llama.ps1 first)" OFF)
-
-if(KITSUNE_LLAMA)
-	set(LLAMA_VENDOR_DIR "${CMAKE_SOURCE_DIR}/vendor/llama.cpp")
-
-	if(NOT EXISTS "${LLAMA_VENDOR_DIR}/include/llama.h")
-		message(FATAL_ERROR
-			"llama.cpp vendor files not found.\n"
-			"Run: powershell -ExecutionPolicy Bypass -File vendor/fetch-llama.ps1")
-	endif()
-
-	target_sources(KitsuneEngine PRIVATE LuaLlama.cpp LuaLlamaMain.cpp)
-	target_compile_definitions(KitsuneEngine PRIVATE KITSUNE_LLAMA)
-	target_include_directories(KitsuneEngine PRIVATE
-		"${LLAMA_VENDOR_DIR}/include"
-		"${LLAMA_VENDOR_DIR}/include/ggml"
-	)
-	target_link_libraries(KitsuneEngine PRIVATE
-		"${LLAMA_VENDOR_DIR}/lib/llama.lib"
-		"${LLAMA_VENDOR_DIR}/lib/ggml.lib"
-	)
-endif()
-
 target_compile_definitions(KitsuneEngine PRIVATE
 	KITSUNE_ENGINE_EXPORTS
 )
@@ -363,11 +337,7 @@ set_target_properties(KitsuneEngine PROPERTIES
 	C_VISIBILITY_PRESET   default
 )
 
-if(WIN32)
-	target_link_libraries(KitsuneEngine PRIVATE lua_core)
-else()
-	target_link_libraries(KitsuneEngine PRIVATE lua_core pthread dl)
-endif()
+target_link_libraries(KitsuneEngine PRIVATE lua_core pthread dl)
 
 # ── kitsune host executable ───────────────────────────────────────────────────
 if(EXISTS "${CMAKE_SOURCE_DIR}/Kitsune/Scheduler.cpp")

@@ -25,12 +25,6 @@
 #	ifndef KITSUNE_HTTP
 #		define KITSUNE_HTTP
 #	endif
-	// llama.cpp uses prebuilt Windows-only vendor binaries; skip on Linux/macOS.
-#	ifdef _WIN32
-#		ifndef KITSUNE_LLAMA
-#			define KITSUNE_LLAMA
-#		endif
-#	endif
 #endif
 
 #ifdef _WIN32

@@ -10687,11 +10687,11 @@ namespace KitsuneNet.Tests
             ");
 
             // Dispose the token from outside after a short delay
-            await Task.Delay(30);
-            await engine.ExecuteStringAsync(@"_token:Dispose()");
+            await Task.Delay(30).ConfigureAwait(false);
+            await engine.ExecuteStringAsync(@"_token:Dispose()").ConfigureAwait(false);
 
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            await sleepTask;
+            await sleepTask.ConfigureAwait(false);
             sw.Stop();
 
             // Should have woken when token was disposed, well before 5000 ms

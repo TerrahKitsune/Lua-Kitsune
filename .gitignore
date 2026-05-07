@@ -6,9 +6,6 @@
 # Local test credentials - tracked once as a safe template then ignored
 tests/config.lua
 
-# Test model files - large binaries, download via tests/fetch-test-model.ps1
-tests/models/
-
 # Planning / design documents — local only, not for version control
 plans/
 
@@ -382,6 +379,3 @@ x64/
 
 # vcpkg installed packages — restored locally by vcpkg, not committed
 vcpkg_installed/
-
-# llama.cpp prebuilt vendor binaries (fetched by vendor/fetch-llama.ps1)
-vendor/llama.cpp/

@@ -51,8 +51,10 @@ namespace KitsuneNet.Tests
                 return s
             end
             local function ws_connect(client, url)
-                local ws = client:Connect(url)
-                if ws == nil then error('Connect failed') end
+                local co = client:Connect(url)
+                local ok, ws = coroutine.resume(co)
+                while ok and type(ws) ~= 'userdata' do ok, ws = coroutine.resume(co) end
+                if not ok then error('Connect failed: ' .. tostring(ws)) end
                 ws:Poll()  -- drain server welcome frame if any
                 return ws
             end
@@ -839,8 +841,10 @@ namespace KitsuneNet.Tests
                     if HttpClient == nil then skip() end
                     local client = HttpClient.New()
                     client:SetTimeout(8000)
-                    local ws = client:Connect('{WsUrl}')
-                    if ws == nil then error('connect failed') end
+                    local co = client:Connect('{WsUrl}')
+                    local ok, ws = coroutine.resume(co)
+                    while ok and type(ws) ~= 'userdata' do ok, ws = coroutine.resume(co) end
+                    if not ok then error('connect failed: ' .. tostring(ws)) end
                     ws:Dispose()
                     _outcome = 'true'
                 end)
@@ -861,8 +865,10 @@ namespace KitsuneNet.Tests
                     if HttpClient == nil then skip() end
                     local client = HttpClient.New()
                     client:SetTimeout(8000)
-                    local ws = client:Connect('{WsUrl}')
-                    if ws == nil then error('connect failed') end
+                    local co = client:Connect('{WsUrl}')
+                    local ok, ws = coroutine.resume(co)
+                    while ok and type(ws) ~= 'userdata' do ok, ws = coroutine.resume(co) end
+                    if not ok then error('connect failed: ' .. tostring(ws)) end
                     local connected = ws:IsConnected()
                     ws:Dispose()
                     local after = ws:IsConnected()
@@ -885,8 +891,10 @@ namespace KitsuneNet.Tests
                     if HttpClient == nil then skip() end
                     local client = HttpClient.New()
                     client:SetTimeout(8000)
-                    local ws = client:Connect('{WsUrl}')
-                    if ws == nil then error('connect failed') end
+                    local co = client:Connect('{WsUrl}')
+                    local ok, ws = coroutine.resume(co)
+                    while ok and type(ws) ~= 'userdata' do ok, ws = coroutine.resume(co) end
+                    if not ok then error('connect failed: ' .. tostring(ws)) end
                     local id1 = ws:GetId()
                     local id2 = ws:GetId()
                     ws:Dispose()
@@ -909,8 +917,10 @@ namespace KitsuneNet.Tests
                     if HttpClient == nil then skip() end
                     local client = HttpClient.New()
                     client:SetTimeout(8000)
-                    local ws = client:Connect('{WsUrl}')
-                    if ws == nil then error('connect failed') end
+                    local co = client:Connect('{WsUrl}')
+                    local ok, ws = coroutine.resume(co)
+                    while ok and type(ws) ~= 'userdata' do ok, ws = coroutine.resume(co) end
+                    if not ok then error('connect failed: ' .. tostring(ws)) end
                     local ctx1 = ws:GetContext()
                     ctx1.foo = 'bar'
                     local ctx2 = ws:GetContext()
@@ -1084,8 +1094,10 @@ namespace KitsuneNet.Tests
                     if HttpClient == nil then skip() end
                     local client = HttpClient.New()
                     client:SetTimeout(8000)
-                    local ws = client:Connect('{WsUrl}')
-                    if ws == nil then error('connect failed') end
+                    local co = client:Connect('{WsUrl}')
+                    local ok, ws = coroutine.resume(co)
+                    while ok and type(ws) ~= 'userdata' do ok, ws = coroutine.resume(co) end
+                    if not ok then error('connect failed: ' .. tostring(ws)) end
                     ws:Dispose()
                     local msg = ws:Read()
                     _outcome = tostring(msg == nil)
@@ -1436,6 +1448,7 @@ namespace KitsuneNet.Tests
         // where concurrent coroutines could steal each other's CURLMSG_DONE and
         // stall forever.  Each test fires two or more requests simultaneously
         // inside the same Lua coroutine drive loop and asserts both complete.
+
         [Fact]
         public async Task Http_Concurrent_TwoRequests_BothComplete()
         {
