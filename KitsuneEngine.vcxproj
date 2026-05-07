@@ -107,6 +107,7 @@
     <ClCompile Include="KitsuneEngine.cpp" />
     <ClCompile Include="KitsuneLuaDebug.cpp" />
     <ClCompile Include="kitsuneuserdata.cpp" />
+    <ClCompile Include="LlamaContext.cpp" />
     <ClCompile Include="LuaArchive.cpp" />
     <ClCompile Include="LuaArchiveMain.cpp" />
     <ClCompile Include="base64.cpp" />
@@ -124,6 +125,8 @@
     <ClCompile Include="luakafkaconsumer.cpp" />
     <ClCompile Include="luakafkamain.cpp" />
     <ClCompile Include="luakafkaproducer.cpp" />
+    <ClCompile Include="luallama.cpp" />
+    <ClCompile Include="luallamamain.cpp" />
     <ClCompile Include="luamsgpack.cpp" />
     <ClCompile Include="luamsgpackmain.cpp" />
     <ClCompile Include="luatask.cpp" />
@@ -258,6 +261,7 @@
     <ClInclude Include="Kitsune\KitsuneLuaDebug.h" />
     <ClInclude Include="kitsune_internal.h" />
     <ClInclude Include="libyaml\src\config.h" />
+    <ClInclude Include="LlamaContext.h" />
     <ClInclude Include="LuaArchive.h" />
     <ClInclude Include="LuaArchiveMain.h" />
     <ClInclude Include="base64.h" />
@@ -277,6 +281,8 @@
     <ClInclude Include="luakafkaconsumer.h" />
     <ClInclude Include="luakafkamain.h" />
     <ClInclude Include="luakafkaproducer.h" />
+    <ClInclude Include="luallama.h" />
+    <ClInclude Include="luallamamain.h" />
     <ClInclude Include="luamsgpack.h" />
     <ClInclude Include="luamsgpackmain.h" />
     <ClInclude Include="luatask.h" />
@@ -386,6 +392,7 @@
     <None Include=".vscode\launch.json" />
     <None Include="build-linux-and-test.ps1" />
     <None Include="Lua functions.md" />
+    <None Include="plans\llama_cpp_integration.md" />
     <None Include="plans\websocket-server.md" />
     <None Include="testEnvironments.json" />
     <None Include="triplets\x64-windows-static-md.cmake" />

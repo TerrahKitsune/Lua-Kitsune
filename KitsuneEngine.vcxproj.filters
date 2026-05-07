@@ -288,6 +288,15 @@
     <Filter Include="LuaAliveToken">
       <UniqueIdentifier>{67d27bd3-dca7-4d41-bbf4-05a2467911ba}</UniqueIdentifier>
     </Filter>
+    <Filter Include="LuaLlama">
+      <UniqueIdentifier>{839ac8d7-ac66-413a-8d5a-0c19c441645e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaLlama\Source Files">
+      <UniqueIdentifier>{b4d8f306-47f6-4eb7-9298-1c66d04c4232}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaLlama\Header Files">
+      <UniqueIdentifier>{ac94d203-f963-4994-a136-763ce346832b}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="KitsuneEngine.cpp">
@@ -719,6 +728,15 @@
     <ClCompile Include="LuaWebSocket.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="luallamamain.cpp">
+      <Filter>LuaLlama</Filter>
+    </ClCompile>
+    <ClCompile Include="luallama.cpp">
+      <Filter>LuaLlama\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LlamaContext.cpp">
+      <Filter>LuaLlama\Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="KitsuneEngine.h">
@@ -1129,6 +1147,15 @@
     <ClInclude Include="LuaWebSocket.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="luallamamain.h">
+      <Filter>LuaLlama</Filter>
+    </ClInclude>
+    <ClInclude Include="luallama.h">
+      <Filter>LuaLlama\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LlamaContext.h">
+      <Filter>LuaLlama\Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="Lua functions.md" />
@@ -1138,6 +1165,7 @@
     <None Include="build-linux-and-test.ps1" />
     <None Include=".vscode\launch.json" />
     <None Include="plans\websocket-server.md" />
+    <None Include="plans\llama_cpp_integration.md" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />
