@@ -15,29 +15,28 @@
 
 // -- Process-wide log buffer ----------------------------------------------------
 
-static std::mutex              g_log_mtx;
-static std::vector<std::string> g_log_buf;
-static constexpr size_t        LOG_BUF_MAX = 500;
+static constexpr size_t LOG_BUF_MAX = 500;
+
+static std::mutex*               g_log_mtx = nullptr;
+static std::vector<std::string>* g_log_buf = nullptr;
 
 static void llama_log_callback(enum ggml_log_level level, const char* text, void* user_data) {
     (void)level;
     (void)user_data;
-    if (!text)
+    if (!text || !g_log_mtx || !g_log_buf)
         return;
-    std::lock_guard<std::mutex> lock(g_log_mtx);
-    if (g_log_buf.size() >= LOG_BUF_MAX)
-        g_log_buf.erase(g_log_buf.begin());
-    g_log_buf.emplace_back(text);
-}
-
-void llama_log_buffer_init() {
-    llama_log_set(llama_log_callback, nullptr);
+    std::lock_guard<std::mutex> lock(*g_log_mtx);
+    if (g_log_buf->size() >= LOG_BUF_MAX)
+        g_log_buf->erase(g_log_buf->begin());
+    g_log_buf->emplace_back(text);
 }
 
 void llama_log_buffer_drain(std::vector<std::string>& out) {
-    std::lock_guard<std::mutex> lock(g_log_mtx);
-    out = std::move(g_log_buf);
-    g_log_buf.clear();
+    if (!g_log_mtx || !g_log_buf)
+        return;
+    std::lock_guard<std::mutex> lock(*g_log_mtx);
+    out = std::move(*g_log_buf);
+    g_log_buf->clear();
 }
 
 // -- Process-wide backend init --------------------------------------------------
@@ -47,15 +46,21 @@ static std::atomic<bool> g_llama_backend_initialized{false};
 void llama_backend_init_once() {
     bool expected = false;
     if (g_llama_backend_initialized.compare_exchange_strong(expected, true)) {
+        g_log_mtx = new std::mutex();
+        g_log_buf = new std::vector<std::string>();
         llama_backend_init();
-        llama_log_buffer_init();
+        llama_log_set(llama_log_callback, nullptr);
     }
 }
 
 void llama_backend_cleanup() {
     bool expected = true;
     if (g_llama_backend_initialized.compare_exchange_strong(expected, false)) {
-        llama_backend_free();
+        llama_log_set(nullptr, nullptr);
+        delete g_log_buf;
+        g_log_buf = nullptr;
+        delete g_log_mtx;
+        g_log_mtx = nullptr;
     }
 }
 

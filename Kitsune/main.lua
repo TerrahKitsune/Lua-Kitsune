@@ -134,6 +134,43 @@ CreateGCPrint();
 collectgarbage();
 GetKey = Session.Console.GetKey;
 
+local ctx = Llama.CreateContext();
+assert(ctx:SetModel("C:/models/qwen3-0.6b-q8_0.gguf"));
+print(ctx:IsReady());
+assert(ctx:Generate({
+    { role = 'system', content = 'You are a helpful assistant.' },
+    { role = 'user',   content = 'Hello!' },
+}));
+
+local ok, data = ctx:Poll()
+while ok do
+    if data then
+        if data.type == 'error' then 
+			error(data.text)
+		else
+			print(data.type, data.text)
+		end
+    end
+    Sleep(10)
+    ok, data = ctx:Poll()
+end
+
+GetKey();
+
+data = Llama.GetLogs();
+
+for n=1, #data do
+	print(data[n]);
+end
+data=nil
+
+GetKey();
+
+print("");
+print(Json.New(true):Encode(ctx:Info()));
+
+GetKey();
+
 SetTitle("Kitsune: ".._VERSION);
 if Imgui then
 	print("Imgui is detected");

@@ -340,41 +340,39 @@ int lua_llama_generate(lua_State* L) {
 int lua_llama_poll(lua_State* L) {
 	LuaLlama* llama = lua_llama_check(L, 1);
 	if (!llama->context || llama->context->IsDisposed()) {
-		lua_pushliteral(L, "");
-		lua_pushliteral(L, "");
-		lua_pushliteral(L, "done");
-		return 3;
+		lua_pushboolean(L, 0);
+		lua_pushnil(L);
+		return 2;
 	}
 
 	std::string text, type;
 	bool ok = llama->context->Poll(text, type);
 
 	if (!ok) {
-		// Done or error
+		lua_pushboolean(L, 0);
 		if (!text.empty()) {
+			lua_newtable(L);
 			lua_pushlstring(L, text.c_str(), text.size());
-			lua_pushstring(L, type.c_str());
+			lua_setfield(L, -2, "text");
 			lua_pushliteral(L, "error");
+			lua_setfield(L, -2, "type");
 		} else {
-			lua_pushliteral(L, "");
-			lua_pushliteral(L, "");
-			lua_pushliteral(L, "done");
+			lua_pushnil(L);
 		}
-		return 3;
+		return 2;
 	}
 
+	lua_pushboolean(L, 1);
 	if (text.empty() && type.empty()) {
-		// Nothing ready yet
-		lua_pushliteral(L, "");
-		lua_pushliteral(L, "");
-		lua_pushliteral(L, "generating");
-		return 3;
+		lua_pushnil(L);
+	} else {
+		lua_newtable(L);
+		lua_pushlstring(L, text.c_str(), text.size());
+		lua_setfield(L, -2, "text");
+		lua_pushstring(L, type.c_str());
+		lua_setfield(L, -2, "type");
 	}
-
-	lua_pushlstring(L, text.c_str(), text.size());
-	lua_pushstring(L, type.c_str());
-	lua_pushliteral(L, "generating");
-	return 3;
+	return 2;
 }
 
 // ctx:Stop() -> true

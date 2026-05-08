@@ -77,7 +77,6 @@ struct LlamaGenOpts {
 
 // ── Process-wide llama.cpp log buffer ──────────────────────────────────────────
 
-void        llama_log_buffer_init();
 void        llama_log_buffer_drain(std::vector<std::string>& out);
 
 // ── Process-wide backend init ──────────────────────────────────────────────────

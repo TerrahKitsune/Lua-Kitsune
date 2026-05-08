@@ -10,7 +10,9 @@
       <KITSUNE_MONGO_TEST>mongodb://10.9.23.123:27017/</KITSUNE_MONGO_TEST>
       <KITSUNE_MONGO_DB>kitsune</KITSUNE_MONGO_DB>
       <KITSUNE_MONGO_COLL>kitsune</KITSUNE_MONGO_COLL>
+      <KITSUNE_LLAMA_MODEL>C:\Models\qwen3-0.6b-q8_0.gguf</KITSUNE_LLAMA_MODEL>
       <KITSUNE_SKIP_ANNOYING>1</KITSUNE_SKIP_ANNOYING>
+      <GGML_NO_BACKTRACE>1</GGML_NO_BACKTRACE>
     </EnvironmentVariables>
   </RunConfiguration>
 </RunSettings>
