@@ -40,6 +40,7 @@ A comprehensive reference for all available functions in the Lua environment.
 - [Ini](#ini)
 - [AliveToken](#alivetoken)
 - [Tasks](#tasks)
+- [Llama](#llama)
 - [Third-Party Notices](#third-party-notices)
 ---
 
@@ -3642,6 +3643,476 @@ if not slow:Finished() then
     slow:Cancel()
 end
 slow:Dispose()
+```
+
+---
+
+## Llama
+
+A local LLM inference module backed by [llama.cpp](https://github.com/ggml-org/llama.cpp). Runs GGUF models on CPU or GPU (CUDA). All inference is dispatched to a **persistent background worker thread** per context; the calling coroutine uses non-blocking `Poll()` calls cooperatively — no OS thread is blocked. **Windows only** in the current build.
+
+> **Note:** `Llama.CreateContext` lazily initialises the llama.cpp and ggml backends on first call. The CUDA backend is loaded automatically when `ggml-cuda.dll` is present in the output directory.
+
+### Module-level
+
+```lua
+LlamaContext  Llama.CreateContext(opt opts)
+table         Llama.GetLogs()
+```
+
+#### Llama.CreateContext
+
+```lua
+LlamaContext  Llama.CreateContext(opt opts)
+```
+
+Creates a new inference context. The worker thread is started immediately. Returns a `LlamaContext` userdata.
+
+**`opts` fields (all optional):**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `n_gpu_layers` | integer | `99` | Number of model layers to offload to GPU. `99` offloads all layers |
+| `n_ctx` | integer | `4096` | Context window size in tokens |
+| `n_threads` | integer | `0` | CPU inference threads. `0` = auto-detect (hardware concurrency) |
+| `n_batch` | integer | `512` | Prompt batch size |
+| `flash_attn` | boolean | `false` | Enable Flash Attention |
+| `model_ttl_ms` | integer | `300000` | Milliseconds of idle time before the model is automatically unloaded. `0` disables auto-unload |
+
+```lua
+-- Default context (all layers on GPU, 4096 context window)
+local ctx = Llama.CreateContext()
+
+-- Custom context
+local ctx = Llama.CreateContext({
+    n_gpu_layers = 32,
+    n_ctx        = 8192,
+    n_threads    = 8,
+    model_ttl_ms = 0,     -- never auto-unload
+})
+```
+
+#### Llama.GetLogs
+
+```lua
+table  Llama.GetLogs()
+```
+
+Drains and returns the accumulated llama.cpp / ggml log lines since the last call as an array of strings. The internal buffer holds up to 500 entries; older entries are dropped when the buffer is full.
+
+```lua
+local logs = Llama.GetLogs()
+for _, line in ipairs(logs) do io.write(line) end
+```
+
+---
+
+### LlamaContext methods
+
+All methods are available both as `Llama.Method(ctx, ...)` and as `ctx:Method(...)`.
+
+```lua
+bool          ctx:SetModel(path [, opts])
+bool          ctx:LoadModel()
+bool          ctx:UnloadModel()
+bool          ctx:IsModelLoaded()
+bool          ctx:IsReady()
+bool          ctx:Generate(messages [, opts])
+ok, data      ctx:Poll()
+bool          ctx:Stop()
+bool          ctx:Reset()
+float[]       ctx:Embed(text)
+table         ctx:Info()
+bool          ctx:Dispose()
+```
+
+---
+
+#### ctx:SetModel
+
+```lua
+true  ctx:SetModel(path)
+nil, errmsg  ctx:SetModel(path)
+```
+
+Sets the path to the GGUF model file. Does not load it — call `LoadModel` afterwards. Returns `nil, "busy"` if the worker is currently busy.
+
+```lua
+ctx:SetModel([[C:\Models\qwen3-0.6b-q8_0.gguf]])
+```
+
+---
+
+#### ctx:LoadModel
+
+```lua
+true         ctx:LoadModel()
+nil, errmsg  ctx:LoadModel()
+```
+
+Queues a model load on the worker thread. Returns immediately; poll `ctx:IsReady()` to wait for completion, then call `ctx:Info()` only if you need to check for an error.
+
+```lua
+ctx:LoadModel()
+while not ctx:IsReady() and ctx:Info().context.status ~= 'error' do Sleep(50) end
+if ctx:Info().context.status == 'error' then
+    error(ctx:Info().context.error)
+end
+```
+
+---
+
+#### ctx:UnloadModel
+
+```lua
+true         ctx:UnloadModel()
+nil, errmsg  ctx:UnloadModel()
+```
+
+Queues a model unload on the worker thread. Returns `nil, "busy"` if a generation is in progress. Call `Stop()` first to cancel generation, then `UnloadModel`.
+
+---
+
+#### ctx:IsModelLoaded
+
+```lua
+bool  ctx:IsModelLoaded()
+```
+
+Returns `true` if a model is currently loaded and ready for inference.
+
+---
+
+#### ctx:IsReady
+
+```lua
+bool  ctx:IsReady()
+```
+
+Returns `true` if the context is idle with a model loaded — i.e. ready to accept a `Generate` call immediately.
+
+---
+
+#### ctx:Generate
+
+```lua
+true         ctx:Generate(messages [, opts])
+nil, errmsg  ctx:Generate(messages [, opts])
+```
+
+Queues a generation request. `messages` is an array of chat message tables (OpenAI-format). Returns immediately; output is consumed via `Poll`.
+
+Returns `nil, errmsg` when:
+- `"already running"` — a generation is already in progress
+- `"no model"` — no model has been set / loaded
+- `"busy"` — the worker is occupied with another task
+- `"empty messages"` — the messages array was empty or contained no valid entries
+- `"disposed"` — the context has been disposed
+
+**Message table fields:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `role` | string | yes | `"system"`, `"user"`, `"assistant"`, or `"tool"` |
+| `content` | string | yes | Message text |
+| `tool_call_id` | string | no | For `"tool"` role messages — the id of the tool call being responded to |
+| `tool_calls` | string or table | no | For `"assistant"` role messages — JSON string or table of tool call objects (OpenAI format) |
+
+**`opts` fields (all optional):**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `temperature` | number | `0.8` | Sampling temperature |
+| `top_p` | number | `0.95` | Top-P nucleus sampling |
+| `top_k` | integer | `40` | Top-K sampling |
+| `min_p` | number | `0.05` | Min-P sampling |
+| `seed` | integer | `-1` | RNG seed. `-1` = random |
+| `max_tokens` | integer | `2048` | Maximum tokens to generate |
+| `tools` | string | — | JSON string of an OpenAI-format tools array |
+
+```lua
+ctx:Generate(
+    {
+        { role = 'system',    content = 'You are a helpful assistant.' },
+        { role = 'user',      content = 'What is 2 + 2?' },
+    },
+    { temperature = 0.3, max_tokens = 512 }
+)
+```
+
+---
+
+#### ctx:Poll
+
+```lua
+ok, data  ctx:Poll()
+```
+
+Non-blocking. Drains the next token or event from the worker queue.
+
+**Return values:**
+
+| Return | Type | Description |
+|--------|------|-------------|
+| `ok` | boolean | `true` while generation is in progress; `false` when done |
+| `data` | table or nil | `nil` when nothing is ready yet; otherwise a table with `text` and `type` fields |
+
+**`data.type` values:**
+
+| Value | Description |
+|-------|-------------|
+| `"token"` | Regular output token text |
+| `"reasoning"` | Token inside a `<think>...</think>` block (Qwen3, DeepSeek-R1, QwQ) |
+| `"tool_calls"` | `data.text` is a JSON array of tool call objects |
+| `"error"` | `data.text` contains the error message |
+
+When `ok` is `false` there is no more data; the poll loop should exit.
+
+```lua
+local ok, data = ctx:Poll()
+while ok do
+    if data then
+        if data.type == 'error' then error(data.text) end
+        if data.type == 'token'     then io.write(data.text) end
+        if data.type == 'reasoning' then -- discard or log end
+        if data.type == 'tool_calls' then
+            local calls = Json.New():Decode(data.text)
+            -- handle tool calls
+        end
+    end
+    Sleep(10)
+    ok, data = ctx:Poll()
+end
+```
+
+---
+
+#### ctx:Stop
+
+```lua
+bool  ctx:Stop()
+```
+
+Signals the worker to abort the current generation at the next token boundary. Non-blocking — returns immediately. The context status returns to `"idle"` asynchronously. Always returns `true`.
+
+---
+
+#### ctx:Reset
+
+```lua
+true         ctx:Reset()
+nil, errmsg  ctx:Reset()
+```
+
+Clears the KV cache without unloading the model. Use between multi-turn conversations to start a fresh session. Returns `nil, "busy"` if a generation is in progress.
+
+---
+
+#### ctx:Embed
+
+```lua
+float[]      ctx:Embed(text)
+nil, errmsg  ctx:Embed(text)
+```
+
+Generates an embedding vector for `text`. Blocks (yields) until the embedding is complete. The model must support embeddings. Returns a sequential table of floats, or `nil, errmsg` on failure.
+
+> **Note:** Embedding and generation use different llama.cpp context configurations. Not all models support both.
+
+```lua
+local vec = assert(ctx:Embed("hello world"))
+print(#vec)  -- embedding dimension
+```
+
+---
+
+#### ctx:Info
+
+```lua
+table  ctx:Info()
+```
+
+Returns a snapshot of the context state. The returned table has two sub-tables: `context` (always present) and `model` (present only when a model is loaded).
+
+**`info.context` fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `status` | string | `"idle"`, `"loading"`, `"generating"`, `"unloading"`, or `"error"` |
+| `n_ctx` | integer | Configured context window size |
+| `n_gpu_layers` | integer | Configured GPU layer count |
+| `n_threads` | integer | CPU thread count (resolved from hardware concurrency when 0) |
+| `n_batch` | integer | Batch size |
+| `model_ttl_ms` | integer | Auto-unload timeout in milliseconds |
+| `model_path` | string or nil | Path set via `SetModel`, or `nil` |
+| `error` | string or nil | Last error message, or `nil` |
+| `last_used` | number or nil | Seconds since last generation completed, or `nil` if never used |
+| `tokens_used` | integer | Tokens currently occupying the KV cache |
+| `tokens_available` | integer | Remaining tokens available in the context window |
+
+**`info.model` fields (nil when no model is loaded):**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `desc` | string | Model description string from the GGUF metadata |
+| `arch` | string | Model architecture (e.g. `"llama"`, `"qwen2"`) |
+| `context_length` | integer | Model's native maximum context length |
+| `n_params` | integer | Total parameter count |
+| `n_embd` | integer | Embedding dimension |
+| `n_layer` | integer | Number of transformer layers |
+| `size_bytes` | integer | Model size in bytes |
+| `chat_template` | string | Jinja2 chat template string from the GGUF metadata |
+| `n_gpu_layers` | integer | Configured GPU layer count |
+| `gpu_layer_count` | integer | Layers actually offloaded to GPU |
+| `cpu_layer_count` | integer | Layers running on CPU |
+| `gpu_percent` | number | Percentage of layers on GPU |
+| `cpu_percent` | number | Percentage of layers on CPU |
+| `capabilities` | array | String array of detected model capabilities (e.g. `"embedding"`, `"completion"`) |
+
+```lua
+local info = ctx:Info()
+print(info.context.status)            -- "idle"
+print(info.context.tokens_used)       -- 0
+if info.model then
+    print(info.model.desc)            -- "Qwen3-0.6B Q8_0"
+    print(info.model.n_params)        -- parameter count
+    print(info.model.gpu_percent)     -- e.g. 100.0
+end
+```
+
+---
+
+#### ctx:Dispose
+
+```lua
+bool  ctx:Dispose()
+```
+
+Signals the worker thread to shut down, unloads the model, and frees all resources. Idempotent — safe to call multiple times. The GC calls this automatically, but explicit disposal is recommended to release GPU memory promptly.
+
+---
+
+### Tool calling
+
+Pass an OpenAI-format tools JSON string as `opts.tools` to `Generate`. When the model produces a tool call the output is detected automatically and returned by `Poll` with `data.type == "tool_calls"` and `data.text` set to a JSON array:
+
+```json
+[{"name": "get_weather", "arguments": {"city": "Paris"}}]
+```
+
+Supported detection formats: single JSON object, JSON array of objects, and XML `<tool_call>...</tool_call>` tags (Mistral / Hermes style).
+
+```lua
+local tools = Json.New():Encode({
+    {
+        type     = 'function',
+        ['function'] = {
+            name        = 'get_weather',
+            description = 'Get the weather for a city',
+            parameters  = {
+                type       = 'object',
+                properties = { city = { type = 'string' } },
+                required   = { 'city' },
+            },
+        },
+    },
+})
+
+ctx:Generate(
+    {{ role = 'user', content = 'What is the weather in Paris?' }},
+    { tools = tools }
+)
+
+local ok, data = ctx:Poll()
+while ok do
+    if data then
+        if data.type == 'error' then error(data.text) end
+        if data.type == 'tool_calls' then
+            local calls = Json.New():Decode(data.text)
+            print(calls[1].name, calls[1].arguments.city)
+        end
+    end
+    Sleep(10)
+    ok, data = ctx:Poll()
+end
+```
+
+After handling tool results, pass them back as `"tool"` role messages and call `Generate` again without calling `Reset` (the KV cache is preserved between `Generate` calls within the same session).
+
+---
+
+### Reasoning models
+
+Models with `<think>` support (Qwen3, DeepSeek-R1, QwQ) emit chain-of-thought tokens before their final answer. These are returned as `data.type == "reasoning"` by `Poll`.
+
+```lua
+local content, reasoning = '', ''
+local ok, data = ctx:Poll()
+while ok do
+    if data then
+        if data.type == 'error'     then error(data.text) end
+        if data.type == 'token'     then content   = content   .. data.text end
+        if data.type == 'reasoning' then reasoning = reasoning .. data.text end
+    end
+    Sleep(10)
+    ok, data = ctx:Poll()
+end
+print('Reasoning:', reasoning)
+print('Answer:',    content)
+```
+
+---
+
+### Full example
+
+```lua
+local ctx = Llama.CreateContext({ n_gpu_layers = 99, n_ctx = 4096 })
+ctx:SetModel([[C:\Models\qwen3-0.6b-q8_0.gguf]])
+ctx:LoadModel()
+
+-- Wait for the model to finish loading
+while not ctx:IsReady() and ctx:Info().context.status ~= 'error' do Sleep(50) end
+if ctx:Info().context.status == 'error' then error(ctx:Info().context.error) end
+print('Model loaded:', info.model.desc)
+print(string.format('GPU: %.0f%%  CPU: %.0f%%', info.model.gpu_percent, info.model.cpu_percent))
+
+-- First turn
+ctx:Generate(
+    {
+        { role = 'system', content = 'You are a helpful assistant.' },
+        { role = 'user',   content = 'What is the capital of France?' },
+    },
+    { temperature = 0.3 }
+)
+
+local result = ''
+local ok, data = ctx:Poll()
+while ok do
+    if data then
+        if data.type == 'error' then error(data.text) end
+        if data.type == 'token' then
+            result = result .. data.text
+            io.write(data.text)
+        end
+    end
+    Sleep(10)
+    ok, data = ctx:Poll()
+end
+print()
+
+-- Second turn (KV cache preserved — no Reset needed)
+ctx:Generate({{ role = 'user', content = 'And Germany?' }})
+
+ok, data = ctx:Poll()
+while ok do
+    if data and data.type == 'token' then io.write(data.text) end
+    Sleep(10)
+    ok, data = ctx:Poll()
+end
+print()
+
+ctx:Reset()    -- clear KV cache between sessions
+ctx:Dispose()  -- free GPU memory and worker thread
 ```
 
 ---
