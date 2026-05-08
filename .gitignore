@@ -9,6 +9,10 @@ tests/config.lua
 # Planning / design documents — local only, not for version control
 plans/
 
+# Vendor binaries (llama.cpp, CUDA runtime) — downloaded by vendor\fetch-llama.ps1
+vendor/llama.cpp/
+vendor/.tmp/
+
 # User-specific files
 *.rsuser
 *.suo

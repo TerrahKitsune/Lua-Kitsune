@@ -25,6 +25,11 @@
 #	ifndef KITSUNE_HTTP
 #		define KITSUNE_HTTP
 #	endif
+#	ifdef _WIN32
+#		ifndef KITSUNE_LLAMA
+#			define KITSUNE_LLAMA
+#		endif
+#	endif
 #endif
 
 #ifdef _WIN32

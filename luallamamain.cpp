@@ -1,8 +1,22 @@
-﻿#include "luallama.h"
+﻿#include "platform.h"
+#include "luallama.h"
 #include "luallamamain.h"
 
 static const struct luaL_Reg llama_functions[] = {
-    { "CreateContext", lua_llama_new },
+    { "CreateContext",  lua_llama_new         },
+    { "GetLogs",        lua_llama_getlogs     },
+    { "SetModel",       lua_llama_setmodel    },
+    { "LoadModel",      lua_llama_loadmodel   },
+    { "UnloadModel",    lua_llama_unloadmodel },
+    { "IsModelLoaded",  lua_llama_ismodelloaded },
+    { "IsReady",        lua_llama_isready     },
+    { "Generate",       lua_llama_generate    },
+    { "Poll",           lua_llama_poll        },
+    { "Stop",           lua_llama_stop        },
+    { "Reset",          lua_llama_reset       },
+    { "Embed",          lua_llama_embed       },
+    { "Info",           lua_llama_info        },
+    { "Dispose",        lua_llama_dispose     },
     { NULL, NULL }
 };
 
