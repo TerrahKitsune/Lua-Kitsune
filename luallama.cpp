@@ -1,11 +1,14 @@
 ﻿#include "platform.h"
 #include "luallama.h"
+#include "luatoolsuite.h"
 #include "LlamaContext.h"
+#include "luajson.h"
 #include <cstring>
 
 LuaLlama* lua_llama_push(lua_State* L) {
 	LuaLlama* x = (LuaLlama*)lua_newuserdata(L, sizeof(LuaLlama));
 	memset(x, 0, sizeof(LuaLlama));
+	x->messages_ref = LUA_NOREF;
 	luaL_setmetatable(L, LUALLAMA);
 	return x;
 }
@@ -77,6 +80,10 @@ int lua_llama_new(lua_State* L) {
 
 int lua_llama_gc(lua_State* L) {
 	LuaLlama* llama = lua_llama_check(L, 1);
+	if (llama->messages_ref != LUA_NOREF) {
+		luaL_unref(L, LUA_REGISTRYINDEX, llama->messages_ref);
+		llama->messages_ref = LUA_NOREF;
+	}
 	if (llama->context) {
 		delete llama->context;
 		llama->context = nullptr;
@@ -299,25 +306,51 @@ int lua_llama_generate(lua_State* L) {
 		if (!lua_isnil(L, -1))
 			opts.max_tokens = (int)lua_tointeger(L, -1);
 		lua_pop(L, 1);
+	}
 
-		// tools: serialize the Lua table to JSON string
-		lua_getfield(L, 3, "tools");
-		if (lua_isstring(L, -1)) {
-			opts.tools_json = lua_tostring(L, -1);
-		} else if (lua_istable(L, -1)) {
-			// Use the Lua table as-is by converting to a JSON string
-			// For now, store a placeholder � the proper serialization
-			// would use the engine's JSON module. We'll use luaL_tolstring
-			// as a workaround. Actually, we need proper JSON here.
-			// Let's use a simple recursive serializer.
-			// For tool definitions, the structure is well-known:
-			// [{type:"function", function:{name, description, parameters:{...}}}]
-			// We'll just pass through the raw JSON if it's a string.
-			// If it's a table, the caller should pass JSON string.
-			// For maximum compatibility, accept both.
-			opts.tools_json = "[]";
+	// Optional tools: 4th arg when opts present, 3rd arg otherwise; string, table, or ToolSuite
+	int tools_arg = lua_istable(L, 3) ? 4 : 3;
+	if (lua_toolsuite_is(L, tools_arg)) {
+		// Extract JSON directly from the ToolSuite userdata
+		lua_pushcfunction(L, lua_toolsuite_getjson);
+		lua_pushvalue(L, tools_arg);
+		if (lua_pcall(L, 1, 1, 0) == LUA_OK) {
+			size_t len = 0;
+			const char* s = lua_tolstring(L, -1, &len);
+			if (s && len > 0)
+				opts.tools_json.assign(s, len);
+			lua_pop(L, 1);
+		} else {
+			lua_pop(L, 1);
 		}
-		lua_pop(L, 1);
+	} else if (lua_isstring(L, tools_arg)) {
+		size_t len = 0;
+		const char* s = lua_tolstring(L, tools_arg, &len);
+		if (s && len > 0)
+			opts.tools_json.assign(s, len);
+	} else if (lua_istable(L, tools_arg)) {
+		// Serialize via a fresh LuaJson with emptyObjectAsSentinel so empty
+		// parameter schemas encode as {} rather than [].
+		LuaJson* j = lua_json_push(L);
+		j->emptyObjectAsSentinel = 1;
+		lua_pushcfunction(L, lua_json_encode);
+		lua_insert(L, -2);               // json_encode fn, then LuaJson on stack
+		lua_pushvalue(L, tools_arg);     // the tools table
+		if (lua_pcall(L, 2, 1, 0) == LUA_OK) {
+			size_t len = 0;
+			const char* s = lua_tolstring(L, -1, &len);
+			if (s && len > 0)
+				opts.tools_json.assign(s, len);
+			lua_pop(L, 1);
+		} else {
+			lua_pop(L, 1); // discard pcall error; proceed without tools
+		}
+	}
+
+	// Release any previous messages ref
+	if (llama->messages_ref != LUA_NOREF) {
+		luaL_unref(L, LUA_REGISTRYINDEX, llama->messages_ref);
+		llama->messages_ref = LUA_NOREF;
 	}
 
 	if (!llama->context->Generate(std::move(messages), std::move(opts))) {
@@ -331,6 +364,10 @@ int lua_llama_generate(lua_State* L) {
 			lua_pushliteral(L, "busy");
 		return 2;
 	}
+
+	// Store a reference to the messages table so Poll can append the reply
+	lua_pushvalue(L, 2);
+	llama->messages_ref = luaL_ref(L, LUA_REGISTRYINDEX);
 
 	lua_pushboolean(L, 1);
 	return 1;
@@ -349,6 +386,33 @@ int lua_llama_poll(lua_State* L) {
 	bool ok = llama->context->Poll(text, type);
 
 	if (!ok) {
+		// Append the assistant reply to the stored messages table before returning
+		if (llama->messages_ref != LUA_NOREF) {
+			lua_rawgeti(L, LUA_REGISTRYINDEX, llama->messages_ref);
+			if (lua_istable(L, -1)) {
+				int n = (int)lua_rawlen(L, -1);
+				lua_newtable(L);                            // new message table
+				lua_pushliteral(L, "assistant");
+				lua_setfield(L, -2, "role");
+				if (llama->context->HasToolCall()) {
+					// tool_calls turn: empty content + tool_calls JSON
+					lua_pushliteral(L, "");
+					lua_setfield(L, -2, "content");
+					const std::string& tc = llama->context->GetToolCallJson();
+					lua_pushlstring(L, tc.c_str(), tc.size());
+					lua_setfield(L, -2, "tool_calls");
+				} else {
+					const std::string& content = llama->context->GetFullContent();
+					lua_pushlstring(L, content.c_str(), content.size());
+					lua_setfield(L, -2, "content");
+				}
+				lua_rawseti(L, -2, n + 1);                 // messages[#messages+1] = msg
+			}
+			lua_pop(L, 1);                                  // pop messages table
+			luaL_unref(L, LUA_REGISTRYINDEX, llama->messages_ref);
+			llama->messages_ref = LUA_NOREF;
+		}
+
 		lua_pushboolean(L, 0);
 		if (!text.empty()) {
 			lua_newtable(L);
@@ -363,7 +427,7 @@ int lua_llama_poll(lua_State* L) {
 	}
 
 	lua_pushboolean(L, 1);
-	if (text.empty() && type.empty()) {
+	if (text.empty()) {
 		lua_pushnil(L);
 	} else {
 		lua_newtable(L);
@@ -556,6 +620,10 @@ int lua_llama_info(lua_State* L) {
 // ctx:Dispose() -> true
 int lua_llama_dispose(lua_State* L) {
 	LuaLlama* llama = lua_llama_check(L, 1);
+	if (llama->messages_ref != LUA_NOREF) {
+		luaL_unref(L, LUA_REGISTRYINDEX, llama->messages_ref);
+		llama->messages_ref = LUA_NOREF;
+	}
 	if (llama->context) {
 		llama->context->Dispose();
 	}

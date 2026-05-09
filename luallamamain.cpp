@@ -1,10 +1,12 @@
 ﻿#include "platform.h"
 #include "luallama.h"
+#include "luatoolsuite.h"
 #include "luallamamain.h"
 
 static const struct luaL_Reg llama_functions[] = {
-    { "CreateContext",  lua_llama_new         },
-    { "GetLogs",        lua_llama_getlogs     },
+    { "CreateContext",    lua_llama_new           },
+    { "CreateToolSuite",  lua_toolsuite_new        },
+    { "GetLogs",          lua_llama_getlogs        },
     { "SetModel",       lua_llama_setmodel    },
     { "LoadModel",      lua_llama_loadmodel   },
     { "UnloadModel",    lua_llama_unloadmodel },
@@ -40,6 +42,33 @@ int luaopen_llama(lua_State* L) {
     lua_pushvalue(L, -3);   // module table
     lua_rawset(L, -3);
 
-    lua_pop(L, 1);   // pop metatable
+    lua_pop(L, 1);   // pop LlamaContext metatable
+
+    // ── ToolSuite metatable ────────────────────────────────────────────────────
+    static const struct luaL_Reg toolsuite_meta[] = {
+        { "__gc",       lua_toolsuite_gc       },
+        { "__tostring", lua_toolsuite_tostring },
+        { NULL, NULL }
+    };
+    static const struct luaL_Reg toolsuite_methods[] = {
+        { "AddTool",  lua_toolsuite_addtool     },
+        { "Call",     lua_toolsuite_call        },
+        { "GetJson",  lua_toolsuite_getjson     },
+        { "Callback", lua_toolsuite_setcallback },
+        { NULL, NULL }
+    };
+
+    luaL_newmetatable(L, LUATOOLSUITE);
+    luaL_setfuncs(L, toolsuite_meta, 0);
+    lua_newtable(L);                            // __index table with methods
+    luaL_setfuncs(L, toolsuite_methods, 0);
+    lua_pushliteral(L, "__index");
+    lua_insert(L, -2);
+    lua_rawset(L, -3);                          // meta.__index = methods table
+    lua_pushliteral(L, "__metatable");
+    lua_pushvalue(L, -3);                       // module table as __metatable guard
+    lua_rawset(L, -3);
+    lua_pop(L, 1);   // pop ToolSuite metatable
+
     return 1;        // return module table
 }

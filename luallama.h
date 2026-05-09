@@ -6,6 +6,7 @@
 
 typedef struct LuaLlama {
 	LlamaContext* context;
+	int           messages_ref; // LUA_NOREF when unused
 } LuaLlama;
 
 LuaLlama* lua_llama_push(lua_State* L);

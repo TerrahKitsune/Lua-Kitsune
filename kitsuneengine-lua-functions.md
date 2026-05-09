@@ -3796,8 +3796,8 @@ Returns `true` if the context is idle with a model loaded — i.e. ready to acce
 #### ctx:Generate
 
 ```lua
-true         ctx:Generate(messages [, opts])
-nil, errmsg  ctx:Generate(messages [, opts])
+true         ctx:Generate(messages [, opts] [, tools])
+nil, errmsg  ctx:Generate(messages [, opts] [, tools])
 ```
 
 Queues a generation request. `messages` is an array of chat message tables (OpenAI-format). Returns immediately; output is consumed via `Poll`.
@@ -3828,7 +3828,8 @@ Returns `nil, errmsg` when:
 | `min_p` | number | `0.05` | Min-P sampling |
 | `seed` | integer | `-1` | RNG seed. `-1` = random |
 | `max_tokens` | integer | `2048` | Maximum tokens to generate |
-| `tools` | string | — | JSON string of an OpenAI-format tools array |
+
+The optional `tools` argument (3rd positional arg when `opts` is present, 2nd otherwise) accepts either a **JSON string** or a **Lua table**. When a table is passed it is serialized automatically with empty tables encoded as `{}` so parameter schemas are preserved correctly.
 
 ```lua
 ctx:Generate(
@@ -4003,7 +4004,8 @@ Pass an OpenAI-format tools JSON string as `opts.tools` to `Generate`. When the 
 Supported detection formats: single JSON object, JSON array of objects, and XML `<tool_call>...</tool_call>` tags (Mistral / Hermes style).
 
 ```lua
-local tools = Json.New():Encode({
+-- tools can be a Lua table (serialized automatically) or a JSON string
+local tools = {
     {
         type     = 'function',
         ['function'] = {
@@ -4016,11 +4018,20 @@ local tools = Json.New():Encode({
             },
         },
     },
-})
+}
 
+-- Pass tools as the third argument (after opts, or second if no opts)
 ctx:Generate(
     {{ role = 'user', content = 'What is the weather in Paris?' }},
-    { tools = tools }
+    { temperature = 0.3 },
+    tools
+)
+
+-- Or with a pre-encoded JSON string:
+ctx:Generate(
+    {{ role = 'user', content = 'What is the weather in Paris?' }},
+    nil,
+    Json.New():Encode(tools)
 )
 
 local ok, data = ctx:Poll()

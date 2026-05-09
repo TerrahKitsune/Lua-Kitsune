@@ -737,6 +737,9 @@
     <ClCompile Include="LlamaContext.cpp">
       <Filter>LuaLlama\Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="luatoolsuite.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="KitsuneEngine.h">
@@ -1155,6 +1158,9 @@
     </ClInclude>
     <ClInclude Include="LlamaContext.h">
       <Filter>LuaLlama\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="luatoolsuite.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

@@ -134,26 +134,56 @@ CreateGCPrint();
 collectgarbage();
 GetKey = Session.Console.GetKey;
 
+local tools = [[{
+  "type": "function",
+  "function": {
+    "name": "get_weather",
+    "description": "Get the current weather for a city",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "city": {
+          "type": "string",
+          "description": "The name of the city"
+        }
+      },
+      "required": ["city"]
+    }
+  }
+}]];
+
+local msgs = {
+    { role = 'system', content = 'You are a helpful assistant. Check the weather with get_weather if asked' },
+    { role = 'user',   content = 'Hello! What is the weather in stockholm?' },
+};
 local ctx = Llama.CreateContext();
 assert(ctx:SetModel("C:/models/qwen3-0.6b-q8_0.gguf"));
 print(ctx:IsReady());
-assert(ctx:Generate({
-    { role = 'system', content = 'You are a helpful assistant.' },
-    { role = 'user',   content = 'Hello!' },
-}));
+assert(ctx:Generate(msgs, nil, tools));
 
-local ok, data = ctx:Poll()
-while ok do
-    if data then
-        if data.type == 'error' then 
-			error(data.text)
-		else
-			print(data.type, data.text)
+local function PollTest(ctx)
+
+	local toolcalls 
+	local nth = 0;
+	local ok, data = ctx:Poll()
+	while ok do
+		if data then
+			nth = nth + 1;
+			if data.type == 'error' then 
+					error(nth, data.text)
+				elseif data.type == 'tool_calls' then
+					print(nth, data.type, data.text)
+				else
+				print(nth, data.type, data.text)
+			end
 		end
-    end
-    Sleep(10)
-    ok, data = ctx:Poll()
+		Sleep(10)
+		ok, data = ctx:Poll()
+	end
 end
+
+PollTest(ctx);
+print(Json.New(true):Encode(msgs));
 
 GetKey();
 

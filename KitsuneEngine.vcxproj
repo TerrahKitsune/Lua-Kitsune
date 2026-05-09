@@ -132,6 +132,7 @@
     <ClCompile Include="luatask.cpp" />
     <ClCompile Include="luatimespan.cpp" />
     <ClCompile Include="luatoml.cpp" />
+    <ClCompile Include="luatoolsuite.cpp" />
     <ClCompile Include="luauint.cpp" />
     <ClCompile Include="LuaWebSocket.cpp" />
     <ClCompile Include="timespanmain.cpp" />
@@ -292,6 +293,7 @@
     <ClInclude Include="luaini.h" />
     <ClInclude Include="luainimain.h" />
     <ClInclude Include="luaalivetoken.h" />
+    <ClInclude Include="luatoolsuite.h" />
     <ClInclude Include="luauint.h" />
     <ClInclude Include="LuaWebSocket.h" />
     <ClInclude Include="luayaml.h" />
@@ -412,6 +414,3 @@
     <Error Condition="!Exists('packages\librdkafka.redist.2.12.0\build\native\librdkafka.redist.targets')" Text="$([System.String]::Format('$(ErrorText)', 'packages\librdkafka.redist.2.12.0\build\native\librdkafka.redist.targets'))" />
   </Target>
 </Project>
-
-
-

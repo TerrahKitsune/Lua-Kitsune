@@ -1,5 +1,7 @@
 ﻿#include "platform.h"
 #include "LlamaContext.h"
+#include <cstdlib>
+#include <cstdio>
 
 #ifdef KITSUNE_LLAMA
 
@@ -749,6 +751,13 @@ void LlamaContext::WorkerGenerate() {
 
     // Generation loop
     bool in_think = false;
+    bool in_tool_call = false;
+    bool skip_leading_newline = false;
+    std::string pending;
+    const size_t OPEN_TAG_LEN       = 7;  // "<think>"
+    const size_t CLOSE_TAG_LEN      = 8;  // "</think>"
+    const size_t TOOL_OPEN_TAG_LEN  = 11; // "<tool_call>"
+    const size_t TOOL_CLOSE_TAG_LEN = 12; // "</tool_call>"
     int generated = 0;
     int max_tokens = gen_opts.max_tokens;
 
@@ -765,41 +774,132 @@ void LlamaContext::WorkerGenerate() {
             n = 0;
         std::string piece(buf, n);
 
-        // Track <think>...</think> blocks
-        std::string check_buf = in_think ? full_reasoning : full_content;
-        check_buf += piece;
+        // Track <think>...</think> blocks using a pending buffer so that
+        // tags split across token boundaries are handled correctly.
+        pending += piece;
 
-        if (!in_think && check_buf.find("<think>") != std::string::npos) {
-            in_think = true;
-            // Remove <think> tag from the piece for display
-            size_t pos = piece.find("<think>");
-            if (pos != std::string::npos)
-                piece = piece.substr(pos + 7);
+        // If the previous token ended a tag, eat leading newlines of this token
+        if (skip_leading_newline) {
+            while (!pending.empty() && (pending[0] == '\r' || pending[0] == '\n'))
+                pending = pending.substr(1);
+            skip_leading_newline = pending.empty();
         }
 
-        if (in_think) {
-            size_t end_pos = piece.find("</think>");
-            if (end_pos != std::string::npos) {
-                std::string before = piece.substr(0, end_pos);
-                std::string after = piece.substr(end_pos + 8);
-                if (!before.empty()) {
-                    full_reasoning += before;
-                    PushToken(before, true);
+        while (!pending.empty()) {
+            if (in_tool_call) {
+                // Suppress all tokens until </tool_call>; full_content accumulates
+                // the raw text so DetectToolCalls can parse it after generation ends.
+                size_t tag_pos = pending.find("</tool_call>");
+                if (tag_pos != std::string::npos) {
+                    full_content += pending.substr(0, tag_pos + TOOL_CLOSE_TAG_LEN);
+                    pending = pending.substr(tag_pos + TOOL_CLOSE_TAG_LEN);
+                    if (!pending.empty() && (pending[0] == '\r' || pending[0] == '\n')) {
+                        while (!pending.empty() && (pending[0] == '\r' || pending[0] == '\n'))
+                            pending = pending.substr(1);
+                    } else {
+                        skip_leading_newline = true;
+                    }
+                    in_tool_call = false;
+                } else {
+                    // Keep a partial-tag suffix buffered; accumulate the safe part silently
+                    size_t safe = pending.size() >= (TOOL_CLOSE_TAG_LEN - 1)
+                                  ? pending.size() - (TOOL_CLOSE_TAG_LEN - 1)
+                                  : 0;
+                    if (safe > 0) {
+                        full_content += pending.substr(0, safe);
+                        pending = pending.substr(safe);
+                    }
+                    break;
                 }
-                in_think = false;
-                if (!after.empty()) {
-                    full_content += after;
-                    PushToken(after, false);
+            } else if (!in_think) {
+                // Check for <tool_call> first so it takes priority over content flushing
+                size_t tool_pos  = pending.find("<tool_call>");
+                size_t think_pos = pending.find("<think>");
+                size_t first_tag = std::string::npos;
+                bool   is_tool   = false;
+                if (tool_pos  != std::string::npos) { first_tag = tool_pos;  is_tool = true; }
+                if (think_pos != std::string::npos && think_pos < first_tag) { first_tag = think_pos; is_tool = false; }
+
+                if (first_tag != std::string::npos) {
+                    // Flush content before whichever tag comes first
+                    if (first_tag > 0) {
+                        std::string before = pending.substr(0, first_tag);
+                        full_content += before;
+                        PushToken(before, false);
+                    }
+                    if (is_tool) {
+                        full_content += "<tool_call>";
+                        pending = pending.substr(first_tag + TOOL_OPEN_TAG_LEN);
+                        if (!pending.empty() && (pending[0] == '\r' || pending[0] == '\n')) {
+                            while (!pending.empty() && (pending[0] == '\r' || pending[0] == '\n'))
+                                pending = pending.substr(1);
+                        } else {
+                            skip_leading_newline = true;
+                        }
+                        in_tool_call = true;
+                    } else {
+                        pending = pending.substr(first_tag + OPEN_TAG_LEN);
+                        if (!pending.empty() && (pending[0] == '\r' || pending[0] == '\n')) {
+                            while (!pending.empty() && (pending[0] == '\r' || pending[0] == '\n'))
+                                pending = pending.substr(1);
+                        } else {
+                            skip_leading_newline = true;
+                        }
+                        in_think = true;
+                    }
+                } else {
+                    // No full open tag found — keep a partial-tag suffix buffered
+                    size_t safe_think = pending.size() >= (OPEN_TAG_LEN - 1)
+                                        ? pending.size() - (OPEN_TAG_LEN - 1)
+                                        : 0;
+                    size_t safe_tool  = pending.size() >= (TOOL_OPEN_TAG_LEN - 1)
+                                        ? pending.size() - (TOOL_OPEN_TAG_LEN - 1)
+                                        : 0;
+                    size_t safe = safe_tool < safe_think ? safe_tool : safe_think;
+                    if (safe > 0) {
+                        std::string flush = pending.substr(0, safe);
+                        full_content += flush;
+                        PushToken(flush, false);
+                        pending = pending.substr(safe);
+                    }
+                    break;
                 }
             } else {
-                full_reasoning += piece;
-                if (!piece.empty())
-                    PushToken(piece, true);
+                size_t tag_pos = pending.find("</think>");
+                if (tag_pos != std::string::npos) {
+                    // Flush reasoning content before the close tag, stripping trailing newlines
+                    if (tag_pos > 0) {
+                        std::string before = pending.substr(0, tag_pos);
+                        while (!before.empty() && (before.back() == '\r' || before.back() == '\n'))
+                            before.pop_back();
+                        if (!before.empty()) {
+                            full_reasoning += before;
+                            PushToken(before, true);
+                        }
+                    }
+                    pending = pending.substr(tag_pos + CLOSE_TAG_LEN);
+                    // Strip all leading newlines; if none present yet, eat them from the next token
+                    if (!pending.empty() && (pending[0] == '\r' || pending[0] == '\n')) {
+                        while (!pending.empty() && (pending[0] == '\r' || pending[0] == '\n'))
+                            pending = pending.substr(1);
+                    } else {
+                        skip_leading_newline = true;
+                    }
+                    in_think = false;
+                } else {
+                    // No full close tag found — keep a partial-tag suffix buffered
+                    size_t safe = pending.size() >= (CLOSE_TAG_LEN - 1)
+                                  ? pending.size() - (CLOSE_TAG_LEN - 1)
+                                  : 0;
+                    if (safe > 0) {
+                        std::string flush = pending.substr(0, safe);
+                        full_reasoning += flush;
+                        PushToken(flush, true);
+                        pending = pending.substr(safe);
+                    }
+                    break;
+                }
             }
-        } else {
-            full_content += piece;
-            if (!piece.empty())
-                PushToken(piece, false);
         }
 
         // Decode the new token
@@ -813,6 +913,21 @@ void LlamaContext::WorkerGenerate() {
     }
 
     llama_sampler_free(smpl);
+
+    // Flush any remaining pending buffer after generation ends
+    if (!pending.empty()) {
+        if (in_think) {
+            full_reasoning += pending;
+            PushToken(pending, true);
+        } else if (in_tool_call) {
+            // Incomplete tool_call block — accumulate silently; DetectToolCalls will handle it
+            full_content += pending;
+        } else {
+            full_content += pending;
+            PushToken(pending, false);
+        }
+        pending.clear();
+    }
 
     // Tool call detection
     if (!full_content.empty() && !gen_opts.tools_json.empty()) {
@@ -1045,6 +1160,83 @@ std::string LlamaContext::BuildToolInjection(const std::string& tools_json) cons
     return "";
 }
 
+// Inject a generated "id" field into each tool-call object that lacks one.
+// Input is a JSON array string like [{"name":"x","arguments":{}}].
+// Returns the array with "id":"call_XXXXXXXX" added where missing.
+static std::string EnsureToolCallIds(const std::string& json_array) {
+    std::string result;
+    result.reserve(json_array.size() + 64);
+
+    size_t pos = 0;
+    size_t len = json_array.size();
+
+    // Copy opening '['
+    while (pos < len && json_array[pos] != '[')
+        result += json_array[pos++];
+    if (pos < len)
+        result += json_array[pos++]; // '['
+
+    bool first = true;
+    while (pos < len) {
+        // Skip whitespace / commas between objects
+        while (pos < len && (json_array[pos] == ' ' || json_array[pos] == '\t' ||
+                              json_array[pos] == '\r' || json_array[pos] == '\n' ||
+                              json_array[pos] == ','))
+            pos++;
+        if (pos >= len || json_array[pos] == ']')
+            break;
+        if (json_array[pos] != '{')
+            break;
+
+        // Find the matching closing brace
+        int depth = 0;
+        size_t obj_start = pos;
+        size_t obj_end   = pos;
+        bool   in_str    = false;
+        bool   escape    = false;
+        for (size_t i = pos; i < len; i++) {
+            char c = json_array[i];
+            if (escape) {
+                escape = false;
+            } else if (c == '\\' && in_str) {
+                escape = true;
+            } else if (c == '"') {
+                in_str = !in_str;
+            } else if (!in_str) {
+                if (c == '{')
+                    depth++;
+                else if (c == '}') {
+                    depth--;
+                    if (depth == 0) {
+                        obj_end = i;
+                        break;
+                    }
+                }
+            }
+        }
+
+        std::string obj = json_array.substr(obj_start, obj_end - obj_start + 1);
+        pos = obj_end + 1;
+
+        // Check whether the object already contains an "id" key
+        if (obj.find("\"id\"") == std::string::npos) {
+            // Generate a short random hex id
+            char id_buf[24];
+            std::snprintf(id_buf, sizeof(id_buf), "call_%08x", (unsigned int)std::rand());
+            // Insert after the opening '{': {"id":"call_XXXX",...}
+            obj = std::string("{\"id\":\"") + id_buf + "\"," + obj.substr(1);
+        }
+
+        if (!first)
+            result += ',';
+        result += obj;
+        first = false;
+    }
+
+    result += ']';
+    return result;
+}
+
 bool LlamaContext::DetectToolCalls(const std::string& content) {
     // Strip leading/trailing whitespace
     std::string trimmed = content;
@@ -1088,7 +1280,7 @@ bool LlamaContext::DetectToolCalls(const std::string& content) {
         }
         result += "]";
         if (found) {
-            tool_call_json = result;
+            tool_call_json = EnsureToolCallIds(result);
             has_tool_call.store(true);
             return true;
         }
@@ -1098,7 +1290,7 @@ bool LlamaContext::DetectToolCalls(const std::string& content) {
     if (trimmed.front() == '{' && trimmed.back() == '}') {
         if (trimmed.find("\"name\"") != std::string::npos &&
             trimmed.find("\"arguments\"") != std::string::npos) {
-            tool_call_json = "[" + trimmed + "]";
+            tool_call_json = EnsureToolCallIds("[" + trimmed + "]");
             has_tool_call.store(true);
             return true;
         }
@@ -1108,7 +1300,7 @@ bool LlamaContext::DetectToolCalls(const std::string& content) {
     if (trimmed.front() == '[' && trimmed.back() == ']') {
         if (trimmed.find("\"name\"") != std::string::npos &&
             trimmed.find("\"arguments\"") != std::string::npos) {
-            tool_call_json = trimmed;
+            tool_call_json = EnsureToolCallIds(trimmed);
             has_tool_call.store(true);
             return true;
         }

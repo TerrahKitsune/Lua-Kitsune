@@ -142,6 +142,11 @@ public:
 	double      GetCpuPercent() const;
 	void        GetCapabilities(std::vector<std::string>& out) const;
 
+	// Generation result accessors (valid after Poll returns ok=false)
+	const std::string& GetFullContent() const   { return full_content; }
+	const std::string& GetToolCallJson() const  { return tool_call_json; }
+	bool               HasToolCall() const       { return has_tool_call.load(); }
+
 	// Embed result (valid after EMBED task completes)
 	const std::vector<float>& GetEmbedResult() const;
 
