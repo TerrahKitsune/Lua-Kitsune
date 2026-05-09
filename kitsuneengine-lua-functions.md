@@ -41,6 +41,7 @@ A comprehensive reference for all available functions in the Lua environment.
 - [AliveToken](#alivetoken)
 - [Tasks](#tasks)
 - [Llama](#llama)
+- [ToolSuite](#toolsuite)
 - [Third-Party Notices](#third-party-notices)
 ---
 
@@ -4128,9 +4129,234 @@ ctx:Dispose()  -- free GPU memory and worker thread
 
 ---
 
+### ToolSuite
+
+`ToolSuite` is a higher-level userdata that manages OpenAI-compatible tool declarations and dispatches tool calls returned by a model. It hides the JSON serialisation required by `Generate(..., tools)` and the message-appending bookkeeping normally needed after `Poll` returns a `tool_calls` event.
+
+#### Creation
+
+```lua
+ToolSuite  Llama.CreateToolSuite()
+```
+
+Creates an empty `ToolSuite` with no tools and no permission gate.
+
+```lua
+tostring(suite)   -- "ToolSuite(N tools)"
+```
+
+---
+
+#### suite:AddTool
+
+```lua
+true  suite:AddTool(name, description, parameters, fn)
+```
+
+Registers a tool with the suite.
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `name` | string | Tool name as the model will call it |
+| `description` | string | Natural-language description of what the tool does |
+| `parameters` | table | Sequential array of parameter descriptor tables (see below) |
+| `fn` | function | Callback invoked when the model calls this tool |
+
+**Parameter descriptor fields:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | yes | Parameter name |
+| `type` | string | no | JSON Schema type (`"string"`, `"integer"`, `"number"`, `"boolean"`). Defaults to `"string"` |
+| `description` | string | no | Human-readable description |
+| `required` | boolean | no | Whether the parameter is required. Defaults to `false` |
+
+The callback `fn` is called with arguments in the order the parameters were declared. Each argument is the decoded value from the model's `arguments` object. Returns whatever the tool result should be (coerced to string via `tostring`).
+
+```lua
+local suite = Llama.CreateToolSuite()
+suite:AddTool(
+    'get_weather',
+    'Get the current weather for a city',
+    {
+        { name='city',  type='string',  description='City name', required=true  },
+        { name='units', type='string',  description='"celsius" or "fahrenheit"', required=false },
+    },
+    function(city, units)
+        -- city and units are the decoded argument values
+        return 'It is 22 ' .. (units or 'celsius') .. ' in ' .. city
+    end
+)
+```
+
+---
+
+#### suite:GetJson
+
+```lua
+string  suite:GetJson()
+```
+
+Returns the OpenAI-format JSON tools array for all registered tools. Pass the result directly to `ctx:Generate` as the `tools` argument, or use the `ToolSuite` userdata directly (it is accepted as-is).
+
+```lua
+print(suite:GetJson())
+-- [{"type":"function","function":{"name":"get_weather",...}}]
+
+-- Both forms are accepted by Generate:
+ctx:Generate(messages, opts, suite:GetJson())  -- JSON string
+ctx:Generate(messages, opts, suite)            -- userdata directly
+```
+
+---
+
+#### suite:Call
+
+```lua
+number  suite:Call(messages)
+```
+
+Inspects the **last message** in `messages`. If it is an `assistant` message with a `tool_calls` field, decodes the JSON, dispatches each call to the matching registered function, and appends `{ role='tool', content=result, tool_call_id=id }` entries to `messages`.
+
+Returns the number of tool replies appended (0 if the last message is not a tool call or no calls were decoded).
+
+**Yield-safe:** both tool callbacks and the permission gate (see `suite:Callback`) use `lua_pcallk` internally, so they can call `Sleep`, `HttpClient:Call`, or any other yieldable engine function without stalling the application. The KitsuneEngine 1000-instruction ticker that forces coroutine yields mid-execution is also handled correctly.
+
+If a tool name is not found in the suite, a `"Tool not found: <name>"` reply is appended and dispatch continues with the next call.
+
+```lua
+-- After Poll returns a tool_calls event:
+local ok, data = ctx:Poll()
+while ok do
+    if data and data.type == 'tool_calls' then
+        suite:Call(msgs)        -- dispatches and appends tool replies to msgs
+        ctx:Generate(msgs)      -- continue the conversation
+    end
+    Sleep(10)
+    ok, data = ctx:Poll()
+end
+```
+
+---
+
+#### suite:Callback
+
+```lua
+nil  suite:Callback(fn)
+nil  suite:Callback(nil)     -- remove the gate
+```
+
+Registers an optional **permission gate** that is called before every tool invocation. Pass `nil` to remove a previously set gate.
+
+The gate function receives:
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `name` | string | Tool name the model wants to call |
+| `args` | table or nil | Decoded arguments table, or `nil` if the model sent no arguments |
+
+Return `true` to allow the call; return `false` (or any falsy value) to deny it. When denied, a `"error: permission denied"` reply is appended to messages and dispatch continues with the next call.
+
+**Yield-safe:** the gate can call `Sleep`, show a UI prompt, or await any async operation — it uses `lua_pcallk` internally.
+
+```lua
+suite:Callback(function(name, args)
+    -- name  = tool being requested
+    -- args  = decoded argument table (or nil)
+    -- This can yield — e.g. wait for a user to click Allow/Deny
+    local allowed = UI.Ask('Allow the AI to call ' .. name .. '?')
+    return allowed
+end)
+
+-- Simple allowlist
+local ALLOWED = { get_weather = true, search = true }
+suite:Callback(function(name, args)
+    return ALLOWED[name] == true
+end)
+
+-- Remove the gate
+suite:Callback(nil)
+```
+
+---
+
+#### Complete tool-calling example
+
+```lua
+local ctx   = Llama.CreateContext()
+local suite = Llama.CreateToolSuite()
+
+suite:AddTool(
+    'get_weather',
+    'Get the current weather for a city',
+    { { name='city', type='string', description='City name', required=true } },
+    function(city)
+        Sleep(0)            -- safe to yield inside the callback
+        return 'Sunny, 22°C in ' .. city
+    end
+)
+
+-- Optional: permission gate (yieldable)
+suite:Callback(function(name, args)
+    print('Model wants to call: ' .. name)
+    return true    -- allow all tools
+end)
+
+ctx:SetModel([[C:\Models\qwen3-0.6b-q8_0.gguf]])
+ctx:LoadModel()
+while not ctx:IsReady() do Sleep(50) end
+
+local msgs = {
+    { role='system', content='You are a helpful assistant with access to tools.' },
+    { role='user',   content='What is the weather in Paris?' },
+}
+
+ctx:Generate(msgs, { temperature=0.3 }, suite)
+
+local ok, data = ctx:Poll()
+while ok do
+    if data then
+        if data.type == 'error' then
+            error(data.text)
+        elseif data.type == 'token' then
+            io.write(data.text)
+        elseif data.type == 'tool_calls' then
+            -- Dispatch all tool calls and append replies to msgs.
+            -- msgs already contains the assistant tool_calls message
+            -- (auto-appended by Poll when generation completed).
+            suite:Call(msgs)
+            -- Continue the conversation with tool results
+            ctx:Generate(msgs, { temperature=0.3 }, suite)
+        end
+    end
+    Sleep(10)
+    ok, data = ctx:Poll()
+end
+print()
+
+ctx:Dispose()
+```
+
+---
+
 ## Third-Party Notices
 
+
 KitsuneEngine incorporates the following open-source libraries. Their copyright notices and license terms are reproduced below as required.
+
+---
+
+### llama.cpp
+
+**Copyright © 2023–2026 The ggml authors**
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+*License: [MIT](https://opensource.org/licenses/MIT)*
 
 ---
 

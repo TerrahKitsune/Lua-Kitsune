@@ -152,6 +152,21 @@ local tools = [[{
   }
 }]];
 
+local tools = Llama.CreateToolSuite()
+tools:AddTool(
+    'get_weather',
+    'Get the current weather for a city',
+    {
+        { name='city',  type='string',  description='City name', required=true  },
+        { name='units', type='string',  description='"celsius" or "fahrenheit"', required=false },
+    },
+    function(city, units)
+		local t = math.random(10, 20)
+        -- city and units are the decoded argument values
+        return 'It is '..t..' ' .. (units or 'celsius') .. ' in ' .. city
+    end
+)
+
 local msgs = {
     { role = 'system', content = 'You are a helpful assistant. Check the weather with get_weather if asked' },
     { role = 'user',   content = 'Hello! What is the weather in stockholm?' },
@@ -159,7 +174,7 @@ local msgs = {
 local ctx = Llama.CreateContext();
 assert(ctx:SetModel("C:/models/qwen3-0.6b-q8_0.gguf"));
 print(ctx:IsReady());
-assert(ctx:Generate(msgs, nil, tools));
+assert(ctx:Generate(msgs, {}, tools));
 
 local function PollTest(ctx)
 
@@ -182,6 +197,9 @@ local function PollTest(ctx)
 	end
 end
 
+PollTest(ctx);
+tools:Call(msgs);
+assert(ctx:Generate(msgs, {}, tools));
 PollTest(ctx);
 print(Json.New(true):Encode(msgs));
 
