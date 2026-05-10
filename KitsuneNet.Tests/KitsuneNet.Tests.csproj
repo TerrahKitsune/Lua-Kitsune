@@ -113,4 +113,8 @@
     <UpToDateCheckBuilt Include="$(OutputPath)SQLiteKitsune.dll" Original="$(NativeOutputDir)SQLiteKitsune.dll" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="bin\Release\net10.0\" />
+  </ItemGroup>
+
 </Project>

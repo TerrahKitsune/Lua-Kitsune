@@ -164,6 +164,8 @@
     <ClCompile Include="LuaHttpResponse.cpp" />
     <ClCompile Include="LuaHttpServer.cpp" />
     <ClCompile Include="LuaHttpServerMain.cpp" />
+    <ClCompile Include="LuaTcpListener.cpp" />
+    <ClCompile Include="LuaTcpMain.cpp" />
     <ClCompile Include="LuaSha256.cpp" />
     <ClCompile Include="luawchar.cpp" />
     <ClCompile Include="luaidentifier.cpp" />
@@ -310,6 +312,8 @@
     <ClInclude Include="LuaHttpRequest.h" />
     <ClInclude Include="LuaHttpServer.h" />
     <ClInclude Include="LuaHttpServerMain.h" />
+    <ClInclude Include="LuaTcpListener.h" />
+    <ClInclude Include="LuaTcpMain.h" />
     <ClInclude Include="luawchar.h" />
     <ClInclude Include="luaidentifier.h" />
     <ClInclude Include="luadatetime.h" />
@@ -395,8 +399,6 @@
     <None Include="build-libevent-linux.sh" />
     <None Include="build-linux-and-test.ps1" />
     <None Include="Lua functions.md" />
-    <None Include="plans\llama_cpp_integration.md" />
-    <None Include="plans\websocket-server.md" />
     <None Include="testEnvironments.json" />
     <None Include="triplets\x64-windows-static-md.cmake" />
     <None Include="vcpkg.json" />

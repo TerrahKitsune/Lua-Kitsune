@@ -297,6 +297,15 @@
     <Filter Include="LuaLlama\Header Files">
       <UniqueIdentifier>{ac94d203-f963-4994-a136-763ce346832b}</UniqueIdentifier>
     </Filter>
+    <Filter Include="LuaTCP">
+      <UniqueIdentifier>{45c33308-a34e-4332-8bac-cbde4b8f3318}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaTCP\Header Files">
+      <UniqueIdentifier>{099f507c-ab17-49d0-bd71-50235066fd09}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LuaTCP\Source Files">
+      <UniqueIdentifier>{e8315d1f-d6fb-458f-b54b-65b5e18bc77f}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="KitsuneEngine.cpp">
@@ -740,6 +749,12 @@
     <ClCompile Include="luatoolsuite.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="LuaTcpListener.cpp">
+      <Filter>LuaTCP\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaTcpMain.cpp">
+      <Filter>LuaTCP</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="KitsuneEngine.h">
@@ -1162,6 +1177,12 @@
     <ClInclude Include="luatoolsuite.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="LuaTcpListener.h">
+      <Filter>LuaTCP\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaTcpMain.h">
+      <Filter>LuaTCP</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="Lua functions.md" />
@@ -1170,8 +1191,6 @@
     <None Include="triplets\x64-windows-static-md.cmake" />
     <None Include="build-linux-and-test.ps1" />
     <None Include=".vscode\launch.json" />
-    <None Include="plans\websocket-server.md" />
-    <None Include="plans\llama_cpp_integration.md" />
     <None Include="build-libevent-linux.sh" />
   </ItemGroup>
   <ItemGroup>

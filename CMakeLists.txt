@@ -259,11 +259,12 @@ if(KITSUNE_HTTP)
 			"${LIBEVENT_BUNDLED_LIBDIR}/libevent_extra.a")
 	endif()
 
-	target_sources(KitsuneEngine PRIVATE
+		target_sources(KitsuneEngine PRIVATE
 		HttpCurl.cpp HttpCurlMain.cpp
 		LuaHttpRequest.cpp LuaHttpResponse.cpp
 		LuaHttpServer.cpp LuaHttpServerMain.cpp
-		LuaWebSocket.cpp)
+		LuaWebSocket.cpp
+		LuaTcpListener.cpp LuaTcpMain.cpp)
 
 	target_compile_definitions(KitsuneEngine PRIVATE KITSUNE_HTTP KITSUNE_WEBSOCKET)
 	# Suppress _strdup deprecation on Linux — consistent with Windows build flags

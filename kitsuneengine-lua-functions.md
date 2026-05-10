@@ -20,6 +20,7 @@ A comprehensive reference for all available functions in the Lua environment.
 - [HttpClient](#httpclient)
 - [HttpServer](#httpserver)
 - [WebSocket](#websocket)
+- [TCP](#tcp)
 - [Hashing (SHA256, MD5, SHA1)](#hashing)
 - [MySQL](#mysql)
 - [Postgres](#postgres)
@@ -1672,6 +1673,168 @@ while coroutine.status(co) == 'suspended' do
         end
     end
 end
+```
+
+---
+
+## TCP
+
+A raw TCP listener/client module backed by [libevent](https://libevent.org/). The module is always available on platforms that include HTTP support (libevent is shared with `HttpServer` and `WebSocket`). Networking is non-blocking — `Accept()` and `Poll()` are polling calls that return immediately; use `Sleep()` between calls to yield cooperatively and let other coroutines run.
+
+### Creation
+
+```lua
+TcpListener          TCP.StartListener(port)
+nil, errmsg          TCP.StartListener(port)   -- on failure
+TcpClient            TCP.Connect(host, port)
+nil, errmsg          TCP.Connect(host, port)   -- on failure
+```
+
+| Function | Description |
+|----------|-------------|
+| `StartListener` | Bind a TCP listener on `port` (integer, 1–65535). Returns a `TcpListener` on success, or `nil, errmsg` on failure |
+| `Connect` | Initiate a non-blocking TCP connection to `host:port`. Returns a `TcpClient` immediately — the connection may still be in progress. Poll `client:IsConnected()` to wait for it |
+
+---
+
+### TcpListener
+
+```lua
+client, nil         listener:Accept()           -- client is pending
+nil, nil            listener:Accept()           -- no client pending yet
+nil, errmsg         listener:Accept()           -- listener is disposed / error
+table               listener:GetContext()
+nil                 listener:Dispose()
+```
+
+| Method | Description |
+|--------|-------------|
+| `Accept()` | Pumps the libevent loop non-blocking and returns the next pending `TcpClient` from the accept queue. Returns `client, nil` when a new connection is ready, `nil, nil` when the queue is empty (call again after a `Sleep`), or `nil, errmsg` if the listener is disposed or an error occurred |
+| `GetContext()` | Returns a per-listener Lua table created lazily on first call. Persists for the lifetime of the listener |
+| `Dispose()` | Close the listener and free all resources. Idempotent — safe to call more than once. Called automatically by `__gc` |
+
+---
+
+### TcpClient
+
+Returned by `TCP.Connect` (client-initiated) or by `listener:Accept()` (server-accepted). Both sides share the same API.
+
+```lua
+string, nil         client:Poll()               -- data available
+nil, nil            client:Poll()               -- no data yet (connected)
+nil, errmsg         client:Poll()               -- closed or error
+bool, nil           client:Send(data)           -- sent ok
+bool, errmsg        client:Send(data)           -- disposed or error
+bool                client:IsConnected()
+string              client:GetIP()
+int                 client:GetPort()
+table               client:GetContext()
+nil                 client:Dispose()
+```
+
+| Method | Description |
+|--------|-------------|
+| `Poll()` | Non-blocking. Returns the next chunk of received data as a string, or `nil, nil` when no data is available yet (connection is still open), or `nil, errmsg` when the connection has been closed or an error occurred. Never blocks |
+| `Send(data)` | Write `data` (string) to the connection. Returns `true, nil` on success, or `false, errmsg` if the client is disposed or the write failed |
+| `IsConnected()` | Returns `true` while the connection is established |
+| `GetIP()` | Returns the remote IP address string (e.g. `"127.0.0.1"`) |
+| `GetPort()` | Returns the remote port as an integer |
+| `GetContext()` | Returns a per-client Lua table created lazily on first call. Persists for the lifetime of the client |
+| `Dispose()` | Close the connection and free all resources. Idempotent. Called automatically by `__gc` |
+
+---
+
+### Examples
+
+#### Simple echo server
+
+```lua
+local listener = assert(TCP.StartListener(9000))
+
+local server = Tasks.New(function()
+    while true do
+        local client = listener:Accept()
+        if client then
+            -- Handle each connection in its own task
+            Tasks.New(function(c)
+                while true do
+                    local data, err = c:Poll()
+                    if not data then break end  -- closed or error
+                    if data ~= '' then
+                        c:Send(data)            -- echo back
+                    end
+                    Sleep(1)
+                end
+                c:Dispose()
+            end, client):Dispose()
+        else
+            Sleep(5)
+        end
+    end
+end)
+
+-- Stop after 30 s
+Sleep(30000)
+listener:Dispose()
+server:Cancel()
+```
+
+#### TCP client
+
+```lua
+local client = assert(TCP.Connect('127.0.0.1', 9000))
+
+-- Wait for the connection to be established
+for i = 1, 50 do
+    if client:IsConnected() then break end
+    Sleep(10)
+end
+assert(client:IsConnected(), 'connection failed')
+
+client:Send('hello')
+
+-- Read reply
+local reply = ''
+for i = 1, 100 do
+    local data, err = client:Poll()
+    if not data then
+        break   -- nil, errmsg means closed / error
+    end
+    reply = reply .. data
+    if reply ~= '' then break end
+    Sleep(5)
+end
+print('got:', reply)
+client:Dispose()
+```
+
+#### Server with per-connection context
+
+```lua
+local listener = assert(TCP.StartListener(9001))
+
+Tasks.New(function()
+    while true do
+        local client = listener:Accept()
+        if client then
+            local ctx = client:GetContext()
+            ctx.connected_at = Time()
+            Tasks.New(function(c)
+                local data, err = c:Poll()
+                while data do
+                    c:Send(data)
+                    Sleep(1)
+                    data, err = c:Poll()
+                end
+                local ctx2 = c:GetContext()
+                print('connection lasted', Time() - ctx2.connected_at, 'ms')
+                c:Dispose()
+            end, client):Dispose()
+        else
+            Sleep(5)
+        end
+    end
+end):Dispose()
 ```
 
 ---
