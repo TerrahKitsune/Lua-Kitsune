@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
@@ -53,7 +53,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(SolutionDir)msgpack\include;$(SolutionDir)pugixml;$(SolutionDir)libyaml\include;$(SolutionDir)libarchive\include;$(SolutionDir)mysql\include;$(SolutionDir)postgres\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)hiredis;$(SolutionDir)curl\include;$(SolutionDir)mongodb\include;$(SolutionDir)libevent\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)msgpack\include;$(SolutionDir)pugixml;$(SolutionDir)libyaml\include;$(SolutionDir)libarchive\include;$(SolutionDir)mysql\include;$(SolutionDir)postgres\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)hiredis;$(SolutionDir)curl\include;$(SolutionDir)mongodb\include;$(SolutionDir)libevent\include;$(SolutionDir)llama\include;$(SolutionDir)llama\include\ggml;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4703;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <PreprocessorDefinitions>KITSUNE_HTTP;KITSUNE_KAFKA;KITSUNE_REDIS;KITSUNE_ENGINE_EXPORTS;KITSUNE_ALL;STANDALONEGFF;SQLITE_ENABLE_MATH_FUNCTIONS;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
@@ -63,13 +63,13 @@
     <Link>
       <LinkIncremental>false</LinkIncremental>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>$(SolutionDir)mysql\libmysql.lib;ws2_32.lib;Iphlpapi.lib;archive.lib;bz2d.lib;lzma.lib;zlibd.lib;zstd.lib;Cabinet.lib;$(SolutionDir)mongodb\debug\lib\mongoc2.lib;$(SolutionDir)mongodb\debug\lib\bson2.lib;$(SolutionDir)mongodb\debug\lib\utf8proc_static.lib;Dnsapi.lib;Bcrypt.lib;Secur32.lib;Ncrypt.lib;Crypt32.lib;ws2_32.lib;$(SolutionDir)curl\lib\libcurl.lib;$(SolutionDir)hiredis\hiredis.lib;$(SolutionDir)hiredis\hiredis_ssl.lib;$(SolutionDir)OpenSSL\libssl.lib;$(SolutionDir)OpenSSL\libcrypto.lib;eventd.lib;event_cored.lib;event_extrad.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(SolutionDir)libarchive\debug\lib;$(SolutionDir)libevent\debug\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>$(SolutionDir)mysql\libmysql.lib;ws2_32.lib;Iphlpapi.lib;archive.lib;bz2d.lib;lzma.lib;zlibd.lib;zstd.lib;Cabinet.lib;$(SolutionDir)mongodb\debug\lib\mongoc2.lib;$(SolutionDir)mongodb\debug\lib\bson2.lib;$(SolutionDir)mongodb\debug\lib\utf8proc_static.lib;Dnsapi.lib;Bcrypt.lib;Secur32.lib;Ncrypt.lib;Crypt32.lib;ws2_32.lib;$(SolutionDir)curl\lib\libcurl.lib;$(SolutionDir)hiredis\hiredis.lib;$(SolutionDir)hiredis\hiredis_ssl.lib;$(SolutionDir)OpenSSL\libssl.lib;$(SolutionDir)OpenSSL\libcrypto.lib;eventd.lib;event_cored.lib;event_extrad.lib;$(SolutionDir)llama\lib\llama.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(SolutionDir)llama\lib;$(SolutionDir)libarchive\debug\lib;$(SolutionDir)libevent\debug\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <LargeAddressAware>true</LargeAddressAware>
       <IgnoreSpecificDefaultLibraries>msvcrt.lib;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /Y "$(SolutionDir)*.dll" "$(OutDir)" &amp; xcopy /Y "$(SolutionDir)mysql\libmysql.dll" "$(OutDir)" &amp; xcopy /Y "$(SolutionDir)postgres\lib\*.dll" "$(OutDir)" &amp; xcopy /Y "$(SolutionDir)packages\librdkafka.redist.2.12.0\runtimes\win-x64\native\*.dll" "$(OutDir)" &amp; xcopy /Y "$(OutDir)*.dll" "$(SolutionDir)KitsuneNet.Tests\bin\$(Configuration)\net10.0\" &amp; xcopy /Y "$(OutDir)$(TargetName).pdb" "$(SolutionDir)KitsuneNet.Tests\bin\$(Configuration)\net10.0\" &amp; exit 0</Command>
+      <Command>xcopy /Y "$(SolutionDir)*.dll" "$(OutDir)" &amp; xcopy /Y "$(SolutionDir)mysql\libmysql.dll" "$(OutDir)" &amp; xcopy /Y "$(SolutionDir)postgres\lib\*.dll" "$(OutDir)" &amp; xcopy /Y "$(SolutionDir)packages\librdkafka.redist.2.12.0\runtimes\win-x64\native\*.dll" "$(OutDir)" &amp; xcopy /Y "$(SolutionDir)llama\*.dll" "$(OutDir)" &amp; xcopy /Y "$(OutDir)*.dll" "$(SolutionDir)KitsuneNet.Tests\bin\$(Configuration)\net10.0\" &amp; xcopy /Y "$(OutDir)$(TargetName).pdb" "$(SolutionDir)KitsuneNet.Tests\bin\$(Configuration)\net10.0\" &amp; exit 0</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -79,7 +79,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(SolutionDir)msgpack\include;$(SolutionDir)pugixml;$(SolutionDir)libyaml\include;$(SolutionDir)libarchive\include;$(SolutionDir)mysql\include;$(SolutionDir)postgres\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)hiredis;$(SolutionDir)curl\include;$(SolutionDir)mongodb\include;$(SolutionDir)libevent\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)msgpack\include;$(SolutionDir)pugixml;$(SolutionDir)libyaml\include;$(SolutionDir)libarchive\include;$(SolutionDir)mysql\include;$(SolutionDir)postgres\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)hiredis;$(SolutionDir)curl\include;$(SolutionDir)mongodb\include;$(SolutionDir)libevent\include;$(SolutionDir)llama\include;$(SolutionDir)llama\include\ggml;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4703;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <PreprocessorDefinitions>KITSUNE_HTTP;KITSUNE_KAFKA;KITSUNE_REDIS;KITSUNE_ENGINE_EXPORTS;KITSUNE_ALL;STANDALONEGFF;SQLITE_ENABLE_MATH_FUNCTIONS;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
@@ -91,12 +91,12 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>$(SolutionDir)mysql\libmysql.lib;ws2_32.lib;Iphlpapi.lib;archive.lib;bz2.lib;lzma.lib;zlib.lib;zstd.lib;Cabinet.lib;$(SolutionDir)mongodb\lib\mongoc2.lib;$(SolutionDir)mongodb\lib\bson2.lib;$(SolutionDir)mongodb\lib\utf8proc_static.lib;Dnsapi.lib;Bcrypt.lib;Secur32.lib;Ncrypt.lib;Crypt32.lib;ws2_32.lib;$(SolutionDir)curl\lib\libcurl.lib;$(SolutionDir)hiredis\hiredis.lib;$(SolutionDir)hiredis\hiredis_ssl.lib;$(SolutionDir)OpenSSL\libssl.lib;$(SolutionDir)OpenSSL\libcrypto.lib;event.lib;event_core.lib;event_extra.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(SolutionDir)libarchive\lib;$(SolutionDir)libevent\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>$(SolutionDir)mysql\libmysql.lib;ws2_32.lib;Iphlpapi.lib;archive.lib;bz2.lib;lzma.lib;zlib.lib;zstd.lib;Cabinet.lib;$(SolutionDir)mongodb\lib\mongoc2.lib;$(SolutionDir)mongodb\lib\bson2.lib;$(SolutionDir)mongodb\lib\utf8proc_static.lib;Dnsapi.lib;Bcrypt.lib;Secur32.lib;Ncrypt.lib;Crypt32.lib;ws2_32.lib;$(SolutionDir)curl\lib\libcurl.lib;$(SolutionDir)hiredis\hiredis.lib;$(SolutionDir)hiredis\hiredis_ssl.lib;$(SolutionDir)OpenSSL\libssl.lib;$(SolutionDir)OpenSSL\libcrypto.lib;event.lib;event_core.lib;event_extra.lib;$(SolutionDir)llama\lib\llama.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(SolutionDir)llama\lib;$(SolutionDir)libarchive\lib;$(SolutionDir)libevent\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <LargeAddressAware>true</LargeAddressAware>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /Y "$(SolutionDir)*.dll" "$(OutDir)" &amp; xcopy /Y "$(SolutionDir)mysql\libmysql.dll" "$(OutDir)" &amp; xcopy /Y "$(SolutionDir)postgres\lib\*.dll" "$(OutDir)" &amp; xcopy /Y "$(SolutionDir)packages\librdkafka.redist.2.12.0\runtimes\win-x64\native\*.dll" "$(OutDir)" &amp; xcopy /Y "$(OutDir)*.dll" "$(SolutionDir)KitsuneNet.Tests\bin\$(Configuration)\net10.0\" &amp; xcopy /Y "$(OutDir)$(TargetName).pdb" "$(SolutionDir)KitsuneNet.Tests\bin\$(Configuration)\net10.0\" &amp; exit 0</Command>
+      <Command>xcopy /Y "$(SolutionDir)*.dll" "$(OutDir)" &amp; xcopy /Y "$(SolutionDir)mysql\libmysql.dll" "$(OutDir)" &amp; xcopy /Y "$(SolutionDir)postgres\lib\*.dll" "$(OutDir)" &amp; xcopy /Y "$(SolutionDir)packages\librdkafka.redist.2.12.0\runtimes\win-x64\native\*.dll" "$(OutDir)" &amp; xcopy /Y "$(SolutionDir)llama\*.dll" "$(OutDir)" &amp; xcopy /Y "$(OutDir)*.dll" "$(SolutionDir)KitsuneNet.Tests\bin\$(Configuration)\net10.0\" &amp; xcopy /Y "$(OutDir)$(TargetName).pdb" "$(SolutionDir)KitsuneNet.Tests\bin\$(Configuration)\net10.0\" &amp; exit 0</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -107,6 +107,7 @@
     <ClCompile Include="KitsuneEngine.cpp" />
     <ClCompile Include="KitsuneLuaDebug.cpp" />
     <ClCompile Include="kitsuneuserdata.cpp" />
+    <ClCompile Include="LlamaContext.cpp" />
     <ClCompile Include="LuaArchive.cpp" />
     <ClCompile Include="LuaArchiveMain.cpp" />
     <ClCompile Include="base64.cpp" />
@@ -124,11 +125,14 @@
     <ClCompile Include="luakafkaconsumer.cpp" />
     <ClCompile Include="luakafkamain.cpp" />
     <ClCompile Include="luakafkaproducer.cpp" />
+    <ClCompile Include="luallama.cpp" />
+    <ClCompile Include="luallamamain.cpp" />
     <ClCompile Include="luamsgpack.cpp" />
     <ClCompile Include="luamsgpackmain.cpp" />
     <ClCompile Include="luatask.cpp" />
     <ClCompile Include="luatimespan.cpp" />
     <ClCompile Include="luatoml.cpp" />
+    <ClCompile Include="luatoolsuite.cpp" />
     <ClCompile Include="luauint.cpp" />
     <ClCompile Include="LuaWebSocket.cpp" />
     <ClCompile Include="timespanmain.cpp" />
@@ -160,6 +164,8 @@
     <ClCompile Include="LuaHttpResponse.cpp" />
     <ClCompile Include="LuaHttpServer.cpp" />
     <ClCompile Include="LuaHttpServerMain.cpp" />
+    <ClCompile Include="LuaTcpListener.cpp" />
+    <ClCompile Include="LuaTcpMain.cpp" />
     <ClCompile Include="LuaSha256.cpp" />
     <ClCompile Include="luawchar.cpp" />
     <ClCompile Include="luaidentifier.cpp" />
@@ -258,6 +264,7 @@
     <ClInclude Include="Kitsune\KitsuneLuaDebug.h" />
     <ClInclude Include="kitsune_internal.h" />
     <ClInclude Include="libyaml\src\config.h" />
+    <ClInclude Include="LlamaContext.h" />
     <ClInclude Include="LuaArchive.h" />
     <ClInclude Include="LuaArchiveMain.h" />
     <ClInclude Include="base64.h" />
@@ -277,6 +284,8 @@
     <ClInclude Include="luakafkaconsumer.h" />
     <ClInclude Include="luakafkamain.h" />
     <ClInclude Include="luakafkaproducer.h" />
+    <ClInclude Include="luallama.h" />
+    <ClInclude Include="luallamamain.h" />
     <ClInclude Include="luamsgpack.h" />
     <ClInclude Include="luamsgpackmain.h" />
     <ClInclude Include="luatask.h" />
@@ -286,6 +295,7 @@
     <ClInclude Include="luaini.h" />
     <ClInclude Include="luainimain.h" />
     <ClInclude Include="luaalivetoken.h" />
+    <ClInclude Include="luatoolsuite.h" />
     <ClInclude Include="luauint.h" />
     <ClInclude Include="LuaWebSocket.h" />
     <ClInclude Include="luayaml.h" />
@@ -302,6 +312,8 @@
     <ClInclude Include="LuaHttpRequest.h" />
     <ClInclude Include="LuaHttpServer.h" />
     <ClInclude Include="LuaHttpServerMain.h" />
+    <ClInclude Include="LuaTcpListener.h" />
+    <ClInclude Include="LuaTcpMain.h" />
     <ClInclude Include="luawchar.h" />
     <ClInclude Include="luaidentifier.h" />
     <ClInclude Include="luadatetime.h" />
@@ -384,9 +396,9 @@
   </ItemGroup>
   <ItemGroup>
     <None Include=".vscode\launch.json" />
+    <None Include="build-libevent-linux.sh" />
     <None Include="build-linux-and-test.ps1" />
     <None Include="Lua functions.md" />
-    <None Include="plans\websocket-server.md" />
     <None Include="testEnvironments.json" />
     <None Include="triplets\x64-windows-static-md.cmake" />
     <None Include="vcpkg.json" />

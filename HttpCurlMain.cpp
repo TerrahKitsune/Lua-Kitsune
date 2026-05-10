@@ -1,4 +1,4 @@
-#ifdef KITSUNE_HTTP
+ï»¿#ifdef KITSUNE_HTTP
 
 #include "HttpCurl.h"
 #include "LuaWebSocket.h"
@@ -54,7 +54,7 @@ int luaopen_http(lua_State* L) {
 	lua_setmetatable(L, -2);
 	lua_rawsetp(L, LUA_REGISTRYINDEX, &g_sentinel_key);
 
-	// -- LUAHTTPCLIENT — wchar pattern -----------------------------------------
+	// -- LUAHTTPCLIENT â€” wchar pattern -----------------------------------------
 	// Create the Http module table first; it doubles as the __index for
 	// LuaHttpClient instances so both Http.Create() and client:Request() work.
 	luaL_newlibtable(L, httpclient_functions);
@@ -79,7 +79,7 @@ int luaopen_http(lua_State* L) {
 	// Register WEBSOCKET and WSMESSAGE metatables.
 	luaopen_websocket(L);
 
-	// Http module table is on top — return it as the Http global
+	// Http module table is on top â€” return it as the Http global
 	return 1;
 }
 

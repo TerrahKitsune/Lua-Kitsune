@@ -134,6 +134,91 @@ CreateGCPrint();
 collectgarbage();
 GetKey = Session.Console.GetKey;
 
+local tools = [[{
+  "type": "function",
+  "function": {
+    "name": "get_weather",
+    "description": "Get the current weather for a city",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "city": {
+          "type": "string",
+          "description": "The name of the city"
+        }
+      },
+      "required": ["city"]
+    }
+  }
+}]];
+
+local tools = Llama.CreateToolSuite()
+tools:AddTool(
+    'get_weather',
+    'Get the current weather for a city',
+    {
+        { name='city',  type='string',  description='City name', required=true  },
+        { name='units', type='string',  description='"celsius" or "fahrenheit"', required=false },
+    },
+    function(city, units)
+		local t = math.random(10, 20)
+        -- city and units are the decoded argument values
+        return 'It is '..t..' ' .. (units or 'celsius') .. ' in ' .. city
+    end
+)
+
+local msgs = {
+    { role = 'system', content = 'You are a helpful assistant. Check the weather with get_weather if asked' },
+    { role = 'user',   content = 'Hello! What is the weather in stockholm?' },
+};
+local ctx = Llama.CreateContext();
+assert(ctx:SetModel("C:/models/qwen3-0.6b-q8_0.gguf"));
+print(ctx:IsReady());
+assert(ctx:Generate(msgs, {}, tools));
+
+local function PollTest(ctx)
+
+	local toolcalls 
+	local nth = 0;
+	local ok, data = ctx:Poll()
+	while ok do
+		if data then
+			nth = nth + 1;
+			if data.type == 'error' then 
+					error(nth, data.text)
+				elseif data.type == 'tool_calls' then
+					print(nth, data.type, data.text)
+				else
+				print(nth, data.type, data.text)
+			end
+		end
+		Sleep(10)
+		ok, data = ctx:Poll()
+	end
+end
+
+PollTest(ctx);
+tools:Call(msgs);
+assert(ctx:Generate(msgs, {}, tools));
+PollTest(ctx);
+print(Json.New(true):Encode(msgs));
+
+GetKey();
+
+data = Llama.GetLogs();
+
+for n=1, #data do
+	print(data[n]);
+end
+data=nil
+
+GetKey();
+
+print("");
+print(Json.New(true):Encode(ctx:Info()));
+
+GetKey();
+
 SetTitle("Kitsune: ".._VERSION);
 if Imgui then
 	print("Imgui is detected");

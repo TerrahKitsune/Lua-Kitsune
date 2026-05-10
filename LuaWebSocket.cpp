@@ -5,7 +5,20 @@
 #include "LuaHttpRequest.h"
 #include "LuaHttpServer.h"
 #include "luaalivetoken.h"
+#include "kitsune_internal.h"
 #include "mem.h"
+
+static void set_did_work(lua_State* L) {
+	void* ud;
+	lua_getallocf(L, &ud);
+	KitsuneState* state = (KitsuneState*)ud;
+	if (!state)
+		return;
+	int id = (int)state->currentCoroutineId.load();
+	KitsuneCoroutine* slot = FindSlot(state, id);
+	if (slot)
+		slot->didWork = true;
+}
 extern "C" {
 #include <event2/ws.h>
 #include <event2/bufferevent.h>
@@ -476,10 +489,10 @@ int WebSocket_Poll(lua_State* L) {
 	}
 
 	if (ws->easy) {
-		// Client: advance curl multi so OS data reaches curl's buffers,
-		// then try to receive one complete message.
+		// Client: advance curl multi and drain all available fragments.
 		ws_curlm_step(ws->multi);
-		ws_client_recv_one(ws);
+		while (ws_client_recv_one(ws))
+			;
 	}
 
 	WsMsgNode* node = ws_dequeue(ws);
@@ -510,14 +523,18 @@ static int WebSocket_ReadContinuation(lua_State* L, int status, lua_KContext ctx
 	}
 
 	if (ws->easy) {
-		// Client: drive multi and try receiving.
+		// Client: drive multi and drain all available curl fragments so a large
+		// message that arrives in multiple curl_ws_recv chunks is fully assembled
+		// before we check the queue.
 		ws_curlm_step(ws->multi);
-		ws_client_recv_one(ws);
+		while (ws_client_recv_one(ws))
+			;
 	}
 	// Server: libevent callbacks push messages; no extra work needed here.
 
 	WsMsgNode* node = ws_dequeue(ws);
 	if (node) {
+		set_did_work(L);  // dequeued a message
 		ws_push_message(L, node);
 		return 1;
 	}
@@ -525,7 +542,7 @@ static int WebSocket_ReadContinuation(lua_State* L, int status, lua_KContext ctx
 		lua_pushnil(L);
 		return 1;
 	}
-	return lua_yieldk(L, 0, 0, WebSocket_ReadContinuation);
+	return lua_yieldk(L, 0, 0, WebSocket_ReadContinuation);  // no message — no work done
 }
 
 int WebSocket_Read(lua_State* L) {

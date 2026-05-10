@@ -1,6 +1,19 @@
 ﻿#include "RedisPubSub.h"
 #include "luaalivetoken.h"
+#include "kitsune_internal.h"
 #include <string.h>
+
+static void set_did_work(lua_State* L) {
+	void* ud;
+	lua_getallocf(L, &ud);
+	KitsuneState* state = (KitsuneState*)ud;
+	if (!state)
+		return;
+	int id = (int)state->currentCoroutineId.load();
+	KitsuneCoroutine* slot = FindSlot(state, id);
+	if (slot)
+		slot->didWork = true;
+}
 
 #ifndef _WIN32
 #include <sys/select.h>
@@ -87,7 +100,7 @@ static int pubsub_cont(lua_State* L, int status, lua_KContext ctx) {
 	}
 
 	if (!redis_data_available(state->context))
-		return lua_yieldk(L, 0, ctx, pubsub_cont);
+		return lua_yieldk(L, 0, ctx, pubsub_cont);  // no data — no work done
 
 	void* reply_ptr = NULL;
 	if (redisGetReply(state->context, &reply_ptr) == REDIS_ERR || !reply_ptr) {
@@ -105,27 +118,29 @@ static int pubsub_cont(lua_State* L, int status, lua_KContext ctx) {
 			r->element[0]->len == 7 &&
 			memcmp(r->element[0]->str, "message", 7) == 0 &&
 			r->element[1] && r->element[2]) {
-			lua_pushlstring(L, r->element[1]->str, r->element[1]->len);  // channel
-			lua_pushlstring(L, r->element[2]->str, r->element[2]->len);  // message
-			freeReplyObject(r);
-			return lua_yieldk(L, 2, ctx, pubsub_cont);
-		}
-		// PSUBSCRIBE message: ["pmessage", pattern, channel, payload]
-		if (r->elements >= 4 &&
-			r->element[0]->len == 8 &&
-			memcmp(r->element[0]->str, "pmessage", 8) == 0 &&
-			r->element[1] && r->element[2] && r->element[3]) {
-			lua_pushlstring(L, r->element[1]->str, r->element[1]->len);  // pattern
-			lua_pushlstring(L, r->element[2]->str, r->element[2]->len);  // channel
-			lua_pushlstring(L, r->element[3]->str, r->element[3]->len);  // message
-			freeReplyObject(r);
-			return lua_yieldk(L, 3, ctx, pubsub_cont);
-		}
-	}
+					lua_pushlstring(L, r->element[1]->str, r->element[1]->len);  // channel
+					lua_pushlstring(L, r->element[2]->str, r->element[2]->len);  // message
+					freeReplyObject(r);
+					set_did_work(L);  // received a message
+					return lua_yieldk(L, 2, ctx, pubsub_cont);
+				}
+				// PSUBSCRIBE message: ["pmessage", pattern, channel, payload]
+				if (r->elements >= 4 &&
+					r->element[0]->len == 8 &&
+					memcmp(r->element[0]->str, "pmessage", 8) == 0 &&
+					r->element[1] && r->element[2] && r->element[3]) {
+					lua_pushlstring(L, r->element[1]->str, r->element[1]->len);  // pattern
+					lua_pushlstring(L, r->element[2]->str, r->element[2]->len);  // channel
+					lua_pushlstring(L, r->element[3]->str, r->element[3]->len);  // message
+					freeReplyObject(r);
+					set_did_work(L);  // received a message
+					return lua_yieldk(L, 3, ctx, pubsub_cont);
+				}
+			}
 
-	// Subscribe ack, unsubscribe notification, or other non-message frame: yield 0.
-	freeReplyObject(r);
-	return lua_yieldk(L, 0, ctx, pubsub_cont);
+			// Subscribe ack, unsubscribe notification, or other non-message frame: yield 0.
+				freeReplyObject(r);
+				return lua_yieldk(L, 0, ctx, pubsub_cont);
 }
 
 int PubSubCoroutineGC(lua_State* L) {

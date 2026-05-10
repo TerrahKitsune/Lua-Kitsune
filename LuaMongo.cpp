@@ -8,6 +8,19 @@
 #include "luauint.h"
 #include "luatimespan.h"
 #include "luaalivetoken.h"
+#include "kitsune_internal.h"
+
+static void set_did_work(lua_State* L) {
+	void* ud;
+	lua_getallocf(L, &ud);
+	KitsuneState* state = (KitsuneState*)ud;
+	if (!state)
+		return;
+	int id = (int)state->currentCoroutineId.load();
+	KitsuneCoroutine* slot = FindSlot(state, id);
+	if (slot)
+		slot->didWork = true;
+}
 
 #ifdef KITSUNE_MONGO
 
@@ -1241,6 +1254,7 @@ static int PushOpResult(lua_State* L, LuaMongoWorker* w) {
 static int MongoGetResultCont(lua_State* L, int status, lua_KContext ctx) {
 	LuaMongoWorker* w = (LuaMongoWorker*)(intptr_t)ctx;
 	if (w->state.load(std::memory_order_acquire) != MONGO_STATE_RUNNING) {
+		set_did_work(L);  // operation completed — result ready
 		int n = PushOpResult(L, w);
 		MongoUnanchor(L, w);
 		return n;
@@ -1253,10 +1267,10 @@ static int MongoGetResultCont(lua_State* L, int status, lua_KContext ctx) {
 		lua_pop(L, 1);
 		if (alive == 0) {
 			w->cancelled.store(true, std::memory_order_release);
-			return lua_yieldk(L, 0, ctx, MongoCancelCont);
+			return lua_yieldk(L, 0, ctx, MongoCancelCont);  // cancelled — no work
 		}
 	}
-	return lua_yieldk(L, 0, ctx, MongoGetResultCont);
+	return lua_yieldk(L, 0, ctx, MongoGetResultCont);  // still running — no work done
 }
 
 int MongoGetResult(lua_State* L) {
