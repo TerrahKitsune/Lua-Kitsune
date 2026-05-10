@@ -56,22 +56,76 @@ if ($wslCheck -ne 'ok') {
 }
 Write-Success 'WSL is available.'
 
+# Resolve the WSL home directory as an absolute path so we can use it safely
+# inside single-quoted bash strings (tilde is not expanded inside single quotes).
+$wslHome = (wsl bash -c 'echo $HOME' 2>&1).Trim()
+Write-Info "WSL home: $wslHome"
+
+# ── Build bundled libevent 2.2 static libs (Linux) ───────────────────────────
+# WebSocket support requires libevent 2.2 (event2/ws.h).  Ubuntu 24.04 ships
+# only 2.1, so we build from source and cache the static libs in libevent/linux.
+Write-Header 'Ensuring bundled libevent 2.2 (Linux static libs)'
+
+$libeventMarker = Join-Path $repoRoot 'libevent\linux\lib\libevent.a'
+if ($Reconfigure -and (Test-Path (Join-Path $repoRoot 'libevent\linux'))) {
+    Write-Info '-Reconfigure: removing cached libevent/linux...'
+    Remove-Item -Recurse -Force (Join-Path $repoRoot 'libevent\linux')
+}
+if (-not (Test-Path $libeventMarker)) {
+    Write-Info 'libevent/linux/lib/libevent.a not found — building from source...'
+    $wslLibeventOut = "$wslRoot/libevent/linux"
+    # Write the build commands to a temp shell script using LF line endings and
+    # no BOM so bash inside WSL can execute it without issues.
+    $buildScript = Join-Path $repoRoot 'build-linux\build-libevent-tmp.sh'
+    $null = New-Item -ItemType Directory -Force -Path (Join-Path $repoRoot 'build-linux')
+    $scriptLines = @(
+        '#!/usr/bin/env bash',
+        'set -e',
+        'apt-get install -y --no-install-recommends cmake make gcc g++ git 2>/dev/null || true',
+        'tmp=$(mktemp -d)',
+        'git clone --depth 1 https://github.com/libevent/libevent.git "$tmp/libevent-src"',
+        'mkdir -p "$tmp/libevent-build"',
+        'cd "$tmp/libevent-build"',
+        'cmake "$tmp/libevent-src" -DCMAKE_BUILD_TYPE=Release -DEVENT__DISABLE_OPENSSL=ON -DEVENT__DISABLE_SAMPLES=ON -DEVENT__DISABLE_TESTS=ON -DEVENT__LIBRARY_TYPE=STATIC -DCMAKE_POSITION_INDEPENDENT_CODE=ON',
+        'cmake --build . --parallel',
+        "mkdir -p '$wslLibeventOut/lib'",
+        "find . -name '*.a' -exec cp {} '$wslLibeventOut/lib/' ';'",
+        # Copy the Linux-generated event-config.h so it replaces the Windows one when building on Linux
+        "mkdir -p '$wslLibeventOut/include/event2'",
+        "cp include/event2/event-config.h '$wslLibeventOut/include/event2/event-config.h'",
+        'rm -rf "$tmp"'
+    )
+    [System.IO.File]::WriteAllText($buildScript, ($scriptLines -join "`n") + "`n", [System.Text.UTF8Encoding]::new($false))
+    $wslScript = "$wslRoot/build-linux/build-libevent-tmp.sh"
+    wsl bash $wslScript
+    if ($LASTEXITCODE -ne 0) {
+        Write-Failure 'ERROR: Failed to build libevent 2.2 from source.'
+        exit $LASTEXITCODE
+    }
+    Remove-Item $buildScript -Force
+    Write-Success 'libevent 2.2 built and cached in libevent/linux/lib.'
+}
+else {
+    Write-Success 'Bundled libevent 2.2 already built — skipping.'
+}
+
 # ── CMake configure + build ───────────────────────────────────────────────────
 Write-Header "Building libKitsuneEngine.so  ($Configuration)"
 
-# Build the bash command as a single line — no here-strings, no newlines inside
-# the wsl argument (PowerShell passes those literally and bash rejects them).
-$cacheFile = "$wslRoot/build-linux/CMakeCache.txt"
-
-$cmakeConfigure = "cmake .. -DCMAKE_BUILD_TYPE=$Configuration -DKITSUNE_ALL=ON"
+# Build in the WSL-native home directory to avoid DrvFs large-file write
+# issues (/mnt/c/... paths cannot reliably hold large shared libraries).
+# The finished .so is copied back to the Windows build-linux dir for reference.
+$wslNativeBuildDir = "$wslHome/kitsune-build"
+$cmakeConfigure = "cmake '$wslRoot' -DCMAKE_BUILD_TYPE=$Configuration -DKITSUNE_ALL=ON"
 $cmakeBuild     = 'cmake --build . --parallel'
 
-# Reconfigure: wipe the cache so cmake reruns from scratch.
-$reconfigureCmd = if ($Reconfigure) { "rm -f '$wslRoot/build-linux/CMakeCache.txt'; " } else { '' }
+# Reconfigure: wipe the cmake cache so cmake re-configures from scratch.
+$reconfigureCmd = if ($Reconfigure) { "rm -f '$wslNativeBuildDir/CMakeCache.txt'; " } else { '' }
 
-$bashCmd = "set -e; mkdir -p '$wslRoot/build-linux'; cd '$wslRoot/build-linux'; " +
+$bashCmd = "set -e; mkdir -p $wslNativeBuildDir; cd $wslNativeBuildDir; " +
            $reconfigureCmd +
-           "if [ ! -f CMakeCache.txt ]; then $cmakeConfigure; fi; $cmakeBuild"
+           "if [ ! -f CMakeCache.txt ]; then $cmakeConfigure; fi; $cmakeBuild; " +
+           "cp -f $wslNativeBuildDir/libKitsuneEngine.so '$wslRoot/build-linux/libKitsuneEngine.so'"
 
 Write-Info "WSL command: $bashCmd"
 wsl bash -c $bashCmd
@@ -81,11 +135,11 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $soPath = Join-Path $buildDir 'libKitsuneEngine.so'
-if (-not (Test-Path $soPath)) {
+if (-not (Test-Path $soPath) -or (Get-Item $soPath).Length -eq 0) {
     Write-Failure "ERROR: libKitsuneEngine.so was not produced at: $soPath"
     exit 1
 }
-Write-Success "Build succeeded: $soPath"
+
 
 # ── Rebuild C# test assembly ──────────────────────────────────────────────────
 # The test DLL must be rebuilt from Windows so that any C# source changes are
@@ -114,32 +168,22 @@ if (Test-Path $trxFile) { Remove-Item $trxFile -Force }
 $testOutDir    = Join-Path $repoRoot "KitsuneNet.Tests\bin\$Configuration\net10.0"
 $wslTestOutDir = "$wslRoot/KitsuneNet.Tests/bin/$Configuration/net10.0"
 $testDll       = "$wslTestOutDir/KitsuneNet.Tests.dll"
-
-# Copy libKitsuneEngine.so into the test output dir so .NET P/Invoke finds it
-# alongside the test assembly (same-dir lookup before LD_LIBRARY_PATH).
-# Also create a bare KitsuneEngine.so symlink: .NET tries "KitsuneEngine" → 
-# "libKitsuneEngine.so" on Linux, but some runtimes also probe without the lib prefix.
-$wslSo = "$wslRoot/build-linux/libKitsuneEngine.so"
-$copyAndLink = "cp -f '$wslSo' '$wslTestOutDir/libKitsuneEngine.so'; " +
-               "ln -sf '$wslTestOutDir/libKitsuneEngine.so' '$wslTestOutDir/KitsuneEngine.so'"
-
-Write-Info "Copying .so into test output dir..."
-wsl bash -c $copyAndLink
-if ($LASTEXITCODE -ne 0) {
-    Write-Failure "ERROR: Could not copy .so into test output dir."
-    exit $LASTEXITCODE
-}
+$wslNativeSoDir = $wslNativeBuildDir
 
 # Run dotnet test inside WSL. Use the Linux dotnet (must be installed in WSL).
-# Pipe stdout to a log file inside the WSL path so we can read it back.
+# LD_LIBRARY_PATH points to the WSL-native build dir (not the DrvFs copy) so
+# .NET P/Invoke reliably finds and loads libKitsuneEngine.so.
 # --blame-hang-timeout 60s aborts the run if any single test hangs that long,
 # producing a dump and a non-zero exit code so the script fails fast.
+$wslRunSettings = "$wslRoot/KitsuneNet.Tests/kitsune.runsettings"
 $wslLogFile = "$wslRoot/build-linux/test-results/test-output.txt"
 $dotnetCmd  = "set -e; mkdir -p '$wslTrxDir'; " +
+              "LD_LIBRARY_PATH='$wslNativeSoDir' " +
               "dotnet test '$testDll' " +
               "--logger 'trx;LogFileName=$wslTrxFile' " +
               "--no-build " +
               "--blame-hang-timeout 60s " +
+              "--settings '$wslRunSettings' " +
               "2>&1 | tee '$wslLogFile'"
 
 Write-Info "Running: wsl bash -c `"$dotnetCmd`""

@@ -392,6 +392,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include=".vscode\launch.json" />
+    <None Include="build-libevent-linux.sh" />
     <None Include="build-linux-and-test.ps1" />
     <None Include="Lua functions.md" />
     <None Include="plans\llama_cpp_integration.md" />

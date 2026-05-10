@@ -12,6 +12,20 @@
 #include "luauint.h"
 #include "luatimespan.h"
 #include "luajson.h"
+#include "kitsune_internal.h"
+
+// Mark the current scheduler slot as having done work this tick.
+static void set_did_work(lua_State* L) {
+	void* ud;
+	lua_getallocf(L, &ud);
+	KitsuneState* state = (KitsuneState*)ud;
+	if (!state)
+		return;
+	int id = (int)state->currentCoroutineId.load();
+	KitsuneCoroutine* slot = FindSlot(state, id);
+	if (slot)
+		slot->didWork = true;
+}
 
 // -- Platform helper: set socket non-blocking ----------------------------------
 #ifdef _WIN32
@@ -455,11 +469,13 @@ static int QueryPollCont(lua_State* L, int status, lua_KContext ctx) {
 	if (!PQconsumeInput(q->conn->connection)) {
 		const char* err = PQerrorMessage(q->conn->connection);
 		lua_pushstring(L, err && err[0] ? err : "PQconsumeInput error");
+		set_did_work(L);  // error is a result — don't idle-sleep
 		return lua_yieldk(L, 1, ctx, QueryStreamCont);
 	}
 
 	if (PQisBusy(q->conn->connection)) {
 		lua_pushnil(L);
+		// Still waiting on server — no work done this tick.
 		return lua_yieldk(L, 1, ctx, QueryPollCont);
 	}
 
@@ -473,6 +489,7 @@ static int QueryPollCont(lua_State* L, int status, lua_KContext ctx) {
 
 	if (!result) {
 		lua_pushstring(L, "PQgetResult returned NULL");
+		set_did_work(L);
 		return lua_yieldk(L, 1, ctx, QueryStreamCont);
 	}
 
@@ -483,6 +500,7 @@ static int QueryPollCont(lua_State* L, int status, lua_KContext ctx) {
 		lua_Integer affected = (t && t[0]) ? (lua_Integer)strtoll(t, NULL, 10) : 0;
 		PQclear(result);
 		lua_pushinteger(L, affected);
+		set_did_work(L);
 		return lua_yieldk(L, 1, ctx, QueryStreamCont);
 	}
 
@@ -490,6 +508,7 @@ static int QueryPollCont(lua_State* L, int status, lua_KContext ctx) {
 		q->result      = result;
 		q->accumRowIdx = 0;
 		lua_pushinteger(L, (lua_Integer)PQntuples(result));
+		set_did_work(L);
 		return lua_yieldk(L, 1, ctx, QueryStreamCont);
 	}
 
@@ -497,6 +516,7 @@ static int QueryPollCont(lua_State* L, int status, lua_KContext ctx) {
 	const char* err = PQresultErrorMessage(result);
 	lua_pushstring(L, err && err[0] ? err : "query error");
 	PQclear(result);
+	set_did_work(L);
 	return lua_yieldk(L, 1, ctx, QueryStreamCont);
 }
 

@@ -1172,6 +1172,7 @@
     <None Include=".vscode\launch.json" />
     <None Include="plans\websocket-server.md" />
     <None Include="plans\llama_cpp_integration.md" />
+    <None Include="build-libevent-linux.sh" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />

@@ -8,9 +8,22 @@
 #include "luatimespan.h"
 #include "luaalivetoken.h"
 #include "luajson.h"
+#include "kitsune_internal.h"
 #ifdef _WIN32
 #pragma comment(lib, "mysql/libmysql.lib")
 #endif
+
+static void set_did_work(lua_State* L) {
+	void* ud;
+	lua_getallocf(L, &ud);
+	KitsuneState* state = (KitsuneState*)ud;
+	if (!state)
+		return;
+	int id = (int)state->currentCoroutineId.load();
+	KitsuneCoroutine* slot = FindSlot(state, id);
+	if (slot)
+		slot->didWork = true;
+}
 
 // -- Helper mode constants ---------------------------------------------------
 #define MYSQL_HELPER_NONQUERY 1
@@ -460,16 +473,19 @@ static int QueryRunCont(lua_State* L, int status, lua_KContext ctx) {
 
 	if (nas == NET_ASYNC_NOT_READY) {
 		lua_pushnil(L);
+		// Still waiting — no work done this tick.
 		return lua_yieldk(L, 1, ctx, QueryRunCont);
 	}
 
 	if (nas == NET_ASYNC_ERROR) {
 		const char* err = mysql_error(q->conn->connection);
 		lua_pushstring(L, err && err[0] ? err : "mysql_real_query_nonblocking error");
+		set_did_work(L);  // error is a result
 		return lua_yieldk(L, 1, ctx, QueryStreamCont);
 	}
 
 	lua_pushnil(L);
+	set_did_work(L);  // query completed
 	return lua_yieldk(L, 1, ctx, QueryStoreCont);
 }
 
@@ -485,16 +501,19 @@ static int MySqlQueryBody(lua_State* L) {
 
 	if (nas == NET_ASYNC_NOT_READY) {
 		lua_pushnil(L);
+		// Still waiting — no work done this tick.
 		return lua_yieldk(L, 1, (lua_KContext)(intptr_t)q, QueryRunCont);
 	}
 
 	if (nas == NET_ASYNC_ERROR) {
 		const char* err = mysql_error(q->conn->connection);
 		lua_pushstring(L, err && err[0] ? err : "mysql_real_query_nonblocking error");
+		set_did_work(L);  // error is a result
 		return lua_yieldk(L, 1, (lua_KContext)(intptr_t)q, QueryStreamCont);
 	}
 
 	lua_pushnil(L);
+	set_did_work(L);  // query completed
 	return lua_yieldk(L, 1, (lua_KContext)(intptr_t)q, QueryStoreCont);
 }
 
@@ -594,6 +613,7 @@ static int HelperStreamCont(lua_State* L, int status, lua_KContext ctx) {
 		if (nr > 1)
 			lua_pop(T, nr - 1);
 		lua_rawseti(L, accumIdx, ++q->accumRowIdx);
+		set_did_work(L);  // received a row
 		return lua_yieldk(L, 0, ctx, HelperStreamCont);
 	}
 
@@ -816,7 +836,7 @@ static int MySqlConnectCont(lua_State* L, int status, lua_KContext ctx) {
 		mysqld->connection, host, user, pass, db, port, NULL, 0);
 
 	if (nas == NET_ASYNC_NOT_READY)
-		return lua_yieldk(L, 0, ctx, MySqlConnectCont);
+		return lua_yieldk(L, 0, ctx, MySqlConnectCont);  // still connecting — no work done
 
 	if (nas == NET_ASYNC_ERROR) {
 		const char* err = mysql_error(mysqld->connection);

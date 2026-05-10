@@ -45,6 +45,7 @@ struct KitsuneCoroutine {
     char*         name;
     int           luaRefCount;
     bool          apiOwned;
+    bool          didWork;  // set by Yield(true) or cooperative C yields with data; cleared by scheduler each tick
 };
 
 // -- Engine state -------------------------------------------------------------

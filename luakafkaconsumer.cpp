@@ -2,8 +2,21 @@
 #include "kafkahelpers.h"
 #include "luakafka.h"
 #include "luaalivetoken.h"
+#include "kitsune_internal.h"
 #include <string.h>
 #include <stdlib.h>
+
+static void set_did_work(lua_State* L) {
+	void* ud;
+	lua_getallocf(L, &ud);
+	KitsuneState* state = (KitsuneState*)ud;
+	if (!state)
+		return;
+	int id = (int)state->currentCoroutineId.load();
+	KitsuneCoroutine* slot = FindSlot(state, id);
+	if (slot)
+		slot->didWork = true;
+}
 
 // ---------------------------------------------------------------------------
 // push/get helpers
@@ -165,7 +178,7 @@ static int consume_cont(lua_State* L, int status, lua_KContext ctx) {
 	lua_settop(L, 0);
 
 	if (!msg)
-		return lua_yieldk(L, 0, ctx, consume_cont);
+		return lua_yieldk(L, 0, ctx, consume_cont);  // nothing received — no work done
 
 	if (state->autocommit) {
 		rd_kafka_commit_message(state->consumer->rd, msg, 1);
@@ -184,6 +197,7 @@ static int consume_cont(lua_State* L, int status, lua_KContext ctx) {
 
 	push_consume_message(L, msg);
 	rd_kafka_message_destroy(msg);  // all fields copied to Lua; safe to free before yield
+	set_did_work(L);  // received a message — signal scheduler we did real work
 	return lua_yieldk(L, 1, ctx, consume_cont);
 }
 

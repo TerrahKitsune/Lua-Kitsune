@@ -1073,6 +1073,7 @@ static void SchedulerProc(KitsuneState* state) {
 		DrainPendingVariableChain(state->L);
 
 		bool anyActive = false;
+		bool anyDidWork = false;
 
 		// -- Step 2: Interrupt all non-done coroutines if requested ------------
 		if (state->interrupt.load()) {
@@ -1205,13 +1206,20 @@ static void SchedulerProc(KitsuneState* state) {
 					slot->resumeValueRef = LUA_NOREF;
 					nstart = 1;
 				}
+				slot->didWork = false;
 				state->currentCoroutineId.store((long)slot->id);
 				int rc = lua_resume(T, state->L, nstart, &nresults);
 				state->currentCoroutineId.store(0);
-				if (rc == LUA_YIELD)
+				if (rc == LUA_YIELD) {
+					if (slot->didWork)
+						anyDidWork = true;
 					lua_pop(T, nresults);  // discard yielded values only; lua_settop(T,0) would corrupt locals
-				else
+				}
+				else {
+					// Coroutine finished (ok or error) — counts as work so we don't idle-sleep.
+					anyDidWork = true;
 					FinishCoroutine(state, slot, T, rc, nresults);
+				}
 			}
 		}
 
@@ -1279,6 +1287,14 @@ static void SchedulerProc(KitsuneState* state) {
 			if (waitMs > 0)
 				state->workEvent.WaitFor(waitMs);
 		}
+		else if (!anyDidWork) {
+			// All active coroutines yielded with no work done (pure idle spin).
+			// Sleep(1) blocks for ~1ms, dropping scheduler CPU to near-zero.
+			// Sleep(0) is insufficient on Windows — it only yields the timeslice
+			// if a same-or-higher priority thread is ready, otherwise returns
+			// immediately and the spin continues.
+			Sleep(1);
+		}
 	}
 	// All work is done; signal KitsuneCleanup that it is safe to proceed.
 	// This must be the last access to state in this function.
@@ -1322,7 +1338,9 @@ static int L_SleepContinuation(lua_State* L, int status, lua_KContext ctx) {
 	return 0;
 }
 
-// Yield() — cooperatively yields the calling coroutine back to the scheduler.
+// Yield() / Yield(true) / Yield(false) — cooperatively yields the calling coroutine back to the scheduler.
+// Yield(true)  signals that this coroutine did useful work this tick (suppresses idle sleep).
+// Yield(false) or Yield() signals no useful work was done (may allow scheduler to sleep).
 // For inline sync calls this triggers the yield loop: access is released briefly so the
 // scheduler and variable bridge can service their queues before the call is resumed.
 // Errors if called from a non-yieldable context that is not the scheduler thread.
@@ -1332,6 +1350,16 @@ static int L_Yield(lua_State* L) {
 		if (g_isSchedulerThread)
 			return 0;  // nohook callback on scheduler thread — no-op, not an error
 		return luaL_error(L, "Yield() cannot be called from a non-yieldable context");
+	}
+	bool work = lua_toboolean(L, 1) != 0;
+	if (work) {
+		void* ud;
+		lua_getallocf(L, &ud);
+		KitsuneState* state = (KitsuneState*)ud;
+		int id = (int)state->currentCoroutineId.load();
+		KitsuneCoroutine* slot = FindSlot(state, id);
+		if (slot)
+			slot->didWork = true;
 	}
 	return lua_yield(L, 0);
 }
@@ -4043,8 +4071,8 @@ extern "C" {
 				DrainPendingVariableChain(state->L);
 
 				lua_gc(state->L, LUA_GCCOLLECT, 0);
-					kitsune_hook_remove_state(state->L);
-					lua_close(state->L);
+				kitsune_hook_remove_state(state->L);
+				lua_close(state->L);
 				state->L = nullptr;
 			}
 			delete state;

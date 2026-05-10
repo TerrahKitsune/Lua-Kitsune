@@ -904,65 +904,13 @@ public sealed class KitsuneHttpServerTests
     // -- WebSocket server tests -----------------------------------------------
     // All WS server tests use C# ClientWebSocket against a background Lua server
     // (StartWsServer) so curl and libevent never share a single-threaded pump loop.
-
-    private static async Task<(KitsuneEngine Engine, Task PumpTask)> StartWsServer(
-        string port, string perTickLua)
-    {
-        var engine = new KitsuneEngine();
-        await engine.ExecuteStringAsync($$"""
-            _stop      = false
-            _server_ws = nil
-            _server    = assert(HttpServer.Listen('{{port}}'))
-            """);
-
-        var pumpTask = Task.Run(() => engine.ExecuteStringAsync($$"""
-            local co = _server:Accept()
-            while not _stop do
-                local ok, req = coroutine.resume(co)
-                if req and req:IsFinished() and not _server_ws then
-                    _server_ws = req:GetResponse():UpgradeToWebSocket()
-                end
-                if _server_ws then
-                    {{perTickLua}}
-                end
-            end
-            if _server_ws then _server_ws:Dispose() end
-            coroutine.resume(co, true)
-            """));
-
-        await Task.Delay(50);
-        return (engine, pumpTask);
-    }
-
-    private static async Task StopWsServer(KitsuneEngine engine, Task pumpTask)
-    {
-        await engine.ExecuteStringAsync("_stop = true");
-        await pumpTask;
-        engine.Dispose();
-    }
-
-    private static async Task<(string Data, WebSocketMessageType Type)> WsCsEchoOnce(
-        string url, string message,
-        WebSocketMessageType sendType = WebSocketMessageType.Text)
-    {
-        using var ws = new ClientWebSocket();
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await ws.ConnectAsync(new Uri(url), cts.Token);
-        byte[] send = Encoding.UTF8.GetBytes(message);
-        await ws.SendAsync(send, sendType, true, cts.Token);
-        byte[] recv = new byte[4096];
-        var result = await ws.ReceiveAsync(recv, cts.Token);
-        try { await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None); }
-        catch (WebSocketException) { /* libevent drops TCP without echoing a WS CLOSE frame */ }
-        return (Encoding.UTF8.GetString(recv, 0, result.Count), result.MessageType);
-    }
-
     [WebSocketFact]
     public async Task Server_WebSocket_Upgrade_Succeeds()
     {
-        var (engine, pump) = await StartWsServer("127.0.0.1:19880", "");
+        var (engine, pump) = await StartWsServer("127.0.0.1:19880", string.Empty);
         var ws = new ClientWebSocket();
         await ws.ConnectAsync(new Uri("ws://127.0.0.1:19880/"), CancellationToken.None);
+
         // Upgrade succeeded if ConnectAsync didn't throw.
         ws.Dispose();
         await StopWsServer(engine, pump);
@@ -987,8 +935,7 @@ public sealed class KitsuneHttpServerTests
             local msg = _server_ws:Poll()
             if msg then _server_ws:Send(msg:GetData()) end
             """);
-        var (data, _) = await WsCsEchoOnce("ws://127.0.0.1:19882/", "bindata",
-            WebSocketMessageType.Binary);
+        var (data, _) = await WsCsEchoOnce("ws://127.0.0.1:19882/", "bindata", WebSocketMessageType.Binary);
         await StopWsServer(engine, pump);
         data.ShouldBe("bindata");
     }
@@ -996,7 +943,7 @@ public sealed class KitsuneHttpServerTests
     [WebSocketFact]
     public async Task Server_WebSocket_IsConnected_TrueAfterUpgrade()
     {
-        var (engine, pump) = await StartWsServer("127.0.0.1:19884", "");
+        var (engine, pump) = await StartWsServer("127.0.0.1:19884", string.Empty);
         var ws = new ClientWebSocket();
         await ws.ConnectAsync(new Uri("ws://127.0.0.1:19884/"), CancellationToken.None);
         await Task.Delay(100); // let the pump see the upgrade
@@ -1010,7 +957,7 @@ public sealed class KitsuneHttpServerTests
     [WebSocketFact]
     public async Task Server_WebSocket_GetId_IsNonZero()
     {
-        var (engine, pump) = await StartWsServer("127.0.0.1:19885", "");
+        var (engine, pump) = await StartWsServer("127.0.0.1:19885", string.Empty);
         using var ws = new ClientWebSocket();
         await ws.ConnectAsync(new Uri("ws://127.0.0.1:19885/"), CancellationToken.None);
         await Task.Delay(100); // let the pump see the upgrade
@@ -1028,7 +975,7 @@ public sealed class KitsuneHttpServerTests
     [WebSocketFact]
     public async Task Server_WebSocket_GetContext_ReturnsSameTable()
     {
-        var (engine, pump) = await StartWsServer("127.0.0.1:19886", "");
+        var (engine, pump) = await StartWsServer("127.0.0.1:19886", string.Empty);
         var ws = new ClientWebSocket();
         await ws.ConnectAsync(new Uri("ws://127.0.0.1:19886/"), CancellationToken.None);
         await Task.Delay(100);
@@ -1048,7 +995,7 @@ public sealed class KitsuneHttpServerTests
     [WebSocketFact]
     public async Task Server_WebSocket_Dispose_AfterDispose_ReadReturnsNil()
     {
-        var (engine, pump) = await StartWsServer("127.0.0.1:19887", "");
+        var (engine, pump) = await StartWsServer("127.0.0.1:19887", string.Empty);
         var ws = new ClientWebSocket();
         await ws.ConnectAsync(new Uri("ws://127.0.0.1:19887/"), CancellationToken.None);
         await Task.Delay(100);
@@ -1059,6 +1006,7 @@ public sealed class KitsuneHttpServerTests
             end
             return 'false'
             """);
+
         // Server already disposed the WS; closing from client side would throw.
         await StopWsServer(engine, pump);
         ws.Dispose();
@@ -1078,7 +1026,6 @@ public sealed class KitsuneHttpServerTests
     }
 
     // -- SSE tests ------------------------------------------------------------
-
     [Fact]
     public async Task Server_SSE_EventsDeliveredInOrder()
     {
@@ -1140,8 +1087,10 @@ public sealed class KitsuneHttpServerTests
         // The client stream runs as a second scheduler coroutine so both can yield
         // independently — stream:Read() yields back to the scheduler which resumes
         // the server pump, advancing the chunked sender between reads.
-        if (new KitsuneEngine().ExecuteStringAsync("return type(HttpClient)").Result.String == "nil")
+        if ((await new KitsuneEngine().ExecuteStringAsync("return type(HttpClient)")).String == "nil")
+        {
             return; // HttpClient not compiled in
+        }
 
         var (engine, pump) = await StartLuaServer("127.0.0.1:19892", """
             resp:SetHeader('Content-Type', 'text/event-stream')
@@ -1178,8 +1127,66 @@ public sealed class KitsuneHttpServerTests
             """);
 
         await StopLuaServer(engine, pump);
-        r.String.ShouldContain("data: alpha");
-        r.String.ShouldContain("data: beta");
+        r.String!.ShouldContain("data: alpha");
+        r.String!.ShouldContain("data: beta");
+    }
+
+    private static async Task<(KitsuneEngine Engine, Task PumpTask)> StartWsServer(
+        string port, string perTickLua)
+    {
+        var engine = new KitsuneEngine();
+        await engine.ExecuteStringAsync($$"""
+            _stop      = false
+            _server_ws = nil
+            _server    = assert(HttpServer.Listen('{{port}}'))
+            """);
+
+        var pumpTask = Task.Run(() => engine.ExecuteStringAsync($$"""
+            local co = _server:Accept()
+            while not _stop do
+                local ok, req = coroutine.resume(co)
+                if req and req:IsFinished() and not _server_ws then
+                    _server_ws = req:GetResponse():UpgradeToWebSocket()
+                end
+                if _server_ws then
+                    {{perTickLua}}
+                end
+            end
+            if _server_ws then _server_ws:Dispose() end
+            coroutine.resume(co, true)
+            """));
+
+        await Task.Delay(50);
+        return (engine, pumpTask);
+    }
+
+    private static async Task StopWsServer(KitsuneEngine engine, Task pumpTask)
+    {
+        await engine.ExecuteStringAsync("_stop = true");
+        await pumpTask;
+        engine.Dispose();
+    }
+
+    private static async Task<(string Data, WebSocketMessageType Type)> WsCsEchoOnce(
+        string url,
+        string message,
+        WebSocketMessageType sendType = WebSocketMessageType.Text)
+    {
+        using var ws = new ClientWebSocket();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await ws.ConnectAsync(new Uri(url), cts.Token);
+        byte[] send = Encoding.UTF8.GetBytes(message);
+        await ws.SendAsync(send, sendType, true, cts.Token);
+        byte[] recv = new byte[4096];
+        var result = await ws.ReceiveAsync(recv, cts.Token);
+        try
+        {
+            await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None);
+        }
+        catch (WebSocketException)
+        { /* libevent drops TCP without echoing a WS CLOSE frame */
+        }
+        return (Encoding.UTF8.GetString(recv, 0, result.Count), result.MessageType);
     }
 
     private static async Task<(KitsuneEngine Engine, Task PumpTask)> StartLuaServer(
