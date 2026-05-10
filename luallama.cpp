@@ -549,6 +549,8 @@ int lua_llama_info(lua_State* L) {
 		lua_setfield(L, -2, "tokens_used");
 		lua_pushinteger(L, ctx->GetTokensAvailable());
 		lua_setfield(L, -2, "tokens_available");
+		lua_pushinteger(L, ctx->GetLastMessagesUsed());
+		lua_setfield(L, -2, "last_messages_used");
 	}
 	lua_setfield(L, -2, "context");
 

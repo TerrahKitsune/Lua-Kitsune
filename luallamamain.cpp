@@ -1,4 +1,5 @@
 ﻿#include "platform.h"
+#ifdef KITSUNE_LLAMA
 #include "luallama.h"
 #include "luatoolsuite.h"
 #include "luallamamain.h"
@@ -72,3 +73,5 @@ int luaopen_llama(lua_State* L) {
 
     return 1;        // return module table
 }
+
+#endif // KITSUNE_LLAMA

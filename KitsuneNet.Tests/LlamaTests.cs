@@ -1,4 +1,4 @@
-﻿using KitsuneNet;
+using KitsuneNet;
 using Shouldly;
 using Xunit;
 
@@ -10,28 +10,28 @@ namespace KitsuneNet.Tests
         private static string ModelPath =>
             Environment.GetEnvironmentVariable("KITSUNE_LLAMA_MODEL")!;
 
-        [Fact]
+        [WindowsFact]
         public void Llama_GlobalExists()
         {
             using KitsuneEngine engine = new();
             engine.RunString("return type(Llama)").String.ShouldBe("table");
         }
 
-        [Fact]
+        [WindowsFact]
         public void Llama_CreateContext_ReturnsUserdata()
         {
             using KitsuneEngine engine = new();
             engine.RunString("local ctx = Llama.CreateContext(); local t = type(ctx); ctx:Dispose(); return t").String.ShouldBe("userdata");
         }
 
-        [Fact]
+        [WindowsFact]
         public void Llama_GetLogs_ReturnsTable()
         {
             using KitsuneEngine engine = new();
             engine.RunString("return type(Llama.GetLogs())").String.ShouldBe("table");
         }
 
-        [Fact]
+        [WindowsFact]
         public void Llama_Context_Dispose_IsIdempotent()
         {
             using KitsuneEngine engine = new();
@@ -43,7 +43,7 @@ namespace KitsuneNet.Tests
             ").Boolean.ShouldBeTrue();
         }
 
-        [Fact]
+        [WindowsFact]
         public void Llama_Context_Info_ReturnsTable()
         {
             using KitsuneEngine engine = new();
@@ -55,7 +55,7 @@ namespace KitsuneNet.Tests
             ").String.ShouldBe("table");
         }
 
-        [Fact]
+        [WindowsFact]
         public void Llama_Context_StatusIdle_WhenNew()
         {
             using KitsuneEngine engine = new();
@@ -159,8 +159,8 @@ namespace KitsuneNet.Tests
             result.String.ShouldBe("idle");
         }
 
-        // ── ToolSuite — basic API ─────────────────────────────────────────────
-        [Fact]
+        // -- ToolSuite � basic API ---------------------------------------------
+        [WindowsFact]
         public void ToolSuite_CreateToolSuite_ReturnsUserdata()
         {
             using KitsuneEngine engine = new();
@@ -168,7 +168,7 @@ namespace KitsuneNet.Tests
                 .ShouldBe("userdata");
         }
 
-        [Fact]
+        [WindowsFact]
         public void ToolSuite_Tostring_IncludesToolCount()
         {
             using KitsuneEngine engine = new();
@@ -178,7 +178,7 @@ namespace KitsuneNet.Tests
             ").String!.ShouldContain("ToolSuite(");
         }
 
-        [Fact]
+        [WindowsFact]
         public void ToolSuite_AddTool_ReturnsTrue()
         {
             using KitsuneEngine engine = new();
@@ -188,8 +188,8 @@ namespace KitsuneNet.Tests
             ").Boolean.ShouldBeTrue();
         }
 
-        // ── ToolSuite — GetJson ───────────────────────────────────────────────
-        [Fact]
+        // -- ToolSuite � GetJson -----------------------------------------------
+        [WindowsFact]
         public void ToolSuite_GetJson_EmptySuite_ReturnsEmptyArray()
         {
             using KitsuneEngine engine = new();
@@ -199,7 +199,7 @@ namespace KitsuneNet.Tests
             ").String.ShouldBe("[]");
         }
 
-        [Fact]
+        [WindowsFact]
         public void ToolSuite_GetJson_ContainsToolName()
         {
             using KitsuneEngine engine = new();
@@ -212,7 +212,7 @@ namespace KitsuneNet.Tests
             ").String!.ShouldContain("get_weather");
         }
 
-        [Fact]
+        [WindowsFact]
         public void ToolSuite_GetJson_ContainsRequiredParam()
         {
             using KitsuneEngine engine = new();
@@ -225,8 +225,8 @@ namespace KitsuneNet.Tests
             ").String!.ShouldContain(@"""required"":[""host""]");
         }
 
-        // ── ToolSuite — Call early-return paths ───────────────────────────────
-        [Fact]
+        // -- ToolSuite � Call early-return paths -------------------------------
+        [WindowsFact]
         public void ToolSuite_Call_EmptyMessages_ReturnsZero()
         {
             using KitsuneEngine engine = new();
@@ -236,7 +236,7 @@ namespace KitsuneNet.Tests
             ").String.ShouldBe("0");
         }
 
-        [Fact]
+        [WindowsFact]
         public void ToolSuite_Call_LastMessageNotAssistant_ReturnsZero()
         {
             using KitsuneEngine engine = new();
@@ -246,7 +246,7 @@ namespace KitsuneNet.Tests
             ").String.ShouldBe("0");
         }
 
-        [Fact]
+        [WindowsFact]
         public void ToolSuite_Call_AssistantMessage_NoToolCalls_ReturnsZero()
         {
             using KitsuneEngine engine = new();
@@ -256,7 +256,7 @@ namespace KitsuneNet.Tests
             ").String.ShouldBe("0");
         }
 
-        [Fact]
+        [WindowsFact]
         public void ToolSuite_Call_LastMessage_NotATable_ReturnsZero()
         {
             using KitsuneEngine engine = new();
@@ -268,8 +268,8 @@ namespace KitsuneNet.Tests
             ").String.ShouldBe("0");
         }
 
-        // ── ToolSuite — Call dispatch ─────────────────────────────────────────
-        [Fact]
+        // -- ToolSuite � Call dispatch -----------------------------------------
+        [WindowsFact]
         public void ToolSuite_Call_AppendsToolReply_WithCorrectRole()
         {
             using KitsuneEngine engine = new();
@@ -285,7 +285,7 @@ namespace KitsuneNet.Tests
             ").String.ShouldBe("tool");
         }
 
-        [Fact]
+        [WindowsFact]
         public void ToolSuite_Call_ContentMatchesCallbackReturn()
         {
             using KitsuneEngine engine = new();
@@ -302,7 +302,7 @@ namespace KitsuneNet.Tests
             ").String.ShouldBe("42C");
         }
 
-        [Fact]
+        [WindowsFact]
         public void ToolSuite_Call_ToolCallId_MatchesMessageId()
         {
             using KitsuneEngine engine = new();
@@ -318,7 +318,7 @@ namespace KitsuneNet.Tests
             ").String.ShouldBe("myid");
         }
 
-        [Fact]
+        [WindowsFact]
         public void ToolSuite_Call_UnknownTool_AppendsNotFoundReply()
         {
             using KitsuneEngine engine = new();
@@ -333,7 +333,7 @@ namespace KitsuneNet.Tests
             ").String!.ShouldContain("Tool not found");
         }
 
-        [Fact]
+        [WindowsFact]
         public void ToolSuite_Call_MultipleTools_AllDispatched()
         {
             using KitsuneEngine engine = new();
@@ -350,8 +350,8 @@ namespace KitsuneNet.Tests
             ").String.ShouldBe("2 ra rb");
         }
 
-        // ── ToolSuite — Callback (permission gate) ────────────────────────────
-        [Fact]
+        // -- ToolSuite � Callback (permission gate) ----------------------------
+        [WindowsFact]
         public void ToolSuite_Callback_AllowingGate_ToolRuns()
         {
             using KitsuneEngine engine = new();
@@ -368,7 +368,7 @@ namespace KitsuneNet.Tests
             ").String.ShouldBe("done");
         }
 
-        [Fact]
+        [WindowsFact]
         public void ToolSuite_Callback_DenyingGate_AppendsDeniedReply()
         {
             using KitsuneEngine engine = new();
@@ -385,7 +385,7 @@ namespace KitsuneNet.Tests
             ").String!.ShouldContain("permission denied");
         }
 
-        [Fact]
+        [WindowsFact]
         public void ToolSuite_Callback_ReceivesToolNameAndArgs()
         {
             using KitsuneEngine engine = new();
@@ -409,7 +409,7 @@ namespace KitsuneNet.Tests
             ").String.ShouldBe("weather Paris");
         }
 
-        [Fact]
+        [WindowsFact]
         public void ToolSuite_Callback_Nil_RemovesGate()
         {
             using KitsuneEngine engine = new();
@@ -427,11 +427,11 @@ namespace KitsuneNet.Tests
             ").String.ShouldBe("ok");
         }
 
-        // ── ToolSuite — yield survival ────────────────────────────────────────
+        // -- ToolSuite � yield survival ----------------------------------------
         // Sleep(0) triggers an immediate yield+resume, exercising the same
         // lua_pcallk continuation path that the engine's 1000-instruction
         // ticker forces mid-callback.
-        [Fact]
+        [WindowsFact]
         public void ToolSuite_Call_ToolCallback_SurvivesYield()
         {
             using KitsuneEngine engine = new();
@@ -451,7 +451,7 @@ namespace KitsuneNet.Tests
             ").String!.ShouldBe("after-yield:x");
         }
 
-        [Fact]
+        [WindowsFact]
         public void ToolSuite_Callback_Gate_SurvivesYield()
         {
             using KitsuneEngine engine = new();
@@ -471,7 +471,7 @@ namespace KitsuneNet.Tests
             ").String.ShouldBe("done");
         }
 
-        [Fact]
+        [WindowsFact]
         public void ToolSuite_Call_MultipleTools_SurviveYieldsInCallbacks()
         {
             using KitsuneEngine engine = new();
@@ -488,7 +488,7 @@ namespace KitsuneNet.Tests
             ").String.ShouldBe("2 ra rb");
         }
 
-        [Fact]
+        [WindowsFact]
         public void ToolSuite_Callback_GateAndToolBothYield_CorrectResults()
         {
             using KitsuneEngine engine = new();
@@ -510,8 +510,8 @@ namespace KitsuneNet.Tests
             ").String.ShouldBe("2 ran error: permission denied");
         }
 
-        // ── ToolSuite — stack balance ─────────────────────────────────────────
-        [Fact]
+        // -- ToolSuite � stack balance -----------------------------------------
+        [WindowsFact]
         public void ToolSuite_Call_Repeated_DoesNotLeakLuaStack()
         {
             using KitsuneEngine engine = new();

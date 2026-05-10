@@ -126,6 +126,7 @@ public:
 	int         GetTokensUsed() const;
 	int         GetTokensAvailable() const;
 	double      GetSecondsSinceLastUsed() const;
+	int         GetLastMessagesUsed() const;
 
 	// Model info (only valid when model loaded)
 	std::string GetModelDesc() const;
@@ -221,4 +222,7 @@ private:
 	int64_t                     model_ttl_ms = 300000;
 	std::chrono::steady_clock::time_point last_used_time;
 	bool                        last_used_valid = false;
+
+	// Last generation stats
+	int                         last_messages_used = 0;
 };

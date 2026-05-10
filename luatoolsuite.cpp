@@ -1,4 +1,5 @@
 ﻿#include "platform.h"
+#ifdef KITSUNE_LLAMA
 #include "luatoolsuite.h"
 #include "luajson.h"
 #include <cstring>
@@ -552,3 +553,5 @@ int lua_toolsuite_call(lua_State* L) {
 
     return toolsuite_dispatch_one(L, state);
 }
+
+#endif // KITSUNE_LLAMA

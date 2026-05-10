@@ -132,11 +132,14 @@ if ($LASTEXITCODE -ne 0) {
 
 # Run dotnet test inside WSL. Use the Linux dotnet (must be installed in WSL).
 # Pipe stdout to a log file inside the WSL path so we can read it back.
+# --blame-hang-timeout 60s aborts the run if any single test hangs that long,
+# producing a dump and a non-zero exit code so the script fails fast.
 $wslLogFile = "$wslRoot/build-linux/test-results/test-output.txt"
 $dotnetCmd  = "set -e; mkdir -p '$wslTrxDir'; " +
               "dotnet test '$testDll' " +
               "--logger 'trx;LogFileName=$wslTrxFile' " +
               "--no-build " +
+              "--blame-hang-timeout 60s " +
               "2>&1 | tee '$wslLogFile'"
 
 Write-Info "Running: wsl bash -c `"$dotnetCmd`""

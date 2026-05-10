@@ -957,7 +957,7 @@ public sealed class KitsuneHttpServerTests
         return (Encoding.UTF8.GetString(recv, 0, result.Count), result.MessageType);
     }
 
-    [Fact]
+    [WebSocketFact]
     public async Task Server_WebSocket_Upgrade_Succeeds()
     {
         var (engine, pump) = await StartWsServer("127.0.0.1:19880", "");
@@ -968,7 +968,7 @@ public sealed class KitsuneHttpServerTests
         await StopWsServer(engine, pump);
     }
 
-    [Fact]
+    [WebSocketFact]
     public async Task Server_WebSocket_Echo_TextFrame_RoundTrips()
     {
         var (engine, pump) = await StartWsServer("127.0.0.1:19881", """
@@ -980,7 +980,7 @@ public sealed class KitsuneHttpServerTests
         data.ShouldBe("hello server");
     }
 
-    [Fact]
+    [WebSocketFact]
     public async Task Server_WebSocket_Echo_BinaryFrame_RoundTrips()
     {
         var (engine, pump) = await StartWsServer("127.0.0.1:19882", """
@@ -993,7 +993,7 @@ public sealed class KitsuneHttpServerTests
         data.ShouldBe("bindata");
     }
 
-    [Fact]
+    [WebSocketFact]
     public async Task Server_WebSocket_IsConnected_TrueAfterUpgrade()
     {
         var (engine, pump) = await StartWsServer("127.0.0.1:19884", "");
@@ -1007,7 +1007,7 @@ public sealed class KitsuneHttpServerTests
         r.String.ShouldBe("true");
     }
 
-    [Fact]
+    [WebSocketFact]
     public async Task Server_WebSocket_GetId_IsNonZero()
     {
         var (engine, pump) = await StartWsServer("127.0.0.1:19885", "");
@@ -1025,7 +1025,7 @@ public sealed class KitsuneHttpServerTests
         r.String.ShouldBe("true");
     }
 
-    [Fact]
+    [WebSocketFact]
     public async Task Server_WebSocket_GetContext_ReturnsSameTable()
     {
         var (engine, pump) = await StartWsServer("127.0.0.1:19886", "");
@@ -1045,7 +1045,7 @@ public sealed class KitsuneHttpServerTests
         r.String.ShouldBe("true");
     }
 
-    [Fact]
+    [WebSocketFact]
     public async Task Server_WebSocket_Dispose_AfterDispose_ReadReturnsNil()
     {
         var (engine, pump) = await StartWsServer("127.0.0.1:19887", "");
@@ -1065,7 +1065,7 @@ public sealed class KitsuneHttpServerTests
         r.String.ShouldBe("true");
     }
 
-    [Fact]
+    [WebSocketFact]
     public async Task Server_WebSocket_CSharpClient_TextEcho_RoundTrips()
     {
         var (engine, pump) = await StartWsServer("127.0.0.1:19888", """

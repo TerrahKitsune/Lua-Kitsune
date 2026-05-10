@@ -1,7 +1,9 @@
 ﻿#include "LuaHttpServerMain.h"
 #include "LuaHttpServer.h"
 #include "LuaHttpRequest.h"
+#ifdef KITSUNE_WEBSOCKET
 #include "LuaWebSocket.h"
+#endif
 
 static const luaL_Reg httpserver_functions[] = {
     { "Listen", HttpServer_Listen },
@@ -54,7 +56,9 @@ static const luaL_Reg httpresponse_methods[] = {
     { "Send",                 HttpResponse_Send                 },
     { "Reject",               HttpResponse_Reject               },
     { "Close",                HttpResponse_Close                },
-    { "UpgradeToWebSocket",   ws_server_upgrade                 },
+    #ifdef KITSUNE_WEBSOCKET
+        { "UpgradeToWebSocket",   ws_server_upgrade                 },
+    #endif
     { NULL, NULL }
 };
 

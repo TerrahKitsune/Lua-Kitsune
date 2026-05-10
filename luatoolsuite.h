@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include "lua_main_incl.h"
+#ifdef KITSUNE_LLAMA
 #include <string>
 #include <vector>
 
@@ -45,3 +46,5 @@ int lua_toolsuite_setcallback(lua_State* L);
 int lua_toolsuite_gc(lua_State* L);
 int lua_toolsuite_tostring(lua_State* L);
 int lua_toolsuite_new(lua_State* L);
+
+#endif // KITSUNE_LLAMA

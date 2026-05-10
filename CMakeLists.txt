@@ -30,6 +30,9 @@ set_target_properties(lua_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 # etc.) are compiled out via KITSUNE_BAREBONES.  Only in-memory modules and the
 # core scheduler are compiled.
 set(KITSUNE_ENGINE_SOURCES
+	# ── Lua debug/hook bridge ─────────────────────────────────────────────────
+	KitsuneLuaDebug.cpp
+
 	# ── Core scheduler ─────────────────────────────────────────────────────
 	KitsuneEngine.cpp
 	kitsuneuserdata.cpp
@@ -170,7 +173,11 @@ if(NOT WIN32)
 	set(_sqlite_hidden "SQLITE_API=__attribute__((visibility(\"hidden\")))")
 	set_source_files_properties(
 		SQLite/sqlite3.c LuaSQLite.cpp LuaSQLiteMain.cpp
-		PROPERTIES COMPILE_DEFINITIONS "${_sqlite_hidden}")
+		PROPERTIES COMPILE_DEFINITIONS "${_sqlite_hidden};SQLITE_ENABLE_MATH_FUNCTIONS")
+else()
+	set_source_files_properties(
+		SQLite/sqlite3.c
+		PROPERTIES COMPILE_DEFINITIONS "SQLITE_ENABLE_MATH_FUNCTIONS")
 endif()
 
 add_library(KitsuneEngine SHARED ${KITSUNE_ENGINE_SOURCES})
@@ -225,6 +232,21 @@ if(KITSUNE_HTTP)
 
 	target_include_directories(KitsuneEngine PRIVATE ${LIBEVENT_INCLUDE_DIRS})
 	target_link_libraries(KitsuneEngine PRIVATE CURL::libcurl ${LIBEVENT_LINK_LIBRARIES})
+
+	# LuaWebSocket requires libevent >= 2.2 (event2/ws.h).  Skip silently if
+	# the installed version is too old (common on Ubuntu 24.04 / libevent 2.1).
+	include(CheckIncludeFileCXX)
+	set(CMAKE_REQUIRED_INCLUDES ${LIBEVENT_INCLUDE_DIRS})
+	check_include_file_cxx("event2/ws.h" HAVE_LIBEVENT_WS)
+	unset(CMAKE_REQUIRED_INCLUDES)
+
+	if(HAVE_LIBEVENT_WS)
+		target_sources(KitsuneEngine PRIVATE LuaWebSocket.cpp)
+		target_compile_definitions(KitsuneEngine PRIVATE KITSUNE_WEBSOCKET)
+		message(STATUS "WebSocket support: enabled (event2/ws.h found)")
+	else()
+		message(STATUS "WebSocket support: disabled (event2/ws.h not found; libevent >= 2.2 required)")
+	endif()
 endif()
 
 # ── Optional PostgreSQL support ───────────────────────────────────────────────

@@ -830,7 +830,7 @@ namespace KitsuneNet.Tests
         }
 
         // -- WebSocket ---------------------------------------------------------
-        [Fact]
+        [WebSocketFact]
         public async Task Http_WebSocket_Connect_Succeeds()
         {
             using KitsuneEngine engine = new();
@@ -852,7 +852,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        [Fact]
+        [WebSocketFact]
         public async Task Http_WebSocket_IsConnected_TrueAfterConnect()
         {
             using KitsuneEngine engine = new();
@@ -876,7 +876,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        [Fact]
+        [WebSocketFact]
         public async Task Http_WebSocket_GetId_StableAcrossCalls()
         {
             using KitsuneEngine engine = new();
@@ -900,7 +900,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        [Fact]
+        [WebSocketFact]
         public async Task Http_WebSocket_GetContext_ReturnsSameTable()
         {
             using KitsuneEngine engine = new();
@@ -925,7 +925,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        [Fact]
+        [WebSocketFact]
         public async Task Http_WebSocket_Echo_TextFrame_RoundTrips()
         {
             using KitsuneEngine engine = new();
@@ -948,7 +948,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        [Fact]
+        [WebSocketFact]
         public async Task Http_WebSocket_Echo_TextFrame_TypeIsOne()
         {
             using KitsuneEngine engine = new();
@@ -971,7 +971,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        [Fact]
+        [WebSocketFact]
         public async Task Http_WebSocket_Echo_BinaryFrame_RoundTrips()
         {
             using KitsuneEngine engine = new();
@@ -995,7 +995,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        [Fact]
+        [WebSocketFact]
         public async Task Http_WebSocket_Echo_BinaryFrame_TypeIsTwo()
         {
             using KitsuneEngine engine = new();
@@ -1018,7 +1018,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        [Fact]
+        [WebSocketFact]
         public async Task Http_WebSocket_MultipleFrames_AllEchoedInOrder()
         {
             using KitsuneEngine engine = new();
@@ -1048,7 +1048,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        [Fact]
+        [WebSocketFact]
         public async Task Http_WebSocket_MixedFrames_TextAndBinary_TypesCorrect()
         {
             using KitsuneEngine engine = new();
@@ -1075,7 +1075,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        [Fact]
+        [WebSocketFact]
         public async Task Http_WebSocket_Dispose_AfterDispose_ReadReturnsNil()
         {
             using KitsuneEngine engine = new();
@@ -1098,7 +1098,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        [Fact]
+        [WebSocketFact]
         public async Task Http_WebSocket_Poll_ReturnsNilWhenNoMessage()
         {
             using KitsuneEngine engine = new();
@@ -1120,7 +1120,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        [Fact]
+        [WebSocketFact]
         public async Task Http_WebSocket_LargeTextPayload_RoundTrips()
         {
             using KitsuneEngine engine = new();

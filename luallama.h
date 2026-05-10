@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include "lua_main_incl.h"
+#ifdef KITSUNE_LLAMA
 #include "LlamaContext.h"
 
 #define LUALLAMA "LUALLAMA"
@@ -28,3 +29,5 @@ int lua_llama_embed(lua_State* L);
 int lua_llama_info(lua_State* L);
 int lua_llama_dispose(lua_State* L);
 int lua_llama_getlogs(lua_State* L);
+
+#endif // KITSUNE_LLAMA

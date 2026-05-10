@@ -3650,9 +3650,11 @@ slow:Dispose()
 
 ## Llama
 
-A local LLM inference module backed by [llama.cpp](https://github.com/ggml-org/llama.cpp). Runs GGUF models on CPU or GPU (CUDA). All inference is dispatched to a **persistent background worker thread** per context; the calling coroutine uses non-blocking `Poll()` calls cooperatively — no OS thread is blocked. **Windows only** in the current build.
+A local LLM inference module backed by [llama.cpp](https://github.com/ggml-org/llama.cpp). Runs GGUF models on CPU or GPU (CUDA). All inference is dispatched to a **persistent background worker thread** per context; the calling coroutine uses non-blocking `Poll()` calls cooperatively — no OS thread is blocked.
 
-> **Note:** `Llama.CreateContext` lazily initialises the llama.cpp and ggml backends on first call. The CUDA backend is loaded automatically when `ggml-cuda.dll` is present in the output directory.
+> **Platform note:** llama.cpp itself supports Windows and Linux. The prebuilt vendor binaries bundled with this project (`vendor/fetch-llama.ps1`) are Windows-only (CUDA + AVX2 DLLs). To enable Llama on Linux, build llama.cpp from source and link against it — the C++ integration code is fully cross-platform and compiles cleanly on Linux when `KITSUNE_LLAMA` is defined.
+
+> **Note:** `Llama.CreateContext` lazily initialises the llama.cpp and ggml backends on first call. The CUDA backend is loaded automatically when `ggml-cuda.dll` / `libggml-cuda.so` is present in the output directory.
 
 ### Module-level
 
@@ -3676,7 +3678,7 @@ Creates a new inference context. The worker thread is started immediately. Retur
 | `n_gpu_layers` | integer | `99` | Number of model layers to offload to GPU. `99` offloads all layers |
 | `n_ctx` | integer | `4096` | Context window size in tokens |
 | `n_threads` | integer | `0` | CPU inference threads. `0` = auto-detect (hardware concurrency) |
-| `n_batch` | integer | `512` | Prompt batch size |
+| `n_batch` | integer | `512` | Prompt prefill batch size. Controls how many tokens are processed per decode call during prompt ingestion. Smaller values use less memory at the cost of slower prefill; larger values are faster but use more memory. Independent of `n_ctx` — the engine chunks the prompt automatically so this never needs to match or exceed `n_ctx` |
 | `flash_attn` | boolean | `false` | Enable Flash Attention |
 | `model_ttl_ms` | integer | `300000` | Milliseconds of idle time before the model is automatically unloaded. `0` disables auto-unload |
 
@@ -3802,6 +3804,8 @@ nil, errmsg  ctx:Generate(messages [, opts] [, tools])
 ```
 
 Queues a generation request. `messages` is an array of chat message tables (OpenAI-format). Returns immediately; output is consumed via `Poll`.
+
+**Context window and auto-trim:** before decoding, the engine tokenises the full prompt and compares it to `n_ctx`. If the prompt is too long, the oldest non-system messages are dropped one at a time until it fits. The system message (first message with `role = "system"`) is always preserved. If even the system message alone exceeds `n_ctx`, `Poll` returns a `"error"` event. No notification is emitted when trimming occurs — the conversation simply continues with a shorter history.
 
 Returns `nil, errmsg` when:
 - `"already running"` — a generation is already in progress
@@ -3944,13 +3948,14 @@ Returns a snapshot of the context state. The returned table has two sub-tables: 
 | `n_ctx` | integer | Configured context window size |
 | `n_gpu_layers` | integer | Configured GPU layer count |
 | `n_threads` | integer | CPU thread count (resolved from hardware concurrency when 0) |
-| `n_batch` | integer | Batch size |
+| `n_batch` | integer | Prompt prefill batch size. The engine feeds the prompt in chunks of this size, so it is independent of and never needs to match `n_ctx` |
 | `model_ttl_ms` | integer | Auto-unload timeout in milliseconds |
 | `model_path` | string or nil | Path set via `SetModel`, or `nil` |
 | `error` | string or nil | Last error message, or `nil` |
 | `last_used` | number or nil | Seconds since last generation completed, or `nil` if never used |
 | `tokens_used` | integer | Tokens currently occupying the KV cache |
 | `tokens_available` | integer | Remaining tokens available in the context window |
+| `last_messages_used` | integer | Number of messages from the last `Generate` call that were actually included in the prompt after auto-trimming. `0` before any generation. Compare against your full messages array length to find out how many were silently dropped |
 
 **`info.model` fields (nil when no model is loaded):**
 

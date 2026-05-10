@@ -316,6 +316,10 @@ double LlamaContext::GetSecondsSinceLastUsed() const {
     return std::chrono::duration<double>(now - last_used_time).count();
 }
 
+int LlamaContext::GetLastMessagesUsed() const {
+    return last_messages_used;
+}
+
 std::string LlamaContext::GetModelDesc() const {
     if (!llama_mdl)
         return "";
@@ -728,6 +732,76 @@ void LlamaContext::WorkerGenerate() {
     }
     tokens.resize(n_tokens);
 
+    // Auto-trim: if the prompt exceeds the context window, drop the oldest
+    // non-system messages one at a time until the prompt fits.
+    // The system message (index 0) is always preserved.
+    while (n_tokens > ctx_opts.n_ctx) {
+        bool has_system = !gen_messages.empty() && gen_messages[0].role == "system";
+        int drop_idx = has_system ? 1 : 0;
+        if (drop_idx >= (int)gen_messages.size()) {
+            // Even the system prompt alone is too long — nothing left to cut
+            PushError("prompt exceeds context window even after trimming (" +
+                      std::to_string(n_tokens) + " tokens > n_ctx " +
+                      std::to_string(ctx_opts.n_ctx) + "). Increase n_ctx.");
+            PushDone();
+            status.store(LlamaStatus::IDLE);
+            return;
+        }
+        gen_messages.erase(gen_messages.begin() + drop_idx);
+
+        // Rebuild chat_msgs from the trimmed message list.
+        // Tool injection was already applied to the system message content above,
+        // so a simple rebuild is sufficient here.
+        chat_msgs.clear();
+        chat_msgs.reserve(gen_messages.size());
+        for (auto& msg : gen_messages) {
+            llama_chat_message cm;
+            cm.role    = msg.role.c_str();
+            cm.content = msg.content.c_str();
+            chat_msgs.push_back(cm);
+        }
+
+        // Re-apply chat template
+        prompt_len = llama_chat_apply_template(
+            chat_tmpl,
+            chat_msgs.data(), chat_msgs.size(),
+            true,
+            prompt_buf.data(), (int32_t)prompt_buf.size()
+        );
+        if (prompt_len < 0) {
+            PushError("failed to apply chat template during trim");
+            PushDone();
+            status.store(LlamaStatus::IDLE);
+            return;
+        }
+        if ((size_t)prompt_len >= prompt_buf.size()) {
+            prompt_buf.resize(prompt_len + 1);
+            prompt_len = llama_chat_apply_template(
+                chat_tmpl,
+                chat_msgs.data(), chat_msgs.size(),
+                true,
+                prompt_buf.data(), (int32_t)prompt_buf.size()
+            );
+        }
+        prompt.assign(prompt_buf.data(), prompt_len);
+
+        // Re-tokenize the trimmed prompt
+        n_prompt_max = prompt_len + 256;
+        tokens.resize(n_prompt_max);
+        n_tokens = llama_tokenize(llama_model_get_vocab(llama_mdl), prompt.c_str(), (int32_t)prompt.size(),
+            tokens.data(), n_prompt_max, true, true);
+        if (n_tokens < 0) {
+            PushError("tokenization failed during trim");
+            PushDone();
+            status.store(LlamaStatus::IDLE);
+            return;
+        }
+        tokens.resize(n_tokens);
+    }
+
+    // Record how many messages were actually included after trimming
+    last_messages_used = (int)gen_messages.size();
+
     // Clear KV cache for fresh generation
     llama_memory_clear(llama_get_memory(llama_ctx), true);
 
@@ -739,14 +813,20 @@ void LlamaContext::WorkerGenerate() {
     llama_sampler_chain_add(smpl, llama_sampler_init_temp(gen_opts.temperature));
     llama_sampler_chain_add(smpl, llama_sampler_init_dist(gen_opts.seed >= 0 ? (uint32_t)gen_opts.seed : LLAMA_DEFAULT_SEED));
 
-    // Decode prompt batch
-    llama_batch batch = llama_batch_get_one(tokens.data(), n_tokens);
-    if (llama_decode(llama_ctx, batch) != 0) {
-        llama_sampler_free(smpl);
-        PushError("prompt decode failed");
-        PushDone();
-        status.store(LlamaStatus::IDLE);
-        return;
+    // Decode prompt in n_batch-sized chunks so n_batch can be tuned
+    // independently of n_ctx without hitting llama_decode's batch assert.
+    int n_decoded = 0;
+    while (n_decoded < n_tokens) {
+        int chunk = (std::min)(ctx_opts.n_batch, n_tokens - n_decoded);
+        llama_batch batch = llama_batch_get_one(tokens.data() + n_decoded, chunk);
+        if (llama_decode(llama_ctx, batch) != 0) {
+            llama_sampler_free(smpl);
+            PushError("prompt decode failed");
+            PushDone();
+            status.store(LlamaStatus::IDLE);
+            return;
+        }
+        n_decoded += chunk;
     }
 
     // Generation loop
@@ -983,11 +1063,16 @@ void LlamaContext::WorkerEmbed() {
 
     llama_memory_clear(llama_get_memory(llama_ctx), true);
 
-    llama_batch batch = llama_batch_get_one(tokens.data(), n_tokens);
-    if (llama_decode(llama_ctx, batch) != 0) {
-        PushError("embedding decode failed");
-        status.store(LlamaStatus::FAILED);
-        return;
+    int n_decoded = 0;
+    while (n_decoded < n_tokens) {
+        int chunk = (std::min)(ctx_opts.n_batch, n_tokens - n_decoded);
+        llama_batch batch = llama_batch_get_one(tokens.data() + n_decoded, chunk);
+        if (llama_decode(llama_ctx, batch) != 0) {
+            PushError("embedding decode failed");
+            status.store(LlamaStatus::FAILED);
+            return;
+        }
+        n_decoded += chunk;
     }
 
     // Get embeddings

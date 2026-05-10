@@ -1,7 +1,9 @@
-#ifdef KITSUNE_HTTP
+ï»¿#ifdef KITSUNE_HTTP
 
 #include "HttpCurl.h"
+#ifdef KITSUNE_WEBSOCKET
 #include "LuaWebSocket.h"
+#endif
 
 // -----------------------------------------------------------------------------
 // Module registration tables  (wchar pattern)
@@ -17,7 +19,9 @@ static const luaL_Reg httpclient_functions[] = {
 	{ "Request",            client_request },
 	{ "Call",               client_call },
 	{ "Stream",             client_stream },
-	{ "Connect",            ws_client_connect },
+	#ifdef KITSUNE_WEBSOCKET
+		{ "Connect",            ws_client_connect },
+	#endif
 	{ "SetTimeout",         client_set_timeout },
 	{ "SetDefaultHeader",   client_set_default_header },
 	{ "SetFollowRedirects", client_set_follow_redirects },
@@ -54,7 +58,7 @@ int luaopen_http(lua_State* L) {
 	lua_setmetatable(L, -2);
 	lua_rawsetp(L, LUA_REGISTRYINDEX, &g_sentinel_key);
 
-	// -- LUAHTTPCLIENT — wchar pattern -----------------------------------------
+	// -- LUAHTTPCLIENT â€” wchar pattern -----------------------------------------
 	// Create the Http module table first; it doubles as the __index for
 	// LuaHttpClient instances so both Http.Create() and client:Request() work.
 	luaL_newlibtable(L, httpclient_functions);
@@ -76,10 +80,12 @@ int luaopen_http(lua_State* L) {
 	lua_setfield(L, -2, "__gc");
 	lua_pop(L, 1);
 
+	#ifdef KITSUNE_WEBSOCKET
 	// Register WEBSOCKET and WSMESSAGE metatables.
 	luaopen_websocket(L);
+#endif
 
-	// Http module table is on top — return it as the Http global
+	// Http module table is on top â€” return it as the Http global
 	return 1;
 }
 
