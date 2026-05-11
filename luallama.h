@@ -29,5 +29,6 @@ int lua_llama_embed(lua_State* L);
 int lua_llama_info(lua_State* L);
 int lua_llama_dispose(lua_State* L);
 int lua_llama_getlogs(lua_State* L);
+int lua_llama_peekmodel(lua_State* L);
 
 #endif // KITSUNE_LLAMA

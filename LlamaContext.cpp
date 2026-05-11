@@ -99,7 +99,7 @@ bool LlamaContext::LoadModel() {
     if (model_loaded.load())
         return true;
     LlamaStatus s = status.load();
-    if (s == LlamaStatus::GENERATING)
+    if (s == LlamaStatus::GENERATING || s == LlamaStatus::UNLOADING)
         return false;
     {
         std::lock_guard<std::mutex> lock(task_mtx);
@@ -117,7 +117,7 @@ bool LlamaContext::UnloadModel() {
     if (disposed.load())
         return false;
     LlamaStatus s = status.load();
-    if (s == LlamaStatus::GENERATING || s == LlamaStatus::LOADING)
+    if (s == LlamaStatus::GENERATING || s == LlamaStatus::LOADING || s == LlamaStatus::UNLOADING)
         return false;
     {
         std::lock_guard<std::mutex> lock(task_mtx);
@@ -285,12 +285,34 @@ std::string LlamaContext::GetModelPath() const {
     return model_path;
 }
 
+std::string LlamaContext::GetLoadedModelPath() const {
+    return loaded_model_path;
+}
+
 bool LlamaContext::IsDisposed() const {
     return disposed.load();
 }
 
 const LlamaCtxOpts& LlamaContext::GetCtxOpts() const {
     return ctx_opts;
+}
+
+uint32_t LlamaContext::GetActualNCtx() const {
+    if (llama_ctx)
+        return llama_n_ctx(llama_ctx);
+    return (uint32_t)ctx_opts.n_ctx;
+}
+
+uint32_t LlamaContext::GetActualNBatch() const {
+    if (llama_ctx)
+        return llama_n_batch(llama_ctx);
+    return (uint32_t)ctx_opts.n_batch;
+}
+
+int32_t LlamaContext::GetActualNThreads() const {
+    if (llama_ctx)
+        return llama_n_threads(llama_ctx);
+    return ctx_opts.n_threads > 0 ? ctx_opts.n_threads : (int32_t)std::thread::hardware_concurrency();
 }
 
 int LlamaContext::GetTokensUsed() const {
@@ -306,7 +328,7 @@ int LlamaContext::GetTokensUsed() const {
 int LlamaContext::GetTokensAvailable() const {
     if (!llama_ctx)
         return 0;
-    return ctx_opts.n_ctx - GetTokensUsed();
+    return (int)GetActualNCtx() - GetTokensUsed();
 }
 
 double LlamaContext::GetSecondsSinceLastUsed() const {
@@ -378,6 +400,8 @@ std::string LlamaContext::GetChatTemplate() const {
 int LlamaContext::GetGpuLayerCount() const {
     if (!llama_mdl)
         return 0;
+    if (actual_gpu_layers >= 0)
+        return actual_gpu_layers;
     int total = GetModelLayerCount() + 1;
     int requested = (model_n_gpu_layers >= 0) ? model_n_gpu_layers : ctx_opts.n_gpu_layers;
     return (std::min)(requested, total);
@@ -403,49 +427,61 @@ double LlamaContext::GetCpuPercent() const {
     return 100.0 - GetGpuPercent();
 }
 
-void LlamaContext::GetCapabilities(std::vector<std::string>& out) const {
+void llama_model_get_capabilities(const llama_model* mdl, std::vector<std::string>& out) {
     out.clear();
-    if (!llama_mdl)
+    if (!mdl)
         return;
 
     // Completion: has a decoder
-    out.push_back("completion");
+    if (llama_model_has_decoder(mdl))
+        out.push_back("completion");
 
-    // Tools: check chat template for tool markers
-    std::string tmpl = GetChatTemplate();
-    std::string tmpl_lower;
-    tmpl_lower.resize(tmpl.size());
+    // Embedding: encoder-only or known embedding architectures
+    char arch_buf[64] = {0};
+    llama_model_meta_val_str(mdl, "general.architecture", arch_buf, sizeof(arch_buf));
+    std::string arch = arch_buf;
+    std::string arch_lower(arch.size(), 0);
+    std::transform(arch.begin(), arch.end(), arch_lower.begin(), ::tolower);
+
+    if (!llama_model_has_decoder(mdl) && llama_model_has_encoder(mdl))
+        out.push_back("embedding");
+    else if (arch_lower.find("bert") != std::string::npos ||
+             arch_lower.find("nomic") != std::string::npos)
+        out.push_back("embedding");
+
+    // Vision: known multimodal architectures
+    if (arch_lower.find("mllama") != std::string::npos ||
+        arch_lower.find("llava") != std::string::npos ||
+        arch_lower.find("minicpm") != std::string::npos ||
+        arch_lower.find("qwen2vl") != std::string::npos ||
+        arch_lower.find("gemma3") != std::string::npos)
+        out.push_back("vision");
+
+    // Tools + Reasoning: inspect embedded chat template
+    const char* tmpl_raw = llama_model_chat_template(mdl, nullptr);
+    std::string tmpl = tmpl_raw ? tmpl_raw : "";
+    std::string tmpl_lower(tmpl.size(), 0);
     std::transform(tmpl.begin(), tmpl.end(), tmpl_lower.begin(), ::tolower);
 
     if (tmpl_lower.find("tool") != std::string::npos ||
         tmpl_lower.find("function") != std::string::npos ||
-        tmpl_lower.find("<|python_tag|>") != std::string::npos) {
+        tmpl_lower.find("<|python_tag|>") != std::string::npos)
         out.push_back("tools");
-    }
 
-    // Reasoning: check for think block support
     if (tmpl_lower.find("<think>") != std::string::npos ||
-        tmpl_lower.find("think") != std::string::npos) {
+        tmpl_lower.find("/think>") != std::string::npos)
         out.push_back("reasoning");
-    }
 
-    // Vision: check architecture for multimodal
-    std::string arch = GetModelArch();
-    std::string arch_lower;
-    arch_lower.resize(arch.size());
-    std::transform(arch.begin(), arch.end(), arch_lower.begin(), ::tolower);
-    if (arch_lower.find("mllama") != std::string::npos ||
-        arch_lower.find("llava") != std::string::npos ||
-        arch_lower.find("minicpm") != std::string::npos) {
-        out.push_back("vision");
-    }
+    // Recurrent state models
+    if (llama_model_is_recurrent(mdl))
+        out.push_back("recurrent");
+}
 
-    // Embedding: check architecture
-    if (arch_lower.find("bert") != std::string::npos ||
-        arch_lower.find("bge") != std::string::npos ||
-        arch_lower.find("nomic") != std::string::npos) {
-        out.push_back("embedding");
-    }
+void LlamaContext::GetCapabilities(std::vector<std::string>& out) const {
+    out.clear();
+    if (!llama_mdl)
+        return;
+    llama_model_get_capabilities(llama_mdl, out);
 }
 
 const std::vector<float>& LlamaContext::GetEmbedResult() const {
@@ -542,6 +578,8 @@ void LlamaContext::WorkerMain() {
         llama_mdl = nullptr;
     }
     model_loaded.store(false);
+    loaded_model_path.clear();
+    actual_gpu_layers = -1;
 }
 
 void LlamaContext::WorkerLoad() {
@@ -558,12 +596,41 @@ void LlamaContext::WorkerLoad() {
     auto mparams = llama_model_default_params();
     int gpu_layers = (model_n_gpu_layers >= 0) ? model_n_gpu_layers : ctx_opts.n_gpu_layers;
     mparams.n_gpu_layers = gpu_layers;
+    mparams.use_mmap  = ctx_opts.use_mmap;
+    mparams.use_mlock = ctx_opts.use_mlock;
 
     llama_mdl = llama_model_load_from_file(model_path.c_str(), mparams);
     if (!llama_mdl) {
         PushError("failed to load model: " + model_path);
         status.store(LlamaStatus::FAILED);
         return;
+    }
+
+    // Parse actual offloaded layer count from llama.cpp log.
+    // "offloaded N/N layers to GPU" can appear even when no GPU backend is active
+    // (llama.cpp logs it optimistically). Only trust it if a GPU memory buffer line
+    // also appears, e.g. "CUDA0 model buffer size = ..." or "Vulkan0 model buffer size = ...".
+    // If only CPU_Mapped / CPU buffers appear, no GPU VRAM was used so actual count is 0.
+    actual_gpu_layers = -1;
+    {
+        std::vector<std::string> load_logs;
+        llama_log_buffer_drain(load_logs);
+        std::regex offload_re(R"(offloaded\s+(\d+)/\d+\s+layers?\s+to\s+GPU)");
+        // Matches any non-CPU device buffer, e.g. "CUDA0 model buffer size" or "Vulkan0 ..."
+        std::regex gpu_buf_re(R"((?:CUDA|Vulkan|Metal|ROCm|SYCL|HIP)\d*\s+model buffer size)", std::regex::icase);
+        int offloaded = -1;
+        bool has_gpu_buffer = false;
+        for (const std::string& line : load_logs) {
+            std::smatch m;
+            if (offloaded < 0 && std::regex_search(line, m, offload_re))
+                offloaded = std::stoi(m[1].str());
+            if (!has_gpu_buffer && std::regex_search(line, gpu_buf_re))
+                has_gpu_buffer = true;
+        }
+        if (has_gpu_buffer && offloaded >= 0)
+            actual_gpu_layers = offloaded;
+        else
+            actual_gpu_layers = 0;
     }
 
     auto cparams = llama_context_default_params();
@@ -578,11 +645,12 @@ void LlamaContext::WorkerLoad() {
         llama_model_free(llama_mdl);
         llama_mdl = nullptr;
         PushError("failed to create llama context");
-        status.store(LlamaStatus::FAILED);        status.store(LlamaStatus::FAILED);
+        status.store(LlamaStatus::FAILED);
         return;
     }
 
     tool_family = DetectToolFamily();
+    loaded_model_path = model_path;
     model_loaded.store(true);
     {
         std::lock_guard<std::mutex> lock(error_mtx);
@@ -602,6 +670,8 @@ void LlamaContext::WorkerUnload() {
         llama_mdl = nullptr;
     }
     model_loaded.store(false);
+    loaded_model_path.clear();
+    actual_gpu_layers = -1;
     status.store(LlamaStatus::IDLE);
 }
 
@@ -625,8 +695,10 @@ void LlamaContext::WorkerResetKV() {
 void LlamaContext::WorkerGenerate() {
     status.store(LlamaStatus::GENERATING);
 
-    // Auto-load if needed
-    if (!model_loaded.load()) {
+    // Auto-load if needed, or reload if model path has changed
+    if (!model_loaded.load() || loaded_model_path != model_path) {
+        if (model_loaded.load())
+            WorkerUnload();
         WorkerLoad();
         if (!model_loaded.load()) {
             PushError("model failed to load");
@@ -634,6 +706,7 @@ void LlamaContext::WorkerGenerate() {
             status.store(LlamaStatus::FAILED);
             return;
         }
+        WorkerResetKV();
     }
 
     full_content.clear();
@@ -1100,6 +1173,8 @@ void LlamaContext::WorkerEmbed() {
             embed_result[i] = embd[i];
     }
 
+    last_used_time = std::chrono::steady_clock::now();
+    last_used_valid = true;
     status.store(LlamaStatus::IDLE);
 }
 

@@ -171,6 +171,10 @@ local msgs = {
     { role = 'system', content = 'You are a helpful assistant. Check the weather with get_weather if asked' },
     { role = 'user',   content = 'Hello! What is the weather in stockholm?' },
 };
+
+local info = Llama.PeekModel("C:/models/qwen3-0.6b-q8_0.gguf")
+print(Json.New(true):Encode(info));
+GetKey();
 local ctx = Llama.CreateContext();
 assert(ctx:SetModel("C:/models/qwen3-0.6b-q8_0.gguf"));
 print(ctx:IsReady());

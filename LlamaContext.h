@@ -63,6 +63,8 @@ struct LlamaCtxOpts {
 	int     n_batch       = 512;
 	bool    flash_attn    = false;
 	int64_t model_ttl_ms  = 300000;
+	bool    use_mmap      = true;
+	bool    use_mlock     = false;
 };
 
 struct LlamaGenOpts {
@@ -83,6 +85,7 @@ void        llama_log_buffer_drain(std::vector<std::string>& out);
 
 void        llama_backend_init_once();
 void        llama_backend_cleanup();
+void        llama_model_get_capabilities(const struct llama_model* mdl, std::vector<std::string>& out);
 
 // ── LlamaContext ───────────────────────────────────────────────────────────────
 
@@ -100,6 +103,7 @@ public:
 	bool        LoadModel();
 	bool        UnloadModel();
 	bool        IsModelLoaded() const;
+	std::string GetLoadedModelPath() const;
 	bool        IsReady() const;
 	bool        Generate(std::vector<ChatMessage>&& messages, LlamaGenOpts&& opts);
 	bool        Stop();
@@ -123,6 +127,9 @@ public:
 
 	// Context info
 	const LlamaCtxOpts& GetCtxOpts() const;
+	uint32_t    GetActualNCtx() const;
+	uint32_t    GetActualNBatch() const;
+	int32_t     GetActualNThreads() const;
 	int         GetTokensUsed() const;
 	int         GetTokensAvailable() const;
 	double      GetSecondsSinceLastUsed() const;
@@ -202,8 +209,10 @@ private:
 
 	// Model path and options
 	std::string                 model_path;
+	std::string                 loaded_model_path;
 	LlamaCtxOpts                ctx_opts;
 	int                         model_n_gpu_layers = -1;
+	int                         actual_gpu_layers  = -1;
 
 	// Generation state
 	std::vector<ChatMessage>    gen_messages;

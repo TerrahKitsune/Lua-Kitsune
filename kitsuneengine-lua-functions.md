@@ -3824,6 +3824,44 @@ A local LLM inference module backed by [llama.cpp](https://github.com/ggml-org/l
 ```lua
 LlamaContext  Llama.CreateContext(opt opts)
 table         Llama.GetLogs()
+table|nil     Llama.PeekModel(string path)
+```
+
+#### Llama.PeekModel
+
+```lua
+table|nil, string  Llama.PeekModel(string path)
+```
+
+Reads model metadata from a `.gguf` file without loading any weights. Only the vocabulary and GGUF header are parsed — this takes a fraction of a second and uses negligible memory regardless of model size. Returns a table on success, or `nil, err` on failure.
+
+**Returned table fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `desc` | string | Human-readable model description |
+| `arch` | string | Model architecture (e.g. `"llama"`, `"qwen2"`) |
+| `context_length` | integer | Maximum context length the model was trained with |
+| `n_params` | integer | Total parameter count |
+| `n_embd` | integer | Embedding dimension |
+| `n_layer` | integer | Number of layers |
+| `size_bytes` | integer | Model file size in bytes |
+| `chat_template` | string | Embedded chat template string (empty if none) |
+| `has_encoder` | boolean | Whether the model has an encoder |
+| `has_decoder` | boolean | Whether the model has a decoder |
+| `is_recurrent` | boolean | Whether the model uses recurrent state (e.g. Mamba, RWKV) |
+| `capabilities` | string[] | Detected capability list. Values: `"completion"`, `"tools"`, `"reasoning"`, `"vision"`, `"embedding"`, `"recurrent"` |
+| `meta` | table | All raw GGUF metadata key/value pairs as strings |
+
+```lua
+local info, err = Llama.PeekModel("/models/qwen2.5-7b-q4_k_m.gguf")
+if not info then
+    print("Error:", err)
+else
+    print(info.desc, "ctx:", info.context_length, "params:", info.n_params)
+    print("recurrent:", info.is_recurrent)
+    print("capabilities:", table.concat(info.capabilities, ", "))
+end
 ```
 
 #### Llama.CreateContext
@@ -3844,6 +3882,8 @@ Creates a new inference context. The worker thread is started immediately. Retur
 | `n_batch` | integer | `512` | Prompt prefill batch size. Controls how many tokens are processed per decode call during prompt ingestion. Smaller values use less memory at the cost of slower prefill; larger values are faster but use more memory. Independent of `n_ctx` — the engine chunks the prompt automatically so this never needs to match or exceed `n_ctx` |
 | `flash_attn` | boolean | `false` | Enable Flash Attention |
 | `model_ttl_ms` | integer | `300000` | Milliseconds of idle time before the model is automatically unloaded. `0` disables auto-unload |
+| `use_mmap` | boolean | `true` | Memory-map the model file. When `true` the OS pages weights from disk on demand, keeping RAM usage low but causing page faults on first access. Set to `false` to load all weights into RAM up front for more consistent inference latency |
+| `use_mlock` | boolean | `false` | Lock memory-mapped pages into RAM so the OS cannot swap them out. Has no effect when `use_mmap` is `false`. May require elevated privileges on some systems |
 
 ```lua
 -- Default context (all layers on GPU, 4096 context window)
@@ -3878,10 +3918,11 @@ for _, line in ipairs(logs) do io.write(line) end
 All methods are available both as `Llama.Method(ctx, ...)` and as `ctx:Method(...)`.
 
 ```lua
-bool          ctx:SetModel(path [, opts])
-bool          ctx:LoadModel()
-bool          ctx:UnloadModel()
-bool          ctx:IsModelLoaded()
+true          ctx:SetModel(path [, opts])
+true          ctx:LoadModel()
+true          ctx:UnloadModel()
+true, path    ctx:IsModelLoaded()
+false[, err]  ctx:IsModelLoaded()
 bool          ctx:IsReady()
 bool          ctx:Generate(messages [, opts])
 ok, data      ctx:Poll()
@@ -3897,14 +3938,24 @@ bool          ctx:Dispose()
 #### ctx:SetModel
 
 ```lua
-true  ctx:SetModel(path)
-nil, errmsg  ctx:SetModel(path)
+true         ctx:SetModel(path [, opts])
+nil, errmsg  ctx:SetModel(path [, opts])
 ```
 
-Sets the path to the GGUF model file. Does not load it — call `LoadModel` afterwards. Returns `nil, "busy"` if the worker is currently busy.
+Sets the path to the GGUF model file. Does not load or unload anything immediately. Returns `nil, "busy"` if the worker is loading or generating.
+
+If the new path differs from the currently loaded model, the swap happens automatically the next time `Generate` is called — the old model is unloaded, the new one is loaded, and the KV cache is reset before generation begins. Explicit `UnloadModel` + `LoadModel` calls are only needed if you want the swap to happen eagerly.
+
+**`opts` fields (all optional):**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `n_gpu_layers` | integer | `-1` (use context default) | Number of layers to offload to GPU |
 
 ```lua
 ctx:SetModel([[C:\Models\qwen3-0.6b-q8_0.gguf]])
+ctx:SetModel([[C:\Models\qwen3-0.6b-q8_0.gguf]], { n_gpu_layers = 0 })  -- CPU only
+```
 ```
 
 ---
@@ -3916,14 +3967,17 @@ true         ctx:LoadModel()
 nil, errmsg  ctx:LoadModel()
 ```
 
-Queues a model load on the worker thread. Returns immediately; poll `ctx:IsReady()` to wait for completion, then call `ctx:Info()` only if you need to check for an error.
+Queues a model load on the worker thread and returns immediately. Returns `nil, "busy"` if the worker is currently generating or still unloading (status `UNLOADING`) — yield and retry in that case. Poll `ctx:IsReady()` or `ctx:IsModelLoaded()` to know when loading has finished.
 
 ```lua
-ctx:LoadModel()
-while not ctx:IsReady() and ctx:Info().context.status ~= 'error' do Sleep(50) end
-if ctx:Info().context.status == 'error' then
-    error(ctx:Info().context.error)
-end
+_context:UnloadModel()
+while _context:IsModelLoaded() do coroutine.yield() end
+_context:SetModel(path)
+repeat
+    local ok, err = _context:LoadModel()
+    if not ok and err ~= 'busy' then error(err) end
+    if not ok then coroutine.yield() end
+until ok
 ```
 
 ---
@@ -3935,17 +3989,26 @@ true         ctx:UnloadModel()
 nil, errmsg  ctx:UnloadModel()
 ```
 
-Queues a model unload on the worker thread. Returns `nil, "busy"` if a generation is in progress. Call `Stop()` first to cancel generation, then `UnloadModel`.
+Queues a model unload on the worker thread and returns immediately. Returns `nil, "busy"` if the worker is generating, loading, or already unloading. Call `Stop()` first to cancel an in-progress generation before unloading.
+
+The unload completes asynchronously — poll `ctx:IsModelLoaded()` to confirm the model is fully released before calling `LoadModel` or `SetModel` + `LoadModel` for a swap:
+
+```lua
+_context:UnloadModel()
+while _context:IsModelLoaded() do coroutine.yield() end
+-- safe to load a new model now
+```
 
 ---
 
 #### ctx:IsModelLoaded
 
 ```lua
-bool  ctx:IsModelLoaded()
+true, model_path  ctx:IsModelLoaded()
+false [, err]     ctx:IsModelLoaded()
 ```
 
-Returns `true` if a model is currently loaded and ready for inference.
+Returns `true` and the **actually loaded** model path when a model is currently loaded. Returns `false` with no second value when simply idle/unloaded, or `false, err` if there is an error (e.g. load failure or context disposed).
 
 ---
 
@@ -3968,7 +4031,9 @@ nil, errmsg  ctx:Generate(messages [, opts] [, tools])
 
 Queues a generation request. `messages` is an array of chat message tables (OpenAI-format). Returns immediately; output is consumed via `Poll`.
 
-**Context window and auto-trim:** before decoding, the engine tokenises the full prompt and compares it to `n_ctx`. If the prompt is too long, the oldest non-system messages are dropped one at a time until it fits. The system message (first message with `role = "system"`) is always preserved. If even the system message alone exceeds `n_ctx`, `Poll` returns a `"error"` event. No notification is emitted when trimming occurs — the conversation simply continues with a shorter history.
+**Automatic model load / swap:** if no model is loaded yet, `Generate` loads the model set by `SetModel` automatically. If a different model is already loaded (i.e. `SetModel` was called with a new path since the last load), the old model is unloaded, the new one is loaded, and the KV cache is cleared — all transparently before generation begins.
+
+**Context window and auto-trim:**
 
 Returns `nil, errmsg` when:
 - `"already running"` — a generation is already in progress

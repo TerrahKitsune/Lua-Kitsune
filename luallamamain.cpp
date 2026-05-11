@@ -8,6 +8,7 @@ static const struct luaL_Reg llama_functions[] = {
     { "CreateContext",    lua_llama_new           },
     { "CreateToolSuite",  lua_toolsuite_new        },
     { "GetLogs",          lua_llama_getlogs        },
+    { "PeekModel",        lua_llama_peekmodel      },
     { "SetModel",       lua_llama_setmodel    },
     { "LoadModel",      lua_llama_loadmodel   },
     { "UnloadModel",    lua_llama_unloadmodel },

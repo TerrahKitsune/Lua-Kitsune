@@ -18,6 +18,7 @@ LuaLlama* lua_llama_check(lua_State* L, int idx) {
 }
 
 #ifdef KITSUNE_LLAMA
+#include "llama.h"
 
 static int push_disposed_error(lua_State* L) {
 	lua_pushnil(L);
@@ -35,35 +36,54 @@ static int push_busy_error(lua_State* L) {
 int lua_llama_new(lua_State* L) {
 	LlamaCtxOpts opts;
 
-	if (lua_istable(L, 1)) {
-		lua_getfield(L, 1, "n_gpu_layers");
+	// Support both Llama.CreateContext({...}) (table at 1)
+	// and Llama:CreateContext({...}) (self userdata at 1, table at 2)
+	// and pcall(Llama.CreateContext, Llama, {...}) (module table at 1, opts at 2)
+	// Prefer index 2 if it is a table, since index 1 may be the module table.
+	int tbl = 0;
+	if (lua_istable(L, 2))
+		tbl = 2;
+	else if (lua_istable(L, 1))
+		tbl = 1;
+	if (tbl != 0) {
+		lua_getfield(L, tbl, "n_gpu_layers");
 		if (!lua_isnil(L, -1))
 			opts.n_gpu_layers = (int)lua_tointeger(L, -1);
 		lua_pop(L, 1);
 
-		lua_getfield(L, 1, "n_ctx");
+		lua_getfield(L, tbl, "n_ctx");
 		if (!lua_isnil(L, -1))
 			opts.n_ctx = (int)lua_tointeger(L, -1);
 		lua_pop(L, 1);
 
-		lua_getfield(L, 1, "n_threads");
+		lua_getfield(L, tbl, "n_threads");
 		if (!lua_isnil(L, -1))
 			opts.n_threads = (int)lua_tointeger(L, -1);
 		lua_pop(L, 1);
 
-		lua_getfield(L, 1, "n_batch");
+		lua_getfield(L, tbl, "n_batch");
 		if (!lua_isnil(L, -1))
 			opts.n_batch = (int)lua_tointeger(L, -1);
 		lua_pop(L, 1);
 
-		lua_getfield(L, 1, "flash_attn");
+		lua_getfield(L, tbl, "flash_attn");
 		if (!lua_isnil(L, -1))
 			opts.flash_attn = lua_toboolean(L, -1) != 0;
 		lua_pop(L, 1);
 
-		lua_getfield(L, 1, "model_ttl_ms");
+		lua_getfield(L, tbl, "model_ttl_ms");
 		if (!lua_isnil(L, -1))
 			opts.model_ttl_ms = (int64_t)lua_tointeger(L, -1);
+		lua_pop(L, 1);
+
+		lua_getfield(L, tbl, "use_mmap");
+		if (!lua_isnil(L, -1))
+			opts.use_mmap = lua_toboolean(L, -1) != 0;
+		lua_pop(L, 1);
+
+		lua_getfield(L, tbl, "use_mlock");
+		if (!lua_isnil(L, -1))
+			opts.use_mlock = lua_toboolean(L, -1) != 0;
 		lua_pop(L, 1);
 	}
 
@@ -152,14 +172,26 @@ int lua_llama_unloadmodel(lua_State* L) {
 	return 1;
 }
 
-// ctx:IsModelLoaded() -> bool
+// ctx:IsModelLoaded() -> true, model_path | false [, err]
 int lua_llama_ismodelloaded(lua_State* L) {
 	LuaLlama* llama = lua_llama_check(L, 1);
 	if (!llama->context || llama->context->IsDisposed()) {
 		lua_pushboolean(L, 0);
-		return 1;
+		lua_pushliteral(L, "disposed");
+		return 2;
 	}
-	lua_pushboolean(L, llama->context->IsModelLoaded() ? 1 : 0);
+	bool loaded = llama->context->IsModelLoaded();
+	lua_pushboolean(L, loaded ? 1 : 0);
+	if (loaded) {
+		std::string path = llama->context->GetLoadedModelPath();
+		lua_pushstring(L, path.c_str());
+		return 2;
+	}
+	std::string err = llama->context->GetError();
+	if (!err.empty()) {
+		lua_pushstring(L, err.c_str());
+		return 2;
+	}
 	return 1;
 }
 
@@ -513,16 +545,20 @@ int lua_llama_info(lua_State* L) {
 		lua_setfield(L, -2, "status");
 
 		const LlamaCtxOpts& opts = ctx->GetCtxOpts();
-		lua_pushinteger(L, opts.n_ctx);
+		lua_pushinteger(L, ctx->GetActualNCtx());
 		lua_setfield(L, -2, "n_ctx");
 		lua_pushinteger(L, opts.n_gpu_layers);
 		lua_setfield(L, -2, "n_gpu_layers");
-		lua_pushinteger(L, opts.n_threads > 0 ? opts.n_threads : (int)std::thread::hardware_concurrency());
+		lua_pushinteger(L, ctx->GetActualNThreads());
 		lua_setfield(L, -2, "n_threads");
-		lua_pushinteger(L, opts.n_batch);
+		lua_pushinteger(L, ctx->GetActualNBatch());
 		lua_setfield(L, -2, "n_batch");
 		lua_pushinteger(L, opts.model_ttl_ms);
 		lua_setfield(L, -2, "model_ttl_ms");
+		lua_pushboolean(L, opts.use_mmap ? 1 : 0);
+		lua_setfield(L, -2, "use_mmap");
+		lua_pushboolean(L, opts.use_mlock ? 1 : 0);
+		lua_setfield(L, -2, "use_mlock");
 
 		std::string mp = ctx->GetModelPath();
 		if (!mp.empty())
@@ -585,7 +621,7 @@ int lua_llama_info(lua_State* L) {
 			lua_pushstring(L, tmpl.c_str());
 			lua_setfield(L, -2, "chat_template");
 
-			lua_pushinteger(L, ctx->GetCtxOpts().n_gpu_layers);
+			lua_pushinteger(L, ctx->GetGpuLayerCount());
 			lua_setfield(L, -2, "n_gpu_layers");
 
 			lua_pushinteger(L, ctx->GetGpuLayerCount());
@@ -633,6 +669,122 @@ int lua_llama_dispose(lua_State* L) {
 	return 1;
 }
 
+// Llama.PeekModel(path) -> table or nil, err
+int lua_llama_peekmodel(lua_State* L) {
+	// Accept both Llama.PeekModel(path) and Llama:PeekModel(path)
+	const char* path = nullptr;
+	if (lua_isstring(L, 1))
+		path = lua_tostring(L, 1);
+	else if (lua_isstring(L, 2))
+		path = lua_tostring(L, 2);
+
+	if (!path || path[0] == '\0') {
+		lua_pushnil(L);
+		lua_pushliteral(L, "path required");
+		return 2;
+	}
+
+	llama_backend_init_once();
+
+	auto mparams = llama_model_default_params();
+	mparams.vocab_only = true;
+	mparams.n_gpu_layers = 0;
+
+	llama_model* mdl = llama_model_load_from_file(path, mparams);
+	if (!mdl) {
+		lua_pushnil(L);
+		lua_pushliteral(L, "failed to load model");
+		return 2;
+	}
+
+	lua_createtable(L, 0, 16);
+
+	// desc
+	char buf256[256] = {0};
+	llama_model_desc(mdl, buf256, sizeof(buf256));
+	lua_pushstring(L, buf256);
+	lua_setfield(L, -2, "desc");
+
+	// arch
+	char buf64[64] = {0};
+	llama_model_meta_val_str(mdl, "general.architecture", buf64, sizeof(buf64));
+	lua_pushstring(L, buf64);
+	lua_setfield(L, -2, "arch");
+
+	// context_length (n_ctx_train) - fall back to raw GGUF metadata if the API returns 0
+	{
+		int32_t ctx_train = llama_model_n_ctx_train(mdl);
+		if (ctx_train <= 0) {
+			// try architecture-specific GGUF key, e.g. "llama.context_length"
+			char ctx_key[128];
+			snprintf(ctx_key, sizeof(ctx_key), "%s.context_length", buf64);
+			char ctx_val[64] = {};
+			if (llama_model_meta_val_str(mdl, ctx_key, ctx_val, sizeof(ctx_val)) >= 0)
+				ctx_train = (int32_t)atoi(ctx_val);
+		}
+		lua_pushinteger(L, ctx_train);
+	}
+	lua_setfield(L, -2, "context_length");
+
+	// n_params
+	lua_pushinteger(L, (lua_Integer)llama_model_n_params(mdl));
+	lua_setfield(L, -2, "n_params");
+
+	// n_embd
+	lua_pushinteger(L, llama_model_n_embd(mdl));
+	lua_setfield(L, -2, "n_embd");
+
+	// n_layer
+	lua_pushinteger(L, llama_model_n_layer(mdl));
+	lua_setfield(L, -2, "n_layer");
+
+	// size_bytes
+	lua_pushinteger(L, (lua_Integer)llama_model_size(mdl));
+	lua_setfield(L, -2, "size_bytes");
+
+	// chat_template
+	const char* tmpl = llama_model_chat_template(mdl, nullptr);
+	lua_pushstring(L, tmpl ? tmpl : "");
+	lua_setfield(L, -2, "chat_template");
+
+	// has_encoder / has_decoder
+	lua_pushboolean(L, llama_model_has_encoder(mdl) ? 1 : 0);
+	lua_setfield(L, -2, "has_encoder");
+	lua_pushboolean(L, llama_model_has_decoder(mdl) ? 1 : 0);
+	lua_setfield(L, -2, "has_decoder");
+
+	// is_recurrent
+	lua_pushboolean(L, llama_model_is_recurrent(mdl) ? 1 : 0);
+	lua_setfield(L, -2, "is_recurrent");
+
+	// all raw metadata as a flat key=value table
+	int meta_count = llama_model_meta_count(mdl);
+	lua_createtable(L, 0, meta_count);
+	char key_buf[256];
+	char val_buf[512];
+	for (int i = 0; i < meta_count; i++) {
+		if (llama_model_meta_key_by_index(mdl, i, key_buf, sizeof(key_buf)) >= 0 &&
+			llama_model_meta_val_str_by_index(mdl, i, val_buf, sizeof(val_buf)) >= 0) {
+			lua_pushstring(L, val_buf);
+			lua_setfield(L, -2, key_buf);
+		}
+	}
+	lua_setfield(L, -2, "meta");
+
+	// capabilities array
+	std::vector<std::string> caps;
+	llama_model_get_capabilities(mdl, caps);
+	lua_createtable(L, (int)caps.size(), 0);
+	for (int i = 0; i < (int)caps.size(); i++) {
+		lua_pushstring(L, caps[i].c_str());
+		lua_rawseti(L, -2, i + 1);
+	}
+	lua_setfield(L, -2, "capabilities");
+
+	llama_model_free(mdl);
+	return 1;
+}
+
 // Llama.GetLogs() -> string[]
 int lua_llama_getlogs(lua_State* L) {
 	std::vector<std::string> logs;
@@ -665,5 +817,6 @@ int lua_llama_embed(lua_State* L) { return luaL_error(L, "llama not available");
 int lua_llama_info(lua_State* L) { return luaL_error(L, "llama not available"); }
 int lua_llama_dispose(lua_State* L) { lua_pushboolean(L, 1); return 1; }
 int lua_llama_getlogs(lua_State* L) { lua_newtable(L); return 1; }
+int lua_llama_peekmodel(lua_State* L) { lua_pushnil(L); lua_pushliteral(L, "llama not available"); return 2; }
 
 #endif

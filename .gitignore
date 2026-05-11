@@ -10,10 +10,11 @@ tests/config.lua
 plans/
 
 # CUDA DLLs — too large to commit; download with vendor\fetch-llama.ps1
-llama/ggml-cuda.dll
-llama/cublas64_12.dll
-llama/cublasLt64_12.dll
-llama/cudart64_12.dll
+llama/*.dll
+llama/lib/*.lib
+llama/lib/*.exp
+llama/lib/*.def
+llama/include/
 vendor/.tmp/
 
 # User-specific files
