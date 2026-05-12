@@ -20,6 +20,7 @@ static const struct luaL_Reg redisfunctions[] = {
 	{ "Subscribe", RedisSubscribe },
 	{ "PSubscribe", RedisPSubscribe },
 	{ "Open", RedisOpen },
+	{ "Dispose", redis_dispose },
 	{ NULL, NULL }
 };
 

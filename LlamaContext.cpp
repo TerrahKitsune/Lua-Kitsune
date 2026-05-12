@@ -639,6 +639,7 @@ void LlamaContext::WorkerLoad() {
     cparams.n_threads = (ctx_opts.n_threads > 0) ? ctx_opts.n_threads : std::thread::hardware_concurrency();
     cparams.n_threads_batch = cparams.n_threads;
     cparams.flash_attn_type = ctx_opts.flash_attn ? LLAMA_FLASH_ATTN_TYPE_ENABLED : LLAMA_FLASH_ATTN_TYPE_DISABLED;
+    cparams.offload_kqv = ctx_opts.offload_kqv;
 
     llama_ctx = llama_init_from_model(llama_mdl, cparams);
     if (!llama_ctx) {
@@ -1380,11 +1381,18 @@ static std::string EnsureToolCallIds(const std::string& json_array) {
 
         // Check whether the object already contains an "id" key
         if (obj.find("\"id\"") == std::string::npos) {
-            // Generate a short random hex id
             char id_buf[24];
             std::snprintf(id_buf, sizeof(id_buf), "call_%08x", (unsigned int)std::rand());
-            // Insert after the opening '{': {"id":"call_XXXX",...}
-            obj = std::string("{\"id\":\"") + id_buf + "\"," + obj.substr(1);
+            // Insert after the opening '{'
+            std::string afterBrace = obj.substr(1);
+            // Trim leading whitespace
+            size_t ns = afterBrace.find_first_not_of(" \t\r\n");
+            if (ns == std::string::npos || afterBrace[ns] == '}') {
+                // Empty (or whitespace-only) object — no trailing comma
+                obj = std::string("{\"id\":\"") + id_buf + "\"}";
+            } else {
+                obj = std::string("{\"id\":\"") + id_buf + "\"," + afterBrace;
+            }
         }
 
         if (!first)

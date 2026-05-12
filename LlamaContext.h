@@ -65,6 +65,7 @@ struct LlamaCtxOpts {
 	int64_t model_ttl_ms  = 300000;
 	bool    use_mmap      = true;
 	bool    use_mlock     = false;
+	bool    offload_kqv   = true;   // false = KV cache in RAM (frees VRAM for long context)
 };
 
 struct LlamaGenOpts {

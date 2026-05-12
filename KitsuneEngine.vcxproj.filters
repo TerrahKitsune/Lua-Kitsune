@@ -1192,6 +1192,7 @@
     <None Include="build-linux-and-test.ps1" />
     <None Include=".vscode\launch.json" />
     <None Include="build-libevent-linux.sh" />
+    <None Include="fetch-llama-binaries.ps1" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />

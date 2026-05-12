@@ -86,5 +86,6 @@ int RedisGetSet(lua_State* L);
 int RedisGetSortedSet(lua_State* L);
 int RedisGetStream(lua_State* L);
 
+int redis_dispose(lua_State* L);
 int redis_gc(lua_State* L);
 int redis_tostring(lua_State* L);

@@ -398,6 +398,7 @@
     <None Include=".vscode\launch.json" />
     <None Include="build-libevent-linux.sh" />
     <None Include="build-linux-and-test.ps1" />
+    <None Include="fetch-llama-binaries.ps1" />
     <None Include="Lua functions.md" />
     <None Include="testEnvironments.json" />
     <None Include="triplets\x64-windows-static-md.cmake" />

@@ -85,6 +85,11 @@ int lua_llama_new(lua_State* L) {
 		if (!lua_isnil(L, -1))
 			opts.use_mlock = lua_toboolean(L, -1) != 0;
 		lua_pop(L, 1);
+
+		lua_getfield(L, tbl, "offload_kqv");
+		if (!lua_isnil(L, -1))
+			opts.offload_kqv = lua_toboolean(L, -1) != 0;
+		lua_pop(L, 1);
 	}
 
 	LuaLlama* llama = lua_llama_push(L);

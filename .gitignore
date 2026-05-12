@@ -9,13 +9,12 @@ tests/config.lua
 # Planning / design documents — local only, not for version control
 plans/
 
-# CUDA DLLs — too large to commit; download with vendor\fetch-llama.ps1
+# llama.cpp — large DLLs are fetched locally by fetch-llama-binaries.ps1; headers and libs are committed
 llama/*.dll
-llama/lib/*.lib
 llama/lib/*.exp
 llama/lib/*.def
-llama/include/
 vendor/.tmp/
+.llama-fetch-tmp/
 
 # User-specific files
 *.rsuser

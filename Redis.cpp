@@ -584,8 +584,13 @@ LuaRedis* lua_toredis(lua_State* L, int index) {
 	return redis;
 }
 
-int redis_gc(lua_State* L) {
+int redis_dispose(lua_State* L) {
+	RedisDispose(L, lua_toredis(L, 1));
+	lua_pushboolean(L, 1);
+	return 1;
+}
 
+int redis_gc(lua_State* L) {
 	RedisDispose(L, lua_toredis(L, 1));
 	return 0;
 }

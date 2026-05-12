@@ -3884,6 +3884,7 @@ Creates a new inference context. The worker thread is started immediately. Retur
 | `model_ttl_ms` | integer | `300000` | Milliseconds of idle time before the model is automatically unloaded. `0` disables auto-unload |
 | `use_mmap` | boolean | `true` | Memory-map the model file. When `true` the OS pages weights from disk on demand, keeping RAM usage low but causing page faults on first access. Set to `false` to load all weights into RAM up front for more consistent inference latency |
 | `use_mlock` | boolean | `false` | Lock memory-mapped pages into RAM so the OS cannot swap them out. Has no effect when `use_mmap` is `false`. May require elevated privileges on some systems |
+| `offload_kqv` | boolean | `true` | Offload the KV cache (keys, queries, values) to GPU VRAM. When `true` the KV cache lives on the GPU alongside the weights, which is faster. Set to `false` to keep the KV cache in system RAM — useful when VRAM is tight and you need a long context window at the cost of some performance |
 
 ```lua
 -- Default context (all layers on GPU, 4096 context window)
@@ -3895,6 +3896,13 @@ local ctx = Llama.CreateContext({
     n_ctx        = 8192,
     n_threads    = 8,
     model_ttl_ms = 0,     -- never auto-unload
+})
+
+-- Long context on a VRAM-limited GPU: keep KV cache in RAM
+local ctx = Llama.CreateContext({
+    n_gpu_layers = 99,
+    n_ctx        = 32768,
+    offload_kqv  = false, -- KV cache in system RAM to free VRAM for weights
 })
 ```
 
