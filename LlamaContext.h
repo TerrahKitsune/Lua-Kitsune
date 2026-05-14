@@ -213,7 +213,6 @@ private:
 	std::string                 loaded_model_path;
 	LlamaCtxOpts                ctx_opts;
 	int                         model_n_gpu_layers = -1;
-	int                         actual_gpu_layers  = -1;
 
 	// Generation state
 	std::vector<ChatMessage>    gen_messages;

@@ -400,10 +400,9 @@ std::string LlamaContext::GetChatTemplate() const {
 int LlamaContext::GetGpuLayerCount() const {
     if (!llama_mdl)
         return 0;
-    if (actual_gpu_layers >= 0)
-        return actual_gpu_layers;
     int total = GetModelLayerCount() + 1;
     int requested = (model_n_gpu_layers >= 0) ? model_n_gpu_layers : ctx_opts.n_gpu_layers;
+    if (requested < 0) return total; // negative means all layers
     return (std::min)(requested, total);
 }
 
@@ -579,7 +578,6 @@ void LlamaContext::WorkerMain() {
     }
     model_loaded.store(false);
     loaded_model_path.clear();
-    actual_gpu_layers = -1;
 }
 
 void LlamaContext::WorkerLoad() {
@@ -606,32 +604,6 @@ void LlamaContext::WorkerLoad() {
         return;
     }
 
-    // Parse actual offloaded layer count from llama.cpp log.
-    // "offloaded N/N layers to GPU" can appear even when no GPU backend is active
-    // (llama.cpp logs it optimistically). Only trust it if a GPU memory buffer line
-    // also appears, e.g. "CUDA0 model buffer size = ..." or "Vulkan0 model buffer size = ...".
-    // If only CPU_Mapped / CPU buffers appear, no GPU VRAM was used so actual count is 0.
-    actual_gpu_layers = -1;
-    {
-        std::vector<std::string> load_logs;
-        llama_log_buffer_drain(load_logs);
-        std::regex offload_re(R"(offloaded\s+(\d+)/\d+\s+layers?\s+to\s+GPU)");
-        // Matches any non-CPU device buffer, e.g. "CUDA0 model buffer size" or "Vulkan0 ..."
-        std::regex gpu_buf_re(R"((?:CUDA|Vulkan|Metal|ROCm|SYCL|HIP)\d*\s+model buffer size)", std::regex::icase);
-        int offloaded = -1;
-        bool has_gpu_buffer = false;
-        for (const std::string& line : load_logs) {
-            std::smatch m;
-            if (offloaded < 0 && std::regex_search(line, m, offload_re))
-                offloaded = std::stoi(m[1].str());
-            if (!has_gpu_buffer && std::regex_search(line, gpu_buf_re))
-                has_gpu_buffer = true;
-        }
-        if (has_gpu_buffer && offloaded >= 0)
-            actual_gpu_layers = offloaded;
-        else
-            actual_gpu_layers = 0;
-    }
 
     auto cparams = llama_context_default_params();
     cparams.n_ctx = ctx_opts.n_ctx;
@@ -672,7 +644,6 @@ void LlamaContext::WorkerUnload() {
     }
     model_loaded.store(false);
     loaded_model_path.clear();
-    actual_gpu_layers = -1;
     status.store(LlamaStatus::IDLE);
 }
 
