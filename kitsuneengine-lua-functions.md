@@ -1367,7 +1367,7 @@ coroutine  server:Accept()
 
 Returns a coroutine (the same one on repeated calls — idempotent). Drive it with `coroutine.resume`:
 
-- `coroutine.resume(co)` — polls Mongoose, advances any active stream senders, and yields one pending `HttpRequest` when available. Returns `true, HttpRequest` when a request is ready, or `true` with no second value when idle.
+- `coroutine.resume(co)` — polls the server, advances any active stream senders, and yields one pending `HttpRequest` when available. Returns `true, HttpRequest` when a request is ready, or `true` with no second value when idle.
 - `coroutine.resume(co, true)` — **stop flag**: tears down the server and lets the coroutine die cleanly.
 
 ```lua
