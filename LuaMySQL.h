@@ -11,6 +11,7 @@ typedef struct LuaMySQL {
 	void*   activeQuery;   // LuaMySQLQuery* of the running query, or NULL
 	char*   error;         // last connection-level error
 	int     aliveTokenRef; // LUA_NOREF when not set
+	void*   appToken;      // cached LuaAliveToken* for the engine app token; NULL if not present
 } LuaMySQL;
 
 LuaMySQL* lua_tomysql(lua_State* L, int index);

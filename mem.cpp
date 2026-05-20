@@ -79,8 +79,12 @@ void InitMemoryManager() {
 	s_free_fn = ::free;
 #endif
 #ifdef _DEBUG
-	g_live_allocs.store(0);
-	g_permanent_allocs.store(0);
+	// Snapshot the current counter as the baseline for this session rather than resetting
+	// to zero.  In multi-session test hosts the .NET GC may finalize LuaFunctionRef /
+	// LuaThreadRef objects from a previous session after this point, decrementing
+	// g_live_allocs.  By baselining here those cross-session frees are already accounted
+	// for in g_permanent_allocs and EndMemoryManager returns 0 instead of underflowing.
+	g_permanent_allocs.store(g_live_allocs.load());
 #endif
 }
 

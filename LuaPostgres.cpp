@@ -351,6 +351,9 @@ LuaPostgres* lua_pushpostgres(lua_State* L) {
 	memset(pg, 0, sizeof(LuaPostgres));
 	pg->queryRef      = LUA_NOREF;
 	pg->aliveTokenRef = LUA_NOREF;
+	lua_rawgetp(L, LUA_REGISTRYINDEX, lua_alivetoken_app_registry_key());
+	pg->appToken = luaL_testudata(L, -1, LUAALIVETOKEN);
+	lua_pop(L, 1);
 	return pg;
 }
 
@@ -625,81 +628,41 @@ int PostgresQuery(lua_State* L) {
 }
 
 // -- Helper continuations ------------------------------------------------------
-static int HelperStreamCont(lua_State* L, int status, lua_KContext ctx) {
-	(void)status;
-	LuaPostgresQuery* q = (LuaPostgresQuery*)(intptr_t)ctx;
-
-	// Save accumTableIdx before any resume that might FreeQuery.
-	int accumIdx = q->accumTableIdx;
-
-	if (q->conn->aliveTokenRef != LUA_NOREF) {
-		lua_rawgeti(L, LUA_REGISTRYINDEX, q->conn->aliveTokenRef);
-		int alive = lua_alivetoken_isalive(L, -1);
-		lua_pop(L, 1);
-		if (alive == 0) {
-			lua_rawgeti(L, LUA_REGISTRYINDEX, q->conn->queryRef);
-			lua_State* T = lua_tothread(L, -1);
-			lua_pop(L, 1);
-			if (T) {
-				lua_pushboolean(T, 1);
-				int nr2;
-				lua_resume(T, L, 1, &nr2);
-				if (nr2 > 0)
-					lua_pop(T, nr2);
-			}
-			lua_pushboolean(L, 0);
-			lua_pushliteral(L, "cancelled");
-			return 2;
-		}
-	}
-
-	lua_rawgeti(L, LUA_REGISTRYINDEX, q->conn->queryRef);
-	lua_State* T = lua_tothread(L, -1);
-	lua_pop(L, 1);
-
-	if (!T) {
-		lua_pushboolean(L, 1);
-		lua_pushvalue(L, accumIdx);
-		return 2;
-	}
-
-	int nr = 0;
-	int rc = lua_resume(T, L, 0, &nr);
-
-	if (rc == LUA_YIELD && nr > 0 && lua_istable(T, -1)) {
-		// q is still alive — T yielded, hasn't called FreeQuery yet
-		lua_xmove(T, L, 1);
-		if (nr > 1)
-			lua_pop(T, nr - 1);
-		// Use rawlen to avoid conflict with q->accumRowIdx (stream cursor)
-		int nextIdx = (int)lua_rawlen(L, accumIdx) + 1;
-		lua_rawseti(L, accumIdx, nextIdx);
-		return lua_yieldk(L, 0, ctx, HelperStreamCont);
-	}
-
-	// T returned nil — QueryStreamCont already called FreeQuery
-	if (nr > 0)
-		lua_pop(T, nr);
-	lua_pushboolean(L, 1);
-	lua_pushvalue(L, accumIdx);
-	return 2;
-}
-
 static int HelperWaitCont(lua_State* L, int status, lua_KContext ctx) {
 	(void)status;
 	LuaPostgresQuery* q = (LuaPostgresQuery*)(intptr_t)ctx;
 
+	// Check app-level token first — direct pointer dereference, no registry lookup.
+	if (q->conn->appToken && !((LuaAliveToken*)q->conn->appToken)->alive) {
+		LuaPostgres* conn = q->conn;
+		lua_rawgeti(L, LUA_REGISTRYINDEX, conn->queryRef);
+		lua_State* T = lua_tothread(L, -1);
+		lua_pop(L, 1);
+		if (T && lua_status(T) == LUA_YIELD) {
+			lua_pushboolean(T, 1);
+			int nr2;
+			lua_resume(T, L, 1, &nr2);
+			if (nr2 > 0)
+				lua_pop(T, nr2);
+		}
+		// QueryFlushCont and QueryPollCont call FreeQuery on stop (conn->activeQuery becomes NULL).
+		// Only call FreeQuery here if T didn't already do so.
+		if (conn->activeQuery != NULL)
+			FreeQuery(L, q);
+		lua_pushboolean(L, 0);
+		lua_pushliteral(L, "cancelled");
+		return 2;
+	}
+
 	if (q->conn->aliveTokenRef != LUA_NOREF) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, q->conn->aliveTokenRef);
 		int alive = lua_alivetoken_isalive(L, -1);
 		lua_pop(L, 1);
 		if (alive == 0) {
-			lua_rawgeti(L, LUA_REGISTRYINDEX, q->conn->queryRef);
+			LuaPostgres* conn = q->conn;
+			lua_rawgeti(L, LUA_REGISTRYINDEX, conn->queryRef);
 			lua_State* T = lua_tothread(L, -1);
 			lua_pop(L, 1);
-			// Only send the stop flag if T has already been started (LUA_YIELD).
-			// If T is unstarted (LUA_OK), no query has been dispatched yet;
-			// FreeQuery alone is sufficient and safe.
 			if (T && lua_status(T) == LUA_YIELD) {
 				lua_pushboolean(T, 1);
 				int nr2;
@@ -707,7 +670,10 @@ static int HelperWaitCont(lua_State* L, int status, lua_KContext ctx) {
 				if (nr2 > 0)
 					lua_pop(T, nr2);
 			}
-			FreeQuery(L, q);
+			// QueryFlushCont and QueryPollCont call FreeQuery on stop (conn->activeQuery becomes NULL).
+			// Only call FreeQuery here if T didn't already do so.
+			if (conn->activeQuery != NULL)
+				FreeQuery(L, q);
 			lua_pushboolean(L, 0);
 			lua_pushliteral(L, "cancelled");
 			return 2;
@@ -798,8 +764,46 @@ static int HelperWaitCont(lua_State* L, int status, lua_KContext ctx) {
 		return 2;
 	}
 
-	// PG_HELPER_QUERYALL: yield L and start streaming
-	return lua_yieldk(L, 0, ctx, HelperStreamCont);
+	// PG_HELPER_QUERYALL: result is fully buffered — build table without yielding
+	{
+		PGresult* res = q->result;
+		int nrows    = PQntuples(res);
+		int nfields  = PQnfields(res);
+		int accumIdx = q->accumTableIdx;
+		lua_State* T2 = NULL;
+		lua_rawgeti(L, LUA_REGISTRYINDEX, q->conn->queryRef);
+		T2 = lua_tothread(L, -1);
+		lua_pop(L, 1);
+
+		for (int r = 0; r < nrows; r++) {
+			lua_createtable(L, nfields, 0);
+			for (int c = 0; c < nfields; c++) {
+				if (PQgetisnull(res, r, c))
+					lua_pushnil(L);
+				else
+					PushPostgresValue(L,
+						PQgetvalue(res, r, c),
+						PQgetlength(res, r, c),
+						PQftype(res, c));
+				lua_rawseti(L, -2, c + 1);
+			}
+			int nextIdx = (int)lua_rawlen(L, accumIdx) + 1;
+			lua_rawseti(L, accumIdx, nextIdx);
+		}
+
+		// Stop the query coroutine so FreeQuery runs cleanly
+		if (T2) {
+			lua_pushboolean(T2, 1);
+			int nr2;
+			lua_resume(T2, L, 1, &nr2);
+			if (nr2 > 0)
+				lua_pop(T2, nr2);
+		}
+
+		lua_pushboolean(L, 1);
+		lua_pushvalue(L, accumIdx);
+		return 2;
+	}
 }
 
 static int PostgresHelperRun(lua_State* L, int mode) {

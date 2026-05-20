@@ -664,6 +664,71 @@ void LlamaContext::WorkerResetKV() {
     }
 }
 
+// Applies the model's chat template, with manual fallbacks for models
+// whose Jinja template is not in llama_chat_apply_template's built-in list.
+// buf is resized automatically; returns the final prompt length, or -1 on error.
+static int32_t ApplyChatTemplateWithFallback(
+    const char* tmpl,
+    const llama_chat_message* chat,
+    size_t n_msg,
+    bool add_ass,
+    std::vector<char>& buf)
+{
+    // Try the built-in path first
+    int32_t len = llama_chat_apply_template(tmpl, chat, n_msg, add_ass, buf.data(), (int32_t)buf.size());
+    if (len >= 0) {
+        if ((size_t)len >= buf.size()) {
+            buf.resize((size_t)len + 1);
+            len = llama_chat_apply_template(tmpl, chat, n_msg, add_ass, buf.data(), (int32_t)buf.size());
+        }
+        return len;
+    }
+
+    if (!tmpl)
+        return -1;
+
+    std::string prompt;
+    prompt.reserve(4096);
+
+    // Gemma 4: uses <|turn> / <turn|> delimiters
+    // Format: <|turn>role\ncontent<turn|>\n
+    if (std::strstr(tmpl, "<|turn>") != nullptr) {
+        for (size_t i = 0; i < n_msg; ++i) {
+            prompt += "<|turn>";
+            prompt += chat[i].role;
+            prompt += "\n";
+            prompt += chat[i].content;
+            prompt += "<turn|>\n";
+        }
+        if (add_ass)
+            prompt += "<|turn>model\n";
+    }
+    // Gemma 2 / Gemma 3: uses <start_of_turn> / <end_of_turn> delimiters
+    // Format: <bos><start_of_turn>role\ncontent<end_of_turn>\n
+    else if (std::strstr(tmpl, "<start_of_turn>") != nullptr) {
+        prompt += "<bos>";
+        for (size_t i = 0; i < n_msg; ++i) {
+            prompt += "<start_of_turn>";
+            prompt += chat[i].role;
+            prompt += "\n";
+            prompt += chat[i].content;
+            prompt += "<end_of_turn>\n";
+        }
+        if (add_ass)
+            prompt += "<start_of_turn>model\n";
+    }
+    else {
+        return -1;
+    }
+
+    size_t needed = prompt.size() + 1;
+    if (buf.size() < needed)
+        buf.resize(needed);
+    std::memcpy(buf.data(), prompt.data(), prompt.size());
+    buf[prompt.size()] = '\0';
+    return (int32_t)prompt.size();
+}
+
 void LlamaContext::WorkerGenerate() {
     status.store(LlamaStatus::GENERATING);
 
@@ -738,11 +803,11 @@ void LlamaContext::WorkerGenerate() {
     // Apply template
     const char* chat_tmpl = llama_model_chat_template(llama_mdl, nullptr);
     std::vector<char> prompt_buf(4096);
-    int32_t prompt_len = llama_chat_apply_template(
+    int32_t prompt_len = ApplyChatTemplateWithFallback(
         chat_tmpl,
         chat_msgs.data(), chat_msgs.size(),
         true,
-        prompt_buf.data(), (int32_t)prompt_buf.size()
+        prompt_buf
     );
 
     if (prompt_len < 0) {
@@ -750,16 +815,6 @@ void LlamaContext::WorkerGenerate() {
         PushDone();
         status.store(LlamaStatus::IDLE);
         return;
-    }
-
-    if ((size_t)prompt_len >= prompt_buf.size()) {
-        prompt_buf.resize(prompt_len + 1);
-        prompt_len = llama_chat_apply_template(
-            chat_tmpl,
-            chat_msgs.data(), chat_msgs.size(),
-            true,
-            prompt_buf.data(), (int32_t)prompt_buf.size()
-        );
     }
 
     std::string prompt(prompt_buf.data(), prompt_len);
@@ -807,26 +862,17 @@ void LlamaContext::WorkerGenerate() {
         }
 
         // Re-apply chat template
-        prompt_len = llama_chat_apply_template(
+        prompt_len = ApplyChatTemplateWithFallback(
             chat_tmpl,
             chat_msgs.data(), chat_msgs.size(),
             true,
-            prompt_buf.data(), (int32_t)prompt_buf.size()
+            prompt_buf
         );
         if (prompt_len < 0) {
             PushError("failed to apply chat template during trim");
             PushDone();
             status.store(LlamaStatus::IDLE);
             return;
-        }
-        if ((size_t)prompt_len >= prompt_buf.size()) {
-            prompt_buf.resize(prompt_len + 1);
-            prompt_len = llama_chat_apply_template(
-                chat_tmpl,
-                chat_msgs.data(), chat_msgs.size(),
-                true,
-                prompt_buf.data(), (int32_t)prompt_buf.size()
-            );
         }
         prompt.assign(prompt_buf.data(), prompt_len);
 

@@ -11,6 +11,7 @@ typedef struct LuaPostgres {
 	void*   activeQuery;   // LuaPostgresQuery* of the running query, or NULL
 	char*   error;         // last connection-level error
 	int     aliveTokenRef; // LUA_NOREF when not set
+	void*   appToken;      // cached LuaAliveToken* for the engine app token; NULL if not present
 } LuaPostgres;
 
 LuaPostgres* lua_topostgres(lua_State* L, int index);

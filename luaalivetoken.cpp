@@ -1,6 +1,17 @@
 ﻿#include "luaalivetoken.h"
 #include <chrono>
 
+static const int g_app_token_key = 0;
+const void* lua_alivetoken_app_registry_key() { return &g_app_token_key; }
+
+void lua_alivetoken_app_kill(lua_State* L) {
+    lua_rawgetp(L, LUA_REGISTRYINDEX, lua_alivetoken_app_registry_key());
+    LuaAliveToken* t = (LuaAliveToken*)luaL_testudata(L, -1, LUAALIVETOKEN);
+    if (t)
+        t->alive = 0;
+    lua_pop(L, 1);
+}
+
 static int64_t alive_now_ms() {
     return (int64_t)std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now().time_since_epoch()).count();

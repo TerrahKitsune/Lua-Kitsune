@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "lua_main_incl.h"
 #include <stdint.h>
 
@@ -26,6 +26,11 @@ int lua_alivetoken_error_if_dead(lua_State* L);
 int lua_alivetoken_link(lua_State* L);
 int lua_alivetoken_gc(lua_State* L);
 int lua_alivetoken_tostring(lua_State* L);
+
+// Returns the lightuserdata key used to store the app-level AliveToken in the Lua registry.
+const void* lua_alivetoken_app_registry_key();
+// Kills the app-level AliveToken stored in the registry. Call before lua_close.
+void lua_alivetoken_app_kill(lua_State* L);
 
 int luaopen_alivetoken(lua_State* L);
 

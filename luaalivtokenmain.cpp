@@ -32,6 +32,15 @@ int luaopen_alivetoken(lua_State* L) {
     lua_pushvalue(L, -3);
     lua_rawset(L, -3);
 
-    lua_pop(L, 1);   // pop metatable
+    lua_pop(L, 1);   // pop metatable — module table is now on top
+
+    // Create the app-level token, store it in the registry and expose it as AliveToken.App.
+    lua_alivetoken_new(L);   // pushes a new token onto the stack
+    lua_pushvalue(L, -1);    // dup for registry
+    lua_rawsetp(L, LUA_REGISTRYINDEX, lua_alivetoken_app_registry_key());
+    lua_pushliteral(L, "App");
+    lua_insert(L, -2);       // swap: key below value
+    lua_rawset(L, -3);       // module["App"] = token
+
     return 1;        // return module table
 }
