@@ -746,14 +746,17 @@
     <ClCompile Include="LlamaContext.cpp">
       <Filter>LuaLlama\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="luatoolsuite.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="LuaTcpListener.cpp">
       <Filter>LuaTCP\Source Files</Filter>
     </ClCompile>
     <ClCompile Include="LuaTcpMain.cpp">
       <Filter>LuaTCP</Filter>
+    </ClCompile>
+    <ClCompile Include="luallama_prompt.cpp">
+      <Filter>LuaLlama\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="luatoolsuite.cpp">
+      <Filter>LuaLlama\Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -1174,14 +1177,17 @@
     <ClInclude Include="LlamaContext.h">
       <Filter>LuaLlama\Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="luatoolsuite.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="LuaTcpListener.h">
       <Filter>LuaTCP\Header Files</Filter>
     </ClInclude>
     <ClInclude Include="LuaTcpMain.h">
       <Filter>LuaTCP</Filter>
+    </ClInclude>
+    <ClInclude Include="luallama_prompt.h">
+      <Filter>LuaLlama\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="luatoolsuite.h">
+      <Filter>LuaLlama\Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

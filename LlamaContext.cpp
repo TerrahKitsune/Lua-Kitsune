@@ -135,7 +135,7 @@ bool LlamaContext::IsReady() const {
     return status.load() == LlamaStatus::IDLE && !model_path.empty();
 }
 
-bool LlamaContext::Generate(std::vector<ChatMessage>&& messages, LlamaGenOpts&& opts) {
+bool LlamaContext::Generate(std::vector<ChatMessage> messages, LlamaGenOpts&& opts) {
     if (disposed.load())
         return false;
     if (status.load() != LlamaStatus::IDLE && status.load() != LlamaStatus::FAILED)
@@ -622,7 +622,7 @@ void LlamaContext::WorkerLoad() {
         return;
     }
 
-    tool_family = DetectToolFamily();
+    chat_template = ChatTemplate::Detect(llama_model_chat_template(llama_mdl, nullptr));
     loaded_model_path = model_path;
     model_loaded.store(true);
     {
@@ -664,69 +664,206 @@ void LlamaContext::WorkerResetKV() {
     }
 }
 
-// Applies the model's chat template, with manual fallbacks for models
-// whose Jinja template is not in llama_chat_apply_template's built-in list.
-// buf is resized automatically; returns the final prompt length, or -1 on error.
-static int32_t ApplyChatTemplateWithFallback(
-    const char* tmpl,
+// -- ChatTemplate ---------------------------------------------------------------
+
+ChatTemplate ChatTemplate::Detect(const char* tmpl) {
+    ChatTemplate ct;
+
+    if (!tmpl) {
+        // No template — default to QWEN_HERMES
+        ct.kind        = Kind::QWEN_HERMES;
+        ct.think_open  = "<think>";
+        ct.think_close = "</think>";
+        ct.tool_open   = "<tool_call>";
+        ct.tool_close  = "</tool_call>";
+        return ct;
+    }
+
+    // Gemma 4: <|turn> / <turn|>
+    if (std::strstr(tmpl, "<|turn>") != nullptr) {
+        ct.kind        = Kind::GEMMA4;
+        ct.think_open  = "<|channel>thought\n";
+        ct.think_close = "<channel|>";
+        ct.tool_open   = "<|tool_call>";
+        ct.tool_close  = "<tool_call|>";
+        return ct;
+    }
+
+    // Gemma 2 / 3: <start_of_turn> / <end_of_turn>
+    if (std::strstr(tmpl, "<start_of_turn>") != nullptr) {
+        ct.kind        = Kind::GEMMA2;
+        ct.think_open  = "<think>";
+        ct.think_close = "</think>";
+        ct.tool_open   = "<tool_call>";
+        ct.tool_close  = "</tool_call>";
+        return ct;
+    }
+
+    // Use lowercase for family detection of other models
+    std::string lower(tmpl);
+    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+
+    if (lower.find("llama3") != std::string::npos ||
+        lower.find("llama-3") != std::string::npos ||
+        lower.find("<|python_tag|>") != std::string::npos) {
+        ct.kind        = Kind::LLAMA3;
+        ct.think_open  = "<think>";
+        ct.think_close = "</think>";
+        ct.tool_open   = "<tool_call>";
+        ct.tool_close  = "</tool_call>";
+        return ct;
+    }
+
+    if (lower.find("[tool_calls]") != std::string::npos ||
+        lower.find("[tool_results]") != std::string::npos ||
+        lower.find("mistral") != std::string::npos) {
+        ct.kind        = Kind::MISTRAL;
+        ct.think_open  = "<think>";
+        ct.think_close = "</think>";
+        ct.tool_open   = "<tool_call>";
+        ct.tool_close  = "</tool_call>";
+        return ct;
+    }
+
+    if (lower.find("command-r") != std::string::npos ||
+        lower.find("cohere") != std::string::npos) {
+        ct.kind        = Kind::COMMAND_R;
+        ct.think_open  = "<think>";
+        ct.think_close = "</think>";
+        ct.tool_open   = "<tool_call>";
+        ct.tool_close  = "</tool_call>";
+        return ct;
+    }
+
+    // Default: QWEN_HERMES
+    ct.kind        = Kind::QWEN_HERMES;
+    ct.think_open  = "<think>";
+    ct.think_close = "</think>";
+    ct.tool_open   = "<tool_call>";
+    ct.tool_close  = "</tool_call>";
+    return ct;
+}
+
+std::string ChatTemplate::MapRole(const std::string& role) const {
+    if (kind == Kind::GEMMA4 || kind == Kind::GEMMA2) {
+        if (role == "assistant")
+            return "model";
+    }
+    return role;
+}
+
+std::string ChatTemplate::FormatPrompt(
+    const llama_model* mdl,
     const llama_chat_message* chat,
     size_t n_msg,
-    bool add_ass,
-    std::vector<char>& buf)
+    bool add_ass) const
 {
-    // Try the built-in path first
+    // Try llama.cpp's built-in template engine first (handles most models)
+    const char* tmpl = llama_model_chat_template(mdl, nullptr);
+    std::vector<char> buf(4096);
     int32_t len = llama_chat_apply_template(tmpl, chat, n_msg, add_ass, buf.data(), (int32_t)buf.size());
     if (len >= 0) {
         if ((size_t)len >= buf.size()) {
             buf.resize((size_t)len + 1);
             len = llama_chat_apply_template(tmpl, chat, n_msg, add_ass, buf.data(), (int32_t)buf.size());
         }
-        return len;
+        return std::string(buf.data(), len);
     }
 
-    if (!tmpl)
-        return -1;
-
+    // Built-in path failed — construct manually using our known format
     std::string prompt;
     prompt.reserve(4096);
 
-    // Gemma 4: uses <|turn> / <turn|> delimiters
-    // Format: <|turn>role\ncontent<turn|>\n
-    if (std::strstr(tmpl, "<|turn>") != nullptr) {
+    switch (kind) {
+    case Kind::GEMMA4:
         for (size_t i = 0; i < n_msg; ++i) {
             prompt += "<|turn>";
-            prompt += chat[i].role;
+            prompt += MapRole(chat[i].role);
             prompt += "\n";
             prompt += chat[i].content;
             prompt += "<turn|>\n";
         }
         if (add_ass)
             prompt += "<|turn>model\n";
-    }
-    // Gemma 2 / Gemma 3: uses <start_of_turn> / <end_of_turn> delimiters
-    // Format: <bos><start_of_turn>role\ncontent<end_of_turn>\n
-    else if (std::strstr(tmpl, "<start_of_turn>") != nullptr) {
+        break;
+
+    case Kind::GEMMA2:
         prompt += "<bos>";
         for (size_t i = 0; i < n_msg; ++i) {
             prompt += "<start_of_turn>";
-            prompt += chat[i].role;
+            prompt += MapRole(chat[i].role);
             prompt += "\n";
             prompt += chat[i].content;
             prompt += "<end_of_turn>\n";
         }
         if (add_ass)
             prompt += "<start_of_turn>model\n";
-    }
-    else {
-        return -1;
+        break;
+
+    default:
+        // All other families are in llama_chat_apply_template's built-in list,
+        // so we should never reach this path. Return empty to signal failure.
+        break;
     }
 
-    size_t needed = prompt.size() + 1;
-    if (buf.size() < needed)
-        buf.resize(needed);
-    std::memcpy(buf.data(), prompt.data(), prompt.size());
-    buf[prompt.size()] = '\0';
-    return (int32_t)prompt.size();
+    return prompt;
+}
+
+std::string ChatTemplate::BuildToolInjection(const std::string& tools_json) const {
+    switch (kind) {
+    case Kind::QWEN_HERMES:
+        return "<tools>\n" + tools_json + "\n</tools>\n\n"
+            "When you need to call a tool, respond with a <tool_call> block containing "
+            "a JSON object with \"name\" and \"arguments\" keys.\n"
+            "Example:\n<tool_call>\n{\"name\": \"tool_name\", \"arguments\": {\"arg\": \"value\"}}\n</tool_call>";
+
+    case Kind::LLAMA3:
+        return "You have access to the following tools:\n" + tools_json + "\n\n"
+            "When you need to call a tool, respond with a JSON object containing "
+            "\"name\" and \"arguments\" keys. Do not wrap in markdown.";
+
+    case Kind::MISTRAL:
+        return "[AVAILABLE_TOOLS] " + tools_json + "[/AVAILABLE_TOOLS]";
+
+    case Kind::COMMAND_R:
+        return "You have access to the following tools:\n" + tools_json + "\n\n"
+            "When you need to call a tool, respond with a JSON object containing "
+            "\"name\" and \"arguments\" keys.";
+
+    case Kind::GEMMA2:
+    case Kind::GEMMA4:
+        return "You have access to the following tools:\n" + tools_json + "\n\n"
+            "When you need to call a tool, respond with a <tool_call> block containing "
+            "a JSON object with \"name\" and \"arguments\" keys.\n"
+            "Example:\n<tool_call>\n{\"name\": \"tool_name\", \"arguments\": {\"arg\": \"value\"}}\n</tool_call>";
+    }
+    return "";
+}
+
+std::string ChatTemplate::ReconstructToolCall(const std::vector<ToolCall>& tool_calls) const {
+    std::string result;
+    for (const ToolCall& tc : tool_calls) {
+        // arguments may be a JSON object string or already-serialized string
+        std::string call_json = "{\"name\":\"" + tc.name + "\",\"arguments\":" + tc.arguments + "}";
+
+        switch (kind) {
+        case Kind::QWEN_HERMES:
+        case Kind::GEMMA2:
+        case Kind::GEMMA4:
+            result += "<tool_call>\n" + call_json + "\n</tool_call>\n";
+            break;
+        case Kind::LLAMA3:
+            result += call_json;
+            break;
+        case Kind::MISTRAL:
+            result += "[TOOL_CALLS] [" + call_json + "]";
+            break;
+        case Kind::COMMAND_R:
+            result += "{\"tool_calls\":[" + call_json + "]}";
+            break;
+        }
+    }
+    return result;
 }
 
 void LlamaContext::WorkerGenerate() {
@@ -751,6 +888,9 @@ void LlamaContext::WorkerGenerate() {
     tool_call_json.clear();
     has_tool_call.store(false);
 
+    // Detect the model's template family once per generation
+    chat_template = ChatTemplate::Detect(llama_model_chat_template(llama_mdl, nullptr));
+
     // Build prompt via chat template
     std::vector<llama_chat_message> chat_msgs;
     chat_msgs.reserve(gen_messages.size());
@@ -759,15 +899,15 @@ void LlamaContext::WorkerGenerate() {
     bool has_tools = !gen_opts.tools_json.empty();
     std::string tool_injection;
     if (has_tools)
-        tool_injection = BuildToolInjection(gen_opts.tools_json);
+        tool_injection = chat_template.BuildToolInjection(gen_opts.tools_json);
 
     for (auto& msg : gen_messages) {
         llama_chat_message cm;
         std::string content = msg.content;
 
-        // Reconstruct tool-call assistant turns
-        if (!msg.tool_calls_json.empty())
-            content = ReconstructToolCallContent(msg.tool_calls_json);
+        // Reconstruct tool-call assistant turns from structured vector
+        if (!msg.tool_calls.empty())
+            content = chat_template.ReconstructToolCall(msg.tool_calls);
 
         // Inject tools into system message
         if (has_tools && msg.role == "system" && !tool_injection.empty()) {
@@ -800,27 +940,17 @@ void LlamaContext::WorkerGenerate() {
         }
     }
 
-    // Apply template
-    const char* chat_tmpl = llama_model_chat_template(llama_mdl, nullptr);
-    std::vector<char> prompt_buf(4096);
-    int32_t prompt_len = ApplyChatTemplateWithFallback(
-        chat_tmpl,
-        chat_msgs.data(), chat_msgs.size(),
-        true,
-        prompt_buf
-    );
-
-    if (prompt_len < 0) {
+    // Format prompt using the detected template
+    std::string prompt = chat_template.FormatPrompt(llama_mdl, chat_msgs.data(), chat_msgs.size(), true);
+    if (prompt.empty()) {
         PushError("failed to apply chat template");
         PushDone();
         status.store(LlamaStatus::IDLE);
         return;
     }
 
-    std::string prompt(prompt_buf.data(), prompt_len);
-
     // Tokenise
-    int n_prompt_max = prompt_len + 256;
+    int n_prompt_max = (int)prompt.size() + 256;
     std::vector<llama_token> tokens(n_prompt_max);
     int n_tokens = llama_tokenize(llama_model_get_vocab(llama_mdl), prompt.c_str(), (int32_t)prompt.size(),
         tokens.data(), n_prompt_max, true, true);
@@ -850,8 +980,6 @@ void LlamaContext::WorkerGenerate() {
         gen_messages.erase(gen_messages.begin() + drop_idx);
 
         // Rebuild chat_msgs from the trimmed message list.
-        // Tool injection was already applied to the system message content above,
-        // so a simple rebuild is sufficient here.
         chat_msgs.clear();
         chat_msgs.reserve(gen_messages.size());
         for (auto& msg : gen_messages) {
@@ -861,23 +989,17 @@ void LlamaContext::WorkerGenerate() {
             chat_msgs.push_back(cm);
         }
 
-        // Re-apply chat template
-        prompt_len = ApplyChatTemplateWithFallback(
-            chat_tmpl,
-            chat_msgs.data(), chat_msgs.size(),
-            true,
-            prompt_buf
-        );
-        if (prompt_len < 0) {
+        // Re-format prompt
+        prompt = chat_template.FormatPrompt(llama_mdl, chat_msgs.data(), chat_msgs.size(), true);
+        if (prompt.empty()) {
             PushError("failed to apply chat template during trim");
             PushDone();
             status.store(LlamaStatus::IDLE);
             return;
         }
-        prompt.assign(prompt_buf.data(), prompt_len);
 
         // Re-tokenize the trimmed prompt
-        n_prompt_max = prompt_len + 256;
+        n_prompt_max = (int)prompt.size() + 256;
         tokens.resize(n_prompt_max);
         n_tokens = llama_tokenize(llama_model_get_vocab(llama_mdl), prompt.c_str(), (int32_t)prompt.size(),
             tokens.data(), n_prompt_max, true, true);
@@ -925,10 +1047,10 @@ void LlamaContext::WorkerGenerate() {
     bool in_tool_call = false;
     bool skip_leading_newline = false;
     std::string pending;
-    const size_t OPEN_TAG_LEN       = 7;  // "<think>"
-    const size_t CLOSE_TAG_LEN      = 8;  // "</think>"
-    const size_t TOOL_OPEN_TAG_LEN  = 11; // "<tool_call>"
-    const size_t TOOL_CLOSE_TAG_LEN = 12; // "</tool_call>"
+    const std::string& THINK_OPEN  = chat_template.think_open;
+    const std::string& THINK_CLOSE = chat_template.think_close;
+    const std::string& TOOL_OPEN   = chat_template.tool_open;
+    const std::string& TOOL_CLOSE  = chat_template.tool_close;
     int generated = 0;
     int max_tokens = gen_opts.max_tokens;
 
@@ -945,7 +1067,7 @@ void LlamaContext::WorkerGenerate() {
             n = 0;
         std::string piece(buf, n);
 
-        // Track <think>...</think> blocks using a pending buffer so that
+        // Track thinking and tool-call blocks using a pending buffer so that
         // tags split across token boundaries are handled correctly.
         pending += piece;
 
@@ -958,12 +1080,11 @@ void LlamaContext::WorkerGenerate() {
 
         while (!pending.empty()) {
             if (in_tool_call) {
-                // Suppress all tokens until </tool_call>; full_content accumulates
-                // the raw text so DetectToolCalls can parse it after generation ends.
-                size_t tag_pos = pending.find("</tool_call>");
+                // Accumulate silently until tool close tag; DetectToolCalls parses it afterwards.
+                size_t tag_pos = pending.find(TOOL_CLOSE);
                 if (tag_pos != std::string::npos) {
-                    full_content += pending.substr(0, tag_pos + TOOL_CLOSE_TAG_LEN);
-                    pending = pending.substr(tag_pos + TOOL_CLOSE_TAG_LEN);
+                    full_content += pending.substr(0, tag_pos + TOOL_CLOSE.size());
+                    pending = pending.substr(tag_pos + TOOL_CLOSE.size());
                     if (!pending.empty() && (pending[0] == '\r' || pending[0] == '\n')) {
                         while (!pending.empty() && (pending[0] == '\r' || pending[0] == '\n'))
                             pending = pending.substr(1);
@@ -972,9 +1093,9 @@ void LlamaContext::WorkerGenerate() {
                     }
                     in_tool_call = false;
                 } else {
-                    // Keep a partial-tag suffix buffered; accumulate the safe part silently
-                    size_t safe = pending.size() >= (TOOL_CLOSE_TAG_LEN - 1)
-                                  ? pending.size() - (TOOL_CLOSE_TAG_LEN - 1)
+                    // Keep a partial-tag suffix buffered
+                    size_t safe = pending.size() >= (TOOL_CLOSE.size() - 1)
+                                  ? pending.size() - (TOOL_CLOSE.size() - 1)
                                   : 0;
                     if (safe > 0) {
                         full_content += pending.substr(0, safe);
@@ -983,24 +1104,23 @@ void LlamaContext::WorkerGenerate() {
                     break;
                 }
             } else if (!in_think) {
-                // Check for <tool_call> first so it takes priority over content flushing
-                size_t tool_pos  = pending.find("<tool_call>");
-                size_t think_pos = pending.find("<think>");
+                // Check for tool open and think open; whichever comes first wins
+                size_t tool_pos  = TOOL_OPEN.empty()  ? std::string::npos : pending.find(TOOL_OPEN);
+                size_t think_pos = THINK_OPEN.empty() ? std::string::npos : pending.find(THINK_OPEN);
                 size_t first_tag = std::string::npos;
                 bool   is_tool   = false;
                 if (tool_pos  != std::string::npos) { first_tag = tool_pos;  is_tool = true; }
                 if (think_pos != std::string::npos && think_pos < first_tag) { first_tag = think_pos; is_tool = false; }
 
                 if (first_tag != std::string::npos) {
-                    // Flush content before whichever tag comes first
                     if (first_tag > 0) {
                         std::string before = pending.substr(0, first_tag);
                         full_content += before;
                         PushToken(before, false);
                     }
                     if (is_tool) {
-                        full_content += "<tool_call>";
-                        pending = pending.substr(first_tag + TOOL_OPEN_TAG_LEN);
+                        full_content += TOOL_OPEN;
+                        pending = pending.substr(first_tag + TOOL_OPEN.size());
                         if (!pending.empty() && (pending[0] == '\r' || pending[0] == '\n')) {
                             while (!pending.empty() && (pending[0] == '\r' || pending[0] == '\n'))
                                 pending = pending.substr(1);
@@ -1009,7 +1129,7 @@ void LlamaContext::WorkerGenerate() {
                         }
                         in_tool_call = true;
                     } else {
-                        pending = pending.substr(first_tag + OPEN_TAG_LEN);
+                        pending = pending.substr(first_tag + THINK_OPEN.size());
                         if (!pending.empty() && (pending[0] == '\r' || pending[0] == '\n')) {
                             while (!pending.empty() && (pending[0] == '\r' || pending[0] == '\n'))
                                 pending = pending.substr(1);
@@ -1019,13 +1139,13 @@ void LlamaContext::WorkerGenerate() {
                         in_think = true;
                     }
                 } else {
-                    // No full open tag found — keep a partial-tag suffix buffered
-                    size_t safe_think = pending.size() >= (OPEN_TAG_LEN - 1)
-                                        ? pending.size() - (OPEN_TAG_LEN - 1)
-                                        : 0;
-                    size_t safe_tool  = pending.size() >= (TOOL_OPEN_TAG_LEN - 1)
-                                        ? pending.size() - (TOOL_OPEN_TAG_LEN - 1)
-                                        : 0;
+                    // No full open tag yet — keep a partial-tag suffix buffered
+                    size_t safe_think = (!THINK_OPEN.empty() && pending.size() >= (THINK_OPEN.size() - 1))
+                                        ? pending.size() - (THINK_OPEN.size() - 1)
+                                        : pending.size();
+                    size_t safe_tool  = (!TOOL_OPEN.empty() && pending.size() >= (TOOL_OPEN.size() - 1))
+                                        ? pending.size() - (TOOL_OPEN.size() - 1)
+                                        : pending.size();
                     size_t safe = safe_tool < safe_think ? safe_tool : safe_think;
                     if (safe > 0) {
                         std::string flush = pending.substr(0, safe);
@@ -1036,9 +1156,8 @@ void LlamaContext::WorkerGenerate() {
                     break;
                 }
             } else {
-                size_t tag_pos = pending.find("</think>");
+                size_t tag_pos = THINK_CLOSE.empty() ? std::string::npos : pending.find(THINK_CLOSE);
                 if (tag_pos != std::string::npos) {
-                    // Flush reasoning content before the close tag, stripping trailing newlines
                     if (tag_pos > 0) {
                         std::string before = pending.substr(0, tag_pos);
                         while (!before.empty() && (before.back() == '\r' || before.back() == '\n'))
@@ -1048,8 +1167,7 @@ void LlamaContext::WorkerGenerate() {
                             PushToken(before, true);
                         }
                     }
-                    pending = pending.substr(tag_pos + CLOSE_TAG_LEN);
-                    // Strip all leading newlines; if none present yet, eat them from the next token
+                    pending = pending.substr(tag_pos + THINK_CLOSE.size());
                     if (!pending.empty() && (pending[0] == '\r' || pending[0] == '\n')) {
                         while (!pending.empty() && (pending[0] == '\r' || pending[0] == '\n'))
                             pending = pending.substr(1);
@@ -1058,9 +1176,9 @@ void LlamaContext::WorkerGenerate() {
                     }
                     in_think = false;
                 } else {
-                    // No full close tag found — keep a partial-tag suffix buffered
-                    size_t safe = pending.size() >= (CLOSE_TAG_LEN - 1)
-                                  ? pending.size() - (CLOSE_TAG_LEN - 1)
+                    // Keep a partial close-tag suffix buffered
+                    size_t safe = (!THINK_CLOSE.empty() && pending.size() >= (THINK_CLOSE.size() - 1))
+                                  ? pending.size() - (THINK_CLOSE.size() - 1)
                                   : 0;
                     if (safe > 0) {
                         std::string flush = pending.substr(0, safe);
@@ -1197,146 +1315,8 @@ void LlamaContext::WorkerEmbed() {
 }
 
 // -- Tool system ----------------------------------------------------------------
-
-ToolFamily LlamaContext::DetectToolFamily() const {
-    std::string tmpl = GetChatTemplate();
-    std::string lower;
-    lower.resize(tmpl.size());
-    std::transform(tmpl.begin(), tmpl.end(), lower.begin(), ::tolower);
-
-    if (lower.find("llama3") != std::string::npos ||
-        lower.find("llama-3") != std::string::npos ||
-        lower.find("<|python_tag|>") != std::string::npos)
-        return ToolFamily::LLAMA3;
-
-    if (lower.find("[tool_calls]") != std::string::npos ||
-        lower.find("[tool_results]") != std::string::npos ||
-        lower.find("mistral") != std::string::npos)
-        return ToolFamily::MISTRAL;
-
-    if (lower.find("command-r") != std::string::npos ||
-        lower.find("cohere") != std::string::npos)
-        return ToolFamily::COMMAND_R;
-
-    return ToolFamily::QWEN_HERMES;
-}
-
-std::string LlamaContext::ReconstructToolCallContent(const std::string& tool_calls_json) const {
-    // tool_calls_json is an OpenAI-format JSON array:
-    // [{"id":"...","type":"function","function":{"name":"...","arguments":"..."}}]
-    // We reconstruct model-native text based on family.
-
-    // Simple extraction: find name and arguments from the JSON
-    // This is a lightweight parse — we just need name+arguments pairs.
-    std::string result;
-
-    // Find all function entries
-    size_t pos = 0;
-    while (pos < tool_calls_json.size()) {
-        size_t name_key = tool_calls_json.find("\"name\"", pos);
-        if (name_key == std::string::npos)
-            break;
-
-        // Extract name value
-        size_t name_start = tool_calls_json.find('"', name_key + 6);
-        if (name_start == std::string::npos)
-            break;
-        name_start++;
-        size_t name_end = tool_calls_json.find('"', name_start);
-        if (name_end == std::string::npos)
-            break;
-        std::string name = tool_calls_json.substr(name_start, name_end - name_start);
-
-        // Extract arguments value
-        size_t args_key = tool_calls_json.find("\"arguments\"", name_end);
-        if (args_key == std::string::npos)
-            break;
-
-        // Arguments can be a string or object
-        size_t args_val_start = tool_calls_json.find_first_of("\"{", args_key + 11);
-        if (args_val_start == std::string::npos)
-            break;
-
-        std::string arguments;
-        if (tool_calls_json[args_val_start] == '"') {
-            // String value — extract and unescape
-            args_val_start++;
-            size_t args_val_end = args_val_start;
-            while (args_val_end < tool_calls_json.size()) {
-                if (tool_calls_json[args_val_end] == '\\') {
-                    args_val_end += 2;
-                    continue;
-                }
-                if (tool_calls_json[args_val_end] == '"')
-                    break;
-                args_val_end++;
-            }
-            arguments = tool_calls_json.substr(args_val_start, args_val_end - args_val_start);
-            pos = args_val_end + 1;
-        } else {
-            // Object value — find matching brace
-            int depth = 0;
-            size_t obj_start = args_val_start;
-            size_t i = obj_start;
-            for (; i < tool_calls_json.size(); i++) {
-                if (tool_calls_json[i] == '{')
-                    depth++;
-                else if (tool_calls_json[i] == '}') {
-                    depth--;
-                    if (depth == 0) {
-                        i++;
-                        break;
-                    }
-                }
-            }
-            arguments = tool_calls_json.substr(obj_start, i - obj_start);
-            pos = i;
-        }
-
-        std::string call_json = "{\"name\":\"" + name + "\",\"arguments\":" + arguments + "}";
-
-        switch (tool_family) {
-        case ToolFamily::QWEN_HERMES:
-            result += "<tool_call>\n" + call_json + "\n</tool_call>\n";
-            break;
-        case ToolFamily::LLAMA3:
-            result += call_json;
-            break;
-        case ToolFamily::MISTRAL:
-            result += "[TOOL_CALLS] [" + call_json + "]";
-            break;
-        case ToolFamily::COMMAND_R:
-            result += "{\"tool_calls\":[" + call_json + "]}";
-            break;
-        }
-    }
-
-    return result;
-}
-
-std::string LlamaContext::BuildToolInjection(const std::string& tools_json) const {
-    switch (tool_family) {
-    case ToolFamily::QWEN_HERMES:
-        return "<tools>\n" + tools_json + "\n</tools>\n\n"
-            "When you need to call a tool, respond with a <tool_call> block containing "
-            "a JSON object with \"name\" and \"arguments\" keys.\n"
-            "Example:\n<tool_call>\n{\"name\": \"tool_name\", \"arguments\": {\"arg\": \"value\"}}\n</tool_call>";
-
-    case ToolFamily::LLAMA3:
-        return "You have access to the following tools:\n" + tools_json + "\n\n"
-            "When you need to call a tool, respond with a JSON object containing "
-            "\"name\" and \"arguments\" keys. Do not wrap in markdown.";
-
-    case ToolFamily::MISTRAL:
-        return "[AVAILABLE_TOOLS] " + tools_json + "[/AVAILABLE_TOOLS]";
-
-    case ToolFamily::COMMAND_R:
-        return "You have access to the following tools:\n" + tools_json + "\n\n"
-            "When you need to call a tool, respond with a JSON object containing "
-            "\"name\" and \"arguments\" keys.";
-    }
-    return "";
-}
+// ChatTemplate::BuildToolInjection and ChatTemplate::ReconstructToolCall
+// contain all model-family-specific tool formatting. See ChatTemplate::Detect.
 
 // Inject a generated "id" field into each tool-call object that lacks one.
 // Input is a JSON array string like [{"name":"x","arguments":{}}].
@@ -1492,6 +1472,109 @@ bool LlamaContext::DetectToolCalls(const std::string& content) {
     }
 
     return false;
+}
+
+// Parse tool_call_json (array of {id, name, arguments}) into structured ToolCall vector.
+// The JSON produced by DetectToolCalls has the shape: [{"id":"...","name":"...","arguments":{...}}]
+std::vector<ToolCall> LlamaContext::GetToolCalls() const {
+    std::vector<ToolCall> out;
+    const std::string& json = tool_call_json;
+    size_t pos = 0;
+    while (pos < json.size()) {
+        size_t obj_start = json.find('{', pos);
+        if (obj_start == std::string::npos)
+            break;
+        // Find the matching closing brace
+        int depth = 0;
+        bool in_str = false;
+        bool escape = false;
+        size_t obj_end = obj_start;
+        for (size_t i = obj_start; i < json.size(); i++) {
+            char c = json[i];
+            if (escape) {
+                escape = false;
+            } else if (c == '\\' && in_str) {
+                escape = true;
+            } else if (c == '"') {
+                in_str = !in_str;
+            } else if (!in_str) {
+                if (c == '{')
+                    depth++;
+                else if (c == '}') {
+                    depth--;
+                    if (depth == 0) {
+                        obj_end = i;
+                        break;
+                    }
+                }
+            }
+        }
+        std::string obj = json.substr(obj_start, obj_end - obj_start + 1);
+        pos = obj_end + 1;
+
+        ToolCall tc;
+
+        auto extract = [&](const char* key) -> std::string {
+            std::string k = std::string("\"") + key + "\"";
+            size_t kp = obj.find(k);
+            if (kp == std::string::npos)
+                return {};
+            size_t vp = kp + k.size();
+            while (vp < obj.size() && (obj[vp] == ' ' || obj[vp] == ':'))
+                vp++;
+            if (vp >= obj.size())
+                return {};
+            if (obj[vp] == '"') {
+                vp++;
+                std::string val;
+                bool esc = false;
+                while (vp < obj.size()) {
+                    char c = obj[vp++];
+                    if (esc) {
+                        val += c;
+                        esc = false;
+                    } else if (c == '\\') {
+                        esc = true;
+                    } else if (c == '"') {
+                        break;
+                    } else {
+                        val += c;
+                    }
+                }
+                return val;
+            }
+            // Object/number value — grab until matching depth or comma/}
+            if (obj[vp] == '{') {
+                int d = 0;
+                size_t start = vp;
+                for (; vp < obj.size(); vp++) {
+                    if (obj[vp] == '{') d++;
+                    else if (obj[vp] == '}') {
+                        d--;
+                        if (d == 0) {
+                            vp++;
+                            break;
+                        }
+                    }
+                }
+                return obj.substr(start, vp - start);
+            }
+            size_t start = vp;
+            while (vp < obj.size() && obj[vp] != ',' && obj[vp] != '}')
+                vp++;
+            return obj.substr(start, vp - start);
+        };
+
+        tc.id        = extract("id");
+        tc.name      = extract("name");
+        tc.arguments = extract("arguments");
+        if (tc.arguments.empty())
+            tc.arguments = "{}";
+
+        if (!tc.name.empty())
+            out.push_back(std::move(tc));
+    }
+    return out;
 }
 
 #else

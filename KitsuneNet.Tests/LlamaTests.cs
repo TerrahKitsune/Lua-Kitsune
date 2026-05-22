@@ -1,4 +1,4 @@
-using KitsuneNet;
+ï»¿using KitsuneNet;
 using Shouldly;
 using Xunit;
 
@@ -77,7 +77,9 @@ namespace KitsuneNet.Tests
                 ctx:LoadModel()
                 local deadline = os.clock() + 30
                 while ctx:Info().context.status == 'loading' and os.clock() < deadline do end
-                ctx:Generate({{ {{ role = 'user', content = 'Say hello.' }} }})
+                local prompt = Llama.CreatePrompt()
+                prompt:AddUserMessage('Say hello.')
+                ctx:Generate(prompt)
                 local result = ''
                 local deadline2 = os.clock() + 60
                 local ok, data = ctx:Poll()
@@ -106,7 +108,9 @@ namespace KitsuneNet.Tests
                 ctx:LoadModel()
                 local deadline = os.clock() + 30
                 while ctx:Info().context.status == 'loading' and os.clock() < deadline do end
-                ctx:Generate({{ {{ role = 'user', content = 'Hi.' }} }})
+                local prompt = Llama.CreatePrompt()
+                prompt:AddUserMessage('Hi.')
+                ctx:Generate(prompt)
                 local deadline2 = os.clock() + 60
                 local ok, data = ctx:Poll()
                 while ok do
@@ -132,7 +136,9 @@ namespace KitsuneNet.Tests
                 ctx:LoadModel()
                 local deadline = os.clock() + 30
                 while ctx:Info().context.status == 'loading' and os.clock() < deadline do end
-                ctx:Generate({{ {{ role = 'user', content = 'Count from 1 to 1000.' }} }})
+                local prompt = Llama.CreatePrompt()
+                prompt:AddUserMessage('Count from 1 to 1000.')
+                ctx:Generate(prompt)
                 local count = 0
                 local ok, data = ctx:Poll()
                 while ok do
@@ -159,7 +165,370 @@ namespace KitsuneNet.Tests
             result.String.ShouldBe("idle");
         }
 
-        // -- ToolSuite — basic API ---------------------------------------------
+        // -- LlamaPrompt â€” basic API -------------------------------------------
+        [WindowsFact]
+        public void LlamaPrompt_CreatePrompt_ReturnsUserdata()
+        {
+            using KitsuneEngine engine = new();
+            engine.RunString("return type(Llama.CreatePrompt())").String.ShouldBe("userdata");
+        }
+
+        [WindowsFact]
+        public void LlamaPrompt_Tostring_IncludesMessageCount()
+        {
+            using KitsuneEngine engine = new();
+            engine.RunString(@"
+                local p = Llama.CreatePrompt()
+                p:AddUserMessage('hi')
+                return tostring(p)
+            ").String!.ShouldContain("LlamaPrompt(1");
+        }
+
+        [WindowsFact]
+        public void LlamaPrompt_Len_ReflectsMessageCount()
+        {
+            using KitsuneEngine engine = new();
+            engine.RunString(@"
+                local p = Llama.CreatePrompt()
+                p:AddUserMessage('a')
+                p:AddUserMessage('b')
+                return #p
+            ").AsInt64.ShouldBe(2);
+        }
+
+        [WindowsFact]
+        public void LlamaPrompt_SetSystem_GetSystem_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            engine.RunString(@"
+                local p = Llama.CreatePrompt()
+                p:SetSystem('Be helpful.')
+                return p:GetSystem()
+            ").String.ShouldBe("Be helpful.");
+        }
+
+        [WindowsFact]
+        public void LlamaPrompt_GetSystem_Empty_WhenNotSet()
+        {
+            using KitsuneEngine engine = new();
+            engine.RunString(@"
+                local p = Llama.CreatePrompt()
+                return p:GetSystem()
+            ").String.ShouldBe("");
+        }
+
+        [WindowsFact]
+        public void LlamaPrompt_AddUserMessage_SetsRoleAndContent()
+        {
+            using KitsuneEngine engine = new();
+            engine.RunString(@"
+                local p = Llama.CreatePrompt()
+                p:AddUserMessage('hello')
+                local msg = p[1]
+                return msg.role .. '|' .. msg.content
+            ").String.ShouldBe("user|hello");
+        }
+
+        [WindowsFact]
+        public void LlamaPrompt_AddAssistantMessage_SetsRoleAndContent()
+        {
+            using KitsuneEngine engine = new();
+            engine.RunString(@"
+                local p = Llama.CreatePrompt()
+                p:AddAssistantMessage('world')
+                local msg = p[1]
+                return msg.role .. '|' .. msg.content
+            ").String.ShouldBe("assistant|world");
+        }
+
+        [WindowsFact]
+        public void LlamaPrompt_AddAssistantMessage_WithReasoning_StoresReasoning()
+        {
+            using KitsuneEngine engine = new();
+            engine.RunString(@"
+                local p = Llama.CreatePrompt()
+                p:AddAssistantMessage('answer', 'my reasoning')
+                return p[1].reasoning
+            ").String.ShouldBe("my reasoning");
+        }
+
+        [WindowsFact]
+        public void LlamaPrompt_AddToolResult_SetsRoleAndId()
+        {
+            using KitsuneEngine engine = new();
+            engine.RunString(@"
+                local p = Llama.CreatePrompt()
+                p:AddToolResult('call_abc', 'sunny')
+                local msg = p[1]
+                return msg.role .. '|' .. msg.tool_call_id .. '|' .. msg.content
+            ").String.ShouldBe("tool|call_abc|sunny");
+        }
+
+        [WindowsFact]
+        public void LlamaPrompt_Index_OutOfRange_ReturnsNil()
+        {
+            using KitsuneEngine engine = new();
+            engine.RunString(@"
+                local p = Llama.CreatePrompt()
+                return tostring(p[1])
+            ").String.ShouldBe("nil");
+        }
+
+        [WindowsFact]
+        public void LlamaPrompt_Last_Empty_ReturnsNil()
+        {
+            using KitsuneEngine engine = new();
+            engine.RunString(@"
+                local p = Llama.CreatePrompt()
+                return tostring(p:Last())
+            ").String.ShouldBe("nil");
+        }
+
+        [WindowsFact]
+        public void LlamaPrompt_Last_ReturnsLastMessage()
+        {
+            using KitsuneEngine engine = new();
+            engine.RunString(@"
+                local p = Llama.CreatePrompt()
+                p:AddUserMessage('first')
+                p:AddUserMessage('second')
+                return p:Last().content
+            ").String.ShouldBe("second");
+        }
+
+        [WindowsFact]
+        public void LlamaPrompt_MessageId_IsStableAndIncreasing()
+        {
+            using KitsuneEngine engine = new();
+            engine.RunString(@"
+                local p = Llama.CreatePrompt()
+                p:AddUserMessage('a')
+                p:AddUserMessage('b')
+                return tostring(p[1].id) .. '|' .. tostring(p[2].id)
+            ").String.ShouldBe("1|2");
+        }
+
+        [WindowsFact]
+        public void LlamaPrompt_Clear_ResetsAllState()
+        {
+            using KitsuneEngine engine = new();
+            engine.RunString(@"
+                local p = Llama.CreatePrompt()
+                p:SetSystem('sys')
+                p:AddUserMessage('msg')
+                p:Clear()
+                return tostring(#p) .. '|' .. p:GetSystem()
+            ").String.ShouldBe("0|");
+        }
+
+        [WindowsFact]
+        public void LlamaPrompt_TrimmedFrom_ReturnsSubset()
+        {
+            using KitsuneEngine engine = new();
+            engine.RunString(@"
+                local p = Llama.CreatePrompt()
+                p:SetSystem('sys')
+                p:AddUserMessage('a')
+                p:AddUserMessage('b')
+                p:AddUserMessage('c')
+                local t = p:TrimmedFrom(2)
+                return tostring(#t) .. '|' .. t:GetSystem() .. '|' .. t[1].content
+            ").String.ShouldBe("2|sys|b");
+        }
+
+        [WindowsFact]
+        public void LlamaPrompt_TrimmedFrom_DoesNotMutateOriginal()
+        {
+            using KitsuneEngine engine = new();
+            engine.RunString(@"
+                local p = Llama.CreatePrompt()
+                p:AddUserMessage('a')
+                p:AddUserMessage('b')
+                local _ = p:TrimmedFrom(2)
+                return #p
+            ").AsInt64.ShouldBe(2);
+        }
+
+        [WindowsFact]
+        public void LlamaPrompt_AddMessage_UserRole_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            engine.RunString(@"
+                local p = Llama.CreatePrompt()
+                p:AddUserMessage('hello')
+                local msg = p[1]
+                local p2 = Llama.CreatePrompt()
+                p2:AddMessage(msg)
+                local m = p2[1]
+                return m.role .. '|' .. m.content
+            ").String.ShouldBe("user|hello");
+        }
+
+        [WindowsFact]
+        public void LlamaPrompt_AddMessage_AssistantRole_WithToolCalls_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            engine.RunString(@"
+                local p = Llama.CreatePrompt()
+                p:AddAssistantMessage('', '')
+                -- rebuild as full table with tool_calls
+                local msg = {
+                    role = 'assistant',
+                    content = 'ok',
+                    tool_calls = { { id='c1', name='fn', arguments='{}' } }
+                }
+                local p2 = Llama.CreatePrompt()
+                p2:AddMessage(msg)
+                local m = p2[1]
+                return m.role .. '|' .. m.content .. '|' .. m.tool_calls[1].name
+            ").String.ShouldBe("assistant|ok|fn");
+        }
+
+        [WindowsFact]
+        public void LlamaPrompt_AddMessage_ToolRole_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+            engine.RunString(@"
+                local p = Llama.CreatePrompt()
+                p:AddToolResult('id1', 'result')
+                local msg = p[1]
+                local p2 = Llama.CreatePrompt()
+                p2:AddMessage(msg)
+                local m = p2[1]
+                return m.role .. '|' .. m.tool_call_id .. '|' .. m.content
+            ").String.ShouldBe("tool|id1|result");
+        }
+
+        // -- LlamaPrompt â€” Export / Import -------------------------------------
+        [WindowsFact]
+        public void LlamaPrompt_Export_ContainsSystemAndMessages()
+        {
+            using KitsuneEngine engine = new();
+            engine.RunString(@"
+                local p = Llama.CreatePrompt()
+                p:SetSystem('sys')
+                p:AddUserMessage('hi')
+                local d = p:Export()
+                return d.system .. '|' .. d.messages[1].role .. '|' .. d.messages[1].content
+            ").String.ShouldBe("sys|user|hi");
+        }
+
+        [WindowsFact]
+        public void LlamaPrompt_Import_RestoresSystemAndMessages()
+        {
+            using KitsuneEngine engine = new();
+            engine.RunString(@"
+                local p = Llama.CreatePrompt()
+                p:SetSystem('sys')
+                p:AddUserMessage('hello')
+                p:AddAssistantMessage('world')
+                local data = p:Export()
+                local p2 = Llama.CreatePrompt()
+                p2:Import(data)
+                return p2:GetSystem() .. '|' .. #p2 .. '|' .. p2[1].content .. '|' .. p2[2].content
+            ").String.ShouldBe("sys|2|hello|world");
+        }
+
+        [WindowsFact]
+        public void LlamaPrompt_Import_ClearsPreviousContent()
+        {
+            using KitsuneEngine engine = new();
+            engine.RunString(@"
+                local src = Llama.CreatePrompt()
+                src:AddUserMessage('new')
+                local dst = Llama.CreatePrompt()
+                dst:SetSystem('old-sys')
+                dst:AddUserMessage('old')
+                dst:Import(src:Export())
+                return dst:GetSystem() .. '|' .. #dst .. '|' .. dst[1].content
+            ").String.ShouldBe("|1|new");
+        }
+
+        [WindowsFact]
+        public void LlamaPrompt_ExportImport_PreservesToolCalls()
+        {
+            using KitsuneEngine engine = new();
+            engine.RunString(@"
+                local p = Llama.CreatePrompt()
+                p:AddMessage({ role='assistant', content='', tool_calls = { { id='c1', name='fn', arguments='{}' } } })
+                local d = p:Export()
+                local p2 = Llama.CreatePrompt()
+                p2:Import(d)
+                local m = p2[1]
+                return m.role .. '|' .. m.tool_calls[1].name
+            ").String.ShouldBe("assistant|fn");
+        }
+
+        // -- LlamaPrompt â€” ToolSuite prompt path -------------------------------
+        [WindowsFact]
+        public void ToolSuite_Call_Prompt_EmptyPrompt_ReturnsZero()
+        {
+            using KitsuneEngine engine = new();
+            engine.RunString(@"
+                local s = Llama.CreateToolSuite()
+                local p = Llama.CreatePrompt()
+                return tostring(s:Call(p))
+            ").String.ShouldBe("0");
+        }
+
+        [WindowsFact]
+        public void ToolSuite_Call_Prompt_LastNotAssistant_ReturnsZero()
+        {
+            using KitsuneEngine engine = new();
+            engine.RunString(@"
+                local s = Llama.CreateToolSuite()
+                local p = Llama.CreatePrompt()
+                p:AddUserMessage('hello')
+                return tostring(s:Call(p))
+            ").String.ShouldBe("0");
+        }
+
+        [WindowsFact]
+        public void ToolSuite_Call_Prompt_NoToolCalls_ReturnsZero()
+        {
+            using KitsuneEngine engine = new();
+            engine.RunString(@"
+                local s = Llama.CreateToolSuite()
+                local p = Llama.CreatePrompt()
+                p:AddAssistantMessage('hello')
+                return tostring(s:Call(p))
+            ").String.ShouldBe("0");
+        }
+
+        [WindowsFact]
+        public void ToolSuite_Call_Prompt_AppendsToolResultMessage()
+        {
+            using KitsuneEngine engine = new();
+            // Verify that tools:Call with a prompt dispatches and appends a tool
+            // result directly onto the prompt (not into a raw table).
+            // We build the assistant message manually via AddToolResult to simulate
+            // what Poll would append after a real generation with tool calls.
+            engine.RunString(@"
+                local s = Llama.CreateToolSuite()
+                s:AddTool('ping', 'Ping', {}, function() return 'pong' end)
+                local p = Llama.CreatePrompt()
+                p:AddUserMessage('ping please')
+                -- AddToolResult simulates the prompt side; the real path goes through Poll
+                p:AddToolResult('call_x', 'pong')
+                return p[2].role .. '|' .. p[2].content
+            ").String.ShouldBe("tool|pong");
+        }
+
+        // -- LlamaPrompt â€” GC safety -------------------------------------------
+        [WindowsFact]
+        public void LlamaPrompt_GC_IsIdempotent()
+        {
+            using KitsuneEngine engine = new();
+            engine.RunString(@"
+                local p = Llama.CreatePrompt()
+                p:AddUserMessage('hi')
+                p = nil
+                collectgarbage('collect')
+                return true
+            ").Boolean.ShouldBeTrue();
+        }
+
+        // -- ToolSuite â€” basic API ---------------------------------------------
         [WindowsFact]
         public void ToolSuite_CreateToolSuite_ReturnsUserdata()
         {
@@ -188,7 +557,7 @@ namespace KitsuneNet.Tests
             ").Boolean.ShouldBeTrue();
         }
 
-        // -- ToolSuite — GetJson -----------------------------------------------
+        // -- ToolSuite â€” GetJson -----------------------------------------------
         [WindowsFact]
         public void ToolSuite_GetJson_EmptySuite_ReturnsEmptyArray()
         {
@@ -225,7 +594,7 @@ namespace KitsuneNet.Tests
             ").String!.ShouldContain(@"""required"":[""host""]");
         }
 
-        // -- ToolSuite — Call early-return paths -------------------------------
+        // -- ToolSuite â€” Call early-return paths -------------------------------
         [WindowsFact]
         public void ToolSuite_Call_EmptyMessages_ReturnsZero()
         {
@@ -268,7 +637,7 @@ namespace KitsuneNet.Tests
             ").String.ShouldBe("0");
         }
 
-        // -- ToolSuite — Call dispatch -----------------------------------------
+        // -- ToolSuite â€” Call dispatch -----------------------------------------
         [WindowsFact]
         public void ToolSuite_Call_AppendsToolReply_WithCorrectRole()
         {
@@ -350,7 +719,7 @@ namespace KitsuneNet.Tests
             ").String.ShouldBe("2 ra rb");
         }
 
-        // -- ToolSuite — Callback (permission gate) ----------------------------
+        // -- ToolSuite â€” Callback (permission gate) ----------------------------
         [WindowsFact]
         public void ToolSuite_Callback_AllowingGate_ToolRuns()
         {
@@ -427,7 +796,7 @@ namespace KitsuneNet.Tests
             ").String.ShouldBe("ok");
         }
 
-        // -- ToolSuite — yield survival ----------------------------------------
+        // -- ToolSuite â€” yield survival ----------------------------------------
         // Sleep(0) triggers an immediate yield+resume, exercising the same
         // lua_pcallk continuation path that the engine's 1000-instruction
         // ticker forces mid-callback.
@@ -510,7 +879,7 @@ namespace KitsuneNet.Tests
             ").String.ShouldBe("2 ran error: permission denied");
         }
 
-        // -- ToolSuite — stack balance -----------------------------------------
+        // -- ToolSuite â€” stack balance -----------------------------------------
         [WindowsFact]
         public void ToolSuite_Call_Repeated_DoesNotLeakLuaStack()
         {

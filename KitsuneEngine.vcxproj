@@ -127,6 +127,7 @@
     <ClCompile Include="luakafkaproducer.cpp" />
     <ClCompile Include="luallama.cpp" />
     <ClCompile Include="luallamamain.cpp" />
+    <ClCompile Include="luallama_prompt.cpp" />
     <ClCompile Include="luamsgpack.cpp" />
     <ClCompile Include="luamsgpackmain.cpp" />
     <ClCompile Include="luatask.cpp" />
@@ -286,6 +287,7 @@
     <ClInclude Include="luakafkaproducer.h" />
     <ClInclude Include="luallama.h" />
     <ClInclude Include="luallamamain.h" />
+    <ClInclude Include="luallama_prompt.h" />
     <ClInclude Include="luamsgpack.h" />
     <ClInclude Include="luamsgpackmain.h" />
     <ClInclude Include="luatask.h" />

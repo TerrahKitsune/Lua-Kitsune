@@ -11,6 +11,7 @@
 
 struct llama_model;
 struct llama_context;
+struct llama_chat_message;
 
 // ── Enums ──────────────────────────────────────────────────────────────────────
 
@@ -32,13 +33,6 @@ enum class LlamaStatus {
 	FAILED
 };
 
-enum class ToolFamily {
-	QWEN_HERMES,
-	LLAMA3,
-	MISTRAL,
-	COMMAND_R
-};
-
 // ── Data structs ───────────────────────────────────────────────────────────────
 
 struct TokenEntry {
@@ -49,12 +43,77 @@ struct TokenEntry {
 	bool        is_tool_calls  = false;
 };
 
-struct ChatMessage {
-	std::string role;
-	std::string content;
-	std::string tool_calls_json;
-	std::string tool_call_id;
+struct ToolCall {
+	std::string id;
+	std::string name;
+	std::string arguments; // JSON string
 };
+
+struct ChatMessage {
+	uint32_t                id           = 0;
+	std::string             role;
+	std::string             content;
+	std::string             reasoning;   // stored but never sent to model
+	std::string             tool_call_id; // for role="tool" result messages
+	std::vector<ToolCall>   tool_calls;  // for role="assistant" with calls
+};
+
+// ── ChatTemplate ───────────────────────────────────────────────────────────────
+//
+// Encapsulates all model-family-specific formatting logic:
+//   - Prompt construction (role names, delimiters, BOS token)
+//   - Thinking block tags (e.g. <think> / <|channel>thought)
+//   - Tool-call tags and injection format
+//
+// Detected once from the Jinja template string embedded in the GGUF.
+// Adding support for a new model family only requires touching this struct.
+
+struct ChatTemplate {
+	enum class Kind {
+		QWEN_HERMES,  // default / fallback — Qwen, Hermes, most open models
+		LLAMA3,
+		MISTRAL,
+		COMMAND_R,
+		GEMMA2,       // Gemma 2 / Gemma 3  (<start_of_turn> / <end_of_turn>)
+		GEMMA4,       // Gemma 4            (<|turn> / <turn|>)
+	};
+
+	Kind        kind         = Kind::QWEN_HERMES;
+
+	// Thinking-block delimiters (empty = model has no thinking mode)
+	std::string think_open;   // e.g. "<think>"  or  "<|channel>thought\n"
+	std::string think_close;  // e.g. "</think>" or  "<channel|>"
+
+	// Tool-call delimiters used natively by this model
+	std::string tool_open;    // e.g. "<tool_call>"
+	std::string tool_close;   // e.g. "</tool_call>"
+
+	// Detect the right template from the raw Jinja string returned by
+	// llama_model_chat_template(). Falls back to QWEN_HERMES.
+	static ChatTemplate Detect(const char* jinja_tmpl);
+
+	// Map an OpenAI-convention role name to this model's role name.
+	// e.g. "assistant" -> "model" for Gemma 4.
+	std::string MapRole(const std::string& role) const;
+
+	// Build a full prompt string from messages.
+	// Falls back to llama_chat_apply_template first; constructs manually only
+	// when that returns -1 (i.e. the model's Jinja is not in the built-in list).
+	std::string FormatPrompt(
+		const llama_model*        mdl,
+		const llama_chat_message* chat,
+		size_t                    n_msg,
+		bool                      add_ass) const;
+
+	// Build a tool-list injection string to prepend to the system message.
+	std::string BuildToolInjection(const std::string& tools_json) const;
+
+	// Re-serialize a structured tool-call vector into the native text
+	// representation that this model was trained on.
+	std::string ReconstructToolCall(const std::vector<ToolCall>& tool_calls) const;
+};
+
+// ── Context options ────────────────────────────────────────────────────────────
 
 struct LlamaCtxOpts {
 	int     n_gpu_layers  = 99;
@@ -106,7 +165,7 @@ public:
 	bool        IsModelLoaded() const;
 	std::string GetLoadedModelPath() const;
 	bool        IsReady() const;
-	bool        Generate(std::vector<ChatMessage>&& messages, LlamaGenOpts&& opts);
+	bool        Generate(std::vector<ChatMessage> messages, LlamaGenOpts&& opts);
 	bool        Stop();
 	bool        Reset();
 	bool        Embed(const std::string& text);
@@ -153,8 +212,11 @@ public:
 
 	// Generation result accessors (valid after Poll returns ok=false)
 	const std::string& GetFullContent() const   { return full_content; }
+	const std::string& GetFullReasoning() const { return full_reasoning; }
 	const std::string& GetToolCallJson() const  { return tool_call_json; }
 	bool               HasToolCall() const       { return has_tool_call.load(); }
+	// Parse tool_call_json into a structured vector for prompt storage.
+	std::vector<ToolCall> GetToolCalls() const;
 
 	// Embed result (valid after EMBED task completes)
 	const std::vector<float>& GetEmbedResult() const;
@@ -175,9 +237,6 @@ private:
 
 	// ── Tool system helpers ────────────────────────────────────────────────
 
-	ToolFamily  DetectToolFamily() const;
-	std::string ReconstructToolCallContent(const std::string& tool_calls_json) const;
-	std::string BuildToolInjection(const std::string& tools_json) const;
 	bool        DetectToolCalls(const std::string& content);
 
 	// ── Fields ─────────────────────────────────────────────────────────────
@@ -221,7 +280,7 @@ private:
 	std::string                 full_reasoning;
 	std::string                 tool_call_json;
 	std::atomic<bool>           has_tool_call{false};
-	ToolFamily                  tool_family = ToolFamily::QWEN_HERMES;
+	ChatTemplate                chat_template;
 
 	// Embed state
 	std::string                 embed_input;

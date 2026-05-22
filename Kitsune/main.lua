@@ -134,27 +134,9 @@ CreateGCPrint();
 collectgarbage();
 GetKey = Session.Console.GetKey;
 
-FileSystem.SetCurrentDirectory("C:\\Users\\Terrah\\Documents\\GitHub\\KitsuneUI");
-dofile("main.lua");
-if true then return; end
-
-local tools = [[{
-  "type": "function",
-  "function": {
-    "name": "get_weather",
-    "description": "Get the current weather for a city",
-    "parameters": {
-      "type": "object",
-      "properties": {
-        "city": {
-          "type": "string",
-          "description": "The name of the city"
-        }
-      },
-      "required": ["city"]
-    }
-  }
-}]];
+--FileSystem.SetCurrentDirectory("C:\\Users\\Terrah\\Documents\\GitHub\\KitsuneUI");
+--dofile("main.lua");
+--if true then return; end
 
 local tools = Llama.CreateToolSuite()
 tools:AddTool(
@@ -171,10 +153,9 @@ tools:AddTool(
     end
 )
 
-local msgs = {
-    { role = 'system', content = 'You are a helpful assistant. Check the weather with get_weather if asked' },
-    { role = 'user',   content = 'Hello! What is the weather in stockholm?' },
-};
+local prompt = Llama.CreatePrompt()
+prompt:SetSystem('You are a helpful assistant. Check the weather with get_weather if asked');
+prompt:AddUserMessage('Hello! What is the weather in stockholm?');
 
 local info = Llama.PeekModel("C:/models/qwen3-0.6b-q8_0.gguf")
 print(Json.New(true):Encode(info));
@@ -182,7 +163,7 @@ GetKey();
 local ctx = Llama.CreateContext();
 assert(ctx:SetModel("C:/models/qwen3-0.6b-q8_0.gguf"));
 print(ctx:IsReady());
-assert(ctx:Generate(msgs, {}, tools));
+assert(ctx:Generate(prompt, {}, tools));
 
 local function PollTest(ctx)
 
@@ -206,10 +187,10 @@ local function PollTest(ctx)
 end
 
 PollTest(ctx);
-tools:Call(msgs);
-assert(ctx:Generate(msgs, {}, tools));
+tools:Call(prompt);
+assert(ctx:Generate(prompt, {}, tools));
 PollTest(ctx);
-print(Json.New(true):Encode(msgs));
+print(Json.New(true):Encode(prompt:Export()));
 
 GetKey();
 

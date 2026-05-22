@@ -1,5 +1,6 @@
 ﻿#include "platform.h"
 #include "luallama.h"
+#include "luallama_prompt.h"
 #include "luatoolsuite.h"
 #include "LlamaContext.h"
 #include "luajson.h"
@@ -8,7 +9,8 @@
 LuaLlama* lua_llama_push(lua_State* L) {
 	LuaLlama* x = (LuaLlama*)lua_newuserdata(L, sizeof(LuaLlama));
 	memset(x, 0, sizeof(LuaLlama));
-	x->messages_ref = LUA_NOREF;
+	x->active_prompt = nullptr;
+	x->prompt_ref    = LUA_NOREF;
 	luaL_setmetatable(L, LUALLAMA);
 	return x;
 }
@@ -105,9 +107,10 @@ int lua_llama_new(lua_State* L) {
 
 int lua_llama_gc(lua_State* L) {
 	LuaLlama* llama = lua_llama_check(L, 1);
-	if (llama->messages_ref != LUA_NOREF) {
-		luaL_unref(L, LUA_REGISTRYINDEX, llama->messages_ref);
-		llama->messages_ref = LUA_NOREF;
+	if (llama->prompt_ref != LUA_NOREF) {
+		luaL_unref(L, LUA_REGISTRYINDEX, llama->prompt_ref);
+		llama->prompt_ref    = LUA_NOREF;
+		llama->active_prompt = nullptr;
 	}
 	if (llama->context) {
 		delete llama->context;
@@ -211,104 +214,18 @@ int lua_llama_isready(lua_State* L) {
 	return 1;
 }
 
-// Helper: read messages table from Lua stack
-static void read_messages(lua_State* L, int idx, std::vector<ChatMessage>& out) {
-	luaL_checktype(L, idx, LUA_TTABLE);
-	int n = (int)lua_rawlen(L, idx);
-	out.reserve(n);
 
-	for (int i = 1; i <= n; i++) {
-		lua_rawgeti(L, idx, i);
-		if (!lua_istable(L, -1)) {
-			lua_pop(L, 1);
-			continue;
-		}
-
-		ChatMessage msg;
-
-		lua_getfield(L, -1, "role");
-		if (lua_isstring(L, -1))
-			msg.role = lua_tostring(L, -1);
-		lua_pop(L, 1);
-
-		lua_getfield(L, -1, "content");
-		if (lua_isstring(L, -1))
-			msg.content = lua_tostring(L, -1);
-		lua_pop(L, 1);
-
-		lua_getfield(L, -1, "tool_call_id");
-		if (lua_isstring(L, -1))
-			msg.tool_call_id = lua_tostring(L, -1);
-		lua_pop(L, 1);
-
-		// tool_calls can be a table or JSON string
-		lua_getfield(L, -1, "tool_calls");
-		if (lua_isstring(L, -1)) {
-			msg.tool_calls_json = lua_tostring(L, -1);
-		} else if (lua_istable(L, -1)) {
-			// Serialize table to JSON manually (simple approach)
-			// We build a JSON string from the OpenAI-format tool_calls array
-			std::string json = "[";
-			int tc_n = (int)lua_rawlen(L, -1);
-			for (int j = 1; j <= tc_n; j++) {
-				lua_rawgeti(L, -1, j);
-				if (lua_istable(L, -1)) {
-					if (j > 1)
-						json += ",";
-					json += "{";
-
-					lua_getfield(L, -1, "id");
-					if (lua_isstring(L, -1))
-						json += "\"id\":\"" + std::string(lua_tostring(L, -1)) + "\",";
-					lua_pop(L, 1);
-
-					lua_getfield(L, -1, "type");
-					if (lua_isstring(L, -1))
-						json += "\"type\":\"" + std::string(lua_tostring(L, -1)) + "\",";
-					lua_pop(L, 1);
-
-					lua_getfield(L, -1, "function");
-					if (lua_istable(L, -1)) {
-						json += "\"function\":{";
-						lua_getfield(L, -1, "name");
-						if (lua_isstring(L, -1))
-							json += "\"name\":\"" + std::string(lua_tostring(L, -1)) + "\",";
-						lua_pop(L, 1);
-
-						lua_getfield(L, -1, "arguments");
-						if (lua_isstring(L, -1))
-							json += "\"arguments\":\"" + std::string(lua_tostring(L, -1)) + "\"";
-						lua_pop(L, 1);
-
-						json += "}";
-					}
-					lua_pop(L, 1);
-
-					json += "}";
-				}
-				lua_pop(L, 1);
-			}
-			json += "]";
-			msg.tool_calls_json = json;
-		}
-		lua_pop(L, 1);
-
-		out.push_back(std::move(msg));
-		lua_pop(L, 1);
-	}
-}
-
-// ctx:Generate(messages, opts) -> true or nil, err
+// ctx:Generate(prompt, opts) -> true or nil, err
+// prompt must be a LlamaPrompt userdata.
 int lua_llama_generate(lua_State* L) {
 	LuaLlama* llama = lua_llama_check(L, 1);
 	if (!llama->context || llama->context->IsDisposed())
 		return push_disposed_error(L);
 
-	std::vector<ChatMessage> messages;
-	read_messages(L, 2, messages);
-	if (messages.empty()) {
+	LuaLlamaPrompt* lp = lua_llama_prompt_check(L, 2);
+	if (!lp->prompt || lp->prompt->Count() == 0) {
 		lua_pushnil(L);
-		lua_pushliteral(L, "empty messages");
+		lua_pushliteral(L, "empty prompt");
 		return 2;
 	}
 
@@ -348,7 +265,6 @@ int lua_llama_generate(lua_State* L) {
 	// Optional tools: 4th arg when opts present, 3rd arg otherwise; string, table, or ToolSuite
 	int tools_arg = lua_istable(L, 3) ? 4 : 3;
 	if (lua_toolsuite_is(L, tools_arg)) {
-		// Extract JSON directly from the ToolSuite userdata
 		lua_pushcfunction(L, lua_toolsuite_getjson);
 		lua_pushvalue(L, tools_arg);
 		if (lua_pcall(L, 1, 1, 0) == LUA_OK) {
@@ -366,13 +282,11 @@ int lua_llama_generate(lua_State* L) {
 		if (s && len > 0)
 			opts.tools_json.assign(s, len);
 	} else if (lua_istable(L, tools_arg)) {
-		// Serialize via a fresh LuaJson with emptyObjectAsSentinel so empty
-		// parameter schemas encode as {} rather than [].
 		LuaJson* j = lua_json_push(L);
 		j->emptyObjectAsSentinel = 1;
 		lua_pushcfunction(L, lua_json_encode);
-		lua_insert(L, -2);               // json_encode fn, then LuaJson on stack
-		lua_pushvalue(L, tools_arg);     // the tools table
+		lua_insert(L, -2);
+		lua_pushvalue(L, tools_arg);
 		if (lua_pcall(L, 2, 1, 0) == LUA_OK) {
 			size_t len = 0;
 			const char* s = lua_tolstring(L, -1, &len);
@@ -380,17 +294,18 @@ int lua_llama_generate(lua_State* L) {
 				opts.tools_json.assign(s, len);
 			lua_pop(L, 1);
 		} else {
-			lua_pop(L, 1); // discard pcall error; proceed without tools
+			lua_pop(L, 1);
 		}
 	}
 
-	// Release any previous messages ref
-	if (llama->messages_ref != LUA_NOREF) {
-		luaL_unref(L, LUA_REGISTRYINDEX, llama->messages_ref);
-		llama->messages_ref = LUA_NOREF;
+	// Release any previous prompt ref
+	if (llama->prompt_ref != LUA_NOREF) {
+		luaL_unref(L, LUA_REGISTRYINDEX, llama->prompt_ref);
+		llama->prompt_ref    = LUA_NOREF;
+		llama->active_prompt = nullptr;
 	}
 
-	if (!llama->context->Generate(std::move(messages), std::move(opts))) {
+	if (!llama->context->Generate(lp->prompt->BuildMessageList(), std::move(opts))) {
 		lua_pushnil(L);
 		LlamaStatus s = llama->context->GetStatus();
 		if (s == LlamaStatus::GENERATING)
@@ -402,9 +317,10 @@ int lua_llama_generate(lua_State* L) {
 		return 2;
 	}
 
-	// Store a reference to the messages table so Poll can append the reply
+	// Pin the prompt userdata in the registry so Poll can append the reply
 	lua_pushvalue(L, 2);
-	llama->messages_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+	llama->prompt_ref    = luaL_ref(L, LUA_REGISTRYINDEX);
+	llama->active_prompt = lp;
 
 	lua_pushboolean(L, 1);
 	return 1;
@@ -423,31 +339,21 @@ int lua_llama_poll(lua_State* L) {
 	bool ok = llama->context->Poll(text, type);
 
 	if (!ok) {
-		// Append the assistant reply to the stored messages table before returning
-		if (llama->messages_ref != LUA_NOREF) {
-			lua_rawgeti(L, LUA_REGISTRYINDEX, llama->messages_ref);
-			if (lua_istable(L, -1)) {
-				int n = (int)lua_rawlen(L, -1);
-				lua_newtable(L);                            // new message table
-				lua_pushliteral(L, "assistant");
-				lua_setfield(L, -2, "role");
-				if (llama->context->HasToolCall()) {
-					// tool_calls turn: empty content + tool_calls JSON
-					lua_pushliteral(L, "");
-					lua_setfield(L, -2, "content");
-					const std::string& tc = llama->context->GetToolCallJson();
-					lua_pushlstring(L, tc.c_str(), tc.size());
-					lua_setfield(L, -2, "tool_calls");
-				} else {
-					const std::string& content = llama->context->GetFullContent();
-					lua_pushlstring(L, content.c_str(), content.size());
-					lua_setfield(L, -2, "content");
-				}
-				lua_rawseti(L, -2, n + 1);                 // messages[#messages+1] = msg
+		// Append the assistant reply to the pinned prompt before returning
+		if (llama->active_prompt && llama->active_prompt->prompt) {
+			LlamaPrompt* prompt = llama->active_prompt->prompt;
+			if (llama->context->HasToolCall()) {
+				prompt->AddAssistantMessage("", "", llama->context->GetToolCalls());
+			} else {
+				const std::string& reasoning = llama->context->GetFullReasoning();
+				const std::string& content   = llama->context->GetFullContent();
+				prompt->AddAssistantMessage(content, reasoning, {});
 			}
-			lua_pop(L, 1);                                  // pop messages table
-			luaL_unref(L, LUA_REGISTRYINDEX, llama->messages_ref);
-			llama->messages_ref = LUA_NOREF;
+		}
+		if (llama->prompt_ref != LUA_NOREF) {
+			luaL_unref(L, LUA_REGISTRYINDEX, llama->prompt_ref);
+			llama->prompt_ref    = LUA_NOREF;
+			llama->active_prompt = nullptr;
 		}
 
 		lua_pushboolean(L, 0);
@@ -663,9 +569,10 @@ int lua_llama_info(lua_State* L) {
 // ctx:Dispose() -> true
 int lua_llama_dispose(lua_State* L) {
 	LuaLlama* llama = lua_llama_check(L, 1);
-	if (llama->messages_ref != LUA_NOREF) {
-		luaL_unref(L, LUA_REGISTRYINDEX, llama->messages_ref);
-		llama->messages_ref = LUA_NOREF;
+	if (llama->prompt_ref != LUA_NOREF) {
+		luaL_unref(L, LUA_REGISTRYINDEX, llama->prompt_ref);
+		llama->prompt_ref    = LUA_NOREF;
+		llama->active_prompt = nullptr;
 	}
 	if (llama->context) {
 		llama->context->Dispose();

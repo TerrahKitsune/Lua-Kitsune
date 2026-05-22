@@ -1,12 +1,14 @@
 ﻿#include "platform.h"
 #ifdef KITSUNE_LLAMA
 #include "luallama.h"
+#include "luallama_prompt.h"
 #include "luatoolsuite.h"
 #include "luallamamain.h"
 
 static const struct luaL_Reg llama_functions[] = {
     { "CreateContext",    lua_llama_new           },
     { "CreateToolSuite",  lua_toolsuite_new        },
+    { "CreatePrompt",     lua_llama_prompt_new     },
     { "GetLogs",          lua_llama_getlogs        },
     { "PeekModel",        lua_llama_peekmodel      },
     { "SetModel",       lua_llama_setmodel    },
@@ -71,6 +73,9 @@ int luaopen_llama(lua_State* L) {
     lua_pushvalue(L, -3);                       // module table as __metatable guard
     lua_rawset(L, -3);
     lua_pop(L, 1);   // pop ToolSuite metatable
+
+    // ── LlamaPrompt metatable ──────────────────────────────────────────────────
+    lua_llama_prompt_register(L);
 
     return 1;        // return module table
 }

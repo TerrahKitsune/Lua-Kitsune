@@ -2,12 +2,14 @@
 #include "lua_main_incl.h"
 #ifdef KITSUNE_LLAMA
 #include "LlamaContext.h"
+#include "luallama_prompt.h"
 
 #define LUALLAMA "LUALLAMA"
 
 typedef struct LuaLlama {
-	LlamaContext* context;
-	int           messages_ref; // LUA_NOREF when unused
+	LlamaContext*   context;
+	LuaLlamaPrompt* active_prompt; // non-owning; kept alive via registry ref
+	int             prompt_ref;    // registry ref to the prompt userdata
 } LuaLlama;
 
 LuaLlama* lua_llama_push(lua_State* L);

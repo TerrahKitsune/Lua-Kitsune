@@ -1,6 +1,7 @@
 ﻿#include "platform.h"
 #ifdef KITSUNE_LLAMA
 #include "luatoolsuite.h"
+#include "luallama_prompt.h"
 #include "luajson.h"
 #include <cstring>
 #include <string>
@@ -199,6 +200,8 @@ struct ToolCallEntry {
 struct ToolCallState {
     // Registry ref to the messages table (arg 2 of the original call)
     int messages_ref;
+    // Registry ref to a LuaLlamaPrompt userdata (set when prompt path is used)
+    int prompt_ref;
     // Original length of messages before any tool replies were appended
     int msg_base;
     // Number of replies successfully appended so far
@@ -224,16 +227,26 @@ static void toolcallstate_free(lua_State* L, ToolCallState* state) {
     }
     if (state->messages_ref != LUA_NOREF)
         luaL_unref(L, LUA_REGISTRYINDEX, state->messages_ref);
+    if (state->prompt_ref != LUA_NOREF)
+        luaL_unref(L, LUA_REGISTRYINDEX, state->prompt_ref);
     // gate_ref is an owned ref taken at dispatch time, always free it
     if (state->gate_ref != LUA_NOREF)
         luaL_unref(L, LUA_REGISTRYINDEX, state->gate_ref);
     delete state;
 }
 
-// Append {role='tool', content, tool_call_id} to the messages table.
-static void append_tool_message(lua_State* L, int messages_ref, int slot,
+// Append {role='tool', content, tool_call_id} to the messages table or prompt.
+static void append_tool_message(lua_State* L, ToolCallState* state, int slot,
                                 const std::string& id, const std::string& result) {
-    lua_rawgeti(L, LUA_REGISTRYINDEX, messages_ref);
+    if (state->prompt_ref != LUA_NOREF) {
+        lua_rawgeti(L, LUA_REGISTRYINDEX, state->prompt_ref);
+        LuaLlamaPrompt* lp = (LuaLlamaPrompt*)lua_touserdata(L, -1);
+        lua_pop(L, 1);
+        if (lp && lp->prompt)
+            lp->prompt->AddToolResult(id, result);
+        return;
+    }
+    lua_rawgeti(L, LUA_REGISTRYINDEX, state->messages_ref);
     lua_newtable(L);
     lua_pushliteral(L, "tool");
     lua_setfield(L, -2, "role");
@@ -267,13 +280,13 @@ static int toolsuite_continuation(lua_State* L, int status, lua_KContext ctx) {
     lua_pop(L, 1);
 
     int slot = state->msg_base + state->dispatched + 1;
-    append_tool_message(L, state->messages_ref, slot, state->calls[state->current_idx].id, result_str);
+    append_tool_message(L, state, slot, state->calls[state->current_idx].id, result_str);
     state->dispatched++;
 
     return toolsuite_dispatch_one(L, state);
 }
 
-// ── Gate continuation ──────────────────────────────────────────────────────────
+// ── Gate continuation
 // Called after the permission gate callback completes (or resumes from a yield).
 // If the gate returned truthy, dispatch the tool; otherwise record a denied reply.
 static int toolsuite_gate_continuation(lua_State* L, int status, lua_KContext ctx) {
@@ -286,7 +299,7 @@ static int toolsuite_gate_continuation(lua_State* L, int status, lua_KContext ct
 
     if (!allowed) {
         int slot = state->msg_base + state->dispatched + 1;
-        append_tool_message(L, state->messages_ref, slot,
+        append_tool_message(L, state, slot,
                             state->calls[state->current_idx].id,
                             "error: permission denied");
         state->dispatched++;
@@ -313,7 +326,7 @@ static int toolsuite_dispatch_tool(lua_State* L, ToolCallState* state) {
             ? std::string("Unknown tool")
             : std::string("Tool not found: ") + entry.name;
         int slot = state->msg_base + state->dispatched + 1;
-        append_tool_message(L, state->messages_ref, slot, entry.id, result);
+        append_tool_message(L, state, slot, entry.id, result);
         state->dispatched++;
         return toolsuite_dispatch_one(L, state);
     }
@@ -347,13 +360,13 @@ static int toolsuite_dispatch_tool(lua_State* L, ToolCallState* state) {
     lua_pop(L, 1);
 
     int slot = state->msg_base + state->dispatched + 1;
-    append_tool_message(L, state->messages_ref, slot, entry.id, result_str);
+    append_tool_message(L, state, slot, entry.id, result_str);
     state->dispatched++;
 
     return toolsuite_dispatch_one(L, state);
 }
 
-// ── Main loop — picks the next entry and runs gate (if any) then tool ─────────
+// ── Main loop
 static int toolsuite_dispatch_one(lua_State* L, ToolCallState* state) {
     while (state->next < (int)state->calls.size()) {
         state->current_idx = state->next;
@@ -383,7 +396,7 @@ static int toolsuite_dispatch_one(lua_State* L, ToolCallState* state) {
 
         if (!allowed) {
             int slot = state->msg_base + state->dispatched + 1;
-            append_tool_message(L, state->messages_ref, slot,
+            append_tool_message(L, state, slot,
                                 entry.id, "error: permission denied");
             state->dispatched++;
             continue;
@@ -421,22 +434,84 @@ int lua_toolsuite_setcallback(lua_State* L) {
     return 0;
 }
 
-// ── tools:Call(messages) ──────────────────────────────────────────────────────
-// Inspects the last message in messages. If it is an assistant tool_calls
-// message, dispatches each call to the matching registered function and appends
+// ── tools:Call(prompt_or_messages) ────────────────────────────────────────────
+// Inspects the last message. If it is an assistant tool_calls message,
+// dispatches each call to the matching registered function and appends
 // {role='tool', content=result, tool_call_id=id} entries.
+// Accepts either a LuaLlamaPrompt userdata or a raw Lua table of messages.
 // Uses lua_pcallk so tool callbacks and the permission gate can yield.
 // Returns the number of tools dispatched (0 if the last message is not a tool call).
 
 int lua_toolsuite_call(lua_State* L) {
     LuaToolSuite* suite = lua_toolsuite_check(L, 1);
-    luaL_checktype(L, 2, LUA_TTABLE);
 
-    // Snapshot the stack depth now so every early-return path can restore it
-    // with lua_settop rather than relying on counted pops.
     const int top = lua_gettop(L);
-
 #define CALL_RETURN_ZERO() do { lua_settop(L, top); lua_pushinteger(L, 0); return 1; } while(0)
+
+    // ── Prompt userdata path ───────────────────────────────────────────────
+    if (lua_llama_prompt_is(L, 2)) {
+        LuaLlamaPrompt* lp = lua_llama_prompt_check(L, 2);
+        if (!lp->prompt || lp->prompt->Count() == 0) {
+            lua_pushinteger(L, 0);
+            return 1;
+        }
+        const ChatMessage* last = lp->prompt->Last();
+        if (!last || last->role != "assistant" || last->tool_calls.empty()) {
+            lua_pushinteger(L, 0);
+            return 1;
+        }
+
+        ToolCallState* state = new ToolCallState();
+        state->dispatched   = 0;
+        state->next         = 0;
+        state->current_idx  = 0;
+        state->msg_base     = lp->prompt->Count(); // unused for prompt path but kept for symmetry
+        state->suite        = suite;
+        state->messages_ref = LUA_NOREF;
+        state->prompt_ref   = LUA_NOREF;
+        state->gate_ref     = LUA_NOREF;
+
+        if (suite->gate_ref != LUA_NOREF) {
+            lua_rawgeti(L, LUA_REGISTRYINDEX, suite->gate_ref);
+            state->gate_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+        }
+
+        // Pin the prompt userdata in the registry
+        lua_pushvalue(L, 2);
+        state->prompt_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+
+        for (const ToolCall& tc : last->tool_calls) {
+            ToolCallEntry entry;
+            entry.name     = tc.name;
+            entry.id       = tc.id;
+            entry.args_ref = LUA_NOREF;
+
+            // Decode arguments JSON into a Lua table for the tool function
+            if (!tc.arguments.empty() && tc.arguments != "{}") {
+                lua_rawgetp(L, LUA_REGISTRYINDEX, lua_json_bridge_registry_key());
+                lua_pushcfunction(L, lua_json_decode);
+                lua_insert(L, -2);
+                lua_pushlstring(L, tc.arguments.c_str(), tc.arguments.size());
+                if (lua_pcall(L, 2, 1, 0) == LUA_OK && lua_istable(L, -1))
+                    entry.args_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+                else
+                    lua_pop(L, 1);
+            }
+            state->calls.push_back(std::move(entry));
+        }
+
+        lua_settop(L, top);
+
+        if (state->calls.empty()) {
+            toolcallstate_free(L, state);
+            lua_pushinteger(L, 0);
+            return 1;
+        }
+        return toolsuite_dispatch_one(L, state);
+    }
+
+    // ── Raw table path ─────────────────────────────────────────────────────
+    luaL_checktype(L, 2, LUA_TTABLE);
 
     int msg_count = (int)lua_rawlen(L, 2);
     if (msg_count == 0) {
@@ -470,12 +545,10 @@ int lua_toolsuite_call(lua_State* L) {
     if (!tc_str || tc_len == 0)
         CALL_RETURN_ZERO();
 
-    // Decode tool_calls JSON using the shared bridge
     lua_rawgetp(L, LUA_REGISTRYINDEX, lua_json_bridge_registry_key());
     lua_pushcfunction(L, lua_json_decode);
     lua_insert(L, -2);
     lua_pushlstring(L, tc_str, tc_len);
-    // This decode itself is plain pcall; it is a pure C function, not user code.
     if (lua_pcall(L, 2, 1, 0) != LUA_OK)
         CALL_RETURN_ZERO();
 
@@ -487,8 +560,6 @@ int lua_toolsuite_call(lua_State* L) {
     int calls_table = lua_gettop(L);
     int num_calls   = (int)lua_rawlen(L, calls_table);
 
-    // Build the dispatch state from the decoded array while we still have the
-    // Lua tables on the stack, then clean the stack before any yield can occur.
     ToolCallState* state = new ToolCallState();
     state->dispatched   = 0;
     state->next         = 0;
@@ -496,15 +567,14 @@ int lua_toolsuite_call(lua_State* L) {
     state->msg_base     = msg_count;
     state->suite        = suite;
     state->messages_ref = LUA_NOREF;
+    state->prompt_ref   = LUA_NOREF;
     state->gate_ref     = LUA_NOREF;
-    // Take an independent owned ref to the gate so it cannot be freed under us
-    // if the user calls suite:Callback(nil) while this Call is yielded mid-loop.
+
     if (suite->gate_ref != LUA_NOREF) {
         lua_rawgeti(L, LUA_REGISTRYINDEX, suite->gate_ref);
         state->gate_ref = luaL_ref(L, LUA_REGISTRYINDEX);
     }
 
-    // Store a registry ref to the messages table so it survives yields
     lua_pushvalue(L, 2);
     state->messages_ref = luaL_ref(L, LUA_REGISTRYINDEX);
 
@@ -530,19 +600,15 @@ int lua_toolsuite_call(lua_State* L) {
 
         lua_getfield(L, -1, "arguments");
         if (lua_istable(L, -1)) {
-            // Anchor arguments table in registry so it survives yields
             entry.args_ref = luaL_ref(L, LUA_REGISTRYINDEX);
         } else {
             lua_pop(L, 1);
         }
 
-        lua_pop(L, 1); // pop call object
+        lua_pop(L, 1);
         state->calls.push_back(std::move(entry));
     }
 
-    // Restore the stack to the baseline captured at function entry.
-    // This clears decoded_array + tool_calls_str + last_msg in one safe call,
-    // regardless of how many items the decode phase left behind.
     lua_settop(L, top);
 
     if (state->calls.empty()) {

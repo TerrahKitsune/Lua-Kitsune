@@ -3823,6 +3823,7 @@ A local LLM inference module backed by [llama.cpp](https://github.com/ggml-org/l
 
 ```lua
 LlamaContext  Llama.CreateContext(opt opts)
+LlamaPrompt   Llama.CreatePrompt()
 table         Llama.GetLogs()
 table|nil     Llama.PeekModel(string path)
 ```
@@ -3932,7 +3933,7 @@ true          ctx:UnloadModel()
 true, path    ctx:IsModelLoaded()
 false[, err]  ctx:IsModelLoaded()
 bool          ctx:IsReady()
-bool          ctx:Generate(messages [, opts])
+bool          ctx:Generate(prompt [, opts] [, tools])
 ok, data      ctx:Poll()
 bool          ctx:Stop()
 bool          ctx:Reset()
@@ -4033,31 +4034,22 @@ Returns `true` if the context is idle with a model loaded — i.e. ready to acce
 #### ctx:Generate
 
 ```lua
-true         ctx:Generate(messages [, opts] [, tools])
-nil, errmsg  ctx:Generate(messages [, opts] [, tools])
+true         ctx:Generate(prompt [, opts] [, tools])
+nil, errmsg  ctx:Generate(prompt [, opts] [, tools])
 ```
 
-Queues a generation request. `messages` is an array of chat message tables (OpenAI-format). Returns immediately; output is consumed via `Poll`.
+Queues a generation request. `prompt` must be a `LlamaPrompt` userdata created with `Llama.CreatePrompt()`. Returns immediately; output is consumed via `Poll`.
+
+When generation completes, the assistant reply is **automatically appended** to the prompt as a new message (via `prompt:AddAssistantMessage`). If the model produced tool calls they are stored as a structured `tool_calls` array on that message. There is no need to manually push a reply back into the history.
 
 **Automatic model load / swap:** if no model is loaded yet, `Generate` loads the model set by `SetModel` automatically. If a different model is already loaded (i.e. `SetModel` was called with a new path since the last load), the old model is unloaded, the new one is loaded, and the KV cache is cleared — all transparently before generation begins.
-
-**Context window and auto-trim:**
 
 Returns `nil, errmsg` when:
 - `"already running"` — a generation is already in progress
 - `"no model"` — no model has been set / loaded
 - `"busy"` — the worker is occupied with another task
-- `"empty messages"` — the messages array was empty or contained no valid entries
+- `"empty prompt"` — the prompt contained no messages
 - `"disposed"` — the context has been disposed
-
-**Message table fields:**
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `role` | string | yes | `"system"`, `"user"`, `"assistant"`, or `"tool"` |
-| `content` | string | yes | Message text |
-| `tool_call_id` | string | no | For `"tool"` role messages — the id of the tool call being responded to |
-| `tool_calls` | string or table | no | For `"assistant"` role messages — JSON string or table of tool call objects (OpenAI format) |
 
 **`opts` fields (all optional):**
 
@@ -4070,16 +4062,26 @@ Returns `nil, errmsg` when:
 | `seed` | integer | `-1` | RNG seed. `-1` = random |
 | `max_tokens` | integer | `2048` | Maximum tokens to generate |
 
-The optional `tools` argument (3rd positional arg when `opts` is present, 2nd otherwise) accepts either a **JSON string** or a **Lua table**. When a table is passed it is serialized automatically with empty tables encoded as `{}` so parameter schemas are preserved correctly.
+The optional `tools` argument (3rd positional arg when `opts` is present, 2nd otherwise) accepts a **`ToolSuite` userdata**, a **JSON string**, or a **Lua table**. When a table is passed it is serialized automatically with empty tables encoded as `{}` so parameter schemas are preserved correctly.
 
 ```lua
-ctx:Generate(
-    {
-        { role = 'system',    content = 'You are a helpful assistant.' },
-        { role = 'user',      content = 'What is 2 + 2?' },
-    },
-    { temperature = 0.3, max_tokens = 512 }
-)
+local prompt = Llama.CreatePrompt()
+prompt:SetSystem("You are a helpful assistant.")
+prompt:AddUserMessage("What is 2 + 2?")
+
+ctx:Generate(prompt, { temperature = 0.3, max_tokens = 512 })
+
+local ok, data = ctx:Poll()
+while ok do
+    if data then
+        if data.type == 'error' then error(data.text) end
+        if data.type == 'token' then io.write(data.text) end
+    end
+    Sleep(10)
+    ok, data = ctx:Poll()
+end
+-- prompt now has the assistant reply appended automatically
+print(prompt:Last().content)
 ```
 
 ---
@@ -4091,6 +4093,8 @@ ok, data  ctx:Poll()
 ```
 
 Non-blocking. Drains the next token or event from the worker queue.
+
+When `ok` returns `false` (generation complete), the assistant reply is **automatically appended** to the `LlamaPrompt` that was passed to `Generate` — there is no need to manually construct a reply message.
 
 **Return values:**
 
@@ -4104,8 +4108,7 @@ Non-blocking. Drains the next token or event from the worker queue.
 | Value | Description |
 |-------|-------------|
 | `"token"` | Regular output token text |
-| `"reasoning"` | Token inside a `<think>...</think>` block (Qwen3, DeepSeek-R1, QwQ) |
-| `"tool_calls"` | `data.text` is a JSON array of tool call objects |
+| `"reasoning"` | Token inside a `<think>...</think>` block (Qwen3, DeepSeek-R1, QwQ). Stored in `prompt:Last().reasoning` after generation |
 | `"error"` | `data.text` contains the error message |
 
 When `ok` is `false` there is no more data; the poll loop should exit.
@@ -4114,17 +4117,14 @@ When `ok` is `false` there is no more data; the poll loop should exit.
 local ok, data = ctx:Poll()
 while ok do
     if data then
-        if data.type == 'error' then error(data.text) end
+        if data.type == 'error'     then error(data.text) end
         if data.type == 'token'     then io.write(data.text) end
         if data.type == 'reasoning' then -- discard or log end
-        if data.type == 'tool_calls' then
-            local calls = Json.New():Decode(data.text)
-            -- handle tool calls
-        end
     end
     Sleep(10)
     ok, data = ctx:Poll()
 end
+-- reply (including tool_calls if any) is now in prompt:Last()
 ```
 
 ---
@@ -4235,62 +4235,314 @@ Signals the worker thread to shut down, unloads the model, and frees all resourc
 
 ---
 
-### Tool calling
+### LlamaPrompt
 
-Pass an OpenAI-format tools JSON string as `opts.tools` to `Generate`. When the model produces a tool call the output is detected automatically and returned by `Poll` with `data.type == "tool_calls"` and `data.text` set to a JSON array:
+`LlamaPrompt` is the conversation history object. It owns all messages in a session and is the single source of truth for what has been said. Pass it to `ctx:Generate` and `tools:Call`; the engine appends replies and tool results directly to it.
 
-```json
-[{"name": "get_weather", "arguments": {"city": "Paris"}}]
-```
-
-Supported detection formats: single JSON object, JSON array of objects, and XML `<tool_call>...</tool_call>` tags (Mistral / Hermes style).
+Create one with `Llama.CreatePrompt()`.
 
 ```lua
--- tools can be a Lua table (serialized automatically) or a JSON string
-local tools = {
-    {
-        type     = 'function',
-        ['function'] = {
-            name        = 'get_weather',
-            description = 'Get the weather for a city',
-            parameters  = {
-                type       = 'object',
-                properties = { city = { type = 'string' } },
-                required   = { 'city' },
-            },
-        },
-    },
-}
+LlamaPrompt  Llama.CreatePrompt()
+```
 
--- Pass tools as the third argument (after opts, or second if no opts)
-ctx:Generate(
-    {{ role = 'user', content = 'What is the weather in Paris?' }},
-    { temperature = 0.3 },
-    tools
-)
+#### Summary
 
--- Or with a pre-encoded JSON string:
-ctx:Generate(
-    {{ role = 'user', content = 'What is the weather in Paris?' }},
-    nil,
-    Json.New():Encode(tools)
-)
+```lua
+prompt:SetSystem(content)
+prompt:GetSystem()           -> string
+prompt:AddUserMessage(content)
+prompt:AddAssistantMessage(content [, reasoning])
+prompt:AddToolResult(tool_call_id, content)
+prompt:AddMessage(message)
+prompt:Export()              -> table
+prompt:Import(data)
+prompt:Last()                -> table or nil
+prompt:Clear()
+prompt:TrimmedFrom(index)    -> LlamaPrompt
+#prompt                      -> integer
+prompt[i]                    -> table or nil
+```
 
-local ok, data = ctx:Poll()
-while ok do
-    if data then
-        if data.type == 'error' then error(data.text) end
-        if data.type == 'tool_calls' then
-            local calls = Json.New():Decode(data.text)
-            print(calls[1].name, calls[1].arguments.city)
-        end
-    end
-    Sleep(10)
-    ok, data = ctx:Poll()
+#### Message table shape
+
+All methods that return a message return a table with these fields:
+
+| Field | Type | Present when |
+|-------|------|--------------|
+| `id` | integer | always — stable 1-based id assigned on append |
+| `role` | string | always — `"user"`, `"assistant"`, or `"tool"` |
+| `content` | string | always |
+| `reasoning` | string | assistant messages that had a `<think>` block |
+| `tool_calls` | table | assistant messages that produced tool calls |
+| `tool_call_id` | string | `"tool"` role result messages |
+
+`tool_calls` entries each have `id`, `name`, and `arguments` (JSON string) fields.
+
+---
+
+#### Llama.CreatePrompt
+
+```lua
+LlamaPrompt  Llama.CreatePrompt()
+```
+
+Creates a new empty prompt with no system message and no history.
+
+```lua
+local prompt = Llama.CreatePrompt()
+```
+
+---
+
+#### prompt:SetSystem
+
+```lua
+prompt:SetSystem(content)
+```
+
+Sets (or replaces) the system message. The system message is always prepended to the message list sent to the model and is preserved by `TrimmedFrom`.
+
+```lua
+prompt:SetSystem("You are a helpful assistant.")
+```
+
+---
+
+#### prompt:GetSystem
+
+```lua
+string  prompt:GetSystem()
+```
+
+Returns the current system message content, or an empty string if none is set.
+
+---
+
+#### prompt:AddUserMessage
+
+```lua
+prompt:AddUserMessage(content)
+```
+
+Appends a `"user"` role message.
+
+```lua
+prompt:AddUserMessage("What is the weather in Paris?")
+```
+
+---
+
+#### prompt:AddAssistantMessage
+
+```lua
+prompt:AddAssistantMessage(content [, reasoning])
+```
+
+Appends an `"assistant"` role message. `reasoning` is optional and stored on the message for Lua/UI use, but never sent to the model. Called automatically by `Poll` when generation completes — you do not normally need to call this yourself.
+
+---
+
+#### prompt:AddToolResult
+
+```lua
+prompt:AddToolResult(tool_call_id, content)
+```
+
+Appends a `"tool"` role result message. Called automatically by `tools:Call` — you do not normally need to call this yourself.
+
+```lua
+prompt:AddToolResult("call_abc123", "Sunny, 22°C")
+```
+
+---
+
+#### prompt:AddMessage
+
+```lua
+prompt:AddMessage(message)
+```
+
+Appends a message given as a table in the same shape that `prompt[i]` returns. The `role` field is required and must be `"user"`, `"assistant"`, or `"tool"`. All other fields follow the same rules as the typed helpers.
+
+| Field | Used by role | Notes |
+|---|---|---|
+| `role` | all | **Required.** `"user"`, `"assistant"`, or `"tool"`. |
+| `content` | all | Message body. |
+| `reasoning` | `"assistant"` | Optional chain-of-thought text. |
+| `tool_call_id` | `"tool"` | Id of the tool call being answered. |
+| `tool_calls` | `"assistant"` | Array of `{id, name, arguments}` tables. |
+
+The `id` field from `prompt[i]` is ignored — a new stable id is always assigned.
+
+```lua
+-- Round-trip a message from one prompt into another
+local msg = src[1]
+dst:AddMessage(msg)
+
+-- Manually add an assistant message with tool calls
+prompt:AddMessage({
+    role = "assistant",
+    content = "",
+    tool_calls = {
+        { id = "call_1", name = "get_weather", arguments = '{"city":"Oslo"}' }
+    }
+})
+```
+
+---
+
+#### prompt:Export
+
+```lua
+table  prompt:Export()
+```
+
+Returns the full prompt as a plain Lua table that can be serialized, saved, and later restored with `Import`. The returned table has two fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `system` | `string` | The system message, or `""` if none is set. |
+| `messages` | `table` | Array of message tables in the same shape as `prompt[i]`. |
+
+```lua
+local data = prompt:Export()
+-- data.system  -> "You are helpful."
+-- data.messages[1].role    -> "user"
+-- data.messages[1].content -> "Hello"
+```
+
+---
+
+#### prompt:Import
+
+```lua
+prompt:Import(data)
+```
+
+Clears the prompt and loads it from a table previously produced by `Export`. The `data` argument must have the same structure: an optional `system` string and a `messages` array of message tables. Each message is passed through `AddMessage`, so the same role rules apply.
+
+```lua
+local data = prompt:Export()
+local p2 = Llama.CreatePrompt()
+p2:Import(data)
+-- p2 is now an independent copy of prompt
+```
+
+---
+
+#### prompt:Last
+
+```lua
+table or nil  prompt:Last()
+```
+
+Returns the last message as a table, or `nil` if the prompt is empty.
+
+```lua
+local last = prompt:Last()
+if last and last.tool_calls then
+    -- model wants to call a tool
 end
 ```
 
-After handling tool results, pass them back as `"tool"` role messages and call `Generate` again without calling `Reset` (the KV cache is preserved between `Generate` calls within the same session).
+---
+
+#### prompt:Clear
+
+```lua
+prompt:Clear()
+```
+
+Removes all messages and the system message. Resets the id counter to 1.
+
+---
+
+#### prompt:TrimmedFrom
+
+```lua
+LlamaPrompt  prompt:TrimmedFrom(index)
+```
+
+Returns a new `LlamaPrompt` containing messages from `index` (1-based) to the end. The system message is always preserved in the copy. Useful for passing a sliding window of context to the model while keeping the full history in the original prompt.
+
+```lua
+local recent = prompt:TrimmedFrom(#prompt - 5)  -- last 6 messages
+ctx:Generate(recent, opts)
+```
+
+---
+
+#### #prompt
+
+```lua
+integer  #prompt
+```
+
+Returns the number of messages in the prompt (excluding the system message).
+
+---
+
+#### prompt[i]
+
+```lua
+table or nil  prompt[i]
+```
+
+Returns the message at 1-based index `i`, or `nil` if out of range.
+
+```lua
+for i = 1, #prompt do
+    local msg = prompt[i]
+    print(msg.role, msg.content)
+end
+```
+
+---
+
+### Tool calling
+
+### Tool calling
+
+Tools are registered with a `ToolSuite`. Pass the suite to `ctx:Generate` so the model knows what tools are available. When generation finishes, if the model produced tool calls they are stored on `prompt:Last().tool_calls`. Call `tools:Call(prompt)` to dispatch them; results are appended to the prompt automatically. Then call `ctx:Generate(prompt, ...)` again to let the model continue with the tool results.
+
+```lua
+local tools = Llama.CreateToolSuite()
+tools:AddTool('get_weather', 'Get the weather for a city',
+    { {name='city', type='string', description='City name', required=true} },
+    function(city) return 'Sunny, 22°C in ' .. city end)
+
+local prompt = Llama.CreatePrompt()
+prompt:SetSystem("You are a helpful assistant.")
+prompt:AddUserMessage("What is the weather in Paris?")
+
+-- Generate with tool awareness
+ctx:Generate(prompt, { temperature = 0.3 }, tools)
+
+local ok, data = ctx:Poll()
+while ok do
+    if data and data.type == 'error' then error(data.text) end
+    Sleep(10)
+    ok, data = ctx:Poll()
+end
+
+-- If the model called a tool, dispatch it and generate again
+if prompt:Last() and prompt:Last().tool_calls then
+    tools:Call(prompt)   -- results appended to prompt automatically
+    ctx:Generate(prompt, { temperature = 0.3 }, tools)
+
+    ok, data = ctx:Poll()
+    while ok do
+        if data then
+            if data.type == 'error' then error(data.text) end
+            if data.type == 'token' then io.write(data.text) end
+        end
+        Sleep(10)
+        ok, data = ctx:Poll()
+    end
+end
+```
+
+`tools:Call` also still accepts a raw Lua message table for backwards compatibility.
 
 ---
 
