@@ -622,7 +622,7 @@ void LlamaContext::WorkerLoad() {
         return;
     }
 
-    chat_template = ChatTemplate::Detect(llama_model_chat_template(llama_mdl, nullptr));
+    chat_template = ChatTemplate::Detect(llama_mdl);
     loaded_model_path = model_path;
     model_loaded.store(true);
     {
@@ -666,82 +666,82 @@ void LlamaContext::WorkerResetKV() {
 
 // -- ChatTemplate ---------------------------------------------------------------
 
-ChatTemplate ChatTemplate::Detect(const char* tmpl) {
+// Helper: fill ct with Gemma 4 tags and return it.
+static ChatTemplate make_gemma4() {
     ChatTemplate ct;
+    ct.kind        = ChatTemplate::Kind::GEMMA4;
+    ct.think_open  = "<|channel>thought";
+    ct.think_close = "<channel|>";
+    ct.tool_open   = "<|tool_call>";
+    ct.tool_close  = "<tool_call|>";
+    return ct;
+}
 
-    if (!tmpl) {
-        // No template — default to QWEN_HERMES
-        ct.kind        = Kind::QWEN_HERMES;
-        ct.think_open  = "<think>";
-        ct.think_close = "</think>";
-        ct.tool_open   = "<tool_call>";
-        ct.tool_close  = "</tool_call>";
-        return ct;
-    }
-
-    // Gemma 4: <|turn> / <turn|>
-    if (std::strstr(tmpl, "<|turn>") != nullptr) {
-        ct.kind        = Kind::GEMMA4;
-        ct.think_open  = "<|channel>thought\n";
-        ct.think_close = "<channel|>";
-        ct.tool_open   = "<|tool_call>";
-        ct.tool_close  = "<tool_call|>";
-        return ct;
-    }
-
-    // Gemma 2 / 3: <start_of_turn> / <end_of_turn>
-    if (std::strstr(tmpl, "<start_of_turn>") != nullptr) {
-        ct.kind        = Kind::GEMMA2;
-        ct.think_open  = "<think>";
-        ct.think_close = "</think>";
-        ct.tool_open   = "<tool_call>";
-        ct.tool_close  = "</tool_call>";
-        return ct;
-    }
-
-    // Use lowercase for family detection of other models
-    std::string lower(tmpl);
-    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-
-    if (lower.find("llama3") != std::string::npos ||
-        lower.find("llama-3") != std::string::npos ||
-        lower.find("<|python_tag|>") != std::string::npos) {
-        ct.kind        = Kind::LLAMA3;
-        ct.think_open  = "<think>";
-        ct.think_close = "</think>";
-        ct.tool_open   = "<tool_call>";
-        ct.tool_close  = "</tool_call>";
-        return ct;
-    }
-
-    if (lower.find("[tool_calls]") != std::string::npos ||
-        lower.find("[tool_results]") != std::string::npos ||
-        lower.find("mistral") != std::string::npos) {
-        ct.kind        = Kind::MISTRAL;
-        ct.think_open  = "<think>";
-        ct.think_close = "</think>";
-        ct.tool_open   = "<tool_call>";
-        ct.tool_close  = "</tool_call>";
-        return ct;
-    }
-
-    if (lower.find("command-r") != std::string::npos ||
-        lower.find("cohere") != std::string::npos) {
-        ct.kind        = Kind::COMMAND_R;
-        ct.think_open  = "<think>";
-        ct.think_close = "</think>";
-        ct.tool_open   = "<tool_call>";
-        ct.tool_close  = "</tool_call>";
-        return ct;
-    }
-
-    // Default: QWEN_HERMES
-    ct.kind        = Kind::QWEN_HERMES;
+// Helper: fill ct with Gemma 2/3 tags and return it.
+static ChatTemplate make_gemma2() {
+    ChatTemplate ct;
+    ct.kind        = ChatTemplate::Kind::GEMMA2;
     ct.think_open  = "<think>";
     ct.think_close = "</think>";
     ct.tool_open   = "<tool_call>";
     ct.tool_close  = "</tool_call>";
     return ct;
+}
+
+// Helper: fill ct with the standard think/tool tags used by most models.
+static ChatTemplate make_standard(ChatTemplate::Kind kind) {
+    ChatTemplate ct;
+    ct.kind        = kind;
+    ct.think_open  = "<think>";
+    ct.think_close = "</think>";
+    ct.tool_open   = "<tool_call>";
+    ct.tool_close  = "</tool_call>";
+    return ct;
+}
+
+ChatTemplate ChatTemplate::Detect(const llama_model* mdl) {
+    if (!mdl)
+        return make_standard(Kind::QWEN_HERMES);
+
+    // ── Primary: general.architecture from GGUF metadata ─────────────────
+    char arch[64] = {};
+    llama_model_meta_val_str(mdl, "general.architecture", arch, sizeof(arch));
+
+    std::string a(arch);
+    std::transform(a.begin(), a.end(), a.begin(), ::tolower);
+
+    if (a == "gemma4")
+        return make_gemma4();
+
+    if (a == "gemma3" || a == "gemma2" || a == "gemma") {
+        // Gemma 4 models may report "gemma3" arch via llama.cpp.
+        // Check the Jinja template for confirmed Gemma 4 control tokens.
+        const char* tmpl = llama_model_chat_template(mdl, nullptr);
+        if (tmpl && std::strstr(tmpl, "<|channel>") != nullptr)
+            return make_gemma4();
+        return make_gemma2();
+    }
+
+    if (a.find("llama") != std::string::npos)
+        return make_standard(Kind::LLAMA3);
+
+    if (a.find("mistral") != std::string::npos || a.find("mixtral") != std::string::npos)
+        return make_standard(Kind::MISTRAL);
+
+    if (a.find("command") != std::string::npos || a.find("cohere") != std::string::npos)
+        return make_standard(Kind::COMMAND_R);
+
+    // ── Fallback: scan the Jinja template for known patterns ─────────────
+    // Only reached when general.architecture is missing or unrecognised.
+    const char* tmpl = llama_model_chat_template(mdl, nullptr);
+    if (tmpl) {
+        if (std::strstr(tmpl, "<|channel>") != nullptr)
+            return make_gemma4();
+        if (std::strstr(tmpl, "<start_of_turn>") != nullptr)
+            return make_gemma2();
+    }
+
+    return make_standard(Kind::QWEN_HERMES);
 }
 
 std::string ChatTemplate::MapRole(const std::string& role) const {
@@ -831,11 +831,16 @@ std::string ChatTemplate::BuildToolInjection(const std::string& tools_json) cons
             "\"name\" and \"arguments\" keys.";
 
     case Kind::GEMMA2:
-    case Kind::GEMMA4:
         return "You have access to the following tools:\n" + tools_json + "\n\n"
             "When you need to call a tool, respond with a <tool_call> block containing "
             "a JSON object with \"name\" and \"arguments\" keys.\n"
             "Example:\n<tool_call>\n{\"name\": \"tool_name\", \"arguments\": {\"arg\": \"value\"}}\n</tool_call>";
+
+    case Kind::GEMMA4:
+        return "You have access to the following tools:\n" + tools_json + "\n\n"
+            "When you need to call a tool, respond with a <|tool_call> block containing "
+            "a JSON object with \"name\" and \"arguments\" keys.\n"
+            "Example:\n<|tool_call>\n{\"name\": \"tool_name\", \"arguments\": {\"arg\": \"value\"}}\n<tool_call|>";
     }
     return "";
 }
@@ -849,8 +854,10 @@ std::string ChatTemplate::ReconstructToolCall(const std::vector<ToolCall>& tool_
         switch (kind) {
         case Kind::QWEN_HERMES:
         case Kind::GEMMA2:
-        case Kind::GEMMA4:
             result += "<tool_call>\n" + call_json + "\n</tool_call>\n";
+            break;
+        case Kind::GEMMA4:
+            result += "<|tool_call>\n" + call_json + "\n<tool_call|>\n";
             break;
         case Kind::LLAMA3:
             result += call_json;
@@ -888,8 +895,8 @@ void LlamaContext::WorkerGenerate() {
     tool_call_json.clear();
     has_tool_call.store(false);
 
-    // Detect the model's template family once per generation
-    chat_template = ChatTemplate::Detect(llama_model_chat_template(llama_mdl, nullptr));
+    // Detect the model's template family once per generation using arch metadata
+    chat_template = ChatTemplate::Detect(llama_mdl);
 
     // Build prompt via chat template
     std::vector<llama_chat_message> chat_msgs;
@@ -1139,13 +1146,15 @@ void LlamaContext::WorkerGenerate() {
                         in_think = true;
                     }
                 } else {
-                    // No full open tag yet — keep a partial-tag suffix buffered
+                    // No full open tag yet — keep a partial-tag suffix buffered.
+                    // safe = how many bytes are safe to flush (can't be the start of either tag).
+                    // If pending is shorter than the tag, buffer everything (safe = 0).
                     size_t safe_think = (!THINK_OPEN.empty() && pending.size() >= (THINK_OPEN.size() - 1))
                                         ? pending.size() - (THINK_OPEN.size() - 1)
-                                        : pending.size();
+                                        : 0;
                     size_t safe_tool  = (!TOOL_OPEN.empty() && pending.size() >= (TOOL_OPEN.size() - 1))
                                         ? pending.size() - (TOOL_OPEN.size() - 1)
-                                        : pending.size();
+                                        : 0;
                     size_t safe = safe_tool < safe_think ? safe_tool : safe_think;
                     if (safe > 0) {
                         std::string flush = pending.substr(0, safe);
@@ -1412,6 +1421,66 @@ bool LlamaContext::DetectToolCalls(const std::string& content) {
     size_t end = trimmed.find_last_not_of(" \t\r\n");
     if (end != std::string::npos)
         trimmed = trimmed.substr(0, end + 1);
+
+    // 0. Gemma 4: <|tool_call>call:name{args}<tool_call|> blocks
+    // Inner content is "call:name{json_args}" or "call:name{}" for no args.
+    {
+        std::string result = "[";
+        bool found = false;
+        size_t pos = 0;
+        const std::string G4_OPEN  = "<|tool_call>";
+        const std::string G4_CLOSE = "<tool_call|>";
+        while (true) {
+            size_t tag_start = trimmed.find(G4_OPEN, pos);
+            if (tag_start == std::string::npos)
+                break;
+            size_t inner_start = tag_start + G4_OPEN.size();
+            size_t tag_end = trimmed.find(G4_CLOSE, inner_start);
+            if (tag_end == std::string::npos)
+                break;
+            std::string inner = trimmed.substr(inner_start, tag_end - inner_start);
+            // Trim whitespace
+            size_t is = inner.find_first_not_of(" \t\r\n");
+            if (is != std::string::npos)
+                inner = inner.substr(is);
+            size_t ie = inner.find_last_not_of(" \t\r\n");
+            if (ie != std::string::npos)
+                inner = inner.substr(0, ie + 1);
+
+            // Parse "call:name{args}" format
+            if (inner.substr(0, 5) == "call:") {
+                std::string rest = inner.substr(5);
+                size_t brace = rest.find('{');
+                if (brace != std::string::npos) {
+                    std::string name = rest.substr(0, brace);
+                    std::string args = rest.substr(brace);
+                    // Trim name
+                    size_t ne = name.find_last_not_of(" \t\r\n");
+                    if (ne != std::string::npos)
+                        name = name.substr(0, ne + 1);
+                    if (!name.empty()) {
+                        if (found)
+                            result += ",";
+                        result += "{\"name\":\"" + name + "\",\"arguments\":" + args + "}";
+                        found = true;
+                    }
+                }
+            } else if (!inner.empty()) {
+                // Already JSON — pass through
+                if (found)
+                    result += ",";
+                result += inner;
+                found = true;
+            }
+            pos = tag_end + G4_CLOSE.size();
+        }
+        result += "]";
+        if (found) {
+            tool_call_json = EnsureToolCallIds(result);
+            has_tool_call.store(true);
+            return true;
+        }
+    }
 
     // 1. XML <tool_call>...</tool_call> blocks
     {

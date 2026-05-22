@@ -65,7 +65,7 @@ struct ChatMessage {
 //   - Thinking block tags (e.g. <think> / <|channel>thought)
 //   - Tool-call tags and injection format
 //
-// Detected once from the Jinja template string embedded in the GGUF.
+// Detected once per generation from GGUF general.architecture metadata.
 // Adding support for a new model family only requires touching this struct.
 
 struct ChatTemplate {
@@ -74,23 +74,24 @@ struct ChatTemplate {
 		LLAMA3,
 		MISTRAL,
 		COMMAND_R,
-		GEMMA2,       // Gemma 2 / Gemma 3  (<start_of_turn> / <end_of_turn>)
-		GEMMA4,       // Gemma 4            (<|turn> / <turn|>)
+		GEMMA2,       // Gemma 2 / Gemma 3  (arch: "gemma2" / "gemma3")
+		GEMMA4,       // Gemma 4            (arch: "gemma4")
 	};
 
 	Kind        kind         = Kind::QWEN_HERMES;
 
 	// Thinking-block delimiters (empty = model has no thinking mode)
-	std::string think_open;   // e.g. "<think>"  or  "<|channel>thought\n"
+	std::string think_open;   // e.g. "<think>"  or  "<|channel>thought"
 	std::string think_close;  // e.g. "</think>" or  "<channel|>"
 
 	// Tool-call delimiters used natively by this model
 	std::string tool_open;    // e.g. "<tool_call>"
 	std::string tool_close;   // e.g. "</tool_call>"
 
-	// Detect the right template from the raw Jinja string returned by
-	// llama_model_chat_template(). Falls back to QWEN_HERMES.
-	static ChatTemplate Detect(const char* jinja_tmpl);
+	// Detect the right template from the GGUF model's general.architecture
+	// metadata key. Falls back to the Jinja template string if the arch is
+	// not recognised, and ultimately to QWEN_HERMES.
+	static ChatTemplate Detect(const llama_model* mdl);
 
 	// Map an OpenAI-convention role name to this model's role name.
 	// e.g. "assistant" -> "model" for Gemma 4.
