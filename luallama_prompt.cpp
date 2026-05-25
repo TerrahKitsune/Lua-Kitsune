@@ -5,34 +5,13 @@
 #include <cstring>
 #include <cstdio>
 #include <algorithm>
-
-// ── CRC-32 helper ─────────────────────────────────────────────────────────────
-
-static uint32_t crc32_update(uint32_t crc, const void* data, size_t len) {
-	static const uint32_t table[256] = {
-#define X(i) \
-	(((i)>>1) ^ (((i)&1) ? 0xEDB88320u : 0u))
-#define XX(i) X(i),X(i+1),X(i+2),X(i+3),X(i+4),X(i+5),X(i+6),X(i+7)
-		XX(0),  XX(8),  XX(16), XX(24), XX(32), XX(40), XX(48), XX(56),
-		XX(64), XX(72), XX(80), XX(88), XX(96), XX(104),XX(112),XX(120),
-		XX(128),XX(136),XX(144),XX(152),XX(160),XX(168),XX(176),XX(184),
-		XX(192),XX(200),XX(208),XX(216),XX(224),XX(232),XX(240),XX(248)
-#undef XX
-#undef X
-	};
-	const uint8_t* p = (const uint8_t*)data;
-	for (size_t i = 0; i < len; i++)
-		crc = table[(crc ^ p[i]) & 0xFF] ^ (crc >> 8);
-	return crc;
-}
-
-static uint32_t crc32_str(uint32_t crc, const std::string& s) {
-	return crc32_update(crc, s.data(), s.size());
-}
+#include <atomic>
 
 // ── LlamaPrompt ───────────────────────────────────────────────────────────────
 
-LlamaPrompt::LlamaPrompt() : next_id_(1) {}
+static std::atomic<uint64_t> s_next_prompt_id{1};
+
+LlamaPrompt::LlamaPrompt() : next_id_(1), instance_id(s_next_prompt_id++) {}
 
 void LlamaPrompt::assign_id(ChatMessage& msg) {
 	msg.id = next_id_++;
@@ -124,23 +103,6 @@ std::vector<ChatMessage> LlamaPrompt::BuildMessageList() const {
 	for (const ChatMessage& m : messages_)
 		out.push_back(m);
 	return out;
-}
-
-uint32_t LlamaPrompt::ComputeHash() const {
-	uint32_t crc = 0xFFFFFFFFu;
-	crc = crc32_str(crc, system_content_);
-	for (const ChatMessage& m : messages_) {
-		crc = crc32_str(crc, m.role);
-		crc = crc32_str(crc, m.content);
-		crc = crc32_str(crc, m.reasoning);
-		crc = crc32_str(crc, m.tool_call_id);
-		for (const ToolCall& tc : m.tool_calls) {
-			crc = crc32_str(crc, tc.id);
-			crc = crc32_str(crc, tc.name);
-			crc = crc32_str(crc, tc.arguments);
-		}
-	}
-	return crc ^ 0xFFFFFFFFu;
 }
 
 // ── Lua helpers ───────────────────────────────────────────────────────────────

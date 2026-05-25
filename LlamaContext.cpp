@@ -1,5 +1,6 @@
 ﻿#include "platform.h"
 #include "LlamaContext.h"
+#include "luallama_prompt.h"
 #include <cstdlib>
 #include <cstdio>
 
@@ -487,6 +488,48 @@ const std::vector<float>& LlamaContext::GetEmbedResult() const {
     return embed_result;
 }
 
+// -- UTF-8 helpers --------------------------------------------------------------
+
+// Returns the number of trailing bytes in s[0..len) that belong to an
+// incomplete UTF-8 multibyte sequence.  Flushing those bytes would produce a
+// broken codepoint in the next WebSocket frame's JSON string, which TextDecoder
+// replaces with U+FFFD (shown as ?? in the UI during streaming).
+static size_t utf8_incomplete_tail(const char* s, size_t len) {
+	if (len == 0)
+		return 0;
+	size_t tail = 0;
+	size_t i = len;
+	while (i > 0) {
+		i--;
+		unsigned char c = (unsigned char)s[i];
+		tail++;
+		if ((c & 0x80) == 0x00)
+			return 0; // single-byte — no incomplete sequence
+		if ((c & 0xC0) == 0x80) {
+			if (tail > 3)
+				return 0; // too many continuation bytes — don't withhold
+			continue;
+		}
+		// Leading byte: check if sequence is complete
+		int expected;
+		if      ((c & 0xE0) == 0xC0) expected = 2;
+		else if ((c & 0xF0) == 0xE0) expected = 3;
+		else if ((c & 0xF8) == 0xF0) expected = 4;
+		else
+			return 0; // not a valid leading byte
+		if ((int)tail >= expected)
+			return 0; // complete
+		return tail;   // leading byte present but continuation bytes missing
+	}
+	return 0;
+}
+
+// Largest prefix of s[0..len) that ends on a complete UTF-8 codepoint.
+static size_t utf8_safe_len(const char* s, size_t len) {
+	size_t tail = utf8_incomplete_tail(s, len);
+	return (tail <= len) ? len - tail : 0;
+}
+
 // -- Token queue helpers --------------------------------------------------------
 
 void LlamaContext::PushToken(const std::string& text, bool is_reasoning) {
@@ -549,7 +592,17 @@ void LlamaContext::WorkerMain() {
             task_complete.store(true);
             break;
         case LlamaTask::GENERATE:
-            WorkerGenerate();
+            try {
+                WorkerGenerate();
+            } catch (const std::exception& ex) {
+                PushError(std::string("generation exception: ") + ex.what());
+                PushDone();
+                status.store(LlamaStatus::FAILED);
+            } catch (...) {
+                PushError("generation exception: unknown");
+                PushDone();
+                status.store(LlamaStatus::FAILED);
+            }
             break;
         case LlamaTask::UNLOAD:
             WorkerUnload();
@@ -644,12 +697,14 @@ void LlamaContext::WorkerUnload() {
     }
     model_loaded.store(false);
     loaded_model_path.clear();
+    last_tokens_.clear();
     status.store(LlamaStatus::IDLE);
 }
 
 void LlamaContext::WorkerResetKV() {
     if (llama_ctx)
         llama_memory_clear(llama_get_memory(llama_ctx), true);
+    last_tokens_.clear();
     {
         std::lock_guard<std::mutex> lock(token_mtx);
         token_queue.clear();
@@ -873,6 +928,74 @@ std::string ChatTemplate::ReconstructToolCall(const std::vector<ToolCall>& tool_
     return result;
 }
 
+LlamaPrompt* LlamaContext::TrimPrompt(const LlamaPrompt& prompt) {
+    if (!model_loaded.load() || !llama_mdl || !llama_ctx)
+        return nullptr;
+
+    // Build a working copy of the message list (same as Generate does)
+    std::vector<ChatMessage> messages = prompt.BuildMessageList();
+    if (messages.empty())
+        return nullptr;
+
+    ChatTemplate tmpl = ChatTemplate::Detect(llama_mdl);
+
+    // Format and tokenize
+    std::vector<llama_chat_message> chat_msgs;
+    chat_msgs.reserve(messages.size());
+    for (auto& msg : messages) {
+        llama_chat_message cm;
+        cm.role    = msg.role.c_str();
+        cm.content = msg.content.c_str();
+        chat_msgs.push_back(cm);
+    }
+
+    auto format_and_count = [&]() -> int {
+        std::string formatted = tmpl.FormatPrompt(llama_mdl, chat_msgs.data(), chat_msgs.size(), true);
+        if (formatted.empty())
+            return -1;
+        int n_max = (int)formatted.size() + 256;
+        std::vector<llama_token> toks(n_max);
+        int n = llama_tokenize(llama_model_get_vocab(llama_mdl), formatted.c_str(),
+                               (int32_t)formatted.size(), toks.data(), n_max, true, true);
+        return n;
+    };
+
+    int n_ctx = (int)GetActualNCtx();
+    int n_tokens = format_and_count();
+
+    // Drop oldest non-system messages until it fits, same policy as WorkerGenerate
+    int drop_count = 0;
+    while (n_tokens > n_ctx) {
+        bool has_system = !messages.empty() && messages[0].role == "system";
+        int drop_idx = has_system ? 1 : 0;
+        if (drop_idx >= (int)messages.size())
+            break;
+        messages.erase(messages.begin() + drop_idx);
+        chat_msgs.erase(chat_msgs.begin() + drop_idx);
+        // Re-point char* into the surviving message strings
+        for (size_t i = 0; i < messages.size(); i++) {
+            chat_msgs[i].role    = messages[i].role.c_str();
+            chat_msgs[i].content = messages[i].content.c_str();
+        }
+        drop_count++;
+        n_tokens = format_and_count();
+        if (n_tokens < 0)
+            break;
+    }
+
+    if (drop_count == 0)
+        return nullptr; // already fits — caller can keep using the original
+
+    // Build a new prompt from the surviving messages
+    // The system message is stored separately; surviving user/assistant messages
+    // start at index (has_system ? 1 : 0) in the original prompt.
+    bool had_system = !prompt.GetSystem().empty();
+    // drop_count messages were removed from the front (after system), so
+    // TrimmedFrom skips that many from the original message list.
+    int trim_from = drop_count + 1; // +1 because TrimmedFrom is 1-based
+    return prompt.TrimmedFrom(trim_from);
+}
+
 void LlamaContext::WorkerGenerate() {
     status.store(LlamaStatus::GENERATING);
 
@@ -972,7 +1095,9 @@ void LlamaContext::WorkerGenerate() {
     // Auto-trim: if the prompt exceeds the context window, drop the oldest
     // non-system messages one at a time until the prompt fits.
     // The system message (index 0) is always preserved.
+    bool did_trim = false;
     while (n_tokens > ctx_opts.n_ctx) {
+        did_trim = true;
         bool has_system = !gen_messages.empty() && gen_messages[0].role == "system";
         int drop_idx = has_system ? 1 : 0;
         if (drop_idx >= (int)gen_messages.size()) {
@@ -1022,8 +1147,46 @@ void LlamaContext::WorkerGenerate() {
     // Record how many messages were actually included after trimming
     last_messages_used = (int)gen_messages.size();
 
-    // Clear KV cache for fresh generation
-    llama_memory_clear(llama_get_memory(llama_ctx), true);
+    // KV-cache reuse: find the longest token prefix shared with the previous
+    // generation. If auto-trim fired the message composition changed so we
+    // always do a full reset. Otherwise walk the token arrays to find the
+    // first divergence and only decode from there.
+    // When reusing a prefix we must remove the stale generated tokens that
+    // sit after `common` in the KV cache from the previous round, otherwise
+    // the sampler reads corrupt state.
+    int decode_start = 0;
+    int already_decoded_end = 0; // tracks how far we already decoded during KV reuse validation
+    if (!did_trim && !last_tokens_.empty()) {
+        int common = 0;
+        int limit = (int)(std::min)(last_tokens_.size(), (size_t)n_tokens);
+        while (common < limit && last_tokens_[common] == tokens[common])
+            common++;
+        if (common > 0) {
+            auto* mem = llama_get_memory(llama_ctx);
+            llama_memory_seq_rm(mem, 0, (llama_pos)common, -1);
+            // Validate the first batch with the reused prefix
+            if (common < n_tokens) {
+                int chunk = (std::min)(ctx_opts.n_batch, n_tokens - common);
+                llama_batch trial_batch = llama_batch_get_one(tokens.data() + common, chunk);
+                if (llama_decode(llama_ctx, trial_batch) != 0) {
+                    fprintf(stderr, "[llama] KV prefix reuse failed at common=%d, falling back to full clear\n", common);
+                    llama_memory_clear(mem, true);
+                    last_tokens_.clear();
+                    common = 0;
+                    already_decoded_end = 0;
+                } else {
+                    already_decoded_end = common + chunk;
+                }
+            }
+            decode_start = common;
+        } else {
+            llama_memory_clear(llama_get_memory(llama_ctx), true);
+            last_tokens_.clear();
+        }
+    } else {
+        llama_memory_clear(llama_get_memory(llama_ctx), true);
+        last_tokens_.clear();
+    }
 
     // Create sampler chain
     auto* smpl = llama_sampler_chain_init(llama_sampler_chain_default_params());
@@ -1035,7 +1198,11 @@ void LlamaContext::WorkerGenerate() {
 
     // Decode prompt in n_batch-sized chunks so n_batch can be tuned
     // independently of n_ctx without hitting llama_decode's batch assert.
-    int n_decoded = 0;
+    // already_decoded_end tracks the first batch decoded during KV reuse
+    // validation so we don't decode it a second time.
+    int n_decoded = decode_start;
+    if (already_decoded_end > n_decoded)
+        n_decoded = already_decoded_end;
     while (n_decoded < n_tokens) {
         int chunk = (std::min)(ctx_opts.n_batch, n_tokens - n_decoded);
         llama_batch batch = llama_batch_get_one(tokens.data() + n_decoded, chunk);
@@ -1048,6 +1215,8 @@ void LlamaContext::WorkerGenerate() {
         }
         n_decoded += chunk;
     }
+    // Save the prompt tokens so the next generation can reuse the KV prefix.
+    last_tokens_.assign(tokens.begin(), tokens.begin() + n_tokens);
 
     // Generation loop
     bool in_think = false;
@@ -1156,6 +1325,7 @@ void LlamaContext::WorkerGenerate() {
                                         ? pending.size() - (TOOL_OPEN.size() - 1)
                                         : 0;
                     size_t safe = safe_tool < safe_think ? safe_tool : safe_think;
+                    safe = utf8_safe_len(pending.c_str(), safe);
                     if (safe > 0) {
                         std::string flush = pending.substr(0, safe);
                         full_content += flush;
@@ -1189,6 +1359,7 @@ void LlamaContext::WorkerGenerate() {
                     size_t safe = (!THINK_CLOSE.empty() && pending.size() >= (THINK_CLOSE.size() - 1))
                                   ? pending.size() - (THINK_CLOSE.size() - 1)
                                   : 0;
+                    safe = utf8_safe_len(pending.c_str(), safe);
                     if (safe > 0) {
                         std::string flush = pending.substr(0, safe);
                         full_reasoning += flush;

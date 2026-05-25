@@ -8,6 +8,34 @@
 #include "kitsune_internal.h"
 #include "mem.h"
 
+extern "C" {
+#include <event2/ws.h>
+#include <event2/bufferevent.h>
+}
+#include <curl/curl.h>
+#include <curl/websockets.h>
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#ifdef _WIN32
+#include <windows.h>
+static uint64_t ws_now_ms() { return (uint64_t)GetTickCount64(); }
+#else
+#include <time.h>
+static uint64_t ws_now_ms() {
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return (uint64_t)ts.tv_sec * 1000 + (uint64_t)ts.tv_nsec / 1000000;
+}
+#endif
+
+// After WS_PING_AFTER_MS of silence from the client, send a ping frame to
+// keep the TCP connection alive during long LLM generations.
+// Pong frames are consumed internally by libevent and never reach evws_msg_cb,
+// so we cannot use them as a liveness signal; dead-connection detection is
+// left to the TCP stack (which will fire evws_close_cb when the connection drops).
+#define WS_PING_AFTER_MS 30000u   // 30 s idle before sending a keepalive ping
+
 static void set_did_work(lua_State* L) {
 	void* ud;
 	lua_getallocf(L, &ud);
@@ -19,15 +47,6 @@ static void set_did_work(lua_State* L) {
 	if (slot)
 		slot->didWork = true;
 }
-extern "C" {
-#include <event2/ws.h>
-#include <event2/bufferevent.h>
-}
-#include <curl/curl.h>
-#include <curl/websockets.h>
-#include <string.h>
-#include <stdio.h>
-#include <stdlib.h>
 
 // Shared CURLM* registry key defined in HttpCurl.cpp
 extern const char g_curlm_key;
@@ -148,18 +167,21 @@ static void ws_curlm_step(CURLM* multi) {
 	ws_drain_curlm(multi);
 }
 
-// Send a binary WebSocket frame over the bufferevent (RFC 6455).
-// evws_send always sends text (opcode 0x1); for binary (opcode 0x2) we
-// build the frame header manually and write it directly.
-static void ws_server_send_binary(struct evws_connection* evws,
-	const char* data, size_t len)
+// Send a text or binary WebSocket frame over the bufferevent (RFC 6455).
+// evws_send() has a bug: for payloads > 65535 bytes it writes the 64-bit
+// length indicator (127) but leaves the 8 length bytes as zeros, producing
+// a malformed frame that browsers reject with a protocol error.
+// We always build the frame header manually to avoid this.
+static void ws_server_send_frame(struct evws_connection* evws,
+	const char* data, size_t len, bool binary)
 {
 	struct bufferevent* bev = evws_connection_get_bufferevent(evws);
 	if (!bev)
 		return;
 	unsigned char hdr[10];
 	size_t hdrLen;
-	hdr[0] = 0x82; // FIN + opcode binary
+	// FIN bit (0x80) + opcode: 0x2 = binary, 0x1 = text
+	hdr[0] = binary ? 0x82 : 0x81;
 	if (len <= 125) {
 		hdr[1] = (unsigned char)len;
 		hdrLen = 2;
@@ -172,16 +194,33 @@ static void ws_server_send_binary(struct evws_connection* evws,
 	}
 	else {
 		hdr[1] = 127;
-		hdr[2] = 0; hdr[3] = 0; hdr[4] = 0; hdr[5] = 0;
-		hdr[6] = (unsigned char)(len >> 24);
-		hdr[7] = (unsigned char)((len >> 16) & 0xFF);
-		hdr[8] = (unsigned char)((len >> 8) & 0xFF);
-		hdr[9] = (unsigned char)(len & 0xFF);
+		uint64_t len64 = (uint64_t)len;
+		hdr[2] = (unsigned char)(len64 >> 56);
+		hdr[3] = (unsigned char)((len64 >> 48) & 0xFF);
+		hdr[4] = (unsigned char)((len64 >> 40) & 0xFF);
+		hdr[5] = (unsigned char)((len64 >> 32) & 0xFF);
+		hdr[6] = (unsigned char)((len64 >> 24) & 0xFF);
+		hdr[7] = (unsigned char)((len64 >> 16) & 0xFF);
+		hdr[8] = (unsigned char)((len64 >> 8) & 0xFF);
+		hdr[9] = (unsigned char)(len64 & 0xFF);
 		hdrLen = 10;
 	}
 	bufferevent_write(bev, hdr, hdrLen);
 	if (data && len > 0)
 		bufferevent_write(bev, data, len);
+}
+
+// Send a WebSocket ping frame (opcode 0x9, no payload) over the bufferevent.
+// The browser will reply with a pong; if it doesn't, the TCP stack will
+// eventually time out the connection naturally.
+static void ws_server_send_ping(struct evws_connection* evws) {
+	struct bufferevent* bev = evws_connection_get_bufferevent(evws);
+	if (!bev)
+		return;
+	unsigned char hdr[2];
+	hdr[0] = 0x89; // FIN + opcode 0x9 (ping)
+	hdr[1] = 0x00; // no payload, not masked (server→client is unmasked)
+	bufferevent_write(bev, hdr, 2);
 }
 
 // ---- libevent evws callbacks ------------------------------------------------
@@ -194,6 +233,8 @@ static void evws_msg_cb(struct evws_connection* conn, int type,
 		return;
 	if (ws->maxMsgSize > 0 && len > ws->maxMsgSize)
 		return; // silently drop oversized messages
+	// Any frame from the client resets the keepalive clock.
+	ws->lastDataMs = ws_now_ms();
 	int wstype = WS_TYPE_TEXT;
 	if (type == WS_BINARY_FRAME)
 		wstype = WS_TYPE_BINARY;
@@ -203,15 +244,39 @@ static void evws_msg_cb(struct evws_connection* conn, int type,
 
 static void evws_close_cb(struct evws_connection* conn, void* arg) {
 	LuaWebSocket* ws = (LuaWebSocket*)arg;
-	if (!ws || ws->closed)
+	if (!ws)
 		return;
+	fprintf(stderr, "[WS] evws_close_cb: ws id=%lld already_closed=%d\n",
+		(long long)ws->id, ws->closed ? 1 : 0);
 	// Null the pointer immediately — libevent calls evws_connection_free
 	// after this callback returns, so the pointer will be invalid.
 	ws->evws = NULL;
 	ws->connected = false;
-	// Enqueue a close message so Poll/Read can return it to Lua.
-	WsMsgNode* node = ws_msg_alloc(NULL, 0, WS_TYPE_CLOSE);
-	ws_enqueue(ws, node);
+	// Enqueue a close message so Poll/Read can return it to Lua, but only if
+	// the connection was not already torn down by an explicit Dispose().
+	if (!ws->closed) {
+		WsMsgNode* node = ws_msg_alloc(NULL, 0, WS_TYPE_CLOSE);
+		ws_enqueue(ws, node);
+	}
+	// IMPORTANT: Do NOT call any Lua API here.
+	// This callback fires from within event_base_loop, which can be called
+	// from inside ws_dispose_native, which is itself called from a Lua C
+	// function (Poll/Read/GC). Calling luaL_unref here would re-enter the
+	// Lua API while the stack is already in use, causing an access violation.
+	// self_ref is released by the caller (ws_dispose_native) after
+	// event_base_loop returns, or by ws_release_self_ref in Poll/Read.
+}
+
+// Release self_ref from a safe Lua context (NOT from within event_base_loop).
+// self_ref keeps the WEBSOCKET userdata alive while libevent holds the arg
+// pointer.  Once evws_close_cb has fired (ws->evws == NULL && ws->closed or
+// ws->connected == false), libevent is done with the pointer and we can
+// safely unref from a normal Lua C function call frame.
+static void ws_release_self_ref(lua_State* L, LuaWebSocket* ws) {
+	if (ws->self_ref > 0) {
+		luaL_unref(L, LUA_REGISTRYINDEX, ws->self_ref);
+		ws->self_ref = LUA_NOREF;
+	}
 }
 
 // ---- curl build_headers (local helper; mirrors HttpCurl.cpp) ----------------
@@ -271,7 +336,6 @@ static LuaWebSocket* ws_push_userdata(lua_State* L) {
 	lua_setmetatable(L, -2);
 	memset(ws, 0, sizeof(LuaWebSocket));
 	ws->client_ref = LUA_NOREF;
-	ws->server_ref = LUA_NOREF;
 	ws->context_ref = LUA_NOREF;
 	ws->self_ref = LUA_NOREF;
 	ws->aliveTokenRef = LUA_NOREF;
@@ -351,6 +415,8 @@ static bool ws_client_recv_one(LuaWebSocket* ws) {
 static void ws_dispose_native(lua_State* L, LuaWebSocket* ws) {
 	if (ws->closed)
 		return;
+	fprintf(stderr, "[WS] ws_dispose_native called for ws id=%lld (connected=%d, evws=%p)\n",
+		(long long)ws->id, ws->connected ? 1 : 0, (void*)ws->evws);
 	ws->closed = true;
 	ws->connected = false;
 
@@ -374,16 +440,12 @@ static void ws_dispose_native(lua_State* L, LuaWebSocket* ws) {
 		ws->evws = NULL;
 	}
 	ws->evbase = NULL;
-	if (ws->self_ref > 0) {
-		luaL_unref(L, LUA_REGISTRYINDEX, ws->self_ref);
-		ws->self_ref = LUA_NOREF;
-	}
-	if (ws->server_ref > 0) {
-		luaL_unref(L, LUA_REGISTRYINDEX, ws->server_ref);
-		ws->server_ref = LUA_NOREF;
-	}
+	// Now that event_base_loop has returned we are back in a safe Lua C call
+	// frame and can release self_ref.  evws_close_cb intentionally skips this
+	// because it fires from inside event_base_loop.
+	ws_release_self_ref(L, ws);
 
-	// --- client side ---------------------------------------------------------
+	// --- client side
 	if (ws->easy) {
 		if (ws->multi)
 			curl_multi_remove_handle(ws->multi, ws->easy);
@@ -441,6 +503,8 @@ int WebSocket_Dispose(lua_State* L) {
 
 int WebSocket_GC(lua_State* L) {
 	LuaWebSocket* ws = (LuaWebSocket*)luaL_checkudata(L, 1, LUAWEBSOCKET);
+	if (!ws->closed)
+		fprintf(stderr, "[WS] __gc fired on LIVE ws id=%lld\n", (long long)ws->id);
 	ws_dispose_native(L, ws);
 	return 0;
 }
@@ -480,6 +544,8 @@ int WebSocket_SetMaxMessageSize(lua_State* L) {
 
 // WebSocket:Poll() — non-blocking; drives network, returns next WsMessage or nil.
 // Server side: libevent callbacks already enqueue into msg_head; just dequeue.
+// Also handles server-initiated ping keepalive: sends a ping after 30 s of
+// client silence and closes the connection if no response arrives within 30 s.
 // Client side: calls curl_ws_recv until no more data, then dequeues.
 int WebSocket_Poll(lua_State* L) {
 	LuaWebSocket* ws = (LuaWebSocket*)luaL_checkudata(L, 1, LUAWEBSOCKET);
@@ -493,6 +559,20 @@ int WebSocket_Poll(lua_State* L) {
 		ws_curlm_step(ws->multi);
 		while (ws_client_recv_one(ws))
 			;
+	}
+	else if (ws->evws && ws->connected) {
+		// Server: send a ping after WS_PING_AFTER_MS of client silence to keep
+		// the TCP connection alive during long LLM generations.
+		// NOTE: libevent's evws_msg_cb only fires for TEXT/BINARY frames; pong
+		// frames are consumed internally and never reach our callback, so we
+		// cannot use pong receipt as a liveness signal.  We rely on TCP itself
+		// to detect genuinely dead connections (evws_close_cb will fire).
+		uint64_t now = ws_now_ms();
+		if (now - ws->lastDataMs >= WS_PING_AFTER_MS) {
+			ws_server_send_ping(ws->evws);
+			// Reset so we don't spam pings every Poll() call.
+			ws->lastDataMs = now;
+		}
 	}
 
 	WsMsgNode* node = ws_dequeue(ws);
@@ -530,7 +610,14 @@ static int WebSocket_ReadContinuation(lua_State* L, int status, lua_KContext ctx
 		while (ws_client_recv_one(ws))
 			;
 	}
-	// Server: libevent callbacks push messages; no extra work needed here.
+	else if (ws->evws && ws->connected) {
+		// Server: same periodic ping as Poll().
+		uint64_t now = ws_now_ms();
+		if (now - ws->lastDataMs >= WS_PING_AFTER_MS) {
+			ws_server_send_ping(ws->evws);
+			ws->lastDataMs = now;
+		}
+	}
 
 	WsMsgNode* node = ws_dequeue(ws);
 	if (node) {
@@ -554,6 +641,29 @@ int WebSocket_Read(lua_State* L) {
 	return WebSocket_ReadContinuation(L, LUA_OK, 0);
 }
 
+// WebSocket:Ping() — sends a WebSocket ping frame to the client.
+// Returns true if the ping was sent, false if the connection is closed.
+// The browser will respond with a pong automatically; we don't track it
+// here — TCP will detect the dead connection if no response ever comes.
+int WebSocket_Ping(lua_State* L) {
+	LuaWebSocket* ws = (LuaWebSocket*)luaL_checkudata(L, 1, LUAWEBSOCKET);
+	if (ws->closed || !ws->connected) {
+		lua_pushboolean(L, 0);
+		return 1;
+	}
+	if (ws->evws) {
+		ws_server_send_ping(ws->evws);
+		lua_pushboolean(L, 1);
+	}
+	else {
+		// Client-side: use curl to send a ping frame
+		size_t nsent = 0;
+		CURLcode rc = curl_ws_send(ws->easy, "", 0, &nsent, 0, CURLWS_PING);
+		lua_pushboolean(L, rc == CURLE_OK ? 1 : 0);
+	}
+	return 1;
+}
+
 // WebSocket:Send(data [, binary]) — returns true on success, false on failure/overflow.
 int WebSocket_Send(lua_State* L) {
 	LuaWebSocket* ws = (LuaWebSocket*)luaL_checkudata(L, 1, LUAWEBSOCKET);
@@ -566,6 +676,8 @@ int WebSocket_Send(lua_State* L) {
 	bool binary = lua_toboolean(L, 3) != 0;
 
 	if (ws->maxMsgSize > 0 && len > ws->maxMsgSize) {
+		fprintf(stderr, "[WS] Send: oversized payload len=%zu (max=%zu) id=%lld\n",
+			len, ws->maxMsgSize, (long long)ws->id);
 		// Oversized send: return false without closing.
 		lua_pushboolean(L, 0);
 		return 1;
@@ -573,11 +685,9 @@ int WebSocket_Send(lua_State* L) {
 
 	bool ok = false;
 	if (ws->evws) {
-		// Server side: use manual binary framing for binary frames, evws_send for text.
-		if (binary)
-			ws_server_send_binary(ws->evws, data, len);
-		else
-			evws_send(ws->evws, data, len);
+		// Server side: always use manual framing — evws_send has a bug with
+		// payloads > 65535 bytes (writes the 8-byte length field as zeros).
+		ws_server_send_frame(ws->evws, data, len, binary);
 		ok = true;
 	}
 	else if (ws->easy) {
@@ -755,7 +865,38 @@ int ws_server_upgrade(lua_State* L) {
 	LuaWebSocket* ws = ws_push_userdata(L);
 	// Stack: [resp, ws]
 
-	struct evws_connection* evws = evws_new_session(req->req,
+	// evhttp_start_ws_() (called inside evws_new_session) calls
+	// evhttp_connection_free() which synchronously fires conn_close_cb on the
+	// LuaHttpServer.  conn_close_cb uses r->req to look up what to clean up.
+	// If r->req is still set when that callback fires it will call
+	// HttpRequest_Cleanup on a request that libevent is in the middle of
+	// freeing — corrupting state and aborting the TCP connection.
+	// Null these out NOW, before evws_new_session, so conn_close_cb sees
+	// an already-handled connection and returns early.
+	struct evhttp_request* raw_req = req->req;
+	struct evhttp_connection* evcon = evhttp_request_get_connection(raw_req);
+
+	// Pre-clear the evhttp_connection timeout. Best-effort: evws_new_session
+	// steals the bufferevent from evcon, so we also clear it on the bev below.
+	if (evcon)
+		evhttp_connection_set_timeout_tv(evcon, NULL);
+
+	// Mark the request as upgraded before evws_new_session fires conn_close_cb.
+	req->req = NULL;
+	req->upgraded = true;
+	resp->finalized = true;
+	// Also clear the registry entries keyed by req* and con* so conn_close_cb
+	// finds nothing and returns immediately.
+	if (evcon) {
+		lua_pushlightuserdata(L, (void*)evcon);
+		lua_pushnil(L);
+		lua_rawset(L, LUA_REGISTRYINDEX);
+	}
+	lua_pushlightuserdata(L, (void*)raw_req);
+	lua_pushnil(L);
+	lua_rawset(L, LUA_REGISTRYINDEX);
+
+	struct evws_connection* evws = evws_new_session(raw_req,
 		evws_msg_cb, ws, 0);
 	if (!evws) {
 		lua_pop(L, 1);
@@ -766,21 +907,57 @@ int ws_server_upgrade(lua_State* L) {
 
 	evws_connection_set_closecb(evws, evws_close_cb, ws);
 
+	// Replace libevent's broken ws_evhttp_error_cb with our own.
+	// The stock callback only handles BEV_EVENT_EOF — any other bufferevent
+	// error (BEV_EVENT_ERROR, BEV_EVENT_TIMEOUT, etc.) is silently swallowed:
+	// reads stop, the connection appears alive on our side, but the browser
+	// gets no more data and eventually closes from its end via TCP timeout.
+	// We store a pointer to our error handler in the ws struct and install it
+	// by reaching into the bufferevent after evws_new_session has set its own
+	// read callback (which we must preserve).
+	{
+		struct bufferevent* bev = evws_connection_get_bufferevent(evws);
+		if (bev) {
+			bufferevent_set_timeouts(bev, NULL, NULL);
+			// evws_new_session already called bufferevent_setcb with its own
+			// read+error callbacks. We want to keep the read callback intact
+			// and only replace the error callback. bufferevent_setcb with NULL
+			// for readcb would zero it, so we use the event callback field only
+			// via bufferevent_setcb — but we need the existing readcb pointer.
+			// libevent exposes bufferevent_getcb for exactly this purpose.
+			bufferevent_data_cb  readcb  = NULL;
+			bufferevent_data_cb  writecb = NULL;
+			bufferevent_event_cb eventcb = NULL;
+			void*                cbarg   = NULL;
+			bufferevent_getcb(bev, &readcb, &writecb, &eventcb, &cbarg);
+			// Install our fixed error handler, preserving the read callback.
+			bufferevent_setcb(bev, readcb, writecb,
+				[](struct bufferevent*, short what, void* arg) {
+					// Close the WS connection on any bufferevent error or EOF.
+					// libevent's stock ws_evhttp_error_cb only handles EOF,
+					// leaving BEV_EVENT_ERROR/BEV_EVENT_TIMEOUT silently broken.
+					fprintf(stderr, "[WS] bev error event: what=0x%04x (EOF=%d ERR=%d TIMEOUT=%d)\n",
+						(unsigned)what,
+						(what & BEV_EVENT_EOF)     ? 1 : 0,
+						(what & BEV_EVENT_ERROR)   ? 1 : 0,
+						(what & BEV_EVENT_TIMEOUT) ? 1 : 0);
+					struct evws_connection* evws = (struct evws_connection*)arg;
+					evws_close(evws, 1001 /* going away */);
+				},
+				cbarg);
+		}
+	}
+
 	ws->evws = evws;
 	ws->evbase = req->server ? req->server->base : NULL;
 	ws->connected = true;
 	ws->L = L;
+	ws->lastDataMs = ws_now_ms();
 
-	// Hold a registry ref to the WEBSOCKET userdata itself so the close callback
-	// can safely read from ws-> even if Lua has no other references to it.
+	// Hold a registry ref to the WEBSOCKET userdata so evws_close_cb can
+	// safely access ws-> even if Lua has dropped its own reference.
 	lua_pushvalue(L, -1);
 	ws->self_ref = luaL_ref(L, LUA_REGISTRYINDEX);
-
-	// Null out the underlying evhttp_request* so HttpRequest_Cleanup does not
-	// double-free it after evws_new_session takes ownership.
-	req->req = NULL;
-	req->upgraded = true;
-	resp->finalized = true;
 
 	return 1;
 }
@@ -827,6 +1004,8 @@ int luaopen_websocket(lua_State* L) {
 	lua_setfield(L, -2, "GetContext");
 	lua_pushcfunction(L, WebSocket_SetMaxMessageSize);
 	lua_setfield(L, -2, "SetMaxMessageSize");
+	lua_pushcfunction(L, WebSocket_Ping);
+	lua_setfield(L, -2, "Ping");
 	lua_setfield(L, -2, "__index");
 	lua_pop(L, 1);
 

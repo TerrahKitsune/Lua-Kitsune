@@ -899,5 +899,200 @@ namespace KitsuneNet.Tests
                 return true
             ").Boolean.ShouldBeTrue();
         }
+
+        // -- KV cache reuse and tool-call round stability ----------------------
+
+        // Verify that two consecutive generations reuse the KV prefix without
+        // crashing. This is the simplest regression for the out_of_range bug
+        // triggered by llama_memory_seq_rm leaving the cache in a bad state.
+        [LlamaFact]
+        public void Llama_Generate_TwoConsecutiveGenerations_NoCrash()
+        {
+            using KitsuneEngine engine = new();
+            var result = engine.RunString($@"
+                local ctx = Llama.CreateContext()
+                ctx:SetModel([[{ModelPath}]])
+                ctx:LoadModel()
+                local deadline = os.clock() + 30
+                while ctx:Info().context.status == 'loading' and os.clock() < deadline do end
+
+                local function generate(userMsg)
+                    local prompt = Llama.CreatePrompt()
+                    prompt:AddUserMessage(userMsg)
+                    ctx:Generate(prompt)
+                    local out = ''
+                    local ok, data = ctx:Poll()
+                    while ok do
+                        if data then
+                            if data.type == 'error' then error('gen error: ' .. tostring(data.text)) end
+                            if data.type == 'token' then out = out .. data.text end
+                        end
+                        Sleep(10)
+                        ok, data = ctx:Poll()
+                    end
+                    return out
+                end
+
+                local r1 = generate('Say the word hello.')
+                local r2 = generate('Say the word world.')
+                ctx:Dispose()
+                return #r1 > 0 and #r2 > 0
+            ");
+            result.Boolean.ShouldBeTrue();
+        }
+
+        // Verify that a generation → tool result → second generation round
+        // completes without throwing std::out_of_range. This is the primary
+        // regression scenario for the KV prefix reuse bug.
+        [LlamaFact]
+        public void Llama_Generate_ToolCallRound_KVReuse_NoCrash()
+        {
+            using KitsuneEngine engine = new();
+            var result = engine.RunString($@"
+                local ctx = Llama.CreateContext()
+                ctx:SetModel([[{ModelPath}]])
+                ctx:LoadModel()
+                local deadline = os.clock() + 30
+                while ctx:Info().context.status == 'loading' and os.clock() < deadline do end
+
+                -- First round: a plain assistant turn
+                local prompt = Llama.CreatePrompt()
+                prompt:SetSystem('You are a helpful assistant.')
+                prompt:AddUserMessage('What is 2+2?')
+                ctx:Generate(prompt)
+                local out1 = ''
+                local ok, data = ctx:Poll()
+                while ok do
+                    if data then
+                        if data.type == 'error' then error('round1 error: ' .. tostring(data.text)) end
+                        if data.type == 'token' then out1 = out1 .. data.text end
+                    end
+                    Sleep(10)
+                    ok, data = ctx:Poll()
+                end
+
+                -- Simulate a tool-call round: extend the prompt with a tool
+                -- result and generate again (this is the path that triggered
+                -- the out_of_range crash via KV prefix reuse with seq_rm).
+                local prompt2 = Llama.CreatePrompt()
+                prompt2:SetSystem('You are a helpful assistant.')
+                prompt2:AddUserMessage('What is 2+2?')
+                prompt2:AddAssistantMessage(out1)
+                prompt2:AddToolResult('call_test', '4')
+                prompt2:AddUserMessage('Now say done.')
+                ctx:Generate(prompt2)
+                local out2 = ''
+                ok, data = ctx:Poll()
+                while ok do
+                    if data then
+                        if data.type == 'error' then error('round2 error: ' .. tostring(data.text)) end
+                        if data.type == 'token' then out2 = out2 .. data.text end
+                    end
+                    Sleep(10)
+                    ok, data = ctx:Poll()
+                end
+
+                ctx:Dispose()
+                return #out1 > 0 and #out2 > 0
+            ");
+            result.Boolean.ShouldBeTrue();
+        }
+
+        // Verify that multiple back-to-back tool-call rounds all complete
+        // without errors. This stresses the KV reuse/fallback path repeatedly.
+        [LlamaFact]
+        public void Llama_Generate_MultipleToolRounds_NoCrash()
+        {
+            using KitsuneEngine engine = new();
+            var result = engine.RunString($@"
+                local ctx = Llama.CreateContext()
+                ctx:SetModel([[{ModelPath}]])
+                ctx:LoadModel()
+                local deadline = os.clock() + 30
+                while ctx:Info().context.status == 'loading' and os.clock() < deadline do end
+
+                local function generate(prompt)
+                    ctx:Generate(prompt)
+                    local out = ''
+                    local ok, data = ctx:Poll()
+                    while ok do
+                        if data then
+                            if data.type == 'error' then error('error: ' .. tostring(data.text)) end
+                            if data.type == 'token' then out = out .. data.text end
+                        end
+                        Sleep(10)
+                        ok, data = ctx:Poll()
+                    end
+                    return out
+                end
+
+                local rounds = 0
+                local p = Llama.CreatePrompt()
+                p:SetSystem('Reply in one sentence.')
+                p:AddUserMessage('Say hi.')
+                local prev = generate(p)
+                rounds = rounds + 1
+
+                for i = 1, 3 do
+                    local p2 = Llama.CreatePrompt()
+                    p2:SetSystem('Reply in one sentence.')
+                    p2:AddUserMessage('Say hi.')
+                    p2:AddAssistantMessage(prev)
+                    p2:AddToolResult('call_' .. i, 'result_' .. i)
+                    p2:AddUserMessage('Continue.')
+                    prev = generate(p2)
+                    rounds = rounds + 1
+                end
+
+                ctx:Dispose()
+                return rounds
+            ");
+            result.AsInt64.ShouldBe(4);
+        }
+
+        // Verify that after the KV fallback (clear + full re-decode) the
+        // status returns to idle and no error is reported. We simulate a
+        // truncated/divergent prompt to force the fallback path.
+        [LlamaFact]
+        public void Llama_Generate_KVFallback_DoesNotError()
+        {
+            using KitsuneEngine engine = new();
+            var result = engine.RunString($@"
+                local ctx = Llama.CreateContext()
+                ctx:SetModel([[{ModelPath}]])
+                ctx:LoadModel()
+                local deadline = os.clock() + 30
+                while ctx:Info().context.status == 'loading' and os.clock() < deadline do end
+
+                local function gen(msg)
+                    local p = Llama.CreatePrompt()
+                    p:AddUserMessage(msg)
+                    ctx:Generate(p)
+                    local errored = false
+                    local ok, data = ctx:Poll()
+                    while ok do
+                        if data and data.type == 'error' then errored = true end
+                        Sleep(10)
+                        ok, data = ctx:Poll()
+                    end
+                    return not errored
+                end
+
+                -- First gen seeds last_tokens_
+                local ok1 = gen('Hello world.')
+                -- Completely different prompt forces prefix mismatch (common=0),
+                -- which exercises the full-clear fallback branch.
+                local ok2 = gen('Goodbye universe.')
+                -- Third gen: prefix of gen2 matches, exercising the reuse branch.
+                local ok3 = gen('Goodbye universe.')
+                ctx:Dispose()
+                return ok1 and ok2 and ok3
+            ");
+            result.Boolean.ShouldBeTrue();
+        }
+
+        // -- end KV cache / tool-call round tests ------------------------------
+
+        // -- end of class
     }
 }

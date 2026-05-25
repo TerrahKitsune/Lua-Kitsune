@@ -59,9 +59,9 @@ public:
 	// System message (if set) is inserted at position 0.
 	std::vector<ChatMessage> BuildMessageList() const;
 
-	// CRC-32 over the full content (system + all messages).
-	// Used by LlamaContext to detect whether the KV cache can be reused.
-	uint32_t              ComputeHash() const;
+	// Stable instance identifier for KV-cache reuse detection.
+	// Unique per LlamaPrompt object; never changes after construction.
+	uint64_t              instance_id;
 
 private:
 	uint32_t                  next_id_;

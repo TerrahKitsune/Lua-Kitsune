@@ -21,6 +21,7 @@ static const struct luaL_Reg llama_functions[] = {
     { "Stop",           lua_llama_stop        },
     { "Reset",          lua_llama_reset       },
     { "Embed",          lua_llama_embed       },
+    { "TrimPrompt",     lua_llama_trimprompt  },
     { "Info",           lua_llama_info        },
     { "Dispose",        lua_llama_dispose     },
     { NULL, NULL }

@@ -566,6 +566,33 @@ int lua_llama_info(lua_State* L) {
 	return 1;
 }
 
+// ctx:TrimPrompt(prompt) -> trimmed_prompt or nil
+// Returns a new LlamaPrompt that fits in the loaded model's context window,
+// or nil if the prompt already fits (no trimming needed) or no model is loaded.
+int lua_llama_trimprompt(lua_State* L) {
+	LuaLlama* llama = lua_llama_check(L, 1);
+	if (!llama->context || llama->context->IsDisposed())
+		return push_disposed_error(L);
+
+	LuaLlamaPrompt* lp = lua_llama_prompt_check(L, 2);
+	if (!lp->prompt) {
+		lua_pushnil(L);
+		lua_pushliteral(L, "invalid prompt");
+		return 2;
+	}
+
+	LlamaPrompt* trimmed = llama->context->TrimPrompt(*lp->prompt);
+	if (!trimmed) {
+		// nil = already fits or no model loaded
+		lua_pushnil(L);
+		return 1;
+	}
+
+	LuaLlamaPrompt* np = lua_llama_prompt_push(L);
+	np->prompt = trimmed;
+	return 1;
+}
+
 // ctx:Dispose() -> true
 int lua_llama_dispose(lua_State* L) {
 	LuaLlama* llama = lua_llama_check(L, 1);
@@ -728,6 +755,7 @@ int lua_llama_reset(lua_State* L) { return luaL_error(L, "llama not available");
 int lua_llama_embed(lua_State* L) { return luaL_error(L, "llama not available"); }
 int lua_llama_info(lua_State* L) { return luaL_error(L, "llama not available"); }
 int lua_llama_dispose(lua_State* L) { lua_pushboolean(L, 1); return 1; }
+int lua_llama_trimprompt(lua_State* L) { lua_pushnil(L); return 1; }
 int lua_llama_getlogs(lua_State* L) { lua_newtable(L); return 1; }
 int lua_llama_peekmodel(lua_State* L) { lua_pushnil(L); lua_pushliteral(L, "llama not available"); return 2; }
 

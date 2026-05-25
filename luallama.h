@@ -29,6 +29,7 @@ int lua_llama_stop(lua_State* L);
 int lua_llama_reset(lua_State* L);
 int lua_llama_embed(lua_State* L);
 int lua_llama_info(lua_State* L);
+int lua_llama_trimprompt(lua_State* L);
 int lua_llama_dispose(lua_State* L);
 int lua_llama_getlogs(lua_State* L);
 int lua_llama_peekmodel(lua_State* L);

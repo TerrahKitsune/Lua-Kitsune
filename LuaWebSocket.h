@@ -52,7 +52,6 @@ typedef struct LuaWebSocket {
     // --- server side (evws non-NULL when this is a server connection) --------
     struct evws_connection* evws;
     struct event_base*      evbase;     // borrowed from LuaHttpServer; used to pump after close
-    int                     server_ref; // registry ref keeping LuaHttpServer alive
 
     // --- client side (easy non-NULL when this is a client connection) --------
     CURL*               easy;
@@ -82,6 +81,14 @@ typedef struct LuaWebSocket {
     int         self_ref;      // registry ref to this userdata (server only, for callback routing)
     int         context_ref;   // LUA_NOREF until GetContext() first called
     lua_Integer id;            // stable monotonically-increasing ID assigned at creation
+
+    // --- server-side ping keepalive ------------------------------------------
+    // lastDataMs is updated when a TEXT/BINARY frame arrives from the client.
+    // A ping frame is sent after WS_PING_AFTER_MS of silence to keep the TCP
+    // connection alive during long LLM generations.  Pong frames are consumed
+    // internally by libevent (evws_msg_cb is never called for them), so dead
+    // connection detection is left entirely to the TCP stack.
+    uint64_t lastDataMs;   // ms timestamp of last received client frame
 } LuaWebSocket;
 
 // ---- module init ------------------------------------------------------------
@@ -98,6 +105,7 @@ int WebSocket_IsConnected    (lua_State* L);
 int WebSocket_Poll           (lua_State* L);
 int WebSocket_Read           (lua_State* L);
 int WebSocket_Send           (lua_State* L);
+int WebSocket_Ping           (lua_State* L);
 int WebSocket_Dispose        (lua_State* L);
 int WebSocket_GetId          (lua_State* L);
 int WebSocket_GetContext     (lua_State* L);

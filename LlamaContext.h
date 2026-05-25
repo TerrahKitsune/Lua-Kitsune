@@ -12,6 +12,7 @@
 struct llama_model;
 struct llama_context;
 struct llama_chat_message;
+class  LlamaPrompt;
 
 // ── Enums ──────────────────────────────────────────────────────────────────────
 
@@ -167,10 +168,13 @@ public:
 	std::string GetLoadedModelPath() const;
 	bool        IsReady() const;
 	bool        Generate(std::vector<ChatMessage> messages, LlamaGenOpts&& opts);
+	LlamaPrompt* TrimPrompt(const LlamaPrompt& prompt);
 	bool        Stop();
 	bool        Reset();
 	bool        Embed(const std::string& text);
 	void        Dispose();
+
+
 
 	// ── Poll (called from Lua thread, non-blocking) ────────────────────────
 
@@ -294,4 +298,8 @@ private:
 
 	// Last generation stats
 	int                         last_messages_used = 0;
+
+	// KV-cache reuse — store the token sequence decoded in the last generation.
+	// On the next call, compare prefix to find where to start decoding from.
+	std::vector<int32_t>        last_tokens_;
 };
