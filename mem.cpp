@@ -112,7 +112,7 @@ void kitsune_set_allocators(
 
 // ── Core allocators ────────────────────────────────────────────────────────────
 void* kitsune_malloc(size_t size) {
-	void* p = s_malloc_fn(size);
+	void* p = (s_malloc_fn ? s_malloc_fn : ::malloc)(size);
 #ifdef _DEBUG
 	if (p)
 		g_live_allocs++;
@@ -127,12 +127,12 @@ void* kitsune_realloc(void* ptr, size_t size) {
 	}
 	if (!ptr)
 		return kitsune_malloc(size);
-	return s_realloc_fn(ptr, size);  // resize; allocation count unchanged
+	return (s_realloc_fn ? s_realloc_fn : ::realloc)(ptr, size);  // resize; allocation count unchanged
 }
 
 void kitsune_free(void* ptr) {
 	if (ptr) {
-		s_free_fn(ptr);
+		(s_free_fn ? s_free_fn : ::free)(ptr);
 #ifdef _DEBUG
 		g_live_allocs--;
 #endif

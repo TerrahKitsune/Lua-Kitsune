@@ -819,8 +819,12 @@ int ws_client_connect(lua_State* L) {
 	curl_easy_setopt(ws->easy, CURLOPT_SSL_VERIFYHOST, client->verifySsl ? 2L : 0L);
 	curl_easy_setopt(ws->easy, CURLOPT_NOSIGNAL, 1L);
 	curl_easy_setopt(ws->easy, CURLOPT_PRIVATE, ws->curlMsg);
+	// Use CONNECTTIMEOUT, not TIMEOUT_MS. CURLOPT_TIMEOUT_MS is a total-transfer
+	// deadline that fires on the multi handle even during the live data phase,
+	// killing the socket while the coroutine is still waiting for echo frames.
+	// CURLOPT_CONNECTTIMEOUT_MS only covers the TCP+TLS+HTTP-101 handshake.
 	if (client->timeoutMs > 0)
-		curl_easy_setopt(ws->easy, CURLOPT_TIMEOUT_MS, (long)client->timeoutMs);
+		curl_easy_setopt(ws->easy, CURLOPT_CONNECTTIMEOUT_MS, (long)client->timeoutMs);
 
 	curl_multi_add_handle(multi, ws->easy);
 

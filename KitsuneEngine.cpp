@@ -58,6 +58,7 @@
 #include "MD5Main.h"
 #include "LuaAesMain.h"
 #include "LuaSQLiteMain.h"
+#include "LuaDuckDBMain.h"
 #include "TimerMain.h"
 #include "LuaFileSystemMain.h"
 #include "StreamMain.h"
@@ -1650,6 +1651,7 @@ extern "C" {
 		luaopen_hardware(L);     lua_setglobal(L, "Hardware");
 		luaopen_luaaes(L);       lua_setglobal(L, "Aes");
 		luaopen_sqlite(L);       lua_setglobal(L, "SQLite");
+		luaopen_duckdb(L);       lua_setglobal(L, "DuckDB");
 		luaopen_timer(L);        lua_setglobal(L, "Timer");
 		luaopen_filesystem(L);   lua_setglobal(L, "FileSystem");
 		luaopen_md5(L);          lua_setglobal(L, "MD5");

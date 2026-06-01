@@ -26,6 +26,7 @@ A comprehensive reference for all available functions in the Lua environment.
 - [Postgres](#postgres)
 - [Timer](#timer)
 - [SQLite](#sqlite)
+- [DuckDB](#duckdb)
 - [Json](#json)
 - [Wchar](#wchar)
 - [UInt](#uint)
@@ -2239,6 +2240,49 @@ db:Close()
 |---------------|---------|
 | `"ROW"` | First row is ready; call `Fetch()` / `GetRow()` to read results |
 | `"DONE"` | Statement completed with no (more) rows (typical for DDL/DML or empty SELECT) |
+| `false, errmsg` | Preparation or execution error |
+
+---
+
+## DuckDB
+
+```lua
+DuckDB      DuckDB.Open(opt filename)
+bool, txt   DuckDB:Execute(sql, opt params)
+bool, txt   DuckDB:Query(sql, opt params)
+nil         DuckDB:Finish()
+bool        DuckDB:Fetch()
+table|value DuckDB:GetRow(opt index)
+nil         DuckDB:Close()
+```
+
+Always compiled in (self-contained amalgamation, no external dependencies).
+
+| Function | Description |
+|----------|-------------|
+| `Open` | Open a DuckDB database. Omit `filename` (or pass `nil`) for an in-memory database |
+| `Execute` | Prepare and execute `sql`. Returns `true, "ROW"` if the first row is ready, `true, "DONE"` when there are no rows (DDL/DML or empty SELECT), or `false, errmsg` on error. Call `Fetch` / `GetRow` to consume results |
+| `Query` | Alias for `Execute` |
+| `Finish` | Destroy the current prepared statement and result early, allowing a new `Execute` before all rows have been consumed |
+| `Fetch` | Advance to the next result row. Returns `true` while a row is available, `false` when exhausted |
+| `GetRow` | Without arguments (or `0`): returns the current row as a string-keyed table `{columnName = value, ...}`. With a positive 1-based integer index: returns that single column value directly. Returns `nil` if the index is out of range or there is no active row |
+| `Close` | Disconnect and close the database |
+
+### Parameter binding
+
+`Execute` / `Query` accept an optional second argument to bind positional parameters (`$1`, `$2`, …):
+
+- **Array table** `{val1, val2, …}` — values bound by position
+- **Function** `function(index) return val end` — called once per parameter index (1-based)
+
+Supported Lua types: `nil` → NULL, `boolean` → BOOLEAN, integer → BIGINT, float → DOUBLE, string → VARCHAR.
+
+### Execute return values
+
+| Return | Meaning |
+|--------|---------|
+| `true, "ROW"` | First row is ready; call `Fetch()` / `GetRow()` to read results |
+| `true, "DONE"` | Statement completed with no (more) rows (typical for DDL/DML or empty SELECT) |
 | `false, errmsg` | Preparation or execution error |
 
 ---

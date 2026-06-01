@@ -134,9 +134,9 @@ CreateGCPrint();
 collectgarbage();
 GetKey = Session.Console.GetKey;
 
-FileSystem.SetCurrentDirectory("C:\\Users\\Terrah\\Documents\\GitHub\\KitsuneUI");
-dofile("main.lua");
-if true then return; end
+--FileSystem.SetCurrentDirectory("C:\\Users\\Terrah\\Documents\\GitHub\\KitsuneUI");
+--dofile("main.lua");
+--if true then return; end
 
 local tools = Llama.CreateToolSuite()
 tools:AddTool(
