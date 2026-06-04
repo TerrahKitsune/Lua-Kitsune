@@ -758,6 +758,15 @@
     <ClCompile Include="luatoolsuite.cpp">
       <Filter>LuaLlama\Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="LuaDuckDB.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaDuckDBMain.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="DuckDB\duckdb.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="KitsuneEngine.h">
@@ -1188,6 +1197,15 @@
     </ClInclude>
     <ClInclude Include="luatoolsuite.h">
       <Filter>LuaLlama\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaDuckDB.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaDuckDBMain.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DuckDB\duckdb.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
