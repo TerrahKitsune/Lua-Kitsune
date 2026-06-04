@@ -30,7 +30,7 @@ static const luaL_Reg kafkaproducermeta[] = {
 static const luaL_Reg kafkaconsumerfunctions[] = {
     { "Subscribe",          ConsumerSubscribe          },
     { "Assign",             ConsumerAssign             },
-    { "Commit",             ConsumerCommit             },
+    { "Poll",               ConsumerPoll               },
     { "Seek",               ConsumerSeek               },
     { "GetOffsets",         ConsumerGetOffsets         },
     { "GetMetadata",        ConsumerGetMetadata        },
@@ -49,17 +49,6 @@ static const luaL_Reg kafkaconsumerfunctions[] = {
 static const luaL_Reg kafkaconsumermeta[] = {
     { "__gc",       ConsumerGC       },
     { "__tostring", ConsumerToString },
-    { NULL, NULL }
-};
-
-static const luaL_Reg kafkacoroutinemethods[] = {
-    { "AutoCommit",     ConsumeAutoCommit      },
-    { "SetAliveToken",  ConsumerSetAliveToken  },
-    { NULL, NULL }
-};
-
-static const luaL_Reg kafkacoroutinemeta[] = {
-    { "__gc", ConsumeCoroutineGC },
     { NULL, NULL }
 };
 
@@ -93,23 +82,6 @@ int luaopen_kafka(lua_State* L) {
 
     register_type(L, LUAKAFKAPRODUCER, kafkaproducerfunctions, kafkaproducermeta);
     register_type(L, LUAKAFKACONSUMER, kafkaconsumerfunctions, kafkaconsumermeta);
-
-    // KAFKACONSUMERSTATE — internal userdata, only needs __gc for cleanup
-    luaL_newmetatable(L, LUAKAFKACONSUMERSTATE);
-    lua_pop(L, 1);
-
-    // KAFKACONSUMECOROUTINE — thread metatable: __gc + __index -> methods table
-    luaL_newlibtable(L, kafkacoroutinemethods);
-    luaL_setfuncs(L, kafkacoroutinemethods, 0);
-
-    luaL_newmetatable(L, LUAKAFKACONSUMECOROUTINE);
-    luaL_setfuncs(L, kafkacoroutinemeta, 0);
-
-    lua_pushliteral(L, "__index");
-    lua_pushvalue(L, -3);
-    lua_rawset(L, -3);
-
-    lua_pop(L, 2);
 
     // Module table returned to Lua
     luaL_newlibtable(L, kafkamodule);

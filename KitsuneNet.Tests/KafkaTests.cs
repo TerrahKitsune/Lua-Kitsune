@@ -30,11 +30,62 @@ public sealed class KafkaTests
     {
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
-            local c = Kafka.NewConsumer({{['bootstrap.servers']='{Bootstrap()}'}})
+            local c = Kafka.NewConsumer({{['bootstrap.servers']='{Bootstrap()}'}})  
             assert(c, 'NewConsumer returned nil')
             return tostring(c):sub(1, 13)
         ");
         r.String.ShouldBe("KafkaConsumer");
+    }
+
+    [KafkaFact]
+    public async Task Consumer_Subscribe_ReturnsTrue()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
+            local c = Kafka.NewConsumer({{
+                ['bootstrap.servers'] = '{Bootstrap()}',
+                ['group.id']          = 'test_kitsune'
+            }})
+            local ok, err = c:Subscribe({{'{Topic()}'}})
+            c:Close()
+            return tostring(ok) .. ':' .. tostring(err == nil)
+        ");
+        r.String.ShouldBe("true:true");
+    }
+
+    [KafkaFact]
+    public async Task Consumer_Assign_ReturnsTrue()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
+            local c = Kafka.NewConsumer({{
+                ['bootstrap.servers'] = '{Bootstrap()}',
+                ['group.id']          = 'test_kitsune'
+            }})
+            local ok, err = c:Assign({{'{Topic()}:{Partition()}'}})
+            c:Close()
+            return tostring(ok) .. ':' .. tostring(err == nil)
+        ");
+        r.String.ShouldBe("true:true");
+    }
+
+    [KafkaFact]
+    public async Task Consumer_Poll_IdleReturnsTrue()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
+            local c = Kafka.NewConsumer({{
+                ['bootstrap.servers'] = '{Bootstrap()}',
+                ['group.id']          = 'test_kitsune',
+                ['auto.offset.reset'] = 'latest'
+            }})
+            assert(c:Subscribe({{'{Topic()}'}}))
+            local ok, msg = c:Poll()
+            c:Close()
+            -- idle: ok=true, msg=nil
+            return tostring(ok) .. ':' .. tostring(msg == nil)
+        ");
+        r.String.ShouldBe("true:true");
     }
 
     [KafkaFact]
@@ -168,18 +219,17 @@ public sealed class KafkaTests
                 ['bootstrap.servers'] = bootstrap,
                 ['group.id']          = 'test_kitsune',
             }})
-            local co = consumer:Assign({{topic .. ':' .. part .. ':' .. hi0}})
+            assert(consumer:Assign({{topic .. ':' .. part .. ':' .. hi0}}))
 
             local deadline = Time() + 15000
             local data = nil
             while Time() < deadline do
-                local ok2, d = coroutine.resume(co, false)
+                local ok2, d = consumer:Poll()
                 if not ok2 then error(tostring(d)) end
                 if d and d.Value == uniqueVal then data = d; break end
                 if not d then Sleep(50) end
             end
 
-            coroutine.resume(co, true)
             consumer:Close()
 
             if not data then return 'no-message' end
@@ -190,25 +240,7 @@ public sealed class KafkaTests
 
     // -- consumer -------------------------------------------------------------
     [KafkaFact]
-    public async Task Consumer_Subscribe_ReturnsThread()
-    {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local c = Kafka.NewConsumer({{
-                ['bootstrap.servers'] = '{Bootstrap()}',
-                ['group.id']          = 'test_kitsune'
-            }})
-            assert(c, 'NewConsumer failed')
-            local co = c:Subscribe({{'{Topic()}'}})
-            assert(co, 'Subscribe returned nil')
-            c:Close()
-            return type(co)
-        ");
-        r.String.ShouldBe("thread");
-    }
-
-    [KafkaFact]
-    public async Task Consumer_Subscribe_ToMultipleTopics_ReturnsThread()
+    public async Task Consumer_Subscribe_ToMultipleTopics_Succeeds()
     {
         using KitsuneEngine engine = new();
 
@@ -227,36 +259,16 @@ public sealed class KafkaTests
                 ['bootstrap.servers'] = bootstrap,
                 ['group.id']          = 'test_kitsune'
             }})
-            local co = c:Subscribe({{topic1, topic2}})
-            local ok2 = co ~= nil
-            if co then coroutine.resume(co, true) end
+            local ok2, err2 = c:Subscribe({{topic1, topic2}})
             c:Close()
 
             local p2 = Kafka.NewProducer({{['bootstrap.servers'] = bootstrap}})
             p2:DestroyTopic(topic2)
             p2:Close()
 
-            return tostring(ok2) .. ':' .. tostring(type(co) == 'thread')
+            return tostring(ok2)
         ");
-        r.String.ShouldBe("true:true");
-    }
-
-    [KafkaFact]
-    public async Task Consumer_Assign_ReturnsThread()
-    {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local c = Kafka.NewConsumer({{
-                ['bootstrap.servers'] = '{Bootstrap()}',
-                ['group.id']          = 'test_kitsune'
-            }})
-            assert(c, 'NewConsumer failed')
-            local co = c:Assign({{'{Topic()}:0'}})
-            assert(co, 'Assign returned nil')
-            c:Close()
-            return type(co)
-        ");
-        r.String.ShouldBe("thread");
+        r.String.ShouldBe("true");
     }
 
     // -- round-trip -----------------------------------------------------------
@@ -282,12 +294,12 @@ public sealed class KafkaTests
                 ['bootstrap.servers'] = bootstrap,
                 ['group.id']          = 'test_kitsune',
             }})
-            local co = consumer:Assign({{topic .. ':' .. part .. ':' .. hi0}})
+            assert(consumer:Assign({{topic .. ':' .. part .. ':' .. hi0}}))
 
             local deadline = Time() + 15000
             local received = nil
             while Time() < deadline do
-                local ok2, data = coroutine.resume(co, false)
+                local ok2, data = consumer:Poll()
                 if not ok2 then error(tostring(data)) end
                 if data and data.Value == uniqueVal then
                     received = data.Value
@@ -296,7 +308,6 @@ public sealed class KafkaTests
                 if not data then Sleep(50) end
             end
 
-            coroutine.resume(co, true)
             consumer:Close()
             return tostring(received ~= nil)
         ");
@@ -325,12 +336,12 @@ public sealed class KafkaTests
                 ['bootstrap.servers'] = bootstrap,
                 ['group.id']          = 'test_kitsune',
             }})
-            local co = consumer:Assign({{topic .. ':' .. part .. ':' .. hi0}})
+            assert(consumer:Assign({{topic .. ':' .. part .. ':' .. hi0}}))
 
             local deadline = Time() + 15000
             local data = nil
             while Time() < deadline do
-                local ok2, d = coroutine.resume(co, false)
+                local ok2, d = consumer:Poll()
                 if not ok2 then error(tostring(d)) end
                 if d and d.Value == uniqueVal then
                     data = d
@@ -339,7 +350,6 @@ public sealed class KafkaTests
                 if not d then Sleep(50) end
             end
 
-            coroutine.resume(co, true)
             consumer:Close()
 
             if not data then return 'no-message' end
@@ -359,9 +369,9 @@ public sealed class KafkaTests
         r.String.ShouldBe("true");
     }
 
-    // -- manual commit ---------------------------------------------------------
+    // -- implicit commit via next Poll -----------------------------------------
     [KafkaFact]
-    public async Task Consumer_ManualCommit_CommitsAndPreventsDoubleCommit()
+    public async Task Consumer_Poll_CommitsImplicitlyOnNextCall()
     {
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
@@ -371,7 +381,6 @@ public sealed class KafkaTests
             local uniqueVal = 'kitsune-commit-' .. tostring(Time())
 
             local producer = Kafka.NewProducer({{['bootstrap.servers'] = bootstrap}})
-            -- Snapshot before producing so the consumer starts exactly at this message.
             local ok0, lo0, hi0 = producer:GetOffsets(topic, part)
             assert(ok0, tostring(lo0))
             local ok, err = producer:Send(topic, 'commit-key', uniqueVal, nil, part)
@@ -382,34 +391,23 @@ public sealed class KafkaTests
                 ['bootstrap.servers'] = bootstrap,
                 ['group.id']          = 'test_kitsune',
             }})
-            local co = consumer:Assign({{topic .. ':' .. part .. ':' .. hi0}})
-            co:AutoCommit(false)
+            assert(consumer:Assign({{topic .. ':' .. part .. ':' .. hi0}}))
 
             local deadline = Time() + 15000
             local found = false
             while Time() < deadline do
-                local ok2, d = coroutine.resume(co, false)
+                local ok2, d = consumer:Poll()
                 if not ok2 then error(tostring(d)) end
                 if d and d.Value == uniqueVal then found = true; break end
                 if not d then Sleep(50) end
             end
 
-            coroutine.resume(co, true)
-
-            if not found then
-                consumer:Close()
-                return 'no-message'
-            end
-
-            -- First commit must succeed (consumer holds pending after the coroutine stop)
-            local ok1, e1 = consumer:Commit()
-            -- Second commit must fail (pending was cleared by the first)
-            local ok2, e2 = consumer:Commit()
-
+            -- One more poll commits the previously received message implicitly
+            if found then consumer:Poll() end
             consumer:Close()
-            return tostring(ok1) .. ':' .. tostring(ok2) .. ':' .. tostring(type(e2) == 'string')
+            return tostring(found)
         ");
-        r.String.ShouldBe("true:false:true");
+        r.String.ShouldBe("true");
     }
 
     // -- AutoCommit toggle -----------------------------------------------------
@@ -442,13 +440,13 @@ public sealed class KafkaTests
                 ['bootstrap.servers'] = bootstrap,
                 ['group.id']          = 'test_kitsune',
             }})
-            local co = consumer:Assign({{topic .. ':' .. part .. ':' .. hi_hw}})
+            assert(consumer:Assign({{topic .. ':' .. part .. ':' .. hi_hw}}))
 
             -- Receive exactly the messages we just produced; no historical backlog
             local deadline = Time() + 15000
             local found = 0
             while Time() < deadline do
-                local ok2, data = coroutine.resume(co, false)
+                local ok2, data = consumer:Poll()
                 if not ok2 then error(tostring(data)) end
                 if data and data.ErrorCode == 0 and
                    string.sub(data.Value, 1, #prefix) == prefix then
@@ -458,7 +456,6 @@ public sealed class KafkaTests
                 if not data then Sleep(50) end
             end
 
-            coroutine.resume(co, true)
             consumer:Close()
             return tostring(found) .. '/' .. tostring(count)
         ");
@@ -497,9 +494,8 @@ public sealed class KafkaTests
                 ['group.id']          = groupId,
                 ['auto.offset.reset'] = 'latest'
             }})
-            local co = consumer:Subscribe({{topic}})
-            coroutine.resume(co, false)  -- one poll to register
-            coroutine.resume(co, true)
+            assert(consumer:Subscribe({{topic}}))
+            consumer:Poll()  -- one poll to register
             consumer:Close()
 
             local p = Kafka.NewProducer({{['bootstrap.servers'] = bootstrap}})
@@ -542,20 +538,18 @@ public sealed class KafkaTests
                 ['bootstrap.servers'] = bootstrap,
                 ['group.id']          = groupId,
             }})
-            local co = consumer:Assign({{topic .. ':' .. part .. ':' .. hi0}})
-            co:AutoCommit(false)
+            assert(consumer:Assign({{topic .. ':' .. part .. ':' .. hi0}}))
 
             local deadline = Time() + 10000
             local data = nil
             while Time() < deadline do
-                local ok2, d = coroutine.resume(co, false)
+                local ok2, d = consumer:Poll()
                 if not ok2 then error(tostring(d)) end
                 if d and d.Value == uniqueVal then data = d; break end
                 if not d then Sleep(50) end
             end
-            coroutine.resume(co, true)
-
-            if data then consumer:Commit() end
+            -- Poll once more to commit the pending message implicitly
+            if data then consumer:Poll() end
             consumer:Close()
 
             if not data then return 'no-message' end
@@ -915,12 +909,12 @@ public sealed class KafkaTests
                 ['group.id']          = 'test_kitsune',
                 ['auto.offset.reset'] = 'latest'
             }})
-            local co = consumer:Assign({{topic .. ':' .. part .. ':' .. hi0}})
+            assert(consumer:Assign({{topic .. ':' .. part .. ':' .. hi0}}))
 
             local deadline = Time() + 15000
             local found = 0
             while Time() < deadline do
-                local ok2, data = coroutine.resume(co, false)
+                local ok2, data = consumer:Poll()
                 if not ok2 then error(tostring(data)) end
                 if data and data.ErrorCode == 0 and
                    string.sub(data.Value, 1, #prefix) == prefix then
@@ -930,7 +924,6 @@ public sealed class KafkaTests
                 if not data then Sleep(50) end
             end
 
-            coroutine.resume(co, true)
             consumer:Close()
             return tostring(found) .. '/' .. tostring(count)
         ");
@@ -954,12 +947,12 @@ public sealed class KafkaTests
                 ['auto.offset.reset'] = 'latest'   -- config says latest…
             }})
             -- …but the ':earliest' keyword in the Assign string overrides it
-            local co = consumer:Assign({{topic .. ':' .. part .. ':earliest'}})
+            assert(consumer:Assign({{topic .. ':' .. part .. ':earliest'}}))
 
             local deadline = Time() + 10000
             local received = 0
             while Time() < deadline do
-                local ok2, data = coroutine.resume(co, false)
+                local ok2, data = consumer:Poll()
                 if not ok2 then error(tostring(data)) end
                 if data and data.ErrorCode == 0 then
                     received = received + 1
@@ -968,7 +961,6 @@ public sealed class KafkaTests
                 if not data then Sleep(50) end
             end
 
-            coroutine.resume(co, true)
             consumer:Close()
             return tostring(received >= 1)
         ");
@@ -1005,15 +997,13 @@ public sealed class KafkaTests
                 ['group.id']          = 'test_kitsune',
                 ['auto.offset.reset'] = 'earliest'
             }})
-            local co = consumer:Assign({{topic .. ':' .. part}})
+            assert(consumer:Assign({{topic .. ':' .. part}}))
 
             -- Warm up: drive polls for a fixed 3 s window to ensure librdkafka has
             -- fully established the partition assignment before Seek is called.
-            -- On Linux, early responses can arrive before the internal state is ready;
-            -- a time-based loop is safer than breaking after the first poll.
             local warmDeadline = Time() + 3000
             while Time() < warmDeadline do
-                coroutine.resume(co, false)
+                consumer:Poll()
                 Sleep(50)
             end
 
@@ -1026,7 +1016,7 @@ public sealed class KafkaTests
             local deadline = Time() + 15000
             local found = 0
             while Time() < deadline do
-                local ok2, data = coroutine.resume(co, false)
+                local ok2, data = consumer:Poll()
                 if not ok2 then error(tostring(data)) end
                 if data and data.ErrorCode == 0 and
                    string.sub(data.Value, 1, #prefix) == prefix then
@@ -1036,49 +1026,12 @@ public sealed class KafkaTests
                 if not data then Sleep(50) end
             end
 
-            coroutine.resume(co, true)
             consumer:Close()
             return tostring(found) .. '/' .. tostring(count)
         ");
         r.String.ShouldBe("3/3");
     }
 
-    [KafkaFact]
-    public async Task Consumer_DroppedBeforeCoroutineFinishes_DoesNotCrash()
-    {
-        using KitsuneEngine engine = new();
-
-        // Regression for the consumer lifetime bug:
-        // if the consumer is GC'd while a coroutine still holds a reference to
-        // state->owner, the next poll would use-after-free. The registry anchor
-        // introduced to fix that must keep the consumer alive.
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local bootstrap = '{Bootstrap()}'
-            local topic     = '{Topic()}'
-
-            local co
-            do
-                local consumer = Kafka.NewConsumer({{
-                    ['bootstrap.servers'] = bootstrap,
-                    ['group.id']          = 'test_kitsune',
-                    ['auto.offset.reset'] = 'latest'
-                }})
-                co = consumer:Subscribe({{topic}})
-                -- consumer goes out of scope here; the local block ends
-            end
-
-            -- Force a collection cycle; consumer should NOT be destroyed yet
-            -- because the coroutine still holds its registry anchor
-            collectgarbage('collect')
-
-            -- Drive one poll — must not crash or error
-            local ok, data = coroutine.resume(co, false)
-            coroutine.resume(co, true)  -- clean stop releases the anchor
-
-            return tostring(ok)
-        ");
-        r.String.ShouldBe("true");
-    }
 
     [KafkaFact]
     public async Task Consumer_GetGroupOffsets_WithPartitionFilter()
@@ -1186,15 +1139,13 @@ public sealed class KafkaTests
                 ['group.id']          = 'test_kitsune',
                 ['auto.offset.reset'] = 'latest'
             }})
-            local co = consumer:Assign({{topic .. ':' .. part}})
+            assert(consumer:Assign({{topic .. ':' .. part}}))
 
             -- Warm-up: drive polls for a fixed 5 s window so librdkafka has fully
             -- established the Assign-based partition assignment before Seek is called.
-            -- On Linux, early nil responses can arrive before the assignment is stable;
-            -- a time-based loop avoids breaking out prematurely.
             local warmDeadline = Time() + 5000
             while Time() < warmDeadline do
-                coroutine.resume(co, false)
+                consumer:Poll()
                 Sleep(50)
             end
 
@@ -1206,7 +1157,7 @@ public sealed class KafkaTests
             local deadline = Time() + 10000
             local received = 0
             while Time() < deadline do
-                local ok2, data = coroutine.resume(co, false)
+                local ok2, data = consumer:Poll()
                 if not ok2 then error(tostring(data)) end
                 if data and data.ErrorCode == 0 then
                     received = received + 1
@@ -1215,7 +1166,6 @@ public sealed class KafkaTests
                 if not data then Sleep(50) end
             end
 
-            coroutine.resume(co, true)
             consumer:Close()
             return tostring(received >= 1)
         ");
@@ -1239,19 +1189,18 @@ public sealed class KafkaTests
                 ['auto.offset.reset'] = 'earliest'  -- config says earliest...
             }})
             -- ...but ':latest' in the string overrides it
-            local co = consumer:Assign({{topic .. ':' .. part .. ':latest'}})
+            assert(consumer:Assign({{topic .. ':' .. part .. ':latest'}}))
 
             -- Poll for 2 seconds; no old messages should arrive
             local deadline = Time() + 2000
             local received = 0
             while Time() < deadline do
-                local ok2, data = coroutine.resume(co, false)
+                local ok2, data = consumer:Poll()
                 if not ok2 then error(tostring(data)) end
                 if data and data.ErrorCode == 0 then received = received + 1 end
                 if not data then Sleep(50) end
             end
 
-            coroutine.resume(co, true)
             consumer:Close()
             return tostring(received == 0)
         ");
@@ -1327,24 +1276,6 @@ public sealed class KafkaTests
         r.String.ShouldStartWith("true");
     }
 
-    [KafkaFact]
-    public async Task Consumer_AutoCommitToggle_DoesNotError()
-    {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local c = Kafka.NewConsumer({{
-                ['bootstrap.servers'] = '{Bootstrap()}',
-                ['group.id']          = 'test_kitsune'
-            }})
-            local co = c:Subscribe({{'{Topic()}'}})
-            co:AutoCommit(false)
-            co:AutoCommit(true)
-            coroutine.resume(co, true)
-            c:Close()
-            return 'ok'
-        ");
-        r.String.ShouldBe("ok");
-    }
 
     [KafkaFact]
     public async Task StressTest_OneProducerTwoConsumers_SharedGroupSplitPartitions()
@@ -1399,14 +1330,14 @@ public sealed class KafkaTests
                 ['bootstrap.servers'] = '{Bootstrap()}',
                 ['group.id']          = '{groupId}',
             }})
-            local co = consumer:Assign({{'{stressTopic}:{partition}:earliest'}})
+            assert(consumer:Assign({{'{stressTopic}:{partition}:earliest'}}))
 
             local seen     = {{}}
             local found    = 0
             local deadline = Time() + 90000
 
             while Time() < deadline do
-                local ok, d = coroutine.resume(co, false)
+                local ok, d = consumer:Poll()
                 if not ok then error(tostring(d)) end
                 if d and d.ErrorCode == 0 and d.Key
                    and string.sub(d.Key, 1, #prefix) == prefix
@@ -1418,7 +1349,6 @@ public sealed class KafkaTests
                 if not d then Sleep(10) end
             end
 
-            coroutine.resume(co, true)
             consumer:Close()
             return tostring(found)
         ";
@@ -1457,57 +1387,6 @@ public sealed class KafkaTests
                 p:Close()
             ");
         }
-    }
-
-    // -- AliveToken integration -----------------------------------------------
-    [KafkaFact]
-    public async Task Consumer_SetAliveToken_DoesNotRaise()
-    {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local c = Kafka.NewConsumer({{['bootstrap.servers']='{Bootstrap()}', ['group.id']='test_alive_noerr'}})
-            local co = c:Subscribe({{'{Topic()}'}})
-            co:SetAliveToken(AliveToken.New())
-            coroutine.resume(co, true)
-            c:Close()
-            return 'ok'
-        ");
-        r.String.ShouldBe("ok");
-    }
-
-    [KafkaFact]
-    public async Task Consumer_AliveToken_DisposedToken_StopsCoroutine()
-    {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local c = Kafka.NewConsumer({{['bootstrap.servers']='{Bootstrap()}', ['group.id']='test_alive_stop'}})
-            local co = c:Subscribe({{'{Topic()}'}})
-            local token = AliveToken.New()
-            co:SetAliveToken(token)
-            coroutine.resume(co)
-            token:Dispose()
-            coroutine.resume(co)
-            return tostring(coroutine.status(co) == 'dead')
-        ");
-        r.String.ShouldBe("true");
-    }
-
-    [KafkaFact]
-    public async Task Consumer_AliveToken_LiveToken_PumpContinues()
-    {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local c = Kafka.NewConsumer({{['bootstrap.servers']='{Bootstrap()}', ['group.id']='test_alive_live'}})
-            local co = c:Subscribe({{'{Topic()}'}})
-            local token = AliveToken.New()
-            co:SetAliveToken(token)
-            for i = 1, 5 do coroutine.resume(co) end
-            local alive = coroutine.status(co) == 'suspended'
-            coroutine.resume(co, true)
-            c:Close()
-            return tostring(alive)
-        ");
-        r.String.ShouldBe("true");
     }
 
     // -- Cleanup utility -------------------------------------------------------

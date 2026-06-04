@@ -1,22 +1,8 @@
 ﻿#include "luakafkaconsumer.h"
 #include "kafkahelpers.h"
 #include "luakafka.h"
-#include "luaalivetoken.h"
-#include "kitsune_internal.h"
 #include <string.h>
 #include <stdlib.h>
-
-static void set_did_work(lua_State* L) {
-	void* ud;
-	lua_getallocf(L, &ud);
-	KitsuneState* state = (KitsuneState*)ud;
-	if (!state)
-		return;
-	int id = (int)state->currentCoroutineId.load();
-	KitsuneCoroutine* slot = FindSlot(state, id);
-	if (slot)
-		slot->didWork = true;
-}
 
 // ---------------------------------------------------------------------------
 // push/get helpers
@@ -113,160 +99,6 @@ static void push_consume_message(lua_State* L, const rd_kafka_message_t* msg) {
 }
 
 // ---------------------------------------------------------------------------
-// Consume coroutine
-// ---------------------------------------------------------------------------
-
-// Forward declaration of the continuation used by lua_yieldk.
-static int consume_cont(lua_State* L, int status, lua_KContext ctx);
-
-// Entry point — called on the first coroutine.resume(co, ...).
-// State is upvalue[1]; shouldQuit is the first resume argument.
-int ConsumeCoroutineBody(lua_State* L) {
-	LuaKafkaConsumeState* state = (LuaKafkaConsumeState*)lua_touserdata(L, lua_upvalueindex(1));
-	return consume_cont(L, LUA_OK, (lua_KContext)(intptr_t)state);
-}
-
-// Continuation — re-entered on every subsequent resume.
-static int consume_cont(lua_State* L, int status, lua_KContext ctx) {
-	LuaKafkaConsumeState* state = (LuaKafkaConsumeState*)(intptr_t)ctx;
-
-	// shouldQuit is the first argument from the current resume
-	if (lua_toboolean(L, 1)) {
-		// Stop path: release alive token ref if set
-		if (state->aliveTokenRef != LUA_NOREF) {
-			luaL_unref(L, LUA_REGISTRYINDEX, state->aliveTokenRef);
-			state->aliveTokenRef = LUA_NOREF;
-		}
-		// has_pending is left intact so consumer:Commit() can
-		// still be called after the coroutine is stopped.
-		lua_pushlightuserdata(L, (void*)state);
-		lua_pushnil(L);
-		lua_rawset(L, LUA_REGISTRYINDEX);
-		lua_pushlightuserdata(L, (void*)L);
-		lua_pushnil(L);
-		lua_rawset(L, LUA_REGISTRYINDEX);
-		return 0;
-	}
-
-	// AliveToken check — treat a disposed token the same as a stop flag
-	if (state->aliveTokenRef != LUA_NOREF) {
-		lua_rawgeti(L, LUA_REGISTRYINDEX, state->aliveTokenRef);
-		int alive = lua_alivetoken_isalive(L, -1);
-		lua_pop(L, 1);
-		if (alive == 0) {
-			luaL_unref(L, LUA_REGISTRYINDEX, state->aliveTokenRef);
-			state->aliveTokenRef = LUA_NOREF;
-			lua_pushlightuserdata(L, (void*)state);
-			lua_pushnil(L);
-			lua_rawset(L, LUA_REGISTRYINDEX);
-			lua_pushlightuserdata(L, (void*)L);
-			lua_pushnil(L);
-			lua_rawset(L, LUA_REGISTRYINDEX);
-			return 0;
-		}
-	}
-
-	// Close the previous commit window — the caller had one resume to call Commit
-	state->consumer->has_pending = false;
-
-	// Always poll with timeout=0: this coroutine runs on the Kitsune scheduler thread
-	// and blocking rd_kafka_consumer_poll would stall all other coroutines. A positive
-	// poll_timeout_ms is honoured by the Sleep() between each yielded resume that the
-	// Lua caller inserts (or by the scheduler's natural 1ms tick). Never block here.
-	rd_kafka_message_t* msg = rd_kafka_consumer_poll(state->consumer->rd, 0);
-
-	lua_settop(L, 0);
-
-	if (!msg)
-		return lua_yieldk(L, 0, ctx, consume_cont);  // nothing received — no work done
-
-	if (state->autocommit) {
-		rd_kafka_commit_message(state->consumer->rd, msg, 1);
-	}
-	else {
-		// Record commit coordinates before freeing the message.
-		// push_consume_message copies all data into Lua strings so the
-		// raw rd_kafka_message_t* is not needed across the yield boundary.
-		state->consumer->has_pending = true;
-		state->consumer->pending_partition = msg->partition;
-		state->consumer->pending_offset = msg->offset;
-		const char* tname = msg->rkt ? rd_kafka_topic_name(msg->rkt) : "";
-		strncpy(state->consumer->pending_topic, tname, sizeof(state->consumer->pending_topic) - 1);
-		state->consumer->pending_topic[sizeof(state->consumer->pending_topic) - 1] = '\0';
-	}
-
-	push_consume_message(L, msg);
-	rd_kafka_message_destroy(msg);  // all fields copied to Lua; safe to free before yield
-	set_did_work(L);  // received a message — signal scheduler we did real work
-	return lua_yieldk(L, 1, ctx, consume_cont);
-}
-
-// AutoCommit — called as co:AutoCommit(bool).
-// self is the thread at index 1; bool is at index 2.
-int ConsumeAutoCommit(lua_State* L) {
-	lua_State* co = lua_tothread(L, 1);
-	if (!co)
-		return luaL_argerror(L, 1, "expected coroutine");
-	lua_pushlightuserdata(L, (void*)co);
-	lua_rawget(L, LUA_REGISTRYINDEX);
-	LuaKafkaConsumeState* state = (LuaKafkaConsumeState*)lua_touserdata(L, -1);
-	if (state)
-		state->autocommit = (bool)lua_toboolean(L, 2);
-	return 0;
-}
-
-// co:SetAliveToken(token | nil) — attach or detach an AliveToken.
-// Arg 1 is the coroutine thread; arg 2 is the AliveToken or nil.
-int ConsumerSetAliveToken(lua_State* L) {
-	lua_State* co = lua_tothread(L, 1);
-	if (!co)
-		return luaL_argerror(L, 1, "expected coroutine");
-	lua_pushlightuserdata(L, (void*)co);
-	lua_rawget(L, LUA_REGISTRYINDEX);
-	LuaKafkaConsumeState* state = (LuaKafkaConsumeState*)lua_touserdata(L, -1);
-	lua_pop(L, 1);
-	if (!state)
-		return 0;
-	if (state->aliveTokenRef != LUA_NOREF) {
-		luaL_unref(L, LUA_REGISTRYINDEX, state->aliveTokenRef);
-		state->aliveTokenRef = LUA_NOREF;
-	}
-	if (!lua_isnil(L, 2) && !lua_isnone(L, 2)) {
-		luaL_checkudata(L, 2, LUAALIVETOKEN);
-		lua_pushvalue(L, 2);
-		state->aliveTokenRef = luaL_ref(L, LUA_REGISTRYINDEX);
-	}
-	return 0;
-}
-
-// __gc for the coroutine thread metatable.
-// Cleans up the registry entry and any pending message.
-int ConsumeCoroutineGC(lua_State* L) {
-	lua_State* co = lua_tothread(L, 1);
-	if (!co)
-		return 0;
-	lua_pushlightuserdata(L, (void*)co);
-	lua_rawget(L, LUA_REGISTRYINDEX);
-	LuaKafkaConsumeState* state = (LuaKafkaConsumeState*)lua_touserdata(L, -1);
-	if (state) {
-		if (state->aliveTokenRef != LUA_NOREF) {
-			luaL_unref(L, LUA_REGISTRYINDEX, state->aliveTokenRef);
-			state->aliveTokenRef = LUA_NOREF;
-		}
-		// consumer->pending is owned by the consumer, not the coroutine.
-		// ConsumerGC will free it; we only release the registry anchors here.
-		lua_pushlightuserdata(L, (void*)state);
-		lua_pushnil(L);
-		lua_rawset(L, LUA_REGISTRYINDEX);
-	}
-	lua_pop(L, 1);
-	lua_pushlightuserdata(L, (void*)co);
-	lua_pushnil(L);
-	lua_rawset(L, LUA_REGISTRYINDEX);
-	return 0;
-}
-
-// ---------------------------------------------------------------------------
 // Offset helpers
 // ---------------------------------------------------------------------------
 
@@ -300,12 +132,12 @@ static int64_t luakafkaoffset(lua_State* L, int idx) {
 // Assign entries have the form "topic", "topic:partition", or
 // "topic:partition:offset" where offset is a number or keyword.
 // Subscribe entries are plain topic name strings (partition ignored).
-// Returns NULL and pushes nil + errmsg on error (caller should return 2).
+// Returns NULL and pushes false + errmsg on error (caller should return 2).
 // ---------------------------------------------------------------------------
 
 static rd_kafka_topic_partition_list_t* build_partition_list(lua_State* L, int table_idx, bool with_partitions) {
 	if (!lua_istable(L, table_idx)) {
-		lua_pushnil(L);
+		lua_pushboolean(L, false);
 		lua_pushstring(L, "expected array of topic strings");
 		return NULL;
 	}
@@ -320,7 +152,7 @@ static rd_kafka_topic_partition_list_t* build_partition_list(lua_State* L, int t
 
 		if (!entry) {
 			rd_kafka_topic_partition_list_destroy(list);
-			lua_pushnil(L);
+			lua_pushboolean(L, false);
 			lua_pushfstring(L, "topics[%d] is not a string", i);
 			return NULL;
 		}
@@ -364,66 +196,17 @@ static rd_kafka_topic_partition_list_t* build_partition_list(lua_State* L, int t
 }
 
 // ---------------------------------------------------------------------------
-// Internal helper — creates the consume coroutine from an existing consumer.
-// Called by both ConsumerSubscribe and ConsumerAssign after the librdkafka
-// subscription/assignment has already been applied.
-// ---------------------------------------------------------------------------
-
-static int make_consume_coroutine(lua_State* L, LuaKafkaConsumer* consumer) {
-	// Create the shared state userdata
-	LuaKafkaConsumeState* state = (LuaKafkaConsumeState*)lua_newuserdata(L, sizeof(LuaKafkaConsumeState));
-	if (!state)
-		luaL_error(L, "Unable to allocate consume state");
-	luaL_getmetatable(L, LUAKAFKACONSUMERSTATE);
-	lua_setmetatable(L, -2);
-	state->consumer = consumer;
-	state->autocommit = true;
-	state->poll_timeout_ms = 0;
-	state->aliveTokenRef = LUA_NOREF;
-	// state is now at the top of L's stack; remember its absolute index
-	int state_idx = lua_gettop(L);
-
-	// Create the coroutine thread
-	lua_State* co = lua_newthread(L);
-	// stack: [..., state, thread]
-
-	// Create the body closure (state as upvalue) on L, then move to co
-	lua_pushvalue(L, state_idx);
-	lua_pushcclosure(L, ConsumeCoroutineBody, 1);
-	lua_xmove(L, co, 1);
-	// co stack: [ConsumeCoroutineBody_closure]
-	// L stack:  [..., state, thread]
-
-	// Store state in the registry keyed by the co pointer so AutoCommit
-	// and ConsumeCoroutineGC can find it without going through upvalues
-	lua_pushlightuserdata(L, (void*)co);
-	lua_pushvalue(L, state_idx);
-	lua_rawset(L, LUA_REGISTRYINDEX);
-
-	// Anchor the consumer userdata so it cannot be GC'd before this coroutine
-	// finishes. The coroutine holds state->owner (rd_kafka_t*) and would
-	// use-after-free if the consumer is destroyed first.
-	// Key = state address (distinct from the co-pointer key above).
-	lua_pushlightuserdata(L, (void*)state);
-	lua_pushvalue(L, 1); // consumer userdata is always arg 1 of Subscribe/Assign
-	lua_rawset(L, LUA_REGISTRYINDEX);
-
-	// Set KAFKACONSUMECOROUTINE metatable on the thread
-	// (thread is at the top of L's stack)
-	luaL_getmetatable(L, LUAKAFKACONSUMECOROUTINE);
-	lua_setmetatable(L, -2);
-
-	// Return the thread; state below it will be cleaned up by Lua
-	return 1;
-}
-
-// ---------------------------------------------------------------------------
 // Consumer API
 // ---------------------------------------------------------------------------
 
 int CreateConsumer(lua_State* L) {
 	rd_kafka_conf_t* conf = lua_tokafkaconf(L, 1, "LUAC");
 	rd_kafka_conf_set_log_cb(conf, kafka_logger);
+
+	// Force manual offset commit so Poll() controls exactly when offsets
+	// advance. This prevents librdkafka's background auto-commit from racing
+	// with the next-Poll commit and double-committing or skipping messages.
+	rd_kafka_conf_set(conf, "enable.auto.commit", "false", NULL, 0);
 
 	char errbuf[kafka_error_buffer_len];
 	rd_kafka_t* rd = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errbuf, kafka_error_buffer_len);
@@ -438,15 +221,16 @@ int CreateConsumer(lua_State* L) {
 
 	LuaKafkaConsumer* c = lua_pushkafkaconsumer(L);
 	c->rd = rd;
+	c->msg = NULL;
 	return 1;
 }
 
+// consumer:Subscribe({"topic-a", "topic-b"}) -> true | false, errmsg
+// Overwrites any previous subscription or assignment.
 int ConsumerSubscribe(lua_State* L) {
 	LuaKafkaConsumer* c = lua_tokafkaconsumer(L, 1);
-	if (!c->rd) {
-		luaL_error(L, "Consumer not open");
-		return 0;
-	}
+	if (!c->rd)
+		return luaL_error(L, "Consumer not open");
 
 	rd_kafka_topic_partition_list_t* list = build_partition_list(L, 2, false);
 	if (!list)
@@ -456,20 +240,24 @@ int ConsumerSubscribe(lua_State* L) {
 	rd_kafka_topic_partition_list_destroy(list);
 
 	if (err) {
-		lua_pushnil(L);
+		lua_pushboolean(L, false);
 		lua_pushstring(L, rd_kafka_err2str(err));
 		return 2;
 	}
 
-	return make_consume_coroutine(L, c);
+	lua_pushboolean(L, true);
+	return 1;
 }
 
+// consumer:Assign({"topic:partition", "topic:partition:offset"}) -> true | false, errmsg
+// Overwrites any previous subscription or assignment.
+// Offset keywords: "earliest" = beginning, "latest" = end, omitted/nil = stored.
+// Seek cannot be called until Assign has been called and librdkafka has established
+// the partition assignment (drive Poll() for a short warm-up period first).
 int ConsumerAssign(lua_State* L) {
 	LuaKafkaConsumer* c = lua_tokafkaconsumer(L, 1);
-	if (!c->rd) {
-		luaL_error(L, "Consumer not open");
-		return 0;
-	}
+	if (!c->rd)
+		return luaL_error(L, "Consumer not open");
 
 	rd_kafka_topic_partition_list_t* list = build_partition_list(L, 2, true);
 	if (!list)
@@ -479,62 +267,78 @@ int ConsumerAssign(lua_State* L) {
 	rd_kafka_topic_partition_list_destroy(list);
 
 	if (err) {
-		lua_pushnil(L);
+		lua_pushboolean(L, false);
 		lua_pushstring(L, rd_kafka_err2str(err));
 		return 2;
 	}
 
-	return make_consume_coroutine(L, c);
+	lua_pushboolean(L, true);
+	return 1;
 }
 
-int ConsumerCommit(lua_State* L) {
+// consumer:Poll() -> true | true, msg | false, errmsg
+//
+// Commits the previous real message (if any) then polls for the next one.
+// Returns:
+//   false, errmsg  — consumer is broken and cannot continue
+//   true, msg      — a message or status event was received; inspect msg.ErrorCode
+//   true           — idle, no message available; caller should Yield() and retry
+//
+// Commit happens automatically at the top of Poll() for the message returned
+// by the previous Poll() call. There is no separate Commit() method.
+int ConsumerPoll(lua_State* L) {
 	LuaKafkaConsumer* c = lua_tokafkaconsumer(L, 1);
 	if (!c->rd) {
-		luaL_error(L, "Consumer not open");
-		return 0;
-	}
-
-	if (!c->has_pending) {
 		lua_pushboolean(L, false);
-		lua_pushstring(L, "no pending message to commit");
+		lua_pushstring(L, "Consumer not open");
 		return 2;
 	}
 
-	// Clear before committing to prevent double-commit.
-	// async=1: queued by librdkafka background threads; rd_kafka_poll_set_consumer
-	// routes responses through rd_kafka_consumer_poll so a sync commit (async=0)
-	// would deadlock once the coroutine is stopped.
-	c->has_pending = false;
-
-	rd_kafka_topic_partition_list_t* offsets = rd_kafka_topic_partition_list_new(1);
-	rd_kafka_topic_partition_list_add(offsets, c->pending_topic, c->pending_partition)->offset =
-		c->pending_offset + 1;
-	rd_kafka_resp_err_t err = rd_kafka_commit(c->rd, offsets, 1);
-	rd_kafka_topic_partition_list_destroy(offsets);
-
-	lua_pushboolean(L, !err);
-	if (err) {
-		lua_pushstring(L, rd_kafka_err2str(err));
-		return 2;
+	// Commit the previous real message now that the caller has processed it.
+	if (c->msg) {
+		rd_kafka_commit_message(c->rd, c->msg, 1);  // async=1; non-blocking
+		rd_kafka_message_destroy(c->msg);
+		c->msg = NULL;
 	}
-	return 1;
+
+	// Poll with timeout=0: this runs on the Kitsune scheduler thread and must
+	// never block. The caller inserts Yield() when msg is nil to cooperate.
+	rd_kafka_message_t* msg = rd_kafka_consumer_poll(c->rd, 0);
+
+	if (!msg) {
+		lua_pushboolean(L, true);
+		return 1;
+	}
+
+	// Only store real messages for the next-Poll commit. Error/status
+	// notifications (EOF, rebalance, transport errors) carry sentinel offsets
+	// that must not be committed.
+	if (msg->err == RD_KAFKA_RESP_ERR_NO_ERROR)
+		c->msg = msg;
+
+	push_consume_message(L, msg);
+
+	// If the message was not stored (error/status), free it now; all data has
+	// been copied into the Lua table.
+	if (msg->err != RD_KAFKA_RESP_ERR_NO_ERROR)
+		rd_kafka_message_destroy(msg);
+
+	lua_pushboolean(L, true);
+	lua_insert(L, -2);  // stack: true, msgtable
+	return 2;
 }
 
 int ConsumerGetOffsets(lua_State* L) {
 	LuaKafkaConsumer* c = lua_tokafkaconsumer(L, 1);
-	if (!c->rd) {
-		luaL_error(L, "Consumer not open");
-		return 0;
-	}
+	if (!c->rd)
+		return luaL_error(L, "Consumer not open");
 	return kafka_query_watermarks(L, c->rd);
 }
 
 int ConsumerSeek(lua_State* L) {
 	LuaKafkaConsumer* c = lua_tokafkaconsumer(L, 1);
-	if (!c->rd) {
-		luaL_error(L, "Consumer not open");
-		return 0;
-	}
+	if (!c->rd)
+		return luaL_error(L, "Consumer not open");
 
 	const char* topic = luaL_checkstring(L, 2);
 	int32_t partition = (int32_t)luaL_checkinteger(L, 3);
@@ -548,10 +352,10 @@ int ConsumerSeek(lua_State* L) {
 	rd_kafka_topic_partition_list_destroy(parts);
 
 	if (err) {
-		const char* msg = rd_kafka_error_string(err);
+		const char* errmsg = rd_kafka_error_string(err);
 		rd_kafka_error_destroy(err);
 		lua_pushboolean(L, false);
-		lua_pushstring(L, msg);
+		lua_pushstring(L, errmsg);
 		return 2;
 	}
 	lua_pushboolean(L, true);
@@ -560,89 +364,78 @@ int ConsumerSeek(lua_State* L) {
 
 int ConsumerGetMetadata(lua_State* L) {
 	LuaKafkaConsumer* c = lua_tokafkaconsumer(L, 1);
-	if (!c->rd) {
-		luaL_error(L, "Consumer not open");
-		return 0;
-	}
+	if (!c->rd)
+		return luaL_error(L, "Consumer not open");
 	return kafka_get_metadata(L, c->rd);
 }
 
 int ConsumerGetTopicConfig(lua_State* L) {
 	LuaKafkaConsumer* c = lua_tokafkaconsumer(L, 1);
-	if (!c->rd) {
-		luaL_error(L, "Consumer not open");
-		return 0;
-	}
+	if (!c->rd)
+		return luaL_error(L, "Consumer not open");
 	return kafka_get_topic_config(L, c->rd);
 }
 
 int ConsumerSetTopicConfig(lua_State* L) {
 	LuaKafkaConsumer* c = lua_tokafkaconsumer(L, 1);
-	if (!c->rd) {
-		luaL_error(L, "Consumer not open");
-		return 0;
-	}
+	if (!c->rd)
+		return luaL_error(L, "Consumer not open");
 	return kafka_set_topic_config(L, c->rd);
 }
 
 int ConsumerListGroups(lua_State* L) {
 	LuaKafkaConsumer* c = lua_tokafkaconsumer(L, 1);
-	if (!c->rd) {
-		luaL_error(L, "Consumer not open");
-		return 0;
-	}
+	if (!c->rd)
+		return luaL_error(L, "Consumer not open");
 	return kafka_list_groups(L, c->rd);
 }
 
 int ConsumerDescribeGroups(lua_State* L) {
 	LuaKafkaConsumer* c = lua_tokafkaconsumer(L, 1);
-	if (!c->rd) {
-		luaL_error(L, "Consumer not open");
-		return 0;
-	}
+	if (!c->rd)
+		return luaL_error(L, "Consumer not open");
 	return kafka_describe_groups(L, c->rd);
 }
 
 int ConsumerDeleteGroup(lua_State* L) {
 	LuaKafkaConsumer* c = lua_tokafkaconsumer(L, 1);
-	if (!c->rd) {
-		luaL_error(L, "Consumer not open");
-		return 0;
-	}
+	if (!c->rd)
+		return luaL_error(L, "Consumer not open");
 	return kafka_delete_group(L, c->rd);
 }
 
 int ConsumerGetGroupOffsets(lua_State* L) {
 	LuaKafkaConsumer* c = lua_tokafkaconsumer(L, 1);
-	if (!c->rd) {
-		luaL_error(L, "Consumer not open");
-		return 0;
-	}
+	if (!c->rd)
+		return luaL_error(L, "Consumer not open");
 	return kafka_get_group_offsets(L, c->rd);
 }
 
 int ConsumerSetGroupOffsets(lua_State* L) {
 	LuaKafkaConsumer* c = lua_tokafkaconsumer(L, 1);
-	if (!c->rd) {
-		luaL_error(L, "Consumer not open");
-		return 0;
-	}
+	if (!c->rd)
+		return luaL_error(L, "Consumer not open");
 	return kafka_set_group_offsets(L, c->rd);
 }
 
 int ConsumerDeleteGroupOffsets(lua_State* L) {
 	LuaKafkaConsumer* c = lua_tokafkaconsumer(L, 1);
-	if (!c->rd) {
-		luaL_error(L, "Consumer not open");
-		return 0;
-	}
+	if (!c->rd)
+		return luaL_error(L, "Consumer not open");
 	return kafka_delete_group_offsets(L, c->rd);
 }
 
 int ConsumerGC(lua_State* L) {
 	LuaKafkaConsumer* c = lua_tokafkaconsumer(L, 1);
 	if (c->rd) {
-		// Async close: background thread sends LeaveGroup.  All events
+		// Free any pending message before closing so rd_kafka_destroy does not
+		// see an outstanding reference.
+		if (c->msg) {
+			rd_kafka_message_destroy(c->msg);
+			c->msg = NULL;
+		}
+
+		// Async close: background thread sends LeaveGroup. All events
 		// (rebalance, commit ACKs) are forwarded to closeq.
 		// Rebalance events MUST be explicitly acknowledged via rd_kafka_assign;
 		// without this the cgrp thread waits forever and

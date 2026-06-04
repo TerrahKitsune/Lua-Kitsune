@@ -120,7 +120,7 @@ struct ChatTemplate {
 struct LlamaCtxOpts {
 	int     n_gpu_layers  = 99;
 	int     n_ctx         = 4096;
-	int     n_threads     = 0;
+	int     n_threads     = 0;  // 0 = auto (hardware_concurrency / 2)
 	int     n_batch       = 512;
 	bool    flash_attn    = false;
 	int64_t model_ttl_ms  = 300000;

@@ -807,35 +807,65 @@ bool, errmsg  producer:Close()
 
 All topic-admin and group-admin methods available on `KafkaProducer` are also available on `KafkaConsumer` with identical signatures.
 
-#### Consuming
+#### Subscribing and assigning
 
 ```lua
-coroutine  consumer:Subscribe({'topic', ...})
-coroutine  consumer:Assign({'topic:partition[:offset]', ...})
+bool, errmsg  consumer:Subscribe({'topic', ...})
+bool, errmsg  consumer:Assign({'topic:partition[:offset]', ...})
 ```
 
-**Offset keyword in `Assign`:**
+Both methods apply the subscription or assignment immediately and return `true` on success, or `false, errmsg` on failure. Use `assert` to surface errors:
 
-| String | librdkafka offset | Behaviour |
-|--------|-------------------|-----------|
+```lua
+assert(consumer:Subscribe({'my-topic'}))
+assert(consumer:Assign({'my-topic:0:earliest'}))
+```
+
+`Subscribe` uses Kafka's consumer-group rebalance protocol (supply `group.id` in conf). `Assign` pins specific partitions directly without a group coordinator.
+
+**Offset keywords for `Assign`:**
+
+| Entry format | librdkafka offset | Behaviour |
+|---|---|---|
 | `"topic:N"` | `OFFSET_STORED` | Uses committed offset; falls back to `auto.offset.reset` |
 | `"topic:N:earliest"` | `OFFSET_BEGINNING` | Always starts from message 0 |
 | `"topic:N:latest"` | `OFFSET_END` | Starts after the current last message |
 | `"topic:N:123"` | `123` | Starts from exact offset 123 |
 
-Both methods return a **Lua thread** (coroutine).
-
-#### Driving the consume coroutine
+#### Polling
 
 ```lua
-ok, data = coroutine.resume(co, stop_flag)
+bool, msg  consumer:Poll()
 ```
 
-- Pass `false` (or any falsy value) to poll for the next message.
-- Pass `true` to stop: the coroutine frees its resources and dies cleanly.
-- Returns `true, nil` when no message is available yet (call again after a short sleep).
-- Returns `true, message` when a message arrives.
-- Returns `false, errmsg` if the coroutine encountered an error.
+Non-blocking. Returns one of three states:
+
+- `false, errmsg` — consumer is in an unrecoverable error state; raise or handle the error.
+- `true, msg` — a message or status event was received; inspect `msg.ErrorCode` (0 = real data message).
+- `true` *(nil second value)* — nothing available right now; call `Yield()` or `Sleep()` before the next poll.
+
+Offsets are committed automatically. Each call to `Poll()` commits the offset from the previous polled message (if any) before fetching the next one. `auto.commit` is forced off in the librdkafka config to keep commit timing under explicit control.
+
+```lua
+assert(consumer:Subscribe({'my-topic'}))
+while running do
+    local ok, msg = consumer:Poll()
+    if not ok then
+        error(msg)
+    elseif msg then
+        if msg.ErrorCode == 0 then
+            -- real message
+            print(msg.Value)
+        else
+            -- status / error event surfaced by librdkafka
+            print('kafka event:', msg.Error)
+        end
+    else
+        Yield()
+    end
+end
+consumer:Close()
+```
 
 **Message table fields:**
 
@@ -847,24 +877,10 @@ ok, data = coroutine.resume(co, stop_flag)
 | `Partition` | number | Partition index |
 | `Offset` | number | Offset within the partition |
 | `Timestamp` | number | Message timestamp (ms) |
+| `Latency` | number | Producer-to-broker latency (ms) |
 | `ErrorCode` | number | librdkafka error code (0 = success) |
 | `Error` | string | Error description |
 | `Headers` | table | Key/value header table |
-
-#### Coroutine methods
-
-```lua
-co:AutoCommit(bool)      -- enable (true) or disable (false) automatic offset commit
-co:SetAliveToken(token)  -- attach an AliveToken; when disposed the coroutine stops cleanly (same as resuming with true). Pass nil to detach
-```
-
-#### Manual commit
-
-```lua
-bool, errmsg  consumer:Commit(message_data)
-```
-
-After a successful commit the message handle is cleared; calling `Commit` on the same data a second time returns `false, errmsg`.
 
 #### Seeking
 
@@ -872,7 +888,7 @@ After a successful commit the message handle is cleared; calling `Commit` on the
 bool, errmsg  consumer:Seek(topic, partition, offset [, timeout_ms])
 ```
 
-Repositions an already-assigned, already-polling partition. `offset` accepts a number or the keywords `"earliest"`, `"latest"`, `"stored"`. Uses `rd_kafka_seek_partitions` internally; the most reliable pattern is a **specific numeric offset** obtained from `GetOffsets`.
+Repositions an already-assigned partition. `offset` accepts a number or the keywords `"earliest"`, `"latest"`, `"stored"`. Uses `rd_kafka_seek_partitions` internally.
 
 ```lua
 bool, errmsg  consumer:Close()
