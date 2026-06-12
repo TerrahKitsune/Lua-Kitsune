@@ -51,6 +51,7 @@ void llama_backend_init_once() {
 	if (g_llama_backend_initialized.compare_exchange_strong(expected, true)) {
 		g_log_mtx = new std::mutex();
 		g_log_buf = new std::vector<std::string>();
+		ggml_backend_load_all();
 		llama_backend_init();
 		llama_log_set(llama_log_callback, nullptr);
 	}
