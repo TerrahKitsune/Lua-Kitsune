@@ -1217,6 +1217,7 @@
     <None Include=".vscode\launch.json" />
     <None Include="build-libevent-linux.sh" />
     <None Include="fetch-llama-binaries.ps1" />
+    <None Include="Plans\KitsuneGuard.md" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />

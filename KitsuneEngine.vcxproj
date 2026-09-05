@@ -63,7 +63,7 @@
     <Link>
       <LinkIncremental>false</LinkIncremental>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>$(SolutionDir)mysql\libmysql.lib;ws2_32.lib;Iphlpapi.lib;rstrtmgr.lib;archive.lib;bz2d.lib;lzma.lib;zlibd.lib;zstd.lib;Cabinet.lib;$(SolutionDir)mongodb\debug\lib\mongoc2.lib;$(SolutionDir)mongodb\debug\lib\bson2.lib;$(SolutionDir)mongodb\debug\lib\utf8proc_static.lib;Dnsapi.lib;Bcrypt.lib;Secur32.lib;Ncrypt.lib;Crypt32.lib;ws2_32.lib;$(SolutionDir)curl\lib\libcurl.lib;$(SolutionDir)hiredis\hiredis.lib;$(SolutionDir)hiredis\hiredis_ssl.lib;$(SolutionDir)OpenSSL\libssl.lib;$(SolutionDir)OpenSSL\libcrypto.lib;eventd.lib;event_cored.lib;event_extrad.lib;$(SolutionDir)llama\lib\llama.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(SolutionDir)mysql\libmysql.lib;ws2_32.lib;Iphlpapi.lib;rstrtmgr.lib;archive.lib;bz2d.lib;lzma.lib;zlibd.lib;zstd.lib;Cabinet.lib;$(SolutionDir)mongodb\debug\lib\mongoc2.lib;$(SolutionDir)mongodb\debug\lib\bson2.lib;$(SolutionDir)mongodb\debug\lib\utf8proc_static.lib;Dnsapi.lib;Bcrypt.lib;Secur32.lib;Ncrypt.lib;Crypt32.lib;ws2_32.lib;$(SolutionDir)curl\lib\libcurl.lib;$(SolutionDir)hiredis\hiredis.lib;$(SolutionDir)hiredis\hiredis_ssl.lib;$(SolutionDir)OpenSSL\libssl.lib;$(SolutionDir)OpenSSL\libcrypto.lib;eventd.lib;event_cored.lib;event_extrad.lib;$(SolutionDir)llama\lib\llama.lib;$(SolutionDir)llama\lib\ggml.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(SolutionDir)llama\lib;$(SolutionDir)libarchive\debug\lib;$(SolutionDir)libevent\debug\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <LargeAddressAware>true</LargeAddressAware>
       <IgnoreSpecificDefaultLibraries>msvcrt.lib;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
@@ -91,7 +91,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>$(SolutionDir)mysql\libmysql.lib;ws2_32.lib;Iphlpapi.lib;rstrtmgr.lib;archive.lib;bz2.lib;lzma.lib;zlib.lib;zstd.lib;Cabinet.lib;$(SolutionDir)mongodb\lib\mongoc2.lib;$(SolutionDir)mongodb\lib\bson2.lib;$(SolutionDir)mongodb\lib\utf8proc_static.lib;Dnsapi.lib;Bcrypt.lib;Secur32.lib;Ncrypt.lib;Crypt32.lib;ws2_32.lib;$(SolutionDir)curl\lib\libcurl.lib;$(SolutionDir)hiredis\hiredis.lib;$(SolutionDir)hiredis\hiredis_ssl.lib;$(SolutionDir)OpenSSL\libssl.lib;$(SolutionDir)OpenSSL\libcrypto.lib;event.lib;event_core.lib;event_extra.lib;$(SolutionDir)llama\lib\llama.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(SolutionDir)mysql\libmysql.lib;ws2_32.lib;Iphlpapi.lib;rstrtmgr.lib;archive.lib;bz2.lib;lzma.lib;zlib.lib;zstd.lib;Cabinet.lib;$(SolutionDir)mongodb\lib\mongoc2.lib;$(SolutionDir)mongodb\lib\bson2.lib;$(SolutionDir)mongodb\lib\utf8proc_static.lib;Dnsapi.lib;Bcrypt.lib;Secur32.lib;Ncrypt.lib;Crypt32.lib;ws2_32.lib;$(SolutionDir)curl\lib\libcurl.lib;$(SolutionDir)hiredis\hiredis.lib;$(SolutionDir)hiredis\hiredis_ssl.lib;$(SolutionDir)OpenSSL\libssl.lib;$(SolutionDir)OpenSSL\libcrypto.lib;event.lib;event_core.lib;event_extra.lib;$(SolutionDir)llama\lib\llama.lib;$(SolutionDir)llama\lib\ggml.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(SolutionDir)llama\lib;$(SolutionDir)libarchive\lib;$(SolutionDir)libevent\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <LargeAddressAware>true</LargeAddressAware>
     </Link>
@@ -416,6 +416,7 @@
     <None Include="build-linux-and-test.ps1" />
     <None Include="fetch-llama-binaries.ps1" />
     <None Include="Lua functions.md" />
+    <None Include="Plans\KitsuneGuard.md" />
     <None Include="testEnvironments.json" />
     <None Include="triplets\x64-windows-static-md.cmake" />
     <None Include="vcpkg.json" />

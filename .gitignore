@@ -384,5 +384,8 @@ build/
 # Visual Studio build output — regenerated on every build
 x64/
 
+# llama.cpp runtime DLLs — too large to commit, fetched by fetch-llama-binaries.ps1
+llama/*.dll
+
 # vcpkg installed packages — restored locally by vcpkg, not committed
 vcpkg_installed/

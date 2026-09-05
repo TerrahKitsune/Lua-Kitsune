@@ -368,24 +368,25 @@ if(KITSUNE_MONGO)
 endif()
 
 # ── Optional llama.cpp support (local LLM inference) ─────────────────────────
-# Windows-only for now (CUDA prebuilt binaries). Run vendor/fetch-llama.ps1 first.
+# Windows-only for now (CUDA prebuilt binaries). Run fetch-llama-binaries.ps1 first.
 if(WIN32)
-	option(KITSUNE_LLAMA "Build with llama.cpp support (run vendor/fetch-llama.ps1 first)" OFF)
+	option(KITSUNE_LLAMA "Build with llama.cpp support (run fetch-llama-binaries.ps1 first)" OFF)
 
 	if(KITSUNE_LLAMA)
-		set(LLAMA_VENDOR "${CMAKE_SOURCE_DIR}/vendor/llama.cpp")
+		set(LLAMA_VENDOR "${CMAKE_SOURCE_DIR}/llama")
 		if(NOT EXISTS "${LLAMA_VENDOR}/include/llama.h")
-			message(FATAL_ERROR "llama.cpp vendor files missing. Run: powershell vendor/fetch-llama.ps1")
+			message(FATAL_ERROR "llama.cpp vendor files missing. Run: powershell fetch-llama-binaries.ps1")
 		endif()
 
 		target_sources(KitsuneEngine PRIVATE
 			LlamaContext.cpp
 			luallama.cpp
 			luallamamain.cpp
+			luallama_prompt.cpp
 		)
 
 		target_compile_definitions(KitsuneEngine PRIVATE KITSUNE_LLAMA)
-		target_include_directories(KitsuneEngine PRIVATE "${LLAMA_VENDOR}/include")
+		target_include_directories(KitsuneEngine PRIVATE "${LLAMA_VENDOR}/include" "${LLAMA_VENDOR}/include/ggml")
 		target_link_libraries(KitsuneEngine PRIVATE
 			"${LLAMA_VENDOR}/lib/llama.lib"
 			"${LLAMA_VENDOR}/lib/ggml.lib"
