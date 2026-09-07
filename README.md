@@ -185,6 +185,7 @@ The core native library. Embeds Lua 5.4 and exposes the C API above. All built-i
 | `Identifier` | RFC 4122 UUID v4 and MongoDB ObjectID generation |
 | `Timer` | High-resolution stopwatch |
 | `Mutex` | Named cross-process mutex |
+| `MCP` | Model Context Protocol server over stdin/stdout — register Lua functions as tools for MCP clients (Claude Code, Claude Desktop, ...) |
 | `Process` | Spawn and communicate with child processes |
 | `FileSystem` | File and directory operations with wide-path support |
 | `MsgPack` | MessagePack encode/decode |
@@ -282,6 +283,7 @@ The core native library. Embeds Lua 5.4 and exposes a C API that hosts can call 
 | `Identifier` | RFC 4122 UUID v4 and MongoDB ObjectID generation |
 | `Timer` | High-resolution stopwatch |
 | `Mutex` | Named cross-process mutex |
+| `MCP` | Model Context Protocol server over stdin/stdout — register Lua functions as tools for MCP clients (Claude Code, Claude Desktop, ...) |
 | `Process` | Spawn and communicate with child processes |
 | `FileSystem` | File and directory operations with wide-path support |
 | `MsgPack` | MessagePack encode/decode |

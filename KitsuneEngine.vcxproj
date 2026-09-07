@@ -134,6 +134,7 @@
     <ClCompile Include="luatimespan.cpp" />
     <ClCompile Include="luatoml.cpp" />
     <ClCompile Include="luatoolsuite.cpp" />
+    <ClCompile Include="luamcp.cpp" />
     <ClCompile Include="luauint.cpp" />
     <ClCompile Include="LuaWebSocket.cpp" />
     <ClCompile Include="timespanmain.cpp" />
@@ -309,6 +310,8 @@
     <ClInclude Include="luainimain.h" />
     <ClInclude Include="luaalivetoken.h" />
     <ClInclude Include="luatoolsuite.h" />
+    <ClInclude Include="luamcp.h" />
+    <ClInclude Include="luamcpmain.h" />
     <ClInclude Include="luauint.h" />
     <ClInclude Include="LuaWebSocket.h" />
     <ClInclude Include="luayaml.h" />

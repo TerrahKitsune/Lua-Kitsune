@@ -41,6 +41,9 @@ set(KITSUNE_ENGINE_SOURCES
 	LuaEngineBuiltins.cpp
 	lua_misc.cpp
 
+	# ── MCP (Model Context Protocol server) ─────────────────────────────────
+	luamcp.cpp
+
 	# ── Hashing / encoding ─────────────────────────────────────────────────
 	base64.cpp
 	LuaMD5.cpp

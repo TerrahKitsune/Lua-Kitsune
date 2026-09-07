@@ -306,6 +306,9 @@
     <Filter Include="LuaTCP\Source Files">
       <UniqueIdentifier>{e8315d1f-d6fb-458f-b54b-65b5e18bc77f}</UniqueIdentifier>
     </Filter>
+    <Filter Include="LuaMcp">
+      <UniqueIdentifier>{289a3914-5869-45cc-ba00-4339210eb02e}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="KitsuneEngine.cpp">
@@ -767,6 +770,9 @@
     <ClCompile Include="DuckDB\duckdb.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="luamcp.cpp">
+      <Filter>LuaMcp</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="KitsuneEngine.h">
@@ -1206,6 +1212,12 @@
     </ClInclude>
     <ClInclude Include="DuckDB\duckdb.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="luamcp.h">
+      <Filter>LuaMcp</Filter>
+    </ClInclude>
+    <ClInclude Include="luamcpmain.h">
+      <Filter>LuaMcp</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

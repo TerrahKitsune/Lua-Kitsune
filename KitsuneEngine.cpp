@@ -88,6 +88,7 @@
 #include "LuaCsvMain.h"
 #include "SHA1Main.h"
 #include "LuaHttpServerMain.h"
+#include "luamcpmain.h"
 #include "LuaTcpMain.h"
 
 #include "KitsuneEngine.h"
@@ -1687,6 +1688,7 @@ extern "C" {
 		luaopen_tcp(L);          lua_setglobal(L, "TCP");
 #endif
 		luaopen_tasks(L);        lua_setglobal(L, "Tasks");
+		luaopen_mcp(L);          lua_setglobal(L, "MCP");
 
 #ifdef KITSUNE_LLAMA
 		luaopen_llama(L);        lua_setglobal(L, "Llama");

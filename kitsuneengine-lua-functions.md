@@ -44,6 +44,7 @@ A comprehensive reference for all available functions in the Lua environment.
 - [Tasks](#tasks)
 - [Llama](#llama)
 - [ToolSuite](#toolsuite)
+- [MCP](#mcp)
 - [Third-Party Notices](#third-party-notices)
 ---
 
@@ -4889,6 +4890,166 @@ print()
 
 ctx:Dispose()
 ```
+
+---
+
+## MCP
+
+Implements a [Model Context Protocol](https://modelcontextprotocol.io) server directly in the engine — register Lua functions as MCP tools and serve them to any MCP client (Claude Code, Claude Desktop, etc.) over the process's own stdin/stdout. No networking of any kind is involved: MCP's stdio transport is exactly this — the client spawns the process and exchanges newline-delimited JSON-RPC messages over the two standard pipes every process already has. There is no HTTP/network transport in this version.
+
+Only one `MCP` instance can exist per process (there is exactly one stdin/stdout to poll); `MCP.Create` is a singleton constructor — see below.
+
+### Creation
+
+```lua
+Mcp  MCP.Create(opt settings, opt context)
+```
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `settings` | table (opt) | `Name` (string), `Version` (string), `Instructions` (string) — reported to the client in the `initialize` handshake. All fields optional; `Name` defaults to `"kitsune-lua"`, `Version` to `"1.0.0"` |
+| `context` | table (opt) | Shared state passed as the first argument to every tool callback (a DB handle, counters, config, whatever the tool author needs). An empty table is created automatically if omitted |
+
+If an `MCP` instance already exists in this process, `MCP.Create` returns that **same instance** unchanged — new `settings`/`context` arguments are ignored. This is deliberate: there is only one stdin/stdout, so only one server can meaningfully poll it.
+
+```lua
+local mcp = MCP.Create({ Name = "kitsune-lua", Version = "1.0.0" }, { logPath = "server.log" })
+```
+
+### mcp:AddTool
+
+```lua
+true  mcp:AddTool(name, description, parameters, fn)
+```
+
+Registers a tool. Must be called before `mcp:Start()`.
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `name` | string | Tool name as the client will call it |
+| `description` | string | Natural-language description of what the tool does |
+| `parameters` | table | Sequential array of parameter descriptor tables (see below) — becomes the tool's `inputSchema` in `tools/list`, exactly as MCP requires so the calling model knows what to send |
+| `fn` | function | `function(context, request) ... end` — see below |
+
+**Parameter descriptor fields** (same shape as `Llama.CreateToolSuite():AddTool`'s parameter descriptors):
+
+| Field | Type | Required | Description |
+|-------|------|----------|--------------|
+| `name` | string | yes | Parameter name |
+| `type` | string | no | JSON Schema type (`"string"`, `"integer"`, `"number"`, `"boolean"`). Defaults to `"string"` |
+| `description` | string | no | Human-readable description |
+| `required` | boolean | no | Whether the parameter is required. Defaults to `false` |
+
+**The callback** `fn(context, request)` receives:
+
+- `context` — the same table passed to `MCP.Create` (or the auto-created empty one). Shared across every tool call for the life of the server.
+- `request` — per-call data:
+  | Field | Description |
+  |-------|-------------|
+  | `request.Arguments` | The decoded arguments as a named table, matching the declared parameter schema (e.g. `request.Arguments.text`) |
+  | `request.Parameters` | The same values as a 1-based positional array, in declared parameter order (e.g. `request.Parameters[1]`) |
+  | `request.Name` | The tool name being called (useful if one function is registered for several tools) |
+  | `request.RequestId` | The JSON-RPC request id, for correlation/logging |
+  | `request.Client` | `{ Name=, Version= }` from the MCP `initialize` handshake |
+
+The callback's return value is coerced to a string and becomes the tool's text result. The callback is yield-safe (built on the same `lua_pcallk`/continuation mechanism as `ToolSuite:Call`) — it may call `Sleep()`, `HttpClient:Call()`, or any other yieldable engine function without stalling the server. A Lua error raised inside the callback is caught and reported back to the client as a normal MCP tool-execution error (`isError = true`), not a protocol-level failure.
+
+```lua
+mcp:AddTool(
+    "log",
+    "Appends a line to the server's log file. Usage: log(text)",
+    { { name = "text", type = "string", description = "Text to log", required = true } },
+    function(context, request)
+        local f = io.open(context.logPath, "a")
+        f:write(tostring(request.Parameters[1]) .. "\n")
+        f:close()
+        return "OK"
+    end
+)
+```
+
+### mcp:Start
+
+```lua
+ok, err = mcp:Start()
+```
+
+Starts the server: spins up its own independently-scheduled task (via `Tasks.New`, the same mechanism `Tasks.New(fn)` gives any script) that polls stdin non-blockingly, decodes JSON-RPC requests, and dispatches them to registered tools. Returns immediately.
+
+Returns `true` on success. Returns `false, errmsg` if stdin/stdout are not available in this host (e.g. a GUI-subsystem process launched with no console and no redirected pipes) — there is no reasonable MCP client to serve in that case, so `Start()` fails cleanly rather than guessing.
+
+Tools must be registered with `AddTool` before calling `Start()`.
+
+**`print`/`io.write` are globally redirected the moment `Start()` succeeds.** stdout is reserved for JSON-RPC responses, so once the server is running nothing may write to it directly — this holds regardless of which coroutine calls `print`/`io.write` or when. Output isn't discarded: whatever a tool callback prints while it runs is captured and added as its own entry in that call's `content` array, ahead of the callback's actual return value. Output produced outside of any tool dispatch (nothing currently listening) is dropped the next time a dispatch starts.
+
+### mcp:IsRunning
+
+```lua
+bool  mcp:IsRunning()
+```
+
+Returns `true` while the server's polling task is still active. Becomes `false` once the client closes its end of the pipe (the normal MCP disconnect path — stdin reaches EOF) or after `mcp:Stop()` is called. Since `Start()` returns immediately, the idiomatic top-level script keeps itself (and therefore `kitsune.exe`) alive by polling this:
+
+```lua
+local ok, err = mcp:Start()
+assert(ok, err)
+
+while mcp:IsRunning() do
+    Sleep(20)
+end
+```
+
+### mcp:Stop
+
+```lua
+nil  mcp:Stop()
+```
+
+Signals the polling task to stop; it exits cleanly on its next poll iteration (typically within a few milliseconds).
+
+### Complete example
+
+```lua
+local mcp = MCP.Create(
+    { Name = "kitsune-lua", Version = VERSION or "1.0.0" },
+    { logPath = "mcp_server_example.log" }
+)
+
+mcp:AddTool(
+    "log",
+    "Appends a line to the server's log file. Usage: log(text)",
+    { { name = "text", type = "string", description = "Text to log", required = true } },
+    function(context, request)
+        local f = io.open(context.logPath, "a")
+        f:write(tostring(request.Parameters[1]) .. "\n")
+        f:close()
+        return "OK"
+    end
+)
+
+mcp:AddTool(
+    "run_lua",
+    "Executes a snippet of Lua code against this engine and returns its result. " ..
+    "The full Kitsune API (Redis, HttpClient, SQLite, Stream, Json, ...) is available.",
+    { { name = "code", type = "string", description = "Lua source; the value returned becomes the tool result", required = true } },
+    function(context, request)
+        local fn, err = load(request.Arguments.code, "=run_lua", "t", _G)
+        if not fn then
+            error("compile error: " .. tostring(err))
+        end
+        return tostring(fn())
+    end
+)
+
+local ok, err = mcp:Start()
+assert(ok, err)
+
+while mcp:IsRunning() do
+    Sleep(20)
+end
+```
+
+Run with `kitsune mcp_server_example.lua`, then register it with an MCP client by pointing it at the built `Kitsune.exe` and this script — the client will spawn the process and talk to it over stdin/stdout for the life of the session.
 
 ---
 
