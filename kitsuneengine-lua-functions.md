@@ -36,6 +36,7 @@ A comprehensive reference for all available functions in the Lua environment.
 - [Decimal](#decimal)
 - [MongoDB](#mongodb)
 - [FileSystem](#filesystem)
+- [Image](#image)
 - [Xml](#xml)
 - [Yaml](#yaml)
 - [Toml](#toml)
@@ -3128,6 +3129,132 @@ Wchar   FileSystem.GetSpecialFolder(csidl)   -- Windows only
 | `0x000e` | My Videos |
 | `0x0010` | Desktop Directory |
 | `0x001a` | AppData |
+
+---
+
+## Image
+
+Pixel-level PNG loading/editing/saving, native to the engine (no external
+process, no window/OpenGL context required). Decoding uses `stb_image`;
+encoding uses `stb_image_write`; PNG `tEXt`/`iTXt` metadata tags are read and
+written by a small hand-rolled chunk reader/writer on top of both. `img` is
+an `Image` object returned by `Open`/`New`/`FromBytes`/`Crop`/`Resize`/`Clone`.
+
+Pixels are RGBA8 (straight, non-premultiplied alpha). Coordinates are
+0-indexed pixel coordinates (`x` = column, `y` = row, origin top-left) — not
+Lua's usual 1-indexed convention. Only PNG is supported (no JPEG).
+
+```lua
+Image  Image.Open(path)
+Image  Image.New(width, height)
+Image  Image.FromBytes(data)
+
+table  img:GetMetadata()
+       img:SetMetadata(key, value)
+number img:GetWidth()
+number img:GetHeight()
+int,int,int,int img:GetPixel(x, y)
+       img:SetPixel(x, y, r, g, b, opt a)
+
+Image  img:Crop(x, y, w, h)
+Image  img:Resize(width, height, opt filter)
+Image  img:Clone()
+
+       img:FillRect(x, y, w, h, r, g, b, opt a)
+       img:DrawLine(x1, y1, x2, y2, r, g, b, opt a, opt thickness, opt antialias)
+       img:DrawCircle(cx, cy, radius, r, g, b, opt a, opt filled, opt antialias)
+       img:Composite(otherImg, x, y, opt alpha)
+int,int,int,int,int img:Diff(otherImg)
+
+int    img:Save(path)
+string img:ToBytes()
+
+number,number,number Image.RGBtoHSV(r, g, b)
+int,int,int          Image.HSVtoRGB(h, s, v)
+number,number,number Image.RGBtoHSL(r, g, b)
+int,int,int          Image.HSLtoRGB(h, s, l)
+
+       img:Tint(r, g, b, opt strength)
+       img:RecolorPalette(mapping)
+       img:AdjustHSV(opt hueShift, opt saturationMul, opt valueMul, opt x, opt y, opt w, opt h)
+       img:Dither(palette, opt amount)
+       img:Outline(r, g, b, opt a, opt thickness)
+
+       img:Stamp(brushImg, x, y, opt opacity)
+       img:StrokePath(brushImg, points, opt spacing, opt opacity)
+
+Image  img:FlipHorizontal()
+Image  img:FlipVertical()
+Image  img:Rotate90(opt clockwise)
+Image  img:PadCanvas(left, top, right, bottom)
+Image  img:DropShadow(offsetX, offsetY, blurRadius, r, g, b, opt a)
+
+       img:Blur(radius, opt passes)
+       img:Invert(opt x, opt y, opt w, opt h)
+       img:Grayscale(opt strength, opt x, opt y, opt w, opt h)
+       img:AdjustBrightnessContrast(opt brightness, opt contrast, opt x, opt y, opt w, opt h)
+       img:Threshold(cutoff, r, g, b, opt a, opt useAlpha)
+       img:ApplyMask(maskImg, opt useLuminance)
+       img:Noise(opt amount, opt seed, opt monochrome, opt x, opt y, opt w, opt h)
+
+       img:FillGradientLinear(x1, y1, r1, g1, b1, opt a1, x2, y2, r2, g2, b2, opt a2)
+       img:FillGradientRadial(cx, cy, radius, r1, g1, b1, opt a1, r2, g2, b2, opt a2)
+       img:FillPolygon(points, r, g, b, opt a)
+       img:DrawText(text, x, y, r, g, b, opt a, opt scale)
+
+table  img:ExtractPalette(opt n)
+```
+
+| Function | Description |
+|----------|-------------|
+| `Open` | Decodes a PNG file from disk into a new `Image`. Raises a Lua error if the file cannot be read or decoded |
+| `New` | Creates a blank, fully-transparent `width`x`height` canvas |
+| `FromBytes` | Decodes a PNG already held in memory (e.g. base64-decoded bytes) — no disk I/O |
+| `GetMetadata` | Returns `{ width, height, tags = { key = value, ... } }`. `tags` merges every `tEXt`/`iTXt` chunk found at decode time (last chunk for a given key wins); `zTXt` and compressed `iTXt` chunks are not read |
+| `SetMetadata` | Sets (or overwrites) one tag. Tags are written as uncompressed `iTXt` chunks by `Save`/`ToBytes` |
+| `GetWidth` / `GetHeight` | Convenience accessors, equivalent to the fields on `GetMetadata()` |
+| `GetPixel` | Returns `r, g, b, a` (0-255) at `(x, y)`. Errors if out of bounds |
+| `SetPixel` | Overwrites the pixel at `(x, y)` directly (no blending). `a` defaults to 255. Errors if out of bounds |
+| `Crop` | Returns a new `Image` containing the `w`x`h` rect at `(x, y)`. Non-mutating; carries tags over. Errors if the rect doesn't fit |
+| `Resize` | Returns a new `Image` at `width`x`height`, non-mutating, carries tags over. `filter` is `"bilinear"` (default, smooth) or `"nearest"` (no blending -- crisp pixel-art edges when zooming in for pixel-perfect inspection, or scaling up retro-style art without smearing) |
+| `Clone` | Returns an independent copy of the image, including tags |
+| `FillRect` | Alpha-composites (`over`) a solid color into the `w`x`h` rect at `(x, y)`, mutating in place. Clipped silently to the canvas; `a` defaults to 255 |
+| `DrawLine` | Alpha-composites a line from `(x1,y1)` to `(x2,y2)`, `thickness` pixels wide (default 1) |
+| `DrawCircle` | Alpha-composites a circle at `(cx,cy)` with `radius`. `filled` defaults to `true`; pass `false` for a ~1px outline |
+| `Composite` | Alpha-blends `otherImg` onto `img` at offset `(x, y)`. `alpha` (0-1, default 1) is an extra global opacity multiplier on top of `otherImg`'s own per-pixel alpha |
+| `Diff` | Compares two same-sized images pixel-by-pixel. Returns `x, y, w, h, changedCount` — the bounding box of every differing pixel — so a hand-edited region can be found and transplanted without diffing the whole image. Returns `nil, nil, nil, nil, 0` if identical. Errors on a dimension mismatch |
+| `Save` | Encodes to PNG (tags included) and writes to `path`. Returns the number of bytes written |
+| `ToBytes` | Encodes to PNG (tags included) and returns it as a Lua string, with no disk I/O |
+| `RGBtoHSV` / `HSVtoRGB` | Convert between 0-255 RGB and HSV (`h` in `[0,360)`, `s`/`v` in `[0,1]`). Pure math, no `Image` object involved |
+| `RGBtoHSL` / `HSLtoRGB` | Convert between 0-255 RGB and HSL (`h` in `[0,360)`, `s`/`l` in `[0,1]`) |
+| `Tint` | Recolors every opaque pixel toward `(r,g,b)`'s hue/saturation while keeping each pixel's own brightness (HSV value) — reuses one base sprite as a "team color"/"ore type" variant without losing its shading. `strength` (0-1, default 1) blends toward the tint |
+| `RecolorPalette` | Exact color-swap recoloring. `mapping` is `{ {fromR,fromG,fromB, toR,toG,toB, opt tolerance}, ... }` — the first rule within `tolerance` (per-channel max difference, default 0 = exact) wins for each pixel |
+| `AdjustHSV` | Adjusts hue (`hueShift`, degrees), saturation and value (`saturationMul`/`valueMul` multipliers, 1.0 = unchanged) over a region (defaults to the whole image) |
+| `Dither` | Quantizes to `palette` (`{ {r,g,b}, ... }`) using 4x4 ordered (Bayer) dithering — breaks up flat color bands instead of hard banding. `amount` (default 32) is the dither strength in 0-255 units |
+| `Outline` | Grows a colored, `thickness`-pixel border around the image's existing silhouette (based on a snapshot of the original alpha, so it doesn't bleed into itself) |
+| `Stamp` | Pastes `brushImg` centered on `(x, y)`, alpha-blended, its own per-pixel alpha further scaled by `opacity` (default 1) |
+| `StrokePath` | Drags `brushImg` along a polyline (`points` = `{ {x,y}, ... }`), stamping it every `spacing` pixels of travelled distance so a fast stroke has no gaps |
+| `FlipHorizontal` / `FlipVertical` | Return a new, mirrored `Image` (non-mutating, like `Crop`/`Resize`/`Clone`) |
+| `Rotate90` | Returns a new `Image` rotated 90°, dimensions swapped. `clockwise` defaults to `true` |
+
+`DrawLine` and `DrawCircle` both take a trailing optional `antialias` boolean (default `false`) — hard edges are usually what pixel art wants, so smooth, coverage-based edges are opt-in rather than the default.
+
+| Function | Description |
+|----------|-------------|
+| `PadCanvas` | Returns a new, larger `Image` with the original pasted at `(left, top)` and the new border transparent |
+| `DropShadow` | Renders a blurred, offset, colored silhouette of `img` into a new (larger) canvas — the `shadow.png` workflow the factorio-art pipeline currently does by hand. The canvas grows to fit both the blur falloff and however far `offsetX`/`offsetY` shift the silhouette, so large offsets (Factorio shadows commonly shift 40+ px) don't clip |
+| `Blur` | Separable box blur, alpha-aware (won't bleed black into transparent edges). `passes` (default 3) approximates a Gaussian falloff |
+| `Invert` | Inverts RGB (255-channel) over a region (defaults to the whole image); alpha is untouched |
+| `Grayscale` | Desaturates toward luminance (`0.299R+0.587G+0.114B`); `strength` (0-1, default 1) blends between original and full grayscale |
+| `AdjustBrightnessContrast` | `brightness` is additive (-255..255); `contrast` uses the standard contrast-correction-factor formula (-255..255, 0 = unchanged) |
+| `Threshold` | Two-tone stencil: pixels at/above `cutoff` (0-255, luminance by default or alpha if `useAlpha`) become `(r,g,b,a)`, everything else becomes fully transparent |
+| `ApplyMask` | Multiplies `img`'s alpha by `maskImg`'s alpha (or luminance, if `useLuminance`) — combine an arbitrary painted/generated shape as a stencil. Both images must be the same size |
+| `Noise` | Deterministic per-pixel random offset (seeded, so the same `seed` always reproduces the same grain) over a region — texture/grit without an AI round-trip. `monochrome` (default true) offsets all channels together so grain doesn't shift hue |
+| `FillGradientLinear` | Alpha-composites a gradient between `(r1,g1,b1,a1)` at `(x1,y1)` and `(r2,g2,b2,a2)` at `(x2,y2)` across the whole image |
+| `FillGradientRadial` | Alpha-composites a gradient from `(r1,g1,b1,a1)` at the center `(cx,cy)` to `(r2,g2,b2,a2)` at `radius` |
+| `FillPolygon` | Even-odd scanline fill of an arbitrary polygon (`points` = `{ {x,y}, ... }`) |
+| `DrawText` | Draws `text` with a bundled 3x5 bitmap font, `scale` pixels per font-pixel (default 1). Only digits, space, `-`, `.`, `:` are supported today — enough for coordinate/measurement labels; anything else renders as a blank cell rather than erroring |
+| `ExtractPalette` | Returns the top `n` (default 8) most common colors as `{ {r=,g=,b=,count=}, ... }`, ranked by frequency (colors are bucketed to 5 bits/channel so near-identical shades merge). Feeds directly into `Dither`'s palette argument |
 
 ---
 

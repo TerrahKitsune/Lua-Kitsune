@@ -149,6 +149,12 @@ set(KITSUNE_ENGINE_SOURCES
 	LuaFileSystem.cpp
 	LuaFileSystemMain.cpp
 
+	# ── Image (stb_image decode + stb_image_write encode, both header-only and bundled
+	#           in stb/; PNG tEXt/iTXt tag support is hand-rolled on top, using miniz's
+	#           mz_crc32 -- see LuaImage.cpp) ─────────────────────────────────────────
+	LuaImage.cpp
+	LuaImageMain.cpp
+
 	# ── Mutex (POSIX named semaphores on Linux) ────────────────────────────────────────
 	LuaMutex.cpp
 	LuaMutexMain.cpp

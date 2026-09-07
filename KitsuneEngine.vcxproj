@@ -232,6 +232,8 @@
     <ClCompile Include="decimalmain.cpp" />
     <ClCompile Include="LuaFileSystem.cpp" />
     <ClCompile Include="LuaFileSystemMain.cpp" />
+    <ClCompile Include="LuaImage.cpp" />
+    <ClCompile Include="LuaImageMain.cpp" />
     <ClCompile Include="LuaMD5.cpp" />
     <ClCompile Include="LuaSQLite.cpp" />
     <ClCompile Include="LuaSQLiteMain.cpp" />
@@ -394,6 +396,10 @@
     <ClInclude Include="decimalmain.h" />
     <ClInclude Include="LuaFileSystem.h" />
     <ClInclude Include="LuaFileSystemMain.h" />
+    <ClInclude Include="LuaImage.h" />
+    <ClInclude Include="LuaImageMain.h" />
+    <ClInclude Include="stb\stb_image.h" />
+    <ClInclude Include="stb\stb_image_write.h" />
     <ClInclude Include="LuaMD5.h" />
     <ClInclude Include="LuaSQLite.h" />
     <ClInclude Include="LuaSQLiteMain.h" />
