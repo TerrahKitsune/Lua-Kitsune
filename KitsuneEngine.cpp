@@ -15,6 +15,8 @@
 #ifdef _WIN32
 // WinSock2 must be included before windows.h or any headers that include it
 #include <WinSock2.h>
+#include <mmsystem.h>  // timeBeginPeriod/timeEndPeriod
+#pragma comment(lib, "winmm.lib")
 #endif
 #include "platform.h"
 
@@ -990,8 +992,18 @@ static void Ticker(lua_State* L, lua_Debug* ar) {
 	// luaD_callnoyield (non-yieldable) when L->ci is a C frame, so lua_yield would raise
 	// "attempt to yield across a C-call boundary".  Skipping the yield here is safe — the
 	// coroutine will be preempted at the next hook firing that lands in a yieldable Lua frame.
-	if (state->runningCount.load() > 1 && state->currentCoroutineId.load() && lua_isyieldable(L))
+	if (state->runningCount.load() > 1 && state->currentCoroutineId.load() && lua_isyieldable(L)) {
+		// This is a forced preemption, not a voluntary idle Yield()/Yield(false): the
+		// coroutine burned a full instruction-count timeslice, so it did real work and
+		// wants the CPU back immediately. Mark didWork so the scheduler's idle-sleep
+		// path (Step 5, "all active coroutines yielded with no work done") doesn't
+		// mistake this for genuine idleness and insert a real OS sleep between every
+		// 1000-instruction slice of a busy coroutine.
+		KitsuneCoroutine* selfSlot = FindSlot(state, (int)state->currentCoroutineId.load());
+		if (selfSlot)
+			selfSlot->didWork = true;
 		lua_yield(L, 0);
+	}
 }
 
 // Retrieve the coroutine's cached lua_State*.
@@ -1587,6 +1599,12 @@ extern "C" {
 			if (g_coOwned) CoUninitialize();
 			return false;
 		}
+		// Raise the Windows timer resolution from the default ~15.6ms tick to ~1ms.
+		// Without this, SchedulerProc's idle Sleep(1) (Step 5, "all active coroutines
+		// yielded with no work done") actually blocks ~15.6ms per call instead of ~1ms,
+		// which is disastrous when combined with Ticker's forced per-1000-instruction
+		// preemption of a busy coroutine. Matched by timeEndPeriod(1) in KitsuneCleanup.
+		timeBeginPeriod(1);
 #endif
 #ifdef KITSUNE_HTTP
 		curl_global_init(CURL_GLOBAL_DEFAULT);
@@ -1604,6 +1622,7 @@ extern "C" {
 		if (!state->L) {
 			delete state;
 #ifdef _WIN32
+			timeEndPeriod(1);
 			WSACleanup();
 			if (g_coOwned) CoUninitialize();
 #endif
@@ -1728,6 +1747,7 @@ extern "C" {
 			lua_close(state->L);
 			delete state;
 #ifdef _WIN32
+			timeEndPeriod(1);
 			WSACleanup();
 			if (g_coOwned) CoUninitialize();
 #endif
@@ -4115,6 +4135,7 @@ extern "C" {
 		llama_backend_cleanup();
 #endif
 #ifdef _WIN32
+		timeEndPeriod(1);
 		WSACleanup();
 #endif
 		size_t leaked = EndMemoryManager();
