@@ -3258,6 +3258,71 @@ table  img:ExtractPalette(opt n)
 
 ---
 
+## Sound
+
+PCM sample-level audio creation/editing, native to the engine (no external process, no playback/SDL_mixer dependency required). Decoding and encoding both use `dr_wav`. `snd` is a `Sound` object returned by `New`/`Tone`/`Noise`/`Open`/`FromBytes`/`Clone`/`Slice`/`Concat`/`Resample`.
+
+Samples are stored internally as float (-1..1) regardless of the source file's bit depth, so edits don't ratchet quantization the way repeated int16 in-place edits would; `Save`/`ToBytes` always emit 16-bit PCM WAV, which Factorio's modding system accepts directly (`.ogg` is only its *recommended* format for size, not a requirement) and which `SDL.Audio.LoadRaw` can also load for playback. Frames are 0-indexed (`frame` = 0..`GetFrameCount()-1`), matching `Image`'s 0-indexed pixel coordinates rather than Lua's 1-indexed convention. WAV only -- no MP3/OGG decode/encode (`SDL.Audio.*` already handles MP3/OGG *playback* separately via SDL_mixer).
+
+```lua
+Sound  Sound.New(sampleRate, channels, frameCount)
+Sound  Sound.Tone(sampleRate, channels, frameCount, frequency, opt waveform, opt amplitude)
+Sound  Sound.Noise(sampleRate, channels, frameCount, opt amplitude)
+Sound  Sound.Open(path)
+Sound  Sound.FromBytes(data)
+
+number snd:GetSampleRate()
+number snd:GetChannels()
+number snd:GetFrameCount()
+number snd:GetDuration()
+number snd:GetSample(frame, channel)
+       snd:SetSample(frame, channel, value)
+
+Sound  snd:Clone()
+Sound  snd:Slice(startFrame, frameCount)
+Sound  snd:Concat(otherSnd)
+Sound  snd:Resample(newSampleRate)
+
+       snd:Mix(otherSnd, atFrame, opt gain)
+       snd:ApplyGain(gain, opt startFrame, opt frameCount)
+       snd:Fade(startFrame, frameCount, fromGain, toGain)
+       snd:Normalize(opt targetPeak)
+       snd:Reverse()
+
+number,number snd:GetPeak()
+number        snd:GetRMS()
+
+int    snd:Save(path)
+string snd:ToBytes()
+```
+
+| Function | Description |
+|----------|-------------|
+| `New` | Creates a silent buffer with the given sample rate, channel count, and frame count |
+| `Tone` | Generates a fixed-frequency waveform identically on every channel. `waveform` is `"sine"` (default), `"square"`, `"triangle"`, or `"saw"`. `amplitude` (0-1, default 1) |
+| `Noise` | Generates white noise (uniform random samples) at `amplitude` (0-1, default 1) |
+| `Open` | Decodes a WAV file from disk into a new `Sound`. Raises a Lua error if the file cannot be read or decoded |
+| `FromBytes` | Decodes a WAV already held in memory -- no disk I/O |
+| `GetSampleRate` / `GetChannels` / `GetFrameCount` | Convenience accessors |
+| `GetDuration` | Length in seconds (`GetFrameCount() / GetSampleRate()`) |
+| `GetSample` | Returns the sample (-1..1) at `(frame, channel)`. Errors if out of bounds |
+| `SetSample` | Overwrites the sample at `(frame, channel)`, clamped to -1..1. Errors if out of bounds |
+| `Clone` | Returns an independent copy |
+| `Slice` | Returns a new `Sound` containing `frameCount` frames starting at `startFrame`. Errors if the range doesn't fit |
+| `Concat` | Returns a new `Sound` with `otherSnd`'s frames appended after `snd`'s. Errors on a channel-count or sample-rate mismatch |
+| `Resample` | Returns a new `Sound` at `newSampleRate`, linear-interpolated, with a proportionally scaled frame count |
+| `Mix` | Additively mixes `otherSnd` into `snd` starting at `atFrame`, in place, scaled by `gain` (default 1) and clamped. Frames that fall outside `snd`'s bounds are clipped silently, like `Image:Composite` clips off-canvas pixels. Errors on a channel-count mismatch |
+| `ApplyGain` | Multiplies samples by `gain` over `[startFrame, startFrame+frameCount)` (defaults to the whole buffer), in place, clamped |
+| `Fade` | Applies a linear gain envelope from `fromGain` to `toGain` across `[startFrame, startFrame+frameCount)`, in place, clamped. Call twice (e.g. 0→1 then 1→0) for a fade-in/fade-out |
+| `Normalize` | Scales every sample so the buffer's peak absolute value becomes `targetPeak` (default 1.0). No-ops on silence |
+| `Reverse` | Reverses frame order in place (all channels) |
+| `GetPeak` | Returns `min, max` sample values across the whole buffer |
+| `GetRMS` | Returns the RMS (root-mean-square) level across the whole buffer |
+| `Save` | Encodes to 16-bit PCM WAV and writes to `path`. Returns the number of bytes written |
+| `ToBytes` | Encodes to 16-bit PCM WAV and returns it as a Lua string, with no disk I/O |
+
+---
+
 ## Yaml
 
 A YAML serialization module backed by [libyaml](https://github.com/yaml/libyaml). Supports encoding Lua tables to YAML strings and decoding YAML strings back to Lua values. Implements YAML 1.1.

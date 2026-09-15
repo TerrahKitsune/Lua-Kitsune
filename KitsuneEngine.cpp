@@ -64,6 +64,7 @@
 #include "TimerMain.h"
 #include "LuaFileSystemMain.h"
 #include "LuaImageMain.h"
+#include "LuaSoundMain.h"
 #include "StreamMain.h"
 #include "stream.h"
 #include "Sha256Main.h"
@@ -1676,6 +1677,7 @@ extern "C" {
 		luaopen_timer(L);        lua_setglobal(L, "Timer");
 		luaopen_filesystem(L);   lua_setglobal(L, "FileSystem");
 		luaopen_image(L);        lua_setglobal(L, "Image");
+		luaopen_sound(L);        lua_setglobal(L, "Sound");
 		luaopen_md5(L);          lua_setglobal(L, "MD5");
 		luaopen_stream(L);       lua_setglobal(L, "Stream");
 #ifdef KITSUNE_HTTP

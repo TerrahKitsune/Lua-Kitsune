@@ -309,6 +309,9 @@
     <Filter Include="LuaMcp">
       <UniqueIdentifier>{289a3914-5869-45cc-ba00-4339210eb02e}</UniqueIdentifier>
     </Filter>
+    <Filter Include="LuaSound">
+      <UniqueIdentifier>{b91fb2e9-5d30-48f9-a226-81d9fa72a1a8}</UniqueIdentifier>
+    </Filter>
     <Filter Include="LuaImage">
       <UniqueIdentifier>{a8efa1d8-4c2f-47e8-9115-70c8e9619097}</UniqueIdentifier>
     </Filter>
@@ -782,6 +785,12 @@
     <ClCompile Include="LuaImage.cpp">
       <Filter>LuaImage</Filter>
     </ClCompile>
+    <ClCompile Include="LuaSoundMain.cpp">
+      <Filter>LuaSound</Filter>
+    </ClCompile>
+    <ClCompile Include="LuaSound.cpp">
+      <Filter>LuaSound</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="KitsuneEngine.h">
@@ -1239,6 +1248,15 @@
     </ClInclude>
     <ClInclude Include="LuaImage.h">
       <Filter>LuaImage</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaSoundMain.h">
+      <Filter>LuaSound</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaSound.h">
+      <Filter>LuaSound</Filter>
+    </ClInclude>
+    <ClInclude Include="dr_libs\dr_wav.h">
+      <Filter>LuaSound</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

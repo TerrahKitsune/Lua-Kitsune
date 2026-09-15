@@ -155,6 +155,11 @@ set(KITSUNE_ENGINE_SOURCES
 	LuaImage.cpp
 	LuaImageMain.cpp
 
+	# ── Sound (dr_wav.h decode/encode, header-only and bundled in dr_libs/;
+	#          float32 PCM editing -- see LuaSound.cpp) ────────────────────────────────
+	LuaSound.cpp
+	LuaSoundMain.cpp
+
 	# ── Mutex (POSIX named semaphores on Linux) ────────────────────────────────────────
 	LuaMutex.cpp
 	LuaMutexMain.cpp
@@ -163,6 +168,11 @@ set(KITSUNE_ENGINE_SOURCES
 	LuaSQLite.cpp
 	LuaSQLiteMain.cpp
 	SQLite/sqlite3.c
+
+	# ── DuckDB (bundled amalgamation) ──────────────────────────────────────────────────
+	LuaDuckDB.cpp
+	LuaDuckDBMain.cpp
+	DuckDB/duckdb.cpp
 
 	# ── Process management (cross-platform: POSIX fork/exec on Linux) ─────────────────
 	LuaProcess.cpp
@@ -190,6 +200,12 @@ else()
 endif()
 
 add_library(KitsuneEngine SHARED ${KITSUNE_ENGINE_SOURCES})
+
+# DuckDB (bundled amalgamation, DuckDB/duckdb.cpp): matches the Windows vcxproj's
+# DUCKDB_STATIC_BUILD define and DuckDB/ include dir. The vcxproj also force-includes
+# duckdb_win32_preamble.h for MSVC compatibility shims that GCC/Clang don't need.
+target_include_directories(KitsuneEngine PRIVATE "${CMAKE_SOURCE_DIR}/DuckDB")
+target_compile_definitions(KitsuneEngine PRIVATE DUCKDB_STATIC_BUILD)
 
 # ── KITSUNE_ALL umbrella option ───────────────────────────────────────────────
 # Mirrors the Windows KITSUNE_ALL preprocessor flag: enables every optional
