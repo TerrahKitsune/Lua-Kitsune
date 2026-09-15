@@ -312,6 +312,9 @@
     <Filter Include="LuaSound">
       <UniqueIdentifier>{b91fb2e9-5d30-48f9-a226-81d9fa72a1a8}</UniqueIdentifier>
     </Filter>
+    <Filter Include="LuaSound\Vorbis">
+      <UniqueIdentifier>{c1a2d3e4-6f70-4a81-b912-92eafb83b2b9}</UniqueIdentifier>
+    </Filter>
     <Filter Include="LuaImage">
       <UniqueIdentifier>{a8efa1d8-4c2f-47e8-9115-70c8e9619097}</UniqueIdentifier>
     </Filter>
@@ -791,6 +794,81 @@
     <ClCompile Include="LuaSound.cpp">
       <Filter>LuaSound</Filter>
     </ClCompile>
+    <ClCompile Include="LuaSoundVorbis.cpp">
+      <Filter>LuaSound</Filter>
+    </ClCompile>
+    <ClCompile Include="libogg\src\bitwise.c">
+      <Filter>LuaSound\Vorbis</Filter>
+    </ClCompile>
+    <ClCompile Include="libogg\src\framing.c">
+      <Filter>LuaSound\Vorbis</Filter>
+    </ClCompile>
+    <ClCompile Include="libvorbis\lib\mdct.c">
+      <Filter>LuaSound\Vorbis</Filter>
+    </ClCompile>
+    <ClCompile Include="libvorbis\lib\smallft.c">
+      <Filter>LuaSound\Vorbis</Filter>
+    </ClCompile>
+    <ClCompile Include="libvorbis\lib\block.c">
+      <Filter>LuaSound\Vorbis</Filter>
+    </ClCompile>
+    <ClCompile Include="libvorbis\lib\envelope.c">
+      <Filter>LuaSound\Vorbis</Filter>
+    </ClCompile>
+    <ClCompile Include="libvorbis\lib\window.c">
+      <Filter>LuaSound\Vorbis</Filter>
+    </ClCompile>
+    <ClCompile Include="libvorbis\lib\lsp.c">
+      <Filter>LuaSound\Vorbis</Filter>
+    </ClCompile>
+    <ClCompile Include="libvorbis\lib\lpc.c">
+      <Filter>LuaSound\Vorbis</Filter>
+    </ClCompile>
+    <ClCompile Include="libvorbis\lib\analysis.c">
+      <Filter>LuaSound\Vorbis</Filter>
+    </ClCompile>
+    <ClCompile Include="libvorbis\lib\synthesis.c">
+      <Filter>LuaSound\Vorbis</Filter>
+    </ClCompile>
+    <ClCompile Include="libvorbis\lib\psy.c">
+      <Filter>LuaSound\Vorbis</Filter>
+    </ClCompile>
+    <ClCompile Include="libvorbis\lib\info.c">
+      <Filter>LuaSound\Vorbis</Filter>
+    </ClCompile>
+    <ClCompile Include="libvorbis\lib\floor1.c">
+      <Filter>LuaSound\Vorbis</Filter>
+    </ClCompile>
+    <ClCompile Include="libvorbis\lib\floor0.c">
+      <Filter>LuaSound\Vorbis</Filter>
+    </ClCompile>
+    <ClCompile Include="libvorbis\lib\res0.c">
+      <Filter>LuaSound\Vorbis</Filter>
+    </ClCompile>
+    <ClCompile Include="libvorbis\lib\mapping0.c">
+      <Filter>LuaSound\Vorbis</Filter>
+    </ClCompile>
+    <ClCompile Include="libvorbis\lib\registry.c">
+      <Filter>LuaSound\Vorbis</Filter>
+    </ClCompile>
+    <ClCompile Include="libvorbis\lib\codebook.c">
+      <Filter>LuaSound\Vorbis</Filter>
+    </ClCompile>
+    <ClCompile Include="libvorbis\lib\sharedbook.c">
+      <Filter>LuaSound\Vorbis</Filter>
+    </ClCompile>
+    <ClCompile Include="libvorbis\lib\lookup.c">
+      <Filter>LuaSound\Vorbis</Filter>
+    </ClCompile>
+    <ClCompile Include="libvorbis\lib\bitrate.c">
+      <Filter>LuaSound\Vorbis</Filter>
+    </ClCompile>
+    <ClCompile Include="libvorbis\lib\vorbisfile.c">
+      <Filter>LuaSound\Vorbis</Filter>
+    </ClCompile>
+    <ClCompile Include="libvorbis\lib\vorbisenc.c">
+      <Filter>LuaSound\Vorbis</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="KitsuneEngine.h">
@@ -1254,6 +1332,27 @@
     </ClInclude>
     <ClInclude Include="LuaSound.h">
       <Filter>LuaSound</Filter>
+    </ClInclude>
+    <ClInclude Include="LuaSoundVorbis.h">
+      <Filter>LuaSound</Filter>
+    </ClInclude>
+    <ClInclude Include="libogg\include\ogg\ogg.h">
+      <Filter>LuaSound\Vorbis</Filter>
+    </ClInclude>
+    <ClInclude Include="libogg\include\ogg\os_types.h">
+      <Filter>LuaSound\Vorbis</Filter>
+    </ClInclude>
+    <ClInclude Include="libogg\include\ogg\config_types.h">
+      <Filter>LuaSound\Vorbis</Filter>
+    </ClInclude>
+    <ClInclude Include="libvorbis\include\vorbis\codec.h">
+      <Filter>LuaSound\Vorbis</Filter>
+    </ClInclude>
+    <ClInclude Include="libvorbis\include\vorbis\vorbisenc.h">
+      <Filter>LuaSound\Vorbis</Filter>
+    </ClInclude>
+    <ClInclude Include="libvorbis\include\vorbis\vorbisfile.h">
+      <Filter>LuaSound\Vorbis</Filter>
     </ClInclude>
     <ClInclude Include="dr_libs\dr_wav.h">
       <Filter>LuaSound</Filter>

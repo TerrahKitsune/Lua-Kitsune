@@ -15,16 +15,19 @@ static const struct luaL_Reg soundfunctions[] = {
 	{ "GetSample",     Sound_GetSample },
 	{ "SetSample",     Sound_SetSample },
 
-	{ "Clone",    Sound_Clone },
-	{ "Slice",    Sound_Slice },
-	{ "Concat",   Sound_Concat },
-	{ "Resample", Sound_Resample },
+	{ "Clone",      Sound_Clone },
+	{ "Slice",      Sound_Slice },
+	{ "Concat",     Sound_Concat },
+	{ "Resample",   Sound_Resample },
+	{ "ToMono",     Sound_ToMono },
+	{ "ToChannels", Sound_ToChannels },
 
 	{ "Mix",       Sound_Mix },
 	{ "ApplyGain", Sound_ApplyGain },
 	{ "Fade",      Sound_Fade },
 	{ "Normalize", Sound_Normalize },
 	{ "Reverse",   Sound_Reverse },
+	{ "Filter",    Sound_Filter },
 
 	{ "GetPeak", Sound_GetPeak },
 	{ "GetRMS",  Sound_GetRMS },

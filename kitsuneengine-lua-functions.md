@@ -3260,14 +3260,16 @@ table  img:ExtractPalette(opt n)
 
 ## Sound
 
-PCM sample-level audio creation/editing, native to the engine (no external process, no playback/SDL_mixer dependency required). Decoding and encoding both use `dr_wav`. `snd` is a `Sound` object returned by `New`/`Tone`/`Noise`/`Open`/`FromBytes`/`Clone`/`Slice`/`Concat`/`Resample`.
+PCM sample-level audio creation/editing, native to the engine (no external process, no playback/SDL_mixer dependency required). Decoding/encoding uses `dr_wav` for WAV and `libogg`/`libvorbis` for OGG. `snd` is a `Sound` object returned by `New`/`Tone`/`Noise`/`Open`/`FromBytes`/`Clone`/`Slice`/`Concat`/`Resample`.
 
-Samples are stored internally as float (-1..1) regardless of the source file's bit depth, so edits don't ratchet quantization the way repeated int16 in-place edits would; `Save`/`ToBytes` always emit 16-bit PCM WAV, which Factorio's modding system accepts directly (`.ogg` is only its *recommended* format for size, not a requirement) and which `SDL.Audio.LoadRaw` can also load for playback. Frames are 0-indexed (`frame` = 0..`GetFrameCount()-1`), matching `Image`'s 0-indexed pixel coordinates rather than Lua's 1-indexed convention. WAV only -- no MP3/OGG decode/encode (`SDL.Audio.*` already handles MP3/OGG *playback* separately via SDL_mixer).
+Samples are stored internally as float (-1..1) regardless of the source file's format/bit depth, so edits don't ratchet quantization the way repeated int16 in-place edits would. Frames are 0-indexed (`frame` = 0..`GetFrameCount()-1`), matching `Image`'s 0-indexed pixel coordinates rather than Lua's 1-indexed convention.
+
+`Open`/`FromBytes` auto-detect WAV vs OGG by sniffing the data's magic bytes (`RIFF` vs `OggS`) rather than trusting a file extension -- this matters most for `FromBytes`, which has no filename to go on. `Save`/`ToBytes` default to WAV (uncompressed 16-bit PCM -- the format Factorio's modding system and `SDL.Audio.LoadRaw` both accept directly) but take an optional `format` of `"ogg"` for roughly an order-of-magnitude smaller files at the cost of lossy compression -- useful when a mod's size cap makes shipping WAV assets impractical. OGG's `quality` follows libvorbis's own 0.0-1.0 VBR scale (~0.4 is roughly "average", ~0.6 is a good general-purpose default for game sound effects).
 
 ```lua
 Sound  Sound.New(sampleRate, channels, frameCount)
 Sound  Sound.Tone(sampleRate, channels, frameCount, frequency, opt waveform, opt amplitude)
-Sound  Sound.Noise(sampleRate, channels, frameCount, opt amplitude)
+Sound  Sound.Noise(sampleRate, channels, frameCount, opt amplitude, opt noiseType)
 Sound  Sound.Open(path)
 Sound  Sound.FromBytes(data)
 
@@ -3282,27 +3284,30 @@ Sound  snd:Clone()
 Sound  snd:Slice(startFrame, frameCount)
 Sound  snd:Concat(otherSnd)
 Sound  snd:Resample(newSampleRate)
+Sound  snd:ToMono()
+Sound  snd:ToChannels(channels)
 
        snd:Mix(otherSnd, atFrame, opt gain)
        snd:ApplyGain(gain, opt startFrame, opt frameCount)
        snd:Fade(startFrame, frameCount, fromGain, toGain)
        snd:Normalize(opt targetPeak)
        snd:Reverse()
+       snd:Filter(type, cutoffHz, opt Q)
 
 number,number snd:GetPeak()
 number        snd:GetRMS()
 
-int    snd:Save(path)
-string snd:ToBytes()
+int    snd:Save(path, opt format, opt quality)
+string snd:ToBytes(opt format, opt quality)
 ```
 
 | Function | Description |
 |----------|-------------|
 | `New` | Creates a silent buffer with the given sample rate, channel count, and frame count |
 | `Tone` | Generates a fixed-frequency waveform identically on every channel. `waveform` is `"sine"` (default), `"square"`, `"triangle"`, or `"saw"`. `amplitude` (0-1, default 1) |
-| `Noise` | Generates white noise (uniform random samples) at `amplitude` (0-1, default 1) |
-| `Open` | Decodes a WAV file from disk into a new `Sound`. Raises a Lua error if the file cannot be read or decoded |
-| `FromBytes` | Decodes a WAV already held in memory -- no disk I/O |
+| `Noise` | Generates noise at `amplitude` (0-1, default 1, exact peak regardless of type). `noiseType` is `"white"` (default, flat spectrum, every sample independent -- the harshest/most "static"-like), `"pink"` (more low-frequency energy, less high -- audibly softer than white), or `"brown"` (even more bottom-heavy, a simple leaky-integrator rumble -- reads as more distant/muffled). All three are still recognizably broadband noise/static in character; getting a genuinely organic hiss/steam texture is more of a sampling problem than something these generators (or `Filter` on top of them) can produce from scratch. Each channel gets independent noise |
+| `Open` | Decodes a WAV or OGG file from disk into a new `Sound` (format auto-detected). Raises a Lua error if the file cannot be read or decoded |
+| `FromBytes` | Decodes a WAV or OGG buffer already held in memory -- no disk I/O |
 | `GetSampleRate` / `GetChannels` / `GetFrameCount` | Convenience accessors |
 | `GetDuration` | Length in seconds (`GetFrameCount() / GetSampleRate()`) |
 | `GetSample` | Returns the sample (-1..1) at `(frame, channel)`. Errors if out of bounds |
@@ -3311,15 +3316,18 @@ string snd:ToBytes()
 | `Slice` | Returns a new `Sound` containing `frameCount` frames starting at `startFrame`. Errors if the range doesn't fit |
 | `Concat` | Returns a new `Sound` with `otherSnd`'s frames appended after `snd`'s. Errors on a channel-count or sample-rate mismatch |
 | `Resample` | Returns a new `Sound` at `newSampleRate`, linear-interpolated, with a proportionally scaled frame count |
+| `ToMono` | Returns a new 1-channel `Sound`, each frame averaged across `snd`'s channels |
+| `ToChannels` | Returns a new `Sound` at `channels` channels. Downmixes to mono (same averaging as `ToMono`) then broadcasts to every output channel; `channels == snd:GetChannels()` returns an independent copy, same as `Clone`. Use this before `Mix`/`Concat` when channel counts don't match -- those still error on a mismatch rather than silently converting |
 | `Mix` | Additively mixes `otherSnd` into `snd` starting at `atFrame`, in place, scaled by `gain` (default 1) and clamped. Frames that fall outside `snd`'s bounds are clipped silently, like `Image:Composite` clips off-canvas pixels. Errors on a channel-count mismatch |
 | `ApplyGain` | Multiplies samples by `gain` over `[startFrame, startFrame+frameCount)` (defaults to the whole buffer), in place, clamped |
 | `Fade` | Applies a linear gain envelope from `fromGain` to `toGain` across `[startFrame, startFrame+frameCount)`, in place, clamped. Call twice (e.g. 0→1 then 1→0) for a fade-in/fade-out |
 | `Normalize` | Scales every sample so the buffer's peak absolute value becomes `targetPeak` (default 1.0). No-ops on silence |
 | `Reverse` | Reverses frame order in place (all channels) |
+| `Filter` | Applies a standard biquad (2nd-order IIR) filter to the *whole* buffer, in place -- `type` is `"lowpass"`, `"highpass"`, `"bandpass"`, or `"notch"`; `cutoffHz` must be between 0 and Nyquist (`sampleRate/2`); `Q` (default ~0.707, maximally-flat) controls resonance/bandwidth. Filters carry state between samples, so unlike `ApplyGain`/`Fade` there's no sub-range option -- filtering only part of a buffer would leave an audible click at the boundary. Useful for muffling a tone, shaping a click/pop's character, or changing `Noise`'s brightness |
 | `GetPeak` | Returns `min, max` sample values across the whole buffer |
 | `GetRMS` | Returns the RMS (root-mean-square) level across the whole buffer |
-| `Save` | Encodes to 16-bit PCM WAV and writes to `path`. Returns the number of bytes written |
-| `ToBytes` | Encodes to 16-bit PCM WAV and returns it as a Lua string, with no disk I/O |
+| `Save` | Encodes and writes to `path`. `format` is `"wav"` (default, 16-bit PCM) or `"ogg"`; `quality` (OGG only, 0.0-1.0, default 0.6) is libvorbis's own VBR quality scale. Returns the number of bytes written |
+| `ToBytes` | Encodes and returns it as a Lua string, with no disk I/O. Same `format`/`quality` args as `Save` |
 
 ---
 

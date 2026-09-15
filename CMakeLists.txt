@@ -160,6 +160,33 @@ set(KITSUNE_ENGINE_SOURCES
 	LuaSound.cpp
 	LuaSoundMain.cpp
 
+	# ── OGG/Vorbis (libogg + libvorbis, bundled source -- see LuaSoundVorbis.cpp) ──────
+	libogg/src/bitwise.c
+	libogg/src/framing.c
+	libvorbis/lib/mdct.c
+	libvorbis/lib/smallft.c
+	libvorbis/lib/block.c
+	libvorbis/lib/envelope.c
+	libvorbis/lib/window.c
+	libvorbis/lib/lsp.c
+	libvorbis/lib/lpc.c
+	libvorbis/lib/analysis.c
+	libvorbis/lib/synthesis.c
+	libvorbis/lib/psy.c
+	libvorbis/lib/info.c
+	libvorbis/lib/floor1.c
+	libvorbis/lib/floor0.c
+	libvorbis/lib/res0.c
+	libvorbis/lib/mapping0.c
+	libvorbis/lib/registry.c
+	libvorbis/lib/codebook.c
+	libvorbis/lib/sharedbook.c
+	libvorbis/lib/lookup.c
+	libvorbis/lib/bitrate.c
+	libvorbis/lib/vorbisfile.c
+	libvorbis/lib/vorbisenc.c
+	LuaSoundVorbis.cpp
+
 	# ── Mutex (POSIX named semaphores on Linux) ────────────────────────────────────────
 	LuaMutex.cpp
 	LuaMutexMain.cpp
@@ -206,6 +233,13 @@ add_library(KitsuneEngine SHARED ${KITSUNE_ENGINE_SOURCES})
 # duckdb_win32_preamble.h for MSVC compatibility shims that GCC/Clang don't need.
 target_include_directories(KitsuneEngine PRIVATE "${CMAKE_SOURCE_DIR}/DuckDB")
 target_compile_definitions(KitsuneEngine PRIVATE DUCKDB_STATIC_BUILD)
+
+# libogg/libvorbis (bundled source, see LuaSoundVorbis.cpp) -- public headers
+# live under each library's own include/ dir; internal headers sit next to
+# their .c files in libvorbis/lib and resolve via quoted includes.
+target_include_directories(KitsuneEngine PRIVATE
+	"${CMAKE_SOURCE_DIR}/libogg/include"
+	"${CMAKE_SOURCE_DIR}/libvorbis/include")
 
 # ── KITSUNE_ALL umbrella option ───────────────────────────────────────────────
 # Mirrors the Windows KITSUNE_ALL preprocessor flag: enables every optional

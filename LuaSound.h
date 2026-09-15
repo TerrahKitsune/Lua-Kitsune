@@ -34,12 +34,15 @@ int Sound_Clone(lua_State* L);
 int Sound_Slice(lua_State* L);
 int Sound_Concat(lua_State* L);
 int Sound_Resample(lua_State* L);
+int Sound_ToMono(lua_State* L);
+int Sound_ToChannels(lua_State* L);
 
 int Sound_Mix(lua_State* L);
 int Sound_ApplyGain(lua_State* L);
 int Sound_Fade(lua_State* L);
 int Sound_Normalize(lua_State* L);
 int Sound_Reverse(lua_State* L);
+int Sound_Filter(lua_State* L);
 
 int Sound_GetPeak(lua_State* L);
 int Sound_GetRMS(lua_State* L);

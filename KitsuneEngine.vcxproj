@@ -53,7 +53,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(SolutionDir)DuckDB;$(SolutionDir)msgpack\include;$(SolutionDir)pugixml;$(SolutionDir)libyaml\include;$(SolutionDir)libarchive\include;$(SolutionDir)mysql\include;$(SolutionDir)postgres\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)hiredis;$(SolutionDir)curl\include;$(SolutionDir)mongodb\include;$(SolutionDir)libevent\include;$(SolutionDir)llama\include;$(SolutionDir)llama\include\ggml;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)DuckDB;$(SolutionDir)libogg\include;$(SolutionDir)libvorbis\include;$(SolutionDir)msgpack\include;$(SolutionDir)pugixml;$(SolutionDir)libyaml\include;$(SolutionDir)libarchive\include;$(SolutionDir)mysql\include;$(SolutionDir)postgres\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)hiredis;$(SolutionDir)curl\include;$(SolutionDir)mongodb\include;$(SolutionDir)libevent\include;$(SolutionDir)llama\include;$(SolutionDir)llama\include\ggml;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4703;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <PreprocessorDefinitions>DUCKDB_STATIC_BUILD;KITSUNE_HTTP;KITSUNE_KAFKA;KITSUNE_REDIS;KITSUNE_ENGINE_EXPORTS;KITSUNE_ALL;STANDALONEGFF;SQLITE_ENABLE_MATH_FUNCTIONS;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
@@ -79,7 +79,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(SolutionDir)DuckDB;$(SolutionDir)msgpack\include;$(SolutionDir)pugixml;$(SolutionDir)libyaml\include;$(SolutionDir)libarchive\include;$(SolutionDir)mysql\include;$(SolutionDir)postgres\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)hiredis;$(SolutionDir)curl\include;$(SolutionDir)mongodb\include;$(SolutionDir)libevent\include;$(SolutionDir)llama\include;$(SolutionDir)llama\include\ggml;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)DuckDB;$(SolutionDir)libogg\include;$(SolutionDir)libvorbis\include;$(SolutionDir)msgpack\include;$(SolutionDir)pugixml;$(SolutionDir)libyaml\include;$(SolutionDir)libarchive\include;$(SolutionDir)mysql\include;$(SolutionDir)postgres\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)hiredis;$(SolutionDir)curl\include;$(SolutionDir)mongodb\include;$(SolutionDir)libevent\include;$(SolutionDir)llama\include;$(SolutionDir)llama\include\ggml;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4703;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <PreprocessorDefinitions>DUCKDB_STATIC_BUILD;KITSUNE_HTTP;KITSUNE_KAFKA;KITSUNE_REDIS;KITSUNE_ENGINE_EXPORTS;KITSUNE_ALL;STANDALONEGFF;SQLITE_ENABLE_MATH_FUNCTIONS;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
@@ -236,6 +236,31 @@
     <ClCompile Include="LuaImageMain.cpp" />
     <ClCompile Include="LuaSound.cpp" />
     <ClCompile Include="LuaSoundMain.cpp" />
+    <ClCompile Include="LuaSoundVorbis.cpp" />
+    <ClCompile Include="libogg\src\bitwise.c" />
+    <ClCompile Include="libogg\src\framing.c" />
+    <ClCompile Include="libvorbis\lib\mdct.c" />
+    <ClCompile Include="libvorbis\lib\smallft.c" />
+    <ClCompile Include="libvorbis\lib\block.c" />
+    <ClCompile Include="libvorbis\lib\envelope.c" />
+    <ClCompile Include="libvorbis\lib\window.c" />
+    <ClCompile Include="libvorbis\lib\lsp.c" />
+    <ClCompile Include="libvorbis\lib\lpc.c" />
+    <ClCompile Include="libvorbis\lib\analysis.c" />
+    <ClCompile Include="libvorbis\lib\synthesis.c" />
+    <ClCompile Include="libvorbis\lib\psy.c" />
+    <ClCompile Include="libvorbis\lib\info.c" />
+    <ClCompile Include="libvorbis\lib\floor1.c" />
+    <ClCompile Include="libvorbis\lib\floor0.c" />
+    <ClCompile Include="libvorbis\lib\res0.c" />
+    <ClCompile Include="libvorbis\lib\mapping0.c" />
+    <ClCompile Include="libvorbis\lib\registry.c" />
+    <ClCompile Include="libvorbis\lib\codebook.c" />
+    <ClCompile Include="libvorbis\lib\sharedbook.c" />
+    <ClCompile Include="libvorbis\lib\lookup.c" />
+    <ClCompile Include="libvorbis\lib\bitrate.c" />
+    <ClCompile Include="libvorbis\lib\vorbisfile.c" />
+    <ClCompile Include="libvorbis\lib\vorbisenc.c" />
     <ClCompile Include="LuaMD5.cpp" />
     <ClCompile Include="LuaSQLite.cpp" />
     <ClCompile Include="LuaSQLiteMain.cpp" />
@@ -404,6 +429,13 @@
     <ClInclude Include="stb\stb_image_write.h" />
     <ClInclude Include="LuaSound.h" />
     <ClInclude Include="LuaSoundMain.h" />
+    <ClInclude Include="LuaSoundVorbis.h" />
+    <ClInclude Include="libogg\include\ogg\ogg.h" />
+    <ClInclude Include="libogg\include\ogg\os_types.h" />
+    <ClInclude Include="libogg\include\ogg\config_types.h" />
+    <ClInclude Include="libvorbis\include\vorbis\codec.h" />
+    <ClInclude Include="libvorbis\include\vorbis\vorbisenc.h" />
+    <ClInclude Include="libvorbis\include\vorbis\vorbisfile.h" />
     <ClInclude Include="dr_libs\dr_wav.h" />
     <ClInclude Include="LuaMD5.h" />
     <ClInclude Include="LuaSQLite.h" />

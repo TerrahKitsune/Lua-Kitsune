@@ -18,6 +18,8 @@
 #define DR_WAV_IMPLEMENTATION
 #include "dr_libs/dr_wav.h"
 
+#include "LuaSoundVorbis.h"
+
 // ===========================================================================
 // Userdata plumbing (mirrors LuaImage.cpp)
 // ===========================================================================
@@ -131,21 +133,95 @@ int Sound_Tone(lua_State* L) {
 	return 1;
 }
 
+// White noise is flat across the whole spectrum -- every sample independent,
+// no correlation to its neighbors. Band-limiting it with Filter() changes
+// how *bright* it sounds but not its underlying grain, so it still reads as
+// "static" rather than a soft hiss no matter the cutoff. Pink ("Paul
+// Kellet's economy" 3-pole approximation, the standard cheap trick for
+// this) and brown (a simple leaky integrator) noise have naturally more
+// energy at low frequencies and less at high, which is what actual tape
+// hiss/steam/wind sound like even unfiltered.
+// Box-Muller transform: two independent uniform (0,1] samples -> one
+// standard-normal (Gaussian) sample. Naively using a *uniform* random value
+// as a "noise sample" (every value between -1 and 1 equally likely) gives a
+// harsher, more "digital/buzzy" edge than real-world analog noise, which is
+// Gaussian-distributed (values near zero are far more common than the
+// extremes) -- this alone is a big part of why a naive noise generator
+// reads as "static" no matter how it's spectrally shaped afterwards.
+static double GaussianSample() {
+	double u1 = ((double)rand() + 1.0) / ((double)RAND_MAX + 1.0); // avoid log(0)
+	double u2 = (double)rand() / RAND_MAX;
+	return sqrt(-2.0 * log(u1)) * cos(2.0 * M_PI * u2);
+}
+
 int Sound_Noise(lua_State* L) {
 	int sampleRate = (int)luaL_checkinteger(L, 1);
 	int channels = (int)luaL_checkinteger(L, 2);
 	int frameCount = (int)luaL_checkinteger(L, 3);
 	double amplitude = luaL_optnumber(L, 4, 1.0);
+	const char* noiseType = luaL_optstring(L, 5, "white");
 	CheckArgs(L, sampleRate, channels, frameCount, "Sound.Noise");
 	if (amplitude < 0.0) amplitude = 0.0;
 	if (amplitude > 1.0) amplitude = 1.0;
 
+	bool isWhite = strcmp(noiseType, "white") == 0;
+	bool isPink = strcmp(noiseType, "pink") == 0;
+	bool isBrown = strcmp(noiseType, "brown") == 0;
+	if (!isWhite && !isPink && !isBrown)
+		return luaL_error(L, "Sound.Noise: noiseType must be \"white\", \"pink\", or \"brown\"");
+
 	LuaSound* snd = PushBlankSound(L, sampleRate, channels, frameCount);
-	size_t count = (size_t)frameCount * channels;
-	for (size_t i = 0; i < count; i++) {
-		double v = ((double)rand() / RAND_MAX) * 2.0 - 1.0;
-		snd->samples[i] = ClampSample(v * amplitude);
+
+	// All three types carry per-channel state (pink/brown's filters; even
+	// "white" now needs a per-sample Gaussian draw rather than a bulk fill),
+	// so every channel is generated independently -- otherwise channel 2's
+	// "previous sample" would really be channel 1's.
+	double* raw = (double*)kitsune_malloc((size_t)frameCount * sizeof(double));
+	for (int c = 0; c < channels; c++) {
+		double peak = 0.0;
+
+		if (isWhite) {
+			for (int i = 0; i < frameCount; i++) {
+				double v = GaussianSample();
+				raw[i] = v;
+				double a = fabs(v);
+				if (a > peak) peak = a;
+			}
+		}
+		else if (isPink) {
+			double b0 = 0.0, b1 = 0.0, b2 = 0.0;
+			for (int i = 0; i < frameCount; i++) {
+				double w = GaussianSample();
+				b0 = 0.99886 * b0 + w * 0.0555179;
+				b1 = 0.99332 * b1 + w * 0.0750759;
+				b2 = 0.96900 * b2 + w * 0.1538520;
+				double v = b0 + b1 + b2 + w * 0.5362;
+				raw[i] = v;
+				double a = fabs(v);
+				if (a > peak) peak = a;
+			}
+		}
+		else { // brown
+			double acc = 0.0;
+			for (int i = 0; i < frameCount; i++) {
+				double w = GaussianSample();
+				acc = (acc + w * 0.02) / 1.02; // leaky integrator, bounded by construction
+				raw[i] = acc;
+				double a = fabs(acc);
+				if (a > peak) peak = a;
+			}
+		}
+
+		// A Gaussian draw is technically unbounded (just increasingly
+		// unlikely at the extremes), so -- same as pink/brown already did --
+		// normalize per channel to the actual peak reached rather than
+		// assuming a fixed range, guaranteeing the requested amplitude is
+		// hit exactly regardless of type.
+		double scale = peak > 0.0 ? (amplitude / peak) : 0.0;
+		for (int i = 0; i < frameCount; i++)
+			snd->samples[(size_t)i * channels + c] = ClampSample(raw[i] * scale);
 	}
+	kitsune_free(raw);
 	return 1;
 }
 
@@ -170,12 +246,23 @@ int Sound_Open(lua_State* L) {
 		return luaL_error(L, "Sound.Open: failed reading '%s'", path);
 	}
 
+	if (IsOggData(buf, (size_t)size)) {
+		LuaSound tmp; memset(&tmp, 0, sizeof(tmp));
+		const char* errMsg = NULL;
+		bool ok = DecodeOgg(buf, (size_t)size, &tmp, &errMsg);
+		kitsune_free(buf);
+		if (!ok)
+			return luaL_error(L, "Sound.Open: failed to decode '%s' (%s)", path, errMsg);
+		*lua_pushsound(L) = tmp;
+		return 1;
+	}
+
 	unsigned int channels, sampleRate;
 	drwav_uint64 frameCount;
 	float* samples = drwav_open_memory_and_read_pcm_frames_f32(buf, (size_t)size, &channels, &sampleRate, &frameCount, NULL);
 	kitsune_free(buf);
 	if (!samples)
-		return luaL_error(L, "Sound.Open: failed to decode '%s' (not a valid WAV file)", path);
+		return luaL_error(L, "Sound.Open: failed to decode '%s' (not a valid WAV or OGG file)", path);
 
 	LuaSound* snd = lua_pushsound(L);
 	snd->sampleRate = (int)sampleRate;
@@ -189,11 +276,20 @@ int Sound_FromBytes(lua_State* L) {
 	size_t len;
 	const char* data = luaL_checklstring(L, 1, &len);
 
+	if (IsOggData((const unsigned char*)data, len)) {
+		LuaSound tmp; memset(&tmp, 0, sizeof(tmp));
+		const char* errMsg = NULL;
+		if (!DecodeOgg((const unsigned char*)data, len, &tmp, &errMsg))
+			return luaL_error(L, "Sound.FromBytes: failed to decode (%s)", errMsg);
+		*lua_pushsound(L) = tmp;
+		return 1;
+	}
+
 	unsigned int channels, sampleRate;
 	drwav_uint64 frameCount;
 	float* samples = drwav_open_memory_and_read_pcm_frames_f32(data, len, &channels, &sampleRate, &frameCount, NULL);
 	if (!samples)
-		return luaL_error(L, "Sound.FromBytes: failed to decode (not a valid WAV buffer)");
+		return luaL_error(L, "Sound.FromBytes: failed to decode (not a valid WAV or OGG buffer)");
 
 	LuaSound* snd = lua_pushsound(L);
 	snd->sampleRate = (int)sampleRate;
@@ -316,8 +412,46 @@ int Sound_Resample(lua_State* L) {
 	return 1;
 }
 
+// Downmixes to mono (average of the source channels) and broadcasts that to
+// n output channels; n == channels is just an independent copy, same as
+// Clone. Shared by Sound_ToMono/Sound_ToChannels.
+static LuaSound* ToChannelsImpl(lua_State* L, const LuaSound* snd, int n) {
+	if (n == snd->channels) {
+		LuaSound* out = PushBlankSound(L, snd->sampleRate, snd->channels, snd->frameCount);
+		memcpy(out->samples, snd->samples, (size_t)snd->frameCount * snd->channels * sizeof(float));
+		return out;
+	}
+
+	LuaSound* out = PushBlankSound(L, snd->sampleRate, n, snd->frameCount);
+	for (int i = 0; i < snd->frameCount; i++) {
+		double mono = 0.0;
+		for (int c = 0; c < snd->channels; c++)
+			mono += snd->samples[(size_t)i * snd->channels + c];
+		mono /= snd->channels;
+		float v = ClampSample(mono);
+		for (int c = 0; c < n; c++)
+			out->samples[(size_t)i * n + c] = v;
+	}
+	return out;
+}
+
+int Sound_ToMono(lua_State* L) {
+	LuaSound* snd = lua_tosound(L, 1);
+	ToChannelsImpl(L, snd, 1);
+	return 1;
+}
+
+int Sound_ToChannels(lua_State* L) {
+	LuaSound* snd = lua_tosound(L, 1);
+	int n = (int)luaL_checkinteger(L, 2);
+	if (n <= 0)
+		return luaL_error(L, "Sound:ToChannels: channels must be positive");
+	ToChannelsImpl(L, snd, n);
+	return 1;
+}
+
 // ===========================================================================
-// In-place editing (Mix/ApplyGain/Fade/Normalize/Reverse)
+// In-place editing (Mix/ApplyGain/Fade/Normalize/Reverse/Filter)
 // ===========================================================================
 
 // Additive mix, clamped -- clips silently at the buffer's edges the same way
@@ -414,6 +548,71 @@ int Sound_Reverse(lua_State* L) {
 	return 0;
 }
 
+// Standard biquad (2nd-order IIR) -- the same "Audio EQ Cookbook" (Robert
+// Bristow-Johnson) formulas used by the Web Audio API's BiquadFilterNode and
+// most audio engines. Operates on the whole buffer (not a sub-range like
+// ApplyGain/Fade): a filter carries state between samples, so filtering only
+// part of a buffer would leave an unprimed discontinuity (an audible click)
+// at the boundary for no practical benefit.
+int Sound_Filter(lua_State* L) {
+	LuaSound* snd = lua_tosound(L, 1);
+	const char* type = luaL_checkstring(L, 2);
+	double cutoffHz = luaL_checknumber(L, 3);
+	double q = luaL_optnumber(L, 4, 0.7071067811865476);
+
+	bool isLowpass = strcmp(type, "lowpass") == 0;
+	bool isHighpass = strcmp(type, "highpass") == 0;
+	bool isBandpass = strcmp(type, "bandpass") == 0;
+	bool isNotch = strcmp(type, "notch") == 0;
+	if (!isLowpass && !isHighpass && !isBandpass && !isNotch)
+		return luaL_error(L, "Sound:Filter: type must be \"lowpass\", \"highpass\", \"bandpass\", or \"notch\"");
+	if (cutoffHz <= 0.0 || cutoffHz >= snd->sampleRate / 2.0)
+		return luaL_error(L, "Sound:Filter: cutoffHz must be between 0 and sampleRate/2 (Nyquist)");
+	if (q <= 0.0)
+		return luaL_error(L, "Sound:Filter: Q must be positive");
+
+	double w0 = 2.0 * M_PI * cutoffHz / snd->sampleRate;
+	double alpha = sin(w0) / (2.0 * q);
+	double cosw0 = cos(w0);
+
+	double b0, b1, b2, a0, a1, a2;
+	if (isLowpass) {
+		b0 = (1.0 - cosw0) / 2.0; b1 = 1.0 - cosw0;    b2 = (1.0 - cosw0) / 2.0;
+	}
+	else if (isHighpass) {
+		b0 = (1.0 + cosw0) / 2.0; b1 = -(1.0 + cosw0); b2 = (1.0 + cosw0) / 2.0;
+	}
+	else if (isBandpass) {
+		b0 = alpha; b1 = 0.0; b2 = -alpha;
+	}
+	else { // notch
+		b0 = 1.0; b1 = -2.0 * cosw0; b2 = 1.0;
+	}
+	a0 = 1.0 + alpha; a1 = -2.0 * cosw0; a2 = 1.0 - alpha;
+	b0 /= a0; b1 /= a0; b2 /= a0; a1 /= a0; a2 /= a0;
+
+	// Independent filter state per channel -- a stereo signal's left/right
+	// history must not bleed into each other.
+	int channels = snd->channels;
+	double* x1 = (double*)kitsune_calloc(channels, sizeof(double));
+	double* x2 = (double*)kitsune_calloc(channels, sizeof(double));
+	double* y1 = (double*)kitsune_calloc(channels, sizeof(double));
+	double* y2 = (double*)kitsune_calloc(channels, sizeof(double));
+
+	for (int i = 0; i < snd->frameCount; i++) {
+		for (int c = 0; c < channels; c++) {
+			double x0 = snd->samples[(size_t)i * channels + c];
+			double y0 = b0 * x0 + b1 * x1[c] + b2 * x2[c] - a1 * y1[c] - a2 * y2[c];
+			x2[c] = x1[c]; x1[c] = x0;
+			y2[c] = y1[c]; y1[c] = y0;
+			snd->samples[(size_t)i * channels + c] = ClampSample(y0);
+		}
+	}
+
+	kitsune_free(x1); kitsune_free(x2); kitsune_free(y1); kitsune_free(y2);
+	return 0;
+}
+
 // ===========================================================================
 // Analysis (read-only)
 // ===========================================================================
@@ -487,14 +686,33 @@ static unsigned char* EncodeToWav(const LuaSound* snd, size_t* outLen) {
 	return (unsigned char*)pData;
 }
 
+// Shared by Save/ToBytes: validates the format arg and encodes accordingly.
+// Returns a kitsune_malloc'd buffer (caller frees) or NULL on failure, in
+// which case *errMsg points at a static description.
+static unsigned char* EncodeSound(lua_State* L, const LuaSound* snd, int formatArgIndex, int qualityArgIndex, size_t* outLen, const char** errMsg) {
+	const char* fmt = luaL_optstring(L, formatArgIndex, "wav");
+	if (strcmp(fmt, "wav") == 0)
+		return EncodeToWav(snd, outLen);
+	if (strcmp(fmt, "ogg") == 0) {
+		double quality = luaL_optnumber(L, qualityArgIndex, 0.6);
+		unsigned char* data = EncodeOgg(snd, quality, outLen);
+		if (!data)
+			*errMsg = "libvorbis encode failed";
+		return data;
+	}
+	*errMsg = "format must be \"wav\" or \"ogg\"";
+	return NULL;
+}
+
 int Sound_Save(lua_State* L) {
 	LuaSound* snd = lua_tosound(L, 1);
 	const char* path = luaL_checkstring(L, 2);
 
 	size_t len;
-	unsigned char* data = EncodeToWav(snd, &len);
+	const char* errMsg = "failed to encode";
+	unsigned char* data = EncodeSound(L, snd, 3, 4, &len, &errMsg);
 	if (!data)
-		return luaL_error(L, "Sound:Save: failed to encode WAV");
+		return luaL_error(L, "Sound:Save: %s", errMsg);
 
 	FILE* f = fopen(path, "wb");
 	if (!f) {
@@ -514,9 +732,10 @@ int Sound_Save(lua_State* L) {
 int Sound_ToBytes(lua_State* L) {
 	LuaSound* snd = lua_tosound(L, 1);
 	size_t len;
-	unsigned char* data = EncodeToWav(snd, &len);
+	const char* errMsg = "failed to encode";
+	unsigned char* data = EncodeSound(L, snd, 2, 3, &len, &errMsg);
 	if (!data)
-		return luaL_error(L, "Sound:ToBytes: failed to encode WAV");
+		return luaL_error(L, "Sound:ToBytes: %s", errMsg);
 	lua_pushlstring(L, (const char*)data, len);
 	kitsune_free(data);
 	return 1;
