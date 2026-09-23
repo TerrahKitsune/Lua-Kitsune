@@ -43,10 +43,6 @@ namespace KitsuneNet
         /// <summary>Lua 5.3+ integer subtype. Value is stored in <see cref="LuaValue.Int64"/>; never a float.</summary>
         Integer = -3,
 
-        /// <summary>Kitsune Wchar userdata. UTF-16 LE bytes are stored in <see cref="LuaValue.Bytes"/>;
-        /// <see cref="LuaValue.String"/> decodes them. Pushes a Lua Wchar object back into the state.</summary>
-        Char16 = -4,
-
         /// <summary>JSON value bridged via the engine's Json instance. C# holds a
         /// <see cref="System.Text.Json.Nodes.JsonNode"/>; Lua receives/sends a table decoded/encoded
         /// by <c>Json:Decode</c> / <c>Json:Encode</c>. Only meaningful as input (C# → Lua);

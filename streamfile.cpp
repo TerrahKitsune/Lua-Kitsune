@@ -1,4 +1,5 @@
 ﻿#include "streamfile.h"
+#include "kitsunefile.h"
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
@@ -180,12 +181,7 @@ static const LuaStreamVtable g_file_vtbl = {
 // -- Public constructor helper -------------------------------------------------
 
 LuaStream* lua_pushfilestream(lua_State* L, const char* filename, const char* mode) {
-	FILE* f = NULL;
-#ifdef _WIN32
-	fopen_s(&f, filename, mode);
-#else
-	f = fopen(filename, mode);
-#endif
+	FILE* f = kitsune_fopen(filename, mode);
 	if (!f) {
 		char errbuf[256];
 #ifdef _WIN32

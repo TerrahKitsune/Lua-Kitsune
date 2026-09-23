@@ -169,7 +169,9 @@
     <ClCompile Include="LuaTcpListener.cpp" />
     <ClCompile Include="LuaTcpMain.cpp" />
     <ClCompile Include="LuaSha256.cpp" />
-    <ClCompile Include="luawchar.cpp" />
+    <ClCompile Include="luatext.cpp" />
+    <ClCompile Include="kitsunestdlib.cpp" />
+    <ClCompile Include="kitsunefile.cpp" />
     <ClCompile Include="luaidentifier.cpp" />
     <ClCompile Include="luadatetime.cpp" />
     <ClCompile Include="luadecimal.cpp" />
@@ -226,7 +228,7 @@
     <ClCompile Include="streammemory.cpp" />
     <ClCompile Include="StreamMain.cpp" />
     <ClCompile Include="uintmain.cpp" />
-    <ClCompile Include="wcharmain.cpp" />
+    <ClCompile Include="luatextmain.cpp" />
     <ClCompile Include="identifiermain.cpp" />
     <ClCompile Include="datetimemain.cpp" />
     <ClCompile Include="decimalmain.cpp" />
@@ -359,7 +361,10 @@
     <ClInclude Include="LuaHttpServerMain.h" />
     <ClInclude Include="LuaTcpListener.h" />
     <ClInclude Include="LuaTcpMain.h" />
-    <ClInclude Include="luawchar.h" />
+    <ClInclude Include="luatext.h" />
+    <ClInclude Include="kitsunefile.h" />
+    <ClInclude Include="kitsuneconsole.h" />
+    <ClInclude Include="kitsunestdlib.h" />
     <ClInclude Include="luaidentifier.h" />
     <ClInclude Include="luadatetime.h" />
     <ClInclude Include="luadecimal.h" />
@@ -417,7 +422,7 @@
     <ClInclude Include="timespanmain.h" />
     <ClInclude Include="uintmain.h" />
     <ClInclude Include="utf8bom.h" />
-    <ClInclude Include="wcharmain.h" />
+    <ClInclude Include="luatextmain.h" />
     <ClInclude Include="identifiermain.h" />
     <ClInclude Include="datetimemain.h" />
     <ClInclude Include="decimalmain.h" />

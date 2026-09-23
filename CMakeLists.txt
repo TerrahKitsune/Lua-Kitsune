@@ -40,6 +40,8 @@ set(KITSUNE_ENGINE_SOURCES
 	mem.cpp
 	LuaEngineBuiltins.cpp
 	lua_misc.cpp
+	kitsunefile.cpp       # UTF-8 C-runtime wrappers (wide CRT on Windows)
+	kitsunestdlib.cpp     # UTF-8 file names for Lua's io / os / loadfile / require
 
 	# ── MCP (Model Context Protocol server) ─────────────────────────────────
 	luamcp.cpp
@@ -71,9 +73,9 @@ set(KITSUNE_ENGINE_SOURCES
 	msgpack/src/vrefbuffer.c
 	msgpack/src/zone.c
 
-	# ── WChar (wide-string type) ────────────────────────────────────────────
-	luawchar.cpp
-	wcharmain.cpp
+	# ── Text (UTF-8 / UTF-16 / code page helpers) ───────────────────────────
+	luatext.cpp
+	luatextmain.cpp
 
 	# ── UInt (unsigned 64-bit integer type) ──────────────────────────────────
 	luauint.cpp
@@ -240,6 +242,15 @@ target_compile_definitions(KitsuneEngine PRIVATE DUCKDB_STATIC_BUILD)
 target_include_directories(KitsuneEngine PRIVATE
 	"${CMAKE_SOURCE_DIR}/libogg/include"
 	"${CMAKE_SOURCE_DIR}/libvorbis/include")
+
+# The mode headers (libvorbis/lib/modes/setup_*.h) include each other as "modes/xxx.h",
+# relative to lib/. MSVC finds them through the including .c file's directory; GCC and
+# Clang only search the header's own directory, so lib/ must be on the include path
+# (upstream builds with -I lib). Scoped to the vorbis sources so vorbis's generic header
+# names (os.h, window.h, registry.h, ...) can't shadow anything else in the engine.
+file(GLOB KITSUNE_VORBIS_SOURCES "${CMAKE_SOURCE_DIR}/libvorbis/lib/*.c")
+set_source_files_properties(${KITSUNE_VORBIS_SOURCES} PROPERTIES
+	INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/libvorbis/lib")
 
 # ── KITSUNE_ALL umbrella option ───────────────────────────────────────────────
 # Mirrors the Windows KITSUNE_ALL preprocessor flag: enables every optional
@@ -410,11 +421,13 @@ if(KITSUNE_REDIS)
 	)
 endif()
 
-option(KITSUNE_MONGO "Build with MongoDB support (requires libmongoc-1.0 >= 1.17)" OFF)
+option(KITSUNE_MONGO "Build with MongoDB support (requires libmongoc 2.x, or 1.x >= 1.17)" OFF)
 
 if(KITSUNE_MONGO)
 	find_package(PkgConfig REQUIRED)
-	pkg_check_modules(MONGOC REQUIRED libmongoc-1.0)
+	# libmongoc 2.x (what the Windows build links) renamed its pkg-config module from
+	# libmongoc-1.0 to mongoc2; take whichever is installed, preferring 2.x.
+	pkg_search_module(MONGOC REQUIRED mongoc2 libmongoc-1.0)
 
 	target_sources(KitsuneEngine PRIVATE
 		LuaMongo.cpp

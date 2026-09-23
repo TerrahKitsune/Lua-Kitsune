@@ -317,6 +317,38 @@ static size_t ReadBodyCallback(char* buffer, size_t size, size_t nitems, void* u
 	return nread;
 }
 
+// Standard reason phrase for an HTTP status code ("" when unknown). HTTP/2 and HTTP/3
+// status lines carry no reason phrase, so this keeps Status meaningful regardless of the
+// protocol curl negotiated.
+static const char* HttpReasonPhrase(long code) {
+	static const struct {
+		long code;
+		const char* text;
+	} phrases[] = {
+		{ 100, "Continue" }, { 101, "Switching Protocols" },
+		{ 200, "OK" }, { 201, "Created" }, { 202, "Accepted" }, { 203, "Non-Authoritative Information" },
+		{ 204, "No Content" }, { 205, "Reset Content" }, { 206, "Partial Content" },
+		{ 300, "Multiple Choices" }, { 301, "Moved Permanently" }, { 302, "Found" }, { 303, "See Other" },
+		{ 304, "Not Modified" }, { 307, "Temporary Redirect" }, { 308, "Permanent Redirect" },
+		{ 400, "Bad Request" }, { 401, "Unauthorized" }, { 402, "Payment Required" }, { 403, "Forbidden" },
+		{ 404, "Not Found" }, { 405, "Method Not Allowed" }, { 406, "Not Acceptable" }, { 408, "Request Timeout" },
+		{ 409, "Conflict" }, { 410, "Gone" }, { 411, "Length Required" }, { 412, "Precondition Failed" },
+		{ 413, "Content Too Large" }, { 414, "URI Too Long" }, { 415, "Unsupported Media Type" },
+		{ 416, "Range Not Satisfiable" }, { 417, "Expectation Failed" }, { 421, "Misdirected Request" },
+		{ 422, "Unprocessable Content" }, { 425, "Too Early" }, { 426, "Upgrade Required" },
+		{ 428, "Precondition Required" }, { 429, "Too Many Requests" }, { 431, "Request Header Fields Too Large" },
+		{ 451, "Unavailable For Legal Reasons" },
+		{ 500, "Internal Server Error" }, { 501, "Not Implemented" }, { 502, "Bad Gateway" },
+		{ 503, "Service Unavailable" }, { 504, "Gateway Timeout" }, { 505, "HTTP Version Not Supported" },
+		{ 511, "Network Authentication Required" },
+	};
+	for (size_t i = 0; i < sizeof(phrases) / sizeof(phrases[0]); i++) {
+		if (phrases[i].code == code)
+			return phrases[i].text;
+	}
+	return "";
+}
+
 // -----------------------------------------------------------------------------
 // T5c ? WriteHeaderCallback (buffered request path)
 // -----------------------------------------------------------------------------
@@ -324,8 +356,10 @@ static size_t ReadBodyCallback(char* buffer, size_t size, size_t nitems, void* u
 static size_t WriteHeaderCallback(char* buffer, size_t size, size_t nitems, void* userdata) {
 	LuaHttpCurlRequest* req = (LuaHttpCurlRequest*)userdata;
 	size_t total = size * nitems;
-	// Status line: "HTTP/X.Y CODE REASON\r\n"
+	// Status line: "HTTP/X.Y CODE REASON\r\n" (HTTP/2 and HTTP/3: "HTTP/2 CODE \r\n", no reason).
+	// Each response in a redirect chain starts with one, so reset the previous reason first.
 	if (total >= 5 && strncmp(buffer, "HTTP/", 5) == 0) {
+		req->statusText[0] = '\0';
 		char* sp1 = (char*)memchr(buffer + 5, ' ', total - 5);
 		if (sp1) {
 			char* sp2 = (char*)memchr(sp1 + 1, ' ', total - (size_t)(sp1 + 1 - buffer));
@@ -374,7 +408,7 @@ static int BuildHttpResultTable(lua_State* L, LuaHttpCurlRequest* req) {
 	if (req->httpCode > 0) {
 		lua_pushinteger(L, req->httpCode);
 		lua_setfield(L, -2, "Code");
-		lua_pushstring(L, req->statusText);
+		lua_pushstring(L, req->statusText[0] ? req->statusText : HttpReasonPhrase(req->httpCode));
 		lua_setfield(L, -2, "Status");
 		if (!req->streamOutput) {
 			lua_pushlstring(L, req->body ? req->body : "", req->bodyLen);
@@ -656,6 +690,7 @@ static size_t WriteStreamHeaderCallback(char* buffer, size_t size, size_t nitems
 	LuaHttpStreamNative* h = (LuaHttpStreamNative*)userdata;
 	size_t total = size * nitems;
 	if (total >= 5 && strncmp(buffer, "HTTP/", 5) == 0) {
+		h->statusText[0] = '\0';  // new response in a redirect chain
 		char* sp1 = (char*)memchr(buffer + 5, ' ', total - 5);
 		if (sp1) {
 			h->httpCode = atol(sp1 + 1);
@@ -744,7 +779,7 @@ static int http_stream_info(void* native, lua_State* L) {
 	if (h->httpCode > 0) {
 		lua_pushinteger(L, h->httpCode);
 		lua_setfield(L, -2, "Code");
-		lua_pushstring(L, h->statusText);
+		lua_pushstring(L, h->statusText[0] ? h->statusText : HttpReasonPhrase(h->httpCode));
 		lua_setfield(L, -2, "Status");
 		const char* effectiveUrl = NULL;
 		if (h->easy)

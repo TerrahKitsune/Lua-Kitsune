@@ -1,7 +1,7 @@
 ﻿#pragma once
 #include "lua_main_incl.h"
 #include "platform.h"
-#include "luawchar.h"
+#include "luatext.h"
 
 #define LUACSV "LUACSV"  // metatable name for CSV instance userdata
 
@@ -11,9 +11,10 @@
 // delimiter == L'\0' means auto-detect on every call.
 typedef struct LuaCsv {
     // ── String-mode source (data != NULL) ────────────────────────────────────
-    int       pos;
-    LuaWChar* data;
-    wchar_t   last;
+    int            pos;
+    const wchar_t* data;     // decoded input (owned by a userdata on the Lua stack)
+    size_t         dataLen;  // wchar_t count in data
+    wchar_t        last;
     // ── Field write buffer ───────────────────────────────────────────────────
     size_t    len;
     size_t    alloc;
@@ -27,6 +28,8 @@ typedef struct LuaCsv {
     size_t     streamLen;      // valid wchar_t count in streamBuf
     size_t     streamAlloc;    // allocated capacity of streamBuf
     bool       streamDone;     // supplier returned nil/false/empty — no more data
+    KitsuneUtf8Carry utf8Carry; // UTF-8 sequence split across the previous chunk boundary
+    bool       bomChecked;     // first decoded character has been checked for a BOM
     // ── Stream-object source (streamRef != LUA_NOREF) ────────────────────────
     // A LuaStream* is called via lua_callk rather than lua_call_nohook so that
     // async streams can yield cooperatively.  Sync streams simply return
@@ -44,8 +47,8 @@ typedef struct LuaCsv {
 //   When called as csv:New([delim]), the existing instance at arg 1 is ignored.
 int lua_csv_new(lua_State* L);
 
-// csv:Decode(str_or_wchar)
-//   Returns {Comments={...}, Rows={{field,...},...}}; fields are Wchar objects.
+// csv:Decode(str)
+//   Returns {Comments={...}, Rows={{field,...},...}}; fields are UTF-8 strings.
 int lua_csv_decode(lua_State* L);
 
 // csv:Encode(rows)
@@ -54,9 +57,10 @@ int lua_csv_decode(lua_State* L);
 int lua_csv_encode(lua_State* L);
 
 // csv:DecodeFromFunction(fn_or_stream)
-//   fn:     called with no arguments; returns a string/Wchar chunk, or nil/false/"" to stop.
-//   stream: read in 4 KiB chunks; the iterator keeps the stream alive until GC.
-//   Each iteration of the returned iterator yields one row as a Wchar-field table.
+//   fn:     called with no arguments; returns a string chunk, or nil/false/"" to stop.
+//   stream: read with stream:Read() (whatever is available per call); the iterator keeps
+//           the stream alive until GC. A UTF-8 character split across reads is reassembled.
+//   Each iteration of the returned iterator yields one row as a table of UTF-8 strings.
 int lua_csv_decode_from_function(lua_State* L);
 
 // Metamethods registered on the LUACSV metatable.

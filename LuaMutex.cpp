@@ -1,5 +1,6 @@
 ﻿#define _WIN32_WINNT 0x0500
 #include "LuaMutex.h"
+#include "luatext.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -11,18 +12,32 @@
 
 int LuaCreateMutex(lua_State* L) {
 
-	const char* name = luaL_checkstring(L, 1);
-	HANDLE mutex = CreateMutexA(NULL, FALSE, name);
-	lua_pop(L, lua_gettop(L));
+	size_t nameLen;
+	const char* name = luaL_checklstring(L, 1, &nameLen);
+
+	// W form so distinct non-ASCII names don't collapse to the same "??" kernel object.
+	wchar_t* wname = kitsune_utf8_to_wide_alloc(name);
+	if (!wname)
+		return luaL_error(L, "out of memory");
+	HANDLE mutex = CreateMutexW(NULL, FALSE, wname);
+	DWORD err = GetLastError();
+	kitsune_free(wname);
 
 	if (mutex == NULL) {
+		lua_pop(L, lua_gettop(L));
 		lua_pushnil(L);
-		lua_pushinteger(L, GetLastError());
+		lua_pushinteger(L, err);
 		return 2;
 	}
 
+	// Argument 1 stays on the stack, so name remains valid while the userdata is allocated.
+	// Copy at most MAX_PATH - 1 bytes, backing off so a UTF-8 sequence is never cut.
 	LuaMutex* luamutex = lua_pushmutex(L);
-	memcpy(luamutex->mutexname, name, MAX_PATH);
+	size_t copy = nameLen < MAX_PATH - 1 ? nameLen : MAX_PATH - 1;
+	while (copy < nameLen && copy > 0 && ((unsigned char)name[copy] & 0xC0) == 0x80)
+		copy--;
+	memcpy(luamutex->mutexname, name, copy);
+	luamutex->mutexname[copy] = '\0';
 	luamutex->mutex = mutex;
 	return 1;
 }

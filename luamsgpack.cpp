@@ -1,6 +1,5 @@
 ﻿#include "luamsgpack.h"
 #include "stream.h"
-#include "luawchar.h"
 #include "luaidentifier.h"
 #include "luadatetime.h"
 #include "luadecimal.h"
@@ -177,14 +176,6 @@ static void enc_value(LuaMsgPack* m, msgpack_packer* pk, lua_State* L) {
             size_t len;
             const char* s = lua_tolstring(L, -1, &len);
             if (s) msgpack_pack_str_with_body(pk, s, len);
-            lua_pop(L, 1);
-            break;
-        }
-        if (lua_iswchar(L, -1)) {
-            ToUtf8(L);
-            size_t      len;
-            const char* s = lua_tolstring(L, -1, &len);
-            enc_string_value(pk, s, len);
             lua_pop(L, 1);
             break;
         }

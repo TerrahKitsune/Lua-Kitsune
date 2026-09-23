@@ -1,7 +1,7 @@
 ﻿#include "platform.h"
 #include "LuaMongo.h"
+#include "luatext.h"
 #include "stream.h"
-#include "luawchar.h"
 #include "luaidentifier.h"
 #include "luadatetime.h"
 #include "luadecimal.h"
@@ -420,32 +420,14 @@ static void LuaToBsonValue(lua_State* L, int idx, bson_t* doc, const char* key, 
 		return;
 	}
 
-	if (lua_iswchar(L, idx)) {
-		LuaWChar* wc = lua_towchar(L, idx);
-#ifdef _WIN32
-		if (!wc->str || wc->len == 0) {
-			bson_append_utf8(doc, key, -1, "", 0);
-			return;
-		}
-		int u8len = WideCharToMultiByte(CP_UTF8, 0, wc->str, (int)wc->len, NULL, 0, NULL, NULL);
-		char* u8buf = (char*)kitsune_malloc(u8len + 1);
-		if (!u8buf)
-			luaL_error(L, "MongoDB: out of memory");
-		WideCharToMultiByte(CP_UTF8, 0, wc->str, (int)wc->len, u8buf, u8len, NULL, NULL);
-		u8buf[u8len] = '\0';
-		bson_append_utf8(doc, key, -1, u8buf, u8len);
-		kitsune_free(u8buf);
-#else
-		(void)wc;
-		BSON_APPEND_NULL(doc, key);
-#endif
-		return;
-	}
-
 	switch (lua_type(L, idx)) {
 	case LUA_TSTRING: {
 		size_t slen;
 		const char* s = lua_tolstring(L, idx, &slen);
+		// BSON strings must be UTF-8: other drivers fail to read anything else. Binary data
+		// belongs in a Stream, which is stored as BSON binary.
+		if (!kitsune_utf8_valid(s, slen))
+			luaL_error(L, "MongoDB: value of '%s' is not valid UTF-8 (store binary data as a Stream)", key);
 		// Use the explicit-length API so embedded NUL bytes are preserved.
 		bson_append_utf8(doc, key, -1, s, (int)slen);
 		break;
@@ -516,7 +498,10 @@ static void LuaToBson(lua_State* L, int idx, bson_t* doc, BsonWriteCtx* ctx) {
 	lua_pushnil(L);
 	while (lua_next(L, idx)) {
 		if (lua_type(L, -2) == LUA_TSTRING) {
-			const char* key = lua_tostring(L, -2);
+			size_t klen;
+			const char* key = lua_tolstring(L, -2, &klen);
+			if (!kitsune_utf8_valid(key, klen))
+				luaL_error(L, "MongoDB: document key is not valid UTF-8");
 			LuaToBsonValue(L, -1, doc, key, ctx);
 		}
 		else if (lua_type(L, -2) == LUA_TNUMBER && lua_isinteger(L, -2)) {

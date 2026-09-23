@@ -448,24 +448,46 @@ public sealed class SQLiteTests
     }
 
     [Fact]
-    public async Task SQLite_ParameterizedQuery_WcharParam_RoundTrips()
+    public async Task SQLite_ParameterizedQuery_NonAsciiParam_RoundTrips()
     {
         using KitsuneEngine engine = new();
 
-        // Wchar values bind as UTF-16 text; read back with ToggleWidechar(true)
-        // so both sides use the matched text16/bytes16 pair.
+        // Non-ASCII UTF-8 parameters (including a surrogate pair) round-trip unchanged.
         LuaValue r = await engine.ExecuteStringAsync(@"
 			local db = SQLite.Open()
-			db:ToggleWidechar(true)
 			db:Query('CREATE TABLE t (v TEXT)'); db:Fetch()
-			db:Query('INSERT INTO t VALUES (:v)', {v = Wchar.FromUtf8('hello wchar')}); db:Fetch()
+			db:Query('INSERT INTO t VALUES (:v)', {v = 'h\xc3\xa9llo \xf0\x9f\x98\x80'}); db:Fetch()
 			db:Query('SELECT v FROM t')
 			db:Fetch()
-			local val = db:GetRow(1)   -- Wchar userdata
+			local val = db:GetRow(1)
 			db:Close()
-			return tostring(val)       -- Wchar.__tostring ? ToUtf8
+			return tostring(type(val) == 'string' and val == 'h\xc3\xa9llo \xf0\x9f\x98\x80')
 		");
-        r.String.ShouldBe("hello wchar");
+        r.String.ShouldBe("true");
+    }
+
+    [Fact]
+    public async Task SQLite_ParameterizedQuery_FunctionParams_StringsSurviveGC()
+    {
+        using KitsuneEngine engine = new();
+
+        // Strings returned by a parameter function are popped before sqlite3_step, so they
+        // must be copied by SQLite; a full GC between binding and stepping must not corrupt them.
+        LuaValue r = await engine.ExecuteStringAsync(@"
+			local db = SQLite.Open()
+			db:Query('CREATE TABLE t (a TEXT, b TEXT)'); db:Fetch()
+			db:Query('INSERT INTO t VALUES (:a, :b)', function(name)
+				collectgarbage('collect')
+				return string.rep(name, 3) .. '_'
+			end)
+			db:Fetch()
+			db:Query('SELECT a, b FROM t')
+			db:Fetch()
+			local row = db:GetRow()
+			db:Close()
+			return row.a .. ',' .. row.b
+		");
+        r.String.ShouldBe("aaa_,bbb_");
     }
 
     // -- Custom functions -----------------------------------------------------
@@ -540,45 +562,38 @@ public sealed class SQLiteTests
         r.String.ShouldBe("true");
     }
 
-    // -- ToggleWidechar -------------------------------------------------------
+    // -- Text columns ---------------------------------------------------------
     [Fact]
-    public async Task SQLite_ToggleWidechar_False_TextComesBackAsString()
+    public async Task SQLite_TextColumn_NonAscii_ComesBackAsUtf8String()
     {
         using KitsuneEngine engine = new();
 
-        // After ToggleWidechar(false) TEXT columns must be plain Lua strings.
+        // TEXT columns are always plain UTF-8 Lua strings, on every platform.
         LuaValue r = await engine.ExecuteStringAsync(@"
 			local db = SQLite.Open()
-			db:ToggleWidechar(false)
 			db:Query('CREATE TABLE t (v TEXT)'); db:Fetch()
-			db:Query([[INSERT INTO t VALUES ('hello')]]); db:Fetch()
+			db:Query('INSERT INTO t VALUES (:v)', {v = 'caf\xc3\xa9 \xe6\xb5\x8b'}); db:Fetch()
 			db:Query('SELECT v FROM t')
 			db:Fetch()
 			local val = db:GetRow(1)
 			db:Close()
-			return tostring(type(val) == 'string')
+			return tostring(type(val) == 'string' and val == 'caf\xc3\xa9 \xe6\xb5\x8b')
 		");
         r.String.ShouldBe("true");
     }
 
     [Fact]
-    public async Task SQLite_ToggleWidechar_True_TextComesBackAsWchar()
+    public async Task SQLite_ToggleWidechar_IsRemoved()
     {
         using KitsuneEngine engine = new();
 
-        // After ToggleWidechar(true) TEXT columns must be Wchar userdata.
         LuaValue r = await engine.ExecuteStringAsync(@"
 			local db = SQLite.Open()
-			db:ToggleWidechar(true)
-			db:Query('CREATE TABLE t (v TEXT)'); db:Fetch()
-			db:Query([[INSERT INTO t VALUES ('hello')]]); db:Fetch()
-			db:Query('SELECT v FROM t')
-			db:Fetch()
-			local val = db:GetRow(1)
+			local exists = db.ToggleWidechar ~= nil
 			db:Close()
-			return tostring(type(val) == 'userdata')
+			return tostring(exists)
 		");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("false");
     }
 
     // -- __tostring -----------------------------------------------------------

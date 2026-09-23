@@ -63,6 +63,7 @@
 #include "LuaDuckDBMain.h"
 #include "TimerMain.h"
 #include "LuaFileSystemMain.h"
+#include "kitsunestdlib.h"
 #include "LuaImageMain.h"
 #include "LuaSoundMain.h"
 #include "StreamMain.h"
@@ -77,7 +78,7 @@
 #include "luaalivetoken.h"
 #include "luajson.h"
 #include "base64.h"
-#include "wcharmain.h"
+#include "luatextmain.h"
 #include "identifiermain.h"
 #include "luaidentifier.h"
 #include "datetimemain.h"
@@ -88,7 +89,6 @@
 #include "luadecimal.h"
 #include "uintmain.h"
 #include "luauint.h"
-#include "luawchar.h"
 #include "LuaCsvMain.h"
 #include "SHA1Main.h"
 #include "LuaHttpServerMain.h"
@@ -185,7 +185,7 @@ static void DrainPendingVariableChain(lua_State* L) {
 // L must be non-NULL if any node key or value may be LUA_TFUNCTION or LUA_TTHREAD (to release registry refs).
 static void FreeKVNode(KitsuneKeyValuePairVariableNode* node, lua_State* L) {
 	while (node) {
-		if ((node->key.type == LUA_TSTRING || node->key.type == KITSUNE_TJSON || node->key.type == KITSUNE_TCHAR16 || node->key.type == KITSUNE_TERROR) && node->key.data)
+		if ((node->key.type == LUA_TSTRING || node->key.type == KITSUNE_TJSON || node->key.type == KITSUNE_TERROR) && node->key.data)
 			kitsune_free(node->key.data);
 		else if (node->key.type == LUA_TUSERDATA && node->key.userdata) {
 			kitsune_free(node->key.userdata->name);
@@ -197,7 +197,7 @@ static void FreeKVNode(KitsuneKeyValuePairVariableNode* node, lua_State* L) {
 			FreeKVNode(node->key.table, L);
 		else if ((node->key.type == LUA_TTABLE || node->key.type == LUA_TFUNCTION || node->key.type == LUA_TTHREAD) && L && node->key.ref > 0)
 			luaL_unref(L, LUA_REGISTRYINDEX, node->key.ref);
-		if ((node->value.type == LUA_TSTRING || node->value.type == KITSUNE_TJSON || node->value.type == KITSUNE_TCHAR16 || node->value.type == KITSUNE_TERROR) && node->value.data)
+		if ((node->value.type == LUA_TSTRING || node->value.type == KITSUNE_TJSON || node->value.type == KITSUNE_TERROR) && node->value.data)
 			kitsune_free(node->value.data);
 		else if (node->value.type == LUA_TUSERDATA && node->value.userdata) {
 			kitsune_free(node->value.userdata->name);
@@ -228,12 +228,6 @@ void FreeVariableData(KitsuneVariable* var, lua_State* L) {
 		if (var->data) {
 			kitsune_free(var->data);
 			var->data = NULL;
-		}
-		break;
-	case KITSUNE_TCHAR16:
-		if (var->char16data) {
-			kitsune_free(var->char16data);
-			var->char16data = NULL;
 		}
 		break;
 	case KITSUNE_TDATETIME:
@@ -289,26 +283,6 @@ void FreeVariableData(KitsuneVariable* var, lua_State* L) {
 	default:
 		break;
 	}
-}
-
-// -- char16_t / wchar_t boundary helpers -----------------------------------------------------
-// All casting between the public ABI type (char16_t, stored in KitsuneVariable) and the
-// internal Lua representation (wchar_t, used by LuaWChar) is confined here.
-// On Windows, wchar_t is 2 bytes (UTF-16 LE), so both helpers are zero-cost operations.
-// A future non-Windows port replaces these two functions with real UTF-32 <-> UTF-16
-// converters and adds the appropriate #ifdef guard — nothing outside these helpers changes.
-
-// Allocates a char16_t* copy of a wchar_t* src (len code units, excluding null terminator).
-// The caller owns the result; free with kitsune_free.
-static char16_t* AllocChar16FromWchar(const wchar_t* src, size_t len, size_t* outChar16Len) {
-	return wchar_alloc_as_char16(src, len, outChar16Len);
-}
-
-// Returns a wchar_t* view of a char16_t* for passing to Lua APIs.
-// On Windows this is a no-op reinterpret cast. A future non-Windows port that stores UTF-32
-// internally must allocate and convert here (and update callers to free the result).
-static inline const wchar_t* Char16AsWchar(const char16_t* p) {
-	return reinterpret_cast<const wchar_t*>(p);
 }
 
 // Forward declaration — LuaCFunctionWrapper is defined inside the extern "C" block below;
@@ -441,16 +415,6 @@ static void FillKitsuneVariableFromStack(lua_State* L, int idx, KitsuneVariable*
 			LuaUInt* u = (LuaUInt*)lua_touserdata(L, abs_idx);
 			out->integer = (long long)u->value;
 			out->type = KITSUNE_TUINT;
-			break;
-		}
-		// Wchar is bridged as KITSUNE_TCHAR16: the internal wchar_t* is converted to char16_t*
-		// at the boundary via AllocChar16FromWchar so the native object can be reconstructed on push.
-		if (lua_iswchar(L, abs_idx)) {
-			LuaWChar* wch = (LuaWChar*)lua_touserdata(L, abs_idx);
-			if (wch && wch->str && wch->len > 0) {
-				out->char16data = AllocChar16FromWchar(wch->str, wch->len, &out->length);
-			}
-			out->type = KITSUNE_TCHAR16;
 			break;
 		}
 		// All other userdata types: bridge as KITSUNE_TUSERDATA with a KitsuneUserData*.
@@ -611,25 +575,6 @@ void PushKitsuneVariable(lua_State* L, const KitsuneVariable* v) {
 			lua_pushlstring(L, (const char*)v->data, v->length);
 		else
 			lua_pushstring(L, "");
-		break;
-	case KITSUNE_TCHAR16:
-		// On Windows wchar_t == char16_t (both 2 bytes): reinterpret cast is safe.
-		// On Linux wchar_t is 4 bytes (UTF-32): must decode UTF-16 surrogate pairs.
-		if (v->char16data) {
-#ifdef _WIN32
-			lua_pushwchar(L, Char16AsWchar(v->char16data), v->length);
-#else
-			{
-				size_t wlen = 0;
-				wchar_t* wbuf = char16_alloc_as_wchar(v->char16data, v->length, &wlen);
-				lua_pushwchar(L, wbuf ? wbuf : L"", wlen);
-				kitsune_free(wbuf);
-			}
-#endif
-		}
-		else {
-			lua_pushwchar(L, L"", 0);
-		}
 		break;
 	case KITSUNE_TJSON: {
 		// Decode JSON using the shared bridge instance (avoids GC churn per call).
@@ -838,16 +783,6 @@ static void SetSlotResult(KitsuneCoroutine* slot, lua_State* T, int idx) {
 			LuaUInt* u = (LuaUInt*)lua_touserdata(T, idx);
 			slot->result.integer = (long long)u->value;
 			slot->result.type = KITSUNE_TUINT;
-			break;
-		}
-		// Wchar is bridged as KITSUNE_TCHAR16: the internal wchar_t* is converted to char16_t*
-		// at the boundary via AllocChar16FromWchar so the native object can be reconstructed on push.
-		if (lua_iswchar(T, idx)) {
-			LuaWChar* wch = (LuaWChar*)lua_touserdata(T, idx);
-			if (wch && wch->str && wch->len > 0) {
-				slot->result.char16data = AllocChar16FromWchar(wch->str, wch->len, &slot->result.length);
-			}
-			slot->result.type = KITSUNE_TCHAR16;
 			break;
 		}
 		// All other userdata types: bridge as KITSUNE_TUSERDATA with a KitsuneUserData*.
@@ -1634,6 +1569,8 @@ extern "C" {
 		lua_State* L = state->L;
 		lua_gc(L, LUA_GCGEN, 20, 100);
 		luaL_openlibs(L);
+		// UTF-8 file names for io / os / loadfile / require on Windows (see kitsunestdlib.h).
+		kitsune_open_utf8_stdlib(L);
 
 		// Force LC_NUMERIC to "C" so Lua's tostring / string.format always use '.' as the
 		// decimal separator, regardless of the OS locale.  Without this, machines with a
@@ -1698,7 +1635,7 @@ extern "C" {
 		luaopen_ini(L);          lua_setglobal(L, "Ini");
 		luaopen_alivetoken(L);   lua_setglobal(L, "AliveToken");
 		luaopen_base64(L);       lua_setglobal(L, "Base64");
-		luaopen_wchar(L);        lua_setglobal(L, "Wchar");
+		luaopen_text(L);         lua_setglobal(L, "Text");
 		luaopen_identifier(L);   lua_setglobal(L, "Identifier");
 		luaopen_datetime(L);     lua_setglobal(L, "DateTime");
 		luaopen_decimal(L);      lua_setglobal(L, "Decimal");
@@ -1908,7 +1845,7 @@ extern "C" {
 		lua_State* T = PrepareSlotThread(state, slot);
 
 		int loadrc = isFile
-			? luaL_loadfile(T, source)
+			? kitsune_loadfile(T, source)
 			: luaL_loadbuffer(T, source, strlen(source), "string");
 
 		if (loadrc != 0) {
@@ -2268,7 +2205,7 @@ extern "C" {
 			if (!slot)
 				return NULL;
 			lua_State* T = PrepareSlotThread(state, slot);
-			int loadrc = luaL_loadfile(T, path);
+			int loadrc = kitsune_loadfile(T, path);
 			if (loadrc != 0) {
 				const char* err = lua_tolstring(T, -1, NULL);
 				KitsuneVariable* out = MakeErrorVariable(err ? err : "load error");
@@ -2299,7 +2236,7 @@ extern "C" {
 
 		lua_State* T = PrepareSlotThread(state, slot);
 
-		int loadrc = luaL_loadfile(T, path);
+		int loadrc = kitsune_loadfile(T, path);
 		if (loadrc != 0) {
 			const char* err = lua_tolstring(T, -1, NULL);
 			KitsuneVariable* out = MakeErrorVariable(err ? err : "load error");

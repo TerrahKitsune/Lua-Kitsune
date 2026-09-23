@@ -164,4 +164,32 @@ public sealed class ArchiveTests
             args: [LuaValue.FromString("nonexistent_file_that_does_not_exist.7z")]);
         r.String.ShouldBe("true|true");
     }
+
+    // -- Non-ASCII archive path ------------------------------------------------
+    [ArchiveTheory]
+    [MemberData(nameof(ArchiveFiles))]
+    public async Task OpenRead_NonAsciiPath_ReadsEntries(string path)
+    {
+        using KitsuneEngine engine = new();
+
+        // A copy of the archive under a name outside the ANSI code page must open,
+        // list and read exactly like the original.
+        LuaValue r = await engine.ExecuteStringAsync("""
+            local src = (...)
+            local ext = src:match('%.%w+$')
+            local copy = FileSystem.GetTempFileName() .. '_\xc5\x81\xe6\xb5\x8b_\xf0\x9f\x98\x80' .. ext
+            assert(FileSystem.Copy(src, copy, true), 'copy failed')
+            local arc, err = Archive.OpenRead(copy)
+            local count, data = 0, nil
+            if arc then
+                count = #Archive.Entries(arc)
+                Archive.SetEntry(arc, 1)
+                data = Archive.ReadAll(arc)
+            end
+            FileSystem.Delete(copy)
+            return tostring(arc ~= nil and count == 2 and type(data) == 'string') .. '|' .. tostring(err)
+            """,
+            args: [LuaValue.FromString(path)]);
+        r.String.ShouldBe("true|nil");
+    }
 }

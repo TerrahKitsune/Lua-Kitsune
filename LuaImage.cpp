@@ -1,4 +1,6 @@
 #include "LuaImage.h"
+#include "kitsunefile.h"
+#include "luatext.h"
 #include "miniz.h"
 #include <math.h>
 #include <string.h>
@@ -95,6 +97,20 @@ static void SetTag(LuaImage* img, const char* key, size_t keylen, const char* va
 	img->tags[img->tagCount].key = DupString(key, keylen);
 	img->tags[img->tagCount].value = DupString(value, vallen);
 	img->tagCount++;
+}
+
+// PNG tEXt keywords and text are Latin-1 by spec: returns a heap UTF-8 copy (at most two
+// bytes per input byte) and its length. *out is NULL when out of memory; free with kitsune_free.
+static size_t Latin1ToUtf8(const unsigned char* src, size_t len, char** out) {
+	char* buf = (char*)kitsune_malloc(len * 2 + 1);
+	*out = buf;
+	if (!buf)
+		return 0;
+	size_t n = 0;
+	for (size_t i = 0; i < len; i++)
+		n += kitsune_utf8_encode(buf + n, src[i]);
+	buf[n] = '\0';
+	return n;
 }
 
 static void CopyTags(LuaImage* dst, const LuaImage* src) {
@@ -211,7 +227,14 @@ static void ScanTextChunks(const unsigned char* data, size_t len, LuaImage* img)
 			if (nul) {
 				size_t keyLen = nul - chunkData;
 				size_t valLen = chunkLen - keyLen - 1;
-				SetTag(img, (const char*)chunkData, keyLen, (const char*)(nul + 1), valLen);
+				char* key8;
+				char* val8;
+				size_t key8Len = Latin1ToUtf8(chunkData, keyLen, &key8);
+				size_t val8Len = Latin1ToUtf8(nul + 1, valLen, &val8);
+				if (key8 && val8)
+					SetTag(img, key8, key8Len, val8, val8Len);
+				kitsune_free(key8);
+				kitsune_free(val8);
 			}
 		}
 		else if (memcmp(type, "iTXt", 4) == 0) {
@@ -338,7 +361,7 @@ static unsigned char* EncodeWithTags(const LuaImage* img, size_t* outLen) {
 int Image_Open(lua_State* L) {
 	const char* path = luaL_checkstring(L, 1);
 
-	FILE* f = fopen(path, "rb");
+	FILE* f = kitsune_fopen(path, "rb");
 	if (!f)
 		return luaL_error(L, "Image.Open: cannot open '%s'", path);
 	fseek(f, 0, SEEK_END);
@@ -791,7 +814,7 @@ int Image_Save(lua_State* L) {
 	if (!data)
 		return luaL_error(L, "Image:Save: failed to encode PNG");
 
-	FILE* f = fopen(path, "wb");
+	FILE* f = kitsune_fopen(path, "wb");
 	if (!f) {
 		kitsune_free(data);
 		return luaL_error(L, "Image:Save: cannot open '%s' for writing", path);

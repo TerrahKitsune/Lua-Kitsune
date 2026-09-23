@@ -1,6 +1,5 @@
 ﻿#include "luayaml.h"
 #include "utf8bom.h"
-#include "luawchar.h"
 #include "luaidentifier.h"
 #include "luadatetime.h"
 #include "luadecimal.h"
@@ -212,14 +211,6 @@ static void enc_value(LuaYaml* y, yaml_emitter_t* em, lua_State* L) {
         enc_table(y, em, L);
         break;
     case LUA_TUSERDATA:
-        if (lua_iswchar(L, -1)) {
-            ToUtf8(L);
-            size_t      len;
-            const char* s = lua_tolstring(L, -1, &len);
-            enc_string_scalar(em, L, s, len, YAML_DOUBLE_QUOTED_SCALAR_STYLE);
-            lua_pop(L, 1);
-            break;
-        }
         if (lua_isidentifier(L, -1)) {
             lua_identifier_push_string(L, -1);
             size_t      len;

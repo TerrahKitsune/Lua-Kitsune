@@ -1,4 +1,5 @@
 #include "LuaProcess.h"
+#include "luatext.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -53,31 +54,39 @@ int process_tostring(lua_State* L) {
 // -- Windows -------------------------------------------------------------------
 #ifdef _WIN32
 
-static char procname[MAX_PATH];
-const char* GetProcessName(int id) {
+// Pushes the executable name of process id as UTF-8 ("" when it cannot be queried).
+static void PushProcessName(lua_State* L, DWORD id) {
 	HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION |
 		PROCESS_VM_READ,
 		FALSE, id);
 
-	memset(procname, 0, sizeof(MAX_PATH));
+	wchar_t name[MAX_PATH] = { 0 };
 
 	if (hProcess != NULL) {
 		HMODULE hMod;
 		DWORD cbNeeded;
 
 		if (EnumProcessModules(hProcess, &hMod, sizeof(hMod), &cbNeeded))
-			GetModuleBaseName(hProcess, hMod, procname, MAX_PATH);
+			GetModuleBaseNameW(hProcess, hMod, name, MAX_PATH);
+		CloseHandle(hProcess);
 	}
 
-	CloseHandle(hProcess);
-	procname[MAX_PATH - 1] = '\0';
-	return procname;
+	name[MAX_PATH - 1] = L'\0';
+	lua_pushwideasutf8(L, name);
+}
+
+// Converts an optional UTF-8 string to a heap-allocated wide string (NULL stays NULL).
+// Sets *oom when allocation fails. Free with kitsune_free.
+static wchar_t* ProcessArgToWide(const char* s, bool* oom) {
+	wchar_t* w = kitsune_utf8_to_wide_alloc(s);
+	if (s && !w)
+		*oom = true;
+	return w;
 }
 
 int GetAllProcesses(lua_State* L) {
 	DWORD processes[1024];
 	DWORD needed;
-	const char* name;
 	if (!EnumProcesses(processes, sizeof(processes), &needed)) {
 		lua_pushnil(L);
 		return 1;
@@ -86,9 +95,8 @@ int GetAllProcesses(lua_State* L) {
 	needed = needed / sizeof(DWORD);
 	lua_createtable(L, 0, needed);
 	for (unsigned int n = 0; n < needed; n++) {
-		name = GetProcessName(processes[n]);
 		lua_pushinteger(L, processes[n]);
-		lua_pushstring(L, name);
+		PushProcessName(L, processes[n]);
 		lua_settable(L, -3);
 	}
 
@@ -140,11 +148,7 @@ int StartNewProcess(lua_State* L) {
 	bool redirect = false;
 	int mask = 0;
 
-	if (!dir) {
-		char defaultdir[MAX_PATH];
-		defaultdir[GetCurrentDirectory(MAX_PATH, defaultdir)] = '\0';
-		dir = defaultdir;
-	}
+	// A NULL directory makes the child inherit the current directory.
 
 	if (lua_gettop(L) >= 5) {
 		if (lua_isboolean(L, 5)) {
@@ -161,7 +165,7 @@ int StartNewProcess(lua_State* L) {
 	if (noconsole)
 		flag = NORMAL_PRIORITY_CLASS;
 
-	STARTUPINFO info;
+	STARTUPINFOW info;
 	PROCESS_INFORMATION processInfo;
 	HANDLE hChildStd_OUT_Rd = INVALID_HANDLE_VALUE;
 	HANDLE hChildStd_OUT_Wr = INVALID_HANDLE_VALUE;
@@ -170,7 +174,7 @@ int StartNewProcess(lua_State* L) {
 	HANDLE hChildStd_ERR_Rd = INVALID_HANDLE_VALUE;
 	HANDLE hChildStd_ERR_Wr = INVALID_HANDLE_VALUE;
 
-	ZeroMemory(&info, sizeof(STARTUPINFO));
+	ZeroMemory(&info, sizeof(STARTUPINFOW));
 	info.cb = sizeof(info);
 	ZeroMemory(&processInfo, sizeof(PROCESS_INFORMATION));
 
@@ -231,7 +235,19 @@ int StartNewProcess(lua_State* L) {
 		info.dwFlags |= STARTF_USESTDHANDLES;
 	}
 
-	if (CreateProcess(appname, (LPSTR)cmd, NULL, NULL, redirect, flag, NULL, dir, &info, &processInfo)) {
+	// UTF-8 -> UTF-16 for CreateProcessW (the command line buffer must be writable).
+	bool oom = false;
+	wchar_t* wappname = ProcessArgToWide(appname, &oom);
+	wchar_t* wcmd = ProcessArgToWide(cmd, &oom);
+	wchar_t* wdir = ProcessArgToWide(dir, &oom);
+	BOOL created = !oom && CreateProcessW(wappname, wcmd, NULL, NULL, redirect, flag, NULL, wdir, &info, &processInfo);
+	DWORD createError = oom ? ERROR_NOT_ENOUGH_MEMORY : GetLastError();
+	kitsune_free(wappname);
+	kitsune_free(wcmd);
+	kitsune_free(wdir);
+	SetLastError(createError);
+
+	if (created) {
 		lua_pop(L, lua_gettop(L));
 		LuaProcess* proc = lua_pushprocess(L);
 		proc->info = info;
@@ -498,7 +514,7 @@ int GetProcName(lua_State* L) {
 	LuaProcess* proc = lua_toprocess(L, 1);
 	DWORD id = proc->processInfo.dwProcessId;
 	lua_pop(L, 1);
-	lua_pushstring(L, GetProcessName(id));
+	PushProcessName(L, id);
 	return 1;
 }
 
@@ -668,11 +684,23 @@ int StartNewProcess(lua_State* L) {
 
 	// If a working directory is requested, wrap the command in a subshell that
 	// first changes to that directory.  posix_spawn has no portable chdir action
-	// so we prepend "cd '<dir>' && " to the shell command string.
-	char cd_buf[4096];
+	// so we prepend "cd '<dir>' && " to the shell command string.  The directory is
+	// quoted with embedded quotes escaped, and the string is built on the Lua stack
+	// (it stays there until posix_spawn) so long commands are never truncated.
 	if (dir && dir[0]) {
-		snprintf(cd_buf, sizeof(cd_buf), "cd '%s' && %s", dir, exec_cmd);
-		exec_cmd = cd_buf;
+		luaL_Buffer b;
+		luaL_buffinit(L, &b);
+		luaL_addstring(&b, "cd '");
+		for (const char* p = dir; *p; p++) {
+			if (*p == '\'')
+				luaL_addstring(&b, "'\\''");
+			else
+				luaL_addchar(&b, *p);
+		}
+		luaL_addstring(&b, "' && ");
+		luaL_addstring(&b, exec_cmd);
+		luaL_pushresult(&b);
+		exec_cmd = lua_tostring(L, -1);
 	}
 
 	int fd_in[2]  = { -1, -1 };

@@ -1565,22 +1565,6 @@ namespace KitsuneNet
             return LuaValue.FromBytes(bytes);
         }
 
-        // wcharCount is the char16_t count; each char16_t is 2 bytes (UTF-16 LE).
-        private static LuaValue NativeCopyChar16(IntPtr src, nuint wcharCount)
-        {
-            if (wcharCount > (nuint)(Array.MaxLength / 2))
-            {
-                throw new InvalidOperationException($"Native wchar count {wcharCount} exceeds the managed array limit.");
-            }
-            int byteCount = (int)wcharCount * 2;
-            byte[] bytes = new byte[byteCount];
-            if (byteCount > 0)
-            {
-                Marshal.Copy(src, bytes, 0, byteCount);
-            }
-            return new LuaValue { Type = LuaType.Char16, Bytes = bytes };
-        }
-
         private static LuaValue NativeMarshalDateTime(IntPtr ptr)
         {
             var s = Marshal.PtrToStructure<NativeDateTime>(ptr);
@@ -1738,7 +1722,6 @@ namespace KitsuneNet
                 LuaType.Identifier when nv.Data != IntPtr.Zero => NativeMarshalIdentifier(nv.Data),
                 LuaType.Boolean => LuaValue.FromBool(nv.BoolByte != 0),
                 LuaType.String when nv.Data != IntPtr.Zero => NativeCopyBytes(nv.Data, nv.Length),
-                LuaType.Char16 when nv.Data != IntPtr.Zero => NativeCopyChar16(nv.Data, nv.Length),
                 LuaType.Json when nv.Data != IntPtr.Zero && nv.Length > 0 => NativeParseJson(nv.Data, nv.Length),
                 LuaType.TableContents => ReadNativeTable(nv.Data),  // snapshot from KitsuneGetTableContents
                 LuaType.Error when nv.Data != IntPtr.Zero => NativeCopyBytes(nv.Data, nv.Length) with { Type = LuaType.Error },
@@ -1790,7 +1773,6 @@ namespace KitsuneNet
                 LuaType.Identifier when nv.Data != IntPtr.Zero => NativeMarshalIdentifier(nv.Data),
                 LuaType.Boolean => LuaValue.FromBool(nv.BoolByte != 0),
                 LuaType.String when nv.Data != IntPtr.Zero => NativeCopyBytes(nv.Data, nv.Length),
-                LuaType.Char16 when nv.Data != IntPtr.Zero => NativeCopyChar16(nv.Data, nv.Length),
                 LuaType.Userdata when nv.Data != IntPtr.Zero => NativeUnmarshalUserdata(nv.Data, nv.Length),
                 LuaType.Json when nv.Data != IntPtr.Zero && nv.Length > 0 => NativeParseJson(nv.Data, nv.Length),
                 LuaType.TableContents => ReadNativeTable(nv.Data),  // snapshot linked list inside a node
@@ -1923,23 +1905,6 @@ namespace KitsuneNet
                         ptrs.Add(p);
                         nv.Data = p;
                         nv.Length = (nuint)bytes.Length;
-                    }
-                    break;
-                case LuaType.Char16:
-                    if (v.Bytes is not null)
-                    {
-                        // Bytes stores UTF-16 LE; Length = number of char16_t code units (2 bytes each).
-                        byte[] wbytes = v.Bytes;
-                        IntPtr p = Marshal.AllocHGlobal(wbytes.Length + 2);  // +2 for null char16_t
-                        if (wbytes.Length > 0)
-                        {
-                            Marshal.Copy(wbytes, 0, p, wbytes.Length);
-                        }
-                        Marshal.WriteInt16(p, wbytes.Length, 0);
-                        ptrs ??= new List<IntPtr>();
-                        ptrs.Add(p);
-                        nv.Data = p;
-                        nv.Length = (nuint)(wbytes.Length / 2);
                     }
                     break;
                 case LuaType.Function when v.FunctionRef is { NativePtr: 0 }:

@@ -4,16 +4,41 @@
 
 #include "Session.h"
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <string>
 #ifdef _WIN32
 #include <conio.h>
 #include <io.h>
+#include "kitsuneconsole.h"
 #else
 #include <unistd.h>
 #include <sys/ioctl.h>
 #endif
 
 // kitsune_ResultSetter may be called multiple times to return multiple values.
+
+#ifdef _WIN32
+// Lua strings are UTF-8; Windows console APIs are used in their UTF-16 (W) form so text
+// is correct regardless of the console code page.
+static std::wstring session_utf8_to_wide(const char* s, size_t len) {
+	std::wstring w;
+	if (!s || len == 0)
+		return w;
+	int n = MultiByteToWideChar(CP_UTF8, 0, s, (int)len, NULL, 0);
+	if (n <= 0)
+		return w;
+	w.resize((size_t)n);
+	MultiByteToWideChar(CP_UTF8, 0, s, (int)len, &w[0], n);
+	return w;
+}
+
+// A console created or attached at runtime starts in the OEM code page.
+static void session_console_utf8() {
+	SetConsoleOutputCP(CP_UTF8);
+	SetConsoleCP(CP_UTF8);
+}
+#endif
 
 static inline bool session_is_stdin_tty() {
 #ifdef _WIN32
@@ -39,12 +64,13 @@ static int SessionConsolePut(int argc, const KitsuneVariable* argv, const kitsun
 	return 1;
 }
 
-// Session.Console.GetKey -- read one byte/key from stdin; returns integer.
+// Session.Console.GetKey -- read one key from stdin; returns its Unicode code point
+// (utf8.char(key) gives the character) or, when stdin is redirected, the next byte.
 static int SessionConsoleGetKey(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter setter, void*) {
 	long long ch;
 	if (session_is_stdin_tty()) {
 #ifdef _WIN32
-		ch = _getch();
+		ch = kitsune_getwch_codepoint();
 #else
 		ch = -1;
 #endif
@@ -147,14 +173,18 @@ static int SessionClipboardSet(int argc, const KitsuneVariable* argv, const kits
 #ifdef _WIN32
 	if (OpenClipboard(NULL)) {
 		if (argc > 0 && argv[0].type == KITSUNE_TSTRING && argv[0].data && argv[0].length > 0) {
-			HGLOBAL hg = GlobalAlloc(GMEM_MOVEABLE, argv[0].length + 1);
+			// Lua strings are UTF-8; CF_TEXT would be read back in the ANSI code page.
+			const char* src = (const char*)argv[0].data;
+			int srclen = (int)argv[0].length;
+			int wlen = MultiByteToWideChar(CP_UTF8, 0, src, srclen, NULL, 0);
+			HGLOBAL hg = GlobalAlloc(GMEM_MOVEABLE, ((size_t)wlen + 1) * sizeof(wchar_t));
 			if (hg) {
-				char* p = (char*)GlobalLock(hg);
+				wchar_t* p = (wchar_t*)GlobalLock(hg);
 				if (p) {
-					memcpy(p, argv[0].data, argv[0].length);
-					p[argv[0].length] = '\0';
+					MultiByteToWideChar(CP_UTF8, 0, src, srclen, p, wlen);
+					p[wlen] = L'\0';
 					GlobalUnlock(hg);
-					ok = SetClipboardData(CF_TEXT, hg) != NULL;
+					ok = SetClipboardData(CF_UNICODETEXT, hg) != NULL;
 					if (!ok)
 						GlobalFree(hg);
 				}
@@ -174,7 +204,7 @@ static int SessionClipboardSet(int argc, const KitsuneVariable* argv, const kits
 	return 1;
 }
 
-// Session.Clipboard.Get -- returns the clipboard text as a Wchar, or nil.
+// Session.Clipboard.Get -- returns the clipboard text as a UTF-8 string, or nil.
 static int SessionClipboardGet(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter setter, void*) {
 #ifdef _WIN32
 	if (OpenClipboard(NULL)) {
@@ -182,14 +212,28 @@ static int SessionClipboardGet(int argc, const KitsuneVariable* argv, const kits
 		if (hData) {
 			wchar_t* text = (wchar_t*)GlobalLock(hData);
 			if (text) {
-				size_t wlen = wcslen(text);
-				KitsuneVariable r = {};
-				r.type = KITSUNE_TCHAR16;
-				r.length = wlen;
-				r.char16data = (char16_t*)text;
-				setter(&r);
+				int wlen = (int)wcslen(text);
+				int bytes = WideCharToMultiByte(CP_UTF8, 0, text, wlen, NULL, 0, NULL, NULL);
+				char* utf8 = (char*)malloc((size_t)bytes + 1);
+				bool pushed = false;
+				if (utf8) {
+					if (bytes > 0)
+						WideCharToMultiByte(CP_UTF8, 0, text, wlen, utf8, bytes, NULL, NULL);
+					KitsuneVariable r = {};
+					r.type = KITSUNE_TSTRING;
+					r.length = (size_t)bytes;
+					r.data = (unsigned char*)utf8;
+					setter(&r);
+					free(utf8);
+					pushed = true;
+				}
 				GlobalUnlock(hData);
 				CloseClipboard();
+				if (pushed)
+					return 1;
+				KitsuneVariable n = {};
+				n.type = KITSUNE_TNIL;
+				setter(&n);
 				return 1;
 			}
 		}
@@ -205,9 +249,14 @@ static int SessionClipboardGet(int argc, const KitsuneVariable* argv, const kits
 // Session.Console.Write -- WriteConsole with a single string; returns bytes written.
 static int SessionConsoleWrite(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter setter, void*) {
 	HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);
-	DWORD written = 0;
-	if (h != INVALID_HANDLE_VALUE && argc > 0 && argv[0].type == KITSUNE_TSTRING && argv[0].data)
-		WriteConsole(h, argv[0].data, (DWORD)argv[0].length, &written, NULL);
+	long long written = 0;
+	if (h != INVALID_HANDLE_VALUE && argc > 0 && argv[0].type == KITSUNE_TSTRING && argv[0].data) {
+		std::wstring w = session_utf8_to_wide((const char*)argv[0].data, argv[0].length);
+		DWORD chars = 0;
+		// Reports the UTF-8 byte count, as before, when the whole string was written.
+		if (!w.empty() && WriteConsoleW(h, w.data(), (DWORD)w.size(), &chars, NULL) && chars == (DWORD)w.size())
+			written = (long long)argv[0].length;
+	}
 	KitsuneVariable r = {}; r.type = KITSUNE_TINTEGER; r.integer = written;
 	setter(&r);
 	return 1;
@@ -217,7 +266,7 @@ static int SessionConsoleWrite(int argc, const KitsuneVariable* argv, const kits
 static int SessionConsoleReadKey(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter setter, void*) {
 	bool has = session_is_stdin_tty() ? (_kbhit() > 0) : !feof(stdin);
 	if (has) {
-		KitsuneVariable r = {}; r.type = KITSUNE_TINTEGER; r.integer = _getch();
+		KitsuneVariable r = {}; r.type = KITSUNE_TINTEGER; r.integer = kitsune_getwch_codepoint();
 		setter(&r);
 	}
 	else {
@@ -273,13 +322,16 @@ static int SessionConsoleSetVisible(int argc, const KitsuneVariable* argv, const
 // Session.Console.SetTitle -- set the console window title.
 static int SessionConsoleSetTitle(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter, void*) {
 	if (argc > 0 && argv[0].type == KITSUNE_TSTRING && argv[0].data)
-		SetConsoleTitleA((const char*)argv[0].data);
+		SetConsoleTitleW(session_utf8_to_wide((const char*)argv[0].data, argv[0].length).c_str());
 	return 1;
 }
 
 // Session.Console.Create / Destroy / Attach -- AllocConsole / FreeConsole / AttachConsole.
 static int SessionConsoleCreate(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter setter, void*) {
-	KitsuneVariable r = {}; r.type = KITSUNE_TBOOLEAN; r.boolean = AllocConsole() != FALSE;
+	bool ok = AllocConsole() != FALSE;
+	if (ok)
+		session_console_utf8();
+	KitsuneVariable r = {}; r.type = KITSUNE_TBOOLEAN; r.boolean = ok;
 	setter(&r);
 	return 1;
 }
@@ -291,7 +343,10 @@ static int SessionConsoleDestroy(int argc, const KitsuneVariable* argv, const ki
 static int SessionConsoleAttach(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter setter, void*) {
 	DWORD pid = (argc > 0 && argv[0].type == KITSUNE_TINTEGER)
 		? (DWORD)argv[0].integer : ATTACH_PARENT_PROCESS;
-	KitsuneVariable r = {}; r.type = KITSUNE_TBOOLEAN; r.boolean = AttachConsole(pid) != FALSE;
+	bool ok = AttachConsole(pid) != FALSE;
+	if (ok)
+		session_console_utf8();
+	KitsuneVariable r = {}; r.type = KITSUNE_TBOOLEAN; r.boolean = ok;
 	setter(&r);
 	return 1;
 }

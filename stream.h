@@ -137,7 +137,8 @@ int ReadDecimal(lua_State* L);
 int ReadIdentifier(lua_State* L);
 int ReadDateTime(lua_State* L);
 int ReadTimeSpan(lua_State* L);
-int ReadWchar(lua_State* L);
+int ReadUtf16(lua_State* L);
+int WriteUtf16(lua_State* L);
 
 // ── Write operations ──────────────────────────────────────────────────────────
 int WriteLuaValue(lua_State* L);

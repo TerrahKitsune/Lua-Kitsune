@@ -22,12 +22,18 @@ static bool s_rebuildPending = false;
 // Forward declaration
 static void font_free(Resource* node);
 
-// Glyph ranges included in every loaded font atlas.
-// Basic Latin + Latin-1 + General Punctuation (em/en dash, smart quotes, ellipsis, bullet…) + Euro.
+// Glyph ranges included in every loaded font atlas: European scripts (Latin, Greek,
+// Cyrillic) plus common punctuation and currency. CJK is left out on purpose because it
+// multiplies the atlas size; glyphs the TTF itself lacks still render as '?'.
 static const ImWchar s_glyphRanges[] = {
     0x0020, 0x00FF,  // Basic Latin + Latin-1 Supplement
-    0x2000, 0x206F,  // General Punctuation
-    0x20AC, 0x20AC,  // Euro sign
+    0x0100, 0x024F,  // Latin Extended-A and -B (Polish, Czech, Turkish, Romanian, Baltic, ...)
+    0x0370, 0x03FF,  // Greek and Coptic
+    0x0400, 0x052F,  // Cyrillic + Cyrillic Supplement
+    0x1E00, 0x1EFF,  // Latin Extended Additional (Vietnamese, Welsh)
+    0x2000, 0x206F,  // General Punctuation (dashes, smart quotes, ellipsis, bullet)
+    0x20A0, 0x20CF,  // Currency Symbols (euro, ruble, hryvnia, lira, ...)
+    0x2116, 0x2116,  // Numero sign
     0,
 };
 

@@ -1,6 +1,5 @@
 ﻿#include "LuaMySQL.h"
 #include "stream.h"
-#include "luawchar.h"
 #include "luaidentifier.h"
 #include "luadatetime.h"
 #include "luadecimal.h"
@@ -57,11 +56,6 @@ static void PushAsParamString(lua_State* L, int index) {
 			lua_error(L);
 			return;
 		}
-		lua_remove(L, -2);
-	}
-	else if (lua_iswchar(L, index)) {
-		lua_pushvalue(L, index);
-		ToUtf8(L);
 		lua_remove(L, -2);
 	}
 	else if (lua_isidentifier(L, index)) {

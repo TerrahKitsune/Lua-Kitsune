@@ -1813,37 +1813,6 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task CRC64_WithWchar_ReturnsNumber()
-        {
-            using KitsuneEngine engine = new();
-
-            // CRC64 uses the raw UTF-16 LE bytes of the Wchar, not the UTF-8 encoding.
-            LuaValue r = await engine.ExecuteStringAsync("return tostring(type(CRC64(Wchar.FromUtf8('hello'))) == 'number')");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task CRC64_Wchar_IsDeterministic()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local w = Wchar.FromUtf8('deterministic')
-                return tostring(CRC64(w) == CRC64(w))
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task CRC64_Wchar_DiffersFromStringEquivalent()
-        {
-            using KitsuneEngine engine = new();
-
-            // Wchar stores UTF-16 LE bytes; plain string is UTF-8 — different byte sequences.
-            LuaValue r = await engine.ExecuteStringAsync("return tostring(CRC64(Wchar.FromUtf8('hello')) ~= CRC64('hello'))");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
         public async Task CRC64_WithStream_RaisesError()
         {
             // CRC64 no longer accepts stream input — it was silently computing CRC of
@@ -1962,12 +1931,30 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
 
-            // The returned value includes a trailing null byte; strip it before comparing.
             LuaValue r = await engine.ExecuteStringAsync(@"
                 setenv('KITSUNE_UTIL_TEST_1', 'hello_kitsune', true)
-                return getenv('KITSUNE_UTIL_TEST_1'):gsub('%z', '')
+                return getenv('KITSUNE_UTIL_TEST_1')
             ");
             r.String.ShouldBe("hello_kitsune");
+        }
+
+        [Fact]
+        public async Task SetEnv_GetEnv_NonAscii_RoundTripsAndReachesProcessEnvironment()
+        {
+            using KitsuneEngine engine = new();
+
+            // "Jörg 日本" must survive both directions and land in the real (UTF-16) process
+            // environment, which is what child processes and .NET see.
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                setenv('KITSUNE_UTIL_TEST_UTF8', 'J\xc3\xb6rg \xe6\x97\xa5\xe6\x9c\xac', true)
+                return tostring(getenv('KITSUNE_UTIL_TEST_UTF8') == 'J\xc3\xb6rg \xe6\x97\xa5\xe6\x9c\xac')
+            ");
+            r.String.ShouldBe("true");
+            if (OperatingSystem.IsWindows())
+            {
+                // .NET on Linux keeps its own environment snapshot, so only Windows can check this.
+                Environment.GetEnvironmentVariable("KITSUNE_UTIL_TEST_UTF8").ShouldBe("Jörg 日本");
+            }
         }
 
         [Fact]
@@ -1977,22 +1964,19 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 setenv('KITSUNE_UTIL_TEST_2', 'original', true)
                 setenv('KITSUNE_UTIL_TEST_2', 'overwritten', false)
-                return getenv('KITSUNE_UTIL_TEST_2'):gsub('%z', '')
+                return getenv('KITSUNE_UTIL_TEST_2')
             ");
             r.String.ShouldBe("original");
         }
 
         [Fact]
-        public async Task GetEnv_NonExistentVariable_ReturnsNilOrEmpty()
+        public async Task GetEnv_NonExistentVariable_ReturnsNil()
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
-                local v = getenv('KITSUNE_UTIL_TEST_DEFINITELY_NOT_SET_XYZ_9987')
-                -- nil or empty string (possibly with null byte); strip null before checking
-                if v then v = v:gsub('%z', '') end
-                return tostring(v == nil or v == '')
+                return tostring(getenv('KITSUNE_UTIL_TEST_DEFINITELY_NOT_SET_XYZ_9987'))
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("nil");
         }
 
         // -- table.first ----------------------------------------------------------
@@ -2106,6 +2090,19 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync("local m,c = GetLastError(2); return tostring(type(m)=='string' and #m>0 and type(c)=='number')");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task GetLastError_Message_IsValidUtf8WithoutTrailingNewline()
+        {
+            using KitsuneEngine engine = new();
+
+            // Localized system messages must come back as UTF-8, trimmed.
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local m = GetLastError(5)
+                return tostring(utf8.len(m) ~= nil and m:find('[\r\n]$') == nil)
+            ");
             r.String.ShouldBe("true");
         }
 
@@ -2719,6 +2716,85 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
+        public async Task Json_DecodeUnicodeEscapes_SurrogatePairAndUnpaired()
+        {
+            using KitsuneEngine engine = new();
+
+            // A valid pair decodes to one character; unpaired surrogates become U+FFFD and
+            // never produce invalid UTF-8; a character after an unpaired high surrogate is kept.
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local j = Json.New()
+                local pair     = j:Decode([[""😀""]])
+                local loneHigh = j:Decode([[""\uD83Dx""]])
+                local loneLow  = j:Decode([[""a\uDC00b""]])
+                local highThen = j:Decode([[""\uD83DA""]])
+                return tostring(pair == '\xf0\x9f\x98\x80'
+                    and loneHigh == '\xef\xbf\xbdx'
+                    and loneLow == 'a\xef\xbf\xbdb'
+                    and highThen == '\xef\xbf\xbdA'
+                    and utf8.len(pair .. loneHigh .. loneLow .. highThen) ~= nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_DecodeUnicodeEscapes_UnpairedHighSurrogateBeforeValidPair()
+        {
+            using KitsuneEngine engine = new();
+
+            // An unpaired high surrogate followed by another high surrogate must not swallow it:
+            // the second one still pairs with the low surrogate after it.
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local j = Json.New()
+                local strayThenPair = j:Decode([[""\uD800😀""]])
+                local twoHighs      = j:Decode([[""\uD800\uD801x""]])
+                local threeHighs    = j:Decode([[""\uD800\uD801😀""]])
+                return tostring(strayThenPair == '\xef\xbf\xbd\xf0\x9f\x98\x80'
+                    and twoHighs == '\xef\xbf\xbd\xef\xbf\xbdx'
+                    and threeHighs == '\xef\xbf\xbd\xef\xbf\xbd\xf0\x9f\x98\x80')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_Encode_InvalidUtf8_BecomesReplacementChar()
+        {
+            using KitsuneEngine engine = new();
+
+            // Valid multi-byte UTF-8 passes through; a stray byte (ANSI 'é' = 0xE9) becomes
+            // U+FFFD so the output is always valid JSON, in values and keys alike.
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local j = Json.New()
+                local out = j:Encode({ ['k\xe9'] = 'caf\xe9 \xc3\xa9 \xf0\x9f\x98\x80' })
+                return tostring(out == '{""k\xef\xbf\xbd"":""caf\xef\xbf\xbd \xc3\xa9 \xf0\x9f\x98\x80""}'
+                    and utf8.len(out) ~= nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Json_Decode_BomSkipped_ForFunctionAndStreamSources()
+        {
+            using KitsuneEngine engine = new();
+
+            // A UTF-8 BOM (as written by many Windows editors) is skipped for every source type.
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local j = Json.New()
+                local text = '\xef\xbb\xbf{""a"":1}'
+                local done = false
+                local fromFn = j:Decode(function()
+                    if done then return nil end
+                    done = true
+                    return text
+                end)
+                local fromStream = j:Decode(Stream.New(text))
+                local fromString = j:Decode(text)
+                return tostring(fromFn.a == 1 and fromStream.a == 1 and fromString.a == 1)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
         public async Task Json_Decode_NumberTooLong_RaisesError()
         {
             using KitsuneEngine engine = new();
@@ -3102,7 +3178,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Encode stream / Wchar as JSON value ----------------------------------
+        // -- Encode stream as JSON value --------------------------------------------
         [Fact]
         public async Task Json_Encode_Stream_ReadableSeekable_ProducesJsonString()
         {
@@ -3197,96 +3273,12 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task Json_Encode_Wchar_AsciiContent_ProducesJsonString()
-        {
-            using KitsuneEngine engine = new();
-
-            // ASCII Wchar must produce the same JSON string as the equivalent Lua string.
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local j = Json.New()
-                local w = Wchar.FromUtf8('hello')
-                return j:Encode(w)
-            ");
-            r.String.ShouldBe("\"hello\"");
-        }
-
-        [Fact]
-        public async Task Json_Encode_Wchar_NonAscii_RoundTripsCorrectly()
-        {
-            using KitsuneEngine engine = new();
-
-            // é = U+00E9, UTF-8: 0xC3 0xA9.  Use Lua hex escapes for unambiguous byte values.
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local j = Json.New()
-                local w = Wchar.FromUtf8('\xC3\xa9')
-                return j:Decode(j:Encode(w))
-            ");
-            r.String.ShouldBe("é");
-        }
-
-        [Fact]
-        public async Task Json_Encode_Wchar_Empty_ProducesEmptyJsonString()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local j = Json.New()
-                local w = Wchar.FromUtf8('')
-                return j:Encode(w)
-            ");
-            r.String.ShouldBe("\"\"");
-        }
-
-        [Fact]
-        public async Task Json_Encode_Wchar_SpecialChars_EscapedCorrectly()
-        {
-            using KitsuneEngine engine = new();
-
-            // Double-quotes inside the Wchar content must be JSON-escaped as \".
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local j = Json.New()
-                local w = Wchar.FromUtf8('say ""hi""')
-                return j:Encode(w)
-            ");
-            r.String.ShouldBe("\"say \\\"hi\\\"\"");
-        }
-
-        [Fact]
-        public async Task Json_Encode_Wchar_NewlineAndTab_EscapedAndRoundTrip()
-        {
-            using KitsuneEngine engine = new();
-
-            // Control characters must be JSON-escaped and survive a full decode round-trip.
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local j = Json.New()
-                local w = Wchar.FromUtf8('a' .. '\n' .. 'b')
-                return j:Decode(j:Encode(w))
-            ");
-            r.String.ShouldBe("a\nb");
-        }
-
-        [Fact]
-        public async Task Json_Encode_Wchar_AsTableValue_RoundTripsAsString()
-        {
-            using KitsuneEngine engine = new();
-
-            // After encode?decode, the decoded value is a Lua string (not a Wchar),
-            // since JSON has no wchar type.
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local j = Json.New()
-                local w = Wchar.FromUtf8('world')
-                local t = j:Decode(j:Encode({msg = w}))
-                return t.msg
-            ");
-            r.String.ShouldBe("world");
-        }
-
-        [Fact]
         public async Task Json_Encode_UnknownUserdata_ProducesNull()
         {
             using KitsuneEngine engine = new();
 
-            // Any userdata that is neither a Wchar nor a stream must encode as null.
-            // Json.New() returns a LuaJson userdata, which is not stream/wchar.
+            // Any userdata that is not a stream or a known value type must encode as null.
+            // Json.New() returns a LuaJson userdata, which is neither.
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local j = Json.New()
                 return j:Encode(Json.New())
@@ -3294,553 +3286,169 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("null");
         }
 
-        // -- Wchar ----------------------------------------------------------------
+        // -- Text -----------------------------------------------------------------
         [Fact]
-        public async Task Wchar_FromUtf8_ToUtf8_RoundTrip()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("return Wchar.FromUtf8('hello'):ToUtf8()");
-            r.String.ShouldBe("hello");
-        }
-
-        [Fact]
-        public async Task Wchar_ToUpper_ChangesCase()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("return Wchar.FromUtf8('hello world'):ToUpper():ToUtf8()");
-            r.String.ShouldBe("HELLO WORLD");
-        }
-
-        [Fact]
-        public async Task Wchar_ToLower_ChangesCase()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("return Wchar.FromUtf8('KITSUNE'):ToLower():ToUtf8()");
-            r.String.ShouldBe("kitsune");
-        }
-
-        [Fact]
-        public async Task Wchar_Substring_ExtractsCorrectly()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("return Wchar.FromUtf8('hello world'):Substring(7):ToUtf8()");
-            r.String.ShouldBe("world");
-        }
-
-        [Fact]
-        public async Task Wchar_Length_ReturnsCharCount()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("return tostring(#Wchar.FromUtf8('hello'))");
-            r.String.ShouldBe("5");
-        }
-
-        [Fact]
-        public async Task Wchar_Empty_HasZeroLength()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("return tostring(#Wchar.FromUtf8('') == 0)");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task Wchar_LenMethod_MatchesHashOperator()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("local w = Wchar.FromUtf8('hello'); return tostring(w:len() == #w and w:len() == 5)");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task Wchar_ToString_ReturnsUtf8String()
+        public async Task Text_Utf16_RoundTrip_IncludingSurrogatePair()
         {
             using KitsuneEngine engine = new();
 
-            // __tostring metamethod should produce the same result as :ToUtf8().
-            LuaValue r = await engine.ExecuteStringAsync("return tostring(Wchar.FromUtf8('kitsune'))");
-            r.String.ShouldBe("kitsune");
-        }
-
-        [Fact]
-        public async Task Wchar_Substring_WithLength_ExtractsSlice()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("return Wchar.FromUtf8('hello world'):Substring(1, 5):ToUtf8()");
-            r.String.ShouldBe("hello");
-        }
-
-        [Fact]
-        public async Task Wchar_Substring_OutOfRange_ReturnsNil()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("return tostring(Wchar.FromUtf8('hi'):Substring(99))");
-            r.String.ShouldBe("nil");
-        }
-
-        [Fact]
-        public async Task Wchar_Find_ReturnsPosition()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("return tostring(Wchar.FromUtf8('hello world'):Find(Wchar.FromUtf8('world')))");
-            r.String.ShouldBe("7");
-        }
-
-        [Fact]
-        public async Task Wchar_Find_NotFound_ReturnsNil()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("return tostring(Wchar.FromUtf8('hello'):Find(Wchar.FromUtf8('xyz')))");
-            r.String.ShouldBe("nil");
-        }
-
-        [Fact]
-        public async Task Wchar_Find_WithOffset_StartsFromPosition()
-        {
-            using KitsuneEngine engine = new();
-
-            // 'a' appears at indices 1 and 4 in 'abcabc'; with offset 2 it finds index 4.
-            LuaValue r = await engine.ExecuteStringAsync("return tostring(Wchar.FromUtf8('abcabc'):Find(Wchar.FromUtf8('a'), 2))");
-            r.String.ShouldBe("4");
-        }
-
-        [Fact]
-        public async Task Wchar_Find_StringPattern_Works()
-        {
-            using KitsuneEngine engine = new();
-
-            // Find also accepts a plain Lua string as the search pattern.
-            LuaValue r = await engine.ExecuteStringAsync("return tostring(Wchar.FromUtf8('hello world'):Find('world'))");
-            r.String.ShouldBe("7");
-        }
-
-        [Fact]
-        public async Task Wchar_Find_NonAsciiStringPattern_Works()
-        {
-            using KitsuneEngine engine = new();
-
-            // String patterns are interpreted as UTF-8; \xC3\xA9 are the UTF-8 bytes for U+00E9 (é).
+            // 'A' (1 unit), 'é' (1 unit), '😀' (surrogate pair) -> 8 bytes of UTF-16LE, and back.
             LuaValue r = await engine.ExecuteStringAsync(@"
-                local hay = Wchar.FromUtf8('caf\xC3\xA9 au lait')
-                return tostring(hay:Find('\xC3\xA9') ~= nil)
+                local s = 'A\xc3\xa9\xf0\x9f\x98\x80'
+                local b = Text.ToUtf16(s)
+                return tostring(b == 'A\0\xe9\0\x3d\xd8\x00\xde' and Text.FromUtf16(b) == s)
             ");
             r.String.ShouldBe("true");
         }
 
         [Fact]
-        public async Task Wchar_Equality_SameContent_IsTrue()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("return tostring(Wchar.FromUtf8('hello') == Wchar.FromUtf8('hello'))");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task Wchar_Equality_DifferentContent_IsFalse()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("return tostring(Wchar.FromUtf8('hello') == Wchar.FromUtf8('world'))");
-            r.String.ShouldBe("false");
-        }
-
-        [Fact]
-        public async Task Wchar_Equality_DifferentLengths_IsFalse()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("return tostring(Wchar.FromUtf8('hi') == Wchar.FromUtf8('hello'))");
-            r.String.ShouldBe("false");
-        }
-
-        [Fact]
-        public async Task Wchar_Equality_EmptyWchars_AreEqual()
+        public async Task Text_Utf16_InvalidInput_BecomesReplacementChar()
         {
             using KitsuneEngine engine = new();
 
-            // Edge case: two empty Wchars must compare as equal.
-            LuaValue r = await engine.ExecuteStringAsync("return tostring(Wchar.FromUtf8('') == Wchar.FromUtf8(''))");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task Wchar_Concat_WcharAndWchar_ProducesJoined()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("return (Wchar.FromUtf8('hello') .. Wchar.FromUtf8(' world')):ToUtf8()");
-            r.String.ShouldBe("hello world");
-        }
-
-        [Fact]
-        public async Task Wchar_Concat_WcharAndString_ProducesJoined()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("return (Wchar.FromUtf8('hello') .. ' world'):ToUtf8()");
-            r.String.ShouldBe("hello world");
-        }
-
-        [Fact]
-        public async Task Wchar_Concat_StringAndWchar_ProducesJoined()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("return ('hello ' .. Wchar.FromUtf8('world')):ToUtf8()");
-            r.String.ShouldBe("hello world");
-        }
-
-        [Fact]
-        public async Task Wchar_Concat_NonAsciiStringOperand_ProducesCorrectResult()
-        {
-            using KitsuneEngine engine = new();
-
-            // \xC3\xA9 = UTF-8 for U+00E9 (é); string operands are treated as UTF-8.
-            LuaValue r = await engine.ExecuteStringAsync(@"return (Wchar.FromUtf8('caf') .. '\xC3\xA9'):ToUtf8()");
-            r.String.ShouldBe("caf\u00e9");
-        }
-
-        [Fact]
-        public async Task Wchar_ToBytes_ReturnsCorrectCodeValues()
-        {
-            using KitsuneEngine engine = new();
-
-            // 'A' = 65, 'B' = 66 as wchar_t values.
+            // A lone high surrogate and a stray UTF-8 continuation byte both become U+FFFD;
+            // a trailing odd byte is ignored.
             LuaValue r = await engine.ExecuteStringAsync(@"
-                local b = Wchar.FromUtf8('AB'):ToBytes()
-                return tostring(#b == 2 and b[1] == 65 and b[2] == 66)
+                local fromBadUtf16 = Text.FromUtf16('\x3d\xd8' .. 'B\0' .. 'x')
+                local toFromBadUtf8 = Text.FromUtf16(Text.ToUtf16('a\x80b'))
+                return tostring(fromBadUtf16 == '\xef\xbf\xbdB' and toFromBadUtf8 == 'a\xef\xbf\xbdb')
             ");
             r.String.ShouldBe("true");
         }
 
         [Fact]
-        public async Task Wchar_FromBytes_Table_CreatesCorrectWchar()
+        public async Task Text_Utf16_Empty_ReturnsEmpty()
         {
             using KitsuneEngine engine = new();
-
-            // Reconstruct 'AB' from its wchar_t code values.
-            LuaValue r = await engine.ExecuteStringAsync("return Wchar.FromBytes({65, 66}):ToUtf8()");
-            r.String.ShouldBe("AB");
-        }
-
-        [Fact]
-        public async Task Wchar_FromBytes_SingleInteger_CreatesSingleCharWchar()
-        {
-            using KitsuneEngine engine = new();
-
-            // Codepoint 65 = 'A'.
-            LuaValue r = await engine.ExecuteStringAsync("return Wchar.FromBytes(65):ToUtf8()");
-            r.String.ShouldBe("A");
-        }
-
-        [Fact]
-        public async Task Wchar_FromBytes_InvalidCodepoint_ProducesEmptyWchar()
-        {
-            using KitsuneEngine engine = new();
-
-            // A codepoint above U+10FFFF is invalid; FromBytes must return an empty Wchar.
-            LuaValue r = await engine.ExecuteStringAsync("return tostring(#Wchar.FromBytes(0x200000) == 0)");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task Wchar_ToBytes_AsciiChar_ProducesOneCodeUnit()
-        {
-            using KitsuneEngine engine = new();
-
-            // ToBytes returns a table of UTF-16 code units.
-            // 'A' is U+0041 — one code unit — so the table has exactly one entry with value 65.
             LuaValue r = await engine.ExecuteStringAsync(@"
-                local units = Wchar.FromUtf8('A'):ToBytes()
-                return tostring(#units == 1 and units[1] == 65)
+                return tostring(Text.ToUtf16('') == '' and Text.FromUtf16('') == '')
             ");
             r.String.ShouldBe("true");
         }
 
         [Fact]
-        public async Task Wchar_FromBytes_Table_RoundTrips()
+        public async Task Text_Codepage_1252_RoundTrip()
         {
             using KitsuneEngine engine = new();
 
-            // ToBytes returns a table of UTF-16 code units; FromBytes(table) reconstructs from them.
+            // Windows-1252: 'é' = 0xE9, '€' = 0x80.
             LuaValue r = await engine.ExecuteStringAsync(@"
-                local w1 = Wchar.FromUtf8('hello')
-                local w2 = Wchar.FromBytes(w1:ToBytes())
-                return tostring(w1 == w2)
+                local utf8 = 'caf\xc3\xa9 \xe2\x82\xac5'
+                local ansi = Text.ToCodepage(utf8, 1252)
+                return tostring(ansi == 'caf\xe9 \x805' and Text.FromCodepage(ansi, 1252) == utf8)
             ");
             r.String.ShouldBe("true");
         }
 
         [Fact]
-        public async Task Wchar_Codepoints_ReturnsCorrectTable()
+        public async Task Text_Codepage_UnmappableChar_BecomesQuestionMark()
         {
             using KitsuneEngine engine = new();
 
-            // 'AB' ? codepoints table {65, 66}.
+            // '测' has no Windows-1252 representation.
             LuaValue r = await engine.ExecuteStringAsync(@"
-                local pts = Wchar.FromUtf8('AB'):Codepoints()
-                return tostring(#pts == 2 and pts[1] == 65 and pts[2] == 66)
+                return Text.ToCodepage('a\xe6\xb5\x8bb', 1252)
+            ");
+            r.String.ShouldBe("a?b");
+        }
+
+        [Fact]
+        public async Task Text_Codepage_Unsupported_RaisesError()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local ok1 = pcall(Text.FromCodepage, 'abc', 424242)
+                local ok2 = pcall(Text.ToCodepage, 'abc', 424242)
+                return tostring(not ok1 and not ok2)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+        private static extern uint GetACP();
+
+        [WindowsOnlyFact]
+        public async Task Text_Codepage_Zero_IsSystemAnsiCodePage()
+        {
+            // Code page 0 is the system ANSI code page, not CP_ACP: kitsune.exe's manifest makes
+            // CP_ACP UTF-8, which would make legacy text convert differently per host. This test
+            // host has no such manifest, so GetACP() here is the system ANSI code page.
+            using KitsuneEngine engine = new();
+            engine.SetVariable("acp", LuaValue.FromInt64(GetACP()));
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local legacy = 'A\xe9\x80\xa4'
+                local text = 'caf\xc3\xa9 \xe2\x82\xac'
+                return tostring(Text.FromCodepage(legacy) == Text.FromCodepage(legacy, acp)
+                    and Text.FromCodepage(legacy, 0) == Text.FromCodepage(legacy, acp)
+                    and Text.ToCodepage(text) == Text.ToCodepage(text, acp))
             ");
             r.String.ShouldBe("true");
         }
 
         [Fact]
-        public async Task Wchar_At_ValidIndex_ReturnsCodepoint()
+        public async Task Text_LowerUpper_AreUnicodeAware()
         {
             using KitsuneEngine engine = new();
 
-            // 'B' is at character position 2 (1-indexed) in 'AB'.
-            LuaValue r = await engine.ExecuteStringAsync("return tostring(Wchar.FromUtf8('AB'):At(2) == 66)");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task Wchar_At_OutOfRange_ReturnsNil()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("return tostring(Wchar.FromUtf8('hi'):At(99))");
-            r.String.ShouldBe("nil");
-        }
-
-        [Fact]
-        public async Task Wchar_FromAnsi_ToAnsi_AsciiRoundTrip()
-        {
-            using KitsuneEngine engine = new();
-
-            // ASCII characters are stable across all encodings.
-            LuaValue r = await engine.ExecuteStringAsync("return Wchar.FromAnsi('hello'):ToAnsi()");
-            r.String.ShouldBe("hello");
-        }
-
-        [Fact]
-        public async Task Wchar_NonAsciiUtf8_LengthIsWcharCount()
-        {
-            using KitsuneEngine engine = new();
-
-            // U+00E9 (é) is 2 UTF-8 bytes (\xC3\xA9) but 1 wchar_t; length should be 1.
-            LuaValue r = await engine.ExecuteStringAsync(@"return tostring(#Wchar.FromUtf8('\xC3\xA9') == 1)");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task Wchar_ChainedOps_ProduceCorrectResult()
-        {
-            using KitsuneEngine engine = new();
+            // ASCII, Latin-1 (É/é), Greek (Σ/σ), Cyrillic (Ж/ж); digits and emoji unchanged.
             LuaValue r = await engine.ExecuteStringAsync(@"
-                local result = Wchar.FromUtf8('hello world')
-                    :ToUpper()
-                    :Substring(7)
-                return tostring(result:ToUtf8() == 'WORLD')
+                local upper = 'ABC \xc3\x89 \xce\xa3 \xd0\x96 1\xf0\x9f\x98\x80'
+                local lower = 'abc \xc3\xa9 \xcf\x83 \xd0\xb6 1\xf0\x9f\x98\x80'
+                return tostring(Text.Lower(upper) == lower and Text.Upper(lower) == upper)
             ");
             r.String.ShouldBe("true");
         }
 
         [Fact]
-        public async Task Wchar_Setlocale_DoesNotThrow()
+        public async Task Text_Wchar_IsRemoved()
         {
             using KitsuneEngine engine = new();
-
-            // Setlocale sets the C locale used by FromAnsi/ToAnsi; must not raise an error.
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local ok, err = pcall(Wchar.Setlocale, '')
-                return tostring(ok or type(err) == 'string')
-            ");
+            LuaValue r = await engine.ExecuteStringAsync("return tostring(Wchar == nil)");
             r.String.ShouldBe("true");
         }
 
-        // -- Stream Wchar read/write -----------------------------------------------
+        // -- Stream UTF-16 read/write -----------------------------------------------
         [Fact]
-        public async Task Stream_WriteWchar_ReadWchar_AsciiRoundTrip()
+        public async Task Stream_WriteUtf16_ReadUtf16_RoundTrip()
         {
             using KitsuneEngine engine = new();
-
-            // Write a Wchar into a stream and read it back as a Wchar.
             LuaValue r = await engine.ExecuteStringAsync(@"
-                local w = Wchar.FromUtf8('hello')
                 local s = Stream.New()
-                s:Write(w)
+                local text = 'h\xc3\xa9llo \xf0\x9f\x98\x80'
+                local written = s:WriteUtf16(text)
                 s:Seek(0)
-                local w2 = s:ReadWchar(5)
-                return w2:ToUtf8()
-            ");
-            r.String.ShouldBe("hello");
-        }
-
-        [Fact]
-        public async Task Stream_WriteWchar_ReturnsCorrectByteCount()
-        {
-            using KitsuneEngine engine = new();
-
-            // Write returns the number of bytes written (2 bytes per wchar_t code unit).
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local w = Wchar.FromUtf8('hi')
-                local s = Stream.New()
-                local written = s:Write(w)
-                return tostring(written == 4)   -- 2 code units * 2 bytes each
+                local back = s:ReadUtf16()
+                -- 6 BMP characters + 1 surrogate pair = 8 units = 16 bytes
+                return tostring(written == 16 and back == text)
             ");
             r.String.ShouldBe("true");
         }
 
         [Fact]
-        public async Task Stream_WriteWchar_AdvancesPosition()
+        public async Task Stream_ReadUtf16_PartialRead_ReturnsRequestedUnits()
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
-                local w = Wchar.FromUtf8('abc')
                 local s = Stream.New()
-                s:Write(w)
-                return tostring(s:pos() == 6)   -- 3 code units * 2 bytes each
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task Stream_ReadWchar_PartialRead_ReturnsRequestedCount()
-        {
-            using KitsuneEngine engine = new();
-
-            // Write a 5-char Wchar then read back only 3 code units.
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local w = Wchar.FromUtf8('hello')
-                local s = Stream.New()
-                s:Write(w)
+                s:WriteUtf16('abcdef')
                 s:Seek(0)
-                local w2 = s:ReadWchar(3)
-                return tostring(w2:len() == 3 and w2:ToUtf8() == 'hel')
+                local first = s:ReadUtf16(2)
+                local rest = s:ReadUtf16()
+                local after = s:ReadUtf16()
+                return tostring(first == 'ab' and rest == 'cdef' and after == nil)
             ");
             r.String.ShouldBe("true");
         }
 
         [Fact]
-        public async Task Stream_ReadWchar_PastEnd_ReturnsNil()
+        public async Task Stream_WriteUtf16_MatchesTextToUtf16()
         {
             using KitsuneEngine engine = new();
-
-            // Requesting more code units than are available returns nil.
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local s = Stream.New()
-                return tostring(s:ReadWchar(1) == nil)
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task Stream_WriteWchar_MultipleAppend_ReadBackFull()
-        {
-            using KitsuneEngine engine = new();
-
-            // Two Wchar writes must be contiguous; one ReadWchar retrieves them all.
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local s = Stream.New()
-                s:Write(Wchar.FromUtf8('foo'))
-                s:Write(Wchar.FromUtf8('bar'))
+                s:WriteUtf16('x\xc3\xa9')
                 s:Seek(0)
-                local w = s:ReadWchar(6)
-                return w:ToUtf8()
-            ");
-            r.String.ShouldBe("foobar");
-        }
-
-        [Fact]
-        public async Task Stream_ReadWchar_NoLength_ReadsRemaining()
-        {
-            using KitsuneEngine engine = new();
-
-            // ReadWchar() with no argument reads all remaining code units to end of stream.
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local s = Stream.New()
-                s:Write(Wchar.FromUtf8('hello'))
-                s:Seek(0)
-                local w = s:ReadWchar()
-                return w:ToUtf8()
-            ");
-            r.String.ShouldBe("hello");
-        }
-
-        [Fact]
-        public async Task Stream_ReadWchar_NoLength_FromMidStream_ReadsRemainder()
-        {
-            using KitsuneEngine engine = new();
-
-            // ReadWchar() from mid-stream must only return code units from the current position.
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local s = Stream.New()
-                s:Write(Wchar.FromUtf8('abcde'))
-                s:Seek(4)   -- skip first 2 code units (2 bytes each)
-                local w = s:ReadWchar()
-                return tostring(w:len() == 3 and w:ToUtf8() == 'cde')
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task Stream_ReadWchar_NoArg_EmptyStream_ReturnsNil()
-        {
-            using KitsuneEngine engine = new();
-
-            // ReadWchar() with no argument on an empty stream must return nil, not error.
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local s = Stream.New()
-                return tostring(s:ReadWchar() == nil)
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task Stream_ReadWchar_ExplicitNilArg_ReadAll()
-        {
-            using KitsuneEngine engine = new();
-
-            // Passing nil explicitly must behave identically to omitting the argument.
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local s = Stream.New()
-                s:Write(Wchar.FromUtf8('test'))
-                s:Seek(0)
-                local w = s:ReadWchar(nil)
-                return tostring(w ~= nil and w:ToUtf8() == 'test')
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task Stream_ReadWchar_ResultIsWcharUserdata()
-        {
-            using KitsuneEngine engine = new();
-
-            // The return value must be a Wchar userdata, not a plain Lua string.
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local s = Stream.New()
-                s:Write(Wchar.FromUtf8('x'))
-                s:Seek(0)
-                local w = s:ReadWchar(1)
-                return tostring(type(w) == 'userdata' and w:len() == 1)
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task Stream_WriteWchar_NonWritable_ReturnsZero()
-        {
-            using KitsuneEngine engine = new();
-
-            // Writing a Wchar to a read-only stream must return 0.
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local s = Stream.New(function(op, ...)
-                    if op == READ then return 'x' end
-                    return 1   -- caps: READ only (no WRITE bit)
-                end)
-                local w = Wchar.FromUtf8('hi')
-                return tostring(s:Write(w) == 0)
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task Stream_ReadWchar_WriteOnly_ReturnsNil()
-        {
-            using KitsuneEngine engine = new();
-
-            // ReadWchar on a write-only stream must return nil.
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local s = Stream.New(function(op, ...)
-                    if op == WRITE then return true end
-                    return 2   -- caps: WRITE only
-                end)
-                return tostring(s:ReadWchar(1) == nil)
+                return tostring(s:Read() == Text.ToUtf16('x\xc3\xa9'))
             ");
             r.String.ShouldBe("true");
         }
@@ -4717,7 +4325,7 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task CSV_DecodeString_RowValues_AccessibleAsWchar()
+        public async Task CSV_DecodeString_RowValues_AccessibleAsStrings()
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
@@ -4732,8 +4340,7 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
 
-            // ASCII-only cells must come back as plain Lua strings (not WChar
-            // userdata) so the fast path is active.
+            // ASCII-only cells take the fast path and come back as plain Lua strings.
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = CSV.New():Decode('hello,42,2024-01-01')
                 return tostring(
@@ -4745,17 +4352,104 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task CSV_Decode_NonAsciiCell_IsWchar()
+        public async Task CSV_Decode_Utf8Bom_IsStripped()
         {
             using KitsuneEngine engine = new();
 
-            // Cells containing characters above U+007F must still be WChar userdata.
+            // Excel's "CSV UTF-8" files start with a BOM; it must not end up in the first header,
+            // for string input or when the BOM itself is split across supplier chunks.
             LuaValue r = await engine.ExecuteStringAsync(@"
-                local input = 'caf\xc3\xa9,plain'
+                local text = '\xef\xbb\xbfName,Age\n\xc3\x85sa,30\n'
+                local t = CSV.New(','):Decode(text)
+                local chunks = { '\xef\xbb', '\xbfName,Age\n', '\xc3\x85sa,30\n' }
+                local i = 0
+                local first
+                for row in CSV.New(','):DecodeFromFunction(function() i = i + 1; return chunks[i] end) do
+                    first = first or row[1]
+                end
+                return tostring(t.Rows[1][1] == 'Name' and t.Rows[2][1] == '\xc3\x85sa' and first == 'Name')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task CSV_DecodeFromFunction_CharacterSplitAcrossChunks_IsPreserved()
+        {
+            using KitsuneEngine engine = new();
+
+            // 'é' (C3 A9) is split between two chunks, '测' (E6 B5 8B) is spread over three,
+            // one of them a single byte on its own.
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local chunks = { 'a,caf\xc3', '\xa9\nb,\xe6', '\xb5', '\x8b\n' }
+                local i = 0
+                local rows = {}
+                for row in CSV.New(','):DecodeFromFunction(function() i = i + 1; return chunks[i] end) do
+                    rows[#rows + 1] = row[2]
+                end
+                return tostring(#rows == 2 and rows[1] == 'caf\xc3\xa9' and rows[2] == '\xe6\xb5\x8b')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task CSV_DecodeFromStream_CharacterAcrossReadBoundary_IsPreserved()
+        {
+            using KitsuneEngine engine = new();
+
+            // A stream that delivers data piece by piece (like a network stream) splits
+            // 'é' between two reads. Opcodes: 0 = open (capability 1 = read), 1 = close, 2 = read.
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local chunks = { 'h,v\ncaf\xc3', '\xa9,x\n' }
+                local idx = 0
+                local s = Stream.New(function(op)
+                    if op == 0 then return 1 end
+                    if op == 1 then return true end
+                    if op == 2 then
+                        idx = idx + 1
+                        return chunks[idx]
+                    end
+                end)
+                local rows = {}
+                for row in CSV.New(','):DecodeFromFunction(s) do
+                    rows[#rows + 1] = row
+                end
+                return tostring(#rows == 2 and rows[2][1] == 'caf\xc3\xa9' and rows[2][2] == 'x')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task CSV_DecodeFromFunction_TruncatedCharacterAtEnd_BecomesReplacementChar()
+        {
+            using KitsuneEngine engine = new();
+
+            // Input that ends mid-character must not hang or drop the row.
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local chunks = { 'a,b\xc3' }
+                local i = 0
+                local rows = {}
+                for row in CSV.New(','):DecodeFromFunction(function() i = i + 1; return chunks[i] end) do
+                    rows[#rows + 1] = row[2]
+                end
+                return tostring(#rows == 1 and rows[1] == 'b\xef\xbf\xbd')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task CSV_Decode_NonAsciiCell_IsUtf8String()
+        {
+            using KitsuneEngine engine = new();
+
+            // Cells containing characters above U+007F (including a surrogate pair) must come
+            // back as plain UTF-8 strings, identical to the input bytes.
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local input = 'caf\xc3\xa9,plain,\xf0\x9f\x98\x80'
                 local t = CSV.New():Decode(input)
                 return tostring(
-                    type(t.Rows[1][1]) == 'userdata' and
-                    type(t.Rows[1][2]) == 'string')
+                    type(t.Rows[1][1]) == 'string' and t.Rows[1][1] == 'caf\xc3\xa9' and
+                    type(t.Rows[1][2]) == 'string' and
+                    type(t.Rows[1][3]) == 'string' and t.Rows[1][3] == '\xf0\x9f\x98\x80')
             ");
             r.String.ShouldBe("true");
         }
@@ -4921,20 +4615,6 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task CSV_DecodeString_WcharInput_ParsedCorrectly()
-        {
-            using KitsuneEngine engine = new();
-
-            // Exercises the lua_iswchar branch in DecodeString; all other tests pass
-            // plain Lua strings which take the FromUtf8 conversion path instead.
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local t = CSV.New():Decode(Wchar.FromUtf8('x,y,z'))
-                return tostring(tostring(t.Rows[1][1]) == 'x' and tostring(t.Rows[1][3]) == 'z')
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
         public async Task CSV_Encode_SimpleTable_ProducesCorrectString()
         {
             using KitsuneEngine engine = new();
@@ -4953,22 +4633,6 @@ namespace KitsuneNet.Tests
                 local encoded = csv:Encode({{'hello, world', 'end'}})
                 local decoded = csv:Decode(encoded)
                 return tostring(tostring(decoded.Rows[1][1]) == 'hello, world' and tostring(decoded.Rows[1][2]) == 'end')
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task CSV_Encode_WcharField_ConvertedToUtf8()
-        {
-            using KitsuneEngine engine = new();
-
-            // Wchar fields must be converted via __tostring (UTF-8) during encoding.
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local csv = CSV.New()
-                local rows = {{Wchar.FromUtf8('hello'), Wchar.FromUtf8('world')}}
-                local encoded = csv:Encode(rows)
-                local decoded = csv:Decode(encoded)
-                return tostring(tostring(decoded.Rows[1][1]) == 'hello' and tostring(decoded.Rows[1][2]) == 'world')
             ");
             r.String.ShouldBe("true");
         }
@@ -5239,28 +4903,6 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task CSV_DecodeFromFunction_WcharChunks_ConvertedTransparently()
-        {
-            using KitsuneEngine engine = new();
-
-            // Supplier returns Wchar userdata objects; they must be converted to UTF-8
-            // and parsed identically to plain-string chunks.
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local chunks = { Wchar.FromUtf8('x,y'), Wchar.FromUtf8('\nz,w') }
-                local i = 0
-                local rows = {}
-                for row in CSV.New():DecodeFromFunction(function()
-                    i = i + 1
-                    return chunks[i]
-                end) do
-                    table.insert(rows, tostring(row[1]) .. ':' .. tostring(row[2]))
-                end
-                return table.concat(rows, '|')
-            ");
-            r.String.ShouldBe("x:y|z:w");
-        }
-
-        [Fact]
         public async Task CSV_DecodeFromFunction_NilTerminates_FinalRowWithoutNewline()
         {
             using KitsuneEngine engine = new();
@@ -5444,19 +5086,6 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task FileSystem_CreateAndDeleteDirectory_WithWchar_Succeeds()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local dir = Wchar.FromUtf8(FileSystem.GetTempFileName() .. '_kitsune_wchar_testdir')
-                local ok1 = FileSystem.CreateDirectory(dir)
-                local ok2 = FileSystem.RemoveDirectory(dir)
-                return tostring(ok1 and ok2)
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
         public async Task FileSystem_Open_WriteAndRead_RoundTrip()
         {
             using KitsuneEngine engine = new();
@@ -5475,25 +5104,6 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task FileSystem_Open_WithWcharPath_WriteAndRead_RoundTrip()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local path = FileSystem.GetTempFileName() .. '_kitsune_wchar_open.txt'
-                local wpath = Wchar.FromUtf8(path)
-                local f = FileSystem.Open(wpath, 'wb')
-                f:write('hello wchar')
-                f:close()
-                local g = FileSystem.Open(wpath, 'rb')
-                local data = g:read('*a')
-                g:close()
-                FileSystem.Delete(wpath)
-                return data
-            ");
-            r.String.ShouldBe("hello wchar");
-        }
-
-        [Fact]
         public async Task FileSystem_GetFileInfo_ReturnsValidTable()
         {
             using KitsuneEngine engine = new();
@@ -5505,22 +5115,6 @@ namespace KitsuneNet.Tests
                 local info = FileSystem.GetFileInfo(path)
                 FileSystem.Delete(path)
                 return tostring(type(info) == 'table' and info.Size == 3 and info.isFolder == false)
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task FileSystem_GetFileInfo_WithWchar_ReturnsValidTable()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local path = FileSystem.GetTempFileName() .. '_kitsune_winfo.txt'
-                local f = FileSystem.Open(path, 'wb')
-                f:write('xyz')
-                f:close()
-                local info = FileSystem.GetFileInfo(Wchar.FromUtf8(path))
-                FileSystem.Delete(path)
-                return tostring(type(info) == 'table' and info.Size == 3)
             ");
             r.String.ShouldBe("true");
         }
@@ -5545,23 +5139,6 @@ namespace KitsuneNet.Tests
                 local dst = FileSystem.GetTempFileName() .. '_kitsune_dst.txt'
                 local f = FileSystem.Open(src, 'wb'); f:write('copy me'); f:close()
                 local ok = FileSystem.Copy(src, dst, true)
-                local exists = FileSystem.GetFileInfo(dst) ~= nil
-                FileSystem.Delete(src)
-                FileSystem.Delete(dst)
-                return tostring(ok and exists)
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task FileSystem_Copy_WithWcharPaths_CreatesDestination()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local src = FileSystem.GetTempFileName() .. '_kitsune_wsrc.txt'
-                local dst = FileSystem.GetTempFileName() .. '_kitsune_wdst.txt'
-                local f = FileSystem.Open(src, 'wb'); f:write('wchar copy'); f:close()
-                local ok = FileSystem.Copy(Wchar.FromUtf8(src), Wchar.FromUtf8(dst), true)
                 local exists = FileSystem.GetFileInfo(dst) ~= nil
                 FileSystem.Delete(src)
                 FileSystem.Delete(dst)
@@ -5605,23 +5182,6 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task FileSystem_Rename_WithWcharPaths()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local src = FileSystem.GetTempFileName() .. '_kitsune_wrsrc.txt'
-                local dst = FileSystem.GetTempFileName() .. '_kitsune_wrdst.txt'
-                local f = FileSystem.Open(src, 'wb'); f:write('wchar rename'); f:close()
-                local ok = FileSystem.Rename(Wchar.FromUtf8(src), Wchar.FromUtf8(dst))
-                local srcGone = FileSystem.GetFileInfo(src) == nil
-                local dstExists = FileSystem.GetFileInfo(dst) ~= nil
-                FileSystem.Delete(dst)
-                return tostring(ok and srcGone and dstExists)
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
         public async Task FileSystem_Delete_RemovesFile()
         {
             using KitsuneEngine engine = new();
@@ -5629,20 +5189,6 @@ namespace KitsuneNet.Tests
                 local path = FileSystem.GetTempFileName() .. '_kitsune_del.txt'
                 local f = FileSystem.Open(path, 'wb'); f:write('delete me'); f:close()
                 local ok = FileSystem.Delete(path)
-                local gone = FileSystem.GetFileInfo(path) == nil
-                return tostring(ok and gone)
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task FileSystem_Delete_WithWcharPath_RemovesFile()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local path = FileSystem.GetTempFileName() .. '_kitsune_wdel.txt'
-                local f = FileSystem.Open(path, 'wb'); f:write('wchar delete'); f:close()
-                local ok = FileSystem.Delete(Wchar.FromUtf8(path))
                 local gone = FileSystem.GetFileInfo(path) == nil
                 return tostring(ok and gone)
             ");
@@ -5671,18 +5217,512 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task FileSystem_GetFiles_WithWcharPath_ReturnsOnlyFiles()
+        public async Task FileSystem_NonAsciiNames_ReturnedAsUtf8Strings()
         {
             using KitsuneEngine engine = new();
+
+            // Names come back as plain UTF-8 strings on every platform and
+            // round-trip exactly, including characters outside the ANSI code page and a surrogate pair.
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local sep = package.config:sub(1,1)
-                local base = FileSystem.GetTempFileName() .. '_kitsune_wls'
+                local dirname = '_kitsune_\xc3\xbc\xe6\xb5\x8b'
+                local fname = '\xc3\xa5\xc3\xa4\xc3\xb6_\xe2\x82\xac_\xf0\x9f\x98\x80.txt'
+                local base = FileSystem.GetTempFileName() .. dirname
                 FileSystem.CreateDirectory(base)
-                local f1 = FileSystem.Open(base .. sep .. 'x.txt', 'wb'); f1:write('x'); f1:close()
-                local files = FileSystem.GetFiles(Wchar.FromUtf8(base))
-                FileSystem.Delete(base .. sep .. 'x.txt')
+                local f = FileSystem.Open(base .. sep .. fname, 'wb'); f:write('x'); f:close()
+                FileSystem.CreateDirectory(base .. sep .. dirname)
+
+                local files = FileSystem.GetFiles(base)
+                local dirs = FileSystem.GetDirectories(base)
+                local info = FileSystem.GetFileInfo(base .. sep .. fname)
+                local names = {}
+                for _, e in ipairs(FileSystem.GetAll(base)) do
+                    names[e.FileName] = type(e.FileName)
+                end
+
+                FileSystem.Delete(base .. sep .. fname)
+                FileSystem.RemoveDirectory(base .. sep .. dirname)
                 FileSystem.RemoveDirectory(base)
-                return tostring(#files == 1)
+
+                return tostring(
+                    type(files[1]) == 'string' and files[1] == fname and
+                    type(dirs[1]) == 'string' and dirs[1] == dirname and
+                    type(info.FileName) == 'string' and info.FileName == fname and
+                    names[fname] == 'string' and names[dirname] == 'string' and
+                    type(FileSystem.CurrentDirectory()) == 'string')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        // Directory and file names with characters outside the ANSI code page (plus a
+        // surrogate pair), used by the non-ASCII path tests below.
+        private const string NonAsciiPathSetup = @"
+                local sep = package.config:sub(1,1)
+                local base = FileSystem.GetTempFileName() .. '_kitsune_\xc5\x81\xe6\xb5\x8b'
+                FileSystem.CreateDirectory(base)
+                local function path(name) return base .. sep .. name end
+                local function cleanup(...)
+                    for _, n in ipairs({...}) do FileSystem.Delete(path(n)) end
+                    FileSystem.RemoveDirectory(base)
+                end
+        ";
+
+        [Fact]
+        public async Task IoOpen_NonAsciiPath_WriteAndRead_RoundTrip()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(NonAsciiPathSetup + @"
+                local name = '\xc3\xa5\xc3\xa4\xc3\xb6_\xe2\x82\xac_\xf0\x9f\x98\x80.txt'
+                local f = assert(io.open(path(name), 'wb'))
+                f:write('hello')
+                f:close()
+                local g = assert(io.open(path(name)))   -- default mode 'r'
+                local data = g:read('a')
+                g:close()
+                local listed = FileSystem.GetFiles(base)[1]
+                cleanup(name)
+                return tostring(data == 'hello' and listed == name)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task IoOpen_MissingFile_ReturnsNilMessageAndErrno()
+        {
+            using KitsuneEngine engine = new();
+
+            // Same contract as Lua's io.open: nil, "<path>: <error>", errno.
+            LuaValue r = await engine.ExecuteStringAsync(NonAsciiPathSetup + @"
+                local f, msg, code = io.open(path('missing_\xc3\xa9.txt'))
+                local f2, msg2, code2 = FileSystem.Open(path('missing_\xc3\xa9.txt'), 'rb')
+                cleanup()
+                return tostring(f == nil and type(msg) == 'string' and msg:find('missing_\xc3\xa9.txt', 1, true) ~= nil
+                    and math.type(code) == 'integer'
+                    and f2 == nil and type(msg2) == 'string' and math.type(code2) == 'integer')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task IoOpen_InvalidMode_RaisesError()
+        {
+            using KitsuneEngine engine = new();
+
+            // An invalid mode must be a Lua error, never reach the CRT (which aborts on Windows).
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local ok1 = pcall(io.open, 'x.txt', 'rz')
+                local ok2 = pcall(FileSystem.Open, 'x.txt', 'q')
+                local ok3 = pcall(FileSystem.Open, 'x.txt', 'rbb')
+                return tostring(not ok1 and not ok2 and not ok3)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task IoOpen_RepeatedBinaryFlag_NeverReachesCrtAbort()
+        {
+            using KitsuneEngine engine = new();
+
+            // io.open accepts Lua's '[rwa]%+?b*', so 'rbb' passes its own check. The MSVC CRT
+            // would terminate the process on that mode, so on Windows it must come back as a
+            // normal failure (EINVAL) instead; elsewhere fopen accepts it.
+            LuaValue r = await engine.ExecuteStringAsync(NonAsciiPathSetup + @"
+                local name = 'l\xc3\xa4ge_\xe6\xb5\x8b.txt'
+                local f = assert(io.open(path(name), 'wb')); f:write('x'); f:close()
+                local g, msg, code = io.open(path(name), 'rbb')
+                local result
+                if sep == '\\' then
+                    result = g == nil and msg:find(name, 1, true) ~= nil and math.type(code) == 'integer'
+                else
+                    result = g ~= nil and g:read('a') == 'x'
+                    if g then g:close() end
+                end
+                cleanup(name)
+                return tostring(result)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task StreamOpen_NonAsciiPath_ReadsFile()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(NonAsciiPathSetup + @"
+                local name = 'str\xc3\xa9am_\xe6\xb5\x8b.bin'
+                local f = assert(FileSystem.Open(path(name), 'wb'))
+                f:write('stream data')
+                f:close()
+                local s = Stream.Open(path(name), 'rb')
+                local data = s:Read()
+                s:Close()
+                cleanup(name)
+                return tostring(data == 'stream data')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task ImageAndSound_NonAsciiPath_SaveAndOpen()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(NonAsciiPathSetup + @"
+                local imgName = 'bild_\xc3\xa5\xe2\x82\xac.png'
+                local img = Image.New(3, 2)
+                img:SetPixel(1, 1, 10, 20, 30, 255)
+                img:Save(path(imgName))
+                local img2 = Image.Open(path(imgName))
+                local _, g = img2:GetPixel(1, 1)
+
+                local sndName = 'ljud_\xc3\xb6\xe6\xb5\x8b.wav'
+                local snd = Sound.Tone(8000, 1, 800, 440)
+                snd:Save(path(sndName))
+                local snd2 = Sound.Open(path(sndName))
+
+                cleanup(imgName, sndName)
+                return tostring(img2:GetWidth() == 3 and g == 20 and snd2:GetFrameCount() == 800)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        // -- Standard Lua library, non-ASCII paths ----------------------------------
+        // The test host is a plain .NET process (no UTF-8 activeCodePage manifest), so on
+        // Windows these only pass when Lua's io/os/package libraries use the wide CRT.
+
+        [Fact]
+        public async Task IoLines_NonAsciiPath_ReadsLinesAndClosesFile()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(NonAsciiPathSetup + @"
+                local name = 'rader_\xc3\xa5\xe6\xb5\x8b_\xf0\x9f\x98\x80.txt'
+                local f = assert(io.open(path(name), 'wb'))
+                f:write('one\ntwo\nthree\n')
+                f:close()
+
+                local lines = {}
+                for line in io.lines(path(name)) do lines[#lines + 1] = line end
+
+                -- Read formats are passed on: 'L' keeps the newline, a number reads that many bytes.
+                local kept, chunks = {}, {}
+                for line in io.lines(path(name), 'L') do kept[#kept + 1] = line end
+                for a, b in io.lines(path(name), 2, 1) do chunks[#chunks + 1] = a .. '|' .. (b or '') end
+
+                -- Breaking out of the loop closes the file too (it is the loop's to-be-closed
+                -- value), so it can be deleted right away; on Windows an open file can't be.
+                local first
+                for line in io.lines(path(name)) do first = line; break end
+
+                -- io.lines closes the file at the end, so it can be deleted afterwards.
+                local removed = os.remove(path(name))
+                local ok, err = pcall(io.lines, path('saknas_\xc3\xa9.txt'))
+                FileSystem.RemoveDirectory(base)
+                return tostring(#lines == 3 and lines[1] == 'one' and lines[3] == 'three'
+                    and #kept == 3 and kept[2] == 'two\n'
+                    and chunks[1] == 'on|e' and chunks[2] == '\nt|w'
+                    and first == 'one' and removed == true
+                    and not ok and err:find('saknas_\xc3\xa9.txt', 1, true) ~= nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task IoInputOutput_NonAsciiPath_WriteAndRead()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(NonAsciiPathSetup + @"
+                local name = 'ut_\xc5\x81\xc3\xb6d\xc5\xba.txt'
+                io.output(path(name))
+                io.write('first\n', 'second\n')
+                io.close()
+                io.output(io.stdout)
+
+                io.input(path(name))
+                local a = io.read('l')
+                local b = io.read('l')
+                io.close(io.input())
+                io.input(io.stdin)
+
+                cleanup(name)
+                return tostring(a == 'first' and b == 'second')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task OsRenameRemove_NonAsciiPath()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(NonAsciiPathSetup + @"
+                local from = 'f\xc3\xb6re_\xe6\xb5\x8b.txt'
+                local to = 'efter_\xe2\x82\xac_\xf0\x9f\x98\x80.txt'
+                local f = assert(io.open(path(from), 'wb')); f:write('x'); f:close()
+
+                local renamed = os.rename(path(from), path(to))
+                local listed = FileSystem.GetFiles(base)[1]
+                local removed = os.remove(path(to))
+                local again, msg = os.remove(path(to))
+                local remaining = #FileSystem.GetFiles(base)
+                FileSystem.RemoveDirectory(base)
+                return tostring(renamed == true and listed == to and removed == true
+                    and again == nil and msg:find(to, 1, true) ~= nil and remaining == 0)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task LoadfileDofile_NonAsciiPath_LoadsScripts()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(NonAsciiPathSetup + @"
+                local good = 'skript_\xc3\xa5\xe6\xb5\x8b.lua'
+                local bad = 'fel_\xc3\xa9.lua'
+                -- A UTF-8 BOM and a '#!' line are skipped, as by the stock loader.
+                local f = assert(io.open(path(good), 'wb'))
+                f:write('\xef\xbb\xbf#!/usr/bin/env lua\nreturn ... or \'dofile\', \'\xc3\xb6\'\n')
+                f:close()
+                f = assert(io.open(path(bad), 'wb')); f:write('return +'); f:close()
+
+                local chunk = assert(loadfile(path(good)))
+                local a, b = chunk('loadfile')
+                local c = dofile(path(good))
+                local failed, err = loadfile(path(bad))
+                local missing, err2 = loadfile(path('saknas_\xe6\xb5\x8b.lua'))
+                cleanup(good, bad)
+                return tostring(a == 'loadfile' and b == '\xc3\xb6' and c == 'dofile'
+                    and failed == nil and err:find(bad, 1, true) ~= nil
+                    and missing == nil and err2:find('saknas_\xe6\xb5\x8b.lua', 1, true) ~= nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Require_NonAsciiPackagePathAndModuleName()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(NonAsciiPathSetup + @"
+                local file = 'kitsune_m\xc3\xb6d_\xe6\xb5\x8b.lua'
+                local f = assert(io.open(path(file), 'wb'))
+                f:write('return { name = \'m\xc3\xb6d\' }')
+                f:close()
+
+                local savedPath = package.path
+                package.path = path('?.lua')
+                local found = package.searchpath('kitsune_m\xc3\xb6d_\xe6\xb5\x8b', package.path)
+                local ok, mod = pcall(require, 'kitsune_m\xc3\xb6d_\xe6\xb5\x8b')
+                package.path = savedPath
+                package.loaded['kitsune_m\xc3\xb6d_\xe6\xb5\x8b'] = nil
+
+                cleanup(file)
+                return tostring(found == path(file) and ok and mod.name == 'm\xc3\xb6d')
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Require_CSearchers_FindNonAsciiLibraryFiles()
+        {
+            using KitsuneEngine engine = new();
+
+            // The files are not real libraries, so loading them fails, but only after the C
+            // searcher (module file) and the C-root searcher ('root.sub' -> root library) have
+            // found them at their non-ASCII paths: the error names the file it tried to load.
+            LuaValue r = await engine.ExecuteStringAsync(NonAsciiPathSetup + @"
+                local ext = sep == '\\' and '.dll' or '.so'
+                local modFile = 'trasig_m\xc3\xb6d' .. ext
+                local rootFile = 'r\xc3\xb6t_\xe6\xb5\x8b' .. ext
+                for _, n in ipairs({ modFile, rootFile }) do
+                    local f = assert(io.open(path(n), 'wb')); f:write('not a library'); f:close()
+                end
+
+                local savedPath, savedCPath = package.path, package.cpath
+                package.path = ''
+                package.cpath = path('?' .. ext)
+                local ok1, e1 = pcall(require, 'trasig_m\xc3\xb6d')
+                local ok2, e2 = pcall(require, 'r\xc3\xb6t_\xe6\xb5\x8b.under')
+                local ok3, e3 = pcall(require, 'saknas_\xc3\xa9')
+                package.path, package.cpath = savedPath, savedCPath
+
+                cleanup(modFile, rootFile)
+                return tostring(not ok1 and e1:find('error loading module', 1, true) ~= nil
+                        and e1:find(path(modFile), 1, true) ~= nil
+                    and not ok2 and e2:find('error loading module', 1, true) ~= nil
+                        and e2:find(path(rootFile), 1, true) ~= nil
+                    and not ok3 and e3:find(path('saknas_\xc3\xa9' .. ext), 1, true) ~= nil
+                    and utf8.len(e1) ~= nil and utf8.len(e2) ~= nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [WindowsOnlyFact]
+        public async Task PackagePath_FromLuaPathEnvironment_UsesUtf8AndDefault()
+        {
+            // package.path is rebuilt from LUA_PATH_5_5 read as UTF-8, with ';;' replaced by the
+            // default path ('!' expanded to the executable's directory). The variable is set with
+            // the engine's setenv (the C runtime's copy of the environment, which getenv reads)
+            // and removed again afterwards. (Windows only: on Linux setenv(name, '') leaves an
+            // empty variable, which would give later engines an empty package.path.)
+            string dir = Path.Combine(Path.GetTempPath(), "kitsune_lpath_ö测_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(dir);
+            File.WriteAllText(Path.Combine(dir, "kitsune_envmöd.lua"), "return 'från env'");
+            string luaPath = dir + "\\?.lua;;";
+            try
+            {
+                using (KitsuneEngine setup = new())
+                {
+                    setup.SetVariable("luaPath", (LuaValue)luaPath);
+                    await setup.ExecuteStringAsync("setenv('LUA_PATH_5_5', luaPath, true)");
+                }
+
+                using KitsuneEngine engine = new();
+                engine.SetVariable("prefix", (LuaValue)(dir + "\\?.lua;"));
+                LuaValue r = await engine.ExecuteStringAsync(@"
+                    local p = package.path
+                    local ok, mod = pcall(require, 'kitsune_envm\xc3\xb6d')
+                    package.loaded['kitsune_envm\xc3\xb6d'] = nil
+                    return tostring(p:sub(1, #prefix) == prefix and #p > #prefix
+                        and not p:find(';;', 1, true) and not p:find('!', 1, true)
+                        and ok and mod == 'fr\xc3\xa5n env')
+                ");
+                r.String.ShouldBe("true");
+            }
+            finally
+            {
+                using (KitsuneEngine restore = new())
+                    await restore.ExecuteStringAsync("setenv('LUA_PATH_5_5', '', true)");
+                Directory.Delete(dir, true);
+            }
+        }
+
+        [Fact]
+        public async Task OsGetenv_NonAsciiValue_RoundTrips()
+        {
+            using KitsuneEngine engine = new();
+
+            // The long value makes os.getenv grow its per-thread buffer; the short one read
+            // afterwards must not be affected by what was left in it.
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local long = string.rep('\xc3\xbc\xe6\xb5\x8b', 2000) .. '\xf0\x9f\x98\x80'
+                setenv('KITSUNE_OSGETENV_LONG', long, true)
+                setenv('KITSUNE_OSGETENV_SHORT', 'v\xc3\xa4rde \xe2\x82\xac', true)
+                local a = os.getenv('KITSUNE_OSGETENV_LONG')
+                local b = os.getenv('KITSUNE_OSGETENV_SHORT')
+                return tostring(a == long and b == 'v\xc3\xa4rde \xe2\x82\xac'
+                    and os.getenv('KITSUNE_OSGETENV_NOT_SET_\xc3\xa9') == nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task OsTmpname_ReturnsUsablePath()
+        {
+            // Smoke test in the default temp directory. A non-ASCII temp folder can't be tested
+            // in-process: the CRT's tmpnam reads the temp directory once, on its first call, and
+            // ignores later TMP changes, so the result would depend on test order.
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local name = os.tmpname()
+                local f = assert(io.open(name, 'wb'))
+                f:write('tmp')
+                f:close()
+                local removed = os.remove(name)
+                return tostring(type(name) == 'string' and utf8.len(name) ~= nil and removed == true)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task IoPopenOsExecute_NoWindowCases()
+        {
+            using KitsuneEngine engine = new();
+
+            // The parts of io.popen / os.execute that start no process (and so open no console
+            // window), for runs where the annoying round-trip test below is skipped:
+            // os.execute() only reports whether a shell exists, and an invalid popen mode is an
+            // argument error before anything is started.
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local hasShell = os.execute()
+                local ok1, e1 = pcall(io.popen, 'x', 'q')
+                local ok2 = pcall(io.popen, 'x', 'r+')
+                local ok3 = pcall(io.popen, 'x', 'a')
+                return tostring(hasShell == true and not ok1 and e1:find('invalid mode', 1, true) ~= nil
+                    and not ok2 and not ok3)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [AnnoyingFact]
+        public async Task IoPopenOsExecute_NonAsciiPathInCommand()
+        {
+            using KitsuneEngine engine = new();
+
+            // The command line itself carries the non-ASCII path; the file content is ASCII so
+            // the child's output code page does not matter.
+            LuaValue r = await engine.ExecuteStringAsync(NonAsciiPathSetup + @"
+                local windows = sep == '\\'
+                local name = 'kommando_\xc3\xa5\xe6\xb5\x8b.txt'
+                local f = assert(io.open(path(name), 'wb')); f:write('piped'); f:close()
+
+                local p = assert(io.popen((windows and 'type ""%s""' or 'cat ""%s""'):format(path(name))))
+                local out = p:read('a')
+                p:close()
+
+                local created = 'skapad_\xe2\x82\xac.txt'
+                local ok = os.execute((windows and 'type nul > ""%s""' or ': > ""%s""'):format(path(created)))
+                local exists = FileSystem.GetFileInfo(path(created)) ~= nil
+
+                cleanup(name, created)
+                return tostring(out == 'piped' and ok == true and exists)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [WindowsOnlyFact]
+        public async Task PackageLoadlib_NonAsciiPath_LoadsLibrary()
+        {
+            // Any DLL will do for loadlib(path, '*'), which only loads it. The copy is deleted
+            // after the engine is disposed, since lua_close is what unloads it.
+            string dir = Path.Combine(Path.GetTempPath(), "kitsune_lib_ö测_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(dir);
+            string dll = Path.Combine(dir, "vérsion_€.dll");
+            File.Copy(Path.Combine(Environment.SystemDirectory, "version.dll"), dll);
+            try
+            {
+                using (KitsuneEngine engine = new())
+                {
+                    engine.SetVariable("dllPath", (LuaValue)dll);
+                    LuaValue r = await engine.ExecuteStringAsync(@"
+                        local ok = package.loadlib(dllPath, '*')
+                        -- A real export resolves to a function (not called: it isn't a lua_CFunction).
+                        local fn = package.loadlib(dllPath, 'GetFileVersionInfoSizeW')
+                        local noSym, err1, where1 = package.loadlib(dllPath, 'kitsune_no_such_symbol')
+                        local missing, err2, where2 = package.loadlib(dllPath .. '.saknas', '*')
+                        return tostring(ok == true and type(fn) == 'function'
+                            and noSym == nil and type(err1) == 'string' and where1 == 'init'
+                            and missing == nil and type(err2) == 'string' and where2 == 'open'
+                            and utf8.len(err1) ~= nil and utf8.len(err2) ~= nil)
+                    ");
+                    r.String.ShouldBe("true");
+                }
+            }
+            finally
+            {
+                try { Directory.Delete(dir, true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+            }
+        }
+
+        [WindowsOnlyFact]
+        public async Task FileSystem_LongNonAsciiPath_IsNotRejectedAsTooLong()
+        {
+            using KitsuneEngine engine = new();
+
+            // 400 CJK characters are 1200 UTF-8 bytes but only 400 UTF-16 units, well within
+            // the 1023-unit limit; the lookup itself just finds nothing. A path that really is
+            // too long still raises.
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local sep = package.config:sub(1,1)
+                local base = os.getenv('TEMP') or '.'
+                local okLong, info = pcall(FileSystem.GetFileInfo, base .. sep .. string.rep('\xe6\xb5\x8b', 400))
+                local okHuge, err = pcall(FileSystem.GetFileInfo, base .. sep .. string.rep('\xe6\xb5\x8b', 1100))
+                return tostring(okLong and info == nil and not okHuge and err:find('too long', 1, true) ~= nil)
             ");
             r.String.ShouldBe("true");
         }
@@ -5751,23 +5791,6 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task FileSystem_GetAll_WithWcharPath_ReturnsMixedEntries()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local sep = package.config:sub(1,1)
-                local base = FileSystem.GetTempFileName() .. '_kitsune_wall'
-                FileSystem.CreateDirectory(base)
-                local f = FileSystem.Open(base .. sep .. 'y.txt', 'wb'); f:write('y'); f:close()
-                local all = FileSystem.GetAll(Wchar.FromUtf8(base))
-                FileSystem.Delete(base .. sep .. 'y.txt')
-                FileSystem.RemoveDirectory(base)
-                return tostring(#all == 1)
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
         public async Task FileSystem_SetCurrentDirectory_ChangesDirectory()
         {
             using KitsuneEngine engine = new();
@@ -5776,22 +5799,6 @@ namespace KitsuneNet.Tests
                 local tmp  = FileSystem.GetTempFileName() .. '_kitsune_chdir'
                 FileSystem.CreateDirectory(tmp)
                 local ok = FileSystem.SetCurrentDirectory(tmp)
-                FileSystem.SetCurrentDirectory(orig)
-                FileSystem.RemoveDirectory(tmp)
-                return tostring(ok == true)
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task FileSystem_SetCurrentDirectory_WithWcharPath_ChangesDirectory()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local orig = FileSystem.CurrentDirectory()
-                local tmp  = FileSystem.GetTempFileName() .. '_kitsune_wchdir'
-                FileSystem.CreateDirectory(tmp)
-                local ok = FileSystem.SetCurrentDirectory(Wchar.FromUtf8(tmp))
                 FileSystem.SetCurrentDirectory(orig)
                 FileSystem.RemoveDirectory(tmp)
                 return tostring(ok == true)
@@ -7264,6 +7271,36 @@ namespace KitsuneNet.Tests
             {
                 r.String.ShouldBe("true");
             }
+        }
+
+        [Fact]
+        public async Task Process_Start_NonAsciiWorkingDirectory_IsUsed()
+        {
+            using KitsuneEngine engine = new();
+
+            // The child writes a marker file into its working directory, whose name has
+            // characters outside the ANSI code page and a quote (Linux wraps it in 'cd ...').
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local is_win = package.config:sub(1,1) == '\\'
+                local sep = package.config:sub(1,1)
+                local dir = FileSystem.GetTempFileName() .. ""_pr'oc_\xc5\x81\xe6\xb5\x8b""
+                FileSystem.CreateDirectory(dir)
+                local cmd = is_win and 'cmd /c echo x> marker.txt' or 'echo x > marker.txt'
+                local proc = Process.Start(nil, cmd, dir, true, false)
+                local found = false
+                for i = 1, 60 do
+                    if FileSystem.GetFileInfo(dir .. sep .. 'marker.txt') then
+                        found = true
+                        break
+                    end
+                    Sleep(50)
+                end
+                Sleep(50)
+                FileSystem.Delete(dir .. sep .. 'marker.txt')
+                FileSystem.RemoveDirectory(dir)
+                return tostring(proc ~= nil and found)
+            ");
+            r.String.ShouldBe("true");
         }
 
         [AnnoyingFact]
@@ -9024,45 +9061,6 @@ namespace KitsuneNet.Tests
                 local m = MsgPack.New()
                 local t = m:Decode(m:Encode({1, function() end, 3}))
                 return tostring(t[1] == 1 and t[2] == nil and t[3] == 3)
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        // -- Wchar encoding -------------------------------------------------------
-        [Fact]
-        public async Task MsgPack_Wchar_AsciiContent_EncodesAsStr()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local m = MsgPack.New()
-                local w = Wchar.FromUtf8('hello')
-                return tostring(m:Decode(m:Encode(w)) == 'hello')
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task MsgPack_Wchar_NonAscii_RoundTrips()
-        {
-            using KitsuneEngine engine = new();
-
-            // é = U+00E9, UTF-8: \xC3\xA9
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local m = MsgPack.New()
-                local w = Wchar.FromUtf8('\xC3\xa9')
-                return tostring(m:Decode(m:Encode(w)) == '\xC3\xa9')
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task MsgPack_Wchar_EmptyWchar_EncodesAsEmptyStr()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local m = MsgPack.New()
-                local w = Wchar.FromUtf8('')
-                return tostring(m:Decode(m:Encode(w)) == '')
             ");
             r.String.ShouldBe("true");
         }

@@ -1,32 +1,18 @@
 ﻿#include "LuaFileSystem.h"
-#include "luawchar.h"
+#include "luatext.h"
+#include "kitsunestdlib.h"
 #include <time.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <errno.h>
 
 #define MAX_PATH_LENGTH 1024
 
-// ── Shared: Lua io file-handle helpers ────────────────────────────────────────
-// luaL_Stream.closef == NULL is Lua's "closed file" sentinel (isclosed macro).
-// Both platform implementations use newfile_impl so closef is always valid.
-
-typedef luaL_Stream LStream;
-
-static int io_fclose_impl(lua_State* L) {
-
-	LStream* p = (LStream*)luaL_checkudata(L, 1, LUA_FILEHANDLE);
-	return luaL_fileresult(L, fclose(p->f) == 0, NULL);
-}
-
-static LStream* newfile_impl(lua_State* L) {
-
-	LStream* p = (LStream*)lua_newuserdata(L, sizeof(LStream));
-	p->closef = NULL;
-	luaL_setmetatable(L, LUA_FILEHANDLE);
-	p->f = NULL;
-	p->closef = &io_fclose_impl;
-	return p;
+// FileSystem.Open is io.open (UTF-8 path, nil, "<path>: <error>", errno on failure) with a
+// stricter mode: '[rwa]%+?b?' only, where io.open also accepts repeated 'b'.
+int OpenFileWide(lua_State* L) {
+	return kitsune_io_open_strict(L);
 }
 
 // =========================================================
@@ -39,7 +25,6 @@ static LStream* newfile_impl(lua_State* L) {
 #include <io.h>
 #include <shlobj.h>
 
-static char    _PATH[MAX_PATH_LENGTH];
 static wchar_t _PATHW[MAX_PATH_LENGTH];
 
 typedef struct REPARSE_DATA {
@@ -50,30 +35,39 @@ typedef struct REPARSE_DATA {
 	WCHAR  Data[MAX_PATH];
 } REPARSE_DATA;
 
-// Internal: convert string-or-Wchar to wchar_t path (normalises slashes, optionally appends wildcard).
+// Internal: copy the UTF-8 string argument at idx into dst as a null-terminated wide string.
+// Creates no Lua objects, so the result cannot be garbage collected mid-use.
+// Returns the number of wchar_t written, or -1 if it does not fit in cap (including the terminator).
+static int arg_to_wide(lua_State* L, int idx, wchar_t* dst, int cap) {
+
+	size_t len;
+	const char* s = luaL_checklstring(L, idx, &len);
+
+	// A UTF-8 string never needs more wide units than bytes, so only a long one is measured.
+	if (len + 1 > (size_t)cap && kitsune_utf8_wide_len(s, len) + 1 > (size_t)cap)
+		return -1;
+	return (int)kitsune_utf8_to_wide(s, len, dst);
+}
+
+// Internal: convert a UTF-8 path to wchar_t (normalises slashes, optionally appends "\*").
 static const wchar_t* to_pathw(lua_State* L, int idx, bool wildcard = false) {
 
-	LuaWChar* fromlua = lua_stringtowchar(L, idx);
-	wchar_t* filter = L"*";
+	int len = arg_to_wide(L, idx, _PATHW, MAX_PATH_LENGTH);
+	if (len < 0)
+		luaL_error(L, "path is too long (max %d characters)", MAX_PATH_LENGTH - 1);
 
-	if (wildcard && lua_type(L, idx + 1) == LUA_TUSERDATA)
-		filter = lua_stringtowchar(L, idx + 1)->str;
-
-	if (fromlua->len + wcslen(filter) >= MAX_PATH_LENGTH)
-		luaL_error(L, "%s is too long to be a path!", fromlua);
-
-	for (size_t n = 0; n < fromlua->len; n++) {
-		wchar_t c = fromlua->str[n];
-		_PATHW[n] = (c == L'/') ? L'\\' : c;
+	for (int n = 0; n < len; n++) {
+		if (_PATHW[n] == L'/')
+			_PATHW[n] = L'\\';
 	}
 
-	_PATHW[fromlua->len] = L'\0';
-
 	if (wildcard) {
-		wchar_t c = _PATHW[fromlua->len - 1];
-		if (c != L'/' && c != L'\\')
+		bool needsep = len > 0 && _PATHW[len - 1] != L'\\';
+		if ((size_t)len + (needsep ? 2 : 1) >= MAX_PATH_LENGTH)
+			luaL_error(L, "path is too long (max %d characters)", MAX_PATH_LENGTH - 1);
+		if (needsep)
 			wcscat(_PATHW, L"\\");
-		wcscat(_PATHW, filter);
+		wcscat(_PATHW, L"*");
 	}
 
 	return _PATHW;
@@ -99,11 +93,11 @@ static void push_find_dataw(lua_State* L, const WIN32_FIND_DATAW* d) {
 	lua_createtable(L, 0, 8);
 
 	lua_pushstring(L, "FileName");
-	lua_pushwchar(L, d->cFileName);
+	lua_pushwideasutf8(L, d->cFileName);
 	lua_settable(L, -3);
 
 	lua_pushstring(L, "AlternateFileName");
-	lua_pushwchar(L, d->cAlternateFileName);
+	lua_pushwideasutf8(L, d->cAlternateFileName);
 	lua_settable(L, -3);
 
 	lua_pushstring(L, "isFolder");
@@ -133,15 +127,15 @@ static void push_find_dataw(lua_State* L, const WIN32_FIND_DATAW* d) {
 
 int GetCurrent(lua_State* L) {
 
-	GetCurrentDirectory(MAX_PATH_LENGTH, _PATH);
-	lua_pushstring(L, _PATH);
+	DWORD len = GetCurrentDirectoryW(MAX_PATH_LENGTH, _PATHW);
+	lua_pushwideasutf8(L, _PATHW, (len < MAX_PATH_LENGTH) ? len : 0);
 	return 1;
 }
 
 int GetSpecialFolder(lua_State* L) {
 
 	if (SUCCEEDED(SHGetFolderPathW(NULL, (int)luaL_optinteger(L, 1, CSIDL_DESKTOPDIRECTORY), NULL, 0, _PATHW)))
-		lua_pushwchar(L, _PATHW);
+		lua_pushwideasutf8(L, _PATHW);
 	else
 		lua_pushnil(L);
 	return 1;
@@ -162,7 +156,7 @@ int GetFiles(lua_State* L) {
 				wcscmp(ffd.cFileName, L"..") != 0 &&
 				!(ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
 			{
-				lua_pushwchar(L, ffd.cFileName);
+				lua_pushwideasutf8(L, ffd.cFileName);
 				lua_rawseti(L, -2, ++n);
 			}
 		} while (FindNextFileW(h, &ffd));
@@ -187,7 +181,7 @@ int GetDirectories(lua_State* L) {
 				wcscmp(ffd.cFileName, L"..") != 0 &&
 				(ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
 			{
-				lua_pushwchar(L, ffd.cFileName);
+				lua_pushwideasutf8(L, ffd.cFileName);
 				lua_rawseti(L, -2, ++n);
 			}
 		} while (FindNextFileW(h, &ffd));
@@ -247,7 +241,7 @@ int GetAllInFolder(lua_State* L) {
 			DWORD ret = 0;
 			if (DeviceIoControl(fh, FSCTL_GET_REPARSE_POINT, NULL, 0, &rp, sizeof(rp), &ret, NULL)) {
 				lua_pushstring(L, "Link");
-				lua_pushwchar(L, rp.Data);
+				lua_pushwideasutf8(L, rp.Data);
 				lua_settable(L, -3);
 			}
 			CloseHandle(fh);
@@ -318,30 +312,20 @@ int lua_Rename(lua_State* L) {
 	return 1;
 }
 
-int OpenFileWide(lua_State* L) {
-
-	const wchar_t* fname = to_pathw(L, 1);
-	LuaWChar* mode = lua_stringtowchar(L, 2);
-	LStream* p = newfile_impl(L);
-	p->f = _wfopen(fname, mode->str);
-
-	if (!p->f) {
-		lua_pop(L, 1);
-		lua_pushnil(L);
-	}
-
-	return 1;
-}
-
 int lua_TempFile(lua_State* L) {
 
-	char temp[MAX_PATH_LENGTH];
-	GetTempPath(MAX_PATH_LENGTH, temp);
+	wchar_t temp[MAX_PATH_LENGTH];
+	GetTempPathW(MAX_PATH_LENGTH, temp);
 
-	if (lua_gettop(L) <= 0 || !lua_toboolean(L, 1))
-		GetTempFileName(temp, "gff", 0, temp);
+	if (lua_gettop(L) <= 0 || !lua_toboolean(L, 1)) {
+		wchar_t file[MAX_PATH_LENGTH];
+		if (GetTempFileNameW(temp, L"gff", 0, file)) {
+			lua_pushwideasutf8(L, file);
+			return 1;
+		}
+	}
 
-	lua_pushstring(L, temp);
+	lua_pushwideasutf8(L, temp);
 	return 1;
 }
 
@@ -449,13 +433,14 @@ int lua_GetAllAvailableDrives(lua_State* L) {
 
 static char _PATH[MAX_PATH_LENGTH];
 
-// Internal: copy string-or-Wchar argument into caller-supplied buffer so it
-// survives the next lua_topathutf8 call (which uses a single static buffer).
+// Internal: copy the UTF-8 path argument into a caller-supplied buffer.
 static const char* dup_path(lua_State* L, int idx, char* buf, size_t bufsz) {
 
-	const char* p = lua_topathutf8(L, idx);
-	strncpy(buf, p, bufsz - 1);
-	buf[bufsz - 1] = '\0';
+	size_t len;
+	const char* p = luaL_checklstring(L, idx, &len);
+	if (len >= bufsz)
+		luaL_error(L, "path is too long (max %d characters)", (int)bufsz - 1);
+	memcpy(buf, p, len + 1);
 	return buf;
 }
 
@@ -729,23 +714,6 @@ int lua_Rename(lua_State* L) {
 	return 1;
 }
 
-int OpenFileWide(lua_State* L) {
-
-	char fname[MAX_PATH_LENGTH];
-	dup_path(L, 1, fname, sizeof(fname));
-	const char* mode = lua_topathutf8(L, 2);
-	FILE* f = fopen(fname, mode);
-
-	if (f) {
-		LStream* p = newfile_impl(L);
-		p->f = f;
-	}
-	else {
-		lua_pushnil(L);
-	}
-
-	return 1;
-}
 
 int lua_TempFile(lua_State* L) {
 

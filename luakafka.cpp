@@ -1,4 +1,5 @@
 ﻿#include "luakafka.h"
+#include "kitsunefile.h"
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>
@@ -46,7 +47,7 @@ int GetLastLogs(lua_State* L) {
             KafkaLogFile = NULL;
         }
         if (logfile[0] != '\0') {
-            KafkaLogFile = fopen(logfile, "a");
+            KafkaLogFile = kitsune_fopen(logfile, "a");
         }
     }
 

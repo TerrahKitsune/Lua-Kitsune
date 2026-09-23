@@ -60,7 +60,7 @@
   ```
 
 ### Lua Module Registration
-- Follow the **wchar pattern**: one `functions[]` table containing all callable methods, one `meta[]` table containing only metamethods (`__gc`, `__tostring`, etc.), and `__index = module table` so all functions are reachable both as `Module.Xxx()` and `instance:Xxx()`.
+- Follow the **CSV module pattern** (see `LuaCsvMain.cpp`): one `functions[]` table containing all callable methods, one `meta[]` table containing only metamethods (`__gc`, `__tostring`, etc.), and `__index = module table` so all functions are reachable both as `Module.Xxx()` and `instance:Xxx()`.
 - Do **not** create a separate `__index` subtable with a filtered subset of methods.
 
 ### Lua Registry References

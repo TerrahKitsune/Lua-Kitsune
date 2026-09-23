@@ -69,4 +69,4 @@ end
 print(Json.Create(true):Encode(query("select * from Testx;")));
 print(Json.Create(true):Encode(query("select * from Testx where Id=50;")));
 
-return Wchar.FromAnsi("test");
+return Text.FromCodepage("test");

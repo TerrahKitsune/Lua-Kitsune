@@ -17,7 +17,6 @@ typedef struct LuaSQLite {
 	char * file;
 	int status;
 	int busyhandler;
-	bool useWidechar;
 	int funcs;
 	LuaSQLiteFunction** functions;
 } LuaSQLite;
@@ -27,7 +26,6 @@ int SQLiteExecute(lua_State *L);
 int SQLiteFetch(lua_State *L);
 int SQLiteGetRow(lua_State *L);
 int SQLiteSetBusyHandler(lua_State *L);
-int SQLiteSetUseWidechar(lua_State* L);
 int SQLiteRegisterFunction(lua_State* L);
 int SQLiteRegisterAggregateFunction(lua_State* L);
 int SQLiteFinish(lua_State* L);

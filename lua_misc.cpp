@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <ctype.h>
 #include "platform.h"
-#include "luawchar.h"
+#include "luatext.h"
 #include "Bencode.h"
 #include "stream.h"
 #ifdef _WIN32
@@ -35,13 +35,16 @@
 static int GetLastErrorAsMessage(lua_State* L)
 {
 	DWORD lasterror = (DWORD)luaL_optinteger(L, 1, GetLastError());
-	char err[1024];
+	wchar_t err[1024];
 
-	DWORD ok = FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, NULL, lasterror,
+	// W form so localized messages ("Accès refusé") come back as UTF-8; drop the trailing CRLF.
+	DWORD len = FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, lasterror,
 		MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), err, 1024, NULL);
+	while (len > 0 && (err[len - 1] == L'\r' || err[len - 1] == L'\n' || err[len - 1] == L' '))
+		len--;
 
 	lua_pop(L, lua_gettop(L));
-	lua_pushlstring(L, err, ok);
+	lua_pushwideasutf8(L, err, len);
 	lua_pushinteger(L, lasterror);
 
 	return 2;
@@ -275,15 +278,27 @@ int CRC32(lua_State* L) {
 }
 
 #ifdef _WIN32
+// Wide CRT environment so UTF-8 names/values reach child processes and W APIs intact.
 static int setenv_win(const char* name, const char* value, int overwrite)
 {
+	wchar_t* wname = kitsune_utf8_to_wide_alloc(name);
+	wchar_t* wvalue = kitsune_utf8_to_wide_alloc(value);
 	int errcode = 0;
-	if (!overwrite) {
-		size_t envsize = 0;
-		errcode = getenv_s(&envsize, NULL, 0, name);
-		if (errcode || envsize) return errcode;
+
+	if (!wname || !wvalue) {
+		errcode = ENOMEM;
 	}
-	return _putenv_s(name, value);
+	else {
+		size_t envsize = 0;
+		if (!overwrite)
+			errcode = _wgetenv_s(&envsize, NULL, 0, wname);
+		if (!errcode && envsize == 0)
+			errcode = _wputenv_s(wname, wvalue);
+	}
+
+	kitsune_free(wname);
+	kitsune_free(wvalue);
+	return errcode;
 }
 #endif
 
@@ -311,19 +326,26 @@ int luagetenv(lua_State* L) {
 	lua_pop(L, lua_gettop(L));
 
 #ifdef _WIN32
-	size_t len;
-	int error = getenv_s(&len, NULL, 0, var);
+	// Wide CRT environment, returned as UTF-8; nil when the variable is not set (as on Linux).
+	wchar_t* wvar = kitsune_utf8_to_wide_alloc(var);
+	size_t len = 0;
+	if (!wvar || _wgetenv_s(&len, NULL, 0, wvar) != 0 || len == 0) {
+		kitsune_free(wvar);
+		lua_pushnil(L);
+		return 1;
+	}
 
-	if (error) { lua_pushnil(L); return 1; }
-	if (len <= 0) { lua_pushstring(L, ""); return 1; }
+	// len includes the terminator.
+	wchar_t* data = (wchar_t*)kitsune_malloc(len * sizeof(wchar_t));
+	if (!data || _wgetenv_s(&len, data, len, wvar) != 0) {
+		kitsune_free(data);
+		kitsune_free(wvar);
+		lua_pushnil(L);
+		return 1;
+	}
 
-	char* data = (char*)kitsune_calloc(sizeof(char), len + 1);
-	if (!data) { lua_pushnil(L); return 1; }
-
-	error = getenv_s(&len, data, len, var);
-	if (error) { kitsune_free(data); lua_pushnil(L); return 1; }
-
-	lua_pushlstring(L, data, len);
+	kitsune_free(wvar);
+	lua_pushwideasutf8(L, data);
 	kitsune_free(data);
 #else
 	const char* value = getenv(var);
@@ -421,13 +443,15 @@ static int L_GetHost(lua_State* L) {
 #ifdef _WIN32
 static int L_GetComputerName(lua_State* L) {
 
-	char data[MAX_COMPUTERNAME_LENGTH + 1];
-	DWORD len;
+	// A fully qualified DNS name can be up to 255 characters, far more than
+	// MAX_COMPUTERNAME_LENGTH; len is the buffer size in and the name length out.
+	wchar_t data[256];
+	DWORD len = 256;
 
 	lua_pop(L, lua_gettop(L));
 
-	if (GetComputerNameEx(ComputerNameDnsFullyQualified, data, &len)) {
-		lua_pushlstring(L, data, len);
+	if (GetComputerNameExW(ComputerNameDnsFullyQualified, data, &len)) {
+		lua_pushwideasutf8(L, data, len);
 	}
 	else {
 		lua_pushnil(L);
@@ -545,11 +569,6 @@ static int crc64(lua_State* L) {
 	}
 	else if (lua_isstream(L, -1)) {
 		return luaL_error(L, "CRC64 does not support stream input");
-	}
-	else if (lua_iswchar(L, -1)) {
-		LuaWChar* wchar = lua_towchar(L, -1);
-		data = (const BYTE*)wchar->str;
-		len = wchar->len * sizeof(wchar_t);
 	}
 	else {
 		data = (const BYTE*)luaL_tolstring(L, -1, &len);

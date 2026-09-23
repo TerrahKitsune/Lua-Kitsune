@@ -1,7 +1,6 @@
 ﻿#include "LuaMD5.h"
 #include <stdlib.h>
 #include <string.h>
-#include "luawchar.h"
 #include "stream.h"
 
 LuaMD5 * lua_tomd5(lua_State *L, int index){
@@ -53,13 +52,7 @@ int UpdateMD5(lua_State *L){
 
 	int type = lua_type(L, 2);
 
-	if (type == LUA_TUSERDATA && luaL_testudata(L, -1, LUAWCHAR)) {
-		LuaWChar* wchar = lua_towchar(L, -1);
-		if (wchar && wchar->str) {
-			MD5Update(&luamd5->MD5, (unsigned char*)wchar->str, (unsigned int)(wchar->len * sizeof(wchar_t)));
-		}
-	}
-	else if (type == LUA_TUSERDATA && luaL_testudata(L, -1, STREAM)) {
+	if (type == LUA_TUSERDATA && luaL_testudata(L, -1, STREAM)) {
 	}
 	else if (type == LUA_TSTRING) {
 		size_t len;

@@ -90,6 +90,24 @@ public sealed class ImageTests
     }
 
     [Fact]
+    public async Task Image_TextChunk_Latin1_IsDecodedAsUtf8()
+    {
+        using KitsuneEngine engine = new();
+
+        // tEXt chunks are Latin-1 by spec: "\xA9\xC4" ("©Ä") must come back as UTF-8.
+        // The chunk is spliced in just before IEND (the last 12 bytes).
+        LuaValue r = await engine.ExecuteStringAsync(@"
+            local png = Image.New(1, 1):ToBytes()
+            local data = 'Comment\0\xa9\xc4'
+            local chunk = string.pack('>I4', #data) .. 'tEXt' .. data
+                .. string.pack('>I4', CRC32('tEXt' .. data) & 0xFFFFFFFF)
+            local img = Image.FromBytes(png:sub(1, #png - 12) .. chunk .. png:sub(-12))
+            return tostring(img:GetMetadata().tags.Comment == '\xc2\xa9\xc3\x84')
+        ");
+        r.String.ShouldBe("true");
+    }
+
+    [Fact]
     public async Task Image_ToBytes_FromBytes_RoundTrips()
     {
         using KitsuneEngine engine = new();

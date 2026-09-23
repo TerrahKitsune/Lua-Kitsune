@@ -138,11 +138,9 @@ namespace KitsuneNet
         /// Null for all other types.</summary>
         public LuaIteratorRef? IteratorValue { get; init; }
 
-        /// <summary>Decodes <see cref="Bytes"/> as UTF-8 for strings, or UTF-16 LE for Wchar values.
+        /// <summary>Decodes <see cref="Bytes"/> as UTF-8.
         /// Returns <c>null</c> when <see cref="Bytes"/> is null.</summary>
-        public string? String => Type == LuaType.Char16
-            ? (Bytes is null ? null : Encoding.Unicode.GetString(Bytes))
-            : (Bytes is null ? null : Encoding.UTF8.GetString(Bytes));
+        public string? String => Bytes is null ? null : Encoding.UTF8.GetString(Bytes);
 
         /// <summary>Returns the numeric value as <c>double</c>, bridging both
         /// <see cref="LuaType.Number"/> (float) and <see cref="LuaType.Integer"/> subtypes.
@@ -188,7 +186,6 @@ namespace KitsuneNet
         public override string ToString() => Type switch
         {
             LuaType.String => String ?? string.Empty,
-            LuaType.Char16 => String ?? string.Empty,
             LuaType.Number => Number.ToString(System.Globalization.CultureInfo.InvariantCulture),
             LuaType.Integer => Int64.ToString(),
             LuaType.UInt => UInt64.ToString(),
@@ -328,11 +325,6 @@ namespace KitsuneNet
         /// <summary>Creates a string value from a raw byte array with no encoding applied.</summary>
         public static LuaValue FromBytes(byte[]? v) =>
             v is null ? None : new() { Type = LuaType.String, Bytes = v };
-
-        /// <summary>Creates a Wchar value. When set on a Lua global the engine pushes a Lua Wchar object.
-        /// The UTF-16 LE encoded text is stored in <see cref="Bytes"/>; <see cref="String"/> decodes it back.</summary>
-        public static LuaValue FromWchar(string? v) =>
-            v is null ? None : new() { Type = LuaType.Char16, Bytes = Encoding.Unicode.GetBytes(v) };
 
         /// <summary>Creates an error value carrying <paramref name="message"/>.
         /// When returned from a <see cref="LuaFunction"/> the engine converts it to a Lua error

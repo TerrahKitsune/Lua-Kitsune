@@ -5,7 +5,6 @@
 #include <limits.h>
 #define _MAX_PATH PATH_MAX
 #endif
-#include "luawchar.h"
 #include "stream.h"
 
 void FinalizeStmt(LuaSQLite*state) {
@@ -36,7 +35,7 @@ LuaSQLite* lua_pushsqlite(lua_State* L) {
 	return luasqlite;
 }
 
-void push_sqlitevalue(lua_State* L, sqlite3_stmt* pStmt, int idx, bool usewchar) {
+void push_sqlitevalue(lua_State* L, sqlite3_stmt* pStmt, int idx) {
 	switch (sqlite3_column_type(pStmt, idx)) {
 	case SQLITE_INTEGER:
 		lua_pushinteger(L, sqlite3_column_int64(pStmt, idx));
@@ -44,18 +43,12 @@ void push_sqlitevalue(lua_State* L, sqlite3_stmt* pStmt, int idx, bool usewchar)
 	case SQLITE_FLOAT:
 		lua_pushnumber(L, sqlite3_column_double(pStmt, idx));
 		break;
-	case SQLITE_TEXT:
-		if (usewchar) {
-			const void* txt16 = sqlite3_column_text16(pStmt, idx);
-			int bytes16 = sqlite3_column_bytes16(pStmt, idx);
-			lua_pushwchar(L, (wchar_t*)txt16, bytes16 / sizeof(wchar_t));
-		}
-		else {
-			const char* txt = (const char*)sqlite3_column_text(pStmt, idx);
-			int bytes = sqlite3_column_bytes(pStmt, idx);
-			lua_pushlstring(L, txt, bytes);
-		}
+	case SQLITE_TEXT: {
+		const char* txt = (const char*)sqlite3_column_text(pStmt, idx);
+		int bytes = sqlite3_column_bytes(pStmt, idx);
+		lua_pushlstring(L, txt, bytes);
 		break;
+	}
 
 	case SQLITE_BLOB:
 
@@ -66,15 +59,6 @@ void push_sqlitevalue(lua_State* L, sqlite3_stmt* pStmt, int idx, bool usewchar)
 		lua_pushnil(L);
 		break;
 	}
-}
-
-int SQLiteSetUseWidechar(lua_State* L) {
-
-	LuaSQLite* luasqlite = (LuaSQLite*)luaL_checksqlite(L, 1);
-
-	luasqlite->useWidechar = lua_toboolean(L, 2) != 0;
-
-	return 0;
 }
 
 int SQLiteGetRow(lua_State* L) {
@@ -107,7 +91,7 @@ int SQLiteGetRow(lua_State* L) {
 		}
 		else {
 			lua_pop(L, lua_gettop(L));
-			push_sqlitevalue(L, luasqlite->stmt, idx, luasqlite->useWidechar);
+			push_sqlitevalue(L, luasqlite->stmt, idx);
 		}
 		return 1;
 	}
@@ -118,7 +102,7 @@ int SQLiteGetRow(lua_State* L) {
 	for (int n = 0; n < cnt; n++) {
 
 		lua_pushstring(L, sqlite3_column_name(luasqlite->stmt, n));
-		push_sqlitevalue(L, luasqlite->stmt, n, luasqlite->useWidechar);
+		push_sqlitevalue(L, luasqlite->stmt, n);
 		lua_settable(L, -3);
 	}
 
@@ -182,7 +166,6 @@ int SQLiteExecute(lua_State* L) {
 	size_t len;
 	const char* data;
 	const char* name;
-	LuaWChar* wchar;
 
 	FinalizeStmt(luasqlite);
 
@@ -231,14 +214,7 @@ int SQLiteExecute(lua_State* L) {
 				break;
 			case LUA_TUSERDATA:
 
-				if (luaL_testudata(L, -1, LUAWCHAR)) {
-					wchar = lua_towchar(L, -1);
-					if (wchar->str) {
-						sqlite3_bind_text16(luasqlite->stmt, ++cnt, wchar->str, (int)(wchar->len * sizeof(wchar_t)), SQLITE_STATIC);
-						break;
-					}
-				}
-				else if (luaL_testudata(L, -1, STREAM)) {
+				if (luaL_testudata(L, -1, STREAM)) {
 					sqlite3_bind_null(luasqlite->stmt, ++cnt);
 					break;
 				}
@@ -288,19 +264,13 @@ int SQLiteExecute(lua_State* L) {
 				sqlite3_bind_int(luasqlite->stmt, ++cnt, lua_toboolean(L, -1));
 				break;
 			case LUA_TSTRING:
+				// TRANSIENT: the callback's return value is popped below, so nothing keeps it alive until sqlite3_step.
 				data = lua_tolstring(L, -1, &len);
-				sqlite3_bind_text(luasqlite->stmt, ++cnt, data, (int)len, SQLITE_STATIC);
+				sqlite3_bind_text(luasqlite->stmt, ++cnt, data, (int)len, SQLITE_TRANSIENT);
 				break;
 			case LUA_TUSERDATA:
 
-				if (luaL_testudata(L, -1, LUAWCHAR)) {
-					wchar = lua_towchar(L, -1);
-					if (wchar->str) {
-						sqlite3_bind_text16(luasqlite->stmt, ++cnt, wchar->str, (int)(wchar->len * sizeof(wchar_t)), SQLITE_STATIC);
-						break;
-					}
-				}
-				else if (luaL_testudata(L, -1, STREAM)) {
+				if (luaL_testudata(L, -1, STREAM)) {
 					sqlite3_bind_null(luasqlite->stmt, ++cnt);
 					break;
 				}
@@ -504,13 +474,7 @@ void SqlitePCallFunction(bool isFinish, LuaSQLiteFunction* function, sqlite3_con
 		return;
 	}
 	else if (type == LUA_TUSERDATA) {
-		if (lua_iswchar(L, -1)) {
-			LuaWChar* wchar = lua_towchar(L, -1);
-			sqlite3_result_text16(context, wchar->str, (int)(wchar->len * sizeof(wchar_t)), SQLITE_TRANSIENT);
-			lua_pop(L, 1);
-			return;
-		}
-		else if (lua_isstream(L, -1)) {
+		if (lua_isstream(L, -1)) {
 			sqlite3_result_null(context);
 			lua_pop(L, 1);
 			return;
@@ -695,11 +659,6 @@ int SQLiteConnect(lua_State* L) {
 	sqlite3_exec(luasqlite->db, "PRAGMA synchronous=NORMAL;", 0, 0, 0);
 
 	luasqlite->file = file;
-#ifdef _WIN32
-	luasqlite->useWidechar = true;
-#else
-	luasqlite->useWidechar = false;
-#endif
 
 sqlite3_enable_load_extension(luasqlite->db, 1);
 sqlite3_create_function(luasqlite->db, "Lua", 1, SQLITE_UTF8, L, SqliteLuaFunction, NULL, NULL);

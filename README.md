@@ -66,7 +66,6 @@ KitsuneVariableFree(got);
 | `KITSUNE_TFUNCTION` | 6 | live Lua function (registry ref) |
 | `KITSUNE_TUSERDATA` | 7 | registered userdata |
 | `KITSUNE_TTHREAD` | 8 | Lua coroutine |
-| `KITSUNE_TCHAR16` | −4 | UTF-16 string |
 | `KITSUNE_TJSON` | −5 | pre-encoded JSON string |
 | `KITSUNE_TCFUNCTION` | −6 | anonymous C function closure |
 | `KITSUNE_TITERATOR` | −7 | custom iterator |
@@ -179,7 +178,7 @@ The core native library. Embeds Lua 5.4 and exposes the C API above. All built-i
 | `CSV` | CSV encode/decode with auto-delimiter sniffing and streaming |
 | `Aes` | AES-256 encryption (CBC, ECB, CTR) |
 | `Base64` | Base64 encode/decode with swappable alphabet |
-| `Wchar` | UTF-16 wide string type with full Unicode operations |
+| `Text` | Unicode case mapping, UTF-16 and legacy code page conversion for UTF-8 strings |
 | `DateTime` | Timezone-aware date/time arithmetic (100ns tick precision) |
 | `Decimal` | Exact 128-bit base-10 arithmetic |
 | `Identifier` | RFC 4122 UUID v4 and MongoDB ObjectID generation |
@@ -277,7 +276,7 @@ The core native library. Embeds Lua 5.4 and exposes a C API that hosts can call 
 | `CSV` | CSV encode/decode with auto-delimiter sniffing and streaming |
 | `Aes` | AES-256 encryption (CBC, ECB, CTR) |
 | `Base64` | Base64 encode/decode with swappable alphabet |
-| `Wchar` | UTF-16 wide string type with full Unicode operations |
+| `Text` | Unicode case mapping, UTF-16 and legacy code page conversion for UTF-8 strings |
 | `DateTime` | Timezone-aware date/time arithmetic (100ns tick precision) |
 | `Decimal` | Exact 128-bit base-10 arithmetic |
 | `Identifier` | RFC 4122 UUID v4 and MongoDB ObjectID generation |

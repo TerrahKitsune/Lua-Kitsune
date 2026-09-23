@@ -10,6 +10,7 @@
 #include <chrono>
 #include <csignal>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <thread>
 #include "platform.h"
@@ -86,6 +87,16 @@ int Test(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter resul
 static std::atomic<long> g_exitSignaled{ 0 };
 
 #ifdef _WIN32
+static UINT s_origConsoleOutputCP = 0;
+static UINT s_origConsoleInputCP = 0;
+
+static void RestoreConsoleCodePages() {
+	if (s_origConsoleOutputCP)
+		SetConsoleOutputCP(s_origConsoleOutputCP);
+	if (s_origConsoleInputCP)
+		SetConsoleCP(s_origConsoleInputCP);
+}
+
 BOOL WINAPI ConsoleCtrlHandler(DWORD ctrlType) {
 	switch (ctrlType) {
 	case CTRL_C_EVENT:
@@ -117,7 +128,13 @@ int main(int argc, char* argv[]) {
 #endif
 
 #ifdef _WIN32
-	SetConsoleOutputCP(65001);
+	// Console I/O as UTF-8 (print/io.write output and io.read input). The console is
+	// shared with the parent shell, so the original code pages are restored on exit.
+	s_origConsoleOutputCP = GetConsoleOutputCP();
+	s_origConsoleInputCP = GetConsoleCP();
+	SetConsoleOutputCP(CP_UTF8);
+	SetConsoleCP(CP_UTF8);
+	atexit(RestoreConsoleCodePages);
 #endif
 
 	KitsuneInternals* internals = KitsuneGetInternals();

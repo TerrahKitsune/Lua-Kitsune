@@ -806,6 +806,29 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
+        public async Task ExecuteFile_NonAsciiPath_LoadsScript()
+        {
+            // The host's script loader takes UTF-8 paths in any host process (this one has no
+            // UTF-8 code page manifest). The file starts with a UTF-8 BOM and a '#!' line,
+            // which are skipped as by the stock loader, and the path reaches the script intact.
+            string dir = Path.Combine(Path.GetTempPath(), "kitsune_skript_ö测_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(dir);
+            string path = Path.Combine(dir, "körning_€_😀.lua");
+            try
+            {
+                File.WriteAllText(path, "#!/usr/bin/env lua\nlocal p = ...\nreturn p .. '|' .. 'ö'",
+                    new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+                using KitsuneEngine engine = new();
+                engine.RunFile(path).String.ShouldBe(path + "|ö");
+                (await engine.ExecuteFileAsync(path)).String.ShouldBe(path + "|ö");
+            }
+            finally
+            {
+                Directory.Delete(dir, true);
+            }
+        }
+
+        [Fact]
         public async Task ExecuteFileAsync_ReturnsResult()
         {
             string path = Path.GetTempFileName();
@@ -3758,119 +3781,6 @@ namespace KitsuneNet.Tests
                 return 'the real result'
             ");
             result.String.ShouldBe("the real result");
-            engine.GetActiveIds().ShouldBeEmpty();
-        }
-
-        // -- Wchar bridge ---------------------------------------------------------
-        [Fact]
-        public void Wchar_ReturnedFromScript_HasWcharType()
-        {
-            // A Lua Wchar returned by a coroutine is surfaced as LuaType.Wchar, not LuaType.String.
-            using KitsuneEngine engine = new();
-            LuaValue v = engine.RunString("return Wchar.FromUtf8('hello wchar')");
-            v.Type.ShouldBe(LuaType.Char16);
-            v.String.ShouldBe("hello wchar");
-            engine.GetActiveIds().ShouldBeEmpty();
-        }
-
-        [Fact]
-        public void Wchar_ReturnedFromScript_StringAccessible()
-        {
-            // GetResultString decodes the UTF-8 bytes regardless of String vs Wchar type.
-            using KitsuneEngine engine = new();
-            engine.RunString("return Wchar.FromUtf8('kitsune wchar')").String.ShouldBe("kitsune wchar");
-            engine.GetActiveIds().ShouldBeEmpty();
-        }
-
-        [Fact]
-        public async Task Wchar_SetVariable_PushesWcharIntoLua()
-        {
-            // Setting a Wchar variable pushes a Lua Wchar object; Lua can call Wchar methods on it.
-            using KitsuneEngine engine = new();
-            engine.SetVariable("wv", LuaValue.FromWchar("hello"));
-            LuaValue result = await engine.ExecuteStringAsync(
-                "return tostring(type(wv) == 'userdata' and wv:ToUtf8() == 'hello')");
-            result.String.ShouldBe("true");
-            engine.GetActiveIds().ShouldBeEmpty();
-        }
-
-        [Fact]
-        public async Task Wchar_SetVariable_LuaCanCallWcharMethods()
-        {
-            using KitsuneEngine engine = new();
-            engine.SetVariable("greeting", LuaValue.FromWchar("Hello World"));
-            LuaValue result = await engine.ExecuteStringAsync(
-                "return greeting:ToUpper():ToUtf8()");
-            result.String.ShouldBe("HELLO WORLD");
-            engine.GetActiveIds().ShouldBeEmpty();
-        }
-
-        [Fact]
-        public async Task Wchar_GetVariable_FromLuaWcharGlobal_ReturnsWcharType()
-        {
-            using KitsuneEngine engine = new();
-            engine.ExecuteString("myWchar = Wchar.FromUtf8('bridge test')");
-            engine.Wait();
-            LuaValue v = engine.GetVariable("myWchar");
-            v.Type.ShouldBe(LuaType.Char16);
-            v.String.ShouldBe("bridge test");
-            engine.GetActiveIds().ShouldBeEmpty();
-        }
-
-        [Fact]
-        public void Wchar_RoundTrip_SetAndGet_PreservesContent()
-        {
-            using KitsuneEngine engine = new();
-            engine.SetVariable("wRound", LuaValue.FromWchar("round trip \u00e9"));  // é is non-ASCII
-            LuaValue back = engine.GetVariable("wRound");
-            back.Type.ShouldBe(LuaType.Char16);
-            back.String.ShouldBe("round trip \u00e9");
-        }
-
-        [Fact]
-        public async Task Wchar_InTable_ReturnedWithWcharType()
-        {
-            // A Wchar inside a returned table is also tagged as LuaType.Wchar.
-            using KitsuneEngine engine = new();
-            LuaValue result = engine.RunString("return { w = Wchar.FromUtf8('in table') }");
-            result.Type.ShouldBe(LuaType.Table);
-            using var tableRef = result.TableRef;
-            tableRef.ShouldNotBeNull();
-            var table = tableRef!.GetContents();
-            var entry = table.Single(kvp => kvp.Key.String == "w");
-            entry.Value.Type.ShouldBe(LuaType.Char16);
-            entry.Value.String.ShouldBe("in table");
-            engine.GetActiveIds().ShouldBeEmpty();
-        }
-
-        [Fact]
-        public async Task Wchar_RegisterFunction_WcharArgReceivedAsWcharType()
-        {
-            // A Wchar passed to a registered C# function arrives with LuaType.Wchar.
-            using KitsuneEngine engine = new();
-            LuaValue? received = null;
-            engine.RegisterFunction("CaptureWchar", args =>
-            {
-                received = args[0];
-                return LuaValue.None;
-            });
-            engine.ExecuteString("CaptureWchar(Wchar.FromUtf8('from lua'))");
-            engine.Wait();
-            received.ShouldNotBeNull();
-            received!.Value.Type.ShouldBe(LuaType.Char16);
-            received.Value.String.ShouldBe("from lua");
-            engine.GetActiveIds().ShouldBeEmpty();
-        }
-
-        [Fact]
-        public async Task Wchar_RegisterFunction_ReturnWchar_LuaReceivesWcharObject()
-        {
-            // A C# function returning LuaType.Wchar pushes a Lua Wchar object; Lua can call methods on it.
-            using KitsuneEngine engine = new();
-            engine.RegisterFunction("MakeWchar", _ => LuaValue.FromWchar("from csharp"));
-            LuaValue result = await engine.ExecuteStringAsync(
-                "local w = MakeWchar(); return tostring(type(w)=='userdata' and w:ToUpper():ToUtf8())");
-            result.String.ShouldBe("FROM CSHARP");
             engine.GetActiveIds().ShouldBeEmpty();
         }
 

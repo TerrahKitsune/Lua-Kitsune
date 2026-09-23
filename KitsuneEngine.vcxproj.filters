@@ -141,13 +141,13 @@
     <Filter Include="Memory\Source Files">
       <UniqueIdentifier>{dcefc642-cd9a-4e70-a7ee-cbd7cadcc68e}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaWchar">
+    <Filter Include="LuaText">
       <UniqueIdentifier>{3cce908f-8005-4bb8-8ea7-41325772c947}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaWchar\Header Files">
+    <Filter Include="LuaText\Header Files">
       <UniqueIdentifier>{fdda124e-d4e6-4514-8c44-c1aa1fd1ae3d}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaWchar\Source Files">
+    <Filter Include="LuaText\Source Files">
       <UniqueIdentifier>{5152b899-2bcf-47db-bb32-93b6dca0ed23}</UniqueIdentifier>
     </Filter>
     <Filter Include="LuaIdentifier">
@@ -419,11 +419,17 @@
     <ClCompile Include="MemoryManager.cpp">
       <Filter>Memory\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="wcharmain.cpp">
-      <Filter>LuaWchar</Filter>
+    <ClCompile Include="luatextmain.cpp">
+      <Filter>LuaText\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="luawchar.cpp">
-      <Filter>LuaWchar\Source Files</Filter>
+    <ClCompile Include="luatext.cpp">
+      <Filter>LuaText\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="kitsunestdlib.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="kitsunefile.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="datetimemain.cpp">
       <Filter>LuaDateTime</Filter>
@@ -973,11 +979,20 @@
     <ClInclude Include="MemoryManager.h">
       <Filter>Memory\Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="wcharmain.h">
-      <Filter>LuaWchar</Filter>
+    <ClInclude Include="luatextmain.h">
+      <Filter>LuaText\Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="luawchar.h">
-      <Filter>LuaWchar\Header Files</Filter>
+    <ClInclude Include="luatext.h">
+      <Filter>LuaText\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="kitsunefile.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="kitsuneconsole.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="kitsunestdlib.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="datetimemain.h">
       <Filter>LuaDateTime</Filter>

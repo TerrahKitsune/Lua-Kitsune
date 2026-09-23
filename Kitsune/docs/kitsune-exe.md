@@ -16,7 +16,7 @@ kitsune.exe [script.lua] [arg1 arg2 ...]
 4. If the script called `Imgui.Start(...)` before returning, the render loop is entered and blocks until the window is closed.
 5. Prints the script's return value to stdout (string, number, or boolean) then exits.
 
-On Windows the console output code page is set to UTF-8 (CP 65001) automatically.
+On Windows the console input and output code pages are set to UTF-8 (CP 65001) at startup and restored on exit, so `print`, `io.write` and `io.read` exchange UTF-8 text. The executable's manifest also makes UTF-8 the process code page (Windows 10 1903 or later), so command-line arguments (`arg`), script paths and the standard Lua `io`/`os` file functions handle non-ASCII text.
 
 Exit code `0` = success; `1` = the script raised an uncaught error (message printed to stderr).
 
@@ -87,18 +87,18 @@ Cross-platform console I/O. Available in both headless and GUI builds.
 | Function | Parameters | Returns | Platform | Notes |
 |---|---|---|---|---|
 | `Session.Console.Put(str)` | `string` | — | All | Print to stdout with `\r` → newline and `\b` → backspace-space-backspace handling |
-| `Session.Console.GetKey()` | — | `integer` | All | Block and read one byte from stdin. Returns `-1` on EOF. On a TTY uses `_getch` (Windows) or blocking read (Linux) |
+| `Session.Console.GetKey()` | — | `integer` | All | Block and read one key. On a Windows console returns the key's Unicode code point (`utf8.char(key)` gives the character); when stdin is redirected returns the next byte. Returns `-1` on EOF |
 | `Session.Console.HasKeyDown()` | — | `boolean` | All | Non-blocking check: `true` if a key is waiting in stdin (TTY) or stdin is not at EOF (pipe) |
-| `Session.Console.Write(str)` | `string` | `integer` | Windows | `WriteConsole` to stdout; returns bytes written |
-| `Session.Console.ReadKey()` | — | `integer or nil` | Windows | Non-blocking: returns key code if one is ready, `nil` otherwise |
+| `Session.Console.Write(str)` | `string` | `integer` | Windows | Write UTF-8 text to the console (`WriteConsoleW`, correct in any console code page); returns the bytes written, or `0` if the console could not be written (e.g. stdout redirected) |
+| `Session.Console.ReadKey()` | — | `integer or nil` | Windows | Non-blocking: returns the Unicode code point of a waiting key, `nil` otherwise |
 | `Session.Console.GetKeyState(vkey)` | `integer` | `boolean` | Windows | `GetAsyncKeyState` — `true` while the given virtual-key code is physically held |
 | `Session.Console.SetColor(bg, fg)` | `integer, integer` | — | Windows | Set console text attributes. Each value is a 4-bit colour index (0–15) |
 | `Session.Console.GetColor()` | — | `integer bg, integer fg` | Windows | Returns current background and foreground colour index nibbles |
 | `Session.Console.SetVisible(bool)` | `boolean` | — | Windows | Show (`true`) or hide (`false`) the console window |
 | `Session.Console.SetTitle(str)` | `string` | — | Windows | Set the console window title bar text |
-| `Session.Console.Create()` | — | `boolean` | Windows | `AllocConsole` — creates a new console for this process |
+| `Session.Console.Create()` | — | `boolean` | Windows | `AllocConsole` — creates a new console for this process (set to UTF-8) |
 | `Session.Console.Destroy()` | — | `boolean` | Windows | `FreeConsole` — detaches the console |
-| `Session.Console.Attach(opt pid)` | `integer?` | `boolean` | Windows | `AttachConsole(pid)`. Omit `pid` to attach to the parent process |
+| `Session.Console.Attach(opt pid)` | `integer?` | `boolean` | Windows | `AttachConsole(pid)`. Omit `pid` to attach to the parent process. The attached console is set to UTF-8 |
 | `Session.Console.Clear()` | — | — | Windows | Fill the screen buffer with spaces and reset cursor to origin |
 | `Session.Console.GetInfo()` | — | `x, y, width, height, maxW, maxH` | Windows | Returns six integers from `CONSOLE_SCREEN_BUFFER_INFO`: cursor column, cursor row, buffer width, buffer height, max window width, max window height |
 | `Session.Console.SetCursorPosition(x, y)` | `integer, integer` | — | Windows | Move the cursor to the given column and row |
@@ -156,8 +156,8 @@ Screen and cursor geometry. Always available; most values are `0` on non-Windows
 
 | Function | Parameters | Returns | Platform | Notes |
 |---|---|---|---|---|
-| `Session.Clipboard.Set(str)` | `string or nil` | `boolean` | Windows | Copy a string to the clipboard. Pass `nil` or an empty string to clear the clipboard. Returns `true` on success |
-| `Session.Clipboard.Get()` | — | `Wchar or nil` | Windows | Read the clipboard as a `Wchar` (Unicode text). Returns `nil` if empty or not available |
+| `Session.Clipboard.Set(str)` | `string or nil` | `boolean` | Windows | Copy a UTF-8 string to the clipboard as Unicode text. Pass `nil` or an empty string to clear the clipboard. Returns `true` on success |
+| `Session.Clipboard.Get()` | — | `string or nil` | Windows | Read the clipboard text as a UTF-8 string. Returns `nil` if empty or not available |
 
 ```lua
 Session.Clipboard.Set("hello world")

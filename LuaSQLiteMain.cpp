@@ -9,7 +9,6 @@ static const struct luaL_Reg lasqlitefunctions[] = {
 	{ "Fetch", SQLiteFetch },
 	{ "GetRow", SQLiteGetRow },
 	{ "SetBusyHandler", SQLiteSetBusyHandler },
-	{ "ToggleWidechar", SQLiteSetUseWidechar },
 	{ "RegisterFunction", SQLiteRegisterFunction },
 	{ "RegisterAggregateFunction", SQLiteRegisterAggregateFunction },
 	{ NULL, NULL }

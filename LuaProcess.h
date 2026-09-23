@@ -21,7 +21,7 @@ static const char* LUAPROCESS = "LuaProcess";
 
 typedef struct LuaProcess {
 #ifdef _WIN32
-	STARTUPINFO info;
+	STARTUPINFOW info;
 	PROCESS_INFORMATION processInfo;
 	ULARGE_INTEGER lastCPU, lastSysCPU, lastUserCPU;
 	int numProcessors;

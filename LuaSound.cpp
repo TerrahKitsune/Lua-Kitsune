@@ -1,4 +1,5 @@
 #include "LuaSound.h"
+#include "kitsunefile.h"
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
@@ -228,7 +229,7 @@ int Sound_Noise(lua_State* L) {
 int Sound_Open(lua_State* L) {
 	const char* path = luaL_checkstring(L, 1);
 
-	FILE* f = fopen(path, "rb");
+	FILE* f = kitsune_fopen(path, "rb");
 	if (!f)
 		return luaL_error(L, "Sound.Open: cannot open '%s'", path);
 	fseek(f, 0, SEEK_END);
@@ -714,7 +715,7 @@ int Sound_Save(lua_State* L) {
 	if (!data)
 		return luaL_error(L, "Sound:Save: %s", errMsg);
 
-	FILE* f = fopen(path, "wb");
+	FILE* f = kitsune_fopen(path, "wb");
 	if (!f) {
 		kitsune_free(data);
 		return luaL_error(L, "Sound:Save: cannot open '%s' for writing", path);

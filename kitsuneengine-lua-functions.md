@@ -6,6 +6,7 @@ A comprehensive reference for all available functions in the Lua environment.
 
 ## Table of Contents
 
+- [Userdata Return Values (read first)](#userdata-return-values-read-first)
 - [Global Functions](#global-functions)
 - [Hardware](#hardware)
 - [Mutex](#mutex)
@@ -28,7 +29,7 @@ A comprehensive reference for all available functions in the Lua environment.
 - [SQLite](#sqlite)
 - [DuckDB](#duckdb)
 - [Json](#json)
-- [Wchar](#wchar)
+- [Text](#text)
 - [UInt](#uint)
 - [TimeSpan](#timespan)
 - [Identifier](#identifier)
@@ -49,6 +50,53 @@ A comprehensive reference for all available functions in the Lua environment.
 - [Third-Party Notices](#third-party-notices)
 ---
 
+## Userdata Return Values (read first)
+
+All text in the engine is a plain **UTF-8 Lua string** on every platform, both in and out: filenames, CSV fields, SQLite columns, archive entry names, clipboard text, and so on. Non-ASCII text such as `é`, `€`, CJK or emoji is fully supported. Use Lua 5.4's built-in `utf8` library for codepoint-level work (`utf8.len`, `utf8.codepoint`, `utf8.offset`, `utf8.char`), and the [`Text`](#text) module for Unicode case mapping, UTF-16 and legacy code pages.
+
+A few functions do return a **userdata** object (`type(v) == "userdata"`) where you might expect a plain string or number: typed values such as `Decimal`, `DateTime`, `Identifier`, `UInt` and `TimeSpan`, listed below. These values print fine but **are not Lua strings or numbers**. Convert them with `tostring(v)` (or `v:ToNumber()`) before doing anything string- or number-like with them.
+
+File paths are UTF-8 as well, on every platform and in every host (including .NET applications): `FileSystem.*`, `Stream.Open`, `Image.Open`/`Save`, `Sound.Open`/`Save`, `Archive.OpenRead`, `Process.Start`, `getenv`/`setenv`, script files run by the host, and the standard Lua functions that take a filename, command or environment name (`io.open`, `io.lines(filename)`, `io.input(filename)`, `io.output(filename)`, `io.popen`, `dofile`, `loadfile`, `require`, `os.remove`, `os.rename`, `os.getenv`, `os.execute`, `os.tmpname`) all handle non-ASCII text. On Windows, where the C runtime would read these in the ANSI code page, the engine replaces those functions with equivalents that behave the same but use the wide (UTF-16) C runtime; `package.path` and `package.cpath` are likewise built from the UTF-8 environment and executable directory.
+
+### What works and what does not
+
+| Operation on a userdata `v` | Result |
+|------------------------------|--------|
+| `tostring(v)`, `print(v)`, `string.format("%s", v)` | Works: gives the UTF-8 string or the canonical text form |
+| `json:Encode(v)`, `csv:Encode(...)`, database parameters | Works: converted automatically |
+| `v == "literal"` | **Always `false`**. Lua never calls `__eq` for a userdata compared with a string. Use `tostring(v) == "literal"` |
+| `tbl[v]` / `tbl[v] = x` | **Does not match a string key**. The userdata itself is the key. Use `tbl[tostring(v)]` |
+| `v:lower()`, `v:find(...)`, `v:match(...)`, `v:gsub(...)`, `v:sub(...)` | **Error** ("attempt to call a nil value"): string methods do not exist on userdata |
+| `string.lower(v)`, `string.find(v, ...)`, `string.len(v)`, and so on | **Error** ("string expected, got DATETIME") |
+| `table.concat({v, ...})` | **Error** ("invalid value (userdata)") |
+| `"prefix" .. v` | **Error** ("attempt to concatenate a DECIMAL value") |
+| `math.floor(v)`, `v == 1.5` where `v` is a `Decimal` or `UInt` | **Error** / **`false`**. Use `v:ToNumber()` (lossy) or compare against another `Decimal` / `UInt` |
+
+Idiom: when a value may be a userdata and you only need it as text, normalize it once as soon as it comes back:
+
+```lua
+local ok, rows = conn:QueryAll("SELECT id, created FROM orders")   -- Postgres: UUID, TIMESTAMP
+for _, row in ipairs(rows) do
+    local id = tostring(row[1])        -- Identifier -> "xxxxxxxx-xxxx-..."
+    local created = tostring(row[2])   -- DateTime   -> "2024-06-01T12:00:00.000Z"
+end
+```
+
+### Where userdata are returned instead of a plain value
+
+| Returned by | Userdata | When |
+|-------------|----------|------|
+| `Tasks` / shared values | same type that was stored | A `UInt`, `DateTime` and so on round-trips as the same userdata |
+| MySQL `DECIMAL`, Postgres `NUMERIC`, MongoDB `DECIMAL128` | `Decimal` | Always (falls back to a string if parsing fails) |
+| MySQL `DATE`/`DATETIME`/`TIMESTAMP`, Postgres date/time types, MongoDB `DATE_TIME` | `DateTime` | Always (falls back to a string if parsing fails) |
+| Postgres `UUID`, MongoDB `OID` / UUID binary | `Identifier` | Always |
+| MySQL `BIGINT UNSIGNED`, MsgPack positive integers | `UInt` | Only when the value is greater than `2^63 - 1`. Smaller values are plain integers |
+| `Stream:ReadUInt64` / `ReadDecimal` / `ReadIdentifier` / `ReadDateTime` / `ReadTimeSpan` | matching type | Always |
+| `Stream:ReadUnsignedLong` | `UInt` | Only when the value is greater than `2^63 - 1` |
+| `Timer:ElapsedTimeSpan()`, `client:GetTimestamp()` (HttpClient) | `TimeSpan` | Always |
+
+---
+
 ## Global Functions
 
 ### CRC Functions
@@ -58,7 +106,7 @@ int CRC32(stringdata, opt existingcrc)
 int CRC64(data)
 ```
 - `CRC32`: Calculate a CRC32 checksum
-- `CRC64`: Calculate a CRC64 (works with stream and wchar, converts non-strings via `tostring`)
+- `CRC64`: Calculate a CRC64 over a string's bytes (non-strings are converted via `tostring`). For a checksum over UTF-16 text, pass `Text.ToUtf16(str)`
 
 ### Time & Sleep
 
@@ -85,13 +133,14 @@ ms Runtime()
 ```lua
 string, code GetLastError(opt lasterrorcode)
 ```
-Retrieves the last error code as a message and code.
+Retrieves the last error code as a message (UTF-8, localized by the OS, without trailing newline) and code.
 
 ### Shell
 
 ```lua
 bool ShellExecute(file, parameter)   -- Windows only
 ```
+Opens `file` (a path, URL or program) with its associated application; `file` and `parameter` are UTF-8.
 
 ### Memory
 
@@ -113,7 +162,7 @@ Compares two strings ignoring case.
 int setenv(var, value, override)
 string (or nil) getenv(var)
 ```
-`getenv` returns an empty string when a variable is unset.
+Names and values are UTF-8 and reach child processes unchanged. `getenv` returns `nil` when a variable is unset. `setenv` returns `0` on success; with `override` false an existing variable is left as it is. Unlike Lua's `os.getenv`, these use the Unicode environment on Windows in every host.
 
 ### Table Functions
 
@@ -564,7 +613,7 @@ print(j.items:Length())        -- array length
 ## CSV
 
 ```lua
-table   CSV.Decode(str_or_wchar [, delimiter])
+table   CSV.Decode(str [, delimiter])
 string  CSV.Encode(rows [, delimiter])
 iter    CSV.DecodeFromFunction(fn [, delimiter])
 object  CSV.New([delimiter])
@@ -572,7 +621,7 @@ object  CSV.New([delimiter])
 
 | Function | Description |
 |----------|-------------|
-| `Decode` | Decode a complete CSV string or Wchar into a result table |
+| `Decode` | Decode a complete CSV string into a result table |
 | `Encode` | Encode an array-of-arrays into a UTF-8 CSV string |
 | `DecodeFromFunction` | Return a generic-`for` iterator that streams rows from a supplier function |
 | `New` | Return a CSV object with a bound delimiter (or auto-detect when omitted) || `New` | Return a CSV object with a bound delimiter (or auto-detect when omitted) |
@@ -586,15 +635,19 @@ The optional `delimiter` argument accepts:
 ### CSV.Decode
 
 ```lua
-table CSV.Decode(str_or_wchar [, delimiter])
+table CSV.Decode(str [, delimiter])
 ```
 
-Decodes a complete CSV string or Wchar object. Returns a table with two keys:
+Decodes a complete CSV string. Returns a table with two keys:
 
 | Key | Type | Description |
 |-----|------|-------------|
-| `Comments` | array of Wchar | Lines beginning with `*` at the top of the file, with the leading `*` stripped |
-| `Rows` | array of arrays | Each inner array is one row; each field is a Wchar object |
+| `Comments` | array of strings | Lines beginning with `*` at the top of the file, with the leading `*` stripped |
+| `Rows` | array of arrays | Each inner array is one row; each field is a UTF-8 string |
+
+Fields are always plain UTF-8 Lua strings, including fields with non-ASCII text. Use `tonumber(field)` for numeric columns.
+
+Input must be UTF-8. A leading UTF-8 BOM (as in Excel's "CSV UTF-8" export) is skipped for every source type, and a character split across chunks from `DecodeFromFunction` is reassembled. For a file in a legacy code page (Excel's plain "CSV" export is in the system ANSI code page, e.g. 1252), convert it first: `csv:Decode(Text.FromCodepage(data, 1252))`. `Encode` writes UTF-8 without a BOM; prepend `"\xEF\xBB\xBF"` if the file will be opened in Excel.
 
 Leading spaces and tabs before each field are stripped. Quoted fields follow RFC 4180: `""` inside a quoted field becomes a literal `"`.
 
@@ -616,7 +669,7 @@ local t = CSV.Decode("a;b;c", ";")             -- explicit delimiter
 string CSV.Encode(rows [, delimiter])
 ```
 
-Encodes an array-of-arrays into a UTF-8 CSV string. Each field is converted via `tostring`, so Wchar fields are converted to UTF-8 automatically. Fields containing the delimiter, a double-quote, a newline, or **leading whitespace** are wrapped in double-quotes with inner quotes escaped as `""` (RFC 4180). Rows are joined with `\n`.
+Encodes an array-of-arrays into a UTF-8 CSV string. Each field is converted via `tostring`. Fields containing the delimiter, a double-quote, a newline, or **leading whitespace** are wrapped in double-quotes with inner quotes escaped as `""` (RFC 4180). Rows are joined with `\n`.
 
 ```lua
 local s = CSV.Encode({{"hello", "world"}, {"foo", "bar"}})
@@ -635,7 +688,7 @@ local s = CSV.Encode({{"a", "b"}}, ";")  -- semicolon delimiter
 iterator CSV.DecodeFromFunction(fn [, delimiter])
 ```
 
-Returns a generic `for` iterator. On each iteration the supplier function `fn` is called with no arguments and should return a chunk of CSV data as a plain string or Wchar object. The iterator stops when `fn` returns `nil`, `false`, or an empty string. Each iteration yields one row as a sequential table of Wchar fields.
+Returns a generic `for` iterator. On each iteration the supplier function `fn` is called with no arguments and should return a chunk of CSV data as a string. The iterator stops when `fn` returns `nil`, `false`, or an empty string. Each iteration yields one row as a sequential table of UTF-8 string fields.
 
 The parser handles chunk boundaries that fall in the middle of a field or row transparently — no alignment of chunks to row boundaries is required.
 
@@ -699,7 +752,6 @@ The sniffer scans up to the first 5 lines, counts each candidate's occurrences p
 | **Multi-character delimiter** | Only the first character is used; `CSV.Decode(s, "||")` behaves as `|` |
 | **Non-ASCII delimiter** | Matched at the byte level in `Encode`; works correctly for all printable ASCII delimiters (`,` `;` `|` `\t` etc.) |
 | **`"` as delimiter** | Not supported; the parser uses `"` as the quoting character |
-| **Wchar delimiter argument** | Not accepted by the direct functions; pass a single-character string or integer codepoint instead (or use `CSV.New()`) |
 | **`*` comment mid-file** | Only lines at the very start of the input are checked for `*`; a `*` anywhere else is a regular field character |
 | **Sniffer on single-line input** | Any consistently-occurring candidate wins; for a tie or no candidates, falls back to `,` |
 | **`CSV.New()` Encode delimiter** | Uses `,` — auto-detect has no meaning for output. Bind an explicit delimiter (`CSV.New(";")`) if you need a specific character for both reading and writing |
@@ -911,7 +963,7 @@ Returns (and optionally saves to file) the accumulated librdkafka log output.
 ## Archive
 
 ```lua
-Archive Archive.OpenRead(filename, opt usewchar)
+Archive Archive.OpenRead(filename)
 array   Archive:Entries()
 file, size Archive:SetEntry(index)
 data    Archive:Read(opt buffer)
@@ -919,6 +971,8 @@ string  Archive:ReadAll()
 ```
 
 **Entries returns:** Array of tables with `Name` and `Size`
+
+- **Entry names** (`Entries()[i].Name` and the first return value of `SetEntry`) are always UTF-8 strings, including non-ASCII names.
 
 - **`ReadAll`** — reads the entire current entry into a single Lua string in one call. More convenient than looping with `Read` for entries that must be consumed completely.
 
@@ -937,7 +991,7 @@ Stream Stream.Open(filename, mode)
 - **No argument** — creates a new empty in-memory stream.
 - **String argument** — creates an in-memory stream pre-loaded with the string contents, with the position reset to 0.
 - **Function argument** — creates a stream backed by the provided Lua function. The function is called with an opcode as its first argument and must handle all `STREAM_OP_*` operations it wishes to support. It must return the capability bitmask when called with `STREAM_OP_OPEN` (0).
-- **`Open(filename, mode)`** — opens a file as a stream.
+- **`Open(filename, mode)`** — opens a file as a stream. `filename` is UTF-8 on every platform (non-ASCII paths work on Windows).
 
 ### Custom Backend Functions
 
@@ -1027,19 +1081,21 @@ bool, err   Stream:WriteByte(byte)
 byte        Stream:ReadByte()
 byte        Stream:PeekByte(opt pos)
 void        Stream:SetByte(byte, opt position)
-int         Stream:Write(string or Wchar, opt size)
+int         Stream:Write(value, opt size)
 bool        Stream:WriteUtf8(str)
 string, int Stream:ReadUtf8()
-Wchar       Stream:ReadWchar(opt n)
+int         Stream:WriteUtf16(str)
+string      Stream:ReadUtf16(opt n)
 string      Stream:Read(opt length)
 bool/int    Stream:HasData()
 int         Stream:Id()
 nil         Stream:Close()
 ```
 
-- **`Write`** accepts a `string`, `Wchar`, `number`, or `boolean`. A `Wchar` is written as raw UTF-16 LE bytes (2 bytes per code unit); use `WriteUtf8` instead to write its UTF-8 encoding. The optional `size` argument limits the number of bytes written. Returns the number of bytes written, or `0` on failure.
+- **`Write`** accepts a `string` (written as raw bytes), `number`, `boolean`, or one of the typed userdata listed under [Custom-type Reads](#custom-type-reads). The optional `size` argument limits the number of bytes written. Returns the number of bytes written, or `0` on failure.
 - **`WriteUtf8`** converts a Lua string from Latin-1/byte values to proper UTF-8 before writing.
-- **`ReadWchar`** reads `n` UTF-16 LE code units (each 2 bytes) from the current position and returns a `Wchar`. If `n` is omitted or `nil`, reads all remaining bytes. Returns `nil` if the stream is not readable or there are no complete code units available.
+- **`WriteUtf16`** encodes a UTF-8 string as UTF-16 LE (2 bytes per code unit, 4 for characters outside the BMP, no BOM) and writes it. Returns the number of bytes written, or `0` if the stream is not writable.
+- **`ReadUtf16`** reads `n` UTF-16 LE code units (2 bytes each) from the current position and returns them decoded as a UTF-8 string. If `n` is omitted or `nil`, reads all remaining bytes. Returns `nil` if the stream is not readable or no complete code unit is available. Unpaired surrogates decode to U+FFFD.
 - **`HasData`** — non-blocking availability check. For sync (seekable) streams returns the number of bytes remaining as an integer, or `false` at EOF. For async streams (vtable with `hasdata`) returns `true` if data is ready in the buffer, `false` if nothing is available yet (more may arrive later — `false` is **not** EOF for async streams). For fn backends dispatches `STREAM_OP_HASDATA`; returns `nil`/`false` if the backend has no handler. **Never yields.**
 - **`Id`** — returns a stable integer identity value for this stream, suitable for use as a cache key or for distinguishing two stream references. Calls the backend's `getid` if available; otherwise falls back to the native pointer value.
 - **`Close`** — explicitly frees the stream's resources and marks it unusable. Called automatically by the GC; safe to call early when resources should be released promptly.
@@ -1119,8 +1175,8 @@ bool Stream:WriteUnsignedShort() / int Stream:ReadUnsignedShort()
 bool Stream:WriteInt() / int Stream:ReadInt()
 bool Stream:WriteUnsignedInt() / int Stream:ReadUnsignedInt()
 bool Stream:WriteLong() / int Stream:ReadLong()
-bool Stream:WriteUnsignedLong() / int Stream:ReadUnsignedLong()
-Wchar Stream:ReadWchar(opt n)
+bool Stream:WriteUnsignedLong() / int-or-UInt Stream:ReadUnsignedLong()   -- UInt userdata when the value is > 2^63 - 1
+int Stream:WriteUtf16(str) / string Stream:ReadUtf16(opt n)
 ```
 
 ### Custom-type Reads
@@ -1128,7 +1184,7 @@ Wchar Stream:ReadWchar(opt n)
 Custom userdata types can be written with `Stream:Write(value)` and read back with dedicated typed-read functions. All reads return `nil` on a short read or non-readable stream.
 
 ```lua
-UInt       Stream:ReadUInt()        -- reads 8 bytes (uint64, native endian)
+UInt       Stream:ReadUInt64()      -- reads 8 bytes (uint64, native endian)
 Decimal    Stream:ReadDecimal()     -- reads 24 bytes (LuaDecimal struct layout)
 Identifier Stream:ReadIdentifier()  -- reads 16 bytes (UUID raw bytes)
 DateTime   Stream:ReadDateTime()    -- reads 10 bytes (int64 ticks + int16 offset_minutes)
@@ -1190,6 +1246,10 @@ int/bool Process:Priority(opt prio)  -- Windows only
 int, int Process:Affinity(opt newmask) -- Windows only
 array Process:Threads()              -- Windows only
 ```
+
+- `app`, `cmd` and `directory` are UTF-8, so non-ASCII paths and arguments work. When `directory` is `nil` the child starts in the current directory.
+- Names from `Process.All()` and `GetName()` are UTF-8.
+- **Pipe output is the child's raw bytes.** Many Windows console programs write in the OEM or ANSI code page rather than UTF-8. Convert with `Text.FromCodepage(out, 850)` (or the relevant code page) when the output isn't UTF-8.
 
 ---
 
@@ -1998,7 +2058,6 @@ Pass an array table as the second argument to `Query`, `NonQuery`, `Scalar`, or 
 | `string` | escaped string |
 | `number` / `integer` | stringified |
 | `boolean` | `"1"` / `"0"` |
-| `Wchar` | UTF-8 encoded string |
 | `Identifier` | canonical string (`xxxxxxxx-xxxx-…` or 24-char hex) |
 | `DateTime` | ISO 8601 string (`YYYY-MM-DDTHH:MM:SS.mmmZ`) |
 | `Decimal` | decimal string (e.g. `"123.456"`) |
@@ -2013,7 +2072,7 @@ conn:Scalar("SELECT name FROM users WHERE id = ?", {42})
 
 | MySQL type | Lua type |
 |------------|----------|
-| TINYINT, SMALLINT, MEDIUMINT, INT, BIGINT | integer |
+| TINYINT, SMALLINT, MEDIUMINT, INT, BIGINT | integer (`BIGINT UNSIGNED` values above `2^63 - 1` return a `UInt` userdata) |
 | FLOAT, DOUBLE, BIT | number |
 | DECIMAL, NEWDECIMAL | `Decimal` ¹ |
 | TINYBLOB, BLOB, MEDIUMBLOB, LONGBLOB | `LuaStream` |
@@ -2021,6 +2080,8 @@ conn:Scalar("SELECT name FROM users WHERE id = ?", {42})
 | all others (VARCHAR, TEXT, YEAR, TIME, ENUM, JSON, …) | string |
 
 > ¹ Falls back to a plain string when parsing fails (e.g. non-standard server format).
+>
+> `Decimal`, `DateTime`, `Identifier` and `UInt` are **userdata**, not strings or numbers. `v == "2024-01-01"` or `v == 1.5` is always `false`, `"x" .. v` errors, and `math.*` rejects them. Use `tostring(v)`, `v:ToNumber()`, or compare against a value of the same type. See [Userdata Return Values](#userdata-return-values-read-first).
 
 > **Note:** MySQL has no native boolean type. `TINYINT(1)` columns return integer `1` or `0`.
 
@@ -2113,7 +2174,6 @@ Pass an array table as the second argument to `Query`, `NonQuery`, `Scalar`, or 
 | `string` | string |
 | `number` / `integer` | stringified |
 | `boolean` | `"true"` / `"false"` |
-| `Wchar` | UTF-8 encoded string |
 | `Identifier` | canonical string (`xxxxxxxx-xxxx-…` or 24-char hex) |
 | `DateTime` | ISO 8601 string (`YYYY-MM-DDTHH:MM:SS.mmmZ`) |
 | `Decimal` | decimal string (e.g. `"123.456"`) |
@@ -2144,6 +2204,8 @@ conn:NonQuery("INSERT INTO t (a, b, c) VALUES ($1, $2, $3)", {"hello", nil, 3.14
 | all others | TEXT, VARCHAR, BYTEA, JSON, etc. | string |
 
 > ¹ Falls back to a plain string when parsing fails (e.g. non-standard server format).
+>
+> `Decimal`, `DateTime`, `Identifier` and `UInt` are **userdata**, not strings or numbers. `v == "2024-01-01"` or `v == 1.5` is always `false`, `"x" .. v` errors, and `math.*` rejects them. Use `tostring(v)`, `v:ToNumber()`, or compare against a value of the same type. See [Userdata Return Values](#userdata-return-values-read-first).
 
 ---
 
@@ -2181,12 +2243,13 @@ bool        SQLite:Fetch()
 table|value SQLite:GetRow(opt index)
 nil         SQLite:RegisterFunction(function, name, args)
 nil         SQLite:RegisterAggregateFunction(function, name, args)
-nil         SQLite:ToggleWidechar(bool)
 nil         SQLite:SetBusyHandler(opt fn)
 nil         SQLite:Close()
 ```
 
 **Mode:** 0=single thread, 1=multithreaded, 2=serialized
+
+TEXT columns are always returned as plain UTF-8 Lua strings.
 
 | Function | Description |
 |----------|-------------|
@@ -2197,7 +2260,6 @@ nil         SQLite:Close()
 | `GetRow` | Without arguments (or `0`): returns the current row as a string-keyed table `{columnName = value, ...}` — **not** an integer-indexed array. With a positive 1-based integer index: returns that single column value directly. Returns `nil` if the index is out of range or there is no active row |
 | `RegisterFunction` | Register a scalar Lua function callable from SQL. `args` is the number of expected arguments (-1 for variadic) |
 | `RegisterAggregateFunction` | Register an aggregate Lua function. Called per row with `(false, …args)` and once at the end with `(true)` to collect the final result |
-| `ToggleWidechar` | When `true`, text columns are returned as `Wchar` instead of plain Lua strings |
 | `SetBusyHandler` | Register a callback invoked when a table is locked. Receives `(sqlite, retryCount)`; return truthy to retry, falsy to abort. Pass `nil` or no argument to remove |
 | `Close` | Close the database connection |
 
@@ -2218,7 +2280,7 @@ db:Query('SELECT * FROM users WHERE id = :id', function(param)
 end)
 ```
 
-Supported bind types: `nil` → NULL, integer → INTEGER, float → REAL, boolean → INTEGER (0/1), string → TEXT, `Wchar` → TEXT (UTF-16), `Stream` → NULL.
+Supported bind types: `nil` → NULL, integer → INTEGER, float → REAL, boolean → INTEGER (0/1), string → TEXT, `Stream` → NULL.
 
 ### Query Workflow
 
@@ -2422,7 +2484,6 @@ local t = json:Decode(myStream)
 | integer | number (no decimal point) |
 | float | number (trailing zeros trimmed, e.g. `3.5`) |
 | `string` | string |
-| `Wchar` | string (UTF-8 via `ToUtf8`) |
 | `Identifier` | string (canonical UUID or OID hex) |
 | `DateTime` | string (ISO 8601, e.g. `"2024-06-01T12:00:00.000Z"`) |
 | `Decimal` | number (no quotes — preserves numeric semantics) |
@@ -2436,7 +2497,8 @@ local t = json:Decode(myStream)
 - **Circular references** raise an error: `Json: recursion detected`
 - **Table classification**: pure sequential integer-keyed tables (`{1, 2, 3}`) encode as JSON arrays; all others encode as objects
 - **UTF-8 strings** pass through the encoder unescaped. Only control characters (U+0000–U+001F) are hex-escaped as `\uXXXX`
-- **`Wchar` values** are converted to UTF-8 before encoding
+- **Invalid UTF-8** (binary data or ANSI text) is replaced with U+FFFD, so the output is always valid JSON. Send binary data Base64-encoded or as a `LuaStream`
+- **Decoding** skips a leading UTF-8 BOM for every source (string, function, stream). Unpaired `\uD800`–`\uDFFF` escapes decode to U+FFFD
 - **`LuaStream`** must be both readable and seekable; unreachable streams encode as `null`
 
 ### Examples
@@ -2475,42 +2537,47 @@ f:close()
 
 ---
 
-## Wchar
+## Text
 
-### Creation
-
-```lua
-Wchar Wchar.FromAnsi(str)
-Wchar Wchar.FromBytes(array or widestring or int)
-Wchar Wchar.FromUtf8(str)
-nil Wchar.Setlocale(codepage)
-```
-
-### Conversion
+Helpers for the text conversions plain UTF-8 strings and Lua's `utf8` library don't cover. Every function takes and returns ordinary Lua strings. Malformed input never raises: invalid UTF-8 sequences and unpaired UTF-16 surrogates become U+FFFD (`"\xEF\xBF\xBD"`).
 
 ```lua
-string Wchar:ToUtf8()
-string Wchar:ToAnsi()
-array Wchar:ToBytes()
+string  Text.Lower(str)
+string  Text.Upper(str)
+string  Text.ToUtf16(str)
+string  Text.FromUtf16(bytes)
+string  Text.FromCodepage(bytes, opt codepage)
+string  Text.ToCodepage(str, opt codepage)
 ```
 
-### Operations
+| Function | Description |
+|----------|-------------|
+| `Lower` / `Upper` | Unicode-aware case conversion (all scripts, not only ASCII: `"É"` ↔ `"é"`, `"Σ"` ↔ `"σ"`, `"Ж"` ↔ `"ж"`). Uses simple, locale-independent mappings, so there's no Turkish dotless-i special case. `string.lower` / `string.upper` only change ASCII letters |
+| `ToUtf16` | Encodes a UTF-8 string as UTF-16 LE bytes (2 bytes per code unit, 4 for characters outside the BMP, no BOM), returned as a Lua string |
+| `FromUtf16` | Decodes UTF-16 LE bytes to a UTF-8 string. A trailing odd byte is ignored, and a leading BOM is kept as U+FEFF |
+| `FromCodepage` | Decodes bytes in a legacy code page to UTF-8. Bytes the code page can't decode become U+FFFD |
+| `ToCodepage` | Encodes a UTF-8 string into a legacy code page. Characters the code page can't represent become `?` |
+
+`codepage` is a Windows code page number, for example `1252` (Western European), `1250`, `1251`, `437`, `850`, `932` (Shift-JIS), `936`, `949`, `950`, `28591`–`28606` (ISO-8859-1 to -16), `20127` (ASCII) or `65001` (UTF-8). For UTF-16 use `ToUtf16` / `FromUtf16`. Omitted or `0` means the system ANSI code page on Windows and the locale's charset elsewhere. An unsupported code page raises an error.
 
 ```lua
-int Wchar:At(index)
-array Wchar:Codepoints()
-Wchar Wchar:ToLower()
-Wchar Wchar:ToUpper()
-Wchar Wchar:Substring(start, opt length)
-int Wchar:Find(substring, opt offset)
+-- Legacy Windows-1252 file -> UTF-8
+local f = assert(io.open("legacy.txt", "rb"))
+local text = Text.FromCodepage(f:read("a"), 1252)
+f:close()
+
+-- Case-insensitive comparison that works beyond ASCII
+if Text.Lower(name) == Text.Lower("ÅSA") then ... end
+
+-- Checksum over UTF-16 bytes, e.g. to match a hash computed by .NET/Windows code
+local crc = CRC64(Text.ToUtf16("hello"))
+
+-- Codepoint-level work uses Lua's utf8 library
+print(utf8.len("héllo"))                   --> 5
+for _, cp in utf8.codes("hé") do print(cp) end   --> 104, 233
 ```
 
-### Metamethods
-
-- `tostring`: same as `ToUtf8`
-- `..` (concat): returns new Wchar
-- `#` (length): returns length
-- `==` (equal): compares Wchars
+See also `Stream:ReadUtf16` / `Stream:WriteUtf16` for reading and writing UTF-16 data directly.
 
 ---
 
@@ -2916,7 +2983,11 @@ On error: `nil, errmsg`.
 | `TIMESTAMP` | table `{t=ordinal, i=increment}` |
 | `REGEX` | string `"/pattern/options"` |
 
-When writing Lua → BSON, `Identifier`, `DateTime`, `Decimal`, `Wchar`, and `LuaStream` values are also recognised and serialised to their corresponding BSON types.
+When writing Lua → BSON, `Identifier`, `DateTime`, `Decimal` and `LuaStream` values are also recognised and serialised to their corresponding BSON types.
+
+Lua strings are stored as BSON strings, which must be valid UTF-8. A string value or key that isn't (binary data, ANSI text) raises an error rather than storing data other drivers can't read. Store binary data as a `LuaStream`, which becomes BSON binary.
+
+> `Identifier`, `DateTime` and `Decimal` are **userdata**. For example, `doc._id == "65f0c3..."` is always `false` and `"id: " .. doc._id` errors. Use `tostring(doc._id)`, or compare against `Identifier.FromString("65f0c3...")`. See [Userdata Return Values](#userdata-return-values-read-first).
 
 ### Example
 
@@ -3039,9 +3110,11 @@ if not doc then print("Parse error:", err) end
 
 ## FileSystem
 
-All path arguments accept either a plain Lua `string` (UTF-8) or a `Wchar` object.
+All path arguments are UTF-8 strings.
 On Windows the W-API is used internally so non-ASCII filenames are handled correctly.
 On Linux the POSIX UTF-8 API is used directly — no wide-char handling is needed.
+
+All returned names and paths (`GetFiles`, `GetDirectories`, `GetAll` / `GetFileInfo` fields, `CurrentDirectory`, `GetTempFileName`, `GetSpecialFolder`) are plain UTF-8 strings on every platform, so non-ASCII names round-trip exactly and can be passed straight back into FileSystem functions.
 
 ### File and Directory Operations
 
@@ -3050,7 +3123,7 @@ Array   FileSystem.GetAll(path)
 Array   FileSystem.GetFiles(path)
 Array   FileSystem.GetDirectories(path)
 FileInfo FileSystem.GetFileInfo(path)
-file    FileSystem.Open(path, mode)
+file    FileSystem.Open(path, opt mode)
 bool    FileSystem.Copy(source, destination, overwrite)
 bool    FileSystem.Move(source, destination)
 bool    FileSystem.Delete(source)
@@ -3063,10 +3136,10 @@ bool    FileSystem.SetAttributes(path, attributemask)
 | Function | Description |
 |----------|-------------|
 | `GetAll` | Returns an array of `FileInfo` tables for every entry (files **and** directories) in `path` |
-| `GetFiles` | Returns an array of filenames (strings/Wchar) for all regular files in `path` |
+| `GetFiles` | Returns an array of filenames for all regular files in `path` |
 | `GetDirectories` | Returns an array of directory names for all subdirectories in `path` |
 | `GetFileInfo` | Returns a `FileInfo` table for `path`, or `nil` if the path does not exist |
-| `Open` | Open a file and return a Lua `io` file handle. `mode` follows standard C `fopen` conventions: `"rb"`, `"wb"`, `"r"`, `"w"`, etc. |
+| `Open` | Open a file and return a standard Lua `io` file handle. Same contract as `io.open`: `mode` defaults to `"r"` and must be `"r"`, `"w"` or `"a"`, optionally followed by `+` and/or `b` (anything else raises an error); on failure returns `nil, "<path>: <error>", errno` |
 | `Copy` | Copy `source` to `destination`. Pass `true` for `overwrite` to allow replacing an existing file |
 | `Move` | Move (rename across directories) `source` to `destination` |
 | `Delete` | Delete a file or empty directory |
@@ -3081,14 +3154,14 @@ Returned by `GetFileInfo` and `GetAll`:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `FileName` | string or Wchar | Entry name (without path) |
+| `FileName` | string | Entry name (without path) |
 | `isFolder` | boolean | `true` when the entry is a directory |
 | `Size` | number | File size in bytes (`0` for directories) |
 | `Creation` | number | Creation time as Unix timestamp |
 | `Access` | number | Last access time as Unix timestamp |
 | `Write` | number | Last write time as Unix timestamp |
-| `Link` | string | *(optional)* Symlink target path, present only when the entry is a symbolic link |
-| `AlternateFileName` | string or Wchar | *(Windows only)* 8.3 short name |
+| `Link` | string | *(optional)* Symlink / reparse-point target path, present only when the entry is a link |
+| `AlternateFileName` | string | *(Windows only)* 8.3 short name |
 | `Attributes` | number | *(Windows only)* Win32 `FILE_ATTRIBUTE_*` bitmask |
 
 ### Path and Directory Utilities
@@ -3098,7 +3171,7 @@ string  FileSystem.CurrentDirectory()
 bool    FileSystem.SetCurrentDirectory(path)
 string  FileSystem.GetTempFileName()
 Array   FileSystem.GetDrives(opt drive)
-Wchar   FileSystem.GetSpecialFolder(csidl)   -- Windows only
+string  FileSystem.GetSpecialFolder(csidl)   -- Windows only
 ```
 
 | Function | Description |
@@ -3107,7 +3180,7 @@ Wchar   FileSystem.GetSpecialFolder(csidl)   -- Windows only
 | `SetCurrentDirectory` | Changes the current working directory. Returns `true` on success |
 | `GetTempFileName` | Creates a temporary file and returns its path as a string |
 | `GetDrives` | Returns an array of drive tables (see below). Pass a single drive letter string to query one drive only |
-| `GetSpecialFolder` | *(Windows only)* Returns a `Wchar` path for a CSIDL folder constant |
+| `GetSpecialFolder` | *(Windows only)* Returns the path for a CSIDL folder constant as a string, or `nil` on failure |
 
 ### Drive table (from `GetDrives`)
 
@@ -3210,8 +3283,8 @@ table  img:ExtractPalette(opt n)
 | `Open` | Decodes a PNG file from disk into a new `Image`. Raises a Lua error if the file cannot be read or decoded |
 | `New` | Creates a blank, fully-transparent `width`x`height` canvas |
 | `FromBytes` | Decodes a PNG already held in memory (e.g. base64-decoded bytes) — no disk I/O |
-| `GetMetadata` | Returns `{ width, height, tags = { key = value, ... } }`. `tags` merges every `tEXt`/`iTXt` chunk found at decode time (last chunk for a given key wins); `zTXt` and compressed `iTXt` chunks are not read |
-| `SetMetadata` | Sets (or overwrites) one tag. Tags are written as uncompressed `iTXt` chunks by `Save`/`ToBytes` |
+| `GetMetadata` | Returns `{ width, height, tags = { key = value, ... } }`. `tags` merges every `tEXt`/`iTXt` chunk found at decode time (last chunk for a given key wins); `zTXt` and compressed `iTXt` chunks are not read. Keys and values are UTF-8 (`tEXt` chunks are Latin-1 by spec and are converted) |
+| `SetMetadata` | Sets (or overwrites) one tag. Tags are written as uncompressed UTF-8 `iTXt` chunks by `Save`/`ToBytes` |
 | `GetWidth` / `GetHeight` | Convenience accessors, equivalent to the fields on `GetMetadata()` |
 | `GetPixel` | Returns `r, g, b, a` (0-255) at `(x, y)`. Errors if out of bounds |
 | `SetPixel` | Overwrites the pixel at `(x, y)` directly (no blending). `a` defaults to 255. Errors if out of bounds |
@@ -3373,7 +3446,6 @@ Quoted scalars (`"..."` or `'...'`) are always decoded as strings regardless of 
 | integer | plain scalar (e.g. `42`) |
 | float | plain scalar (e.g. `3.14`) |
 | `string` | double-quoted scalar |
-| `Wchar` | double-quoted scalar (UTF-8 encoded) |
 | `Identifier` | double-quoted scalar (canonical string) |
 | `DateTime` | double-quoted scalar (ISO 8601) |
 | `Decimal` | double-quoted scalar (decimal string) |
@@ -3470,7 +3542,6 @@ nil     toml:Dispose()          -- explicitly free the instance (also called by 
 | `integer` | integer scalar |
 | `float` | float scalar (always includes `.` or `e` so TOML recognises it as float) |
 | `string` | basic string (double-quoted, with escapes) |
-| `Wchar` | basic string (UTF-8 encoded) |
 | `Identifier` | basic string (canonical UUID or OID hex) |
 | `DateTime` | bare datetime scalar (no quotes — native TOML datetime type) |
 | `Decimal` | basic string |
@@ -5180,7 +5251,7 @@ Returns `true` on success. Returns `false, errmsg` if stdin/stdout are not avail
 
 Tools must be registered with `AddTool` before calling `Start()`.
 
-**`print`/`io.write` are globally redirected the moment `Start()` succeeds.** stdout is reserved for JSON-RPC responses, so once the server is running nothing may write to it directly — this holds regardless of which coroutine calls `print`/`io.write` or when. Output isn't discarded: whatever a tool callback prints while it runs is captured and added as its own entry in that call's `content` array, ahead of the callback's actual return value. Output produced outside of any tool dispatch (nothing currently listening) is dropped the next time a dispatch starts.
+**`print`/`io.write` are globally redirected the moment `Start()` succeeds.** stdout is reserved for JSON-RPC responses, so once the server is running nothing may write to it directly — this holds regardless of which coroutine calls `print`/`io.write` or when. Output isn't discarded: whatever a tool callback prints while it runs is captured and added as its own entry in that call's `content` array, ahead of the callback's actual return value. Output produced outside of any tool dispatch (nothing currently listening) is dropped the next time a dispatch starts. Because `io.write` is always captured, `io.output` is disabled in MCP mode and raises an error; to write a file, use the handle from `io.open(path, "w")` (`f:write(...)`).
 
 ### mcp:IsRunning
 

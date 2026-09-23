@@ -649,6 +649,13 @@ static int mcp_iowrite_override(lua_State* L) {
 	return 0;
 }
 
+// io.write is always captured (above), so redirecting the default output with io.output
+// would silently have no effect. It is disabled instead, so the limitation is explicit.
+static int mcp_iooutput_disabled(lua_State* L) {
+	return luaL_error(L, "io.output is not available in MCP mode (stdout carries the JSON-RPC "
+		"stream and io.write is captured); write to a file handle from io.open instead");
+}
+
 static void mcp_install_output_redirect(lua_State* L, LuaMcpServer* server) {
 	lua_pushlightuserdata(L, server);
 	lua_pushcclosure(L, mcp_print_override, 1);
@@ -658,6 +665,8 @@ static void mcp_install_output_redirect(lua_State* L, LuaMcpServer* server) {
 	lua_pushlightuserdata(L, server);
 	lua_pushcclosure(L, mcp_iowrite_override, 1);
 	lua_setfield(L, -2, "write");
+	lua_pushcfunction(L, mcp_iooutput_disabled);
+	lua_setfield(L, -2, "output");
 	lua_pop(L, 1); // io table
 }
 

@@ -23,7 +23,7 @@
 #define KITSUNE_TITERATOR      (-7) // Kitsune extension: iterator type; data is a pointer to a kitsune_Iterator struct containing the iteration state. Not a value returned by lua_type() — only used in KitsuneVariable for iterating tables with KitsuneGetAll, and never appears in Lua or in a variable returned by the engine. Data should be a pointer to a kitsune_Iterator.
 #define KITSUNE_TCFUNCTION     (-6) // Kitsune extension: C function pointer type; data is a pointer to a kitsune_CFunctionData struct containing the function pointer and its userdata. Not a value returned by lua_type() — only used in KitsuneVariable for passing C function pointers to Lua, and never appears in Lua or in a variable returned by the engine. Data should be a pointer to a kitsune_CFunctionData.
 #define KITSUNE_TJSON          (-5) // Kitsune extension: JSON string type; data is a UTF-8 char* and length is in bytes (excluding null terminator). Not a value returned by lua_type().
-#define KITSUNE_TCHAR16        (-4) // Kitsune extension: UTF-16 string type; data is a char16_t* and length is in char16_t code units (excluding null terminator). Not a value returned by lua_type().
+// (-4) was KITSUNE_TCHAR16 (UTF-16 strings, removed with the Wchar type); left unused so old values are never misread.
 #define KITSUNE_TINTEGER       (-3) // Kitsune extension: Lua 5.3+ integer subtype (lua_isinteger); not a value returned by lua_type()
 #define KITSUNE_TERROR         (-2) // Kitsune extension: The variable represents an error message (UTF-8 char*); length is in bytes (excluding null terminator). Not a value returned by lua_type(); Used to signal an error when passed too and from Lua via kitsune_ResultSetter and KitsuneVariableReturnFromLua.
 #define KITSUNE_TNONE          (-1)
@@ -74,14 +74,13 @@ struct KitsuneIdentifier;
 
 struct KitsuneVariable {
 	int type; // see KITSUNE_T* constants above
-	size_t length; // byte count for KITSUNE_TSTRING and KITSUNE_TUSERDATA __name; char16_t count for KITSUNE_TCHAR16; entry count for KITSUNE_TTABLE; 0 for all other types
+	size_t length; // byte count for KITSUNE_TSTRING and KITSUNE_TUSERDATA __name; entry count for KITSUNE_TTABLE; 0 for all other types
 	union {
 		int ref;                                   // LUA_TTHREAD, LUA_TFUNCTION, LUA_TTABLE: Lua registry reference
 		double number;                             // LUA_TNUMBER
 		long long integer;                         // KITSUNE_TINTEGER, KITSUNE_TUINT
 		bool boolean;                              // LUA_TBOOLEAN
 		unsigned char* data;                       // KITSUNE_TSTRING, KITSUNE_TJSON, KITSUNE_TERROR: heap-allocated UTF-8 bytes
-		char16_t* char16data;                      // KITSUNE_TCHAR16: heap-allocated char16_t string
 		KitsuneKeyValuePairVariableNode* table;    // KITSUNE_TTABLECONTENTS: head of linked list
 		kitsune_CFunctionData* cfunction;          // KITSUNE_TCFUNCTION
 		KitsuneIterator* iterator;                 // KITSUNE_TITERATOR

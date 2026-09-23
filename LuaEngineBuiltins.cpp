@@ -4,13 +4,14 @@
 
 #include "platform.h"
 #include "lua_main_incl.h"
+#include "luatext.h"
 #ifdef _WIN32
 #include <conio.h>
 #include <io.h>
 #include "Shellapi.h"
+#include "kitsuneconsole.h"
 #endif
 #include "mem.h"
-#include "luawchar.h"
 
 #define HI_PART(x)  ((x>>4) & 0x0F)
 #define LO_PART(x)  ((x) & 0x0F)
@@ -42,7 +43,8 @@ int L_kbhit(lua_State *L) {
 int L_getch(lua_State *L) {
 	if (is_stdin_tty()) {
 #ifdef _WIN32
-		lua_pushinteger(L, _getch());
+		// Unicode code point of the key (utf8.char(key) gives the character), not an OEM byte.
+		lua_pushinteger(L, kitsune_getwch_codepoint());
 #else
 		lua_pushinteger(L, -1);
 #endif
@@ -112,7 +114,14 @@ int L_GetMemory(lua_State *L) {
 
 #ifdef _WIN32
 int L_ShellExecute(lua_State *L) {
-	INT_PTR ok = (INT_PTR)ShellExecute(NULL, "open", luaL_checkstring(L, 1), luaL_checkstring(L, 2), NULL, SW_SHOW);
+	// W form so non-ASCII paths, URLs and arguments are passed intact.
+	wchar_t* file = kitsune_utf8_to_wide_alloc(luaL_checkstring(L, 1));
+	wchar_t* params = kitsune_utf8_to_wide_alloc(luaL_checkstring(L, 2));
+	INT_PTR ok = 0;
+	if (file && params)
+		ok = (INT_PTR)ShellExecuteW(NULL, L"open", file, params, NULL, SW_SHOW);
+	kitsune_free(file);
+	kitsune_free(params);
 	lua_pop(L, lua_gettop(L));
 	lua_pushboolean(L, ok > 32);
 	return 1;

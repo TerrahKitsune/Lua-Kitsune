@@ -1,5 +1,5 @@
 ﻿#include "stream.h"
-#include "luawchar.h"
+#include "luatext.h"
 #include "luadecimal.h"
 #include "luaidentifier.h"
 #include "luadatetime.h"
@@ -555,7 +555,9 @@ int ReadUnsignedLong(lua_State* L) {
 	return 1;
 }
 
-int ReadWchar(lua_State* L) {
+// Reads n UTF-16LE code units (2 bytes each; all remaining when n is omitted) and
+// pushes them decoded as a UTF-8 string. Returns nil if nothing could be read.
+int ReadUtf16(lua_State* L) {
 	LuaStream* s = lua_toluastream(L, 1);
 	if (!(s->Caps & STREAM_CAP_READ)) {
 		lua_pushnil(L);
@@ -571,27 +573,36 @@ int ReadWchar(lua_State* L) {
 			lua_pushnil(L);
 			return 1;
 		}
-		byteCount = (size_t)n * sizeof(char16_t);  // always 2 bytes per unit on every platform
+		byteCount = (size_t)n * 2;
 	}
 	StreamRead(L, s, byteCount);
 	size_t outLen = 0;
 	const char* raw = lua_type(L, -1) == LUA_TSTRING ? lua_tolstring(L, -1, &outLen) : NULL;
-	if (!raw || outLen < sizeof(char16_t)) {
+	if (!raw || outLen < 2) {
 		lua_pop(L, 1);
 		lua_pushnil(L);
 		return 1;
 	}
-	size_t char16Count = outLen / sizeof(char16_t);
-	size_t wcharLen = 0;
-	wchar_t* wstr = char16_alloc_as_wchar((const char16_t*)raw, char16Count, &wcharLen);
-	lua_pop(L, 1);  // pop the string; raw is no longer valid
-	if (!wstr) {
-		lua_pushnil(L);
+	lua_pushutf8fromutf16le(L, raw, outLen);
+	lua_remove(L, -2);
+	return 1;
+}
+
+// Writes a UTF-8 string encoded as UTF-16LE (no BOM). Returns the number of bytes written.
+int WriteUtf16(lua_State* L) {
+	LuaStream* s = lua_toluastream(L, 1);
+	size_t len;
+	const char* str = luaL_checklstring(L, 2, &len);
+	if (!(s->Caps & STREAM_CAP_WRITE)) {
+		lua_pushinteger(L, 0);
 		return 1;
 	}
-	LuaWChar* wch = lua_pushwchar(L);
-	wch->str = wstr;
-	wch->len = wcharLen;
+	lua_pushutf16lefromutf8(L, str, len);
+	size_t blen;
+	const char* bytes = lua_tolstring(L, -1, &blen);
+	bool ok = blen == 0 || StreamWrite(L, s, (const BYTE*)bytes, blen);
+	lua_pop(L, 1);
+	lua_pushinteger(L, ok ? (lua_Integer)blen : 0);
 	return 1;
 }
 
@@ -912,26 +923,6 @@ int WriteLuaValue(lua_State* L) {
 		raw = (const BYTE*)lua_tolstring(L, 2, &len);
 		break;
 	case LUA_TUSERDATA:
-		if (lua_iswchar(L, 2)) {
-			LuaWChar* wch = (LuaWChar*)lua_touserdata(L, 2);
-			if (wch && wch->str && wch->len > 0) {
-				size_t char16Count = 0;
-				char16_t* buf = wchar_alloc_as_char16(wch->str, wch->len, &char16Count);
-				if (!buf) {
-					lua_pushinteger(L, 0);
-					return 1;
-				}
-				size_t byteLen = char16Count * sizeof(char16_t);
-				if (limit > 0 && limit < byteLen)
-					byteLen = limit;
-				bool ok = StreamWrite(L, stream, (const BYTE*)buf, byteLen);
-				kitsune_free(buf);
-				lua_pushinteger(L, ok ? (lua_Integer)byteLen : 0);
-				return 1;
-			}
-			lua_pushinteger(L, 0);
-			return 1;
-		}
 		if (lua_isdecimal(L, 2)) {
 			// Write the canonical decimal string (UTF-8 bytes, no null terminator).
 			lua_decimal_push_string(L, 2);

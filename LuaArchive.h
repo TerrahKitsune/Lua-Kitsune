@@ -19,7 +19,6 @@ typedef struct LuaArchive {
 	void* buff;
 	char* file;
 	bool isRead;
-	bool useWchar;
 
 	struct archive* a;
 	struct archive_entry* entry;

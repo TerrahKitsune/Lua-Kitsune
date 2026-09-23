@@ -1,7 +1,7 @@
 ﻿#include "luajson.h"
 #include "stream.h"
 #include "utf8bom.h"
-#include "luawchar.h"
+#include "luatext.h"
 #include "luaidentifier.h"
 #include "luadatetime.h"
 #include "luadecimal.h"
@@ -195,8 +195,18 @@ static void enc_string(LuaJson* j, lua_State* L) {
 				char esc[7];
 				snprintf(esc, sizeof(esc), "\\u%04x", c);
 				jbuf_emit(j, L, esc, 6);
-			} else {
+			} else if (c < 0x80) {
 				jbuf_emitc(j, L, (char)c);
+			} else {
+				// Valid UTF-8 passes through unchanged; malformed bytes become U+FFFD so the
+				// output is always valid JSON (binary data belongs in Base64 or a Stream).
+				size_t start = i;
+				uint32_t cp = kitsune_utf8_next(s, len, &i);
+				if (cp == 0xFFFD)
+					jbuf_emit(j, L, "\xEF\xBF\xBD", 3);
+				else
+					jbuf_emit(j, L, s + start, i - start);
+				i--;  // the loop increments i
 			}
 		}
 	}
@@ -341,13 +351,6 @@ static void enc_value(LuaJson* j, lua_State* L, int depth) {
 		enc_table(j, L, depth);
 		break;
 	case LUA_TUSERDATA:
-		if (lua_iswchar(L, -1)) {
-			// Convert to UTF-8 via the existing Wchar helper, then encode as a JSON string.
-			ToUtf8(L);            // pushes a UTF-8 Lua string
-			enc_string(j, L);
-			lua_pop(L, 1);
-			break;
-		}
 		if (lua_isidentifier(L, -1)) {
 			lua_identifier_push_string(L, -1);
 			enc_string(j, L);
@@ -467,39 +470,37 @@ static void jread_unget(LuaJson* j, lua_State* L, char c) {
 	j->unget[j->ungetLen++] = c;
 }
 
+// Consumes a UTF-8 BOM at the start of chunked input (sync streams and supplier functions;
+// string input uses skip_utf8_bom). Bytes that turn out not to be a BOM are pushed back.
+static void dec_skip_bom(LuaJson* j, lua_State* L) {
+	char c0 = jread_next(j);
+	if (c0 != '\xEF') {
+		if (c0)
+			jread_unget(j, L, c0);
+		return;
+	}
+	char c1 = jread_next(j);
+	if (c1 != '\xBB') {
+		if (c1)
+			jread_unget(j, L, c1);
+		jread_unget(j, L, c0);
+		return;
+	}
+	char c2 = jread_next(j);
+	if (c2 != '\xBF') {
+		if (c2)
+			jread_unget(j, L, c2);
+		jread_unget(j, L, c1);
+		jread_unget(j, L, c0);
+	}
+}
+
 static char jread_skip(LuaJson* j) {
 	char c;
 	while ((c = jread_next(j)) != '\0')
 		if (c != ' ' && c != '\t' && c != '\r' && c != '\n')
 			return c;
 	return '\0';
-}
-
-// =============================================================================
-// Decoder — UTF-8 helper
-// =============================================================================
-
-static int utf8_encode(unsigned int cp, char* out) {
-	if (cp <= 0x7F) {
-		out[0] = (char)cp;
-		return 1;
-	}
-	if (cp <= 0x7FF) {
-		out[0] = (char)(0xC0 | (cp >> 6));
-		out[1] = (char)(0x80 | (cp & 0x3F));
-		return 2;
-	}
-	if (cp <= 0xFFFF) {
-		out[0] = (char)(0xE0 | (cp >> 12));
-		out[1] = (char)(0x80 | ((cp >> 6) & 0x3F));
-		out[2] = (char)(0x80 | (cp & 0x3F));
-		return 3;
-	}
-	out[0] = (char)(0xF0 | (cp >> 18));
-	out[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
-	out[2] = (char)(0x80 | ((cp >> 6)  & 0x3F));
-	out[3] = (char)(0x80 | (cp & 0x3F));
-	return 4;
 }
 
 // =============================================================================
@@ -540,26 +541,38 @@ static void dec_string(LuaJson* j, lua_State* L) {
 				if (!hex[k])
 					luaL_error(L, "Json: unexpected end in \\u escape");
 			}
+			// Unpaired surrogates cannot be represented in UTF-8 and become U+FFFD.
 			unsigned int cp = (unsigned int)strtoul(hex, NULL, 16);
-			if (cp >= 0xD800 && cp <= 0xDBFF) {
+			char utf8[4];
+			while (cp >= 0xD800 && cp <= 0xDBFF) {
 				char p1 = jread_next(j);
 				char p2 = jread_next(j);
-				if (p1 == '\\' && p2 == 'u') {
-					char hex2[5] = { 0 };
-					for (int k = 0; k < 4; k++)
-						hex2[k] = jread_next(j);
-					unsigned int low = (unsigned int)strtoul(hex2, NULL, 16);
-					if (low >= 0xDC00 && low <= 0xDFFF)
-						cp = 0x10000 + ((cp - 0xD800) << 10) + (low - 0xDC00);
-					// Invalid low surrogate: encode high alone, discard low hex
-				} else {
+				if (p1 != '\\' || p2 != 'u') {
 					jread_unget(j, L, p2);
 					jread_unget(j, L, p1);
+					cp = 0xFFFD;
+					break;
 				}
+				char hex2[5] = { 0 };
+				for (int k = 0; k < 4; k++) {
+					hex2[k] = jread_next(j);
+					if (!hex2[k])
+						luaL_error(L, "Json: unexpected end in \\u escape");
+				}
+				unsigned int low = (unsigned int)strtoul(hex2, NULL, 16);
+				if (low >= 0xDC00 && low <= 0xDFFF) {
+					cp = 0x10000 + ((cp - 0xD800) << 10) + (low - 0xDC00);
+					break;
+				}
+				// The high surrogate is unpaired; the second escape is its own character
+				// (and, if it is another high surrogate, may pair with the escape after it).
+				luaL_addlstring(&b, utf8, kitsune_utf8_encode(utf8, 0xFFFD));
+				cp = low;
 			}
-			char utf8[5] = { 0 };
-			int  n       = utf8_encode(cp, utf8);
-			luaL_addlstring(&b, utf8, (size_t)n);
+			if (cp >= 0xDC00 && cp <= 0xDFFF) {
+				cp = 0xFFFD;
+			}
+			luaL_addlstring(&b, utf8, kitsune_utf8_encode(utf8, cp));
 			break;
 		}
 		default:
@@ -798,6 +811,7 @@ int lua_json_decode(lua_State* L) {
 		dec_reset(j, NULL, 0);
 		j->chunkFnIdx = lua_gettop(L);
 		j->chunkL     = L;
+		dec_skip_bom(j, L);
 		dec_value(j, L);
 		j->chunkFnIdx = 0;
 		j->chunkL     = NULL;
@@ -808,6 +822,7 @@ int lua_json_decode(lua_State* L) {
 		dec_reset(j, NULL, 0);
 		j->chunkFnIdx = 2;
 		j->chunkL     = L;
+		dec_skip_bom(j, L);
 	} else {
 		s = luaL_checklstring(L, 2, &len);
 		skip_utf8_bom(&s, &len);
@@ -918,6 +933,7 @@ int lua_json_decode_from_stream(lua_State* L) {
 	j->chunkFnIdx = fnIdx;
 	j->chunkL     = L;
 
+	dec_skip_bom(j, L);
 	dec_value(j, L);
 
 	j->chunkFnIdx = 0;

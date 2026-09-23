@@ -1,188 +1,79 @@
 ﻿#include "luacsv.h"
 #include <string.h>
-#include "luawchar.h"
+#include "luatext.h"
+#include "utf8bom.h"
 #include "stream.h"
-#ifndef _WIN32
-#include <iconv.h>
-// Converts UTF-8 src into *dstBuf (grown via kitsune_realloc if needed).
-// Returns the number of wchar_t code units written.
-static size_t csv_utf8_to_wchar(const char* src, size_t srcLen,
-	wchar_t** dstBuf, size_t* dstCap) {
-	size_t need = srcLen; // conservative upper bound
-	if (need > *dstCap) {
-		wchar_t* nb = (wchar_t*)kitsune_realloc(*dstBuf, (need + 1) * sizeof(wchar_t));
-		if (!nb)
-			return 0;
-		*dstBuf = nb;
-		*dstCap = need;
-	}
-	iconv_t cd = iconv_open("WCHAR_T", "UTF-8");
-	if (cd == (iconv_t)-1)
-		return 0;
-	char* in = (char*)src;
-	size_t inLeft = srcLen;
-	char* out = (char*)*dstBuf;
-	size_t outLeft = need * sizeof(wchar_t);
-	iconv(cd, &in, &inLeft, &out, &outLeft);
-	iconv_close(cd);
-	size_t written = (need * sizeof(wchar_t) - outLeft) / sizeof(wchar_t);
-	(*dstBuf)[written] = L'\0';
-	return written;
-}
-#endif
 
-// Calls the chunk-supplier function stored in csv->streamFuncRef.
-// If the supplier returns a LuaWChar userdata it is converted to a UTF-8 string first,
-// then the string is decoded to wchar_t and stored in streamBuf.
-// Sets streamDone=true on nil / false / non-string / empty result.
-static void RefillStreamBuffer(LuaCsv* csv) {
-	csv->streamPos = 0;
-	csv->streamLen = 0;
+// Decodes a UTF-8 chunk and appends it to streamBuf after [0, streamLen). A character
+// split across chunk boundaries is carried over to the next call (csv->utf8Carry);
+// s == NULL flushes the carry at end of input. Returns false on out-of-memory.
+static bool AppendUtf8ToStreamBuf(LuaCsv* csv, const char* s, size_t slen) {
+	size_t need = csv->streamLen + slen + 4;  // kitsune_utf8_to_wide_chunk worst case
+	if (need > csv->streamAlloc) {
+		wchar_t* nb = (wchar_t*)kitsune_realloc(csv->streamBuf, (need + 1) * sizeof(wchar_t));
+		if (!nb)
+			return false;
+		csv->streamBuf   = nb;
+		csv->streamAlloc = need;
+	}
+	csv->streamLen += kitsune_utf8_to_wide_chunk(&csv->utf8Carry, s, slen, csv->streamBuf + csv->streamLen);
+
+	// Drop a UTF-8 BOM (U+FEFF) at the very start of the input; it may have been split
+	// across chunks, so check the first decoded character rather than the raw bytes.
+	if (!csv->bomChecked && csv->streamLen > 0) {
+		csv->bomChecked = true;
+		if (csv->streamBuf[0] == 0xFEFF) {
+			memmove(csv->streamBuf, csv->streamBuf + 1, (csv->streamLen - 1) * sizeof(wchar_t));
+			csv->streamLen--;
+			csv->streamBuf[csv->streamLen] = L'\0';
+		}
+	}
+	return true;
+}
+
+// Calls the chunk-supplier function once and appends the decoded chunk to streamBuf.
+// On nil / false / non-string / empty result sets streamDone and flushes the carry.
+static void FetchSupplierChunk(LuaCsv* csv) {
 	lua_State* L = csv->streamL;
 
 	lua_rawgeti(L, LUA_REGISTRYINDEX, csv->streamFuncRef);
 	lua_call_nohook(L, 0, 1);  // errors propagate to the Lua caller naturally
 
-	// LuaWChar userdata ? convert to UTF-8 string, then fall through to the string path
-	if (lua_iswchar(L, -1)) {
-		luaL_tolstring(L, -1, NULL);  // pushes UTF-8 string on top
-		lua_remove(L, -2);            // remove the Wchar; string is now at -1
-	}
-
-	// Anything other than a non-empty string signals end-of-stream
-	if (lua_type(L, -1) != LUA_TSTRING) {
-		lua_pop(L, 1);
-		csv->streamDone = true;
-		return;
-	}
-
-	size_t slen;
-	const char* s = lua_tolstring(L, -1, &slen);
+	size_t slen = 0;
+	const char* s = lua_type(L, -1) == LUA_TSTRING ? lua_tolstring(L, -1, &slen) : NULL;
+	bool ok;
 	if (!s || slen == 0) {
-		lua_pop(L, 1);
 		csv->streamDone = true;
-		return;
+		ok = AppendUtf8ToStreamBuf(csv, NULL, 0);
 	}
-
-	// Convert UTF-8 ? wchar_t
-#ifdef _WIN32
-	int wlen = MultiByteToWideChar(CP_UTF8, 0, s, (int)slen, NULL, 0);
-	if (wlen <= 0) {
-		lua_pop(L, 1);
-		csv->streamDone = true;
-		return;
+	else {
+		ok = AppendUtf8ToStreamBuf(csv, s, slen);
 	}
-
-	if ((size_t)wlen > csv->streamAlloc) {
-		wchar_t* nb = (wchar_t*)kitsune_realloc(csv->streamBuf, ((size_t)wlen + 1) * sizeof(wchar_t));
-		if (!nb) {
-			lua_pop(L, 1);
-			csv->streamDone = true;
-			luaL_error(L, "Out of memory");
-		}
-		csv->streamBuf   = nb;
-		csv->streamAlloc = (size_t)wlen;
-	}
-
-	MultiByteToWideChar(CP_UTF8, 0, s, (int)slen, csv->streamBuf, wlen);
-	csv->streamBuf[wlen] = L'\0';
-	csv->streamLen       = (size_t)wlen;
-#else
-	size_t wlen = csv_utf8_to_wchar(s, slen, &csv->streamBuf, &csv->streamAlloc);
-	if (wlen == 0 && slen > 0) {
-		lua_pop(L, 1);
-		csv->streamDone = true;
-		return;
-	}
-	csv->streamLen = wlen;
-#endif
-
 	lua_pop(L, 1);
+
+	if (!ok) {
+		csv->streamDone = true;
+		luaL_error(L, "Out of memory");
+	}
+}
+
+// Replaces the consumed streamBuf with the next chunk(s) from the supplier. Keeps
+// fetching while a chunk decodes to nothing (it only held the start of a split
+// character), so on return there is data or the supplier is exhausted.
+static void RefillStreamBuffer(LuaCsv* csv) {
+	csv->streamPos = 0;
+	csv->streamLen = 0;
+	while (csv->streamLen == 0 && !csv->streamDone)
+		FetchSupplierChunk(csv);
 }
 
 // Fetches one chunk from the supplier and APPENDS it to the existing streamBuf
 // content.  Unlike RefillStreamBuffer, does not reset streamPos or streamLen.
 // Used by BufferUntilNewline to accumulate multiple chunks for delimiter sniffing.
 static void AppendStreamBuffer(LuaCsv* csv) {
-	lua_State* L = csv->streamL;
-
-	lua_rawgeti(L, LUA_REGISTRYINDEX, csv->streamFuncRef);
-	lua_call_nohook(L, 0, 1);
-
-	if (lua_iswchar(L, -1)) {
-		luaL_tolstring(L, -1, NULL);
-		lua_remove(L, -2);
-	}
-
-	if (lua_type(L, -1) != LUA_TSTRING) {
-		lua_pop(L, 1);
-		csv->streamDone = true;
-		return;
-	}
-
-	size_t slen;
-	const char* s = lua_tolstring(L, -1, &slen);
-	if (!s || slen == 0) {
-		lua_pop(L, 1);
-		csv->streamDone = true;
-		return;
-	}
-
-#ifdef _WIN32
-	int wlenNew = MultiByteToWideChar(CP_UTF8, 0, s, (int)slen, NULL, 0);
-	if (wlenNew <= 0) {
-		lua_pop(L, 1);
-		csv->streamDone = true;
-		return;
-	}
-
-	size_t totalLen = csv->streamLen + (size_t)wlenNew;
-	if (totalLen > csv->streamAlloc) {
-		wchar_t* nb = (wchar_t*)kitsune_realloc(csv->streamBuf, (totalLen + 1) * sizeof(wchar_t));
-		if (!nb) {
-			lua_pop(L, 1);
-			luaL_error(L, "Out of memory");
-		}
-		csv->streamBuf   = nb;
-		csv->streamAlloc = totalLen;
-	}
-
-	MultiByteToWideChar(CP_UTF8, 0, s, (int)slen, csv->streamBuf + csv->streamLen, wlenNew);
-	csv->streamLen       = totalLen;
-	csv->streamBuf[totalLen] = L'\0';
-#else
-	{
-		size_t prevLen = csv->streamLen;
-		// Grow the buffer to hold prevLen + slen wchars (conservative upper bound: UTF-8
-		// bytes >= UTF-32 code units, so slen is a safe upper bound for the new chunk).
-		size_t needed = prevLen + slen;
-		if (needed > csv->streamAlloc) {
-			wchar_t* nb = (wchar_t*)kitsune_realloc(csv->streamBuf, (needed + 1) * sizeof(wchar_t));
-			if (!nb) { lua_pop(L, 1); luaL_error(L, "Out of memory"); }
-			csv->streamBuf   = nb;
-			csv->streamAlloc = needed;
-		}
-		// Convert directly into the append position so the existing [0..prevLen) data
-		// is never touched.  The earlier csv_utf8_to_wchar pattern was wrong: it wrote
-		// from offset 0, silently corrupting the already-buffered rows.
-		size_t wlenNew = 0;
-		iconv_t cd = iconv_open("WCHAR_T", "UTF-8");
-		if (cd != (iconv_t)-1) {
-			char* in = (char*)s;
-			size_t inLeft = slen;
-			char* out = (char*)(csv->streamBuf + prevLen);
-			size_t outLeft = (csv->streamAlloc - prevLen) * sizeof(wchar_t);
-			iconv(cd, &in, &inLeft, &out, &outLeft);
-			iconv_close(cd);
-			wlenNew = ((csv->streamAlloc - prevLen) * sizeof(wchar_t) - outLeft) / sizeof(wchar_t);
-		}
-		csv->streamLen = prevLen + wlenNew;
-		csv->streamBuf[csv->streamLen] = L'\0';
-	}
-#endif
-
-	lua_pop(L, 1);
+	FetchSupplierChunk(csv);
 }
+
 
 // Ensures streamBuf contains at least one complete line before returning.
 // Calls RefillStreamBuffer to get the first chunk, then keeps appending chunks
@@ -210,7 +101,7 @@ static void BufferUntilNewline(LuaCsv* csv) {
 // between row boundaries must call EnsureStreamRefilled first.
 static bool IsAtEnd(LuaCsv* csv) {
 	if (csv->data)
-		return csv->pos >= (int)csv->data->len;
+		return csv->pos >= (int)csv->dataLen;
 	if (csv->streamFuncRef != LUA_NOREF || csv->streamRef != LUA_NOREF)
 		return csv->streamPos >= (int)csv->streamLen && csv->streamDone;
 	return true;
@@ -230,8 +121,8 @@ static wchar_t GetNext(LuaCsv* csv, bool peek = false) {
 	wchar_t last;
 	if (csv->data) {
 		// String mode: exhausted data returns L'\0', never falls into streaming branch.
-		if (csv->pos < (int)csv->data->len) {
-			last = csv->data->str[csv->pos];
+		if (csv->pos < (int)csv->dataLen) {
+			last = csv->data[csv->pos];
 			if (!peek)
 				csv->pos++;
 		} else {
@@ -316,10 +207,9 @@ static void PushAndClearBuffer(LuaCsv* csv, lua_State* L) {
 	const wchar_t* buf = csv->buffer ? csv->buffer : L"";
 	size_t         len = csv->len;
 
-	// Fast path: if every wide char is within the ASCII range push a plain Lua
-	// string instead of constructing a LuaWChar userdata.  This avoids the heap
-	// allocation and GC pressure for the common case of numeric columns, dates,
-	// and short English text — the overwhelming majority of real CSV cells.
+	// Fields are always returned as UTF-8 Lua strings. Fast path: pure-ASCII
+	// fields (numbers, dates, short English text, the overwhelming majority of
+	// real CSV cells) are narrowed byte by byte without a UTF-8 conversion.
 	bool ascii = true;
 	for (size_t i = 0; i < len && ascii; i++) {
 		if ((unsigned int)buf[i] > 127u)
@@ -333,7 +223,7 @@ static void PushAndClearBuffer(LuaCsv* csv, lua_State* L) {
 			luaL_addchar(&b, (char)buf[i]);
 		luaL_pushresult(&b);
 	} else {
-		lua_pushwchar(L, buf, len);
+		lua_pushwideasutf8(L, buf, len);
 	}
 
 	ClearBuffer(csv);
@@ -554,7 +444,7 @@ static wchar_t ParseDelimiter(lua_State* L, int idx, wchar_t noArgDefault) {
 	return noArgDefault;
 }
 
-// Internal decode: str_or_wchar at L[1], csv->delimiter pre-set.
+// Internal decode: UTF-8 string at L[1], csv->delimiter pre-set.
 // Resets transient parse fields; preserves csv->buffer allocation for reuse.
 // Saves and restores csv->delimiter so auto-detect re-fires on every call.
 //
@@ -571,24 +461,24 @@ static int DecodeCsvWith(lua_State* L, LuaCsv* csv) {
 
 	wchar_t savedDelim = csv->delimiter;
 
-	if (lua_iswchar(L, 1)) {
-		lua_pushvalue(L, 1);
-	} else {
-		lua_pushvalue(L, 1);
-		FromUtf8(L);
-		lua_remove(L, -2);
-	}
-	csv->data = lua_towchar(L, -1);
-	csv->pos  = 0;
+	// The decoded input lives in a userdata on the stack, so it is freed even if parsing raises.
+	size_t slen;
+	const char* s = luaL_checklstring(L, 1, &slen);
+	skip_utf8_bom(&s, &slen);  // Excel "CSV UTF-8" files start with a BOM
+	wchar_t* wide = (wchar_t*)lua_newuserdatauv(L, (slen + 1) * sizeof(wchar_t), 0);
+	csv->dataLen = kitsune_utf8_to_wide(s, slen, wide);
+	csv->data    = wide;
+	csv->pos     = 0;
 
 	if (csv->delimiter == L'\0')
-		csv->delimiter = (csv->data && csv->data->len > 0)
-			? SniffDelimiter(csv->data->str, csv->data->len)
+		csv->delimiter = (csv->dataLen > 0)
+			? SniffDelimiter(csv->data, csv->dataLen)
 			: L',';
 
 	Decode(csv, L);
 
 	csv->data      = NULL;
+	csv->dataLen   = 0;
 	csv->delimiter = savedDelim;
 	lua_remove(L, -2);
 	return 1;
@@ -710,54 +600,8 @@ static bool CsvAppendChunkToStreamBuf(LuaCsv* csv, const char* s, size_t slen) {
 		memmove(csv->streamBuf, csv->streamBuf + csv->streamPos, remaining * sizeof(wchar_t));
 	csv->streamLen = remaining;
 	csv->streamPos = 0;
-	// Convert and append the new UTF-8 chunk.
-#ifdef _WIN32
-	int wlen = MultiByteToWideChar(CP_UTF8, 0, s, (int)slen, NULL, 0);
-	if (wlen <= 0)
-		return true;  // skip empty/invalid
-	if ((size_t)(wlen) + csv->streamLen > csv->streamAlloc) {
-		size_t need = csv->streamLen + (size_t)wlen;
-		wchar_t* nb = (wchar_t*)kitsune_realloc(csv->streamBuf, (need + 1) * sizeof(wchar_t));
-		if (!nb)
-			return false;
-		csv->streamBuf   = nb;
-		csv->streamAlloc = need;
-	}
-	MultiByteToWideChar(CP_UTF8, 0, s, (int)slen, csv->streamBuf + csv->streamLen, wlen);
-	csv->streamLen += (size_t)wlen;
-	csv->streamBuf[csv->streamLen] = L'\0';
-#else
-	{
-		// Use iconv directly at the append offset so the compacted [0..remaining)
-		// data is never touched.  The old csv_utf8_to_wchar path wrote from
-		// position 0, silently overwriting the remainder and then writing the
-		// null terminator past the end of the allocation — causing heap corruption
-		// on Linux ("free(): invalid pointer") when multiple chunks were appended.
-		size_t prevLen = csv->streamLen;                // = remaining after compaction
-		size_t needed  = prevLen + slen;                // safe upper bound in wchar_t
-		if (needed > csv->streamAlloc) {
-			wchar_t* nb = (wchar_t*)kitsune_realloc(csv->streamBuf, (needed + 1) * sizeof(wchar_t));
-			if (!nb)
-				return false;
-			csv->streamBuf   = nb;
-			csv->streamAlloc = needed;
-		}
-		size_t wlenNew = 0;
-		iconv_t cd = iconv_open("WCHAR_T", "UTF-8");
-		if (cd != (iconv_t)-1) {
-			char*  in      = (char*)s;
-			size_t inLeft  = slen;
-			char*  out     = (char*)(csv->streamBuf + prevLen);
-			size_t outLeft = (csv->streamAlloc - prevLen) * sizeof(wchar_t);
-			iconv(cd, &in, &inLeft, &out, &outLeft);
-			iconv_close(cd);
-			wlenNew = ((csv->streamAlloc - prevLen) * sizeof(wchar_t) - outLeft) / sizeof(wchar_t);
-		}
-		csv->streamLen = prevLen + wlenNew;
-		csv->streamBuf[csv->streamLen] = L'\0';
-	}
-#endif
-	return true;
+	// Convert and append the new UTF-8 chunk (s == NULL flushes a carried partial character).
+	return AppendUtf8ToStreamBuf(csv, s, slen);
 }
 
 static int CsvStreamContinuation(lua_State* L, int status, lua_KContext ctx);
@@ -810,15 +654,19 @@ static int CsvStreamIterator(lua_State* L) {
 static int CsvStreamContinuation(lua_State* L, int status, lua_KContext ctx) {
 	LuaCsv* csv = (LuaCsv*)lua_touserdata(L, lua_upvalueindex(1));
 
+	bool ok;
 	if (lua_type(L, -1) == LUA_TSTRING) {
 		size_t slen = 0;
 		const char* s = lua_tolstring(L, -1, &slen);
-		CsvAppendChunkToStreamBuf(csv, s, slen);
+		ok = CsvAppendChunkToStreamBuf(csv, s, slen);
 		lua_pop(L, 1);
 	} else {
 		lua_pop(L, 1);
 		csv->streamDone = true;
+		ok = CsvAppendChunkToStreamBuf(csv, NULL, 0);
 	}
+	if (!ok)
+		return luaL_error(L, "Out of memory");
 
 	bool hasRow = csv->streamDone;
 	for (size_t i = (size_t)csv->streamPos; i < csv->streamLen && !hasRow; i++) {
@@ -932,7 +780,7 @@ int lua_csv_new(lua_State* L) {
 	return 1;
 }
 
-// csv:Decode(str_or_wchar)
+// csv:Decode(str)
 int lua_csv_decode(lua_State* L) {
 	LuaCsv* csv = (LuaCsv*)luaL_checkudata(L, 1, LUACSV);
 	lua_remove(L, 1);       // str ? arg 1

@@ -1,11 +1,50 @@
 #include "LuaArchive.h"
-#include "luawchar.h"
+#include "luatext.h"
+#include <errno.h>
 
+// Entry names are always returned as UTF-8 strings. archive_entry_pathname() uses the
+// locale's code page on Windows, so the UTF-8 and wide forms are tried first.
+static void push_entry_name(lua_State* L, struct archive_entry* entry) {
+
+	const char* utf8 = archive_entry_pathname_utf8(entry);
+	if (utf8) {
+		lua_pushstring(L, utf8);
+		return;
+	}
+
+	const wchar_t* wide = archive_entry_pathname_w(entry);
+	if (wide) {
+		lua_pushwideasutf8(L, wide);
+		return;
+	}
+
+	const char* name = archive_entry_pathname(entry);
+	lua_pushstring(L, name ? name : "");
+}
+
+// Opens a UTF-8 path. archive_read_open_filename() reads the path in the ANSI code
+// page on Windows, so the wide-char variant is used there.
+static int open_archive_file(struct archive* a, const char* path) {
+#ifdef _WIN32
+	wchar_t* wpath = kitsune_utf8_to_wide_alloc(path);
+	if (!wpath) {
+		archive_set_error(a, ENOMEM, "out of memory");
+		return ARCHIVE_FATAL;
+	}
+
+	int r = archive_read_open_filename_w(a, wpath, 10240);
+	kitsune_free(wpath);
+	return r;
+#else
+	return archive_read_open_filename(a, path, 10240);
+#endif
+}
+
+// The optional second argument (usewchar) is accepted for compatibility and ignored.
 int OpenReadArchive(lua_State* L) {
 
 	size_t len;
 	const char* file = luaL_checklstring(L, 1, &len);
-	int useWchar = lua_toboolean(L, 2);
 
 	struct archive* a;
 	struct archive_entry* entry = NULL;
@@ -16,7 +55,7 @@ int OpenReadArchive(lua_State* L) {
 	archive_read_support_filter_all(a);
 	archive_read_support_format_all(a);
 
-	r = archive_read_open_filename(a, file, 10240);
+	r = open_archive_file(a, file);
 
 	if (r != ARCHIVE_OK) {
 		
@@ -29,8 +68,6 @@ int OpenReadArchive(lua_State* L) {
 	archive_read_free(a);
 
 	LuaArchive* arc = lua_pusharchive(L);
-
-	arc->useWchar = useWchar != 0;
 
 	arc->isRead = true;
 	arc->file = (char*)kitsune_malloc(len+1);
@@ -69,7 +106,7 @@ int ReadArchiveEntries(lua_State* L) {
 	archive_read_support_filter_all(a);
 	archive_read_support_format_all(a);
 
-	r = archive_read_open_filename(a, arc->file, 10240);
+	r = open_archive_file(a, arc->file);
 
 	if (r != ARCHIVE_OK) {
 
@@ -88,12 +125,7 @@ int ReadArchiveEntries(lua_State* L) {
 		lua_createtable(L, 0, 2);
 
 		lua_pushstring(L, "Name");
-		if (arc->useWchar) {
-			lua_pushwchar(L, archive_entry_pathname_w(entry));
-		}
-		else {
-			lua_pushstring(L, archive_entry_pathname(entry));
-		}
+		push_entry_name(L, entry);
 		lua_settable(L, -3);
 
 		lua_pushstring(L, "Size");
@@ -242,7 +274,7 @@ int SetReadEntry(lua_State* L) {
 	archive_read_support_filter_all(arc->a);
 	archive_read_support_format_all(arc->a);
 
-	r = archive_read_open_filename(arc->a, arc->file, 10240);
+	r = open_archive_file(arc->a, arc->file);
 
 	if (r != ARCHIVE_OK) {
 
@@ -257,12 +289,7 @@ int SetReadEntry(lua_State* L) {
 	while (r == ARCHIVE_OK) {
 
 		if (target == ++nth) {
-			if (arc->useWchar) {
-				lua_pushwchar(L, archive_entry_pathname_w(arc->entry));
-			}
-			else {
-				lua_pushstring(L, archive_entry_pathname(arc->entry));
-			}
+			push_entry_name(L, arc->entry);
 			lua_pushinteger(L, archive_entry_size(arc->entry));
 			return 2;
 		}

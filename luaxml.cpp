@@ -3,7 +3,6 @@
 #include "luadecimal.h"
 #include "luaidentifier.h"
 #include "luadatetime.h"
-#include "luawchar.h"
 #include "luauint.h"
 #include "luatimespan.h"
 #include "pugixml/pugixml.hpp"
@@ -397,14 +396,6 @@ int lua_xml_encode(lua_State* L) {
 				}
 				else if (lua_isdatetime(L, -1)) {
 					lua_datetime_push_string(L, -1);
-					tv = lua_tolstring(L, -1, &tlen);
-					if (tv && tlen > 0)
-						elem.append_child(pugi::node_pcdata).set_value(tv);
-					lua_pop(L, 1);
-					tv = NULL;
-				}
-				else if (lua_iswchar(L, -1)) {
-					ToUtf8(L);
 					tv = lua_tolstring(L, -1, &tlen);
 					if (tv && tlen > 0)
 						elem.append_child(pugi::node_pcdata).set_value(tv);
