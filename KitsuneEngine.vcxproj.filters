@@ -988,9 +988,6 @@
     <ClInclude Include="kitsunefile.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="kitsuneconsole.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="kitsunestdlib.h">
       <Filter>Header Files</Filter>
     </ClInclude>

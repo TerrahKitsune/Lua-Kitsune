@@ -22,6 +22,13 @@ static void push_entry_name(lua_State* L, struct archive_entry* entry) {
 	lua_pushstring(L, name ? name : "");
 }
 
+// Pushes libarchive's error message for a, or a generic one when it has none.
+static void push_archive_error(lua_State* L, struct archive* a, const char* fallback) {
+
+	const char* err = a ? archive_error_string(a) : NULL;
+	lua_pushstring(L, err ? err : fallback);
+}
+
 // Opens a UTF-8 path. archive_read_open_filename() reads the path in the ANSI code
 // page on Windows, so the wide-char variant is used there.
 static int open_archive_file(struct archive* a, const char* path) {
@@ -51,6 +58,11 @@ int OpenReadArchive(lua_State* L) {
 	int r;
 
 	a = archive_read_new();
+	if (!a) {
+		lua_pushnil(L);
+		lua_pushstring(L, "Out of memory");
+		return 2;
+	}
 
 	archive_read_support_filter_all(a);
 	archive_read_support_format_all(a);
@@ -58,9 +70,10 @@ int OpenReadArchive(lua_State* L) {
 	r = open_archive_file(a, file);
 
 	if (r != ARCHIVE_OK) {
-		
+
 		lua_pushnil(L);
-		lua_pushstring(L, archive_error_string(a));
+		const char* err = archive_error_string(a);
+		lua_pushstring(L, err ? err : "Unable to open archive");
 		archive_read_free(a);
 		return 2;
 	}
@@ -102,6 +115,11 @@ int ReadArchiveEntries(lua_State* L) {
 	int nth = 0;
 
 	a = archive_read_new();
+	if (!a) {
+		lua_pushnil(L);
+		lua_pushstring(L, "Out of memory");
+		return 2;
+	}
 
 	archive_read_support_filter_all(a);
 	archive_read_support_format_all(a);
@@ -111,7 +129,7 @@ int ReadArchiveEntries(lua_State* L) {
 	if (r != ARCHIVE_OK) {
 
 		lua_pushnil(L);
-		lua_pushstring(L, archive_error_string(a));
+		push_archive_error(L, a, "error reading archive");
 		archive_read_free(a);
 		return 2;
 	}
@@ -142,7 +160,7 @@ int ReadArchiveEntries(lua_State* L) {
 
 		lua_pop(L, lua_gettop(L));
 		lua_pushnil(L);
-		lua_pushstring(L, archive_error_string(a));
+		push_archive_error(L, a, "error reading archive");
 		archive_read_free(a);
 		return 2;
 	}
@@ -270,6 +288,11 @@ int SetReadEntry(lua_State* L) {
 	int nth = 0;
 
 	arc->a = archive_read_new();
+	if (!arc->a) {
+		lua_pushnil(L);
+		lua_pushstring(L, "Out of memory");
+		return 2;
+	}
 
 	archive_read_support_filter_all(arc->a);
 	archive_read_support_format_all(arc->a);
@@ -279,8 +302,11 @@ int SetReadEntry(lua_State* L) {
 	if (r != ARCHIVE_OK) {
 
 		lua_pushnil(L);
-		lua_pushstring(L, archive_error_string(arc->a));
+		const char* err = archive_error_string(arc->a);
+		lua_pushstring(L, err ? err : "Unable to open archive");
 		archive_read_free(arc->a);
+		arc->a = NULL;
+		arc->entry = NULL;
 		return 2;
 	}
 
@@ -304,7 +330,7 @@ int SetReadEntry(lua_State* L) {
 
 		lua_pop(L, lua_gettop(L));
 		lua_pushnil(L);
-		lua_pushstring(L, archive_error_string(arc->a));
+		push_archive_error(L, arc->a, "error reading archive");
 
 		return 2;
 	}

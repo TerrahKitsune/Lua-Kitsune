@@ -50,7 +50,7 @@ unsigned char *base64_decode(const char *data,
 	size_t input_length,
 	size_t *output_length) {
 
-	if (input_length % 4 != 0) return NULL;
+	if (input_length == 0 || input_length % 4 != 0) return NULL;
 
 	*output_length = input_length / 4 * 3;
 	if (data[input_length - 1] == '=') (*output_length)--;
@@ -61,10 +61,10 @@ unsigned char *base64_decode(const char *data,
 
 	for (int i = 0, j = 0; i < input_length;) {
 
-		uint32_t sextet_a = data[i] == '=' ? 0 & i++ : decoding_table[data[i++]];
-		uint32_t sextet_b = data[i] == '=' ? 0 & i++ : decoding_table[data[i++]];
-		uint32_t sextet_c = data[i] == '=' ? 0 & i++ : decoding_table[data[i++]];
-		uint32_t sextet_d = data[i] == '=' ? 0 & i++ : decoding_table[data[i++]];
+		uint32_t sextet_a = data[i] == '=' ? 0 & i++ : decoding_table[(unsigned char)data[i++]];
+		uint32_t sextet_b = data[i] == '=' ? 0 & i++ : decoding_table[(unsigned char)data[i++]];
+		uint32_t sextet_c = data[i] == '=' ? 0 & i++ : decoding_table[(unsigned char)data[i++]];
+		uint32_t sextet_d = data[i] == '=' ? 0 & i++ : decoding_table[(unsigned char)data[i++]];
 
 		uint32_t triple = (sextet_a << 3 * 6)
 			+ (sextet_b << 2 * 6)
@@ -82,6 +82,7 @@ unsigned char *base64_decode(const char *data,
 
 void build_decoding_table() {
 
+	memset(decoding_table, 0, sizeof(decoding_table));   // drop entries from a previous table
 	for (int i = 0; i < 64; i++) {
 		decoding_table[(unsigned char)encoding_table[i]] = i;
 	}
@@ -110,6 +111,11 @@ int lua_base64decode(lua_State *L) {
 
 	size_t len;
 	const char * data = luaL_checklstring(L, 1, &len);
+
+	if (len == 0) {
+		lua_pushliteral(L, "");
+		return 1;
+	}
 
 	size_t encodedlen;
 	unsigned char* decoded = base64_decode(data, len, &encodedlen);

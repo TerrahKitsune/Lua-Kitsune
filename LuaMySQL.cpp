@@ -78,8 +78,12 @@ static void PushAsParamString(lua_State* L, int index) {
 	}
 }
 
+// charsetnr of binary columns (BLOB, BINARY, VARBINARY). The C API reports TEXT columns
+// as BLOB types too; only the charset tells them apart.
+#define MYSQL_BINARY_CHARSET 63
+
 // -- PushMySQLValue ------------------------------------------------------------
-static void PushMySQLValue(lua_State* L, const char* data, unsigned long length, enum_field_types type, unsigned int flags) {
+static void PushMySQLValue(lua_State* L, const char* data, unsigned long length, enum_field_types type, unsigned int flags, unsigned int charsetnr) {
 	char* endptr;
 	switch (type) {
 	case MYSQL_TYPE_NULL:
@@ -97,10 +101,20 @@ static void PushMySQLValue(lua_State* L, const char* data, unsigned long length,
 		break;
 	}
 	case MYSQL_TYPE_FLOAT:
-	case MYSQL_TYPE_BIT:
 	case MYSQL_TYPE_DOUBLE:
 		lua_pushnumber(L, strtod(data, &endptr));
 		break;
+	case MYSQL_TYPE_BIT: {
+		// BIT(n) arrives as raw big-endian bytes (up to 8), not as text.
+		uint64_t uv = 0;
+		for (unsigned long i = 0; i < length && i < 8; i++)
+			uv = (uv << 8) | (unsigned char)data[i];
+		if (uv <= (uint64_t)LUA_MAXINTEGER)
+			lua_pushinteger(L, (lua_Integer)uv);
+		else
+			lua_pushuint(L)->value = uv;
+		break;
+	}
 	case MYSQL_TYPE_SHORT:
 	case MYSQL_TYPE_TINY:
 	case MYSQL_TYPE_LONG:
@@ -123,7 +137,11 @@ static void PushMySQLValue(lua_State* L, const char* data, unsigned long length,
 	case MYSQL_TYPE_MEDIUM_BLOB:
 	case MYSQL_TYPE_LONG_BLOB:
 	case MYSQL_TYPE_BLOB:
-		lua_pushluastream(L, (uint8_t*)data, length);
+		// TEXT family (a real charset) → string; BLOB family (binary) → stream.
+		if (charsetnr == MYSQL_BINARY_CHARSET)
+			lua_pushluastream(L, (uint8_t*)data, length);
+		else
+			lua_pushlstring(L, data ? data : "", length);
 		break;
 	case MYSQL_TYPE_DATE:
 	case MYSQL_TYPE_DATETIME:
@@ -413,7 +431,7 @@ static int QueryStreamCont(lua_State* L, int status, lua_KContext ctx) {
 		if (!row[i])
 			lua_pushnil(L);
 		else
-			PushMySQLValue(L, row[i], lens[i], fields[i].type, fields[i].flags);
+			PushMySQLValue(L, row[i], lens[i], fields[i].type, fields[i].flags, fields[i].charsetnr);
 		lua_rawseti(L, -2, i + 1);
 	}
 	return lua_yieldk(L, 1, ctx, QueryStreamCont);
@@ -425,15 +443,58 @@ static int QueryStreamCont(lua_State* L, int status, lua_KContext ctx) {
 
 // -- Cross-platform nonblocking query continuations --------------------------
 
+// Drives a pending nonblocking query to completion and discards its result so
+// the connection can accept a new statement. The MySQL async state machine
+// lives in the MYSQL handle, so an in-flight query cannot simply be abandoned:
+// the next mysql_real_query_nonblocking call would resume the old one.
+//   queryInFlight = 1: mysql_real_query_nonblocking returned NOT_READY and has
+//                      not completed yet (QueryRunCont phase).
+//   queryInFlight = 0: the query itself completed; only the result set
+//                      (possibly not yet started) is pending (QueryStoreCont).
+// This blocks (spins on the nonblocking calls) until the server answers.
+static void DrainPendingQuery(LuaMySQLQuery* q, int queryInFlight) {
+	if (q->result) {
+		mysql_free_result(q->result);
+		q->result = NULL;
+	}
+
+	MYSQL* con = q->conn ? q->conn->connection : NULL;
+	if (!con)
+		return;
+
+	net_async_status nas;
+	if (queryInFlight) {
+		do {
+			nas = mysql_real_query_nonblocking(con, q->sql, (unsigned long)q->sqllen);
+		} while (nas == NET_ASYNC_NOT_READY);
+		if (nas != NET_ASYNC_COMPLETE)
+			return;
+	}
+
+	MYSQL_RES* res = NULL;
+	do {
+		nas = mysql_store_result_nonblocking(con, &res);
+	} while (nas == NET_ASYNC_NOT_READY);
+	if (res)
+		mysql_free_result(res);
+}
+
+// Pushes a query-level error string, releases the query state (connection is
+// immediately reusable) and returns it as the coroutine's final value.
+static int QueryFinishWithError(lua_State* L, LuaMySQLQuery* q, const char* fallback) {
+	const char* err = mysql_error(q->conn->connection);
+	lua_pushstring(L, err && err[0] ? err : fallback);
+	FreeQuery(L, q);
+	return 1;
+}
+
 static int QueryStoreCont(lua_State* L, int status, lua_KContext ctx) {
 	(void)status;
 	LuaMySQLQuery* q = (LuaMySQLQuery*)(intptr_t)ctx;
 
 	if (lua_toboolean(L, 1)) {
-		if (q->result) {
-			mysql_free_result(q->result);
-			q->result = NULL;
-		}
+		DrainPendingQuery(q, 0);
+		FreeQuery(L, q);
 		return 0;
 	}
 
@@ -444,9 +505,7 @@ static int QueryStoreCont(lua_State* L, int status, lua_KContext ctx) {
 	}
 
 	if (nas == NET_ASYNC_ERROR || (nas == NET_ASYNC_COMPLETE && !q->result && mysql_errno(q->conn->connection) != 0)) {
-		const char* err = mysql_error(q->conn->connection);
-		lua_pushstring(L, err && err[0] ? err : "query error");
-		return lua_yieldk(L, 1, ctx, QueryStreamCont);
+		return QueryFinishWithError(L, q, "query error");
 	}
 
 	my_ulonglong rowcount = q->result
@@ -462,6 +521,9 @@ static int QueryRunCont(lua_State* L, int status, lua_KContext ctx) {
 	LuaMySQLQuery* q = (LuaMySQLQuery*)(intptr_t)ctx;
 
 	if (lua_toboolean(L, 1)) {
+		// Query is in flight: finish it so the connection is reusable.
+		DrainPendingQuery(q, 1);
+		FreeQuery(L, q);
 		return 0;
 	}
 
@@ -475,10 +537,8 @@ static int QueryRunCont(lua_State* L, int status, lua_KContext ctx) {
 	}
 
 	if (nas == NET_ASYNC_ERROR) {
-		const char* err = mysql_error(q->conn->connection);
-		lua_pushstring(L, err && err[0] ? err : "mysql_real_query_nonblocking error");
 		set_did_work(L);  // error is a result
-		return lua_yieldk(L, 1, ctx, QueryStreamCont);
+		return QueryFinishWithError(L, q, "mysql_real_query_nonblocking error");
 	}
 
 	lua_pushnil(L);
@@ -490,6 +550,8 @@ static int MySqlQueryBody(lua_State* L) {
 	LuaMySQLQuery* q = (LuaMySQLQuery*)lua_touserdata(L, lua_upvalueindex(1));
 
 	if (lua_toboolean(L, 1)) {
+		// Nothing has been sent yet; just release the query state.
+		FreeQuery(L, q);
 		return 0;
 	}
 
@@ -503,10 +565,8 @@ static int MySqlQueryBody(lua_State* L) {
 	}
 
 	if (nas == NET_ASYNC_ERROR) {
-		const char* err = mysql_error(q->conn->connection);
-		lua_pushstring(L, err && err[0] ? err : "mysql_real_query_nonblocking error");
 		set_did_work(L);  // error is a result
-		return lua_yieldk(L, 1, (lua_KContext)(intptr_t)q, QueryStreamCont);
+		return QueryFinishWithError(L, q, "mysql_real_query_nonblocking error");
 	}
 
 	lua_pushnil(L);
@@ -551,65 +611,67 @@ static LuaMySQLQuery* SetupQueryCoroutine(lua_State* L, LuaMySQL* m,
 // HelperStreamCont collects rows one-at-a-time for QueryAll.
 //
 // Correctness rule for FreeQuery ownership:
-//   * Polling phase (QueryRunCont / QueryStoreCont / MySqlQueryBody) never
-//     calls FreeQuery when the stop flag fires — the helper must do it.
+//   * Every phase of T calls FreeQuery itself when the stop flag fires
+//     (MySqlQueryBody, QueryRunCont, QueryStoreCont drain any pending
+//     async work first; QueryStreamCont frees the buffered result).
+//   * A query-level error string is the coroutine's final return value;
+//     FreeQuery has already run when the helper sees it.
 //   * QueryStreamCont ALWAYS calls FreeQuery before returning (stop flag,
-//     nil/error, or natural end of rows).
+//     nil, or natural end of rows).
+//   * FreeQuery unrefs T's registry anchor, so the helper keeps T on L's
+//     stack while resuming it so T cannot be collected mid-use.
+
+// Sends the stop flag to T (if suspended) and releases the query state if T
+// did not already do so. T must be on top of L's stack (it is popped).
+static void HelperStopQuery(lua_State* L, LuaMySQL* conn, LuaMySQLQuery* q) {
+	lua_State* T = lua_tothread(L, -1);
+	if (T && lua_status(T) == LUA_YIELD) {
+		lua_pushboolean(T, 1);
+		int nr2;
+		lua_resume(T, L, 1, &nr2);
+		if (nr2 > 0)
+			lua_pop(T, nr2);
+	}
+	lua_pop(L, 1);
+	if (conn->activeQuery == q)
+		FreeQuery(L, q);
+}
 
 static int HelperWaitCont(lua_State* L, int status, lua_KContext ctx) {
 	(void)status;
 	LuaMySQLQuery* q = (LuaMySQLQuery*)(intptr_t)ctx;
+	LuaMySQL* conn = q->conn;
 
 	// Check app-level token first — direct pointer dereference, no registry lookup.
-	if (q->conn->appToken && !((LuaAliveToken*)q->conn->appToken)->alive) {
-		lua_rawgeti(L, LUA_REGISTRYINDEX, q->conn->queryRef);
-		lua_State* T = lua_tothread(L, -1);
-		lua_pop(L, 1);
-		if (T && lua_status(T) == LUA_YIELD) {
-			lua_pushboolean(T, 1);
-			int nr2;
-			lua_resume(T, L, 1, &nr2);
-			if (nr2 > 0)
-				lua_pop(T, nr2);
-		}
-		FreeQuery(L, q);
+	if (conn->appToken && !((LuaAliveToken*)conn->appToken)->alive) {
+		lua_rawgeti(L, LUA_REGISTRYINDEX, conn->queryRef);
+		HelperStopQuery(L, conn, q);
 		lua_pushboolean(L, 0);
 		lua_pushliteral(L, "cancelled");
 		return 2;
 	}
 
-	// Cancel check. T is in the polling phase here (QueryRunCont / QueryStoreCont).
-	// Those continuations do NOT call FreeQuery on stop — the helper must.
-	// QueryStreamCont DOES call FreeQuery; guard with conn->activeQuery check.
-	if (q->conn->aliveTokenRef != LUA_NOREF) {
-		lua_rawgeti(L, LUA_REGISTRYINDEX, q->conn->aliveTokenRef);
+	// Cancel check. T is in the polling phase here (QueryRunCont / QueryStoreCont),
+	// which releases the query state itself on stop.
+	if (conn->aliveTokenRef != LUA_NOREF) {
+		lua_rawgeti(L, LUA_REGISTRYINDEX, conn->aliveTokenRef);
 		int alive = lua_alivetoken_isalive(L, -1);
 		lua_pop(L, 1);
 		if (alive == 0) {
-			LuaMySQL* conn = q->conn;
 			lua_rawgeti(L, LUA_REGISTRYINDEX, conn->queryRef);
-			lua_State* T = lua_tothread(L, -1);
-			lua_pop(L, 1);
-			if (T && lua_status(T) == LUA_YIELD) {
-				lua_pushboolean(T, 1);
-				int nr2;
-				lua_resume(T, L, 1, &nr2);
-				if (nr2 > 0)
-					lua_pop(T, nr2);
-			}
-			if (conn->activeQuery != NULL)
-				FreeQuery(L, q);
+			HelperStopQuery(L, conn, q);
 			lua_pushboolean(L, 0);
 			lua_pushliteral(L, "cancelled");
 			return 2;
 		}
 	}
 
-	lua_rawgeti(L, LUA_REGISTRYINDEX, q->conn->queryRef);
+	// Keep T on L's stack (anchored) until this continuation finishes with it.
+	lua_rawgeti(L, LUA_REGISTRYINDEX, conn->queryRef);
 	lua_State* T = lua_tothread(L, -1);
-	lua_pop(L, 1);
 
 	if (!T) {
+		lua_pop(L, 1);
 		FreeQuery(L, q);
 		lua_pushboolean(L, 0);
 		lua_pushliteral(L, "connection lost");
@@ -622,33 +684,43 @@ static int HelperWaitCont(lua_State* L, int status, lua_KContext ctx) {
 	if (rc != LUA_OK && rc != LUA_YIELD) {
 		if (nr > 0)
 			lua_pop(T, nr);
-		FreeQuery(L, q);
+		lua_pop(L, 1);
+		if (conn->activeQuery == q)
+			FreeQuery(L, q);
 		lua_pushboolean(L, 0);
 		lua_pushliteral(L, "query coroutine error");
 		return 2;
 	}
 
 	// Still polling (T yielded nil).
-	if (nr == 0 || lua_isnil(T, -1)) {
+	if (rc == LUA_YIELD && (nr == 0 || lua_isnil(T, -1))) {
 		if (nr > 0)
 			lua_pop(T, nr);
+		lua_pop(L, 1);
 		return lua_yieldk(L, 0, ctx, HelperWaitCont);
 	}
 
-	// Query-level error (string). T transitioned to QueryStreamCont; stop it so
-	// QueryStreamCont calls FreeQuery for us.
-	if (lua_type(T, -1) == LUA_TSTRING) {
+	// Query-level error (string). T has returned it and already called FreeQuery.
+	if (nr > 0 && lua_type(T, -1) == LUA_TSTRING) {
 		size_t elen;
 		const char* err = lua_tolstring(T, -1, &elen);
-		lua_pushlstring(L, err, elen); // copy to L before we pop T
+		lua_pushlstring(L, err, elen); // copy to L before we pop T (T still anchored below)
 		lua_pop(T, nr);
-		lua_pushboolean(T, 1);
-		int nr2;
-		lua_resume(T, L, 1, &nr2); // QueryStreamCont stop -> FreeQuery
-		if (nr2 > 0)
-			lua_pop(T, nr2);
+		lua_remove(L, -2); // drop T
 		lua_pushboolean(L, 0);
 		lua_insert(L, -2); // false, errmsg
+		return 2;
+	}
+
+	// T ended without a rowcount (should not happen) — state already released.
+	if (rc == LUA_OK) {
+		if (nr > 0)
+			lua_pop(T, nr);
+		lua_pop(L, 1);
+		if (conn->activeQuery == q)
+			FreeQuery(L, q);
+		lua_pushboolean(L, 0);
+		lua_pushliteral(L, "query ended unexpectedly");
 		return 2;
 	}
 
@@ -711,7 +783,7 @@ static int HelperWaitCont(lua_State* L, int status, lua_KContext ctx) {
 				if (!row[c])
 					lua_pushnil(L);
 				else
-					PushMySQLValue(L, row[c], lens[c], fields[c].type, fields[c].flags);
+					PushMySQLValue(L, row[c], lens[c], fields[c].type, fields[c].flags, fields[c].charsetnr);
 				lua_rawseti(L, -2, c + 1);
 			}
 			lua_rawseti(L, accumIdx, ++q->accumRowIdx);

@@ -454,20 +454,52 @@ static int QueryStreamCont(lua_State* L, int status, lua_KContext ctx) {
 	return lua_yieldk(L, 1, ctx, QueryStreamCont);
 }
 
+// Stop requested after the query was sent: libpq still expects its results, so the
+// next PQsendQuery would fail with "another command is already in progress". Finish
+// sending, ask the server to cancel the statement, then drain whatever it returns.
+// Blocks briefly (like the MySQL stop path); use an AliveToken with the helpers to
+// cancel long statements without that wait.
+static void AbandonSentQuery(PGconn* conn) {
+	if (!conn)
+		return;
+	int flush;
+	while ((flush = PQflush(conn)) == 1) {
+		// The socket is non-blocking; keep pushing the remaining query bytes out.
+	}
+	if (flush < 0)
+		return;   // connection broken; nothing more to drain
+	PGcancel* cancel = PQgetCancel(conn);
+	if (cancel) {
+		char errbuf[256];
+		PQcancel(cancel, errbuf, sizeof(errbuf));
+		PQfreeCancel(cancel);
+	}
+	PGresult* res;
+	while ((res = PQgetResult(conn)) != NULL)
+		PQclear(res);
+}
+
+// Pushes a query-level error string, releases the query state (connection is
+// immediately reusable) and returns it as the coroutine's final value.
+static int QueryFinishWithError(lua_State* L, LuaPostgresQuery* q, const char* err, const char* fallback) {
+	lua_pushstring(L, err && err[0] ? err : fallback);
+	FreeQuery(L, q);
+	return 1;
+}
+
 static int QueryPollCont(lua_State* L, int status, lua_KContext ctx) {
 	(void)status;
 	LuaPostgresQuery* q = (LuaPostgresQuery*)(intptr_t)ctx;
 
 	if (lua_toboolean(L, 1)) {
+		AbandonSentQuery(q->conn->connection);
 		FreeQuery(L, q);
 		return 0;
 	}
 
 	if (!PQconsumeInput(q->conn->connection)) {
-		const char* err = PQerrorMessage(q->conn->connection);
-		lua_pushstring(L, err && err[0] ? err : "PQconsumeInput error");
 		set_did_work(L);  // error is a result — don't idle-sleep
-		return lua_yieldk(L, 1, ctx, QueryStreamCont);
+		return QueryFinishWithError(L, q, PQerrorMessage(q->conn->connection), "PQconsumeInput error");
 	}
 
 	if (PQisBusy(q->conn->connection)) {
@@ -485,9 +517,8 @@ static int QueryPollCont(lua_State* L, int status, lua_KContext ctx) {
 		PQclear(extra);
 
 	if (!result) {
-		lua_pushstring(L, "PQgetResult returned NULL");
 		set_did_work(L);
-		return lua_yieldk(L, 1, ctx, QueryStreamCont);
+		return QueryFinishWithError(L, q, NULL, "PQgetResult returned NULL");
 	}
 
 	ExecStatusType es = PQresultStatus(result);
@@ -514,7 +545,8 @@ static int QueryPollCont(lua_State* L, int status, lua_KContext ctx) {
 	lua_pushstring(L, err && err[0] ? err : "query error");
 	PQclear(result);
 	set_did_work(L);
-	return lua_yieldk(L, 1, ctx, QueryStreamCont);
+	FreeQuery(L, q);  // release the connection before handing back the error
+	return 1;
 }
 
 static int QueryFlushCont(lua_State* L, int status, lua_KContext ctx) {
@@ -522,6 +554,7 @@ static int QueryFlushCont(lua_State* L, int status, lua_KContext ctx) {
 	LuaPostgresQuery* q = (LuaPostgresQuery*)(intptr_t)ctx;
 
 	if (lua_toboolean(L, 1)) {
+		AbandonSentQuery(q->conn->connection);
 		FreeQuery(L, q);
 		return 0;
 	}
@@ -532,9 +565,7 @@ static int QueryFlushCont(lua_State* L, int status, lua_KContext ctx) {
 		return lua_yieldk(L, 1, ctx, QueryPollCont);
 	}
 	if (flush < 0) {
-		const char* err = PQerrorMessage(q->conn->connection);
-		lua_pushstring(L, err && err[0] ? err : "PQflush error");
-		return lua_yieldk(L, 1, ctx, QueryStreamCont);
+		return QueryFinishWithError(L, q, PQerrorMessage(q->conn->connection), "PQflush error");
 	}
 	// flush == 1: more to send
 	lua_pushnil(L);
@@ -561,9 +592,7 @@ static int PostgresQueryBody(lua_State* L) {
 	}
 
 	if (!ok) {
-		const char* err = PQerrorMessage(q->conn->connection);
-		lua_pushstring(L, err && err[0] ? err : "PQsendQuery failed");
-		return lua_yieldk(L, 1, (lua_KContext)(intptr_t)q, QueryStreamCont);
+		return QueryFinishWithError(L, q, PQerrorMessage(q->conn->connection), "PQsendQuery failed");
 	}
 
 	lua_pushnil(L);
@@ -674,11 +703,14 @@ static int HelperWaitCont(lua_State* L, int status, lua_KContext ctx) {
 		}
 	}
 
-	lua_rawgeti(L, LUA_REGISTRYINDEX, q->conn->queryRef);
+	// Keep T on L's stack (anchored) while resuming: FreeQuery inside T drops
+	// the registry anchor.
+	LuaPostgres* conn = q->conn;
+	lua_rawgeti(L, LUA_REGISTRYINDEX, conn->queryRef);
 	lua_State* T = lua_tothread(L, -1);
-	lua_pop(L, 1);
 
 	if (!T) {
+		lua_pop(L, 1);
 		FreeQuery(L, q);
 		lua_pushboolean(L, 0);
 		lua_pushliteral(L, "connection lost");
@@ -691,32 +723,43 @@ static int HelperWaitCont(lua_State* L, int status, lua_KContext ctx) {
 	if (rc != LUA_OK && rc != LUA_YIELD) {
 		if (nr > 0)
 			lua_pop(T, nr);
-		FreeQuery(L, q);
+		lua_pop(L, 1);
+		if (conn->activeQuery == q)
+			FreeQuery(L, q);
 		lua_pushboolean(L, 0);
 		lua_pushliteral(L, "query coroutine error");
 		return 2;
 	}
 
 	// Still polling — T yielded nil
-	if (nr == 0 || lua_isnil(T, -1)) {
+	if (rc == LUA_YIELD && (nr == 0 || lua_isnil(T, -1))) {
 		if (nr > 0)
 			lua_pop(T, nr);
+		lua_pop(L, 1);
 		return lua_yieldk(L, 0, ctx, HelperWaitCont);
 	}
 
-	// Query-level error string — T is now in QueryStreamCont; stop it
-	if (lua_type(T, -1) == LUA_TSTRING) {
+	// Query-level error string — T has returned it and already called FreeQuery
+	if (nr > 0 && lua_type(T, -1) == LUA_TSTRING) {
 		size_t elen;
 		const char* err = lua_tolstring(T, -1, &elen);
 		lua_pushlstring(L, err, elen);
 		lua_pop(T, nr);
-		lua_pushboolean(T, 1);
-		int nr2;
-		lua_resume(T, L, 1, &nr2);
-		if (nr2 > 0)
-			lua_pop(T, nr2);
+		lua_remove(L, -2); // drop T
 		lua_pushboolean(L, 0);
 		lua_insert(L, -2);
+		return 2;
+	}
+
+	// T ended without a rowcount (should not happen) — release if still held
+	if (rc == LUA_OK) {
+		if (nr > 0)
+			lua_pop(T, nr);
+		lua_pop(L, 1);
+		if (conn->activeQuery == q)
+			FreeQuery(L, q);
+		lua_pushboolean(L, 0);
+		lua_pushliteral(L, "query ended unexpectedly");
 		return 2;
 	}
 

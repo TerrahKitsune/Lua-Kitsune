@@ -192,7 +192,8 @@ void lua_datetime_push_string(lua_State* L, int index) {
 // Parses "YYYY-MM-DD[T HH:MM[:SS[.fff]]][Z|+HH:MM|-HH:MM]".
 // Returns 1 on success and fills *out (UTC ticks + offset), 0 on failure.
 // *has_offset_out is set to 1 if an explicit Z or +/-offset was present.
-static int parse_iso8601(const char* s, LuaDateTime* out, int* has_offset_out) {
+// end_out (optional) receives the position after the last character consumed.
+static int parse_iso8601(const char* s, LuaDateTime* out, int* has_offset_out, const char** end_out = NULL) {
 	int y = 0, mo = 0, d = 0, h = 0, mi = 0, sec = 0, ms = 0;
 	int off_h = 0, off_m = 0;
 	int off_sign = 0; // 0 = not set/Z, +1 = east, -1 = west
@@ -233,13 +234,21 @@ static int parse_iso8601(const char* s, LuaDateTime* out, int* has_offset_out) {
 		p++;
 	}
 	else if (*p == '+' || *p == '-') {
+		// ±HH, ±HHMM or ±HH:MM (Postgres prints whole-hour offsets as "+00", "-05").
 		off_sign = (*p == '+') ? 1 : -1;
 		has_explicit_offset = 1;
 		p++;
-		int nz = 0;
-		if (sscanf(p, "%d:%d%n", &off_h, &off_m, &nz) < 2) {
-			// Try without colon: +HHMM
-			if (sscanf(p, "%2d%2d%n", &off_h, &off_m, &nz) < 2) return 0;
+		if (p[0] < '0' || p[0] > '9' || p[1] < '0' || p[1] > '9') return 0;
+		off_h = (p[0] - '0') * 10 + (p[1] - '0');
+		p += 2;
+		int colon = (*p == ':');
+		if (colon) p++;
+		if (p[0] >= '0' && p[0] <= '9' && p[1] >= '0' && p[1] <= '9') {
+			off_m = (p[0] - '0') * 10 + (p[1] - '0');
+			p += 2;
+		}
+		else if (colon) {
+			return 0;   // "+05:" without minutes
 		}
 	}
 
@@ -257,6 +266,7 @@ static int parse_iso8601(const char* s, LuaDateTime* out, int* has_offset_out) {
 	out->ticks = utc_ticks;
 	out->offset_minutes = offset_min;
 	*has_offset_out = has_explicit_offset;
+	if (end_out) *end_out = p;
 	return 1;
 }
 
@@ -329,9 +339,13 @@ int datetime_fromunixmilliseconds(lua_State* L) {
 }
 
 // parse_iso8601 is exposed as datetime_parse_c for C callers (MySQL/Postgres).
+// Unlike DateTime.Parse it must consume the whole value, so server output it
+// doesn't fully understand (Postgres "0044-03-15 BC", an LMT offset with
+// seconds) falls back to a string instead of becoming a wrong DateTime.
 int datetime_parse_c(const char* s, LuaDateTime* out) {
 	int has_offset;
-	return parse_iso8601(s, out, &has_offset);
+	const char* end = NULL;
+	return parse_iso8601(s, out, &has_offset, &end) && *end == '\0';
 }
 
 int datetime_parse(lua_State* L) {

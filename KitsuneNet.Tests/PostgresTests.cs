@@ -96,6 +96,69 @@ public sealed class PostgresTests
     }
 
     [PostgresFact]
+    public async Task StopFlag_AfterQuerySent_CancelsAndConnectionIsReusable()
+    {
+        // Stopping once the statement is on the server must cancel it and drain its
+        // result; otherwise the next query fails with "another command is already in
+        // progress" (or waits for the whole pg_sleep).
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
+			local conn = assert({ConnectLua()})
+			local co = assert(conn:Query('SELECT pg_sleep(5)'))
+			coroutine.resume(co)          -- sends the statement
+			coroutine.resume(co)          -- polling: the server is still sleeping
+			local t0 = Time()
+			coroutine.resume(co, true)    -- stop mid-poll
+			local stopMs = Time() - t0
+			local ok, v = conn:Scalar('SELECT 42')
+			conn:Close()
+			return tostring(ok == true and v == 42 and stopMs < 4000) .. ' ' .. tostring(v) .. ' ' .. stopMs
+		");
+        r.String.ShouldStartWith("true");
+    }
+
+    [PostgresFact]
+    public async Task Timestamptz_WholeHourAndMinuteOffsets_ReturnDateTime()
+    {
+        // Postgres prints whole-hour offsets as "+00" / "-05"; those used to come
+        // back as strings instead of DateTime.
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
+			local conn = assert({ConnectLua()})
+			local out = {{}}
+			for _, tz in ipairs({{ 'UTC', 'America/New_York', 'Asia/Kolkata' }}) do
+				assert(conn:NonQuery(""SET TIME ZONE '"" .. tz .. ""'""))
+				local ok, v = conn:Scalar(""SELECT '2024-01-01 12:00:00.250Z'::timestamptz"")
+				out[#out + 1] = type(v) .. '/' .. (type(v) == 'userdata'
+					and (v:OffsetMinutes() .. '/' .. v:UnixMilliseconds()) or tostring(v))
+			end
+			conn:Close()
+			return table.concat(out, ',')
+		");
+        r.String.ShouldBe("userdata/0/1704110400250,userdata/-300/1704110400250,userdata/330/1704110400250");
+    }
+
+    [PostgresFact]
+    public async Task Dates_WithUnparsedSuffix_FallBackToString()
+    {
+        // A BC date or a pre-1900 local-mean-time offset with seconds used to parse
+        // as a wrong DateTime (the suffix was ignored); they now come back as strings.
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync($@"
+			local conn = assert({ConnectLua()})
+			assert(conn:NonQuery(""SET TIME ZONE 'Europe/Stockholm'""))
+			local _, bc  = conn:Scalar(""SELECT '0044-03-15 BC'::date"")
+			local _, lmt = conn:Scalar(""SELECT '1850-01-01 12:00:00'::timestamptz"")
+			local _, ok  = conn:Scalar(""SELECT '2024-01-01 12:00:00'::timestamptz"")
+			conn:Close()
+			-- The exact LMT offset depends on the server's tzdata; it always has seconds.
+			local lmtShape = type(lmt) == 'string' and lmt:match('[+-]%d%d:%d%d:%d%d$') ~= nil
+			return type(bc) .. ':' .. tostring(bc) .. ',' .. tostring(lmtShape) .. ',' .. type(ok)
+		");
+        r.String.ShouldBe("string:0044-03-15 BC,true,userdata");
+    }
+
+    [PostgresFact]
     public async Task StopFlag_MidStream_ConnNotBusy()
     {
         using KitsuneEngine engine = new();

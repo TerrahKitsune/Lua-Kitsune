@@ -248,8 +248,14 @@ int identifier_asstring(lua_State* L) {
 // ── Metamethods ───────────────────────────────────────────────────────────────
 
 int identifier_eq(lua_State* L) {
-    LuaIdentifier* a = lua_toidentifier(L, 1);
-    LuaIdentifier* b = lua_toidentifier(L, 2);
+    // Like the other typed values, comparing with a different kind of userdata is
+    // simply false rather than an error.
+    LuaIdentifier* a = (LuaIdentifier*)luaL_testudata(L, 1, LUAIDENTIFIER);
+    LuaIdentifier* b = (LuaIdentifier*)luaL_testudata(L, 2, LUAIDENTIFIER);
+    if (!a || !b) {
+        lua_pushboolean(L, 0);
+        return 1;
+    }
     lua_pushboolean(L,
         a->type == b->type &&
         a->len  == b->len  &&

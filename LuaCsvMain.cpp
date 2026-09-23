@@ -3,9 +3,9 @@
 
 static const struct luaL_Reg csv_functions[] = {
 	{ "New",               lua_csv_new                   },  // CSV.New([delim])
-	{ "Decode",            lua_csv_decode                },  // csv:Decode(str)
-	{ "Encode",            lua_csv_encode                },  // csv:Encode(rows)
-	{ "DecodeFromFunction", lua_csv_decode_from_function },  // csv:DecodeFromFunction(fn_or_stream)
+	{ "Decode",            lua_csv_decode                },  // csv:Decode(str) / CSV.Decode(str [, delim])
+	{ "Encode",            lua_csv_encode                },  // csv:Encode(rows) / CSV.Encode(rows [, delim])
+	{ "DecodeFromFunction", lua_csv_decode_from_function },  // csv:DecodeFromFunction(fn_or_stream) / CSV.DecodeFromFunction(fn_or_stream [, delim])
 	{ NULL, NULL }
 };
 

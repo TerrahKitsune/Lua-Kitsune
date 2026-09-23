@@ -363,7 +363,6 @@
     <ClInclude Include="LuaTcpMain.h" />
     <ClInclude Include="luatext.h" />
     <ClInclude Include="kitsunefile.h" />
-    <ClInclude Include="kitsuneconsole.h" />
     <ClInclude Include="kitsunestdlib.h" />
     <ClInclude Include="luaidentifier.h" />
     <ClInclude Include="luadatetime.h" />

@@ -118,6 +118,12 @@ extern int   PQsocket(const PGconn* conn);
 // ── Affected-row count (PGRES_COMMAND_OK path) ────────────────────────────────
 extern char* PQcmdTuples(PGresult* res);
 
+// ── Cancelling a statement that was already sent (query stop flag) ───────────
+typedef struct pg_cancel PGcancel;
+extern PGcancel* PQgetCancel(PGconn* conn);
+extern void      PQfreeCancel(PGcancel* cancel);
+extern int       PQcancel(PGcancel* cancel, char* errbuf, int errbufsize);
+
 #ifdef __cplusplus
 }
 #endif

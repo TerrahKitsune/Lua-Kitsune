@@ -16,7 +16,7 @@ kitsune.exe [script.lua] [arg1 arg2 ...]
 4. If the script called `Imgui.Start(...)` before returning, the render loop is entered and blocks until the window is closed.
 5. Prints the script's return value to stdout (string, number, or boolean) then exits.
 
-On Windows the console input and output code pages are set to UTF-8 (CP 65001) at startup and restored on exit, so `print`, `io.write` and `io.read` exchange UTF-8 text. The executable's manifest also makes UTF-8 the process code page (Windows 10 1903 or later), so command-line arguments (`arg`), script paths and the standard Lua `io`/`os` file functions handle non-ASCII text.
+On Windows the console input and output code pages are set to UTF-8 (CP 65001) at startup and restored on exit, so `print`, `io.write` and `io.read` exchange UTF-8 text. The executable's manifest also makes UTF-8 the process code page (Windows 10 1903 or later), so command-line arguments (`arg`) and the script path arrive as UTF-8. The engine itself handles UTF-8 file names in every host, independent of the manifest: `FileSystem.*` and the standard Lua `io`/`os`/`loadfile`/`require` functions (see the UTF-8 notes at the top of `kitsuneengine-lua-functions.md`, under "Userdata Return Values (read first)").
 
 Exit code `0` = success; `1` = the script raised an uncaught error (message printed to stderr).
 

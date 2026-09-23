@@ -432,6 +432,11 @@ static int L_GetHost(lua_State* L) {
 		}
 
 		freeaddrinfo(result);
+
+		// Resolved, but no IPv4 address to return.
+		if (!full) {
+			lua_pushnil(L);
+		}
 	}
 	else {
 		lua_pushnil(L);

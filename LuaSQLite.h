@@ -17,6 +17,7 @@ typedef struct LuaSQLite {
 	char * file;
 	int status;
 	int busyhandler;
+	lua_State* activeL; // state running the current prepare/step (sqlite object at stack index 1); used by the busy handler
 	int funcs;
 	LuaSQLiteFunction** functions;
 } LuaSQLite;

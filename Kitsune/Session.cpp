@@ -10,7 +10,6 @@
 #ifdef _WIN32
 #include <conio.h>
 #include <io.h>
-#include "kitsuneconsole.h"
 #else
 #include <unistd.h>
 #include <sys/ioctl.h>
@@ -37,6 +36,23 @@ static std::wstring session_utf8_to_wide(const char* s, size_t len) {
 static void session_console_utf8() {
 	SetConsoleOutputCP(CP_UTF8);
 	SetConsoleCP(CP_UTF8);
+}
+
+// Reads one key from the console and returns it as a Unicode code point. _getwch returns
+// UTF-16 units, so a character outside the BMP (such as an emoji) arrives as a surrogate
+// pair and is combined here. An unpaired surrogate becomes U+FFFD, and a key read while
+// looking for the second half is put back. Special keys keep _getwch's 0 / 0xE0 prefix.
+static long long session_getwch_codepoint() {
+	wint_t hi = _getwch();
+	if (hi < 0xD800 || hi > 0xDFFF)
+		return (long long)hi;
+	if (hi <= 0xDBFF) {
+		wint_t lo = _getwch();
+		if (lo >= 0xDC00 && lo <= 0xDFFF)
+			return 0x10000 + (((long long)hi - 0xD800) << 10) + ((long long)lo - 0xDC00);
+		_ungetwch(lo);
+	}
+	return 0xFFFD;
 }
 #endif
 
@@ -70,7 +86,7 @@ static int SessionConsoleGetKey(int argc, const KitsuneVariable* argv, const kit
 	long long ch;
 	if (session_is_stdin_tty()) {
 #ifdef _WIN32
-		ch = kitsune_getwch_codepoint();
+		ch = session_getwch_codepoint();
 #else
 		ch = -1;
 #endif
@@ -266,7 +282,7 @@ static int SessionConsoleWrite(int argc, const KitsuneVariable* argv, const kits
 static int SessionConsoleReadKey(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter setter, void*) {
 	bool has = session_is_stdin_tty() ? (_kbhit() > 0) : !feof(stdin);
 	if (has) {
-		KitsuneVariable r = {}; r.type = KITSUNE_TINTEGER; r.integer = kitsune_getwch_codepoint();
+		KitsuneVariable r = {}; r.type = KITSUNE_TINTEGER; r.integer = session_getwch_codepoint();
 		setter(&r);
 	}
 	else {

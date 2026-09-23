@@ -153,6 +153,15 @@ static void enc_key(LuaToml* t, lua_State* L, const char* s, size_t len) {
         enc_string(t, L, s, len);
 }
 
+// Text of the table key copy on top of the stack. TOML keys are strings, so only
+// string and number keys are accepted (numbers are converted in place on the copy).
+static const char* key_text(lua_State* L, size_t* len) {
+    int kt = lua_type(L, -1);
+    if (kt != LUA_TSTRING && kt != LUA_TNUMBER)
+        luaL_error(L, "Toml: table keys must be strings or numbers (got %s)", lua_typename(L, kt));
+    return lua_tolstring(L, -1, len);
+}
+
 // =============================================================================
 // Encoder — forward declarations
 // =============================================================================
@@ -199,6 +208,35 @@ static int has_table_children(lua_State* L) {
         lua_pop(L, 1);
     }
     return 0;
+}
+
+// How a table value under a key is written by enc_table_body.
+enum {
+    TOML_KIND_INLINE        = 0, // key = [...] / key = {} on the current section
+    TOML_KIND_SECTION       = 1, // [path] header block
+    TOML_KIND_TABLE_ARRAY   = 2  // [[path]] header block per element
+};
+
+// Classify the table on top of the stack. Empty tables and arrays that are
+// not made up entirely of (non-array or empty) tables are written inline so
+// they stay attached to the current section; string-keyed tables become
+// sections; arrays of tables become [[path]] blocks.
+static int table_kind(lua_State* L) {
+    if (!is_array(L))
+        return TOML_KIND_SECTION;
+    int         tbl = lua_gettop(L);
+    lua_Integer n   = (lua_Integer)lua_rawlen(L, tbl);
+    if (n == 0)
+        return TOML_KIND_INLINE;
+    for (lua_Integer i = 1; i <= n; i++) {
+        lua_rawgeti(L, tbl, i);
+        int ok = lua_type(L, -1) == LUA_TTABLE &&
+                 (!is_array(L) || lua_rawlen(L, -1) == 0);
+        lua_pop(L, 1);
+        if (!ok)
+            return TOML_KIND_INLINE;
+    }
+    return TOML_KIND_TABLE_ARRAY;
 }
 
 // =============================================================================
@@ -339,7 +377,7 @@ static void enc_inline_table(LuaToml* t, lua_State* L, int depth) {
         // key
         lua_pushvalue(L, -2);
         size_t      klen;
-        const char* k = lua_tolstring(L, -1, &klen);
+        const char* k = key_text(L, &klen);
         enc_key(t, L, k, klen);
         lua_pop(L, 1);
         tbuf_emitlit(t, L, " = ");
@@ -372,11 +410,14 @@ static void enc_table_body(LuaToml* t, lua_State* L, int depth,
     int tbl = lua_gettop(L);
     rec_push(t, L, (uintptr_t)lua_topointer(L, tbl));
 
-    // First pass: emit all scalar and array-of-scalars key=value pairs.
+    // First pass: emit all key = value pairs that belong to this section:
+    // scalars, arrays of scalars (or of arrays / mixed) and empty tables.
+    // These must precede any [header] below, or they would land in it.
     lua_pushnil(L);
     while (lua_next(L, tbl) != 0) {
         int vtype = lua_type(L, -1);
-        if (vtype == LUA_TTABLE) {
+        int kind  = vtype == LUA_TTABLE ? table_kind(L) : TOML_KIND_INLINE;
+        if (kind != TOML_KIND_INLINE) {
             // Defer sub-tables and arrays of tables to second pass.
             lua_pop(L, 1);
             continue;
@@ -384,12 +425,15 @@ static void enc_table_body(LuaToml* t, lua_State* L, int depth,
         // key
         lua_pushvalue(L, -2);
         size_t      klen;
-        const char* k = lua_tolstring(L, -1, &klen);
+        const char* k = key_text(L, &klen);
         enc_indent(t, L, depth);
         enc_key(t, L, k, klen);
         lua_pop(L, 1);
         tbuf_emitlit(t, L, " = ");
-        enc_value(t, L, depth, 0);
+        if (vtype == LUA_TTABLE && lua_rawlen(L, -1) == 0)
+            tbuf_emitlit(t, L, "{}"); // empty table round-trips as a table
+        else
+            enc_value(t, L, depth, 0);
         tbuf_emitc(t, L, '\n');
         lua_pop(L, 1);
     }
@@ -397,70 +441,65 @@ static void enc_table_body(LuaToml* t, lua_State* L, int depth,
     // Second pass: emit sub-tables as [section] or [[array]] headers.
     lua_pushnil(L);
     while (lua_next(L, tbl) != 0) {
-        if (lua_type(L, -1) != LUA_TTABLE) {
+        int kind = lua_type(L, -1) == LUA_TTABLE ? table_kind(L) : TOML_KIND_INLINE;
+        if (kind == TOML_KIND_INLINE) {
             lua_pop(L, 1);
             continue;
         }
 
+        // Encode this key as one dotted-path segment (bare or quoted) by
+        // emitting it at the end of the output buffer and taking it back.
         lua_pushvalue(L, -2);
         size_t      klen;
-        const char* k = lua_tolstring(L, -1, &klen);
+        const char* k    = key_text(L, &klen);
+        size_t      mark = t->outLen;
+        enc_key(t, L, k, klen);
+        size_t segLen = t->outLen - mark;
         lua_pop(L, 1);
 
-        // Build the dotted path for this sub-key.
-        size_t newPathLen = pathLen + (pathLen > 0 ? 1 : 0) + klen;
-        char*  newPath    = (char*)kitsune_malloc(newPathLen + 1);
-        if (!newPath)
-            luaL_error(L, "Toml: out of memory");
+        // Build the dotted header path: each segment quoted individually. It is kept
+        // as a Lua string below the value (key, path, value), so an error raised
+        // while encoding the sub-table can't leak it.
+        luaL_Buffer pb;
+        luaL_buffinit(L, &pb);
         if (pathLen > 0) {
-            memcpy(newPath, path, pathLen);
-            newPath[pathLen] = '.';
-            memcpy(newPath + pathLen + 1, k, klen);
-        } else {
-            memcpy(newPath, k, klen);
+            luaL_addlstring(&pb, path, pathLen);
+            luaL_addchar(&pb, '.');
         }
-        newPath[newPathLen] = '\0';
+        luaL_addlstring(&pb, t->out + mark, segLen);
+        luaL_pushresult(&pb);
+        t->outLen = mark;
+        lua_insert(L, -2);
+        size_t      newPathLen;
+        const char* newPath = lua_tolstring(L, -2, &newPathLen);
 
-        // Determine: array-of-tables or plain sub-table?
-        if (is_array(L)) {
+        if (kind == TOML_KIND_TABLE_ARRAY) {
             // Array of tables: emit [[path]] for each element.
             int        arr  = lua_gettop(L);
             lua_Integer n   = (lua_Integer)lua_rawlen(L, arr);
             for (lua_Integer i = 1; i <= n; i++) {
                 lua_rawgeti(L, arr, i);
-                if (lua_type(L, -1) == LUA_TTABLE) {
-                    if (t->pretty && depth > 0)
-                        tbuf_emitc(t, L, '\n');
-                    tbuf_emitlit(t, L, "[[");
-                    enc_key(t, L, newPath, newPathLen);
-                    tbuf_emitlit(t, L, "]]\n");
-                    enc_table_body(t, L, 0, newPath, newPathLen);
-                } else {
-                    // Array of non-tables — emit as inline array value instead.
-                    enc_indent(t, L, depth);
-                    enc_key(t, L, k, klen);
-                    tbuf_emitlit(t, L, " = ");
-                    lua_pushvalue(L, arr);
-                    enc_inline_array(t, L, depth);
-                    lua_pop(L, 1);
+                if (t->pretty && t->outLen > 0)
                     tbuf_emitc(t, L, '\n');
-                    lua_pop(L, 1);
-                    break;
-                }
+                enc_indent(t, L, depth);
+                tbuf_emitlit(t, L, "[[");
+                tbuf_emit(t, L, newPath, newPathLen);
+                tbuf_emitlit(t, L, "]]\n");
+                enc_table_body(t, L, depth + 1, newPath, newPathLen);
                 lua_pop(L, 1);
             }
         } else {
             // Plain sub-table: emit [path] header.
-            if (t->pretty && depth > 0)
+            if (t->pretty && t->outLen > 0)
                 tbuf_emitc(t, L, '\n');
+            enc_indent(t, L, depth);
             tbuf_emitlit(t, L, "[");
-            enc_key(t, L, newPath, newPathLen);
+            tbuf_emit(t, L, newPath, newPathLen);
             tbuf_emitlit(t, L, "]\n");
-            enc_table_body(t, L, 0, newPath, newPathLen);
+            enc_table_body(t, L, depth + 1, newPath, newPathLen);
         }
 
-        kitsune_free(newPath);
-        lua_pop(L, 1);
+        lua_pop(L, 2);   // value and header path; the key stays for lua_next
     }
 
     rec_pop(t);

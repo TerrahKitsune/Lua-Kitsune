@@ -260,6 +260,23 @@ static void append_tool_message(lua_State* L, ToolCallState* state, int slot,
     lua_pop(L, 1); // pop messages table
 }
 
+// Reads (and pops) the permission gate's single result from the top of the
+// stack. ok is false when the gate raised an error (sync or after a yield);
+// an error always denies the call. On deny, reply receives the tool reply.
+static bool gate_result(lua_State* L, bool ok, std::string& reply) {
+    bool allowed = false;
+    if (ok) {
+        allowed = lua_toboolean(L, -1) != 0;
+        if (!allowed)
+            reply = "error: permission denied";
+    } else {
+        const char* err = lua_tostring(L, -1);
+        reply = std::string("error: permission check failed: ") + (err ? err : "unknown error");
+    }
+    lua_pop(L, 1);
+    return allowed;
+}
+
 // Forward declarations
 static int toolsuite_dispatch_one(lua_State* L, ToolCallState* state);
 static int toolsuite_dispatch_tool(lua_State* L, ToolCallState* state);
@@ -292,16 +309,13 @@ static int toolsuite_continuation(lua_State* L, int status, lua_KContext ctx) {
 static int toolsuite_gate_continuation(lua_State* L, int status, lua_KContext ctx) {
     ToolCallState* state = (ToolCallState*)ctx;
 
-    bool allowed = false;
-    if (status == LUA_OK || status == LUA_YIELD)
-        allowed = lua_toboolean(L, -1) != 0;
-    lua_pop(L, 1);
+    std::string reply;
+    bool allowed = gate_result(L, status == LUA_OK || status == LUA_YIELD, reply);
 
     if (!allowed) {
         int slot = state->msg_base + state->dispatched + 1;
         append_tool_message(L, state, slot,
-                            state->calls[state->current_idx].id,
-                            "error: permission denied");
+                            state->calls[state->current_idx].id, reply);
         state->dispatched++;
         return toolsuite_dispatch_one(L, state);
     }
@@ -390,14 +404,13 @@ static int toolsuite_dispatch_one(lua_State* L, ToolCallState* state) {
         int rc = lua_pcallk(L, 2, 1, 0,
                             (lua_KContext)state, toolsuite_gate_continuation);
 
-        // Synchronous return from gate
-        bool allowed = lua_toboolean(L, -1) != 0;
-        lua_pop(L, 1);
+        // Synchronous return from gate (an error raised by the gate denies)
+        std::string reply;
+        bool allowed = gate_result(L, rc == LUA_OK, reply);
 
         if (!allowed) {
             int slot = state->msg_base + state->dispatched + 1;
-            append_tool_message(L, state, slot,
-                                entry.id, "error: permission denied");
+            append_tool_message(L, state, slot, entry.id, reply);
             state->dispatched++;
             continue;
         }

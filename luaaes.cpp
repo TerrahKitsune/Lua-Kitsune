@@ -68,7 +68,12 @@ int LuaSetIV(lua_State* L) {
 		return 0;
 	}
 
-	AES_ctx_set_iv(&luaaes->context, (const uint8_t*)data);
+	// Shorter IVs are zero-padded to 16 bytes, the same as Aes.New.
+	uint8_t iv[AES_BLOCKLEN];
+	memset(iv, 0, AES_BLOCKLEN);
+	memcpy(iv, data, len);
+
+	AES_ctx_set_iv(&luaaes->context, iv);
 
 	return 0;
 }

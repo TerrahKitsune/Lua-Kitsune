@@ -484,13 +484,22 @@ static int DecodeCsvWith(lua_State* L, LuaCsv* csv) {
 	return 1;
 }
 
-// CSV.Decode entry point: parses delimiter from the stack, runs DecodeCsvWith on
-// a temporary local state, then frees the transient buffer.
+// CSV.Decode(str [, delimiter]) entry point: parses the delimiter (default ','),
+// runs DecodeCsvWith on a temporary LUACSV userdata (so __gc frees the field
+// buffer even if parsing raises), then frees the transient buffer eagerly.
+// The stream refs must be LUA_NOREF: 0 would send string-mode parsing into
+// the supplier-refill path.
 int LuaDecodeCsv(lua_State* L) {
-	LuaCsv csv = {};
-	csv.delimiter = ParseDelimiter(L, 2, L',');
-	int r = DecodeCsvWith(L, &csv);
-	FreeBuffer(&csv);
+	wchar_t delim = ParseDelimiter(L, 2, L',');
+	LuaCsv* csv = (LuaCsv*)lua_newuserdata(L, sizeof(LuaCsv));
+	memset(csv, 0, sizeof(LuaCsv));
+	csv->delimiter     = delim;
+	csv->streamFuncRef = LUA_NOREF;
+	csv->streamRef     = LUA_NOREF;
+	luaL_getmetatable(L, LUACSV);
+	lua_setmetatable(L, -2);
+	int r = DecodeCsvWith(L, csv);
+	FreeBuffer(csv);
 	return r;
 }
 
@@ -780,24 +789,32 @@ int lua_csv_new(lua_State* L) {
 	return 1;
 }
 
-// csv:Decode(str)
+// csv:Decode(str) / CSV.Decode(str [, delimiter])
+// The module table doubles as the instance __index table, so both forms land
+// here; a non-instance arg 1 dispatches to the module-level implementation.
 int lua_csv_decode(lua_State* L) {
-	LuaCsv* csv = (LuaCsv*)luaL_checkudata(L, 1, LUACSV);
+	LuaCsv* csv = (LuaCsv*)luaL_testudata(L, 1, LUACSV);
+	if (!csv)
+		return LuaDecodeCsv(L);
 	lua_remove(L, 1);       // str ? arg 1
 	return DecodeCsvWith(L, csv);
 }
 
-// csv:Encode(rows)
+// csv:Encode(rows) / CSV.Encode(rows [, delimiter])
 int lua_csv_encode(lua_State* L) {
-	LuaCsv* csv = (LuaCsv*)luaL_checkudata(L, 1, LUACSV);
+	LuaCsv* csv = (LuaCsv*)luaL_testudata(L, 1, LUACSV);
+	if (!csv)
+		return LuaEncodeCsv(L);
 	char delimiter = (csv->delimiter == L'\0') ? ',' : (char)csv->delimiter;
 	lua_remove(L, 1);       // rows ? arg 1
 	return EncodeCsvWithDelimiter(L, delimiter);
 }
 
-// csv:DecodeFromFunction(fn_or_stream)
+// csv:DecodeFromFunction(fn_or_stream) / CSV.DecodeFromFunction(fn_or_stream [, delimiter])
 int lua_csv_decode_from_function(lua_State* L) {
-	LuaCsv* csv = (LuaCsv*)luaL_checkudata(L, 1, LUACSV);
+	LuaCsv* csv = (LuaCsv*)luaL_testudata(L, 1, LUACSV);
+	if (!csv)
+		return LuaDecodeFromFunction(L);
 	wchar_t delim = csv->delimiter;
 	lua_remove(L, 1);       // fn/stream ? arg 1
 	WrapStreamIfNeeded(L);

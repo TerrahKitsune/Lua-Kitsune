@@ -487,6 +487,7 @@ int luaopen_tasks(lua_State* L) {
     lua_pushinteger(L, KITSUNE_STATUS_CANCELLED); lua_setfield(L, -2, "Cancelled");
     lua_pushinteger(L, KITSUNE_STATUS_INLINE);    lua_setfield(L, -2, "Inline");
     lua_pushinteger(L, KITSUNE_STATUS_PAUSED);    lua_setfield(L, -2, "Paused");
+    lua_pushinteger(L, KITSUNE_STATUS_WAITING);   lua_setfield(L, -2, "Waiting");
     lua_setglobal(L, "TaskStatus");
     // Expose MaxSlots as a constant on the Tasks table itself.
     lua_pushinteger(L, KITSUNE_MAX_COROUTINES);

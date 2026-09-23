@@ -129,7 +129,7 @@ int redisstring_at(lua_State* L) {
 	lua_pop(L, 5);
 
 	if (redis->reply->type == REDIS_REPLY_STRING && redis->reply->len == 1) {
-		lua_pushinteger(L, redis->reply->str[0]);
+		lua_pushinteger(L, (unsigned char)redis->reply->str[0]);
 	}
 	else {
 		lua_pushnil(L);

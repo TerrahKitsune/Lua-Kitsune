@@ -75,17 +75,15 @@ static const wchar_t* to_pathw(lua_State* L, int idx, bool wildcard = false) {
 
 static time_t FILETIME_to_time_t(const FILETIME* ft) {
 
-	SYSTEMTIME st;
-	struct tm tmp;
-	FileTimeToSystemTime(ft, &st);
-	memset(&tmp, 0, sizeof(tmp));
-	tmp.tm_mday = st.wDay;
-	tmp.tm_mon  = st.wMonth - 1;
-	tmp.tm_year = st.wYear - 1900;
-	tmp.tm_sec  = st.wSecond;
-	tmp.tm_min  = st.wMinute;
-	tmp.tm_hour = st.wHour;
-	return mktime(&tmp);
+	/* FILETIME is UTC in 100ns ticks since 1601-01-01; convert straight to
+	   Unix seconds (no local-time round trip through mktime). */
+	ULARGE_INTEGER ull;
+	ull.LowPart = ft->dwLowDateTime;
+	ull.HighPart = ft->dwHighDateTime;
+	const unsigned long long epoch_diff = 116444736000000000ULL;
+	if (ull.QuadPart < epoch_diff)
+		return 0;
+	return (time_t)((ull.QuadPart - epoch_diff) / 10000000ULL);
 }
 
 static void push_find_dataw(lua_State* L, const WIN32_FIND_DATAW* d) {
@@ -624,7 +622,7 @@ int lua_CopyFile(lua_State* L) {
 	dup_path(L, 1, src, sizeof(src));
 	char dst[MAX_PATH_LENGTH];
 	dup_path(L, 2, dst, sizeof(dst));
-	bool overwrite = lua_toboolean(L, 3) == 0;
+	bool overwrite = lua_toboolean(L, 3) != 0;
 	lua_pop(L, lua_gettop(L));
 
 	if (!overwrite) {

@@ -8,6 +8,7 @@ static const char * LUAMD5 = "MD5";
 typedef struct LuaMD5 {
 	MD5_CTX MD5;
 	unsigned char hash[16];
+	bool finished;   // set by Finish(); hash then holds the digest for repeated calls
 } LuaMD5;
 
 LuaMD5 * lua_tomd5(lua_State *L, int index);

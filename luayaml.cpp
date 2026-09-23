@@ -262,8 +262,54 @@ static void enc_value(LuaYaml* y, yaml_emitter_t* em, lua_State* L) {
 // Decoder — walk libyaml events and push Lua values
 // =============================================================================
 
-// Forward declaration for recursive mapping/sequence handling.
-static void dec_value(lua_State* L, yaml_parser_t* parser);
+// Nesting limit for sequences/mappings; the decoder recurses on the C stack.
+#define YAML_DECODE_MAX_DEPTH 1000
+
+// Owns the libyaml parser for the duration of a Decode call. It lives in a
+// userdata so a Lua error raised mid-decode (parse error, out of memory) still
+// releases the parser when the userdata is collected.
+typedef struct {
+    yaml_parser_t parser;
+    int           live;
+} YamlDecoder;
+
+typedef struct {
+    yaml_parser_t* parser;
+    int            anchors;  // absolute stack index of the anchor-name -> value table
+    int            depth;
+} YamlDecodeState;
+
+// Stored in the anchor table for anchored nulls, so an alias to a null can be
+// told apart from an alias to an anchor that was never defined.
+static char yaml_null_anchor;
+
+static int yaml_decoder_gc(lua_State* L) {
+    YamlDecoder* d = (YamlDecoder*)lua_touserdata(L, 1);
+    if (d && d->live) {
+        d->live = 0;
+        yaml_parser_delete(&d->parser);
+    }
+    return 0;
+}
+
+static void dec_next(lua_State* L, YamlDecodeState* s, yaml_event_t* ev, const char* where) {
+    if (!yaml_parser_parse(s->parser, ev)) {
+        yaml_parser_t* p = s->parser;
+        luaL_error(L, "Yaml: parse error in %s: %s (line %d, column %d)", where,
+                   p->problem ? p->problem : "unknown error",
+                   (int)p->problem_mark.line + 1, (int)p->problem_mark.column + 1);
+    }
+}
+
+// Stores the value on top of the stack under the anchor name at nameIdx.
+static void dec_register_anchor(lua_State* L, YamlDecodeState* s, int nameIdx) {
+    lua_pushvalue(L, nameIdx);
+    if (lua_isnil(L, -2))
+        lua_pushlightuserdata(L, &yaml_null_anchor);
+    else
+        lua_pushvalue(L, -2);
+    lua_rawset(L, s->anchors);
+}
 
 // Decodes one scalar value from a YAML_SCALAR_EVENT.
 // Applies YAML 1.1 type coercion: null, bool, integer, float, else string.
@@ -321,106 +367,192 @@ static void dec_scalar(lua_State* L, yaml_event_t* ev) {
     lua_pushlstring(L, v, len);
 }
 
-static void dec_sequence(lua_State* L, yaml_parser_t* parser) {
-    lua_newtable(L);
+static void dec_node(lua_State* L, YamlDecodeState* s, yaml_event_t* ev);
+
+static void dec_sequence_items(lua_State* L, YamlDecodeState* s) {
     lua_Integer idx = 1;
     for (;;) {
         yaml_event_t ev;
-        if (!yaml_parser_parse(parser, &ev))
-            luaL_error(L, "Yaml: parse error in sequence");
+        dec_next(L, s, &ev, "sequence");
         if (ev.type == YAML_SEQUENCE_END_EVENT) {
             yaml_event_delete(&ev);
-            break;
+            return;
         }
-        // Push the event back by processing it directly here.
-        yaml_event_type_t type = ev.type;
-        if (type == YAML_SCALAR_EVENT) {
-            dec_scalar(L, &ev);
-            yaml_event_delete(&ev);
-        } else if (type == YAML_MAPPING_START_EVENT) {
-            yaml_event_delete(&ev);
-            dec_value(L, parser);
-        } else if (type == YAML_SEQUENCE_START_EVENT) {
-            yaml_event_delete(&ev);
-            dec_value(L, parser);
-        } else if (type == YAML_ALIAS_EVENT) {
-            // Aliases resolved by libyaml — treat value as nil fallback.
-            yaml_event_delete(&ev);
-            lua_pushnil(L);
-        } else {
-            yaml_event_delete(&ev);
-            continue;
-        }
+        dec_node(L, s, &ev);
         lua_rawseti(L, -2, idx++);
     }
 }
 
-static void dec_mapping_inner(lua_State* L, yaml_parser_t* parser) {
-    lua_newtable(L);
+// Copies the entries of the merge source on top of the stack into tbl, keeping
+// keys tbl already has. Non-table sources are ignored.
+static void dec_merge_from(lua_State* L, int tbl) {
+    if (!lua_istable(L, -1))
+        return;
+    lua_pushnil(L);
+    while (lua_next(L, -2)) {
+        lua_pushvalue(L, -2);
+        if (lua_rawget(L, tbl) == LUA_TNIL) {
+            lua_pop(L, 1);
+            lua_pushvalue(L, -2);
+            lua_insert(L, -2);
+            lua_rawset(L, tbl);
+        } else {
+            lua_pop(L, 2);
+        }
+    }
+}
+
+static void dec_mapping_items(lua_State* L, YamlDecodeState* s) {
+    int         tbl     = lua_gettop(L);
+    int         merges  = 0;  // stack index of pending `<<` sources, created on first use
+    lua_Integer nmerges = 0;
     for (;;) {
-        // Parse key
         yaml_event_t kev;
-        if (!yaml_parser_parse(parser, &kev))
-            luaL_error(L, "Yaml: parse error in mapping key");
+        dec_next(L, s, &kev, "mapping key");
         if (kev.type == YAML_MAPPING_END_EVENT) {
             yaml_event_delete(&kev);
             break;
         }
-        if (kev.type == YAML_SCALAR_EVENT) {
-            dec_scalar(L, &kev);
-            yaml_event_delete(&kev);
-        } else {
-            yaml_event_delete(&kev);
-            lua_pushnil(L);  // non-scalar key — push nil key (will overwrite)
+        int isMerge = kev.type == YAML_SCALAR_EVENT &&
+                      kev.data.scalar.style == YAML_PLAIN_SCALAR_STYLE &&
+                      kev.data.scalar.length == 2 &&
+                      memcmp(kev.data.scalar.value, "<<", 2) == 0;
+        dec_node(L, s, &kev);
+
+        yaml_event_t vev;
+        dec_next(L, s, &vev, "mapping value");
+        int valueIsList = vev.type == YAML_SEQUENCE_START_EVENT;
+        dec_node(L, s, &vev);
+
+        // YAML 1.1 merge key: `<<: *base` or `<<: [*a, *b]`. Applied after the
+        // mapping is complete so explicit keys win regardless of their position,
+        // and earlier sources in a list win over later ones.
+        if (isMerge && lua_istable(L, -1)) {
+            if (!merges) {
+                lua_newtable(L);
+                lua_insert(L, tbl + 1);
+                merges = tbl + 1;
+            }
+            if (valueIsList) {
+                lua_Integer n = (lua_Integer)lua_rawlen(L, -1);
+                for (lua_Integer i = 1; i <= n; i++) {
+                    lua_rawgeti(L, -1, i);
+                    lua_rawseti(L, merges, ++nmerges);
+                }
+                lua_pop(L, 1);
+            } else {
+                lua_rawseti(L, merges, ++nmerges);
+            }
+            lua_pop(L, 1);  // key
+            continue;
         }
 
-        // Parse value
-        dec_value(L, parser);
+        // A null or NaN key cannot be stored in a Lua table; drop the pair.
+        if (lua_isnil(L, -2) ||
+            (lua_type(L, -2) == LUA_TNUMBER && lua_tonumber(L, -2) != lua_tonumber(L, -2))) {
+            lua_pop(L, 2);
+            continue;
+        }
+        lua_rawset(L, tbl);
+    }
 
-        // key at -2, value at -1
-        lua_rawset(L, -3);
+    if (merges) {
+        for (lua_Integer i = 1; i <= nmerges; i++) {
+            lua_rawgeti(L, merges, i);
+            dec_merge_from(L, tbl);
+            lua_pop(L, 1);
+        }
+        lua_remove(L, merges);
     }
 }
 
-// Consumes one complete YAML value from the parser, pushing it onto the Lua stack.
-// Caller must have already consumed the START event (MAPPING_START, SEQUENCE_START)
-// or be about to receive SCALAR.  This function handles all three cases by
-// consuming the NEXT event from the parser.
-static void dec_value(lua_State* L, yaml_parser_t* parser) {
-    yaml_event_t ev;
-    for (;;) {
-        if (!yaml_parser_parse(parser, &ev))
-            luaL_error(L, "Yaml: parse error");
-        yaml_event_type_t type = ev.type;
-        if (type == YAML_SCALAR_EVENT) {
-            dec_scalar(L, &ev);
-            yaml_event_delete(&ev);
-            return;
+// Pushes the value for an event that has already been parsed, consuming any
+// nested events for collections. Takes ownership of ev.
+static void dec_node(lua_State* L, YamlDecodeState* s, yaml_event_t* ev) {
+    if (!lua_checkstack(L, 8)) {
+        yaml_event_delete(ev);
+        luaL_error(L, "Yaml: nesting too deep");
+    }
+    switch (ev->type) {
+    case YAML_SCALAR_EVENT: {
+        int nameIdx = 0;
+        if (ev->data.scalar.anchor) {
+            lua_pushstring(L, (const char*)ev->data.scalar.anchor);
+            nameIdx = lua_gettop(L);
         }
-        if (type == YAML_MAPPING_START_EVENT) {
-            yaml_event_delete(&ev);
-            dec_mapping_inner(L, parser);
-            return;
+        dec_scalar(L, ev);
+        yaml_event_delete(ev);
+        if (nameIdx) {
+            dec_register_anchor(L, s, nameIdx);
+            lua_remove(L, nameIdx);
         }
-        if (type == YAML_SEQUENCE_START_EVENT) {
-            yaml_event_delete(&ev);
-            dec_sequence(L, parser);
-            return;
+        return;
+    }
+    case YAML_SEQUENCE_START_EVENT:
+    case YAML_MAPPING_START_EVENT: {
+        int isSeq = ev->type == YAML_SEQUENCE_START_EVENT;
+        const yaml_char_t* anchor = isSeq ? ev->data.sequence_start.anchor
+                                          : ev->data.mapping_start.anchor;
+        int nameIdx = 0;
+        if (anchor) {
+            lua_pushstring(L, (const char*)anchor);
+            nameIdx = lua_gettop(L);
         }
-        if (type == YAML_ALIAS_EVENT) {
-            // libyaml resolves anchors/aliases internally; aliases appear as scalars.
-            // If we see a raw alias event, treat it as nil.
-            yaml_event_delete(&ev);
+        yaml_event_delete(ev);
+        if (++s->depth > YAML_DECODE_MAX_DEPTH)
+            luaL_error(L, "Yaml: nesting deeper than %d levels", YAML_DECODE_MAX_DEPTH);
+        lua_newtable(L);
+        // Registered before the contents so aliases inside it (self references)
+        // resolve to the same table.
+        if (nameIdx)
+            dec_register_anchor(L, s, nameIdx);
+        if (isSeq)
+            dec_sequence_items(L, s);
+        else
+            dec_mapping_items(L, s);
+        s->depth--;
+        if (nameIdx)
+            lua_remove(L, nameIdx);
+        return;
+    }
+    case YAML_ALIAS_EVENT: {
+        lua_pushstring(L, (const char*)ev->data.alias.anchor);
+        yaml_event_delete(ev);
+        lua_pushvalue(L, -1);
+        int t = lua_rawget(L, s->anchors);
+        if (t == LUA_TNIL)
+            luaL_error(L, "Yaml: undefined alias '*%s'", lua_tostring(L, -2));
+        if (t == LUA_TLIGHTUSERDATA && lua_touserdata(L, -1) == &yaml_null_anchor) {
+            lua_pop(L, 1);
             lua_pushnil(L);
-            return;
+        }
+        lua_remove(L, -2);
+        return;
+    }
+    default:
+        yaml_event_delete(ev);
+        lua_pushnil(L);
+        return;
+    }
+}
+
+// Decodes the first document of the stream; an empty stream decodes to nil.
+static void dec_document(lua_State* L, YamlDecodeState* s) {
+    for (;;) {
+        yaml_event_t ev;
+        dec_next(L, s, &ev, "document");
+        yaml_event_type_t type = ev.type;
+        if (type == YAML_STREAM_START_EVENT || type == YAML_DOCUMENT_START_EVENT) {
+            yaml_event_delete(&ev);
+            continue;
         }
         if (type == YAML_DOCUMENT_END_EVENT || type == YAML_STREAM_END_EVENT) {
             yaml_event_delete(&ev);
             lua_pushnil(L);
             return;
         }
-        yaml_event_delete(&ev);
-        // Skip STREAM_START, DOCUMENT_START, etc. and loop.
+        dec_node(L, s, &ev);
+        return;
     }
 }
 
@@ -484,12 +616,23 @@ int lua_yaml_decode(lua_State* L) {
     const char* src = luaL_checklstring(L, 2, &len);
     skip_utf8_bom(&src, &len);
 
-    yaml_parser_t parser;
-    yaml_parser_initialize(&parser);
-    yaml_parser_set_input_string(&parser, (const unsigned char*)src, len);
+    YamlDecoder* d = (YamlDecoder*)lua_newuserdatauv(L, sizeof(YamlDecoder), 0);
+    d->live = 0;
+    if (luaL_newmetatable(L, "Kitsune.YamlDecoder")) {
+        lua_pushcfunction(L, yaml_decoder_gc);
+        lua_setfield(L, -2, "__gc");
+    }
+    lua_setmetatable(L, -2);
+    if (!yaml_parser_initialize(&d->parser))
+        luaL_error(L, "Yaml: out of memory");
+    d->live = 1;
+    yaml_parser_set_input_string(&d->parser, (const unsigned char*)src, len);
 
-    dec_value(L, &parser);
+    lua_newtable(L);  // anchors
+    YamlDecodeState s = { &d->parser, lua_gettop(L), 0 };
+    dec_document(L, &s);
 
-    yaml_parser_delete(&parser);
+    d->live = 0;
+    yaml_parser_delete(&d->parser);
     return 1;
 }

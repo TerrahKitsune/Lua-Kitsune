@@ -405,18 +405,25 @@ int ErrorFromPipe(lua_State* L) {
 
 int GetSetPriority(lua_State* L) {
 	LuaProcess* proc = lua_toprocess(L, 1);
-	DWORD prio = GetPriorityClass(proc->processInfo.hProcess);
 
 	if (lua_type(L, 2) == LUA_TNUMBER) {
-		prio = (DWORD)SetPriorityClass(proc->processInfo.hProcess, (DWORD)lua_tointeger(L, 2));
+		BOOL ok = SetPriorityClass(proc->processInfo.hProcess, (DWORD)lua_tointeger(L, 2));
 		lua_pop(L, lua_gettop(L));
-		lua_pushboolean(L, prio > 0);
-	}
-	else {
-		lua_pop(L, lua_gettop(L));
-		lua_pushinteger(L, prio > 0);
+		lua_pushboolean(L, ok != 0);
+		return 1;
 	}
 
+	// No argument: return the current priority class, or nil, errmsg on failure.
+	DWORD prio = GetPriorityClass(proc->processInfo.hProcess);
+	lua_pop(L, lua_gettop(L));
+
+	if (prio == 0) {
+		lua_pushnil(L);
+		lua_pushfstring(L, "Unable to get priority class %d", (int)GetLastError());
+		return 2;
+	}
+
+	lua_pushinteger(L, (lua_Integer)prio);
 	return 1;
 }
 
@@ -472,8 +479,8 @@ int GetThreads(lua_State* L) {
 
 int GetSetAffinity(lua_State* L) {
 	LuaProcess* proc = lua_toprocess(L, 1);
-	DWORD64 newmask;
-	DWORD64 process, system;
+	DWORD_PTR newmask;
+	DWORD_PTR process, system;
 
 	bool ok = GetProcessAffinityMask(proc->processInfo.hProcess, &process, &system) > 0;
 
@@ -481,24 +488,25 @@ int GetSetAffinity(lua_State* L) {
 		lua_pop(L, lua_gettop(L));
 		lua_pushnil(L);
 		lua_pushstring(L, "Unable to retrive process affinity mask");
-		return 1;
+		return 2;
 	}
 
 	if (lua_isnumber(L, 2)) {
-		newmask = (DWORD)lua_tointeger(L, 2);
+		// Full pointer width, so masks above bit 31 are kept on 64-bit builds.
+		newmask = (DWORD_PTR)(unsigned long long)lua_tointeger(L, 2);
 		ok = SetProcessAffinityMask(proc->processInfo.hProcess, newmask) > 0;
 
 		if (!ok) {
 			lua_pop(L, lua_gettop(L));
 			lua_pushnil(L);
 			lua_pushstring(L, "Unable to set process affinity mask");
-			return 1;
+			return 2;
 		}
 	}
 
 	lua_pop(L, lua_gettop(L));
-	lua_pushinteger(L, process);
-	lua_pushinteger(L, system);
+	lua_pushinteger(L, (lua_Integer)process);
+	lua_pushinteger(L, (lua_Integer)system);
 	return 2;
 }
 

@@ -85,6 +85,10 @@ int PushReply(lua_State* L, redisReply* reply) {
 
 		lua_pushinteger(L, reply->integer);
 	}
+	else if (reply->type == REDIS_REPLY_BOOL) {
+		// RESP3 booleans live in reply->integer; str is NULL
+		lua_pushboolean(L, reply->integer != 0);
+	}
 	else if (reply->type == REDIS_REPLY_ARRAY ||
 			 reply->type == REDIS_REPLY_MAP   ||
 			 reply->type == REDIS_REPLY_SET   ||

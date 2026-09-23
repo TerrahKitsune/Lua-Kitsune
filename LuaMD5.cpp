@@ -45,7 +45,7 @@ int UpdateMD5(lua_State *L){
 		luaL_error(L, "Unable to get md5 instance");
 		return 0;
 	}
-	else if (luamd5->hash && luamd5->hash[0] != '\0') {
+	else if (luamd5->finished) {
 		luaL_error(L, "Cannot update already finished md5 digest");
 		return 0;
 	}
@@ -78,8 +78,9 @@ int UpdateMD5(lua_State *L){
 int FinalMD5(lua_State *L){
 
 	LuaMD5 * luamd5 = lua_tomd5(L, 1);
-	if (luamd5->hash || luamd5->hash[0] == '\0'){
+	if (!luamd5->finished){
 		MD5Final((unsigned char *)luamd5->hash, &luamd5->MD5);
+		luamd5->finished = true;   // later calls return the same digest
 	}
 
 	char md5string[33];
@@ -95,12 +96,7 @@ int FinalMD5(lua_State *L){
 
 int md5_gc(lua_State *L){
 
-	LuaMD5 * luamd5 = lua_tomd5(L, 1);
-
-	if (!luamd5->hash){
-		MD5Final(luamd5->hash, &luamd5->MD5);
-	}
-
+	lua_tomd5(L, 1);   // nothing to free: the context lives inside the userdata
 	return 0;
 }
 

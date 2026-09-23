@@ -37,7 +37,7 @@ int UpdateSHA256(lua_State *L) {
 	LuaSHA256 * luasha256 = lua_tosha256(L, 1);
 	if (!luasha256)
 		luaL_error(L, "Unable to get sha256 instance");
-	else if (luasha256->hash && luasha256->hash[0] != '\0')
+	else if (luasha256->finished)
 		luaL_error(L, "Cannot update already finished sha256 digest");
 
 	size_t len;
@@ -52,8 +52,9 @@ int UpdateSHA256(lua_State *L) {
 int FinalSHA256(lua_State *L) {
 
 	LuaSHA256 * luasha256 = lua_tosha256(L, 1);
-	if (luasha256->hash || luasha256->hash[0] == '\0') {
+	if (!luasha256->finished) {
 		sha256_final(&luasha256->SHA, luasha256->hash);
+		luasha256->finished = true;   // later calls return the same digest
 	}
 
 	char sha256string[(SHA256_BLOCK_SIZE*2) + 1];
@@ -69,12 +70,7 @@ int FinalSHA256(lua_State *L) {
 
 int sha256_gc(lua_State *L) {
 
-	LuaSHA256 * luasha256 = lua_tosha256(L, 1);
-
-	if (!luasha256->hash) {
-		sha256_final(&luasha256->SHA, luasha256->hash);
-	}
-
+	lua_tosha256(L, 1);   // nothing to free: the context lives inside the userdata
 	return 0;
 }
 

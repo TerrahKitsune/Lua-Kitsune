@@ -29,6 +29,7 @@ A comprehensive reference for all available functions in the Lua environment.
 - [SQLite](#sqlite)
 - [DuckDB](#duckdb)
 - [Json](#json)
+- [MsgPack](#msgpack)
 - [Text](#text)
 - [UInt](#uint)
 - [TimeSpan](#timespan)
@@ -38,6 +39,7 @@ A comprehensive reference for all available functions in the Lua environment.
 - [MongoDB](#mongodb)
 - [FileSystem](#filesystem)
 - [Image](#image)
+- [Sound](#sound)
 - [Xml](#xml)
 - [Yaml](#yaml)
 - [Toml](#toml)
@@ -52,7 +54,7 @@ A comprehensive reference for all available functions in the Lua environment.
 
 ## Userdata Return Values (read first)
 
-All text in the engine is a plain **UTF-8 Lua string** on every platform, both in and out: filenames, CSV fields, SQLite columns, archive entry names, clipboard text, and so on. Non-ASCII text such as `é`, `€`, CJK or emoji is fully supported. Use Lua 5.4's built-in `utf8` library for codepoint-level work (`utf8.len`, `utf8.codepoint`, `utf8.offset`, `utf8.char`), and the [`Text`](#text) module for Unicode case mapping, UTF-16 and legacy code pages.
+All text in the engine is a plain **UTF-8 Lua string** on every platform, both in and out: filenames, CSV fields, SQLite columns, archive entry names, clipboard text, and so on. Non-ASCII text such as `é`, `€`, CJK or emoji is fully supported. Use Lua's built-in `utf8` library for codepoint-level work (`utf8.len`, `utf8.codepoint`, `utf8.offset`, `utf8.char`), and the [`Text`](#text) module for Unicode case mapping, UTF-16 and legacy code pages.
 
 A few functions do return a **userdata** object (`type(v) == "userdata"`) where you might expect a plain string or number: typed values such as `Decimal`, `DateTime`, `Identifier`, `UInt` and `TimeSpan`, listed below. These values print fine but **are not Lua strings or numbers**. Convert them with `tostring(v)` (or `v:ToNumber()`) before doing anything string- or number-like with them.
 
@@ -90,7 +92,7 @@ end
 | MySQL `DECIMAL`, Postgres `NUMERIC`, MongoDB `DECIMAL128` | `Decimal` | Always (falls back to a string if parsing fails) |
 | MySQL `DATE`/`DATETIME`/`TIMESTAMP`, Postgres date/time types, MongoDB `DATE_TIME` | `DateTime` | Always (falls back to a string if parsing fails) |
 | Postgres `UUID`, MongoDB `OID` / UUID binary | `Identifier` | Always |
-| MySQL `BIGINT UNSIGNED`, MsgPack positive integers | `UInt` | Only when the value is greater than `2^63 - 1`. Smaller values are plain integers |
+| MySQL `BIGINT UNSIGNED` and `BIT(64)`, MsgPack positive integers | `UInt` | Only when the value is greater than `2^63 - 1`. Smaller values are plain integers |
 | `Stream:ReadUInt64` / `ReadDecimal` / `ReadIdentifier` / `ReadDateTime` / `ReadTimeSpan` | matching type | Always |
 | `Stream:ReadUnsignedLong` | `UInt` | Only when the value is greater than `2^63 - 1` |
 | `Timer:ElapsedTimeSpan()`, `client:GetTimestamp()` (HttpClient) | `TimeSpan` | Always |
@@ -106,7 +108,7 @@ int CRC32(stringdata, opt existingcrc)
 int CRC64(data)
 ```
 - `CRC32`: Calculate a CRC32 checksum
-- `CRC64`: Calculate a CRC64 over a string's bytes (non-strings are converted via `tostring`). For a checksum over UTF-16 text, pass `Text.ToUtf16(str)`
+- `CRC64`: Calculate a CRC64 over a string's bytes (non-strings are converted via `tostring`; a `Stream` raises an error). The unsigned 64-bit result is returned as a Lua integer, so it can be negative. For a checksum over UTF-16 text, pass `Text.ToUtf16(str)`
 
 ### Time & Sleep
 
@@ -114,26 +116,26 @@ int CRC64(data)
 nil Sleep(opt ms)
 nil Sleep(token)
 nil Sleep(token, ms)
-nil Yield()
-nil Pause()
+nil Yield(opt didWork)
+value Pause()
 int Time()
-ms Runtime()
+number Runtime()
 ```
-- `Sleep`: Yield the current coroutine cooperatively without blocking any OS thread. Falls back to a blocking OS sleep when called outside a scheduler-managed coroutine.
+- `Sleep`: Yield the current coroutine cooperatively without blocking any OS thread. Falls back to a blocking OS sleep when called outside a scheduler-managed coroutine; inside an engine coroutine that can't yield (and not on the scheduler thread) it raises "Sleep() cannot be called from a non-yieldable context".
   - `Sleep(ms)` — sleep for at least `ms` milliseconds (default `0`).
   - `Sleep(token)` — sleep until the `AliveToken` is disposed, expired, or a linked parent dies. Returns immediately if the token is already dead.
   - `Sleep(token, ms)` or `Sleep(ms, token)` — sleep until whichever comes first: token death or the millisecond deadline.
-- `Yield`: Cooperatively yield the current coroutine back to the scheduler immediately (no sleep delay). For inline sync calls, this briefly releases Lua access so the scheduler and variable bridge can service their queues before the call is resumed.
-- `Pause`: Suspend the current coroutine indefinitely until `task:Resume()` is called externally. The coroutine's status becomes `TaskStatus.Paused` and it will not be resumed by the scheduler on its own. A no-op when called outside a scheduler-managed async coroutine (e.g. from an inline call or a registered function callback).
+- `Yield`: Cooperatively yield the current coroutine back to the scheduler immediately (no sleep delay). `Yield(true)` also tells the scheduler the coroutine did work, so it doesn't idle-sleep before the next round. For inline sync calls, this briefly releases Lua access so the scheduler and variable bridge can service their queues before the call is resumed. Raises "Yield() cannot be called from a non-yieldable context" where it can't yield.
+- `Pause`: Suspend the current coroutine indefinitely until `task:Resume(value)` is called externally, then return `value` (nothing if none was given). The coroutine's status becomes `TaskStatus.Paused` and it will not be resumed by the scheduler on its own. A no-op when called outside a scheduler-managed async coroutine (e.g. from an inline call or a registered function callback).
 - `Time`: Get current Unix epoch in milliseconds.
-- `Runtime`: Get runtime in milliseconds.
+- `Runtime`: Elapsed milliseconds as a number (with a fractional part): inside a scheduler coroutine, since that coroutine started; otherwise since the engine started.
 
 ### Error Handling
 
 ```lua
 string, code GetLastError(opt lasterrorcode)
 ```
-Retrieves the last error code as a message (UTF-8, localized by the OS, without trailing newline) and code.
+Retrieves the last error code as a message (UTF-8, localized by the OS, without trailing newline) and code. The default code is `GetLastError()` on Windows and `errno` on Linux (message from `strerror`).
 
 ### Shell
 
@@ -147,22 +149,22 @@ Opens `file` (a path, URL or program) with its associated application; `file` an
 ```lua
 int GetMemory()
 ```
-Returns memory in bytes used by Lua.
+Returns memory in bytes used by Lua (a 64-bit integer, so values above 2 GB are correct).
 
 ### String Functions
 
 ```lua
 bool string.equal(str1, str2)
 ```
-Compares two strings ignoring case.
+Compares two strings ignoring ASCII case only (use `Text.Lower(a) == Text.Lower(b)` for other letters).
 
 ### Environment Variables
 
 ```lua
-int setenv(var, value, override)
+int setenv(var, value, opt override)   -- override defaults to false
 string (or nil) getenv(var)
 ```
-Names and values are UTF-8 and reach child processes unchanged. `getenv` returns `nil` when a variable is unset. `setenv` returns `0` on success; with `override` false an existing variable is left as it is. Unlike Lua's `os.getenv`, these use the Unicode environment on Windows in every host.
+Names and values are UTF-8 and reach child processes unchanged. `getenv` returns `nil` when a variable is unset. `setenv` returns `0` on success; with `override` false an existing variable is left as it is. These use the Unicode environment on Windows in every host; Lua's `os.getenv` reads the same environment (also as UTF-8), so it sees values set with `setenv`.
 
 ### Table Functions
 
@@ -180,8 +182,8 @@ string or array Dns(name, full default false)
 string or nil GetComputerName()
 ```
 - `Dns`: If `full=true`, returns an array of objects with fields `Type` (`"IPV4"`/`"IPV6"`) and `IP`
-- If `full=false`, returns first IPv4 address or `nil`
-- `GetComputerName`: Retrieve fully qualified computer name
+- If `full=false`, returns the first IPv4 address, or `nil` when the name doesn't resolve or has no IPv4 address (for example `Dns("::1")`)
+- `GetComputerName`: Retrieve the computer name (fully qualified DNS name on Windows; `gethostname` on Linux)
 
 ### Memory Status
 
@@ -189,7 +191,7 @@ string or nil GetComputerName()
 int GlobalMemoryStatus(opt type)
 ```
 
-**Type values:**
+**Type values** (sizes are KB on Windows, **MB** on Linux; on Linux 5/6 repeat 1/2):
 | Value | Description |
 |-------|-------------|
 | 0 | Percentage in use (default) |
@@ -205,6 +207,8 @@ int GlobalMemoryStatus(opt type)
 ```lua
 table BencodeDecode(binarystring)
 bool GetIsAdmin()
+nil Break()   -- no-op (reserved debugging hook)
+nil Test()    -- no-op (reserved)
 ```
 
 ### Global Variables
@@ -222,7 +226,7 @@ bool GetIsAdmin()
 
 ## Hardware
 
-Read-only hardware sensor and system information module. On **Windows**, temperature and CPU load data come from PDH (`\Thermal Zone Information` and `\Processor`); battery uses `GetSystemPowerStatus`. On **Linux**, all sensors are read from `/sys/class/hwmon/`, `/proc/`, and `/sys/class/power_supply/`.
+Read-only hardware sensor and system information module. On **Windows**, temperature and CPU load data come from PDH (`\Thermal Zone Information`, `\Processor` and `\Processor Information`); battery uses `GetSystemPowerStatus`. On **Linux**, all sensors are read from `/sys/class/hwmon/`, `/proc/`, and `/sys/class/power_supply/`.
 
 > **Note:** On Windows, temperature data comes from the PDH `\Thermal Zone Information` counter (no admin rights required). Fan RPM and voltage sensors are not available on Windows without vendor drivers.
 
@@ -233,8 +237,10 @@ number or nil Hardware.CpuLoad()
 table or nil  Hardware.Memory()
 string or nil Hardware.CpuName()
 table or nil  Hardware.Battery()
-table or nil  Hardware.GpuMemory()   -- Windows only; nil on Linux
-table or nil  Hardware.GpuLoad()     -- Windows only; nil on Linux
+table or nil  Hardware.GpuMemory()   -- Windows: table (may be empty); nil on Linux
+table or nil  Hardware.GpuLoad()     -- Windows: table (may be empty); nil on Linux
+table         Hardware.DiskIO()
+table         Hardware.NetworkIO()
 ```
 
 ### Hardware.CpuTemp
@@ -243,16 +249,20 @@ table or nil  Hardware.GpuLoad()     -- Windows only; nil on Linux
 table or nil Hardware.CpuTemp()
 ```
 
-Returns an array of tables — one per thermal zone found — each with `Name` (string) and `Value` (°C, number). Returns `nil` when no valid thermal zones are found.
+Returns `nil` when no valid sensors are found. The element type differs by platform:
 
-- **Windows:** Tries `\Thermal Zone Information(*)\High Precision Temperature` first, then `\Temperature`. Both counters report tenths of Kelvin; zones below 200 K (uninitialised) are filtered out.
-- **Linux:** Reads from `/sys/class/hwmon/` chips named `coretemp`, `k10temp`, `zenpower`, or `cpu_thermal`.
+- **Windows:** an array of tables, one per thermal zone, each with `Name` (string) and `Value` (°C, number). Tries `\Thermal Zone Information(*)\High Precision Temperature` first, then `\Temperature`. Both counters report tenths of Kelvin; zones below 200 K (uninitialised) are filtered out.
+- **Linux:** an array of plain numbers (°C), read from `/sys/class/hwmon/` chips named `coretemp`, `k10temp`, `zenpower`, or `cpu_thermal`.
 
 ```lua
 local temps = Hardware.CpuTemp()
 if temps then
-    for _, t in ipairs(temps) do
-        print(string.format("%s: %.1f°C", t.Name, t.Value))
+    for i, t in ipairs(temps) do
+        if type(t) == "table" then   -- Windows
+            print(string.format("%s: %.1f°C", t.Name, t.Value))
+        else                         -- Linux
+            print(string.format("sensor %d: %.1f°C", i, t))
+        end
     end
 end
 ```
@@ -328,8 +338,8 @@ string or nil Hardware.CpuName()
 
 Returns the CPU brand string (e.g. `"Intel(R) Core(TM) i7-9700K @ 3.60GHz"`).
 
-- **Windows / Linux x86-64:** Uses the CPUID instruction leaf `0x80000002–4`.
-- **Linux non-x86:** Reads the `model name` field from `/proc/cpuinfo`.
+- **Windows:** Uses the CPUID instruction leaf `0x80000002–4`.
+- **Linux:** Reads the `model name` field from `/proc/cpuinfo`.
 
 ```lua
 print("CPU:", Hardware.CpuName())
@@ -373,7 +383,7 @@ end
 table or nil Hardware.GpuMemory()
 ```
 
-**Windows only** — returns `nil` on Linux.
+**Windows only** — returns `nil` on Linux. On Windows it always returns a table, which is empty if the counters can't be read.
 
 Returns a table keyed by adapter friendly name. Each value is a table with memory usage in **MB**:
 
@@ -401,7 +411,7 @@ end
 table or nil Hardware.GpuLoad()
 ```
 
-**Windows only** — returns `nil` on Linux.
+**Windows only** — returns `nil` on Linux. On Windows it always returns a table, which is empty if the counters can't be read.
 
 Returns a table keyed by adapter friendly name. Each value is a table mapping engine type strings to utilisation percentages (0–100). Engine types include `"3d"`, `"copy"`, `"videoencode"`, `"videodecode"`, `"compute 0"`, etc. — exactly what the driver exposes.
 
@@ -421,6 +431,26 @@ if load then
 end
 ```
 
+### Hardware.DiskIO / Hardware.NetworkIO
+
+```lua
+table Hardware.DiskIO()
+table Hardware.NetworkIO()
+```
+
+- `DiskIO` returns `{[disk] = {ReadBytesPerSec, WriteBytesPerSec, ActivePercent}}`; `ActivePercent` is Windows only.
+- `NetworkIO` returns `{[adapter] = {RecvBytesPerSec, SendBytesPerSec, TotalBytesPerSec}}`.
+- **Windows:** persistent PDH queries (rates per second); no sleep needed between calls.
+- **Linux:** computed from `/proc/diskstats` and `/proc/net/dev` deltas. The values are **bytes since the previous call**, not per second, and the first call returns an empty table.
+
+```lua
+Hardware.NetworkIO()   -- prime the baseline (needed on Linux)
+Sleep(1000)
+for nic, io in pairs(Hardware.NetworkIO()) do
+    print(nic, io.RecvBytesPerSec, io.SendBytesPerSec)
+end
+```
+
 ---
 
 ## Mutex
@@ -429,7 +459,7 @@ end
 Mutex Mutex.Open(name)
 -- or on failure:
 nil, errorCode Mutex.Open(name)
-bool Mutex:Lock(opt timeout)
+bool Mutex:Lock(opt timeoutMs)
 nil Mutex:Unlock()
 islocked, name, internalid Mutex:Info()
 ```
@@ -437,9 +467,9 @@ islocked, name, internalid Mutex:Info()
 | Function | Description |
 |----------|-------------|
 | `Open` | Opens/creates a named mutex (returns `nil, errorCode` on failure) |
-| `Lock` | Lock mutex (waits infinitely if no timeout). Returns `true` on success/already-held |
+| `Lock` | Lock the mutex. `timeoutMs` defaults to **0, a non-blocking try** that returns `false` if the mutex is held; a negative value waits forever; a positive value waits up to that many ms. Returns `true` on success/already-held, `false` on timeout |
 | `Unlock` | Unlocks the mutex |
-| `Info` | Get mutex information |
+| `Info` | Get mutex information. `internalid` is the OS handle as an integer on Windows and always `0` on Linux |
 
 ---
 
@@ -448,8 +478,11 @@ islocked, name, internalid Mutex:Info()
 ### Connection
 
 ```lua
-Redis Redis.Open(host, port, opt useTls, opt timeout, opt sslOptions, opt password)
+Redis Redis.Open(host, opt port, opt useTls, opt timeout, opt sslOptions, opt password)
+nil   Redis:Dispose()   -- close the connection (also done by the GC); returns true
 ```
+
+`port` defaults to 6379 and `timeout` (the connect timeout, in **seconds**) to 10. `Open` raises an error on any failure (connect, TLS, AUTH); it never returns `nil`, so wrap it in `pcall` if the server may be down.
 
 **SSL Options:**
 - `cacert`, `capath`, `cert`, `privatekey`, `servername`
@@ -459,6 +492,13 @@ Redis Redis.Open(host, port, opt useTls, opt timeout, opt sslOptions, opt passwo
 
 ```lua
 reply Redis:Command(command, arg, arg, arg, ...)
+```
+
+The reply is a table `{Type = int, Value = ...}`. For arrays, maps, sets and pushes, `Value` is an array of nested reply tables of the same shape. A server error **raises** a Lua error ("Redis error: ..."), so type 6 never comes back at the top level. BOOL replies (RESP3, e.g. after `HELLO 3`) come back with `Value` as a Lua boolean, DOUBLE replies as a number, INTEGER replies as an integer; STRING, STATUS, BIGNUM and VERB replies come back as strings.
+
+```lua
+local r = redis:Command("GET", "counter")
+if r.Type == 1 then print(r.Value) elseif r.Type == 4 then print("missing") end
 ```
 
 **Reply types:**
@@ -492,21 +532,39 @@ RedisStream Redis:GetStream(key)
 RedisJson   Redis:GetJson(key)
 ```
 
+### RedisValue (hash, list, set, sorted set)
+
+`GetHashset`, `GetList`, `GetSet` and `GetSortedSet` return a `RedisValue`. It has no methods; everything goes through indexing, assignment, `#`, `pairs` and calling it:
+
+| Kind | Read | Write | `#v` | `pairs(v)` |
+|------|------|-------|------|------------|
+| Hash | `h[field]` → string or nil (HGET) | `h[field] = v` (HSET; tables are JSON-encoded), `h[field] = nil` (HDEL) | always 0 | field, value |
+| List | `l[i]` 1-based, negative counts from the end; **`l[0]` pops (LPOP) and removes the item** | `l[i] = v` (LSET), or RPUSH/LPUSH when `i` is 0 or out of range | LLEN | — |
+| Set | `s[member]` → boolean (SISMEMBER); `s[0]` random member; `s[-1]` pops (SPOP); `s[i]` (i ≥ 1) from an SSCAN snapshot | `s[member] = truthy` (SADD), `nil`/`false` (SREM) | SCARD | — |
+| Sorted set | `z[i]` member at rank `i`; `z[member]` score as a string | `z[member] = number` (ZADD), any other value (ZREM) | always 0 | member, score |
+
+`v()` returns the `RedisKey` and the Redis type as an integer.
+
 ### RedisStream
 
 ```lua
-id RedisStream:Add({key=value})
-id, data RedisStream:Read(opt id, opt blocktime)
-int RedisStream:Trim(int or id)
+id          RedisStream:Add({field=value})
+id, data    RedisStream:Read(opt id, opt blockMs)
+int         RedisStream:Trim(maxlen_or_minid)
 ```
+
+- `Add` returns the new entry id.
+- `Read` returns the first message *after* `id` (default `"0-0"`) as `id, {field=value}`, waiting up to `blockMs` (default 0) for one; it returns **no values** when there is none.
+- `Trim(n)` trims to `n` entries (MAXLEN) given an integer, or removes entries older than an id (MINID) given a string; returns the number removed.
+- `stream()` returns the `RedisKey`.
 
 ### RedisKey
 
 ```lua
 bool RedisKey:Delete()
 string RedisKey:Type()
-int RedisKey:GetTTL()
-bool RedisKey:SetTTL(ms)
+int RedisKey:GetTTL()     -- nil if the key doesn't exist, -1 if it has no TTL
+bool RedisKey:SetTTL(ms)  -- ms <= 0 removes the TTL (PERSIST)
 ```
 
 ### RedisString
@@ -515,24 +573,29 @@ bool RedisKey:SetTTL(ms)
 int    RedisString:GetTTL()
 bool   RedisString:SetTTL(ms)
 string RedisString:Set(newValue)      -- returns old value, or nil if key was new
-string RedisString:GetOrSet(newValue) -- alias: GetSet
+string RedisString:GetOrSet(newValue) -- alias: GetSet; returns the existing value without
+                                      -- overwriting it, or sets and returns newValue if the key is missing
 string RedisString:Delete()           -- returns value before deletion
-byte   RedisString:At(n)             -- byte at 1-based position; nil if out of range
+byte   RedisString:At(n)             -- byte (0-255) at 1-based position; nil if out of range
 length RedisString:len()
 ```
 
 Metamethod shortcuts:
 - `#str` — same as `len()`
-- `str[n]` — same as `At(n)` (read)
+- `str[n]` — same as `At(n)` (read); bytes are returned as 0-255
 - `str[n] = byte` — writes byte via `SETRANGE`
 - `str1 .. str2` — concatenates, returning a Lua string
 - `pairs(str)` — iterates bytes as `(position, byte)` pairs
+- `tostring(str)` — the current value (GET), or `""` if the key is missing
+- `str()` — the `RedisKey`
 
 ### Iterator Example
 
+Iterating the connection yields every key as a `RedisKey` userdata (not a string):
+
 ```lua
 for key in redis do
-    print(key)
+    print(tostring(key))
 end
 ```
 
@@ -555,8 +618,10 @@ Drive the coroutine with `coroutine.resume(co, stop_flag)`:
 |---|---|
 | `true, channel, message` | A message arrived on `channel` |
 | `true, pattern, channel, message` | A `PSubscribe` message matched `pattern` on `channel` |
-| `true` (no extra values) | Subscribe/unsubscribe acknowledgement — resume again |
+| `true` (no extra values) | No message yet, or a subscribe/unsubscribe acknowledgement — resume again later (polling never blocks) |
 | `true, nil, errmsg` | Connection error; coroutine is now dead |
+
+A dead `AliveToken` (see below) ends the coroutine the same way as resuming with `true`.
 
 #### Coroutine methods
 
@@ -569,7 +634,7 @@ co:SetAliveToken(token)  -- attach an AliveToken; when disposed the coroutine un
 local co = assert(redis:Subscribe('news', 'alerts'))
 while coroutine.status(co) == 'suspended' do
     local ok, ch, msg = coroutine.resume(co)
-    if ch then print(ch, msg) end
+    if ch then print(ch, msg) else Sleep(10) end   -- don't busy-spin while idle
     if done then coroutine.resume(co, true) end
 end
 ```
@@ -587,7 +652,10 @@ int        json:Delete()      -- delete at current path; returns count removed
 string     json:Type()        -- JSON type string: "null", "boolean", "integer",
                               --   "number", "string", "object", "array"
 int        json:Length()      -- array length at current path
+iterator   json:Pairs()       -- same as pairs(json)
 ```
+
+Path segments named after a method (`Get`, `Set`, `Delete`, `Type`, `Length`, `Pairs`) resolve to the method, not the JSON field: `j.Type` is the method. Avoid those field names, or read the parent with `Get()` and index the result.
 
 Metamethod shortcuts:
 - `json.field` — descends into object field (path chaining, returns new `RedisJson`)
@@ -595,7 +663,7 @@ Metamethod shortcuts:
 - `json.field = value` / `json[n] = value` — calls `Set`
 - `#json` — calls `Length`
 - `tostring(json)` — shows key and accumulated path
-- `json()` — `__call`: returns key name and Redis type string
+- `json()` — `__call`: same as `json:Get()`
 - `pairs(json)` — iterates object keys/values or array elements at current path
 
 ```lua
@@ -612,29 +680,47 @@ print(j.items:Length())        -- array length
 
 ## CSV
 
+Every operation is available in two forms: as a module-level function that takes an optional delimiter as its last argument, or as a method on a CSV object created with `CSV.New(delimiter)` that uses the object's bound delimiter.
+
 ```lua
+-- Module-level forms: delimiter defaults to ","
 table   CSV.Decode(str [, delimiter])
 string  CSV.Encode(rows [, delimiter])
-iter    CSV.DecodeFromFunction(fn [, delimiter])
+iter    CSV.DecodeFromFunction(fn_or_stream [, delimiter])
+
+-- CSV object forms: delimiter bound by New (defaults to auto-detect)
 object  CSV.New([delimiter])
+table   csv:Decode(str)
+string  csv:Encode(rows)
+iter    csv:DecodeFromFunction(fn_or_stream)
 ```
 
 | Function | Description |
 |----------|-------------|
+| `New` | Return a CSV object with a bound delimiter (or auto-detect when omitted) |
 | `Decode` | Decode a complete CSV string into a result table |
 | `Encode` | Encode an array-of-arrays into a UTF-8 CSV string |
-| `DecodeFromFunction` | Return a generic-`for` iterator that streams rows from a supplier function |
-| `New` | Return a CSV object with a bound delimiter (or auto-detect when omitted) || `New` | Return a CSV object with a bound delimiter (or auto-detect when omitted) |
+| `DecodeFromFunction` | Return a generic-`for` iterator that streams rows from a supplier function or a readable `Stream` |
 
-The optional `delimiter` argument accepts:
+The methods on a CSV object take no delimiter argument (an extra argument is silently ignored); use the module-level form or another `CSV.New(delimiter)` object for a different delimiter. `delimiter` accepts:
 - A single-character string: `","` `";"` `"|"` `"\t"`
 - An integer codepoint: `string.byte(";")` → `59`
-- The string `"auto"` or boolean `true` to trigger automatic delimiter detection
-- Omitting it (or passing `nil`) defaults to `","` for the direct functions, and `"auto"` for `CSV.New()`
-
-### CSV.Decode
+- The string `"auto"` or boolean `true` to trigger automatic delimiter detection (`Encode` always writes `","` in that case)
+- `false` for `","`
+- Omitting it (or passing `nil`) means `","` for the module-level functions and `"auto"` for `CSV.New`
 
 ```lua
+local t = CSV.Decode("a,b\n1,2")            -- t.Rows[2][2] == "2"
+local t = CSV.Decode("a;b\n1;2", ";")       -- explicit delimiter
+local t = CSV.Decode("a;b\n1;2", "auto")    -- sniff the delimiter
+local s = CSV.Encode({{"a", "b"}}, "|")     -- "a|b"
+for row in CSV.DecodeFromFunction(fn, ";") do ... end
+```
+
+### csv:Decode
+
+```lua
+table csv:Decode(str)
 table CSV.Decode(str [, delimiter])
 ```
 
@@ -652,58 +738,62 @@ Input must be UTF-8. A leading UTF-8 BOM (as in Excel's "CSV UTF-8" export) is s
 Leading spaces and tabs before each field are stripped. Quoted fields follow RFC 4180: `""` inside a quoted field becomes a literal `"`.
 
 ```lua
-local t = CSV.Decode("* header\na,b,c\n1,2,3")
+local t = CSV.New(","):Decode("* header\na,b,c\n1,2,3")
 -- t.Comments[1] == " header"
 -- t.Rows[1][1]  == "a"
 -- t.Rows[2][3]  == "3"
 
-local t = CSV.Decode("a;b;c\n1;2;3", "auto")  -- sniffer detects ";"
-local t = CSV.Decode("a;b;c", ";")             -- explicit delimiter
+local t = CSV.New():Decode("a;b;c\n1;2;3")   -- auto-detect: sniffer finds ";"
+local t = CSV.New(";"):Decode("a;b;c")       -- explicit delimiter
+local t = CSV.Decode("a;b;c", ";")           -- same, module-level form
 ```
 
-> **Memory note:** `Decode` converts the entire input to an internal wide-character buffer before parsing begins. A UTF-8 string of N bytes requires approximately 2×N bytes of additional heap memory for the conversion. For multi-megabyte files, use `DecodeFromFunction` (or `csv:DecodeFromFunction`) with a `Stream` or a chunked supplier function so that peak memory stays bounded to the chunk size rather than the whole file.
+> **Memory note:** `Decode` converts the entire input to an internal wide-character buffer before parsing begins. A UTF-8 string of N bytes requires approximately 2×N bytes of additional heap memory for the conversion (4×N on Linux). For multi-megabyte files, use `csv:DecodeFromFunction` with a `Stream` or a chunked supplier function so that peak memory stays bounded to the chunk size rather than the whole file.
 
-### CSV.Encode
+### csv:Encode
 
 ```lua
+string csv:Encode(rows)
 string CSV.Encode(rows [, delimiter])
 ```
 
 Encodes an array-of-arrays into a UTF-8 CSV string. Each field is converted via `tostring`. Fields containing the delimiter, a double-quote, a newline, or **leading whitespace** are wrapped in double-quotes with inner quotes escaped as `""` (RFC 4180). Rows are joined with `\n`.
 
 ```lua
-local s = CSV.Encode({{"hello", "world"}, {"foo", "bar"}})
+local csv = CSV.New(",")
+local s = csv:Encode({{"hello", "world"}, {"foo", "bar"}})
 -- s == "hello,world\nfoo,bar"
 
-local s = CSV.Encode({{"value with, comma"}})
+local s = csv:Encode({{"value with, comma"}})
 -- s == '"value with, comma"'
 
-local s = CSV.Encode({{"a", "b"}}, ";")  -- semicolon delimiter
+local s = CSV.New(";"):Encode({{"a", "b"}})  -- semicolon delimiter
 -- s == "a;b"
 ```
 
-### CSV.DecodeFromFunction
+### csv:DecodeFromFunction
 
 ```lua
-iterator CSV.DecodeFromFunction(fn [, delimiter])
+iterator csv:DecodeFromFunction(fn_or_stream)
+iterator CSV.DecodeFromFunction(fn_or_stream [, delimiter])
 ```
 
-Returns a generic `for` iterator. On each iteration the supplier function `fn` is called with no arguments and should return a chunk of CSV data as a string. The iterator stops when `fn` returns `nil`, `false`, or an empty string. Each iteration yields one row as a sequential table of UTF-8 string fields.
+Returns a generic `for` iterator. With a function, on each iteration the supplier `fn` is called with no arguments and should return a chunk of CSV data as a string; the iterator stops when `fn` returns `nil`, `false`, or an empty string. With a readable `Stream`, chunks are read with `stream:Read()` until it is exhausted. Each iteration yields one row as a sequential table of UTF-8 string fields.
 
 The parser handles chunk boundaries that fall in the middle of a field or row transparently — no alignment of chunks to row boundaries is required.
 
-When `delimiter` is `"auto"` or omitted on a `CSV.New()` object, the sniffer runs once on the first chunk and is not called again.
+When `delimiter` is `"auto"` (or omitted on a `CSV.New()` object), the sniffer runs once on the first chunk and is not called again.
 
 ```lua
 -- Stream a large file in 4 KB chunks
 local f = io.open("data.csv", "r")
-for row in CSV.DecodeFromFunction(function() return f:read(4096) end) do
-    print(tostring(row[1]), tostring(row[2]))
+for row in CSV.New(","):DecodeFromFunction(function() return f:read(4096) end) do
+    print(row[1], row[2])
 end
 f:close()
 
 -- Auto-detect delimiter from the stream
-for row in CSV.DecodeFromFunction(mySupplierFn, "auto") do ... end
+for row in CSV.New():DecodeFromFunction(Stream.Open("data.csv")) do ... end
 ```
 
 > **Note:** Comment lines (starting with `*`) are not detected in streaming mode and appear as regular rows.
@@ -743,13 +833,13 @@ The sniffer scans up to the first 5 lines, counts each candidate's occurrences p
 
 | Situation | Behaviour |
 |-----------|-----------|
-| **Empty input** | `CSV.Decode("")` produces `{Rows={}}` — zero rows, empty `Rows` table |
+| **Empty input** | `csv:Decode("")` produces `{Rows={}}` — zero rows, empty `Rows` table |
 | **Trailing newline** | A single trailing `\n` does **not** create an extra row (the newline is consumed as the end-of-row sentinel) |
 | **Double trailing newline** | `"a,b\n\n"` produces a second empty row `[""]` |
 | **Leading whitespace in unquoted fields** | Spaces and tabs before a field value are stripped during decode. `Encode` quotes fields with leading whitespace to preserve round-trip fidelity |
 | **Trailing whitespace in unquoted fields** | Preserved as-is; only *leading* whitespace is stripped |
 | **Unquoted field containing `"`** | Treated leniently: the `"` turns on quote-mode mid-field. `hel"lo"world` → `helloworld` |
-| **Multi-character delimiter** | Only the first character is used; `CSV.Decode(s, "||")` behaves as `|` |
+| **Multi-character delimiter** | Only the first character is used; `CSV.New("||")` behaves as `|` |
 | **Non-ASCII delimiter** | Matched at the byte level in `Encode`; works correctly for all printable ASCII delimiters (`,` `;` `|` `\t` etc.) |
 | **`"` as delimiter** | Not supported; the parser uses `"` as the quoting character |
 | **`*` comment mid-file** | Only lines at the very start of the input are checked for `*`; a `*` anywhere else is a regular field character |
@@ -767,8 +857,8 @@ KafkaProducer  Kafka.NewProducer(opt conf)
 KafkaConsumer  Kafka.NewConsumer(opt conf)
 ```
 
-`conf` is an optional table of librdkafka configuration key/value pairs.  
-Default `group.id` values: `"LUAP"` (producer), `"LUAC"` (consumer).
+`conf` is an optional table of librdkafka configuration key/value pairs (values must be strings or numbers; an unknown or invalid key raises an error).  
+Default `group.id` values: `"LUAP"` (producer), `"LUAC"` (consumer). Both constructors return `nil, errmsg` if the client can't be created.
 
 ---
 
@@ -781,8 +871,10 @@ bool, errmsg  producer:Send(topic, key, value [, headers [, partition]])
 ```
 
 - `key` — may be `nil` for keyless messages
+- `value` — required string
 - `headers` — optional table of string key/value pairs: `{source='app', version='1'}`
 - `partition` — optional integer; omit (or pass `nil`) for automatic partitioning
+- `true` means the message was **queued** for sending, not that the broker received it
 
 #### Offsets & metadata
 
@@ -852,14 +944,16 @@ bool, errmsg   producer:DeleteGroupOffsets(groupId, {'topic:N', ...} [, timeout_
 **`DeleteGroup`** — deletes the group entirely. The group must have no active members.
 
 ```lua
-bool, errmsg  producer:Close()
+nil  producer:Close()
 ```
+
+`Close()` returns nothing. Afterwards every other producer method raises "Producer not open".
 
 ---
 
 ### KafkaConsumer
 
-All topic-admin and group-admin methods available on `KafkaProducer` are also available on `KafkaConsumer` with identical signatures.
+The offsets/metadata and group-admin methods available on `KafkaProducer` (`GetOffsets`, `GetMetadata`, `GetTopicConfig`, `SetTopicConfig`, `ListGroups`, `DescribeGroups`, `DeleteGroup`, `GetGroupOffsets`, `SetGroupOffsets`, `DeleteGroupOffsets`) are also available on `KafkaConsumer` with identical signatures. `CreateTopic` and `DestroyTopic` are **producer only**.
 
 #### Subscribing and assigning
 
@@ -881,9 +975,9 @@ assert(consumer:Assign({'my-topic:0:earliest'}))
 
 | Entry format | librdkafka offset | Behaviour |
 |---|---|---|
-| `"topic:N"` | `OFFSET_STORED` | Uses committed offset; falls back to `auto.offset.reset` |
-| `"topic:N:earliest"` | `OFFSET_BEGINNING` | Always starts from message 0 |
-| `"topic:N:latest"` | `OFFSET_END` | Starts after the current last message |
+| `"topic:N"` or `"topic:N:stored"` | `OFFSET_STORED` | Uses committed offset; falls back to `auto.offset.reset` |
+| `"topic:N:earliest"` or `"topic:N:beginning"` | `OFFSET_BEGINNING` | Always starts from message 0 |
+| `"topic:N:latest"` or `"topic:N:end"` | `OFFSET_END` | Starts after the current last message |
 | `"topic:N:123"` | `123` | Starts from exact offset 123 |
 
 #### Polling
@@ -942,11 +1036,13 @@ consumer:Close()
 bool, errmsg  consumer:Seek(topic, partition, offset [, timeout_ms])
 ```
 
-Repositions an already-assigned partition. `offset` accepts a number or the keywords `"earliest"`, `"latest"`, `"stored"`. Uses `rd_kafka_seek_partitions` internally.
+Repositions an already-assigned partition. `offset` accepts a number or the keywords `"earliest"`/`"beginning"`, `"latest"`/`"end"`, `"stored"`. `timeout_ms` defaults to 5000. Uses `rd_kafka_seek_partitions` internally.
 
 ```lua
-bool, errmsg  consumer:Close()
+nil  consumer:Close()
 ```
+
+`Close()` returns nothing. Afterwards `Poll()` returns `false, "Consumer not open"` and the other methods raise "Consumer not open".
 
 ---
 
@@ -956,25 +1052,27 @@ bool, errmsg  consumer:Close()
 string  Kafka.Logs([filename])
 ```
 
-Returns (and optionally saves to file) the accumulated librdkafka log output.
+Returns the librdkafka log output collected since the previous call and **clears** it (the buffer holds about the last 10 KB). `filename` does not save that text: it opens a log file (in append mode) that **future** log lines are also written to; `""` closes it.
 
 ---
 
 ## Archive
 
 ```lua
-Archive Archive.OpenRead(filename)
-array   Archive:Entries()
-file, size Archive:SetEntry(index)
-data    Archive:Read(opt buffer)
+Archive Archive.OpenRead(filename)        -- nil, errmsg on failure
+array   Archive:Entries()                 -- nil, errmsg on read errors
+name, size Archive:SetEntry(index)        -- 1-based; nil, "EOF" past the end; nil, errmsg on error
+data    Archive:Read(opt maxBytes)        -- default 1024; nil at the end of the entry
 string  Archive:ReadAll()
 ```
 
-**Entries returns:** Array of tables with `Name` and `Size`
+**Entries returns:** Array of tables with `Name` and `Size`. `Read` and `ReadAll` raise an error if no entry has been selected with `SetEntry`.
 
 - **Entry names** (`Entries()[i].Name` and the first return value of `SetEntry`) are always UTF-8 strings, including non-ASCII names.
 
 - **`ReadAll`** — reads the entire current entry into a single Lua string in one call. More convenient than looping with `Read` for entries that must be consumed completely.
+
+- **`SetEntry` reopens the archive file.** If the file can no longer be opened (deleted, renamed, locked) it returns `nil, errmsg` and no entry is selected; the `Archive` object stays safe to use and to garbage-collect.
 
 ---
 
@@ -985,13 +1083,13 @@ string  Archive:ReadAll()
 ```lua
 Stream Stream.New(opt string)
 Stream Stream.New(backendfunction)
-Stream Stream.Open(filename, mode)
+Stream Stream.Open(filename, opt mode)
 ```
 
 - **No argument** — creates a new empty in-memory stream.
 - **String argument** — creates an in-memory stream pre-loaded with the string contents, with the position reset to 0.
-- **Function argument** — creates a stream backed by the provided Lua function. The function is called with an opcode as its first argument and must handle all `STREAM_OP_*` operations it wishes to support. It must return the capability bitmask when called with `STREAM_OP_OPEN` (0).
-- **`Open(filename, mode)`** — opens a file as a stream. `filename` is UTF-8 on every platform (non-ASCII paths work on Windows).
+- **Function argument** — creates a stream backed by the provided Lua function. The function is called with an opcode as its first argument and must handle all `STREAM_OP_*` operations it wishes to support. It must return the capability bitmask when called with `STREAM_OP_OPEN` (0); a non-number or 0 raises "Backend function failed to open".
+- **`Open(filename, opt mode)`** — opens a file as a stream; `mode` defaults to `"rb"`. `filename` is UTF-8 on every platform (non-ASCII paths work on Windows). Raises "Stream.Open: cannot open '<file>' (<error>)" if the file can't be opened.
 
 ### Custom Backend Functions
 
@@ -1013,9 +1111,9 @@ A backend function is called as `backend(opcode, arg)` whenever the stream engin
 **Capability flags advertised via `STREAM_OP_OPEN`:**
 | Value | Constant | Enables |
 |-------|----------|---------|
-| 1 | `STREAM_CAP_READ` | `Read`, `ReadByte`, `ReadUtf8`, typed reads, `Compress`/`Decompress` source |
+| 1 | `STREAM_CAP_READ` | `Read`, `ReadByte`, `ReadUtf8`, typed reads, `len` (a readable function backend must handle `STREAM_OP_LEN` if `len()` is called), `Compress`/`Decompress` source |
 | 2 | `STREAM_CAP_WRITE` | `Write`, `WriteByte`, `WriteUtf8`, typed writes, `Compress`/`Decompress` destination |
-| 4 | `STREAM_CAP_SEEK` | `Seek`, `pos`, `len`, `SetByte` with position, `PeekByte` (requires both `CAP_READ` and `CAP_SEEK`) |
+| 4 | `STREAM_CAP_SEEK` | `Seek`, `pos`, `SetByte` with position, `PeekByte` (requires both `CAP_READ` and `CAP_SEEK`) |
 
 > **Note:** There is no `STREAM_CAP_PEEK` flag. `PeekByte` is gated on `CAP_READ | CAP_SEEK` — any seekable readable stream supports it via the save-pos / read / restore-pos path.
 
@@ -1077,9 +1175,9 @@ print(s:pos())    -- 11
 ### Read/Write Operations
 
 ```lua
-bool, err   Stream:WriteByte(byte)
-byte        Stream:ReadByte()
-byte        Stream:PeekByte(opt pos)
+bool        Stream:WriteByte(byte)      -- false if byte isn't 0-255 or the stream isn't writable
+int         Stream:ReadByte()           -- -1 at EOF or when not readable
+int         Stream:PeekByte(opt pos)    -- -1 at EOF, when not readable, or without CAP_SEEK
 void        Stream:SetByte(byte, opt position)
 int         Stream:Write(value, opt size)
 bool        Stream:WriteUtf8(str)
@@ -1092,11 +1190,11 @@ int         Stream:Id()
 nil         Stream:Close()
 ```
 
-- **`Write`** accepts a `string` (written as raw bytes), `number`, `boolean`, or one of the typed userdata listed under [Custom-type Reads](#custom-type-reads). The optional `size` argument limits the number of bytes written. Returns the number of bytes written, or `0` on failure.
+- **`Write`** accepts a `string` (written as raw bytes), `number` (always an 8-byte `double`, integers included), `boolean` (1 byte), or one of the typed userdata listed under [Custom-type Reads](#custom-type-reads); other userdata write 0 bytes. The optional `size` argument limits the number of bytes written. Returns the number of bytes written, or `0` on failure.
 - **`WriteUtf8`** converts a Lua string from Latin-1/byte values to proper UTF-8 before writing.
 - **`WriteUtf16`** encodes a UTF-8 string as UTF-16 LE (2 bytes per code unit, 4 for characters outside the BMP, no BOM) and writes it. Returns the number of bytes written, or `0` if the stream is not writable.
 - **`ReadUtf16`** reads `n` UTF-16 LE code units (2 bytes each) from the current position and returns them decoded as a UTF-8 string. If `n` is omitted or `nil`, reads all remaining bytes. Returns `nil` if the stream is not readable or no complete code unit is available. Unpaired surrogates decode to U+FFFD.
-- **`HasData`** — non-blocking availability check. For sync (seekable) streams returns the number of bytes remaining as an integer, or `false` at EOF. For async streams (vtable with `hasdata`) returns `true` if data is ready in the buffer, `false` if nothing is available yet (more may arrive later — `false` is **not** EOF for async streams). For fn backends dispatches `STREAM_OP_HASDATA`; returns `nil`/`false` if the backend has no handler. **Never yields.**
+- **`HasData`** — non-blocking availability check. For sync (seekable) streams returns the number of bytes remaining as an integer when more than 1 byte remains, `true` when exactly 1 byte remains, `false` at EOF, and `-1` if the stream was closed. For async streams (vtable with `hasdata`) returns `true` if data is ready in the buffer, `false` if nothing is available yet (more may arrive later — `false` is **not** EOF for async streams). For fn backends dispatches `STREAM_OP_HASDATA`; returns `nil`/`false` if the backend has no handler. **Never yields.**
 - **`Id`** — returns a stable integer identity value for this stream, suitable for use as a cache key or for distinguishing two stream references. Calls the backend's `getid` if available; otherwise falls back to the native pointer value.
 - **`Close`** — explicitly frees the stream's resources and marks it unusable. Called automatically by the GC; safe to call early when resources should be released promptly.
 
@@ -1104,14 +1202,16 @@ nil         Stream:Close()
 
 ```lua
 capsTable, backendInfo Stream:GetInfo()
-length Stream:len()
-pos Stream:pos()
-void Stream:Seek(opt pos)
+length Stream:len()    -- nil without CAP_READ
+pos Stream:pos()       -- nil without CAP_SEEK
+bool Stream:Seek(pos)  -- false if the stream isn't seekable
 ```
 
-`GetInfo()` returns two values:
+`GetInfo()` returns two values for sync streams:
 - `capsTable` — `{ Caps = number }` where `Caps` is the capability bitmask (`STREAM_CAP_*` flags)
-- `backendInfo` — backend-defined; for in-memory streams: `{ pos, len, alloc }`
+- `backendInfo` — backend-defined; in-memory streams: `{ pos, len, alloc, type = "memory" }`; file streams: `{ pos, len, mode, name, type = "file" }`
+
+Async streams (such as HTTP response streams) return a single backend table instead, may yield, and have no caps table.
 
 **`STREAM_CAP_*` flags:**
 | Value | Constant | Description |
@@ -1138,8 +1238,8 @@ Both functions work on **Windows and Linux** and accept **sync or async** source
 - The instance form (`stream:Compress()`) uses the stream itself as the source.
 - The static module form (`Stream.Compress(source)`) accepts any readable stream — including async streams created with a custom function backend.
 - If `deststream` is omitted or `nil`, a new in-memory stream is created, written to, rewound to position 0, and returned.
-- If `deststream` is provided it is written to **at its current position** and returned as-is (no automatic seek).
-- On failure (non-readable source, non-writable destination, or internal error) both return `nil, errmsg`.
+- If `deststream` is provided it is written to **at its current position** and returned as-is (no automatic seek). Exception: `Decompress` with an async source ignores `deststream` and always returns a new in-memory stream.
+- A non-readable source or non-writable destination returns `nil, errmsg`. Internal failures **raise** errors instead: "compression failed (N)", "truncated compressed stream", "decompression failed (N)", "out of memory".
 
 **Compression level** (`level` argument to `Compress`):
 
@@ -1168,16 +1268,18 @@ The sentinel is a pair of zero-valued `uint32` fields (`uncompressedSize == 0`).
 ### Typed Read/Write
 
 ```lua
-bool Stream:WriteFloat() / number Stream:ReadFloat()
-bool Stream:WriteDouble() / number Stream:ReadDouble()
-bool Stream:WriteShort() / int Stream:ReadShort()
-bool Stream:WriteUnsignedShort() / int Stream:ReadUnsignedShort()
-bool Stream:WriteInt() / int Stream:ReadInt()
-bool Stream:WriteUnsignedInt() / int Stream:ReadUnsignedInt()
-bool Stream:WriteLong() / int Stream:ReadLong()
-bool Stream:WriteUnsignedLong() / int-or-UInt Stream:ReadUnsignedLong()   -- UInt userdata when the value is > 2^63 - 1
+bool Stream:WriteFloat(value) / number Stream:ReadFloat()
+bool Stream:WriteDouble(value) / number Stream:ReadDouble()
+bool Stream:WriteShort(value) / int Stream:ReadShort()
+bool Stream:WriteUnsignedShort(value) / int Stream:ReadUnsignedShort()
+bool Stream:WriteInt(value) / int Stream:ReadInt()
+bool Stream:WriteUnsignedInt(value) / int Stream:ReadUnsignedInt()
+bool Stream:WriteLong(value) / int Stream:ReadLong()
+bool Stream:WriteUnsignedLong(value) / int-or-UInt Stream:ReadUnsignedLong()   -- UInt userdata when the value is > 2^63 - 1
 int Stream:WriteUtf16(str) / string Stream:ReadUtf16(opt n)
 ```
+
+`WriteUnsignedLong` takes a Lua integer, so a `UInt` returned by `ReadUnsignedLong` can't be written back with it; use `stream:Write(uint)` for that.
 
 ### Custom-type Reads
 
@@ -1185,7 +1287,7 @@ Custom userdata types can be written with `Stream:Write(value)` and read back wi
 
 ```lua
 UInt       Stream:ReadUInt64()      -- reads 8 bytes (uint64, native endian)
-Decimal    Stream:ReadDecimal()     -- reads 24 bytes (LuaDecimal struct layout)
+Decimal    Stream:ReadDecimal()     -- reads decimal text up to a NUL, "\n" or EOF (max 63 chars)
 Identifier Stream:ReadIdentifier()  -- reads 16 bytes (UUID raw bytes)
 DateTime   Stream:ReadDateTime()    -- reads 10 bytes (int64 ticks + int16 offset_minutes)
 TimeSpan   Stream:ReadTimeSpan()    -- reads 8 bytes (int64 ticks)
@@ -1196,7 +1298,7 @@ TimeSpan   Stream:ReadTimeSpan()    -- reads 8 bytes (int64 ticks)
 | Type | Bytes written | Format |
 |------|--------------|--------|
 | `UInt` | 8 | `uint64_t`, native endian |
-| `Decimal` | 24 | `LuaDecimal` struct (`uint64 lo`, `uint64 hi`, `int16 scale`, `uint8 negative`, 5 pad) |
+| `Decimal` | variable | the canonical decimal text (e.g. `"12.5"`, 4 bytes), no terminator; write a `"\0"` or `"\n"` after it if more data follows, so `ReadDecimal` knows where it ends |
 | `Identifier` | 12 or 16 | raw bytes — 16 for UUID, 12 for OID |
 | `DateTime` | 10 | `int64_t ticks` + `int16_t offset_minutes` |
 | `TimeSpan` | 8 | `int64_t ticks` |
@@ -1212,6 +1314,9 @@ string Base64.GetEncodeTable()
 void Base64.SetEncodeTable(encodetablestring)
 ```
 
+- `Decode("")` returns `""`. `Decode` returns `nil` if the input length isn't a multiple of 4. It doesn't validate characters or skip whitespace, so strip line breaks first.
+- `SetEncodeTable` raises unless given exactly 64 unique bytes, and it changes the table for everything in the process that uses `Base64`.
+
 ---
 
 ## Aes
@@ -1223,20 +1328,25 @@ data Aes:Decrypt(data)
 nil Aes:SetIV(opt iv)
 ```
 
-Creates AES-256-CBC, AES-256-ECB, or AES-256-CTR context.
+Creates an AES-256 context:
+
+- `key` is up to 32 bytes; shorter keys are zero-padded, longer ones raise "Key length must be 32 bytes".
+- Without an IV (`nil` or `""`) the mode is **ECB** and `usectr` is ignored. With an IV (up to 16 bytes, zero-padded) the mode is **CBC**, or **CTR** when `usectr == true`.
+- `Encrypt` always applies PKCS#7 padding (CTR included). `Decrypt` raises if the length isn't a multiple of 16, or "Invalid aes padding".
+- In CBC and CTR the context chains across calls, so call `SetIV()` to start a new message. `SetIV(nil)` (or `""`) restores the original IV; it does nothing in ECB. `SetIV(iv)` takes up to 16 bytes and zero-pads shorter IVs the same way `Aes.New` does; longer ones raise "IV length must be 16 bytes".
 
 ---
 
 ## Process
 
 ```lua
-table Process.All()
-Process Process.Open(opt id)
-Process Process.Start(app, cmd, directory, noconsole, opt redirectinputoutput)
+table Process.All()                  -- {[pid] = name}, or nil on failure
+Process Process.Open(opt id)          -- no id or 0: the current process; nil on failure
+Process Process.Start(app, cmd, directory, noconsole, opt redirect)   -- nil, errmsg on failure
 string Process:ReadFromPipe(opt buffersize)
-int Process:WriteToPipe()
+int Process:WriteToPipe(data)        -- bytes written, or -1
 string Process:ReadErrorFromPipe(opt buffersize)
-bool Process:Stop()
+bool Process:Stop(opt exitcode)
 int/nil Process:GetExitCode()
 int Process:GetID()
 string Process:GetName()
@@ -1248,6 +1358,13 @@ array Process:Threads()              -- Windows only
 ```
 
 - `app`, `cmd` and `directory` are UTF-8, so non-ASCII paths and arguments work. When `directory` is `nil` the child starts in the current directory.
+- `redirect` is `true` (redirect stdin, stdout and stderr) or a bitmask: 1 = stdin, 2 = stdout, 4 = stderr. `noconsole` is Windows only.
+- On Linux the command runs as `/bin/sh -c <cmd or app>`, and a `directory` becomes `cd '<dir>' && …`.
+- `ReadFromPipe` / `ReadErrorFromPipe` don't block: they return `nil` when nothing is available. The default buffer is 1 MB, and one read returns at most `buffersize - 1` bytes.
+- `Stop(exitcode)` terminates the process with that exit code on Windows; Linux sends SIGTERM.
+- `Priority()` with no argument returns the current priority class (for example `32` = `NORMAL_PRIORITY_CLASS`), or `nil, errmsg` on failure; with an argument it sets the class and returns a boolean.
+- `Affinity` returns the process and system masks from *before* any change, or `nil, errmsg` on failure. Masks use the full pointer width, so bits above 31 work in 64-bit builds.
+- `Threads()` returns `{ {ID, BasePrio, DeltaPrio}, … }` or `nil, errmsg`.
 - Names from `Process.All()` and `GetName()` are UTF-8.
 - **Pipe output is the child's raw bytes.** Many Windows console programs write in the OEM or ANSI code page rather than UTF-8. Convert with `Text.FromCodepage(out, 850)` (or the relevant code page) when the output isn't UTF-8.
 
@@ -1290,7 +1407,7 @@ TimeSpan client:GetTimestamp()
 | `SetFollowRedirects` | Follow HTTP redirects. Default `true` |
 | `SetVerifySSL` | Verify SSL certificates. Default `true` |
 | `SetDefaultHeader` | Add a header sent with every request on this client |
-| `SetAliveToken(token)` | Attach an `AliveToken` to this client. While the token is alive requests proceed normally. When disposed: `Request` returns `nil, "aborted"` immediately (no coroutine is created); `Call` returns `nil, "aborted"`. Pass `nil` to detach |
+| `SetAliveToken(token)` | Attach an `AliveToken` to this client. While the token is alive requests proceed normally. If the token is already dead when a request starts, `Request` returns `nil, "aborted"` (no coroutine is created) and `Call` returns `nil, "aborted"`. If it dies while a `Request` is in flight, the request coroutine finishes with **no values**. Pass `nil` to detach |
 | `GetTimestamp` | Returns the round-trip duration of the most recently **completed** `Request()` call as a `TimeSpan`. The clock starts just before the request is submitted to curl and stops when the last response byte is received. Returns a zero `TimeSpan` if no request has completed yet on this client |
 
 ### Buffered request
@@ -1299,7 +1416,7 @@ TimeSpan client:GetTimestamp()
 coroutine, errmsg client:Request(method, url, opt body, opt headers, opt outStream)
 ```
 
-Returns a coroutine immediately. Drive it with `coroutine.resume` until a non-nil result table is returned. `body` is an optional string. `headers` is an optional per-request header table. `outStream` is an optional writable `Stream`; when provided the response body is written there and `Contents` in the result is `nil`.
+Returns a coroutine immediately. Drive it with `coroutine.resume` until it is dead (`coroutine.status(co) == "dead"`); its last results are the result table. `body` is an optional string, or a native `Stream` (not a Lua-function stream) for a streaming upload. `headers` is an optional per-request header table. `outStream` is an optional writable `Stream`; when provided the response body is written there and `Contents` in the result is `nil`.
 
 ### Simple blocking call
 
@@ -1308,7 +1425,7 @@ result        = client:Call(method, url [, headers [, body]])
 nil, errmsg   = client:Call(...)   -- on transport failure
 ```
 
-Drives the request to completion internally, yielding the outer coroutine cooperatively on each poll. Returns the same result table as `Request` on success, or `nil, errmsg` on transport failure (e.g. `"Timeout"`, `"Could not resolve host"`, curl error text).
+Drives the request to completion internally, yielding the outer coroutine cooperatively on each poll. Returns the same result table as `Request` on success, or `nil, errmsg` on transport failure, where `errmsg` is curl's error text (e.g. `"Operation timed out after 5000 milliseconds ..."`, `"Could not resolve host: ..."`).
 
 Argument order is optimised for the common case where headers are needed more often than a body:
 
@@ -1331,7 +1448,7 @@ local result, err = client:Call("POST", "https://api.example.com/data",
     {["Content-Type"] = "application/json"},
     '{"key":"value"}')
 if not result then
-    print("failed:", err)   -- e.g. "Timeout", "Could not resolve host: ..."
+    print("failed:", err)   -- curl error text, e.g. "Could not resolve host: ..."
 else
     print(result.Code, result.Contents)
     print("round-trip:", client:GetTimestamp():TotalMilliseconds(), "ms")
@@ -1346,24 +1463,30 @@ end
 |-------|------|-------------|
 | `Code` | integer or nil | HTTP status code; `nil` on transport error |
 | `Status` | string | Status text (e.g. `"OK"`) or transport error message |
-| `Contents` | string or nil | Response body |
-| `Headers` | table | Response headers keyed by header name |
+| `Contents` | string or nil | Response body (absent on a transport error) |
+| `Headers` | table or nil | Response headers keyed by header name (absent on a transport error) |
 
 ### Streaming request
 
 ```lua
-coroutine, errmsg client:Stream(method, url, opt body, opt headers)
+Stream-or-coroutine, errmsg client:Stream(method, url, opt body, opt headers)
 ```
 
-Returns a **coroutine** immediately. Drive it with `coroutine.resume` until it yields a `Stream` userdata — that is the response body stream. Call `stream:GetInfo()` for metadata, then `stream:Read()` in a loop to receive body chunks. Must be driven from inside a coroutine.
+Returns **either** the response body `Stream` directly (when the headers arrive on the first internal poll) **or** a coroutine. Drive a coroutine with `coroutine.resume` until it finishes; it returns the `Stream`, or `nil, errmsg` on failure. Always check the type of the first result and handle `nil, errmsg`. Call `stream:GetInfo()` for metadata, then `stream:Read()` in a loop to receive body chunks. Must be driven from inside a coroutine. A `Stream` request body isn't supported here (`nil, "stream body not supported..."`).
 
 ```lua
 -- Inside a coroutine:
-local co = client:Stream('GET', 'https://example.com/feed')
-local ok, stream = coroutine.resume(co)
-while ok and type(stream) ~= 'userdata' do
-    ok, stream = coroutine.resume(co)
+local function openStream(client, method, url)
+    local r, err = client:Stream(method, url)
+    if type(r) ~= 'thread' then return r, err end      -- Stream or nil, err
+    local ok, stream, err2
+    repeat ok, stream, err2 = coroutine.resume(r) until coroutine.status(r) == 'dead'
+    if not ok then return nil, stream end
+    return stream, err2
 end
+
+local stream, err = openStream(client, 'GET', 'https://example.com/feed')
+if not stream then error(err) end
 local chunk = stream:Read()
 while chunk do io.write(chunk); chunk = stream:Read() end
 stream:Close()
@@ -1381,10 +1504,10 @@ stream:Close()
 ### WebSocket connection
 
 ```lua
-coroutine, errmsg client:Connect(url, opt headers)
+WebSocket, errmsg client:Connect(url, opt headers)
 ```
 
-Returns a **coroutine** immediately. Drive it with `coroutine.resume` until it yields a `WebSocket` userdata — that is the live connection. Yields the calling coroutine cooperatively until the HTTP 101 upgrade completes. See the [WebSocket](#websocket) section for the full API on the returned object.
+Must be called from inside a coroutine or task: it **yields the calling coroutine** until the HTTP 101 upgrade completes, then returns the live `WebSocket` (it does not return a coroutine). On failure it returns `nil, errmsg` (`"aborted"` or curl's error text). The client's `SetTimeout` applies as the connect timeout. See the [WebSocket](#websocket) section for the full API on the returned object.
 
 ### Examples
 
@@ -1394,22 +1517,19 @@ local client = HttpClient.New()
 client:SetTimeout(8000)
 local co = client:Request('GET', 'https://httpbin.org/get')
 local ok, result
-repeat ok, result = coroutine.resume(co) until result ~= nil
-print(result.Code, result.Contents)
+repeat ok, result = coroutine.resume(co) until coroutine.status(co) == 'dead'
+if ok and result then print(result.Code, result.Contents) end
 
--- Streaming GET (must run inside a coroutine)
-local co = client:Stream('GET', 'https://httpbin.org/get')
-local ok, stream = coroutine.resume(co)
-while ok and type(stream) ~= 'userdata' do ok, stream = coroutine.resume(co) end
+-- Streaming GET (must run inside a coroutine): see openStream above
+local stream = assert(openStream(client, 'GET', 'https://httpbin.org/get'))
 local info = stream:GetInfo()
 local chunk = stream:Read()
 while chunk do io.write(chunk); chunk = stream:Read() end
 stream:Close()
 
 -- WebSocket echo (must run inside a coroutine)
-local co = client:Connect('wss://echo.websocket.org')
-local ok, ws = coroutine.resume(co)
-while ok and type(ws) ~= 'userdata' do ok, ws = coroutine.resume(co) end
+local ws, err = client:Connect('wss://echo.websocket.org')
+if not ws then error(err) end
 local welcome = ws:Poll()   -- drain optional server welcome frame
 ws:Send('hello')
 local msg = ws:Read()       -- yields until message arrives
@@ -1429,10 +1549,10 @@ An embedded HTTP/1.1 server backed by [libevent](https://libevent.org/). The ser
 ### Creation
 
 ```lua
-HttpServer, errmsg  HttpServer.Listen(address)
+HttpServer, errmsg  HttpServer.Listen(address, opt options)
 ```
 
-Binds to `address` (e.g. `"0.0.0.0:8080"` or `"127.0.0.1:9000"`). Returns the server on success, or `nil, errmsg` on failure.
+Binds to `address`: `"host:port"` (e.g. `"0.0.0.0:8080"`, `"127.0.0.1:9000"`), `":port"`, or an `http://` / `https://` URL. Returns the server on success, or `nil, errmsg` on failure. TLS isn't supported: passing `options.cert` returns `nil, "TLS not supported..."`.
 
 ```lua
 local server = assert(HttpServer.Listen("0.0.0.0:8080"))
@@ -1469,7 +1589,7 @@ nil  server:Close()
 
 | Method | Description |
 |--------|-------------|
-| `SetOnDisconnect` | Register a `function(req)` called when a connection closes (after the response is sent or on error) |
+| `SetOnDisconnect` | Register a `function(req)` called when each response finishes writing (so once per request under keep-alive), or when the TCP connection closes before a response was sent |
 | `SetAliveToken` | Attach an `AliveToken` to this server. When the token is disposed the `Accept()` coroutine tears down the server and dies cleanly — identical to `coroutine.resume(co, true)`. Pass `nil` to detach |
 | `Close` | Tear down the server immediately. Idempotent — safe to call more than once. `__gc` calls this automatically |
 
@@ -1477,20 +1597,22 @@ nil  server:Close()
 
 ### HttpRequest
 
-One `HttpRequest` object exists per connection for its lifetime. It is updated in-place on each HTTP message and queued to the `Accept()` coroutine.
+A new `HttpRequest` object is created for every HTTP request and queued to the `Accept()` coroutine. Requests are only dispatched once complete, so `IsFinished()` is always `true` for them.
 
 ```lua
 string   req:GetUrl()        -- full path + query string, e.g. "/api/items?id=1"
 string   req:GetMethod()     -- HTTP verb: "GET", "POST", "PUT", "DELETE", …
 string   req:GetBody()       -- request body (empty string when none)
 table    req:GetHeaders()    -- lowercase header names → values
-string   req:GetIp()         -- remote address + port, e.g. "127.0.0.1:54321"
-integer  req:GetId()         -- unique integer identity (the connection pointer)
+string   req:GetIp()         -- remote address + port, e.g. "127.0.0.1:54321"; "" after the response is sent
+integer  req:GetId()         -- identity of this request; 0 after the response is sent
 bool     req:IsFinished()    -- true once headers and body have been fully received
-table    req:GetContext()    -- per-connection Lua table; created lazily, persists across resumes
+table    req:GetContext()    -- Lua table for this request; created lazily
 HttpResponse req:GetResponse() -- returns the paired response object
-string   req:GetError()      -- error message string, or nil when no error
+string   req:GetError()      -- currently always nil
 ```
+
+Read `GetIp()` / `GetId()` **before** sending the response if you need them (for example in logging or in `SetOnDisconnect`).
 
 ---
 
@@ -1500,27 +1622,28 @@ string   req:GetError()      -- error message string, or nil when no error
 nil        resp:SetCode(code)
 nil        resp:SetHeader(name, value)
 bool       resp:Send(opt body)
-bool       resp:Reject(code, message)
-WebSocket  resp:UpgradeToWebSocket()
+nil        resp:Reject(code, message)
+nil        resp:Close()
+WebSocket  resp:UpgradeToWebSocket()   -- nil, errmsg on failure
 ```
 
 | Method | Description |
 |--------|-------------|
 | `SetCode(code)` | Override the HTTP status code. Default: `200` |
 | `SetHeader(name, value)` | Add a response header. May be called multiple times |
-| `Send(opt body)` | Send the response. `body` may be omitted (no body), a `string`, or a readable `Stream`. Returns `false` when the request is not yet finished |
-| `Reject(code, message)` | Send a minimal error response with the given status code and plain-text body |
-| `UpgradeToWebSocket()` | Upgrade the HTTP connection to a WebSocket session. Sends HTTP 101 immediately and returns a `WebSocket` userdata. The `HttpRequest` and `HttpResponse` objects must not be used after this call. See the [WebSocket](#websocket) section for the full API |
+| `Send(opt body)` | Send the response. `body` may be omitted (no body), a `string`, or a readable `Stream`; other types raise an error. Returns `false` when the request is not yet finished |
+| `Reject(code, message)` | Send a minimal error response with the given status code and plain-text body, with `Connection: close` (reason phrase "Error"). Returns nothing |
+| `Close()` | Send an empty 200 response with `Connection: close` |
+| `UpgradeToWebSocket()` | Upgrade the HTTP connection to a WebSocket session. Sends HTTP 101 immediately and returns a `WebSocket` userdata, or `nil, errmsg`. The `HttpRequest` and `HttpResponse` objects must not be used after this call. See the [WebSocket](#websocket) section for the full API |
+
+A response can only be finalized once: calling `Send` again, or `SetCode` / `SetHeader` after it, raises "HttpResponse: response already finalized" (or "connection is no longer alive").
 
 #### Stream responses
 
-When `body` is a `Stream`:
-
-- **Seekable stream** (`CAP_READ + CAP_SEEK`): `Content-Length` is determined from `stream:len()` and the body is sent with a known length.
-- **Non-seekable stream** (`CAP_READ` only): `Transfer-Encoding: chunked` is used. The coroutine pump reads 64 KB chunks per iteration until the stream returns empty or `nil`.
+When `body` is a `Stream`, the response is **always sent chunked** (`Transfer-Encoding: chunked`), seekable or not; `Content-Length` is not taken from `stream:len()`. The coroutine pump reads 64 KB per iteration until the stream returns empty or `nil`. For a known length, send a string, or set `Content-Length` yourself with `SetHeader`.
 
 ```lua
--- Non-seekable → chunked
+-- Function-backed stream → chunked
 local function make_stream(data)
     local pos = 0
     return Stream.New(function(op, arg)
@@ -1534,7 +1657,7 @@ local function make_stream(data)
 end
 resp:Send(make_stream('hello world'))
 
--- Seekable → Content-Length
+-- In-memory stream → also chunked
 local s = Stream.New('hello world')
 resp:Send(s)
 ```
@@ -1580,13 +1703,16 @@ end
 
 ```lua
 local server = assert(HttpServer.Listen("0.0.0.0:8080"))
+local ips = {}
 server:SetOnDisconnect(function(req)
-    print('disconnected', req:GetIp())
+    print('done', ips[req])   -- req:GetIp() is "" once the response has been sent
+    ips[req] = nil
 end)
 local co = server:Accept()
 while coroutine.status(co) == 'suspended' do
     local ok, req = coroutine.resume(co)
     if req and req:IsFinished() then
+        ips[req] = req:GetIp()
         req:GetResponse():Send('bye')
     end
 end
@@ -1610,7 +1736,7 @@ local co = server:Accept()
 while coroutine.status(co) == 'suspended' do
     local ok, req = coroutine.resume(co)
     if req and req:IsFinished() then
-        -- A non-seekable stream triggers Transfer-Encoding: chunked
+        -- Stream bodies are always sent with Transfer-Encoding: chunked
         local data = string.rep('x', 200000)
         local pos  = 0
         local stream = Stream.New(function(op, arg)
@@ -1658,6 +1784,7 @@ A unified WebSocket connection handle used for both **client** connections (crea
 WebSocketMessage  ws:Poll()                   -- non-blocking: dequeue next message or nil
 WebSocketMessage  ws:Read()                   -- yield until next message arrives or connection closes
 bool              ws:Send(data, opt binary)    -- send a text (default) or binary frame
+bool              ws:Ping()                    -- send a ping; false if closed
 bool              ws:IsConnected()             -- true while the connection is open
 integer           ws:GetId()                  -- stable non-zero integer identity
 table             ws:GetContext()             -- per-connection Lua table, created lazily
@@ -1667,13 +1794,14 @@ nil               ws:Dispose()               -- close the connection and free re
 
 | Method | Description |
 |--------|-------------|
-| `Poll()` | Non-blocking. Advances the network layer and dequeues the next `WebSocketMessage` from the internal queue, or returns `nil` if none is ready. Never yields. |
-| `Read()` | Yields the current coroutine until a `WebSocketMessage` is available, then returns it. Returns `nil` when the connection is closed. |
-| `Send(data, opt binary)` | Send `data` (string) as a WebSocket frame. Pass `true` as the second argument to send a binary frame; default is a text frame. Returns `false` if the connection is closed. **Note:** server-side connections only support text frames — pass `binary = false` or omit it. |
+| `Poll()` | Non-blocking. Dequeues the next `WebSocketMessage` from the internal queue, or returns `nil` if none is ready. Never yields. For client connections it also advances the network layer; server connections are driven by the `Accept()` pump, which must keep running. |
+| `Read()` | Yields the current coroutine until a `WebSocketMessage` is available, then returns it (must be called inside a coroutine). Returns `nil` as soon as the connection is marked closed, without handing over a queued Close (8) message. |
+| `Send(data, opt binary)` | Send `data` (string) as a WebSocket frame. Pass `true` as the second argument to send a binary frame; default is a text frame. Works on client and server connections. Returns `false` if the connection is closed or the payload is larger than `SetMaxMessageSize`. |
+| `Ping()` | Send a ping frame. Returns `false` if the connection is closed. |
 | `IsConnected()` | Returns `true` while the underlying connection is open. |
 | `GetId()` | Returns a stable non-zero integer that uniquely identifies this connection for its lifetime. |
 | `GetContext()` | Returns a per-connection Lua table. Created lazily on first call; persists for the lifetime of the connection. Use it to store per-connection state. |
-| `SetMaxMessageSize(bytes)` | Set the maximum allowed incoming message size in bytes. Messages exceeding the cap are dropped. `0` disables the cap (default). |
+| `SetMaxMessageSize(bytes)` | Set the maximum message size in bytes. Incoming messages exceeding the cap are dropped, and `Send` refuses larger payloads. `0` disables the cap (default). |
 | `Dispose()` | Send a WS CLOSE frame (if still connected), close the underlying connection, and free all resources. Idempotent — safe to call more than once. Called automatically by `__gc`. |
 
 ### WebSocketMessage
@@ -1692,18 +1820,19 @@ integer  msg:GetType()   -- message type constant (see below)
 | `1` | Text frame |
 | `2` | Binary frame |
 | `8` | Close |
-| `9` | Ping |
-| `10` | Pong |
+| `9` | Ping (client connections only) |
+| `10` | Pong (client connections only) |
+
+Server connections only queue text and binary messages.
 
 ### Client WebSocket example
 
 ```lua
--- client:Connect() returns a coroutine; drive it until it yields the WebSocket
+-- Must run inside a coroutine/task: client:Connect() yields until connected
 local client = HttpClient.New()
 client:SetVerifySSL(false)
-local co = client:Connect('wss://echo.websocket.org')
-local ok, ws = coroutine.resume(co)
-while ok and type(ws) ~= 'userdata' do ok, ws = coroutine.resume(co) end
+local ws, err = client:Connect('wss://echo.websocket.org')
+if not ws then error(err) end
 
 -- optional: drain server welcome frame
 local welcome = ws:Poll()
@@ -1771,7 +1900,7 @@ nil, errmsg          TCP.Connect(host, port)   -- on failure
 
 | Function | Description |
 |----------|-------------|
-| `StartListener` | Bind a TCP listener on `port` (integer, 1–65535). Returns a `TcpListener` on success, or `nil, errmsg` on failure |
+| `StartListener` | Bind a TCP listener on `port` (integer, 1–65535) on all IPv4 interfaces. Returns a `TcpListener` on success, or `nil, errmsg` on failure |
 | `Connect` | Initiate a non-blocking TCP connection to `host:port`. Returns a `TcpClient` immediately — the connection may still be in progress. Poll `client:IsConnected()` to wait for it |
 
 ---
@@ -1799,12 +1928,12 @@ nil                 listener:Dispose()
 Returned by `TCP.Connect` (client-initiated) or by `listener:Accept()` (server-accepted). Both sides share the same API.
 
 ```lua
-string, nil         client:Poll()               -- data available
-nil, nil            client:Poll()               -- no data yet (connected)
-nil, errmsg         client:Poll()               -- closed or error
+string              client:Poll()               -- data available
+""                  client:Poll()               -- connected, no data yet (empty string)
+nil, errmsg         client:Poll()               -- closed ("closed"), disposed ("client disposed") or error
 bool, nil           client:Send(data)           -- sent ok
 bool, errmsg        client:Send(data)           -- disposed or error
-bool                client:IsConnected()
+bool, opt errmsg    client:IsConnected()
 string              client:GetIP()
 int                 client:GetPort()
 table               client:GetContext()
@@ -1813,10 +1942,10 @@ nil                 client:Dispose()
 
 | Method | Description |
 |--------|-------------|
-| `Poll()` | Non-blocking. Returns the next chunk of received data as a string, or `nil, nil` when no data is available yet (connection is still open), or `nil, errmsg` when the connection has been closed or an error occurred. Never blocks |
+| `Poll()` | Non-blocking. Returns the next chunk of received data as a string, `""` (an empty string) when no data is available yet (connection is still open), or `nil, errmsg` when the connection has been closed (`"closed"`), disposed (`"client disposed"`) or an error occurred. Never blocks |
 | `Send(data)` | Write `data` (string) to the connection. Returns `true, nil` on success, or `false, errmsg` if the client is disposed or the write failed |
-| `IsConnected()` | Returns `true` while the connection is established |
-| `GetIP()` | Returns the remote IP address string (e.g. `"127.0.0.1"`) |
+| `IsConnected()` | Returns `true` while the connection is established; may return `false, errmsg` |
+| `GetIP()` | Returns the remote IP address string (e.g. `"127.0.0.1"`). For a client created with `TCP.Connect` it is the `host` string that was passed in, which may be a hostname |
 | `GetPort()` | Returns the remote port as an integer |
 | `GetContext()` | Returns a per-client Lua table created lazily on first call. Persists for the lifetime of the client |
 | `Dispose()` | Close the connection and free all resources. Idempotent. Called automatically by `__gc` |
@@ -1877,7 +2006,7 @@ local reply = ''
 for i = 1, 100 do
     local data, err = client:Poll()
     if not data then
-        break   -- nil, errmsg means closed / error
+        break   -- nil, errmsg means closed / error ("" means no data yet)
     end
     reply = reply .. data
     if reply ~= '' then break end
@@ -1901,7 +2030,7 @@ Tasks.New(function()
             Tasks.New(function(c)
                 local data, err = c:Poll()
                 while data do
-                    c:Send(data)
+                    if data ~= '' then c:Send(data) end   -- "" = no data yet
                     Sleep(1)
                     data, err = c:Poll()
                 end
@@ -1944,6 +2073,12 @@ nil SHA1:Update(data)
 hexstring, 20bytes SHA1:Finish()
 ```
 
+### Notes (all three)
+
+- `data` should be a string; other values are hashed as `tostring(data)`. **Streams are not supported**: MD5 and SHA1 silently ignore a `Stream` argument, and SHA256 hashes its `tostring` form.
+- `Finish()` finalizes once; calling it again returns the same hex string and raw bytes.
+- `Update` after `Finish` raises "Cannot update already finished … digest".
+
 ---
 
 ## MySQL
@@ -1965,7 +2100,7 @@ nil           conn:Close()
 | Function | Description |
 |----------|-------------|
 | `Connect` | Connect to MySQL, yielding the caller cooperatively during the TCP + auth handshake. Returns the connection on success, or `nil, errmsg` on failure. `port` defaults to `3306`, `timeout` defaults to `10` seconds |
-| `Query` | Returns a **Lua coroutine** immediately without blocking. Drive it with `coroutine.resume` as described below. Returns `nil, errmsg` if the connection is already busy |
+| `Query` | Returns a **Lua coroutine** immediately without blocking. Drive it with `coroutine.resume` as described below |
 | `NonQuery` | Helper — drives a query to completion and returns `true, rowcount` (integer), or `false, errmsg` on error. Designed for INSERT / UPDATE / DELETE |
 | `Scalar` | Helper — returns `true, col1value` (first column of the first row), or `true, nil` when no rows matched, or `false, errmsg` on error |
 | `QueryAll` | Helper — collects every row into an array of integer-keyed row arrays and returns `true, rows`, or `false, errmsg` on error |
@@ -1973,6 +2108,8 @@ nil           conn:Close()
 | `IsBusy` | Returns `true` while a query coroutine is still alive on this connection |
 | `EscapeValue` | Escape a string with `mysql_real_escape_string`. Returns the escaped value **without** surrounding quotes |
 | `Close` | Close the connection and free all resources. Safe to call multiple times |
+
+While another query is active on the connection, `Query` and the helpers return `nil, "Connection already has an active query"`. After `Close()`, `Query`, the helpers and `EscapeValue` **raise** "Connection is closed".
 
 ### Helper methods (recommended API)
 
@@ -2017,12 +2154,14 @@ local ok, rows = conn:QueryAll("SELECT id FROM big_table")
 |---|---|
 | `true, nil` + status `"suspended"` | Query / store still in progress — resume again |
 | `true, <integer>` | Done — integer is the affected / row count |
-| `true, <string>` | Done — string is a query-level error message |
+| `true, <string>` + status `"dead"` | Done — string is a query-level error message; the connection is already released |
 | `true, {col1, col2, …}` | One data row (integer-keyed, 1-based) |
 | `true, nil` + status `"dead"` | All rows consumed, C buffer freed |
 | `false, <string>` | Coroutine raised a Lua error |
 
-Pass a truthy value as the **first argument** of any `coroutine.resume` call to send the **stop flag**: the coroutine immediately frees the result buffer, clears the connection's busy state, and dies cleanly.
+Pass a truthy value as the **first argument** of any `coroutine.resume` call to send the **stop flag**: in any phase, the coroutine frees the result buffer, clears the connection's busy state, and dies cleanly, so the connection is immediately reusable. If the stop flag arrives while the query is still in flight on the server (before the rowcount), the coroutine first waits for the server to finish that statement and discards its result — this blocks the engine thread until the server answers. Cancelling a helper with an `AliveToken` goes through the same path, so it waits too; MySQL can't abort a running statement from the same connection, so give long statements a server-side limit (e.g. `SET max_execution_time`) instead.
+
+A query-level error string is the coroutine's final value: the coroutine is dead and the connection is free for the next query, with no extra resume needed.
 
 ```lua
 local conn = assert(MySQL.Connect("127.0.0.1", "user", "pass", "mydb"))
@@ -2034,7 +2173,9 @@ while ok and val == nil and coroutine.status(co) == "suspended" do
     ok, val = coroutine.resume(co)
 end
 if not ok then error(val) end          -- coroutine error
-if type(val) == "string" then error(val) end  -- query-level error
+if type(val) == "string" then          -- query-level error (connection already released)
+    error(val)
+end
 local rowcount = val                   -- integer
 
 -- Phase 2: stream rows one at a time
@@ -2050,17 +2191,18 @@ coroutine.resume(co, true)
 
 ### Parameterized queries
 
-Pass an array table as the second argument to `Query`, `NonQuery`, `Scalar`, or `QueryAll`. `?` placeholders are substituted in order. Missing or `nil` entries become SQL `NULL`. The following Lua types are accepted as parameter values:
+Pass an array table as the second argument to `Query`, `NonQuery`, `Scalar`, or `QueryAll`. `?` placeholders are substituted in order — **every** `?` in the SQL text is counted, including one inside a string literal, so don't put a literal `?` in parameterized SQL. Missing or `nil` entries become SQL `NULL`. Every non-NULL value, numbers included, is sent as a single-quoted, escaped literal. The following Lua types are accepted as parameter values:
 
 | Parameter type | Sent as |
 |----------------|---------|
 | `nil` | SQL `NULL` |
 | `string` | escaped string |
 | `number` / `integer` | stringified |
-| `boolean` | `"1"` / `"0"` |
+| `boolean` | `'true'` / `'false'` (use `1` / `0` for `TINYINT` columns) |
 | `Identifier` | canonical string (`xxxxxxxx-xxxx-…` or 24-char hex) |
-| `DateTime` | ISO 8601 string (`YYYY-MM-DDTHH:MM:SS.mmmZ`) |
+| `DateTime` | ISO 8601 string (`...Z` for UTC, `...±HH:MM` with an offset) |
 | `Decimal` | decimal string (e.g. `"123.456"`) |
+| `UInt`, `TimeSpan` | their string form |
 | `table` | JSON-encoded string |
 
 ```lua
@@ -2073,11 +2215,13 @@ conn:Scalar("SELECT name FROM users WHERE id = ?", {42})
 | MySQL type | Lua type |
 |------------|----------|
 | TINYINT, SMALLINT, MEDIUMINT, INT, BIGINT | integer (`BIGINT UNSIGNED` values above `2^63 - 1` return a `UInt` userdata) |
-| FLOAT, DOUBLE, BIT | number |
+| FLOAT, DOUBLE | number |
+| BIT | integer (`b'10000001'` → `129`; a `BIT(64)` value above `2^63 - 1` returns a `UInt` userdata) |
 | DECIMAL, NEWDECIMAL | `Decimal` ¹ |
-| TINYBLOB, BLOB, MEDIUMBLOB, LONGBLOB | `LuaStream` |
+| TINYTEXT, TEXT, MEDIUMTEXT, LONGTEXT | string |
+| TINYBLOB, BLOB, MEDIUMBLOB, LONGBLOB (binary collation) | `LuaStream`; read with `tostring(v)` or `v:Read()` |
 | DATE, DATETIME, TIMESTAMP | `DateTime` ¹ |
-| all others (VARCHAR, TEXT, YEAR, TIME, ENUM, JSON, …) | string |
+| all others (VARCHAR, CHAR, YEAR, TIME, ENUM, JSON, …) | string |
 
 > ¹ Falls back to a plain string when parsing fails (e.g. non-standard server format).
 >
@@ -2089,7 +2233,7 @@ conn:Scalar("SELECT name FROM users WHERE id = ?", {42})
 
 ## Postgres
 
-Connects to a PostgreSQL database using libpq. All I/O is driven by the libpq async API so **no background thread is ever created**. The connection is always configured with `UTF8` client encoding automatically.
+Connects to a PostgreSQL database using libpq. Queries are driven by the libpq async API so **no background thread is ever created**. `Connect` itself is **blocking** (`PQconnectdb`): the whole engine thread waits during the handshake, so set `connect_timeout` in the connection string. The connection is always configured with `UTF8` client encoding automatically.
 
 ```lua
 conn, errmsg    Postgres.Connect(conninfo)
@@ -2106,7 +2250,7 @@ nil             conn:Close()
 | Function | Description |
 |----------|-------------|
 | `Connect` | Connect using a libpq connection string (e.g. `"host=localhost user=postgres password=secret dbname=mydb connect_timeout=5"`). Returns the connection on success, or `nil, errmsg` on failure |
-| `Query` | Returns a **Lua coroutine** immediately without blocking. Drive it with `coroutine.resume` as described below. Returns `nil, errmsg` if the connection is already busy |
+| `Query` | Returns a **Lua coroutine** immediately without blocking. Drive it with `coroutine.resume` as described below |
 | `NonQuery` | Helper — drives a query to completion and returns `true, rowcount` (integer), or `false, errmsg` on error. Designed for INSERT / UPDATE / DELETE |
 | `Scalar` | Helper — returns `true, col1value` (first column of the first row), or `true, nil` when no rows matched, or `false, errmsg` on error |
 | `QueryAll` | Helper — collects every row into an array of integer-keyed row arrays and returns `true, rows`, or `false, errmsg` on error |
@@ -2114,6 +2258,8 @@ nil             conn:Close()
 | `IsBusy` | Returns `true` while a query coroutine is still alive on this connection |
 | `EscapeValue` | Escape a string using `PQescapeLiteral`. The result **includes** surrounding single quotes (e.g. `'O''Reilly'`) |
 | `Close` | Close the connection and free all resources. Safe to call multiple times |
+
+While another query is active on the connection, `Query` and the helpers return `nil, "Connection already has an active query"`. After `Close()`, `Query` returns `nil, "Connection is closed"`, while the helpers and `EscapeValue` **raise** that error.
 
 ### Connection String
 
@@ -2157,12 +2303,14 @@ end
 |---|---|
 | `true, nil` + status `"suspended"` | Query still in progress — resume again |
 | `true, <integer>` | Done — integer is the affected / row count |
-| `true, <string>` | Done — string is a query-level error message |
+| `true, <string>` + status `"dead"` | Done — string is a query-level error message; the connection is already released |
 | `true, {col1, col2, …}` | One data row (integer-keyed, 1-based) |
 | `true, nil` + status `"dead"` | All rows consumed |
 | `false, <string>` | Coroutine raised a Lua error |
 
-Pass a truthy value as the **first argument** of any `coroutine.resume` call to send the **stop flag**: the coroutine immediately frees the result buffer and dies cleanly.
+Pass a truthy value as the **first argument** of any `coroutine.resume` call to send the **stop flag**: the coroutine frees the result buffer and dies cleanly (in any phase), and the connection is immediately reusable. If the query has already been sent, the stop also asks the server to cancel the statement and waits briefly for the connection to be free. Cancelling a helper with an `AliveToken` does the same.
+
+As with MySQL, a query-level error string is the coroutine's final value: the coroutine is dead and the connection is free for the next query, with no extra resume needed.
 
 ### Parameterized Queries
 
@@ -2197,13 +2345,14 @@ conn:NonQuery("INSERT INTO t (a, b, c) VALUES ($1, $2, $3)", {"hello", nil, 3.14
 | 1700 | NUMERIC | `Decimal` ¹ |
 | 2950 | UUID | `Identifier` ¹ |
 | 1082 | DATE | `DateTime` ¹ |
-| 1083 | TIME | `DateTime` ¹ |
-| 1266 | TIMETZ | `DateTime` ¹ |
+| 1083 | TIME | string (a time without a date doesn't parse) |
+| 1266 | TIMETZ | string |
 | 1114 | TIMESTAMP | `DateTime` ¹ |
-| 1184 | TIMESTAMPTZ | `DateTime` ¹ |
-| all others | TEXT, VARCHAR, BYTEA, JSON, etc. | string |
+| 1184 | TIMESTAMPTZ | `DateTime` carrying the session time zone's offset (`+00`, `-05`, `+05:30`) ¹ |
+| 17 | BYTEA | string in Postgres's text form (`\x48656c6c6f` hex), not raw bytes; decode the hex yourself |
+| all others | TEXT, VARCHAR, JSON, etc. | string |
 
-> ¹ Falls back to a plain string when parsing fails (e.g. non-standard server format).
+> ¹ Falls back to a plain string when parsing fails (e.g. a non-ISO `DateStyle` such as `SQL` or `German`, a BC date such as `0044-03-15 BC`, `infinity`, or a pre-1900 local-mean-time offset with seconds such as `+00:53:28`).
 >
 > `Decimal`, `DateTime`, `Identifier` and `UInt` are **userdata**, not strings or numbers. `v == "2024-01-01"` or `v == 1.5` is always `false`, `"x" .. v` errors, and `math.*` rejects them. Use `tostring(v)`, `v:ToNumber()`, or compare against a value of the same type. See [Userdata Return Values](#userdata-return-values-read-first).
 
@@ -2227,7 +2376,7 @@ TimeSpan Timer:ElapsedTimeSpan()
 | `IsRunning` | Returns `true` while the timer is running |
 | `Reset` | Stop and zero all counters |
 | `Start` | Start (or resume) the timer. If already started, the current interval is accumulated first |
-| `Stop` | Stop the timer and return elapsed ms for the last interval |
+| `Stop` | Stop the timer and return elapsed ms for the last interval. Only call it after `Start()`: stopping a timer that was never started returns (and later accumulates) a meaningless value |
 | `Elapsed` | Total accumulated elapsed time in milliseconds as a `number`. Returns `0` if never started |
 | `ElapsedTimeSpan` | Same duration as `Elapsed` but returned as a `TimeSpan` userdata. Returns a zero `TimeSpan` if never started |
 
@@ -2247,25 +2396,27 @@ nil         SQLite:SetBusyHandler(opt fn)
 nil         SQLite:Close()
 ```
 
-**Mode:** 0=single thread, 1=multithreaded, 2=serialized
+**Mode:** non-zero puts the database in WAL journal mode (`PRAGMA journal_mode=WAL`), `0` uses `journal_mode=DELETE`. It is also passed to `sqlite3_config` (0=single thread, 1=multithreaded, 2=serialized), which only has an effect before SQLite is first initialized in the process. `synchronous=NORMAL` is always set.
 
-TEXT columns are always returned as plain UTF-8 Lua strings.
+TEXT columns are always returned as plain UTF-8 Lua strings; BLOB columns as `LuaStream`.
+
+Every database opened with `Open` gets a built-in SQL function **`Lua(script)`** that compiles and runs a Lua string and returns its result as TEXT (or NULL): `SELECT Lua('return 1+1')` → `'2'`. Extension loading (`load_extension`) is also enabled. Both run with the engine's full privileges, so never pass untrusted SQL to a database.
 
 | Function | Description |
 |----------|-------------|
-| `Open` | Open an SQLite database. Omit `filename` (or pass `nil`) for an in-memory database |
-| `Query` | Prepare and execute `sql`. Returns `true, "ROW"` if the first row is ready, `true, "DONE"` when there are no rows (DML or empty SELECT), or `false, errmsg` on error. Call `Fetch` / `GetRow` to consume results |
+| `Open` | Open an SQLite database. Omit `filename` (or pass `nil`) for an in-memory database. Raises an error on failure |
+| `Query` | Prepare and execute `sql`. Returns `true, "ROW"` if the first row is ready, `true, "DONE"` when there are no rows (DDL/DML or empty SELECT), or `false, errmsg` on error. DDL/DML have already run (and the statement is finalized) when `Query` returns `"DONE"`; no `Fetch()` is needed. For rows, loop with `while db:Fetch() do ... db:GetRow() ... end` (the first row is also readable with `GetRow()` straight after `Query`) |
 | `Finish` | Finalize the current prepared statement early, allowing a new `Query` before all rows have been consumed |
 | `Fetch` | Advance to the next result row. Returns `true` while a row is available, `false` when exhausted |
 | `GetRow` | Without arguments (or `0`): returns the current row as a string-keyed table `{columnName = value, ...}` — **not** an integer-indexed array. With a positive 1-based integer index: returns that single column value directly. Returns `nil` if the index is out of range or there is no active row |
-| `RegisterFunction` | Register a scalar Lua function callable from SQL. `args` is the number of expected arguments (-1 for variadic) |
+| `RegisterFunction` | Register a scalar Lua function callable from SQL. `args` (required) is the exact number of arguments; variadic functions aren't supported (a negative value raises "SQLite function args can't be negative"). A Lua number returned by the function becomes REAL (even `42`), a boolean becomes 0/1, a `Stream` becomes NULL, anything else is converted with `tostring`. BLOB arguments arrive as `LuaStream` |
 | `RegisterAggregateFunction` | Register an aggregate Lua function. Called per row with `(false, …args)` and once at the end with `(true)` to collect the final result |
-| `SetBusyHandler` | Register a callback invoked when a table is locked. Receives `(sqlite, retryCount)`; return truthy to retry, falsy to abort. Pass `nil` or no argument to remove |
+| `SetBusyHandler` | Register a callback invoked when a table is locked. Receives `(sqlite, retryCount)` (`retryCount` starts at 0). Return a truthy value to wait and retry, or a falsy value (`false`/`nil`) to give up, in which case the `Query`/`Fetch` that hit the lock fails (`Query` returns `false, "database is locked"`). An error raised inside the handler is swallowed and also gives up. Pass `nil` or no argument to remove |
 | `Close` | Close the database connection |
 
 ### Prepared Statements (named parameters)
 
-`Query` supports named parameters using the `:name` placeholder syntax. **Anonymous positional parameters (`?`) are not supported** and will cause an error.
+`Query` supports named parameters using the `:name` placeholder syntax (`@name` and `$name` work too). **Anonymous positional parameters (`?`) are not supported**: with a params table or function, `Query` returns `false, "Parameters contain a nameless parameter!"`; without params, a `?` simply binds NULL.
 
 Pass parameters as a **table** or a **function**:
 
@@ -2280,19 +2431,16 @@ db:Query('SELECT * FROM users WHERE id = :id', function(param)
 end)
 ```
 
-Supported bind types: `nil` → NULL, integer → INTEGER, float → REAL, boolean → INTEGER (0/1), string → TEXT, `Stream` → NULL.
+Supported bind types: `nil` → NULL, integer → INTEGER, float → REAL, boolean → INTEGER (0/1), string → TEXT. **Every other value binds NULL**: any userdata (including `Stream`, `DateTime`, `Decimal`, `Identifier` and `UInt`, so convert those with `tostring(v)` first), tables, functions, coroutines and lightuserdata such as `Json.Null`. Each placeholder is always bound exactly once, so an unsupported value never shifts the parameters after it.
 
 ### Query Workflow
 
 ```lua
 local db = SQLite.Open()          -- in-memory database
 
--- DDL / DML — consume with a single Fetch()
+-- DDL / DML run inside Query (returns true, "DONE")
 db:Query('CREATE TABLE t (id INTEGER, name TEXT)')
-db:Fetch()
-
 db:Query('INSERT INTO t VALUES (:id, :name)', {id = 1, name = 'Alice'})
-db:Fetch()
 
 -- SELECT — loop with Fetch(), read each row with GetRow()
 db:Query('SELECT id, name FROM t ORDER BY id')
@@ -2340,22 +2488,34 @@ Always compiled in (self-contained amalgamation, no external dependencies).
 
 | Function | Description |
 |----------|-------------|
-| `Open` | Open a DuckDB database. Omit `filename` (or pass `nil`) for an in-memory database |
-| `Execute` | Prepare and execute `sql`. Returns `true, "ROW"` if the first row is ready, `true, "DONE"` when there are no rows (DDL/DML or empty SELECT), or `false, errmsg` on error. Call `Fetch` / `GetRow` to consume results |
+| `Open` | Open a DuckDB database. Omit `filename` (or pass `nil`) for an in-memory database. Raises an error on failure |
+| `Execute` | Prepare and execute `sql`. Returns `true, "ROW"` when the result has rows, `true, "DONE"` when it has none (DDL or empty SELECT), or `false, errmsg` on error. Unlike SQLite, **call `Fetch()` before the first `GetRow()`** (`GetRow()` returns `nil` until then); the usual `while db:Fetch() do ... end` loop works. INSERT/UPDATE/DELETE return `true, "ROW"` with a single row `{Count = n}` |
 | `Query` | Alias for `Execute` |
 | `Finish` | Destroy the current prepared statement and result early, allowing a new `Execute` before all rows have been consumed |
 | `Fetch` | Advance to the next result row. Returns `true` while a row is available, `false` when exhausted |
 | `GetRow` | Without arguments (or `0`): returns the current row as a string-keyed table `{columnName = value, ...}`. With a positive 1-based integer index: returns that single column value directly. Returns `nil` if the index is out of range or there is no active row |
-| `Close` | Disconnect and close the database |
+| `Close` | Disconnect and close the database. Afterwards everything except `Finish`/`Close` raises "DuckDB instance has been closed" |
 
 ### Parameter binding
 
-`Execute` / `Query` accept an optional second argument to bind positional parameters (`$1`, `$2`, …):
+`Execute` / `Query` accept an optional second argument to bind positional parameters (`$1`, `$2`, … or `?`):
 
 - **Array table** `{val1, val2, …}` — values bound by position
 - **Function** `function(index) return val end` — called once per parameter index (1-based)
 
-Supported Lua types: `nil` → NULL, `boolean` → BOOLEAN, integer → BIGINT, float → DOUBLE, string → VARCHAR.
+Supported Lua types: `nil` → NULL, `boolean` → BOOLEAN, integer → BIGINT, float → DOUBLE, string → VARCHAR. Anything else (userdata, tables) binds NULL; convert with `tostring` first.
+
+### Type mapping
+
+| DuckDB type | Lua type |
+|-------------|----------|
+| BOOLEAN | boolean |
+| TINYINT … BIGINT, UTINYINT … UINTEGER | integer |
+| UBIGINT | number (float; loses precision above 2^53) |
+| FLOAT, DOUBLE | number |
+| BLOB | string (raw bytes) |
+| everything else (VARCHAR, DECIMAL, HUGEINT, DATE, TIMESTAMP, UUID, LIST, …) | string |
+| NULL | nil (the key is absent from the `GetRow()` table) |
 
 ### Execute return values
 
@@ -2377,6 +2537,8 @@ string  json:Encode(value)
 value   json:Decode(string | fn | stream)
 bool    json:EncodeIntoStream(stream, value)
 value   json:DecodeFromStream(stream)
+json    json:SetDecodeNull(bool)          -- returns the instance (chainable)
+json    json:SetEncodeEmptyObject(bool)   -- returns the instance (chainable)
 nil     json:Dispose()
 ```
 
@@ -2386,7 +2548,7 @@ nil     json:Dispose()
 | `Json.Null` | The unique lightuserdata sentinel that encodes to/decodes from JSON `null`. Compare with `== Json.Null` |
 | `Json.EmptyObject` | The unique lightuserdata sentinel that encodes to/decodes from JSON `{}`. Only produced during decode when `SetEncodeEmptyObject(true)` is active. Compare with `== Json.EmptyObject` |
 | `Encode` | Encode a Lua value to a JSON string |
-| `Decode` | Decode JSON from a string, a chunk-reader function, or a `Stream`. Returns the decoded value |
+| `Decode` | Decode JSON from a string, a chunk-reader function, or a `Stream`. Returns the decoded value. Malformed JSON **raises** an error (e.g. `Json: unexpected end of input`, `Json: expected ':' at line N`), so use `pcall` for untrusted input. Anything after the first complete value is ignored. A non-readable stream returns `nil, "stream is not readable"`; an empty async stream returns `nil` |
 | `EncodeIntoStream` | Encode `value` and write the JSON bytes directly into `stream`. Returns `true` on success, or `false, errmsg` if the stream is not writable |
 | `DecodeFromStream` | Decode one JSON value from `stream`. Returns the decoded value, or `nil, errmsg` if the stream is not readable |
 | `SetDecodeNull(bool)` | Control how JSON `null` is decoded. Default `false` — decodes as Lua `nil` (falsy, coalescing works). Pass `true` to decode as the `Json.Null` sentinel instead (truthy, round-trip safe but lossy on re-encode if value was nil) |
@@ -2397,7 +2559,7 @@ nil     json:Dispose()
 
 By default JSON `null` decodes to Lua `nil` — falsy, so coalescing with `or` works naturally. Call `json:SetDecodeNull(true)` to decode `null` as the `Json.Null` sentinel instead, which is **truthy** and survives a round-trip through `Encode`. Without `SetDecodeNull(true)`, re-encoding a decoded object will omit any keys whose value was `null` (since `nil` in a Lua table means absent).
 
-> **Internal modules always use the sentinel.** The Kitsune engine bridge and all built-in integrations (MySQL, Postgres, Redis/RedisJSON, MongoDB, etc.) decode JSON with `nullAsSentinel = true` internally. This means any JSON `null` that arrives through those modules is already the `Json.Null` sentinel — no `SetDecodeNull` call is required on your side. This behaviour is intentional: when JSON comes from a database or protocol layer, preserving the distinction between "field is null" and "field is absent" is almost always the right default.
+> **Some internal modules use the sentinel.** JSON decoded by the engine bridge (values passed from the host), Redis/RedisJSON, the MCP server and `ToolSuite` uses `nullAsSentinel = true`, so a JSON `null` arriving through those is already `Json.Null`. **Database NULLs are different:** SQL `NULL` from MySQL, Postgres, SQLite and DuckDB, and BSON null from MongoDB, come back as Lua `nil`, not `Json.Null`.
 
 ```lua
 local json = Json.New()
@@ -2420,8 +2582,8 @@ print(t2.value or "default")   -- prints Json.Null userdata, NOT "default"
 -- Re-encode preserves null
 print(json2:Encode(t2))         -- {"value":null}
 
--- Values from internal modules already use the sentinel:
--- local row = mysql_result_row  →  row.nullable_col == Json.Null  (not nil)
+-- JSON from Redis/RedisJSON already uses the sentinel; SQL NULL from
+-- MySQL/Postgres/SQLite/DuckDB is plain nil:  row[2] == nil
 ```
 
 ### EmptyObject Sentinel
@@ -2482,15 +2644,18 @@ local t = json:Decode(myStream)
 | `Json.Null` | `null` |
 | `boolean` | `true` / `false` |
 | integer | number (no decimal point) |
-| float | number (trailing zeros trimmed, e.g. `3.5`) |
+| float | number formatted with `%.16g`: an integral float like `2.0` encodes as `2` (and decodes back as an integer), and the last digit can be rounded (`0.1 + 0.2` → `0.3`) |
 | `string` | string |
 | `Identifier` | string (canonical UUID or OID hex) |
 | `DateTime` | string (ISO 8601, e.g. `"2024-06-01T12:00:00.000Z"`) |
+| `TimeSpan` | string (e.g. `"00:00:01.000"`) |
 | `Decimal` | number (no quotes — preserves numeric semantics) |
+| `UInt` | number |
 | `LuaStream` | string (all bytes from offset 0; stream position preserved; `null` if not readable+seekable) |
-| `table` | object `{}` or array `[]` depending on keys |
+| `table` | object `{}` or array `[]` depending on keys; non-string object keys are converted with `tostring` (a sparse `{[1]=..,[3]=..}` becomes `{"1":..,"3":..}`) |
+| functions, threads, other userdata/lightuserdata | `null` |
 | `NaN` | `null` |
-| `±Infinity` | `null` |
+| `±Infinity` | `1e+9999` / `-1e+9999` |
 
 ### Notes
 
@@ -2499,6 +2664,7 @@ local t = json:Decode(myStream)
 - **UTF-8 strings** pass through the encoder unescaped. Only control characters (U+0000–U+001F) are hex-escaped as `\uXXXX`
 - **Invalid UTF-8** (binary data or ANSI text) is replaced with U+FFFD, so the output is always valid JSON. Send binary data Base64-encoded or as a `LuaStream`
 - **Decoding** skips a leading UTF-8 BOM for every source (string, function, stream). Unpaired `\uD800`–`\uDFFF` escapes decode to U+FFFD
+- **Large integers** outside the 64-bit signed range decode saturated to ±9223372036854775807, without an error; send them as strings if you need them exactly
 - **`LuaStream`** must be both readable and seekable; unreachable streams encode as `null`
 
 ### Examples
@@ -2511,8 +2677,8 @@ local s = json:Encode({name = "Alice", scores = {10, 20, 30}})
 local t = json:Decode(s)
 print(t.name, t.scores[1])
 
--- Null sentinel
-local t2 = json:Decode('{"x":null}')
+-- Null sentinel (needs SetDecodeNull(true); by default null decodes as nil)
+local t2 = Json.New():SetDecodeNull(true):Decode('{"x":null}')
 print(t2.x == Json.Null)   -- true
 
 -- Pretty print
@@ -2537,9 +2703,78 @@ f:close()
 
 ---
 
+## MsgPack
+
+Binary [MessagePack](https://msgpack.org/) encoder/decoder with the same instance shape as `Json`. The functions work as `MsgPack.Xxx(mp, …)` or `mp:Xxx(…)`.
+
+```lua
+MsgPack        MsgPack.New()
+string         mp:Encode(value)
+value|nil,err  mp:Decode(string | stream)
+bool|false,err mp:EncodeIntoStream(stream, value)
+value|nil,err  mp:DecodeFromStream(stream)
+nil            mp:Dispose()
+```
+
+| Function | Description |
+|----------|-------------|
+| `New` | Create an encoder/decoder instance (no options) |
+| `Encode` | Encode a Lua value and return the MessagePack bytes as a Lua string. Raises `MsgPack: recursion detected` on cyclic tables |
+| `Decode` | Decode the first MessagePack value from a string (or from a `Stream`, same as `DecodeFromStream`). Trailing bytes are ignored. On bad input returns `nil, "MsgPack: parse error"` or `nil, "MsgPack: incomplete data"` (does **not** raise) |
+| `EncodeIntoStream` | Encode `value` and write the bytes to `stream`. Returns `true`, or `false, "stream is not writable"`. Raises if argument 2 is not a stream |
+| `DecodeFromStream` | Read the stream's available bytes and decode one value. On seekable streams, bytes belonging to the next message are pushed back, so repeated calls read consecutive messages. Returns `nil, errmsg` if the stream is not readable or the data is invalid or incomplete |
+| `Dispose` | Free the internal buffer early; called automatically by the GC |
+
+### Type mapping
+
+| Lua → MessagePack | |
+|---|---|
+| `nil` | nil |
+| `boolean` | true / false |
+| integer | int (smallest encoding) |
+| float | float64 |
+| `string` | str (bytes passed through, no UTF-8 validation) |
+| `table` with keys exactly `1..n` | array (an empty table encodes as an empty array) |
+| any other `table` | map (keys encoded with their own types) |
+| `UInt` | uint64 |
+| `LuaStream` (readable + seekable) | bin (all bytes from offset 0; position preserved) |
+| `DateTime`, `Identifier`, `Decimal`, `TimeSpan` | str (their string form) |
+| functions, threads, lightuserdata (incl. `Json.Null`), other userdata | nil |
+
+| MessagePack → Lua | |
+|---|---|
+| nil | `nil` (map entries with nil values are absent; a nil map key raises an error) |
+| true / false | boolean |
+| int (positive ≤ 2^63-1, or negative) | integer |
+| positive int > 2^63-1 | `UInt` userdata |
+| float32 / float64 | number |
+| str | string |
+| bin | `LuaStream` (in-memory, positioned at 0) |
+| array | integer-keyed table |
+| map | table |
+| ext | `nil` (not supported) |
+
+`DateTime`, `Decimal`, `Identifier` and `TimeSpan` don't round-trip: they come back as plain strings.
+
+```lua
+local mp = MsgPack.New()
+local bytes = mp:Encode({id = 1, tags = {"a", "b"}})
+local t = assert(mp:Decode(bytes))
+print(t.id, t.tags[2])            -- 1   b
+
+-- Several messages in one stream
+local s = Stream.New()
+mp:EncodeIntoStream(s, 1)
+mp:EncodeIntoStream(s, 2)
+s:Seek(0)
+print(mp:DecodeFromStream(s), mp:DecodeFromStream(s))  -- 1   2
+```
+
+---
+
 ## Text
 
-Helpers for the text conversions plain UTF-8 strings and Lua's `utf8` library don't cover. Every function takes and returns ordinary Lua strings. Malformed input never raises: invalid UTF-8 sequences and unpaired UTF-16 surrogates become U+FFFD (`"\xEF\xBF\xBD"`).
+Helpers for the text conversions plain UTF-8 strings and Lua's `utf8` library don't cover. Every function takes and returns ordinary Lua strings. Malformed input never raises: invalid UTF-8 sequences and unpaired UTF-16 surrogates become U+FFFD (`"\xEF\xBF\xBD"`); code page conversions follow the platform's rules for unmappable characters (see below).
 
 ```lua
 string  Text.Lower(str)
@@ -2555,8 +2790,8 @@ string  Text.ToCodepage(str, opt codepage)
 | `Lower` / `Upper` | Unicode-aware case conversion (all scripts, not only ASCII: `"É"` ↔ `"é"`, `"Σ"` ↔ `"σ"`, `"Ж"` ↔ `"ж"`). Uses simple, locale-independent mappings, so there's no Turkish dotless-i special case. `string.lower` / `string.upper` only change ASCII letters |
 | `ToUtf16` | Encodes a UTF-8 string as UTF-16 LE bytes (2 bytes per code unit, 4 for characters outside the BMP, no BOM), returned as a Lua string |
 | `FromUtf16` | Decodes UTF-16 LE bytes to a UTF-8 string. A trailing odd byte is ignored, and a leading BOM is kept as U+FEFF |
-| `FromCodepage` | Decodes bytes in a legacy code page to UTF-8. Bytes the code page can't decode become U+FFFD |
-| `ToCodepage` | Encodes a UTF-8 string into a legacy code page. Characters the code page can't represent become `?` |
+| `FromCodepage` | Decodes bytes in a legacy code page to UTF-8. Undecodable bytes become U+FFFD on Linux; on Windows the system decoder is used, which may map undefined bytes to C1 control characters (e.g. `0x81` in 1252 → U+0081) or another fallback character instead |
+| `ToCodepage` | Encodes a UTF-8 string into a legacy code page. On Windows characters without an exact mapping may be replaced by a best-fit look-alike (`ł` → `l`, `∞` → `8` in 1252), and only otherwise by `?`; on Linux they become `?` |
 
 `codepage` is a Windows code page number, for example `1252` (Western European), `1250`, `1251`, `437`, `850`, `932` (Shift-JIS), `936`, `949`, `950`, `28591`–`28606` (ISO-8859-1 to -16), `20127` (ASCII) or `65001` (UTF-8). For UTF-16 use `ToUtf16` / `FromUtf16`. Omitted or `0` means the system ANSI code page on Windows and the locale's charset elsewhere. An unsupported code page raises an error.
 
@@ -2583,13 +2818,13 @@ See also `Stream:ReadUtf16` / `Stream:WriteUtf16` for reading and writing UTF-16
 
 ## UInt
 
-A typed userdata for unsigned 64-bit integers. Covers values above `2^63 - 1` that cannot be represented losslessly as a Lua integer or `number`. All arithmetic operators are overloaded so `UInt` values work with `+`, `-`, `*`, `/`, `%`, `&`, `|`, `~`, `^`, `<<`, `>>`, and unary `~` directly. Comparisons (`==`, `<`, `<=`) are also overloaded.
+A typed userdata for unsigned 64-bit integers. Covers values above `2^63 - 1` that cannot be represented losslessly as a Lua integer or `number`. Arithmetic and bitwise operators are overloaded so `UInt` values work with `+`, `-`, `*`, `/`, `%`, `&`, `|`, `~`, `<<`, `>>`, and unary `~` directly (there is no `^`). Comparisons (`==`, `<`, `<=`) are also overloaded.
 
 ### Constructors
 
 ```lua
 UInt  UInt.FromString(str)      -- parse decimal string; nil on failure
-UInt  UInt.FromNumber(n)        -- convert Lua number (truncates to uint64)
+UInt  UInt.FromNumber(n)        -- truncates the fractional part; nil if n < 0 or > 2^64-1
 UInt  UInt.FromUnsigned(n)      -- reinterpret raw bit pattern of a Lua integer as uint64
 UInt  UInt.Zero()               -- returns 0
 ```
@@ -2600,10 +2835,16 @@ UInt  UInt.Zero()               -- returns 0
 string  u:ToString()     -- decimal string representation, alias: AsString()
 string  u:AsString()
 number  u:ToNumber()     -- convert to Lua number (lossy above 2^53)
-int     u:ToInteger()    -- reinterpret as signed int64 (bit pattern preserved)
-uint    u:ToUnsigned()   -- same value as a Lua integer (wraps for values > INT64_MAX)
+int     u:ToInteger()    -- lower 63 bits as a non-negative integer (top bit cleared)
+int     u:ToUnsigned()   -- the same 64 bits as a Lua integer (negative for values > 2^63-1)
 bool    u:IsZero()       -- true when value is 0
+UInt    u:Add(x)         -- same as u + x
+UInt    u:Sub(x)         -- same as u - x
+UInt    u:Mul(x)         -- same as u * x
+UInt    u:Div(x)         -- same as u / x
 ```
+
+The right-hand operand of the operators and of `Add`/`Sub`/`Mul`/`Div` may be a `UInt`, a Lua integer (its bits are reinterpreted), a non-negative number, or a decimal string: `UInt.FromNumber(5) + 1` is `6`. `/` and `%` by zero raise an error; shifting by 64 or more gives 0. Lua only calls `__eq` when both operands are userdata, so `u == 5` is always `false`: compare with `u == UInt.FromNumber(5)` or `u:ToNumber() == 5`.
 
 ### Arithmetic & Bitwise Metamethods
 
@@ -2655,7 +2896,7 @@ TimeSpan  TimeSpan.FromTicks(n)       -- raw 100-ns tick count
 TimeSpan  TimeSpan.Zero()
 ```
 
-All constructors accept fractional `number` arguments.
+All constructors except `FromTicks` (integer only) accept fractional `number` arguments.
 
 ### Component Getters
 
@@ -2667,7 +2908,17 @@ int     ts:Seconds()
 int     ts:Milliseconds()
 int     ts:Ticks()           -- raw 100-ns signed tick count
 bool    ts:IsNegative()      -- true when duration < 0
-bool    ts:IsEmpty()         -- true when ticks == 0
+bool    ts:IsZero()          -- true when ticks == 0
+```
+
+### Other Methods
+
+```lua
+string    ts:ToString()      -- same as tostring(ts); alias: AsString()
+string    ts:AsString()
+TimeSpan  ts:Abs()           -- absolute duration
+TimeSpan  ts:Add(other)      -- same as ts + other
+TimeSpan  ts:Sub(other)      -- same as ts - other
 ```
 
 ### Conversion
@@ -2684,14 +2935,14 @@ number  ts:TotalMilliseconds()
 
 | Metamethod | Behaviour |
 |------------|-----------|
-| `tostring(ts)` | Canonical string, e.g. `"01:30:00.000"` or `"-00:00:30.000"` |
+| `tostring(ts)` | Canonical string, e.g. `"01:30:00.000"` or `"-00:00:30.000"`; a day or more gets a days prefix, `D.HH:MM:SS.mmm` (`FromHours(25.5)` → `"1.01:30:00.000"`) |
 | `ts1 == ts2` | Tick equality |
-| `ts1 < ts2` | Less-than comparison |
-| `ts1 <= ts2` | Less-or-equal comparison |
-| `ts1 + ts2` | Duration addition |
-| `ts1 - ts2` | Duration subtraction |
-| `ts * n` | Scale by a number |
-| `ts / n` | Divide by a number |
+| `ts1 < ts2` | Less-than comparison (raises if the other operand isn't a `TimeSpan`) |
+| `ts1 <= ts2` | Less-or-equal comparison (same) |
+| `ts1 + ts2` | Duration addition (both must be `TimeSpan`) |
+| `ts1 - ts2` | Duration subtraction (both must be `TimeSpan`) |
+| `ts * n`, `n * ts` | Scale by a number |
+| `ts / n` | Divide by a number (`n` must be a number; `/ 0` raises) |
 | `-ts` | Negate the duration |
 
 ### Examples
@@ -2731,6 +2982,7 @@ Identifier Identifier.FromBytes(bytes)
 - `NewOID`: generates a new MongoDB-compatible ObjectID (4-byte Unix timestamp + 5 random bytes + 3-byte counter).
 - `FromString`: parses a 36-character UUID string (`xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`) or a 24-character hex OID string.
 - `FromBytes`: wraps a 16-byte (UUID) or 12-byte (OID) binary string into an Identifier.
+- `FromString` and `FromBytes` return `nil` when the length or format is wrong. Hex digits in the UUID string form are not validated, so check untrusted input yourself.
 
 ### Methods
 
@@ -2747,6 +2999,8 @@ bool    id:IsEmpty()    -- true when all bytes are zero
 tostring(id)   -- canonical string representation
 id == other    -- true when type, length, and bytes all match
 ```
+
+`==` with a string or with another kind of userdata (e.g. a `DateTime`) is `false`.
 
 ---
 
@@ -2769,10 +3023,10 @@ DateTime  DateTime.Parse(str [, fallbackOffsetMinutes])   -- returns nil on fail
 |----------|-------------|
 | `Now` | Current local time with the system's UTC offset |
 | `UtcNow` | Current UTC time (offset = 0) |
-| `New` | Construct from individual components. `offsetMinutes` is the UTC offset in minutes `[-840, +840]`; defaults to 0 (UTC) |
+| `New` | Construct from individual components. `offsetMinutes` is the UTC offset in minutes `[-840, +840]`; defaults to 0 (UTC). Raises an error for out-of-range components (hour 0-23, minute 0-59, second 0-59, millisecond 0-999, a day that doesn't exist in the month) or offset. The same offset range is enforced (with an error) by `FromUnix*`, `Parse` and `ToOffset` |
 | `FromUnixSeconds` | Wrap a Unix timestamp (seconds, may be fractional) into a DateTime |
 | `FromUnixMilliseconds` | Wrap a Unix timestamp in integer milliseconds |
-| `Parse` | Parse an ISO 8601 / SQL datetime string (`YYYY-MM-DD[T HH:MM[:SS[.fff]]][Z\|±HH:MM]`). If no offset is embedded in the string the optional `fallbackOffsetMinutes` is applied. Returns `nil` on parse failure |
+| `Parse` | Parse an ISO 8601 / SQL datetime string (`YYYY-MM-DD[T HH:MM[:SS[.fff]]][Z\|±HH:MM]`). If no offset is embedded in the string the optional `fallbackOffsetMinutes` is applied. `±HHMM` without a colon and a whole-hour `±HH` (as Postgres prints it) are accepted too, and trailing text after a valid prefix is ignored (`"2024-06-01xyz"` parses). Returns `nil` on parse failure |
 
 ### Component Getters
 
@@ -2801,6 +3055,8 @@ string    dt:Format(opt fmt)        -- strftime format string; ISO 8601 when omi
 string    dt:AsString(opt fmt)      -- alias for Format
 ```
 
+`Format` with a format string formats the value's own local time (its offset applied), but `%z` / `%Z` print the *system* time zone, not the value's offset; use `dt:OffsetMinutes()` or the default ISO 8601 output when the offset matters. Output is capped at 256 bytes.
+
 ### Arithmetic
 
 ```lua
@@ -2809,9 +3065,10 @@ DateTime  dt:AddHours(n)
 DateTime  dt:AddMinutes(n)
 DateTime  dt:AddSeconds(n)
 DateTime  dt:AddMilliseconds(n)
+DateTime  dt:AddTimeSpan(ts)
 ```
 
-All `Add*` functions accept fractional numbers and return a new `DateTime` with the same offset.
+All `Add*` functions accept fractional numbers (`AddTimeSpan` takes a `TimeSpan`) and return a new `DateTime` with the same offset.
 
 ### Metamethods
 
@@ -2821,7 +3078,9 @@ All `Add*` functions accept fractional numbers and return a new `DateTime` with 
 | `dt1 == dt2` | `true` when UTC ticks are equal (offset is ignored) |
 | `dt1 < dt2` | UTC tick comparison |
 | `dt1 <= dt2` | UTC tick comparison |
-| `dt1 - dt2` | Difference in **seconds** as a `number` |
+| `dt1 - dt2` | Difference as a `TimeSpan` (use `(a - b):TotalSeconds()` for a number) |
+| `dt + ts` | `DateTime` moved by a `TimeSpan` (the `DateTime` must be on the left: `ts + dt` raises) |
+| `dt - ts` | `DateTime` moved back by a `TimeSpan` |
 
 ### Examples
 
@@ -2837,7 +3096,7 @@ local dt = DateTime.New(2024, 1, 15, 9, 0, 0, 0, 60)  -- +01:00
 print(dt:ToUtc())                   -- "2024-01-15T08:00:00.000Z"
 
 local parsed = DateTime.Parse("2024-06-01T12:00:00Z")
-print(parsed - DateTime.UtcNow())   -- seconds until/since that moment
+print((parsed - DateTime.UtcNow()):TotalSeconds())   -- seconds until/since that moment
 
 local tomorrow = DateTime.Now():AddDays(1)
 print(tomorrow:Format("%Y-%m-%d"))  -- strftime format
@@ -2852,7 +3111,7 @@ A typed userdata for exact base-10 arithmetic with up to 34 significant digits. 
 ### Constructors
 
 ```lua
-Decimal  Decimal.FromString(str)   -- e.g. "123.456", "-0.001"; nil on failure
+Decimal  Decimal.FromString(str)   -- e.g. "123.456", "-0.001", "+1.2E+5"; nil if no number is found
 Decimal  Decimal.FromNumber(n)     -- convert Lua number (lossy for floats)
 Decimal  Decimal.Zero()            -- returns 0
 ```
@@ -2868,13 +3127,18 @@ int      dec:Precision()   -- total significant digits
 bool     dec:IsEmpty()     -- true when value is zero
 bool     dec:IsNegative()  -- true when value < 0
 Decimal  dec:Abs()         -- absolute value
-Decimal  dec:Round(scale)  -- round to given decimal places
-Decimal  dec:Truncate(scale) -- truncate to given decimal places
+Decimal  dec:Round(opt scale)    -- round half away from zero to scale places (default 0)
+Decimal  dec:Truncate(opt scale) -- truncate to scale places (default 0)
 Decimal  dec:Add(other)
 Decimal  dec:Sub(other)
 Decimal  dec:Mul(other)
 Decimal  dec:Div(other)
 ```
+
+- `FromString` stops at the first character that isn't part of a number, so `"12abc"` gives `12`; validate untrusted input first if that matters. A negative `scale` is treated as 0.
+- Operators, comparisons and `Add`/`Sub`/`Mul`/`Div` accept a `Decimal`, Lua integer, number or numeric string on either side (`Decimal.FromString("1.5") + 2` works). As with all userdata, `dec == 0` is always `false` (Lua only calls `__eq` for two userdata); use `dec:IsEmpty()` or compare with a `Decimal`.
+- Division is not exact: the quotient is truncated to 10 extra decimal places (`1 / 3` → `0.3333333333`). Division or modulo by zero raises an error.
+- `%` truncates and takes the dividend's sign (`-7 % 3` → `-1`), unlike Lua's floored `%` on numbers.
 
 ### Metamethods
 
@@ -2913,8 +3177,10 @@ Connects to a MongoDB server using the [libmongoc](https://mongoc.org/) driver. 
 ### Connection
 
 ```lua
-Mongo, errmsg  Mongo.Connect(uri)
+Mongo, errmsg  MongoDB.Connect(uri)
 ```
+
+The global is `MongoDB` (there is no `Mongo` global).
 
 `uri` is a standard [MongoDB connection string](https://www.mongodb.com/docs/manual/reference/connection-string/) (e.g. `"mongodb://localhost:27017"`). Performs an eager ping to verify connectivity. Returns the connection on success, or `nil, errmsg` on failure.
 
@@ -2940,7 +3206,8 @@ bool, errmsg  mongo:CountDocuments(db, collection, filter [, opts])
 - `documents` for `InsertMany` is an array of tables.
 - `pipeline` for `Aggregate` is an array of stage tables.
 - `limit` and `skip` are optional integers.
-- Returns `true, nil` on successful dispatch, or `false, errmsg` if the connection is closed or already busy.
+- Returns `true, nil` on successful dispatch, or `false, errmsg` when the operation can't start: `"connection is closed"` (after `Close()`), `"operation already in progress"`, or for `InsertMany` `"InsertMany: document array is empty"` / `"InsertMany: array element is not a table"`.
+- Invalid arguments **raise an error** instead: an invalid database or collection name, a non-integer `limit`/`skip`, wrong argument types, a string value or key that isn't valid UTF-8, NaN/infinity, or a table that references itself.
 
 ### Async Control
 
@@ -2952,6 +3219,9 @@ nil           mongo:SetAliveToken(token) -- attach an AliveToken; cancels automa
 result, errmsg mongo:GetResult()       -- yield if needed, then return the result
 nil           mongo:Close()            -- close connection and free resources
 ```
+
+- `GetResult` consumes the result: a second call (or a call with nothing dispatched, or after `Cancel()`) returns `nil, "no active operation"`.
+- `Close()` cancels a running operation and waits (up to 15 s) for the worker **without yielding**, so it blocks the scheduler briefly; call `Wait()` or `Cancel()` first if an operation may be in flight. Afterwards every CRUD call returns `false, "connection is closed"`.
 
 **`GetResult` return values by operation:**
 
@@ -2982,8 +3252,15 @@ On error: `nil, errmsg`.
 | `BINARY` (other subtypes) | `LuaStream` |
 | `TIMESTAMP` | table `{t=ordinal, i=increment}` |
 | `REGEX` | string `"/pattern/options"` |
+| `CODE`, `CODEWSCOPE`, `SYMBOL` | string |
+| any other BSON type | nil |
 
-When writing Lua → BSON, `Identifier`, `DateTime`, `Decimal` and `LuaStream` values are also recognised and serialised to their corresponding BSON types.
+When writing Lua → BSON:
+
+- `Identifier`, `DateTime`, `Decimal` and `LuaStream` values are serialised to their corresponding BSON types. A `DateTime` is stored in UTC with millisecond precision (its offset and sub-millisecond part are lost).
+- `UInt` is stored as INT64 (same 64 bits); `TimeSpan` as INT64 **milliseconds**.
+- A table is written as a BSON array only when it has length > 0 and no string keys; everything else, including an empty table `{}`, becomes a document.
+- Functions and other userdata are stored as null.
 
 Lua strings are stored as BSON strings, which must be valid UTF-8. A string value or key that isn't (binary data, ANSI text) raises an error rather than storing data other drivers can't read. Store binary data as a `LuaStream`, which becomes BSON binary.
 
@@ -2992,7 +3269,7 @@ Lua strings are stored as BSON strings, which must be valid UTF-8. A string valu
 ### Example
 
 ```lua
-local mongo = assert(Mongo.Connect("mongodb://localhost:27017"))
+local mongo = assert(MongoDB.Connect("mongodb://localhost:27017"))
 
 -- Insert
 mongo:InsertOne("mydb", "users", {name = "Alice", age = 30})
@@ -3021,7 +3298,8 @@ local token = AliveToken.New()
 mongo:SetAliveToken(token)
 mongo:Find("mydb", "big_collection", {})
 token:Dispose()          -- cancels mid-wait; GetResult/Wait redirects into cancel path
-mongo:GetResult()        -- coroutine dies cleanly once worker acknowledges
+mongo:GetResult()        -- returns nothing once the worker acknowledges the cancel
+                         -- (or the normal result if the operation had already finished)
 
 mongo:Close()
 ```
@@ -3043,12 +3321,12 @@ nil    xml:Dispose()          -- explicitly free the instance (also called by GC
 |----------|-------------|
 | `New` | Create a new Xml instance. Pass `true` for indented output (one tab per level); default is compact (no indentation) |
 | `Encode` | Encode a Lua node table to an XML string. Always prepends an `<?xml version="1.0" encoding="UTF-8"?>` declaration |
-| `Decode` | Parse an XML string and return the root element as a Lua node table. Returns `nil, errmsg` on parse failure |
+| `Decode` | Parse an XML string and return the root element as a Lua node table. Returns `nil, errmsg` on parse failure or `nil, "Xml: no root element"` when there is none; a non-string argument or nesting deeper than 512 levels raises an error |
 | `Dispose` | Explicitly release the instance; called automatically by the GC |
 
 ### Node Table Structure
 
-Every XML element is represented as a Lua table with four fields:
+Every XML element is represented as a Lua table with four fields. `Decode` always fills in all four; for `Encode` only `tag` is required (`attr`, `text` and `children` are optional, so `{tag = "a"}` encodes as `<a/>`):
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -3101,7 +3379,8 @@ if not doc then print("Parse error:", err) end
 ### Notes
 
 - `Encode` expects every node table to have a non-empty `tag` field; an error is raised otherwise.
-- Attributes are written in the order they appear in the `attr` array.
+- Attributes are written in the order they appear in the `attr` array. Attribute values that aren't strings or numbers are written as `""`.
+- When encoding, `text` may also be a number, `UInt`, `Decimal`, `Identifier`, `DateTime` or `TimeSpan` (written as its string form).
 - Mixed content (elements that have both `text` and `children`) is supported: `text` is appended as a PCDATA node before the child elements.
 - `Decode` returns only the first root element; XML comments, processing instructions, and the XML declaration are ignored in the output table.
 - Input must be UTF-8 encoded. The encoder always writes UTF-8.
@@ -3111,8 +3390,9 @@ if not doc then print("Parse error:", err) end
 ## FileSystem
 
 All path arguments are UTF-8 strings.
-On Windows the W-API is used internally so non-ASCII filenames are handled correctly.
-On Linux the POSIX UTF-8 API is used directly — no wide-char handling is needed.
+On Windows the W-API is used internally so non-ASCII filenames are handled correctly; a path can be up to 1023 characters (UTF-16 code units, however many UTF-8 bytes that is), and a longer one raises `path is too long`.
+On Linux the POSIX UTF-8 API is used directly — no wide-char handling is needed; the limit there is 1023 **bytes**.
+The limit doesn't apply to `FileSystem.Open`.
 
 All returned names and paths (`GetFiles`, `GetDirectories`, `GetAll` / `GetFileInfo` fields, `CurrentDirectory`, `GetTempFileName`, `GetSpecialFolder`) are plain UTF-8 strings on every platform, so non-ASCII names round-trip exactly and can be passed straight back into FileSystem functions.
 
@@ -3124,7 +3404,7 @@ Array   FileSystem.GetFiles(path)
 Array   FileSystem.GetDirectories(path)
 FileInfo FileSystem.GetFileInfo(path)
 file    FileSystem.Open(path, opt mode)
-bool    FileSystem.Copy(source, destination, overwrite)
+bool    FileSystem.Copy(source, destination, opt overwrite)
 bool    FileSystem.Move(source, destination)
 bool    FileSystem.Delete(source)
 bool    FileSystem.CreateDirectory(path)
@@ -3136,17 +3416,17 @@ bool    FileSystem.SetAttributes(path, attributemask)
 | Function | Description |
 |----------|-------------|
 | `GetAll` | Returns an array of `FileInfo` tables for every entry (files **and** directories) in `path` |
-| `GetFiles` | Returns an array of filenames for all regular files in `path` |
-| `GetDirectories` | Returns an array of directory names for all subdirectories in `path` |
+| `GetFiles` | Returns an array of filenames for all regular files in `path`. On Linux names starting with `.` are omitted and symlinks are not listed; Windows includes hidden files |
+| `GetDirectories` | Returns an array of directory names for all subdirectories in `path` (on Linux dot-directories are included, symlinks are not) |
 | `GetFileInfo` | Returns a `FileInfo` table for `path`, or `nil` if the path does not exist |
-| `Open` | Open a file and return a standard Lua `io` file handle. Same contract as `io.open`: `mode` defaults to `"r"` and must be `"r"`, `"w"` or `"a"`, optionally followed by `+` and/or `b` (anything else raises an error); on failure returns `nil, "<path>: <error>", errno` |
-| `Copy` | Copy `source` to `destination`. Pass `true` for `overwrite` to allow replacing an existing file |
+| `Open` | Open a file and return a standard Lua `io` file handle. Same contract as `io.open`: `mode` defaults to `"r"` and must be `"r"`, `"w"` or `"a"`, optionally followed by `+` and/or `b` (anything else raises an error, including a repeated `b` that `io.open` itself accepts); on failure returns `nil, "<path>: <error>", errno` |
+| `Copy` | Copy `source` to `destination`. Pass `true` for `overwrite` to allow replacing an existing file (default `false`: the copy fails and returns `false` when `destination` already exists) |
 | `Move` | Move (rename across directories) `source` to `destination` |
-| `Delete` | Delete a file or empty directory |
+| `Delete` | Delete a file. On Linux it also deletes an empty directory; on Windows use `RemoveDirectory` for directories |
 | `CreateDirectory` | Create a directory at `path`. Returns `true` on success |
 | `RemoveDirectory` | Remove an **empty** directory at `path`. Returns `true` on success |
 | `Rename` | Rename `source` to `destination` (same filesystem) |
-| `SetAttributes` | *(Windows only)* Set Win32 file attribute flags |
+| `SetAttributes` | *(Windows only)* Set Win32 file attribute flags. On Linux it exists but always returns `false` |
 
 ### FileInfo table
 
@@ -3156,31 +3436,33 @@ Returned by `GetFileInfo` and `GetAll`:
 |-------|------|-------------|
 | `FileName` | string | Entry name (without path) |
 | `isFolder` | boolean | `true` when the entry is a directory |
-| `Size` | number | File size in bytes (`0` for directories) |
-| `Creation` | number | Creation time as Unix timestamp |
-| `Access` | number | Last access time as Unix timestamp |
-| `Write` | number | Last write time as Unix timestamp |
-| `Link` | string | *(optional)* Symlink / reparse-point target path, present only when the entry is a link |
+| `Size` | number | File size in bytes (`0` for directories on Windows; the directory's `st_size`, typically 4096, on Linux) |
+| `Creation` | number | Creation time as a Unix timestamp (on Linux `st_ctime`, the last status change) |
+| `Access` | number | Last access time as a Unix timestamp |
+| `Write` | number | Last write time as a Unix timestamp |
+| `Link` | string | *(optional, `GetFileInfo` only)* Symlink / reparse-point target path, present only when the entry is a link |
 | `AlternateFileName` | string | *(Windows only)* 8.3 short name |
 | `Attributes` | number | *(Windows only)* Win32 `FILE_ATTRIBUTE_*` bitmask |
+
+The timestamps are Unix timestamps (whole seconds since 1970-01-01 UTC) on every platform, directly comparable with `os.time()`. On Linux, `GetAll` omits `Size` and the timestamps when the entry can't be `stat`ed.
 
 ### Path and Directory Utilities
 
 ```lua
 string  FileSystem.CurrentDirectory()
 bool    FileSystem.SetCurrentDirectory(path)
-string  FileSystem.GetTempFileName()
+string  FileSystem.GetTempFileName(opt dirOnly)
 Array   FileSystem.GetDrives(opt drive)
-string  FileSystem.GetSpecialFolder(csidl)   -- Windows only
+string  FileSystem.GetSpecialFolder(opt csidl)   -- Windows only
 ```
 
 | Function | Description |
 |----------|-------------|
 | `CurrentDirectory` | Returns the process current working directory as a plain UTF-8 string |
 | `SetCurrentDirectory` | Changes the current working directory. Returns `true` on success |
-| `GetTempFileName` | Creates a temporary file and returns its path as a string |
-| `GetDrives` | Returns an array of drive tables (see below). Pass a single drive letter string to query one drive only |
-| `GetSpecialFolder` | *(Windows only)* Returns the path for a CSIDL folder constant as a string, or `nil` on failure |
+| `GetTempFileName` | Creates a temporary file and returns its path as a string. On Windows, `GetTempFileName(true)` returns the temp directory instead of creating a file (Linux ignores the argument) |
+| `GetDrives` | Returns an array of drive tables (see below). On Windows, passing a drive letter (`"C"`) returns **that single drive table** (not an array), or `nil` for an invalid letter. Linux ignores the argument and always returns `{ {Drive = "/", ...} }` |
+| `GetSpecialFolder` | *(Windows only)* Returns the path for a CSIDL folder constant (default `0x0010`, Desktop Directory) as a string, or `nil` on failure. Not registered on Linux (calling it raises "attempt to call a nil value") |
 
 ### Drive table (from `GetDrives`)
 
@@ -3215,7 +3497,7 @@ an `Image` object returned by `Open`/`New`/`FromBytes`/`Crop`/`Resize`/`Clone`.
 
 Pixels are RGBA8 (straight, non-premultiplied alpha). Coordinates are
 0-indexed pixel coordinates (`x` = column, `y` = row, origin top-left) — not
-Lua's usual 1-indexed convention. Only PNG is supported (no JPEG).
+Lua's usual 1-indexed convention. `Open` / `FromBytes` decode PNG, JPEG, BMP, TGA, GIF (first frame), PSD, HDR, PIC and PNM (everything `stb_image` reads); **saving is PNG only**, and metadata tags are read from PNG input only.
 
 ```lua
 Image  Image.Open(path)
@@ -3270,8 +3552,8 @@ Image  img:DropShadow(offsetX, offsetY, blurRadius, r, g, b, opt a)
        img:ApplyMask(maskImg, opt useLuminance)
        img:Noise(opt amount, opt seed, opt monochrome, opt x, opt y, opt w, opt h)
 
-       img:FillGradientLinear(x1, y1, r1, g1, b1, opt a1, x2, y2, r2, g2, b2, opt a2)
-       img:FillGradientRadial(cx, cy, radius, r1, g1, b1, opt a1, r2, g2, b2, opt a2)
+       img:FillGradientLinear(x1, y1, r1, g1, b1, a1, x2, y2, r2, g2, b2, opt a2)   -- a1 must be passed (nil = 255)
+       img:FillGradientRadial(cx, cy, radius, r1, g1, b1, a1, r2, g2, b2, opt a2)   -- a1 must be passed (nil = 255)
        img:FillPolygon(points, r, g, b, opt a)
        img:DrawText(text, x, y, r, g, b, opt a, opt scale)
 
@@ -3280,9 +3562,9 @@ table  img:ExtractPalette(opt n)
 
 | Function | Description |
 |----------|-------------|
-| `Open` | Decodes a PNG file from disk into a new `Image`. Raises a Lua error if the file cannot be read or decoded |
+| `Open` | Decodes an image file (PNG, JPEG, BMP, …) from disk into a new `Image`. Raises a Lua error if the file cannot be read or decoded |
 | `New` | Creates a blank, fully-transparent `width`x`height` canvas |
-| `FromBytes` | Decodes a PNG already held in memory (e.g. base64-decoded bytes) — no disk I/O |
+| `FromBytes` | Decodes an image already held in memory (e.g. base64-decoded bytes) — no disk I/O |
 | `GetMetadata` | Returns `{ width, height, tags = { key = value, ... } }`. `tags` merges every `tEXt`/`iTXt` chunk found at decode time (last chunk for a given key wins); `zTXt` and compressed `iTXt` chunks are not read. Keys and values are UTF-8 (`tEXt` chunks are Latin-1 by spec and are converted) |
 | `SetMetadata` | Sets (or overwrites) one tag. Tags are written as uncompressed UTF-8 `iTXt` chunks by `Save`/`ToBytes` |
 | `GetWidth` / `GetHeight` | Convenience accessors, equivalent to the fields on `GetMetadata()` |
@@ -3304,9 +3586,9 @@ table  img:ExtractPalette(opt n)
 | `RecolorPalette` | Exact color-swap recoloring. `mapping` is `{ {fromR,fromG,fromB, toR,toG,toB, opt tolerance}, ... }` — the first rule within `tolerance` (per-channel max difference, default 0 = exact) wins for each pixel |
 | `AdjustHSV` | Adjusts hue (`hueShift`, degrees), saturation and value (`saturationMul`/`valueMul` multipliers, 1.0 = unchanged) over a region (defaults to the whole image) |
 | `Dither` | Quantizes to `palette` (`{ {r,g,b}, ... }`) using 4x4 ordered (Bayer) dithering — breaks up flat color bands instead of hard banding. `amount` (default 32) is the dither strength in 0-255 units |
-| `Outline` | Grows a colored, `thickness`-pixel border around the image's existing silhouette (based on a snapshot of the original alpha, so it doesn't bleed into itself) |
+| `Outline` | Grows a colored, `thickness`-pixel border (default 1, `a` default 255) around the image's existing silhouette (based on a snapshot of the original alpha, so it doesn't bleed into itself) |
 | `Stamp` | Pastes `brushImg` centered on `(x, y)`, alpha-blended, its own per-pixel alpha further scaled by `opacity` (default 1) |
-| `StrokePath` | Drags `brushImg` along a polyline (`points` = `{ {x,y}, ... }`), stamping it every `spacing` pixels of travelled distance so a fast stroke has no gaps |
+| `StrokePath` | Drags `brushImg` along a polyline (`points` = `{ {x,y}, ... }`), stamping it every `spacing` pixels (default 1, minimum 0.5) of travelled distance so a fast stroke has no gaps |
 | `FlipHorizontal` / `FlipVertical` | Return a new, mirrored `Image` (non-mutating, like `Crop`/`Resize`/`Clone`) |
 | `Rotate90` | Returns a new `Image` rotated 90°, dimensions swapped. `clockwise` defaults to `true` |
 
@@ -3315,19 +3597,19 @@ table  img:ExtractPalette(opt n)
 | Function | Description |
 |----------|-------------|
 | `PadCanvas` | Returns a new, larger `Image` with the original pasted at `(left, top)` and the new border transparent |
-| `DropShadow` | Renders a blurred, offset, colored silhouette of `img` into a new (larger) canvas — the `shadow.png` workflow the factorio-art pipeline currently does by hand. The canvas grows to fit both the blur falloff and however far `offsetX`/`offsetY` shift the silhouette, so large offsets (Factorio shadows commonly shift 40+ px) don't clip |
+| `DropShadow` | Renders a blurred, offset, colored silhouette of `img` into a new (larger) canvas — the `shadow.png` workflow the factorio-art pipeline currently does by hand. The canvas grows to fit both the blur falloff and however far `offsetX`/`offsetY` shift the silhouette, so large offsets (Factorio shadows commonly shift 40+ px) don't clip. Exact layout: `margin = blurRadius + 2 + max(|offsetX|, |offsetY|)` is added on every side, and the shadowed silhouette sits at `(margin + offsetX, margin + offsetY)`, so the original image aligns at `(margin, margin)`. Tags are not copied |
 | `Blur` | Separable box blur, alpha-aware (won't bleed black into transparent edges). `passes` (default 3) approximates a Gaussian falloff |
 | `Invert` | Inverts RGB (255-channel) over a region (defaults to the whole image); alpha is untouched |
 | `Grayscale` | Desaturates toward luminance (`0.299R+0.587G+0.114B`); `strength` (0-1, default 1) blends between original and full grayscale |
 | `AdjustBrightnessContrast` | `brightness` is additive (-255..255); `contrast` uses the standard contrast-correction-factor formula (-255..255, 0 = unchanged) |
 | `Threshold` | Two-tone stencil: pixels at/above `cutoff` (0-255, luminance by default or alpha if `useAlpha`) become `(r,g,b,a)`, everything else becomes fully transparent |
 | `ApplyMask` | Multiplies `img`'s alpha by `maskImg`'s alpha (or luminance, if `useLuminance`) — combine an arbitrary painted/generated shape as a stencil. Both images must be the same size |
-| `Noise` | Deterministic per-pixel random offset (seeded, so the same `seed` always reproduces the same grain) over a region — texture/grit without an AI round-trip. `monochrome` (default true) offsets all channels together so grain doesn't shift hue |
-| `FillGradientLinear` | Alpha-composites a gradient between `(r1,g1,b1,a1)` at `(x1,y1)` and `(r2,g2,b2,a2)` at `(x2,y2)` across the whole image |
-| `FillGradientRadial` | Alpha-composites a gradient from `(r1,g1,b1,a1)` at the center `(cx,cy)` to `(r2,g2,b2,a2)` at `radius` |
+| `Noise` | Deterministic per-pixel random offset (seeded, so the same `seed` always reproduces the same grain) over a region — texture/grit without an AI round-trip. `amount` defaults to 20 and `seed` to 12345. `monochrome` (default true) offsets all channels together so grain doesn't shift hue |
+| `FillGradientLinear` | Alpha-composites a gradient between `(r1,g1,b1,a1)` at `(x1,y1)` and `(r2,g2,b2,a2)` at `(x2,y2)` across the whole image. `a1` sits in the middle of the argument list, so it can't be skipped: pass `nil` (255) or a value |
+| `FillGradientRadial` | Alpha-composites a gradient from `(r1,g1,b1,a1)` at the center `(cx,cy)` to `(r2,g2,b2,a2)` at `radius`. As above, `a1` must be passed (`nil` for 255) |
 | `FillPolygon` | Even-odd scanline fill of an arbitrary polygon (`points` = `{ {x,y}, ... }`) |
 | `DrawText` | Draws `text` with a bundled 3x5 bitmap font, `scale` pixels per font-pixel (default 1). Only digits, space, `-`, `.`, `:` are supported today — enough for coordinate/measurement labels; anything else renders as a blank cell rather than erroring |
-| `ExtractPalette` | Returns the top `n` (default 8) most common colors as `{ {r=,g=,b=,count=}, ... }`, ranked by frequency (colors are bucketed to 5 bits/channel so near-identical shades merge). Feeds directly into `Dither`'s palette argument |
+| `ExtractPalette` | Returns the top `n` (default 8) most common colors as `{ {r=,g=,b=,count=}, ... }`, ranked by frequency (colors are bucketed to 5 bits/channel so near-identical shades merge). `Dither` expects `{ {r,g,b}, ... }` with positional entries, so convert first: `local p = {}; for i, c in ipairs(pal) do p[i] = {c.r, c.g, c.b} end` (passing the result directly dithers everything to black) |
 
 ---
 
@@ -3378,7 +3660,7 @@ string snd:ToBytes(opt format, opt quality)
 |----------|-------------|
 | `New` | Creates a silent buffer with the given sample rate, channel count, and frame count |
 | `Tone` | Generates a fixed-frequency waveform identically on every channel. `waveform` is `"sine"` (default), `"square"`, `"triangle"`, or `"saw"`. `amplitude` (0-1, default 1) |
-| `Noise` | Generates noise at `amplitude` (0-1, default 1, exact peak regardless of type). `noiseType` is `"white"` (default, flat spectrum, every sample independent -- the harshest/most "static"-like), `"pink"` (more low-frequency energy, less high -- audibly softer than white), or `"brown"` (even more bottom-heavy, a simple leaky-integrator rumble -- reads as more distant/muffled). All three are still recognizably broadband noise/static in character; getting a genuinely organic hiss/steam texture is more of a sampling problem than something these generators (or `Filter` on top of them) can produce from scratch. Each channel gets independent noise |
+| `Noise` | Generates noise at `amplitude` (0-1, default 1, exact peak regardless of type). `noiseType` is `"white"` (default, flat spectrum, every sample independent -- the harshest/most "static"-like), `"pink"` (more low-frequency energy, less high -- audibly softer than white), or `"brown"` (even more bottom-heavy, a simple leaky-integrator rumble -- reads as more distant/muffled). All three are still recognizably broadband noise/static in character; getting a genuinely organic hiss/steam texture is more of a sampling problem than something these generators (or `Filter` on top of them) can produce from scratch. Each channel gets independent noise. Uses the C `rand()`, so unlike `Image:Noise` there is no seed and the output isn't reproducible |
 | `Open` | Decodes a WAV or OGG file from disk into a new `Sound` (format auto-detected). Raises a Lua error if the file cannot be read or decoded |
 | `FromBytes` | Decodes a WAV or OGG buffer already held in memory -- no disk I/O |
 | `GetSampleRate` / `GetChannels` / `GetFrameCount` | Convenience accessors |
@@ -3393,11 +3675,11 @@ string snd:ToBytes(opt format, opt quality)
 | `ToChannels` | Returns a new `Sound` at `channels` channels. Downmixes to mono (same averaging as `ToMono`) then broadcasts to every output channel; `channels == snd:GetChannels()` returns an independent copy, same as `Clone`. Use this before `Mix`/`Concat` when channel counts don't match -- those still error on a mismatch rather than silently converting |
 | `Mix` | Additively mixes `otherSnd` into `snd` starting at `atFrame`, in place, scaled by `gain` (default 1) and clamped. Frames that fall outside `snd`'s bounds are clipped silently, like `Image:Composite` clips off-canvas pixels. Errors on a channel-count mismatch |
 | `ApplyGain` | Multiplies samples by `gain` over `[startFrame, startFrame+frameCount)` (defaults to the whole buffer), in place, clamped |
-| `Fade` | Applies a linear gain envelope from `fromGain` to `toGain` across `[startFrame, startFrame+frameCount)`, in place, clamped. Call twice (e.g. 0→1 then 1→0) for a fade-in/fade-out |
-| `Normalize` | Scales every sample so the buffer's peak absolute value becomes `targetPeak` (default 1.0). No-ops on silence |
+| `Fade` | Applies a linear gain envelope from `fromGain` to `toGain` across `[startFrame, startFrame+frameCount)`, in place, clamped. Raises an error if the range doesn't fit (unlike `ApplyGain`, which clips the range). Call twice (e.g. 0→1 then 1→0) for a fade-in/fade-out |
+| `Normalize` | Scales every sample so the buffer's peak absolute value becomes `targetPeak` (default 1.0; must be > 0, otherwise it raises). No-ops on silence |
 | `Reverse` | Reverses frame order in place (all channels) |
 | `Filter` | Applies a standard biquad (2nd-order IIR) filter to the *whole* buffer, in place -- `type` is `"lowpass"`, `"highpass"`, `"bandpass"`, or `"notch"`; `cutoffHz` must be between 0 and Nyquist (`sampleRate/2`); `Q` (default ~0.707, maximally-flat) controls resonance/bandwidth. Filters carry state between samples, so unlike `ApplyGain`/`Fade` there's no sub-range option -- filtering only part of a buffer would leave an audible click at the boundary. Useful for muffling a tone, shaping a click/pop's character, or changing `Noise`'s brightness |
-| `GetPeak` | Returns `min, max` sample values across the whole buffer |
+| `GetPeak` | Returns `min, max` sample values across the whole buffer, measured from 0: `min` is never above 0 and `max` never below 0 (effectively `min(0, lowest), max(0, highest)`) |
 | `GetRMS` | Returns the RMS (root-mean-square) level across the whole buffer |
 | `Save` | Encodes and writes to `path`. `format` is `"wav"` (default, 16-bit PCM) or `"ogg"`; `quality` (OGG only, 0.0-1.0, default 0.6) is libvorbis's own VBR quality scale. Returns the number of bytes written |
 | `ToBytes` | Encodes and returns it as a Lua string, with no disk I/O. Same `format`/`quality` args as `Save` |
@@ -3419,7 +3701,7 @@ nil     yaml:Dispose()          -- explicitly free the instance (also called by 
 |----------|-------------|
 | `New` | Create a new Yaml instance. Pass `true` for block/pretty style (one entry per line); default is flow style (compact, inline) |
 | `Encode` | Encode a Lua value to a YAML string |
-| `Decode` | Parse a YAML string and return the decoded Lua value |
+| `Decode` | Parse a YAML string and return the decoded Lua value. Parse errors **raise** a Lua error (`Yaml: parse error ...`); a mapping key that decodes to `nil` (`null`, `~`, empty) is dropped along with its value |
 | `Dispose` | Explicitly release the instance; called automatically by the GC |
 
 ### Scalar Type Coercion (Decode)
@@ -3449,6 +3731,8 @@ Quoted scalars (`"..."` or `'...'`) are always decoded as strings regardless of 
 | `Identifier` | double-quoted scalar (canonical string) |
 | `DateTime` | double-quoted scalar (ISO 8601) |
 | `Decimal` | double-quoted scalar (decimal string) |
+| `TimeSpan` | double-quoted scalar |
+| `UInt` | plain decimal scalar |
 | `table` (sequential integer keys) | sequence (`[]` / block `- ` style) |
 | `table` (other keys) | mapping (`{}` / block `key: value` style) |
 | functions, threads, unsupported userdata | `null` |
@@ -3458,7 +3742,11 @@ Quoted scalars (`"..."` or `'...'`) are always decoded as strings regardless of 
 - **Circular references** raise an error: `Yaml: recursion detected`
 - **Table classification**: pure sequential integer-keyed tables (`{1, 2, 3}`) encode as YAML sequences; all others encode as mappings
 - **Style**: `Yaml.New()` (flow) produces compact single-line output; `Yaml.New(true)` (block) produces human-readable multi-line output. Both styles decode correctly by the other instance
-- **Anchors and aliases** in input YAML are resolved transparently by libyaml before the binding layer ever sees them
+- **Anchors and aliases** are resolved: `a: &x 5` / `b: *x` gives `b = 5`. An alias to a mapping or sequence returns the **same** Lua table as the anchor (not a copy), so modifying one modifies both; self-references produce a cyclic table (which `Encode` rejects). An alias to an undefined anchor raises `Yaml: undefined alias '*name'`
+- **Merge keys** (`<<: *base` or `<<: [*a, *b]`) copy the source mappings' entries into the mapping; explicit keys win, and earlier sources in a list win over later ones
+- **Keys**: a null (`~`) or NaN key is dropped, since a Lua table can't hold it; a complex key (`? [a, b]`) becomes a table key
+- **Errors**: invalid YAML raises `Yaml: parse error in <context>: <problem> (line N, column M)`; nesting deeper than 1000 levels raises an error
+- **Mapping keys** that are strings are always written double-quoted (`"a": 1`)
 - **Multi-document YAML** — only the first document is decoded
 
 ### Examples
@@ -3482,8 +3770,8 @@ print(cfg.host, cfg.port, cfg.debug)  -- localhost  5432  true
 -- Block/pretty style
 local pretty = Yaml.New(true)
 print(pretty:Encode({a = 1, b = {2, 3}}))
--- a: 1
--- b:
+-- "a": 1
+-- "b":
 -- - 2
 -- - 3
 
@@ -3514,7 +3802,7 @@ nil     toml:Dispose()          -- explicitly free the instance (also called by 
 
 | Function | Description |
 |----------|-------------|
-| `New` | Create a new Toml instance. Pass `true` for indented output (2 spaces per level); default is compact |
+| `New` | Create a new Toml instance. With `pretty = true`, `Encode` puts a blank line before each section header and indents nested content by 2 spaces per level; the data it decodes to is identical to the compact output (default `false`) |
 | `Encode` | Encode a Lua table to a TOML string. The top-level value **must** be a table (TOML always has a root mapping) |
 | `Decode` | Parse a TOML string and return a Lua table. Returns `nil, errmsg` on parse failure |
 | `Dispose` | Explicitly release the instance; called automatically by the GC |
@@ -3532,7 +3820,7 @@ nil     toml:Dispose()          -- explicitly free the instance (also called by 
 | Array | table (sequential integer keys, 1-based) |
 | Table / inline table | table (string keys) |
 | Array of tables (`[[section]]`) | table (sequential integer keys, each element a table) |
-| Datetime / Date / Time | `string` (ISO 8601 format, e.g. `"2024-06-01T12:00:00Z"`) |
+| Datetime / Date / Time | `string` (ISO 8601 format, e.g. `"2024-06-01T12:00:00Z"`; fractional seconds are dropped) |
 
 #### Encode (Lua → TOML)
 
@@ -3545,21 +3833,25 @@ nil     toml:Dispose()          -- explicitly free the instance (also called by 
 | `Identifier` | basic string (canonical UUID or OID hex) |
 | `DateTime` | bare datetime scalar (no quotes — native TOML datetime type) |
 | `Decimal` | basic string |
+| `TimeSpan` | basic string |
+| `UInt` | bare integer |
 | `table` (sequential integer keys) used as value | inline array `[...]` |
-| `table` (string keys) at root or as sub-key | `[section]` header block |
-| `table` used as array-of-tables element | `[[section]]` header block |
+| empty `table` | inline empty table `{}` (decodes back as an empty table) |
+| `table` (string keys) at root or as sub-key | `[section]` header block (nested: dotted `[a.b.c]`) |
+| array whose elements are all tables | one `[[section]]` header block per element |
 | `nil`, functions, unsupported types | empty string `""` |
 
 ### Key Quoting
 
-Keys that consist only of `A–Z a–z 0–9 - _` are written as bare keys. All other keys are written as double-quoted basic strings.
+Keys that consist only of `A–Z a–z 0–9 - _` are written as bare keys. All other keys are written as double-quoted basic strings. In dotted section headers each segment is quoted on its own, so `{["my key"] = {sub = {k = 1}}}` is written as `["my key".sub]`.
 
 ### Notes
 
 - **Circular references** raise an error: `Toml: recursion detected`
 - **Top-level value must be a table** — `Encode` raises an error if passed a non-table value, because TOML documents always have a root mapping
-- **Sub-tables** are emitted as `[dotted.path]` section headers after all scalar keys at the current level
-- **Arrays of tables** are emitted as `[[dotted.path]]` blocks, one per element
+- **Sub-tables** are emitted as section headers after all plain keys at the current level. Nested sub-tables use dotted headers (`{app = {sub = {k = 1}}}` → `[app]` then `[app.sub]`) and round-trip at any depth
+- **Arrays of tables** are emitted as `[[section]]` blocks, one per element, also with dotted paths when nested (`[[app.list]]`). Arrays that mix tables with other values, or hold arrays, are written inline instead
+- **Empty sub-tables** are written as `key = {}` and decode back as empty tables
 - **Datetime** values are emitted without quotes as native TOML datetimes; decoded datetimes come back as ISO 8601 strings
 - **Parse errors** are returned as `nil, errmsg` rather than raised as Lua errors
 
@@ -3601,9 +3893,14 @@ print(s2)
 -- [log]
 -- level = "info"
 
--- Indented output
+-- Deeper nesting uses dotted headers; pretty mode adds blank lines and indentation
 local pretty = Toml.New(true)
-print(pretty:Encode({x = 1, y = 2}))
+print(pretty:Encode({ app = { name = 'kitsune', db = { port = 5432 } } }))
+-- [app]
+--   name = "kitsune"
+--
+--   [app.db]
+--     port = 5432
 
 -- Error handling
 local v, err = toml:Decode('this is !!! not toml')
@@ -3628,19 +3925,22 @@ bool        token:IsAlive()                        -- true while not disposed an
 nil         token:Dispose()                        -- cancel / dispose the token immediately
 nil         token:ErrorIfDead(opt msg)             -- luaL_error if disposed or timed out
 nil         token:Link(parent1, parent2, ...)      -- die when any linked parent dies
+AliveToken  AliveToken.App                         -- app-level token, killed at engine shutdown
 ```
+
+`AliveToken.App` is created with the engine and killed when the engine shuts down, just before the Lua state closes. Link long-running work to it (`myToken:Link(AliveToken.App)`) so it stops cleanly on shutdown.
 
 | Function | Description |
 |----------|-------------|
 | `New(opt timeoutMs)` | Create a live token. Pass a positive integer to set an automatic timeout in milliseconds; the token expires after that duration when `IsAlive`, `ErrorIfDead`, or any internal poll point checks it. Pass nothing (or `0`) for a token that only expires via `Dispose` |
 | `IsAlive` | Returns `true` while the token is alive. Checks the timeout and all linked parents on every call |
 | `Dispose` | Marks the token as disposed immediately, regardless of timeout. Idempotent |
-| `ErrorIfDead` | Raises a Lua error if the token is disposed or timed out |
+| `ErrorIfDead` | Raises a Lua error if the token is disposed or timed out (default message "Cancellation token was cancelled") |
 | `Link` | Attach one or more parent tokens. The child token becomes dead whenever any linked parent is disposed, timed out, or itself has a dead parent. Can be called multiple times to add more parents incrementally. Propagates through chains (grandparent → parent → child) |
 
 ### Timeout
 
-When `timeoutMs` is given, liveness is checked lazily on every call to `IsAlive`, `ErrorIfDead`, or any internal C++ poll point (`HelperWaitCont`, `consume_cont`, `accept_body`, `pubsub_cont`, etc.). The token's `alive` flag is set to `0` the first time the deadline is found to have passed — there is no background timer or thread.
+When `timeoutMs` is given, liveness is checked lazily on every call to `IsAlive`, `ErrorIfDead`, or any internal C++ poll point (`HelperWaitCont`, `accept_body`, `pubsub_cont`, etc.). The token's `alive` flag is set to `0` the first time the deadline is found to have passed — there is no background timer or thread.
 
 ```lua
 -- Expires automatically after 5 seconds
@@ -3650,7 +3950,7 @@ local token = AliveToken.New(5000)
 local token = AliveToken.New()
 ```
 
-`tostring` on a timed token includes the remaining milliseconds while alive:
+`tostring` on a timed token includes the remaining milliseconds while alive (a timed-out token also shows as `disposed`):
 
 ```
 AliveToken(alive, 4823 ms remaining)
@@ -3705,7 +4005,7 @@ gp:Dispose()              -- child is now dead too
 - `__gc` calls `Dispose` automatically, so tokens created inside a scope that exits will cancel themselves when collected.
 - `Link` stores references to parent tokens in the registry — parents are kept alive for at least as long as the child.
 - Linked parents are checked lazily on every `IsAlive` / `ErrorIfDead` / poll call; there is no background thread.
-- All modules that accept `SetAliveToken` (`HttpClient`, `HttpServer`, `MySQL`, `Postgres`, `MongoDB`, `Redis Subscribe`, `Kafka consumer`) check the token through the same `alivetoken_tick` function — linking, timeout, and dispose all work transparently.
+- All modules that accept `SetAliveToken` (`HttpClient`, `HttpServer`, `WebSocket`, `MySQL`, `Postgres`, `MongoDB`, `Redis Subscribe`) and `Sleep(token)` check the token through the same `alivetoken_tick` function — linking, timeout, and dispose all work transparently. Kafka has no `SetAliveToken`.
 
 ---
 
@@ -3739,7 +4039,7 @@ Both `Encode` and `Decode` use a consistent two-level structure:
 }
 ```
 
-The `"__global"` pseudo-section holds any key/value pairs that appear before the first `[section]` header in the file. When encoding, bare scalar values at the top level of the table are also treated as global keys.
+The `"__global"` pseudo-section holds any key/value pairs that appear before the first `[section]` header in the file. `Decode` **always** creates it, even when empty, so skip it when iterating sections with `pairs(result)`. When encoding, bare scalar values at the top level of the table are also treated as global keys.
 
 ### Decode Behaviour
 
@@ -3857,7 +4157,7 @@ TaskStatus.Sleeping  = 2   -- waiting out a Sleep() deadline or AliveToken
 TaskStatus.Running   = 3   -- currently executing inside lua_resume
 TaskStatus.Done      = 4   -- finished successfully; result available via GetResult
 TaskStatus.Faulted   = 5   -- finished with a runtime or Lua error; call GetError
-TaskStatus.Cancelled = 6   -- interrupted by Cancel() or engine shutdown
+TaskStatus.Cancelled = 6   -- Cancel() requested and not yet processed (see Cancellation)
 TaskStatus.Inline    = 7   -- running as an inline sync call (RunString / RunFunction etc.)
 TaskStatus.Paused    = 8   -- suspended inside the coroutine via Pause(); waiting for Resume()
 TaskStatus.Waiting   = 9   -- suspended inside the coroutine via task:Wait(); can be force-woken via Resume()
@@ -3909,9 +4209,11 @@ A running coroutine can suspend itself cooperatively and wait for an external re
 local val = Pause()         -- suspends until resumed; returns the value passed to Resume(), or nil
 
 -- From outside (another coroutine or C#):
-task:Resume()               -- wake any suspended state (Pause/Sleep/Wait); no value delivered
-task:Resume(value)          -- wake; value delivered only when the target was Paused — discarded for Sleep/Wait
+bool task:Resume()          -- wake any suspended state (Pause/Sleep/Wait); no value delivered
+bool task:Resume(value)     -- wake; value delivered only when the target was Paused — discarded for Sleep/Wait
 ```
+
+`Resume` returns `true` only if the target was Paused, Sleeping or Waiting at that moment. Otherwise (still running, idle between yields, finished) it returns `false` and **the value is discarded**, not queued. So wait until the target is actually paused before each `Resume(value)`.
 
 | Suspended state | `Resume()` effect | Value delivered? |
 |---|---|---|
@@ -3932,10 +4234,18 @@ local worker = Tasks.New(function()
     end
 end)
 
--- Dispatch work from another coroutine:
-worker:Resume("job-1")
-worker:Resume("job-2")
-worker:Resume(nil)   -- signal shutdown
+-- Dispatch work from another coroutine. Resume only delivers to a Paused task,
+-- so wait for the worker to pause before each send:
+local function send(task, value)
+    while task:GetStatus() ~= TaskStatus.Paused do
+        if task:Finished() then return false end
+        Sleep(1)
+    end
+    return task:Resume(value)
+end
+send(worker, "job-1")
+send(worker, "job-2")
+send(worker, nil)   -- signal shutdown
 ```
 
 `Pause()` is a no-op when called outside a scheduler-managed coroutine (inline path, registered function callbacks, etc.).
@@ -3953,7 +4263,7 @@ nil  task:Wait(timeoutMs)       -- suspend until target finishes, or timeoutMs e
 - If the target task is already finished when `Wait` is called, it returns immediately without yielding.
 - If the target handle is released (`id == 0`) or the slot no longer exists, it also returns immediately.
 - The optional `timeoutMs` argument is a number of milliseconds after which the wait is abandoned regardless of the target's state. There is no return value indicating whether the wait timed out — call `task:Finished()` afterwards if you need to distinguish.
-- Raises a Lua error if called outside a scheduler-managed coroutine.
+- Raises a Lua error if called outside a scheduler-managed coroutine, or from an inline call ("task:Wait: cannot yield from an inline coroutine").
 
 ```lua
 -- Wait without timeout
@@ -3980,11 +4290,11 @@ t:Wait()
 
 ```lua
 string task:GetError()        -- error string, or nil when no error or task still running
-value  task:GetResult()       -- typed result value, or nil when task has not finished yet
+value  task:GetResult()       -- the coroutine's FIRST return value, or nil when it has not finished yet
 value  task:ConsumeResult()   -- like GetResult, but immediately frees the result and releases the slot
 ```
 
-`GetResult` is non-destructive — the slot and its result stay pinned until all handles are GC'd. Use this when you need to read the result multiple times or keep the slot observable.
+Only the first value a task returns is kept; return a table to pass back several values. `GetResult` is non-destructive — the slot and its result stay pinned until all handles are GC'd. Use this when you need to read the result multiple times or keep the slot observable.
 
 `ConsumeResult` frees the result data immediately after pushing it to the Lua stack and advances the slot to `RELEASED` so the scheduler can compact it on the next tick — no waiting for GC. Use this when you want to eagerly release a large result (e.g. a full database query table) as soon as it has been consumed. After calling `ConsumeResult`, `Finished()` returns `true` and `GetResult()` returns `nil`.
 
@@ -3996,7 +4306,7 @@ If the task faulted (has an error), `ConsumeResult` returns `nil` and still rele
 task:Cancel()   -- signals the coroutine to be terminated before its next resume; no-op if already done
 ```
 
-The coroutine is not stopped immediately; the scheduler sets `interrupted` and terminates it at the next scheduling opportunity. `GetStatus()` will return `TaskStatus.Cancelled` once compacted.
+The coroutine is not stopped immediately; the scheduler sets `interrupted` and terminates it at the next scheduling opportunity. `TaskStatus.Cancelled` is only visible while the cancel is pending. Once the scheduler has processed it, the slot is freed straight away (even while a handle is still live): `GetStatus()` returns `TaskStatus.None`, `GetError()` returns `nil` and `Finished()` returns `true`. Neither `OnError` nor the global error handler fires for a cancel. Engine shutdown ends running tasks the same way.
 
 ### Per-task error handler — OnError
 
@@ -4110,7 +4420,7 @@ task:Resume()  -- unblocks step 2
 while not task:Finished() do Sleep(5) end
 task:Dispose()
 
--- Open a coroutine from its id (e.g. from the ID global inside a running coroutine)
+-- Open a coroutine from its id (e.g. one obtained with Tasks.GetCurrentId() inside it)
 local watcher = Tasks.Open(someId)
 if watcher then
     print(watcher:GetStatus())
@@ -4145,7 +4455,7 @@ slow:Dispose()
 
 ## Llama
 
-A local LLM inference module backed by [llama.cpp](https://github.com/ggml-org/llama.cpp). Runs GGUF models on CPU or GPU (CUDA). All inference is dispatched to a **persistent background worker thread** per context; the calling coroutine uses non-blocking `Poll()` calls cooperatively — no OS thread is blocked.
+A local LLM inference module backed by [llama.cpp](https://github.com/ggml-org/llama.cpp). Runs GGUF models on CPU or GPU (CUDA). Generation is dispatched to a **persistent background worker thread** per context; the calling coroutine uses non-blocking `Poll()` calls cooperatively. Exceptions: `ctx:LoadModel()` and `ctx:Embed()` block the calling OS thread until they finish (they don't yield).
 
 > **Platform note:** llama.cpp itself supports Windows and Linux. The prebuilt vendor binaries bundled with this project (`vendor/fetch-llama.ps1`) are Windows-only (CUDA + AVX2 DLLs). To enable Llama on Linux, build llama.cpp from source and link against it — the C++ integration code is fully cross-platform and compiles cleanly on Linux when `KITSUNE_LLAMA` is defined.
 
@@ -4156,6 +4466,7 @@ A local LLM inference module backed by [llama.cpp](https://github.com/ggml-org/l
 ```lua
 LlamaContext  Llama.CreateContext(opt opts)
 LlamaPrompt   Llama.CreatePrompt()
+ToolSuite     Llama.CreateToolSuite()
 table         Llama.GetLogs()
 table|nil     Llama.PeekModel(string path)
 ```
@@ -4211,7 +4522,7 @@ Creates a new inference context. The worker thread is started immediately. Retur
 |-------|------|---------|-------------|
 | `n_gpu_layers` | integer | `99` | Number of model layers to offload to GPU. `99` offloads all layers |
 | `n_ctx` | integer | `4096` | Context window size in tokens |
-| `n_threads` | integer | `0` | CPU inference threads. `0` = auto-detect (hardware concurrency) |
+| `n_threads` | integer | `0` | CPU inference threads. `0` = auto: half the hardware thread count |
 | `n_batch` | integer | `512` | Prompt prefill batch size. Controls how many tokens are processed per decode call during prompt ingestion. Smaller values use less memory at the cost of slower prefill; larger values are faster but use more memory. Independent of `n_ctx` — the engine chunks the prompt automatically so this never needs to match or exceed `n_ctx` |
 | `flash_attn` | boolean | `false` | Enable Flash Attention |
 | `model_ttl_ms` | integer | `300000` | Milliseconds of idle time before the model is automatically unloaded. `0` disables auto-unload |
@@ -4271,6 +4582,7 @@ bool          ctx:Stop()
 bool          ctx:Reset()
 float[]       ctx:Embed(text)
 table         ctx:Info()
+LlamaPrompt   ctx:TrimPrompt(prompt)
 bool          ctx:Dispose()
 ```
 
@@ -4297,7 +4609,6 @@ If the new path differs from the currently loaded model, the swap happens automa
 ctx:SetModel([[C:\Models\qwen3-0.6b-q8_0.gguf]])
 ctx:SetModel([[C:\Models\qwen3-0.6b-q8_0.gguf]], { n_gpu_layers = 0 })  -- CPU only
 ```
-```
 
 ---
 
@@ -4308,7 +4619,7 @@ true         ctx:LoadModel()
 nil, errmsg  ctx:LoadModel()
 ```
 
-Queues a model load on the worker thread and returns immediately. Returns `nil, "busy"` if the worker is currently generating or still unloading (status `UNLOADING`) — yield and retry in that case. Poll `ctx:IsReady()` or `ctx:IsModelLoaded()` to know when loading has finished.
+Loads the model set by `SetModel` **synchronously**: it blocks the calling OS thread (and so the whole scheduler) until loading finishes, then returns `true`, or `nil, errmsg` (e.g. `"failed to load model: <path>"`, `"no model path set"`). Returns `true` straight away if the model is already loaded. If the worker is currently generating or still unloading it is refused with `nil, "busy"` — yield and retry. (When refused, the error string can be a stale message from an earlier failure rather than `"busy"`; check `ctx:Info().context.status` if you need to tell them apart.) Generation loads the model automatically, so an explicit `LoadModel` is only needed to front-load the cost.
 
 ```lua
 _context:UnloadModel()
@@ -4316,7 +4627,7 @@ while _context:IsModelLoaded() do coroutine.yield() end
 _context:SetModel(path)
 repeat
     local ok, err = _context:LoadModel()
-    if not ok and err ~= 'busy' then error(err) end
+    if not ok and _context:Info().context.status == 'idle' then error(err) end
     if not ok then coroutine.yield() end
 until ok
 ```
@@ -4359,7 +4670,7 @@ Returns `true` and the **actually loaded** model path when a model is currently 
 bool  ctx:IsReady()
 ```
 
-Returns `true` if the context is idle with a model loaded — i.e. ready to accept a `Generate` call immediately.
+Returns `true` if the context is idle and a model path is set — i.e. ready to accept a `Generate` call. The model may not be loaded yet (`Generate` loads it automatically); use `IsModelLoaded()` to check that. Returns `false` in the `"error"` status.
 
 ---
 
@@ -4372,7 +4683,7 @@ nil, errmsg  ctx:Generate(prompt [, opts] [, tools])
 
 Queues a generation request. `prompt` must be a `LlamaPrompt` userdata created with `Llama.CreatePrompt()`. Returns immediately; output is consumed via `Poll`.
 
-When generation completes, the assistant reply is **automatically appended** to the prompt as a new message (via `prompt:AddAssistantMessage`). If the model produced tool calls they are stored as a structured `tool_calls` array on that message. There is no need to manually push a reply back into the history.
+When generation ends (including when it ends with an error, with whatever partial content was produced), the assistant reply is **automatically appended** to the prompt as a new message (via `prompt:AddAssistantMessage`). If the model produced tool calls they are stored as a structured `tool_calls` array on that message, with `content = ""` and **no** `reasoning`. There is no need to manually push a reply back into the history.
 
 **Automatic model load / swap:** if no model is loaded yet, `Generate` loads the model set by `SetModel` automatically. If a different model is already loaded (i.e. `SetModel` was called with a new path since the last load), the old model is unloaded, the new one is loaded, and the KV cache is cleared — all transparently before generation begins.
 
@@ -4394,7 +4705,7 @@ Returns `nil, errmsg` when:
 | `seed` | integer | `-1` | RNG seed. `-1` = random |
 | `max_tokens` | integer | `2048` | Maximum tokens to generate |
 
-The optional `tools` argument (3rd positional arg when `opts` is present, 2nd otherwise) accepts a **`ToolSuite` userdata**, a **JSON string**, or a **Lua table**. When a table is passed it is serialized automatically with empty tables encoded as `{}` so parameter schemas are preserved correctly.
+The optional `tools` argument accepts a **`ToolSuite` userdata**, a **JSON string**, or a **Lua table**. It is the 3rd argument when `opts` is present. A `ToolSuite` or JSON string may also be the 2nd argument, but **a Lua table in 2nd position is read as `opts`**, so when passing tools as a table always pass `opts` too (`{}` if you have none). A table is serialized automatically with empty tables encoded as `{}` so parameter schemas are preserved correctly.
 
 ```lua
 local prompt = Llama.CreatePrompt()
@@ -4405,13 +4716,12 @@ ctx:Generate(prompt, { temperature = 0.3, max_tokens = 512 })
 
 local ok, data = ctx:Poll()
 while ok do
-    if data then
-        if data.type == 'error' then error(data.text) end
-        if data.type == 'token' then io.write(data.text) end
-    end
+    if data and data.type == 'token' then io.write(data.text) end
     Sleep(10)
     ok, data = ctx:Poll()
 end
+-- errors arrive on the final call, together with ok == false
+if data and data.type == 'error' then error(data.text) end
 -- prompt now has the assistant reply appended automatically
 print(prompt:Last().content)
 ```
@@ -4432,30 +4742,31 @@ When `ok` returns `false` (generation complete), the assistant reply is **automa
 
 | Return | Type | Description |
 |--------|------|-------------|
-| `ok` | boolean | `true` while generation is in progress; `false` when done |
+| `ok` | boolean | `true` while generation is in progress; `false` when done (successfully or with an error) |
 | `data` | table or nil | `nil` when nothing is ready yet; otherwise a table with `text` and `type` fields |
 
 **`data.type` values:**
 
 | Value | Description |
 |-------|-------------|
-| `"token"` | Regular output token text |
-| `"reasoning"` | Token inside a `<think>...</think>` block (Qwen3, DeepSeek-R1, QwQ). Stored in `prompt:Last().reasoning` after generation |
-| `"error"` | `data.text` contains the error message |
+| `"token"` | Regular output token text (`ok = true`) |
+| `"reasoning"` | Token inside a `<think>...</think>` block (Qwen3, DeepSeek-R1, QwQ) (`ok = true`). Stored in `prompt:Last().reasoning` after generation, except when the turn produced tool calls |
+| `"tool_calls"` | The model called tools (`ok = true`); `data.text` is the JSON array of calls. The structured calls reach `prompt:Last().tool_calls` only once `ok` becomes `false` |
+| `"error"` | Generation failed: returned **with `ok = false`**, and `data.text` contains the error message |
 
-When `ok` is `false` there is no more data; the poll loop should exit.
+When `ok` is `false` generation is over; the poll loop should exit, and **then check `data` for an error**, because the error arrives on that same final call.
 
 ```lua
 local ok, data = ctx:Poll()
 while ok do
     if data then
-        if data.type == 'error'     then error(data.text) end
         if data.type == 'token'     then io.write(data.text) end
-        if data.type == 'reasoning' then -- discard or log end
+        if data.type == 'reasoning' then --[[ discard or log ]] end
     end
     Sleep(10)
     ok, data = ctx:Poll()
 end
+if data and data.type == 'error' then error(data.text) end
 -- reply (including tool_calls if any) is now in prompt:Last()
 ```
 
@@ -4489,7 +4800,7 @@ float[]      ctx:Embed(text)
 nil, errmsg  ctx:Embed(text)
 ```
 
-Generates an embedding vector for `text`. Blocks (yields) until the embedding is complete. The model must support embeddings. Returns a sequential table of floats, or `nil, errmsg` on failure.
+Generates an embedding vector for `text`. **Blocks the calling OS thread** (it does not yield) until the embedding is complete, and loads the model first if needed. The model must support embeddings. Returns a sequential table of floats, **L2-normalised** (unit length, so a dot product is the cosine similarity), or `nil, errmsg` on failure: `"busy"` (not idle, **or no model path set**), `"model does not support embeddings"`, `"embedding decode failed"`.
 
 > **Note:** Embedding and generation use different llama.cpp context configurations. Not all models support both.
 
@@ -4506,17 +4817,19 @@ print(#vec)  -- embedding dimension
 table  ctx:Info()
 ```
 
-Returns a snapshot of the context state. The returned table has two sub-tables: `context` (always present) and `model` (present only when a model is loaded).
+Returns a snapshot of the context state, or `nil, "disposed"` on a disposed context. The returned table has two sub-tables: `context` (always present) and `model` (present only when a model is loaded).
 
 **`info.context` fields:**
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `status` | string | `"idle"`, `"loading"`, `"generating"`, `"unloading"`, or `"error"` |
-| `n_ctx` | integer | Configured context window size |
+| `n_ctx` | integer | Context window size: the configured value before a model is loaded, llama.cpp's actual value after |
 | `n_gpu_layers` | integer | Configured GPU layer count |
-| `n_threads` | integer | CPU thread count (resolved from hardware concurrency when 0) |
-| `n_batch` | integer | Prompt prefill batch size. The engine feeds the prompt in chunks of this size, so it is independent of and never needs to match `n_ctx` |
+| `n_threads` | integer | CPU thread count: the full hardware thread count before a model is loaded, the thread count actually in use (half of it when configured as 0) after |
+| `n_batch` | integer | Prompt prefill batch size (configured before load, actual after). The engine feeds the prompt in chunks of this size, so it is independent of and never needs to match `n_ctx` |
+| `use_mmap` | boolean | Whether the model file is memory-mapped |
+| `use_mlock` | boolean | Whether mapped pages are locked in RAM |
 | `model_ttl_ms` | integer | Auto-unload timeout in milliseconds |
 | `model_path` | string or nil | Path set via `SetModel`, or `nil` |
 | `error` | string or nil | Last error message, or `nil` |
@@ -4537,11 +4850,11 @@ Returns a snapshot of the context state. The returned table has two sub-tables: 
 | `n_layer` | integer | Number of transformer layers |
 | `size_bytes` | integer | Model size in bytes |
 | `chat_template` | string | Jinja2 chat template string from the GGUF metadata |
-| `n_gpu_layers` | integer | Configured GPU layer count |
-| `gpu_layer_count` | integer | Layers actually offloaded to GPU |
+| `n_gpu_layers` | integer | Effective GPU layer count (same value as `gpu_layer_count`), not the configured one |
+| `gpu_layer_count` | integer | Layers actually offloaded to GPU (capped at `n_layer + 1`, the output layer included) |
 | `cpu_layer_count` | integer | Layers running on CPU |
-| `gpu_percent` | number | Percentage of layers on GPU |
-| `cpu_percent` | number | Percentage of layers on CPU |
+| `gpu_percent` | number | Percentage of layers on GPU (of `n_layer + 1`) |
+| `cpu_percent` | number | Percentage of layers on CPU (of `n_layer + 1`) |
 | `capabilities` | array | String array of detected model capabilities (e.g. `"embedding"`, `"completion"`) |
 
 ```lua
@@ -4554,6 +4867,18 @@ if info.model then
     print(info.model.gpu_percent)     -- e.g. 100.0
 end
 ```
+
+---
+
+#### ctx:TrimPrompt
+
+```lua
+LlamaPrompt  ctx:TrimPrompt(prompt)
+nil          ctx:TrimPrompt(prompt)
+nil, errmsg  ctx:TrimPrompt(prompt)
+```
+
+Returns a **new** `LlamaPrompt` with the oldest non-system messages dropped until the conversation fits the loaded model's `n_ctx`. Returns `nil` when the prompt already fits or no model is loaded, and `nil, "disposed"` / `nil, "invalid prompt"` on those errors. The original prompt is not changed.
 
 ---
 
@@ -4601,7 +4926,7 @@ All methods that return a message return a table with these fields:
 
 | Field | Type | Present when |
 |-------|------|--------------|
-| `id` | integer | always — stable 1-based id assigned on append |
+| `id` | integer | always — 1-based id assigned on append (stable within a prompt; a `TrimmedFrom` copy is renumbered from 1) |
 | `role` | string | always — `"user"`, `"assistant"`, or `"tool"` |
 | `content` | string | always |
 | `reasoning` | string | assistant messages that had a `<think>` block |
@@ -4694,14 +5019,14 @@ prompt:AddToolResult("call_abc123", "Sunny, 22°C")
 prompt:AddMessage(message)
 ```
 
-Appends a message given as a table in the same shape that `prompt[i]` returns. The `role` field is required and must be `"user"`, `"assistant"`, or `"tool"`. All other fields follow the same rules as the typed helpers.
+Appends a message given as a table in the same shape that `prompt[i]` returns. The `role` field is required and must be `"user"`, `"assistant"`, or `"tool"`; any other role raises `AddMessage: unknown role '<role>'`. All other fields follow the same rules as the typed helpers.
 
 | Field | Used by role | Notes |
 |---|---|---|
 | `role` | all | **Required.** `"user"`, `"assistant"`, or `"tool"`. |
-| `content` | all | Message body. |
+| `content` | all | Message body (optional, defaults to `""`). |
 | `reasoning` | `"assistant"` | Optional chain-of-thought text. |
-| `tool_call_id` | `"tool"` | Id of the tool call being answered. |
+| `tool_call_id` | `"tool"` | Id of the tool call being answered (defaults to `""`). |
 | `tool_calls` | `"assistant"` | Array of `{id, name, arguments}` tables. |
 
 The `id` field from `prompt[i]` is ignored — a new stable id is always assigned.
@@ -4795,7 +5120,7 @@ Removes all messages and the system message. Resets the id counter to 1.
 LlamaPrompt  prompt:TrimmedFrom(index)
 ```
 
-Returns a new `LlamaPrompt` containing messages from `index` (1-based) to the end. The system message is always preserved in the copy. Useful for passing a sliding window of context to the model while keeping the full history in the original prompt.
+Returns a new `LlamaPrompt` containing messages from `index` (1-based) to the end. The system message is always preserved in the copy, and the copied messages get new ids starting from 1. Useful for passing a sliding window of context to the model while keeping the full history in the original prompt.
 
 ```lua
 local recent = prompt:TrimmedFrom(#prompt - 5)  -- last 6 messages
@@ -4833,8 +5158,6 @@ end
 
 ### Tool calling
 
-### Tool calling
-
 Tools are registered with a `ToolSuite`. Pass the suite to `ctx:Generate` so the model knows what tools are available. When generation finishes, if the model produced tool calls they are stored on `prompt:Last().tool_calls`. Call `tools:Call(prompt)` to dispatch them; results are appended to the prompt automatically. Then call `ctx:Generate(prompt, ...)` again to let the model continue with the tool results.
 
 ```lua
@@ -4847,34 +5170,30 @@ local prompt = Llama.CreatePrompt()
 prompt:SetSystem("You are a helpful assistant.")
 prompt:AddUserMessage("What is the weather in Paris?")
 
+-- Drain one generation; errors arrive with the final ok == false
+local function drain()
+    local ok, data = ctx:Poll()
+    while ok do
+        if data and data.type == 'token' then io.write(data.text) end
+        Sleep(10)
+        ok, data = ctx:Poll()
+    end
+    if data and data.type == 'error' then error(data.text) end
+end
+
 -- Generate with tool awareness
 ctx:Generate(prompt, { temperature = 0.3 }, tools)
-
-local ok, data = ctx:Poll()
-while ok do
-    if data and data.type == 'error' then error(data.text) end
-    Sleep(10)
-    ok, data = ctx:Poll()
-end
+drain()
 
 -- If the model called a tool, dispatch it and generate again
 if prompt:Last() and prompt:Last().tool_calls then
     tools:Call(prompt)   -- results appended to prompt automatically
     ctx:Generate(prompt, { temperature = 0.3 }, tools)
-
-    ok, data = ctx:Poll()
-    while ok do
-        if data then
-            if data.type == 'error' then error(data.text) end
-            if data.type == 'token' then io.write(data.text) end
-        end
-        Sleep(10)
-        ok, data = ctx:Poll()
-    end
+    drain()
 end
 ```
 
-`tools:Call` also still accepts a raw Lua message table for backwards compatibility.
+`tools:Call` also still accepts a raw Lua message table for backwards compatibility (see `suite:Call`).
 
 ---
 
@@ -4887,13 +5206,13 @@ local content, reasoning = '', ''
 local ok, data = ctx:Poll()
 while ok do
     if data then
-        if data.type == 'error'     then error(data.text) end
         if data.type == 'token'     then content   = content   .. data.text end
         if data.type == 'reasoning' then reasoning = reasoning .. data.text end
     end
     Sleep(10)
     ok, data = ctx:Poll()
 end
+if data and data.type == 'error' then error(data.text) end
 print('Reasoning:', reasoning)
 print('Answer:',    content)
 ```
@@ -4905,48 +5224,34 @@ print('Answer:',    content)
 ```lua
 local ctx = Llama.CreateContext({ n_gpu_layers = 99, n_ctx = 4096 })
 ctx:SetModel([[C:\Models\qwen3-0.6b-q8_0.gguf]])
-ctx:LoadModel()
+assert(ctx:LoadModel())   -- blocks until the model is loaded
 
--- Wait for the model to finish loading
-while not ctx:IsReady() and ctx:Info().context.status ~= 'error' do Sleep(50) end
-if ctx:Info().context.status == 'error' then error(ctx:Info().context.error) end
+local info = ctx:Info()
 print('Model loaded:', info.model.desc)
 print(string.format('GPU: %.0f%%  CPU: %.0f%%', info.model.gpu_percent, info.model.cpu_percent))
 
--- First turn
-ctx:Generate(
-    {
-        { role = 'system', content = 'You are a helpful assistant.' },
-        { role = 'user',   content = 'What is the capital of France?' },
-    },
-    { temperature = 0.3 }
-)
-
-local result = ''
-local ok, data = ctx:Poll()
-while ok do
-    if data then
-        if data.type == 'error' then error(data.text) end
-        if data.type == 'token' then
-            result = result .. data.text
-            io.write(data.text)
-        end
+local function drain()
+    local ok, data = ctx:Poll()
+    while ok do
+        if data and data.type == 'token' then io.write(data.text) end
+        Sleep(10)
+        ok, data = ctx:Poll()
     end
-    Sleep(10)
-    ok, data = ctx:Poll()
+    if data and data.type == 'error' then error(data.text) end
+    print()
 end
-print()
 
--- Second turn (KV cache preserved — no Reset needed)
-ctx:Generate({{ role = 'user', content = 'And Germany?' }})
+-- First turn
+local p = Llama.CreatePrompt()
+p:SetSystem('You are a helpful assistant.')
+p:AddUserMessage('What is the capital of France?')
+assert(ctx:Generate(p, { temperature = 0.3 }))
+drain()                       -- the reply is appended to p automatically
 
-ok, data = ctx:Poll()
-while ok do
-    if data and data.type == 'token' then io.write(data.text) end
-    Sleep(10)
-    ok, data = ctx:Poll()
-end
-print()
+-- Second turn: add to the same prompt (KV cache preserved — no Reset needed)
+p:AddUserMessage('And Germany?')
+assert(ctx:Generate(p))
+drain()
 
 ctx:Reset()    -- clear KV cache between sessions
 ctx:Dispose()  -- free GPU memory and worker thread
@@ -4996,7 +5301,7 @@ Registers a tool with the suite.
 | `description` | string | no | Human-readable description |
 | `required` | boolean | no | Whether the parameter is required. Defaults to `false` |
 
-The callback `fn` is called with arguments in the order the parameters were declared. Each argument is the decoded value from the model's `arguments` object. Returns whatever the tool result should be (coerced to string via `tostring`).
+The callback `fn` is called with arguments in the order the parameters were declared. Each argument is the decoded value from the model's `arguments` object. **Return a string or number**: that becomes the tool reply. Other values (`nil`, booleans, tables) become an empty reply (`""`), so `Json.New():Encode(t)` a table yourself. If the callback raises an error, the reply is `"error: <message>"`.
 
 ```lua
 local suite = Llama.CreateToolSuite()
@@ -5028,9 +5333,9 @@ Returns the OpenAI-format JSON tools array for all registered tools. Pass the re
 print(suite:GetJson())
 -- [{"type":"function","function":{"name":"get_weather",...}}]
 
--- Both forms are accepted by Generate:
-ctx:Generate(messages, opts, suite:GetJson())  -- JSON string
-ctx:Generate(messages, opts, suite)            -- userdata directly
+-- Both forms are accepted by Generate (prompt is a LlamaPrompt):
+ctx:Generate(prompt, opts, suite:GetJson())  -- JSON string
+ctx:Generate(prompt, opts, suite)            -- userdata directly
 ```
 
 ---
@@ -5038,27 +5343,31 @@ ctx:Generate(messages, opts, suite)            -- userdata directly
 #### suite:Call
 
 ```lua
-number  suite:Call(messages)
+number  suite:Call(prompt_or_messages)
 ```
 
-Inspects the **last message** in `messages`. If it is an `assistant` message with a `tool_calls` field, decodes the JSON, dispatches each call to the matching registered function, and appends `{ role='tool', content=result, tool_call_id=id }` entries to `messages`.
+Inspects the **last message**. If it is an `assistant` message with tool calls, dispatches each call to the matching registered function and appends a tool reply for each.
+
+- **`LlamaPrompt`** (the normal case): reads `prompt:Last().tool_calls` and appends replies with `prompt:AddToolResult`.
+- **Raw message table** (backwards compatibility): the last message's `tool_calls` must be a **JSON string**; a `tool_calls` Lua table (as returned by `prompt[i]` or `Export`) is ignored and `Call` returns 0. Replies are appended as `{ role='tool', content=result, tool_call_id=id }`.
+
+Call it **after** the poll loop has finished (`ok == false`): the assistant message with the tool calls is only appended to the prompt then.
 
 Returns the number of tool replies appended (0 if the last message is not a tool call or no calls were decoded).
 
 **Yield-safe:** both tool callbacks and the permission gate (see `suite:Callback`) use `lua_pcallk` internally, so they can call `Sleep`, `HttpClient:Call`, or any other yieldable engine function without stalling the application. The KitsuneEngine 1000-instruction ticker that forces coroutine yields mid-execution is also handled correctly.
 
-If a tool name is not found in the suite, a `"Tool not found: <name>"` reply is appended and dispatch continues with the next call.
+If a tool name is not found in the suite, a `"Tool not found: <name>"` reply is appended (`"Unknown tool"` for an empty name) and dispatch continues with the next call.
 
 ```lua
--- After Poll returns a tool_calls event:
+-- After the generation has finished:
 local ok, data = ctx:Poll()
-while ok do
-    if data and data.type == 'tool_calls' then
-        suite:Call(msgs)        -- dispatches and appends tool replies to msgs
-        ctx:Generate(msgs)      -- continue the conversation
-    end
-    Sleep(10)
-    ok, data = ctx:Poll()
+while ok do Sleep(10); ok, data = ctx:Poll() end
+if data and data.type == 'error' then error(data.text) end
+
+if prompt:Last().tool_calls then
+    suite:Call(prompt)                  -- dispatches and appends tool replies
+    ctx:Generate(prompt, opts, suite)   -- continue the conversation
 end
 ```
 
@@ -5081,6 +5390,8 @@ The gate function receives:
 | `args` | table or nil | Decoded arguments table, or `nil` if the model sent no arguments |
 
 Return `true` to allow the call; return `false` (or any falsy value) to deny it. When denied, a `"error: permission denied"` reply is appended to messages and dispatch continues with the next call.
+
+**An error raised by the gate denies the call**, whether it happens before or after the gate yields: the tool is not run, an `"error: permission check failed: <message>"` reply is appended instead, and dispatch continues with the next call.
 
 **Yield-safe:** the gate can call `Sleep`, show a UI prompt, or await any async operation — it uses `lua_pcallk` internally.
 
@@ -5128,34 +5439,29 @@ suite:Callback(function(name, args)
 end)
 
 ctx:SetModel([[C:\Models\qwen3-0.6b-q8_0.gguf]])
-ctx:LoadModel()
-while not ctx:IsReady() do Sleep(50) end
+assert(ctx:LoadModel())   -- blocks until loaded
 
-local msgs = {
-    { role='system', content='You are a helpful assistant with access to tools.' },
-    { role='user',   content='What is the weather in Paris?' },
-}
+local prompt = Llama.CreatePrompt()
+prompt:SetSystem('You are a helpful assistant with access to tools.')
+prompt:AddUserMessage('What is the weather in Paris?')
 
-ctx:Generate(msgs, { temperature=0.3 }, suite)
+local opts = { temperature = 0.3 }
+assert(ctx:Generate(prompt, opts, suite))
 
-local ok, data = ctx:Poll()
-while ok do
-    if data then
-        if data.type == 'error' then
-            error(data.text)
-        elseif data.type == 'token' then
-            io.write(data.text)
-        elseif data.type == 'tool_calls' then
-            -- Dispatch all tool calls and append replies to msgs.
-            -- msgs already contains the assistant tool_calls message
-            -- (auto-appended by Poll when generation completed).
-            suite:Call(msgs)
-            -- Continue the conversation with tool results
-            ctx:Generate(msgs, { temperature=0.3 }, suite)
-        end
+while true do
+    -- Drain this generation
+    local ok, data = ctx:Poll()
+    while ok do
+        if data and data.type == 'token' then io.write(data.text) end
+        Sleep(10)
+        ok, data = ctx:Poll()
     end
-    Sleep(10)
-    ok, data = ctx:Poll()
+    if data and data.type == 'error' then error(data.text) end
+
+    -- The assistant message (with any tool calls) is in the prompt now
+    if not prompt:Last().tool_calls then break end
+    suite:Call(prompt)                          -- run the tools, append the results
+    assert(ctx:Generate(prompt, opts, suite))   -- let the model continue
 end
 print()
 
@@ -5193,7 +5499,7 @@ local mcp = MCP.Create({ Name = "kitsune-lua", Version = "1.0.0" }, { logPath = 
 true  mcp:AddTool(name, description, parameters, fn)
 ```
 
-Registers a tool. Must be called before `mcp:Start()`.
+Registers a tool. Normally called before `mcp:Start()`; registering later also works, since `tools/list` always reads the current list.
 
 | Argument | Type | Description |
 |----------|------|-------------|
@@ -5217,13 +5523,13 @@ Registers a tool. Must be called before `mcp:Start()`.
 - `request` — per-call data:
   | Field | Description |
   |-------|-------------|
-  | `request.Arguments` | The decoded arguments as a named table, matching the declared parameter schema (e.g. `request.Arguments.text`) |
+  | `request.Arguments` | The decoded arguments as a named table, matching the declared parameter schema (e.g. `request.Arguments.text`). When the client sends no `arguments`, this is the `Json.EmptyObject` sentinel, **not a table**, so indexing it raises; use `request.Parameters[i]`, or check `type(request.Arguments) == "table"` first |
   | `request.Parameters` | The same values as a 1-based positional array, in declared parameter order (e.g. `request.Parameters[1]`) |
   | `request.Name` | The tool name being called (useful if one function is registered for several tools) |
   | `request.RequestId` | The JSON-RPC request id, for correlation/logging |
   | `request.Client` | `{ Name=, Version= }` from the MCP `initialize` handshake |
 
-The callback's return value is coerced to a string and becomes the tool's text result. The callback is yield-safe (built on the same `lua_pcallk`/continuation mechanism as `ToolSuite:Call`) — it may call `Sleep()`, `HttpClient:Call()`, or any other yieldable engine function without stalling the server. A Lua error raised inside the callback is caught and reported back to the client as a normal MCP tool-execution error (`isError = true`), not a protocol-level failure.
+The callback's return value becomes the tool's text result: **return a string or number**. Other values (`nil`, booleans, tables) yield an empty text result, so encode tables yourself (`Json.New():Encode(t)`). The callback is yield-safe (built on the same `lua_pcallk`/continuation mechanism as `ToolSuite:Call`) — it may call `Sleep()`, `HttpClient:Call()`, or any other yieldable engine function without stalling the server. A Lua error raised inside the callback is caught and reported back to the client as a normal MCP tool-execution error (`isError = true`), not a protocol-level failure. Calling a tool name that isn't registered returns a JSON-RPC error (`-32602 "Unknown tool"`) instead.
 
 ```lua
 mcp:AddTool(
@@ -5247,11 +5553,13 @@ ok, err = mcp:Start()
 
 Starts the server: spins up its own independently-scheduled task (via `Tasks.New`, the same mechanism `Tasks.New(fn)` gives any script) that polls stdin non-blockingly, decodes JSON-RPC requests, and dispatches them to registered tools. Returns immediately.
 
-Returns `true` on success. Returns `false, errmsg` if stdin/stdout are not available in this host (e.g. a GUI-subsystem process launched with no console and no redirected pipes) — there is no reasonable MCP client to serve in that case, so `Start()` fails cleanly rather than guessing.
+Returns `true` on success. Returns `false, "stdin/stdout not available"` if stdin/stdout are not available in this host (e.g. a GUI-subsystem process launched with no console and no redirected pipes) — there is no reasonable MCP client to serve in that case, so `Start()` fails cleanly rather than guessing. If the polling task can't be created it returns `false, errmsg`.
 
-Tools must be registered with `AddTool` before calling `Start()`.
+Calling `Start()` again while the server is running returns `true` and does nothing. After `Stop()` the server can't be restarted (`IsRunning()` stays `false`).
 
 **`print`/`io.write` are globally redirected the moment `Start()` succeeds.** stdout is reserved for JSON-RPC responses, so once the server is running nothing may write to it directly — this holds regardless of which coroutine calls `print`/`io.write` or when. Output isn't discarded: whatever a tool callback prints while it runs is captured and added as its own entry in that call's `content` array, ahead of the callback's actual return value. Output produced outside of any tool dispatch (nothing currently listening) is dropped the next time a dispatch starts. Because `io.write` is always captured, `io.output` is disabled in MCP mode and raises an error; to write a file, use the handle from `io.open(path, "w")` (`f:write(...)`).
+
+Only the **global** `print` and `io.write` are replaced. `io.stdout:write(...)`, and any `print` / `io.write` saved in a local variable *before* `Start()`, still write straight to stdout and corrupt the JSON-RPC stream, so never use them in MCP mode.
 
 ### mcp:IsRunning
 

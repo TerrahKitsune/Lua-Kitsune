@@ -127,7 +127,11 @@ int SQLiteFetch(lua_State* L) {
 	}
 	else if (luasqlite->status == SQLITE_OK) {
 
-		if (sqlite3_step(luasqlite->stmt) == SQLITE_ROW) {
+		luasqlite->activeL = L;
+		int step = sqlite3_step(luasqlite->stmt);
+		luasqlite->activeL = NULL;
+
+		if (step == SQLITE_ROW) {
 			lua_pop(L, 1);
 			lua_pushboolean(L, true);
 		}
@@ -169,7 +173,9 @@ int SQLiteExecute(lua_State* L) {
 
 	FinalizeStmt(luasqlite);
 
+	luasqlite->activeL = L;
 	int err = sqlite3_prepare_v2(luasqlite->db, query, -1, &luasqlite->stmt, 0);
+	luasqlite->activeL = NULL;
 	if (err) {
 		lua_pop(L, lua_gettop(L));
 		lua_pushboolean(L, false);
@@ -219,6 +225,10 @@ int SQLiteExecute(lua_State* L) {
 					break;
 				}
 
+				sqlite3_bind_null(luasqlite->stmt, ++cnt);
+				break;
+			default:
+				// table, function, thread, lightuserdata (Json.Null): bind NULL so every placeholder still advances once
 				sqlite3_bind_null(luasqlite->stmt, ++cnt);
 				break;
 			}
@@ -277,13 +287,19 @@ int SQLiteExecute(lua_State* L) {
 
 				sqlite3_bind_null(luasqlite->stmt, ++cnt);
 				break;
+			default:
+				// table, function, thread, lightuserdata (Json.Null): bind NULL so every placeholder still advances once
+				sqlite3_bind_null(luasqlite->stmt, ++cnt);
+				break;
 			}
 
 			lua_pop(L, 1);
 		}
 	}
 
+	luasqlite->activeL = L;
 	luasqlite->status = sqlite3_step(luasqlite->stmt);
+	luasqlite->activeL = NULL;
 
 	lua_pop(L, lua_gettop(L));
 
@@ -318,26 +334,32 @@ static void RemoveBusyHandler(lua_State* L, LuaSQLite* luasqlite) {
 	}
 }
 
+// Returns 1 to have SQLite retry, 0 to give up with SQLITE_BUSY.
+// Runs on the state currently inside Execute/Fetch (activeL), whose stack index 1 is this sqlite object.
 static int BusyHandler(void* d, int retries) {
-	lua_State* L = (lua_State*)d;
+	LuaSQLite* luasqlite = (LuaSQLite*)d;
+	lua_State* L = luasqlite->activeL;
 
-	LuaSQLite* luasqlite = (LuaSQLite*)luaL_checksqlite(L, 1);
+	if (!L || luasqlite->busyhandler == -1 || lua_touserdata(L, 1) != luasqlite || !lua_checkstack(L, 3))
+		return 0;
+
 	lua_rawgeti(L, LUA_REGISTRYINDEX, luasqlite->busyhandler);
 	if (!lua_isfunction(L, -1)) {
 		lua_pop(L, 1);
 		return 0;
 	}
-	else {
-		lua_pushvalue(L, 1);
-		lua_pushinteger(L, retries);
-		if (lua_pcall_nohook(L, 2, 1, NULL)) {
-			return 0;
-		}
-		bool ok = lua_toboolean(L, -1) > 0;
+
+	lua_pushvalue(L, 1);
+	lua_pushinteger(L, retries);
+	if (lua_pcall_nohook(L, 2, 1, 0) != LUA_OK) {
+		// error raised by the handler: drop it and stop retrying
 		lua_pop(L, 1);
-		return 1;
+		return 0;
 	}
-	return 0;
+
+	int retry = lua_toboolean(L, -1) ? 1 : 0;
+	lua_pop(L, 1);
+	return retry;
 }
 
 int SQLiteSetBusyHandler(lua_State* L) {
@@ -352,7 +374,7 @@ int SQLiteSetBusyHandler(lua_State* L) {
 	{
 		lua_pushvalue(L, 2);
 		luasqlite->busyhandler = luaL_ref(L, LUA_REGISTRYINDEX);
-		sqlite3_busy_handler(luasqlite->db, BusyHandler, L);
+		sqlite3_busy_handler(luasqlite->db, BusyHandler, luasqlite);
 	}
 
 	return 0;
@@ -534,7 +556,7 @@ int RegisterFunction(lua_State* L, bool isAggregate) {
 		return 0;
 	}
 	else if (luasqlite->funcs > 0 && luasqlite->functions) {
-		memcpy(newArray, luasqlite->functions, sizeof(LuaSQLiteFunction) * luasqlite->funcs);
+		memcpy(newArray, luasqlite->functions, sizeof(LuaSQLiteFunction*) * luasqlite->funcs);
 		kitsune_free(luasqlite->functions);
 	}
 
