@@ -2405,9 +2405,9 @@ Every database opened with `Open` gets a built-in SQL function **`Lua(script)`**
 | Function | Description |
 |----------|-------------|
 | `Open` | Open an SQLite database. Omit `filename` (or pass `nil`) for an in-memory database. Raises an error on failure |
-| `Query` | Prepare and execute `sql`. Returns `true, "ROW"` if the first row is ready, `true, "DONE"` when there are no rows (DDL/DML or empty SELECT), or `false, errmsg` on error. DDL/DML have already run (and the statement is finalized) when `Query` returns `"DONE"`; no `Fetch()` is needed. For rows, loop with `while db:Fetch() do ... db:GetRow() ... end` (the first row is also readable with `GetRow()` straight after `Query`) |
-| `Finish` | Finalize the current prepared statement early, allowing a new `Query` before all rows have been consumed |
-| `Fetch` | Advance to the next result row. Returns `true` while a row is available, `false` when exhausted |
+| `Query` | Prepare and execute `sql`. Returns `true, "ROW"` when the result has at least one row, `true, "DONE"` when it has none (DDL/DML or empty SELECT), or `false, errmsg` on error. DDL/DML have already run (and the statement is finalized) when `Query` returns `"DONE"`; no `Fetch()` is needed. For rows, loop with `while db:Fetch() do ... db:GetRow() ... end` - this sees **every** row, including the first (see [Reading rows](#reading-rows)) |
+| `Finish` | Finalize the current statement without reading the remaining rows. Optional: starting a new `Query` also finalizes an unfinished statement |
+| `Fetch` | Make the next row current and return `true`, or return `false` when there are no more rows. The **first** `Fetch()` after a `Query` that returned `"ROW"` makes row 1 current - it does not skip it. Also returns `false` right after `"DONE"` |
 | `GetRow` | Without arguments (or `0`): returns the current row as a string-keyed table `{columnName = value, ...}` — **not** an integer-indexed array. With a positive 1-based integer index: returns that single column value directly. Returns `nil` if the index is out of range or there is no active row |
 | `RegisterFunction` | Register a scalar Lua function callable from SQL. `args` (required) is the exact number of arguments; variadic functions aren't supported (a negative value raises "SQLite function args can't be negative"). A Lua number returned by the function becomes REAL (even `42`), a boolean becomes 0/1, a `Stream` becomes NULL, anything else is converted with `tostring`. BLOB arguments arrive as `LuaStream` |
 | `RegisterAggregateFunction` | Register an aggregate Lua function. Called per row with `(false, …args)` and once at the end with `(true)` to collect the final result |
@@ -2454,20 +2454,38 @@ db:Query('SELECT name FROM t WHERE id = :id', {id = 1})
 db:Fetch()
 local name = db:GetRow(1)            -- 'Alice'  (index 1 = first column)
 
--- Finish() discards remaining rows so the next Query can proceed
+-- Read just the first row, then stop (Finish is optional - the next Query would also end it)
 db:Query('SELECT id FROM t ORDER BY id')
-db:Fetch()                            -- reads first row only
-db:Finish()                           -- skip the rest
+db:Fetch()                            -- row 1 is current
+db:Finish()                           -- discard rows 2..n
 
 db:Close()
 ```
+
+### Reading rows
+
+`Fetch()` works like a cursor that starts *before* the first row. Each call makes the next row
+current; `GetRow()` reads the current row. With three rows:
+
+| Call | Returns | `GetRow()` then gives |
+|------|---------|-----------------------|
+| `db:Query('SELECT id FROM t ORDER BY id')` | `true, "ROW"` | row 1 (already readable) |
+| 1st `db:Fetch()` | `true` | row 1 - **not** row 2 |
+| 2nd `db:Fetch()` | `true` | row 2 |
+| 3rd `db:Fetch()` | `true` | row 3 |
+| 4th `db:Fetch()` | `false` | `nil` |
+
+So `while db:Fetch() do ... end` reads rows 1, 2 and 3 - nothing is skipped, and no `Finish()` is
+needed after it. Reading row 1 with `GetRow()` before the first `Fetch()` doesn't change this: the
+first `Fetch()` still returns row 1. After `"DONE"` (or an empty SELECT) the first `Fetch()` returns
+`false`.
 
 ### Return Values from Query
 
 | Second return | Meaning |
 |---------------|---------|
-| `"ROW"` | First row is ready; call `Fetch()` / `GetRow()` to read results |
-| `"DONE"` | Statement completed with no (more) rows (typical for DDL/DML or empty SELECT) |
+| `"ROW"` | The result has rows. Read them with `while db:Fetch() do ... end`; the first `Fetch()` gives row 1 |
+| `"DONE"` | Statement completed with no rows (typical for DDL/DML or empty SELECT); `Fetch()` returns `false` |
 | `false, errmsg` | Preparation or execution error |
 
 ---
@@ -2521,7 +2539,7 @@ Supported Lua types: `nil` → NULL, `boolean` → BOOLEAN, integer → BIGINT, 
 
 | Return | Meaning |
 |--------|---------|
-| `true, "ROW"` | First row is ready; call `Fetch()` / `GetRow()` to read results |
+| `true, "ROW"` | The result has rows. Call `Fetch()` to make row 1 current, then `GetRow()`; `while db:Fetch() do ... end` reads every row |
 | `true, "DONE"` | Statement completed with no (more) rows (typical for DDL/DML or empty SELECT) |
 | `false, errmsg` | Preparation or execution error |
 
