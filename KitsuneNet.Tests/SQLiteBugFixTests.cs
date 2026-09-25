@@ -111,6 +111,8 @@ public sealed class SQLiteBugFixTests
     private const string BusySetup = @"
 			local path = FileSystem.GetTempFileName()   -- empty file: SQLite treats it as a new database
 			local A = SQLite.Open(path)
+			A:Query('PRAGMA journal_mode=DELETE')  -- new databases default to WAL; these tests need rollback locking
+			A:Finish()
 			A:Query('CREATE TABLE t (n INTEGER)')
 			local B = SQLite.Open(path)
 			B:Query('SELECT count(*) FROM t')   -- load the schema on B

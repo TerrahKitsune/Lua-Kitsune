@@ -2390,13 +2390,14 @@ bool, txt   SQLite:Query(sql, opt params)
 nil         SQLite:Finish()
 bool        SQLite:Fetch()
 table|value SQLite:GetRow(opt index)
+table       SQLite:GetColumns()
 nil         SQLite:RegisterFunction(function, name, args)
 nil         SQLite:RegisterAggregateFunction(function, name, args)
 nil         SQLite:SetBusyHandler(opt fn)
 nil         SQLite:Close()
 ```
 
-**Mode:** non-zero puts the database in WAL journal mode (`PRAGMA journal_mode=WAL`), `0` uses `journal_mode=DELETE`. It is also passed to `sqlite3_config` (0=single thread, 1=multithreaded, 2=serialized), which only has an effect before SQLite is first initialized in the process. `synchronous=NORMAL` is always set.
+**Mode:** omit it (or pass `nil`) to keep the journal mode the database already has - a WAL database stays WAL, a rollback-journal database stays as it is - while a new (empty) database is put in WAL mode; SQLite's threading config is then left at its compiled-in default. When given, non-zero forces WAL journal mode (`PRAGMA journal_mode=WAL`) and `0` forces `journal_mode=DELETE` on every open (this is persistent, so it converts the file). A given mode is also passed to `sqlite3_config` (0=single thread, 1=multithreaded, 2=serialized), which only has an effect before SQLite is first initialized in the process. `synchronous=NORMAL` is always set.
 
 TEXT columns are always returned as plain UTF-8 Lua strings; BLOB columns as `LuaStream`.
 
@@ -2409,7 +2410,8 @@ Every database opened with `Open` gets a built-in SQL function **`Lua(script)`**
 | `Finish` | Finalize the current statement without reading the remaining rows. Optional: starting a new `Query` also finalizes an unfinished statement |
 | `Fetch` | Make the next row current and return `true`, or return `false` when there are no more rows. The **first** `Fetch()` after a `Query` that returned `"ROW"` makes row 1 current - it does not skip it. Also returns `false` right after `"DONE"` |
 | `GetRow` | Without arguments (or `0`): returns the current row as a string-keyed table `{columnName = value, ...}` — **not** an integer-indexed array. With a positive 1-based integer index: returns that single column value directly. Returns `nil` if the index is out of range or there is no active row |
-| `RegisterFunction` | Register a scalar Lua function callable from SQL. `args` (required) is the exact number of arguments; variadic functions aren't supported (a negative value raises "SQLite function args can't be negative"). A Lua number returned by the function becomes REAL (even `42`), a boolean becomes 0/1, a `Stream` becomes NULL, anything else is converted with `tostring`. BLOB arguments arrive as `LuaStream` |
+| `GetColumns` | Returns the current statement's column names as an ordered array `{'id', 'name', ...}` - duplicates such as `a.id, b.id` both appear, unlike `GetRow()`'s keys. Available once `Query` returned `"ROW"` and until the last `Fetch()`; returns an empty table when there is no active statement (after `"DONE"`, an empty SELECT, `Finish()` or the final `Fetch()`) |
+| `RegisterFunction` | Register a scalar Lua function callable from SQL. `args` (required) is the exact number of arguments; variadic functions aren't supported (a negative value raises "SQLite function args can't be negative"). Like SQLite itself, a function is identified by name **and** argument count: `f` with 1 and `f` with 2 arguments can both be registered, registering the same name and count twice raises an error, and registering a built-in's name (e.g. `Lua`, `load_extension`) replaces it on that connection. A Lua number returned by the function becomes REAL (even `42`), a boolean becomes 0/1, a `Stream` becomes NULL, anything else is converted with `tostring`. BLOB arguments arrive as `LuaStream` |
 | `RegisterAggregateFunction` | Register an aggregate Lua function. Called per row with `(false, …args)` and once at the end with `(true)` to collect the final result |
 | `SetBusyHandler` | Register a callback invoked when a table is locked. Receives `(sqlite, retryCount)` (`retryCount` starts at 0). Return a truthy value to wait and retry, or a falsy value (`false`/`nil`) to give up, in which case the `Query`/`Fetch` that hit the lock fails (`Query` returns `false, "database is locked"`). An error raised inside the handler is swallowed and also gives up. Pass `nil` or no argument to remove |
 | `Close` | Close the database connection |
@@ -3458,11 +3460,29 @@ Returned by `GetFileInfo` and `GetAll`:
 | `Creation` | number | Creation time as a Unix timestamp (on Linux `st_ctime`, the last status change) |
 | `Access` | number | Last access time as a Unix timestamp |
 | `Write` | number | Last write time as a Unix timestamp |
-| `Link` | string | *(optional, `GetFileInfo` only)* Symlink / reparse-point target path, present only when the entry is a link |
+| `isLink` | boolean | `true` when the entry is a link to another path: a symlink, or on Windows also a junction or volume mount point. Other reparse points (OneDrive/cloud placeholders, dedup, compressed files) are `false`. Recursive walks should skip folders where this is `true` to avoid cycles |
+| `LinkType` | string | *(optional)* `"symlink"`, `"junction"` or `"mount"` (Windows volume mount point); present only for links |
+| `Link` | string | *(optional)* Link target as stored: relative for relative symlinks, a drive path such as `C:\target` for junctions, `\\?\Volume{guid}\` for volume mount points. Present when `isLink` is `true` and the target could be read. On Linux a symlink to a directory also has `isFolder = true` |
+| `isPlaceholder` | boolean | `true` when the entry is not (fully) stored on this device: an online-only OneDrive/cloud file or folder, or a file offloaded by storage management. Set from `FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS`, `FILE_ATTRIBUTE_RECALL_ON_OPEN` or `FILE_ATTRIBUTE_OFFLINE`. Reading such a file downloads it, and listing a placeholder folder can make the sync provider fetch its listing (slow, may stall while offline). Files set to "Always keep on this device" or already downloaded are `false`. Always `false` on Linux |
+| `ReparseTag` | number | *(Windows only, optional)* Raw `IO_REPARSE_TAG_*` value, present on every reparse point (including non-link ones such as cloud placeholders) |
 | `AlternateFileName` | string | *(Windows only)* 8.3 short name |
 | `Attributes` | number | *(Windows only)* Win32 `FILE_ATTRIBUTE_*` bitmask |
 
 The timestamps are Unix timestamps (whole seconds since 1970-01-01 UTC) on every platform, directly comparable with `os.time()`. On Linux, `GetAll` omits `Size` and the timestamps when the entry can't be `stat`ed.
+
+A recursive walk that skips links cannot loop, and skipping placeholders keeps it local. Check `isLink` before `isFolder`, because junctions and directory symlinks are folders too (Linux bind mounts are not detected as links):
+
+```lua
+local function walk(dir, visit)
+    for _, e in ipairs(FileSystem.GetAll(dir)) do
+        if not (e.isLink or e.isPlaceholder) then
+            local path = dir .. '/' .. e.FileName
+            visit(path, e)
+            if e.isFolder then walk(path, visit) end
+        end
+    end
+end
+```
 
 ### Path and Directory Utilities
 

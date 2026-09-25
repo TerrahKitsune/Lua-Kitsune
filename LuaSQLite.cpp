@@ -109,6 +109,25 @@ int SQLiteGetRow(lua_State* L) {
 	return 1;
 }
 
+int SQLiteGetColumns(lua_State* L) {
+
+	LuaSQLite* luasqlite = (LuaSQLite*)luaL_checksqlite(L, 1);
+	if (luasqlite->db == NULL) {
+		luaL_error(L, "SQLite instance has been closed");
+		return 1;
+	}
+
+	int cnt = luasqlite->stmt ? sqlite3_column_count(luasqlite->stmt) : 0;
+	lua_pop(L, lua_gettop(L));
+	lua_createtable(L, cnt, 0);
+	for (int n = 0; n < cnt; n++) {
+		lua_pushstring(L, sqlite3_column_name(luasqlite->stmt, n));
+		lua_rawseti(L, -2, n + 1);
+	}
+
+	return 1;
+}
+
 int SQLiteFetch(lua_State* L) {
 
 	LuaSQLite* luasqlite = (LuaSQLite*)luaL_checksqlite(L, 1);
@@ -542,8 +561,9 @@ int RegisterFunction(lua_State* L, bool isAggregate) {
 
 	if (luasqlite->functions) {
 		for (int n = 0; n < luasqlite->funcs; n++) {
-			if (strcmp(luasqlite->functions[n]->name, name) == 0) {
-				luaL_error(L, "SQLite function with name %s already exists", name);
+			//SQLite identifies a function by name and argument count, so f(x) and f(x, y) can coexist
+			if (strcmp(luasqlite->functions[n]->name, name) == 0 && luasqlite->functions[n]->args == args) {
+				luaL_error(L, "SQLite function %s with %d arguments already exists", name, args);
 				return 0;
 			}
 		}
@@ -633,7 +653,10 @@ int SQLiteConnect(lua_State* L) {
 	file[len] = '\0';
 	memcpy(file, db, len);
 
-	int mode = (int)luaL_optinteger(L, 2, 0);
+	//No mode: keep the journal mode the database already has (new databases get WAL)
+	//and leave SQLite's threading config at its compiled-in default
+	bool hasMode = !lua_isnoneornil(L, 2);
+	int mode = hasMode ? (int)luaL_checkinteger(L, 2) : 0;
 
 	lua_pop(L, lua_gettop(L));
 	LuaSQLite* luasqlite = lua_pushsqlite(L);
@@ -645,24 +668,27 @@ int SQLiteConnect(lua_State* L) {
 
 	luasqlite->busyhandler = -1;
 
-	int ok;
+	if (hasMode) {
 
-	switch (mode) {
-	case 1:
-		ok = sqlite3_config(SQLITE_CONFIG_MULTITHREAD);
-		break;
-	case 2:
-		ok = sqlite3_config(SQLITE_CONFIG_SERIALIZED);
-		break;
-	default:
-		ok = sqlite3_config(SQLITE_CONFIG_SINGLETHREAD);
-		break;
-	}
+		int ok;
 
-	//Ignore missuse
-	if (ok != SQLITE_OK && ok != SQLITE_MISUSE) {
-		kitsune_free(file);
-		luaL_error(L, "SQLite error %s", sqlite3_errmsg(luasqlite->db));
+		switch (mode) {
+		case 1:
+			ok = sqlite3_config(SQLITE_CONFIG_MULTITHREAD);
+			break;
+		case 2:
+			ok = sqlite3_config(SQLITE_CONFIG_SERIALIZED);
+			break;
+		default:
+			ok = sqlite3_config(SQLITE_CONFIG_SINGLETHREAD);
+			break;
+		}
+
+		//Ignore missuse
+		if (ok != SQLITE_OK && ok != SQLITE_MISUSE) {
+			kitsune_free(file);
+			luaL_error(L, "SQLite error %s", sqlite3_errmsg(luasqlite->db));
+		}
 	}
 
 	int err = sqlite3_open(file, &luasqlite->db);
@@ -671,11 +697,27 @@ int SQLiteConnect(lua_State* L) {
 		luaL_error(L, "SQLite error %s", sqlite3_errmsg(luasqlite->db));
 	}
 
-	if (mode != 0) {
-		sqlite3_exec(luasqlite->db, "PRAGMA journal_mode=WAL;", 0, 0, 0);
+	if (hasMode) {
+		if (mode != 0) {
+			sqlite3_exec(luasqlite->db, "PRAGMA journal_mode=WAL;", 0, 0, 0);
+		}
+		else {
+			sqlite3_exec(luasqlite->db, "PRAGMA journal_mode=DELETE;", 0, 0, 0);
+		}
 	}
 	else {
-		sqlite3_exec(luasqlite->db, "PRAGMA journal_mode=DELETE;", 0, 0, 0);
+		//WAL is persistent in the file, so an existing database keeps whatever mode it has;
+		//only a brand new (empty) database is switched to WAL
+		sqlite3_stmt* stmt = NULL;
+		bool empty = false;
+		if (sqlite3_prepare_v2(luasqlite->db, "PRAGMA page_count;", -1, &stmt, NULL) == SQLITE_OK) {
+			empty = sqlite3_step(stmt) == SQLITE_ROW && sqlite3_column_int64(stmt, 0) == 0;
+		}
+		sqlite3_finalize(stmt);
+
+		if (empty) {
+			sqlite3_exec(luasqlite->db, "PRAGMA journal_mode=WAL;", 0, 0, 0);
+		}
 	}
 
 	sqlite3_exec(luasqlite->db, "PRAGMA synchronous=NORMAL;", 0, 0, 0);

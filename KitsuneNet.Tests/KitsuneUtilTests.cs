@@ -5784,10 +5784,133 @@ namespace KitsuneNet.Tests
                     entry ~= nil and
                     type(entry.FileName) ~= 'nil' and
                     type(entry.isFolder) == 'boolean' and
+                    entry.isLink == false and
+                    entry.isPlaceholder == false and
                     type(entry.Size) == 'number'
                 )
             ");
             r.String.ShouldBe("true");
+        }
+
+        [WindowsFact]
+        public async Task FileSystem_OfflineFile_IsPlaceholder()
+        {
+            // Cloud recall attributes can only be set by a sync provider, but OFFLINE is settable
+            // and takes the same path.
+            string dir = Path.Combine(Path.GetTempPath(), "_kitsune_placeholder_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(dir);
+            string file = Path.Combine(dir, "off.txt");
+            File.WriteAllText(file, "abc");
+            File.SetAttributes(file, FileAttributes.Offline);
+            try
+            {
+                using KitsuneEngine engine = new();
+                LuaValue r = await engine.ExecuteStringAsync(@"
+                    local all = FileSystem.GetAll([[" + dir + @"]])
+                    local info = FileSystem.GetFileInfo([[" + file + @"]])
+                    return tostring(all[1].isPlaceholder) .. '|' .. tostring(info.isPlaceholder) .. '|' .. tostring(info.isLink)
+                ");
+                r.String.ShouldBe("true|true|false");
+            }
+            finally
+            {
+                File.SetAttributes(file, FileAttributes.Normal);
+                Directory.Delete(dir, true);
+            }
+        }
+
+        // Returns "name|isLink|LinkType|Link|hasReparseTag" for every entry of the link-test folder,
+        // from GetAll and GetFileInfo, sorted so the result is stable.
+        private static string DescribeLinks(string dir) => @"
+            local dir = [[" + dir + @"]]
+            local function d(src, e)
+                return src .. ':' .. e.FileName .. '|' .. tostring(e.isLink) .. '|' .. tostring(e.LinkType) ..
+                    '|' .. tostring(e.Link) .. '|' .. tostring(e.ReparseTag ~= nil)
+            end
+            local out = {}
+            for _, e in ipairs(FileSystem.GetAll(dir)) do
+                out[#out + 1] = d('all', e)
+                out[#out + 1] = d('info', FileSystem.GetFileInfo(dir .. '\\' .. e.FileName))
+            end
+            table.sort(out)
+            return table.concat(out, '\n')
+        ";
+
+        private static string NewLinkTestDir()
+        {
+            // A long target path: the old fixed-size reparse buffer failed on these.
+            string dir = Path.Combine(Path.GetTempPath(), "_kitsune_links_" + Guid.NewGuid().ToString("N"), new string('t', 120));
+            Directory.CreateDirectory(Path.Combine(dir, "target"));
+            return dir;
+        }
+
+        [WindowsFact]
+        public async Task FileSystem_Junction_IsLinkWithTarget()
+        {
+            string dir = NewLinkTestDir();
+            string target = Path.Combine(dir, "target");
+            try
+            {
+                // Junctions need no privilege, unlike symlinks.
+                using (var p = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
+                    "cmd.exe", $"/c mklink /J \"{Path.Combine(dir, "junc")}\" \"{target}\"")
+                    { CreateNoWindow = true, UseShellExecute = false, RedirectStandardOutput = true })!)
+                {
+                    p.WaitForExit();
+                    p.ExitCode.ShouldBe(0);
+                }
+
+                using KitsuneEngine engine = new();
+                LuaValue r = await engine.ExecuteStringAsync(DescribeLinks(dir));
+                r.String.ShouldBe(string.Join("\n",
+                    $"all:junc|true|junction|{target}|true",
+                    "all:target|false|nil|nil|false",
+                    $"info:junc|true|junction|{target}|true",
+                    "info:target|false|nil|nil|false"));
+            }
+            finally
+            {
+                // A recursive delete is refused on the junction itself, so remove the link first.
+                if (Directory.Exists(Path.Combine(dir, "junc")))
+                    Directory.Delete(Path.Combine(dir, "junc"));
+                Directory.Delete(Path.GetDirectoryName(dir)!, true);
+            }
+        }
+
+        [WindowsFact]
+        public async Task FileSystem_Symlinks_AbsoluteAndRelativeTargets()
+        {
+            string dir = NewLinkTestDir();
+            string target = Path.Combine(dir, "target");
+            try
+            {
+                try
+                {
+                    Directory.CreateSymbolicLink(Path.Combine(dir, "abs"), target);
+                    Directory.CreateSymbolicLink(Path.Combine(dir, "rel"), "target");
+                    File.CreateSymbolicLink(Path.Combine(dir, "file"), "target\\x.txt");
+                }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+                {
+                    return;  // creating symlinks needs Developer Mode or elevation
+                }
+
+                using KitsuneEngine engine = new();
+                LuaValue r = await engine.ExecuteStringAsync(DescribeLinks(dir));
+                r.String.ShouldBe(string.Join("\n",
+                    $"all:abs|true|symlink|{target}|true",
+                    "all:file|true|symlink|target\\x.txt|true",
+                    "all:rel|true|symlink|target|true",
+                    "all:target|false|nil|nil|false",
+                    $"info:abs|true|symlink|{target}|true",
+                    "info:file|true|symlink|target\\x.txt|true",
+                    "info:rel|true|symlink|target|true",
+                    "info:target|false|nil|nil|false"));
+            }
+            finally
+            {
+                Directory.Delete(Path.GetDirectoryName(dir)!, true);
+            }
         }
 
         [Fact]

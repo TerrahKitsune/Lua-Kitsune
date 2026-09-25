@@ -832,4 +832,127 @@ public sealed class SQLiteTests
 		");
         r.String.ShouldBe("true");
     }
+
+    [Fact]
+    public async Task SQLite_GetColumns_OrderedWithDuplicates_EmptyWhenNoStatement()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync(@"
+			local db = SQLite.Open()
+			local before = #db:GetColumns()
+			db:Query('SELECT 1 AS b, NULL AS a, 3 AS b')
+			local cols = table.concat(db:GetColumns(), ',')
+			while db:Fetch() do end
+			local after = #db:GetColumns()
+			db:Close()
+			return before .. '|' .. cols .. '|' .. after
+		");
+        r.String.ShouldBe("0|b,a,b|0");
+    }
+
+    [Fact]
+    public async Task SQLite_RegisterFunction_SameNameDifferentArgCounts_BothWork()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync(@"
+			local db = SQLite.Open()
+			db:RegisterFunction(function(a) return 'one' end, 'f', 1)
+			db:RegisterFunction(function(a, b) return 'two' end, 'f', 2)
+			local dup = pcall(db.RegisterFunction, db, function() end, 'f', 1)
+			db:Query('SELECT f(1) || f(1, 2)')
+			db:Fetch()
+			local v = db:GetRow(1)
+			db:Close()
+			return tostring(v) .. '|' .. tostring(dup)
+		");
+        r.String.ShouldBe("onetwo|false");
+    }
+
+    // -- Open without a mode keeps the database's journal mode -----------------
+
+    private const string JournalModeHelpers = @"
+			local function journal(db)
+				db:Query('PRAGMA journal_mode')
+				db:Fetch()
+				local m = db:GetRow(1)
+				db:Finish()
+				return tostring(m)
+			end
+			local function cleanup(path)
+				FileSystem.Delete(path)
+				FileSystem.Delete(path .. '-wal')
+				FileSystem.Delete(path .. '-shm')
+				FileSystem.Delete(path .. '-journal')
+			end
+";
+
+    [Fact]
+    public async Task SQLite_Open_NoMode_NewDatabaseIsWal()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync(JournalModeHelpers + @"
+			local path = FileSystem.GetTempFileName()   -- empty file: SQLite treats it as a new database
+			local db = SQLite.Open(path)
+			local m = journal(db)
+			db:Close()
+			cleanup(path)
+			return m
+		");
+        r.String.ShouldBe("wal");
+    }
+
+    [Fact]
+    public async Task SQLite_Open_NoMode_KeepsExistingDeleteMode()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync(JournalModeHelpers + @"
+			local path = FileSystem.GetTempFileName()
+			local db = SQLite.Open(path)
+			db:Query('PRAGMA journal_mode=DELETE'); db:Finish()
+			db:Query('CREATE TABLE t (n INTEGER)')
+			db:Close()
+			db = SQLite.Open(path)
+			local m = journal(db)
+			db:Close()
+			cleanup(path)
+			return m
+		");
+        r.String.ShouldBe("delete");
+    }
+
+    [Fact]
+    public async Task SQLite_Open_NoMode_KeepsExistingWalMode()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync(JournalModeHelpers + @"
+			local path = FileSystem.GetTempFileName()
+			local db = SQLite.Open(path)
+			db:Query('CREATE TABLE t (n INTEGER)')
+			db:Close()
+			db = SQLite.Open(path)
+			local m = journal(db)
+			db:Close()
+			cleanup(path)
+			return m
+		");
+        r.String.ShouldBe("wal");
+    }
+
+    [Fact]
+    public async Task SQLite_Open_ExplicitModeZero_StillForcesDelete()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync(JournalModeHelpers + @"
+			local path = FileSystem.GetTempFileName()
+			local db = SQLite.Open(path)
+			db:Query('CREATE TABLE t (n INTEGER)')
+			db:Close()
+			db = SQLite.Open(path, 0)
+			local m = journal(db)
+			db:Close()
+			cleanup(path)
+			return m
+		");
+        r.String.ShouldBe("delete");
+    }
 }

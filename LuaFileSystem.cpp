@@ -27,12 +27,43 @@ int OpenFileWide(lua_State* L) {
 
 static wchar_t _PATHW[MAX_PATH_LENGTH];
 
+#ifndef IO_REPARSE_TAG_LX_SYMLINK
+#define IO_REPARSE_TAG_LX_SYMLINK (0xA000001DL)
+#endif
+#ifndef FILE_ATTRIBUTE_RECALL_ON_OPEN
+#define FILE_ATTRIBUTE_RECALL_ON_OPEN 0x00040000
+#endif
+#ifndef FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS
+#define FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS 0x00400000
+#endif
+
+// FSCTL_GET_REPARSE_POINT output for the Microsoft link tags (REPARSE_DATA_BUFFER is only in the DDK).
+// Name offsets and lengths are in bytes, relative to PathBuffer, and the names are not null-terminated.
 typedef struct REPARSE_DATA {
 	DWORD  ReparseTag;
 	WORD   ReparseDataLength;
 	WORD   Reserved;
-	GUID   ReparseGuid;
-	WCHAR  Data[MAX_PATH];
+	union {
+		struct {
+			WORD   SubstituteNameOffset;
+			WORD   SubstituteNameLength;
+			WORD   PrintNameOffset;
+			WORD   PrintNameLength;
+			DWORD  Flags;
+			WCHAR  PathBuffer[1];
+		} SymbolicLink;
+		struct {
+			WORD   SubstituteNameOffset;
+			WORD   SubstituteNameLength;
+			WORD   PrintNameOffset;
+			WORD   PrintNameLength;
+			WCHAR  PathBuffer[1];
+		} MountPoint;
+		struct {
+			DWORD  Version;
+			char   Target[1];  // UTF-8, not null-terminated
+		} LxSymlink;
+	};
 } REPARSE_DATA;
 
 // Internal: copy the UTF-8 string argument at idx into dst as a null-terminated wide string.
@@ -88,7 +119,7 @@ static time_t FILETIME_to_time_t(const FILETIME* ft) {
 
 static void push_find_dataw(lua_State* L, const WIN32_FIND_DATAW* d) {
 
-	lua_createtable(L, 0, 8);
+	lua_createtable(L, 0, 13);
 
 	lua_pushstring(L, "FileName");
 	lua_pushwideasutf8(L, d->cFileName);
@@ -120,6 +151,124 @@ static void push_find_dataw(lua_State* L, const WIN32_FIND_DATAW* d) {
 
 	lua_pushstring(L, "Write");
 	lua_pushinteger(L, FILETIME_to_time_t(&d->ftLastWriteTime));
+	lua_settable(L, -3);
+
+	// dwReserved0 holds the reparse tag, but only when the entry is a reparse point.
+	bool reparse = (d->dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+	if (reparse) {
+		lua_pushstring(L, "ReparseTag");
+		lua_pushinteger(L, d->dwReserved0);
+		lua_settable(L, -3);
+	}
+
+	// Name surrogates (junctions, mount points, symlinks) point at another path; cloud placeholders,
+	// dedup and compressed files are reparse points too but are not links.
+	lua_pushstring(L, "isLink");
+	lua_pushboolean(L, reparse && IsReparseTagNameSurrogate(d->dwReserved0));
+	lua_settable(L, -3);
+
+	// Not (fully) on this device: OneDrive/cloud online-only files and folders, or HSM-offloaded files.
+	// Reading one downloads it, and listing an unpopulated placeholder folder fetches its listing.
+	lua_pushstring(L, "isPlaceholder");
+	lua_pushboolean(L, (d->dwFileAttributes &
+		(FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS | FILE_ATTRIBUTE_RECALL_ON_OPEN | FILE_ATTRIBUTE_OFFLINE)) != 0);
+	lua_settable(L, -3);
+}
+
+// Internal: push a link target read from a substitute name ("\??\C:\x", "\??\UNC\srv\share",
+// "\??\Volume{guid}\") as a Win32 path: drive paths lose the prefix, the rest get "\\?\".
+static void push_substitute_name(lua_State* L, const wchar_t* name, size_t len) {
+
+	if (len >= 4 && wcsncmp(name, L"\\??\\", 4) == 0) {
+		name += 4;
+		len -= 4;
+		if (!(len >= 2 && name[1] == L':')) {
+			lua_pushstring(L, "\\\\?\\");
+			lua_pushwideasutf8(L, name, len);
+			lua_concat(L, 2);
+			return;
+		}
+	}
+	lua_pushwideasutf8(L, name, len);
+}
+
+// Internal: add LinkType and Link to the FileInfo table on top of the stack for the link at path.
+// Only called for name surrogates, so cloud placeholders are never opened (which could recall them).
+static void push_link_target(lua_State* L, const wchar_t* path) {
+
+	HANDLE fh = CreateFileW(path, 0,
+		FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
+		0, OPEN_EXISTING,
+		FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, 0);
+
+	if (fh == INVALID_HANDLE_VALUE)
+		return;
+
+	DWORD buf[MAXIMUM_REPARSE_DATA_BUFFER_SIZE / sizeof(DWORD)];
+	const REPARSE_DATA* rp = (const REPARSE_DATA*)buf;
+	DWORD ret = 0;
+	BOOL ok = DeviceIoControl(fh, FSCTL_GET_REPARSE_POINT, NULL, 0, buf, sizeof(buf), &ret, NULL);
+	CloseHandle(fh);
+
+	if (!ok || ret < 8 || ret < 8u + rp->ReparseDataLength)
+		return;
+
+	const char* type = NULL;
+	const WCHAR* pathbuf = NULL;
+	size_t pathbytes = 0;
+	WORD subOff = 0, subLen = 0, printOff = 0, printLen = 0;
+
+	if (rp->ReparseTag == IO_REPARSE_TAG_MOUNT_POINT && rp->ReparseDataLength >= 8) {
+		pathbuf = rp->MountPoint.PathBuffer;
+		pathbytes = rp->ReparseDataLength - 8;
+		subOff = rp->MountPoint.SubstituteNameOffset;
+		subLen = rp->MountPoint.SubstituteNameLength;
+		printOff = rp->MountPoint.PrintNameOffset;
+		printLen = rp->MountPoint.PrintNameLength;
+		type = "junction";
+	}
+	else if (rp->ReparseTag == IO_REPARSE_TAG_SYMLINK && rp->ReparseDataLength >= 12) {
+		pathbuf = rp->SymbolicLink.PathBuffer;
+		pathbytes = rp->ReparseDataLength - 12;
+		subOff = rp->SymbolicLink.SubstituteNameOffset;
+		subLen = rp->SymbolicLink.SubstituteNameLength;
+		printOff = rp->SymbolicLink.PrintNameOffset;
+		printLen = rp->SymbolicLink.PrintNameLength;
+		type = "symlink";
+	}
+	else if (rp->ReparseTag == IO_REPARSE_TAG_LX_SYMLINK && rp->ReparseDataLength >= 4) {
+		lua_pushstring(L, "LinkType");
+		lua_pushstring(L, "symlink");
+		lua_settable(L, -3);
+		lua_pushstring(L, "Link");
+		lua_pushlstring(L, rp->LxSymlink.Target, rp->ReparseDataLength - 4);
+		lua_settable(L, -3);
+		return;
+	}
+	else {
+		return;
+	}
+
+	if ((size_t)subOff + subLen > pathbytes || (size_t)printOff + printLen > pathbytes)
+		return;
+
+	const WCHAR* sub = (const WCHAR*)((const BYTE*)pathbuf + subOff);
+
+	// A volume mount point is a mount-point tag whose target is a volume rather than a directory.
+	if (rp->ReparseTag == IO_REPARSE_TAG_MOUNT_POINT && subLen >= 22 && wcsncmp(sub, L"\\??\\Volume{", 11) == 0)
+		type = "mount";
+
+	lua_pushstring(L, "LinkType");
+	lua_pushstring(L, type);
+	lua_settable(L, -3);
+
+	// The print name is the path as the user gave it (relative for relative symlinks); some tools
+	// leave it empty, and volume mount points have none, so fall back to the substitute name.
+	lua_pushstring(L, "Link");
+	if (printLen > 0)
+		lua_pushwideasutf8(L, (const WCHAR*)((const BYTE*)pathbuf + printOff), printLen / sizeof(WCHAR));
+	else
+		push_substitute_name(L, sub, subLen / sizeof(WCHAR));
 	lua_settable(L, -3);
 }
 
@@ -198,20 +347,29 @@ int GetAllInFolder(lua_State* L) {
 	lua_newtable(L);
 	int n = 0;
 
+	// Directory prefix (path without the trailing "*") for building a link's full path.
+	wchar_t full[MAX_PATH_LENGTH + MAX_PATH];
+	size_t dirlen = wcslen(path) - 1;
+	wmemcpy(full, path, dirlen);
+
 	if (h != INVALID_HANDLE_VALUE) {
 		do {
 			if (wcscmp(ffd.cFileName, L".") != 0 && wcscmp(ffd.cFileName, L"..") != 0) {
 				push_find_dataw(L, &ffd);
-				lua_rawseti(L, -2, ++n);
-					}
-				} while (FindNextFileW(h, &ffd));
-					FindClose(h);
+				if ((ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) && IsReparseTagNameSurrogate(ffd.dwReserved0)) {
+					wcscpy(full + dirlen, ffd.cFileName);
+					push_link_target(L, full);
 				}
-
-				return 1;
+				lua_rawseti(L, -2, ++n);
 			}
+		} while (FindNextFileW(h, &ffd));
+		FindClose(h);
+	}
 
-			int GetFileInfo(lua_State* L) {
+	return 1;
+}
+
+int GetFileInfo(lua_State* L) {
 
 	const wchar_t* path = to_pathw(L, 1);
 	WIN32_FIND_DATAW data;
@@ -227,24 +385,8 @@ int GetAllInFolder(lua_State* L) {
 	lua_pop(L, 1);
 	push_find_dataw(L, &data);
 
-	if ((data.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0) {
-
-		HANDLE fh = CreateFileW(path, 0,
-			FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
-			0, OPEN_EXISTING,
-			FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, 0);
-
-		if (fh != INVALID_HANDLE_VALUE) {
-			REPARSE_DATA rp = {0};
-			DWORD ret = 0;
-			if (DeviceIoControl(fh, FSCTL_GET_REPARSE_POINT, NULL, 0, &rp, sizeof(rp), &ret, NULL)) {
-				lua_pushstring(L, "Link");
-				lua_pushwideasutf8(L, rp.Data);
-				lua_settable(L, -3);
-			}
-			CloseHandle(fh);
-		}
-	}
+	if ((data.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) && IsReparseTagNameSurrogate(data.dwReserved0))
+		push_link_target(L, path);
 
 	return 1;
 }
@@ -524,18 +666,48 @@ int GetAllInFolder(lua_State* L) {
 			char full[MAX_PATH_LENGTH];
 			snprintf(full, sizeof(full), "%s/%s", dirpath, e->d_name);
 			struct stat st;
+			bool statok = stat(full, &st) == 0;
 
-			lua_createtable(L, 0, 7);
+			struct stat lst;
+			bool islink = e->d_type == DT_LNK ||
+				(e->d_type == DT_UNKNOWN && lstat(full, &lst) == 0 && S_ISLNK(lst.st_mode));
+
+			lua_createtable(L, 0, 10);
 
 			lua_pushstring(L, "FileName");
 			lua_pushstring(L, e->d_name);
 			lua_settable(L, -3);
 
+			// A link to a directory counts as a folder, as a junction does on Windows.
 			lua_pushstring(L, "isFolder");
-			lua_pushboolean(L, e->d_type == DT_DIR);
+			if (e->d_type == DT_DIR || e->d_type == DT_REG)
+				lua_pushboolean(L, e->d_type == DT_DIR);
+			else
+				lua_pushboolean(L, statok && S_ISDIR(st.st_mode));
 			lua_settable(L, -3);
 
-			if (stat(full, &st) == 0) {
+			lua_pushstring(L, "isLink");
+			lua_pushboolean(L, islink);
+			lua_settable(L, -3);
+
+			lua_pushstring(L, "isPlaceholder");
+			lua_pushboolean(L, false);
+			lua_settable(L, -3);
+
+			if (islink) {
+				char link[MAX_PATH_LENGTH];
+				ssize_t lr = readlink(full, link, sizeof(link) - 1);
+				lua_pushstring(L, "LinkType");
+				lua_pushstring(L, "symlink");
+				lua_settable(L, -3);
+				if (lr > 0) {
+					lua_pushstring(L, "Link");
+					lua_pushlstring(L, link, (size_t)lr);
+					lua_settable(L, -3);
+				}
+			}
+
+			if (statok) {
 				lua_pushstring(L, "Size");
 				lua_pushinteger(L, (lua_Integer)st.st_size);
 				lua_settable(L, -3);
@@ -574,7 +746,7 @@ int GetAllInFolder(lua_State* L) {
 	}
 
 	lua_pop(L, 1);
-	lua_createtable(L, 0, 7);
+	lua_createtable(L, 0, 10);
 
 	const char* fname = strrchr(path, '/');
 	lua_pushstring(L, "FileName");
@@ -602,7 +774,21 @@ int GetAllInFolder(lua_State* L) {
 	lua_settable(L, -3);
 
 	struct stat lst;
-	if (lstat(path, &lst) == 0 && S_ISLNK(lst.st_mode)) {
+	bool islink = lstat(path, &lst) == 0 && S_ISLNK(lst.st_mode);
+
+	lua_pushstring(L, "isLink");
+	lua_pushboolean(L, islink);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "isPlaceholder");
+	lua_pushboolean(L, false);
+	lua_settable(L, -3);
+
+	if (islink) {
+		lua_pushstring(L, "LinkType");
+		lua_pushstring(L, "symlink");
+		lua_settable(L, -3);
+
 		char link[MAX_PATH_LENGTH];
 		ssize_t lr = readlink(path, link, sizeof(link) - 1);
 		if (lr > 0) {
