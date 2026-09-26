@@ -112,6 +112,18 @@ static void senders_remove_req(LuaHttpServer* s, lua_State* L, struct evhttp_req
 	}
 }
 
+/* Call the SetOnDisconnect handler. Stack on entry: [handler, request]. These
+   callbacks run inside event_base_loop on the Accept coroutine's stack, so an
+   error message left behind would sit at index 1, where accept_cont reads its
+   stop flag on the next resume and tears the server down. Report and drop it. */
+static void call_disconnect_handler(lua_State* L) {
+	if (lua_pcall_nohook(L, 1, 0, 0) != LUA_OK) {
+		const char* err = lua_tostring(L, -1);
+		fprintf(stderr, "HttpServer: SetOnDisconnect handler failed: %s\n", err ? err : "(error object is not a string)");
+		lua_pop(L, 1);
+	}
+}
+
 /* Full teardown for one request on close / error. */
 static void conn_close_cleanup(LuaHttpServer* s, lua_State* L,
 	struct evhttp_request* req, const char* errmsg) {
@@ -148,7 +160,7 @@ static void conn_close_cleanup(LuaHttpServer* s, lua_State* L,
 			lua_rawgeti(L, LUA_REGISTRYINDEX, s->disconnect_ref);
 			lua_pushlightuserdata(L, (void*)req);
 			lua_rawget(L, LUA_REGISTRYINDEX);
-			lua_pcall_nohook(L, 1, 0, 0);
+			call_disconnect_handler(L);
 		}
 		else if (r->is_error) {
 			/* Enqueue a final event so GetError() surfaces it */
@@ -217,7 +229,7 @@ static void conn_close_cb(struct evhttp_connection* con, void* arg) {
 			lua_rawgeti(L, LUA_REGISTRYINDEX, s->disconnect_ref);
 			lua_pushlightuserdata(L, (void*)con);
 			lua_rawget(L, LUA_REGISTRYINDEX); /* push LuaHttpRequest userdata as arg */
-			lua_pcall_nohook(L, 1, 0, 0);
+			call_disconnect_handler(L);
 		}
 		/* Clean up Registry[con*] and null the back-pointer. */
 		r->con = NULL;
@@ -252,7 +264,7 @@ static void response_complete_cb(struct evhttp_request* req, void* arg) {
 		lua_pushlightuserdata(L, (void*)con);
 		lua_rawget(L, LUA_REGISTRYINDEX); /* LuaHttpRequest userdata */
 		if (lua_isuserdata(L, -1)) {
-			lua_pcall_nohook(L, 1, 0, 0);
+			call_disconnect_handler(L);
 		}
 		else {
 			lua_pop(L, 2);
