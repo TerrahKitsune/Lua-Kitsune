@@ -200,6 +200,22 @@ Run `claude mcp list` (or `/mcp` inside a Claude Code session) to check that the
 - **Put shared state in `context`** (DB handles, config, caches). It is the second argument to `MCP.Create` and is passed to every call.
 - **One server per process.** `MCP.Create` is a singleton; later calls return the existing instance.
 - **Debug with a log file**, not stdout. Something like the `log` tool in the example script works, or write to stderr with `io.stderr:write`.
+- **Ask the user with an elicitation.** A tool can pause and show the user a form in the client (MCP elicitation), then continue with the answers. Define the form once, with a callback per answer and a default for when the user skips it or the client can't show forms:
+  ```lua
+  local deploy = mcp:CreateElicitation("Where should this be deployed?", function(context, request, reason)
+      return "skipped (" .. reason .. ")"            -- "unsupported", "decline", "cancel" or "timeout"
+  end)
+  local env = deploy:AddQuestion("env", "string", "Environment", true)
+  env:AddAnswer("staging",    "Staging",    function(context, request, value, answers) return deployTo(value) end)
+  env:AddAnswer("production", "Production", function(context, request, value, answers) return deployTo(value) end)
+
+  mcp:AddTool("deploy", "Deploys the current build", {}, function(context, request)
+      local ok, results = assert(deploy:Elicit(context, request))
+      if type(results) ~= "table" then return results end  -- the default ran
+      return results.env.staging or results.env.production
+  end)
+  ```
+  `Elicit` returns `true, results` (a table keyed by question name, or the default callback's return), or `false, errmsg` when a callback fails or the client disconnects. `request.CanElicit` tells a tool whether the caller can show forms at all.
 - A catch-all `run_lua` tool (see the example script) lets the model run arbitrary Lua against the engine. That is very useful, but it means the model can do anything the process can, so only register it for trusted local use.
 
 Full reference: the [MCP section](kitsuneengine-lua-functions.md#mcp) of the API docs.

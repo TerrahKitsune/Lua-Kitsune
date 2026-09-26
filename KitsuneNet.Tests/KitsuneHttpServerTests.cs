@@ -626,6 +626,22 @@ public sealed class KitsuneHttpServerTests
         var response = await client.GetAsync("http://127.0.0.1:19835/");
         await StopLuaServer(engine, pump);
         ((int)response.StatusCode).ShouldBe(404);
+        response.ReasonPhrase.ShouldBe("Not Found");
+    }
+
+    [Theory]
+    [InlineData(19842, "resp:Send()", 200, "OK")]
+    [InlineData(19843, "resp:SetCode(500); resp:Send('boom')", 500, "Internal Server Error")]
+    [InlineData(19844, "resp:SetCode(201); resp:Send(Stream.New())", 201, "Created")]
+    [InlineData(19845, "req:GetResponse():Reject(403, 'no')", 403, "Forbidden")]
+    public async Task CSharpClient_ReasonPhrase_MatchesStatusCode(int port, string handler, int code, string reason)
+    {
+        var (engine, pump) = await StartLuaServer($"127.0.0.1:{port}", handler);
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
+        var response = await client.GetAsync($"http://127.0.0.1:{port}/");
+        await StopLuaServer(engine, pump);
+        ((int)response.StatusCode).ShouldBe(code);
+        response.ReasonPhrase.ShouldBe(reason);
     }
 
     [Fact]

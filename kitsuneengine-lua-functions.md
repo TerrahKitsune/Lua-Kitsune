@@ -1629,10 +1629,10 @@ WebSocket  resp:UpgradeToWebSocket()   -- nil, errmsg on failure
 
 | Method | Description |
 |--------|-------------|
-| `SetCode(code)` | Override the HTTP status code. Default: `200` |
+| `SetCode(code)` | Override the HTTP status code. Default: `200`. The status line gets the standard reason phrase for the code (`404 Not Found`, `500 Internal Server Error`, …); codes without a standard phrase get their class name (e.g. `499 Client Error`) |
 | `SetHeader(name, value)` | Add a response header. May be called multiple times |
 | `Send(opt body)` | Send the response. `body` may be omitted (no body), a `string`, or a readable `Stream`; other types raise an error. Returns `false` when the request is not yet finished |
-| `Reject(code, message)` | Send a minimal error response with the given status code and plain-text body, with `Connection: close` (reason phrase "Error"). Returns nothing |
+| `Reject(code, message)` | Send a minimal error response with the given status code and plain-text body, with `Connection: close`, and the standard reason phrase for the code. Returns nothing |
 | `Close()` | Send an empty 200 response with `Connection: close` |
 | `UpgradeToWebSocket()` | Upgrade the HTTP connection to a WebSocket session. Sends HTTP 101 immediately and returns a `WebSocket` userdata, or `nil, errmsg`. The `HttpRequest` and `HttpResponse` objects must not be used after this call. See the [WebSocket](#websocket) section for the full API |
 
@@ -5564,8 +5564,10 @@ Registers a tool. Normally called before `mcp:Start()`; registering later also w
   | `request.Arguments` | The decoded arguments as a named table, matching the declared parameter schema (e.g. `request.Arguments.text`). When the client sends no `arguments`, this is the `Json.EmptyObject` sentinel, **not a table**, so indexing it raises; use `request.Parameters[i]`, or check `type(request.Arguments) == "table"` first |
   | `request.Parameters` | The same values as a 1-based positional array, in declared parameter order (e.g. `request.Parameters[1]`) |
   | `request.Name` | The tool name being called (useful if one function is registered for several tools) |
-  | `request.RequestId` | The JSON-RPC request id, for correlation/logging |
-  | `request.Client` | `{ Name=, Version= }` from the MCP `initialize` handshake |
+  | `request.RequestId` | The JSON-RPC request id of this call, for correlation/logging |
+  | `request.McpSessionId` | Identifies the MCP connection the call came from, as a string: `"0"` over stdio (one connection per process). It identifies a connection or conversation, not a user. Use it to key per-caller data on the shared `context`, e.g. `context.Cache[request.McpSessionId]` |
+  | `request.CanElicit` | `true` if this caller declared the `elicitation` capability, i.e. it can show [elicitation](#elicitation) forms |
+  | `request.Client` | `{ Name=, Version=, Capabilities= }` from the MCP `initialize` handshake. `Capabilities` is the client's decoded `capabilities` object (absent if the client sent none) |
 
 The callback's return value becomes the tool's text result: **return a string or number**. Other values (`nil`, booleans, tables) yield an empty text result, so encode tables yourself (`Json.New():Encode(t)`). The callback is yield-safe (built on the same `lua_pcallk`/continuation mechanism as `ToolSuite:Call`) — it may call `Sleep()`, `HttpClient:Call()`, or any other yieldable engine function without stalling the server. A Lua error raised inside the callback is caught and reported back to the client as a normal MCP tool-execution error (`isError = true`), not a protocol-level failure. Calling a tool name that isn't registered returns a JSON-RPC error (`-32602 "Unknown tool"`) instead.
 
@@ -5623,6 +5625,157 @@ nil  mcp:Stop()
 ```
 
 Signals the polling task to stop; it exits cleanly on its next poll iteration (typically within a few milliseconds).
+
+### Elicitation
+
+Elicitation lets a tool pause and ask the **user** (not the model) to fill in a form in the client's UI, then continue with the answers ([MCP elicitation](https://modelcontextprotocol.io/specification/2025-06-18/client/elicitation)). A form is defined as an `Elicitation` object with questions, and each question can have answers to pick from. Callbacks attached to questions and answers run when the user submits, and their return values are collected into a results table.
+
+```lua
+local function deleteLogs(context, request, value, answers)
+    return 5                                  -- e.g. number of files deleted; answers.days is available
+end
+
+local function listLogs(context, request, value, answers)
+    return 5                                  -- e.g. number of files that would be deleted
+end
+
+local function default(context, request, reason)
+    -- reason: "unsupported" | "decline" | "cancel" | "timeout"
+    if request.CanElicit then return 0 end    -- user skipped
+    return -1                                 -- client can't show forms
+end
+
+local deleteElicitation = mcp:CreateElicitation("How old should logs be before they're deleted?", default)
+
+local days = deleteElicitation:AddQuestion("days", "integer", "Older than (days)", true)
+days:SetDefault(30)
+days:SetRange(1, 365)
+
+local mode = deleteElicitation:AddQuestion("mode", "string", "What should happen?", true)
+mode:AddAnswer("delete",  "Delete them",             deleteLogs)
+mode:AddAnswer("dry_run", "Only list, don't delete", listLogs)
+
+mcp:AddTool("delete_old_logs", "Deletes log files older than N days", {}, function(context, request)
+    if not request.CanElicit then
+        return "This tool requires elicitation"
+    end
+
+    local ok, results = deleteElicitation:Elicit(context, request)
+    if not ok then error(results) end         -- or: assert(deleteElicitation:Elicit(context, request))
+
+    if type(results) ~= "table" then          -- the default callback ran
+        return "Nothing done"
+    end
+    -- results.days == 30
+    -- results.mode.delete == 5               (only the picked answer is present)
+end)
+```
+
+#### mcp:CreateElicitation
+
+```lua
+Elicitation  mcp:CreateElicitation(message, defaultCallback, opt timeout)
+```
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `message` | string | The text shown to the user above the form |
+| `defaultCallback` | function | `function(context, request, reason)`. Runs whenever the form doesn't produce answers (see [Outcomes](#elicitation-outcomes)); its return value becomes `results`. `reason` is `"unsupported"`, `"decline"`, `"cancel"` or `"timeout"` |
+| `timeout` | integer (opt) | Milliseconds to wait for the user; after that the default callback runs with reason `"timeout"`. Omitted or `nil` waits as long as the dialog is open. For a different timeout, create a separate elicitation |
+
+An elicitation can be defined once at load time and shared by every tool call, or built inside a tool call when its message or questions depend on per-call data (e.g. `"You have " .. count .. " logs"`).
+
+**Everything is write-once and append-only.** Nothing can be changed or removed after it is set:
+
+- `AddQuestion` with a name that already exists raises an error.
+- `AddAnswer` with a value that the question already has raises an error.
+- Calling the same setter twice on a question raises an error.
+- New questions and answers can be added at any time. A form that is already showing is not affected, because each `Elicit` builds its request from the definition at that moment.
+
+#### elicitation:AddQuestion
+
+```lua
+Question  elicitation:AddQuestion(name, type, title, required)
+```
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `name` | string | Key of this question in `results` (and the property name in the form's schema) |
+| `type` | string | `"string"`, `"integer"`, `"number"` or `"boolean"`. Anything else raises an error |
+| `title` | string | Label shown next to the field |
+| `required` | boolean | Whether the user must answer it before submitting. Must be a boolean |
+
+#### question:AddAnswer
+
+```lua
+nil  question:AddAnswer(value, label, opt callback)
+```
+
+Turns the question into a closed list: the user picks from the answers and can't type anything else. A string question without answers is free text. Answers are only allowed on `"string"` questions, because the protocol only allows lists of strings. There is no "pick one or type your own" field; the protocol can't express one.
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `value` | string | What comes back when this answer is picked; also its key in `results[name]` |
+| `label` | string | What the user sees |
+| `callback` | function (opt) | `function(context, request, value, answers)`. Runs when this answer is picked |
+
+#### Question setters
+
+Each setter can be called **once** per question. Calling one on a question it doesn't fit raises an error.
+
+| Setter | Valid on | Description |
+|--------|----------|-------------|
+| `SetDescription(text)` | all | Help text shown with the field |
+| `SetDefault(value)` | all | Pre-filled value. Must match the question type; for a question with answers it must be one of them, and for multi-select it is a list of answer values |
+| `SetRange(min, max)` | `integer`, `number` | Allowed range; either bound may be `nil`. Integer bounds must be integers |
+| `SetLength(min, max)` | `string` without answers | Allowed text length in characters; either bound may be `nil` |
+| `SetFormat(format)` | `string` without answers | `"email"`, `"uri"`, `"date"` or `"date-time"` (the client enforces it; the server doesn't re-check formats) |
+| `SetMultiple(opt min, opt max)` | `string` with answers | Makes it multi-select, optionally with a min/max number of picks. Call it before `SetDefault`. Needs a client on protocol `2025-11-25` or later; older clients get the default callback with reason `"unsupported"` |
+| `SetCallback(fn)` | all | `function(context, request, value, answers)`. On a question without answers, runs with the answered value. On a question with answers, runs for picked answers that have no callback of their own |
+
+#### elicitation:Elicit
+
+```lua
+ok, results  elicitation:Elicit(context, request)
+```
+
+Sends the form to the caller that `request` belongs to and waits for the user. Pass the `context` and `request` of the tool call it belongs to; every callback receives them. It works like the database helpers: the calling code waits, but the coroutine yields cooperatively, so the rest of the engine keeps running. It also answers `ping` while waiting. Other requests from the same client (another `tools/call`, `tools/list`, …) are queued until the current tool call finishes, because tool calls are handled one at a time.
+
+Mistakes in the definition that only show up once everything is added, such as a default that isn't one of the answers or a multi-select question with no answers, raise an error when `Elicit` is called.
+
+`Elicit` can only be called from inside a tool callback, while that tool call is running. It raises an error if called anywhere else (load-time code, another task, or code running after the tool returned), or from a C function inside the tool that can't yield (e.g. a `table.sort` comparator). The error is raised before anything is sent to the client.
+
+<a id="elicitation-outcomes"></a>**Outcomes:**
+
+| What happened | `ok` | `results` |
+|---|---|---|
+| User submitted the form | `true` | Results table (below) |
+| Caller can't show forms (`request.CanElicit` is `false`) | `true` | Return value of the default callback, reason `"unsupported"` |
+| User clicked decline | `true` | Return value of the default callback, reason `"decline"` |
+| User closed the dialog | `true` | Return value of the default callback, reason `"cancel"` |
+| The timeout passed | `true` | Return value of the default callback, reason `"timeout"` (the client is sent `notifications/cancelled`) |
+| A callback (answer, question or default) raised an error | `false` | The error message |
+| Client disconnected while waiting | `false` | `"client disconnected"` |
+| Server stopped while waiting | `false` | `"MCP server stopped"` |
+| Client answered with a JSON-RPC error | `false` | `"elicitation failed: <message>"` |
+| The client's answers don't match the form (missing required answer, unknown question, wrong type, not one of the answers, out of range) | `false` | `"invalid response from client: <detail>"` |
+
+The default callback only covers the user skipping, or the caller not supporting forms; transport problems are errors. A callback that returns `nil` counts as having run successfully and is stored as `true`.
+
+**Results table**: one entry per answered question, keyed by question name:
+
+| Question kind | `results[name]` |
+|---|---|
+| Has answers (single or multi-select) | A table: picked answer value → its callback's return (the answer's own callback, else the question's `SetCallback`, else `true`). Unpicked answers are absent |
+| No answers (text, number, yes/no) | The question's `SetCallback` return if it has one, otherwise the value itself |
+
+A question the user left empty, or that the client sent as `null` (only possible when it isn't required), is absent. The answers are checked against the definition before any callback runs. Callbacks then run in question order, and within a multi-select question in answer order. They may yield (`Sleep`, database calls, …). If one raises an error, `Elicit` returns `false, message`, and callbacks that already ran keep their side effects. Every callback's `answers` argument is the plain submitted form (question name → value, or a list of values for multi-select), so a callback can read the other questions' answers.
+
+**Lifetimes:** an `Elicitation` keeps its `MCP` server alive, and a `Question` keeps its `Elicitation` alive. Each releases its parent when it is garbage-collected.
+
+### Protocol version
+
+During `initialize`, the server echoes the client's requested protocol version if it supports it (`2025-11-25`, `2025-06-18`, `2025-03-26`, `2024-11-05`). Otherwise it offers `2025-11-25`, the newest it supports. Elicitation was added in `2025-06-18`. Clients on `2025-11-25` or later get titled answer lists (`oneOf` with `const`/`title`) and multi-select; older clients get `enum` plus `enumNames`.
 
 ### Complete example
 
