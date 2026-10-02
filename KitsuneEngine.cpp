@@ -1918,7 +1918,7 @@ extern "C" {
 
 	// Executes a KitsuneVariable as a coroutine:
 	//   LUA_TFUNCTION — pushes the function from the Lua registry and calls it with argc/argv as direct parameters.
-	//   LUA_TSTRING   — loads the string as a Lua chunk and runs it; argv is exposed as ARGS[1..argc].
+	//   LUA_TSTRING   — loads the string as a Lua chunk and runs it with argv as its varargs (...).
 	//   Anything else — the slot is created in done/faulted state with a descriptive error.
 	static int StartCoroutineVariable(KitsuneState* state, const KitsuneVariable* var,
 		int argc, const KitsuneVariable* argv, bool fireAndForget, bool apiOwned = true) {
@@ -2047,8 +2047,8 @@ extern "C" {
 	// id assigned, runningCount incremented, T set up for the first lua_resume.
 	// On each LUA_YIELD: reads and zeros slot->sleepUntil, releases access briefly
 	// (so the scheduler and variable bridge can run), then re-acquires and resumes.
-	// Refreshes ARGS and ID globals after each re-acquire in case async coroutines
-	// overwrote them during the yield window.
+	// Restores currentCoroutineId after each re-acquire, since async coroutines run
+	// and overwrite it during the yield window.
 	// After completion: zeroes the slot for reuse, calls doneCV.notify_all.
 	// Returns a heap-allocated KitsuneVariable*; caller must call ReleaseLuaAccess
 	// and then KitsuneVariableFree the result when done.

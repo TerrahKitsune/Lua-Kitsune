@@ -12,13 +12,13 @@ kitsune.exe [script.lua] [arg1 arg2 ...]
 
 1. Initialises KitsuneEngine and registers all built-in functions.
 2. Executes the supplied Lua script file (defaults to `main.lua` in the working directory) as a coroutine.
-3. Waits for the coroutine to finish or an OS signal (`CTRL+C`, `SIGINT`, `SIGTERM`). While waiting, any functions enqueued with `Schedule(fn)` are polled each millisecond tick.
-4. If the script called `Imgui.Start(...)` before returning, the render loop is entered and blocks until the window is closed.
+3. Waits for the coroutine to finish or an OS signal (`CTRL+C`, `SIGINT`, `SIGTERM`).
+4. If the script called `Imgui.Start(...)` before returning, the render loop is entered and blocks until the window is closed or `renderFn` returns `false`.
 5. Prints the script's return value to stdout (string, number, or boolean) then exits.
 
 On Windows the console input and output code pages are set to UTF-8 (CP 65001) at startup and restored on exit, so `print`, `io.write` and `io.read` exchange UTF-8 text. The executable's manifest also makes UTF-8 the process code page (Windows 10 1903 or later), so command-line arguments (`arg`) and the script path arrive as UTF-8. The engine itself handles UTF-8 file names in every host, independent of the manifest: `FileSystem.*` and the standard Lua `io`/`os`/`loadfile`/`require` functions (see the UTF-8 notes at the top of `kitsuneengine-lua-functions.md`, under "Userdata Return Values (read first)").
 
-Exit code `0` = success; `1` = the script raised an uncaught error (message printed to stderr).
+Exit code `0` = success; `1` = the script raised an uncaught error, or the ImGui session ended because of an unhandled render error or a window/OpenGL setup failure (message printed to stderr in every case).
 
 ---
 
@@ -26,18 +26,24 @@ Exit code `0` = success; `1` = the script raised an uncaught error (message prin
 
 | Position | Value |
 |---|---|
-| `argv[1]` | Path to the Lua script. Defaults to `main.lua`. Accessible inside Lua as `ARGS[1]` |
-| `argv[2..n]` | Extra arguments forwarded to the script as `ARGS[2]`, `ARGS[3]`, … |
+| `argv[1]` | Path to the Lua script. Defaults to `main.lua`. Accessible inside Lua as `arg[0]` |
+| `argv[2..n]` | Extra arguments forwarded to the script as `arg[1]`, `arg[2]`, … |
 
 ```
 kitsune.exe server.lua 8080 --verbose
 ```
 
-Inside the script:
+Inside the script, arguments are available two ways. The standard Lua `arg` table:
 ```lua
-print(ARGS[1])  -- "server.lua"
-print(ARGS[2])  -- "8080"
-print(ARGS[3])  -- "--verbose"
+print(arg[-1])  -- path of kitsune.exe
+print(arg[0])   -- "server.lua"
+print(arg[1])   -- "8080"
+print(arg[2])   -- "--verbose"
+```
+
+Or as the chunk's varargs, script path first:
+```lua
+local path, port, flag = ...
 ```
 
 ---
@@ -169,74 +175,9 @@ end
 
 ---
 
-### `Schedule`
-
-Enqueues a Lua function to run as an independent coroutine. The coroutine is submitted and polled in the background — in headless mode once per millisecond tick, in GUI mode once per rendered frame — without blocking the caller.
-
-```lua
-Schedule(fn, arg1, arg2, ...)
-```
-
-| Parameter | Type | Description |
-|---|---|---|
-| `fn` | `function` | The coroutine to execute |
-| `arg1..n` | any | Optional arguments forwarded to `fn` |
-
-Errors raised inside `fn` are forwarded to the handler set by `Scheduler.SetOnError`, or printed to stderr if no handler is set.
-
-`Schedule` works identically in both headless and GUI mode. If `Imgui.Start` is called, the same scheduler continues running inside the render loop so any in-flight coroutines from the startup script keep executing.
-
-```lua
--- Fire-and-forget background work
-Schedule(function()
-    local result = Http.Get("https://example.com")
-    print(result)
-end)
-
--- With arguments
-Schedule(function(url, timeout)
-    local result = Http.Get(url, timeout)
-    print(result)
-end, "https://example.com", 5000)
-```
-
----
-
-### `Scheduler.SetOnError`
-
-Sets a global error handler for all coroutines launched via `Schedule`. Replaces any previously set handler. Pass `nil` (or omit the argument) to clear the handler and fall back to stderr output.
-
-```lua
-Scheduler.SetOnError(fn)
-```
-
-| Parameter | Type | Description |
-|---|---|---|
-| `fn` | `function` or `nil` | Called with the error value when a scheduled coroutine faults. Pass `nil` to clear |
-
-If `Imgui.Start` is called with an `onError` argument, that handler overwrites the one set here for the duration of the render loop.
-
-```lua
-Scheduler.SetOnError(function(err)
-    print("Scheduled task failed:", err)
-end)
-
-Schedule(function()
-    error("something went wrong")
-end)
-```
-
----
-
 ### `Imgui.Start`
 
 See [imgui-renderer-api.md](imgui-renderer-api.md) — Global API section.
-
-### `Imgui.Schedule`
-
-Alias for `Schedule` that is only valid after `Imgui.Start` has been called. Enqueues a coroutine into the same shared scheduler. Prefer `Schedule` for code that must work in both headless and GUI modes.
-
-See [`Schedule`](#schedule) above.
 
 ### SDL Audio
 

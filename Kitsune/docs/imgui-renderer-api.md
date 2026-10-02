@@ -8,7 +8,7 @@
 
 ### `Imgui.Start(title, width, height, renderFn, [context], [onError])`
 
-Opens the ImGui window and begins the render loop. Blocks until the window is closed or `renderFn` returns `false`.
+Requests the ImGui window and returns immediately. The render loop starts once the startup script returns, and runs until the window is closed or `renderFn` returns `false`.
 
 - `title` — window title string
 - `width`, `height` — initial window size in pixels
@@ -18,9 +18,9 @@ Opens the ImGui window and begins the render loop. Blocks until the window is cl
 
 Can only be called once per script run. Removes itself after the first call.
 
-### `Imgui.Schedule(fn, [args...])`
+**Render errors:** if `renderFn` raises an error and there is no `onError`, or `onError` returns `false`/nothing or raises an error itself, the message is printed to stderr, the window closes and `kitsune.exe` exits with code `1`. ImGui blocks the error left open (e.g. a `Begin` with no matching `End`) are recovered at the end of the frame, so an `onError` that returns `true` keeps the window running normally.
 
-Queues `fn` to start as a fire-and-forget coroutine at the end of the current frame. Safe to call from inside `renderFn`. Do not use the `renderer` inside a scheduled function — it is only valid during the frame callback.
+**Arguments:** each `renderer` method binds one fixed ImGui overload with the parameters listed below. Extra arguments are silently ignored. For example, `renderer:Selectable(label)` takes only the label, so a `selected` state, flags or size passed after it have no effect and the item is never shown as selected.
 
 ## SDL API
 

@@ -193,15 +193,15 @@ static int ImguiStart(int argc, const KitsuneVariable* argv,
 // RunImguiSession
 // ---------------------------------------------------------------------------
 
-void RunImguiSession() {
+bool RunImguiSession() {
 	ImguiWindowContext* ctx = g_imguiCtx;
 	if (!ctx)
-		return;
+		return true;
 
 	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER) != 0) {
 		fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
 		free_ctx(ctx);
-		return;
+		return false;
 	}
 
 	ResourceCacheInit();
@@ -224,7 +224,7 @@ void RunImguiSession() {
 		fprintf(stderr, "SDL_CreateWindow failed: %s\n", SDL_GetError());
 		SDL_Quit();
 		free_ctx(ctx);
-		return;
+		return false;
 	}
 
 	ctx->glContext = SDL_GL_CreateContext(ctx->window);
@@ -234,7 +234,7 @@ void RunImguiSession() {
 		ctx->window = nullptr;
 		SDL_Quit();
 		free_ctx(ctx);
-		return;
+		return false;
 	}
 	SDL_GL_MakeCurrent(ctx->window, ctx->glContext);
 	SDL_GL_SetSwapInterval(1);
@@ -278,7 +278,9 @@ void RunImguiSession() {
 	rendererVar.userdata = &rendererUD;
 	KitsuneVariable* anchoredRenderer = KitsuneAnchorVariable(&rendererVar);
 
-	bool running = (anchoredRenderer != nullptr);
+	const bool rendererCreated = (anchoredRenderer != nullptr);
+	bool running = rendererCreated;
+	bool stoppedByError = false;
 	while (running) {
 		SDL_Event event;
 		while (SDL_PollEvent(&event)) {
@@ -327,6 +329,7 @@ void RunImguiSession() {
 					KitsuneVariableFree(result);
 					KitsuneVariableFree(keepRunning);
 					running = false;
+					stoppedByError = true;
 				}
 				else {
 					bool cont = keepRunning->type == KITSUNE_TBOOLEAN && keepRunning->boolean;
@@ -336,8 +339,10 @@ void RunImguiSession() {
 					}
 					KitsuneVariableFree(result);
 					KitsuneVariableFree(keepRunning);
-					if (!cont)
+					if (!cont) {
 						running = false;
+						stoppedByError = true;
+					}
 				}
 			}
 			else {
@@ -345,6 +350,7 @@ void RunImguiSession() {
 					(int)result->length, (char*)result->data);
 				KitsuneVariableFree(result);
 				running = false;
+				stoppedByError = true;
 			}
 		}
 		else if (result && result->type == KITSUNE_TBOOLEAN && !result->boolean) {
@@ -412,6 +418,8 @@ void RunImguiSession() {
 		SDL_Quit();
 		free_ctx(ctx);
 	}
+
+	return rendererCreated && !stoppedByError;
 }
 
 // ---------------------------------------------------------------------------

@@ -239,6 +239,8 @@ string or nil Hardware.CpuName()
 table or nil  Hardware.Battery()
 table or nil  Hardware.GpuMemory()   -- Windows: table (may be empty); nil on Linux
 table or nil  Hardware.GpuLoad()     -- Windows: table (may be empty); nil on Linux
+table or nil  Hardware.NvidiaSmi()   -- nil when no NVIDIA driver is installed
+true or nil, err Hardware.NvidiaSetPowerLimit(index, watts)
 table         Hardware.DiskIO()
 table         Hardware.NetworkIO()
 ```
@@ -428,6 +430,87 @@ if load then
             end
         end
     end
+end
+```
+
+### Hardware.NvidiaSmi
+
+```lua
+table or nil Hardware.NvidiaSmi()
+```
+
+The read-only equivalent of `nvidia-smi -q` plus its process table, for **Windows and Linux**. It reads NVML (`nvml.dll` / `libnvidia-ml.so.1`), the library nvidia-smi itself uses, which ships with the NVIDIA driver, so no CUDA toolkit is needed. Returns `nil` when no NVIDIA driver is installed. NVML is initialised on the first call and stays loaded; a call takes roughly 100 ms with two GPUs, mostly spent on the process list.
+
+Top-level fields: `DriverVersion`, `NvmlVersion`, `CudaVersion` (strings) and `Gpus`, an array with one table per GPU in nvidia-smi index order.
+
+**Any field the GPU or driver doesn't support is omitted (`nil`)**. Examples: `FanPercent` on laptop GPUs, `PersistenceMode` on Windows, `EccEnabled` on GeForce cards, `UsedMemoryMB` per process under WDDM.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `Index` | integer | nvidia-smi GPU index (0-based) |
+| `Name`, `Uuid`, `Serial`, `VbiosVersion`, `PciBusId` | string | Identity |
+| `ComputeCapability` | string | e.g. `"8.6"` |
+| `TemperatureC` | integer | Core temperature |
+| `TemperatureSlowdownC`, `TemperatureShutdownC`, `TemperatureMaxOperatingC` | integer | Thermal thresholds |
+| `FanPercent` | integer | Fan speed (first fan) |
+| `PowerDrawW` | number | Current board power draw |
+| `PowerLimitW` | number | Enforced power limit: the cap the GPU actually runs at (nvidia-smi `enforced.power.limit`) |
+| `PowerManagementLimitW` | number | Software-settable power limit (nvidia-smi `power.limit`). `nil` where it can't be set, e.g. most laptop GPUs |
+| `PowerDefaultLimitW`, `PowerMinLimitW`, `PowerMaxLimitW` | number | Power limit range |
+| `EnergyJ` | number | Energy used since the driver was loaded |
+| `PerformanceState` | string | `"P0"` (max) … `"P12"` (min) |
+| `MemoryTotalMB`, `MemoryUsedMB`, `MemoryFreeMB`, `MemoryReservedMB` | integer | Framebuffer memory |
+| `Bar1TotalMB`, `Bar1UsedMB` | integer | BAR1 aperture |
+| `GpuUtilPercent`, `MemoryUtilPercent` | integer | Utilisation over the last sample period |
+| `EncoderUtilPercent`, `DecoderUtilPercent` | integer | NVENC / NVDEC utilisation |
+| `Clocks`, `MaxClocks` | table | `{ Graphics, SM, Memory, Video }` in MHz |
+| `PcieGen`, `PcieGenMax`, `PcieWidth`, `PcieWidthMax` | integer | PCIe link (current and max) |
+| `PcieTxKBps`, `PcieRxKBps` | integer | PCIe throughput |
+| `ThrottleReasons` | array | Active clock event reasons, e.g. `{ "GpuIdle" }`, `{ "SwPowerCap", "SwThermalSlowdown" }`; empty when clocks are unrestricted. Bits this engine doesn't name are reported as hex strings (`"0x200"`) |
+| `ComputeMode` | string | `Default`, `Exclusive_Process`, `Prohibited` |
+| `DriverModel` | string | `WDDM`, `TCC` or `MCDM` (Windows) |
+| `PersistenceMode`, `DisplayActive`, `EccEnabled` | boolean | Modes |
+| `Processes` | array | `{ Pid, Name, Type, UsedMemoryMB }` per process. `Type` is `"C"` (compute), `"G"` (graphics) or `"C+G"`; `Name` is the full executable path when it can be read |
+
+```lua
+local smi = Hardware.NvidiaSmi()
+if smi then
+    print("Driver " .. smi.DriverVersion .. ", CUDA " .. smi.CudaVersion)
+    for _, g in ipairs(smi.Gpus) do
+        print(string.format("[%d] %s  %d°C  %.0f/%.0f W  %d/%d MB  %d%%  %s",
+            g.Index, g.Name, g.TemperatureC or -1,
+            g.PowerDrawW or 0, g.PowerLimitW or 0,
+            g.MemoryUsedMB or 0, g.MemoryTotalMB or 0,
+            g.GpuUtilPercent or 0, g.PerformanceState or "?"))
+        for _, p in ipairs(g.Processes) do
+            print("    ", p.Pid, p.Type, p.Name or "?")
+        end
+    end
+end
+```
+
+### Hardware.NvidiaSetPowerLimit
+
+```lua
+true Hardware.NvidiaSetPowerLimit(index, watts)
+-- or on failure:
+nil, err Hardware.NvidiaSetPowerLimit(index, watts)
+```
+
+Sets the software power limit of GPU `index` (the `Index` from `NvidiaSmi`), the same as `nvidia-smi -i <index> -pl <watts>`. Uses NVML, so it works on Windows and Linux.
+
+- Needs **administrator** (Windows) or **root** (Linux) rights; otherwise it fails with `"Insufficient Permissions"`.
+- `watts` must lie between `PowerMinLimitW` and `PowerMaxLimitW`; otherwise it fails with `"Invalid Argument"`.
+- GPUs whose limit can't be set by software fail with `"Not Supported"` when elevated; without elevation NVML reports `"Insufficient Permissions"` first. You can recognise them in advance: their `PowerManagementLimitW` is `nil`. This covers most laptop GPUs, where the notebook firmware owns the power budget.
+- `err` is NVML's own error message, or `"NVML not available"` when there is no NVIDIA driver.
+- The limit lasts until reboot or driver reload, as with nvidia-smi. To restore the default, set it to `PowerDefaultLimitW`.
+- A bad `index` type or a non-positive `watts` raises a Lua error rather than returning `nil, err`.
+
+```lua
+local g = Hardware.NvidiaSmi().Gpus[1]
+if g.PowerManagementLimitW then
+    local ok, err = Hardware.NvidiaSetPowerLimit(g.Index, 300)
+    if not ok then print("Failed: " .. err) end
 end
 ```
 

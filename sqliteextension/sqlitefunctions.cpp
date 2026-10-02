@@ -3,7 +3,7 @@
 SQLITE_EXTENSION_INIT3
 #include "kitsuneext.h"
 
-// LuaString(script, args...) — compiles and runs a Lua string; extra args available as ARGS[1..n].
+// LuaString(script, args...) — compiles and runs a Lua string; extra args arrive as the chunk's varargs (...).
 static void lua_string_func(sqlite3_context* context, int argc, sqlite3_value** argv) {
 	if (argc < 1) {
 		sqlite3_result_error(context, "LuaString requires at least one argument (the script)", -1);
@@ -22,8 +22,8 @@ static void lua_string_func(sqlite3_context* context, int argc, sqlite3_value** 
 	kitsune_result_to_sqlite(context, result);
 }
 
-// DoFile(path, args...) — loads and runs a Lua file; extra args available as ARGS[2..n]
-// (ARGS[1] is the file path, matching the standard KitsuneExecuteFile convention).
+// LuaFile(path, args...) — loads and runs a Lua file; its varargs (...) are the file path
+// followed by the extra args, matching the standard KitsuneExecuteFile convention.
 static void lua_file_func(sqlite3_context* context, int argc, sqlite3_value** argv) {
 	if (argc < 1) {
 		sqlite3_result_error(context, "DoFile requires at least one argument (the file path)", -1);

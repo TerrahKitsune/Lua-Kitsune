@@ -157,11 +157,11 @@ local prompt = Llama.CreatePrompt()
 prompt:SetSystem('You are a helpful assistant. Check the weather with get_weather if asked');
 prompt:AddUserMessage('Hello! What is the weather in stockholm?');
 
-local info = Llama.PeekModel("C:/models/qwen3-0.6b-q8_0.gguf")
+local info = Llama.PeekModel("C:/AI/models/qwen3-0.6b-q8_0.gguf")
 print(Json.New(true):Encode(info));
 GetKey();
 local ctx = Llama.CreateContext();
-assert(ctx:SetModel("C:/models/qwen3-0.6b-q8_0.gguf"));
+assert(ctx:SetModel("C:/AI/models/qwen3-0.6b-q8_0.gguf"));
 print(ctx:IsReady());
 assert(ctx:Generate(prompt, {}, tools));
 

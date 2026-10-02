@@ -310,8 +310,10 @@ int main(int argc, char* argv[]) {
 		}
 
 #ifdef KITSUNE_IMGUI
-		if (g_imguiCtx)
-			RunImguiSession();
+		if (g_imguiCtx) {
+			if (!RunImguiSession())
+				ret = 1;
+		}
 		else {
 			KitsuneVariable* result = KitsuneGetResult(id);
 			if (result) {

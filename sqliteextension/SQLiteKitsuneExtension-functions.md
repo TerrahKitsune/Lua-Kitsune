@@ -64,21 +64,20 @@ any LuaString(script, arg1, arg2, ...)
 **Parameters:**
 
 - `script`: Lua source code to execute.
-- `arg1, arg2, ...`: Additional arguments made available inside the script as the global `ARGS` table (`ARGS[1]`, `ARGS[2]`, …).
+- `arg1, arg2, ...`: Additional arguments, passed to the script as its varargs (`...`).
 
 **Notes:**
 
-- `ARGS` is set for the duration of this call and cleared afterwards.
 - Multiple return values are not supported; only the first is returned to SQLite.
 - A Lua error propagates as a SQLite error.
 
 **Example:**
 
 ```sql
-SELECT LuaString('return ARGS[1] .. ARGS[2]', 'hello', 'world');
+SELECT LuaString('local a, b = ... return a .. b', 'hello', 'world');
 -- returns "helloworld"
 
-SELECT LuaString('return string.upper(ARGS[1])', 'kitsune');
+SELECT LuaString('return string.upper((...))', 'kitsune');
 -- returns "KITSUNE"
 ```
 
@@ -97,13 +96,13 @@ any LuaFile(path, arg1, arg2, ...)
 - `path`: Absolute or relative path to the Lua file to execute.
 - `arg1, arg2, ...`: Additional arguments.
 
-**ARGS layout inside the file:**
+**Varargs (`...`) inside the file:**
 
-| Index | Value |
+| Position | Value |
 |---|---|
-| `ARGS[1]` | The file path (set automatically by the engine). |
-| `ARGS[2]` | First extra argument. |
-| `ARGS[3]` | Second extra argument. |
+| 1 | The file path (set automatically by the engine). |
+| 2 | First extra argument. |
+| 3 | Second extra argument. |
 | … | … |
 
 **Notes:**
@@ -114,7 +113,8 @@ any LuaFile(path, arg1, arg2, ...)
 
 ```lua
 -- /tmp/concat.lua
-return ARGS[2] .. ARGS[3]
+local path, a, b = ...
+return a .. b
 ```
 
 ```sql
@@ -139,7 +139,7 @@ any LuaFunction(name, arg1, arg2, ...)
 
 **Notes:**
 
-- Unlike `LuaString` / `LuaFile`, arguments are passed as direct function parameters, **not** via the `ARGS` global.
+- Unlike `LuaString` / `LuaFile`, no chunk is loaded: the existing function is called directly with the arguments as its parameters.
 - The function must already exist as a Lua global when `LuaFunction` is called.
 
 **Example:**

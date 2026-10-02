@@ -10,6 +10,8 @@ static const luaL_Reg hardware_functions[] = {
     { "Battery",        hardware_battery           },
     { "GpuMemory",      hardware_gpu_memory        },
     { "GpuLoad",        hardware_gpu_load          },
+    { "NvidiaSmi",      hardware_nvidia_smi        },
+    { "NvidiaSetPowerLimit", hardware_nvidia_set_power_limit },
     { "DiskIO",         hardware_disk_io           },
     { "NetworkIO",      hardware_network_io        },
     { NULL, NULL }

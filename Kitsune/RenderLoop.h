@@ -1,12 +1,12 @@
 ﻿#pragma once
 #ifdef KITSUNE_IMGUI
 
-// Registers Imgui.Start and Imgui.Schedule.
+// Registers Imgui.Start.
 void RegisterRenderLoopFunctions();
 
 // Starts the SDL2/OpenGL/ImGui render loop. Blocks until the window closes.
-// Called by RunImguiSession in the host after RegisterImguiFunctions().
-void RunImguiSession();
+// Returns false if setup failed or an unhandled render error stopped the loop.
+bool RunImguiSession();
 
 typedef void (*ImguiStackEntryFinalizer)(void* data);
 

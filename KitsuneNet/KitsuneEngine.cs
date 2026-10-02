@@ -308,7 +308,7 @@ namespace KitsuneNet
         /// <summary>Starts execution of a <see cref="LuaValue"/> as a background coroutine (fire-and-forget).
         /// <list type="bullet">
         /// <item><see cref="LuaType.Function"/> — calls the Lua function with <paramref name="args"/> as direct parameters.</item>
-        /// <item><see cref="LuaType.String"/> — loads the string as a Lua chunk; <paramref name="args"/> are exposed as <c>ARGS[1..n]</c>.</item>
+        /// <item><see cref="LuaType.String"/> — loads the string as a Lua chunk; <paramref name="args"/> are passed as the chunk's varargs (<c>...</c>).</item>
         /// <item>Anything else — no-op (silently ignored).</item>
         /// </list></summary>
         /// <exception cref="LuaException">Thrown if called from within a registered function callback.</exception>

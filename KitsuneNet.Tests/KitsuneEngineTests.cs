@@ -4442,7 +4442,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public void Json_ExecuteStringArg_LuaReadsFields()
         {
-            // A JsonNode passed as an ARGS element is accessible as a table in the script.
+            // A JsonNode passed as a script argument is accessible as a table in the script.
             using KitsuneEngine engine = new();
             engine.RunString(
                 "local t = ...; return tostring(t.x + t.y)",

@@ -33,6 +33,15 @@ int hardware_gpu_memory(lua_State* L);
 // Uses a persistent PDH query — no sleep needed between calls.
 int hardware_gpu_load(lua_State* L);
 
+// NVIDIA GPU status via NVML, mirroring nvidia-smi (Windows and Linux).
+// Returns { DriverVersion, NvmlVersion, CudaVersion, Gpus = { {...}, ... } },
+// or nil when no NVIDIA driver is installed. Unsupported fields are omitted.
+int hardware_nvidia_smi(lua_State* L);
+
+// Sets a GPU's software power limit, like `nvidia-smi -i <index> -pl <watts>`.
+// Returns true, or nil plus an error message. Requires admin/root.
+int hardware_nvidia_set_power_limit(lua_State* L);
+
 // Disk I/O throughput per physical disk.
 // Returns { ["PhysicalDisk 0 (C:)"] = { ReadBytesPerSec=..., WriteBytesPerSec=..., ActivePercent=... }, ... }
 // Uses a persistent PDH query — no sleep needed between calls.

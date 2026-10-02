@@ -210,6 +210,7 @@ set(KITSUNE_ENGINE_SOURCES
 	# ── Hardware sensors (CPU temp, fan, memory — WMI on Windows, hwmon on Linux) ─────
 	LuaHardware.cpp
 	LuaHardwareMain.cpp
+	LuaHardwareNvidia.cpp
 )
 
 # On Linux, hide all bundled SQLite symbols from the global dynamic-symbol table so

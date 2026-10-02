@@ -728,6 +728,9 @@
     <ClCompile Include="LuaHardwareMain.cpp">
       <Filter>LuaHardware</Filter>
     </ClCompile>
+    <ClCompile Include="LuaHardwareNvidia.cpp">
+      <Filter>LuaHardware</Filter>
+    </ClCompile>
     <ClCompile Include="luauint.cpp">
       <Filter>LuaUint</Filter>
     </ClCompile>

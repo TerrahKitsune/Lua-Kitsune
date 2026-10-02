@@ -14,6 +14,7 @@ void RegisterImguiFunctions();
 
 // Runs the SDL2+OpenGL render loop using g_imguiCtx.
 // Blocks until the window is closed or renderFn returns false.
-void RunImguiSession();
+// Returns false if setup failed or an unhandled render error stopped the loop.
+bool RunImguiSession();
 
 #endif // KITSUNE_IMGUI

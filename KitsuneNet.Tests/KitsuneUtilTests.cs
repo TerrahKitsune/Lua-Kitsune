@@ -7205,6 +7205,58 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
+        public async Task Hardware_NvidiaSmi_ReturnsTableOrNil()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Hardware.NvidiaSmi()
+                if t == nil then return 'true' end
+                if type(t.Gpus) ~= 'table' then return 'missing Gpus' end
+                return 'true'
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Hardware_NvidiaSmi_GpuEntriesAreWellFormed()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Hardware.NvidiaSmi()
+                if t == nil then return 'true' end
+                for i, g in ipairs(t.Gpus) do
+                    if math.type(g.Index) ~= 'integer' then return 'bad Index' end
+                    if type(g.Name) ~= 'string' then return 'bad Name' end
+                    for _, k in ipairs({ 'GpuUtilPercent', 'MemoryUtilPercent', 'FanPercent' }) do
+                        local v = g[k]
+                        if v ~= nil and (v < 0 or v > 100) then return k .. ' out of range' end
+                    end
+                    if g.MemoryUsedMB and g.MemoryTotalMB and g.MemoryUsedMB > g.MemoryTotalMB then
+                        return 'used > total'
+                    end
+                    if type(g.Processes) ~= 'table' then return 'missing Processes' end
+                    for _, p in ipairs(g.Processes) do
+                        if math.type(p.Pid) ~= 'integer' then return 'bad Pid' end
+                        if p.Type ~= 'C' and p.Type ~= 'G' and p.Type ~= 'C+G' then return 'bad Type' end
+                    end
+                end
+                return 'true'
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task Hardware_NvidiaSetPowerLimit_UnknownGpuReturnsNilAndMessage()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local ok, err = Hardware.NvidiaSetPowerLimit(9999, 100)
+                return tostring(ok == nil and type(err) == 'string' and #err > 0)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
         public async Task Hardware_CpuTemp_ReturnsTableOrNil()
         {
             using KitsuneEngine engine = new();
