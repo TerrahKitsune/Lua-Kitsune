@@ -9,13 +9,6 @@ tests/config.lua
 # Planning / design documents — local only, not for version control
 plans/
 
-# llama.cpp — large DLLs are fetched locally by fetch-llama-binaries.ps1; headers and libs are committed
-llama/*.dll
-llama/lib/*.exp
-llama/lib/*.def
-vendor/.tmp/
-.llama-fetch-tmp/
-
 # User-specific files
 *.rsuser
 *.suo
@@ -383,9 +376,6 @@ build/
 
 # Visual Studio build output — regenerated on every build
 x64/
-
-# llama.cpp runtime DLLs — too large to commit, fetched by fetch-llama-binaries.ps1
-llama/*.dll
 
 # vcpkg installed packages — restored locally by vcpkg, not committed
 vcpkg_installed/

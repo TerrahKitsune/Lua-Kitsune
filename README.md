@@ -70,7 +70,6 @@ All modules are compiled into `KitsuneEngine` and available as globals. Some of 
 |---|---|
 | `Image` | PNG load/edit/save at pixel level: crop, resize, composite and more |
 | `Sound` | PCM audio creation/editing, WAV and OGG Vorbis encode/decode |
-| `Llama` | Local LLM inference on GGUF models via llama.cpp (CPU or CUDA), with tool calling and embeddings |
 
 **Crypto & encoding**
 
@@ -387,8 +386,6 @@ To build from the command line with MSBuild, pass `SolutionDir` explicitly, beca
 msbuild KitsuneEngine.vcxproj -p:Configuration=Release -p:Platform=x64 -p:SolutionDir=C:\path\to\Lua-Kitsune\
 ```
 
-For the `Llama` module, run `fetch-llama-binaries.ps1` first to download the llama.cpp binaries.
-
 Tests:
 
 ```bash
@@ -416,7 +413,6 @@ Optional modules are off by default and can be switched on one at a time, or all
 | `KITSUNE_KAFKA` | librdkafka ≥ 1.9 |
 | `KITSUNE_ARCHIVE` | libarchive ≥ 3.2 |
 | `KITSUNE_MONGO` | libmongoc 2.x (or 1.x ≥ 1.17) |
-| `KITSUNE_LLAMA` | llama.cpp binaries (`fetch-llama-binaries.ps1`) |
 | `KITSUNE_IMGUI` | SDL2 and OpenGL |
 | `KITSUNE_AUDIO` | SDL_mixer (needs `KITSUNE_IMGUI`) |
 

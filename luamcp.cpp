@@ -189,8 +189,7 @@ int lua_mcp_tostring(lua_State* L) {
 
 // =============================================================================
 // JSON bridge helpers -- everything goes through the shared LuaJson bridge
-// instance (lua_json_bridge_registry_key()), exactly as luatoolsuite.cpp
-// already does for decoding tool arguments. No hand-rolled JSON anywhere.
+// instance (lua_json_bridge_registry_key()). No hand-rolled JSON anywhere.
 // =============================================================================
 
 // Decodes `data`/`len` (a JSON-RPC line) into a Lua value, pushing the result.
@@ -428,10 +427,9 @@ static void mcp_handle_initialize(lua_State* L, LuaMcpServer* server, int params
 }
 
 // =============================================================================
-// Dispatch: tools/call -- yield-safe, mirrors luatoolsuite.cpp's
-// toolsuite_dispatch_tool/toolsuite_continuation shape, simplified since MCP
-// dispatches exactly one call per request (no batch/next-index bookkeeping
-// needed). `server` itself (already Lua-GC-owned) is passed as the lua_KContext,
+// Dispatch: tools/call -- yield-safe via a lua_pcallk continuation. MCP
+// dispatches exactly one call per request, so no batch bookkeeping is
+// needed. `server` itself (already Lua-GC-owned) is passed as the lua_KContext,
 // so no extra heap allocation is needed for the yield to survive on.
 //
 // Stack discipline: by the time lua_pcallk is invoked, the stack is exactly

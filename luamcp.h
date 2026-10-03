@@ -20,8 +20,7 @@ struct McpToolParam {
 };
 
 // One registered tool: name/description/schema plus a registry ref to the Lua
-// callback. Mirrors ToolSuiteTool (luatoolsuite.h) in shape only -- this module
-// does not depend on KITSUNE_LLAMA / luatoolsuite.cpp in any way.
+// callback.
 struct McpTool {
 	std::string               name;
 	std::string               description;
