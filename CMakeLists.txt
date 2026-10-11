@@ -222,11 +222,11 @@ if(NOT WIN32)
 	set(_sqlite_hidden "SQLITE_API=__attribute__((visibility(\"hidden\")))")
 	set_source_files_properties(
 		SQLite/sqlite3.c LuaSQLite.cpp LuaSQLiteMain.cpp
-		PROPERTIES COMPILE_DEFINITIONS "${_sqlite_hidden};SQLITE_ENABLE_MATH_FUNCTIONS")
+		PROPERTIES COMPILE_DEFINITIONS "${_sqlite_hidden};SQLITE_ENABLE_MATH_FUNCTIONS;SQLITE_ENABLE_FTS5")
 else()
 	set_source_files_properties(
 		SQLite/sqlite3.c
-		PROPERTIES COMPILE_DEFINITIONS "SQLITE_ENABLE_MATH_FUNCTIONS")
+		PROPERTIES COMPILE_DEFINITIONS "SQLITE_ENABLE_MATH_FUNCTIONS;SQLITE_ENABLE_FTS5")
 endif()
 
 add_library(KitsuneEngine SHARED ${KITSUNE_ENGINE_SOURCES})

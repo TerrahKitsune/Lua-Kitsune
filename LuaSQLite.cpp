@@ -61,6 +61,48 @@ void push_sqlitevalue(lua_State* L, sqlite3_stmt* pStmt, int idx) {
 	}
 }
 
+// Pushes the full content of the stream at the top of the Lua stack as a string, leaving its cursor
+// where it was. Returns false without pushing when the stream can't be rewound; callers then use NULL,
+// matching how Json and MsgPack encode such streams.
+static bool push_stream_content(lua_State* L) {
+	LuaStream* s = lua_toluastream(L, -1);
+	if (!(s->Caps & STREAM_CAP_READ) || !(s->Caps & STREAM_CAP_SEEK))
+		return false;
+
+	lua_Integer saved = lua_stream_curpos(L, s);
+	lua_stream_setpos(L, s, 0);
+	lua_stream_read_chunk(L, s, 0);
+	if (!lua_isstring(L, -1)) {
+		lua_pop(L, 1);
+		lua_pushliteral(L, "");
+	}
+	lua_stream_setpos(L, s, saved);
+	return true;
+}
+
+// A non-NULL pointer with length 0 gives an empty BLOB rather than NULL.
+static void bind_stream_blob(lua_State* L, sqlite3_stmt* stmt, int param) {
+	if (!push_stream_content(L)) {
+		sqlite3_bind_null(stmt, param);
+		return;
+	}
+	size_t len = 0;
+	const char* data = lua_tolstring(L, -1, &len);
+	sqlite3_bind_blob64(stmt, param, data, len, SQLITE_TRANSIENT);
+	lua_pop(L, 1);
+}
+
+static void result_stream_blob(lua_State* L, sqlite3_context* context) {
+	if (!push_stream_content(L)) {
+		sqlite3_result_null(context);
+		return;
+	}
+	size_t len = 0;
+	const char* data = lua_tolstring(L, -1, &len);
+	sqlite3_result_blob64(context, data, len, SQLITE_TRANSIENT);
+	lua_pop(L, 1);
+}
+
 int SQLiteGetRow(lua_State* L) {
 
 	LuaSQLite* luasqlite = (LuaSQLite*)luaL_checksqlite(L, 1);
@@ -238,13 +280,10 @@ int SQLiteExecute(lua_State* L) {
 				sqlite3_bind_text(luasqlite->stmt, ++cnt, data, (int)len, SQLITE_STATIC);
 				break;
 			case LUA_TUSERDATA:
-
-				if (luaL_testudata(L, -1, STREAM)) {
+				if (lua_isstream(L, -1))
+					bind_stream_blob(L, luasqlite->stmt, ++cnt);
+				else
 					sqlite3_bind_null(luasqlite->stmt, ++cnt);
-					break;
-				}
-
-				sqlite3_bind_null(luasqlite->stmt, ++cnt);
 				break;
 			default:
 				// table, function, thread, lightuserdata (Json.Null): bind NULL so every placeholder still advances once
@@ -298,13 +337,10 @@ int SQLiteExecute(lua_State* L) {
 				sqlite3_bind_text(luasqlite->stmt, ++cnt, data, (int)len, SQLITE_TRANSIENT);
 				break;
 			case LUA_TUSERDATA:
-
-				if (luaL_testudata(L, -1, STREAM)) {
+				if (lua_isstream(L, -1))
+					bind_stream_blob(L, luasqlite->stmt, ++cnt);
+				else
 					sqlite3_bind_null(luasqlite->stmt, ++cnt);
-					break;
-				}
-
-				sqlite3_bind_null(luasqlite->stmt, ++cnt);
 				break;
 			default:
 				// table, function, thread, lightuserdata (Json.Null): bind NULL so every placeholder still advances once
@@ -516,7 +552,7 @@ void SqlitePCallFunction(bool isFinish, LuaSQLiteFunction* function, sqlite3_con
 	}
 	else if (type == LUA_TUSERDATA) {
 		if (lua_isstream(L, -1)) {
-			sqlite3_result_null(context);
+			result_stream_blob(L, context);
 			lua_pop(L, 1);
 			return;
 		}

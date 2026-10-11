@@ -403,6 +403,73 @@ public sealed class SQLiteTests
         r.String.ShouldBe("HELLO");
     }
 
+    [Fact]
+    public async Task SQLite_StreamParam_BindsAsBlob()
+    {
+        using KitsuneEngine engine = new();
+
+        // A Stream parameter binds its full content as a BLOB, embedded NULs included,
+        // regardless of where the cursor is, and leaves the cursor untouched.
+        LuaValue r = await engine.ExecuteStringAsync(@"
+			local db = SQLite.Open()
+			db:Query('CREATE TABLE t (v BLOB)'); db:Fetch()
+			local s = Stream.New()
+			s:Write('A\0B\255')
+			local posBefore = s:pos()
+			db:Query('INSERT INTO t VALUES (:v)', {v = s}); db:Fetch()
+			local posAfter = s:pos()
+			db:Query('SELECT typeof(v), length(v), hex(v) FROM t')
+			db:Fetch()
+			local typ, len, hex = db:GetRow(1), db:GetRow(2), db:GetRow(3)
+			db:Close()
+			return table.concat({typ, len, hex, tostring(posBefore == posAfter)}, ',')
+		");
+        r.String.ShouldBe("blob,4,410042FF,true");
+    }
+
+    [Fact]
+    public async Task SQLite_StreamParam_FunctionBind_RoundTripsAsStream()
+    {
+        using KitsuneEngine engine = new();
+
+        // Function-supplied Stream parameters bind as BLOB too and read back as a Stream.
+        LuaValue r = await engine.ExecuteStringAsync(@"
+			local db = SQLite.Open()
+			db:Query('CREATE TABLE t (v BLOB)'); db:Fetch()
+			db:Query('INSERT INTO t VALUES (:v)', function(param)
+				local s = Stream.New()
+				s:Write('HELLO')
+				return s
+			end)
+			db:Fetch()
+			db:Query('SELECT v FROM t')
+			db:Fetch()
+			local blob = db:GetRow(1)
+			db:Close()
+			return blob:Read()
+		");
+        r.String.ShouldBe("HELLO");
+    }
+
+    [Fact]
+    public async Task SQLite_StreamParam_EmptyStream_BindsZeroLengthBlob()
+    {
+        using KitsuneEngine engine = new();
+
+        // An empty Stream is an empty BLOB, not NULL.
+        LuaValue r = await engine.ExecuteStringAsync(@"
+			local db = SQLite.Open()
+			db:Query('CREATE TABLE t (v BLOB)'); db:Fetch()
+			db:Query('INSERT INTO t VALUES (:v)', {v = Stream.New()}); db:Fetch()
+			db:Query('SELECT typeof(v), length(v) FROM t')
+			db:Fetch()
+			local typ, len = db:GetRow(1), db:GetRow(2)
+			db:Close()
+			return typ .. ',' .. len
+		");
+        r.String.ShouldBe("blob,0");
+    }
+
     // -- Parameter binding ----------------------------------------------------
     [Fact]
     public async Task SQLite_ParameterizedQuery_FunctionBind()
@@ -525,6 +592,26 @@ public sealed class SQLiteTests
 			return tostring(val)
 		");
         r.String.ShouldBe("nil");
+    }
+
+    [Fact]
+    public async Task SQLite_RegisterFunction_ReturnsStream_ProducesBlob()
+    {
+        using KitsuneEngine engine = new();
+
+        // A returned Stream becomes a BLOB holding its full content, so BLOBs survive a round trip
+        // through a custom function and an empty Stream gives an empty BLOB rather than NULL.
+        LuaValue r = await engine.ExecuteStringAsync(@"
+			local db = SQLite.Open()
+			db:RegisterFunction(function(b) return b end, 'echo', 1)
+			db:RegisterFunction(function() return Stream.New() end, 'empty', 0)
+			db:Query([[SELECT typeof(echo(X'410042FF')), hex(echo(X'410042FF')), typeof(empty()), length(empty())]])
+			db:Fetch()
+			local row = {db:GetRow(1), db:GetRow(2), db:GetRow(3), db:GetRow(4)}
+			db:Close()
+			return table.concat(row, ',')
+		");
+        r.String.ShouldBe("blob,410042FF,blob,0");
     }
 
     [Fact]
