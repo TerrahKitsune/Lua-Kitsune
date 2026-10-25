@@ -2,7 +2,7 @@
 
 #ifdef KITSUNE_HTTP
 
-#include "lua_main_incl.h"
+#include "LuaMainInclude.h"
 #include "stream.h"
 #include <curl/curl.h>
 

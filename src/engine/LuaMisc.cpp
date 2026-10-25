@@ -1,8 +1,8 @@
-﻿#include "lua_misc.h"
+﻿#include "LuaMisc.h"
 #include <time.h>
 #include <stdio.h>
 #include <ctype.h>
-#include "platform.h"
+#include "Platform.h"
 #include "luatext.h"
 #include "Bencode.h"
 #include "stream.h"

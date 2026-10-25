@@ -1,5 +1,5 @@
 #pragma once
-#include "lua_main_incl.h"
+#include "LuaMainInclude.h"
 #include "DuckDB/duckdb.h"
 
 static const char *LUADUCKDB = "DuckDB";

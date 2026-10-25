@@ -2,7 +2,7 @@
 
 #ifdef KITSUNE_HTTP
 
-#include "lua_main_incl.h"
+#include "LuaMainInclude.h"
 #include <event2/event.h>
 #include <event2/listener.h>
 #include <event2/bufferevent.h>

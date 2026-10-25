@@ -1,5 +1,5 @@
 ﻿#include "LuaDuckDB.h"
-#include "mem.h"
+#include "Mem.h"
 #include <string.h>
 #include <stdlib.h>
 #ifndef _MAX_PATH

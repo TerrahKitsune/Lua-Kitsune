@@ -1,6 +1,6 @@
 ﻿#include "LuaFileSystem.h"
 #include "luatext.h"
-#include "kitsunestdlib.h"
+#include "KitsuneStdlib.h"
 #include <time.h>
 #include <string.h>
 #include <stdlib.h>

@@ -60,7 +60,7 @@
       <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)Imgui;$(ProjectDir)litehtml\include;$(ProjectDir)litehtml\include\litehtml;$(ProjectDir)litehtml\src;$(ProjectDir)litehtml\src\gumbo;$(ProjectDir)litehtml\src\gumbo\include;$(ProjectDir)litehtml\src\gumbo\include\gumbo;$(ProjectDir)litehtml\src\gumbo\visualc\include;$(ProjectDir)SDL2\include;$(ProjectDir)SDL2_mixer\include;$(ProjectDir)..;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)Imgui;$(ProjectDir)litehtml\include;$(ProjectDir)litehtml\include\litehtml;$(ProjectDir)litehtml\src;$(ProjectDir)litehtml\src\gumbo;$(ProjectDir)litehtml\src\gumbo\include;$(ProjectDir)litehtml\src\gumbo\include\gumbo;$(ProjectDir)litehtml\src\gumbo\visualc\include;$(ProjectDir)SDL2\include;$(ProjectDir)SDL2_mixer\include;$(ProjectDir)..;$(ProjectDir)..\src\engine;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -81,7 +81,7 @@
       <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)Imgui;$(ProjectDir)litehtml\include;$(ProjectDir)litehtml\include\litehtml;$(ProjectDir)litehtml\src;$(ProjectDir)litehtml\src\gumbo;$(ProjectDir)litehtml\src\gumbo\include;$(ProjectDir)litehtml\src\gumbo\include\gumbo;$(ProjectDir)litehtml\src\gumbo\visualc\include;$(ProjectDir)SDL2\include;$(ProjectDir)SDL2_mixer\include;$(ProjectDir)..;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)Imgui;$(ProjectDir)litehtml\include;$(ProjectDir)litehtml\include\litehtml;$(ProjectDir)litehtml\src;$(ProjectDir)litehtml\src\gumbo;$(ProjectDir)litehtml\src\gumbo\include;$(ProjectDir)litehtml\src\gumbo\include\gumbo;$(ProjectDir)litehtml\src\gumbo\visualc\include;$(ProjectDir)SDL2\include;$(ProjectDir)SDL2_mixer\include;$(ProjectDir)..;$(ProjectDir)..\src\engine;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -119,7 +119,7 @@
     <ClCompile Include="Win32Console.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\KitsuneEngine.h" />
+    <ClInclude Include="..\src\engine\KitsuneEngine.h" />
     <ClInclude Include="Font.h" />
     <ClInclude Include="ImguiHtml.h" />
     <ClInclude Include="litehtml\include\litehtml.h" />

@@ -1,5 +1,5 @@
 #pragma once
-#include "lua_main_incl.h"
+#include "LuaMainInclude.h"
 #include <stddef.h>
 #include <stdint.h>
 #include <wchar.h>

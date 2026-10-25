@@ -1,5 +1,5 @@
 ﻿#pragma once
-#include "lua_main_incl.h"
+#include "LuaMainInclude.h"
 
 // CPU temperature — returns an array of {Name, Value} tables (one per thermal
 // zone found), or nil if unavailable.

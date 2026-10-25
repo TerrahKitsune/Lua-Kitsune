@@ -1,8 +1,8 @@
 ﻿// KitsuneLuaDebug.cpp
 // Implementation of the dual-slot Lua hook dispatch layer.
 // Including kitsune_internal.h here is safe: .cpp files are never included.
-#include "kitsune_internal.h"
-#include "Kitsune/KitsuneLuaDebug.h"
+#include "KitsuneInternal.h"
+#include "KitsuneLuaDebug.h"
 
 KitsuneState* g_debugState = nullptr;
 

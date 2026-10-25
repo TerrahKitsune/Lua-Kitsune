@@ -1,6 +1,6 @@
 ﻿#include "luajson.h"
 #include "stream.h"
-#include "utf8bom.h"
+#include "Utf8Bom.h"
 #include "luatext.h"
 #include "luaidentifier.h"
 #include "luadatetime.h"

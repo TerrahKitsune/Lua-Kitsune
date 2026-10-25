@@ -3,8 +3,8 @@
 // Required when linking the static build on Windows; harmless on Linux.
 #define LIBARCHIVE_STATIC
 
-#include "lua_main_incl.h"
-#include "platform.h"
+#include "LuaMainInclude.h"
+#include "Platform.h"
 static const char* ARCHIVE = "ARCHIVE";
 #include <archive.h>
 #include <archive_entry.h>

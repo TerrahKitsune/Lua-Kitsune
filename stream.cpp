@@ -7,7 +7,7 @@
 #include "luatimespan.h"
 #include <string.h>
 #include <stdlib.h>
-#include "platform.h"
+#include "Platform.h"
 #include "miniz.h"
 #include "streammemory.h"
 #include "streamfile.h"

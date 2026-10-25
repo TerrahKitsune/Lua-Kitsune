@@ -1,6 +1,6 @@
 ﻿#pragma once
-#include "lua_main_incl.h"
-#include "platform.h"
+#include "LuaMainInclude.h"
+#include "Platform.h"
 
 static const char* LUAIDENTIFIER = "IDENTIFIER";
 

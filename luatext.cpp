@@ -1,5 +1,5 @@
 #include "luatext.h"
-#include "platform.h"
+#include "Platform.h"
 #include <stdint.h>
 #include <string.h>
 #include <errno.h>

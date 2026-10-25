@@ -1,5 +1,5 @@
 ﻿#pragma once
-#include "lua_main_incl.h"
+#include "LuaMainInclude.h"
 
 int GetAllInFolder(lua_State* L);
 int GetFiles(lua_State* L);

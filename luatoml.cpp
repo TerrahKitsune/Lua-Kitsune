@@ -1,5 +1,5 @@
 ﻿#include "luatoml.h"
-#include "utf8bom.h"
+#include "Utf8Bom.h"
 #include "luaidentifier.h"
 #include "luadatetime.h"
 #include "luadecimal.h"

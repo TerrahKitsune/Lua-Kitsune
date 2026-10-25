@@ -2,7 +2,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <atomic>
-#include "mem.h"
+#include "Mem.h"
 #ifdef _WIN32
 #include <objbase.h>
 #include <stdlib.h>

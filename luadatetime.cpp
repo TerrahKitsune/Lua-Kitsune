@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-#include "mem.h"
+#include "Mem.h"
 #ifdef _WIN32
 #include <Windows.h>
 #endif

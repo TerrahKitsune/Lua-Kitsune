@@ -1,5 +1,5 @@
 ﻿#pragma once
-#include "lua_main_incl.h"
+#include "LuaMainInclude.h"
 #ifdef _WIN32
 #include <Windows.h>
 #else

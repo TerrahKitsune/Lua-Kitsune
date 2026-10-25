@@ -2,7 +2,7 @@
 
 #ifdef KITSUNE_HTTP
 
-#include "lua_main_incl.h"
+#include "LuaMainInclude.h"
 
 int luaopen_tcp(lua_State* L);
 

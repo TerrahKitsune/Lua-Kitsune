@@ -7,7 +7,7 @@
 #include "luatimespan.h"
 #include "luaalivetoken.h"
 #include "luajson.h"
-#include "kitsune_internal.h"
+#include "KitsuneInternal.h"
 #ifdef _WIN32
 #pragma comment(lib, "mysql/libmysql.lib")
 #endif

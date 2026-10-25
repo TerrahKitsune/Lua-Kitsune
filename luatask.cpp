@@ -1,6 +1,6 @@
 ﻿#include "luatask.h"
-#include "kitsune_internal.h"
-#include "mem.h"
+#include "KitsuneInternal.h"
+#include "Mem.h"
 #include <cstdio>
 #include <cstring>
 

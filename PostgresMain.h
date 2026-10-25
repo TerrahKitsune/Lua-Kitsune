@@ -1,4 +1,4 @@
 ﻿#pragma once
-#include "lua_main_incl.h"
+#include "LuaMainInclude.h"
 
 int luaopen_postgres(lua_State* L);

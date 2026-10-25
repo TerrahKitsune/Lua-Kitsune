@@ -1,6 +1,6 @@
 ﻿#pragma once
-#include "../xp_lua_incl.h"
-#include "../Lua/lua.h"
+#include "XpLuaInclude.h"
+#include "Lua/lua.h"
 #include <mutex>
 #include <unordered_map>
 

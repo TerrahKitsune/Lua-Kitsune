@@ -1,5 +1,5 @@
 #include "LuaSound.h"
-#include "kitsunefile.h"
+#include "KitsuneFile.h"
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>

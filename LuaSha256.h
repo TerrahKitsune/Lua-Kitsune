@@ -1,5 +1,5 @@
 #pragma once
-#include "lua_main_incl.h"
+#include "LuaMainInclude.h"
 extern "C" {
 #include "sha256.h"
 }

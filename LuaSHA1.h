@@ -1,5 +1,5 @@
 #pragma once
-#include "lua_main_incl.h"
+#include "LuaMainInclude.h"
 #include "sha1.h"
 static const char* LUASHA1 = "LUASHA1";
 

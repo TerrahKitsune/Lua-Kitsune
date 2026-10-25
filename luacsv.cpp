@@ -1,7 +1,7 @@
 ﻿#include "luacsv.h"
 #include <string.h>
 #include "luatext.h"
-#include "utf8bom.h"
+#include "Utf8Bom.h"
 #include "stream.h"
 
 // Decodes a UTF-8 chunk and appends it to streamBuf after [0, streamLen). A character

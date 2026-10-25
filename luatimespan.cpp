@@ -2,7 +2,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "mem.h"
+#include "Mem.h"
 
 // ── Userdata helpers ──────────────────────────────────────────────────────────
 

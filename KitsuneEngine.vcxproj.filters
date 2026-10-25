@@ -75,8 +75,8 @@
     <Filter Include="LuaProcess\Source Files">
       <UniqueIdentifier>{5fe20aa0-5a64-41b4-bb03-48dc2862c9ca}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Util">
-      <UniqueIdentifier>{4c3c8bdb-38d8-4af7-b632-e2a1a5a1a63e}</UniqueIdentifier>
+    <Filter Include="Engine">
+      <UniqueIdentifier>{7d2e5b1a-3c84-4f0e-9a61-2b8f4e6c1d90}</UniqueIdentifier>
     </Filter>
     <Filter Include="LuaStream">
       <UniqueIdentifier>{434db58b-05c4-45f3-acd1-f35be75015db}</UniqueIdentifier>
@@ -131,15 +131,6 @@
     </Filter>
     <Filter Include="LuaJson\Source Files">
       <UniqueIdentifier>{45c7cffb-cd06-4393-9097-f6824a6eabf4}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Memory">
-      <UniqueIdentifier>{166ffa6a-027b-4009-a690-066115b36f77}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Memory\Header Files">
-      <UniqueIdentifier>{4cf98a56-d31c-4193-9aa3-1760930a026d}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Memory\Source Files">
-      <UniqueIdentifier>{dcefc642-cd9a-4e70-a7ee-cbd7cadcc68e}</UniqueIdentifier>
     </Filter>
     <Filter Include="LuaText">
       <UniqueIdentifier>{3cce908f-8005-4bb8-8ea7-41325772c947}</UniqueIdentifier>
@@ -311,8 +302,8 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="KitsuneEngine.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="src\engine\KitsuneEngine.cpp">
+      <Filter>Engine</Filter>
     </ClCompile>
     <ClCompile Include="TimerMain.cpp">
       <Filter>LuaTimer</Filter>
@@ -332,8 +323,8 @@
     <ClCompile Include="LuaMySQL.cpp">
       <Filter>LuaMySQL\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="lua_misc.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="src\engine\LuaMisc.cpp">
+      <Filter>Engine</Filter>
     </ClCompile>
     <ClCompile Include="LuaFileSystemMain.cpp">
       <Filter>LuaFileSystem</Filter>
@@ -404,11 +395,11 @@
     <ClCompile Include="base64.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="mem.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="src\engine\Mem.cpp">
+      <Filter>Engine</Filter>
     </ClCompile>
-    <ClCompile Include="MemoryManager.cpp">
-      <Filter>Memory\Source Files</Filter>
+    <ClCompile Include="src\engine\MemoryManager.cpp">
+      <Filter>Engine</Filter>
     </ClCompile>
     <ClCompile Include="luatextmain.cpp">
       <Filter>LuaText\Source Files</Filter>
@@ -416,11 +407,11 @@
     <ClCompile Include="luatext.cpp">
       <Filter>LuaText\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="kitsunestdlib.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="src\engine\KitsuneStdlib.cpp">
+      <Filter>Engine</Filter>
     </ClCompile>
-    <ClCompile Include="kitsunefile.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="src\engine\KitsuneFile.cpp">
+      <Filter>Engine</Filter>
     </ClCompile>
     <ClCompile Include="datetimemain.cpp">
       <Filter>LuaDateTime</Filter>
@@ -449,8 +440,8 @@
     <ClCompile Include="Redis.cpp">
       <Filter>LuaRedis\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Bencode.cpp">
-      <Filter>Util</Filter>
+    <ClCompile Include="src\engine\Bencode.cpp">
+      <Filter>Engine</Filter>
     </ClCompile>
     <ClCompile Include="LuaSHA1.cpp">
       <Filter>LuaSHA1\Source Files</Filter>
@@ -572,8 +563,8 @@
     <ClCompile Include="PostgresMain.cpp">
       <Filter>LuaPostgres</Filter>
     </ClCompile>
-    <ClCompile Include="LuaEngineBuiltins.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="src\engine\LuaEngineBuiltins.cpp">
+      <Filter>Engine</Filter>
     </ClCompile>
     <ClCompile Include="luajson.cpp">
       <Filter>LuaJson\Source Files</Filter>
@@ -611,8 +602,8 @@
     <ClCompile Include="RedisJson.cpp">
       <Filter>LuaRedis\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="kitsuneuserdata.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="src\engine\KitsuneUserdata.cpp">
+      <Filter>Engine</Filter>
     </ClCompile>
     <ClCompile Include="LuaPostgres.cpp">
       <Filter>LuaPostgres\Source Files</Filter>
@@ -743,8 +734,8 @@
     <ClCompile Include="luatask.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="KitsuneLuaDebug.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="src\engine\KitsuneLuaDebug.cpp">
+      <Filter>Engine</Filter>
     </ClCompile>
     <ClCompile Include="LuaWebSocket.cpp">
       <Filter>Source Files</Filter>
@@ -856,11 +847,11 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="KitsuneEngine.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="src\engine\KitsuneEngine.h">
+      <Filter>Engine</Filter>
     </ClInclude>
-    <ClInclude Include="lua_main_incl.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="src\engine\LuaMainInclude.h">
+      <Filter>Engine</Filter>
     </ClInclude>
     <ClInclude Include="TimerMain.h">
       <Filter>LuaTimer</Filter>
@@ -880,8 +871,8 @@
     <ClInclude Include="LuaMySQL.h">
       <Filter>LuaMySQL\Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="lua_misc.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="src\engine\LuaMisc.h">
+      <Filter>Engine</Filter>
     </ClInclude>
     <ClInclude Include="LuaFileSystemMain.h">
       <Filter>LuaFileSystem</Filter>
@@ -952,11 +943,11 @@
     <ClInclude Include="base64.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="mem.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="src\engine\Mem.h">
+      <Filter>Engine</Filter>
     </ClInclude>
-    <ClInclude Include="MemoryManager.h">
-      <Filter>Memory\Header Files</Filter>
+    <ClInclude Include="src\engine\MemoryManager.h">
+      <Filter>Engine</Filter>
     </ClInclude>
     <ClInclude Include="luatextmain.h">
       <Filter>LuaText\Header Files</Filter>
@@ -964,11 +955,11 @@
     <ClInclude Include="luatext.h">
       <Filter>LuaText\Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="kitsunefile.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="src\engine\KitsuneFile.h">
+      <Filter>Engine</Filter>
     </ClInclude>
-    <ClInclude Include="kitsunestdlib.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="src\engine\KitsuneStdlib.h">
+      <Filter>Engine</Filter>
     </ClInclude>
     <ClInclude Include="datetimemain.h">
       <Filter>LuaDateTime</Filter>
@@ -1009,8 +1000,8 @@
     <ClInclude Include="hiredis\hiredis_ssl.h">
       <Filter>Hiredis</Filter>
     </ClInclude>
-    <ClInclude Include="Bencode.h">
-      <Filter>Util</Filter>
+    <ClInclude Include="src\engine\Bencode.h">
+      <Filter>Engine</Filter>
     </ClInclude>
     <ClInclude Include="LuaArchive.h">
       <Filter>Archive\Header Files</Filter>
@@ -1126,8 +1117,8 @@
     <ClInclude Include="PostgresMain.h">
       <Filter>LuaPostgres</Filter>
     </ClInclude>
-    <ClInclude Include="LuaEngineBuiltins.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="src\engine\LuaEngineBuiltins.h">
+      <Filter>Engine</Filter>
     </ClInclude>
     <ClInclude Include="luajson.h">
       <Filter>LuaJson\Header Files</Filter>
@@ -1141,8 +1132,8 @@
     <ClInclude Include="streamfile.h">
       <Filter>LuaStream\Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="platform.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="src\engine\Platform.h">
+      <Filter>Engine</Filter>
     </ClInclude>
     <ClInclude Include="miniz.h">
       <Filter>Header Files</Filter>
@@ -1162,8 +1153,8 @@
     <ClInclude Include="RedisJson.h">
       <Filter>LuaRedis\Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="kitsuneuserdata.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="src\engine\KitsuneUserdata.h">
+      <Filter>Engine</Filter>
     </ClInclude>
     <ClInclude Include="SHA1Main.h">
       <Filter>LuaSHA1</Filter>
@@ -1255,17 +1246,17 @@
     <ClInclude Include="luaalivetoken.h">
       <Filter>LuaAliveToken</Filter>
     </ClInclude>
-    <ClInclude Include="utf8bom.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="src\engine\Utf8Bom.h">
+      <Filter>Engine</Filter>
     </ClInclude>
-    <ClInclude Include="kitsune_internal.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="src\engine\KitsuneInternal.h">
+      <Filter>Engine</Filter>
     </ClInclude>
     <ClInclude Include="luatask.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Kitsune\KitsuneLuaDebug.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="src\engine\KitsuneLuaDebug.h">
+      <Filter>Engine</Filter>
     </ClInclude>
     <ClInclude Include="LuaWebSocket.h">
       <Filter>Header Files</Filter>

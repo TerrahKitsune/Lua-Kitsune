@@ -1,5 +1,5 @@
 ﻿#pragma once
-#include "lua_main_incl.h"
+#include "LuaMainInclude.h"
 #include "stream.h"
 #include <event2/http.h>
 

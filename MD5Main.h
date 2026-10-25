@@ -1,4 +1,4 @@
 #pragma once
-#include "lua_main_incl.h"
+#include "LuaMainInclude.h"
 
 int luaopen_md5(lua_State *L);

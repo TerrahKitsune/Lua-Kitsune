@@ -13,7 +13,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <thread>
-#include "platform.h"
+#include "Platform.h"
 #if defined(_WIN32) && defined(_DEBUG)
 #include <crtdbg.h>
 #endif

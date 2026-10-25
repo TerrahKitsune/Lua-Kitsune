@@ -1,7 +1,7 @@
 #ifdef KITSUNE_HTTP
 
 #include "LuaTcpListener.h"
-#include "mem.h"
+#include "Mem.h"
 #include <event2/event.h>
 #include <event2/listener.h>
 #include <event2/bufferevent.h>
@@ -15,7 +15,7 @@
 #include <netdb.h>
 #endif
 
-/* kitsune_strdup — like strdup but uses the tracked allocator */
+/* kitsune_strdup â€” like strdup but uses the tracked allocator */
 static char* kitsune_strdup(const char* s) {
     if (!s) return NULL;
     size_t len = strlen(s) + 1;
@@ -162,14 +162,14 @@ static void tcp_event_cb(struct bufferevent* bev, short what, void* ctx) {
             client->error_msg = kitsune_strdup("unknown socket error");
         }
     } else if (what & BEV_EVENT_EOF) {
-        /* Clean close — no error message needed */
+        /* Clean close â€” no error message needed */
         if (!client->error_msg)
             client->error_msg = NULL;
     }
 }
 
 /* =============================================================================
-   Accept callback — called by libevent when a new connection arrives
+   Accept callback â€” called by libevent when a new connection arrives
    ============================================================================= */
 
 static void tcp_accept_cb(struct evconnlistener* listener,
@@ -230,7 +230,7 @@ static void tcp_accept_cb(struct evconnlistener* listener,
         LuaTcpClient** new_q = (LuaTcpClient**)kitsune_realloc(
             s->pending_queue, (size_t)new_cap * sizeof(LuaTcpClient*));
         if (!new_q) {
-            /* Out of memory — dispose the client */
+            /* Out of memory â€” dispose the client */
             tcp_client_dispose_native(L, client);
             lua_pop(L, 1);
             return;
@@ -240,7 +240,7 @@ static void tcp_accept_cb(struct evconnlistener* listener,
     }
     s->pending_queue[s->pending_count++] = client;
 
-    /* Pop client from Lua stack — it's kept alive by self_ref */
+    /* Pop client from Lua stack â€” it's kept alive by self_ref */
     lua_pop(L, 1);
 }
 
@@ -258,7 +258,7 @@ static void tcp_listener_dispose_native(lua_State* L, LuaTcpListener* s) {
         s->listener = NULL;
     }
 
-    /* Don't free the event_base here — accepted clients may still be alive
+    /* Don't free the event_base here â€” accepted clients may still be alive
        and share it. The base is freed in __gc when the listener is fully
        torn down and all clients should have been disposed by then. */
 
@@ -482,7 +482,7 @@ int TcpListener_Accept(lua_State* L) {
         event_base_loop(s->base, EVLOOP_NONBLOCK);
     }
 
-    /* No client waiting — return nil, nil */
+    /* No client waiting â€” return nil, nil */
     if (s->pending_count == 0) {
         lua_pushnil(L);
         lua_pushnil(L);
@@ -525,7 +525,7 @@ int TcpListener_GC(lua_State* L) {
 
     /* Free the event base owned by this listener. By the time __gc runs,
        the user should have disposed all accepted clients. If some clients
-       survive, their evbase pointer dangles — the user is responsible for
+       survive, their evbase pointer dangles â€” the user is responsible for
        disposing clients before the listener. */
     if (s->base) {
         event_base_free(s->base);
@@ -577,7 +577,7 @@ int TcpClient_Poll(lua_State* L) {
             lua_pushstring(L, client->error_msg);
             return 2;
         }
-        /* Not connected, no error — clean close */
+        /* Not connected, no error â€” clean close */
         lua_pushnil(L);
         lua_pushstring(L, "closed");
         return 2;

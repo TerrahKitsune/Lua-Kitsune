@@ -1,5 +1,5 @@
 #include "LuaImage.h"
-#include "kitsunefile.h"
+#include "KitsuneFile.h"
 #include "luatext.h"
 #include "miniz.h"
 #include <math.h>

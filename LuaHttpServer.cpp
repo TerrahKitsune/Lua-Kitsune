@@ -1,7 +1,7 @@
 ﻿#include "LuaHttpServer.h"
 #include "LuaHttpRequest.h"
 #include "stream.h"
-#include "mem.h"
+#include "Mem.h"
 #include "luaalivetoken.h"
 #include <event2/event.h>
 #include <event2/http.h>

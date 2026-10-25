@@ -2,8 +2,8 @@
 
 #include "HttpCurl.h"
 #include "stream.h"
-#include "mem.h"
-#include "platform.h"
+#include "Mem.h"
+#include "Platform.h"
 #include "luatimespan.h"
 #include "luaalivetoken.h"
 #include <string.h>

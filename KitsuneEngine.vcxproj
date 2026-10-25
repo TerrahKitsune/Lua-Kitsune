@@ -53,7 +53,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(SolutionDir)DuckDB;$(SolutionDir)libogg\include;$(SolutionDir)libvorbis\include;$(SolutionDir)msgpack\include;$(SolutionDir)pugixml;$(SolutionDir)libyaml\include;$(SolutionDir)libarchive\include;$(SolutionDir)mysql\include;$(SolutionDir)postgres\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)hiredis;$(SolutionDir)curl\include;$(SolutionDir)mongodb\include;$(SolutionDir)libevent\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)src\engine;$(SolutionDir)src\modules;$(SolutionDir)DuckDB;$(SolutionDir)libogg\include;$(SolutionDir)libvorbis\include;$(SolutionDir)msgpack\include;$(SolutionDir)pugixml;$(SolutionDir)libyaml\include;$(SolutionDir)libarchive\include;$(SolutionDir)mysql\include;$(SolutionDir)postgres\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)hiredis;$(SolutionDir)curl\include;$(SolutionDir)mongodb\include;$(SolutionDir)libevent\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4703;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <PreprocessorDefinitions>DUCKDB_STATIC_BUILD;KITSUNE_HTTP;KITSUNE_KAFKA;KITSUNE_REDIS;KITSUNE_ENGINE_EXPORTS;KITSUNE_ALL;STANDALONEGFF;SQLITE_ENABLE_MATH_FUNCTIONS;SQLITE_ENABLE_FTS5;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
@@ -79,7 +79,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(SolutionDir)DuckDB;$(SolutionDir)libogg\include;$(SolutionDir)libvorbis\include;$(SolutionDir)msgpack\include;$(SolutionDir)pugixml;$(SolutionDir)libyaml\include;$(SolutionDir)libarchive\include;$(SolutionDir)mysql\include;$(SolutionDir)postgres\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)hiredis;$(SolutionDir)curl\include;$(SolutionDir)mongodb\include;$(SolutionDir)libevent\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)src\engine;$(SolutionDir)src\modules;$(SolutionDir)DuckDB;$(SolutionDir)libogg\include;$(SolutionDir)libvorbis\include;$(SolutionDir)msgpack\include;$(SolutionDir)pugixml;$(SolutionDir)libyaml\include;$(SolutionDir)libarchive\include;$(SolutionDir)mysql\include;$(SolutionDir)postgres\include;$(SolutionDir)OpenSSL\include;$(SolutionDir)hiredis;$(SolutionDir)curl\include;$(SolutionDir)mongodb\include;$(SolutionDir)libevent\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4703;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <PreprocessorDefinitions>DUCKDB_STATIC_BUILD;KITSUNE_HTTP;KITSUNE_KAFKA;KITSUNE_REDIS;KITSUNE_ENGINE_EXPORTS;KITSUNE_ALL;STANDALONEGFF;SQLITE_ENABLE_MATH_FUNCTIONS;SQLITE_ENABLE_FTS5;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
@@ -101,12 +101,12 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="aes.c" />
-    <ClCompile Include="Bencode.cpp" />
+    <ClCompile Include="src\engine\Bencode.cpp" />
     <ClCompile Include="HttpCurl.cpp" />
     <ClCompile Include="HttpCurlMain.cpp" />
-    <ClCompile Include="KitsuneEngine.cpp" />
-    <ClCompile Include="KitsuneLuaDebug.cpp" />
-    <ClCompile Include="kitsuneuserdata.cpp" />
+    <ClCompile Include="src\engine\KitsuneEngine.cpp" />
+    <ClCompile Include="src\engine\KitsuneLuaDebug.cpp" />
+    <ClCompile Include="src\engine\KitsuneUserdata.cpp" />
     <ClCompile Include="LuaArchive.cpp" />
     <ClCompile Include="LuaArchiveMain.cpp" />
     <ClCompile Include="base64.cpp" />
@@ -120,7 +120,7 @@
     <ClCompile Include="LuaAesMain.cpp" />
     <ClCompile Include="luacsv.cpp" />
     <ClCompile Include="LuaCsvMain.cpp" />
-    <ClCompile Include="LuaEngineBuiltins.cpp" />
+    <ClCompile Include="src\engine\LuaEngineBuiltins.cpp" />
     <ClCompile Include="luakafka.cpp" />
     <ClCompile Include="luakafkaconsumer.cpp" />
     <ClCompile Include="luakafkamain.cpp" />
@@ -166,8 +166,8 @@
     <ClCompile Include="LuaTcpMain.cpp" />
     <ClCompile Include="LuaSha256.cpp" />
     <ClCompile Include="luatext.cpp" />
-    <ClCompile Include="kitsunestdlib.cpp" />
-    <ClCompile Include="kitsunefile.cpp" />
+    <ClCompile Include="src\engine\KitsuneStdlib.cpp" />
+    <ClCompile Include="src\engine\KitsuneFile.cpp" />
     <ClCompile Include="luaidentifier.cpp" />
     <ClCompile Include="luadatetime.cpp" />
     <ClCompile Include="luadecimal.cpp" />
@@ -203,9 +203,9 @@
     <ClCompile Include="Lua\lutf8lib.c" />
     <ClCompile Include="Lua\lvm.c" />
     <ClCompile Include="Lua\lzio.c" />
-    <ClCompile Include="lua_misc.cpp" />
-    <ClCompile Include="mem.cpp" />
-    <ClCompile Include="MemoryManager.cpp" />
+    <ClCompile Include="src\engine\LuaMisc.cpp" />
+    <ClCompile Include="src\engine\Mem.cpp" />
+    <ClCompile Include="src\engine\MemoryManager.cpp" />
     <ClCompile Include="Redis.cpp" />
     <ClCompile Include="RedisJson.cpp" />
     <ClCompile Include="RedisKey.cpp" />
@@ -293,16 +293,16 @@
   <ItemGroup>
     <ClInclude Include="aes.h" />
     <ClInclude Include="aes.hpp" />
-    <ClInclude Include="Bencode.h" />
+    <ClInclude Include="src\engine\Bencode.h" />
     <ClInclude Include="hiredis\alloc.h" />
     <ClInclude Include="hiredis\hiredis.h" />
     <ClInclude Include="hiredis\hiredis_ssl.h" />
     <ClInclude Include="hiredis\read.h" />
     <ClInclude Include="hiredis\sds.h" />
-    <ClInclude Include="KitsuneEngine.h" />
-    <ClInclude Include="kitsuneuserdata.h" />
-    <ClInclude Include="Kitsune\KitsuneLuaDebug.h" />
-    <ClInclude Include="kitsune_internal.h" />
+    <ClInclude Include="src\engine\KitsuneEngine.h" />
+    <ClInclude Include="src\engine\KitsuneUserdata.h" />
+    <ClInclude Include="src\engine\KitsuneLuaDebug.h" />
+    <ClInclude Include="src\engine\KitsuneInternal.h" />
     <ClInclude Include="libyaml\src\config.h" />
     <ClInclude Include="LuaArchive.h" />
     <ClInclude Include="LuaArchiveMain.h" />
@@ -318,7 +318,7 @@
     <ClInclude Include="LuaAesMain.h" />
     <ClInclude Include="luacsv.h" />
     <ClInclude Include="LuaCsvMain.h" />
-    <ClInclude Include="LuaEngineBuiltins.h" />
+    <ClInclude Include="src\engine\LuaEngineBuiltins.h" />
     <ClInclude Include="luakafka.h" />
     <ClInclude Include="luakafkaconsumer.h" />
     <ClInclude Include="luakafkamain.h" />
@@ -353,8 +353,8 @@
     <ClInclude Include="LuaTcpListener.h" />
     <ClInclude Include="LuaTcpMain.h" />
     <ClInclude Include="luatext.h" />
-    <ClInclude Include="kitsunefile.h" />
-    <ClInclude Include="kitsunestdlib.h" />
+    <ClInclude Include="src\engine\KitsuneFile.h" />
+    <ClInclude Include="src\engine\KitsuneStdlib.h" />
     <ClInclude Include="luaidentifier.h" />
     <ClInclude Include="luadatetime.h" />
     <ClInclude Include="luadecimal.h" />
@@ -386,11 +386,11 @@
     <ClInclude Include="Lua\lundump.h" />
     <ClInclude Include="Lua\lvm.h" />
     <ClInclude Include="Lua\lzio.h" />
-    <ClInclude Include="lua_main_incl.h" />
-    <ClInclude Include="lua_misc.h" />
-    <ClInclude Include="mem.h" />
-    <ClInclude Include="MemoryManager.h" />
-    <ClInclude Include="platform.h" />
+    <ClInclude Include="src\engine\LuaMainInclude.h" />
+    <ClInclude Include="src\engine\LuaMisc.h" />
+    <ClInclude Include="src\engine\Mem.h" />
+    <ClInclude Include="src\engine\MemoryManager.h" />
+    <ClInclude Include="src\engine\Platform.h" />
     <ClInclude Include="postgres\include\libpq-fe.h" />
     <ClInclude Include="Redis.h" />
     <ClInclude Include="RedisJson.h" />
@@ -411,7 +411,7 @@
     <ClInclude Include="streammemory.h" />
     <ClInclude Include="timespanmain.h" />
     <ClInclude Include="uintmain.h" />
-    <ClInclude Include="utf8bom.h" />
+    <ClInclude Include="src\engine\Utf8Bom.h" />
     <ClInclude Include="luatextmain.h" />
     <ClInclude Include="identifiermain.h" />
     <ClInclude Include="datetimemain.h" />

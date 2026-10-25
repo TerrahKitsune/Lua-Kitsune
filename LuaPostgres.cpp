@@ -2,7 +2,7 @@
 #include <WinSock2.h>
 #pragma comment(lib, "postgres/lib/libpq.lib")
 #endif
-#include "platform.h"
+#include "Platform.h"
 #include "LuaPostgres.h"
 #include "luaalivetoken.h"
 #include "luaidentifier.h"
@@ -11,7 +11,7 @@
 #include "luauint.h"
 #include "luatimespan.h"
 #include "luajson.h"
-#include "kitsune_internal.h"
+#include "KitsuneInternal.h"
 
 // Mark the current scheduler slot as having done work this tick.
 static void set_did_work(lua_State* L) {

@@ -317,7 +317,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\KitsuneEngine.h">
+    <ClInclude Include="..\src\engine\KitsuneEngine.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="resource.h">

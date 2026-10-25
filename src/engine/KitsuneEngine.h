@@ -1,5 +1,5 @@
 ﻿#pragma once
-#include "platform.h"
+#include "Platform.h"
 
 #ifdef _WIN32
 #ifdef KITSUNE_ENGINE_EXPORTS

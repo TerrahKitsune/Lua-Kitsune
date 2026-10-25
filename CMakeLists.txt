@@ -31,17 +31,17 @@ set_target_properties(lua_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 # core scheduler are compiled.
 set(KITSUNE_ENGINE_SOURCES
 	# ── Lua debug/hook bridge ─────────────────────────────────────────────────
-	KitsuneLuaDebug.cpp
+	src/engine/KitsuneLuaDebug.cpp
 
 	# ── Core scheduler ─────────────────────────────────────────────────────
-	KitsuneEngine.cpp
-	kitsuneuserdata.cpp
+	src/engine/KitsuneEngine.cpp
+	src/engine/KitsuneUserdata.cpp
 	luatask.cpp
-	mem.cpp
-	LuaEngineBuiltins.cpp
-	lua_misc.cpp
-	kitsunefile.cpp       # UTF-8 C-runtime wrappers (wide CRT on Windows)
-	kitsunestdlib.cpp     # UTF-8 file names for Lua's io / os / loadfile / require
+	src/engine/Mem.cpp
+	src/engine/LuaEngineBuiltins.cpp
+	src/engine/LuaMisc.cpp
+	src/engine/KitsuneFile.cpp       # UTF-8 C-runtime wrappers (wide CRT on Windows)
+	src/engine/KitsuneStdlib.cpp     # UTF-8 file names for Lua's io / os / loadfile / require
 
 	# ── MCP (Model Context Protocol server) ─────────────────────────────────
 	luamcp.cpp
@@ -57,8 +57,8 @@ set(KITSUNE_ENGINE_SOURCES
 	LuaSha256.cpp
 	Sha256Main.cpp
 	sha256.c
-	Bencode.cpp
-	MemoryManager.cpp
+	src/engine/Bencode.cpp
+	src/engine/MemoryManager.cpp
 
 	# ── JSON ───────────────────────────────────────────────────────────────
 	luajson.cpp
@@ -446,6 +446,8 @@ target_compile_definitions(KitsuneEngine PRIVATE
 
 target_include_directories(KitsuneEngine PRIVATE
 	"${CMAKE_SOURCE_DIR}"
+	"${CMAKE_SOURCE_DIR}/src/engine"
+	"${CMAKE_SOURCE_DIR}/src/modules"
 	"${CMAKE_SOURCE_DIR}/Lua"
 	"${CMAKE_SOURCE_DIR}/msgpack/include"
 	"${CMAKE_SOURCE_DIR}/libyaml/include"

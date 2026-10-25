@@ -8,9 +8,9 @@
 #include <thread>
 #include <unordered_map>
 #include <cstdint>
-#include "platform.h"
-#include "mem.h"
-#include "lua_main_incl.h"
+#include "Platform.h"
+#include "Mem.h"
+#include "LuaMainInclude.h"
 #include "KitsuneEngine.h"
 
 #define KITSUNE_MAX_COROUTINES 256

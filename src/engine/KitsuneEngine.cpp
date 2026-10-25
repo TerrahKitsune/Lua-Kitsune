@@ -18,15 +18,15 @@
 #include <mmsystem.h>  // timeBeginPeriod/timeEndPeriod
 #pragma comment(lib, "winmm.lib")
 #endif
-#include "platform.h"
+#include "Platform.h"
 
 #ifdef KITSUNE_HTTP
 #include "HttpCurlMain.h"
 #endif
 
-#include "mem.h"
-#include "lua_main_incl.h"
-#include "Kitsune/KitsuneLuaDebug.h"
+#include "Mem.h"
+#include "LuaMainInclude.h"
+#include "KitsuneLuaDebug.h"
 
 #ifdef KITSUNE_MYSQL
 #include "MySQLMain.h"
@@ -52,14 +52,14 @@
 #include "LuaMutexMain.h"
 #include "LuaHardwareMain.h"
 
-#include "lua_misc.h"
+#include "LuaMisc.h"
 #include "MD5Main.h"
 #include "LuaAesMain.h"
 #include "LuaSQLiteMain.h"
 #include "LuaDuckDBMain.h"
 #include "TimerMain.h"
 #include "LuaFileSystemMain.h"
-#include "kitsunestdlib.h"
+#include "KitsuneStdlib.h"
 #include "LuaImageMain.h"
 #include "LuaSoundMain.h"
 #include "StreamMain.h"
@@ -93,9 +93,9 @@
 
 #include "KitsuneEngine.h"
 #include "LuaEngineBuiltins.h"
-#include "kitsuneuserdata.h"
+#include "KitsuneUserdata.h"
 #include "luatask.h"
-#include "kitsune_internal.h"
+#include "KitsuneInternal.h"
 
 // Unique address used as the Lua registry key for the shared bridge LuaJson instance.
 // Defined in luajson.cpp; accessed via lua_json_bridge_registry_key().

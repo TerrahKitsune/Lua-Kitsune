@@ -1,5 +1,5 @@
 #pragma once
-#include "lua_main_incl.h"
+#include "LuaMainInclude.h"
 
 // UTF-8 file names for Lua's standard libraries.
 //

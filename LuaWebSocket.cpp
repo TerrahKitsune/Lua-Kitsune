@@ -5,8 +5,8 @@
 #include "LuaHttpRequest.h"
 #include "LuaHttpServer.h"
 #include "luaalivetoken.h"
-#include "kitsune_internal.h"
-#include "mem.h"
+#include "KitsuneInternal.h"
+#include "Mem.h"
 
 extern "C" {
 #include <event2/ws.h>

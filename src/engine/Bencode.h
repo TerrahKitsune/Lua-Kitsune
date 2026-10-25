@@ -1,4 +1,4 @@
 #pragma once
-#include "lua_main_incl.h"
+#include "LuaMainInclude.h"
 
 int BencodeDecode(lua_State* L);

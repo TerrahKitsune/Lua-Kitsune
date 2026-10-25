@@ -1,5 +1,5 @@
 ﻿#include "LuaHttpRequest.h"
-#include "mem.h"
+#include "Mem.h"
 #include <string.h>
 #include <stdlib.h>
 

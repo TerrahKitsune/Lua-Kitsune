@@ -1,4 +1,4 @@
-﻿#include "platform.h"
+﻿#include "Platform.h"
 #include "LuaMongo.h"
 #include "luatext.h"
 #include "stream.h"
@@ -8,7 +8,7 @@
 #include "luauint.h"
 #include "luatimespan.h"
 #include "luaalivetoken.h"
-#include "kitsune_internal.h"
+#include "KitsuneInternal.h"
 
 static void set_did_work(lua_State* L) {
 	void* ud;

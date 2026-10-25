@@ -1,6 +1,6 @@
 ﻿#include "RedisPubSub.h"
 #include "luaalivetoken.h"
-#include "kitsune_internal.h"
+#include "KitsuneInternal.h"
 #include <string.h>
 
 static void set_did_work(lua_State* L) {

@@ -1,4 +1,4 @@
-﻿#include "kitsuneuserdata.h"
+﻿#include "KitsuneUserdata.h"
 
 bool lua_registerkitsuneuserdata(lua_State* L, const char* name, const KitsuneUserDataRegistration* registration, lua_CFunction cfunctionWrapper, void (*pushGCHook)(lua_State*, void*, kitsune_Finalizer)) {
 	if (!L || !name || !registration || !cfunctionWrapper)

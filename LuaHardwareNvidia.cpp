@@ -3,7 +3,7 @@
 #endif
 
 #include "LuaHardware.h"
-#include "mem.h"
+#include "Mem.h"
 #include <stdio.h>
 #include <string.h>
 

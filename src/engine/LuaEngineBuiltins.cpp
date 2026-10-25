@@ -2,13 +2,13 @@
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 
-#include "platform.h"
-#include "lua_main_incl.h"
+#include "Platform.h"
+#include "LuaMainInclude.h"
 #include "luatext.h"
 #ifdef _WIN32
 #include "Shellapi.h"
 #endif
-#include "mem.h"
+#include "Mem.h"
 
 int L_GetMemory(lua_State *L) {
 	lua_pop(L, lua_gettop(L));

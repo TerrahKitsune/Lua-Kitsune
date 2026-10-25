@@ -3,8 +3,8 @@
 #endif
 
 #include "LuaHardware.h"
-#include "platform.h"
-#include "mem.h"
+#include "Platform.h"
+#include "Mem.h"
 #include <stdio.h>
 #include <string.h>
 #ifndef _WIN32

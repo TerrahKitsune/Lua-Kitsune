@@ -1,7 +1,7 @@
 ﻿#pragma once
-#include "xp_lua_incl.h"
-#include "Kitsune/KitsuneLuaDebug.h"
-#include "mem.h"
+#include "XpLuaInclude.h"
+#include "KitsuneLuaDebug.h"
+#include "Mem.h"
 #ifndef _WIN32
 #include <stdint.h>
 #endif

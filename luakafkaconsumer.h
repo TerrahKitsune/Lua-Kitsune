@@ -1,7 +1,7 @@
 ﻿#pragma once
-#include "lua_main_incl.h"
+#include "LuaMainInclude.h"
 #include "librdkafka/rdkafka.h"
-#include "platform.h"
+#include "Platform.h"
 
 static const char* LUAKAFKACONSUMER = "KAFKACONSUMER";
 

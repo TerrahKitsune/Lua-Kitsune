@@ -1,5 +1,5 @@
 ﻿#include "streamfile.h"
-#include "kitsunefile.h"
+#include "KitsuneFile.h"
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>

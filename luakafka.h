@@ -1,7 +1,7 @@
 ﻿#pragma once
-#include "lua_main_incl.h"
+#include "LuaMainInclude.h"
 #include "librdkafka/rdkafka.h"
-#include "platform.h"
+#include "Platform.h"
 
 #define kafka_error_buffer_len 1024
 

@@ -1,10 +1,10 @@
-﻿#include "mem.h"
+﻿#include "Mem.h"
 #include <new>
 #include <stdlib.h>
 #include "string.h"
 #include <assert.h>
 #include <atomic>
-#include "platform.h"
+#include "Platform.h"
 
 // ── Debug allocation counter ───────────────────────────────────────────────────
 #ifdef _DEBUG

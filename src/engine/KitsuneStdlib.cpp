@@ -1,7 +1,7 @@
-#include "kitsunestdlib.h"
-#include "kitsunefile.h"
+#include "KitsuneStdlib.h"
+#include "KitsuneFile.h"
 #include "luatext.h"
-#include "platform.h"
+#include "Platform.h"
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>

@@ -1,5 +1,5 @@
 ﻿#pragma once
-#include "lua_main_incl.h"
+#include "LuaMainInclude.h"
 
 int  luaopen_mongo(lua_State* L);
 void MongoGlobalCleanup();
