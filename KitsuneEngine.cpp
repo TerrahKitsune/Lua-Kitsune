@@ -960,6 +960,18 @@ lua_State* CreateCoroutineThread(KitsuneState* state, KitsuneCoroutine* slot) {
 	return T;
 }
 
+static void CallTaskErrorHandler(KitsuneState* state, KitsuneCoroutine* slot, int handlerRef) {
+	lua_rawgeti(state->L, LUA_REGISTRYINDEX, handlerRef);
+	lua_pushinteger(state->L, slot->id);
+	lua_pushstring(state->L, slot->error);
+	if (lua_pcall(state->L, 2, 0, 0) != LUA_OK) {
+		const char* handlerErr = lua_tostring(state->L, -1);
+		fprintf(stderr, "Task %d error: %s\nTask %d error handler failed: %s\n",
+			slot->id, slot->error, slot->id, handlerErr ? handlerErr : "unknown error");
+		lua_pop(state->L, 1);
+	}
+}
+
 static void FinishCoroutine(KitsuneState* state, KitsuneCoroutine* slot, lua_State* T, int rc, int nresults) {
 	if (rc == LUA_OK) {
 		if (nresults > 0)
@@ -979,18 +991,10 @@ static void FinishCoroutine(KitsuneState* state, KitsuneCoroutine* slot, lua_Sta
 		// Per-task handler takes priority over the global one.
 		int handlerRef = (slot->onErrorRef > 0) ? slot->onErrorRef : 0;
 		bool useGlobal = (handlerRef <= 0) && slot->fireAndForget.load() && (state->taskErrorHandlerRef > 0);
-		if (handlerRef > 0) {
-			lua_rawgeti(state->L, LUA_REGISTRYINDEX, handlerRef);
-			lua_pushinteger(state->L, slot->id);
-			lua_pushstring(state->L, slot->error);
-			lua_pcall(state->L, 2, 0, 0);
-		}
-		else if (useGlobal) {
-			lua_rawgeti(state->L, LUA_REGISTRYINDEX, state->taskErrorHandlerRef); // useGlobal already guards taskErrorHandlerRef > 0
-			lua_pushinteger(state->L, slot->id);
-			lua_pushstring(state->L, slot->error);
-			lua_pcall(state->L, 2, 0, 0);
-		}
+		if (handlerRef > 0)
+			CallTaskErrorHandler(state, slot, handlerRef);
+		else if (useGlobal)
+			CallTaskErrorHandler(state, slot, state->taskErrorHandlerRef); // useGlobal already guards taskErrorHandlerRef > 0
 		else if (slot->fireAndForget.load()) {
 			fprintf(stderr, "Task %d error: %s\n", slot->id, slot->error);
 		}
@@ -1002,6 +1006,24 @@ static void FinishCoroutine(KitsuneState* state, KitsuneCoroutine* slot, lua_Sta
 // True only on the scheduler thread; set once in SchedulerProc and never cleared.
 // Used by all KitsuneExecute* guards on every platform without OS-specific thread IDs.
 static thread_local bool g_isSchedulerThread = false;
+
+// RAII guard that acquires the Lua access lock when the calling thread does not already
+// own it (i.e. is not the scheduler or an inline-execution thread), and releases it in
+// the destructor.  All exit paths — including early returns — release automatically,
+// eliminating the manual `bool hasAccess` pattern in every variable-bridge API function.
+struct LuaAccessGuard {
+	KitsuneState* const state;
+	const bool owned;
+	explicit LuaAccessGuard(KitsuneState* s)
+		: state(s), owned(!(g_isSchedulerThread || g_inlineExecution)) {
+		if (owned) AcquireLuaAccess(state);
+	}
+	~LuaAccessGuard() {
+		if (owned) ReleaseLuaAccess(state);
+	}
+	LuaAccessGuard(const LuaAccessGuard&) = delete;
+	LuaAccessGuard& operator=(const LuaAccessGuard&) = delete;
+};
 
 static void SchedulerProc(KitsuneState* state) {
 	g_isSchedulerThread = true;
@@ -2658,6 +2680,8 @@ extern "C" {
 	KITSUNE_API bool KitsuneResume(int id, const KitsuneVariable* value) {
 		KitsuneState* state = g_state;
 		if (!state) return false;
+		// The unref/ref below touch state->L; taken before slotsLock to match StartCoroutine's lock order.
+		LuaAccessGuard access(state);
 		state->slotsLock.lock();
 		KitsuneCoroutine* slot = FindSlot(state, id);
 		if (!slot) {
@@ -3040,24 +3064,6 @@ extern "C" {
 		lua_remove(L, -2);  // remove parent, keep value
 		return true;
 	}
-
-	// RAII guard that acquires the Lua access lock when the calling thread does not already
-	// own it (i.e. is not the scheduler or an inline-execution thread), and releases it in
-	// the destructor.  All exit paths — including early returns — release automatically,
-	// eliminating the manual `bool hasAccess` pattern in every variable-bridge API function.
-	struct LuaAccessGuard {
-		KitsuneState* const state;
-		const bool owned;
-		explicit LuaAccessGuard(KitsuneState* s)
-			: state(s), owned(!(g_isSchedulerThread || g_inlineExecution)) {
-			if (owned) AcquireLuaAccess(state);
-		}
-		~LuaAccessGuard() {
-			if (owned) ReleaseLuaAccess(state);
-		}
-		LuaAccessGuard(const LuaAccessGuard&) = delete;
-		LuaAccessGuard& operator=(const LuaAccessGuard&) = delete;
-	};
 
 	KITSUNE_API bool KitsuneSetVariable(const char* path, const KitsuneVariable* var) {
 		KitsuneState* state = g_state;
