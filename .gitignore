@@ -379,3 +379,4 @@ x64/
 
 # vcpkg installed packages — restored locally by vcpkg, not committed
 vcpkg_installed/
+CLAUDE.md

@@ -1,0 +1,22 @@
+root = true
+
+[*.{c,cpp,h,hpp}]
+indent_style = tab
+indent_size = 4
+tab_width = 4
+
+# Third-party and generated code keeps its upstream formatting.
+[{Lua,SQLite,DuckDB,OpenSSL,curl,hiredis,libarchive,libevent,libogg,libvorbis,libyaml,mongodb,msgpack,mysql,postgres,pugixml,stb,tomlc99,dr_libs,packages,vcpkg_installed}/**]
+indent_style = unset
+indent_size = unset
+tab_width = unset
+
+[Kitsune/{SDL2,SDL2_mixer,litehtml,Imgui}/**]
+indent_style = unset
+indent_size = unset
+tab_width = unset
+
+[{Kitsune/stb_image.h,Kitsune/*_generated.cpp,aes.*,md5.*,sha1.*,sha256.*,miniz.*}]
+indent_style = unset
+indent_size = unset
+tab_width = unset

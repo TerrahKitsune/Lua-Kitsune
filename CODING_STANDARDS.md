@@ -1,0 +1,67 @@
+# Kitsune coding standard
+
+Applies to all our own code in this repository. Follow it when writing new code and when changing existing code.
+
+## Third-party code
+
+Never edit, move, rename or add files in third-party code; updating a library replaces its folder wholesale. That covers `Lua/`, `SQLite/`, `DuckDB/`, `OpenSSL/`, `curl/`, `hiredis/`, `libarchive/`, `libevent/`, `libogg/`, `libvorbis/`, `libyaml/`, `mongodb/`, `msgpack/`, `mysql/`, `postgres/`, `pugixml/`, `stb/`, `tomlc99/`, `dr_libs/`, `Kitsune/SDL2`, `Kitsune/SDL2_mixer`, `Kitsune/litehtml`, `Kitsune/Imgui`, `Kitsune/stb_image.h`, generated `Kitsune/*_generated.cpp`, and the root `aes.*`, `md5.*`, `sha1.*`, `sha256.*`, `miniz.*`.
+
+Conflicts with third-party code (include resolution, name clashes, behaviour) are fixed on our side.
+
+## Layout
+
+- `src/engine/`: engine core and loose globals (`KitsuneEngine`, memory, userdata, debug, stdlib/file wrappers, `LuaMisc`, `LuaEngineBuiltins`).
+- `src/modules/<name>/`: one folder per Lua module. `<name>` is the lowercase Lua global the module registers (`Json` → `json`, `HttpClient` → `httpclient`, `MongoDB` → `mongodb`).
+- Third-party code stays outside `src/`.
+
+## Files
+
+- PascalCase file names.
+- In a module folder every file is prefixed `Lua<Global>` with the global's exact casing:
+  - `LuaJson.cpp/.h`: implementation.
+  - `LuaJsonMain.cpp/.h`: only `luaopen_json`, declared in the `.h`.
+  - Extra files extend the prefix: `LuaRedisString.cpp`, `LuaKafkaProducer.cpp`.
+- Include dirs are the repo root, `src/engine` and `src/modules`:
+  - engine headers by bare name: `"KitsuneEngine.h"`
+  - module headers by folder: `"json/LuaJson.h"`
+  - third-party by its folder: `"SQLite/sqlite3.h"`
+
+## Functions
+
+| What | Pattern | Example |
+|---|---|---|
+| Module registration | `luaopen_<name>` | `luaopen_json` |
+| Userdata helpers | `lua_push<type>`, `lua_to<type>`, `luaL_check<type>` | `lua_pushtoml`, `luaL_checktoml` |
+| Lua-callable functions | `<Module>_<Method>` PascalCase | `Json_Parse`, `DateTime_FromUnixSeconds`, `RedisKey_Delete` |
+| Metamethods | `<Module>_GC`, `<Module>_ToString`, `<Module>_Index`, … | `Toml_GC` |
+| Internal helpers | PascalCase; `static` when file-local | `BsonToLua`, `PushSqliteValue` |
+
+Never rename:
+- the exported `Kitsune*` API (C# P/Invoke binds by name)
+- the `kitsune_*` C helpers (used by `sqliteextension` and the app)
+- any name visible to Lua scripts: globals, methods, metatable name strings
+
+## Types, variables, constants
+
+- Types: PascalCase (`LuaToml`, `KitsuneState`).
+- Locals, parameters, struct/class fields: camelCase (`timeoutMs`, `rowCount`).
+- Mutable file-scope/global variables: `g_` + camelCase (`g_nvml`).
+- Macros and constants: `UPPER_SNAKE` (`LUATOML`).
+- Structs mirroring a third-party ABI keep that ABI's names (e.g. the NVML declarations).
+
+## Comments
+
+Comment only where the code can't explain itself: the why, contracts in headers, platform quirks, non-obvious constraints, license headers.
+
+Not allowed:
+- comments restating the code (`// Create a new table`, `// Advance cursor`)
+- references to plans, tasks, phases, stages or review rounds (`see Plans/...`, task IDs like `T5a`)
+- change history (`replaces old client_connect`, `no longer needed`); that belongs in git
+- commented-out code
+- decorative separator lines (`// =====`, `// -----`)
+
+Allowed: a one-line section label in a long file (`// Instance management`), and algorithm step labels that other code or comments refer to (the scheduler's Step 1–5 in `KitsuneEngine.cpp`).
+
+## Formatting
+
+Tabs (width 4), opening brace on the same line, `else`/`catch` on their own line, `case` at `switch` level, `Type* p`. `.editorconfig` sets the indentation.
