@@ -1,411 +1,383 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <Filter Include="Source Files">
-      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
-      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    <Filter Include="Engine">
+      <UniqueIdentifier>{1dead04a-271b-414e-89f3-5a75a74f23f5}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files">
-      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
-      <Extensions>h;hh;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    <Filter Include="Modules">
+      <UniqueIdentifier>{7e3c293a-7559-4cfb-bc0f-36410006078a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="dr_libs">
+      <UniqueIdentifier>{09863f0d-4ace-4c48-8a03-b0ff41be486e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="DuckDB">
+      <UniqueIdentifier>{d3600daa-b7af-4f28-9f84-3303ee192485}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="hiredis">
+      <UniqueIdentifier>{e5a40fd9-79ba-475e-b4e6-9489a77d426e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="libogg">
+      <UniqueIdentifier>{00e8b0ad-3ff6-44fb-a874-49b42a6e6714}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="libvorbis">
+      <UniqueIdentifier>{4d34cb14-9d02-435b-8ec6-846b074ce52b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="libyaml">
+      <UniqueIdentifier>{882df6c8-9a81-4e5f-ba54-1926893e81d5}</UniqueIdentifier>
     </Filter>
     <Filter Include="Lua">
-      <UniqueIdentifier>{5febcf18-d6cc-4b27-817d-7035732d4ab8}</UniqueIdentifier>
+      <UniqueIdentifier>{05238848-2170-437b-a233-e8c25a4ff791}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaTimer">
-      <UniqueIdentifier>{d98a3149-6aa6-4d49-bf4c-187f4aedd10e}</UniqueIdentifier>
+    <Filter Include="Modules\aes">
+      <UniqueIdentifier>{c38e15de-f7bd-4f6a-b12f-98d41970c18d}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaTimer\Header Files">
-      <UniqueIdentifier>{0a878b2a-3981-4293-853a-3972480f9661}</UniqueIdentifier>
+    <Filter Include="Modules\alivetoken">
+      <UniqueIdentifier>{809172f2-bc70-479b-9ccb-6431c733ed06}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaTimer\Source Files">
-      <UniqueIdentifier>{b7e01c90-68a1-422f-8bc8-cd81c54dbd1f}</UniqueIdentifier>
+    <Filter Include="Modules\archive">
+      <UniqueIdentifier>{7ece5b44-7ae3-4ac9-99c6-8e5c3ecbcd93}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaMySQL">
-      <UniqueIdentifier>{aee4f7e1-7786-40ab-b8ef-64b33522e904}</UniqueIdentifier>
+    <Filter Include="Modules\base64">
+      <UniqueIdentifier>{f80509f1-fb9c-41ef-a199-50be0294ef9b}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaMySQL\Header Files">
-      <UniqueIdentifier>{c60550ae-8d6f-4109-ab0f-da4bc2b38292}</UniqueIdentifier>
+    <Filter Include="Modules\csv">
+      <UniqueIdentifier>{e2fefc6c-3655-42e0-bcc9-d21c4b49ea33}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaMySQL\Source Files">
-      <UniqueIdentifier>{d6cd8c0e-eb92-488c-ae6b-762a3b679fff}</UniqueIdentifier>
+    <Filter Include="Modules\datetime">
+      <UniqueIdentifier>{930f5749-83a9-4225-a49e-fbe8435cb8d7}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaFileSystem">
-      <UniqueIdentifier>{a49d0837-6489-4fe3-8038-3d45fa8a4809}</UniqueIdentifier>
+    <Filter Include="Modules\decimal">
+      <UniqueIdentifier>{edc24b8b-556a-4da9-aaee-c7c07510f6ab}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaFileSystem\Header Files">
-      <UniqueIdentifier>{80800d5c-4a41-47fe-8b95-334b50b8abaf}</UniqueIdentifier>
+    <Filter Include="Modules\duckdb">
+      <UniqueIdentifier>{4bbf5449-dc8a-4360-b54c-9757c9807ce8}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaFileSystem\Source Files">
-      <UniqueIdentifier>{04281dea-b37e-4d69-8696-01394c09ead3}</UniqueIdentifier>
+    <Filter Include="Modules\filesystem">
+      <UniqueIdentifier>{b1556f5c-af83-4fc3-90bb-125a69c8ea62}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaSQLite">
-      <UniqueIdentifier>{837f942e-0bb1-4632-809f-99d95b023ac1}</UniqueIdentifier>
+    <Filter Include="Modules\hardware">
+      <UniqueIdentifier>{a6bb3a71-0f13-4d5c-82ac-9fa0418ef5ee}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaSQLite\Header Files">
-      <UniqueIdentifier>{cb7f6976-b9b9-4f6f-934e-6aed1c877388}</UniqueIdentifier>
+    <Filter Include="Modules\httpclient">
+      <UniqueIdentifier>{a14f794c-0700-4c57-bddd-2b7ead09792b}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaSQLite\Source Files">
-      <UniqueIdentifier>{a4ce2ed5-5512-49e7-875d-28cc80fa3375}</UniqueIdentifier>
+    <Filter Include="Modules\httpserver">
+      <UniqueIdentifier>{87b79799-6d70-4ff3-9641-ddf6b85c6765}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaMD5">
-      <UniqueIdentifier>{f3664418-ac63-4aaa-87cc-3d0da3ad7fb6}</UniqueIdentifier>
+    <Filter Include="Modules\identifier">
+      <UniqueIdentifier>{850437af-98bc-4be4-a11d-3fff06d4ccf4}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaMD5\Header Files">
-      <UniqueIdentifier>{7a1e04f4-2838-4487-9e6f-f0de28216ed1}</UniqueIdentifier>
+    <Filter Include="Modules\image">
+      <UniqueIdentifier>{a89117be-6a4e-4930-bc47-f029145b08fa}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaMD5\Source Files">
-      <UniqueIdentifier>{7703a69d-d192-4f3a-8d11-e570dcac0244}</UniqueIdentifier>
+    <Filter Include="Modules\ini">
+      <UniqueIdentifier>{5e6d6aa4-e18f-4cae-819f-17f4062b9e82}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaHTTP">
-      <UniqueIdentifier>{d8689614-2c91-446a-b9ae-beff28b906aa}</UniqueIdentifier>
+    <Filter Include="Modules\json">
+      <UniqueIdentifier>{243c2d13-c2eb-4261-ac58-acc0eabba3d9}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaHTTP\Header Files">
-      <UniqueIdentifier>{523b5adb-1ebe-4985-816e-dbb8492b2042}</UniqueIdentifier>
+    <Filter Include="Modules\kafka">
+      <UniqueIdentifier>{9ab09f30-5832-484d-855f-45c8b4341cad}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaHTTP\Source Files">
-      <UniqueIdentifier>{6afb50f5-e833-4781-8874-00919cda37b6}</UniqueIdentifier>
+    <Filter Include="Modules\mcp">
+      <UniqueIdentifier>{25368cdb-88af-43f2-8469-422e068a3f85}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaProcess">
-      <UniqueIdentifier>{f6adc465-8171-47eb-87c7-382605644e94}</UniqueIdentifier>
+    <Filter Include="Modules\md5">
+      <UniqueIdentifier>{eb9c9f3b-132b-4180-8e39-5582b6ca62f6}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaProcess\Header Files">
-      <UniqueIdentifier>{fe4ee218-9906-4aba-88cf-dcbcbfaf1450}</UniqueIdentifier>
+    <Filter Include="Modules\mongodb">
+      <UniqueIdentifier>{69d93880-0651-4468-b433-0ac9f162fee1}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaProcess\Source Files">
-      <UniqueIdentifier>{5fe20aa0-5a64-41b4-bb03-48dc2862c9ca}</UniqueIdentifier>
+    <Filter Include="Modules\msgpack">
+      <UniqueIdentifier>{f2d8455b-782b-4bd3-8e6c-b0bac74c61b4}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Engine">
-      <UniqueIdentifier>{7d2e5b1a-3c84-4f0e-9a61-2b8f4e6c1d90}</UniqueIdentifier>
+    <Filter Include="Modules\mutex">
+      <UniqueIdentifier>{61729759-486e-4426-8a98-848573e01917}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaStream">
-      <UniqueIdentifier>{434db58b-05c4-45f3-acd1-f35be75015db}</UniqueIdentifier>
+    <Filter Include="Modules\mysql">
+      <UniqueIdentifier>{81f7cd05-816e-48e2-b412-293c9d4f91ea}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaStream\Header Files">
-      <UniqueIdentifier>{8f795216-a0dc-4ed3-b84a-992467e47584}</UniqueIdentifier>
+    <Filter Include="Modules\postgres">
+      <UniqueIdentifier>{c5d80c83-eea3-4854-a4af-2afd95f8c622}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaStream\Source Files">
-      <UniqueIdentifier>{8fb4bfcd-53c0-4139-8dcd-d2882af0022e}</UniqueIdentifier>
+    <Filter Include="Modules\process">
+      <UniqueIdentifier>{78ddd406-183d-4600-b583-55d1288822a1}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaKafka">
-      <UniqueIdentifier>{e4f30f39-2b06-4efd-b027-6e6db5fd5b77}</UniqueIdentifier>
+    <Filter Include="Modules\redis">
+      <UniqueIdentifier>{d6664c4f-1cd9-44e9-b770-04b6bfe35a20}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaKafka\Header Files">
-      <UniqueIdentifier>{46790a7b-a8c1-4210-8051-67fa93878bd9}</UniqueIdentifier>
+    <Filter Include="Modules\sha1">
+      <UniqueIdentifier>{370611eb-8ae2-42e4-aac1-2724bb056263}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaKafka\Source Files">
-      <UniqueIdentifier>{5c92bced-32c7-43b7-82fb-7696a67caa66}</UniqueIdentifier>
+    <Filter Include="Modules\sha256">
+      <UniqueIdentifier>{22230dc0-e119-46de-bfcb-5ef44fa3ee2b}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaSha256">
-      <UniqueIdentifier>{ad164aa8-3198-4dd1-ba35-24d36bc3fd04}</UniqueIdentifier>
+    <Filter Include="Modules\sound">
+      <UniqueIdentifier>{0dcb0c1f-ab63-475c-a729-1d83fd19313b}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaSha256\Header Files">
-      <UniqueIdentifier>{d4801336-e960-4b6f-a717-cfa6f8ccd9dd}</UniqueIdentifier>
+    <Filter Include="Modules\sqlite">
+      <UniqueIdentifier>{ff920fe3-d653-442a-a5c4-b2c2fee95c5c}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaSha256\Source Files">
-      <UniqueIdentifier>{7dc9be02-68f4-40a2-896f-901111ca3ef5}</UniqueIdentifier>
+    <Filter Include="Modules\stream">
+      <UniqueIdentifier>{c1e32cc8-c2cb-4127-a187-e7e9203c0b10}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaMutex">
-      <UniqueIdentifier>{a26c0542-2fa2-417b-a2c9-b2f6d91c3d56}</UniqueIdentifier>
+    <Filter Include="Modules\tasks">
+      <UniqueIdentifier>{b93a7d2c-aaec-49fe-9ac0-46d0e9e69891}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaMutex\Header Files">
-      <UniqueIdentifier>{1c936cb2-405d-43ac-9a0e-a11c47040b2d}</UniqueIdentifier>
+    <Filter Include="Modules\tcp">
+      <UniqueIdentifier>{d9a39de8-3601-47d8-884c-9d5689fece56}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaMutex\Source Files">
-      <UniqueIdentifier>{ef32238b-5c8a-4fb3-837a-6f73bcd4b940}</UniqueIdentifier>
+    <Filter Include="Modules\text">
+      <UniqueIdentifier>{0535c11f-17b7-4dc7-a97b-6b75454c1b91}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaAes">
-      <UniqueIdentifier>{c55ac30a-9963-4256-9547-c249498971d7}</UniqueIdentifier>
+    <Filter Include="Modules\timer">
+      <UniqueIdentifier>{1fccf636-7a6c-4073-978d-a9120b1acb27}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaAes\Header Files">
-      <UniqueIdentifier>{5bd26ba6-808b-4db3-b806-c02944df4177}</UniqueIdentifier>
+    <Filter Include="Modules\timespan">
+      <UniqueIdentifier>{9a3e169e-c247-4b8c-9a01-b5a05077be6e}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaAes\Source Files">
-      <UniqueIdentifier>{1ce12822-54a0-4b0c-bf56-cd9af209de40}</UniqueIdentifier>
+    <Filter Include="Modules\toml">
+      <UniqueIdentifier>{68854961-9735-4ae7-b652-ef094eec77f4}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaJson">
-      <UniqueIdentifier>{611eb294-916b-41c5-99ad-eab83925a47b}</UniqueIdentifier>
+    <Filter Include="Modules\uint">
+      <UniqueIdentifier>{da79d46d-c4bc-4de6-9ccd-574223c132b8}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaJson\Header Files">
-      <UniqueIdentifier>{f2d1fa47-5273-4aba-b73d-da6a9ac725c0}</UniqueIdentifier>
+    <Filter Include="Modules\websocket">
+      <UniqueIdentifier>{21fe2587-e08f-445a-b1a8-73b557ddd437}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaJson\Source Files">
-      <UniqueIdentifier>{45c7cffb-cd06-4393-9097-f6824a6eabf4}</UniqueIdentifier>
+    <Filter Include="Modules\xml">
+      <UniqueIdentifier>{930f9ee8-352d-4418-b404-d680d5c59c46}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaText">
-      <UniqueIdentifier>{3cce908f-8005-4bb8-8ea7-41325772c947}</UniqueIdentifier>
+    <Filter Include="Modules\yaml">
+      <UniqueIdentifier>{ed8682ba-11d1-4f6f-855a-01188019f6ae}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaText\Header Files">
-      <UniqueIdentifier>{fdda124e-d4e6-4514-8c44-c1aa1fd1ae3d}</UniqueIdentifier>
+    <Filter Include="msgpack">
+      <UniqueIdentifier>{3e1bdfeb-cdba-4c8a-a516-f9467c243764}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaText\Source Files">
-      <UniqueIdentifier>{5152b899-2bcf-47db-bb32-93b6dca0ed23}</UniqueIdentifier>
+    <Filter Include="postgres">
+      <UniqueIdentifier>{c3a9b64a-78aa-47e0-9b53-348d695cb255}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaIdentifier">
-      <UniqueIdentifier>{a1b2c3d4-e5f6-7890-abcd-ef1234567890}</UniqueIdentifier>
+    <Filter Include="pugixml">
+      <UniqueIdentifier>{bf9c09ce-cbfd-4500-8024-80294860f2ef}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaIdentifier\Header Files">
-      <UniqueIdentifier>{b2c3d4e5-f6a7-8901-bcde-f12345678901}</UniqueIdentifier>
+    <Filter Include="SQLite">
+      <UniqueIdentifier>{07c14b31-11da-4241-83f4-947497b824ec}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaIdentifier\Source Files">
-      <UniqueIdentifier>{c3d4e5f6-a7b8-9012-cdef-123456789012}</UniqueIdentifier>
+    <Filter Include="stb">
+      <UniqueIdentifier>{3538113a-fe1b-4aa8-a4a8-84c0ce701603}</UniqueIdentifier>
     </Filter>
-    <Filter Include="LuaDateTime">
-      <UniqueIdentifier>{d4e5f6a7-b8c9-0123-def0-1234567890ab}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaCSV">
-      <UniqueIdentifier>{035b992b-c43a-4798-9516-67392a93ebeb}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaCSV\Header Files">
-      <UniqueIdentifier>{8e1bef7b-5a87-41e6-9e64-865a1808af33}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaCSV\Source Files">
-      <UniqueIdentifier>{993c9efe-3750-4dc3-9fb1-21d95b416e9a}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Archive">
-      <UniqueIdentifier>{35379424-1ef9-403f-b316-0d3ae712448b}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Archive\Header Files">
-      <UniqueIdentifier>{3da93d8f-6f6d-451f-9399-9f20f935a854}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Archive\Source Files">
-      <UniqueIdentifier>{d28e2238-1d0d-47af-8487-91b2c49f39ca}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaRedis">
-      <UniqueIdentifier>{2c662f44-4ed7-450c-a511-9a2b90d61b06}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaRedis\Header Files">
-      <UniqueIdentifier>{04b5d665-bc13-4be8-b5ac-c4a34f07573e}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaRedis\Source Files">
-      <UniqueIdentifier>{9203d280-003e-4184-a146-3595ed5b1735}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Hiredis">
-      <UniqueIdentifier>{676718aa-d0b4-494d-8e46-c5c32376e3ad}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaSHA1">
-      <UniqueIdentifier>{8aec9a9e-65f4-41fd-8ed4-fbdbadf9415b}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaSHA1\Header Files">
-      <UniqueIdentifier>{0c6080ea-bcf9-4408-bf4a-377650a7c5ee}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaSHA1\Source Files">
-      <UniqueIdentifier>{1f0f5f4b-8350-4ae9-9c61-bacfaf063fc4}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaMongo">
-      <UniqueIdentifier>{b1c2d3e4-f5a6-7890-bcde-f01234567890}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaMongo\Header Files">
-      <UniqueIdentifier>{c2d3e4f5-a6b7-8901-cdef-012345678901}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaMongo\Source Files">
-      <UniqueIdentifier>{d3e4f5a6-b7c8-9012-def0-123456789012}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaPostgres">
-      <UniqueIdentifier>{e1a2b3c4-d5e6-7f89-0a1b-2c3d4e5f6a7b}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaPostgres\Header Files">
-      <UniqueIdentifier>{f2b3c4d5-e6f7-8901-2b3c-4d5e6f7a8b9c}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaPostgres\Source Files">
-      <UniqueIdentifier>{a3c4d5e6-f7a8-9012-3c4d-5e6f7a8b9c0d}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaDateTime\Header Files">
-      <UniqueIdentifier>{901c6432-5d3c-4cb5-84e1-3cd353fb5c2c}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaDateTime\Source Files">
-      <UniqueIdentifier>{18d328a4-8456-4b12-bc81-a191e02c8230}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaDecimal">
-      <UniqueIdentifier>{61fa211f-107a-424c-a073-4da09bf930ff}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaDecimal\Header Files">
-      <UniqueIdentifier>{a3c9bee2-99b2-4a94-bdd7-87cbc3e44426}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaDecimal\Source Files">
-      <UniqueIdentifier>{f30c478a-420f-4510-ab5c-38022f94f90b}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaMsgPack">
-      <UniqueIdentifier>{c90a71d3-d90d-4719-8f1b-6c071ecd1eca}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaMsgPack\Header Files">
-      <UniqueIdentifier>{f99d8f96-b150-45aa-90ff-f9be040300f7}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaMsgPack\Source Files">
-      <UniqueIdentifier>{514b926c-ce5a-42d9-b137-faac593a0756}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaHttpServer">
-      <UniqueIdentifier>{4882ca08-7333-41af-a38e-b9831b8cad8b}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaHttpServer\Header Files">
-      <UniqueIdentifier>{87137bdf-31fb-4e5f-b82a-ca2c115efd09}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaHttpServer\Source Files">
-      <UniqueIdentifier>{398bddc5-5f1d-4b23-82ac-08139a52fecb}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaXml">
-      <UniqueIdentifier>{9f3619e9-6a26-4a08-a154-8c55ae02b007}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaXml\Header Files">
-      <UniqueIdentifier>{14317451-7d30-4d62-bc97-df874085e950}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaXml\Source Files">
-      <UniqueIdentifier>{8f4c62b9-cf25-4c6f-8c9c-338935e15f4a}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaYaml">
-      <UniqueIdentifier>{c58d5a2b-7e51-4a3c-bfc1-b1c219ed34f0}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaYaml\Header Files">
-      <UniqueIdentifier>{2468b443-fc3a-47f7-a433-86b26aa3729a}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaYaml\Source Files">
-      <UniqueIdentifier>{43fd7786-235b-4cf1-91c6-71e8bcaa8deb}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaToml">
-      <UniqueIdentifier>{553e513d-ecb0-4921-bddd-ca863eaf01cd}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaIni">
-      <UniqueIdentifier>{a475aaf5-e1f4-46be-951c-c874024cbb54}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaHardware">
-      <UniqueIdentifier>{1662154a-5bd1-4e8d-aa17-9aa4a019809f}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaUint">
-      <UniqueIdentifier>{d5e91a93-e04b-4627-822d-e1632b1d26b9}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaTimespan">
-      <UniqueIdentifier>{a094c2ea-a6e3-4542-9bd2-c7ea51c731c6}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaAliveToken">
-      <UniqueIdentifier>{67d27bd3-dca7-4d41-bbf4-05a2467911ba}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaTCP">
-      <UniqueIdentifier>{45c33308-a34e-4332-8bac-cbde4b8f3318}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaTCP\Header Files">
-      <UniqueIdentifier>{099f507c-ab17-49d0-bd71-50235066fd09}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaTCP\Source Files">
-      <UniqueIdentifier>{e8315d1f-d6fb-458f-b54b-65b5e18bc77f}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaMcp">
-      <UniqueIdentifier>{289a3914-5869-45cc-ba00-4339210eb02e}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaSound">
-      <UniqueIdentifier>{b91fb2e9-5d30-48f9-a226-81d9fa72a1a8}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaSound\Vorbis">
-      <UniqueIdentifier>{c1a2d3e4-6f70-4a81-b912-92eafb83b2b9}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LuaImage">
-      <UniqueIdentifier>{a8efa1d8-4c2f-47e8-9115-70c8e9619097}</UniqueIdentifier>
+    <Filter Include="tomlc99">
+      <UniqueIdentifier>{fd55719c-8025-4393-aa38-5dd3a63600a7}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="aes.c" />
+    <ClCompile Include="src\engine\Bencode.cpp">
+      <Filter>Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\httpclient\LuaHttpClient.cpp">
+      <Filter>Modules\httpclient</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\httpclient\LuaHttpClientMain.cpp">
+      <Filter>Modules\httpclient</Filter>
+    </ClCompile>
     <ClCompile Include="src\engine\KitsuneEngine.cpp">
       <Filter>Engine</Filter>
     </ClCompile>
-    <ClCompile Include="TimerMain.cpp">
-      <Filter>LuaTimer</Filter>
-    </ClCompile>
-    <ClCompile Include="Timer.cpp">
-      <Filter>LuaTimer\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaMongo.cpp">
-      <Filter>LuaMongo\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="MongoMain.cpp">
-      <Filter>LuaMongo</Filter>
-    </ClCompile>
-    <ClCompile Include="MySQLMain.cpp">
-      <Filter>LuaMySQL</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaMySQL.cpp">
-      <Filter>LuaMySQL\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="src\engine\LuaMisc.cpp">
+    <ClCompile Include="src\engine\KitsuneLuaDebug.cpp">
       <Filter>Engine</Filter>
     </ClCompile>
-    <ClCompile Include="LuaFileSystemMain.cpp">
-      <Filter>LuaFileSystem</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaFileSystem.cpp">
-      <Filter>LuaFileSystem\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaSQLiteMain.cpp">
-      <Filter>LuaSQLite</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaSQLite.cpp">
-      <Filter>LuaSQLite\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="SQLite\sqlite3.c">
-      <Filter>LuaSQLite\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="md5.c">
-      <Filter>LuaMD5\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="MD5Main.cpp">
-      <Filter>LuaMD5</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaMD5.cpp">
-      <Filter>LuaMD5\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="ProcessMain.cpp">
-      <Filter>LuaProcess</Filter>
-    </ClCompile>
-    <ClCompile Include="stream.cpp">
-      <Filter>LuaStream\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="StreamMain.cpp">
-      <Filter>LuaStream</Filter>
-    </ClCompile>
-    <ClCompile Include="luakafka.cpp">
-      <Filter>LuaKafka\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="luakafkamain.cpp">
-      <Filter>LuaKafka</Filter>
-    </ClCompile>
-    <ClCompile Include="kafkahelpers.cpp">
-      <Filter>LuaKafka\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="sha256.c">
-      <Filter>LuaSha256\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaSha256.cpp">
-      <Filter>LuaSha256\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Sha256Main.cpp">
-      <Filter>LuaSha256</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaMutexMain.cpp">
-      <Filter>LuaMutex</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaMutex.cpp">
-      <Filter>LuaMutex\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="aes.c">
-      <Filter>LuaAes\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="luaaes.cpp">
-      <Filter>LuaAes\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaAesMain.cpp">
-      <Filter>LuaAes</Filter>
-    </ClCompile>
-    <ClCompile Include="base64.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="src\engine\Mem.cpp">
+    <ClCompile Include="src\engine\KitsuneUserdata.cpp">
       <Filter>Engine</Filter>
     </ClCompile>
-    <ClCompile Include="src\engine\MemoryManager.cpp">
+    <ClCompile Include="src\modules\archive\LuaArchive.cpp">
+      <Filter>Modules\archive</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\archive\LuaArchiveMain.cpp">
+      <Filter>Modules\archive</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\base64\LuaBase64.cpp">
+      <Filter>Modules\base64</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\base64\LuaBase64Main.cpp">
+      <Filter>Modules\base64</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\hardware\LuaHardware.cpp">
+      <Filter>Modules\hardware</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\hardware\LuaHardwareMain.cpp">
+      <Filter>Modules\hardware</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\hardware\LuaHardwareNvidia.cpp">
+      <Filter>Modules\hardware</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\json\LuaJson.cpp">
+      <Filter>Modules\json</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\json\LuaJsonMain.cpp">
+      <Filter>Modules\json</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\kafka\LuaKafkaHelpers.cpp">
+      <Filter>Modules\kafka</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\aes\LuaAes.cpp">
+      <Filter>Modules\aes</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\aes\LuaAesMain.cpp">
+      <Filter>Modules\aes</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\csv\LuaCSV.cpp">
+      <Filter>Modules\csv</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\csv\LuaCSVMain.cpp">
+      <Filter>Modules\csv</Filter>
+    </ClCompile>
+    <ClCompile Include="src\engine\LuaEngineBuiltins.cpp">
       <Filter>Engine</Filter>
     </ClCompile>
-    <ClCompile Include="luatextmain.cpp">
-      <Filter>LuaText\Source Files</Filter>
+    <ClCompile Include="src\modules\kafka\LuaKafka.cpp">
+      <Filter>Modules\kafka</Filter>
     </ClCompile>
-    <ClCompile Include="luatext.cpp">
-      <Filter>LuaText\Source Files</Filter>
+    <ClCompile Include="src\modules\kafka\LuaKafkaConsumer.cpp">
+      <Filter>Modules\kafka</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\kafka\LuaKafkaMain.cpp">
+      <Filter>Modules\kafka</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\kafka\LuaKafkaProducer.cpp">
+      <Filter>Modules\kafka</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\msgpack\LuaMsgPack.cpp">
+      <Filter>Modules\msgpack</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\msgpack\LuaMsgPackMain.cpp">
+      <Filter>Modules\msgpack</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\tasks\LuaTasks.cpp">
+      <Filter>Modules\tasks</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\tasks\LuaTasksMain.cpp">
+      <Filter>Modules\tasks</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\timespan\LuaTimeSpan.cpp">
+      <Filter>Modules\timespan</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\toml\LuaToml.cpp">
+      <Filter>Modules\toml</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\mcp\LuaMCP.cpp">
+      <Filter>Modules\mcp</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\mcp\LuaMCPMain.cpp">
+      <Filter>Modules\mcp</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\uint\LuaUInt.cpp">
+      <Filter>Modules\uint</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\websocket\LuaWebSocket.cpp">
+      <Filter>Modules\websocket</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\websocket\LuaWebSocketMain.cpp">
+      <Filter>Modules\websocket</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\timespan\LuaTimeSpanMain.cpp">
+      <Filter>Modules\timespan</Filter>
+    </ClCompile>
+    <ClCompile Include="tomlc99\toml.c">
+      <Filter>tomlc99</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\toml\LuaTomlMain.cpp">
+      <Filter>Modules\toml</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\ini\LuaIni.cpp">
+      <Filter>Modules\ini</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\ini\LuaIniMain.cpp">
+      <Filter>Modules\ini</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\alivetoken\LuaAliveToken.cpp">
+      <Filter>Modules\alivetoken</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\alivetoken\LuaAliveTokenMain.cpp">
+      <Filter>Modules\alivetoken</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\yaml\LuaYaml.cpp">
+      <Filter>Modules\yaml</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\yaml\LuaYamlMain.cpp">
+      <Filter>Modules\yaml</Filter>
+    </ClCompile>
+    <ClCompile Include="libyaml\src\api.c">
+      <Filter>libyaml</Filter>
+    </ClCompile>
+    <ClCompile Include="libyaml\src\dumper.c">
+      <Filter>libyaml</Filter>
+    </ClCompile>
+    <ClCompile Include="libyaml\src\emitter.c">
+      <Filter>libyaml</Filter>
+    </ClCompile>
+    <ClCompile Include="libyaml\src\loader.c">
+      <Filter>libyaml</Filter>
+    </ClCompile>
+    <ClCompile Include="libyaml\src\parser.c">
+      <Filter>libyaml</Filter>
+    </ClCompile>
+    <ClCompile Include="libyaml\src\reader.c">
+      <Filter>libyaml</Filter>
+    </ClCompile>
+    <ClCompile Include="libyaml\src\scanner.c">
+      <Filter>libyaml</Filter>
+    </ClCompile>
+    <ClCompile Include="libyaml\src\writer.c">
+      <Filter>libyaml</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\xml\LuaXml.cpp">
+      <Filter>Modules\xml</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\xml\LuaXmlMain.cpp">
+      <Filter>Modules\xml</Filter>
+    </ClCompile>
+    <ClCompile Include="pugixml\pugixml.cpp">
+      <Filter>pugixml</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\mutex\LuaMutex.cpp">
+      <Filter>Modules\mutex</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\mutex\LuaMutexMain.cpp">
+      <Filter>Modules\mutex</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\postgres\LuaPostgres.cpp">
+      <Filter>Modules\postgres</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\process\LuaProcess.cpp">
+      <Filter>Modules\process</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\sha1\LuaSHA1.cpp">
+      <Filter>Modules\sha1</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\httpserver\LuaHttpServerRequest.cpp">
+      <Filter>Modules\httpserver</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\httpserver\LuaHttpServerResponse.cpp">
+      <Filter>Modules\httpserver</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\httpserver\LuaHttpServer.cpp">
+      <Filter>Modules\httpserver</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\httpserver\LuaHttpServerMain.cpp">
+      <Filter>Modules\httpserver</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\tcp\LuaTCPListener.cpp">
+      <Filter>Modules\tcp</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\tcp\LuaTCPMain.cpp">
+      <Filter>Modules\tcp</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\sha256\LuaSHA256.cpp">
+      <Filter>Modules\sha256</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\text\LuaText.cpp">
+      <Filter>Modules\text</Filter>
     </ClCompile>
     <ClCompile Include="src\engine\KitsuneStdlib.cpp">
       <Filter>Engine</Filter>
@@ -413,44 +385,14 @@
     <ClCompile Include="src\engine\KitsuneFile.cpp">
       <Filter>Engine</Filter>
     </ClCompile>
-    <ClCompile Include="datetimemain.cpp">
-      <Filter>LuaDateTime</Filter>
+    <ClCompile Include="src\modules\identifier\LuaIdentifier.cpp">
+      <Filter>Modules\identifier</Filter>
     </ClCompile>
-    <ClCompile Include="identifiermain.cpp">
-      <Filter>LuaIdentifier</Filter>
+    <ClCompile Include="src\modules\datetime\LuaDateTime.cpp">
+      <Filter>Modules\datetime</Filter>
     </ClCompile>
-    <ClCompile Include="luaidentifier.cpp">
-      <Filter>LuaIdentifier\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="luacsv.cpp">
-      <Filter>LuaCSV\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaCsvMain.cpp">
-      <Filter>LuaCSV</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaArchiveMain.cpp">
-      <Filter>Archive</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaArchive.cpp">
-      <Filter>Archive\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="RedisMain.cpp">
-      <Filter>LuaRedis</Filter>
-    </ClCompile>
-    <ClCompile Include="Redis.cpp">
-      <Filter>LuaRedis\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="src\engine\Bencode.cpp">
-      <Filter>Engine</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaSHA1.cpp">
-      <Filter>LuaSHA1\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="SHA1Main.cpp">
-      <Filter>LuaSHA1</Filter>
-    </ClCompile>
-    <ClCompile Include="sha1.c">
-      <Filter>LuaSHA1\Source Files</Filter>
+    <ClCompile Include="src\modules\decimal\LuaDecimal.cpp">
+      <Filter>Modules\decimal</Filter>
     </ClCompile>
     <ClCompile Include="Lua\lapi.c">
       <Filter>Lua</Filter>
@@ -548,412 +490,427 @@
     <ClCompile Include="Lua\lzio.c">
       <Filter>Lua</Filter>
     </ClCompile>
-    <ClCompile Include="RedisString.cpp">
-      <Filter>LuaRedis\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="RedisKey.cpp">
-      <Filter>LuaRedis\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="RedisValue.cpp">
-      <Filter>LuaRedis\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="RedisStream.cpp">
-      <Filter>LuaRedis\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="PostgresMain.cpp">
-      <Filter>LuaPostgres</Filter>
-    </ClCompile>
-    <ClCompile Include="src\engine\LuaEngineBuiltins.cpp">
+    <ClCompile Include="src\engine\LuaMisc.cpp">
       <Filter>Engine</Filter>
     </ClCompile>
-    <ClCompile Include="luajson.cpp">
-      <Filter>LuaJson\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="luajsonmain.cpp">
-      <Filter>LuaJson</Filter>
-    </ClCompile>
-    <ClCompile Include="streammemory.cpp">
-      <Filter>LuaStream\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="streamfile.cpp">
-      <Filter>LuaStream\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="miniz.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaProcess.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="HttpCurlMain.cpp">
-      <Filter>LuaHTTP</Filter>
-    </ClCompile>
-    <ClCompile Include="HttpCurl.cpp">
-      <Filter>LuaHTTP\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="luakafkaproducer.cpp">
-      <Filter>LuaKafka\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="luakafkaconsumer.cpp">
-      <Filter>LuaKafka\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="RedisPubSub.cpp">
-      <Filter>LuaRedis\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="RedisJson.cpp">
-      <Filter>LuaRedis\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="src\engine\KitsuneUserdata.cpp">
+    <ClCompile Include="src\engine\Mem.cpp">
       <Filter>Engine</Filter>
     </ClCompile>
-    <ClCompile Include="LuaPostgres.cpp">
-      <Filter>LuaPostgres\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="luadatetime.cpp">
-      <Filter>LuaDateTime\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="decimalmain.cpp">
-      <Filter>LuaDecimal</Filter>
-    </ClCompile>
-    <ClCompile Include="luadecimal.cpp">
-      <Filter>LuaDecimal\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="luamsgpack.cpp">
-      <Filter>LuaMsgPack\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="luamsgpackmain.cpp">
-      <Filter>LuaMsgPack</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaHttpServerMain.cpp">
-      <Filter>LuaHttpServer</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaHttpRequest.cpp">
-      <Filter>LuaHttpServer\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaHttpResponse.cpp">
-      <Filter>LuaHttpServer\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaHttpServer.cpp">
-      <Filter>LuaHttpServer\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="luaxmlmain.cpp">
-      <Filter>LuaXml</Filter>
-    </ClCompile>
-    <ClCompile Include="luaxml.cpp">
-      <Filter>LuaXml\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="pugixml\pugixml.cpp">
-      <Filter>LuaXml\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="luayamlmain.cpp">
-      <Filter>LuaYaml</Filter>
-    </ClCompile>
-    <ClCompile Include="libyaml\src\parser.c">
-      <Filter>LuaYaml\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="libyaml\src\reader.c">
-      <Filter>LuaYaml\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="libyaml\src\scanner.c">
-      <Filter>LuaYaml\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="libyaml\src\writer.c">
-      <Filter>LuaYaml\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="libyaml\src\api.c">
-      <Filter>LuaYaml\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="libyaml\src\dumper.c">
-      <Filter>LuaYaml\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="libyaml\src\emitter.c">
-      <Filter>LuaYaml\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="libyaml\src\loader.c">
-      <Filter>LuaYaml\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="luayaml.cpp">
-      <Filter>LuaYaml\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="luatoml.cpp">
-      <Filter>LuaToml</Filter>
-    </ClCompile>
-    <ClCompile Include="luatomlmain.cpp">
-      <Filter>LuaToml</Filter>
-    </ClCompile>
-    <ClCompile Include="msgpack\src\zone.c">
-      <Filter>LuaMsgPack\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="msgpack\src\unpack.c">
-      <Filter>LuaMsgPack\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="msgpack\src\version.c">
-      <Filter>LuaMsgPack\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="msgpack\src\vrefbuffer.c">
-      <Filter>LuaMsgPack\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="msgpack\src\objectc.c">
-      <Filter>LuaMsgPack\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="tomlc99\toml.c">
-      <Filter>LuaMsgPack\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="luaini.cpp">
-      <Filter>LuaIni</Filter>
-    </ClCompile>
-    <ClCompile Include="luainimain.cpp">
-      <Filter>LuaIni</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaHardware.cpp">
-      <Filter>LuaHardware</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaHardwareMain.cpp">
-      <Filter>LuaHardware</Filter>
-    </ClCompile>
-    <ClCompile Include="LuaHardwareNvidia.cpp">
-      <Filter>LuaHardware</Filter>
-    </ClCompile>
-    <ClCompile Include="luauint.cpp">
-      <Filter>LuaUint</Filter>
-    </ClCompile>
-    <ClCompile Include="uintmain.cpp">
-      <Filter>LuaUint</Filter>
-    </ClCompile>
-    <ClCompile Include="luatimespan.cpp">
-      <Filter>LuaTimespan</Filter>
-    </ClCompile>
-    <ClCompile Include="timespanmain.cpp">
-      <Filter>LuaTimespan</Filter>
-    </ClCompile>
-    <ClCompile Include="luaalivtokenmain.cpp">
-      <Filter>LuaAliveToken</Filter>
-    </ClCompile>
-    <ClCompile Include="luaalivetoken.cpp">
-      <Filter>LuaAliveToken</Filter>
-    </ClCompile>
-    <ClCompile Include="luatask.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="src\engine\KitsuneLuaDebug.cpp">
+    <ClCompile Include="src\engine\MemoryManager.cpp">
       <Filter>Engine</Filter>
     </ClCompile>
-    <ClCompile Include="LuaWebSocket.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="src\modules\redis\LuaRedis.cpp">
+      <Filter>Modules\redis</Filter>
     </ClCompile>
-    <ClCompile Include="LuaTcpListener.cpp">
-      <Filter>LuaTCP\Source Files</Filter>
+    <ClCompile Include="src\modules\redis\LuaRedisJson.cpp">
+      <Filter>Modules\redis</Filter>
     </ClCompile>
-    <ClCompile Include="LuaTcpMain.cpp">
-      <Filter>LuaTCP</Filter>
+    <ClCompile Include="src\modules\redis\LuaRedisKey.cpp">
+      <Filter>Modules\redis</Filter>
     </ClCompile>
-    <ClCompile Include="LuaDuckDB.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="src\modules\redis\LuaRedisMain.cpp">
+      <Filter>Modules\redis</Filter>
     </ClCompile>
-    <ClCompile Include="LuaDuckDBMain.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="src\modules\redis\LuaRedisPubSub.cpp">
+      <Filter>Modules\redis</Filter>
     </ClCompile>
-    <ClCompile Include="DuckDB\duckdb.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="src\modules\redis\LuaRedisStream.cpp">
+      <Filter>Modules\redis</Filter>
     </ClCompile>
-    <ClCompile Include="luamcp.cpp">
-      <Filter>LuaMcp</Filter>
+    <ClCompile Include="src\modules\redis\LuaRedisString.cpp">
+      <Filter>Modules\redis</Filter>
     </ClCompile>
-    <ClCompile Include="LuaImageMain.cpp">
-      <Filter>LuaImage</Filter>
+    <ClCompile Include="src\modules\redis\LuaRedisValue.cpp">
+      <Filter>Modules\redis</Filter>
     </ClCompile>
-    <ClCompile Include="LuaImage.cpp">
-      <Filter>LuaImage</Filter>
+    <ClCompile Include="sha1.c" />
+    <ClCompile Include="src\modules\sha1\LuaSHA1Main.cpp">
+      <Filter>Modules\sha1</Filter>
     </ClCompile>
-    <ClCompile Include="LuaSoundMain.cpp">
-      <Filter>LuaSound</Filter>
+    <ClCompile Include="sha256.c" />
+    <ClCompile Include="src\modules\sha256\LuaSHA256Main.cpp">
+      <Filter>Modules\sha256</Filter>
     </ClCompile>
-    <ClCompile Include="LuaSound.cpp">
-      <Filter>LuaSound</Filter>
+    <ClCompile Include="src\modules\stream\LuaStream.cpp">
+      <Filter>Modules\stream</Filter>
     </ClCompile>
-    <ClCompile Include="LuaSoundVorbis.cpp">
-      <Filter>LuaSound</Filter>
+    <ClCompile Include="miniz.c" />
+    <ClCompile Include="src\modules\stream\LuaStreamFile.cpp">
+      <Filter>Modules\stream</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\stream\LuaStreamMemory.cpp">
+      <Filter>Modules\stream</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\stream\LuaStreamMain.cpp">
+      <Filter>Modules\stream</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\uint\LuaUIntMain.cpp">
+      <Filter>Modules\uint</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\text\LuaTextMain.cpp">
+      <Filter>Modules\text</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\identifier\LuaIdentifierMain.cpp">
+      <Filter>Modules\identifier</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\datetime\LuaDateTimeMain.cpp">
+      <Filter>Modules\datetime</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\decimal\LuaDecimalMain.cpp">
+      <Filter>Modules\decimal</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\filesystem\LuaFileSystem.cpp">
+      <Filter>Modules\filesystem</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\filesystem\LuaFileSystemMain.cpp">
+      <Filter>Modules\filesystem</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\image\LuaImage.cpp">
+      <Filter>Modules\image</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\image\LuaImageMain.cpp">
+      <Filter>Modules\image</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\sound\LuaSound.cpp">
+      <Filter>Modules\sound</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\sound\LuaSoundMain.cpp">
+      <Filter>Modules\sound</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\sound\LuaSoundVorbis.cpp">
+      <Filter>Modules\sound</Filter>
     </ClCompile>
     <ClCompile Include="libogg\src\bitwise.c">
-      <Filter>LuaSound\Vorbis</Filter>
+      <Filter>libogg</Filter>
     </ClCompile>
     <ClCompile Include="libogg\src\framing.c">
-      <Filter>LuaSound\Vorbis</Filter>
+      <Filter>libogg</Filter>
     </ClCompile>
     <ClCompile Include="libvorbis\lib\mdct.c">
-      <Filter>LuaSound\Vorbis</Filter>
+      <Filter>libvorbis</Filter>
     </ClCompile>
     <ClCompile Include="libvorbis\lib\smallft.c">
-      <Filter>LuaSound\Vorbis</Filter>
+      <Filter>libvorbis</Filter>
     </ClCompile>
     <ClCompile Include="libvorbis\lib\block.c">
-      <Filter>LuaSound\Vorbis</Filter>
+      <Filter>libvorbis</Filter>
     </ClCompile>
     <ClCompile Include="libvorbis\lib\envelope.c">
-      <Filter>LuaSound\Vorbis</Filter>
+      <Filter>libvorbis</Filter>
     </ClCompile>
     <ClCompile Include="libvorbis\lib\window.c">
-      <Filter>LuaSound\Vorbis</Filter>
+      <Filter>libvorbis</Filter>
     </ClCompile>
     <ClCompile Include="libvorbis\lib\lsp.c">
-      <Filter>LuaSound\Vorbis</Filter>
+      <Filter>libvorbis</Filter>
     </ClCompile>
     <ClCompile Include="libvorbis\lib\lpc.c">
-      <Filter>LuaSound\Vorbis</Filter>
+      <Filter>libvorbis</Filter>
     </ClCompile>
     <ClCompile Include="libvorbis\lib\analysis.c">
-      <Filter>LuaSound\Vorbis</Filter>
+      <Filter>libvorbis</Filter>
     </ClCompile>
     <ClCompile Include="libvorbis\lib\synthesis.c">
-      <Filter>LuaSound\Vorbis</Filter>
+      <Filter>libvorbis</Filter>
     </ClCompile>
     <ClCompile Include="libvorbis\lib\psy.c">
-      <Filter>LuaSound\Vorbis</Filter>
+      <Filter>libvorbis</Filter>
     </ClCompile>
     <ClCompile Include="libvorbis\lib\info.c">
-      <Filter>LuaSound\Vorbis</Filter>
+      <Filter>libvorbis</Filter>
     </ClCompile>
     <ClCompile Include="libvorbis\lib\floor1.c">
-      <Filter>LuaSound\Vorbis</Filter>
+      <Filter>libvorbis</Filter>
     </ClCompile>
     <ClCompile Include="libvorbis\lib\floor0.c">
-      <Filter>LuaSound\Vorbis</Filter>
+      <Filter>libvorbis</Filter>
     </ClCompile>
     <ClCompile Include="libvorbis\lib\res0.c">
-      <Filter>LuaSound\Vorbis</Filter>
+      <Filter>libvorbis</Filter>
     </ClCompile>
     <ClCompile Include="libvorbis\lib\mapping0.c">
-      <Filter>LuaSound\Vorbis</Filter>
+      <Filter>libvorbis</Filter>
     </ClCompile>
     <ClCompile Include="libvorbis\lib\registry.c">
-      <Filter>LuaSound\Vorbis</Filter>
+      <Filter>libvorbis</Filter>
     </ClCompile>
     <ClCompile Include="libvorbis\lib\codebook.c">
-      <Filter>LuaSound\Vorbis</Filter>
+      <Filter>libvorbis</Filter>
     </ClCompile>
     <ClCompile Include="libvorbis\lib\sharedbook.c">
-      <Filter>LuaSound\Vorbis</Filter>
+      <Filter>libvorbis</Filter>
     </ClCompile>
     <ClCompile Include="libvorbis\lib\lookup.c">
-      <Filter>LuaSound\Vorbis</Filter>
+      <Filter>libvorbis</Filter>
     </ClCompile>
     <ClCompile Include="libvorbis\lib\bitrate.c">
-      <Filter>LuaSound\Vorbis</Filter>
+      <Filter>libvorbis</Filter>
     </ClCompile>
     <ClCompile Include="libvorbis\lib\vorbisfile.c">
-      <Filter>LuaSound\Vorbis</Filter>
+      <Filter>libvorbis</Filter>
     </ClCompile>
     <ClCompile Include="libvorbis\lib\vorbisenc.c">
-      <Filter>LuaSound\Vorbis</Filter>
+      <Filter>libvorbis</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\md5\LuaMD5.cpp">
+      <Filter>Modules\md5</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\sqlite\LuaSQLite.cpp">
+      <Filter>Modules\sqlite</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\sqlite\LuaSQLiteMain.cpp">
+      <Filter>Modules\sqlite</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\duckdb\LuaDuckDB.cpp">
+      <Filter>Modules\duckdb</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\duckdb\LuaDuckDBMain.cpp">
+      <Filter>Modules\duckdb</Filter>
+    </ClCompile>
+    <ClCompile Include="DuckDB\duckdb.cpp">
+      <Filter>DuckDB</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\mysql\LuaMySQL.cpp">
+      <Filter>Modules\mysql</Filter>
+    </ClCompile>
+    <ClCompile Include="md5.c" />
+    <ClCompile Include="src\modules\md5\LuaMD5Main.cpp">
+      <Filter>Modules\md5</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\mysql\LuaMySQLMain.cpp">
+      <Filter>Modules\mysql</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\mongodb\LuaMongoDB.cpp">
+      <Filter>Modules\mongodb</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\mongodb\LuaMongoDBMain.cpp">
+      <Filter>Modules\mongodb</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\postgres\LuaPostgresMain.cpp">
+      <Filter>Modules\postgres</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\process\LuaProcessMain.cpp">
+      <Filter>Modules\process</Filter>
+    </ClCompile>
+    <ClCompile Include="SQLite\sqlite3.c">
+      <Filter>SQLite</Filter>
+    </ClCompile>
+    <ClCompile Include="msgpack\src\objectc.c">
+      <Filter>msgpack</Filter>
+    </ClCompile>
+    <ClCompile Include="msgpack\src\unpack.c">
+      <Filter>msgpack</Filter>
+    </ClCompile>
+    <ClCompile Include="msgpack\src\version.c">
+      <Filter>msgpack</Filter>
+    </ClCompile>
+    <ClCompile Include="msgpack\src\vrefbuffer.c">
+      <Filter>msgpack</Filter>
+    </ClCompile>
+    <ClCompile Include="msgpack\src\zone.c">
+      <Filter>msgpack</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\timer\LuaTimer.cpp">
+      <Filter>Modules\timer</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modules\timer\LuaTimerMain.cpp">
+      <Filter>Modules\timer</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="aes.h" />
+    <ClInclude Include="aes.hpp" />
+    <ClInclude Include="src\engine\Bencode.h">
+      <Filter>Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="hiredis\alloc.h">
+      <Filter>hiredis</Filter>
+    </ClInclude>
+    <ClInclude Include="hiredis\hiredis.h">
+      <Filter>hiredis</Filter>
+    </ClInclude>
+    <ClInclude Include="hiredis\hiredis_ssl.h">
+      <Filter>hiredis</Filter>
+    </ClInclude>
+    <ClInclude Include="hiredis\read.h">
+      <Filter>hiredis</Filter>
+    </ClInclude>
+    <ClInclude Include="hiredis\sds.h">
+      <Filter>hiredis</Filter>
+    </ClInclude>
     <ClInclude Include="src\engine\KitsuneEngine.h">
       <Filter>Engine</Filter>
     </ClInclude>
-    <ClInclude Include="src\engine\LuaMainInclude.h">
+    <ClInclude Include="src\engine\KitsuneUserdata.h">
       <Filter>Engine</Filter>
     </ClInclude>
-    <ClInclude Include="TimerMain.h">
-      <Filter>LuaTimer</Filter>
-    </ClInclude>
-    <ClInclude Include="Timer.h">
-      <Filter>LuaTimer\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="LuaMongo.h">
-      <Filter>LuaMongo\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="MongoMain.h">
-      <Filter>LuaMongo</Filter>
-    </ClInclude>
-    <ClInclude Include="MySQLMain.h">
-      <Filter>LuaMySQL</Filter>
-    </ClInclude>
-    <ClInclude Include="LuaMySQL.h">
-      <Filter>LuaMySQL\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="src\engine\LuaMisc.h">
+    <ClInclude Include="src\engine\KitsuneLuaDebug.h">
       <Filter>Engine</Filter>
     </ClInclude>
-    <ClInclude Include="LuaFileSystemMain.h">
-      <Filter>LuaFileSystem</Filter>
-    </ClInclude>
-    <ClInclude Include="LuaFileSystem.h">
-      <Filter>LuaFileSystem\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="LuaSQLiteMain.h">
-      <Filter>LuaSQLite</Filter>
-    </ClInclude>
-    <ClInclude Include="LuaSQLite.h">
-      <Filter>LuaSQLite\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="SQLite\sqlite3.h">
-      <Filter>LuaSQLite\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="md5.h">
-      <Filter>LuaMD5\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="MD5Main.h">
-      <Filter>LuaMD5</Filter>
-    </ClInclude>
-    <ClInclude Include="LuaMD5.h">
-      <Filter>LuaMD5\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="ProcessMain.h">
-      <Filter>LuaProcess</Filter>
-    </ClInclude>
-    <ClInclude Include="StreamMain.h">
-      <Filter>LuaStream</Filter>
-    </ClInclude>
-    <ClInclude Include="luakafka.h">
-      <Filter>LuaKafka\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="luakafkamain.h">
-      <Filter>LuaKafka</Filter>
-    </ClInclude>
-    <ClInclude Include="kafkahelpers.h">
-      <Filter>LuaKafka\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="sha256.h">
-      <Filter>LuaSha256\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="LuaSha256.h">
-      <Filter>LuaSha256\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Sha256Main.h">
-      <Filter>LuaSha256</Filter>
-    </ClInclude>
-    <ClInclude Include="LuaMutexMain.h">
-      <Filter>LuaMutex</Filter>
-    </ClInclude>
-    <ClInclude Include="LuaMutex.h">
-      <Filter>LuaMutex\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="luaaes.h">
-      <Filter>LuaAes\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="LuaAesMain.h">
-      <Filter>LuaAes</Filter>
-    </ClInclude>
-    <ClInclude Include="aes.hpp">
-      <Filter>LuaAes\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="aes.h">
-      <Filter>LuaAes\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="base64.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="src\engine\Mem.h">
+    <ClInclude Include="src\engine\KitsuneInternal.h">
       <Filter>Engine</Filter>
     </ClInclude>
-    <ClInclude Include="src\engine\MemoryManager.h">
+    <ClInclude Include="libyaml\src\config.h">
+      <Filter>libyaml</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\archive\LuaArchive.h">
+      <Filter>Modules\archive</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\archive\LuaArchiveMain.h">
+      <Filter>Modules\archive</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\base64\LuaBase64.h">
+      <Filter>Modules\base64</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\base64\LuaBase64Main.h">
+      <Filter>Modules\base64</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\httpclient\LuaHttpClient.h">
+      <Filter>Modules\httpclient</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\httpclient\LuaHttpClientMain.h">
+      <Filter>Modules\httpclient</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\hardware\LuaHardware.h">
+      <Filter>Modules\hardware</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\hardware\LuaHardwareMain.h">
+      <Filter>Modules\hardware</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\json\LuaJson.h">
+      <Filter>Modules\json</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\json\LuaJsonMain.h">
+      <Filter>Modules\json</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\kafka\LuaKafkaHelpers.h">
+      <Filter>Modules\kafka</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\aes\LuaAes.h">
+      <Filter>Modules\aes</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\aes\LuaAesMain.h">
+      <Filter>Modules\aes</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\csv\LuaCSV.h">
+      <Filter>Modules\csv</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\csv\LuaCSVMain.h">
+      <Filter>Modules\csv</Filter>
+    </ClInclude>
+    <ClInclude Include="src\engine\LuaEngineBuiltins.h">
       <Filter>Engine</Filter>
     </ClInclude>
-    <ClInclude Include="luatextmain.h">
-      <Filter>LuaText\Header Files</Filter>
+    <ClInclude Include="src\modules\kafka\LuaKafka.h">
+      <Filter>Modules\kafka</Filter>
     </ClInclude>
-    <ClInclude Include="luatext.h">
-      <Filter>LuaText\Header Files</Filter>
+    <ClInclude Include="src\modules\kafka\LuaKafkaConsumer.h">
+      <Filter>Modules\kafka</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\kafka\LuaKafkaMain.h">
+      <Filter>Modules\kafka</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\kafka\LuaKafkaProducer.h">
+      <Filter>Modules\kafka</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\msgpack\LuaMsgPack.h">
+      <Filter>Modules\msgpack</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\msgpack\LuaMsgPackMain.h">
+      <Filter>Modules\msgpack</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\tasks\LuaTasks.h">
+      <Filter>Modules\tasks</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\tasks\LuaTasksMain.h">
+      <Filter>Modules\tasks</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\timespan\LuaTimeSpan.h">
+      <Filter>Modules\timespan</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\toml\LuaToml.h">
+      <Filter>Modules\toml</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\toml\LuaTomlMain.h">
+      <Filter>Modules\toml</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\ini\LuaIni.h">
+      <Filter>Modules\ini</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\ini\LuaIniMain.h">
+      <Filter>Modules\ini</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\alivetoken\LuaAliveToken.h">
+      <Filter>Modules\alivetoken</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\alivetoken\LuaAliveTokenMain.h">
+      <Filter>Modules\alivetoken</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\mcp\LuaMCP.h">
+      <Filter>Modules\mcp</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\mcp\LuaMCPMain.h">
+      <Filter>Modules\mcp</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\uint\LuaUInt.h">
+      <Filter>Modules\uint</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\websocket\LuaWebSocket.h">
+      <Filter>Modules\websocket</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\websocket\LuaWebSocketMain.h">
+      <Filter>Modules\websocket</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\yaml\LuaYaml.h">
+      <Filter>Modules\yaml</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\yaml\LuaYamlMain.h">
+      <Filter>Modules\yaml</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\xml\LuaXml.h">
+      <Filter>Modules\xml</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\xml\LuaXmlMain.h">
+      <Filter>Modules\xml</Filter>
+    </ClInclude>
+    <ClInclude Include="pugixml\pugixml.hpp">
+      <Filter>pugixml</Filter>
+    </ClInclude>
+    <ClInclude Include="pugixml\pugiconfig.hpp">
+      <Filter>pugixml</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\mutex\LuaMutex.h">
+      <Filter>Modules\mutex</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\mutex\LuaMutexMain.h">
+      <Filter>Modules\mutex</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\process\LuaProcess.h">
+      <Filter>Modules\process</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\sha1\LuaSHA1.h">
+      <Filter>Modules\sha1</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\sha256\LuaSHA256.h">
+      <Filter>Modules\sha256</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\httpserver\LuaHttpServerRequest.h">
+      <Filter>Modules\httpserver</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\httpserver\LuaHttpServer.h">
+      <Filter>Modules\httpserver</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\httpserver\LuaHttpServerMain.h">
+      <Filter>Modules\httpserver</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\tcp\LuaTCPListener.h">
+      <Filter>Modules\tcp</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\tcp\LuaTCPMain.h">
+      <Filter>Modules\tcp</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\text\LuaText.h">
+      <Filter>Modules\text</Filter>
     </ClInclude>
     <ClInclude Include="src\engine\KitsuneFile.h">
       <Filter>Engine</Filter>
@@ -961,56 +918,14 @@
     <ClInclude Include="src\engine\KitsuneStdlib.h">
       <Filter>Engine</Filter>
     </ClInclude>
-    <ClInclude Include="datetimemain.h">
-      <Filter>LuaDateTime</Filter>
+    <ClInclude Include="src\modules\identifier\LuaIdentifier.h">
+      <Filter>Modules\identifier</Filter>
     </ClInclude>
-    <ClInclude Include="identifiermain.h">
-      <Filter>LuaIdentifier</Filter>
+    <ClInclude Include="src\modules\datetime\LuaDateTime.h">
+      <Filter>Modules\datetime</Filter>
     </ClInclude>
-    <ClInclude Include="luaidentifier.h">
-      <Filter>LuaIdentifier\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="luacsv.h">
-      <Filter>LuaCSV\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="LuaCsvMain.h">
-      <Filter>LuaCSV</Filter>
-    </ClInclude>
-    <ClInclude Include="LuaArchiveMain.h">
-      <Filter>Archive</Filter>
-    </ClInclude>
-    <ClInclude Include="RedisMain.h">
-      <Filter>LuaRedis</Filter>
-    </ClInclude>
-    <ClInclude Include="Redis.h">
-      <Filter>LuaRedis\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="hiredis\hiredis.h">
-      <Filter>Hiredis</Filter>
-    </ClInclude>
-    <ClInclude Include="hiredis\read.h">
-      <Filter>Hiredis</Filter>
-    </ClInclude>
-    <ClInclude Include="hiredis\sds.h">
-      <Filter>Hiredis</Filter>
-    </ClInclude>
-    <ClInclude Include="hiredis\alloc.h">
-      <Filter>Hiredis</Filter>
-    </ClInclude>
-    <ClInclude Include="hiredis\hiredis_ssl.h">
-      <Filter>Hiredis</Filter>
-    </ClInclude>
-    <ClInclude Include="src\engine\Bencode.h">
-      <Filter>Engine</Filter>
-    </ClInclude>
-    <ClInclude Include="LuaArchive.h">
-      <Filter>Archive\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="LuaSHA1.h">
-      <Filter>LuaSHA1\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="sha1.h">
-      <Filter>LuaSHA1\Header Files</Filter>
+    <ClInclude Include="src\modules\decimal\LuaDecimal.h">
+      <Filter>Modules\decimal</Filter>
     </ClInclude>
     <ClInclude Include="Lua\lapi.h">
       <Filter>Lua</Filter>
@@ -1096,233 +1011,189 @@
     <ClInclude Include="Lua\lzio.h">
       <Filter>Lua</Filter>
     </ClInclude>
-    <ClInclude Include="RedisString.h">
-      <Filter>LuaRedis\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="RedisKey.h">
-      <Filter>LuaRedis\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="RedisValue.h">
-      <Filter>LuaRedis\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="RedisStream.h">
-      <Filter>LuaRedis\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="postgres\include\libpq-fe.h">
-      <Filter>LuaPostgres\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="LuaPostgres.h">
-      <Filter>LuaPostgres\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="PostgresMain.h">
-      <Filter>LuaPostgres</Filter>
-    </ClInclude>
-    <ClInclude Include="src\engine\LuaEngineBuiltins.h">
+    <ClInclude Include="src\engine\LuaMainInclude.h">
       <Filter>Engine</Filter>
     </ClInclude>
-    <ClInclude Include="luajson.h">
-      <Filter>LuaJson\Header Files</Filter>
+    <ClInclude Include="src\engine\LuaMisc.h">
+      <Filter>Engine</Filter>
     </ClInclude>
-    <ClInclude Include="luajsonmain.h">
-      <Filter>LuaJson</Filter>
+    <ClInclude Include="src\engine\Mem.h">
+      <Filter>Engine</Filter>
     </ClInclude>
-    <ClInclude Include="streammemory.h">
-      <Filter>LuaStream\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="streamfile.h">
-      <Filter>LuaStream\Header Files</Filter>
+    <ClInclude Include="src\engine\MemoryManager.h">
+      <Filter>Engine</Filter>
     </ClInclude>
     <ClInclude Include="src\engine\Platform.h">
       <Filter>Engine</Filter>
     </ClInclude>
-    <ClInclude Include="miniz.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="postgres\include\libpq-fe.h">
+      <Filter>postgres</Filter>
     </ClInclude>
-    <ClInclude Include="LuaProcess.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="src\modules\redis\LuaRedis.h">
+      <Filter>Modules\redis</Filter>
     </ClInclude>
-    <ClInclude Include="HttpCurlMain.h">
-      <Filter>LuaHTTP</Filter>
+    <ClInclude Include="src\modules\redis\LuaRedisJson.h">
+      <Filter>Modules\redis</Filter>
     </ClInclude>
-    <ClInclude Include="HttpCurl.h">
-      <Filter>LuaHTTP\Header Files</Filter>
+    <ClInclude Include="src\modules\redis\LuaRedisKey.h">
+      <Filter>Modules\redis</Filter>
     </ClInclude>
-    <ClInclude Include="RedisPubSub.h">
-      <Filter>LuaRedis\Header Files</Filter>
+    <ClInclude Include="src\modules\redis\LuaRedisMain.h">
+      <Filter>Modules\redis</Filter>
     </ClInclude>
-    <ClInclude Include="RedisJson.h">
-      <Filter>LuaRedis\Header Files</Filter>
+    <ClInclude Include="src\modules\redis\LuaRedisPubSub.h">
+      <Filter>Modules\redis</Filter>
     </ClInclude>
-    <ClInclude Include="src\engine\KitsuneUserdata.h">
-      <Filter>Engine</Filter>
+    <ClInclude Include="src\modules\redis\LuaRedisStream.h">
+      <Filter>Modules\redis</Filter>
     </ClInclude>
-    <ClInclude Include="SHA1Main.h">
-      <Filter>LuaSHA1</Filter>
+    <ClInclude Include="src\modules\redis\LuaRedisString.h">
+      <Filter>Modules\redis</Filter>
     </ClInclude>
-    <ClInclude Include="luadatetime.h">
-      <Filter>LuaDateTime\Header Files</Filter>
+    <ClInclude Include="src\modules\redis\LuaRedisValue.h">
+      <Filter>Modules\redis</Filter>
     </ClInclude>
-    <ClInclude Include="decimalmain.h">
-      <Filter>LuaDecimal</Filter>
+    <ClInclude Include="sha1.h" />
+    <ClInclude Include="src\modules\sha1\LuaSHA1Main.h">
+      <Filter>Modules\sha1</Filter>
     </ClInclude>
-    <ClInclude Include="luadecimal.h">
-      <Filter>LuaDecimal\Header Files</Filter>
+    <ClInclude Include="sha256.h" />
+    <ClInclude Include="src\modules\sha256\LuaSHA256Main.h">
+      <Filter>Modules\sha256</Filter>
     </ClInclude>
-    <ClInclude Include="luamsgpack.h">
-      <Filter>LuaMsgPack\Header Files</Filter>
+    <ClInclude Include="miniz.h" />
+    <ClInclude Include="src\modules\stream\LuaStream.h">
+      <Filter>Modules\stream</Filter>
     </ClInclude>
-    <ClInclude Include="luamsgpackmain.h">
-      <Filter>LuaMsgPack</Filter>
+    <ClInclude Include="src\modules\stream\LuaStreamFile.h">
+      <Filter>Modules\stream</Filter>
     </ClInclude>
-    <ClInclude Include="LuaHttpServerMain.h">
-      <Filter>LuaHttpServer</Filter>
+    <ClInclude Include="src\modules\stream\LuaStreamMain.h">
+      <Filter>Modules\stream</Filter>
     </ClInclude>
-    <ClInclude Include="LuaHttpRequest.h">
-      <Filter>LuaHttpServer\Header Files</Filter>
+    <ClInclude Include="src\modules\stream\LuaStreamMemory.h">
+      <Filter>Modules\stream</Filter>
     </ClInclude>
-    <ClInclude Include="LuaHttpServer.h">
-      <Filter>LuaHttpServer\Header Files</Filter>
+    <ClInclude Include="src\modules\timespan\LuaTimeSpanMain.h">
+      <Filter>Modules\timespan</Filter>
     </ClInclude>
-    <ClInclude Include="luaxmlmain.h">
-      <Filter>LuaXml</Filter>
-    </ClInclude>
-    <ClInclude Include="luaxml.h">
-      <Filter>LuaXml\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="pugixml\pugiconfig.hpp">
-      <Filter>LuaXml\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="pugixml\pugixml.hpp">
-      <Filter>LuaXml\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="libyaml\src\config.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="luayamlmain.h">
-      <Filter>LuaYaml</Filter>
-    </ClInclude>
-    <ClInclude Include="luayaml.h">
-      <Filter>LuaYaml\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="luatomlmain.h">
-      <Filter>LuaToml</Filter>
-    </ClInclude>
-    <ClInclude Include="luatoml.h">
-      <Filter>LuaToml</Filter>
-    </ClInclude>
-    <ClInclude Include="luakafkaproducer.h">
-      <Filter>LuaKafka\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="luakafkaconsumer.h">
-      <Filter>LuaKafka\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="stream.h">
-      <Filter>LuaStream\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="luainimain.h">
-      <Filter>LuaIni</Filter>
-    </ClInclude>
-    <ClInclude Include="luaini.h">
-      <Filter>LuaIni</Filter>
-    </ClInclude>
-    <ClInclude Include="LuaHardwareMain.h">
-      <Filter>LuaHardware</Filter>
-    </ClInclude>
-    <ClInclude Include="LuaHardware.h">
-      <Filter>LuaHardware</Filter>
-    </ClInclude>
-    <ClInclude Include="uintmain.h">
-      <Filter>LuaUint</Filter>
-    </ClInclude>
-    <ClInclude Include="luauint.h">
-      <Filter>LuaUint</Filter>
-    </ClInclude>
-    <ClInclude Include="luatimespan.h">
-      <Filter>LuaTimespan</Filter>
-    </ClInclude>
-    <ClInclude Include="timespanmain.h">
-      <Filter>LuaTimespan</Filter>
-    </ClInclude>
-    <ClInclude Include="luaalivetoken.h">
-      <Filter>LuaAliveToken</Filter>
+    <ClInclude Include="src\modules\uint\LuaUIntMain.h">
+      <Filter>Modules\uint</Filter>
     </ClInclude>
     <ClInclude Include="src\engine\Utf8Bom.h">
       <Filter>Engine</Filter>
     </ClInclude>
-    <ClInclude Include="src\engine\KitsuneInternal.h">
-      <Filter>Engine</Filter>
+    <ClInclude Include="src\modules\text\LuaTextMain.h">
+      <Filter>Modules\text</Filter>
     </ClInclude>
-    <ClInclude Include="luatask.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="src\modules\identifier\LuaIdentifierMain.h">
+      <Filter>Modules\identifier</Filter>
     </ClInclude>
-    <ClInclude Include="src\engine\KitsuneLuaDebug.h">
-      <Filter>Engine</Filter>
+    <ClInclude Include="src\modules\datetime\LuaDateTimeMain.h">
+      <Filter>Modules\datetime</Filter>
     </ClInclude>
-    <ClInclude Include="LuaWebSocket.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="src\modules\decimal\LuaDecimalMain.h">
+      <Filter>Modules\decimal</Filter>
     </ClInclude>
-    <ClInclude Include="LuaTcpListener.h">
-      <Filter>LuaTCP\Header Files</Filter>
+    <ClInclude Include="src\modules\filesystem\LuaFileSystem.h">
+      <Filter>Modules\filesystem</Filter>
     </ClInclude>
-    <ClInclude Include="LuaTcpMain.h">
-      <Filter>LuaTCP</Filter>
+    <ClInclude Include="src\modules\filesystem\LuaFileSystemMain.h">
+      <Filter>Modules\filesystem</Filter>
     </ClInclude>
-    <ClInclude Include="LuaDuckDB.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="src\modules\image\LuaImage.h">
+      <Filter>Modules\image</Filter>
     </ClInclude>
-    <ClInclude Include="LuaDuckDBMain.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="DuckDB\duckdb.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="luamcp.h">
-      <Filter>LuaMcp</Filter>
-    </ClInclude>
-    <ClInclude Include="luamcpmain.h">
-      <Filter>LuaMcp</Filter>
-    </ClInclude>
-    <ClInclude Include="LuaImageMain.h">
-      <Filter>LuaImage</Filter>
+    <ClInclude Include="src\modules\image\LuaImageMain.h">
+      <Filter>Modules\image</Filter>
     </ClInclude>
     <ClInclude Include="stb\stb_image.h">
-      <Filter>LuaImage</Filter>
+      <Filter>stb</Filter>
     </ClInclude>
     <ClInclude Include="stb\stb_image_write.h">
-      <Filter>LuaImage</Filter>
+      <Filter>stb</Filter>
     </ClInclude>
-    <ClInclude Include="LuaImage.h">
-      <Filter>LuaImage</Filter>
+    <ClInclude Include="src\modules\sound\LuaSound.h">
+      <Filter>Modules\sound</Filter>
     </ClInclude>
-    <ClInclude Include="LuaSoundMain.h">
-      <Filter>LuaSound</Filter>
+    <ClInclude Include="src\modules\sound\LuaSoundMain.h">
+      <Filter>Modules\sound</Filter>
     </ClInclude>
-    <ClInclude Include="LuaSound.h">
-      <Filter>LuaSound</Filter>
-    </ClInclude>
-    <ClInclude Include="LuaSoundVorbis.h">
-      <Filter>LuaSound</Filter>
+    <ClInclude Include="src\modules\sound\LuaSoundVorbis.h">
+      <Filter>Modules\sound</Filter>
     </ClInclude>
     <ClInclude Include="libogg\include\ogg\ogg.h">
-      <Filter>LuaSound\Vorbis</Filter>
+      <Filter>libogg</Filter>
     </ClInclude>
     <ClInclude Include="libogg\include\ogg\os_types.h">
-      <Filter>LuaSound\Vorbis</Filter>
+      <Filter>libogg</Filter>
     </ClInclude>
     <ClInclude Include="libogg\include\ogg\config_types.h">
-      <Filter>LuaSound\Vorbis</Filter>
+      <Filter>libogg</Filter>
     </ClInclude>
     <ClInclude Include="libvorbis\include\vorbis\codec.h">
-      <Filter>LuaSound\Vorbis</Filter>
+      <Filter>libvorbis</Filter>
     </ClInclude>
     <ClInclude Include="libvorbis\include\vorbis\vorbisenc.h">
-      <Filter>LuaSound\Vorbis</Filter>
+      <Filter>libvorbis</Filter>
     </ClInclude>
     <ClInclude Include="libvorbis\include\vorbis\vorbisfile.h">
-      <Filter>LuaSound\Vorbis</Filter>
+      <Filter>libvorbis</Filter>
     </ClInclude>
     <ClInclude Include="dr_libs\dr_wav.h">
-      <Filter>LuaSound</Filter>
+      <Filter>dr_libs</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\md5\LuaMD5.h">
+      <Filter>Modules\md5</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\sqlite\LuaSQLite.h">
+      <Filter>Modules\sqlite</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\sqlite\LuaSQLiteMain.h">
+      <Filter>Modules\sqlite</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\duckdb\LuaDuckDB.h">
+      <Filter>Modules\duckdb</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\duckdb\LuaDuckDBMain.h">
+      <Filter>Modules\duckdb</Filter>
+    </ClInclude>
+    <ClInclude Include="DuckDB\duckdb.h">
+      <Filter>DuckDB</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\mysql\LuaMySQL.h">
+      <Filter>Modules\mysql</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\postgres\LuaPostgres.h">
+      <Filter>Modules\postgres</Filter>
+    </ClInclude>
+    <ClInclude Include="md5.h" />
+    <ClInclude Include="src\modules\md5\LuaMD5Main.h">
+      <Filter>Modules\md5</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\mysql\LuaMySQLMain.h">
+      <Filter>Modules\mysql</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\mongodb\LuaMongoDB.h">
+      <Filter>Modules\mongodb</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\mongodb\LuaMongoDBMain.h">
+      <Filter>Modules\mongodb</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\postgres\LuaPostgresMain.h">
+      <Filter>Modules\postgres</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\process\LuaProcessMain.h">
+      <Filter>Modules\process</Filter>
+    </ClInclude>
+    <ClInclude Include="SQLite\sqlite3.h">
+      <Filter>SQLite</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\timer\LuaTimer.h">
+      <Filter>Modules\timer</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\timer\LuaTimerMain.h">
+      <Filter>Modules\timer</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

@@ -4,7 +4,7 @@
 
 #include "Platform.h"
 #include "LuaMainInclude.h"
-#include "luatext.h"
+#include "text/LuaText.h"
 #ifdef _WIN32
 #include "Shellapi.h"
 #endif

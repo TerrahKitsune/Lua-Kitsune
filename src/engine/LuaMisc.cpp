@@ -3,9 +3,9 @@
 #include <stdio.h>
 #include <ctype.h>
 #include "Platform.h"
-#include "luatext.h"
+#include "text/LuaText.h"
 #include "Bencode.h"
-#include "stream.h"
+#include "stream/LuaStream.h"
 #ifdef _WIN32
 #include <WinSock2.h>
 #include <ws2tcpip.h>

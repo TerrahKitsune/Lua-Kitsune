@@ -1,6 +1,6 @@
 #include "KitsuneStdlib.h"
 #include "KitsuneFile.h"
-#include "luatext.h"
+#include "text/LuaText.h"
 #include "Platform.h"
 #include <errno.h>
 #include <stdio.h>

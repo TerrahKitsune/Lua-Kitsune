@@ -1,0 +1,1173 @@
+﻿#ifdef KITSUNE_HTTP
+
+#include "httpclient/LuaHttpClient.h"
+#include "stream/LuaStream.h"
+#include "Mem.h"
+#include "Platform.h"
+#include "timespan/LuaTimeSpan.h"
+#include "alivetoken/LuaAliveToken.h"
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <chrono>
+
+static inline int64_t http_now_ns() {
+	return (int64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(
+		std::chrono::steady_clock::now().time_since_epoch()
+	).count();
+}
+
+// Pump the CURLM* and dispatch every completed message to the correct CurlMsg
+// via CURLOPT_PRIVATE.  Because curl_multi_info_read is destructive and the
+// CURLM* is shared across all concurrent HttpClient coroutines, ANY coroutine
+// calling curl_multi_perform may read messages that belong to OTHER coroutines.
+// This helper guarantees each message lands in the right CurlMsg struct so no
+// completion is silently discarded.
+static void drain_curlm(CURLM* multi) {
+	int msgsLeft;
+	CURLMsg* msg;
+	while ((msg = curl_multi_info_read(multi, &msgsLeft)) != NULL) {
+		if (msg->msg != CURLMSG_DONE)
+			continue;
+		CurlMsg* cm = NULL;
+		curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, &cm);
+		if (cm) {
+			cm->done   = true;
+			cm->result = msg->data.result;
+		}
+	}
+}
+
+// Perform one non-blocking poll + perform cycle on the shared CURLM* and
+// dispatch all done messages via drain_curlm.
+static void curlm_step(CURLM* multi) {
+	int running = 0;
+	curl_multi_wait(multi, NULL, 0, 0, NULL);
+	curl_multi_perform(multi, &running);
+	drain_curlm(multi);
+}
+
+// -- Registry anchor keys (static-address trick) -------------------------------
+const char g_curlm_key    = 0;
+const char g_sentinel_key = 0;
+
+// -- CURLM* sentinel __gc -----------------------------------------------------
+int http_sentinel_gc(lua_State* L) {
+	lua_rawgetp(L, LUA_REGISTRYINDEX, &g_curlm_key);
+	CURLM* multi = (CURLM*)lua_touserdata(L, -1);
+	lua_pop(L, 1);
+	if (multi) {
+		curl_multi_cleanup(multi);
+		lua_pushnil(L);
+		lua_rawsetp(L, LUA_REGISTRYINDEX, &g_curlm_key);
+	}
+	return 0;
+}
+
+// -----------------------------------------------------------------------------
+// T4b ? Http.UrlEncode / Http.UrlDecode
+// -----------------------------------------------------------------------------
+
+int UrlEncode(lua_State* L) {
+	size_t len;
+	const char* data = luaL_checklstring(L, 1, &len);
+	size_t allocSize = len * 3 + 1;
+	char* buf = (char*)kitsune_malloc(allocSize);
+	if (!buf)
+		return luaL_error(L, "out of memory");
+	static const char hex[] = "0123456789abcdef";
+	int pos = 0;
+	for (size_t i = 0; i < len; i++) {
+		unsigned char c = (unsigned char)data[i];
+		if (('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') ||
+			('0' <= c && c <= '9') || c == '-' || c == '_' || c == '.' || c == '~') {
+			buf[pos++] = (char)c;
+		} else {
+			buf[pos++] = '%';
+			buf[pos++] = hex[c >> 4];
+			buf[pos++] = hex[c & 15];
+		}
+	}
+	buf[pos] = '\0';
+	lua_pushlstring(L, buf, (size_t)pos);
+	kitsune_free(buf);
+	return 1;
+}
+
+static inline int ishex(int x) {
+	return (x >= '0' && x <= '9') || (x >= 'a' && x <= 'f') || (x >= 'A' && x <= 'F');
+}
+
+int UrlDecode(lua_State* L) {
+	size_t len;
+	const char* s = luaL_checklstring(L, 1, &len);
+	char* buf = (char*)kitsune_malloc(len + 1);
+	if (!buf)
+		return luaL_error(L, "out of memory");
+	char* o = buf;
+	const char* end = s + len;
+	while (s < end) {
+		int c = (unsigned char)*s++;
+		if (c == '+') {
+			c = ' ';
+		} else if (c == '%' && s + 1 < end && ishex((unsigned char)s[0]) && ishex((unsigned char)s[1])) {
+			unsigned int v;
+			sscanf(s, "%2x", &v);
+			c = (int)v;
+			s += 2;
+		}
+		*o++ = (char)c;
+	}
+	lua_pushlstring(L, buf, (size_t)(o - buf));
+	kitsune_free(buf);
+	return 1;
+}
+
+// -----------------------------------------------------------------------------
+// T4c-f ? LuaHttpClient methods
+// -----------------------------------------------------------------------------
+
+int http_create(lua_State* L) {
+	LuaHttpClient* client = (LuaHttpClient*)lua_newuserdata(L, sizeof(LuaHttpClient));
+	memset(client, 0, sizeof(LuaHttpClient));
+	luaL_setmetatable(L, LUAHTTPCLIENT);
+	client->defaultHeadersRef = LUA_NOREF;
+	client->followRedirects   = true;
+	client->verifySsl         = true;
+	client->timeoutMs         = 0;
+	return 1;
+}
+
+int client_set_timeout(lua_State* L) {
+	LuaHttpClient* client = (LuaHttpClient*)luaL_checkudata(L, 1, LUAHTTPCLIENT);
+	client->timeoutMs = (long)luaL_checkinteger(L, 2);
+	return 0;
+}
+
+int client_set_default_header(lua_State* L) {
+	LuaHttpClient* client = (LuaHttpClient*)luaL_checkudata(L, 1, LUAHTTPCLIENT);
+	luaL_checkstring(L, 2);
+	luaL_checkstring(L, 3);
+	// Get-or-create the default headers table in the registry
+	if (client->defaultHeadersRef == LUA_NOREF) {
+		lua_newtable(L);
+		client->defaultHeadersRef = luaL_ref(L, LUA_REGISTRYINDEX);
+	}
+	lua_rawgeti(L, LUA_REGISTRYINDEX, client->defaultHeadersRef);
+	lua_pushvalue(L, 2);
+	lua_pushvalue(L, 3);
+	lua_rawset(L, -3);
+	lua_pop(L, 1);
+	return 0;
+}
+
+int client_set_follow_redirects(lua_State* L) {
+	LuaHttpClient* client = (LuaHttpClient*)luaL_checkudata(L, 1, LUAHTTPCLIENT);
+	client->followRedirects = lua_toboolean(L, 2) != 0;
+	return 0;
+}
+
+int client_set_verify_ssl(lua_State* L) {
+	LuaHttpClient* client = (LuaHttpClient*)luaL_checkudata(L, 1, LUAHTTPCLIENT);
+	client->verifySsl = lua_toboolean(L, 2) != 0;
+	return 0;
+}
+
+int luahttpclient_gc(lua_State* L) {
+	LuaHttpClient* client = (LuaHttpClient*)luaL_checkudata(L, 1, LUAHTTPCLIENT);
+	if (client->defaultHeadersRef != LUA_NOREF) {
+		luaL_unref(L, LUA_REGISTRYINDEX, client->defaultHeadersRef);
+		client->defaultHeadersRef = LUA_NOREF;
+	}
+	if (client->aliveTokenRef != LUA_NOREF) {
+		luaL_unref(L, LUA_REGISTRYINDEX, client->aliveTokenRef);
+		client->aliveTokenRef = LUA_NOREF;
+	}
+	return 0;
+}
+
+int luahttpclient_tostring(lua_State* L) {
+	lua_pushfstring(L, "HttpClient(%p)", lua_touserdata(L, 1));
+	return 1;
+}
+
+// -----------------------------------------------------------------------------
+// Header array helpers shared by buffered and streaming paths
+// -----------------------------------------------------------------------------
+
+static bool append_header(char*** keys, char*** vals, int* count, int* alloc,
+	const char* key, size_t keyLen, const char* val, size_t valLen) {
+	if (*count >= *alloc) {
+		int newAlloc = *alloc ? *alloc * 2 : 8;
+		char** newK = (char**)kitsune_realloc(*keys, (size_t)newAlloc * sizeof(char*));
+		if (!newK)
+			return false;
+		*keys = newK;
+		char** newV = (char**)kitsune_realloc(*vals, (size_t)newAlloc * sizeof(char*));
+		if (!newV)
+			return false;
+		*vals  = newV;
+		*alloc = newAlloc;
+	}
+	char* k = (char*)kitsune_malloc(keyLen + 1);
+	char* v = (char*)kitsune_malloc(valLen + 1);
+	if (!k || !v) {
+		kitsune_free(k);
+		kitsune_free(v);
+		return false;
+	}
+	memcpy(k, key, keyLen); k[keyLen] = '\0';
+	memcpy(v, val, valLen); v[valLen] = '\0';
+	(*keys)[*count] = k;
+	(*vals)[*count] = v;
+	(*count)++;
+	return true;
+}
+
+static void free_header_arrays(char** keys, char** vals, int count) {
+	for (int i = 0; i < count; i++) {
+		kitsune_free(keys[i]);
+		kitsune_free(vals[i]);
+	}
+	kitsune_free(keys);
+	kitsune_free(vals);
+}
+
+// Build a curl_slist from client defaults + per-call headers table (at headersIdx, 0 = absent).
+static struct curl_slist* build_headers(lua_State* L, LuaHttpClient* client, int headersIdx) {
+	struct curl_slist* hdrs = NULL;
+	char buf[2048];
+	if (client->defaultHeadersRef != LUA_NOREF) {
+		lua_rawgeti(L, LUA_REGISTRYINDEX, client->defaultHeadersRef);
+		lua_pushnil(L);
+		while (lua_next(L, -2)) {
+			const char* k = lua_tostring(L, -2);
+			const char* v = lua_tostring(L, -1);
+			if (k && v) {
+				snprintf(buf, sizeof(buf), "%s: %s", k, v);
+				hdrs = curl_slist_append(hdrs, buf);
+			}
+			lua_pop(L, 1);
+		}
+		lua_pop(L, 1);
+	}
+	if (headersIdx > 0 && lua_istable(L, headersIdx)) {
+		lua_pushnil(L);
+		while (lua_next(L, headersIdx)) {
+			const char* k = lua_tostring(L, -2);
+			const char* v = lua_tostring(L, -1);
+			if (k && v) {
+				snprintf(buf, sizeof(buf), "%s: %s", k, v);
+				hdrs = curl_slist_append(hdrs, buf);
+			}
+			lua_pop(L, 1);
+		}
+	}
+	return hdrs;
+}
+
+// -----------------------------------------------------------------------------
+// T5a ? WriteBodyCallback
+// -----------------------------------------------------------------------------
+
+static size_t WriteBodyCallback(char* ptr, size_t size, size_t nmemb, void* userdata) {
+	LuaHttpCurlRequest* req = (LuaHttpCurlRequest*)userdata;
+	size_t total = size * nmemb;
+	if (req->streamOutput && req->streamOutput->vtbl && req->streamOutput->vtbl->write) {
+		bool ok = req->streamOutput->vtbl->write(req->streamOutput->native,
+			(const BYTE*)ptr, total);
+		return ok ? total : 0;
+	}
+	// Heap-buffer accumulation path
+	if (req->bodyLen + total + 1 > req->bodyAlloc) {
+		size_t newAlloc = req->bodyLen + total + 8192;
+		char* nb = (char*)kitsune_realloc(req->body, newAlloc);
+		if (!nb)
+			return 0;
+		req->body      = nb;
+		req->bodyAlloc = newAlloc;
+	}
+	memcpy(req->body + req->bodyLen, ptr, total);
+	req->bodyLen += total;
+	req->body[req->bodyLen] = '\0';
+	return total;
+}
+
+// -----------------------------------------------------------------------------
+// T5b ? ReadBodyCallback
+// -----------------------------------------------------------------------------
+
+static size_t ReadBodyCallback(char* buffer, size_t size, size_t nitems, void* userdata) {
+	LuaHttpCurlRequest* req = (LuaHttpCurlRequest*)userdata;
+	if (!req->streamInput || !req->streamInput->vtbl || !req->callbackL)
+		return 0;
+	size_t capacity = size * nitems;
+	lua_State* L = req->callbackL;
+	req->streamInput->vtbl->read(req->streamInput->native, L, capacity);
+	if (lua_type(L, -1) != LUA_TSTRING) {
+		lua_pop(L, 1);
+		return 0;
+	}
+	size_t nread = 0;
+	const char* data = lua_tolstring(L, -1, &nread);
+	if (nread > capacity)
+		nread = capacity;
+	memcpy(buffer, data, nread);
+	lua_pop(L, 1);
+	return nread;
+}
+
+// Standard reason phrase for an HTTP status code ("" when unknown). HTTP/2 and HTTP/3
+// status lines carry no reason phrase, so this keeps Status meaningful regardless of the
+// protocol curl negotiated.
+static const char* HttpReasonPhrase(long code) {
+	static const struct {
+		long code;
+		const char* text;
+	} phrases[] = {
+		{ 100, "Continue" }, { 101, "Switching Protocols" },
+		{ 200, "OK" }, { 201, "Created" }, { 202, "Accepted" }, { 203, "Non-Authoritative Information" },
+		{ 204, "No Content" }, { 205, "Reset Content" }, { 206, "Partial Content" },
+		{ 300, "Multiple Choices" }, { 301, "Moved Permanently" }, { 302, "Found" }, { 303, "See Other" },
+		{ 304, "Not Modified" }, { 307, "Temporary Redirect" }, { 308, "Permanent Redirect" },
+		{ 400, "Bad Request" }, { 401, "Unauthorized" }, { 402, "Payment Required" }, { 403, "Forbidden" },
+		{ 404, "Not Found" }, { 405, "Method Not Allowed" }, { 406, "Not Acceptable" }, { 408, "Request Timeout" },
+		{ 409, "Conflict" }, { 410, "Gone" }, { 411, "Length Required" }, { 412, "Precondition Failed" },
+		{ 413, "Content Too Large" }, { 414, "URI Too Long" }, { 415, "Unsupported Media Type" },
+		{ 416, "Range Not Satisfiable" }, { 417, "Expectation Failed" }, { 421, "Misdirected Request" },
+		{ 422, "Unprocessable Content" }, { 425, "Too Early" }, { 426, "Upgrade Required" },
+		{ 428, "Precondition Required" }, { 429, "Too Many Requests" }, { 431, "Request Header Fields Too Large" },
+		{ 451, "Unavailable For Legal Reasons" },
+		{ 500, "Internal Server Error" }, { 501, "Not Implemented" }, { 502, "Bad Gateway" },
+		{ 503, "Service Unavailable" }, { 504, "Gateway Timeout" }, { 505, "HTTP Version Not Supported" },
+		{ 511, "Network Authentication Required" },
+	};
+	for (size_t i = 0; i < sizeof(phrases) / sizeof(phrases[0]); i++) {
+		if (phrases[i].code == code)
+			return phrases[i].text;
+	}
+	return "";
+}
+
+// -----------------------------------------------------------------------------
+// T5c ? WriteHeaderCallback (buffered request path)
+// -----------------------------------------------------------------------------
+
+static size_t WriteHeaderCallback(char* buffer, size_t size, size_t nitems, void* userdata) {
+	LuaHttpCurlRequest* req = (LuaHttpCurlRequest*)userdata;
+	size_t total = size * nitems;
+	// Status line: "HTTP/X.Y CODE REASON\r\n" (HTTP/2 and HTTP/3: "HTTP/2 CODE \r\n", no reason).
+	// Each response in a redirect chain starts with one, so reset the previous reason first.
+	if (total >= 5 && strncmp(buffer, "HTTP/", 5) == 0) {
+		req->statusText[0] = '\0';
+		char* sp1 = (char*)memchr(buffer + 5, ' ', total - 5);
+		if (sp1) {
+			char* sp2 = (char*)memchr(sp1 + 1, ' ', total - (size_t)(sp1 + 1 - buffer));
+			if (sp2) {
+				size_t tlen = total - (size_t)(sp2 + 1 - buffer);
+				if (tlen >= 2) tlen -= 2; // strip \r\n
+				if (tlen > 0 && tlen < sizeof(req->statusText)) {
+					memcpy(req->statusText, sp2 + 1, tlen);
+					req->statusText[tlen] = '\0';
+				}
+			}
+		}
+		return total;
+	}
+	if (total <= 2)
+		return total; // blank separator line
+	char* colon = (char*)memchr(buffer, ':', total);
+	if (!colon)
+		return total;
+	const char* valStart = colon + 1;
+	while (valStart < buffer + total && *valStart == ' ')
+		valStart++;
+	size_t keyLen = (size_t)(colon - buffer);
+	size_t valLen = total - (size_t)(valStart - buffer);
+	if (valLen >= 2) valLen -= 2; // strip \r\n
+	append_header(&req->headerKeys, &req->headerVals,
+		&req->headerCount, &req->headerAlloc,
+		buffer, keyLen, valStart, valLen);
+	return total;
+}
+
+// -----------------------------------------------------------------------------
+// T5e ? BuildHttpResultTable
+// -----------------------------------------------------------------------------
+
+static int BuildHttpResultTable(lua_State* L, LuaHttpCurlRequest* req) {
+	if (req->streamOutputRef != LUA_NOREF) {
+		luaL_unref(L, LUA_REGISTRYINDEX, req->streamOutputRef);
+		req->streamOutputRef = LUA_NOREF;
+	}
+	if (req->streamInputRef != LUA_NOREF) {
+		luaL_unref(L, LUA_REGISTRYINDEX, req->streamInputRef);
+		req->streamInputRef = LUA_NOREF;
+	}
+	lua_newtable(L);
+	if (req->httpCode > 0) {
+		lua_pushinteger(L, req->httpCode);
+		lua_setfield(L, -2, "Code");
+		lua_pushstring(L, req->statusText[0] ? req->statusText : HttpReasonPhrase(req->httpCode));
+		lua_setfield(L, -2, "Status");
+		if (!req->streamOutput) {
+			lua_pushlstring(L, req->body ? req->body : "", req->bodyLen);
+			lua_setfield(L, -2, "Contents");
+		}
+		lua_newtable(L);
+		for (int i = 0; i < req->headerCount; i++) {
+			lua_pushstring(L, req->headerKeys[i]);
+			lua_pushstring(L, req->headerVals[i]);
+			lua_rawset(L, -3);
+		}
+		lua_setfield(L, -2, "Headers");
+	} else {
+		lua_pushstring(L, req->errorBuf[0] ? req->errorBuf : "request failed");
+		lua_setfield(L, -2, "Status");
+	}
+	return 1;
+}
+
+// -----------------------------------------------------------------------------
+// T5d ? HttpRequestContinuation
+// -----------------------------------------------------------------------------
+
+static int HttpRequestContinuation(lua_State* L, int status, lua_KContext ctx) {
+	LuaHttpCurlRequest* req = (LuaHttpCurlRequest*)luaL_checkudata(L, 1, LUAHTTPCURLREQUEST);
+	// Check AliveToken: if the client has one and it's been disposed, let the
+	// coroutine die silently so the caller's drive loop exits via status check.
+	if (req->client && req->client->aliveTokenRef != LUA_NOREF) {
+		lua_rawgeti(L, LUA_REGISTRYINDEX, req->client->aliveTokenRef);
+		int alive = lua_alivetoken_isalive(L, -1);
+		lua_pop(L, 1);
+		if (alive == 0)
+			return 0;
+	}
+	req->callbackL = L;
+	curlm_step(req->multi);
+	req->callbackL = NULL;
+	if (req->curlMsg && req->curlMsg->done) {
+		req->addedToMulti = false;
+		curl_multi_remove_handle(req->multi, req->easy);
+		curl_easy_getinfo(req->easy, CURLINFO_RESPONSE_CODE, &req->httpCode);
+		if (req->client && req->startNs > 0) {
+			int64_t elapsedNs = http_now_ns() - req->startNs;
+			// Convert ns to 100-ns ticks (same unit as TimeSpan)
+			req->client->lastRequestElapsedTicks = elapsedNs / 100;
+		}
+		return BuildHttpResultTable(L, req);
+	}
+	return lua_yieldk(L, 0, 0, HttpRequestContinuation);
+}
+
+static int HttpRequestEntry(lua_State* L) {
+	return HttpRequestContinuation(L, LUA_OK, 0);
+}
+
+// -----------------------------------------------------------------------------
+// T5f ? client_request
+// -----------------------------------------------------------------------------
+
+int client_request(lua_State* L) {
+	LuaHttpClient* client = (LuaHttpClient*)luaL_checkudata(L, 1, LUAHTTPCLIENT);
+	// Early-out: if a token is attached and already dead, abort before any curl setup.
+	if (client->aliveTokenRef != LUA_NOREF) {
+		lua_rawgeti(L, LUA_REGISTRYINDEX, client->aliveTokenRef);
+		int alive = lua_alivetoken_isalive(L, -1);
+		lua_pop(L, 1);
+		if (alive == 0) {
+			lua_pushnil(L);
+			lua_pushliteral(L, "aborted");
+			return 2;
+		}
+	}
+	const char* method = luaL_checkstring(L, 2);
+	const char* url    = luaL_checkstring(L, 3);
+
+	// Arg 4: body ? string, native Stream, or nil
+	size_t      bodyLen    = 0;
+	const char* body       = NULL;
+	LuaStream*  streamInput  = NULL;
+	LuaStream*  streamOutput = NULL;
+
+	if (lua_type(L, 4) == LUA_TSTRING) {
+		body = lua_tolstring(L, 4, &bodyLen);
+	} else if (lua_isuserdata(L, 4) && lua_isstream(L, 4)) {
+		streamInput = lua_toluastream(L, 4);
+		if (!streamInput->vtbl) {
+			lua_pushnil(L);
+			lua_pushstring(L, "stream body must be a native-backend stream (vtbl != NULL)");
+			return 2;
+		}
+	}
+
+	// Arg 5: per-call headers table (optional)
+	int headersIdx = lua_istable(L, 5) ? 5 : 0;
+
+	// Arg 6: outStream (optional)
+	if (lua_isuserdata(L, 6) && lua_isstream(L, 6)) {
+		streamOutput = lua_toluastream(L, 6);
+		if (!streamOutput->vtbl || !streamOutput->vtbl->write) {
+			lua_pushnil(L);
+			lua_pushstring(L, "outStream must be a native-backend stream (vtbl->write != NULL)");
+			return 2;
+		}
+	}
+
+	// Retrieve the shared CURLM* from the registry
+	lua_rawgetp(L, LUA_REGISTRYINDEX, &g_curlm_key);
+	CURLM* multi = (CURLM*)lua_touserdata(L, -1);
+	lua_pop(L, 1);
+	if (!multi) {
+		lua_pushnil(L);
+		lua_pushstring(L, "HTTP module not initialised");
+		return 2;
+	}
+
+	// Allocate LuaHttpCurlRequest userdata
+	LuaHttpCurlRequest* req = (LuaHttpCurlRequest*)lua_newuserdata(L, sizeof(LuaHttpCurlRequest));
+	memset(req, 0, sizeof(LuaHttpCurlRequest));
+	luaL_setmetatable(L, LUAHTTPCURLREQUEST);
+	req->streamOutputRef = LUA_NOREF;
+	req->streamInputRef  = LUA_NOREF;
+	int reqIdx = lua_gettop(L);
+
+	req->multi = multi;
+	req->easy  = curl_easy_init();
+	if (!req->easy) {
+		lua_pushnil(L);
+		lua_pushstring(L, "curl_easy_init failed");
+		return 2;
+	}
+
+	req->curlMsg = (CurlMsg*)kitsune_malloc(sizeof(CurlMsg));
+	if (!req->curlMsg) {
+		curl_easy_cleanup(req->easy);
+		req->easy = NULL;
+		lua_pushnil(L);
+		lua_pushstring(L, "out of memory");
+		return 2;
+	}
+	memset(req->curlMsg, 0, sizeof(CurlMsg));
+
+	// Build and store headers slist
+	req->requestHdrs = build_headers(L, client, headersIdx);
+
+	curl_easy_setopt(req->easy, CURLOPT_URL,            url);
+	curl_easy_setopt(req->easy, CURLOPT_CUSTOMREQUEST,  method);
+	curl_easy_setopt(req->easy, CURLOPT_HTTPHEADER,     req->requestHdrs);
+	curl_easy_setopt(req->easy, CURLOPT_WRITEFUNCTION,  WriteBodyCallback);
+	curl_easy_setopt(req->easy, CURLOPT_WRITEDATA,      req);
+	curl_easy_setopt(req->easy, CURLOPT_HEADERFUNCTION, WriteHeaderCallback);
+	curl_easy_setopt(req->easy, CURLOPT_HEADERDATA,     req);
+	curl_easy_setopt(req->easy, CURLOPT_ERRORBUFFER,    req->errorBuf);
+	curl_easy_setopt(req->easy, CURLOPT_FOLLOWLOCATION, client->followRedirects ? 1L : 0L);
+	curl_easy_setopt(req->easy, CURLOPT_SSL_VERIFYPEER, client->verifySsl ? 1L : 0L);
+	curl_easy_setopt(req->easy, CURLOPT_SSL_VERIFYHOST, client->verifySsl ? 2L : 0L);
+	curl_easy_setopt(req->easy, CURLOPT_NOSIGNAL,       1L);
+	curl_easy_setopt(req->easy, CURLOPT_PRIVATE,        req->curlMsg);
+	if (client->timeoutMs > 0)
+		curl_easy_setopt(req->easy, CURLOPT_TIMEOUT_MS, (long)client->timeoutMs);
+
+	if (streamInput) {
+		lua_pushvalue(L, 4);
+		req->streamInput    = streamInput;
+		req->streamInputRef = luaL_ref(L, LUA_REGISTRYINDEX);
+		curl_easy_setopt(req->easy, CURLOPT_UPLOAD,       1L);
+		curl_easy_setopt(req->easy, CURLOPT_READFUNCTION, ReadBodyCallback);
+		curl_easy_setopt(req->easy, CURLOPT_READDATA,     req);
+		curl_off_t uploadSize = -1;
+		if (streamInput->Caps & STREAM_CAP_SEEK) {
+			lua_Integer pos = streamInput->vtbl->curpos(streamInput->native);
+			lua_Integer len = streamInput->vtbl->getlen(streamInput->native);
+			uploadSize = (curl_off_t)(len - pos);
+		}
+		curl_easy_setopt(req->easy, CURLOPT_INFILESIZE_LARGE, uploadSize);
+	} else if (body && bodyLen > 0) {
+		curl_easy_setopt(req->easy, CURLOPT_POSTFIELDS,    body);
+		curl_easy_setopt(req->easy, CURLOPT_POSTFIELDSIZE, (long)bodyLen);
+	}
+
+	if (streamOutput) {
+		lua_pushvalue(L, 6);
+		req->streamOutput    = streamOutput;
+		req->streamOutputRef = luaL_ref(L, LUA_REGISTRYINDEX);
+	}
+
+	curl_multi_add_handle(multi, req->easy);
+	req->addedToMulti = true;
+	req->client       = client;
+	req->startNs      = http_now_ns();
+
+	// Create the coroutine; prime it so the first user coroutine.resume resumes
+	// from the yieldk point rather than trying to call req as a function.
+	lua_State* T = lua_newthread(L);    // T pushed on L's stack
+	lua_pushcfunction(T, HttpRequestEntry);
+	lua_pushvalue(L, reqIdx);
+	lua_xmove(L, T, 1);                 // T: [HttpRequestEntry, req]
+	int nres = 0;
+	int rc = lua_resume(T, L, 1, &nres);
+	if (rc != LUA_YIELD) {
+		// Immediate failure ? req's __gc will remove it from multi
+		lua_pushnil(L);
+		if (nres > 0)
+			lua_xmove(T, L, 1);
+		else
+			lua_pushstring(L, "request failed to start");
+		return 2;
+	}
+	return 1;  // T is on top of L's stack
+}
+
+// -----------------------------------------------------------------------------
+// T5g ? luahttprequest_gc
+// -----------------------------------------------------------------------------
+
+int luahttprequest_gc(lua_State* L) {
+	LuaHttpCurlRequest* req = (LuaHttpCurlRequest*)luaL_checkudata(L, 1, LUAHTTPCURLREQUEST);
+	if (req->addedToMulti && req->multi && req->easy) {
+		curl_multi_remove_handle(req->multi, req->easy);
+		req->addedToMulti = false;
+	}
+	if (req->easy) {
+		curl_easy_cleanup(req->easy);
+		req->easy = NULL;
+	}
+	if (req->requestHdrs) {
+		curl_slist_free_all(req->requestHdrs);
+		req->requestHdrs = NULL;
+	}
+	kitsune_free(req->body);
+	req->body = NULL;
+	if (req->streamOutputRef != LUA_NOREF) {
+		luaL_unref(L, LUA_REGISTRYINDEX, req->streamOutputRef);
+		req->streamOutputRef = LUA_NOREF;
+	}
+	if (req->streamInputRef != LUA_NOREF) {
+		luaL_unref(L, LUA_REGISTRYINDEX, req->streamInputRef);
+		req->streamInputRef = LUA_NOREF;
+	}
+	free_header_arrays(req->headerKeys, req->headerVals, req->headerCount);
+	req->headerKeys  = NULL;
+	req->headerVals  = NULL;
+	req->headerCount = 0;
+	kitsune_free(req->curlMsg);
+	req->curlMsg = NULL;
+	return 0;
+}
+
+// -----------------------------------------------------------------------------
+// T6a ? WriteStreamBodyCallback
+// -----------------------------------------------------------------------------
+
+static size_t WriteStreamBodyCallback(char* ptr, size_t size, size_t nmemb, void* userdata) {
+	LuaHttpStreamNative* h = (LuaHttpStreamNative*)userdata;
+	size_t total = size * nmemb;
+	ChunkNode* node = (ChunkNode*)kitsune_malloc(sizeof(ChunkNode));
+	if (!node)
+		return 0;
+	node->data = (char*)kitsune_malloc(total);
+	if (!node->data) {
+		kitsune_free(node);
+		return 0;
+	}
+	memcpy(node->data, ptr, total);
+	node->len  = total;
+	node->next = NULL;
+	if (h->chunkTail)
+		h->chunkTail->next = node;
+	else
+		h->chunkHead = node;
+	h->chunkTail = node;
+	return total;
+}
+
+// -----------------------------------------------------------------------------
+// T6b ? WriteStreamHeaderCallback
+// -----------------------------------------------------------------------------
+
+static size_t WriteStreamHeaderCallback(char* buffer, size_t size, size_t nitems, void* userdata) {
+	LuaHttpStreamNative* h = (LuaHttpStreamNative*)userdata;
+	size_t total = size * nitems;
+	if (total >= 5 && strncmp(buffer, "HTTP/", 5) == 0) {
+		h->statusText[0] = '\0';  // new response in a redirect chain
+		char* sp1 = (char*)memchr(buffer + 5, ' ', total - 5);
+		if (sp1) {
+			h->httpCode = atol(sp1 + 1);
+			char* sp2 = (char*)memchr(sp1 + 1, ' ', total - (size_t)(sp1 + 1 - buffer));
+			if (sp2) {
+				size_t tlen = total - (size_t)(sp2 + 1 - buffer);
+				if (tlen >= 2) tlen -= 2;
+				if (tlen > 0 && tlen < sizeof(h->statusText)) {
+					memcpy(h->statusText, sp2 + 1, tlen);
+					h->statusText[tlen] = '\0';
+				}
+			}
+		}
+		return total;
+	}
+	if (total <= 2) {
+		h->headersComplete = true;
+		return total;
+	}
+	char* colon = (char*)memchr(buffer, ':', total);
+	if (!colon) return total;
+	const char* valStart = colon + 1;
+	while (valStart < buffer + total && *valStart == ' ')
+		valStart++;
+	size_t keyLen = (size_t)(colon - buffer);
+	size_t valLen = total - (size_t)(valStart - buffer);
+	if (valLen >= 2) valLen -= 2;
+	append_header(&h->headerKeys, &h->headerVals,
+		&h->headerCount, &h->headerAlloc,
+		buffer, keyLen, valStart, valLen);
+	return total;
+}
+
+// -----------------------------------------------------------------------------
+// T6c ? http_stream_read / HttpStreamReadContinuation
+// -----------------------------------------------------------------------------
+
+static int HttpStreamReadContinuation(lua_State* L, int status, lua_KContext ctx);
+
+static int http_stream_read(void* native, lua_State* L, size_t len) {
+	(void)len;
+	return HttpStreamReadContinuation(L, LUA_OK, 0);
+}
+
+static int HttpStreamReadContinuation(lua_State* L, int status, lua_KContext ctx) {
+	LuaStream* s = lua_toluastream(L, 1);
+	LuaHttpStreamNative* h = (LuaHttpStreamNative*)s->native;
+
+	curlm_step(h->multi);
+	if (!h->done && h->curlMsg && h->curlMsg->done) {
+		h->done = true;
+		if (h->addedToMulti) {
+			h->addedToMulti = false;
+			curl_multi_remove_handle(h->multi, h->easy);
+		}
+	}
+
+	if (h->chunkHead) {
+		ChunkNode* node = h->chunkHead;
+		h->chunkHead = node->next;
+		if (!h->chunkHead)
+			h->chunkTail = NULL;
+		lua_pushlstring(L, node->data, node->len);
+		kitsune_free(node->data);
+		kitsune_free(node);
+		return 1;
+	}
+
+	if (h->done) {
+		lua_pushnil(L);
+		return 1;
+	}
+
+	return lua_yieldk(L, 0, 0, HttpStreamReadContinuation);
+}
+
+// -----------------------------------------------------------------------------
+// T6d ? http_stream_info / HttpStreamInfoContinuation
+// -----------------------------------------------------------------------------
+
+static int http_stream_info(void* native, lua_State* L) {
+	LuaHttpStreamNative* h = (LuaHttpStreamNative*)native;
+	lua_newtable(L);
+	lua_pushstring(L, "http");
+	lua_setfield(L, -2, "type");
+	if (h->httpCode > 0) {
+		lua_pushinteger(L, h->httpCode);
+		lua_setfield(L, -2, "Code");
+		lua_pushstring(L, h->statusText[0] ? h->statusText : HttpReasonPhrase(h->httpCode));
+		lua_setfield(L, -2, "Status");
+		const char* effectiveUrl = NULL;
+		if (h->easy)
+			curl_easy_getinfo(h->easy, CURLINFO_EFFECTIVE_URL, &effectiveUrl);
+		if (effectiveUrl) {
+			lua_pushstring(L, effectiveUrl);
+			lua_setfield(L, -2, "Url");
+		}
+		lua_newtable(L);
+		for (int i = 0; i < h->headerCount; i++) {
+			lua_pushstring(L, h->headerKeys[i]);
+			lua_pushstring(L, h->headerVals[i]);
+			lua_rawset(L, -3);
+		}
+		lua_setfield(L, -2, "Headers");
+	} else {
+		lua_pushstring(L, h->errorBuf[0] ? h->errorBuf : "request failed");
+		lua_setfield(L, -2, "Status");
+	}
+	return 1;
+}
+
+// -----------------------------------------------------------------------------
+// T6e ? http_stream_hasdata
+// -----------------------------------------------------------------------------
+
+static int http_stream_hasdata(void* native) {
+	LuaHttpStreamNative* h = (LuaHttpStreamNative*)native;
+	if (h->done)
+		return h->chunkHead != NULL ? 1 : -1;
+	curlm_step(h->multi);
+	if (!h->done && h->curlMsg && h->curlMsg->done) {
+		h->done = true;
+		if (h->addedToMulti) {
+			h->addedToMulti = false;
+			curl_multi_remove_handle(h->multi, h->easy);
+		}
+	}
+	return h->chunkHead != NULL ? 1 : (h->done ? -1 : 0);
+}
+
+// -----------------------------------------------------------------------------
+// T6f ? http_stream_close
+// -----------------------------------------------------------------------------
+
+static void http_stream_close(void* native, lua_State* L) {
+	LuaHttpStreamNative* h = (LuaHttpStreamNative*)native;
+	if (h->addedToMulti && h->multi && h->easy) {
+		curl_multi_remove_handle(h->multi, h->easy);
+		h->addedToMulti = false;
+	}
+	if (h->requestHdrs) {
+		curl_slist_free_all(h->requestHdrs);
+		h->requestHdrs = NULL;
+	}
+	if (h->easy) {
+		curl_easy_cleanup(h->easy);
+		h->easy = NULL;
+	}
+	// Free chunk queue
+	ChunkNode* node = h->chunkHead;
+	while (node) {
+		ChunkNode* next = node->next;
+		kitsune_free(node->data);
+		kitsune_free(node);
+		node = next;
+	}
+	h->chunkHead = NULL;
+	h->chunkTail = NULL;
+	free_header_arrays(h->headerKeys, h->headerVals, h->headerCount);
+	h->headerKeys  = NULL;
+	h->headerVals  = NULL;
+	h->headerCount = 0;
+	kitsune_free(h->curlMsg);
+	h->curlMsg = NULL;
+	kitsune_free(h);
+}
+
+// -----------------------------------------------------------------------------
+// T6g ? g_httpStreamVtable
+// -----------------------------------------------------------------------------
+
+static const LuaStreamVtable g_httpStreamVtable = {
+	http_stream_read,    // read - may call lua_yieldk
+	NULL,                // write - HTTP responses are read-only
+	NULL,                // setpos
+	NULL,                // curpos
+	NULL,                // getlen
+	http_stream_close,   // close
+	http_stream_info,    // info - synchronous; headers guaranteed after connect
+	http_stream_hasdata, // hasdata - non-NULL signals async
+};
+
+static int HttpStreamConnectContinuation(lua_State* L, int status, lua_KContext ctx);
+
+static int HttpStreamEntry(lua_State* L) {
+	// arg 1 is the stream; HttpStreamConnectContinuation expects it at top.
+	lua_settop(L, 1);
+	return HttpStreamConnectContinuation(L, LUA_OK, 0);
+}
+
+static int HttpStreamConnectContinuation(lua_State* L, int status, lua_KContext ctx) {
+	LuaStream* s = lua_toluastream(L, -1);
+	LuaHttpStreamNative* h = (LuaHttpStreamNative*)s->native;
+
+	curlm_step(h->multi);
+	if (!h->done && h->curlMsg && h->curlMsg->done) {
+		h->done = true;
+		if (h->addedToMulti) {
+			curl_multi_remove_handle(h->multi, h->easy);
+			h->addedToMulti = false;
+		}
+	}
+
+	if (!h->headersComplete && !h->done)
+		return lua_yieldk(L, 0, 0, HttpStreamConnectContinuation);
+
+	if (h->done && !h->headersComplete) {
+		lua_pop(L, 1);
+		lua_pushnil(L);
+		lua_pushstring(L, h->errorBuf[0] ? h->errorBuf : "request failed");
+		return 2;
+	}
+
+	return 1;
+}
+
+int client_stream(lua_State* L) {
+	LuaHttpClient* client = (LuaHttpClient*)luaL_checkudata(L, 1, LUAHTTPCLIENT);
+	const char* method = luaL_checkstring(L, 2);
+	const char* url    = luaL_checkstring(L, 3);
+
+	size_t      bodyLen  = 0;
+	const char* body     = NULL;
+	LuaStream*  streamIn = NULL;
+	if (lua_type(L, 4) == LUA_TSTRING) {
+		body = lua_tolstring(L, 4, &bodyLen);
+	} else if (lua_isuserdata(L, 4) && lua_isstream(L, 4)) {
+		streamIn = lua_toluastream(L, 4);
+		if (!streamIn->vtbl) {
+			lua_pushnil(L);
+			lua_pushstring(L, "stream body must be a native-backend stream");
+			return 2;
+		}
+	}
+	int headersIdx = lua_istable(L, 5) ? 5 : 0;
+
+	lua_rawgetp(L, LUA_REGISTRYINDEX, &g_curlm_key);
+	CURLM* multi = (CURLM*)lua_touserdata(L, -1);
+	lua_pop(L, 1);
+	if (!multi) {
+		lua_pushnil(L);
+		lua_pushstring(L, "HTTP module not initialised");
+		return 2;
+	}
+
+	LuaHttpStreamNative* h = (LuaHttpStreamNative*)kitsune_malloc(sizeof(LuaHttpStreamNative));
+	if (!h) {
+		lua_pushnil(L);
+		lua_pushstring(L, "out of memory");
+		return 2;
+	}
+	memset(h, 0, sizeof(LuaHttpStreamNative));
+	h->multi = multi;
+
+	h->easy = curl_easy_init();
+	if (!h->easy) {
+		kitsune_free(h);
+		lua_pushnil(L);
+		lua_pushstring(L, "curl_easy_init failed");
+		return 2;
+	}
+
+	h->curlMsg = (CurlMsg*)kitsune_malloc(sizeof(CurlMsg));
+	if (!h->curlMsg) {
+		curl_easy_cleanup(h->easy);
+		kitsune_free(h);
+		lua_pushnil(L);
+		lua_pushstring(L, "out of memory");
+		return 2;
+	}
+	memset(h->curlMsg, 0, sizeof(CurlMsg));
+
+	struct curl_slist* hdrs = build_headers(L, client, headersIdx);
+
+	curl_easy_setopt(h->easy, CURLOPT_URL,            url);
+	curl_easy_setopt(h->easy, CURLOPT_CUSTOMREQUEST,  method);
+	curl_easy_setopt(h->easy, CURLOPT_HTTPHEADER,     hdrs);
+	curl_easy_setopt(h->easy, CURLOPT_WRITEFUNCTION,  WriteStreamBodyCallback);
+	curl_easy_setopt(h->easy, CURLOPT_WRITEDATA,      h);
+	curl_easy_setopt(h->easy, CURLOPT_HEADERFUNCTION, WriteStreamHeaderCallback);
+	curl_easy_setopt(h->easy, CURLOPT_HEADERDATA,     h);
+	curl_easy_setopt(h->easy, CURLOPT_ERRORBUFFER,    h->errorBuf);
+	curl_easy_setopt(h->easy, CURLOPT_FOLLOWLOCATION, client->followRedirects ? 1L : 0L);
+	curl_easy_setopt(h->easy, CURLOPT_SSL_VERIFYPEER, client->verifySsl ? 1L : 0L);
+	curl_easy_setopt(h->easy, CURLOPT_SSL_VERIFYHOST, client->verifySsl ? 2L : 0L);
+	curl_easy_setopt(h->easy, CURLOPT_NOSIGNAL,       1L);
+	curl_easy_setopt(h->easy, CURLOPT_PRIVATE,        h->curlMsg);
+	if (client->timeoutMs > 0)
+		curl_easy_setopt(h->easy, CURLOPT_TIMEOUT_MS, (long)client->timeoutMs);
+
+	// Keep hdrs alive for the lifetime of the easy handle — curl does NOT copy it.
+	h->requestHdrs = hdrs;
+
+	if (streamIn) {
+		// Streaming upload bodies need a stateful read callback; reject for now.
+		curl_easy_cleanup(h->easy);
+		curl_slist_free_all(hdrs);
+		kitsune_free(h->curlMsg);
+		kitsune_free(h);
+		lua_pushnil(L);
+		lua_pushstring(L, "stream body not supported for streaming requests; use a string body");
+		return 2;
+	} else if (body && bodyLen > 0) {
+		curl_easy_setopt(h->easy, CURLOPT_POSTFIELDS,    body);
+		curl_easy_setopt(h->easy, CURLOPT_POSTFIELDSIZE, (long)bodyLen);
+	}
+
+	curl_multi_add_handle(multi, h->easy);
+	h->addedToMulti = true;
+
+	// One pass to start the connection.
+	curlm_step(multi);
+
+	// Push the stream that HttpStreamEntry/HttpStreamConnectContinuation will operate on.
+	lua_pushluastream_native(L, &g_httpStreamVtable, h, STREAM_CAP_READ);
+	int streamIdx = lua_gettop(L);
+
+	// Wrap in a thread so the caller can drive it with coroutine.resume,
+	// matching c:Request() behaviour and avoiding deadlock in co-routine pump loops.
+	lua_State* T = lua_newthread(L);
+	lua_pushcfunction(T, HttpStreamEntry);
+	lua_pushvalue(L, streamIdx);
+	lua_xmove(L, T, 1);
+	int nres = 0;
+	int rc = lua_resume(T, L, 1, &nres);
+	if (rc == LUA_OK) {
+		// Headers arrived immediately; T is dead, move the stream result back.
+		if (nres > 0)
+			lua_xmove(T, L, nres);
+		else {
+			lua_pushnil(L);
+			lua_pushstring(L, "stream failed to start");
+		}
+		lua_remove(L, streamIdx);
+		return nres > 0 ? nres : 2;
+	}
+	if (rc != LUA_YIELD) {
+		// Immediate failure.
+		lua_pushnil(L);
+		if (nres > 0)
+			lua_xmove(T, L, 1);
+		else
+			lua_pushstring(L, "stream failed to start");
+		lua_remove(L, streamIdx);
+		return 2;
+	}
+	// T is suspended waiting for headers; return the thread to the caller.
+	lua_remove(L, streamIdx);
+	return 1;  // T is on top
+}
+
+// WebSocket client connection is implemented in LuaWebSocket.cpp.
+// See ws_client_connect for the yieldk-based connect implementation.
+
+int client_set_alive_token(lua_State* L) {
+	LuaHttpClient* client = (LuaHttpClient*)luaL_checkudata(L, 1, LUAHTTPCLIENT);
+	if (client->aliveTokenRef != LUA_NOREF) {
+		luaL_unref(L, LUA_REGISTRYINDEX, client->aliveTokenRef);
+		client->aliveTokenRef = LUA_NOREF;
+	}
+	if (!lua_isnil(L, 2) && !lua_isnone(L, 2)) {
+		luaL_checkudata(L, 2, LUAALIVETOKEN);
+		lua_pushvalue(L, 2);
+		client->aliveTokenRef = luaL_ref(L, LUA_REGISTRYINDEX);
+	}
+	return 0;
+}
+
+// -----------------------------------------------------------------------------
+// client_call — simplified blocking helper.
+// Signature (mirrors Request but yields the outer coroutine until done):
+//   result        = client:Call(method, url [, headers [, body]])
+//   nil, errmsg   = client:Call(...)   on transport failure
+//
+// The inner Request coroutine is driven transparently; the caller sees neither
+// the coroutine nor the pump loop.  On success returns the same result table
+// as Request.  On transport failure (curl error, timeout, disconnect) returns
+// nil + a short error string.
+// -----------------------------------------------------------------------------
+
+// Continuation: resumes the inner Request thread (at top of L's stack) until
+// it finishes, then extracts and post-processes the result.
+static int client_call_continuation(lua_State* L, int status, lua_KContext ctx) {
+	// Check AliveToken before driving the inner thread another step.
+	LuaHttpClient* client = (LuaHttpClient*)luaL_testudata(L, 1, LUAHTTPCLIENT);
+	if (client && client->aliveTokenRef != LUA_NOREF) {
+		lua_rawgeti(L, LUA_REGISTRYINDEX, client->aliveTokenRef);
+		int alive = lua_alivetoken_isalive(L, -1);
+		lua_pop(L, 1);
+		if (alive == 0) {
+			lua_pushnil(L);
+			lua_pushliteral(L, "aborted");
+			return 2;
+		}
+	}
+	// The inner polling thread is always at the top of L's stack.
+	lua_State* T = lua_tothread(L, -1);
+	if (!T) {
+		lua_pushnil(L);
+		lua_pushstring(L, "internal error: lost inner thread");
+		return 2;
+	}
+
+	int nres = 0;
+	int rc = lua_resume(T, L, 0, &nres);
+
+	if (rc == LUA_YIELD) {
+		// Still polling — yield the outer coroutine too.
+		return lua_yieldk(L, 0, ctx, client_call_continuation);
+	}
+
+	if (rc == LUA_OK && nres > 0) {
+		// Move result table from inner thread to outer state.
+		lua_xmove(T, L, 1);
+
+		// Transport errors (DNS failure, timeout, etc.) come back as a result
+		// table with Code == nil.  Convert these to nil, errmsg so the caller
+		// can reliably distinguish them from HTTP-level error codes.
+		lua_getfield(L, -1, "Code");
+		int codeIsNil = lua_isnil(L, -1);
+		lua_pop(L, 1);
+
+		if (codeIsNil) {
+			lua_getfield(L, -1, "Status");
+			const char* errmsg = lua_tostring(L, -1);
+			if (!errmsg || *errmsg == '\0')
+				errmsg = "request failed";
+			lua_pop(L, 1);   // pop Status
+			lua_pop(L, 1);   // pop result table
+			lua_pushnil(L);
+			lua_pushstring(L, errmsg);
+			return 2;
+		}
+		return 1;  // result table on top
+	}
+
+	// LUA_ERRRUN or no result — propagate as nil, errmsg.
+	const char* errmsg = "request failed";
+	if (nres > 0 && lua_type(T, -1) == LUA_TSTRING)
+		errmsg = lua_tostring(T, -1);
+	lua_pushnil(L);
+	lua_pushstring(L, errmsg);
+	return 2;
+}
+
+int client_call(lua_State* L) {
+	// Expected args: client(1), method(2), url(3), opt headers(4), opt body(5)
+	// client_request expects: client(1), method(2), url(3), opt body(4), opt headers(5)
+	luaL_checkudata(L, 1, LUAHTTPCLIENT);
+	luaL_checkstring(L, 2);
+	luaL_checkstring(L, 3);
+
+	lua_settop(L, 5);   // ensure 5 slots, padding with nil if args were omitted
+
+	// Swap positions 4 (headers) and 5 (body) to match client_request's order.
+	lua_pushvalue(L, 4);   // push copy of headers at index 6:  [c,m,u,h,b,h]
+	lua_copy(L, 5, 4);     // overwrite index 4 with body:       [c,m,u,b,b,h]
+	lua_replace(L, 5);     // pop top (headers copy) into index 5:[c,m,u,b,h]
+
+	// Call client_request directly on L's stack.  It reads self/method/url/body/headers
+	// from indices 1-5, pushes the inner polling thread, and returns 1.
+	// On failure (curl init error etc.) it pushes nil + errmsg and returns 2.
+	int nresults = client_request(L);
+	if (nresults != 1) {
+		// Immediate failure — nil + errmsg already on the stack.
+		return nresults;
+	}
+
+	// The inner request thread is now at the top of L's stack.
+	// Yield the outer coroutine and drive the inner one poll-by-poll.
+	return lua_yieldk(L, 0, 0, client_call_continuation);
+}
+
+int client_get_timestamp(lua_State* L) {
+	LuaHttpClient* client = (LuaHttpClient*)luaL_checkudata(L, 1, LUAHTTPCLIENT);
+	lua_pushtimespan(L)->ticks = client->lastRequestElapsedTicks;
+	return 1;
+}
+
+#endif  // KITSUNE_HTTP

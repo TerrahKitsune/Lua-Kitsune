@@ -36,7 +36,8 @@ set(KITSUNE_ENGINE_SOURCES
 	# ── Core scheduler ─────────────────────────────────────────────────────
 	src/engine/KitsuneEngine.cpp
 	src/engine/KitsuneUserdata.cpp
-	luatask.cpp
+	src/modules/tasks/LuaTasks.cpp
+	src/modules/tasks/LuaTasksMain.cpp
 	src/engine/Mem.cpp
 	src/engine/LuaEngineBuiltins.cpp
 	src/engine/LuaMisc.cpp
@@ -44,29 +45,31 @@ set(KITSUNE_ENGINE_SOURCES
 	src/engine/KitsuneStdlib.cpp     # UTF-8 file names for Lua's io / os / loadfile / require
 
 	# ── MCP (Model Context Protocol server) ─────────────────────────────────
-	luamcp.cpp
+	src/modules/mcp/LuaMCP.cpp
+	src/modules/mcp/LuaMCPMain.cpp
 
 	# ── Hashing / encoding ─────────────────────────────────────────────────
-	base64.cpp
-	LuaMD5.cpp
-	MD5Main.cpp
+	src/modules/base64/LuaBase64.cpp
+	src/modules/base64/LuaBase64Main.cpp
+	src/modules/md5/LuaMD5.cpp
+	src/modules/md5/LuaMD5Main.cpp
 	md5.c
-	LuaSHA1.cpp
-	SHA1Main.cpp
+	src/modules/sha1/LuaSHA1.cpp
+	src/modules/sha1/LuaSHA1Main.cpp
 	sha1.c
-	LuaSha256.cpp
-	Sha256Main.cpp
+	src/modules/sha256/LuaSHA256.cpp
+	src/modules/sha256/LuaSHA256Main.cpp
 	sha256.c
 	src/engine/Bencode.cpp
 	src/engine/MemoryManager.cpp
 
 	# ── JSON ───────────────────────────────────────────────────────────────
-	luajson.cpp
-	luajsonmain.cpp
+	src/modules/json/LuaJson.cpp
+	src/modules/json/LuaJsonMain.cpp
 
 	# ── MsgPack ─────────────────────────────────────────────────────────────
-	luamsgpack.cpp
-	luamsgpackmain.cpp
+	src/modules/msgpack/LuaMsgPack.cpp
+	src/modules/msgpack/LuaMsgPackMain.cpp
 	msgpack/src/objectc.c
 	msgpack/src/unpack.c
 	msgpack/src/version.c
@@ -74,41 +77,41 @@ set(KITSUNE_ENGINE_SOURCES
 	msgpack/src/zone.c
 
 	# ── Text (UTF-8 / UTF-16 / code page helpers) ───────────────────────────
-	luatext.cpp
-	luatextmain.cpp
+	src/modules/text/LuaText.cpp
+	src/modules/text/LuaTextMain.cpp
 
 	# ── UInt (unsigned 64-bit integer type) ──────────────────────────────────
-	luauint.cpp
-	uintmain.cpp
+	src/modules/uint/LuaUInt.cpp
+	src/modules/uint/LuaUIntMain.cpp
 
 	# ── Identifier (UUID/OID type) ───────────────────────────────────────────
-	luaidentifier.cpp
-	identifiermain.cpp
+	src/modules/identifier/LuaIdentifier.cpp
+	src/modules/identifier/LuaIdentifierMain.cpp
 
 	# ── DateTime (UTC/offset date-time type) ─────────────────────────────────
-	luadatetime.cpp
-	datetimemain.cpp
+	src/modules/datetime/LuaDateTime.cpp
+	src/modules/datetime/LuaDateTimeMain.cpp
 
 	# ── Decimal (128-bit fixed-point decimal type) ───────────────────────────
-	luadecimal.cpp
-	decimalmain.cpp
+	src/modules/decimal/LuaDecimal.cpp
+	src/modules/decimal/LuaDecimalMain.cpp
 
 	# ── TimeSpan (signed duration type) ──────────────────────────────────────
-	luatimespan.cpp
-	timespanmain.cpp
+	src/modules/timespan/LuaTimeSpan.cpp
+	src/modules/timespan/LuaTimeSpanMain.cpp
 
 	# ── CSV ────────────────────────────────────────────────────────────────
-	luacsv.cpp
-	LuaCsvMain.cpp
+	src/modules/csv/LuaCSV.cpp
+	src/modules/csv/LuaCSVMain.cpp
 
 	# ── XML (pugixml, bundled) ───────────────────────────────────────────────
-	luaxml.cpp
-	luaxmlmain.cpp
+	src/modules/xml/LuaXml.cpp
+	src/modules/xml/LuaXmlMain.cpp
 	pugixml/pugixml.cpp
 
 	# ── YAML (libyaml, bundled) ──────────────────────────────────────────────
-	luayaml.cpp
-	luayamlmain.cpp
+	src/modules/yaml/LuaYaml.cpp
+	src/modules/yaml/LuaYamlMain.cpp
 	libyaml/src/api.c
 	libyaml/src/dumper.c
 	libyaml/src/emitter.c
@@ -119,48 +122,48 @@ set(KITSUNE_ENGINE_SOURCES
 	libyaml/src/writer.c
 
 	# ── TOML (tomlc99, bundled) ───────────────────────────────────────────────
-	luatoml.cpp
-	luatomlmain.cpp
+	src/modules/toml/LuaToml.cpp
+	src/modules/toml/LuaTomlMain.cpp
 	tomlc99/toml.c
 
 	# ── INI (pure C, no library) ─────────────────────────────────────────────
-	luaini.cpp
-	luainimain.cpp
-	luaalivetoken.cpp
-	luaalivtokenmain.cpp
+	src/modules/ini/LuaIni.cpp
+	src/modules/ini/LuaIniMain.cpp
+	src/modules/alivetoken/LuaAliveToken.cpp
+	src/modules/alivetoken/LuaAliveTokenMain.cpp
 
 	# ── Stream infrastructure (used by the variable bridge) ─────────────────
-	stream.cpp
-	streammemory.cpp
-	streamfile.cpp
-	StreamMain.cpp
+	src/modules/stream/LuaStream.cpp
+	src/modules/stream/LuaStreamMemory.cpp
+	src/modules/stream/LuaStreamFile.cpp
+	src/modules/stream/LuaStreamMain.cpp
 
 	# ── Compression (miniz, bundled — same library on all platforms) ──────────────────
 	miniz.c
 
 	# ── AES encryption ────────────────────────────────────────────────────────────────
-	luaaes.cpp
-	LuaAesMain.cpp
+	src/modules/aes/LuaAes.cpp
+	src/modules/aes/LuaAesMain.cpp
 	aes.c
 
 	# ── Timer (std::chrono::steady_clock — same on all platforms) ──────────────────────
-	Timer.cpp
-	TimerMain.cpp
+	src/modules/timer/LuaTimer.cpp
+	src/modules/timer/LuaTimerMain.cpp
 
 	# ── FileSystem ─────────────────────────────────────────────────────────────────────
-	LuaFileSystem.cpp
-	LuaFileSystemMain.cpp
+	src/modules/filesystem/LuaFileSystem.cpp
+	src/modules/filesystem/LuaFileSystemMain.cpp
 
 	# ── Image (stb_image decode + stb_image_write encode, both header-only and bundled
 	#           in stb/; PNG tEXt/iTXt tag support is hand-rolled on top, using miniz's
 	#           mz_crc32 -- see LuaImage.cpp) ─────────────────────────────────────────
-	LuaImage.cpp
-	LuaImageMain.cpp
+	src/modules/image/LuaImage.cpp
+	src/modules/image/LuaImageMain.cpp
 
 	# ── Sound (dr_wav.h decode/encode, header-only and bundled in dr_libs/;
 	#          float32 PCM editing -- see LuaSound.cpp) ────────────────────────────────
-	LuaSound.cpp
-	LuaSoundMain.cpp
+	src/modules/sound/LuaSound.cpp
+	src/modules/sound/LuaSoundMain.cpp
 
 	# ── OGG/Vorbis (libogg + libvorbis, bundled source -- see LuaSoundVorbis.cpp) ──────
 	libogg/src/bitwise.c
@@ -187,30 +190,30 @@ set(KITSUNE_ENGINE_SOURCES
 	libvorbis/lib/bitrate.c
 	libvorbis/lib/vorbisfile.c
 	libvorbis/lib/vorbisenc.c
-	LuaSoundVorbis.cpp
+	src/modules/sound/LuaSoundVorbis.cpp
 
 	# ── Mutex (POSIX named semaphores on Linux) ────────────────────────────────────────
-	LuaMutex.cpp
-	LuaMutexMain.cpp
+	src/modules/mutex/LuaMutex.cpp
+	src/modules/mutex/LuaMutexMain.cpp
 
 	# ── SQLite (bundled amalgamation) ─────────────────────────────────────────────────
-	LuaSQLite.cpp
-	LuaSQLiteMain.cpp
+	src/modules/sqlite/LuaSQLite.cpp
+	src/modules/sqlite/LuaSQLiteMain.cpp
 	SQLite/sqlite3.c
 
 	# ── DuckDB (bundled amalgamation) ──────────────────────────────────────────────────
-	LuaDuckDB.cpp
-	LuaDuckDBMain.cpp
+	src/modules/duckdb/LuaDuckDB.cpp
+	src/modules/duckdb/LuaDuckDBMain.cpp
 	DuckDB/duckdb.cpp
 
 	# ── Process management (cross-platform: POSIX fork/exec on Linux) ─────────────────
-	LuaProcess.cpp
-	ProcessMain.cpp
+	src/modules/process/LuaProcess.cpp
+	src/modules/process/LuaProcessMain.cpp
 
 	# ── Hardware sensors (CPU temp, fan, memory — WMI on Windows, hwmon on Linux) ─────
-	LuaHardware.cpp
-	LuaHardwareMain.cpp
-	LuaHardwareNvidia.cpp
+	src/modules/hardware/LuaHardware.cpp
+	src/modules/hardware/LuaHardwareMain.cpp
+	src/modules/hardware/LuaHardwareNvidia.cpp
 )
 
 # On Linux, hide all bundled SQLite symbols from the global dynamic-symbol table so
@@ -221,7 +224,7 @@ set(KITSUNE_ENGINE_SOURCES
 if(NOT WIN32)
 	set(_sqlite_hidden "SQLITE_API=__attribute__((visibility(\"hidden\")))")
 	set_source_files_properties(
-		SQLite/sqlite3.c LuaSQLite.cpp LuaSQLiteMain.cpp
+		SQLite/sqlite3.c src/modules/sqlite/LuaSQLite.cpp src/modules/sqlite/LuaSQLiteMain.cpp
 		PROPERTIES COMPILE_DEFINITIONS "${_sqlite_hidden};SQLITE_ENABLE_MATH_FUNCTIONS;SQLITE_ENABLE_FTS5")
 else()
 	set_source_files_properties(
@@ -277,7 +280,7 @@ if(KITSUNE_MYSQL)
 	find_package(PkgConfig REQUIRED)
 	pkg_check_modules(MYSQLCLIENT REQUIRED mysqlclient>=8.0)
 
-	target_sources(KitsuneEngine PRIVATE LuaMySQL.cpp MySQLMain.cpp)
+	target_sources(KitsuneEngine PRIVATE src/modules/mysql/LuaMySQL.cpp src/modules/mysql/LuaMySQLMain.cpp)
 
 	target_compile_definitions(KitsuneEngine PRIVATE KITSUNE_MYSQL)
 	target_include_directories(KitsuneEngine PRIVATE ${MYSQLCLIENT_INCLUDE_DIRS})
@@ -331,11 +334,11 @@ if(KITSUNE_HTTP)
 	endif()
 
 		target_sources(KitsuneEngine PRIVATE
-		HttpCurl.cpp HttpCurlMain.cpp
-		LuaHttpRequest.cpp LuaHttpResponse.cpp
-		LuaHttpServer.cpp LuaHttpServerMain.cpp
-		LuaWebSocket.cpp
-		LuaTcpListener.cpp LuaTcpMain.cpp)
+		src/modules/httpclient/LuaHttpClient.cpp src/modules/httpclient/LuaHttpClientMain.cpp
+		src/modules/httpserver/LuaHttpServerRequest.cpp src/modules/httpserver/LuaHttpServerResponse.cpp
+		src/modules/httpserver/LuaHttpServer.cpp src/modules/httpserver/LuaHttpServerMain.cpp
+		src/modules/websocket/LuaWebSocket.cpp src/modules/websocket/LuaWebSocketMain.cpp
+		src/modules/tcp/LuaTCPListener.cpp src/modules/tcp/LuaTCPMain.cpp)
 
 	target_compile_definitions(KitsuneEngine PRIVATE KITSUNE_HTTP KITSUNE_WEBSOCKET)
 	# Suppress _strdup deprecation on Linux — consistent with Windows build flags
@@ -354,7 +357,7 @@ if(KITSUNE_POSTGRES)
 	find_package(PkgConfig REQUIRED)
 	pkg_check_modules(LIBPQ REQUIRED libpq)
 
-	target_sources(KitsuneEngine PRIVATE LuaPostgres.cpp PostgresMain.cpp)
+	target_sources(KitsuneEngine PRIVATE src/modules/postgres/LuaPostgres.cpp src/modules/postgres/LuaPostgresMain.cpp)
 
 	target_compile_definitions(KitsuneEngine PRIVATE KITSUNE_POSTGRES)
 	target_include_directories(KitsuneEngine PRIVATE ${LIBPQ_INCLUDE_DIRS})
@@ -369,11 +372,11 @@ if(KITSUNE_KAFKA)
 	pkg_check_modules(RDKAFKA REQUIRED rdkafka>=1.9)
 
 	target_sources(KitsuneEngine PRIVATE
-		luakafka.cpp
-		luakafkaconsumer.cpp
-		luakafkaproducer.cpp
-		kafkahelpers.cpp
-		luakafkamain.cpp
+		src/modules/kafka/LuaKafka.cpp
+		src/modules/kafka/LuaKafkaConsumer.cpp
+		src/modules/kafka/LuaKafkaProducer.cpp
+		src/modules/kafka/LuaKafkaHelpers.cpp
+		src/modules/kafka/LuaKafkaMain.cpp
 	)
 
 	target_compile_definitions(KitsuneEngine PRIVATE KITSUNE_KAFKA)
@@ -387,7 +390,7 @@ option(KITSUNE_ARCHIVE "Build with Archive support (requires libarchive >= 3.2)"
 if(KITSUNE_ARCHIVE)
 	find_package(LibArchive 3.2 REQUIRED)
 
-	target_sources(KitsuneEngine PRIVATE LuaArchive.cpp LuaArchiveMain.cpp)
+	target_sources(KitsuneEngine PRIVATE src/modules/archive/LuaArchive.cpp src/modules/archive/LuaArchiveMain.cpp)
 
 	target_compile_definitions(KitsuneEngine PRIVATE KITSUNE_ARCHIVE)
 	target_include_directories(KitsuneEngine PRIVATE ${LibArchive_INCLUDE_DIRS})
@@ -403,14 +406,14 @@ if(KITSUNE_REDIS)
 	find_package(OpenSSL REQUIRED)
 
 	target_sources(KitsuneEngine PRIVATE
-		Redis.cpp
-		RedisMain.cpp
-		RedisPubSub.cpp
-		RedisKey.cpp
-		RedisString.cpp
-		RedisValue.cpp
-		RedisStream.cpp
-		RedisJson.cpp
+		src/modules/redis/LuaRedis.cpp
+		src/modules/redis/LuaRedisMain.cpp
+		src/modules/redis/LuaRedisPubSub.cpp
+		src/modules/redis/LuaRedisKey.cpp
+		src/modules/redis/LuaRedisString.cpp
+		src/modules/redis/LuaRedisValue.cpp
+		src/modules/redis/LuaRedisStream.cpp
+		src/modules/redis/LuaRedisJson.cpp
 	)
 
 	target_compile_definitions(KitsuneEngine PRIVATE KITSUNE_REDIS)
@@ -431,8 +434,8 @@ if(KITSUNE_MONGO)
 	pkg_search_module(MONGOC REQUIRED mongoc2 libmongoc-1.0)
 
 	target_sources(KitsuneEngine PRIVATE
-		LuaMongo.cpp
-		MongoMain.cpp
+		src/modules/mongodb/LuaMongoDB.cpp
+		src/modules/mongodb/LuaMongoDBMain.cpp
 	)
 
 	target_compile_definitions(KitsuneEngine PRIVATE KITSUNE_MONGO)
