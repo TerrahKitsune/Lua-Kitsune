@@ -51,9 +51,9 @@ struct KitsuneCoroutine {
 // -- Engine state -------------------------------------------------------------
 struct KitsuneState {
     lua_State*    L;
-    double        PCFreq;
-    int64_t       CounterStart;
-    lua_State*    DelegateState;
+    double        pcFreq;
+    int64_t       counterStart;
+    lua_State*    delegateState;
     char*         lastCallError;
 
     std::atomic<long> interrupt{ 0 };

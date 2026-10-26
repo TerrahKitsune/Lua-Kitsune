@@ -39,14 +39,14 @@ static void U128Mul10(uint64_t* lo, uint64_t* hi) {
 	// Multiply lo by 10 using split halves to avoid overflow.
 	uint64_t lo_lo = (*lo & 0xFFFFFFFFULL) * 10;
 	uint64_t lo_hi = (*lo >> 32) * 10;
-	uint64_t new_lo = lo_lo + (lo_hi << 32);
-	uint64_t carry  = (lo_hi >> 32) + (new_lo < lo_lo ? 1ULL : 0ULL);
+	uint64_t newLo = lo_lo + (lo_hi << 32);
+	uint64_t carry  = (lo_hi >> 32) + (newLo < lo_lo ? 1ULL : 0ULL);
 	// Multiply hi by 10 the same way to avoid overflow.
 	uint64_t hi_lo = (*hi & 0xFFFFFFFFULL) * 10;
 	uint64_t hi_hi = (*hi >> 32) * 10;
-	uint64_t new_hi = hi_lo + (hi_hi << 32) + carry;
-	*lo = new_lo;
-	*hi = new_hi;
+	uint64_t newHi = hi_lo + (hi_hi << 32) + carry;
+	*lo = newLo;
+	*hi = newHi;
 }
 
 // a += digit (0-9)
@@ -88,14 +88,14 @@ static void U128Mul32(uint64_t* lo, uint64_t* hi, uint32_t b) {
 	uint64_t hi0 = (*hi & 0xFFFFFFFFULL) * b64;  // bits 64-127
 	uint64_t hi1 = (*hi >> 32)           * b64;  // bits 96-159 (upper half lost)
 	// Assemble low 64: lo0 + (lo1 << 32)
-	uint64_t new_lo = lo0 + (lo1 << 32);
-	uint64_t c1 = (new_lo < lo0) ? 1ULL : 0ULL;  // carry from lo
+	uint64_t newLo = lo0 + (lo1 << 32);
+	uint64_t c1 = (newLo < lo0) ? 1ULL : 0ULL;  // carry from lo
 	// Assemble high 64 with full carry chain.
 	uint64_t h = (lo1 >> 32) + c1;
 	h += hi0; uint64_t c2 = (h < hi0) ? 1ULL : 0ULL;
 	h += (hi1 << 32); c2 += (h < (hi1 << 32)) ? 1ULL : 0ULL;
 	(void)c2;  // c2 would carry into bits 128+ which we discard
-	*lo = new_lo;
+	*lo = newLo;
 	*hi = h;
 }
 
@@ -120,13 +120,13 @@ static void U128Mul128(uint64_t* rlo, uint64_t* rhi,
 	uint64_t p30 = a3 * b0;  // col 3
 	// Col 1 (bits 32-63): sum p01+p10, carry into col 2.
 	uint64_t col1   = p01 + p10;
-	uint64_t col1_c = (col1 < p01) ? 1ULL : 0ULL;
+	uint64_t col1C = (col1 < p01) ? 1ULL : 0ULL;
 	// Low 64: p00 + (col1 << 32)
 	uint64_t rlo2 = p00 + (col1 << 32);
-	uint64_t lo_c = (rlo2 < p00) ? 1ULL : 0ULL;
-	// Col 2 (bits 64-95): p02+p11+p20 + (col1>>32) + col1_c<<32 + lo_c
+	uint64_t loC = (rlo2 < p00) ? 1ULL : 0ULL;
+	// Col 2 (bits 64-95): p02+p11+p20 + (col1>>32) + col1C<<32 + loC
 	// Accumulate with carry tracking.
-	uint64_t c2 = (col1 >> 32) + (col1_c << 32) + lo_c;
+	uint64_t c2 = (col1 >> 32) + (col1C << 32) + loC;
 	uint64_t s2 = p02; uint64_t ca;
 	s2 += p11; ca  = (s2 < p02)  ? 1ULL : 0ULL;
 	s2 += p20; ca += (s2 < p20)  ? 1ULL : 0ULL;
@@ -148,19 +148,19 @@ static void U128Mul128(uint64_t* rlo, uint64_t* rhi,
 static uint64_t U128Div10(uint64_t* lo, uint64_t* hi) {
 	// Divide high 64 bits first, carry remainder into low 64 bits.
 	uint64_t rhi = *hi / 10;
-	uint64_t rem_hi = *hi % 10;
-	// Combine remainder from high with low: (rem_hi * 2^64 + lo) / 10
-	// Use the identity: rem_hi * 2^64 = rem_hi * (10 * 1844674407370955161 + 6)
+	uint64_t remHi = *hi % 10;
+	// Combine remainder from high with low: (remHi * 2^64 + lo) / 10
+	// Use the identity: remHi * 2^64 = remHi * (10 * 1844674407370955161 + 6)
 	// Simpler: do it in two 64-bit halves.
-	uint64_t lo_val = *lo;
+	uint64_t loVal = *lo;
 	// high 32 bits of lo
-	uint64_t lo_hi_word = (rem_hi << 32) | (lo_val >> 32);
-	uint64_t q1 = lo_hi_word / 10;
-	uint64_t r1 = lo_hi_word % 10;
+	uint64_t loHiWord = (remHi << 32) | (loVal >> 32);
+	uint64_t q1 = loHiWord / 10;
+	uint64_t r1 = loHiWord % 10;
 	// low 32 bits of lo
-	uint64_t lo_lo_word = (r1 << 32) | (lo_val & 0xFFFFFFFFULL);
-	uint64_t q0 = lo_lo_word / 10;
-	uint64_t r0 = lo_lo_word % 10;
+	uint64_t loLoWord = (r1 << 32) | (loVal & 0xFFFFFFFFULL);
+	uint64_t q0 = loLoWord / 10;
+	uint64_t r0 = loLoWord % 10;
 	*hi = rhi;
 	*lo = (q1 << 32) | q0;
 	return r0;
@@ -193,21 +193,21 @@ int DecimalParseC(const char* s, size_t len, LuaDecimal* out) {
 	if (s[i] == '-') { out->negative = 1; i++; }
 	else if (s[i] == '+') { i++; }
 
-	int has_dot = 0;
+	int hasDot = 0;
 	int scale = 0;  // use plain int to detect overflow before clamping to int16_t
-	int has_digit = 0;
+	int hasDigit = 0;
 
 	// Skip leading zeros (but track them for scale if after dot)
 	for (; i < len; i++) {
 		char c = s[i];
 		if (c == '.') {
-			if (has_dot) return 0;
-			has_dot = 1;
+			if (hasDot) return 0;
+			hasDot = 1;
 			continue;
 		}
 		if (!isdigit((unsigned char)c)) break;
-		has_digit = 1;
-		if (has_dot) {
+		hasDigit = 1;
+		if (hasDot) {
 			if (scale >= 32767) return 0;  // too many fractional digits for int16_t scale
 			scale++;
 		}
@@ -218,21 +218,21 @@ int DecimalParseC(const char* s, size_t len, LuaDecimal* out) {
 	// Allow optional exponent: e.g. "1.23E+5" from Postgres scientific notation
 	if (i < len && (s[i] == 'e' || s[i] == 'E')) {
 		i++;
-		int exp_neg = 0;
-		if (i < len && s[i] == '-') { exp_neg = 1; i++; }
+		int expNeg = 0;
+		if (i < len && s[i] == '-') { expNeg = 1; i++; }
 		else if (i < len && s[i] == '+') { i++; }
 		int exp = 0;
 		for (; i < len && isdigit((unsigned char)s[i]); i++) {
 			exp = exp * 10 + (s[i] - '0');
 			if (exp > 6200) return 0;  // exceeds int16_t range for scale
 		}
-		if (exp_neg)
+		if (expNeg)
 			scale = scale + exp;
 		else
 			scale = scale - exp;
 	}
 
-	if (!has_digit) return 0;
+	if (!hasDigit) return 0;
 	if (scale < 0) {
 		// Positive exponent shifted scale below zero: scale up the coefficient.
 		if (-scale > 6200) return 0;
@@ -251,10 +251,10 @@ static int DecimalFormat(const LuaDecimal* d, char* buf, size_t bufsz) {
 		if (d->scale > 0) {
 			// Clamp scale so we never write beyond bufsz.
 			// "0." + scale zeros + NUL; bufsz is 64, so max digits = bufsz - 3.
-			int effective_scale = d->scale;
-			if (effective_scale > (int)bufsz - 3)
-				effective_scale = (int)bufsz - 3;
-			int n = snprintf(buf, bufsz, "0.%0*d", effective_scale, 0);
+			int effectiveScale = d->scale;
+			if (effectiveScale > (int)bufsz - 3)
+				effectiveScale = (int)bufsz - 3;
+			int n = snprintf(buf, bufsz, "0.%0*d", effectiveScale, 0);
 			return n;
 		}
 		return snprintf(buf, bufsz, "0");
@@ -270,26 +270,26 @@ static int DecimalFormat(const LuaDecimal* d, char* buf, size_t bufsz) {
 	}
 	// digits[] is in reverse order
 
-	int dot_from_right = (int)d->scale;
-	int total_int_digits = ndigits - dot_from_right;
+	int dotFromRight = (int)d->scale;
+	int totalIntDigits = ndigits - dotFromRight;
 
 	char* p = buf;
 	char* end = buf + bufsz - 1;
 
 	if (d->negative) *p++ = '-';
 
-	if (total_int_digits <= 0) {
+	if (totalIntDigits <= 0) {
 		// Pure fractional: "0.000123"
 		*p++ = '0';
 		*p++ = '.';
-		for (int z = 0; z < -total_int_digits && p < end; z++) *p++ = '0';
+		for (int z = 0; z < -totalIntDigits && p < end; z++) *p++ = '0';
 		for (int j = ndigits - 1; j >= 0 && p < end; j--) *p++ = digits[j];
 	}
 	else {
 		// Has integer part
 		for (int j = ndigits - 1; j >= 0 && p < end; j--) {
 			*p++ = digits[j];
-			if (dot_from_right > 0 && j == dot_from_right && p < end)
+			if (dotFromRight > 0 && j == dotFromRight && p < end)
 				*p++ = '.';
 		}
 	}
@@ -560,9 +560,9 @@ int Decimal_Mul(lua_State* L) {
 	if (!a || !b) return luaL_error(L, "Decimal expected for multiplication");
 	LuaDecimal* r = lua_pushdecimal(L);
 	U128Mul128(&r->lo, &r->hi, a->lo, a->hi, b->lo, b->hi);
-	int combined_scale = (int)a->scale + (int)b->scale;
-	if (combined_scale > 32767) combined_scale = 32767;  // saturate; high scales lose trailing zeros which is harmless
-	r->scale = (int16_t)combined_scale;
+	int combinedScale = (int)a->scale + (int)b->scale;
+	if (combinedScale > 32767) combinedScale = 32767;  // saturate; high scales lose trailing zeros which is harmless
+	r->scale = (int16_t)combinedScale;
 	r->negative = (a->negative != b->negative) ? 1 : 0;
 	if (U128IsZero(r->lo, r->hi)) r->negative = 0;
 	return 1;
@@ -578,19 +578,19 @@ int Decimal_Div(lua_State* L) {
 	LuaDecimal* r = lua_pushdecimal(L);
 	int ts = 10 + (a->scale > b->scale ? (int)a->scale - (int)b->scale : 0);
 	if (ts > 32767) ts = 32767;
-	int16_t target_scale = (int16_t)ts;
+	int16_t targetScale = (int16_t)ts;
 
 	// a/b = (a_coeff * 10^-a_scale) / (b_coeff * 10^-b_scale)
 	//      = (a_coeff / b_coeff) * 10^(b_scale - a_scale)
 	// For the integer quotient (a_coeff * 10^S / b_coeff) to represent the answer
-	// with target_scale decimal places:  S = target_scale + b_scale - a_scale
-	int scale_shift = (int)target_scale + (int)b->scale - (int)a->scale;
+	// with targetScale decimal places:  S = targetScale + b_scale - a_scale
+	int scaleShift = (int)targetScale + (int)b->scale - (int)a->scale;
 	uint64_t nlo = a->lo, nhi = a->hi;
-	if (scale_shift > 0)
-		U128ScaleUp(&nlo, &nhi, scale_shift);
-	else if (scale_shift < 0) {
+	if (scaleShift > 0)
+		U128ScaleUp(&nlo, &nhi, scaleShift);
+	else if (scaleShift < 0) {
 		// a has more fractional digits than needed — truncate excess from numerator.
-		for (int i = 0; i < -scale_shift; i++)
+		for (int i = 0; i < -scaleShift; i++)
 			U128Div10(&nlo, &nhi);
 	}
 
@@ -599,7 +599,7 @@ int Decimal_Div(lua_State* L) {
 
 	r->lo    = qlo;
 	r->hi    = qhi;
-	r->scale = target_scale;
+	r->scale = targetScale;
 	r->negative = (a->negative != b->negative) ? 1 : 0;
 	if (U128IsZero(r->lo, r->hi)) r->negative = 0;
 	return 1;
@@ -683,18 +683,18 @@ int Decimal_Le(lua_State* L) {
 
 int Decimal_Round(lua_State* L) {
 	LuaDecimal* src = lua_todecimal(L, 1);
-	int new_scale = (int)luaL_optinteger(L, 2, 0);
-	if (new_scale < 0) new_scale = 0;
+	int newScale = (int)luaL_optinteger(L, 2, 0);
+	if (newScale < 0) newScale = 0;
 	LuaDecimal* r = lua_pushdecimal(L);
 	*r = *src;
-	int diff = (int)r->scale - new_scale;
+	int diff = (int)r->scale - newScale;
 	if (diff <= 0) return 1;  // already at or coarser than requested scale
 	// Remove (diff-1) digits silently, then check the last removed digit for rounding.
 	for (int i = 0; i < diff - 1; i++)
 		U128Div10(&r->lo, &r->hi);
-	uint64_t deciding_rem = U128Div10(&r->lo, &r->hi);
-	r->scale = (int16_t)new_scale;
-	if (deciding_rem >= 5)
+	uint64_t decidingRem = U128Div10(&r->lo, &r->hi);
+	r->scale = (int16_t)newScale;
+	if (decidingRem >= 5)
 		U128AddDigit(&r->lo, &r->hi, 1);
 	if (U128IsZero(r->lo, r->hi)) r->negative = 0;
 	return 1;
@@ -702,15 +702,15 @@ int Decimal_Round(lua_State* L) {
 
 int Decimal_Truncate(lua_State* L) {
 	LuaDecimal* src = lua_todecimal(L, 1);
-	int new_scale = (int)luaL_optinteger(L, 2, 0);
-	if (new_scale < 0) new_scale = 0;
+	int newScale = (int)luaL_optinteger(L, 2, 0);
+	if (newScale < 0) newScale = 0;
 	LuaDecimal* r = lua_pushdecimal(L);
 	*r = *src;
-	int diff = (int)r->scale - new_scale;
+	int diff = (int)r->scale - newScale;
 	if (diff <= 0) return 1;
 	for (int i = 0; i < diff; i++)
 		U128Div10(&r->lo, &r->hi);
-	r->scale = (int16_t)new_scale;
+	r->scale = (int16_t)newScale;
 	if (U128IsZero(r->lo, r->hi)) r->negative = 0;
 	return 1;
 }

@@ -52,8 +52,9 @@ Never rename:
 
 - Types: PascalCase (`LuaToml`, `KitsuneState`).
 - Locals, parameters, struct/class fields: camelCase (`timeoutMs`, `rowCount`).
-- Mutable file-scope/global variables: `g_` + camelCase (`g_nvml`).
-- Macros and constants: `UPPER_SNAKE` (`LUATOML`).
+- Mutable static storage, file-scope or function-local `static`: `g_` + camelCase (`g_nvml`, `g_prevIdle`).
+- Macros and scalar constants: `UPPER_SNAKE` (`LUATOML`, `SENTINEL_KEY`).
+- Constant tables (`luaL_Reg` arrays, vtables, lookup arrays): camelCase without prefix (`jsonFunctions`, `daysInMonth`).
 - Structs mirroring a third-party ABI keep that ABI's names (e.g. the NVML declarations).
 
 ## Comments

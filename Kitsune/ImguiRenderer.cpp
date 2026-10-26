@@ -581,8 +581,8 @@ static void prepend_meta(KitsuneUserDataRegistration* reg,
 	node->name = (char*)name;
 	node->func = func;
 	node->userdata = nullptr;
-	node->Next = reg->MetaTableFunctions;
-	reg->MetaTableFunctions = node;
+	node->next = reg->metaTableFunctions;
+	reg->metaTableFunctions = node;
 }
 
 static void prepend_fn(KitsuneUserDataRegistration* reg,
@@ -592,8 +592,8 @@ static void prepend_fn(KitsuneUserDataRegistration* reg,
 	node->name = (char*)name;
 	node->func = func;
 	node->userdata = nullptr;
-	node->Next = reg->Functions;
-	reg->Functions = node;
+	node->next = reg->functions;
+	reg->functions = node;
 }
 
 // Mutable fallback colors for PushBold/PushItalic when the styled font is not loaded.

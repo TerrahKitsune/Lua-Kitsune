@@ -27,10 +27,10 @@ return db;
 }
 
 void DuckDBFinalizeStmt(LuaDuckDB *state) {
-if (state->has_result) {
+if (state->hasResult) {
 duckdb_destroy_result(&state->result);
 memset(&state->result, 0, sizeof(state->result));
-state->has_result = false;
+state->hasResult = false;
 state->current_row = 0;
 state->row_count = 0;
 }
@@ -241,7 +241,7 @@ DuckDBFinalizeStmt(db);
 return 2;
 }
 
-db->has_result = true;
+db->hasResult = true;
 db->row_count = duckdb_row_count(&db->result);
 db->current_row = 0;
 
@@ -267,7 +267,7 @@ return luaL_error(L, "DuckDB instance has been closed");
 
 lua_pop(L, 1);
 
-if (!db->has_result) {
+if (!db->hasResult) {
 	lua_pushboolean(L, 0);
 	return 1;
 }
@@ -288,7 +288,7 @@ LuaDuckDB *db = luaL_checkduckdb(L, 1);
 if (!db->con)
 return luaL_error(L, "DuckDB instance has been closed");
 
-if (!db->has_result || db->current_row == 0) {
+if (!db->hasResult || db->current_row == 0) {
 lua_pop(L, lua_gettop(L));
 lua_pushnil(L);
 return 1;

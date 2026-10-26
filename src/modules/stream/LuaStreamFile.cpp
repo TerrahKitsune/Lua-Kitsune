@@ -29,30 +29,30 @@ struct InFileStream {
 //   'a'          -> WRITE  (append forces writes to EOF; seek would mislead)
 //   any '+' form -> adds both READ and WRITE
 static BYTE ModeToCaps(const char* mode) {
-	bool has_read   = false;
-	bool has_write  = false;
-	bool has_append = false;
+	bool hasRead   = false;
+	bool hasWrite  = false;
+	bool hasAppend = false;
 
 	for (const char* p = mode; *p; p++) {
 		if (*p == 'r')
-			has_read = true;
+			hasRead = true;
 		else if (*p == 'w')
-			has_write = true;
+			hasWrite = true;
 		else if (*p == 'a') {
-			has_write  = true;
-			has_append = true;
+			hasWrite  = true;
+			hasAppend = true;
 		} else if (*p == '+') {
-			has_read  = true;
-			has_write = true;
+			hasRead  = true;
+			hasWrite = true;
 		}
 	}
 
 	BYTE caps = 0;
-	if (has_read)
+	if (hasRead)
 		caps |= STREAM_CAP_READ;
-	if (has_write)
+	if (hasWrite)
 		caps |= STREAM_CAP_WRITE;
-	if (!has_append)
+	if (!hasAppend)
 		caps |= STREAM_CAP_SEEK;
 	return caps;
 }
@@ -166,7 +166,7 @@ static uint64_t FileStreamGetId(void* native) {
 	return (uint64_t)((InFileStream*)native)->file;
 }
 
-static const LuaStreamVtable g_file_vtbl = {
+static const LuaStreamVtable fileVtbl = {
 	FileStreamRead,
 	FileStreamWrite,
 	FileStreamSetPos,
@@ -215,8 +215,8 @@ LuaStream* lua_pushfilestream(lua_State* L, const char* filename, const char* mo
 	lua_setmetatable(L, -2);
 	memset(stream, 0, sizeof(LuaStream));
 	stream->backendRef = LUA_NOREF;
-	stream->vtbl       = &g_file_vtbl;
+	stream->vtbl       = &fileVtbl;
 	stream->native     = fs;
-	stream->Caps       = fs->caps;
+	stream->caps      = fs->caps;
 	return stream;
 }

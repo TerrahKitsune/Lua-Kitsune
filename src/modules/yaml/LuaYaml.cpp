@@ -281,7 +281,7 @@ typedef struct {
 
 // Stored in the anchor table for anchored nulls, so an alias to a null can be
 // told apart from an alias to an anchor that was never defined.
-static char yaml_null_anchor;
+static char g_yamlNullAnchor;
 
 static int YamlDecoder_GC(lua_State* L) {
     YamlDecoder* d = (YamlDecoder*)lua_touserdata(L, 1);
@@ -305,7 +305,7 @@ static void DecNext(lua_State* L, YamlDecodeState* s, yaml_event_t* ev, const ch
 static void DecRegisterAnchor(lua_State* L, YamlDecodeState* s, int nameIdx) {
     lua_pushvalue(L, nameIdx);
     if (lua_isnil(L, -2))
-        lua_pushlightuserdata(L, &yaml_null_anchor);
+        lua_pushlightuserdata(L, &g_yamlNullAnchor);
     else
         lua_pushvalue(L, -2);
     lua_rawset(L, s->anchors);
@@ -522,7 +522,7 @@ static void DecNode(lua_State* L, YamlDecodeState* s, yaml_event_t* ev) {
         int t = lua_rawget(L, s->anchors);
         if (t == LUA_TNIL)
             luaL_error(L, "Yaml: undefined alias '*%s'", lua_tostring(L, -2));
-        if (t == LUA_TLIGHTUSERDATA && lua_touserdata(L, -1) == &yaml_null_anchor) {
+        if (t == LUA_TLIGHTUSERDATA && lua_touserdata(L, -1) == &g_yamlNullAnchor) {
             lua_pop(L, 1);
             lua_pushnil(L);
         }
@@ -614,7 +614,7 @@ int Yaml_Decode(lua_State* L) {
 
     size_t      len;
     const char* src = luaL_checklstring(L, 2, &len);
-    skip_utf8_bom(&src, &len);
+    SkipUtf8Bom(&src, &len);
 
     YamlDecoder* d = (YamlDecoder*)lua_newuserdatauv(L, sizeof(YamlDecoder), 0);
     d->live = 0;

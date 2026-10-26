@@ -12,7 +12,7 @@ int RedisPushStreamInternal(lua_State* L, int redisIdx, const char* key, size_t 
 	memset(redisStream, 0, sizeof(LuaRedisStream));
 
 	lua_pushvalue(L, redisIdx);
-	redisStream->key.redis_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+	redisStream->key.redisRef = luaL_ref(L, LUA_REGISTRYINDEX);
 
 	redisStream->key.key = (char*)kitsune_malloc(keylength + 1);
 	if (!redisStream->key.key) {

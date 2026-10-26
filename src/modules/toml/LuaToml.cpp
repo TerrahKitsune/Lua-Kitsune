@@ -100,7 +100,7 @@ static void TbufEmitC(LuaToml* t, lua_State* L, char c) {
     t->out[t->outLen++] = c;
 }
 
-#define tbuf_emitlit(t, L, s) TbufEmit(t, L, "" s, sizeof(s) - 1)
+#define TBUF_EMIT_LIT(t, L, s) TbufEmit(t, L, "" s, sizeof(s) - 1)
 
 // =============================================================================
 // Encoder — scalar helpers
@@ -112,13 +112,13 @@ static void EncString(LuaToml* t, lua_State* L, const char* s, size_t len) {
     for (size_t i = 0; i < len; i++) {
         unsigned char c = (unsigned char)s[i];
         switch (c) {
-        case '"':  tbuf_emitlit(t, L, "\\\""); break;
-        case '\\': tbuf_emitlit(t, L, "\\\\"); break;
-        case '\n': tbuf_emitlit(t, L, "\\n");  break;
-        case '\r': tbuf_emitlit(t, L, "\\r");  break;
-        case '\t': tbuf_emitlit(t, L, "\\t");  break;
-        case '\b': tbuf_emitlit(t, L, "\\b");  break;
-        case '\f': tbuf_emitlit(t, L, "\\f");  break;
+        case '"':  TBUF_EMIT_LIT(t, L, "\\\""); break;
+        case '\\': TBUF_EMIT_LIT(t, L, "\\\\"); break;
+        case '\n': TBUF_EMIT_LIT(t, L, "\\n");  break;
+        case '\r': TBUF_EMIT_LIT(t, L, "\\r");  break;
+        case '\t': TBUF_EMIT_LIT(t, L, "\\t");  break;
+        case '\b': TBUF_EMIT_LIT(t, L, "\\b");  break;
+        case '\f': TBUF_EMIT_LIT(t, L, "\\f");  break;
         default:
             if (c < 0x20) {
                 char esc[7];
@@ -166,7 +166,7 @@ static const char* KeyText(lua_State* L, size_t* len) {
 // Encoder — forward declarations
 // =============================================================================
 
-static void EncValue(LuaToml* t, lua_State* L, int depth, int is_inline);
+static void EncValue(LuaToml* t, lua_State* L, int depth, int isInline);
 static void EncTable(LuaToml* t, lua_State* L, int depth, const char* path, size_t pathLen);
 
 // =============================================================================
@@ -246,17 +246,17 @@ static int TableKind(lua_State* L) {
 static void EncInlineArray(LuaToml* t, lua_State* L, int depth);
 static void EncInlineTable(LuaToml* t, lua_State* L, int depth);
 
-static void EncValue(LuaToml* t, lua_State* L, int depth, int is_inline) {
+static void EncValue(LuaToml* t, lua_State* L, int depth, int isInline) {
     switch (lua_type(L, -1)) {
     case LUA_TNIL:
         // TOML has no null — emit empty string as closest approximation
-        tbuf_emitlit(t, L, "\"\"");
+        TBUF_EMIT_LIT(t, L, "\"\"");
         break;
     case LUA_TBOOLEAN:
         if (lua_toboolean(L, -1))
-            tbuf_emitlit(t, L, "true");
+            TBUF_EMIT_LIT(t, L, "true");
         else
-            tbuf_emitlit(t, L, "false");
+            TBUF_EMIT_LIT(t, L, "false");
         break;
     case LUA_TNUMBER:
         if (lua_isinteger(L, -1)) {
@@ -266,25 +266,25 @@ static void EncValue(LuaToml* t, lua_State* L, int depth, int is_inline) {
         } else {
             double d = lua_tonumber(L, -1);
             if (d != d) {
-                tbuf_emitlit(t, L, "nan");
+                TBUF_EMIT_LIT(t, L, "nan");
             } else if (d == HUGE_VAL) {
-                tbuf_emitlit(t, L, "inf");
+                TBUF_EMIT_LIT(t, L, "inf");
             } else if (d == -HUGE_VAL) {
-                tbuf_emitlit(t, L, "-inf");
+                TBUF_EMIT_LIT(t, L, "-inf");
             } else {
                 char buf[64];
                 int  n = snprintf(buf, sizeof(buf), "%.17g", d);
                 // Ensure a decimal point so TOML recognises it as float.
-                int has_dot = 0;
+                int hasDot = 0;
                 for (int i = 0; i < n; i++) {
                     if (buf[i] == '.' || buf[i] == 'e' || buf[i] == 'E' || buf[i] == 'n' || buf[i] == 'i') {
-                        has_dot = 1;
+                        hasDot = 1;
                         break;
                     }
                 }
                 TbufEmit(t, L, buf, (size_t)n);
-                if (!has_dot)
-                    tbuf_emitlit(t, L, ".0");
+                if (!hasDot)
+                    TBUF_EMIT_LIT(t, L, ".0");
             }
         }
         break;
@@ -340,10 +340,10 @@ static void EncValue(LuaToml* t, lua_State* L, int depth, int is_inline) {
             lua_pop(L, 1);
             break;
         }
-        tbuf_emitlit(t, L, "\"\"");
+        TBUF_EMIT_LIT(t, L, "\"\"");
         break;
     default:
-        tbuf_emitlit(t, L, "\"\"");
+        TBUF_EMIT_LIT(t, L, "\"\"");
         break;
     }
 }
@@ -355,7 +355,7 @@ static void EncInlineArray(LuaToml* t, lua_State* L, int depth) {
     TbufEmitC(t, L, '[');
     for (lua_Integer i = 1; i <= n; i++) {
         if (i > 1)
-            tbuf_emitlit(t, L, ", ");
+            TBUF_EMIT_LIT(t, L, ", ");
         lua_rawgeti(L, tbl, i);
         EncValue(t, L, depth + 1, 1);
         lua_pop(L, 1);
@@ -368,11 +368,11 @@ static void EncInlineTable(LuaToml* t, lua_State* L, int depth) {
     int tbl   = lua_gettop(L);
     int first = 1;
     RecPush(t, L, (uintptr_t)lua_topointer(L, tbl));
-    tbuf_emitlit(t, L, "{");
+    TBUF_EMIT_LIT(t, L, "{");
     lua_pushnil(L);
     while (lua_next(L, tbl) != 0) {
         if (!first)
-            tbuf_emitlit(t, L, ", ");
+            TBUF_EMIT_LIT(t, L, ", ");
         first = 0;
         // key
         lua_pushvalue(L, -2);
@@ -380,11 +380,11 @@ static void EncInlineTable(LuaToml* t, lua_State* L, int depth) {
         const char* k = KeyText(L, &klen);
         EncKey(t, L, k, klen);
         lua_pop(L, 1);
-        tbuf_emitlit(t, L, " = ");
+        TBUF_EMIT_LIT(t, L, " = ");
         EncValue(t, L, depth + 1, 1);
         lua_pop(L, 1);
     }
-    tbuf_emitlit(t, L, "}");
+    TBUF_EMIT_LIT(t, L, "}");
     RecPop(t);
 }
 
@@ -397,7 +397,7 @@ static void EncIndent(LuaToml* t, lua_State* L, int depth) {
     if (!t->pretty)
         return;
     for (int i = 0; i < depth; i++)
-        tbuf_emitlit(t, L, "  ");
+        TBUF_EMIT_LIT(t, L, "  ");
 }
 
 // Forward: emit key = value lines for all scalar/array keys in a table,
@@ -429,9 +429,9 @@ static void EncTableBody(LuaToml* t, lua_State* L, int depth,
         EncIndent(t, L, depth);
         EncKey(t, L, k, klen);
         lua_pop(L, 1);
-        tbuf_emitlit(t, L, " = ");
+        TBUF_EMIT_LIT(t, L, " = ");
         if (vtype == LUA_TTABLE && lua_rawlen(L, -1) == 0)
-            tbuf_emitlit(t, L, "{}"); // empty table round-trips as a table
+            TBUF_EMIT_LIT(t, L, "{}"); // empty table round-trips as a table
         else
             EncValue(t, L, depth, 0);
         TbufEmitC(t, L, '\n');
@@ -482,9 +482,9 @@ static void EncTableBody(LuaToml* t, lua_State* L, int depth,
                 if (t->pretty && t->outLen > 0)
                     TbufEmitC(t, L, '\n');
                 EncIndent(t, L, depth);
-                tbuf_emitlit(t, L, "[[");
+                TBUF_EMIT_LIT(t, L, "[[");
                 TbufEmit(t, L, newPath, newPathLen);
-                tbuf_emitlit(t, L, "]]\n");
+                TBUF_EMIT_LIT(t, L, "]]\n");
                 EncTableBody(t, L, depth + 1, newPath, newPathLen);
                 lua_pop(L, 1);
             }
@@ -493,9 +493,9 @@ static void EncTableBody(LuaToml* t, lua_State* L, int depth,
             if (t->pretty && t->outLen > 0)
                 TbufEmitC(t, L, '\n');
             EncIndent(t, L, depth);
-            tbuf_emitlit(t, L, "[");
+            TBUF_EMIT_LIT(t, L, "[");
             TbufEmit(t, L, newPath, newPathLen);
-            tbuf_emitlit(t, L, "]\n");
+            TBUF_EMIT_LIT(t, L, "]\n");
             EncTableBody(t, L, depth + 1, newPath, newPathLen);
         }
 
@@ -676,7 +676,7 @@ int Toml_Decode(lua_State* L) {
     luaL_checktoml(L, 1);
     size_t      len;
     const char* src = luaL_checklstring(L, 2, &len);
-    skip_utf8_bom(&src, &len);
+    SkipUtf8Bom(&src, &len);
 
     // toml_parse requires a NUL-terminated, mutable string.
     char* buf = (char*)kitsune_malloc(len + 1);

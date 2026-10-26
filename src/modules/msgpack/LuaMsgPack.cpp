@@ -205,7 +205,7 @@ static void EncValue(LuaMsgPack* m, msgpack_packer* pk, lua_State* L) {
         }
         if (lua_isstream(L, -1)) {
             LuaStream* s = lua_tostream(L, -1);
-            if (s && (s->Caps & STREAM_CAP_READ) && (s->Caps & STREAM_CAP_SEEK)) {
+            if (s && (s->caps & STREAM_CAP_READ) && (s->caps & STREAM_CAP_SEEK)) {
                 lua_Integer saved = LuaStreamCurPos(L, s);
                 LuaStreamSetPos(L, s, 0);
                 LuaStreamReadChunk(L, s, 0);
@@ -369,7 +369,7 @@ int MsgPack_EncodeIntoStream(lua_State* L) {
         return luaL_argerror(L, 2, "stream expected");
 
     LuaStream* st = lua_tostream(L, 2);
-    if (!(st->Caps & STREAM_CAP_WRITE)) {
+    if (!(st->caps & STREAM_CAP_WRITE)) {
         lua_pushboolean(L, false);
         lua_pushstring(L, "stream is not writable");
         return 2;
@@ -406,7 +406,7 @@ int MsgPack_DecodeFromStream(lua_State* L) {
         return luaL_argerror(L, 2, "stream expected");
 
     LuaStream* st = lua_tostream(L, 2);
-    if (!(st->Caps & STREAM_CAP_READ)) {
+    if (!(st->caps & STREAM_CAP_READ)) {
         lua_pushnil(L);
         lua_pushstring(L, "stream is not readable");
         return 2;
@@ -431,7 +431,7 @@ int MsgPack_DecodeFromStream(lua_State* L) {
     msgpack_unpack_return ret = msgpack_unpack_next(&result, data, len, &off);
 
     // Seek back any bytes that belonged to the next message
-    if (st->Caps & STREAM_CAP_SEEK) {
+    if (st->caps & STREAM_CAP_SEEK) {
         size_t unconsumed = len - off;
         if (unconsumed > 0) {
             lua_Integer curPos = LuaStreamCurPos(L, st);

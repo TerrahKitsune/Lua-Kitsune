@@ -79,7 +79,7 @@ struct LuaMongoOp {
 	bson_t** insertDocs;
 	int          insertCount;
 	MongoOpType  opType;
-	uintptr_t* ctx_rec;   // BsonWriteCtx::rec — freed by FreeOp so luaL_error paths don't leak
+	uintptr_t* ctxRec;   // BsonWriteCtx::rec — freed by FreeOp so luaL_error paths don't leak
 
 	// Output — written by worker before state -> DONE/ERROR; read by Lua after
 	bson_t** resultDocs;
@@ -125,7 +125,7 @@ static void FreeOp(LuaMongoOp* op) {
 	for (int i = 0; i < op->insertCount; i++)
 		bson_destroy(op->insertDocs[i]);
 	kitsune_free(op->insertDocs);
-	kitsune_free(op->ctx_rec);
+	kitsune_free(op->ctxRec);
 	kitsune_free(op->db);
 	kitsune_free(op->collection);
 	delete op;
@@ -172,7 +172,7 @@ static void BsonIterValueToLua(lua_State* L, bson_iter_t* iter, int depth) {
 		int64_t ms = bson_iter_date_time(iter);
 		LuaDateTime* dt = lua_pushdatetime(L);
 		dt->ticks = ms * DT_TICKS_PER_MILLISECOND + DT_UNIX_EPOCH_TICKS;
-		dt->offset_minutes = 0;
+		dt->offsetMinutes = 0;
 		break;
 	}
 	case BSON_TYPE_BINARY: {
@@ -306,7 +306,7 @@ static void BsonRecPush(lua_State* L, BsonWriteCtx* ctx, uintptr_t addr) {
 		int cap = ctx->recCap ? ctx->recCap * 2 : 8;
 		uintptr_t* p = (uintptr_t*)kitsune_realloc(ctx->rec, cap * sizeof(uintptr_t));
 		if (!p) {
-			// Free the old buffer and zero the context so any op->ctx_rec
+			// Free the old buffer and zero the context so any op->ctxRec
 			// that still points here won't be double-freed by FreeOp.
 			kitsune_free(ctx->rec);
 			ctx->rec = NULL;
@@ -617,7 +617,7 @@ static void MongoWorkerThread(LuaMongoWorker* w) {
 					mongoc_collection_destroy(coll);
 					w->state.store(MONGO_STATE_ERROR, std::memory_order_release);
 					w->workDone.Set();
-					goto next_iteration;
+					goto nextIteration;
 				}
 				if (op->opType == MONGO_OP_FIND_ONE)
 					break;
@@ -628,14 +628,14 @@ static void MongoWorkerThread(LuaMongoWorker* w) {
 				mongoc_collection_destroy(coll);
 				w->state.store(MONGO_STATE_ERROR, std::memory_order_release);
 				w->workDone.Set();
-				goto next_iteration;
+				goto nextIteration;
 			}
 			mongoc_cursor_destroy(cursor);
 			mongoc_collection_destroy(coll);
 			if (w->cancelled.load(std::memory_order_relaxed)) {
 				w->state.store(MONGO_STATE_DONE, std::memory_order_release);
 				w->workDone.Set();
-				goto next_iteration;
+				goto nextIteration;
 			}
 			break;
 		}
@@ -661,7 +661,7 @@ static void MongoWorkerThread(LuaMongoWorker* w) {
 				if (!op->error) WriteError(w, &err);
 				w->state.store(MONGO_STATE_ERROR, std::memory_order_release);
 				w->workDone.Set();
-				goto next_iteration;
+				goto nextIteration;
 			}
 			break;
 		}
@@ -689,7 +689,7 @@ static void MongoWorkerThread(LuaMongoWorker* w) {
 				if (!op->error) WriteError(w, &err);
 				w->state.store(MONGO_STATE_ERROR, std::memory_order_release);
 				w->workDone.Set();
-				goto next_iteration;
+				goto nextIteration;
 			}
 			break;
 		}
@@ -715,7 +715,7 @@ static void MongoWorkerThread(LuaMongoWorker* w) {
 				if (!op->error) WriteError(w, &err);
 				w->state.store(MONGO_STATE_ERROR, std::memory_order_release);
 				w->workDone.Set();
-				goto next_iteration;
+				goto nextIteration;
 			}
 			break;
 		}
@@ -741,7 +741,7 @@ static void MongoWorkerThread(LuaMongoWorker* w) {
 				if (!op->error) WriteError(w, &err);
 				w->state.store(MONGO_STATE_ERROR, std::memory_order_release);
 				w->workDone.Set();
-				goto next_iteration;
+				goto nextIteration;
 			}
 			break;
 		}
@@ -767,7 +767,7 @@ static void MongoWorkerThread(LuaMongoWorker* w) {
 				if (!op->error) WriteError(w, &err);
 				w->state.store(MONGO_STATE_ERROR, std::memory_order_release);
 				w->workDone.Set();
-				goto next_iteration;
+				goto nextIteration;
 			}
 			break;
 		}
@@ -793,7 +793,7 @@ static void MongoWorkerThread(LuaMongoWorker* w) {
 				if (!op->error) WriteError(w, &err);
 				w->state.store(MONGO_STATE_ERROR, std::memory_order_release);
 				w->workDone.Set();
-				goto next_iteration;
+				goto nextIteration;
 			}
 			break;
 		}
@@ -808,7 +808,7 @@ static void MongoWorkerThread(LuaMongoWorker* w) {
 					mongoc_collection_destroy(coll);
 					w->state.store(MONGO_STATE_ERROR, std::memory_order_release);
 					w->workDone.Set();
-					goto next_iteration;
+					goto nextIteration;
 				}
 			}
 			if (!w->cancelled.load(std::memory_order_relaxed) && mongoc_cursor_error(cursor, &err)) {
@@ -817,14 +817,14 @@ static void MongoWorkerThread(LuaMongoWorker* w) {
 				mongoc_collection_destroy(coll);
 				w->state.store(MONGO_STATE_ERROR, std::memory_order_release);
 				w->workDone.Set();
-				goto next_iteration;
+				goto nextIteration;
 			}
 			mongoc_cursor_destroy(cursor);
 			mongoc_collection_destroy(coll);
 			if (w->cancelled.load(std::memory_order_relaxed)) {
 				w->state.store(MONGO_STATE_DONE, std::memory_order_release);
 				w->workDone.Set();
-				goto next_iteration;
+				goto nextIteration;
 			}
 			break;
 		}
@@ -850,7 +850,7 @@ static void MongoWorkerThread(LuaMongoWorker* w) {
 				if (!op->error) WriteError(w, &err);
 				w->state.store(MONGO_STATE_ERROR, std::memory_order_release);
 				w->workDone.Set();
-				goto next_iteration;
+				goto nextIteration;
 			}
 			break;
 		}
@@ -862,7 +862,7 @@ static void MongoWorkerThread(LuaMongoWorker* w) {
 				WriteError(w, &err);
 				w->state.store(MONGO_STATE_ERROR, std::memory_order_release);
 				w->workDone.Set();
-				goto next_iteration;
+				goto nextIteration;
 			}
 			op->countResult = count;
 			break;
@@ -873,7 +873,7 @@ static void MongoWorkerThread(LuaMongoWorker* w) {
 		w->workDone.Set();
 		continue;
 
-	next_iteration:;
+	nextIteration:;
 	}
 }
 
@@ -1187,7 +1187,7 @@ static int PushOpResult(lua_State* L, LuaMongoWorker* w) {
 	if (op->opts) { bson_destroy(op->opts);    op->opts = NULL; }
 	for (int i = 0; i < op->insertCount; i++) bson_destroy(op->insertDocs[i]);
 	kitsune_free(op->insertDocs); op->insertDocs = NULL; op->insertCount = 0;
-	kitsune_free(op->ctx_rec);    op->ctx_rec = NULL;
+	kitsune_free(op->ctxRec);    op->ctxRec = NULL;
 	kitsune_free(op->db);         op->db = NULL;
 	kitsune_free(op->collection); op->collection = NULL;
 
@@ -1387,7 +1387,7 @@ int MongoDB_Find(lua_State* L) {
 	// BuildFindOpts assigns directly to op->opts so FreeOp owns it on any throw.
 	BuildFindOpts(L, op, 7, 5, 6, &ctx);
 
-	op->ctx_rec = ctx.rec;
+	op->ctxRec = ctx.rec;
 	DispatchOp(w);
 	lua_pushboolean(L, 1);
 	lua_pushnil(L);
@@ -1415,7 +1415,7 @@ int MongoDB_FindOne(lua_State* L) {
 		LuaToBson(L, 5, op->opts, &ctx);
 	}
 
-	op->ctx_rec = ctx.rec;
+	op->ctxRec = ctx.rec;
 	DispatchOp(w);
 	lua_pushboolean(L, 1);
 	lua_pushnil(L);
@@ -1436,7 +1436,7 @@ int MongoDB_InsertOne(lua_State* L) {
 	if (!op->filter) { FreeOp(op); w->op = NULL; return luaL_error(L, "MongoDB: out of memory"); }
 	LuaToBson(L, 4, op->filter, &ctx);
 
-	op->ctx_rec = ctx.rec;
+	op->ctxRec = ctx.rec;
 	DispatchOp(w);
 	lua_pushboolean(L, 1);
 	lua_pushnil(L);
@@ -1462,7 +1462,7 @@ int MongoDB_InsertMany(lua_State* L) {
 
 	op->insertDocs = (bson_t**)kitsune_malloc(sizeof(bson_t*) * n);
 	if (!op->insertDocs) {
-		op->ctx_rec = ctx.rec;
+		op->ctxRec = ctx.rec;
 		FreeOp(op); w->op = NULL;
 		lua_pushboolean(L, 0);
 		lua_pushliteral(L, "MongoDB: out of memory");
@@ -1473,7 +1473,7 @@ int MongoDB_InsertMany(lua_State* L) {
 		lua_rawgeti(L, 4, i);
 		if (!lua_istable(L, -1)) {
 			lua_pop(L, 1);
-			op->ctx_rec = ctx.rec;
+			op->ctxRec = ctx.rec;
 			FreeOp(op); w->op = NULL;
 			lua_pushboolean(L, 0);
 			lua_pushliteral(L, "InsertMany: array element is not a table");
@@ -1482,7 +1482,7 @@ int MongoDB_InsertMany(lua_State* L) {
 		bson_t* doc = bson_new();
 		if (!doc) {
 			lua_pop(L, 1);
-			op->ctx_rec = ctx.rec;
+			op->ctxRec = ctx.rec;
 			FreeOp(op); w->op = NULL;
 			lua_pushboolean(L, 0);
 			lua_pushliteral(L, "MongoDB: out of memory");
@@ -1495,7 +1495,7 @@ int MongoDB_InsertMany(lua_State* L) {
 		lua_pop(L, 1);
 	}
 
-	op->ctx_rec = ctx.rec;
+	op->ctxRec = ctx.rec;
 	DispatchOp(w);
 	lua_pushboolean(L, 1);
 	lua_pushnil(L);
@@ -1526,7 +1526,7 @@ int MongoDB_UpdateOne(lua_State* L) {
 		LuaToBson(L, 6, op->opts, &ctx);
 	}
 
-	op->ctx_rec = ctx.rec;
+	op->ctxRec = ctx.rec;
 	DispatchOp(w);
 	lua_pushboolean(L, 1);
 	lua_pushnil(L);
@@ -1557,7 +1557,7 @@ int MongoDB_UpdateMany(lua_State* L) {
 		LuaToBson(L, 6, op->opts, &ctx);
 	}
 
-	op->ctx_rec = ctx.rec;
+	op->ctxRec = ctx.rec;
 	DispatchOp(w);
 	lua_pushboolean(L, 1);
 	lua_pushnil(L);
@@ -1578,7 +1578,7 @@ int MongoDB_DeleteOne(lua_State* L) {
 	if (!op->filter) { FreeOp(op); w->op = NULL; return luaL_error(L, "MongoDB: out of memory"); }
 	LuaToBson(L, 4, op->filter, &ctx);
 
-	op->ctx_rec = ctx.rec;
+	op->ctxRec = ctx.rec;
 	DispatchOp(w);
 	lua_pushboolean(L, 1);
 	lua_pushnil(L);
@@ -1599,7 +1599,7 @@ int MongoDB_DeleteMany(lua_State* L) {
 	if (!op->filter) { FreeOp(op); w->op = NULL; return luaL_error(L, "MongoDB: out of memory"); }
 	LuaToBson(L, 4, op->filter, &ctx);
 
-	op->ctx_rec = ctx.rec;
+	op->ctxRec = ctx.rec;
 	DispatchOp(w);
 	lua_pushboolean(L, 1);
 	lua_pushnil(L);
@@ -1627,7 +1627,7 @@ int MongoDB_Aggregate(lua_State* L) {
 		LuaToBson(L, 5, op->opts, &ctx);
 	}
 
-	op->ctx_rec = ctx.rec;
+	op->ctxRec = ctx.rec;
 	DispatchOp(w);
 	lua_pushboolean(L, 1);
 	lua_pushnil(L);
@@ -1648,7 +1648,7 @@ int MongoDB_Command(lua_State* L) {
 	if (!op->filter) { FreeOp(op); w->op = NULL; return luaL_error(L, "MongoDB: out of memory"); }
 	LuaToBson(L, 3, op->filter, &ctx);
 
-	op->ctx_rec = ctx.rec;
+	op->ctxRec = ctx.rec;
 	DispatchOp(w);
 	lua_pushboolean(L, 1);
 	lua_pushnil(L);
@@ -1675,7 +1675,7 @@ int MongoDB_CountDocuments(lua_State* L) {
 		LuaToBson(L, 5, op->opts, &ctx);
 	}
 
-	op->ctx_rec = ctx.rec;
+	op->ctxRec = ctx.rec;
 	DispatchOp(w);
 	lua_pushboolean(L, 1);
 	lua_pushnil(L);

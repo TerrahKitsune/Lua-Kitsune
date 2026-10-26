@@ -144,7 +144,7 @@ static void NvmlCloseLibrary(void* lib)
 #endif
 }
 
-static NvmlApi s_nvml;
+static NvmlApi g_nvml;
 
 static const NvmlApi* NvmlLoad()
 {
@@ -152,17 +152,17 @@ static const NvmlApi* NvmlLoad()
     if (!lib)
         return NULL;
 
-#define NVML_RESOLVE(name, args) s_nvml.name = (decltype(s_nvml.name))NvmlSymbol(lib, #name);
+#define NVML_RESOLVE(name, args) g_nvml.name = (decltype(g_nvml.name))NvmlSymbol(lib, #name);
     NVML_FUNCTIONS(NVML_RESOLVE)
 #undef NVML_RESOLVE
-    s_nvml.nvmlErrorString = (decltype(s_nvml.nvmlErrorString))NvmlSymbol(lib, "nvmlErrorString");
+    g_nvml.nvmlErrorString = (decltype(g_nvml.nvmlErrorString))NvmlSymbol(lib, "nvmlErrorString");
 
-    if (!s_nvml.nvmlInit_v2 || !s_nvml.nvmlDeviceGetCount_v2 ||
-        !s_nvml.nvmlDeviceGetHandleByIndex_v2 || s_nvml.nvmlInit_v2() != NVML_SUCCESS) {
+    if (!g_nvml.nvmlInit_v2 || !g_nvml.nvmlDeviceGetCount_v2 ||
+        !g_nvml.nvmlDeviceGetHandleByIndex_v2 || g_nvml.nvmlInit_v2() != NVML_SUCCESS) {
         NvmlCloseLibrary(lib);
         return NULL;
     }
-    return &s_nvml;
+    return &g_nvml;
 }
 
 // Loaded and initialised once per process and never shut down, like the

@@ -2302,7 +2302,7 @@ namespace KitsuneNet
                     metaHead = AllocNamedFunction(kvp.Key, kvp.Value, metaHead);
                 }
 
-                // KitsuneUserDataRegistration { MetaTableFunctions*, Functions* }
+                // KitsuneUserDataRegistration { metaTableFunctions*, functions* }
                 reg = Marshal.AllocHGlobal(IntPtr.Size * 2);
                 Marshal.WriteIntPtr(reg, 0, metaHead);
                 Marshal.WriteIntPtr(reg, IntPtr.Size, funcHead);
@@ -2322,7 +2322,7 @@ namespace KitsuneNet
             }
         }
 
-        // Allocates a KitsuneNamedFunction { char* name, func, void* userdata, kitsune_Finalizer finalizer, Next* } node.
+        // Allocates a KitsuneNamedFunction { char* name, func, void* userdata, kitsune_Finalizer finalizer, next* } node.
         // The LuaFunction delegate GCHandle is freed by the KitsuneGCHook __gc when Lua collects the closure.
         // The name string and node itself are freed by FreeNamedFunctionList once KitsuneRegisterUserdata has consumed them.
         private IntPtr AllocNamedFunction(string name, LuaFunction func, IntPtr next)
@@ -2334,7 +2334,7 @@ namespace KitsuneNet
             Marshal.Copy(nameBytes, 0, namePtr, nameBytes.Length);
             Marshal.WriteByte(namePtr, nameBytes.Length, 0);
 
-            // KitsuneNamedFunction { char* name, kitsune_CFunction func, void* userdata, kitsune_Finalizer finalizer, KitsuneNamedFunction* Next }
+            // KitsuneNamedFunction { char* name, kitsune_CFunction func, void* userdata, kitsune_Finalizer finalizer, KitsuneNamedFunction* next }
             // Each field is pointer-sized on x64 (40 bytes total).
             IntPtr node = Marshal.AllocHGlobal(IntPtr.Size * 5);
             Marshal.WriteIntPtr(node, 0, namePtr);
@@ -2412,7 +2412,7 @@ namespace KitsuneNet
             public IntPtr Userdata; // GCHandle address for Kitsune-registered userdatas; IntPtr.Zero otherwise
         }
 
-        // Mirrors KitsuneDateTime { int64_t ticks; int16_t offset_minutes; }
+        // Mirrors KitsuneDateTime { int64_t ticks; int16_t offsetMinutes; }
         [StructLayout(LayoutKind.Sequential)]
         private struct NativeDateTime
         {

@@ -1,8 +1,8 @@
 ﻿#include "alivetoken/LuaAliveToken.h"
 #include <chrono>
 
-static const int g_app_token_key = 0;
-const void* AliveTokenAppRegistryKey() { return &g_app_token_key; }
+static const int APP_TOKEN_KEY = 0;
+const void* AliveTokenAppRegistryKey() { return &APP_TOKEN_KEY; }
 
 void AliveTokenAppKill(lua_State* L) {
     lua_rawgetp(L, LUA_REGISTRYINDEX, AliveTokenAppRegistryKey());

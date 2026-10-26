@@ -4,10 +4,10 @@
 static const char * TIMER = "Timer";
 
 typedef struct Timer {
-	double  PCFreq;        // ns per ms = 1,000,000.0
-	int64_t CounterStart;  // steady_clock ns at Start(), 0 when not started
-	int64_t CounterStop;   // steady_clock ns at Stop(),  0 when still running
-	double  StoredTime;    // accumulated ms from previous Start/Stop cycles
+	double  pcFreq;        // ns per ms = 1,000,000.0
+	int64_t counterStart;  // steady_clock ns at Start(), 0 when not started
+	int64_t counterStop;   // steady_clock ns at Stop(),  0 when still running
+	double  storedTime;    // accumulated ms from previous Start/Stop cycles
 } Timer;
 
 Timer * lua_totimer(lua_State *L, int index);

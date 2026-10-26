@@ -68,7 +68,7 @@ static void IbufEmitc(LuaIni* n, lua_State* L, char c) {
     n->out[n->outLen++] = c;
 }
 
-#define ibuf_emitlit(n, L, s) IbufEmit(n, L, "" s, sizeof(s) - 1)
+#define IBUF_EMIT_LIT(n, L, s) IbufEmit(n, L, "" s, sizeof(s) - 1)
 
 // =============================================================================
 // Encoder — value stringification
@@ -80,9 +80,9 @@ static int EncScalar(LuaIni* n, lua_State* L, int idx) {
     switch (lua_type(L, idx)) {
     case LUA_TBOOLEAN:
         if (lua_toboolean(L, idx))
-            ibuf_emitlit(n, L, "true");
+            IBUF_EMIT_LIT(n, L, "true");
         else
-            ibuf_emitlit(n, L, "false");
+            IBUF_EMIT_LIT(n, L, "false");
         return 1;
     case LUA_TNUMBER:
         if (lua_isinteger(L, idx)) {
@@ -168,7 +168,7 @@ int Ini_Encode(lua_State* L) {
             const char* k = lua_tolstring(L, -2, &klen);
             if (k) {
                 IbufEmit(n, L, k, klen);
-                ibuf_emitlit(n, L, " = ");
+                IBUF_EMIT_LIT(n, L, " = ");
                 EncScalar(n, L, -1);
                 IbufEmitc(n, L, '\n');
             }
@@ -222,7 +222,7 @@ int Ini_Encode(lua_State* L) {
         if (lua_type(L, -1) != LUA_TTABLE) {
             // Bare scalar at root level.
             IbufEmit(n, L, k, klen);
-            ibuf_emitlit(n, L, " = ");
+            IBUF_EMIT_LIT(n, L, " = ");
             EncScalar(n, L, -1);
             IbufEmitc(n, L, '\n');
             lua_pop(L, 1);
@@ -237,7 +237,7 @@ int Ini_Encode(lua_State* L) {
                     size_t      vklen;
                     const char* vk = lua_tolstring(L, -2, &vklen);
                     IbufEmit(n, L, vk, vklen);
-                    ibuf_emitlit(n, L, " = ");
+                    IBUF_EMIT_LIT(n, L, " = ");
                     if (!EncScalar(n, L, -1)) {
                         // Non-scalar: remove the "key = " we just emitted.
                         n->outLen -= vklen + 3;
@@ -268,7 +268,7 @@ int Ini_Encode(lua_State* L) {
         // Section header.
         IbufEmitc(n, L, '[');
         IbufEmit(n, L, k, klen);
-        ibuf_emitlit(n, L, "]\n");
+        IBUF_EMIT_LIT(n, L, "]\n");
 
         int sec = lua_gettop(L);
         lua_pushnil(L);
@@ -277,7 +277,7 @@ int Ini_Encode(lua_State* L) {
                 size_t      vklen;
                 const char* vk = lua_tolstring(L, -2, &vklen);
                 IbufEmit(n, L, vk, vklen);
-                ibuf_emitlit(n, L, " = ");
+                IBUF_EMIT_LIT(n, L, " = ");
                 if (!EncScalar(n, L, -1)) {
                     n->outLen -= vklen + 3;
                 } else {
@@ -318,7 +318,7 @@ int Ini_Decode(lua_State* L) {
     luaL_checkini(L, 1);
     size_t      srcLen;
     const char* src = luaL_checklstring(L, 2, &srcLen);
-    skip_utf8_bom(&src, &srcLen);
+    SkipUtf8Bom(&src, &srcLen);
 
     // Result table.
     lua_newtable(L);

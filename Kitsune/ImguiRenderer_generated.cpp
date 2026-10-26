@@ -5030,8 +5030,8 @@ void add_imgui_bindings(KitsuneUserDataRegistration* reg) {
 		node->name     = (char*)entries[i].name;
 		node->func     = entries[i].func;
 		node->userdata = nullptr;
-		node->Next     = reg->Functions;
-		reg->Functions = node;
+		node->next     = reg->functions;
+		reg->functions = node;
 	}
 }
 

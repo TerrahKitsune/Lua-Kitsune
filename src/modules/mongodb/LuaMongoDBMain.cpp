@@ -11,7 +11,7 @@
 // Set to true when MongoEagerInit() claims the once_flag before the lazy path.
 // Suppresses kitsune_snapshot_permanent_allocs in the lazy path because the
 // caller will explicitly call MongoExplicitCleanup() instead.
-static bool s_eager_init = false;
+static bool g_eagerInit = false;
 
 #endif // KITSUNE_MONGO
 
@@ -25,9 +25,9 @@ void MongoGlobalCleanup() {
 
 void MongoEagerInit() {
 #ifdef KITSUNE_MONGO
-    s_eager_init = true;
-    static std::once_flag s_init_flag;
-    std::call_once(s_init_flag, []() {
+    g_eagerInit = true;
+    static std::once_flag g_initFlag;
+    std::call_once(g_initFlag, []() {
         static const bson_mem_vtable_t vtable = {
             kitsune_malloc,
             kitsune_calloc,
@@ -46,8 +46,8 @@ void MongoEagerInit() {
 
 void MongoExplicitCleanup() {
 #ifdef KITSUNE_MONGO
-    static std::once_flag s_cleanup_flag;
-    std::call_once(s_cleanup_flag, []() {
+    static std::once_flag g_cleanupFlag;
+    std::call_once(g_cleanupFlag, []() {
         mongoc_cleanup();
     });
 #endif
@@ -56,12 +56,12 @@ void MongoExplicitCleanup() {
 static void MongoGlobalInit() {
 #ifdef KITSUNE_MONGO
     // mongoc_init must be called exactly once per process.  Route all mongoc/bson
-    // allocations through kitsune's allocators so they are tracked by g_live_allocs.
+    // allocations through kitsune's allocators so they are tracked by g_liveAllocs.
     // In the lazy path (test host, no MongoEagerInit call), snapshot the live alloc
     // count after init so EndMemoryManager does not report mongoc's one-time global
     // state as a leak across sessions.
-    static std::once_flag s_init_flag;
-    std::call_once(s_init_flag, []() {
+    static std::once_flag g_initFlag;
+    std::call_once(g_initFlag, []() {
         static const bson_mem_vtable_t vtable = {
             kitsune_malloc,
             kitsune_calloc,
@@ -72,7 +72,7 @@ static void MongoGlobalInit() {
         };
         bson_mem_set_vtable(&vtable);
         mongoc_init();
-        if (!s_eager_init)
+        if (!g_eagerInit)
             kitsune_snapshot_permanent_allocs();
     });
 #endif

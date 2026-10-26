@@ -25,7 +25,7 @@ struct McpTool {
 	std::string               name;
 	std::string               description;
 	std::vector<McpToolParam> params;
-	int                        fn_ref = LUA_NOREF;
+	int                        fnRef = LUA_NOREF;
 };
 
 // A server-to-client request (e.g. elicitation/create) awaiting its response.
@@ -34,7 +34,7 @@ struct McpTool {
 // decodes it once and parks it here as a registry ref for the waiter to take.
 struct McpPendingRequest {
 	bool done    = false;
-	int  msg_ref = LUA_NOREF; // the decoded response message, once done
+	int  msgRef = LUA_NOREF; // the decoded response message, once done
 };
 
 // The MCP server userdata. Only ever exists via placement-new inside a Lua
@@ -66,7 +66,7 @@ struct LuaMcpServer {
 	bool eof = false; // stdin reached EOF (client disconnected)
 	lua_State* toolThread = nullptr; // coroutine running the current tool callback, null between calls
 
-	int  context_ref = LUA_NOREF; // the shared table passed to every tool callback
+	int  contextRef = LUA_NOREF; // the shared table passed to every tool callback
 	int  taskRef      = LUA_NOREF; // registry ref to the LuaTask (Tasks.New) running the poll loop
 	bool stopRequested = false;
 	bool started       = false;
@@ -125,7 +125,7 @@ enum McpQuestionType {
 struct McpAnswer {
 	std::string value;
 	std::string label;
-	int         fn_ref = LUA_NOREF;
+	int         fnRef = LUA_NOREF;
 };
 
 // Every optional attribute is write-once: its has* flag is set by the setter,
@@ -142,7 +142,7 @@ struct McpQuestion {
 	std::string description;
 
 	bool hasDefault  = false;
-	int  default_ref = LUA_NOREF;
+	int  defaultRef = LUA_NOREF;
 
 	bool        hasRange = false;
 	bool        hasMin = false, hasMax = false;
@@ -161,24 +161,24 @@ struct McpQuestion {
 	lua_Integer minItems = 0, maxItems = 0;
 
 	bool hasCallback = false;
-	int  fn_ref      = LUA_NOREF;
+	int  fnRef      = LUA_NOREF;
 };
 
 // Only ever exists via placement-new inside a Lua userdata (McpServer_CreateElicitation).
 struct LuaMcpElicitation {
 	std::string   message;
-	int           default_ref = LUA_NOREF;
+	int           defaultRef = LUA_NOREF;
 	lua_Integer   timeoutMs   = 0;         // 0 = wait as long as the dialog is open
-	int           mcp_ref     = LUA_NOREF; // pins the MCP server
-	LuaMcpServer* server      = nullptr;   // valid while mcp_ref is held
+	int           mcpRef     = LUA_NOREF; // pins the MCP server
+	LuaMcpServer* server      = nullptr;   // valid while mcpRef is held
 
 	std::vector<McpQuestion> questions;
 };
 
 // A plain handle: questions are never removed, so the index stays valid.
 struct LuaMcpQuestion {
-	int                elicitation_ref = LUA_NOREF; // pins the Elicitation
-	LuaMcpElicitation* elicitation     = nullptr;   // valid while elicitation_ref is held
+	int                elicitationRef = LUA_NOREF; // pins the Elicitation
+	LuaMcpElicitation* elicitation     = nullptr;   // valid while elicitationRef is held
 	size_t             index           = 0;
 };
 

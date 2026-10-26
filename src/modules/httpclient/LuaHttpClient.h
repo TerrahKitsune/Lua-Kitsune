@@ -93,8 +93,8 @@ typedef struct LuaHttpStreamNative {
 // WebSocket types are defined in LuaWebSocket.h
 
 // -- Functions defined in HttpCurl.cpp; referenced by HttpCurlMain.cpp ---------
-extern const char g_curlm_key;
-extern const char g_sentinel_key;
+extern const char CURLM_KEY;
+extern const char SENTINEL_KEY;
 int HttpSentinel_GC(lua_State* L);
 int HttpClient_UrlEncode(lua_State* L);
 int HttpClient_UrlDecode(lua_State* L);

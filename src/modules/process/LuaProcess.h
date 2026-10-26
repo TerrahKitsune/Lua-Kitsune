@@ -34,14 +34,14 @@ typedef struct LuaProcess {
 	char* writablebuffer;
 #else
 	pid_t pid;
-	int   fd_in_r;
-	int   fd_in_w;
-	int   fd_out_r;
-	int   fd_out_w;
-	int   fd_err_r;
-	int   fd_err_w;
+	int   fdInR;
+	int   fdInW;
+	int   fdOutR;
+	int   fdOutW;
+	int   fdErrR;
+	int   fdErrW;
 	int   exit_status; // cached exit code from waitpid
-	int   has_exited;  // 1 once waitpid succeeded
+	int   hasExited;  // 1 once waitpid succeeded
 #endif
 } LuaProcess;
 

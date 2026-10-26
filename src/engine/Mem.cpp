@@ -8,16 +8,16 @@
 
 // ── Debug allocation counter ───────────────────────────────────────────────────
 #ifdef _DEBUG
-static std::atomic<size_t> g_live_allocs{ 0 };
-static std::atomic<size_t> g_permanent_allocs{ 0 };
+static std::atomic<size_t> g_liveAllocs{ 0 };
+static std::atomic<size_t> g_permanentAllocs{ 0 };
 #endif
 
 // ── Base allocator function pointers ──────────────────────────────────────────
 // Defaults are the standard C allocators (cross-platform).
 // Call kitsune_set_allocators() to override at runtime.
-static void* (*s_malloc_fn)(size_t) = ::malloc;
-static void* (*s_realloc_fn)(void*, size_t) = ::realloc;
-static void  (*s_free_fn)(void*) = ::free;
+static void* (*g_mallocFn)(size_t) = ::malloc;
+static void* (*g_reallocFn)(void*, size_t) = ::realloc;
+static void  (*g_freeFn)(void*) = ::free;
 
 // ── Platform-specific backend implementations ──────────────────────────────────
 #ifdef USEMEMORYMANAGER
@@ -36,14 +36,14 @@ static void* MmReallocRaw(void* ptr, size_t requested, size_t* actual) {
 	*actual = requested;
 	return HeapReAlloc(GetProcessHeap(), 0, ptr, *actual);
 }
-static void* mm_malloc(size_t size) { return MemoryStateAlloc(memState, size); }
-static void* mm_realloc(void* ptr, size_t size) { return MemoryStateRealloc(memState, ptr, size); }
-static void  mm_free(void* ptr) { MemoryStateDealloc(memState, ptr); }
+static void* MmMalloc(size_t size) { return MemoryStateAlloc(memState, size); }
+static void* MmRealloc(void* ptr, size_t size) { return MemoryStateRealloc(memState, ptr, size); }
+static void  MmFree(void* ptr) { MemoryStateDealloc(memState, ptr); }
 
 #elif defined(USEHEAPALLOC)
-static void* heap_malloc(size_t size) { return HeapAlloc(GetProcessHeap(), 0, size); }
-static void* heap_realloc(void* ptr, size_t size) { return HeapReAlloc(GetProcessHeap(), 0, ptr, size); }
-static void  heap_free(void* ptr) { assert(HeapFree(GetProcessHeap(), 0, ptr)); }
+static void* MemHeapMalloc(size_t size) { return HeapAlloc(GetProcessHeap(), 0, size); }
+static void* MemHeapRealloc(void* ptr, size_t size) { return HeapReAlloc(GetProcessHeap(), 0, ptr, size); }
+static void  MemHeapFree(void* ptr) { assert(HeapFree(GetProcessHeap(), 0, ptr)); }
 #endif
 
 // ── Memory manager lifecycle ───────────────────────────────────────────────────
@@ -54,8 +54,8 @@ size_t EndMemoryManager() {
 	memState = NULL;
 	return result;
 #elif defined(_DEBUG)
-	size_t live = g_live_allocs.load();
-	size_t perm = g_permanent_allocs.load();
+	size_t live = g_liveAllocs.load();
+	size_t perm = g_permanentAllocs.load();
 	return live > perm ? live - perm : 0;
 #else
 	return 0;
@@ -66,31 +66,31 @@ void InitMemoryManager() {
 #ifdef USEMEMORYMANAGER
 	assert(!memState);
 	memState = CreateNewMemoryState(MmAllocRaw, MmDeallocRaw, MmReallocRaw);
-	s_malloc_fn = mm_malloc;
-	s_realloc_fn = mm_realloc;
-	s_free_fn = mm_free;
+	g_mallocFn = MmMalloc;
+	g_reallocFn = MmRealloc;
+	g_freeFn = MmFree;
 #elif defined(USEHEAPALLOC)
-	s_malloc_fn = heap_malloc;
-	s_realloc_fn = heap_realloc;
-	s_free_fn = heap_free;
+	g_mallocFn = MemHeapMalloc;
+	g_reallocFn = MemHeapRealloc;
+	g_freeFn = MemHeapFree;
 #else
-	s_malloc_fn = ::malloc;
-	s_realloc_fn = ::realloc;
-	s_free_fn = ::free;
+	g_mallocFn = ::malloc;
+	g_reallocFn = ::realloc;
+	g_freeFn = ::free;
 #endif
 #ifdef _DEBUG
 	// Snapshot the current counter as the baseline for this session rather than resetting
 	// to zero.  In multi-session test hosts the .NET GC may finalize LuaFunctionRef /
 	// LuaThreadRef objects from a previous session after this point, decrementing
-	// g_live_allocs.  By baselining here those cross-session frees are already accounted
-	// for in g_permanent_allocs and EndMemoryManager returns 0 instead of underflowing.
-	g_permanent_allocs.store(g_live_allocs.load());
+	// g_liveAllocs.  By baselining here those cross-session frees are already accounted
+	// for in g_permanentAllocs and EndMemoryManager returns 0 instead of underflowing.
+	g_permanentAllocs.store(g_liveAllocs.load());
 #endif
 }
 
 void kitsune_snapshot_permanent_allocs() {
 #ifdef _DEBUG
-	g_permanent_allocs.store(g_live_allocs.load());
+	g_permanentAllocs.store(g_liveAllocs.load());
 #endif
 }
 
@@ -101,21 +101,21 @@ void kitsune_set_allocators(
 	void  (*free_fn)(void*))
 {
 	if (malloc_fn) 
-		s_malloc_fn = malloc_fn;
+		g_mallocFn = malloc_fn;
 
 	if (realloc_fn)
-		s_realloc_fn = realloc_fn;
+		g_reallocFn = realloc_fn;
 
 	if (free_fn)
-		s_free_fn = free_fn;
+		g_freeFn = free_fn;
 }
 
 // ── Core allocators ────────────────────────────────────────────────────────────
 void* kitsune_malloc(size_t size) {
-	void* p = (s_malloc_fn ? s_malloc_fn : ::malloc)(size);
+	void* p = (g_mallocFn ? g_mallocFn : ::malloc)(size);
 #ifdef _DEBUG
 	if (p)
-		g_live_allocs++;
+		g_liveAllocs++;
 #endif
 	return p;
 }
@@ -127,14 +127,14 @@ void* kitsune_realloc(void* ptr, size_t size) {
 	}
 	if (!ptr)
 		return kitsune_malloc(size);
-	return (s_realloc_fn ? s_realloc_fn : ::realloc)(ptr, size);  // resize; allocation count unchanged
+	return (g_reallocFn ? g_reallocFn : ::realloc)(ptr, size);  // resize; allocation count unchanged
 }
 
 void kitsune_free(void* ptr) {
 	if (ptr) {
-		(s_free_fn ? s_free_fn : ::free)(ptr);
+		(g_freeFn ? g_freeFn : ::free)(ptr);
 #ifdef _DEBUG
-		g_live_allocs--;
+		g_liveAllocs--;
 #endif
 	}
 }
@@ -150,7 +150,7 @@ void* kitsune_calloc(size_t num, size_t size) {
 
 // ── Global operator new / delete overrides
 // Route every C++ heap allocation in this DLL through kitsune_malloc / kitsune_free
-// so the memory-manager counter (g_live_allocs or MemoryStateAlloc) tracks all allocations,
+// so the memory-manager counter (g_liveAllocs or MemoryStateAlloc) tracks all allocations,
 // including those from STL containers, std::thread, and any third-party C++ code linked in.
 
 void* operator new(size_t size) {

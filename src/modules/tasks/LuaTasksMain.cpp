@@ -33,14 +33,14 @@ int luaopen_tasks(lua_State* L) {
     };
     luaL_newlibtable(L, taskfunctions);
     luaL_setfuncs(L, taskfunctions, 0);
-    int methods_idx = lua_gettop(L);
+    int methodsIdx = lua_gettop(L);
     luaL_newmetatable(L, LUATASK_META);
     luaL_setfuncs(L, taskmeta, 0);
     lua_pushliteral(L, "__index");
-    lua_pushvalue(L, methods_idx);
+    lua_pushvalue(L, methodsIdx);
     lua_rawset(L, -3);
     lua_pushliteral(L, "__metatable");
-    lua_pushvalue(L, methods_idx);
+    lua_pushvalue(L, methodsIdx);
     lua_rawset(L, -3);
     lua_pop(L, 1);
     lua_newtable(L);
@@ -57,7 +57,7 @@ int luaopen_tasks(lua_State* L) {
     lua_setglobal(L, "TaskStatus");
     // Expose MaxSlots as a constant on the Tasks table itself.
     lua_pushinteger(L, KITSUNE_MAX_COROUTINES);
-    lua_setfield(L, methods_idx, "MaxSlots");
-    lua_pushvalue(L, methods_idx);
+    lua_setfield(L, methodsIdx, "MaxSlots");
+    lua_pushvalue(L, methodsIdx);
     return 1;
 }

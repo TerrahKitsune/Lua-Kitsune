@@ -10,9 +10,9 @@ LuaHttpRequest* lua_pushhttprequest(lua_State* L) {
     luaL_getmetatable(L, LUAHTTPREQUEST);
     lua_setmetatable(L, -2);
     memset(r, 0, sizeof(LuaHttpRequest));
-    r->headers_ref  = LUA_NOREF;
-    r->context_ref  = LUA_NOREF;
-    r->response_ref = LUA_NOREF;
+    r->headersRef  = LUA_NOREF;
+    r->contextRef  = LUA_NOREF;
+    r->responseRef = LUA_NOREF;
     return r;
 }
 
@@ -28,8 +28,8 @@ LuaHttpResponse* lua_pushhttpresponse(lua_State* L) {
     luaL_getmetatable(L, LUAHTTPRESPONSE);
     lua_setmetatable(L, -2);
     memset(r, 0, sizeof(LuaHttpResponse));
-    r->status_code = 200;
-    r->stream_ref  = LUA_NOREF;
+    r->statusCode = 200;
+    r->streamRef  = LUA_NOREF;
     return r;
 }
 
@@ -78,8 +78,8 @@ int HttpRequest_GetMethod(lua_State* L) {
 
 int HttpRequest_GetHeaders(lua_State* L) {
     LuaHttpRequest* r = luaL_checkhttprequest(L, 1);
-    if (r->headers_ref != LUA_NOREF) {
-        lua_rawgeti(L, LUA_REGISTRYINDEX, r->headers_ref);
+    if (r->headersRef != LUA_NOREF) {
+        lua_rawgeti(L, LUA_REGISTRYINDEX, r->headersRef);
     } else {
         lua_newtable(L);
     }
@@ -112,7 +112,7 @@ int HttpRequest_GetIp(lua_State* L) {
 
 int HttpRequest_IsFinished(lua_State* L) {
     LuaHttpRequest* r = luaL_checkhttprequest(L, 1);
-    lua_pushboolean(L, r->is_finished);
+    lua_pushboolean(L, r->isFinished);
     return 1;
 }
 
@@ -128,28 +128,28 @@ int HttpRequest_GetBody(lua_State* L) {
 
 int HttpRequest_GetContext(lua_State* L) {
     LuaHttpRequest* r = luaL_checkhttprequest(L, 1);
-    if (r->context_ref == LUA_NOREF) {
+    if (r->contextRef == LUA_NOREF) {
         lua_newtable(L);
         lua_pushvalue(L, -1);
-        r->context_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+        r->contextRef = luaL_ref(L, LUA_REGISTRYINDEX);
     } else {
-        lua_rawgeti(L, LUA_REGISTRYINDEX, r->context_ref);
+        lua_rawgeti(L, LUA_REGISTRYINDEX, r->contextRef);
     }
     return 1;
 }
 
 int HttpRequest_GetResponse(lua_State* L) {
     LuaHttpRequest* r = luaL_checkhttprequest(L, 1);
-    if (r->response_ref == LUA_NOREF)
+    if (r->responseRef == LUA_NOREF)
         luaL_error(L, "HttpRequest: no response object");
-    lua_rawgeti(L, LUA_REGISTRYINDEX, r->response_ref);
+    lua_rawgeti(L, LUA_REGISTRYINDEX, r->responseRef);
     return 1;
 }
 
 int HttpRequest_GetError(lua_State* L) {
     LuaHttpRequest* r = luaL_checkhttprequest(L, 1);
-    if (r->is_error && r->error_msg) {
-        lua_pushstring(L, r->error_msg);
+    if (r->is_error && r->errorMsg) {
+        lua_pushstring(L, r->errorMsg);
     } else {
         lua_pushnil(L);
     }
@@ -162,20 +162,20 @@ void HttpRequestCleanup(lua_State* L, LuaHttpRequest* r) {
     // body is allocated via kitsune_malloc, not strdup — must match
     kitsune_free(r->body);
     r->body = NULL;
-    SafeFree(&r->error_msg);
-    SafeUnref(L, &r->headers_ref);
+    SafeFree(&r->errorMsg);
+    SafeUnref(L, &r->headersRef);
 
     /* Teardown response before releasing its ref — mirrors build order */
-    if (r->response_ref != LUA_NOREF) {
-        lua_rawgeti(L, LUA_REGISTRYINDEX, r->response_ref);
+    if (r->responseRef != LUA_NOREF) {
+        lua_rawgeti(L, LUA_REGISTRYINDEX, r->responseRef);
         LuaHttpResponse* resp = (LuaHttpResponse*)lua_touserdata(L, -1);
         lua_pop(L, 1);
         if (resp)
             HttpResponseCleanup(L, resp);
-        SafeUnref(L, &r->response_ref);
+        SafeUnref(L, &r->responseRef);
     }
 
-    SafeUnref(L, &r->context_ref);
+    SafeUnref(L, &r->contextRef);
 
     /* Do NOT call evhttp_request_free here.
        Send paths null r->req immediately so evhttp_send_done handles the free.
@@ -205,7 +205,7 @@ int HttpRequest_ToString(lua_State* L) {
 void HttpResponseCleanup(lua_State* L, LuaHttpResponse* r) {
     r->connection = NULL;
     r->stream     = NULL;
-    SafeUnref(L, &r->stream_ref);
+    SafeUnref(L, &r->streamRef);
 }
 
 int HttpResponse_GC(lua_State* L) {

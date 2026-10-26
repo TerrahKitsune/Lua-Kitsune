@@ -128,13 +128,13 @@ int Redis_Open(lua_State* L) {
 	redis->host = (char*)kitsune_malloc(hostlen + 1);
 	if (redis->host) memcpy(redis->host, host, hostlen + 1);
 	redis->port = port;
-	redis->timeout_sec = timeout;
+	redis->timeoutSec = timeout;
 	if (password) {
 		size_t passlen = strlen(password);
 		redis->password = (char*)kitsune_malloc(passlen + 1);
 		if (redis->password) memcpy(redis->password, password, passlen + 1);
 	}
-	redisSSLContextError ssl_error = REDIS_SSL_CTX_NONE;
+	redisSSLContextError sslError = REDIS_SSL_CTX_NONE;
 
 	if (useTls) {
 
@@ -195,11 +195,11 @@ int Redis_Open(lua_State* L) {
 			lua_pop(L, 2);
 		}
 
-		redis->ssl = redisCreateSSLContextWithOptions(&sslOptions, &ssl_error);
+		redis->ssl = redisCreateSSLContextWithOptions(&sslOptions, &sslError);
 
-		if (!redis->ssl || ssl_error != REDIS_SSL_CTX_NONE) {
+		if (!redis->ssl || sslError != REDIS_SSL_CTX_NONE) {
 			RedisDispose(L, redis);
-			luaL_error(L, "SSL Context error: %s", redisSSLContextGetError(ssl_error));
+			luaL_error(L, "SSL Context error: %s", redisSSLContextGetError(sslError));
 			return 0;
 		}
 	}

@@ -186,7 +186,7 @@ int Xml_Decode(lua_State* L) {
 		luaL_argerror(L, 2, "string expected");
 	size_t      len = 0;
 	const char* src = lua_tolstring(L, 2, &len);
-	skip_utf8_bom(&src, &len);
+	SkipUtf8Bom(&src, &len);
 
 	x->doc->reset();
 

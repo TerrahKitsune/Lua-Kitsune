@@ -161,11 +161,11 @@ unsigned char* EncodeOgg(const LuaSound* snd, double quality, size_t* outLen) {
 		}
 	};
 
-	ogg_packet header, header_comm, header_code;
-	vorbis_analysis_headerout(&vd, &vc, &header, &header_comm, &header_code);
+	ogg_packet header, headerComm, headerCode;
+	vorbis_analysis_headerout(&vd, &vc, &header, &headerComm, &headerCode);
 	ogg_stream_packetin(&os, &header);
-	ogg_stream_packetin(&os, &header_comm);
-	ogg_stream_packetin(&os, &header_code);
+	ogg_stream_packetin(&os, &headerComm);
+	ogg_stream_packetin(&os, &headerCode);
 	drainPages(true); // header pages are flushed immediately, per convention
 
 	int channels = snd->channels;

@@ -87,7 +87,7 @@ static uint64_t InmemStreamGetId(void* native) {
 	return (uint64_t)((InMemoryStream*)native)->data;
 }
 
-static const LuaStreamVtable g_inmem_vtbl = {
+static const LuaStreamVtable inmemVtbl = {
 	InmemStreamRead,
 	InmemStreamWrite,
 	InmemStreamSetPos,
@@ -108,13 +108,13 @@ void LuaSetupInmemoryStream(lua_State* L, LuaStream* stream) {
 		return;
 	}
 	ZeroMemory(m, sizeof(InMemoryStream));
-	stream->vtbl   = &g_inmem_vtbl;
+	stream->vtbl   = &inmemVtbl;
 	stream->native = m;
-	stream->Caps   = HEAP_STREAM_CAPS;
+	stream->caps   = HEAP_STREAM_CAPS;
 }
 
 bool LuaIsInmemoryStream(const LuaStream* stream) {
-	return stream->vtbl == &g_inmem_vtbl;
+	return stream->vtbl == &inmemVtbl;
 }
 
 unsigned char* LuaCopyInmemoryStreamData(const LuaStream* stream, size_t* outLen) {

@@ -66,7 +66,7 @@ void PushSqliteValue(lua_State* L, sqlite3_stmt* pStmt, int idx) {
 // matching how Json and MsgPack encode such streams.
 static bool PushStreamContent(lua_State* L) {
 	LuaStream* s = lua_tostream(L, -1);
-	if (!(s->Caps & STREAM_CAP_READ) || !(s->Caps & STREAM_CAP_SEEK))
+	if (!(s->caps & STREAM_CAP_READ) || !(s->caps & STREAM_CAP_SEEK))
 		return false;
 
 	lua_Integer saved = LuaStreamCurPos(L, s);

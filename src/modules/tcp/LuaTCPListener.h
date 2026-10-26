@@ -31,12 +31,12 @@ typedef struct LuaTcpListener {
 
     /* Pending-accept queue: dynamic array of LuaTcpClient* that have been
        accepted by libevent but not yet yielded to Lua via Accept(). */
-    LuaTcpClient**         pending_queue;
-    int                    pending_count;
-    int                    pending_cap;
+    LuaTcpClient**         pendingQueue;
+    int                    pendingCount;
+    int                    pendingCap;
 
-    int                    self_ref;      /* keeps this userdata alive during callbacks */
-    int                    context_ref;   /* 0 until GetContext() first called */
+    int                    selfRef;      /* keeps this userdata alive during callbacks */
+    int                    contextRef;   /* 0 until GetContext() first called */
     int                    port;          /* listen port, for __tostring */
     bool                   disposed;
 } LuaTcpListener;
@@ -49,18 +49,18 @@ typedef struct LuaTcpClient {
 
     bool                 connected;
     bool                 disposed;
-    bool                 owns_base;   /* true if evbase was self-created (TCP.Connect) */
+    bool                 ownsBase;   /* true if evbase was self-created (TCP.Connect) */
     char*                ip;          /* cached remote IP string                     */
     int                  port;        /* cached remote port                          */
-    char*                error_msg;   /* set when connection drops with an error     */
+    char*                errorMsg;   /* set when connection drops with an error     */
 
     /* Message queue (FIFO)                                                        */
-    TcpMsgNode*          msg_head;
-    TcpMsgNode*          msg_tail;
+    TcpMsgNode*          msgHead;
+    TcpMsgNode*          msgTail;
 
     /* Registry refs                                                                        */
-    int                  self_ref;    /* keeps this userdata alive during callbacks  */
-    int                  context_ref; /* 0 until GetContext() first called           */
+    int                  selfRef;    /* keeps this userdata alive during callbacks  */
+    int                  contextRef; /* 0 until GetContext() first called           */
 
     lua_Integer          id;
 } LuaTcpClient;

@@ -7,7 +7,7 @@ rd_kafka_conf_t* ToKafkaConf(lua_State* L, int idx, const char* defaultgroup) {
 
 	const char* confname;
 	const char* confvalue;
-	char errbuf[kafka_error_buffer_len];
+	char errbuf[KAFKA_ERROR_BUFFER_LEN];
 
 	if (lua_type(L, idx) == LUA_TTABLE) {
 
@@ -21,7 +21,7 @@ rd_kafka_conf_t* ToKafkaConf(lua_State* L, int idx, const char* defaultgroup) {
 				didGroup = true;
 			}
 
-			if (rd_kafka_conf_set(conf, confname, confvalue, errbuf, kafka_error_buffer_len) != RD_KAFKA_CONF_OK) {
+			if (rd_kafka_conf_set(conf, confname, confvalue, errbuf, KAFKA_ERROR_BUFFER_LEN) != RD_KAFKA_CONF_OK) {
 
 				rd_kafka_conf_destroy(conf);
 				luaL_error(L, "Unable to set conf %s = %s: %s", confname, confvalue, errbuf);
@@ -32,7 +32,7 @@ rd_kafka_conf_t* ToKafkaConf(lua_State* L, int idx, const char* defaultgroup) {
 	}
 
 	if (!didGroup) {
-		if (rd_kafka_conf_set(conf, "group.id", defaultgroup, errbuf, kafka_error_buffer_len) != RD_KAFKA_CONF_OK) {
+		if (rd_kafka_conf_set(conf, "group.id", defaultgroup, errbuf, KAFKA_ERROR_BUFFER_LEN) != RD_KAFKA_CONF_OK) {
 
 			rd_kafka_conf_destroy(conf);
 			luaL_error(L, "Unable to set conf %s = %s: %s", "group.id", defaultgroup, errbuf);
@@ -188,18 +188,18 @@ int KafkaQueryWatermarks(lua_State* L, rd_kafka_t* rd) {
 static int KafkaPollAdminResult(
 	lua_State* L,
 	rd_kafka_queue_t* rkqu,
-	int poll_timeout_ms,
-	bool is_create)
+	int pollTimeoutMs,
+	bool isCreate)
 {
-	rd_kafka_event_t* event = rd_kafka_queue_poll(rkqu, poll_timeout_ms);
+	rd_kafka_event_t* event = rd_kafka_queue_poll(rkqu, pollTimeoutMs);
 	if (!event) {
 		lua_pushboolean(L, false);
 		lua_pushstring(L, "Admin operation timed out waiting for broker response");
 		return 2;
 	}
 
-	rd_kafka_resp_err_t event_err = rd_kafka_event_error(event);
-	if (event_err) {
+	rd_kafka_resp_err_t eventErr = rd_kafka_event_error(event);
+	if (eventErr) {
 		const char* msg = rd_kafka_event_error_string(event);
 		rd_kafka_event_destroy(event);
 		lua_pushboolean(L, false);
@@ -210,7 +210,7 @@ static int KafkaPollAdminResult(
 	size_t cnt = 0;
 	const rd_kafka_topic_result_t** results;
 
-	if (is_create) {
+	if (isCreate) {
 		const rd_kafka_CreateTopics_result_t* r = rd_kafka_event_CreateTopics_result(event);
 		results = rd_kafka_CreateTopics_result_topics(r, &cnt);
 	}
@@ -219,22 +219,22 @@ static int KafkaPollAdminResult(
 		results = rd_kafka_DeleteTopics_result_topics(r, &cnt);
 	}
 
-	rd_kafka_resp_err_t topic_err = RD_KAFKA_RESP_ERR_NO_ERROR;
-	char topic_errbuf[512] = { 0 };
+	rd_kafka_resp_err_t topicErr = RD_KAFKA_RESP_ERR_NO_ERROR;
+	char topicErrbuf[512] = { 0 };
 	if (cnt > 0) {
-		topic_err = rd_kafka_topic_result_error(results[0]);
-		if (topic_err) {
+		topicErr = rd_kafka_topic_result_error(results[0]);
+		if (topicErr) {
 			const char* em = rd_kafka_topic_result_error_string(results[0]);
 			if (em)
-				strncpy(topic_errbuf, em, sizeof(topic_errbuf) - 1);
+				strncpy(topicErrbuf, em, sizeof(topicErrbuf) - 1);
 		}
 	}
 
 	rd_kafka_event_destroy(event);
 
-	if (topic_err) {
+	if (topicErr) {
 		lua_pushboolean(L, false);
-		lua_pushstring(L, topic_errbuf[0] ? topic_errbuf : rd_kafka_err2str(topic_err));
+		lua_pushstring(L, topicErrbuf[0] ? topicErrbuf : rd_kafka_err2str(topicErr));
 		return 2;
 	}
 
@@ -282,9 +282,9 @@ int KafkaAdminCreateTopic(lua_State* L, rd_kafka_t* rd) {
 		}
 	}
 
-	char opts_errstr[256];
+	char optsErrstr[256];
 	rd_kafka_AdminOptions_t* options = rd_kafka_AdminOptions_new(rd, RD_KAFKA_ADMIN_OP_CREATETOPICS);
-	rd_kafka_AdminOptions_set_operation_timeout(options, timeout_ms, opts_errstr, sizeof(opts_errstr));
+	rd_kafka_AdminOptions_set_operation_timeout(options, timeout_ms, optsErrstr, sizeof(optsErrstr));
 
 	rd_kafka_queue_t* queue = rd_kafka_queue_new(rd);
 
@@ -303,9 +303,9 @@ int KafkaAdminDestroyTopic(lua_State* L, rd_kafka_t* rd) {
 
 	rd_kafka_DeleteTopic_t* del_topic = rd_kafka_DeleteTopic_new(name);
 
-	char opts_errstr[256];
+	char optsErrstr[256];
 	rd_kafka_AdminOptions_t* options = rd_kafka_AdminOptions_new(rd, RD_KAFKA_ADMIN_OP_DELETETOPICS);
-	rd_kafka_AdminOptions_set_operation_timeout(options, timeout_ms, opts_errstr, sizeof(opts_errstr));
+	rd_kafka_AdminOptions_set_operation_timeout(options, timeout_ms, optsErrstr, sizeof(optsErrstr));
 
 	rd_kafka_queue_t* queue = rd_kafka_queue_new(rd);
 
@@ -368,9 +368,9 @@ int KafkaGetTopicConfig(lua_State* L, rd_kafka_t* rd) {
 
 	rd_kafka_ConfigResource_t* res = rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_TOPIC, topic_name);
 
-	char opts_errstr[256];
+	char optsErrstr[256];
 	rd_kafka_AdminOptions_t* options = rd_kafka_AdminOptions_new(rd, RD_KAFKA_ADMIN_OP_DESCRIBECONFIGS);
-	rd_kafka_AdminOptions_set_operation_timeout(options, timeout_ms, opts_errstr, sizeof(opts_errstr));
+	rd_kafka_AdminOptions_set_operation_timeout(options, timeout_ms, optsErrstr, sizeof(optsErrstr));
 
 	rd_kafka_queue_t* queue = rd_kafka_queue_new(rd);
 
@@ -387,8 +387,8 @@ int KafkaGetTopicConfig(lua_State* L, rd_kafka_t* rd) {
 		return 2;
 	}
 
-	rd_kafka_resp_err_t event_err = rd_kafka_event_error(event);
-	if (event_err) {
+	rd_kafka_resp_err_t eventErr = rd_kafka_event_error(event);
+	if (eventErr) {
 		const char* msg = rd_kafka_event_error_string(event);
 		lua_pushboolean(L, false);
 		lua_pushstring(L, msg);
@@ -397,32 +397,32 @@ int KafkaGetTopicConfig(lua_State* L, rd_kafka_t* rd) {
 	}
 
 	const rd_kafka_DescribeConfigs_result_t* result = rd_kafka_event_DescribeConfigs_result(event);
-	size_t resource_cnt;
-	const rd_kafka_ConfigResource_t** resources = rd_kafka_DescribeConfigs_result_resources(result, &resource_cnt);
+	size_t resourceCnt;
+	const rd_kafka_ConfigResource_t** resources = rd_kafka_DescribeConfigs_result_resources(result, &resourceCnt);
 
-	if (resource_cnt == 0) {
+	if (resourceCnt == 0) {
 		rd_kafka_event_destroy(event);
 		lua_pushboolean(L, false);
 		lua_pushstring(L, "No config resources returned");
 		return 2;
 	}
 
-	rd_kafka_resp_err_t res_err = rd_kafka_ConfigResource_error(resources[0]);
-	if (res_err) {
+	rd_kafka_resp_err_t resErr = rd_kafka_ConfigResource_error(resources[0]);
+	if (resErr) {
 		const char* msg = rd_kafka_ConfigResource_error_string(resources[0]);
 		lua_pushboolean(L, false);
-		lua_pushstring(L, msg ? msg : rd_kafka_err2str(res_err));
+		lua_pushstring(L, msg ? msg : rd_kafka_err2str(resErr));
 		rd_kafka_event_destroy(event);
 		return 2;
 	}
 
-	size_t entry_cnt;
-	const rd_kafka_ConfigEntry_t** entries = rd_kafka_ConfigResource_configs(resources[0], &entry_cnt);
+	size_t entryCnt;
+	const rd_kafka_ConfigEntry_t** entries = rd_kafka_ConfigResource_configs(resources[0], &entryCnt);
 
 	lua_pushboolean(L, true);
-	lua_createtable(L, 0, (int)entry_cnt);
+	lua_createtable(L, 0, (int)entryCnt);
 
-	for (size_t i = 0; i < entry_cnt; i++) {
+	for (size_t i = 0; i < entryCnt; i++) {
 		// Skip synonym entries — they are alternate representations of the same setting
 		if (rd_kafka_ConfigEntry_is_synonym(entries[i]))
 			continue;
@@ -467,9 +467,9 @@ int KafkaSetTopicConfig(lua_State* L, rd_kafka_t* rd) {
 		lua_pop(L, 1);
 	}
 
-	char opts_errstr[256];
+	char optsErrstr[256];
 	rd_kafka_AdminOptions_t* options = rd_kafka_AdminOptions_new(rd, RD_KAFKA_ADMIN_OP_ALTERCONFIGS);
-	rd_kafka_AdminOptions_set_operation_timeout(options, timeout_ms, opts_errstr, sizeof(opts_errstr));
+	rd_kafka_AdminOptions_set_operation_timeout(options, timeout_ms, optsErrstr, sizeof(optsErrstr));
 
 	rd_kafka_queue_t* queue = rd_kafka_queue_new(rd);
 
@@ -486,8 +486,8 @@ int KafkaSetTopicConfig(lua_State* L, rd_kafka_t* rd) {
 		return 2;
 	}
 
-	rd_kafka_resp_err_t event_err = rd_kafka_event_error(event);
-	if (event_err) {
+	rd_kafka_resp_err_t eventErr = rd_kafka_event_error(event);
+	if (eventErr) {
 		const char* msg = rd_kafka_event_error_string(event);
 		lua_pushboolean(L, false);
 		lua_pushstring(L, msg);
@@ -499,22 +499,22 @@ int KafkaSetTopicConfig(lua_State* L, rd_kafka_t* rd) {
 	size_t cnt;
 	const rd_kafka_ConfigResource_t** resources = rd_kafka_IncrementalAlterConfigs_result_resources(result, &cnt);
 
-	rd_kafka_resp_err_t res_err = RD_KAFKA_RESP_ERR_NO_ERROR;
-	char res_errbuf[512] = { 0 };
+	rd_kafka_resp_err_t resErr = RD_KAFKA_RESP_ERR_NO_ERROR;
+	char resErrbuf[512] = { 0 };
 	if (cnt > 0) {
-		res_err = rd_kafka_ConfigResource_error(resources[0]);
-		if (res_err) {
+		resErr = rd_kafka_ConfigResource_error(resources[0]);
+		if (resErr) {
 			const char* em = rd_kafka_ConfigResource_error_string(resources[0]);
 			if (em)
-				strncpy(res_errbuf, em, sizeof(res_errbuf) - 1);
+				strncpy(resErrbuf, em, sizeof(resErrbuf) - 1);
 		}
 	}
 
 	rd_kafka_event_destroy(event);
 
-	if (res_err) {
+	if (resErr) {
 		lua_pushboolean(L, false);
-		lua_pushstring(L, res_errbuf[0] ? res_errbuf : rd_kafka_err2str(res_err));
+		lua_pushstring(L, resErrbuf[0] ? resErrbuf : rd_kafka_err2str(resErr));
 		return 2;
 	}
 
@@ -527,23 +527,23 @@ int KafkaSetTopicConfig(lua_State* L, rd_kafka_t* rd) {
 // ---------------------------------------------------------------------------
 
 // Parses a "topic:N" string into topic + partition.
-static void KafkaParseTpKey(const char* entry, char* tbuf, size_t tbuf_sz, int32_t* out_part) {
-	*out_part = RD_KAFKA_PARTITION_UA;
+static void KafkaParseTpKey(const char* entry, char* tbuf, size_t tbufSz, int32_t* outPart) {
+	*outPart = RD_KAFKA_PARTITION_UA;
 	const char* colon = strchr(entry, ':');
 	if (colon) {
 		size_t tlen = (size_t)(colon - entry);
-		if (tlen >= tbuf_sz)
-			tlen = tbuf_sz - 1;
+		if (tlen >= tbufSz)
+			tlen = tbufSz - 1;
 		strncpy(tbuf, entry, tlen);
 		tbuf[tlen] = '\0';
 		char* end;
 		long p = strtol(colon + 1, &end, 10);
 		if (end != colon + 1 && (*end == '\0' || *end == ':') && p >= 0)
-			*out_part = (int32_t)p;
+			*outPart = (int32_t)p;
 	}
 	else {
-		strncpy(tbuf, entry, tbuf_sz - 1);
-		tbuf[tbuf_sz - 1] = '\0';
+		strncpy(tbuf, entry, tbufSz - 1);
+		tbuf[tbufSz - 1] = '\0';
 	}
 }
 
@@ -615,9 +615,9 @@ static int KafkaCheckEventError(lua_State* L, rd_kafka_event_t* event) {
 int KafkaListGroups(lua_State* L, rd_kafka_t* rd) {
 	int timeout_ms = (int)luaL_optinteger(L, 2, 5000);
 
-	char opts_errstr[256];
+	char optsErrstr[256];
 	rd_kafka_AdminOptions_t* options = rd_kafka_AdminOptions_new(rd, RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPS);
-	rd_kafka_AdminOptions_set_request_timeout(options, timeout_ms, opts_errstr, sizeof(opts_errstr));
+	rd_kafka_AdminOptions_set_request_timeout(options, timeout_ms, optsErrstr, sizeof(optsErrstr));
 
 	rd_kafka_queue_t* queue = rd_kafka_queue_new(rd);
 	rd_kafka_ListConsumerGroups(rd, options, queue);
@@ -671,26 +671,26 @@ int KafkaDescribeGroups(lua_State* L, rd_kafka_t* rd) {
 	int timeout_ms = (int)luaL_optinteger(L, 3, 5000);
 
 	int n = (int)luaL_len(L, 2);
-	const char** group_ids = (const char**)malloc((size_t)n * sizeof(const char*));
-	if (!group_ids) {
+	const char** groupIds = (const char**)malloc((size_t)n * sizeof(const char*));
+	if (!groupIds) {
 		lua_pushboolean(L, false);
 		lua_pushstring(L, "out of memory");
 		return 2;
 	}
 	for (int i = 0; i < n; i++) {
 		lua_rawgeti(L, 2, i + 1);
-		group_ids[i] = lua_tostring(L, -1);
+		groupIds[i] = lua_tostring(L, -1);
 		lua_pop(L, 1);
 	}
 
-	char opts_errstr[256];
+	char optsErrstr[256];
 	rd_kafka_AdminOptions_t* options = rd_kafka_AdminOptions_new(rd, RD_KAFKA_ADMIN_OP_DESCRIBECONSUMERGROUPS);
-	rd_kafka_AdminOptions_set_request_timeout(options, timeout_ms, opts_errstr, sizeof(opts_errstr));
+	rd_kafka_AdminOptions_set_request_timeout(options, timeout_ms, optsErrstr, sizeof(optsErrstr));
 
 	rd_kafka_queue_t* queue = rd_kafka_queue_new(rd);
-	rd_kafka_DescribeConsumerGroups(rd, group_ids, (size_t)n, options, queue);
+	rd_kafka_DescribeConsumerGroups(rd, groupIds, (size_t)n, options, queue);
 	rd_kafka_AdminOptions_destroy(options);
-	free(group_ids);
+	free(groupIds);
 
 	rd_kafka_event_t* event = rd_kafka_queue_poll(queue, timeout_ms + 5000);
 	rd_kafka_queue_destroy(queue);
@@ -818,9 +818,9 @@ int KafkaDeleteGroup(lua_State* L, rd_kafka_t* rd) {
 
 	rd_kafka_DeleteGroup_t* del = rd_kafka_DeleteGroup_new(group_id);
 
-	char opts_errstr[256];
+	char optsErrstr[256];
 	rd_kafka_AdminOptions_t* options = rd_kafka_AdminOptions_new(rd, RD_KAFKA_ADMIN_OP_DELETEGROUPS);
-	rd_kafka_AdminOptions_set_request_timeout(options, timeout_ms, opts_errstr, sizeof(opts_errstr));
+	rd_kafka_AdminOptions_set_request_timeout(options, timeout_ms, optsErrstr, sizeof(optsErrstr));
 
 	rd_kafka_queue_t* queue = rd_kafka_queue_new(rd);
 	rd_kafka_DeleteGroups(rd, &del, 1, options, queue);
@@ -844,9 +844,9 @@ int KafkaDeleteGroup(lua_State* L, rd_kafka_t* rd) {
 	size_t cnt;
 	const rd_kafka_group_result_t** results = rd_kafka_DeleteGroups_result_groups(result, &cnt);
 
-	const rd_kafka_error_t* grp_err = (cnt > 0) ? rd_kafka_group_result_error(results[0]) : NULL;
-	if (grp_err) {
-		const char* msg = rd_kafka_error_string(grp_err);
+	const rd_kafka_error_t* grpErr = (cnt > 0) ? rd_kafka_group_result_error(results[0]) : NULL;
+	if (grpErr) {
+		const char* msg = rd_kafka_error_string(grpErr);
 		lua_pushboolean(L, false);
 		lua_pushstring(L, msg ? msg : "DeleteGroup failed");
 		rd_kafka_event_destroy(event);
@@ -872,9 +872,9 @@ int KafkaGetGroupOffsets(lua_State* L, rd_kafka_t* rd) {
 	if (parts)
 		rd_kafka_topic_partition_list_destroy(parts);
 
-	char opts_errstr[256];
+	char optsErrstr[256];
 	rd_kafka_AdminOptions_t* options = rd_kafka_AdminOptions_new(rd, RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPOFFSETS);
-	rd_kafka_AdminOptions_set_request_timeout(options, timeout_ms, opts_errstr, sizeof(opts_errstr));
+	rd_kafka_AdminOptions_set_request_timeout(options, timeout_ms, optsErrstr, sizeof(optsErrstr));
 
 	rd_kafka_queue_t* queue = rd_kafka_queue_new(rd);
 	rd_kafka_ListConsumerGroupOffsets(rd, &req, 1, options, queue);
@@ -899,9 +899,9 @@ int KafkaGetGroupOffsets(lua_State* L, rd_kafka_t* rd) {
 	const rd_kafka_group_result_t** results = rd_kafka_ListConsumerGroupOffsets_result_groups(result, &gcnt);
 
 	if (gcnt > 0) {
-		const rd_kafka_error_t* grp_err = rd_kafka_group_result_error(results[0]);
-		if (grp_err) {
-			const char* msg = rd_kafka_error_string(grp_err);
+		const rd_kafka_error_t* grpErr = rd_kafka_group_result_error(results[0]);
+		if (grpErr) {
+			const char* msg = rd_kafka_error_string(grpErr);
 			lua_pushboolean(L, false);
 			lua_pushstring(L, msg ? msg : "ListConsumerGroupOffsets failed");
 			rd_kafka_event_destroy(event);
@@ -915,11 +915,11 @@ int KafkaGetGroupOffsets(lua_State* L, rd_kafka_t* rd) {
 	if (gcnt > 0) {
 		const rd_kafka_topic_partition_list_t* offsets = rd_kafka_group_result_partitions(results[0]);
 		if (offsets) {
-			char key_buf[640];
+			char keyBuf[640];
 			for (int i = 0; i < offsets->cnt; i++) {
 				const rd_kafka_topic_partition_t* tp = &offsets->elems[i];
-				snprintf(key_buf, sizeof(key_buf), "%s:%d", tp->topic, tp->partition);
-				lua_pushstring(L, key_buf);
+				snprintf(keyBuf, sizeof(keyBuf), "%s:%d", tp->topic, tp->partition);
+				lua_pushstring(L, keyBuf);
 				lua_pushinteger(L, (lua_Integer)tp->offset);
 				lua_settable(L, -3);
 			}
@@ -943,9 +943,9 @@ int KafkaSetGroupOffsets(lua_State* L, rd_kafka_t* rd) {
 	rd_kafka_AlterConsumerGroupOffsets_t* req = rd_kafka_AlterConsumerGroupOffsets_new(group_id, parts);
 	rd_kafka_topic_partition_list_destroy(parts);
 
-	char opts_errstr[256];
+	char optsErrstr[256];
 	rd_kafka_AdminOptions_t* options = rd_kafka_AdminOptions_new(rd, RD_KAFKA_ADMIN_OP_ALTERCONSUMERGROUPOFFSETS);
-	rd_kafka_AdminOptions_set_request_timeout(options, timeout_ms, opts_errstr, sizeof(opts_errstr));
+	rd_kafka_AdminOptions_set_request_timeout(options, timeout_ms, optsErrstr, sizeof(optsErrstr));
 
 	rd_kafka_queue_t* queue = rd_kafka_queue_new(rd);
 	rd_kafka_AlterConsumerGroupOffsets(rd, &req, 1, options, queue);
@@ -970,9 +970,9 @@ int KafkaSetGroupOffsets(lua_State* L, rd_kafka_t* rd) {
 	const rd_kafka_group_result_t** results = rd_kafka_AlterConsumerGroupOffsets_result_groups(result, &gcnt);
 
 	if (gcnt > 0) {
-		const rd_kafka_error_t* grp_err = rd_kafka_group_result_error(results[0]);
-		if (grp_err) {
-			const char* msg = rd_kafka_error_string(grp_err);
+		const rd_kafka_error_t* grpErr = rd_kafka_group_result_error(results[0]);
+		if (grpErr) {
+			const char* msg = rd_kafka_error_string(grpErr);
 			lua_pushboolean(L, false);
 			lua_pushstring(L, msg ? msg : "AlterConsumerGroupOffsets failed");
 			rd_kafka_event_destroy(event);
@@ -1003,9 +1003,9 @@ int KafkaDeleteGroupOffsets(lua_State* L, rd_kafka_t* rd) {
 	rd_kafka_DeleteConsumerGroupOffsets_t* req = rd_kafka_DeleteConsumerGroupOffsets_new(group_id, parts);
 	rd_kafka_topic_partition_list_destroy(parts);
 
-	char opts_errstr[256];
+	char optsErrstr[256];
 	rd_kafka_AdminOptions_t* options = rd_kafka_AdminOptions_new(rd, RD_KAFKA_ADMIN_OP_DELETECONSUMERGROUPOFFSETS);
-	rd_kafka_AdminOptions_set_request_timeout(options, timeout_ms, opts_errstr, sizeof(opts_errstr));
+	rd_kafka_AdminOptions_set_request_timeout(options, timeout_ms, optsErrstr, sizeof(optsErrstr));
 
 	rd_kafka_queue_t* queue = rd_kafka_queue_new(rd);
 	rd_kafka_DeleteConsumerGroupOffsets(rd, &req, 1, options, queue);
@@ -1030,9 +1030,9 @@ int KafkaDeleteGroupOffsets(lua_State* L, rd_kafka_t* rd) {
 	const rd_kafka_group_result_t** results = rd_kafka_DeleteConsumerGroupOffsets_result_groups(result, &gcnt);
 
 	if (gcnt > 0) {
-		const rd_kafka_error_t* grp_err = rd_kafka_group_result_error(results[0]);
-		if (grp_err) {
-			const char* msg = rd_kafka_error_string(grp_err);
+		const rd_kafka_error_t* grpErr = rd_kafka_group_result_error(results[0]);
+		if (grpErr) {
+			const char* msg = rd_kafka_error_string(grpErr);
 			lua_pushboolean(L, false);
 			lua_pushstring(L, msg ? msg : "DeleteConsumerGroupOffsets failed");
 			rd_kafka_event_destroy(event);

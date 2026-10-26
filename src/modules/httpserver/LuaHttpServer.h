@@ -8,13 +8,13 @@ typedef struct LuaHttpServer {
     struct event_base*   base;
     struct evhttp*       http;
     lua_State*           L;            /* stored for use inside libevent callbacks */
-    HttpOpenConnection*  queue_head;   /* oldest event — dequeue from here */
-    HttpOpenConnection*  queue_tail;   /* newest event  — enqueue here     */
+    HttpOpenConnection*  queueHead;   /* oldest event — dequeue from here */
+    HttpOpenConnection*  queueTail;   /* newest event  — enqueue here     */
     HttpOpenConnection*  senders;      /* connections with active stream send */
-    int                  coroutine_ref;/* LUA_NOREF until Accept() first called */
-    int                  disconnect_ref;/* LUA_NOREF or server-wide disconnect fn */
+    int                  coroutineRef;/* LUA_NOREF until Accept() first called */
+    int                  disconnectRef;/* LUA_NOREF or server-wide disconnect fn */
     int                  aliveTokenRef; /* LUA_NOREF when not set */
-    bool                 http_init;    /* true after evhttp_new, guards double-free */
+    bool                 httpInit;    /* true after evhttp_new, guards double-free */
 } LuaHttpServer;
 
 LuaHttpServer* lua_pushhttpserver (lua_State* L);

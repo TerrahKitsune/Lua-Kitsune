@@ -1,7 +1,7 @@
 ﻿#include "hardware/LuaHardwareMain.h"
 #include "hardware/LuaHardware.h"
 
-static const luaL_Reg hardware_functions[] = {
+static const luaL_Reg hardwareFunctions[] = {
     { "CpuTemp",        Hardware_CpuTemp         },
     { "CpuThreadsLoad", Hardware_CpuThreadsLoad  },
     { "CpuLoad",        Hardware_CpuLoad          },
@@ -19,7 +19,7 @@ static const luaL_Reg hardware_functions[] = {
 
 int luaopen_hardware(lua_State* L)
 {
-    luaL_newlibtable(L, hardware_functions);
-    luaL_setfuncs(L, hardware_functions, 0);
+    luaL_newlibtable(L, hardwareFunctions);
+    luaL_setfuncs(L, hardwareFunctions, 0);
     return 1;
 }

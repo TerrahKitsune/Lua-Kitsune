@@ -7,8 +7,8 @@ static const char* REDISPUBSUBCOROUTINE = "REDISPUBSUBCOROUTINE";
 typedef struct LuaRedisPubSubState {
 	redisContext*    context;   // dedicated connection owned by this state; freed by RedisPubSubState_GC
 	redisSSLContext* ssl;       // borrowed from parent LuaRedis; not freed here
-	bool             is_pattern;
-	int              redis_ref; // registry ref keeping parent LuaRedis alive while context uses its ssl
+	bool             isPattern;
+	int              redisRef; // registry ref keeping parent LuaRedis alive while context uses its ssl
 	int              aliveTokenRef; // LUA_NOREF when not set
 } LuaRedisPubSubState;
 

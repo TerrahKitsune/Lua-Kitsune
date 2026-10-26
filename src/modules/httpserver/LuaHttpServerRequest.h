@@ -14,11 +14,11 @@ typedef struct HttpOpenConnection HttpOpenConnection;
 typedef struct LuaHttpServer      LuaHttpServer;
 
 /*
- * Per-event queue node — lives on LuaHttpServer.queue_head/tail and
+ * Per-event queue node — lives on LuaHttpServer.queueHead/tail and
  * LuaHttpServer.senders.  Never pushed to Lua directly.
  */
 typedef struct HttpOpenConnection {
-    int                        request_ref; /* luaL_ref to LuaHttpRequest userdata —
+    int                        requestRef; /* luaL_ref to LuaHttpRequest userdata —
                                                prevents __gc while queued or sending */
     struct HttpOpenConnection* next;
 } HttpOpenConnection;
@@ -38,17 +38,17 @@ typedef struct LuaHttpRequest {
     char*                  method;
     char*                  body;
     size_t                 body_len;
-    bool                   is_finished;
+    bool                   isFinished;
     bool                   is_error;
-    char*                  error_msg;
-    int                    headers_ref; /* luaL_ref to {[name]=value} table */
-    int                    context_ref; /* luaL_ref to context table        */
-    int                    response_ref;/* luaL_ref to LuaHttpResponse      */
+    char*                  errorMsg;
+    int                    headersRef; /* luaL_ref to {[name]=value} table */
+    int                    contextRef; /* luaL_ref to context table        */
+    int                    responseRef;/* luaL_ref to LuaHttpResponse      */
     bool                   upgraded;   /* true after UpgradeToWebSocket(); guards cleanup */
 } LuaHttpRequest;
 
 /*
- * One LuaHttpResponse per request, reached via request->response_ref.
+ * One LuaHttpResponse per request, reached via request->responseRef.
  * Headers are set directly on the evhttp_request output headers via
  * evhttp_add_header(), so no extra_headers buffer is needed here.
  */
@@ -56,9 +56,9 @@ typedef struct LuaHttpResponse {
     LuaStream*      stream;      /* NULL = not streaming; non-NULL = active sender */
     bool            chunked;     /* true = evhttp_send_reply_start/chunk/end path  */
     bool            finalized;
-    int             status_code; /* HTTP status, default 200                       */
-    int             stream_ref;  /* luaL_ref keeping stream userdata alive during chunked send */
-    LuaHttpRequest* connection;  /* back-pointer, nulled before response_ref unref */
+    int             statusCode; /* HTTP status, default 200                       */
+    int             streamRef;  /* luaL_ref keeping stream userdata alive during chunked send */
+    LuaHttpRequest* connection;  /* back-pointer, nulled before responseRef unref */
 } LuaHttpResponse;
 
 /* push/check helpers */

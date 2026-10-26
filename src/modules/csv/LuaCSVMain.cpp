@@ -1,7 +1,7 @@
 ﻿#include "csv/LuaCSV.h"
 #include "csv/LuaCSVMain.h"
 
-static const struct luaL_Reg csv_functions[] = {
+static const struct luaL_Reg csvFunctions[] = {
 	{ "New",               CSV_New                   },  // CSV.New([delim])
 	{ "Decode",            CSV_Decode               },  // csv:Decode(str) / CSV.Decode(str [, delim])
 	{ "Encode",            CSV_Encode                },  // csv:Encode(rows) / CSV.Encode(rows [, delim])
@@ -9,20 +9,20 @@ static const struct luaL_Reg csv_functions[] = {
 	{ NULL, NULL }
 };
 
-static const struct luaL_Reg csv_meta[] = {
+static const struct luaL_Reg csvMeta[] = {
 	{ "__gc",       CSV_GC       },
 	{ "__tostring", CSV_ToString },
 	{ NULL, NULL }
 };
 
 int luaopen_csv(lua_State* L) {
-	luaL_newlibtable(L, csv_functions);
-	luaL_setfuncs(L, csv_functions, 0);
+	luaL_newlibtable(L, csvFunctions);
+	luaL_setfuncs(L, csvFunctions, 0);
 
 	// Instance metatable: __gc, __tostring, and __index = module table so all
-	// csv_functions are reachable as both CSV.Xxx() and csv:Xxx().
+	// csvFunctions are reachable as both CSV.Xxx() and csv:Xxx().
 	luaL_newmetatable(L, LUACSV);
-	luaL_setfuncs(L, csv_meta, 0);
+	luaL_setfuncs(L, csvMeta, 0);
 	lua_pushliteral(L, "__index");
 	lua_pushvalue(L, -3);   // module table
 	lua_rawset(L, -3);

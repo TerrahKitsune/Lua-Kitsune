@@ -1,7 +1,7 @@
 ﻿#include "xml/LuaXml.h"
 #include "xml/LuaXmlMain.h"
 
-static const struct luaL_Reg xml_functions[] = {
+static const struct luaL_Reg xmlFunctions[] = {
     { "New",     Xml_New    },  // Xml.New([indent])
     { "Decode",  Xml_Decode },  // xml:Decode(string)
     { "Encode",  Xml_Encode },  // xml:Encode(table)
@@ -9,7 +9,7 @@ static const struct luaL_Reg xml_functions[] = {
     { NULL, NULL }
 };
 
-static const struct luaL_Reg xml_meta[] = {
+static const struct luaL_Reg xmlMeta[] = {
     { "__gc",       Xml_Dispose       },
     { "__tostring", Xml_ToString },
     { NULL, NULL }
@@ -17,13 +17,13 @@ static const struct luaL_Reg xml_meta[] = {
 
 int luaopen_xml(lua_State* L) {
     EnsureAllocator();
-    luaL_newlibtable(L, xml_functions);
-    luaL_setfuncs(L, xml_functions, 0);
+    luaL_newlibtable(L, xmlFunctions);
+    luaL_setfuncs(L, xmlFunctions, 0);
 
     // Instance metatable: __gc, __tostring, and __index = module table so all
-    // xml_functions are reachable as both Xml.Xxx() and xml:Xxx().
+    // xmlFunctions are reachable as both Xml.Xxx() and xml:Xxx().
     luaL_newmetatable(L, LUAXML);
-    luaL_setfuncs(L, xml_meta, 0);
+    luaL_setfuncs(L, xmlMeta, 0);
     lua_pushliteral(L, "__index");
     lua_pushvalue(L, -3);   // module table
     lua_rawset(L, -3);

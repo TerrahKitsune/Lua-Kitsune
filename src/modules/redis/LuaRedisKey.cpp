@@ -5,16 +5,16 @@ const char* PushRedisKeyName(lua_State* L, LuaRedisKey* key) {
 }
 
 void PushRedisRef(lua_State* L, LuaRedisKey* key) {
-	if (key->redis_ref == LUA_NOREF) {
+	if (key->redisRef == LUA_NOREF) {
 		luaL_error(L, "Redis key not available");
 	}
-	lua_rawgeti(L, LUA_REGISTRYINDEX, key->redis_ref);
+	lua_rawgeti(L, LUA_REGISTRYINDEX, key->redisRef);
 }
 
 void CleanRedisKey(lua_State* L, LuaRedisKey* key) {
-	if (key->redis_ref != LUA_NOREF) {
-		luaL_unref(L, LUA_REGISTRYINDEX, key->redis_ref);
-		key->redis_ref = LUA_NOREF;
+	if (key->redisRef != LUA_NOREF) {
+		luaL_unref(L, LUA_REGISTRYINDEX, key->redisRef);
+		key->redisRef = LUA_NOREF;
 	}
 
 	if (key->key) {
@@ -93,7 +93,7 @@ LuaRedisKey* lua_pushrediskey(lua_State* L, int redisIdx, const char* key, size_
 	luaL_getmetatable(L, REDISKEY);
 	lua_setmetatable(L, -2);
 	memset(redisKey, 0, sizeof(LuaRedisKey));
-	redisKey->redis_ref = ref;
+	redisKey->redisRef = ref;
 	
 	redisKey->key = (char*)kitsune_malloc(keylen + 1);
 	if (!redisKey->key) {

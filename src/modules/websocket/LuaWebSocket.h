@@ -58,7 +58,7 @@ typedef struct LuaWebSocket {
     CURLM*              multi;         // borrowed from the engine singleton
     struct curl_slist*  requestHdrs;   // owned; freed in ws_dispose
     char                errorBuf[256]; // CURL_ERROR_SIZE
-    int                 client_ref;    // registry ref keeping LuaHttpClient alive
+    int                 clientRef;    // registry ref keeping LuaHttpClient alive
     CurlMsg*            curlMsg;       // heap-allocated; freed in ws_dispose
 
     // curl fragment reassembly: curl_ws_recv may deliver partial frames
@@ -75,11 +75,11 @@ typedef struct LuaWebSocket {
     bool        closed;        // true once Dispose() or GC has run
     size_t      maxMsgSize;    // 0 = uncapped; cap applied to both send and receive
     int         aliveTokenRef; // LUA_NOREF or registry ref to client's AliveToken (client WS only)
-    WsMsgNode*  msg_head;      // oldest unread message (FIFO)
-    WsMsgNode*  msg_tail;
+    WsMsgNode*  msgHead;      // oldest unread message (FIFO)
+    WsMsgNode*  msgTail;
     lua_State*  L;             // the Lua state; needed inside evws callbacks
-    int         self_ref;      // registry ref to this userdata (server only, for callback routing)
-    int         context_ref;   // LUA_NOREF until GetContext() first called
+    int         selfRef;      // registry ref to this userdata (server only, for callback routing)
+    int         contextRef;   // LUA_NOREF until GetContext() first called
     lua_Integer id;            // stable monotonically-increasing ID assigned at creation
 
     // --- server-side ping keepalive ------------------------------------------

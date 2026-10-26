@@ -134,13 +134,13 @@ typedef struct { char name[256]; PDH_HCOUNTER ctr; } PdhCoreEntry;
 
 static PdhSample* PdhCollectCoreLoad(int* nOut)
 {
-    static PDH_HQUERY  s_query   = NULL;
-    static PdhCoreEntry* s_cores = NULL;
-    static int         s_count   = 0;
-    static bool        s_ready   = false;
+    static PDH_HQUERY  g_query   = NULL;
+    static PdhCoreEntry* g_cores = NULL;
+    static int         g_count   = 0;
+    static bool        g_ready   = false;
 
     // One-time initialisation: expand the wildcard and add all per-core counters.
-    if (!s_ready) {
+    if (!g_ready) {
         char* paths = NULL;
         DWORD count = 0;
         if (PdhExpandWildcards(
@@ -148,15 +148,15 @@ static PdhSample* PdhCollectCoreLoad(int* nOut)
                 &paths, &count) != ERROR_SUCCESS || count == 0)
             return NULL;
 
-        if (PdhOpenQuery(NULL, 0, &s_query) != ERROR_SUCCESS) {
+        if (PdhOpenQuery(NULL, 0, &g_query) != ERROR_SUCCESS) {
             kitsune_free(paths);
             return NULL;
         }
 
-        s_cores = (PdhCoreEntry*)kitsune_calloc(count, sizeof(PdhCoreEntry));
-        if (!s_cores) {
-            PdhCloseQuery(s_query);
-            s_query = NULL;
+        g_cores = (PdhCoreEntry*)kitsune_calloc(count, sizeof(PdhCoreEntry));
+        if (!g_cores) {
+            PdhCloseQuery(g_query);
+            g_query = NULL;
             kitsune_free(paths);
             return NULL;
         }
@@ -172,40 +172,40 @@ static PdhSample* PdhCollectCoreLoad(int* nOut)
             const char* open  = strchr(p, '(');
             const char* close = open ? strchr(open, ')') : NULL;
             if (open && close && (close - open - 1) < 255) {
-                strncpy(s_cores[kept].name, open + 1, (size_t)(close - open - 1));
-                s_cores[kept].name[close - open - 1] = '\0';
+                strncpy(g_cores[kept].name, open + 1, (size_t)(close - open - 1));
+                g_cores[kept].name[close - open - 1] = '\0';
             }
             else {
-                strncpy(s_cores[kept].name, p, 255);
+                strncpy(g_cores[kept].name, p, 255);
             }
-            PdhAddCounterA(s_query, p, 0, &s_cores[kept].ctr);
+            PdhAddCounterA(g_query, p, 0, &g_cores[kept].ctr);
             kept++;
             p += strlen(p) + 1;
         }
         kitsune_free(paths);
-        s_count = kept;
+        g_count = kept;
 
         // Prime the baseline
-        PdhCollectQueryData(s_query);
-        s_ready = true;
+        PdhCollectQueryData(g_query);
+        g_ready = true;
 
-        // s_cores is a process-lifetime allocation (persistent query).
+        // g_cores is a process-lifetime allocation (persistent query).
         // Mark it permanent so the leak checker doesn't flag it on engine teardown.
         kitsune_snapshot_permanent_allocs();
     }
 
     // Collect a fresh sample and read each counter's current value.
-    PdhCollectQueryData(s_query);
+    PdhCollectQueryData(g_query);
 
-    PdhSample* out = (PdhSample*)kitsune_calloc((size_t)s_count, sizeof(PdhSample));
+    PdhSample* out = (PdhSample*)kitsune_calloc((size_t)g_count, sizeof(PdhSample));
     if (!out)
         return NULL;
 
     int valid = 0;
-    for (int i = 0; i < s_count; i++) {
+    for (int i = 0; i < g_count; i++) {
         PDH_FMT_COUNTERVALUE val = {};
-        if (PdhGetFormattedCounterValue(s_cores[i].ctr, PDH_FMT_DOUBLE, NULL, &val) == ERROR_SUCCESS) {
-            strncpy(out[valid].name, s_cores[i].name, 255);
+        if (PdhGetFormattedCounterValue(g_cores[i].ctr, PDH_FMT_DOUBLE, NULL, &val) == ERROR_SUCCESS) {
+            strncpy(out[valid].name, g_cores[i].name, 255);
             out[valid].value = val.doubleValue;
             valid++;
         }
@@ -511,12 +511,12 @@ static bool PdhParseEngtype(const char* instance, char* out, size_t outsz)
 // Map a LUID string "0x00000000_0xNNNNNNNN" to a friendly adapter name via
 // EnumDisplayDevices + DXGI.  Falls back to the luid string itself on failure.
 // The LUID from PDH is the DXGI adapter LUID split into high/low 32-bit words.
-static void PdhLuidToAdapterName(const char* luid_str, char* out, size_t outsz)
+static void PdhLuidToAdapterName(const char* luidStr, char* out, size_t outsz)
 {
     // Parse the two hex words
     unsigned long hi = 0, lo = 0;
-    if (sscanf(luid_str, "0x%lx_0x%lx", &hi, &lo) != 2) {
-        strncpy(out, luid_str, outsz - 1);
+    if (sscanf(luidStr, "0x%lx_0x%lx", &hi, &lo) != 2) {
+        strncpy(out, luidStr, outsz - 1);
         out[outsz - 1] = '\0';
         return;
     }
@@ -547,7 +547,7 @@ static void PdhLuidToAdapterName(const char* luid_str, char* out, size_t outsz)
     typedef HRESULT(WINAPI* PFN_CreateFactory)(REFIID, void**);
     HMODULE dxgi = LoadLibraryA("dxgi.dll");
     if (!dxgi) {
-        strncpy(out, luid_str, outsz - 1);
+        strncpy(out, luidStr, outsz - 1);
         out[outsz - 1] = '\0';
         return;
     }
@@ -592,7 +592,7 @@ static void PdhLuidToAdapterName(const char* luid_str, char* out, size_t outsz)
     FreeLibrary(dxgi);
 
     if (!found) {
-        strncpy(out, luid_str, outsz - 1);
+        strncpy(out, luidStr, outsz - 1);
         out[outsz - 1] = '\0';
     }
 }
@@ -606,13 +606,13 @@ static void PdhLuidToAdapterName(const char* luid_str, char* out, size_t outsz)
 int Hardware_GpuMemory(lua_State* L)
 {
     // Three snapshot counters, all per adapter (luid_..._phys_0)
-    static const char* const mem_counters[] = {
+    static const char* const memCounters[] = {
         "\\GPU Adapter Memory(*)\\Dedicated Usage",
         "\\GPU Adapter Memory(*)\\Shared Usage",
         "\\GPU Adapter Memory(*)\\Total Committed",
         NULL
     };
-    static const char* const mem_fields[] = {
+    static const char* const memFields[] = {
         "DedicatedUsageMB",
         "SharedUsageMB",
         "TotalCommittedMB",
@@ -621,10 +621,10 @@ int Hardware_GpuMemory(lua_State* L)
 
     lua_newtable(L);  // result table
 
-    for (int ci = 0; mem_counters[ci]; ci++) {
+    for (int ci = 0; memCounters[ci]; ci++) {
         PdhSample* samples = NULL;
         int n = 0;
-        if (!PdhSampleSnapshot(mem_counters[ci], &samples, &n)) {
+        if (!PdhSampleSnapshot(memCounters[ci], &samples, &n)) {
             kitsune_free(samples);
             continue;
         }
@@ -647,7 +647,7 @@ int Hardware_GpuMemory(lua_State* L)
             }
             // stack: result, sub-table
             lua_pushinteger(L, (lua_Integer)(samples[i].value / (1024 * 1024)));
-            lua_setfield(L, -2, mem_fields[ci]);
+            lua_setfield(L, -2, memFields[ci]);
             lua_pop(L, 1);  // pop sub-table
         }
         kitsune_free(samples);
@@ -673,12 +673,12 @@ int Hardware_GpuLoad(lua_State* L)
         PDH_HCOUNTER ctr;
     } GpuEngineEntry;
 
-    static PDH_HQUERY      s_query   = NULL;
-    static GpuEngineEntry* s_entries = NULL;
-    static int             s_count   = 0;
-    static bool            s_ready   = false;
+    static PDH_HQUERY      g_query   = NULL;
+    static GpuEngineEntry* g_entries = NULL;
+    static int             g_count   = 0;
+    static bool            g_ready   = false;
 
-    if (!s_ready) {
+    if (!g_ready) {
         char* paths = NULL;
         DWORD count = 0;
         if (PdhExpandWildcards(
@@ -689,16 +689,16 @@ int Hardware_GpuLoad(lua_State* L)
             return 1;
         }
 
-        if (PdhOpenQuery(NULL, 0, &s_query) != ERROR_SUCCESS) {
+        if (PdhOpenQuery(NULL, 0, &g_query) != ERROR_SUCCESS) {
             kitsune_free(paths);
             lua_newtable(L);
             return 1;
         }
 
-        s_entries = (GpuEngineEntry*)kitsune_calloc(count, sizeof(GpuEngineEntry));
-        if (!s_entries) {
-            PdhCloseQuery(s_query);
-            s_query = NULL;
+        g_entries = (GpuEngineEntry*)kitsune_calloc(count, sizeof(GpuEngineEntry));
+        if (!g_entries) {
+            PdhCloseQuery(g_query);
+            g_query = NULL;
             kitsune_free(paths);
             lua_newtable(L);
             return 1;
@@ -719,9 +719,9 @@ int Hardware_GpuLoad(lua_State* L)
                     char eng[64]  = {};
                     if (PdhParseLuid(instance, luid, sizeof(luid)) &&
                         PdhParseEngtype(instance, eng, sizeof(eng))) {
-                        strncpy(s_entries[kept].luid,    luid, 63);
-                        strncpy(s_entries[kept].engtype, eng,  63);
-                        PdhAddCounterA(s_query, p, 0, &s_entries[kept].ctr);
+                        strncpy(g_entries[kept].luid,    luid, 63);
+                        strncpy(g_entries[kept].engtype, eng,  63);
+                        PdhAddCounterA(g_query, p, 0, &g_entries[kept].ctr);
                         kept++;
                     }
                 }
@@ -729,44 +729,44 @@ int Hardware_GpuLoad(lua_State* L)
             p += strlen(p) + 1;
         }
         kitsune_free(paths);
-        s_count = kept;
+        g_count = kept;
 
         // Prime baseline
-        PdhCollectQueryData(s_query);
-        s_ready = true;
+        PdhCollectQueryData(g_query);
+        g_ready = true;
         kitsune_snapshot_permanent_allocs();
     }
 
-    PdhCollectQueryData(s_query);
+    PdhCollectQueryData(g_query);
 
     // Aggregate: sum utilisation per (luid, engtype), keyed by friendly name
     // We use a temporary flat array to accumulate, then push to Lua.
     typedef struct { char luid[64]; char engtype[64]; double sum; } EngAgg;
-    EngAgg* agg = (EngAgg*)kitsune_calloc((size_t)s_count, sizeof(EngAgg));
+    EngAgg* agg = (EngAgg*)kitsune_calloc((size_t)g_count, sizeof(EngAgg));
     if (!agg) {
         lua_newtable(L);
         return 1;
     }
     int nagg = 0;
 
-    for (int i = 0; i < s_count; i++) {
+    for (int i = 0; i < g_count; i++) {
         PDH_FMT_COUNTERVALUE val = {};
-        if (PdhGetFormattedCounterValue(s_entries[i].ctr, PDH_FMT_DOUBLE, NULL, &val) != ERROR_SUCCESS)
+        if (PdhGetFormattedCounterValue(g_entries[i].ctr, PDH_FMT_DOUBLE, NULL, &val) != ERROR_SUCCESS)
             continue;
 
         // Find or create aggregation slot
         int slot = -1;
         for (int j = 0; j < nagg; j++) {
-            if (strcmp(agg[j].luid,    s_entries[i].luid)    == 0 &&
-                strcmp(agg[j].engtype, s_entries[i].engtype) == 0) {
+            if (strcmp(agg[j].luid,    g_entries[i].luid)    == 0 &&
+                strcmp(agg[j].engtype, g_entries[i].engtype) == 0) {
                 slot = j;
                 break;
             }
         }
         if (slot < 0) {
             slot = nagg++;
-            strncpy(agg[slot].luid,    s_entries[i].luid,    63);
-            strncpy(agg[slot].engtype, s_entries[i].engtype, 63);
+            strncpy(agg[slot].luid,    g_entries[i].luid,    63);
+            strncpy(agg[slot].engtype, g_entries[i].engtype, 63);
             agg[slot].sum = 0.0;
         }
         agg[slot].sum += val.doubleValue;
@@ -808,12 +808,12 @@ int Hardware_DiskIO(lua_State* L)
         PDH_HCOUNTER activeCtr;
     } DiskEntry;
 
-    static PDH_HQUERY  s_query   = NULL;
-    static DiskEntry*  s_disks   = NULL;
-    static int         s_count   = 0;
-    static bool        s_ready   = false;
+    static PDH_HQUERY  g_query   = NULL;
+    static DiskEntry*  g_disks   = NULL;
+    static int         g_count   = 0;
+    static bool        g_ready   = false;
 
-    if (!s_ready) {
+    if (!g_ready) {
         char* paths = NULL;
         DWORD count = 0;
         if (PdhExpandWildcards(
@@ -824,16 +824,16 @@ int Hardware_DiskIO(lua_State* L)
             return 1;
         }
 
-        if (PdhOpenQuery(NULL, 0, &s_query) != ERROR_SUCCESS) {
+        if (PdhOpenQuery(NULL, 0, &g_query) != ERROR_SUCCESS) {
             kitsune_free(paths);
             lua_newtable(L);
             return 1;
         }
 
-        s_disks = (DiskEntry*)kitsune_calloc(count, sizeof(DiskEntry));
-        if (!s_disks) {
-            PdhCloseQuery(s_query);
-            s_query = NULL;
+        g_disks = (DiskEntry*)kitsune_calloc(count, sizeof(DiskEntry));
+        if (!g_disks) {
+            PdhCloseQuery(g_query);
+            g_query = NULL;
             kitsune_free(paths);
             lua_newtable(L);
             return 1;
@@ -851,43 +851,43 @@ int Hardware_DiskIO(lua_State* L)
             const char* open  = strchr(p, '(');
             const char* close = open ? strchr(open, ')') : NULL;
             if (open && close && (close - open - 1) < 255) {
-                strncpy(s_disks[kept].name, open + 1, (size_t)(close - open - 1));
-                s_disks[kept].name[close - open - 1] = '\0';
+                strncpy(g_disks[kept].name, open + 1, (size_t)(close - open - 1));
+                g_disks[kept].name[close - open - 1] = '\0';
             }
             else {
-                strncpy(s_disks[kept].name, p, 255);
+                strncpy(g_disks[kept].name, p, 255);
             }
 
             // Build the three counter paths for this instance
             char readPath[512], writePath[512], activePath[512];
-            snprintf(readPath,   sizeof(readPath),   "\\PhysicalDisk(%s)\\Disk Read Bytes/sec",  s_disks[kept].name);
-            snprintf(writePath,  sizeof(writePath),  "\\PhysicalDisk(%s)\\Disk Write Bytes/sec", s_disks[kept].name);
-            snprintf(activePath, sizeof(activePath), "\\PhysicalDisk(%s)\\%% Disk Time",          s_disks[kept].name);
+            snprintf(readPath,   sizeof(readPath),   "\\PhysicalDisk(%s)\\Disk Read Bytes/sec",  g_disks[kept].name);
+            snprintf(writePath,  sizeof(writePath),  "\\PhysicalDisk(%s)\\Disk Write Bytes/sec", g_disks[kept].name);
+            snprintf(activePath, sizeof(activePath), "\\PhysicalDisk(%s)\\%% Disk Time",          g_disks[kept].name);
 
-            PdhAddCounterA(s_query, readPath,   0, &s_disks[kept].readCtr);
-            PdhAddCounterA(s_query, writePath,  0, &s_disks[kept].writeCtr);
-            PdhAddCounterA(s_query, activePath, 0, &s_disks[kept].activeCtr);
+            PdhAddCounterA(g_query, readPath,   0, &g_disks[kept].readCtr);
+            PdhAddCounterA(g_query, writePath,  0, &g_disks[kept].writeCtr);
+            PdhAddCounterA(g_query, activePath, 0, &g_disks[kept].activeCtr);
             kept++;
             p += strlen(p) + 1;
         }
         kitsune_free(paths);
-        s_count = kept;
+        g_count = kept;
 
         // Prime baseline
-        PdhCollectQueryData(s_query);
-        s_ready = true;
+        PdhCollectQueryData(g_query);
+        g_ready = true;
         kitsune_snapshot_permanent_allocs();
     }
 
-    PdhCollectQueryData(s_query);
+    PdhCollectQueryData(g_query);
 
     lua_newtable(L);
 
-    for (int i = 0; i < s_count; i++) {
+    for (int i = 0; i < g_count; i++) {
         PDH_FMT_COUNTERVALUE readVal = {}, writeVal = {}, activeVal = {};
-        bool hasRead   = PdhGetFormattedCounterValue(s_disks[i].readCtr,   PDH_FMT_DOUBLE, NULL, &readVal)   == ERROR_SUCCESS;
-        bool hasWrite  = PdhGetFormattedCounterValue(s_disks[i].writeCtr,  PDH_FMT_DOUBLE, NULL, &writeVal)  == ERROR_SUCCESS;
-        bool hasActive = PdhGetFormattedCounterValue(s_disks[i].activeCtr, PDH_FMT_DOUBLE, NULL, &activeVal) == ERROR_SUCCESS;
+        bool hasRead   = PdhGetFormattedCounterValue(g_disks[i].readCtr,   PDH_FMT_DOUBLE, NULL, &readVal)   == ERROR_SUCCESS;
+        bool hasWrite  = PdhGetFormattedCounterValue(g_disks[i].writeCtr,  PDH_FMT_DOUBLE, NULL, &writeVal)  == ERROR_SUCCESS;
+        bool hasActive = PdhGetFormattedCounterValue(g_disks[i].activeCtr, PDH_FMT_DOUBLE, NULL, &activeVal) == ERROR_SUCCESS;
 
         lua_newtable(L);
 
@@ -905,7 +905,7 @@ int Hardware_DiskIO(lua_State* L)
             lua_setfield(L, -2, "ActivePercent");
         }
 
-        lua_setfield(L, -2, s_disks[i].name);
+        lua_setfield(L, -2, g_disks[i].name);
     }
 
     return 1;
@@ -922,12 +922,12 @@ int Hardware_NetworkIO(lua_State* L)
         PDH_HCOUNTER sendCtr;
     } NetEntry;
 
-    static PDH_HQUERY  s_query   = NULL;
-    static NetEntry*   s_nics    = NULL;
-    static int         s_count   = 0;
-    static bool        s_ready   = false;
+    static PDH_HQUERY  g_query   = NULL;
+    static NetEntry*   g_nics    = NULL;
+    static int         g_count   = 0;
+    static bool        g_ready   = false;
 
-    if (!s_ready) {
+    if (!g_ready) {
         char* paths = NULL;
         DWORD count = 0;
         if (PdhExpandWildcards(
@@ -938,16 +938,16 @@ int Hardware_NetworkIO(lua_State* L)
             return 1;
         }
 
-        if (PdhOpenQuery(NULL, 0, &s_query) != ERROR_SUCCESS) {
+        if (PdhOpenQuery(NULL, 0, &g_query) != ERROR_SUCCESS) {
             kitsune_free(paths);
             lua_newtable(L);
             return 1;
         }
 
-        s_nics = (NetEntry*)kitsune_calloc(count, sizeof(NetEntry));
-        if (!s_nics) {
-            PdhCloseQuery(s_query);
-            s_query = NULL;
+        g_nics = (NetEntry*)kitsune_calloc(count, sizeof(NetEntry));
+        if (!g_nics) {
+            PdhCloseQuery(g_query);
+            g_query = NULL;
             kitsune_free(paths);
             lua_newtable(L);
             return 1;
@@ -959,39 +959,39 @@ int Hardware_NetworkIO(lua_State* L)
             const char* open  = strchr(p, '(');
             const char* close = open ? strchr(open, ')') : NULL;
             if (open && close && (close - open - 1) < 255) {
-                strncpy(s_nics[kept].name, open + 1, (size_t)(close - open - 1));
-                s_nics[kept].name[close - open - 1] = '\0';
+                strncpy(g_nics[kept].name, open + 1, (size_t)(close - open - 1));
+                g_nics[kept].name[close - open - 1] = '\0';
             }
             else {
-                strncpy(s_nics[kept].name, p, 255);
+                strncpy(g_nics[kept].name, p, 255);
             }
 
             char recvPath[512], sendPath[512];
-            snprintf(recvPath, sizeof(recvPath), "\\Network Interface(%s)\\Bytes Received/sec", s_nics[kept].name);
-            snprintf(sendPath, sizeof(sendPath), "\\Network Interface(%s)\\Bytes Sent/sec",     s_nics[kept].name);
+            snprintf(recvPath, sizeof(recvPath), "\\Network Interface(%s)\\Bytes Received/sec", g_nics[kept].name);
+            snprintf(sendPath, sizeof(sendPath), "\\Network Interface(%s)\\Bytes Sent/sec",     g_nics[kept].name);
 
-            PdhAddCounterA(s_query, recvPath, 0, &s_nics[kept].recvCtr);
-            PdhAddCounterA(s_query, sendPath, 0, &s_nics[kept].sendCtr);
+            PdhAddCounterA(g_query, recvPath, 0, &g_nics[kept].recvCtr);
+            PdhAddCounterA(g_query, sendPath, 0, &g_nics[kept].sendCtr);
             kept++;
             p += strlen(p) + 1;
         }
         kitsune_free(paths);
-        s_count = kept;
+        g_count = kept;
 
         // Prime baseline
-        PdhCollectQueryData(s_query);
-        s_ready = true;
+        PdhCollectQueryData(g_query);
+        g_ready = true;
         kitsune_snapshot_permanent_allocs();
     }
 
-    PdhCollectQueryData(s_query);
+    PdhCollectQueryData(g_query);
 
     lua_newtable(L);
 
-    for (int i = 0; i < s_count; i++) {
+    for (int i = 0; i < g_count; i++) {
         PDH_FMT_COUNTERVALUE recvVal = {}, sendVal = {};
-        bool hasRecv = PdhGetFormattedCounterValue(s_nics[i].recvCtr, PDH_FMT_DOUBLE, NULL, &recvVal) == ERROR_SUCCESS;
-        bool hasSend = PdhGetFormattedCounterValue(s_nics[i].sendCtr, PDH_FMT_DOUBLE, NULL, &sendVal) == ERROR_SUCCESS;
+        bool hasRecv = PdhGetFormattedCounterValue(g_nics[i].recvCtr, PDH_FMT_DOUBLE, NULL, &recvVal) == ERROR_SUCCESS;
+        bool hasSend = PdhGetFormattedCounterValue(g_nics[i].sendCtr, PDH_FMT_DOUBLE, NULL, &sendVal) == ERROR_SUCCESS;
 
         lua_newtable(L);
 
@@ -1008,7 +1008,7 @@ int Hardware_NetworkIO(lua_State* L)
             lua_setfield(L, -2, "TotalBytesPerSec");
         }
 
-        lua_setfield(L, -2, s_nics[i].name);
+        lua_setfield(L, -2, g_nics[i].name);
     }
 
     return 1;
@@ -1111,7 +1111,7 @@ typedef struct {
     double scale; // multiply raw value by this to get the unit
 } SensorKind;
 
-static const SensorKind sensor_kinds[] = {
+static const SensorKind sensorKinds[] = {
     { "temp",   "Temperature", "C",   0.001 },
     { "fan",    "Fan",         "RPM", 1.0   },
     { "in",     "Voltage",     "V",   0.001 },
@@ -1127,8 +1127,8 @@ static const SensorKind sensor_kinds[] = {
 int Hardware_CpuThreadsLoad(lua_State* L)
 {
     // Static arrays for per-cpu delta computation.
-    static long long prev_idle[512]  = {};
-    static long long prev_total[512] = {};
+    static long long g_prevIdle[512]  = {};
+    static long long g_prevTotal[512] = {};
     static int       initialized     = 0;
 
     FILE* f = fopen("/proc/stat", "r");
@@ -1159,17 +1159,17 @@ int Hardware_CpuThreadsLoad(lua_State* L)
         sscanf(p, "%lld %lld %lld %lld %lld %lld %lld",
             &user, &nice, &sys, &idle, &iowait, &irq, &softirq);
 
-        long long total_idle  = idle + iowait;
+        long long totalIdle  = idle + iowait;
         long long total       = user + nice + sys + idle + iowait + irq + softirq;
-        long long delta_idle  = total_idle - prev_idle[cpuidx];
-        long long delta_total = total      - prev_total[cpuidx];
+        long long deltaIdle  = totalIdle - g_prevIdle[cpuidx];
+        long long deltaTotal = total      - g_prevTotal[cpuidx];
 
-        prev_idle[cpuidx]  = total_idle;
-        prev_total[cpuidx] = total;
+        g_prevIdle[cpuidx]  = totalIdle;
+        g_prevTotal[cpuidx] = total;
 
         double load = 0.0;
-        if (initialized && delta_total > 0)
-            load = 100.0 * (1.0 - (double)delta_idle / (double)delta_total);
+        if (initialized && deltaTotal > 0)
+            load = 100.0 * (1.0 - (double)deltaIdle / (double)deltaTotal);
 
         char key[16];
         snprintf(key, sizeof(key), "cpu%d", cpuidx);
@@ -1189,7 +1189,7 @@ int Hardware_CpuThreadsLoad(lua_State* L)
 int Hardware_CpuLoad(lua_State* L)
 {
     // We need two samples to compute a delta; use static state.
-    static long long prev_idle = 0, prev_total = 0;
+    static long long g_prevIdle = 0, g_prevTotal = 0;
 
     FILE* f = fopen("/proc/stat", "r");
     if (!f) {
@@ -1215,17 +1215,17 @@ int Hardware_CpuLoad(lua_State* L)
         return 1;
     }
 
-    long long total_idle  = idle + iowait;
+    long long totalIdle  = idle + iowait;
     long long total       = user + nice + sys + idle + iowait + irq + softirq;
-    long long delta_idle  = total_idle - prev_idle;
-    long long delta_total = total      - prev_total;
+    long long deltaIdle  = totalIdle - g_prevIdle;
+    long long deltaTotal = total      - g_prevTotal;
 
-    prev_idle  = total_idle;
-    prev_total = total;
+    g_prevIdle  = totalIdle;
+    g_prevTotal = total;
 
     double load = 0.0;
-    if (delta_total > 0)
-        load = 100.0 * (1.0 - (double)delta_idle / (double)delta_total);
+    if (deltaTotal > 0)
+        load = 100.0 * (1.0 - (double)deltaIdle / (double)deltaTotal);
 
     lua_pushnumber(L, load);
     return 1;
@@ -1371,9 +1371,9 @@ int Hardware_Battery(lua_State* L)
     char enpath[512], pwpath[512];
     snprintf(enpath, sizeof(enpath), "%s/energy_now", batpath);
     snprintf(pwpath, sizeof(pwpath), "%s/power_now", batpath);
-    long long energy_now = 0, power_now = 0;
-    if (SysfsReadInt(enpath, &energy_now) && SysfsReadInt(pwpath, &power_now) && power_now > 0) {
-        long long secs = (energy_now * 3600LL) / power_now;
+    long long energy_now = 0, powerNow = 0;
+    if (SysfsReadInt(enpath, &energy_now) && SysfsReadInt(pwpath, &powerNow) && powerNow > 0) {
+        long long secs = (energy_now * 3600LL) / powerNow;
         lua_pushinteger(L, (lua_Integer)secs);
         lua_setfield(L, -2, "SecondsRemaining");
     }
@@ -1411,7 +1411,7 @@ int Hardware_DiskIO(lua_State* L)
     } DiskStat;
 
     static DiskStat prev[64];
-    static int      prev_count = 0;
+    static int      g_prevCount = 0;
     static bool     initialized = false;
 
     FILE* f = fopen("/proc/diskstats", "r");
@@ -1421,34 +1421,34 @@ int Hardware_DiskIO(lua_State* L)
     }
 
     DiskStat cur[64];
-    int cur_count = 0;
+    int curCount = 0;
 
     char line[256];
-    while (fgets(line, sizeof(line), f) && cur_count < 64) {
+    while (fgets(line, sizeof(line), f) && curCount < 64) {
         int major, minor;
         char name[64];
-        unsigned long long rd_ios, rd_merges, rd_sectors, rd_ticks;
-        unsigned long long wr_ios, wr_merges, wr_sectors;
+        unsigned long long rdIos, rdMerges, rdSectors, rdTicks;
+        unsigned long long wrIos, wrMerges, wrSectors;
         if (sscanf(line, "%d %d %63s %llu %llu %llu %llu %llu %llu %llu",
                 &major, &minor, name,
-                &rd_ios, &rd_merges, &rd_sectors, &rd_ticks,
-                &wr_ios, &wr_merges, &wr_sectors) < 10)
+                &rdIos, &rdMerges, &rdSectors, &rdTicks,
+                &wrIos, &wrMerges, &wrSectors) < 10)
             continue;
         // Skip partitions (sda1, sdb2 etc.) — only keep whole disks
         if (minor != 0 && (name[strlen(name)-1] >= '0' && name[strlen(name)-1] <= '9'))
             continue;
-        strncpy(cur[cur_count].name, name, 63);
-        cur[cur_count].rsect = rd_sectors;
-        cur[cur_count].wsect = wr_sectors;
-        cur_count++;
+        strncpy(cur[curCount].name, name, 63);
+        cur[curCount].rsect = rdSectors;
+        cur[curCount].wsect = wrSectors;
+        curCount++;
     }
     fclose(f);
 
     lua_newtable(L);
 
     if (initialized) {
-        for (int i = 0; i < cur_count; i++) {
-            for (int j = 0; j < prev_count; j++) {
+        for (int i = 0; i < curCount; i++) {
+            for (int j = 0; j < g_prevCount; j++) {
                 if (strcmp(cur[i].name, prev[j].name) != 0)
                     continue;
                 // sectors are 512 bytes; rate is bytes since last call (not per-second
@@ -1466,9 +1466,9 @@ int Hardware_DiskIO(lua_State* L)
         }
     }
 
-    for (int i = 0; i < cur_count && i < 64; i++)
+    for (int i = 0; i < curCount && i < 64; i++)
         prev[i] = cur[i];
-    prev_count  = cur_count;
+    g_prevCount  = curCount;
     initialized = true;
 
     return 1;
@@ -1486,7 +1486,7 @@ int Hardware_NetworkIO(lua_State* L)
     } NetStat;
 
     static NetStat prev[64];
-    static int     prev_count = 0;
+    static int     g_prevCount = 0;
     static bool    initialized = false;
 
     FILE* f = fopen("/proc/net/dev", "r");
@@ -1496,21 +1496,21 @@ int Hardware_NetworkIO(lua_State* L)
     }
 
     NetStat cur[64];
-    int cur_count = 0;
+    int curCount = 0;
 
     char line[256];
     // Skip first two header lines
     fgets(line, sizeof(line), f);
     fgets(line, sizeof(line), f);
 
-    while (fgets(line, sizeof(line), f) && cur_count < 64) {
+    while (fgets(line, sizeof(line), f) && curCount < 64) {
         char* colon = strchr(line, ':');
         if (!colon)
             continue;
         *colon = '\0';
         const char* nameptr = line;
         while (*nameptr == ' ') nameptr++;
-        strncpy(cur[cur_count].name, nameptr, 63);
+        strncpy(cur[curCount].name, nameptr, 63);
 
         unsigned long long rx = 0, tx = 0, dummy = 0;
         // Fields after ':': rx_bytes rx_packets rx_errs rx_drop rx_fifo rx_frame rx_compressed rx_multicast
@@ -1518,17 +1518,17 @@ int Hardware_NetworkIO(lua_State* L)
         sscanf(colon + 1,
             "%llu %llu %llu %llu %llu %llu %llu %llu %llu",
             &rx, &dummy, &dummy, &dummy, &dummy, &dummy, &dummy, &dummy, &tx);
-        cur[cur_count].rx = rx;
-        cur[cur_count].tx = tx;
-        cur_count++;
+        cur[curCount].rx = rx;
+        cur[curCount].tx = tx;
+        curCount++;
     }
     fclose(f);
 
     lua_newtable(L);
 
     if (initialized) {
-        for (int i = 0; i < cur_count; i++) {
-            for (int j = 0; j < prev_count; j++) {
+        for (int i = 0; i < curCount; i++) {
+            for (int j = 0; j < g_prevCount; j++) {
                 if (strcmp(cur[i].name, prev[j].name) != 0)
                     continue;
                 unsigned long long rdelta = cur[i].rx - prev[j].rx;
@@ -1546,9 +1546,9 @@ int Hardware_NetworkIO(lua_State* L)
         }
     }
 
-    for (int i = 0; i < cur_count && i < 64; i++)
+    for (int i = 0; i < curCount && i < 64; i++)
         prev[i] = cur[i];
-    prev_count  = cur_count;
+    g_prevCount  = curCount;
     initialized = true;
 
     return 1;

@@ -135,7 +135,7 @@ static int64_t LuaKafkaOffset(lua_State* L, int idx) {
 // Returns NULL and pushes false + errmsg on error (caller should return 2).
 // ---------------------------------------------------------------------------
 
-static rd_kafka_topic_partition_list_t* BuildPartitionList(lua_State* L, int table_idx, bool with_partitions) {
+static rd_kafka_topic_partition_list_t* BuildPartitionList(lua_State* L, int table_idx, bool withPartitions) {
 	if (!lua_istable(L, table_idx)) {
 		lua_pushboolean(L, false);
 		lua_pushstring(L, "expected array of topic strings");
@@ -157,27 +157,27 @@ static rd_kafka_topic_partition_list_t* BuildPartitionList(lua_State* L, int tab
 			return NULL;
 		}
 
-		if (with_partitions) {
+		if (withPartitions) {
 			// Format: "topic"  or  "topic:partition"  or  "topic:partition:offset"
 			// Kafka topic names cannot contain ':', so the first colon is always
 			// the topic/partition boundary.
-			char topic_buf[512];
+			char topicBuf[512];
 			int32_t partition = RD_KAFKA_PARTITION_UA;
 			int64_t offset = RD_KAFKA_OFFSET_STORED;
 
-			const char* first_colon = strchr(entry, ':');
-			if (first_colon) {
-				size_t tlen = (size_t)(first_colon - entry);
-				if (tlen >= sizeof(topic_buf))
-					tlen = sizeof(topic_buf) - 1;
-				strncpy(topic_buf, entry, tlen);
-				topic_buf[tlen] = '\0';
-				entry = topic_buf;
+			const char* firstColon = strchr(entry, ':');
+			if (firstColon) {
+				size_t tlen = (size_t)(firstColon - entry);
+				if (tlen >= sizeof(topicBuf))
+					tlen = sizeof(topicBuf) - 1;
+				strncpy(topicBuf, entry, tlen);
+				topicBuf[tlen] = '\0';
+				entry = topicBuf;
 
-				const char* after_part = first_colon + 1;
+				const char* afterPart = firstColon + 1;
 				char* end;
-				long p = strtol(after_part, &end, 10);
-				if (end != after_part && (*end == '\0' || *end == ':') && p >= 0) {
+				long p = strtol(afterPart, &end, 10);
+				if (end != afterPart && (*end == '\0' || *end == ':') && p >= 0) {
 					partition = (int32_t)p;
 					if (*end == ':')
 						offset = KafkaOffsetFromStr(end + 1);
@@ -208,8 +208,8 @@ int Kafka_NewConsumer(lua_State* L) {
 	// with the next-Poll commit and double-committing or skipping messages.
 	rd_kafka_conf_set(conf, "enable.auto.commit", "false", NULL, 0);
 
-	char errbuf[kafka_error_buffer_len];
-	rd_kafka_t* rd = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errbuf, kafka_error_buffer_len);
+	char errbuf[KAFKA_ERROR_BUFFER_LEN];
+	rd_kafka_t* rd = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errbuf, KAFKA_ERROR_BUFFER_LEN);
 	if (!rd) {
 		rd_kafka_conf_destroy(conf);
 		lua_pushnil(L);
@@ -442,8 +442,8 @@ int KafkaConsumer_Close(lua_State* L) {
 		// rd_kafka_consumer_closed() never returns true, causing the destroy
 		// fallback to block for the full session-timeout (~45 s).
 		rd_kafka_queue_t* closeq = rd_kafka_queue_new(c->rd);
-		rd_kafka_error_t* close_err = rd_kafka_consumer_close_queue(c->rd, closeq);
-		if (!close_err) {
+		rd_kafka_error_t* closeErr = rd_kafka_consumer_close_queue(c->rd, closeq);
+		if (!closeErr) {
 			for (int i = 0; i < 100 && !rd_kafka_consumer_closed(c->rd); i++) {
 				rd_kafka_event_t* ev = rd_kafka_queue_poll(closeq, 100);
 				if (ev) {
@@ -458,7 +458,7 @@ int KafkaConsumer_Close(lua_State* L) {
 			}
 		}
 		else {
-			rd_kafka_error_destroy(close_err);
+			rd_kafka_error_destroy(closeErr);
 		}
 		rd_kafka_queue_destroy(closeq);
 

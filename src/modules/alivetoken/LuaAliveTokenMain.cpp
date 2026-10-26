@@ -1,7 +1,7 @@
 ﻿#include "alivetoken/LuaAliveToken.h"
 #include "alivetoken/LuaAliveTokenMain.h"
 
-static const struct luaL_Reg alivetoken_functions[] = {
+static const struct luaL_Reg alivetokenFunctions[] = {
     { "New",         AliveToken_New           },
     { "IsAlive",     AliveToken_IsAlive },
     { "Dispose",     AliveToken_Dispose       },
@@ -10,18 +10,18 @@ static const struct luaL_Reg alivetoken_functions[] = {
     { NULL, NULL }
 };
 
-static const struct luaL_Reg alivetoken_meta[] = {
+static const struct luaL_Reg alivetokenMeta[] = {
     { "__gc",       AliveToken_GC       },
     { "__tostring", AliveToken_ToString },
     { NULL, NULL }
 };
 
 int luaopen_alivetoken(lua_State* L) {
-    luaL_newlibtable(L, alivetoken_functions);
-    luaL_setfuncs(L, alivetoken_functions, 0);
+    luaL_newlibtable(L, alivetokenFunctions);
+    luaL_setfuncs(L, alivetokenFunctions, 0);
 
     luaL_newmetatable(L, LUAALIVETOKEN);
-    luaL_setfuncs(L, alivetoken_meta, 0);
+    luaL_setfuncs(L, alivetokenMeta, 0);
 
     // __index = module table so all functions are reachable as both
     // AliveToken.Xxx() and token:Xxx() — the standard wchar pattern.

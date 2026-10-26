@@ -33,7 +33,7 @@ int MD5_New(lua_State *L){
 		return NULL;
 	}
 
-	MD5Init(&luamd5->MD5);
+	MD5Init(&luamd5->md5);
 
 	return 1;
 }
@@ -58,7 +58,7 @@ int MD5_Update(lua_State *L){
 		size_t len;
 		const char* data = lua_tolstring(L, 2, &len);
 		if (data) {
-			MD5Update(&luamd5->MD5, (unsigned char*)data, (unsigned int)len);
+			MD5Update(&luamd5->md5, (unsigned char*)data, (unsigned int)len);
 		}
 	}
 	else {
@@ -66,7 +66,7 @@ int MD5_Update(lua_State *L){
 		const char* data = luaL_tolstring(L, 2, &len);
 		lua_pop(L, 1);
 		if (data) {
-			MD5Update(&luamd5->MD5, (unsigned char*)data, (unsigned int)len);
+			MD5Update(&luamd5->md5, (unsigned char*)data, (unsigned int)len);
 		}		
 	}
 	
@@ -79,7 +79,7 @@ int MD5_Finish(lua_State *L){
 
 	LuaMD5 * luamd5 = lua_tomd5(L, 1);
 	if (!luamd5->finished){
-		MD5Final((unsigned char *)luamd5->hash, &luamd5->MD5);
+		MD5Final((unsigned char *)luamd5->hash, &luamd5->md5);
 		luamd5->finished = true;   // later calls return the same digest
 	}
 

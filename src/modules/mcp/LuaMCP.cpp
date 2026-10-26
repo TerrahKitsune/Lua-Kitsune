@@ -37,12 +37,12 @@ static int  McpPollStep(lua_State* L, LuaMcpServer* server);
 static int  McpPollContinuation(lua_State* L, int status, lua_KContext ctx);
 static int  McpPollEntrypoint(lua_State* L);
 static int  McpDispatchLine(lua_State* L, LuaMcpServer* server, const char* data, size_t len);
-static int  McpDispatchToolsCall(lua_State* L, LuaMcpServer* server, int params_idx, int id_idx);
-static int  McpToolFinish(lua_State* L, LuaMcpServer* server, int pcall_status);
+static int  McpDispatchToolsCall(lua_State* L, LuaMcpServer* server, int paramsIdx, int idIdx);
+static int  McpToolFinish(lua_State* L, LuaMcpServer* server, int pcallStatus);
 static int  McpToolContinuation(lua_State* L, int status, lua_KContext ctx);
-static void McpHandleInitialize(lua_State* L, LuaMcpServer* server, int params_idx, int id_idx);
+static void McpHandleInitialize(lua_State* L, LuaMcpServer* server, int paramsIdx, int idIdx);
 static int  McpNextLine(LuaMcpServer* server, std::string& out);
-static void McpRouteResponse(lua_State* L, LuaMcpServer* server, int msg_idx, int id_idx);
+static void McpRouteResponse(lua_State* L, LuaMcpServer* server, int msgIdx, int idIdx);
 
 // =============================================================================
 // Platform: stdio availability + non-blocking poll.
@@ -145,16 +145,16 @@ int McpServer_GC(lua_State* L) {
 	server->stopRequested = true;
 
 	for (McpTool& t : server->tools) {
-		if (t.fn_ref != LUA_NOREF)
-			luaL_unref(L, LUA_REGISTRYINDEX, t.fn_ref);
+		if (t.fnRef != LUA_NOREF)
+			luaL_unref(L, LUA_REGISTRYINDEX, t.fnRef);
 	}
-	if (server->context_ref != LUA_NOREF)
-		luaL_unref(L, LUA_REGISTRYINDEX, server->context_ref);
+	if (server->contextRef != LUA_NOREF)
+		luaL_unref(L, LUA_REGISTRYINDEX, server->contextRef);
 	if (server->clientCapsRef != LUA_NOREF)
 		luaL_unref(L, LUA_REGISTRYINDEX, server->clientCapsRef);
 	for (auto& kv : server->pending) {
-		if (kv.second.msg_ref != LUA_NOREF)
-			luaL_unref(L, LUA_REGISTRYINDEX, kv.second.msg_ref);
+		if (kv.second.msgRef != LUA_NOREF)
+			luaL_unref(L, LUA_REGISTRYINDEX, kv.second.msgRef);
 	}
 
 	if (server->linebuf) {
@@ -205,13 +205,13 @@ static bool McpJsonDecode(lua_State* L, const char* data, size_t len) {
 	return true;
 }
 
-// Encodes the Lua value at stack index `value_idx` to a JSON string, pushing
+// Encodes the Lua value at stack index `valueIdx` to a JSON string, pushing
 // the result string. Returns true on success (string on top of stack).
-static bool McpJsonEncode(lua_State* L, int value_idx) {
-	value_idx = lua_absindex(L, value_idx);
+static bool McpJsonEncode(lua_State* L, int valueIdx) {
+	valueIdx = lua_absindex(L, valueIdx);
 	lua_pushcfunction(L, Json_Encode);
 	lua_rawgetp(L, LUA_REGISTRYINDEX, LuaJsonBridgeRegistryKey());
-	lua_pushvalue(L, value_idx);
+	lua_pushvalue(L, valueIdx);
 	if (lua_pcall(L, 2, 1, 0) != LUA_OK) {
 		lua_pop(L, 1);
 		return false;
@@ -230,15 +230,15 @@ static void McpWriteLine(const char* data, size_t len) {
 	fflush(stdout);
 }
 
-// Writes {jsonrpc="2.0", id=<value at id_idx>, result=<value at result_idx>}.
-static void McpSendResult(lua_State* L, int id_idx, int result_idx) {
-	id_idx     = lua_absindex(L, id_idx);
+// Writes {jsonrpc="2.0", id=<value at idIdx>, result=<value at result_idx>}.
+static void McpSendResult(lua_State* L, int idIdx, int result_idx) {
+	idIdx     = lua_absindex(L, idIdx);
 	result_idx = lua_absindex(L, result_idx);
 
 	lua_newtable(L);
 	lua_pushliteral(L, "2.0");
 	lua_setfield(L, -2, "jsonrpc");
-	lua_pushvalue(L, id_idx);
+	lua_pushvalue(L, idIdx);
 	lua_setfield(L, -2, "id");
 	lua_pushvalue(L, result_idx);
 	lua_setfield(L, -2, "result");
@@ -252,13 +252,13 @@ static void McpSendResult(lua_State* L, int id_idx, int result_idx) {
 	lua_pop(L, 1); // envelope table
 }
 
-static void McpSendError(lua_State* L, int id_idx, int code, const char* message) {
-	id_idx = lua_absindex(L, id_idx);
+static void McpSendError(lua_State* L, int idIdx, int code, const char* message) {
+	idIdx = lua_absindex(L, idIdx);
 
 	lua_newtable(L); // envelope
 	lua_pushliteral(L, "2.0");
 	lua_setfield(L, -2, "jsonrpc");
-	lua_pushvalue(L, id_idx);
+	lua_pushvalue(L, idIdx);
 	lua_setfield(L, -2, "id");
 
 	lua_newtable(L); // error object
@@ -371,34 +371,34 @@ static void McpPushToolsListResult(lua_State* L, LuaMcpServer* server) {
 // Protocol revisions this server can speak, newest first. None of the changes
 // between them affect what this server sends for tools; the newer revisions are
 // what let clients offer elicitation.
-static const char* const mcp_supported_versions[] = {
+static const char* const mcpSupportedVersions[] = {
 	"2025-11-25",
 	"2025-06-18",
 	"2025-03-26",
 	"2024-11-05",
 };
 
-static void McpHandleInitialize(lua_State* L, LuaMcpServer* server, int params_idx, int id_idx) {
+static void McpHandleInitialize(lua_State* L, LuaMcpServer* server, int paramsIdx, int idIdx) {
 	// Echo the client's requested version when we support it, otherwise offer
 	// our latest and let the client decide (per the lifecycle spec).
-	server->protocolVersion = mcp_supported_versions[0];
+	server->protocolVersion = mcpSupportedVersions[0];
 	server->clientElicitation = false;
 	if (server->clientCapsRef != LUA_NOREF) {
 		luaL_unref(L, LUA_REGISTRYINDEX, server->clientCapsRef);
 		server->clientCapsRef = LUA_NOREF;
 	}
 
-	if (lua_istable(L, params_idx)) {
-		lua_getfield(L, params_idx, "protocolVersion");
+	if (lua_istable(L, paramsIdx)) {
+		lua_getfield(L, paramsIdx, "protocolVersion");
 		const char* requested = lua_isstring(L, -1) ? lua_tostring(L, -1) : NULL;
 		if (requested) {
-			for (const char* v : mcp_supported_versions) {
+			for (const char* v : mcpSupportedVersions) {
 				if (strcmp(v, requested) == 0) { server->protocolVersion = v; break; }
 			}
 		}
 		lua_pop(L, 1);
 
-		lua_getfield(L, params_idx, "capabilities");
+		lua_getfield(L, paramsIdx, "capabilities");
 		if (lua_istable(L, -1)) {
 			lua_getfield(L, -1, "elicitation"); // `{}` decodes to an empty table, so test for presence
 			server->clientElicitation = !McpIsNull(L, -1);
@@ -408,7 +408,7 @@ static void McpHandleInitialize(lua_State* L, LuaMcpServer* server, int params_i
 			lua_pop(L, 1);
 		}
 
-		lua_getfield(L, params_idx, "clientInfo");
+		lua_getfield(L, paramsIdx, "clientInfo");
 		if (lua_istable(L, -1)) {
 			lua_getfield(L, -1, "name");
 			if (lua_isstring(L, -1)) server->clientName = lua_tostring(L, -1);
@@ -422,7 +422,7 @@ static void McpHandleInitialize(lua_State* L, LuaMcpServer* server, int params_i
 	}
 
 	McpPushInitializeResult(L, server);
-	McpSendResult(L, id_idx, -1);
+	McpSendResult(L, idIdx, -1);
 	lua_pop(L, 1); // result table
 }
 
@@ -439,20 +439,20 @@ static void McpHandleInitialize(lua_State* L, LuaMcpServer* server, int params_i
 // McpToolFinish can derive every needed index purely from lua_gettop(L).
 // =============================================================================
 
-static int McpToolFinish(lua_State* L, LuaMcpServer* server, int pcall_status) {
+static int McpToolFinish(lua_State* L, LuaMcpServer* server, int pcallStatus) {
 	server->toolThread = nullptr;
 	int top      = lua_gettop(L);
-	int id_idx   = top - 3;
-	int msg_idx  = top - 4;
+	int idIdx   = top - 3;
+	int msgIdx  = top - 4;
 
-	bool ok = (pcall_status == LUA_OK || pcall_status == LUA_YIELD);
+	bool ok = (pcallStatus == LUA_OK || pcallStatus == LUA_YIELD);
 	const char* raw = lua_tostring(L, top);
 	std::string text = ok ? (raw ? raw : "") : (std::string("error: ") + (raw ? raw : "unknown error"));
 
 	lua_newtable(L); // envelope
 	lua_newtable(L); // content array
-	int content_idx = lua_gettop(L);
-	int content_n    = 0;
+	int contentIdx = lua_gettop(L);
+	int contentN    = 0;
 
 	if (!server->capturedOutput.empty()) {
 		lua_newtable(L);
@@ -460,7 +460,7 @@ static int McpToolFinish(lua_State* L, LuaMcpServer* server, int pcall_status) {
 		lua_setfield(L, -2, "type");
 		lua_pushlstring(L, server->capturedOutput.c_str(), server->capturedOutput.size());
 		lua_setfield(L, -2, "text");
-		lua_rawseti(L, content_idx, ++content_n);
+		lua_rawseti(L, contentIdx, ++contentN);
 	}
 
 	lua_newtable(L);
@@ -468,7 +468,7 @@ static int McpToolFinish(lua_State* L, LuaMcpServer* server, int pcall_status) {
 	lua_setfield(L, -2, "type");
 	lua_pushlstring(L, text.c_str(), text.size());
 	lua_setfield(L, -2, "text");
-	lua_rawseti(L, content_idx, ++content_n);
+	lua_rawseti(L, contentIdx, ++contentN);
 
 	lua_setfield(L, -2, "content");
 	if (!ok) {
@@ -476,10 +476,10 @@ static int McpToolFinish(lua_State* L, LuaMcpServer* server, int pcall_status) {
 		lua_setfield(L, -2, "isError");
 	}
 
-	McpSendResult(L, id_idx, -1);
+	McpSendResult(L, idIdx, -1);
 	lua_pop(L, 1); // envelope
 
-	lua_settop(L, msg_idx - 1); // drop msg/id/params/method/result entirely
+	lua_settop(L, msgIdx - 1); // drop msg/id/params/method/result entirely
 	return McpPollStep(L, server);
 }
 
@@ -487,62 +487,62 @@ static int McpToolContinuation(lua_State* L, int status, lua_KContext ctx) {
 	return McpToolFinish(L, (LuaMcpServer*)ctx, status);
 }
 
-static int McpDispatchToolsCall(lua_State* L, LuaMcpServer* server, int params_idx, int id_idx) {
-	int msg_idx = id_idx - 1;
+static int McpDispatchToolsCall(lua_State* L, LuaMcpServer* server, int paramsIdx, int idIdx) {
+	int msgIdx = idIdx - 1;
 
-	lua_getfield(L, params_idx, "name");
-	const char* tool_name = lua_tostring(L, -1);
+	lua_getfield(L, paramsIdx, "name");
+	const char* toolName = lua_tostring(L, -1);
 
 	const McpTool* tool = NULL;
-	if (tool_name) {
+	if (toolName) {
 		for (const McpTool& t : server->tools) {
-			if (t.name == tool_name) { tool = &t; break; }
+			if (t.name == toolName) { tool = &t; break; }
 		}
 	}
 	lua_pop(L, 1); // name
 
 	if (!tool) {
-		McpSendError(L, id_idx, -32602, tool_name ? "Unknown tool" : "Missing tool name");
-		lua_settop(L, msg_idx - 1);
+		McpSendError(L, idIdx, -32602, toolName ? "Unknown tool" : "Missing tool name");
+		lua_settop(L, msgIdx - 1);
 		return McpPollStep(L, server);
 	}
 
-	lua_getfield(L, params_idx, "arguments"); // table or nil
-	int  args_idx = lua_gettop(L);
-	bool has_args = lua_istable(L, args_idx);
+	lua_getfield(L, paramsIdx, "arguments"); // table or nil
+	int  argsIdx = lua_gettop(L);
+	bool hasArgs = lua_istable(L, argsIdx);
 
 	server->capturedOutput.clear();
 
-	lua_rawgeti(L, LUA_REGISTRYINDEX, tool->fn_ref);        // fn
-	lua_rawgeti(L, LUA_REGISTRYINDEX, server->context_ref); // context
+	lua_rawgeti(L, LUA_REGISTRYINDEX, tool->fnRef);        // fn
+	lua_rawgeti(L, LUA_REGISTRYINDEX, server->contextRef); // context
 
 	lua_newtable(L); // request
-	int req_idx = lua_gettop(L);
+	int reqIdx = lua_gettop(L);
 
-	if (has_args) lua_pushvalue(L, args_idx);
+	if (hasArgs) lua_pushvalue(L, argsIdx);
 	else          McpPushEmptyObject(L);
-	lua_setfield(L, req_idx, "Arguments");
+	lua_setfield(L, reqIdx, "Arguments");
 
 	lua_newtable(L); // Parameters (positional, declared order)
 	for (size_t i = 0; i < tool->params.size(); i++) {
-		if (has_args) lua_getfield(L, args_idx, tool->params[i].name.c_str());
+		if (hasArgs) lua_getfield(L, argsIdx, tool->params[i].name.c_str());
 		else          lua_pushnil(L);
 		lua_rawseti(L, -2, (int)(i + 1));
 	}
-	lua_setfield(L, req_idx, "Parameters");
+	lua_setfield(L, reqIdx, "Parameters");
 
 	lua_pushlstring(L, tool->name.c_str(), tool->name.size());
-	lua_setfield(L, req_idx, "Name");
+	lua_setfield(L, reqIdx, "Name");
 
-	lua_pushvalue(L, id_idx);
-	lua_setfield(L, req_idx, "RequestId");
+	lua_pushvalue(L, idIdx);
+	lua_setfield(L, reqIdx, "RequestId");
 
 	// Caller-specific data lives on the request, not the server: a future HTTP
 	// transport serves several callers from one process. stdio is one connection, "0".
 	lua_pushliteral(L, "0");
-	lua_setfield(L, req_idx, "McpSessionId");
+	lua_setfield(L, reqIdx, "McpSessionId");
 	lua_pushboolean(L, server->clientElicitation ? 1 : 0);
-	lua_setfield(L, req_idx, "CanElicit");
+	lua_setfield(L, reqIdx, "CanElicit");
 
 	lua_newtable(L); // Client
 	lua_pushlstring(L, server->clientName.c_str(), server->clientName.size());
@@ -553,9 +553,9 @@ static int McpDispatchToolsCall(lua_State* L, LuaMcpServer* server, int params_i
 		lua_rawgeti(L, LUA_REGISTRYINDEX, server->clientCapsRef);
 		lua_setfield(L, -2, "Capabilities");
 	}
-	lua_setfield(L, req_idx, "Client");
+	lua_setfield(L, reqIdx, "Client");
 
-	lua_remove(L, args_idx); // fn/context/request shift down by one to become contiguous
+	lua_remove(L, argsIdx); // fn/context/request shift down by one to become contiguous
 
 	server->toolThread = L; // lets Elicit tell it's inside this call
 	int rc = lua_pcallk(L, 2, 1, 0, (lua_KContext)server, McpToolContinuation);
@@ -574,49 +574,49 @@ static int McpDispatchLine(lua_State* L, LuaMcpServer* server, const char* data,
 		return McpPollStep(L, server);
 	}
 
-	int msg_idx = lua_gettop(L);
-	if (!lua_istable(L, msg_idx)) {
-		lua_settop(L, msg_idx - 1);
+	int msgIdx = lua_gettop(L);
+	if (!lua_istable(L, msgIdx)) {
+		lua_settop(L, msgIdx - 1);
 		return McpPollStep(L, server);
 	}
 
-	lua_getfield(L, msg_idx, "id");
-	int id_idx = lua_gettop(L);
-	bool has_id = !lua_isnil(L, id_idx);
+	lua_getfield(L, msgIdx, "id");
+	int idIdx = lua_gettop(L);
+	bool hasId = !lua_isnil(L, idIdx);
 
-	lua_getfield(L, msg_idx, "params");
-	int params_idx = lua_gettop(L);
+	lua_getfield(L, msgIdx, "params");
+	int paramsIdx = lua_gettop(L);
 
-	lua_getfield(L, msg_idx, "method");
+	lua_getfield(L, msgIdx, "method");
 	const char* method = lua_tostring(L, -1);
 
 	if (!method) {
 		// A response to one of our own requests (elicitation/create) -- never answered.
-		lua_getfield(L, msg_idx, "result");
-		lua_getfield(L, msg_idx, "error");
-		bool is_response = !lua_isnil(L, -2) || !lua_isnil(L, -1);
+		lua_getfield(L, msgIdx, "result");
+		lua_getfield(L, msgIdx, "error");
+		bool isResponse = !lua_isnil(L, -2) || !lua_isnil(L, -1);
 		lua_pop(L, 2);
-		if (is_response)     McpRouteResponse(L, server, msg_idx, id_idx);
-		else if (has_id)     McpSendError(L, id_idx, -32600, "Invalid Request");
+		if (isResponse)     McpRouteResponse(L, server, msgIdx, idIdx);
+		else if (hasId)     McpSendError(L, idIdx, -32600, "Invalid Request");
 	} else if (strcmp(method, "initialize") == 0) {
-		McpHandleInitialize(L, server, params_idx, id_idx);
+		McpHandleInitialize(L, server, paramsIdx, idIdx);
 	} else if (strcmp(method, "notifications/initialized") == 0) {
 		// no response
 	} else if (strcmp(method, "ping") == 0) {
 		McpPushEmptyObject(L);
-		McpSendResult(L, id_idx, -1);
+		McpSendResult(L, idIdx, -1);
 		lua_pop(L, 1);
 	} else if (strcmp(method, "tools/list") == 0) {
 		McpPushToolsListResult(L, server);
-		McpSendResult(L, id_idx, -1);
+		McpSendResult(L, idIdx, -1);
 		lua_pop(L, 1);
 	} else if (strcmp(method, "tools/call") == 0) {
-		return McpDispatchToolsCall(L, server, params_idx, id_idx); // may yield; tail return
+		return McpDispatchToolsCall(L, server, paramsIdx, idIdx); // may yield; tail return
 	} else {
-		if (has_id) McpSendError(L, id_idx, -32601, "Method not found");
+		if (hasId) McpSendError(L, idIdx, -32601, "Method not found");
 	}
 
-	lua_settop(L, msg_idx - 1); // drop method/params/id/msg
+	lua_settop(L, msgIdx - 1); // drop method/params/id/msg
 	return McpPollStep(L, server);
 }
 
@@ -652,11 +652,11 @@ static int McpNextLine(LuaMcpServer* server, std::string& out) {
 	for (;;) {
 		void* nl = server->linebuf ? memchr(server->linebuf, '\n', server->linebufLen) : NULL;
 		if (nl) {
-			size_t line_len = (size_t)((char*)nl - server->linebuf);
+			size_t lineLen = (size_t)((char*)nl - server->linebuf);
 			// Copy the line out and shrink linebuf BEFORE dispatching -- dispatch may
 			// yield for an arbitrarily long time (a tool callback calling Sleep()/etc).
-			out.assign(server->linebuf, line_len);
-			size_t consumed = line_len + 1; // include the '\n'
+			out.assign(server->linebuf, lineLen);
+			size_t consumed = lineLen + 1; // include the '\n'
 			memmove(server->linebuf, server->linebuf + consumed, server->linebufLen - consumed);
 			server->linebufLen -= consumed;
 			return 1;
@@ -784,41 +784,41 @@ static double McpNowMs() {
 
 // Parks a response in `pending` if something is waiting for it. Anything else
 // (a late answer to a timed-out request, an id we never sent) is dropped.
-static void McpRouteResponse(lua_State* L, LuaMcpServer* server, int msg_idx, int id_idx) {
-	msg_idx = lua_absindex(L, msg_idx);
-	lua_pushvalue(L, id_idx);
+static void McpRouteResponse(lua_State* L, LuaMcpServer* server, int msgIdx, int idIdx) {
+	msgIdx = lua_absindex(L, msgIdx);
+	lua_pushvalue(L, idIdx);
 	const char* key = lua_tostring(L, -1); // converts the copy, never the original id
 	auto it = key ? server->pending.find(key) : server->pending.end();
 	lua_pop(L, 1);
 	if (it == server->pending.end() || it->second.done)
 		return;
-	lua_pushvalue(L, msg_idx);
-	it->second.msg_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+	lua_pushvalue(L, msgIdx);
+	it->second.msgRef = luaL_ref(L, LUA_REGISTRYINDEX);
 	it->second.done    = true;
 }
 
 static void McpHandleLineWhileWaiting(lua_State* L, LuaMcpServer* server, std::string& line) {
 	int base = lua_gettop(L);
 	if (McpJsonDecode(L, line.data(), line.size()) && lua_istable(L, -1)) {
-		int msg_idx = lua_gettop(L);
-		lua_getfield(L, msg_idx, "id");
-		int id_idx = lua_gettop(L);
-		lua_getfield(L, msg_idx, "method");
+		int msgIdx = lua_gettop(L);
+		lua_getfield(L, msgIdx, "id");
+		int idIdx = lua_gettop(L);
+		lua_getfield(L, msgIdx, "method");
 		const char* method = lua_tostring(L, -1);
 
 		if (!method) {
-			lua_getfield(L, msg_idx, "result");
-			lua_getfield(L, msg_idx, "error");
-			bool is_response = !lua_isnil(L, -2) || !lua_isnil(L, -1);
+			lua_getfield(L, msgIdx, "result");
+			lua_getfield(L, msgIdx, "error");
+			bool isResponse = !lua_isnil(L, -2) || !lua_isnil(L, -1);
 			lua_pop(L, 2);
-			if (is_response) {
-				McpRouteResponse(L, server, msg_idx, id_idx);
+			if (isResponse) {
+				McpRouteResponse(L, server, msgIdx, idIdx);
 				lua_settop(L, base);
 				return;
 			}
-		} else if (strcmp(method, "ping") == 0 && !lua_isnil(L, id_idx)) {
+		} else if (strcmp(method, "ping") == 0 && !lua_isnil(L, idIdx)) {
 			McpPushEmptyObject(L);
-			McpSendResult(L, id_idx, -1);
+			McpSendResult(L, idIdx, -1);
 			lua_settop(L, base);
 			return;
 		}
@@ -854,8 +854,8 @@ static void McpPendingErase(lua_State* L, LuaMcpServer* server, const std::strin
 	auto it = server->pending.find(key);
 	if (it == server->pending.end())
 		return;
-	if (it->second.msg_ref != LUA_NOREF)
-		luaL_unref(L, LUA_REGISTRYINDEX, it->second.msg_ref);
+	if (it->second.msgRef != LUA_NOREF)
+		luaL_unref(L, LUA_REGISTRYINDEX, it->second.msgRef);
 	server->pending.erase(it);
 }
 
@@ -954,9 +954,9 @@ int McpServer_CreateElicitation(lua_State* L) {
 	e->message.assign(message, mlen);
 	e->timeoutMs = timeout;
 	lua_pushvalue(L, 3);
-	e->default_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+	e->defaultRef = luaL_ref(L, LUA_REGISTRYINDEX);
 	lua_pushvalue(L, 1);
-	e->mcp_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+	e->mcpRef = luaL_ref(L, LUA_REGISTRYINDEX);
 	e->server  = server;
 	return 1;
 }
@@ -983,12 +983,12 @@ int McpElicitation_AddQuestion(lua_State* L) {
 	}
 
 	LuaMcpQuestion* h = (LuaMcpQuestion*)lua_newuserdata(L, sizeof(LuaMcpQuestion));
-	h->elicitation_ref = LUA_NOREF;
+	h->elicitationRef = LUA_NOREF;
 	h->elicitation     = e;
 	h->index           = e->questions.size();
 	luaL_setmetatable(L, LUAMCPQUESTION);
 	lua_pushvalue(L, 1);
-	h->elicitation_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+	h->elicitationRef = luaL_ref(L, LUA_REGISTRYINDEX);
 
 	McpQuestion q;
 	q.name     = name;
@@ -1018,7 +1018,7 @@ int McpQuestion_AddAnswer(lua_State* L) {
 	a.label = label;
 	if (!lua_isnoneornil(L, 4)) {
 		lua_pushvalue(L, 4);
-		a.fn_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+		a.fnRef = luaL_ref(L, LUA_REGISTRYINDEX);
 	}
 	q.answers.push_back(std::move(a));
 	return 0;
@@ -1065,7 +1065,7 @@ int McpQuestion_SetDefault(lua_State* L) {
 
 	McpOnce(L, q.hasDefault, "SetDefault", q);
 	lua_pushvalue(L, 2);
-	q.default_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+	q.defaultRef = luaL_ref(L, LUA_REGISTRYINDEX);
 	return 0;
 }
 
@@ -1152,20 +1152,20 @@ int McpQuestion_SetCallback(lua_State* L) {
 	luaL_checktype(L, 2, LUA_TFUNCTION);
 	McpOnce(L, q.hasCallback, "SetCallback", q);
 	lua_pushvalue(L, 2);
-	q.fn_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+	q.fnRef = luaL_ref(L, LUA_REGISTRYINDEX);
 	return 0;
 }
 
 int McpElicitation_GC(lua_State* L) {
 	LuaMcpElicitation* e = luaL_checkmcpelicitation(L, 1);
 	for (McpQuestion& q : e->questions) {
-		McpUnref(L, q.fn_ref);
-		McpUnref(L, q.default_ref);
+		McpUnref(L, q.fnRef);
+		McpUnref(L, q.defaultRef);
 		for (McpAnswer& a : q.answers)
-			McpUnref(L, a.fn_ref);
+			McpUnref(L, a.fnRef);
 	}
-	McpUnref(L, e->default_ref);
-	McpUnref(L, e->mcp_ref); // releases the parent last
+	McpUnref(L, e->defaultRef);
+	McpUnref(L, e->mcpRef); // releases the parent last
 	e->server = nullptr;
 	e->~LuaMcpElicitation();
 	return 0;
@@ -1179,7 +1179,7 @@ int McpElicitation_ToString(lua_State* L) {
 
 int McpQuestion_GC(lua_State* L) {
 	LuaMcpQuestion* h = (LuaMcpQuestion*)luaL_checkudata(L, 1, LUAMCPQUESTION);
-	McpUnref(L, h->elicitation_ref);
+	McpUnref(L, h->elicitationRef);
 	h->elicitation = nullptr;
 	return 0;
 }
@@ -1207,7 +1207,7 @@ static void McpValidateElicitation(lua_State* L, LuaMcpElicitation* e) {
 		if (!q.hasDefault || q.type != MCP_Q_STRING || q.answers.empty())
 			continue;
 
-		lua_rawgeti(L, LUA_REGISTRYINDEX, q.default_ref);
+		lua_rawgeti(L, LUA_REGISTRYINDEX, q.defaultRef);
 		if (q.multiple) {
 			int n = (int)lua_rawlen(L, -1);
 			for (int i = 1; i <= n; i++) {
@@ -1241,14 +1241,14 @@ static void McpPushTitledAnswers(lua_State* L, const McpQuestion& q) {
 // reaches here for them -- Elicit treats it as unsupported).
 static void McpPushElicitationSchema(lua_State* L, LuaMcpElicitation* e, bool titled) {
 	lua_newtable(L);
-	int schema_idx = lua_gettop(L);
+	int schemaIdx = lua_gettop(L);
 	lua_pushliteral(L, "object");
-	lua_setfield(L, schema_idx, "type");
+	lua_setfield(L, schemaIdx, "type");
 
 	lua_newtable(L);
-	int props_idx = lua_gettop(L);
+	int propsIdx = lua_gettop(L);
 	lua_newtable(L);
-	int req_idx = lua_gettop(L);
+	int reqIdx = lua_gettop(L);
 	int nreq = 0;
 
 	for (const McpQuestion& q : e->questions) {
@@ -1304,23 +1304,23 @@ static void McpPushElicitationSchema(lua_State* L, LuaMcpElicitation* e, bool ti
 			lua_setfield(L, p, "description");
 		}
 		if (q.hasDefault) {
-			lua_rawgeti(L, LUA_REGISTRYINDEX, q.default_ref);
+			lua_rawgeti(L, LUA_REGISTRYINDEX, q.defaultRef);
 			lua_setfield(L, p, "default");
 		}
 
-		lua_setfield(L, props_idx, q.name.c_str());
+		lua_setfield(L, propsIdx, q.name.c_str());
 		if (q.required) {
 			lua_pushlstring(L, q.name.c_str(), q.name.size());
-			lua_rawseti(L, req_idx, ++nreq);
+			lua_rawseti(L, reqIdx, ++nreq);
 		}
 	}
 
-	lua_setfield(L, schema_idx, "required");
+	lua_setfield(L, schemaIdx, "required");
 	if (e->questions.empty()) {
 		lua_pop(L, 1);
 		McpPushEmptyObject(L); // `{}`, not `[]`
 	}
-	lua_setfield(L, schema_idx, "properties");
+	lua_setfield(L, schemaIdx, "properties");
 }
 
 // =============================================================================
@@ -1384,7 +1384,7 @@ static int McpElicitDefaultContinuation(lua_State* L, int status, lua_KContext c
 // `reason` must be a string literal: the stack is trimmed before it's pushed.
 static int McpElicitRunDefault(lua_State* L, LuaMcpElicitation* e, const char* reason) {
 	lua_settop(L, EL_DEADLINE);
-	lua_rawgeti(L, LUA_REGISTRYINDEX, e->default_ref);
+	lua_rawgeti(L, LUA_REGISTRYINDEX, e->defaultRef);
 	lua_pushvalue(L, EL_CONTEXT);
 	lua_pushvalue(L, EL_REQUEST);
 	lua_pushstring(L, reason);
@@ -1447,11 +1447,11 @@ static int McpElicitCbStep(lua_State* L, LuaMcpElicitation* e) {
 }
 
 // Value on top -> appended to the planned callbacks as { fn, value, qname, answer }.
-static void McpPlanCall(lua_State* L, int calls_idx, lua_Integer* n, int fn_ref, const std::string& qname, const char* answer) {
+static void McpPlanCall(lua_State* L, int callsIdx, lua_Integer* n, int fnRef, const std::string& qname, const char* answer) {
 	lua_newtable(L);
 	lua_insert(L, -2);
 	lua_rawseti(L, -2, 2);
-	lua_rawgeti(L, LUA_REGISTRYINDEX, fn_ref);
+	lua_rawgeti(L, LUA_REGISTRYINDEX, fnRef);
 	lua_rawseti(L, -2, 1);
 	lua_pushlstring(L, qname.c_str(), qname.size());
 	lua_rawseti(L, -2, 3);
@@ -1459,35 +1459,35 @@ static void McpPlanCall(lua_State* L, int calls_idx, lua_Integer* n, int fn_ref,
 		lua_pushstring(L, answer);
 		lua_rawseti(L, -2, 4);
 	}
-	lua_rawseti(L, calls_idx, ++*n);
+	lua_rawseti(L, callsIdx, ++*n);
 }
 
 // A picked answer: plan its callback (or the question's), or record `true`.
-static void McpPlanAnswer(lua_State* L, int calls_idx, lua_Integer* n, int picked_idx,
+static void McpPlanAnswer(lua_State* L, int callsIdx, lua_Integer* n, int pickedIdx,
                             const McpQuestion& q, const McpAnswer& a) {
-	int fn = a.fn_ref != LUA_NOREF ? a.fn_ref : q.fn_ref;
+	int fn = a.fnRef != LUA_NOREF ? a.fnRef : q.fnRef;
 	if (fn != LUA_NOREF) {
 		lua_pushlstring(L, a.value.c_str(), a.value.size());
-		McpPlanCall(L, calls_idx, n, fn, q.name, a.value.c_str());
+		McpPlanCall(L, callsIdx, n, fn, q.name, a.value.c_str());
 	} else {
 		lua_pushboolean(L, 1);
-		lua_setfield(L, picked_idx, a.value.c_str());
+		lua_setfield(L, pickedIdx, a.value.c_str());
 	}
 }
 
-// Validates the accepted `content` (at content_idx) against the definition and
+// Validates the accepted `content` (at contentIdx) against the definition and
 // plans the callbacks. Nothing here yields.
-static int McpElicitPlan(lua_State* L, LuaMcpElicitation* e, int content_idx) {
+static int McpElicitPlan(lua_State* L, LuaMcpElicitation* e, int contentIdx) {
 	lua_newtable(L);
-	int answers_idx = lua_gettop(L);
+	int answersIdx = lua_gettop(L);
 	lua_newtable(L);
-	int results_idx = lua_gettop(L);
+	int resultsIdx = lua_gettop(L);
 	lua_newtable(L);
-	int calls_idx = lua_gettop(L);
+	int callsIdx = lua_gettop(L);
 	lua_Integer ncalls = 0;
 
 	lua_pushnil(L);
-	while (lua_next(L, content_idx)) {
+	while (lua_next(L, contentIdx)) {
 		lua_pop(L, 1);
 		if (lua_type(L, -1) != LUA_TSTRING) {
 			lua_pushliteral(L, "answer keys must be strings");
@@ -1508,7 +1508,7 @@ static int McpElicitPlan(lua_State* L, LuaMcpElicitation* e, int content_idx) {
 	for (const McpQuestion& q : e->questions) {
 		lua_settop(L, base);
 		const char* qn = q.name.c_str();
-		lua_getfield(L, content_idx, qn);
+		lua_getfield(L, contentIdx, qn);
 		int v = lua_gettop(L);
 
 		if (McpIsNull(L, v)) {
@@ -1552,18 +1552,18 @@ static int McpElicitPlan(lua_State* L, LuaMcpElicitation* e, int content_idx) {
 				lua_rawseti(L, copy, i);
 			}
 			lua_pushvalue(L, copy);
-			lua_setfield(L, answers_idx, qn);
+			lua_setfield(L, answersIdx, qn);
 
 			lua_newtable(L);
 			int picked = lua_gettop(L);
 			lua_pushvalue(L, picked);
-			lua_setfield(L, results_idx, qn);
+			lua_setfield(L, resultsIdx, qn);
 			for (const McpAnswer& a : q.answers) { // declaration order
 				lua_getfield(L, set, a.value.c_str());
 				bool isPicked = !lua_isnil(L, -1);
 				lua_pop(L, 1);
 				if (isPicked)
-					McpPlanAnswer(L, calls_idx, &ncalls, picked, q, a);
+					McpPlanAnswer(L, callsIdx, &ncalls, picked, q, a);
 			}
 			continue;
 		}
@@ -1575,12 +1575,12 @@ static int McpElicitPlan(lua_State* L, LuaMcpElicitation* e, int content_idx) {
 				return McpElicitInvalid(L);
 			}
 			lua_pushvalue(L, v);
-			lua_setfield(L, answers_idx, qn);
+			lua_setfield(L, answersIdx, qn);
 			lua_newtable(L);
 			int picked = lua_gettop(L);
 			lua_pushvalue(L, picked);
-			lua_setfield(L, results_idx, qn);
-			McpPlanAnswer(L, calls_idx, &ncalls, picked, q, *a);
+			lua_setfield(L, resultsIdx, qn);
+			McpPlanAnswer(L, callsIdx, &ncalls, picked, q, *a);
 			continue;
 		}
 
@@ -1634,18 +1634,18 @@ static int McpElicitPlan(lua_State* L, LuaMcpElicitation* e, int content_idx) {
 		}
 
 		lua_pushvalue(L, v);
-		lua_setfield(L, answers_idx, qn);
+		lua_setfield(L, answersIdx, qn);
 		lua_pushvalue(L, v);
-		if (q.fn_ref != LUA_NOREF) {
-			McpPlanCall(L, calls_idx, &ncalls, q.fn_ref, q.name, nullptr);
+		if (q.fnRef != LUA_NOREF) {
+			McpPlanCall(L, callsIdx, &ncalls, q.fnRef, q.name, nullptr);
 		} else {
-			lua_setfield(L, results_idx, qn);
+			lua_setfield(L, resultsIdx, qn);
 		}
 	}
 
-	lua_copy(L, answers_idx, EL_ANSWERS);
-	lua_copy(L, results_idx, EL_RESULTS);
-	lua_copy(L, calls_idx, EL_CALLS);
+	lua_copy(L, answersIdx, EL_ANSWERS);
+	lua_copy(L, resultsIdx, EL_RESULTS);
+	lua_copy(L, callsIdx, EL_CALLS);
 	lua_pushinteger(L, 1);
 	lua_copy(L, -1, EL_NEXT);
 	lua_settop(L, EL_NEXT);
@@ -1709,7 +1709,7 @@ static int McpElicitPoll(lua_State* L, LuaMcpServer* server, const std::string& 
 		if (it == server->pending.end())
 			return McpElicitFail(L, "elicitation request was abandoned");
 		if (it->second.done) {
-			int ref = it->second.msg_ref;
+			int ref = it->second.msgRef;
 			server->pending.erase(it);
 			lua_rawgeti(L, LUA_REGISTRYINDEX, ref);
 			luaL_unref(L, LUA_REGISTRYINDEX, ref);
@@ -1882,7 +1882,7 @@ int McpServer_AddTool(lua_State* L) {
 	}
 
 	lua_pushvalue(L, 5);
-	tool.fn_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+	tool.fnRef = luaL_ref(L, LUA_REGISTRYINDEX);
 	server->tools.push_back(std::move(tool));
 
 	lua_pushboolean(L, 1);
@@ -1996,7 +1996,7 @@ int MCP_Create(lua_State* L) {
 
 	if (lua_istable(L, 2)) lua_pushvalue(L, 2);
 	else                   lua_newtable(L);
-	server->context_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+	server->contextRef = luaL_ref(L, LUA_REGISTRYINDEX);
 
 	lua_pushvalue(L, -1); // duplicate the userdata for the singleton tracking slot
 	g_mcpInstanceRef = luaL_ref(L, LUA_REGISTRYINDEX);

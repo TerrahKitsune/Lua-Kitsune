@@ -12,7 +12,7 @@ int RedisPushStringInternal(lua_State* L, int redisIdx, const char* key, size_t 
 	memset(redisString, 0, sizeof(LuaRedisString));
 
 	lua_pushvalue(L, redisIdx);
-	redisString->key.redis_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+	redisString->key.redisRef = luaL_ref(L, LUA_REGISTRYINDEX);
 
 	redisString->key.key = (char*)kitsune_malloc(keylength + sizeof(char));
 	if (!redisString->key.key) {
@@ -102,8 +102,8 @@ int RedisString_NewIndex(lua_State* L) {
 	lua_pushstring(L, "SETRANGE");
 	PushRedisKeyName(L, &redisString->key);
 	lua_pushinteger(L, idx - 1);
-	char byte_val = (char)(unsigned char)data;
-	lua_pushlstring(L, &byte_val, 1);
+	char byteVal = (char)(unsigned char)data;
+	lua_pushlstring(L, &byteVal, 1);
 	LuaRedis* redis = RedisCommandInternal(L);
 	lua_pop(L, 5);
 

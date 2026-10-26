@@ -49,10 +49,10 @@ static void SetDidWork(lua_State* L) {
 }
 
 // Shared CURLM* registry key defined in HttpCurl.cpp
-extern const char g_curlm_key;
+extern const char CURLM_KEY;
 
 // ---- global next-ID counter -------------------------------------------------
-static lua_Integer g_next_ws_id = 1;
+static lua_Integer g_nextWsId = 1;
 
 // ---- forward declarations ---------------------------------------------------
 static void WsDisposeNative(lua_State* L, LuaWebSocket* ws);
@@ -87,36 +87,36 @@ static void WsMsgFree(WsMsgNode* node) {
 static void WsEnqueue(LuaWebSocket* ws, WsMsgNode* node) {
 	if (!node)
 		return;
-	if (ws->msg_tail) {
-		ws->msg_tail->next = node;
-		ws->msg_tail = node;
+	if (ws->msgTail) {
+		ws->msgTail->next = node;
+		ws->msgTail = node;
 	}
 	else {
-		ws->msg_head = node;
-		ws->msg_tail = node;
+		ws->msgHead = node;
+		ws->msgTail = node;
 	}
 }
 
 static WsMsgNode* WsDequeue(LuaWebSocket* ws) {
-	WsMsgNode* node = ws->msg_head;
+	WsMsgNode* node = ws->msgHead;
 	if (!node)
 		return NULL;
-	ws->msg_head = node->next;
-	if (!ws->msg_head)
-		ws->msg_tail = NULL;
+	ws->msgHead = node->next;
+	if (!ws->msgHead)
+		ws->msgTail = NULL;
 	node->next = NULL;
 	return node;
 }
 
 static void WsDrainQueue(LuaWebSocket* ws) {
-	WsMsgNode* node = ws->msg_head;
+	WsMsgNode* node = ws->msgHead;
 	while (node) {
 		WsMsgNode* next = node->next;
 		WsMsgFree(node);
 		node = next;
 	}
-	ws->msg_head = NULL;
-	ws->msg_tail = NULL;
+	ws->msgHead = NULL;
+	ws->msgTail = NULL;
 }
 
 // ---- curl fragment reassembly helpers ---------------------------------------
@@ -263,19 +263,19 @@ static void EvwsCloseCb(struct evws_connection* conn, void* arg) {
 	// from inside WsDisposeNative, which is itself called from a Lua C
 	// function (Poll/Read/GC). Calling luaL_unref here would re-enter the
 	// Lua API while the stack is already in use, causing an access violation.
-	// self_ref is released by the caller (WsDisposeNative) after
+	// selfRef is released by the caller (WsDisposeNative) after
 	// event_base_loop returns, or by WsReleaseSelfRef in Poll/Read.
 }
 
-// Release self_ref from a safe Lua context (NOT from within event_base_loop).
-// self_ref keeps the WEBSOCKET userdata alive while libevent holds the arg
+// Release selfRef from a safe Lua context (NOT from within event_base_loop).
+// selfRef keeps the WEBSOCKET userdata alive while libevent holds the arg
 // pointer.  Once EvwsCloseCb has fired (ws->evws == NULL && ws->closed or
 // ws->connected == false), libevent is done with the pointer and we can
 // safely unref from a normal Lua C function call frame.
 static void WsReleaseSelfRef(lua_State* L, LuaWebSocket* ws) {
-	if (ws->self_ref > 0) {
-		luaL_unref(L, LUA_REGISTRYINDEX, ws->self_ref);
-		ws->self_ref = LUA_NOREF;
+	if (ws->selfRef > 0) {
+		luaL_unref(L, LUA_REGISTRYINDEX, ws->selfRef);
+		ws->selfRef = LUA_NOREF;
 	}
 }
 
@@ -335,11 +335,11 @@ static LuaWebSocket* lua_pushwebsocket(lua_State* L) {
 	luaL_getmetatable(L, LUAWEBSOCKET);
 	lua_setmetatable(L, -2);
 	memset(ws, 0, sizeof(LuaWebSocket));
-	ws->client_ref = LUA_NOREF;
-	ws->context_ref = LUA_NOREF;
-	ws->self_ref = LUA_NOREF;
+	ws->clientRef = LUA_NOREF;
+	ws->contextRef = LUA_NOREF;
+	ws->selfRef = LUA_NOREF;
 	ws->aliveTokenRef = LUA_NOREF;
-	ws->id = g_next_ws_id++;
+	ws->id = g_nextWsId++;
 	ws->L = L;
 	return ws;
 }
@@ -441,7 +441,7 @@ static void WsDisposeNative(lua_State* L, LuaWebSocket* ws) {
 	}
 	ws->evbase = NULL;
 	// Now that event_base_loop has returned we are back in a safe Lua C call
-	// frame and can release self_ref.  EvwsCloseCb intentionally skips this
+	// frame and can release selfRef.  EvwsCloseCb intentionally skips this
 	// because it fires from inside event_base_loop.
 	WsReleaseSelfRef(L, ws);
 
@@ -468,9 +468,9 @@ static void WsDisposeNative(lua_State* L, LuaWebSocket* ws) {
 	ws->recvBuf = NULL;
 	ws->recvAlloc = 0;
 
-	if (ws->client_ref > 0) {
-		luaL_unref(L, LUA_REGISTRYINDEX, ws->client_ref);
-		ws->client_ref = LUA_NOREF;
+	if (ws->clientRef > 0) {
+		luaL_unref(L, LUA_REGISTRYINDEX, ws->clientRef);
+		ws->clientRef = LUA_NOREF;
 	}
 	if (ws->aliveTokenRef != LUA_NOREF) {
 		luaL_unref(L, LUA_REGISTRYINDEX, ws->aliveTokenRef);
@@ -479,9 +479,9 @@ static void WsDisposeNative(lua_State* L, LuaWebSocket* ws) {
 
 	// --- shared ---------------------------------------------------------------
 	WsDrainQueue(ws);
-	if (ws->context_ref > 0) {
-		luaL_unref(L, LUA_REGISTRYINDEX, ws->context_ref);
-		ws->context_ref = LUA_NOREF;
+	if (ws->contextRef > 0) {
+		luaL_unref(L, LUA_REGISTRYINDEX, ws->contextRef);
+		ws->contextRef = LUA_NOREF;
 	}
 }
 
@@ -524,13 +524,13 @@ int WebSocket_GetId(lua_State* L) {
 
 int WebSocket_GetContext(lua_State* L) {
 	LuaWebSocket* ws = (LuaWebSocket*)luaL_checkudata(L, 1, LUAWEBSOCKET);
-	if (ws->context_ref == LUA_NOREF) {
+	if (ws->contextRef == LUA_NOREF) {
 		lua_newtable(L);
 		lua_pushvalue(L, -1);
-		ws->context_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+		ws->contextRef = luaL_ref(L, LUA_REGISTRYINDEX);
 	}
 	else {
-		lua_rawgeti(L, LUA_REGISTRYINDEX, ws->context_ref);
+		lua_rawgeti(L, LUA_REGISTRYINDEX, ws->contextRef);
 	}
 	return 1;
 }
@@ -543,7 +543,7 @@ int WebSocket_SetMaxMessageSize(lua_State* L) {
 }
 
 // WebSocket:Poll() — non-blocking; drives network, returns next WsMessage or nil.
-// Server side: libevent callbacks already enqueue into msg_head; just dequeue.
+// Server side: libevent callbacks already enqueue into msgHead; just dequeue.
 // Also handles server-initiated ping keepalive: sends a ping after 30 s of
 // client silence and closes the connection if no response arrives within 30 s.
 // Client side: calls curl_ws_recv until no more data, then dequeues.
@@ -778,7 +778,7 @@ int HttpClient_Connect(lua_State* L) {
 	int headersIdx = lua_istable(L, 3) ? 3 : 0;
 
 	// Retrieve the shared CURLM* from the Lua registry (same key as HttpCurl.cpp).
-	lua_rawgetp(L, LUA_REGISTRYINDEX, &g_curlm_key);
+	lua_rawgetp(L, LUA_REGISTRYINDEX, &CURLM_KEY);
 	CURLM* multi = (CURLM*)lua_touserdata(L, -1);
 	lua_pop(L, 1);
 	if (!multi) {
@@ -830,7 +830,7 @@ int HttpClient_Connect(lua_State* L) {
 
 	// Hold a ref to the client to prevent GC while the WebSocket is alive.
 	lua_pushvalue(L, 1);
-	ws->client_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+	ws->clientRef = luaL_ref(L, LUA_REGISTRYINDEX);
 
 	// Snapshot the client's AliveToken (if any) so Read/Poll can check it
 	// without needing the client userdata to remain reachable.
@@ -877,8 +877,8 @@ int HttpResponse_UpgradeToWebSocket(lua_State* L) {
 	// freeing — corrupting state and aborting the TCP connection.
 	// Null these out NOW, before evws_new_session, so ConnCloseCb sees
 	// an already-handled connection and returns early.
-	struct evhttp_request* raw_req = req->req;
-	struct evhttp_connection* evcon = evhttp_request_get_connection(raw_req);
+	struct evhttp_request* rawReq = req->req;
+	struct evhttp_connection* evcon = evhttp_request_get_connection(rawReq);
 
 	// Pre-clear the evhttp_connection timeout. Best-effort: evws_new_session
 	// steals the bufferevent from evcon, so we also clear it on the bev below.
@@ -896,11 +896,11 @@ int HttpResponse_UpgradeToWebSocket(lua_State* L) {
 		lua_pushnil(L);
 		lua_rawset(L, LUA_REGISTRYINDEX);
 	}
-	lua_pushlightuserdata(L, (void*)raw_req);
+	lua_pushlightuserdata(L, (void*)rawReq);
 	lua_pushnil(L);
 	lua_rawset(L, LUA_REGISTRYINDEX);
 
-	struct evws_connection* evws = evws_new_session(raw_req,
+	struct evws_connection* evws = evws_new_session(rawReq,
 		EvwsMsgCb, ws, 0);
 	if (!evws) {
 		lua_pop(L, 1);
@@ -961,7 +961,7 @@ int HttpResponse_UpgradeToWebSocket(lua_State* L) {
 	// Hold a registry ref to the WEBSOCKET userdata so EvwsCloseCb can
 	// safely access ws-> even if Lua has dropped its own reference.
 	lua_pushvalue(L, -1);
-	ws->self_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+	ws->selfRef = luaL_ref(L, LUA_REGISTRYINDEX);
 
 	return 1;
 }

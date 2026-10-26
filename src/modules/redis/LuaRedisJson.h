@@ -4,7 +4,7 @@
 static const char* REDISJSON = "REDISJSON";
 
 typedef struct LuaRedisJson {
-	LuaRedisKey key;     // redis_ref + Redis key name
+	LuaRedisKey key;     // redisRef + Redis key name
 	char*       path;    // JSONPath string, e.g. "$", "$.SomeNumber"
 	size_t      pathlen;
 } LuaRedisJson;

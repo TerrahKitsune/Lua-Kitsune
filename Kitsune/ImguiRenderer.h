@@ -44,7 +44,7 @@ struct ImguiWindowContext {
 	struct ImguiStackEntry*     stackHead;
 };
 
-// Populates reg->Functions with heap-allocated KitsuneNamedFunction nodes for
+// Populates reg->functions with heap-allocated KitsuneNamedFunction nodes for
 // all auto-generated ImGui bindings. Called once in RunImguiSession before the
 // render loop starts. After KitsuneRegisterUserdata returns the nodes are kept
 // alive in ctx->reg and freed in __gc.

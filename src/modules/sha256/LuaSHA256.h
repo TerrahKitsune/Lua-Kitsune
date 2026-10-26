@@ -6,7 +6,7 @@ extern "C" {
 static const char * LUASHA256 = "LUASHA256";
 
 typedef struct LuaSHA256 {
-	SHA256_CTX SHA;
+	SHA256_CTX sha;
 	unsigned char hash[SHA256_BLOCK_SIZE];
 	bool finished;   // set by Finish(); hash then holds the digest for repeated calls
 } LuaSHA256;

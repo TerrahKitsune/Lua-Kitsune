@@ -7,11 +7,11 @@ static const char* LUADATETIME = "DATETIME";
 
 // Ticks: 100-nanosecond intervals since 0001-01-01 00:00:00 UTC
 // (matches .NET DateTime/DateTimeOffset epoch).
-// offset_minutes: UTC offset in minutes [-840, +840]; 0 = UTC.
+// offsetMinutes: UTC offset in minutes [-840, +840]; 0 = UTC.
 typedef struct LuaDateTime {
 	int64_t ticks;
-	int16_t offset_minutes;
-	uint8_t _pad[6];  // pad to 16 bytes; prevents ABI surprises across TUs
+	int16_t offsetMinutes;
+	uint8_t pad[6];  // pad to 16 bytes; prevents ABI surprises across TUs
 } LuaDateTime;
 
 // Ticks per unit constants.

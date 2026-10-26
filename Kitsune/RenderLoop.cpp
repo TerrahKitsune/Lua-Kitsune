@@ -246,14 +246,14 @@ bool RunImguiSession() {
 	auto free_reg_nodes = [](KitsuneNamedFunction*& head) {
 		KitsuneNamedFunction* n = head;
 		while (n) {
-			KitsuneNamedFunction* next = n->Next;
+			KitsuneNamedFunction* next = n->next;
 			free(n);
 			n = next;
 		}
 		head = nullptr;
 		};
-	free_reg_nodes(ctx->reg.Functions);
-	free_reg_nodes(ctx->reg.MetaTableFunctions);
+	free_reg_nodes(ctx->reg.functions);
+	free_reg_nodes(ctx->reg.metaTableFunctions);
 
 	IMGUI_CHECKVERSION();
 	ImGuiContext* imCtx = ImGui::CreateContext();

@@ -9,7 +9,7 @@ struct LuaKitsuneUserdata {
 };
 
 // Creates a new userdata registration but if it already exists it returns false.
-// Returns false if registration->MetaTableFunctions contains no __gc or __tostring entry —
+// Returns false if registration->metaTableFunctions contains no __gc or __tostring entry —
 // both are mandatory: __gc frees the managed GCHandle, __tostring enables meaningful
 // output from Lua's tostring() and print().  The C# RegisterUserdata<T> layer always
 // injects defaults for both so this check mainly guards direct C++ callers.

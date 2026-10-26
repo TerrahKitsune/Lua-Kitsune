@@ -586,8 +586,8 @@ def main():
         f.write("\t\tnode->name     = (char*)entries[i].name;\n")
         f.write("\t\tnode->func     = entries[i].func;\n")
         f.write("\t\tnode->userdata = nullptr;\n")
-        f.write("\t\tnode->Next     = reg->Functions;\n")
-        f.write("\t\treg->Functions = node;\n")
+        f.write("\t\tnode->next     = reg->functions;\n")
+        f.write("\t\treg->functions = node;\n")
         f.write("\t}\n}\n\n")
         f.write("#endif // KITSUNE_IMGUI\n")
 

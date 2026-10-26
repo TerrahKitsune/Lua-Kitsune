@@ -52,7 +52,7 @@ static int PubSubCont(lua_State* L, int status, lua_KContext ctx) {
 		}
 		if (state->context) {
 			redisReply* r = (redisReply*)redisCommand(state->context,
-				state->is_pattern ? "PUNSUBSCRIBE" : "UNSUBSCRIBE");
+				state->isPattern ? "PUNSUBSCRIBE" : "UNSUBSCRIBE");
 			if (r)
 				freeReplyObject(r);
 		}
@@ -76,7 +76,7 @@ static int PubSubCont(lua_State* L, int status, lua_KContext ctx) {
 			state->aliveTokenRef = LUA_NOREF;
 			if (state->context) {
 				redisReply* r = (redisReply*)redisCommand(state->context,
-					state->is_pattern ? "PUNSUBSCRIBE" : "UNSUBSCRIBE");
+					state->isPattern ? "PUNSUBSCRIBE" : "UNSUBSCRIBE");
 				if (r)
 					freeReplyObject(r);
 			}
@@ -102,14 +102,14 @@ static int PubSubCont(lua_State* L, int status, lua_KContext ctx) {
 	if (!RedisDataAvailable(state->context))
 		return lua_yieldk(L, 0, ctx, PubSubCont);  // no data — no work done
 
-	void* reply_ptr = NULL;
-	if (redisGetReply(state->context, &reply_ptr) == REDIS_ERR || !reply_ptr) {
+	void* replyPtr = NULL;
+	if (redisGetReply(state->context, &replyPtr) == REDIS_ERR || !replyPtr) {
 		lua_pushnil(L);
 		lua_pushstring(L, state->context->errstr[0] ? state->context->errstr : "pub/sub read error");
 		return 2;
 	}
 
-	redisReply* r = (redisReply*)reply_ptr;
+	redisReply* r = (redisReply*)replyPtr;
 
 	if (r->type == REDIS_REPLY_ARRAY && r->element[0] &&
 		r->element[0]->type == REDIS_REPLY_STRING) {
@@ -175,9 +175,9 @@ int RedisPubSubState_GC(lua_State* L) {
 		redisFree(state->context);  // closes socket; ssl is borrowed and not freed here
 		state->context = NULL;
 	}
-	if (state->redis_ref != LUA_NOREF) {
-		luaL_unref(L, LUA_REGISTRYINDEX, state->redis_ref);
-		state->redis_ref = LUA_NOREF;
+	if (state->redisRef != LUA_NOREF) {
+		luaL_unref(L, LUA_REGISTRYINDEX, state->redisRef);
+		state->redisRef = LUA_NOREF;
 	}
 	if (state->aliveTokenRef != LUA_NOREF) {
 		luaL_unref(L, LUA_REGISTRYINDEX, state->aliveTokenRef);
@@ -187,13 +187,13 @@ int RedisPubSubState_GC(lua_State* L) {
 }
 
 static int MakeSubscribeCoroutine(lua_State* L, LuaRedisPubSubState* state) {
-	int state_idx = lua_gettop(L);  // state userdata is on top
+	int stateIdx = lua_gettop(L);  // state userdata is on top
 
 	lua_State* co = lua_newthread(L);
 	// L stack: [..., state, co_thread]
 
 	// Move the body closure (with state as upvalue) onto co's stack.
-	lua_pushvalue(L, state_idx);
+	lua_pushvalue(L, stateIdx);
 	lua_pushcclosure(L, PubSubCoroutineBody, 1);
 	lua_xmove(L, co, 1);
 	// co stack: [PubSubCoroutineBody_closure]
@@ -201,12 +201,12 @@ static int MakeSubscribeCoroutine(lua_State* L, LuaRedisPubSubState* state) {
 
 	// registry[co] = state — RedisPubSubCoroutine_GC uses this to clear registry[state].
 	lua_pushlightuserdata(L, (void*)co);
-	lua_pushvalue(L, state_idx);
+	lua_pushvalue(L, stateIdx);
 	lua_rawset(L, LUA_REGISTRYINDEX);
 
 	// registry[state] = state — keeps state alive as long as co is alive.
 	lua_pushlightuserdata(L, (void*)state);
-	lua_pushvalue(L, state_idx);
+	lua_pushvalue(L, stateIdx);
 	lua_rawset(L, LUA_REGISTRYINDEX);
 
 	luaL_getmetatable(L, REDISPUBSUBCOROUTINE);
@@ -215,7 +215,7 @@ static int MakeSubscribeCoroutine(lua_State* L, LuaRedisPubSubState* state) {
 	return 1;  // co_thread is on top
 }
 
-static int InternalSubscribe(lua_State* L, bool is_pattern) {
+static int InternalSubscribe(lua_State* L, bool isPattern) {
 	LuaRedis* redis = luaL_checkredis(L, 1);
 	if (!redis->context) {
 		lua_pushnil(L);
@@ -237,18 +237,18 @@ static int InternalSubscribe(lua_State* L, bool is_pattern) {
 	}
 
 	// Open a dedicated connection for pub/sub (the main context must stay in command mode).
-	struct timeval tv = { redis->timeout_sec > 0 ? redis->timeout_sec : 10, 0 };
+	struct timeval tv = { redis->timeoutSec > 0 ? redis->timeoutSec : 10, 0 };
 	redisOptions options;
 	memset(&options, 0, sizeof(options));
 	REDIS_OPTIONS_SET_TCP(&options, redis->host, redis->port);
 	options.connect_timeout = &tv;
 
-	redisContext* sub_ctx = redisConnectWithOptions(&options);
-	if (!sub_ctx || sub_ctx->err) {
+	redisContext* subCtx = redisConnectWithOptions(&options);
+	if (!subCtx || subCtx->err) {
 		char errbuf[256] = {0};
-		if (sub_ctx) {
-			strncpy(errbuf, sub_ctx->errstr, sizeof(errbuf) - 1);
-			redisFree(sub_ctx);
+		if (subCtx) {
+			strncpy(errbuf, subCtx->errstr, sizeof(errbuf) - 1);
+			redisFree(subCtx);
 		}
 		lua_pushnil(L);
 		lua_pushfstring(L, "Subscribe connection error: %s", errbuf[0] ? errbuf : "out of memory");
@@ -256,10 +256,10 @@ static int InternalSubscribe(lua_State* L, bool is_pattern) {
 	}
 
 	if (redis->ssl) {
-		if (redisInitiateSSLWithContext(sub_ctx, redis->ssl) != REDIS_OK) {
+		if (redisInitiateSSLWithContext(subCtx, redis->ssl) != REDIS_OK) {
 			char errbuf[256] = {0};
-			strncpy(errbuf, sub_ctx->errstr, sizeof(errbuf) - 1);
-			redisFree(sub_ctx);
+			strncpy(errbuf, subCtx->errstr, sizeof(errbuf) - 1);
+			redisFree(subCtx);
 			lua_pushnil(L);
 			lua_pushfstring(L, "Subscribe SSL error: %s", errbuf);
 			return 2;
@@ -267,19 +267,19 @@ static int InternalSubscribe(lua_State* L, bool is_pattern) {
 	}
 
 	if (redis->password) {
-		redisReply* auth_reply = (redisReply*)redisCommand(sub_ctx, "AUTH %s", redis->password);
-		if (!auth_reply || auth_reply->type == REDIS_REPLY_ERROR) {
+		redisReply* authReply = (redisReply*)redisCommand(subCtx, "AUTH %s", redis->password);
+		if (!authReply || authReply->type == REDIS_REPLY_ERROR) {
 			char errbuf[256] = {0};
-			if (auth_reply) {
-				strncpy(errbuf, auth_reply->str, sizeof(errbuf) - 1);
-				freeReplyObject(auth_reply);
+			if (authReply) {
+				strncpy(errbuf, authReply->str, sizeof(errbuf) - 1);
+				freeReplyObject(authReply);
 			}
-			redisFree(sub_ctx);
+			redisFree(subCtx);
 			lua_pushnil(L);
 			lua_pushfstring(L, "Subscribe AUTH failed: %s", errbuf[0] ? errbuf : "no reply");
 			return 2;
 		}
-		freeReplyObject(auth_reply);
+		freeReplyObject(authReply);
 	}
 
 	// Build and pipeline SUBSCRIBE/PSUBSCRIBE channel1 channel2 ...
@@ -288,24 +288,24 @@ static int InternalSubscribe(lua_State* L, bool is_pattern) {
 	if (!argv || !argvlen) {
 		kitsune_free(argv);
 		kitsune_free(argvlen);
-		redisFree(sub_ctx);
+		redisFree(subCtx);
 		lua_pushnil(L);
 		lua_pushstring(L, "out of memory");
 		return 2;
 	}
 
-	const char* cmd = is_pattern ? "PSUBSCRIBE" : "SUBSCRIBE";
+	const char* cmd = isPattern ? "PSUBSCRIBE" : "SUBSCRIBE";
 	argv[0]    = (char*)cmd;
 	argvlen[0] = strlen(cmd);
 	for (int i = 0; i < nchan; i++)
 		argv[i + 1] = (char*)luaL_checklstring(L, i + 2, &argvlen[i + 1]);
 
-	int rc = redisAppendCommandArgv(sub_ctx, nchan + 1, (const char**)argv, argvlen);
+	int rc = redisAppendCommandArgv(subCtx, nchan + 1, (const char**)argv, argvlen);
 	kitsune_free(argv);
 	kitsune_free(argvlen);
 
 	if (rc == REDIS_ERR) {
-		redisFree(sub_ctx);
+		redisFree(subCtx);
 		lua_pushnil(L);
 		lua_pushstring(L, "failed to queue SUBSCRIBE command");
 		return 2;
@@ -314,10 +314,10 @@ static int InternalSubscribe(lua_State* L, bool is_pattern) {
 	// Flush the output buffer to the socket.
 	int done = 0;
 	while (!done) {
-		if (redisBufferWrite(sub_ctx, &done) == REDIS_ERR) {
+		if (redisBufferWrite(subCtx, &done) == REDIS_ERR) {
 			char errbuf[256] = {0};
-			strncpy(errbuf, sub_ctx->errstr, sizeof(errbuf) - 1);
-			redisFree(sub_ctx);
+			strncpy(errbuf, subCtx->errstr, sizeof(errbuf) - 1);
+			redisFree(subCtx);
 			lua_pushnil(L);
 			lua_pushfstring(L, "SUBSCRIBE write error: %s", errbuf);
 			return 2;
@@ -326,22 +326,22 @@ static int InternalSubscribe(lua_State* L, bool is_pattern) {
 
 	LuaRedisPubSubState* state = (LuaRedisPubSubState*)lua_newuserdata(L, sizeof(LuaRedisPubSubState));
 	if (!state) {
-		redisFree(sub_ctx);
+		redisFree(subCtx);
 		luaL_error(L, "out of memory");
 		return 0;
 	}
 	luaL_getmetatable(L, REDISPUBSUBSTATE);
 	lua_setmetatable(L, -2);
 	memset(state, 0, sizeof(LuaRedisPubSubState));
-	state->context    = sub_ctx;
+	state->context    = subCtx;
 	state->ssl        = redis->ssl;  // borrowed; not freed by state GC
-	state->is_pattern = is_pattern;
-	state->redis_ref  = LUA_NOREF;
+	state->isPattern = isPattern;
+	state->redisRef  = LUA_NOREF;
 	state->aliveTokenRef = LUA_NOREF;
 
 	// Anchor the parent LuaRedis so its ssl context outlives this pub/sub connection.
 	lua_pushvalue(L, 1);
-	state->redis_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+	state->redisRef = luaL_ref(L, LUA_REGISTRYINDEX);
 
 	return MakeSubscribeCoroutine(L, state);
 }

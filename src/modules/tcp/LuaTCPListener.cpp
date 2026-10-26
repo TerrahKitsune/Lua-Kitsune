@@ -25,7 +25,7 @@ static char* kitsune_strdup(const char* s) {
 }
 
 /* -- Global next-ID counter -------------------------------------------------- */
-static lua_Integer g_next_tcp_id = 1;
+static lua_Integer g_nextTcpId = 1;
 
 /* -- Forward declarations ---------------------------------------------------- */
 static void TcpClientDisposeNative(lua_State* L, LuaTcpClient* client);
@@ -56,34 +56,34 @@ static void TcpMsgFree(TcpMsgNode* node) {
 
 static void TcpEnqueue(LuaTcpClient* client, TcpMsgNode* node) {
     if (!node) return;
-    if (client->msg_tail) {
-        client->msg_tail->next = node;
-        client->msg_tail = node;
+    if (client->msgTail) {
+        client->msgTail->next = node;
+        client->msgTail = node;
     } else {
-        client->msg_head = node;
-        client->msg_tail = node;
+        client->msgHead = node;
+        client->msgTail = node;
     }
 }
 
 static TcpMsgNode* TcpDequeue(LuaTcpClient* client) {
-    TcpMsgNode* node = client->msg_head;
+    TcpMsgNode* node = client->msgHead;
     if (!node) return NULL;
-    client->msg_head = node->next;
-    if (!client->msg_head)
-        client->msg_tail = NULL;
+    client->msgHead = node->next;
+    if (!client->msgHead)
+        client->msgTail = NULL;
     node->next = NULL;
     return node;
 }
 
 static void TcpDrainQueue(LuaTcpClient* client) {
-    TcpMsgNode* node = client->msg_head;
+    TcpMsgNode* node = client->msgHead;
     while (node) {
         TcpMsgNode* next = node->next;
         TcpMsgFree(node);
         node = next;
     }
-    client->msg_head = NULL;
-    client->msg_tail = NULL;
+    client->msgHead = NULL;
+    client->msgTail = NULL;
 }
 
 /* =============================================================================
@@ -95,8 +95,8 @@ static LuaTcpListener* lua_pushtcplistener(lua_State* L) {
     luaL_getmetatable(L, LUATCPLISTENER);
     lua_setmetatable(L, -2);
     memset(s, 0, sizeof(LuaTcpListener));
-    s->self_ref = 0;
-    s->context_ref = 0;
+    s->selfRef = 0;
+    s->contextRef = 0;
     return s;
 }
 
@@ -105,9 +105,9 @@ static LuaTcpClient* lua_pushtcpclient(lua_State* L) {
     luaL_getmetatable(L, LUATCPCLIENT);
     lua_setmetatable(L, -2);
     memset(c, 0, sizeof(LuaTcpClient));
-    c->self_ref = 0;
-    c->context_ref = 0;
-    c->id = g_next_tcp_id++;
+    c->selfRef = 0;
+    c->contextRef = 0;
+    c->id = g_nextTcpId++;
     c->L = L;
     return c;
 }
@@ -155,16 +155,16 @@ static void TcpEventCb(struct bufferevent* bev, short what, void* ctx) {
         int err = EVUTIL_SOCKET_ERROR();
         const char* msg = evutil_socket_error_to_string(err);
         if (msg) {
-            kitsune_free(client->error_msg);
-            client->error_msg = kitsune_strdup(msg);
-            if (!client->error_msg) client->error_msg = kitsune_strdup("unknown socket error");
+            kitsune_free(client->errorMsg);
+            client->errorMsg = kitsune_strdup(msg);
+            if (!client->errorMsg) client->errorMsg = kitsune_strdup("unknown socket error");
         } else {
-            client->error_msg = kitsune_strdup("unknown socket error");
+            client->errorMsg = kitsune_strdup("unknown socket error");
         }
     } else if (what & BEV_EVENT_EOF) {
         /* Clean close — no error message needed */
-        if (!client->error_msg)
-            client->error_msg = NULL;
+        if (!client->errorMsg)
+            client->errorMsg = NULL;
     }
 }
 
@@ -188,7 +188,7 @@ static void TcpAcceptCb(struct evconnlistener* listener,
 
     /* Store a registry ref so the client survives until Accept() hands it out */
     lua_pushvalue(L, -1);
-    client->self_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+    client->selfRef = luaL_ref(L, LUA_REGISTRYINDEX);
 
     /* Extract remote IP / port */
     if (addr && addr->sa_family == AF_INET) {
@@ -218,29 +218,29 @@ static void TcpAcceptCb(struct evconnlistener* listener,
     }
     client->bev = bev;
     client->evbase = s->base;
-    client->owns_base = false; /* borrowed from listener */
+    client->ownsBase = false; /* borrowed from listener */
 
     bufferevent_setcb(bev, TcpReadCb, NULL, TcpEventCb, client);
     bufferevent_enable(bev, EV_READ | EV_WRITE);
     client->connected = true;
 
     /* Enqueue into the listener's pending queue */
-    if (s->pending_count >= s->pending_cap) {
-        int new_cap = s->pending_cap ? s->pending_cap * 2 : 8;
-        LuaTcpClient** new_q = (LuaTcpClient**)kitsune_realloc(
-            s->pending_queue, (size_t)new_cap * sizeof(LuaTcpClient*));
-        if (!new_q) {
+    if (s->pendingCount >= s->pendingCap) {
+        int newCap = s->pendingCap ? s->pendingCap * 2 : 8;
+        LuaTcpClient** newQ = (LuaTcpClient**)kitsune_realloc(
+            s->pendingQueue, (size_t)newCap * sizeof(LuaTcpClient*));
+        if (!newQ) {
             /* Out of memory — dispose the client */
             TcpClientDisposeNative(L, client);
             lua_pop(L, 1);
             return;
         }
-        s->pending_queue = new_q;
-        s->pending_cap = new_cap;
+        s->pendingQueue = newQ;
+        s->pendingCap = newCap;
     }
-    s->pending_queue[s->pending_count++] = client;
+    s->pendingQueue[s->pendingCount++] = client;
 
-    /* Pop client from Lua stack — it's kept alive by self_ref */
+    /* Pop client from Lua stack — it's kept alive by selfRef */
     lua_pop(L, 1);
 }
 
@@ -263,24 +263,24 @@ static void TcpListenerDisposeNative(lua_State* L, LuaTcpListener* s) {
        torn down and all clients should have been disposed by then. */
 
     /* Free pending queue */
-    for (int i = 0; i < s->pending_count; i++) {
-        LuaTcpClient* c = s->pending_queue[i];
+    for (int i = 0; i < s->pendingCount; i++) {
+        LuaTcpClient* c = s->pendingQueue[i];
         if (c) {
             TcpClientDisposeNative(L, c);
-            if (c->self_ref > 0) {
-                luaL_unref(L, LUA_REGISTRYINDEX, c->self_ref);
-                c->self_ref = 0;
+            if (c->selfRef > 0) {
+                luaL_unref(L, LUA_REGISTRYINDEX, c->selfRef);
+                c->selfRef = 0;
             }
         }
     }
-    kitsune_free(s->pending_queue);
-    s->pending_queue = NULL;
-    s->pending_count = 0;
-    s->pending_cap = 0;
+    kitsune_free(s->pendingQueue);
+    s->pendingQueue = NULL;
+    s->pendingCount = 0;
+    s->pendingCap = 0;
 
-    if (s->context_ref > 0) {
-        luaL_unref(L, LUA_REGISTRYINDEX, s->context_ref);
-        s->context_ref = 0;
+    if (s->contextRef > 0) {
+        luaL_unref(L, LUA_REGISTRYINDEX, s->contextRef);
+        s->contextRef = 0;
     }
 }
 
@@ -298,7 +298,7 @@ static void TcpClientDisposeNative(lua_State* L, LuaTcpClient* client) {
         client->bev = NULL;
     }
     /* Free evbase only if we own it (client-initiated connection) */
-    if (client->owns_base && client->evbase) {
+    if (client->ownsBase && client->evbase) {
         event_base_free(client->evbase);
         client->evbase = NULL;
     }
@@ -307,12 +307,12 @@ static void TcpClientDisposeNative(lua_State* L, LuaTcpClient* client) {
 
     kitsune_free(client->ip);
     client->ip = NULL;
-    kitsune_free(client->error_msg);
-    client->error_msg = NULL;
+    kitsune_free(client->errorMsg);
+    client->errorMsg = NULL;
 
-    if (client->context_ref > 0) {
-        luaL_unref(L, LUA_REGISTRYINDEX, client->context_ref);
-        client->context_ref = 0;
+    if (client->contextRef > 0) {
+        luaL_unref(L, LUA_REGISTRYINDEX, client->contextRef);
+        client->contextRef = 0;
     }
 }
 
@@ -398,13 +398,13 @@ int TCP_Connect(lua_State* L) {
     int resolved = 0;
 
     /* Try evutil_parse_sockaddr_port first (handles "1.2.3.4:port") */
-    char addr_str[256];
-    snprintf(addr_str, sizeof(addr_str), "%s:%d", host, port);
+    char addrStr[256];
+    snprintf(addrStr, sizeof(addrStr), "%s:%d", host, port);
     struct sockaddr_storage ss;
-    int ss_len = sizeof(ss);
-    if (evutil_parse_sockaddr_port(addr_str, (struct sockaddr*)&ss, &ss_len) == 0) {
+    int ssLen = sizeof(ss);
+    if (evutil_parse_sockaddr_port(addrStr, (struct sockaddr*)&ss, &ssLen) == 0) {
         /* Use the resolved address */
-        if (bufferevent_socket_connect(bev, (struct sockaddr*)&ss, ss_len) < 0) {
+        if (bufferevent_socket_connect(bev, (struct sockaddr*)&ss, ssLen) < 0) {
             bufferevent_free(bev);
             event_base_free(base);
             lua_pushnil(L);
@@ -420,16 +420,16 @@ int TCP_Connect(lua_State* L) {
         memset(&hints, 0, sizeof(hints));
         hints.ai_family = AF_UNSPEC;
         hints.ai_socktype = SOCK_STREAM;
-        char port_str[16];
-        snprintf(port_str, sizeof(port_str), "%d", port);
+        char portStr[16];
+        snprintf(portStr, sizeof(portStr), "%d", port);
 
-        int gai_err = getaddrinfo(host, port_str, &hints, &ai);
-        if (gai_err != 0 || !ai) {
+        int gaiErr = getaddrinfo(host, portStr, &hints, &ai);
+        if (gaiErr != 0 || !ai) {
             bufferevent_free(bev);
             event_base_free(base);
             lua_pushnil(L);
             lua_pushfstring(L, "failed to resolve '%s': %s", host,
-                gai_strerror(gai_err));
+                gai_strerror(gaiErr));
             return 2;
         }
 
@@ -447,7 +447,7 @@ int TCP_Connect(lua_State* L) {
     LuaTcpClient* client = lua_pushtcpclient(L);
     client->bev = bev;
     client->evbase = base;
-    client->owns_base = true; /* client-initiated connection owns its base */
+    client->ownsBase = true; /* client-initiated connection owns its base */
     client->connected = false;
     client->ip = kitsune_strdup(host);
     client->port = port;
@@ -483,22 +483,22 @@ int TcpListener_Accept(lua_State* L) {
     }
 
     /* No client waiting — return nil, nil */
-    if (s->pending_count == 0) {
+    if (s->pendingCount == 0) {
         lua_pushnil(L);
         lua_pushnil(L);
         return 2;
     }
 
     /* Dequeue the oldest pending client (FIFO) */
-    LuaTcpClient* client = s->pending_queue[0];
-    for (int i = 1; i < s->pending_count; i++)
-        s->pending_queue[i - 1] = s->pending_queue[i];
-    s->pending_count--;
+    LuaTcpClient* client = s->pendingQueue[0];
+    for (int i = 1; i < s->pendingCount; i++)
+        s->pendingQueue[i - 1] = s->pendingQueue[i];
+    s->pendingCount--;
 
     /* Push the client; release the registry self-ref (Lua now owns it via the stack) */
-    lua_rawgeti(L, LUA_REGISTRYINDEX, client->self_ref);
-    luaL_unref(L, LUA_REGISTRYINDEX, client->self_ref);
-    client->self_ref = 0;
+    lua_rawgeti(L, LUA_REGISTRYINDEX, client->selfRef);
+    luaL_unref(L, LUA_REGISTRYINDEX, client->selfRef);
+    client->selfRef = 0;
     return 1;
 }
 
@@ -510,12 +510,12 @@ int TcpListener_Dispose(lua_State* L) {
 
 int TcpListener_GetContext(lua_State* L) {
     LuaTcpListener* s = (LuaTcpListener*)luaL_checkudata(L, 1, LUATCPLISTENER);
-    if (s->context_ref <= 0) {
+    if (s->contextRef <= 0) {
         lua_newtable(L);
         lua_pushvalue(L, -1);
-        s->context_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+        s->contextRef = luaL_ref(L, LUA_REGISTRYINDEX);
     } else {
-        lua_rawgeti(L, LUA_REGISTRYINDEX, s->context_ref);
+        lua_rawgeti(L, LUA_REGISTRYINDEX, s->contextRef);
     }
     return 1;
 }
@@ -572,9 +572,9 @@ int TcpClient_Poll(lua_State* L) {
 
     /* No data in queue */
     if (!client->connected) {
-        if (client->error_msg) {
+        if (client->errorMsg) {
             lua_pushnil(L);
-            lua_pushstring(L, client->error_msg);
+            lua_pushstring(L, client->errorMsg);
             return 2;
         }
         /* Not connected, no error — clean close */
@@ -605,7 +605,7 @@ int TcpClient_Send(lua_State* L) {
 
     if (!client->connected) {
         lua_pushboolean(L, 0);
-        lua_pushstring(L, client->error_msg ? client->error_msg : "not connected");
+        lua_pushstring(L, client->errorMsg ? client->errorMsg : "not connected");
         return 2;
     }
 
@@ -648,8 +648,8 @@ int TcpClient_IsConnected(lua_State* L) {
     }
 
     lua_pushboolean(L, 0);
-    if (client->error_msg) {
-        lua_pushstring(L, client->error_msg);
+    if (client->errorMsg) {
+        lua_pushstring(L, client->errorMsg);
         return 2;
     }
     return 1;
@@ -663,12 +663,12 @@ int TcpClient_Dispose(lua_State* L) {
 
 int TcpClient_GetContext(lua_State* L) {
     LuaTcpClient* client = (LuaTcpClient*)luaL_checkudata(L, 1, LUATCPCLIENT);
-    if (client->context_ref <= 0) {
+    if (client->contextRef <= 0) {
         lua_newtable(L);
         lua_pushvalue(L, -1);
-        client->context_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+        client->contextRef = luaL_ref(L, LUA_REGISTRYINDEX);
     } else {
-        lua_rawgeti(L, LUA_REGISTRYINDEX, client->context_ref);
+        lua_rawgeti(L, LUA_REGISTRYINDEX, client->contextRef);
     }
     return 1;
 }

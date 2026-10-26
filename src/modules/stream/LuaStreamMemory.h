@@ -1,7 +1,7 @@
 #pragma once
 #include "stream/LuaStream.h"
 
-// Allocates an InMemoryStream and wires stream->vtbl, stream->native, stream->Caps.
+// Allocates an InMemoryStream and wires stream->vtbl, stream->native, stream->caps.
 // Calls luaL_error on out-of-memory.
 void LuaSetupInmemoryStream(lua_State* L, LuaStream* stream);
 

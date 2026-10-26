@@ -25,8 +25,8 @@ int Kafka_NewProducer(lua_State* L) {
 	rd_kafka_conf_t* conf = ToKafkaConf(L, 1, "LUAP");
 	rd_kafka_conf_set_log_cb(conf, KafkaLogger);
 
-	char errbuf[kafka_error_buffer_len];
-	rd_kafka_t* rd = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errbuf, kafka_error_buffer_len);
+	char errbuf[KAFKA_ERROR_BUFFER_LEN];
+	rd_kafka_t* rd = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errbuf, KAFKA_ERROR_BUFFER_LEN);
 	if (!rd) {
 		rd_kafka_conf_destroy(conf);
 		lua_pushnil(L);

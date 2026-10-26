@@ -10,7 +10,7 @@ bool RegisterKitsuneUserdata(lua_State* L, const char* name, const KitsuneUserDa
 	// registry so there is no partial registration to clean up.
 	bool hasGc = false;
 	bool hasToString = false;
-	const KitsuneNamedFunction* check = registration->MetaTableFunctions;
+	const KitsuneNamedFunction* check = registration->metaTableFunctions;
 	while (check) {
 		if (strcmp(check->name, "__gc") == 0)
 			hasGc = true;
@@ -18,7 +18,7 @@ bool RegisterKitsuneUserdata(lua_State* L, const char* name, const KitsuneUserDa
 			hasToString = true;
 		if (hasGc && hasToString)
 			break;
-		check = check->Next;
+		check = check->next;
 	}
 	if (!hasGc || !hasToString)
 		return false;
@@ -30,26 +30,26 @@ bool RegisterKitsuneUserdata(lua_State* L, const char* name, const KitsuneUserDa
 	}
 
 	// Stack: [..., metatable]
-	int meta_idx = lua_gettop(L);
+	int metaIdx = lua_gettop(L);
 
 	// __name lets FillKitsuneVariableFromStack read the type name when bridging back to C.
 	lua_pushliteral(L, "__name");
 	lua_pushstring(L, name);
-	lua_rawset(L, meta_idx);
+	lua_rawset(L, metaIdx);
 
 	// Sentinel field: the address of this function is unique per process.
 	// FillKitsuneVariableFromStack checks for it to distinguish Kitsune-registered
 	// userdatas (which expose their instance pointer) from foreign userdatas.
 	lua_pushliteral(L, "__kitsune_userdata");
 	lua_pushlightuserdata(L, (void*)RegisterKitsuneUserdata);
-	lua_rawset(L, meta_idx);
+	lua_rawset(L, metaIdx);
 
 	// Build the methods table and set it as __index so obj:Method() works.
 	lua_newtable(L);
 	// Stack: [..., metatable, methods]
-	int methods_idx = lua_gettop(L);
+	int methodsIdx = lua_gettop(L);
 
-	const KitsuneNamedFunction* fn = registration->Functions;
+	const KitsuneNamedFunction* fn = registration->functions;
 	while (fn) {
 		lua_pushstring(L, fn->name);
 		lua_pushlightuserdata(L, (void*)fn->func);
@@ -60,19 +60,19 @@ bool RegisterKitsuneUserdata(lua_State* L, const char* name, const KitsuneUserDa
 			nupvals = 3;
 		}
 		lua_pushcclosure(L, cfunctionWrapper, nupvals);
-		lua_rawset(L, methods_idx);
-		fn = fn->Next;
+		lua_rawset(L, methodsIdx);
+		fn = fn->next;
 	}
 
 	lua_pushliteral(L, "__index");
-	lua_pushvalue(L, methods_idx);
-	lua_rawset(L, meta_idx);
+	lua_pushvalue(L, methodsIdx);
+	lua_rawset(L, metaIdx);
 
 	// Pop the methods table; it is anchored via __index inside the metatable.
 	lua_pop(L, 1);
 
 	// Register metamethods (__gc, __tostring, etc.) directly on the metatable.
-	fn = registration->MetaTableFunctions;
+	fn = registration->metaTableFunctions;
 	while (fn) {
 		lua_pushstring(L, fn->name);
 		lua_pushlightuserdata(L, (void*)fn->func);
@@ -83,8 +83,8 @@ bool RegisterKitsuneUserdata(lua_State* L, const char* name, const KitsuneUserDa
 			nupvals = 3;
 		}
 		lua_pushcclosure(L, cfunctionWrapper, nupvals);
-		lua_rawset(L, meta_idx);
-		fn = fn->Next;
+		lua_rawset(L, metaIdx);
+		fn = fn->next;
 	}
 
 	// Pop the metatable; it is anchored in the Lua registry by luaL_newmetatable.

@@ -1,7 +1,7 @@
 ﻿#include "json/LuaJson.h"
 #include "json/LuaJsonMain.h"
 
-static const struct luaL_Reg json_functions[] = {
+static const struct luaL_Reg jsonFunctions[] = {
 	{ "New",                  Json_New                    },  // Json.New([pretty])
 	{ "Decode",               Json_Decode                },  // json:Decode(str | fn)
 	{ "Encode",               Json_Encode                },  // json:Encode(value)
@@ -13,15 +13,15 @@ static const struct luaL_Reg json_functions[] = {
 	{ NULL, NULL }
 };
 
-static const struct luaL_Reg json_meta[] = {
+static const struct luaL_Reg jsonMeta[] = {
 	{ "__gc",       Json_Dispose       },
 	{ "__tostring", Json_ToString },
 	{ NULL, NULL }
 };
 
 int luaopen_json(lua_State* L) {
-	luaL_newlibtable(L, json_functions);
-	luaL_setfuncs(L, json_functions, 0);
+	luaL_newlibtable(L, jsonFunctions);
+	luaL_setfuncs(L, jsonFunctions, 0);
 
 	// Json.Null — the unique lightuserdata sentinel for JSON null values.
 	// Lua code compares with:  if value == Json.Null then
@@ -35,9 +35,9 @@ int luaopen_json(lua_State* L) {
 	lua_setfield(L, -2, "EmptyObject");
 
 	// Instance metatable: __gc, __tostring, and __index = module table so all
-	// json_functions are reachable as both Json.Xxx() and json:Xxx().
+	// jsonFunctions are reachable as both Json.Xxx() and json:Xxx().
 	luaL_newmetatable(L, LUAJSON);
-	luaL_setfuncs(L, json_meta, 0);
+	luaL_setfuncs(L, jsonMeta, 0);
 	lua_pushliteral(L, "__index");
 	lua_pushvalue(L, -3);   // module table
 	lua_rawset(L, -3);

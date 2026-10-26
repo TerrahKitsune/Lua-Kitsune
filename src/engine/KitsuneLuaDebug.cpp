@@ -32,24 +32,24 @@ static void MergedHook(lua_State* L, lua_Debug* ar) {
 // Recompute merged mask/count and push to Lua.
 // Must be called with g_debugState->hookMtx already held.
 static void kitsune_recompute(lua_State* L, KitsuneHookState& s) {
-	int merged_mask = s.kitsune.mask | s.external.mask;
-	int merged_count = 0;
-	if (merged_mask & LUA_MASKCOUNT) {
+	int mergedMask = s.kitsune.mask | s.external.mask;
+	int mergedCount = 0;
+	if (mergedMask & LUA_MASKCOUNT) {
 		int kc = s.kitsune.count;
 		int ec = s.external.count;
 		if (kc > 0 && ec > 0)
-			merged_count = (kc < ec) ? kc : ec;
+			mergedCount = (kc < ec) ? kc : ec;
 		else if (kc > 0)
-			merged_count = kc;
+			mergedCount = kc;
 		else
-			merged_count = ec;
+			mergedCount = ec;
 	}
-	if (merged_mask == 0) {
+	if (mergedMask == 0) {
 		g_debugState->hookMap.erase(L);
 		lua_sethook_real(L, nullptr, 0, 0);
 	}
 	else {
-		lua_sethook_real(L, MergedHook, merged_mask, merged_count);
+		lua_sethook_real(L, MergedHook, mergedMask, mergedCount);
 	}
 }
 

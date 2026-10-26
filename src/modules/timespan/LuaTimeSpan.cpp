@@ -32,17 +32,17 @@ int lua_istimespan(lua_State* L, int index) {
 static int TimeSpanFormat(int64_t ticks, char* buf, size_t bufsz) {
     int neg = ticks < 0;
     // Use unsigned arithmetic to avoid INT64_MIN UB.
-    uint64_t abs_ticks = neg ? (ticks == INT64_MIN ? (uint64_t)INT64_MAX + 1ULL : (uint64_t)(-ticks)) : (uint64_t)ticks;
+    uint64_t absTicks = neg ? (ticks == INT64_MIN ? (uint64_t)INT64_MAX + 1ULL : (uint64_t)(-ticks)) : (uint64_t)ticks;
 
-    uint64_t ms      = abs_ticks / (uint64_t)TS_TICKS_PER_MILLISECOND;
-    uint64_t sec_tot = ms / 1000;
-    uint64_t ms_part = ms % 1000;
-    uint64_t min_tot = sec_tot / 60;
-    uint64_t sec     = sec_tot % 60;
-    uint64_t hr_tot  = min_tot / 60;
-    uint64_t min     = min_tot % 60;
-    uint64_t days    = hr_tot / 24;
-    uint64_t hr      = hr_tot % 24;
+    uint64_t ms      = absTicks / (uint64_t)TS_TICKS_PER_MILLISECOND;
+    uint64_t secTot = ms / 1000;
+    uint64_t msPart = ms % 1000;
+    uint64_t minTot = secTot / 60;
+    uint64_t sec     = secTot % 60;
+    uint64_t hrTot  = minTot / 60;
+    uint64_t min     = minTot % 60;
+    uint64_t days    = hrTot / 24;
+    uint64_t hr      = hrTot % 24;
 
     int n;
     if (days > 0)
@@ -52,14 +52,14 @@ static int TimeSpanFormat(int64_t ticks, char* buf, size_t bufsz) {
             (unsigned long long)hr,
             (unsigned long long)min,
             (unsigned long long)sec,
-            (unsigned long long)ms_part);
+            (unsigned long long)msPart);
     else
         n = snprintf(buf, bufsz, "%s%02llu:%02llu:%02llu.%03llu",
             neg ? "-" : "",
             (unsigned long long)hr,
             (unsigned long long)min,
             (unsigned long long)sec,
-            (unsigned long long)ms_part);
+            (unsigned long long)msPart);
     return n;
 }
 
@@ -195,8 +195,8 @@ int TimeSpan_IsNegative(lua_State* L) {
 
 int TimeSpan_Abs(lua_State* L) {
     int64_t t = lua_totimespan(L, 1)->ticks;
-    int64_t abs_t = t < 0 ? (t == INT64_MIN ? INT64_MAX : -t) : t;
-    lua_pushtimespan(L)->ticks = abs_t;
+    int64_t absT = t < 0 ? (t == INT64_MIN ? INT64_MAX : -t) : t;
+    lua_pushtimespan(L)->ticks = absT;
     return 1;
 }
 

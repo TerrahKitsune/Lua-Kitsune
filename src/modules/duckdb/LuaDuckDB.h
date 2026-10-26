@@ -11,7 +11,7 @@ typedef struct LuaDuckDB {
 	duckdb_result result;
 	idx_t current_row;
 	idx_t row_count;
-	bool has_result;
+	bool hasResult;
 	char *file;
 } LuaDuckDB;
 

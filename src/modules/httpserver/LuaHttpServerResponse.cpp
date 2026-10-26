@@ -9,11 +9,11 @@
 
 /* ── internal guard ───────────────────────────────────────────────────────── */
 
-static LuaHttpResponse* ResponseGuard(lua_State* L, bool check_finalized) {
+static LuaHttpResponse* ResponseGuard(lua_State* L, bool checkFinalized) {
     LuaHttpResponse* r = luaL_checkhttpresponse(L, 1);
     if (!r->connection)
         luaL_error(L, "HttpResponse: connection is no longer alive");
-    if (check_finalized && r->finalized)
+    if (checkFinalized && r->finalized)
         luaL_error(L, "HttpResponse: response already finalized");
     return r;
 }
@@ -101,7 +101,7 @@ static const char* HttpReasonPhrase(int code) {
 
 int HttpResponse_SetCode(lua_State* L) {
     LuaHttpResponse* r = ResponseGuard(L, true);
-    r->status_code = (int)luaL_checkinteger(L, 2);
+    r->statusCode = (int)luaL_checkinteger(L, 2);
     return 0;
 }
 
@@ -122,7 +122,7 @@ int HttpResponse_SetHeader(lua_State* L) {
 int HttpResponse_Send(lua_State* L) {
     LuaHttpResponse* r = ResponseGuard(L, true);
 
-    if (!r->connection->is_finished) {
+    if (!r->connection->isFinished) {
         lua_pushboolean(L, false);
         return 1;
     }
@@ -138,7 +138,7 @@ int HttpResponse_Send(lua_State* L) {
     if (type == LUA_TNONE || type == LUA_TNIL) {
         /* Send() — no body */
         struct evbuffer* buf = evbuffer_new();
-        evhttp_send_reply(req, r->status_code, HttpReasonPhrase(r->status_code), buf);
+        evhttp_send_reply(req, r->statusCode, HttpReasonPhrase(r->statusCode), buf);
         evbuffer_free(buf);
         /* evhttp_send_done will free req after the write drains — do NOT call
            evhttp_request_free here. Null now so HttpRequestCleanup skips it. */
@@ -155,7 +155,7 @@ int HttpResponse_Send(lua_State* L) {
         struct evbuffer* buf = evbuffer_new();
         if (buf)
             evbuffer_add(buf, body, len);
-        evhttp_send_reply(req, r->status_code, HttpReasonPhrase(r->status_code), buf);
+        evhttp_send_reply(req, r->statusCode, HttpReasonPhrase(r->statusCode), buf);
         if (buf)
             evbuffer_free(buf);
         /* evhttp_send_done owns the free — do NOT call evhttp_request_free. */
@@ -170,11 +170,11 @@ int HttpResponse_Send(lua_State* L) {
         LuaStream* stream = (LuaStream*)luaL_checkudata(L, 2, "STREAM");
         if (!stream)
             luaL_error(L, "HttpResponse:Send expects a string or Stream");
-        if (!(stream->Caps & STREAM_CAP_READ))
+        if (!(stream->caps & STREAM_CAP_READ))
             luaL_error(L, "HttpResponse:Send — stream must have STREAM_CAP_READ");
 
         /* evhttp always uses chunked TE for the send_reply_start path */
-        evhttp_send_reply_start(req, r->status_code, HttpReasonPhrase(r->status_code));
+        evhttp_send_reply_start(req, r->statusCode, HttpReasonPhrase(r->statusCode));
 
         r->stream    = stream;
         r->chunked   = true;
@@ -183,22 +183,22 @@ int HttpResponse_Send(lua_State* L) {
         /* Keep the stream userdata alive in the Lua registry so GC cannot
            collect it while chunked sending is still in progress. */
         lua_pushvalue(L, 2);
-        r->stream_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+        r->streamRef = luaL_ref(L, LUA_REGISTRYINDEX);
 
         /* Enqueue into server senders so AcceptCont pumps chunks each tick */
         LuaHttpServer* server = r->connection->server;
         if (server) {
             lua_pushlightuserdata(L, (void*)req);
             lua_rawget(L, LUA_REGISTRYINDEX);
-            int req_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+            int reqRef = luaL_ref(L, LUA_REGISTRYINDEX);
 
             HttpOpenConnection* node = (HttpOpenConnection*)kitsune_malloc(sizeof(HttpOpenConnection));
             if (node) {
-                node->request_ref = req_ref;
+                node->requestRef = reqRef;
                 node->next        = server->senders;
                 server->senders   = node;
             } else {
-                luaL_unref(L, LUA_REGISTRYINDEX, req_ref);
+                luaL_unref(L, LUA_REGISTRYINDEX, reqRef);
             }
         }
 

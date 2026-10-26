@@ -48,18 +48,18 @@ static void CurlmStep(CURLM* multi) {
 }
 
 // -- Registry anchor keys (static-address trick) -------------------------------
-const char g_curlm_key    = 0;
-const char g_sentinel_key = 0;
+const char CURLM_KEY    = 0;
+const char SENTINEL_KEY = 0;
 
 // -- CURLM* sentinel __gc -----------------------------------------------------
 int HttpSentinel_GC(lua_State* L) {
-	lua_rawgetp(L, LUA_REGISTRYINDEX, &g_curlm_key);
+	lua_rawgetp(L, LUA_REGISTRYINDEX, &CURLM_KEY);
 	CURLM* multi = (CURLM*)lua_touserdata(L, -1);
 	lua_pop(L, 1);
 	if (multi) {
 		curl_multi_cleanup(multi);
 		lua_pushnil(L);
-		lua_rawsetp(L, LUA_REGISTRYINDEX, &g_curlm_key);
+		lua_rawsetp(L, LUA_REGISTRYINDEX, &CURLM_KEY);
 	}
 	return 0;
 }
@@ -515,7 +515,7 @@ int HttpClient_Request(lua_State* L) {
 	}
 
 	// Retrieve the shared CURLM* from the registry
-	lua_rawgetp(L, LUA_REGISTRYINDEX, &g_curlm_key);
+	lua_rawgetp(L, LUA_REGISTRYINDEX, &CURLM_KEY);
 	CURLM* multi = (CURLM*)lua_touserdata(L, -1);
 	lua_pop(L, 1);
 	if (!multi) {
@@ -577,7 +577,7 @@ int HttpClient_Request(lua_State* L) {
 		curl_easy_setopt(req->easy, CURLOPT_READFUNCTION, ReadBodyCallback);
 		curl_easy_setopt(req->easy, CURLOPT_READDATA,     req);
 		curl_off_t uploadSize = -1;
-		if (streamInput->Caps & STREAM_CAP_SEEK) {
+		if (streamInput->caps & STREAM_CAP_SEEK) {
 			lua_Integer pos = streamInput->vtbl->curpos(streamInput->native);
 			lua_Integer len = streamInput->vtbl->getlen(streamInput->native);
 			uploadSize = (curl_off_t)(len - pos);
@@ -927,7 +927,7 @@ int HttpClient_Stream(lua_State* L) {
 	}
 	int headersIdx = lua_istable(L, 5) ? 5 : 0;
 
-	lua_rawgetp(L, LUA_REGISTRYINDEX, &g_curlm_key);
+	lua_rawgetp(L, LUA_REGISTRYINDEX, &CURLM_KEY);
 	CURLM* multi = (CURLM*)lua_touserdata(L, -1);
 	lua_pop(L, 1);
 	if (!multi) {

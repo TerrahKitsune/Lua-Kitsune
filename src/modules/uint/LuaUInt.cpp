@@ -70,19 +70,19 @@ static int UIntParseC(const char* s, size_t len, uint64_t* out) {
     if (i >= len)
         return 0;
     uint64_t v = 0;
-    int has_digit = 0;
+    int hasDigit = 0;
     for (; i < len; i++) {
         char c = s[i];
         if (!isdigit((unsigned char)c))
             return 0;
-        has_digit = 1;
+        hasDigit = 1;
         uint64_t digit = (uint64_t)(c - '0');
         // Check for overflow: v * 10 + digit > UINT64_MAX
         if (v > (UINT64_MAX - digit) / 10)
             return 0;
         v = v * 10 + digit;
     }
-    if (!has_digit)
+    if (!hasDigit)
         return 0;
     *out = v;
     return 1;

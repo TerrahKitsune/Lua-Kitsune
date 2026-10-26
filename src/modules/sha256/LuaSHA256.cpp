@@ -27,7 +27,7 @@ int SHA256_New(lua_State *L) {
 	if (!luasha256)
 		luaL_error(L, "Unable to push sha256 instance");
 
-	sha256_init(&luasha256->SHA);
+	sha256_init(&luasha256->sha);
 
 	return 1;
 }
@@ -43,7 +43,7 @@ int SHA256_Update(lua_State *L) {
 	size_t len;
 	const char * data = luaL_tolstring(L, 2, &len);
 	if (data) {
-		sha256_update(&luasha256->SHA, (unsigned char*)data, len);
+		sha256_update(&luasha256->sha, (unsigned char*)data, len);
 	}
 	lua_pop(L, 2);
 	return 0;
@@ -53,7 +53,7 @@ int SHA256_Finish(lua_State *L) {
 
 	LuaSHA256 * luasha256 = lua_tosha256(L, 1);
 	if (!luasha256->finished) {
-		sha256_final(&luasha256->SHA, luasha256->hash);
+		sha256_final(&luasha256->sha, luasha256->hash);
 		luasha256->finished = true;   // later calls return the same digest
 	}
 

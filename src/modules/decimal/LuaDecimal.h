@@ -15,7 +15,7 @@ typedef struct LuaDecimal {
 	uint64_t hi;
 	int16_t  scale;
 	uint8_t  negative;
-	uint8_t  _pad;
+	uint8_t  pad;
 } LuaDecimal;
 
 LuaDecimal* lua_pushdecimal(lua_State* L);

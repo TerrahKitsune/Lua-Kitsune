@@ -25,7 +25,7 @@ int FileSystem_Open(lua_State* L) {
 #include <io.h>
 #include <shlobj.h>
 
-static wchar_t _PATHW[MAX_PATH_LENGTH];
+static wchar_t g_pathW[MAX_PATH_LENGTH];
 
 #ifndef IO_REPARSE_TAG_LX_SYMLINK
 #define IO_REPARSE_TAG_LX_SYMLINK (0xA000001DL)
@@ -83,25 +83,25 @@ static int ArgToWide(lua_State* L, int idx, wchar_t* dst, int cap) {
 // Internal: convert a UTF-8 path to wchar_t (normalises slashes, optionally appends "\*").
 static const wchar_t* ToPathW(lua_State* L, int idx, bool wildcard = false) {
 
-	int len = ArgToWide(L, idx, _PATHW, MAX_PATH_LENGTH);
+	int len = ArgToWide(L, idx, g_pathW, MAX_PATH_LENGTH);
 	if (len < 0)
 		luaL_error(L, "path is too long (max %d characters)", MAX_PATH_LENGTH - 1);
 
 	for (int n = 0; n < len; n++) {
-		if (_PATHW[n] == L'/')
-			_PATHW[n] = L'\\';
+		if (g_pathW[n] == L'/')
+			g_pathW[n] = L'\\';
 	}
 
 	if (wildcard) {
-		bool needsep = len > 0 && _PATHW[len - 1] != L'\\';
+		bool needsep = len > 0 && g_pathW[len - 1] != L'\\';
 		if ((size_t)len + (needsep ? 2 : 1) >= MAX_PATH_LENGTH)
 			luaL_error(L, "path is too long (max %d characters)", MAX_PATH_LENGTH - 1);
 		if (needsep)
-			wcscat(_PATHW, L"\\");
-		wcscat(_PATHW, L"*");
+			wcscat(g_pathW, L"\\");
+		wcscat(g_pathW, L"*");
 	}
 
-	return _PATHW;
+	return g_pathW;
 }
 
 static time_t FileTimeToTimeT(const FILETIME* ft) {
@@ -111,10 +111,10 @@ static time_t FileTimeToTimeT(const FILETIME* ft) {
 	ULARGE_INTEGER ull;
 	ull.LowPart = ft->dwLowDateTime;
 	ull.HighPart = ft->dwHighDateTime;
-	const unsigned long long epoch_diff = 116444736000000000ULL;
-	if (ull.QuadPart < epoch_diff)
+	const unsigned long long epochDiff = 116444736000000000ULL;
+	if (ull.QuadPart < epochDiff)
 		return 0;
-	return (time_t)((ull.QuadPart - epoch_diff) / 10000000ULL);
+	return (time_t)((ull.QuadPart - epochDiff) / 10000000ULL);
 }
 
 static void PushFindDataW(lua_State* L, const WIN32_FIND_DATAW* d) {
@@ -274,15 +274,15 @@ static void PushLinkTarget(lua_State* L, const wchar_t* path) {
 
 int FileSystem_CurrentDirectory(lua_State* L) {
 
-	DWORD len = GetCurrentDirectoryW(MAX_PATH_LENGTH, _PATHW);
-	lua_pushwideasutf8(L, _PATHW, (len < MAX_PATH_LENGTH) ? len : 0);
+	DWORD len = GetCurrentDirectoryW(MAX_PATH_LENGTH, g_pathW);
+	lua_pushwideasutf8(L, g_pathW, (len < MAX_PATH_LENGTH) ? len : 0);
 	return 1;
 }
 
 int FileSystem_GetSpecialFolder(lua_State* L) {
 
-	if (SUCCEEDED(SHGetFolderPathW(NULL, (int)luaL_optinteger(L, 1, CSIDL_DESKTOPDIRECTORY), NULL, 0, _PATHW)))
-		lua_pushwideasutf8(L, _PATHW);
+	if (SUCCEEDED(SHGetFolderPathW(NULL, (int)luaL_optinteger(L, 1, CSIDL_DESKTOPDIRECTORY), NULL, 0, g_pathW)))
+		lua_pushwideasutf8(L, g_pathW);
 	else
 		lua_pushnil(L);
 	return 1;
@@ -398,9 +398,9 @@ int FileSystem_Copy(lua_State* L) {
 	wcsncpy(srccopy, src, MAX_PATH_LENGTH - 1);
 	srccopy[MAX_PATH_LENGTH - 1] = 0;
 	const wchar_t* dst = ToPathW(L, 2);
-	BOOL no_overwrite = !lua_toboolean(L, 3);
+	BOOL noOverwrite = !lua_toboolean(L, 3);
 	lua_pop(L, lua_gettop(L));
-	lua_pushboolean(L, CopyFileW(srccopy, dst, no_overwrite));
+	lua_pushboolean(L, CopyFileW(srccopy, dst, noOverwrite));
 	return 1;
 }
 
@@ -571,7 +571,7 @@ int FileSystem_GetDrives(lua_State* L) {
 #include <fcntl.h>
 #include <stdint.h>
 
-static char _PATH[MAX_PATH_LENGTH];
+static char g_path[MAX_PATH_LENGTH];
 
 // Internal: copy the UTF-8 path argument into a caller-supplied buffer.
 static const char* DupPath(lua_State* L, int idx, char* buf, size_t bufsz) {
@@ -586,9 +586,9 @@ static const char* DupPath(lua_State* L, int idx, char* buf, size_t bufsz) {
 
 int FileSystem_CurrentDirectory(lua_State* L) {
 
-	if (!getcwd(_PATH, sizeof(_PATH)))
+	if (!getcwd(g_path, sizeof(g_path)))
 		luaL_error(L, "getcwd failed: %s", strerror(errno));
-	lua_pushstring(L, _PATH);
+	lua_pushstring(L, g_path);
 	return 1;
 }
 

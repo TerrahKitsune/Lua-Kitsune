@@ -34,12 +34,12 @@ LuaProcess* lua_pushprocess(lua_State* L) {
 	proc->hChildStd_ERR_Rd = INVALID_HANDLE_VALUE;
 	proc->hChildStd_ERR_Wr = INVALID_HANDLE_VALUE;
 #else
-	proc->fd_in_r  = -1;
-	proc->fd_in_w  = -1;
-	proc->fd_out_r = -1;
-	proc->fd_out_w = -1;
-	proc->fd_err_r = -1;
-	proc->fd_err_w = -1;
+	proc->fdInR  = -1;
+	proc->fdInW  = -1;
+	proc->fdOutR = -1;
+	proc->fdOutW = -1;
+	proc->fdErrR = -1;
+	proc->fdErrW = -1;
 #endif
 	return proc;
 }
@@ -623,12 +623,12 @@ int Process_All(lua_State* L) {
 	while ((entry = readdir(dir)) != NULL) {
 		// Only numeric directory names are PIDs
 		const char* dname = entry->d_name;
-		bool is_pid = dname[0] != '\0';
-		for (int i = 0; dname[i] && is_pid; i++) {
+		bool isPid = dname[0] != '\0';
+		for (int i = 0; dname[i] && isPid; i++) {
 			if (dname[i] < '0' || dname[i] > '9')
-				is_pid = false;
+				isPid = false;
 		}
-		if (!is_pid)
+		if (!isPid)
 			continue;
 		int pid = atoi(dname);
 		if (pid <= 0)
@@ -682,8 +682,8 @@ int Process_Start(lua_State* L) {
 	}
 
 	// Use cmd if available, fall back to appname (matches Windows CreateProcess semantics)
-	const char* exec_cmd = cmd ? cmd : appname;
-	if (!exec_cmd) {
+	const char* execCmd = cmd ? cmd : appname;
+	if (!execCmd) {
 		lua_pop(L, lua_gettop(L));
 		lua_pushnil(L);
 		lua_pushstring(L, "no command specified");
@@ -706,27 +706,27 @@ int Process_Start(lua_State* L) {
 				luaL_addchar(&b, *p);
 		}
 		luaL_addstring(&b, "' && ");
-		luaL_addstring(&b, exec_cmd);
+		luaL_addstring(&b, execCmd);
 		luaL_pushresult(&b);
-		exec_cmd = lua_tostring(L, -1);
+		execCmd = lua_tostring(L, -1);
 	}
 
 	int fd_in[2]  = { -1, -1 };
 	int fd_out[2] = { -1, -1 };
-	int fd_err[2] = { -1, -1 };
-	bool pipe_ok = true;
+	int fdErr[2] = { -1, -1 };
+	bool pipeOk = true;
 
-	if (pipe_ok && (mask & LUA_PROC_IN)  && pipe(fd_in)  != 0) pipe_ok = false;
-	if (pipe_ok && (mask & LUA_PROC_OUT) && pipe(fd_out) != 0) pipe_ok = false;
-	if (pipe_ok && (mask & LUA_PROC_ERR) && pipe(fd_err) != 0) pipe_ok = false;
+	if (pipeOk && (mask & LUA_PROC_IN)  && pipe(fd_in)  != 0) pipeOk = false;
+	if (pipeOk && (mask & LUA_PROC_OUT) && pipe(fd_out) != 0) pipeOk = false;
+	if (pipeOk && (mask & LUA_PROC_ERR) && pipe(fdErr) != 0) pipeOk = false;
 
-	if (!pipe_ok) {
+	if (!pipeOk) {
 		if (fd_in[0]  >= 0) close(fd_in[0]);
 		if (fd_in[1]  >= 0) close(fd_in[1]);
 		if (fd_out[0] >= 0) close(fd_out[0]);
 		if (fd_out[1] >= 0) close(fd_out[1]);
-		if (fd_err[0] >= 0) close(fd_err[0]);
-		if (fd_err[1] >= 0) close(fd_err[1]);
+		if (fdErr[0] >= 0) close(fdErr[0]);
+		if (fdErr[1] >= 0) close(fdErr[1]);
 		lua_pop(L, lua_gettop(L));
 		lua_pushnil(L);
 		lua_pushstring(L, "failed to create process pipes");
@@ -750,13 +750,13 @@ int Process_Start(lua_State* L) {
 		posix_spawn_file_actions_addclose(&fa, fd_out[1]);
 	}
 	if (mask & LUA_PROC_ERR) {
-		posix_spawn_file_actions_adddup2(&fa, fd_err[1], STDERR_FILENO);
-		posix_spawn_file_actions_addclose(&fa, fd_err[0]);
-		posix_spawn_file_actions_addclose(&fa, fd_err[1]);
+		posix_spawn_file_actions_adddup2(&fa, fdErr[1], STDERR_FILENO);
+		posix_spawn_file_actions_addclose(&fa, fdErr[0]);
+		posix_spawn_file_actions_addclose(&fa, fdErr[1]);
 	}
 
 	extern char** environ;
-	const char* argv[] = { "sh", "-c", exec_cmd, NULL };
+	const char* argv[] = { "sh", "-c", execCmd, NULL };
 	pid_t pid = -1;
 	int rc = posix_spawn(&pid, "/bin/sh", &fa, NULL, (char* const*)argv, environ);
 
@@ -765,12 +765,12 @@ int Process_Start(lua_State* L) {
 	// Parent: close the child-side ends we no longer need
 	if (mask & LUA_PROC_IN)  close(fd_in[0]);
 	if (mask & LUA_PROC_OUT) close(fd_out[1]);
-	if (mask & LUA_PROC_ERR) close(fd_err[1]);
+	if (mask & LUA_PROC_ERR) close(fdErr[1]);
 
 	if (rc != 0) {
 		if (mask & LUA_PROC_IN)  close(fd_in[1]);
 		if (mask & LUA_PROC_OUT) close(fd_out[0]);
-		if (mask & LUA_PROC_ERR) close(fd_err[0]);
+		if (mask & LUA_PROC_ERR) close(fdErr[0]);
 		lua_pop(L, lua_gettop(L));
 		lua_pushnil(L);
 		lua_pushstring(L, "posix_spawn failed");
@@ -780,9 +780,9 @@ int Process_Start(lua_State* L) {
 	lua_pop(L, lua_gettop(L));
 	LuaProcess* proc = lua_pushprocess(L);
 	proc->pid      = pid;
-	proc->fd_in_w  = (mask & LUA_PROC_IN)  ? fd_in[1]  : -1;
-	proc->fd_out_r = (mask & LUA_PROC_OUT) ? fd_out[0] : -1;
-	proc->fd_err_r = (mask & LUA_PROC_ERR) ? fd_err[0] : -1;
+	proc->fdInW  = (mask & LUA_PROC_IN)  ? fd_in[1]  : -1;
+	proc->fdOutR = (mask & LUA_PROC_OUT) ? fd_out[0] : -1;
+	proc->fdErrR = (mask & LUA_PROC_ERR) ? fdErr[0] : -1;
 	return 1;
 }
 
@@ -790,12 +790,12 @@ int Process_WriteToPipe(lua_State* L) {
 	LuaProcess* proc = lua_toprocess(L, 1);
 	size_t len;
 	const char* data = luaL_checklstring(L, 2, &len);
-	if (proc->fd_in_w < 0) {
+	if (proc->fdInW < 0) {
 		lua_pop(L, lua_gettop(L));
 		lua_pushinteger(L, -1);
 		return 1;
 	}
-	ssize_t written = write(proc->fd_in_w, data, len);
+	ssize_t written = write(proc->fdInW, data, len);
 	lua_pop(L, lua_gettop(L));
 	lua_pushinteger(L, (lua_Integer)written);
 	return 1;
@@ -815,7 +815,7 @@ static ssize_t ReadNonblocking(int fd, char* buf, size_t bufsize) {
 int Process_ReadFromPipe(lua_State* L) {
 	LuaProcess* proc = lua_toprocess(L, 1);
 	unsigned int buffersize = (unsigned int)luaL_optinteger(L, 2, 1048576);
-	if (proc->fd_out_r < 0) {
+	if (proc->fdOutR < 0) {
 		lua_pop(L, lua_gettop(L));
 		lua_pushnil(L);
 		return 1;
@@ -828,7 +828,7 @@ int Process_ReadFromPipe(lua_State* L) {
 		lua_pushnil(L);
 		return 1;
 	}
-	ssize_t nread = ReadNonblocking(proc->fd_out_r, data, buffersize - 1);
+	ssize_t nread = ReadNonblocking(proc->fdOutR, data, buffersize - 1);
 	if (nread <= 0) {
 		kitsune_free(data);
 		lua_pop(L, lua_gettop(L));
@@ -844,7 +844,7 @@ int Process_ReadFromPipe(lua_State* L) {
 int Process_ReadErrorFromPipe(lua_State* L) {
 	LuaProcess* proc = lua_toprocess(L, 1);
 	unsigned int buffersize = (unsigned int)luaL_optinteger(L, 2, 1048576);
-	if (proc->fd_err_r < 0) {
+	if (proc->fdErrR < 0) {
 		lua_pop(L, lua_gettop(L));
 		lua_pushnil(L);
 		return 1;
@@ -857,7 +857,7 @@ int Process_ReadErrorFromPipe(lua_State* L) {
 		lua_pushnil(L);
 		return 1;
 	}
-	ssize_t nread = ReadNonblocking(proc->fd_err_r, data, buffersize - 1);
+	ssize_t nread = ReadNonblocking(proc->fdErrR, data, buffersize - 1);
 	if (nread <= 0) {
 		kitsune_free(data);
 		lua_pop(L, lua_gettop(L));
@@ -884,7 +884,7 @@ int Process_Stop(lua_State* L) {
 int Process_GetExitCode(lua_State* L) {
 	LuaProcess* proc = lua_toprocess(L, 1);
 	lua_pop(L, 1);
-	if (proc->has_exited) {
+	if (proc->hasExited) {
 		lua_pushinteger(L, proc->exit_status);
 		return 1;
 	}
@@ -896,7 +896,7 @@ int Process_GetExitCode(lua_State* L) {
 	pid_t result = waitpid(proc->pid, &status, WNOHANG);
 	if (result == proc->pid) {
 		proc->exit_status = WIFEXITED(status) ? (int)WEXITSTATUS(status) : -(int)WTERMSIG(status);
-		proc->has_exited  = 1;
+		proc->hasExited  = 1;
 		lua_pushinteger(L, proc->exit_status);
 	}
 	else {
@@ -958,28 +958,28 @@ int Process_GetRAM(lua_State* L) {
 		return 1;
 	}
 	char line[256];
-	size_t vmrss_kb = 0;
+	size_t vmrssKb = 0;
 	while (fgets(line, sizeof(line), f)) {
 		if (strncmp(line, "VmRSS:", 6) == 0) {
-			sscanf(line + 6, "%zu", &vmrss_kb);
+			sscanf(line + 6, "%zu", &vmrssKb);
 			break;
 		}
 	}
 	fclose(f);
-	lua_pushnumber(L, (lua_Number)(vmrss_kb * 1024));
+	lua_pushnumber(L, (lua_Number)(vmrssKb * 1024));
 	return 1;
 }
 
 int Process_GC(lua_State* L) {
 	LuaProcess* proc = lua_toprocess(L, 1);
-	if (proc->fd_in_r  >= 0) close(proc->fd_in_r);
-	if (proc->fd_in_w  >= 0) close(proc->fd_in_w);
-	if (proc->fd_out_r >= 0) close(proc->fd_out_r);
-	if (proc->fd_out_w >= 0) close(proc->fd_out_w);
-	if (proc->fd_err_r >= 0) close(proc->fd_err_r);
-	if (proc->fd_err_w >= 0) close(proc->fd_err_w);
+	if (proc->fdInR  >= 0) close(proc->fdInR);
+	if (proc->fdInW  >= 0) close(proc->fdInW);
+	if (proc->fdOutR >= 0) close(proc->fdOutR);
+	if (proc->fdOutW >= 0) close(proc->fdOutW);
+	if (proc->fdErrR >= 0) close(proc->fdErrR);
+	if (proc->fdErrW >= 0) close(proc->fdErrW);
 	// Reap the child without blocking if it has already exited
-	if (proc->pid > 0 && !proc->has_exited) {
+	if (proc->pid > 0 && !proc->hasExited) {
 		int status;
 		waitpid(proc->pid, &status, WNOHANG);
 	}

@@ -46,7 +46,7 @@ LuaStream* lua_pushstreamnative(lua_State* L, const LuaStreamVtable* vtbl,
 	s->backendRef = LUA_NOREF;
 	s->vtbl       = vtbl;
 	s->native     = native;
-	s->Caps       = caps;
+	s->caps       = caps;
 	return s;
 }
 
@@ -133,7 +133,7 @@ int Stream_Close(lua_State* L) {
 
 int Stream_ToString(lua_State* L) {
 	LuaStream* s = lua_tostream(L, 1);
-	if ((s->Caps & STREAM_CAP_READ) && (s->Caps & STREAM_CAP_SEEK) && LuaIsInmemoryStream(s))
+	if ((s->caps & STREAM_CAP_READ) && (s->caps & STREAM_CAP_SEEK) && LuaIsInmemoryStream(s))
 		return Stream_Read(L);
 	lua_pushfstring(L, "Stream(%p)", s);
 	return 1;
@@ -165,10 +165,10 @@ int Stream_New(lua_State* L) {
 			luaL_error(L, "Backend function failed to open");
 			return 0;
 		}
-		stream->Caps = (BYTE)lua_tointeger(L, -1);
+		stream->caps = (BYTE)lua_tointeger(L, -1);
 
-		// If Caps is 0 the backend opened but exposed nothing useful
-		if (stream->Caps == 0) {
+		// If caps is 0 the backend opened but exposed nothing useful
+		if (stream->caps == 0) {
 			luaL_error(L, "Backend function failed to open");
 			return 0;
 		}
@@ -187,7 +187,7 @@ int Stream_New(lua_State* L) {
 
 int Stream_pos(lua_State* L) {
 	LuaStream* stream = lua_tostream(L, 1);
-	if (!(stream->Caps & STREAM_CAP_SEEK)) {
+	if (!(stream->caps & STREAM_CAP_SEEK)) {
 		lua_pushnil(L);
 		return 1;
 	}
@@ -197,7 +197,7 @@ int Stream_pos(lua_State* L) {
 
 int Stream_len(lua_State* L) {
 	LuaStream* stream = lua_tostream(L, 1);
-	if (!(stream->Caps & STREAM_CAP_READ)) {
+	if (!(stream->caps & STREAM_CAP_READ)) {
 		lua_pushnil(L);
 		return 1;
 	}
@@ -217,7 +217,7 @@ int Stream_GetInfo(lua_State* L) {
 	}
 	// Sync streams: returns 2 values — caps table + backend info table.
 	lua_createtable(L, 0, 1);
-	lua_pushinteger(L, s->Caps);
+	lua_pushinteger(L, s->caps);
 	lua_setfield(L, -2, "Caps");
 	if (s->vtbl) {
 		s->vtbl->info(s->native, L);
@@ -231,7 +231,7 @@ int Stream_GetInfo(lua_State* L) {
 
 int Stream_Seek(lua_State* L) {
 	LuaStream* stream = lua_tostream(L, 1);
-	if (!(stream->Caps & STREAM_CAP_SEEK)) {
+	if (!(stream->caps & STREAM_CAP_SEEK)) {
 		lua_pushboolean(L, false);
 		return 1;
 	}
@@ -293,7 +293,7 @@ static int FnReadCont(lua_State* L, int status, lua_KContext ctx) {
 
 int Stream_Read(lua_State* L) {
 	LuaStream* s = lua_tostream(L, 1);
-	if (!(s->Caps & STREAM_CAP_READ)) {
+	if (!(s->caps & STREAM_CAP_READ)) {
 		lua_pushnil(L);
 		return 1;
 	}
@@ -318,7 +318,7 @@ int Stream_Read(lua_State* L) {
 
 int Stream_ReadByte(lua_State* L) {
 	LuaStream* s = lua_tostream(L, 1);
-	if (!(s->Caps & STREAM_CAP_READ)) {
+	if (!(s->caps & STREAM_CAP_READ)) {
 		lua_pushinteger(L, -1);
 		return 1;
 	}
@@ -377,7 +377,7 @@ int Stream_HasData(lua_State* L) {
 
 int Stream_PeekByte(lua_State* L) {
 	LuaStream* s = lua_tostream(L, 1);
-	if (!(s->Caps & STREAM_CAP_READ) || !(s->Caps & STREAM_CAP_SEEK)) {
+	if (!(s->caps & STREAM_CAP_READ) || !(s->caps & STREAM_CAP_SEEK)) {
 		lua_pushinteger(L, -1);
 		return 1;
 	}
@@ -400,7 +400,7 @@ int Stream_PeekByte(lua_State* L) {
 
 int Stream_ReadFloat(lua_State* L) {
 	LuaStream* s = lua_tostream(L, 1);
-	if (!(s->Caps & STREAM_CAP_READ)) {
+	if (!(s->caps & STREAM_CAP_READ)) {
 		lua_pushnil(L);
 		return 1;
 	}
@@ -419,7 +419,7 @@ int Stream_ReadFloat(lua_State* L) {
 
 int Stream_ReadDouble(lua_State* L) {
 	LuaStream* s = lua_tostream(L, 1);
-	if (!(s->Caps & STREAM_CAP_READ)) {
+	if (!(s->caps & STREAM_CAP_READ)) {
 		lua_pushnil(L);
 		return 1;
 	}
@@ -438,7 +438,7 @@ int Stream_ReadDouble(lua_State* L) {
 
 int Stream_ReadShort(lua_State* L) {
 	LuaStream* s = lua_tostream(L, 1);
-	if (!(s->Caps & STREAM_CAP_READ)) {
+	if (!(s->caps & STREAM_CAP_READ)) {
 		lua_pushnil(L);
 		return 1;
 	}
@@ -457,7 +457,7 @@ int Stream_ReadShort(lua_State* L) {
 
 int Stream_ReadUnsignedShort(lua_State* L) {
 	LuaStream* s = lua_tostream(L, 1);
-	if (!(s->Caps & STREAM_CAP_READ)) {
+	if (!(s->caps & STREAM_CAP_READ)) {
 		lua_pushnil(L);
 		return 1;
 	}
@@ -476,7 +476,7 @@ int Stream_ReadUnsignedShort(lua_State* L) {
 
 int Stream_ReadInt(lua_State* L) {
 	LuaStream* s = lua_tostream(L, 1);
-	if (!(s->Caps & STREAM_CAP_READ)) {
+	if (!(s->caps & STREAM_CAP_READ)) {
 		lua_pushnil(L);
 		return 1;
 	}
@@ -495,7 +495,7 @@ int Stream_ReadInt(lua_State* L) {
 
 int Stream_ReadUnsignedInt(lua_State* L) {
 	LuaStream* s = lua_tostream(L, 1);
-	if (!(s->Caps & STREAM_CAP_READ)) {
+	if (!(s->caps & STREAM_CAP_READ)) {
 		lua_pushnil(L);
 		return 1;
 	}
@@ -514,7 +514,7 @@ int Stream_ReadUnsignedInt(lua_State* L) {
 
 int Stream_ReadLong(lua_State* L) {
 	LuaStream* s = lua_tostream(L, 1);
-	if (!(s->Caps & STREAM_CAP_READ)) {
+	if (!(s->caps & STREAM_CAP_READ)) {
 		lua_pushnil(L);
 		return 1;
 	}
@@ -533,7 +533,7 @@ int Stream_ReadLong(lua_State* L) {
 
 int Stream_ReadUnsignedLong(lua_State* L) {
 	LuaStream* s = lua_tostream(L, 1);
-	if (!(s->Caps & STREAM_CAP_READ)) {
+	if (!(s->caps & STREAM_CAP_READ)) {
 		lua_pushnil(L);
 		return 1;
 	}
@@ -559,7 +559,7 @@ int Stream_ReadUnsignedLong(lua_State* L) {
 // pushes them decoded as a UTF-8 string. Returns nil if nothing could be read.
 int Stream_ReadUtf16(lua_State* L) {
 	LuaStream* s = lua_tostream(L, 1);
-	if (!(s->Caps & STREAM_CAP_READ)) {
+	if (!(s->caps & STREAM_CAP_READ)) {
 		lua_pushnil(L);
 		return 1;
 	}
@@ -593,7 +593,7 @@ int Stream_WriteUtf16(lua_State* L) {
 	LuaStream* s = lua_tostream(L, 1);
 	size_t len;
 	const char* str = luaL_checklstring(L, 2, &len);
-	if (!(s->Caps & STREAM_CAP_WRITE)) {
+	if (!(s->caps & STREAM_CAP_WRITE)) {
 		lua_pushinteger(L, 0);
 		return 1;
 	}
@@ -609,7 +609,7 @@ int Stream_WriteUtf16(lua_State* L) {
 // Reads 8 bytes and pushes a LuaUInt. Returns nil on EOF/short read.
 int Stream_ReadUInt64(lua_State* L) {
 	LuaStream* s = lua_tostream(L, 1);
-	if (!(s->Caps & STREAM_CAP_READ)) {
+	if (!(s->caps & STREAM_CAP_READ)) {
 		lua_pushnil(L);
 		return 1;
 	}
@@ -630,7 +630,7 @@ int Stream_ReadUInt64(lua_State* L) {
 // Reads until a NUL byte, newline, or EOF. Returns nil on parse failure.
 int Stream_ReadDecimal(lua_State* L) {
 	LuaStream* s = lua_tostream(L, 1);
-	if (!(s->Caps & STREAM_CAP_READ)) {
+	if (!(s->caps & STREAM_CAP_READ)) {
 		lua_pushnil(L);
 		return 1;
 	}
@@ -665,7 +665,7 @@ int Stream_ReadDecimal(lua_State* L) {
 // Reads exactly 16 bytes and pushes a LuaIdentifier (UUID). Returns nil on short read.
 int Stream_ReadIdentifier(lua_State* L) {
 	LuaStream* s = lua_tostream(L, 1);
-	if (!(s->Caps & STREAM_CAP_READ)) {
+	if (!(s->caps & STREAM_CAP_READ)) {
 		lua_pushnil(L);
 		return 1;
 	}
@@ -686,7 +686,7 @@ int Stream_ReadIdentifier(lua_State* L) {
 
 int Stream_ReadDateTime(lua_State* L) {
 	LuaStream* s = lua_tostream(L, 1);
-	if (!(s->Caps & STREAM_CAP_READ)) {
+	if (!(s->caps & STREAM_CAP_READ)) {
 		lua_pushnil(L);
 		return 1;
 	}
@@ -698,20 +698,20 @@ int Stream_ReadDateTime(lua_State* L) {
 	}
 	const char* raw = lua_tolstring(L, -1, NULL);
 	int64_t  ticks;
-	int16_t  offset_minutes;
+	int16_t  offsetMinutes;
 	memcpy(&ticks,          raw,     sizeof(int64_t));
-	memcpy(&offset_minutes, raw + 8, sizeof(int16_t));
+	memcpy(&offsetMinutes, raw + 8, sizeof(int16_t));
 	lua_pop(L, 1);
 	LuaDateTime* dt = lua_pushdatetime(L);
 	dt->ticks          = ticks;
-	dt->offset_minutes = offset_minutes;
+	dt->offsetMinutes = offsetMinutes;
 	return 1;
 }
 
 // Reads 8 bytes (int64 ticks) and pushes a LuaTimeSpan. Returns nil on short read.
 int Stream_ReadTimeSpan(lua_State* L) {
 	LuaStream* s = lua_tostream(L, 1);
-	if (!(s->Caps & STREAM_CAP_READ)) {
+	if (!(s->caps & STREAM_CAP_READ)) {
 		lua_pushnil(L);
 		return 1;
 	}
@@ -730,7 +730,7 @@ int Stream_ReadTimeSpan(lua_State* L) {
 
 int Stream_ReadUtf8(lua_State* L) {
 	LuaStream* s = lua_tostream(L, 1);
-	if (!(s->Caps & STREAM_CAP_READ)) {
+	if (!(s->caps & STREAM_CAP_READ)) {
 		lua_pushnil(L);
 		return 1;
 	}
@@ -776,7 +776,7 @@ int Stream_ReadUtf8(lua_State* L) {
 
 int Stream_WriteByte(lua_State* L) {
 	LuaStream* s = lua_tostream(L, 1);
-	if (!(s->Caps & STREAM_CAP_WRITE)) {
+	if (!(s->caps & STREAM_CAP_WRITE)) {
 		lua_pushboolean(L, false);
 		return 1;
 	}
@@ -794,7 +794,7 @@ int Stream_SetByte(lua_State* L) {
 	LuaStream* s = lua_tostream(L, 1);
 	BYTE value = (BYTE)lua_tointeger(L, 2);
 	if (!lua_isnoneornil(L, 3)) {
-		if (!(s->Caps & STREAM_CAP_WRITE) || !(s->Caps & STREAM_CAP_SEEK))
+		if (!(s->caps & STREAM_CAP_WRITE) || !(s->caps & STREAM_CAP_SEEK))
 			return 0;
 		lua_Integer pos      = luaL_checkinteger(L, 3);
 		lua_Integer savedPos = StreamCurPosC(L, s);
@@ -802,7 +802,7 @@ int Stream_SetByte(lua_State* L) {
 		StreamWrite(L, s, &value, 1);
 		StreamSetPosC(L, s, savedPos);
 	} else {
-		if (!(s->Caps & STREAM_CAP_WRITE))
+		if (!(s->caps & STREAM_CAP_WRITE))
 			return 0;
 		StreamWrite(L, s, &value, 1);
 	}
@@ -811,7 +811,7 @@ int Stream_SetByte(lua_State* L) {
 
 int Stream_WriteFloat(lua_State* L) {
 	LuaStream* s = lua_tostream(L, 1);
-	if (!(s->Caps & STREAM_CAP_WRITE)) {
+	if (!(s->caps & STREAM_CAP_WRITE)) {
 		lua_pushboolean(L, false);
 		return 1;
 	}
@@ -822,7 +822,7 @@ int Stream_WriteFloat(lua_State* L) {
 
 int Stream_WriteDouble(lua_State* L) {
 	LuaStream* s = lua_tostream(L, 1);
-	if (!(s->Caps & STREAM_CAP_WRITE)) {
+	if (!(s->caps & STREAM_CAP_WRITE)) {
 		lua_pushboolean(L, false);
 		return 1;
 	}
@@ -833,7 +833,7 @@ int Stream_WriteDouble(lua_State* L) {
 
 int Stream_WriteShort(lua_State* L) {
 	LuaStream* s = lua_tostream(L, 1);
-	if (!(s->Caps & STREAM_CAP_WRITE)) {
+	if (!(s->caps & STREAM_CAP_WRITE)) {
 		lua_pushboolean(L, false);
 		return 1;
 	}
@@ -844,7 +844,7 @@ int Stream_WriteShort(lua_State* L) {
 
 int Stream_WriteUnsignedShort(lua_State* L) {
 	LuaStream* s = lua_tostream(L, 1);
-	if (!(s->Caps & STREAM_CAP_WRITE)) {
+	if (!(s->caps & STREAM_CAP_WRITE)) {
 		lua_pushboolean(L, false);
 		return 1;
 	}
@@ -855,7 +855,7 @@ int Stream_WriteUnsignedShort(lua_State* L) {
 
 int Stream_WriteInt(lua_State* L) {
 	LuaStream* s = lua_tostream(L, 1);
-	if (!(s->Caps & STREAM_CAP_WRITE)) {
+	if (!(s->caps & STREAM_CAP_WRITE)) {
 		lua_pushboolean(L, false);
 		return 1;
 	}
@@ -866,7 +866,7 @@ int Stream_WriteInt(lua_State* L) {
 
 int Stream_WriteUnsignedInt(lua_State* L) {
 	LuaStream* s = lua_tostream(L, 1);
-	if (!(s->Caps & STREAM_CAP_WRITE)) {
+	if (!(s->caps & STREAM_CAP_WRITE)) {
 		lua_pushboolean(L, false);
 		return 1;
 	}
@@ -877,7 +877,7 @@ int Stream_WriteUnsignedInt(lua_State* L) {
 
 int Stream_WriteLong(lua_State* L) {
 	LuaStream* s = lua_tostream(L, 1);
-	if (!(s->Caps & STREAM_CAP_WRITE)) {
+	if (!(s->caps & STREAM_CAP_WRITE)) {
 		lua_pushboolean(L, false);
 		return 1;
 	}
@@ -888,7 +888,7 @@ int Stream_WriteLong(lua_State* L) {
 
 int Stream_WriteUnsignedLong(lua_State* L) {
 	LuaStream* s = lua_tostream(L, 1);
-	if (!(s->Caps & STREAM_CAP_WRITE)) {
+	if (!(s->caps & STREAM_CAP_WRITE)) {
 		lua_pushboolean(L, false);
 		return 1;
 	}
@@ -899,7 +899,7 @@ int Stream_WriteUnsignedLong(lua_State* L) {
 
 int Stream_Write(lua_State* L) {
 	LuaStream* stream = lua_tostream(L, 1);
-	if (!(stream->Caps & STREAM_CAP_WRITE)) {
+	if (!(stream->caps & STREAM_CAP_WRITE)) {
 		lua_pushinteger(L, 0);
 		return 1;
 	}
@@ -944,11 +944,11 @@ int Stream_Write(lua_State* L) {
 			return 1;
 		}
 		if (lua_isdatetime(L, 2)) {
-			// Write ticks (int64, 8 bytes) + offset_minutes (int16, 2 bytes) = 10 bytes total.
+			// Write ticks (int64, 8 bytes) + offsetMinutes (int16, 2 bytes) = 10 bytes total.
 			LuaDateTime* dt = lua_todatetime(L, 2);
 			unsigned char buf[10];
 			memcpy(buf,     &dt->ticks,          sizeof(int64_t));
-			memcpy(buf + 8, &dt->offset_minutes, sizeof(int16_t));
+			memcpy(buf + 8, &dt->offsetMinutes, sizeof(int16_t));
 			size_t dtlen = 10;
 			if (limit > 0 && limit < dtlen) dtlen = limit;
 			bool ok = StreamWrite(L, stream, buf, dtlen);
@@ -985,7 +985,7 @@ int Stream_Write(lua_State* L) {
 
 int Stream_WriteUtf8(lua_State* L) {
 	LuaStream* s = lua_tostream(L, 1);
-	if (!(s->Caps & STREAM_CAP_WRITE)) {
+	if (!(s->caps & STREAM_CAP_WRITE)) {
 		lua_pushboolean(L, false);
 		return 1;
 	}
@@ -1088,13 +1088,13 @@ static int CompressContinuation(lua_State* L, int status, lua_KContext ctx) {
 
 int Stream_Compress(lua_State* L) {
 	LuaStream* src = lua_tostream(L, 1);
-	if (!(src->Caps & STREAM_CAP_READ)) {
+	if (!(src->caps & STREAM_CAP_READ)) {
 		lua_pushnil(L);
 		lua_pushstring(L, "stream is not readable");
 		return 2;
 	}
 	int level = (int)luaL_optinteger(L, 2, MZ_DEFAULT_COMPRESSION);
-	if (src->Caps & STREAM_CAP_SEEK)
+	if (src->caps & STREAM_CAP_SEEK)
 		StreamSetPosC(L, src, 0);
 	bool ownDst = !lua_isstream(L, 3);
 	if (ownDst) {
@@ -1103,7 +1103,7 @@ int Stream_Compress(lua_State* L) {
 		lua_pushvalue(L, 3);
 	}
 	LuaStream* dst = lua_tostream(L, -1);
-	if (!(dst->Caps & STREAM_CAP_WRITE)) {
+	if (!(dst->caps & STREAM_CAP_WRITE)) {
 		lua_pop(L, 1);
 		lua_pushnil(L);
 		lua_pushstring(L, "destination stream is not writable");
@@ -1158,7 +1158,7 @@ static int DecompressAsyncAccumulateContinuation(lua_State* L, int status, lua_K
 
 int Stream_Decompress(lua_State* L) {
 	LuaStream* src = lua_tostream(L, 1);
-	if (!(src->Caps & STREAM_CAP_READ)) {
+	if (!(src->caps & STREAM_CAP_READ)) {
 		lua_pushnil(L);
 		lua_pushstring(L, "stream is not readable");
 		return 2;
@@ -1174,7 +1174,7 @@ int Stream_Decompress(lua_State* L) {
 		lua_callk(L, 1, 1, 0, DecompressAsyncAccumulateContinuation);
 		return DecompressAsyncAccumulateContinuation(L, LUA_OK, 0);
 	}
-	if (src->Caps & STREAM_CAP_SEEK)
+	if (src->caps & STREAM_CAP_SEEK)
 		StreamSetPosC(L, src, 0);
 	bool ownDst = !lua_isstream(L, 3);
 	if (ownDst) {
@@ -1183,7 +1183,7 @@ int Stream_Decompress(lua_State* L) {
 		lua_pushvalue(L, 3);
 	}
 	LuaStream* dst = lua_tostream(L, -1);
-	if (!(dst->Caps & STREAM_CAP_WRITE)) {
+	if (!(dst->caps & STREAM_CAP_WRITE)) {
 		lua_pop(L, 1);
 		lua_pushnil(L);
 		lua_pushstring(L, "destination stream is not writable");

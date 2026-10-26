@@ -5,18 +5,18 @@
 // Module registration
 // =============================================================================
 
-static const luaL_Reg mcp_functions[] = {
+static const luaL_Reg mcpFunctions[] = {
 	{ "Create", MCP_Create },
 	{ NULL, NULL }
 };
 
-static const luaL_Reg mcp_meta[] = {
+static const luaL_Reg mcpMeta[] = {
 	{ "__gc",       McpServer_GC       },
 	{ "__tostring", McpServer_ToString },
 	{ NULL, NULL }
 };
 
-static const luaL_Reg mcp_methods[] = {
+static const luaL_Reg mcpMethods[] = {
 	{ "AddTool",   McpServer_AddTool   },
 	{ "Start",     McpServer_Start     },
 	{ "Stop",      McpServer_Stop      },
@@ -25,25 +25,25 @@ static const luaL_Reg mcp_methods[] = {
 	{ NULL, NULL }
 };
 
-static const luaL_Reg mcp_elicitation_meta[] = {
+static const luaL_Reg mcpElicitationMeta[] = {
 	{ "__gc",       McpElicitation_GC       },
 	{ "__tostring", McpElicitation_ToString },
 	{ NULL, NULL }
 };
 
-static const luaL_Reg mcp_elicitation_methods[] = {
+static const luaL_Reg mcpElicitationMethods[] = {
 	{ "AddQuestion", McpElicitation_AddQuestion },
 	{ "Elicit",      McpElicitation_Elicit      },
 	{ NULL, NULL }
 };
 
-static const luaL_Reg mcp_question_meta[] = {
+static const luaL_Reg mcpQuestionMeta[] = {
 	{ "__gc",       McpQuestion_GC       },
 	{ "__tostring", McpQuestion_ToString },
 	{ NULL, NULL }
 };
 
-static const luaL_Reg mcp_question_methods[] = {
+static const luaL_Reg mcpQuestionMethods[] = {
 	{ "AddAnswer",      McpQuestion_AddAnswer      },
 	{ "SetDescription", McpQuestion_SetDescription },
 	{ "SetDefault",     McpQuestion_SetDefault     },
@@ -66,12 +66,12 @@ static void McpRegisterType(lua_State* L, const char* name, const luaL_Reg* meta
 }
 
 int luaopen_mcp(lua_State* L) {
-	luaL_newlibtable(L, mcp_functions);
-	luaL_setfuncs(L, mcp_functions, 0);
+	luaL_newlibtable(L, mcpFunctions);
+	luaL_setfuncs(L, mcpFunctions, 0);
 
-	McpRegisterType(L, LUAMCP,            mcp_meta,             mcp_methods);
-	McpRegisterType(L, LUAMCPELICITATION, mcp_elicitation_meta, mcp_elicitation_methods);
-	McpRegisterType(L, LUAMCPQUESTION,    mcp_question_meta,    mcp_question_methods);
+	McpRegisterType(L, LUAMCP,            mcpMeta,             mcpMethods);
+	McpRegisterType(L, LUAMCPELICITATION, mcpElicitationMeta, mcpElicitationMethods);
+	McpRegisterType(L, LUAMCPQUESTION,    mcpQuestionMeta,    mcpQuestionMethods);
 
 	return 1;
 }

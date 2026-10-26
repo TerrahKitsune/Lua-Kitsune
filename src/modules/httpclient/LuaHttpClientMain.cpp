@@ -12,7 +12,7 @@
 // All Http module-level functions AND LuaHttpClient instance methods in one table.
 // The table is returned as the Http global so both Http.Create() and
 // client:Request() resolve through the same __index chain.
-static const luaL_Reg httpclient_functions[] = {
+static const luaL_Reg httpclientFunctions[] = {
 	{ "New",               HttpClient_New },
 	{ "UrlEncode",          HttpClient_UrlEncode },
 	{ "UrlDecode",          HttpClient_UrlDecode },
@@ -29,7 +29,7 @@ static const luaL_Reg httpclient_functions[] = {
 	{ NULL, NULL }
 };
 
-static const luaL_Reg httpclient_meta[] = {
+static const luaL_Reg httpclientMeta[] = {
 	{ "__gc",       HttpClient_GC },
 	{ "__tostring", HttpClient_ToString },
 	{ NULL, NULL }
@@ -46,7 +46,7 @@ int luaopen_httpclient(lua_State* L) {
 		return luaL_error(L, "curl_multi_init failed");
 
 	lua_pushlightuserdata(L, multi);
-	lua_rawsetp(L, LUA_REGISTRYINDEX, &g_curlm_key);
+	lua_rawsetp(L, LUA_REGISTRYINDEX, &CURLM_KEY);
 
 	// Sentinel userdata: __gc fires curl_multi_cleanup when the Lua state closes
 	lua_newuserdata(L, 1);
@@ -54,16 +54,16 @@ int luaopen_httpclient(lua_State* L) {
 	lua_pushcfunction(L, HttpSentinel_GC);
 	lua_setfield(L, -2, "__gc");
 	lua_setmetatable(L, -2);
-	lua_rawsetp(L, LUA_REGISTRYINDEX, &g_sentinel_key);
+	lua_rawsetp(L, LUA_REGISTRYINDEX, &SENTINEL_KEY);
 
 	// -- LUAHTTPCLIENT — wchar pattern -----------------------------------------
 	// Create the Http module table first; it doubles as the __index for
 	// LuaHttpClient instances so both Http.Create() and client:Request() work.
-	luaL_newlibtable(L, httpclient_functions);
-	luaL_setfuncs(L, httpclient_functions, 0);
+	luaL_newlibtable(L, httpclientFunctions);
+	luaL_setfuncs(L, httpclientFunctions, 0);
 
 	luaL_newmetatable(L, LUAHTTPCLIENT);
-	luaL_setfuncs(L, httpclient_meta, 0);
+	luaL_setfuncs(L, httpclientMeta, 0);
 	lua_pushliteral(L, "__index");
 	lua_pushvalue(L, -3);       // the Http module table
 	lua_rawset(L, -3);

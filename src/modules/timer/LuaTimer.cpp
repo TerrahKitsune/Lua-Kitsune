@@ -44,7 +44,7 @@ int Timer_New(lua_State *L) {
 
 int Timer_IsRunning(lua_State *L) {
 	Timer * timer = luaL_checktimer(L, 1);
-	int started = timer->CounterStart > 0 && timer->CounterStop <= 0;
+	int started = timer->counterStart > 0 && timer->counterStop <= 0;
 	lua_pop(L, 1);
 	lua_pushboolean(L, started);
 	return 1;
@@ -52,10 +52,10 @@ int Timer_IsRunning(lua_State *L) {
 
 int Timer_Reset(lua_State *L) {
 	Timer * timer = luaL_checktimer(L, 1);
-	timer->CounterStart = 0;
-	timer->CounterStop  = 0;
-	timer->StoredTime   = 0;
-	timer->PCFreq       = 0;
+	timer->counterStart = 0;
+	timer->counterStop  = 0;
+	timer->storedTime   = 0;
+	timer->pcFreq       = 0;
 	lua_pop(L, 1);
 	return 0;
 }
@@ -63,14 +63,14 @@ int Timer_Reset(lua_State *L) {
 int Timer_Start(lua_State *L) {
 	Timer * timer = luaL_checktimer(L, 1);
 
-	if (timer->CounterStart > 0) {
-		int64_t end = (timer->CounterStop > 0) ? timer->CounterStop : TimerNowNs();
-		timer->StoredTime += (double)(end - timer->CounterStart) / TIMER_NS_PER_MS;
+	if (timer->counterStart > 0) {
+		int64_t end = (timer->counterStop > 0) ? timer->counterStop : TimerNowNs();
+		timer->storedTime += (double)(end - timer->counterStart) / TIMER_NS_PER_MS;
 	}
 
-	timer->PCFreq       = TIMER_NS_PER_MS;
-	timer->CounterStart = TimerNowNs();
-	timer->CounterStop  = 0;
+	timer->pcFreq       = TIMER_NS_PER_MS;
+	timer->counterStart = TimerNowNs();
+	timer->counterStop  = 0;
 
 	lua_pop(L, 1);
 	return 0;
@@ -79,47 +79,47 @@ int Timer_Start(lua_State *L) {
 int Timer_Stop(lua_State *L) {
 	Timer * timer = luaL_checktimer(L, 1);
 
-	if (timer->CounterStop <= 0)
-		timer->CounterStop = TimerNowNs();
+	if (timer->counterStop <= 0)
+		timer->counterStop = TimerNowNs();
 
 	lua_pop(L, 1);
-	lua_pushnumber(L, (double)(timer->CounterStop - timer->CounterStart) / TIMER_NS_PER_MS);
+	lua_pushnumber(L, (double)(timer->counterStop - timer->counterStart) / TIMER_NS_PER_MS);
 	return 1;
 }
 
 int Timer_Elapsed(lua_State *L) {
 	Timer * timer = luaL_checktimer(L, 1);
 
-	if (timer->CounterStart <= 0) {
+	if (timer->counterStart <= 0) {
 		lua_pop(L, 1);
 		lua_pushnumber(L, 0);
 	}
-	else if (timer->CounterStop <= 0) {
+	else if (timer->counterStop <= 0) {
 		lua_pop(L, 1);
-		lua_pushnumber(L, timer->StoredTime + (double)(TimerNowNs() - timer->CounterStart) / TIMER_NS_PER_MS);
+		lua_pushnumber(L, timer->storedTime + (double)(TimerNowNs() - timer->counterStart) / TIMER_NS_PER_MS);
 	}
 	else {
 		lua_pop(L, 1);
-		lua_pushnumber(L, timer->StoredTime + (double)(timer->CounterStop - timer->CounterStart) / TIMER_NS_PER_MS);
+		lua_pushnumber(L, timer->storedTime + (double)(timer->counterStop - timer->counterStart) / TIMER_NS_PER_MS);
 	}
 	return 1;
 }
 
 int Timer_ElapsedTimeSpan(lua_State *L) {
 	Timer * timer = luaL_checktimer(L, 1);
-	double elapsed_ms;
-	if (timer->CounterStart <= 0) {
-		elapsed_ms = 0.0;
+	double elapsedMs;
+	if (timer->counterStart <= 0) {
+		elapsedMs = 0.0;
 	}
-	else if (timer->CounterStop <= 0) {
-		elapsed_ms = timer->StoredTime + (double)(TimerNowNs() - timer->CounterStart) / TIMER_NS_PER_MS;
+	else if (timer->counterStop <= 0) {
+		elapsedMs = timer->storedTime + (double)(TimerNowNs() - timer->counterStart) / TIMER_NS_PER_MS;
 	}
 	else {
-		elapsed_ms = timer->StoredTime + (double)(timer->CounterStop - timer->CounterStart) / TIMER_NS_PER_MS;
+		elapsedMs = timer->storedTime + (double)(timer->counterStop - timer->counterStart) / TIMER_NS_PER_MS;
 	}
 	// 1 ms = 10,000 ticks (100-nanosecond units, same as .NET TimeSpan)
 	lua_pop(L, 1);
-	lua_pushtimespan(L)->ticks = (int64_t)(elapsed_ms * 10000.0);
+	lua_pushtimespan(L)->ticks = (int64_t)(elapsedMs * 10000.0);
 	return 1;
 }
 

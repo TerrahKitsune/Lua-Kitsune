@@ -464,7 +464,7 @@ static int DecodeCsvWith(lua_State* L, LuaCsv* csv) {
 	// The decoded input lives in a userdata on the stack, so it is freed even if parsing raises.
 	size_t slen;
 	const char* s = luaL_checklstring(L, 1, &slen);
-	skip_utf8_bom(&s, &slen);  // Excel "CSV UTF-8" files start with a BOM
+	SkipUtf8Bom(&s, &slen);  // Excel "CSV UTF-8" files start with a BOM
 	wchar_t* wide = (wchar_t*)lua_newuserdatauv(L, (slen + 1) * sizeof(wchar_t), 0);
 	csv->dataLen = kitsune_utf8_to_wide(s, slen, wide);
 	csv->data    = wide;
@@ -708,7 +708,7 @@ static void WrapStreamIfNeeded(lua_State* L) {
 	if (!lua_isstream(L, 1))
 		return;
 	LuaStream* st = lua_tostream(L, 1);
-	if (!(st->Caps & STREAM_CAP_READ))
+	if (!(st->caps & STREAM_CAP_READ))
 		luaL_argerror(L, 1, "stream is not readable");
 }
 

@@ -4,22 +4,22 @@
 #include <string.h>
 #include <stdio.h>
 
-// Encodes a Lua value at value_idx to a JSON string, pushed on top.
-static void PushJsonEncoded(lua_State* L, int value_idx) {
+// Encodes a Lua value at valueIdx to a JSON string, pushed on top.
+static void PushJsonEncoded(lua_State* L, int valueIdx) {
 
-	value_idx = lua_absindex(L, value_idx);
+	valueIdx = lua_absindex(L, valueIdx);
 
 	// Both Lua nil and the Json.Null sentinel map to JSON null without a Lua call.
-	if (lua_isnil(L, value_idx) ||
-		(lua_islightuserdata(L, value_idx) &&
-		 lua_topointer(L, value_idx) == LuaJsonNull())) {
+	if (lua_isnil(L, valueIdx) ||
+		(lua_islightuserdata(L, valueIdx) &&
+		 lua_topointer(L, valueIdx) == LuaJsonNull())) {
 		lua_pushliteral(L, "null");
 		return;
 	}
 
 	lua_pushcfunction(L, Json_Encode);
 	lua_rawgetp(L, LUA_REGISTRYINDEX, LuaJsonBridgeRegistryKey());
-	lua_pushvalue(L, value_idx);
+	lua_pushvalue(L, valueIdx);
 	if (lua_pcall_nohook(L, 2, 1, NULL)) {
 		lua_error(L);
 	}
@@ -61,10 +61,10 @@ int RedisPushJsonInternal(lua_State* L, int redisIdx, const char* rediskey, size
 	luaL_getmetatable(L, REDISJSON);
 	lua_setmetatable(L, -2);
 	memset(json, 0, sizeof(LuaRedisJson));
-	json->key.redis_ref = LUA_NOREF;
+	json->key.redisRef = LUA_NOREF;
 
 	lua_pushvalue(L, redisIdx);
-	json->key.redis_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+	json->key.redisRef = luaL_ref(L, LUA_REGISTRYINDEX);
 
 	json->key.key = (char*)kitsune_malloc(rediskeylen + 1);
 	if (!json->key.key) {
@@ -88,22 +88,22 @@ int RedisPushJsonInternal(lua_State* L, int redisIdx, const char* rediskey, size
 // Returns a new LuaRedisJson with path extended by ".field".
 static void PushJsonField(lua_State* L, LuaRedisJson* json, const char* field, size_t fieldlen) {
 
-	size_t new_pathlen = json->pathlen + 1 + fieldlen;
-	char*  new_path    = (char*)kitsune_malloc(new_pathlen + 1);
-	if (!new_path) {
+	size_t newPathlen = json->pathlen + 1 + fieldlen;
+	char*  newPath    = (char*)kitsune_malloc(newPathlen + 1);
+	if (!newPath) {
 		luaL_error(L, "Out of memory");
 	}
 
-	memcpy(new_path, json->path, json->pathlen);
-	new_path[json->pathlen] = '.';
-	memcpy(new_path + json->pathlen + 1, field, fieldlen);
-	new_path[new_pathlen] = '\0';
+	memcpy(newPath, json->path, json->pathlen);
+	newPath[json->pathlen] = '.';
+	memcpy(newPath + json->pathlen + 1, field, fieldlen);
+	newPath[newPathlen] = '\0';
 
-	lua_rawgeti(L, LUA_REGISTRYINDEX, json->key.redis_ref);
-	RedisPushJsonInternal(L, -1, json->key.key, json->key.keylen, new_path, new_pathlen);
+	lua_rawgeti(L, LUA_REGISTRYINDEX, json->key.redisRef);
+	RedisPushJsonInternal(L, -1, json->key.key, json->key.keylen, newPath, newPathlen);
 	lua_remove(L, -2);
 
-	kitsune_free(new_path);
+	kitsune_free(newPath);
 }
 
 // Returns a new LuaRedisJson with path extended by "[lua_idx-1]" (Lua 1-indexed ? JSONPath 0-indexed).
@@ -112,21 +112,21 @@ static void PushJsonIndex(lua_State* L, LuaRedisJson* json, lua_Integer lua_idx)
 	char buf[32];
 	int  n = snprintf(buf, sizeof(buf), "[%lld]", (long long)(lua_idx - 1));
 
-	size_t new_pathlen = json->pathlen + (size_t)n;
-	char*  new_path    = (char*)kitsune_malloc(new_pathlen + 1);
-	if (!new_path) {
+	size_t newPathlen = json->pathlen + (size_t)n;
+	char*  newPath    = (char*)kitsune_malloc(newPathlen + 1);
+	if (!newPath) {
 		luaL_error(L, "Out of memory");
 	}
 
-	memcpy(new_path, json->path, json->pathlen);
-	memcpy(new_path + json->pathlen, buf, (size_t)n);
-	new_path[new_pathlen] = '\0';
+	memcpy(newPath, json->path, json->pathlen);
+	memcpy(newPath + json->pathlen, buf, (size_t)n);
+	newPath[newPathlen] = '\0';
 
-	lua_rawgeti(L, LUA_REGISTRYINDEX, json->key.redis_ref);
-	RedisPushJsonInternal(L, -1, json->key.key, json->key.keylen, new_path, new_pathlen);
+	lua_rawgeti(L, LUA_REGISTRYINDEX, json->key.redisRef);
+	RedisPushJsonInternal(L, -1, json->key.key, json->key.keylen, newPath, newPathlen);
 	lua_remove(L, -2);
 
-	kitsune_free(new_path);
+	kitsune_free(newPath);
 }
 
 int RedisJson_Index(lua_State* L) {
@@ -166,22 +166,22 @@ int RedisJson_NewIndex(lua_State* L) {
 	// L: [json(1), key(2), value(3)]
 	LuaRedisJson* json = luaL_checkredisjson(L, 1);
 
-	char*  new_path    = NULL;
-	size_t new_pathlen = 0;
+	char*  newPath    = NULL;
+	size_t newPathlen = 0;
 
 	if (lua_type(L, 2) == LUA_TSTRING) {
 		size_t      fieldlen;
 		const char* field = lua_tolstring(L, 2, &fieldlen);
 
-		new_pathlen = json->pathlen + 1 + fieldlen;
-		new_path    = (char*)kitsune_malloc(new_pathlen + 1);
-		if (!new_path) {
+		newPathlen = json->pathlen + 1 + fieldlen;
+		newPath    = (char*)kitsune_malloc(newPathlen + 1);
+		if (!newPath) {
 			luaL_error(L, "Out of memory");
 		}
-		memcpy(new_path, json->path, json->pathlen);
-		new_path[json->pathlen] = '.';
-		memcpy(new_path + json->pathlen + 1, field, fieldlen);
-		new_path[new_pathlen] = '\0';
+		memcpy(newPath, json->path, json->pathlen);
+		newPath[json->pathlen] = '.';
+		memcpy(newPath + json->pathlen + 1, field, fieldlen);
+		newPath[newPathlen] = '\0';
 	}
 	else if (lua_isinteger(L, 2)) {
 		lua_Integer idx = lua_tointeger(L, 2);
@@ -191,14 +191,14 @@ int RedisJson_NewIndex(lua_State* L) {
 		}
 		char buf[32];
 		int  n       = snprintf(buf, sizeof(buf), "[%lld]", (long long)(idx - 1));
-		new_pathlen  = json->pathlen + (size_t)n;
-		new_path     = (char*)kitsune_malloc(new_pathlen + 1);
-		if (!new_path) {
+		newPathlen  = json->pathlen + (size_t)n;
+		newPath     = (char*)kitsune_malloc(newPathlen + 1);
+		if (!newPath) {
 			luaL_error(L, "Out of memory");
 		}
-		memcpy(new_path, json->path, json->pathlen);
-		memcpy(new_path + json->pathlen, buf, (size_t)n);
-		new_path[new_pathlen] = '\0';
+		memcpy(newPath, json->path, json->pathlen);
+		memcpy(newPath + json->pathlen, buf, (size_t)n);
+		newPath[newPathlen] = '\0';
 	}
 	else {
 		luaL_error(L, "Invalid key type for JSON assignment: %s", luaL_typename(L, 2));
@@ -206,14 +206,14 @@ int RedisJson_NewIndex(lua_State* L) {
 	}
 
 	PushJsonEncoded(L, 3);
-	int encoded_pos = lua_gettop(L);  // absolute position of encoded JSON string
+	int encodedPos = lua_gettop(L);  // absolute position of encoded JSON string
 
 	PushRedisRef(L, &json->key);
 	lua_pushliteral(L, "JSON.SET");
 	PushRedisKeyName(L, &json->key);
-	lua_pushlstring(L, new_path, new_pathlen);
-	lua_pushvalue(L, encoded_pos);
-	kitsune_free(new_path);
+	lua_pushlstring(L, newPath, newPathlen);
+	lua_pushvalue(L, encodedPos);
+	kitsune_free(newPath);
 
 	LuaRedis* redis = RedisCommandInternal(L);
 	lua_settop(L, 3);
@@ -260,13 +260,13 @@ int RedisJson_Set(lua_State* L) {
 	LuaRedisJson* json = luaL_checkredisjson(L, 1);
 
 	PushJsonEncoded(L, 2);
-	int encoded_pos = lua_gettop(L);
+	int encodedPos = lua_gettop(L);
 
 	PushRedisRef(L, &json->key);
 	lua_pushliteral(L, "JSON.SET");
 	PushRedisKeyName(L, &json->key);
 	lua_pushlstring(L, json->path, json->pathlen);
-	lua_pushvalue(L, encoded_pos);
+	lua_pushvalue(L, encodedPos);
 
 	LuaRedis* redis = RedisCommandInternal(L);
 	lua_settop(L, 2);

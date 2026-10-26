@@ -51,14 +51,14 @@ static int GenerateRandomBytes(uint8_t* out, int n) {
 
 // ── OID counter (MongoDB ObjectID: 4-byte timestamp + 5-byte random + 3-byte counter) ──
 
-static std::atomic<uint32_t> g_oid_counter(0);
+static std::atomic<uint32_t> g_oidCounter(0);
 
 static int GenerateOidBytes(uint8_t* out) {
     uint32_t ts = (uint32_t)time(NULL);
     uint8_t rand5[5];
     if (!GenerateRandomBytes(rand5, 5))
         return 0;
-    uint32_t cnt = (g_oid_counter.fetch_add(1) + 1) & 0xFFFFFF;
+    uint32_t cnt = (g_oidCounter.fetch_add(1) + 1) & 0xFFFFFF;
 
     out[0] = (ts >> 24) & 0xFF;
     out[1] = (ts >> 16) & 0xFF;

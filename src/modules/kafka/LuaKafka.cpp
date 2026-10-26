@@ -6,10 +6,10 @@
 #include <mutex>
 #include "kafka/LuaKafkaHelpers.h"
 
-#define kafka_last_error_buffer_len 10240
-static char lasterror[kafka_last_error_buffer_len] = { 0 };
+#define KAFKA_LAST_ERROR_BUFFER_LEN 10240
+static char lasterror[KAFKA_LAST_ERROR_BUFFER_LEN] = { 0 };
 static FILE* KafkaLogFile = NULL;
-static std::mutex kafka_log_mutex;
+static std::mutex g_kafkaLogMutex;
 
 void KafkaLogger(const rd_kafka_t* rk, int level, const char* fac, const char* buf) {
 
@@ -24,7 +24,7 @@ void KafkaLogger(const rd_kafka_t* rk, int level, const char* fac, const char* b
     char timestamp[100];
     strftime(timestamp, sizeof(timestamp), "%x %X", &timeinfo);
 
-    std::lock_guard<std::mutex> lock(kafka_log_mutex);
+    std::lock_guard<std::mutex> lock(g_kafkaLogMutex);
 
     if (KafkaLogFile) {
         fprintf(KafkaLogFile, "[%s] [%p] [%d] [%s]: %s\n", timestamp, (const void*)rk, level, fac, buf);
@@ -32,14 +32,14 @@ void KafkaLogger(const rd_kafka_t* rk, int level, const char* fac, const char* b
     }
 
     size_t len = strlen(lasterror);
-    snprintf(&lasterror[len], kafka_last_error_buffer_len - len - 1, "[%s] [%p] [%d] [%s]: %s\n", timestamp, (const void*)rk, level, fac, buf);
+    snprintf(&lasterror[len], KAFKA_LAST_ERROR_BUFFER_LEN - len - 1, "[%s] [%p] [%d] [%s]: %s\n", timestamp, (const void*)rk, level, fac, buf);
 }
 
 int Kafka_Logs(lua_State* L) {
 
     const char* logfile = luaL_optstring(L, lua_type(L, 1) == LUA_TSTRING ? 1 : 2, NULL);
 
-    std::lock_guard<std::mutex> lock(kafka_log_mutex);
+    std::lock_guard<std::mutex> lock(g_kafkaLogMutex);
 
     if (logfile) {
         if (KafkaLogFile) {

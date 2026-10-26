@@ -5,7 +5,7 @@
 static const char* STREAM = "STREAM";
 
 // ── Capability flags ──────────────────────────────────────────────────────────
-// Stored in LuaStream::Caps.
+// Stored in LuaStream::caps.
 #define STREAM_CAP_READ   (1 << 0)
 #define STREAM_CAP_WRITE  (1 << 1)
 #define STREAM_CAP_SEEK   (1 << 2)
@@ -63,7 +63,7 @@ typedef struct LuaStreamVtable {
 
 typedef struct LuaStream {
 	int                      backendRef;  // LUA_NOREF for vtable streams; Lua fn ref otherwise
-	BYTE                     Caps;
+	BYTE                     caps;
 	const LuaStreamVtable*   vtbl;        // NULL = Lua fn backend; non-NULL = native C backend
 	void*                    native;      // InMemoryStream* or InFileStream*; owned by vtbl->close
 } LuaStream;

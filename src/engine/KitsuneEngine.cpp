@@ -103,7 +103,7 @@
 // Defined in luajson.cpp; accessed via LuaJsonBridgeRegistryKey().
 
 #ifdef _WIN32
-BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved) {
+BOOL APIENTRY DllMain(HMODULE hModule, DWORD ulReasonForCall, LPVOID lpReserved) {
 	return TRUE;
 }
 #endif
@@ -112,27 +112,27 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 static void StartCounter(KitsuneState* state) {
 	LARGE_INTEGER li;
 	QueryPerformanceFrequency(&li);
-	state->PCFreq = double(li.QuadPart) / 1000.0;
+	state->pcFreq = double(li.QuadPart) / 1000.0;
 	QueryPerformanceCounter(&li);
-	state->CounterStart = li.QuadPart;
+	state->counterStart = li.QuadPart;
 }
 double GetCounter(KitsuneState* state) {
 	LARGE_INTEGER li;
 	QueryPerformanceCounter(&li);
-	return double(li.QuadPart - state->CounterStart) / state->PCFreq;
+	return double(li.QuadPart - state->counterStart) / state->pcFreq;
 }
 #else
-// Fallback using std::chrono::steady_clock; CounterStart stores microseconds since epoch,
-// PCFreq = 1000 converts to milliseconds via (now - CounterStart) / PCFreq.
+// Fallback using std::chrono::steady_clock; counterStart stores microseconds since epoch,
+// pcFreq = 1000 converts to milliseconds via (now - counterStart) / pcFreq.
 static void StartCounter(KitsuneState* state) {
-	state->PCFreq = 1000.0;
-	state->CounterStart = std::chrono::duration_cast<std::chrono::microseconds>(
+	state->pcFreq = 1000.0;
+	state->counterStart =std::chrono::duration_cast<std::chrono::microseconds>(
 		std::chrono::steady_clock::now().time_since_epoch()).count();
 }
 double GetCounter(KitsuneState* state) {
 	const int64_t now = std::chrono::duration_cast<std::chrono::microseconds>(
 		std::chrono::steady_clock::now().time_since_epoch()).count();
-	return double(now - state->CounterStart) / state->PCFreq;
+	return double(now - state->counterStart) / state->pcFreq;
 }
 #endif
 
@@ -323,26 +323,26 @@ extern "C" {
 // to snapshot contents, or KitsuneGetAll to iterate them. Caller owns any allocated data.
 static void FillKitsuneVariableFromStack(lua_State* L, int idx, KitsuneVariable* out) {
 	memset(out, 0, sizeof(KitsuneVariable));
-	int abs_idx = lua_absindex(L, idx);
-	int t = lua_type(L, abs_idx);
+	int absIdx = lua_absindex(L, idx);
+	int t = lua_type(L, absIdx);
 	switch (t) {
 	case LUA_TNUMBER:
-		if (lua_isinteger(L, abs_idx)) {
+		if (lua_isinteger(L, absIdx)) {
 			out->type = KITSUNE_TINTEGER;
-			out->integer = (long long)lua_tointeger(L, abs_idx);
+			out->integer = (long long)lua_tointeger(L, absIdx);
 		}
 		else {
 			out->type = LUA_TNUMBER;
-			out->number = lua_tonumber(L, abs_idx);
+			out->number = lua_tonumber(L, absIdx);
 		}
 		break;
 	case LUA_TBOOLEAN:
 		out->type = LUA_TBOOLEAN;
-		out->boolean = lua_toboolean(L, abs_idx) != 0;
+		out->boolean = lua_toboolean(L, absIdx) != 0;
 		break;
 	case LUA_TSTRING: {
 		size_t len;
-		const char* s = lua_tolstring(L, abs_idx, &len);
+		const char* s = lua_tolstring(L, absIdx, &len);
 		if (s) {
 			out->data = (unsigned char*)kitsune_malloc(len + 1);
 			if (out->data) {
@@ -358,8 +358,8 @@ static void FillKitsuneVariableFromStack(lua_State* L, int idx, KitsuneVariable*
 	}
 	case LUA_TUSERDATA: {
 		// Identifier ? KITSUNE_TIDENTIFIER: heap-allocated KitsuneIdentifier
-		if (lua_isidentifier(L, abs_idx)) {
-			LuaIdentifier* id = lua_toidentifier(L, abs_idx);
+		if (lua_isidentifier(L, absIdx)) {
+			LuaIdentifier* id = lua_toidentifier(L, absIdx);
 			KitsuneIdentifier* kid = (KitsuneIdentifier*)kitsune_malloc(sizeof(KitsuneIdentifier));
 			if (kid) {
 				memset(kid, 0, sizeof(KitsuneIdentifier));
@@ -372,20 +372,20 @@ static void FillKitsuneVariableFromStack(lua_State* L, int idx, KitsuneVariable*
 			break;
 		}
 		// DateTime ? KITSUNE_TDATETIME: heap-allocated KitsuneDateTime
-		if (lua_isdatetime(L, abs_idx)) {
-			LuaDateTime* dt = lua_todatetime(L, abs_idx);
+		if (lua_isdatetime(L, absIdx)) {
+			LuaDateTime* dt = lua_todatetime(L, absIdx);
 			KitsuneDateTime* kdt = (KitsuneDateTime*)kitsune_malloc(sizeof(KitsuneDateTime));
 			if (kdt) {
 				kdt->ticks = dt->ticks;
-				kdt->offset_minutes = dt->offset_minutes;
+				kdt->offsetMinutes = dt->offsetMinutes;
 				out->datetime = kdt;
 				out->type = KITSUNE_TDATETIME;
 			}
 			break;
 		}
 		// TimeSpan ? KITSUNE_TTIMESPAN: heap-allocated KitsuneTimeSpan
-		if (lua_istimespan(L, abs_idx)) {
-			LuaTimeSpan* ts = lua_totimespan(L, abs_idx);
+		if (lua_istimespan(L, absIdx)) {
+			LuaTimeSpan* ts = lua_totimespan(L, absIdx);
 			KitsuneTimeSpan* kts = (KitsuneTimeSpan*)kitsune_malloc(sizeof(KitsuneTimeSpan));
 			if (kts) {
 				kts->ticks = ts->ticks;
@@ -395,8 +395,8 @@ static void FillKitsuneVariableFromStack(lua_State* L, int idx, KitsuneVariable*
 			break;
 		}
 		// Decimal ? KITSUNE_TDECIMAL: heap-allocated KitsuneDecimal
-		if (lua_isdecimal(L, abs_idx)) {
-			LuaDecimal* dec = (LuaDecimal*)lua_touserdata(L, abs_idx);
+		if (lua_isdecimal(L, absIdx)) {
+			LuaDecimal* dec = (LuaDecimal*)lua_touserdata(L, absIdx);
 			KitsuneDecimal* kdec = (KitsuneDecimal*)kitsune_malloc(sizeof(KitsuneDecimal));
 			if (kdec) {
 				kdec->lo = dec->lo;
@@ -409,8 +409,8 @@ static void FillKitsuneVariableFromStack(lua_State* L, int idx, KitsuneVariable*
 			break;
 		}
 		// UInt is bridged as KITSUNE_TUINT: the uint64_t value is stored in the integer field.
-		if (lua_isuint(L, abs_idx)) {
-			LuaUInt* u = (LuaUInt*)lua_touserdata(L, abs_idx);
+		if (lua_isuint(L, absIdx)) {
+			LuaUInt* u = (LuaUInt*)lua_touserdata(L, absIdx);
 			out->integer = (long long)u->value;
 			out->type = KITSUNE_TUINT;
 			break;
@@ -418,7 +418,7 @@ static void FillKitsuneVariableFromStack(lua_State* L, int idx, KitsuneVariable*
 		// All other userdata types: bridge as KITSUNE_TUSERDATA with a KitsuneUserData*.
 		// Kitsune-registered userdatas (sentinel present) also surface their instance pointer.
 		// __tostring is intentionally not called (may execute arbitrary Lua code).
-		if (lua_getmetatable(L, abs_idx)) {
+		if (lua_getmetatable(L, absIdx)) {
 			lua_pushliteral(L, "__kitsune_userdata");
 			lua_rawget(L, -2);
 			bool isKitsuneRegistered = lua_touserdata(L, -1) == (void*)RegisterKitsuneUserdata;
@@ -435,10 +435,10 @@ static void FillKitsuneVariableFromStack(lua_State* L, int idx, KitsuneVariable*
 						if (kud->name) {
 							memcpy(kud->name, typeName, typeNameLen + 1);
 							kud->userdata = isKitsuneRegistered
-								? ((LuaKitsuneUserdata*)lua_touserdata(L, abs_idx))->userdata
+								? ((LuaKitsuneUserdata*)lua_touserdata(L, absIdx))->userdata
 								: NULL;
 							kud->ref = LUA_NOREF;
-							lua_pushvalue(L, abs_idx);
+							lua_pushvalue(L, absIdx);
 							kud->ref = luaL_ref(L, LUA_REGISTRYINDEX);
 							out->userdata = kud;
 							out->length = typeNameLen;
@@ -456,27 +456,27 @@ static void FillKitsuneVariableFromStack(lua_State* L, int idx, KitsuneVariable*
 		break;
 	}
 	case LUA_TTABLE:
-		lua_pushvalue(L, abs_idx);
+		lua_pushvalue(L, absIdx);
 		out->ref = luaL_ref(L, LUA_REGISTRYINDEX);
 		out->type = LUA_TTABLE;
 		break;
 	case LUA_TFUNCTION:
 		// Anchor the function in the Lua registry so it survives beyond this stack frame.
 		// The ref is stored in out->ref; release with luaL_unref via FreeVariableData.
-		lua_pushvalue(L, abs_idx);
+		lua_pushvalue(L, absIdx);
 		out->ref = luaL_ref(L, LUA_REGISTRYINDEX);
 		out->type = LUA_TFUNCTION;
 		break;
 	case LUA_TTHREAD:
 		// Anchor the coroutine thread in the Lua registry so it can be iterated from C#.
 		// The ref is stored in out->ref; release with luaL_unref via FreeVariableData.
-		lua_pushvalue(L, abs_idx);
+		lua_pushvalue(L, absIdx);
 		out->ref = luaL_ref(L, LUA_REGISTRYINDEX);
 		out->type = LUA_TTHREAD;
 		break;
 	case LUA_TLIGHTUSERDATA:
 		out->type = LUA_TLIGHTUSERDATA;
-		out->lightuserdata = lua_touserdata(L, abs_idx);
+		out->lightuserdata = lua_touserdata(L, absIdx);
 		break;
 	default:
 		out->type = t;
@@ -489,9 +489,9 @@ static void FillKitsuneVariableFromStack(lua_State* L, int idx, KitsuneVariable*
 static KitsuneKeyValuePairVariableNode* TableToLinkedList(lua_State* L, int idx) {
 	KitsuneKeyValuePairVariableNode* head = NULL;
 	KitsuneKeyValuePairVariableNode** tail = &head;
-	int abs_idx = lua_absindex(L, idx);
+	int absIdx = lua_absindex(L, idx);
 	lua_pushnil(L);  // first key
-	while (lua_next(L, abs_idx)) {
+	while (lua_next(L, absIdx)) {
 		KitsuneKeyValuePairVariableNode* node = (KitsuneKeyValuePairVariableNode*)kitsune_malloc(sizeof(KitsuneKeyValuePairVariableNode));
 		if (!node) {
 			lua_pop(L, 2);
@@ -535,7 +535,7 @@ void PushKitsuneVariable(lua_State* L, const KitsuneVariable* v) {
 		if (v->datetime) {
 			LuaDateTime* dt = lua_pushdatetime(L);
 			dt->ticks = v->datetime->ticks;
-			dt->offset_minutes = v->datetime->offset_minutes;
+			dt->offsetMinutes = v->datetime->offsetMinutes;
 		}
 		else {
 			lua_pushnil(L);
@@ -745,7 +745,7 @@ static void SetSlotResult(KitsuneCoroutine* slot, lua_State* T, int idx) {
 			KitsuneDateTime* kdt = (KitsuneDateTime*)kitsune_malloc(sizeof(KitsuneDateTime));
 			if (kdt) {
 				kdt->ticks = dt->ticks;
-				kdt->offset_minutes = dt->offset_minutes;
+				kdt->offsetMinutes = dt->offsetMinutes;
 				slot->result.datetime = kdt;
 				slot->result.type = KITSUNE_TDATETIME;
 			}
@@ -1815,7 +1815,7 @@ extern "C" {
 	// Allocates and fills callback args from the Lua call frame (1..argc), then clears the frame.
 	// Returns the args array on success (NULL for argc==0 is not an error).
 	// Returns NULL on OOM; all partial allocations are freed before returning.
-	// DelegateState must be set by the caller before this call.
+	// delegateState must be set by the caller before this call.
 	static KitsuneVariable* AllocAndFillArgs(lua_State* L, int argc) {
 		if (argc == 0) {
 			lua_settop(L, 0);
@@ -2159,7 +2159,7 @@ extern "C" {
 
 	// -- RunInlineTight: re-entrant variant for nested KitsuneExecute* calls ------------------
 	// Used from three contexts:
-	//   (a) scheduler thread inside LuaCFunctionWrapper (DelegateState set)
+	//   (a) scheduler thread inside LuaCFunctionWrapper (delegateState set)
 	//   (b) scheduler thread inside any raw Lua C callback (g_isSchedulerThread && currentCoroutineId != 0)
 	//   (c) inline calling thread inside RunInline's lua_resume (g_inlineExecution && currentCoroutineId != 0)
 	// In all cases Lua access is already owned; Sleep/Yield in the called function are no-ops
@@ -2210,12 +2210,12 @@ extern "C" {
 		KitsuneState* state = g_state;
 		if (!state) return NULL;
 
-		// Re-entrant path: DelegateState is set (LuaCFunctionWrapper), or we are on the
+		// Re-entrant path: delegateState is set (LuaCFunctionWrapper), or we are on the
 		// scheduler thread inside lua_resume (g_isSchedulerThread, e.g. async coroutine),
 		// or on the inline calling thread inside lua_resume (g_inlineExecution, e.g. RunString
 		// calling SQLite which calls LuaString). Lua access is already owned. Run in a tight
 		// loop; Sleep/Yield are no-ops.
-		if (state->DelegateState || ((g_isSchedulerThread || g_inlineExecution) && state->currentCoroutineId.load() != 0)) {
+		if (state->delegateState || ((g_isSchedulerThread || g_inlineExecution) && state->currentCoroutineId.load() != 0)) {
 			if (!path) return NULL;
 			KitsuneCoroutine* slot = AcquireSlot(state, true, false);
 			if (!slot)
@@ -2238,7 +2238,7 @@ extern "C" {
 			return RunInlineTight(state, slot, T, 1 + argc);
 		}
 
-		if (g_isSchedulerThread || state->DelegateState || g_inlineExecution)
+		if (g_isSchedulerThread || state->delegateState || g_inlineExecution)
 			return MakeErrorVariable("cannot call Execute from this context");
 		if (!path) return NULL;
 
@@ -2276,12 +2276,12 @@ extern "C" {
 		KitsuneState* state = g_state;
 		if (!state) return NULL;
 
-		// Re-entrant path: DelegateState is set (LuaCFunctionWrapper), or we are on the
+		// Re-entrant path: delegateState is set (LuaCFunctionWrapper), or we are on the
 		// scheduler thread inside lua_resume (g_isSchedulerThread, e.g. async coroutine),
 		// or on the inline calling thread inside lua_resume (g_inlineExecution, e.g. RunString
 		// calling SQLite which calls LuaString). Lua access is already owned. Run in a tight
 		// loop; Sleep/Yield are no-ops.
-		if (state->DelegateState || ((g_isSchedulerThread || g_inlineExecution) && state->currentCoroutineId.load() != 0)) {
+		if (state->delegateState || ((g_isSchedulerThread || g_inlineExecution) && state->currentCoroutineId.load() != 0)) {
 			if (!script) return NULL;
 			KitsuneCoroutine* slot = AcquireSlot(state, true, false);
 			if (!slot)
@@ -2303,7 +2303,7 @@ extern "C" {
 			return RunInlineTight(state, slot, T, argc);
 		}
 
-		if (g_isSchedulerThread || state->DelegateState || g_inlineExecution)
+		if (g_isSchedulerThread || state->delegateState || g_inlineExecution)
 			return MakeErrorVariable("cannot call Execute from this context");
 		if (!script) return NULL;
 
@@ -2340,12 +2340,12 @@ extern "C" {
 		KitsuneState* state = g_state;
 		if (!state) return NULL;
 
-		// Re-entrant path: DelegateState is set (LuaCFunctionWrapper), or we are on the
+		// Re-entrant path: delegateState is set (LuaCFunctionWrapper), or we are on the
 		// scheduler thread inside lua_resume (g_isSchedulerThread, e.g. async coroutine),
 		// or on the inline calling thread inside lua_resume (g_inlineExecution, e.g. RunString
 		// calling SQLite which calls LuaString). Lua access is already owned. Run in a tight
 		// loop; Sleep/Yield are no-ops.
-		if (state->DelegateState || ((g_isSchedulerThread || g_inlineExecution) && state->currentCoroutineId.load() != 0)) {
+		if (state->delegateState || ((g_isSchedulerThread || g_inlineExecution) && state->currentCoroutineId.load() != 0)) {
 			if (!functionName) return NULL;
 			KitsuneCoroutine* slot = AcquireSlot(state, true, false);
 			if (!slot)
@@ -2369,7 +2369,7 @@ extern "C" {
 			return RunInlineTight(state, slot, T, argc);
 		}
 
-		if (g_isSchedulerThread || state->DelegateState || g_inlineExecution)
+		if (g_isSchedulerThread || state->delegateState || g_inlineExecution)
 			return MakeErrorVariable("cannot call Execute from this context");
 		if (!functionName) return NULL;
 
@@ -2411,12 +2411,12 @@ extern "C" {
 		KitsuneState* state = g_state;
 		if (!state) return NULL;
 
-		// Re-entrant path: DelegateState is set (LuaCFunctionWrapper), or we are on the
+		// Re-entrant path: delegateState is set (LuaCFunctionWrapper), or we are on the
 		// scheduler thread inside lua_resume (g_isSchedulerThread, e.g. async coroutine),
 		// or on the inline calling thread inside lua_resume (g_inlineExecution, e.g. RunString
 		// calling SQLite which calls LuaString). Lua access is already owned. Run in a tight
 		// loop; Sleep/Yield are no-ops.
-		if (state->DelegateState || ((g_isSchedulerThread || g_inlineExecution) && state->currentCoroutineId.load() != 0)) {
+		if (state->delegateState || ((g_isSchedulerThread || g_inlineExecution) && state->currentCoroutineId.load() != 0)) {
 			if (!var) return NULL;
 			KitsuneCoroutine* slot = AcquireSlot(state, true, false);
 			if (!slot)
@@ -2491,7 +2491,7 @@ extern "C" {
 			return RunInlineTight(state, slot, T, initialNArgs);
 		}
 
-		if (g_isSchedulerThread || state->DelegateState || g_inlineExecution)
+		if (g_isSchedulerThread || state->delegateState || g_inlineExecution)
 			return MakeErrorVariable("cannot call Execute from this context");
 		if (!var) return NULL;
 
@@ -3175,7 +3175,7 @@ extern "C" {
 		KitsuneState* state = g_state;
 		if (!state)
 			return 0;
-		lua_State* L = state->DelegateState;
+		lua_State* L = state->delegateState;
 		if (!L || !result) return 0;
 
 		if (result->type == KITSUNE_TERROR) {
@@ -3205,22 +3205,22 @@ extern "C" {
 			return 0;  // unreachable
 		}
 
-		// Set DelegateState before filling args: if a LUA_TUSERDATA argument's __tostring
+		// Set delegateState before filling args: if a LUA_TUSERDATA argument's __tostring
 		// metamethod calls a guarded Kitsune API function, the guard returns early instead
 		// of deadlocking. Save/restore handles re-entrant registered-function calls correctly.
 		int argc = lua_gettop(L);
-		lua_State* prevDelegateState = state->DelegateState;
-		state->DelegateState = L;
+		lua_State* prevDelegateState = state->delegateState;
+		state->delegateState = L;
 		KitsuneVariable* args = AllocAndFillArgs(L, argc);
 		if (argc > 0 && !args) {
-			state->DelegateState = prevDelegateState;
+			state->delegateState = prevDelegateState;
 			lua_pushstring(L, "out of memory");
 			lua_error(L);
 			return 0;  // unreachable
 		}
 
 		int rc = func(argc, args, LuaResultSetter, userdata);
-		state->DelegateState = prevDelegateState;  // restore; handles nesting correctly
+		state->delegateState = prevDelegateState;  // restore; handles nesting correctly
 
 		// Free args before any potential lua_error so we never leak them on the error path.
 		FreeCallbackArgs(L, args, argc);
@@ -3370,18 +3370,18 @@ extern "C" {
 		lua_getallocf(L, &itud);
 		KitsuneState* state = (KitsuneState*)itud;
 		int argc = lua_gettop(L);
-		lua_State* prevDelegateState = state->DelegateState;
-		state->DelegateState = L;
+		lua_State* prevDelegateState = state->delegateState;
+		state->delegateState = L;
 		KitsuneVariable* args = AllocAndFillArgs(L, argc);
 		if (argc > 0 && !args) {
-			state->DelegateState = prevDelegateState;
+			state->delegateState = prevDelegateState;
 			lua_pushstring(L, "out of memory");
 			lua_error(L);
 			return 0;  // unreachable
 		}
 
 		int rc = cfd->func(argc, args, LuaResultSetter, cfd->userdata);
-		state->DelegateState = prevDelegateState;
+		state->delegateState = prevDelegateState;
 
 		FreeCallbackArgs(L, args, argc);
 
@@ -3944,20 +3944,20 @@ extern "C" {
 	static void DestroyTable(lua_State* L) {
 		// Create a new table to collect keys
 		lua_createtable(L, 0, 0);
-		int key_table = lua_gettop(L);
+		int keyTable = lua_gettop(L);
 
 		// Iterate the target table and collect keys
 		lua_pushnil(L);
-		int key_count = 0;
+		int keyCount = 0;
 		while (lua_next(L, -3)) {  // -3 is the original table
 			lua_pop(L, 1);  // Pop value, keep key
 			lua_pushvalue(L, -1);  // Duplicate key
-			lua_seti(L, key_table, ++key_count);  // Store in key table
+			lua_seti(L, keyTable, ++keyCount);  // Store in key table
 		}
 
 		// Now iterate the key table and set all values to nil
-		for (int i = 1; i <= key_count; i++) {
-			lua_geti(L, key_table, i);  // Get key
+		for (int i = 1; i <= keyCount; i++) {
+			lua_geti(L, keyTable, i);  // Get key
 			lua_pushnil(L);  // Value to set
 			lua_settable(L, -4);  // Set in original table (now at -4)
 		}

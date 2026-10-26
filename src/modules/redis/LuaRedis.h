@@ -27,7 +27,7 @@ static const char* REDISSTREAM = "REDISSTREAM";
 #endif
 
 typedef struct LuaRedisKey {
-	int redis_ref;
+	int redisRef;
 	char* key;
 	size_t keylen;
 } LuaRedisKey;
@@ -46,7 +46,7 @@ typedef struct LuaRedis {
 	char*              host;
 	int                port;
 	char*              password;
-	long               timeout_sec;
+	long               timeoutSec;
 } LuaRedis;
 
 #define REDIS_VALUE_TYPE_UNKNOWN 0
@@ -58,7 +58,7 @@ typedef struct LuaRedis {
 typedef struct LuaRedisValue {
 	LuaRedisKey key;
 	int         type;            // REDIS_VALUE_TYPE_*
-	int         scan_cache_ref;  // set: registry ref to SSCAN batch {member1,...}; LUA_NOREF = none
+	int         scanCacheRef;  // set: registry ref to SSCAN batch {member1,...}; LUA_NOREF = none
 } LuaRedisValue;
 
 void CleanReply(LuaRedis* luaRedis);

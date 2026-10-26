@@ -15,7 +15,7 @@
 // KITSUNE_TNONE (-1) matches LUA_TNONE. KITSUNE_TERROR (-2) is a Kitsune extension not present
 // in Lua; it is used exclusively with kitsune_ResultSetter to signal a Lua error from a
 #define KITSUNE_TUINT          (-9) // Kitsune extension: unsigned 64-bit integer (LuaUInt userdata). The raw uint64_t bit pattern is stored in the integer union field. Values <= INT64_MAX round-trip via KITSUNE_TINTEGER; values > INT64_MAX require this type to avoid sign loss.
-#define KITSUNE_TDATETIME     (-10) // Kitsune extension: DateTime userdata. datetime → heap-allocated KitsuneDateTime { int64_t ticks; int16_t offset_minutes; }. Free via KitsuneVariableFree.
+#define KITSUNE_TDATETIME     (-10) // Kitsune extension: DateTime userdata. datetime → heap-allocated KitsuneDateTime { int64_t ticks; int16_t offsetMinutes; }. Free via KitsuneVariableFree.
 #define KITSUNE_TTIMESPAN     (-11) // Kitsune extension: TimeSpan userdata. timespan → heap-allocated KitsuneTimeSpan { int64_t ticks; }. Free via KitsuneVariableFree.
 #define KITSUNE_TDECIMAL      (-12) // Kitsune extension: Decimal userdata. decimal → heap-allocated KitsuneDecimal { uint64_t lo; uint64_t hi; int16_t scale; uint8_t negative; }. Free via KitsuneVariableFree.
 #define KITSUNE_TIDENTIFIER   (-13) // Kitsune extension: Identifier userdata. identifier → heap-allocated KitsuneIdentifier { uint8_t type; uint8_t bytes[16]; } where type 0=UUID, 1=OID. Free via KitsuneVariableFree.
@@ -102,7 +102,7 @@ struct KitsuneUserData {
 // 100-nanosecond ticks since 0001-01-01 (same epoch as .NET DateTime), plus a signed UTC offset.
 struct KitsuneDateTime {
 	int64_t ticks;          // 100-ns intervals since 0001-01-01 00:00:00 UTC
-	int16_t offset_minutes; // UTC offset in minutes; 0 = UTC
+	int16_t offsetMinutes; // UTC offset in minutes; 0 = UTC
 };
 
 // Signed duration in 100-nanosecond ticks (same representation as .NET TimeSpan).
@@ -221,13 +221,13 @@ struct KitsuneNamedFunction {
 	kitsune_CFunction func;
 	void* userdata; // Opaque pointer passed to func when this method is called
 	kitsune_Finalizer finalizer; // Optional: called with userdata when the Lua closure is GC'd. Set to NULL if not needed.
-	KitsuneNamedFunction* Next;
+	KitsuneNamedFunction* next;
 };
 
 // Passed to KitsuneRegisterUserdata to describe the methods and metamethods of a userdata type.
 struct KitsuneUserDataRegistration {
-	KitsuneNamedFunction* MetaTableFunctions; // Meta functions names should match lua https://www.lua.org/pil/13.html
-	KitsuneNamedFunction* Functions; // Functions added to the userdata metatable
+	KitsuneNamedFunction* metaTableFunctions; // Meta functions names should match lua https://www.lua.org/pil/13.html
+	KitsuneNamedFunction* functions; // Functions added to the userdata metatable
 };
 
 struct KitsuneMemoryAllocator {
@@ -237,7 +237,7 @@ struct KitsuneMemoryAllocator {
 };
 
 struct KitsuneInternals {
-	KitsuneMemoryAllocator Allocator; // The *current* memory allocator in use by the engine. Initially set to the standard malloc/realloc/free, but can be overridden by passing a custom allocator to KitsuneInit. The engine does not take ownership of the function pointers; they must remain valid for the duration of the engine's lifecycle.
+	KitsuneMemoryAllocator allocator; // The *current* memory allocator in use by the engine. Initially set to the standard malloc/realloc/free, but can be overridden by passing a custom allocator to KitsuneInit. The engine does not take ownership of the function pointers; they must remain valid for the duration of the engine's lifecycle.
 	void(*MongoDbInit)(); // Holds the internal function pointer to mongodb init, if this is called from the outside you must also call MongoDbCleanUp when cleaning up the engine, otherwise you will leak memory and other resources used by the MongoDB client.
 	void(*MongoDbCleanUp)();
 };
@@ -308,7 +308,7 @@ extern "C" {
 	KITSUNE_API void KitsuneRegisterFunction(const char* name, kitsune_CFunction func, void* userdata = nullptr, kitsune_Finalizer finalizer = nullptr);
 
 	// Registers a userdata type with the engine, allowing Lua to recognise it and call its metamethods.
-	// Fails if the name is already taken, or if registration->MetaTableFunctions is missing
+	// Fails if the name is already taken, or if registration->metaTableFunctions is missing
 	// a __gc entry (releases the managed GCHandle) or a __tostring entry (enables tostring()).
 	KITSUNE_API bool KitsuneRegisterUserdata(const char* name, const KitsuneUserDataRegistration* registration);
 

@@ -1,7 +1,7 @@
 ﻿#include "msgpack/LuaMsgPack.h"
 #include "msgpack/LuaMsgPackMain.h"
 
-static const struct luaL_Reg msgpack_functions[] = {
+static const struct luaL_Reg msgpackFunctions[] = {
     { "New",              MsgPack_New               },  // MsgPack.New()
     { "Decode",           MsgPack_Decode            },  // msgpack:Decode(str | stream)
     { "Encode",           MsgPack_Encode            },  // msgpack:Encode(value)
@@ -11,20 +11,20 @@ static const struct luaL_Reg msgpack_functions[] = {
     { NULL, NULL }
 };
 
-static const struct luaL_Reg msgpack_meta[] = {
+static const struct luaL_Reg msgpackMeta[] = {
     { "__gc",       MsgPack_Dispose       },
     { "__tostring", MsgPack_ToString },
     { NULL, NULL }
 };
 
 int luaopen_msgpack(lua_State* L) {
-    luaL_newlibtable(L, msgpack_functions);
-    luaL_setfuncs(L, msgpack_functions, 0);
+    luaL_newlibtable(L, msgpackFunctions);
+    luaL_setfuncs(L, msgpackFunctions, 0);
 
     // Instance metatable: __gc, __tostring, and __index = module table so all
-    // msgpack_functions are reachable as both MsgPack.Xxx() and msgpack:Xxx().
+    // msgpackFunctions are reachable as both MsgPack.Xxx() and msgpack:Xxx().
     luaL_newmetatable(L, LUAMSGPACK);
-    luaL_setfuncs(L, msgpack_meta, 0);
+    luaL_setfuncs(L, msgpackMeta, 0);
     lua_pushliteral(L, "__index");
     lua_pushvalue(L, -3);   // module table
     lua_rawset(L, -3);
