@@ -25,63 +25,63 @@
 #define KITSUNE_COROUTINE_STATE_WAITING     7  // suspended until a target coroutine finishes (or timeout)
 
 struct KitsuneCoroutine {
-    int           id;
-    int           threadRef;
-    lua_State*    thread;
-    std::atomic<int>  fireAndForget{ 0 };
-    std::atomic<long> state{ 0 };
-    char*         error;
-    KitsuneVariable result;
-    int           resumeValueRef;  // luaL_ref of value passed by task:Resume(value); LUA_NOREF if none
-    int           onErrorRef;      // luaL_ref of per-task error handler fn(id, err); LUA_NOREF if none
-    double        sleepUntil;
-    int           sleepTokenRef;
-    int           waitingForId;
-    double        startTime;
-    int           initialNArgs;
-    std::atomic<int>  isInline{ 0 };
-    char*         name;
-    int           luaRefCount;
-    bool          apiOwned;
-    bool          didWork;  // set by Yield(true) or cooperative C yields with data; cleared by scheduler each tick
+	int           id;
+	int           threadRef;
+	lua_State*    thread;
+	std::atomic<int>  fireAndForget{ 0 };
+	std::atomic<long> state{ 0 };
+	char*         error;
+	KitsuneVariable result;
+	int           resumeValueRef;  // luaL_ref of value passed by task:Resume(value); LUA_NOREF if none
+	int           onErrorRef;      // luaL_ref of per-task error handler fn(id, err); LUA_NOREF if none
+	double        sleepUntil;
+	int           sleepTokenRef;
+	int           waitingForId;
+	double        startTime;
+	int           initialNArgs;
+	std::atomic<int>  isInline{ 0 };
+	char*         name;
+	int           luaRefCount;
+	bool          apiOwned;
+	bool          didWork;  // set by Yield(true) or cooperative C yields with data; cleared by scheduler each tick
 };
 
 struct KitsuneState {
-    lua_State*    L;
-    double        pcFreq;
-    int64_t       counterStart;
-    lua_State*    delegateState;
-    char*         lastCallError;
+	lua_State*    L;
+	double        pcFreq;
+	int64_t       counterStart;
+	lua_State*    delegateState;
+	char*         lastCallError;
 
-    std::atomic<long> interrupt{ 0 };
-    std::atomic<long> pauseFlag{ 0 };
-    PlatformEvent pausedEvent;
-    PlatformEvent resumeEvent;
+	std::atomic<long> interrupt{ 0 };
+	std::atomic<long> pauseFlag{ 0 };
+	PlatformEvent pausedEvent;
+	PlatformEvent resumeEvent;
 
-    std::mutex    accessLock;
+	std::mutex    accessLock;
 
-    std::thread           schedulerThread;
-    std::atomic<long>     schedulerStop{ 0 };
-    PlatformEvent         workEvent;
-    PlatformEvent         schedulerDoneEvent;
+	std::thread           schedulerThread;
+	std::atomic<long>     schedulerStop{ 0 };
+	PlatformEvent         workEvent;
+	PlatformEvent         schedulerDoneEvent;
 
-    KitsuneCoroutine* slots[KITSUNE_MAX_COROUTINES];
-    int               slotCount;
-    std::mutex        slotsLock;
+	KitsuneCoroutine* slots[KITSUNE_MAX_COROUTINES];
+	int               slotCount;
+	std::mutex        slotsLock;
 
-    std::mutex              doneMtx;
-    std::condition_variable doneCV;
+	std::mutex              doneMtx;
+	std::condition_variable doneCV;
 
-    std::atomic<long> nextId{ 0 };
-    std::atomic<long> runningCount{ 0 };
-    std::atomic<long> currentCoroutineId{ 0 };
-    int               taskErrorHandlerRef{ 0 };
+	std::atomic<long> nextId{ 0 };
+	std::atomic<long> runningCount{ 0 };
+	std::atomic<long> currentCoroutineId{ 0 };
+	int               taskErrorHandlerRef{ 0 };
 
-    // Dual-hook registry: one entry per tracked lua_State*.
-    // Owned here so there are no dangling globals and cleanup is trivially
-    // tied to KitsuneState lifetime.
-    std::mutex                                        hookMtx;
-    std::unordered_map<lua_State*, KitsuneHookState> hookMap;
+	// Dual-hook registry: one entry per tracked lua_State*.
+	// Owned here so there are no dangling globals and cleanup is trivially
+	// tied to KitsuneState lifetime.
+	std::mutex                                        hookMtx;
+	std::unordered_map<lua_State*, KitsuneHookState> hookMap;
 };
 
 // Defined in KitsuneEngine.cpp

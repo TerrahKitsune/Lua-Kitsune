@@ -4,7 +4,7 @@
 #define LUATASK_META "LuaTask"
 
 struct LuaTask {
-    int id; // coroutine id; 0 once this handle has released its refcount share
+	int id; // coroutine id; 0 once this handle has released its refcount share
 };
 
 int Tasks_New(lua_State* L);

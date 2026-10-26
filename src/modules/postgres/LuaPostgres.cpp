@@ -278,14 +278,14 @@ static void FreeQuery(lua_State* L, LuaPostgresQuery* q) {
 	}
 
 	if (q->conn) {
-		if (q->conn->queryRef != LUA_NOREF) {
+		if (q->conn->queryRef > 0) {
 			luaL_unref(L, LUA_REGISTRYINDEX, q->conn->queryRef);
 			q->conn->queryRef = LUA_NOREF;
 		}
 		q->conn->activeQuery = NULL;
 	}
 
-	if (q->connRef != LUA_NOREF) {
+	if (q->connRef > 0) {
 		luaL_unref(L, LUA_REGISTRYINDEX, q->connRef);
 		q->connRef = LUA_NOREF;
 	}
@@ -366,7 +366,7 @@ int Postgres_EscapeValue(lua_State* L) {
 
 int Postgres_IsBusy(lua_State* L) {
 	LuaPostgres* pg = lua_topostgres(L, 1);
-	if (pg->queryRef == LUA_NOREF) {
+	if (pg->queryRef <= 0) {
 		lua_pushboolean(L, false);
 		return 1;
 	}
@@ -621,7 +621,7 @@ int Postgres_Query(lua_State* L) {
 		return 2;
 	}
 
-	if (pg->queryRef != LUA_NOREF) {
+	if (pg->queryRef > 0) {
 		lua_pushnil(L);
 		lua_pushliteral(L, "Connection already has an active query");
 		return 2;
@@ -661,7 +661,7 @@ static int HelperWaitCont(lua_State* L, int status, lua_KContext ctx) {
 		return 2;
 	}
 
-	if (q->conn->aliveTokenRef != LUA_NOREF) {
+	if (q->conn->aliveTokenRef > 0) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, q->conn->aliveTokenRef);
 		int alive = AliveTokenIsAlive(L, -1);
 		lua_pop(L, 1);
@@ -831,7 +831,7 @@ static int PostgresHelperRun(lua_State* L, int mode) {
 	LuaPostgres* pg = lua_topostgres(L, 1);
 
 	// Early-out: if a token is attached and already disposed, abort before setup.
-	if (pg->aliveTokenRef != LUA_NOREF) {
+	if (pg->aliveTokenRef > 0) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, pg->aliveTokenRef);
 		int alive = AliveTokenIsAlive(L, -1);
 		lua_pop(L, 1);
@@ -847,7 +847,7 @@ static int PostgresHelperRun(lua_State* L, int mode) {
 		return 0;
 	}
 
-	if (pg->queryRef != LUA_NOREF) {
+	if (pg->queryRef > 0) {
 		lua_pushnil(L);
 		lua_pushliteral(L, "Connection already has an active query");
 		return 2;
@@ -878,7 +878,7 @@ int Postgres_QueryAll(lua_State* L) { return PostgresHelperRun(L, PG_HELPER_QUER
 
 int Postgres_SetAliveToken(lua_State* L) {
 	LuaPostgres* pg = lua_topostgres(L, 1);
-	if (pg->aliveTokenRef != LUA_NOREF) {
+	if (pg->aliveTokenRef > 0) {
 		luaL_unref(L, LUA_REGISTRYINDEX, pg->aliveTokenRef);
 		pg->aliveTokenRef = LUA_NOREF;
 	}
@@ -898,12 +898,12 @@ int Postgres_Close(lua_State* L) {
 	if (pg->activeQuery)
 		FreeQuery(L, (LuaPostgresQuery*)pg->activeQuery);
 
-	if (pg->queryRef != LUA_NOREF) {
+	if (pg->queryRef > 0) {
 		luaL_unref(L, LUA_REGISTRYINDEX, pg->queryRef);
 		pg->queryRef = LUA_NOREF;
 	}
 
-	if (pg->aliveTokenRef != LUA_NOREF) {
+	if (pg->aliveTokenRef > 0) {
 		luaL_unref(L, LUA_REGISTRYINDEX, pg->aliveTokenRef);
 		pg->aliveTokenRef = LUA_NOREF;
 	}

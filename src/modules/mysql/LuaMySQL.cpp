@@ -308,14 +308,14 @@ static void FreeQuery(lua_State* L, LuaMySQLQuery* q) {
 	}
 
 	if (q->conn) {
-		if (q->conn->queryRef != LUA_NOREF) {
+		if (q->conn->queryRef > 0) {
 			luaL_unref(L, LUA_REGISTRYINDEX, q->conn->queryRef);
 			q->conn->queryRef = LUA_NOREF;
 		}
 		q->conn->activeQuery = NULL;
 	}
 
-	if (q->connRef != LUA_NOREF) {
+	if (q->connRef > 0) {
 		luaL_unref(L, LUA_REGISTRYINDEX, q->connRef);
 		q->connRef = LUA_NOREF;
 	}
@@ -377,7 +377,7 @@ int MySQL_EscapeValue(lua_State* L) {
 
 int MySQL_IsBusy(lua_State* L) {
 	LuaMySQL* m = lua_tomysql(L, 1);
-	if (m->queryRef == LUA_NOREF) {
+	if (m->queryRef <= 0) {
 		lua_pushboolean(L, false);
 		return 1;
 	}
@@ -637,7 +637,7 @@ static int HelperWaitCont(lua_State* L, int status, lua_KContext ctx) {
 
 	// Cancel check. T is in the polling phase here (QueryRunCont / QueryStoreCont),
 	// which releases the query state itself on stop.
-	if (conn->aliveTokenRef != LUA_NOREF) {
+	if (conn->aliveTokenRef > 0) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, conn->aliveTokenRef);
 		int alive = AliveTokenIsAlive(L, -1);
 		lua_pop(L, 1);
@@ -792,7 +792,7 @@ static int MySqlHelperRun(lua_State* L, int mode) {
 	LuaMySQL* m = lua_tomysql(L, 1);
 
 	// Early-out: if a token is attached and already disposed, abort before setup.
-	if (m->aliveTokenRef != LUA_NOREF) {
+	if (m->aliveTokenRef > 0) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, m->aliveTokenRef);
 		int alive = AliveTokenIsAlive(L, -1);
 		lua_pop(L, 1);
@@ -808,7 +808,7 @@ static int MySqlHelperRun(lua_State* L, int mode) {
 		return 0;
 	}
 
-	if (m->queryRef != LUA_NOREF) {
+	if (m->queryRef > 0) {
 		lua_pushnil(L);
 		lua_pushliteral(L, "Connection already has an active query");
 		return 2;
@@ -846,7 +846,7 @@ int MySQL_Query(lua_State* L) {
 		return 0;
 	}
 
-	if (m->queryRef != LUA_NOREF) {
+	if (m->queryRef > 0) {
 		lua_pushnil(L);
 		lua_pushliteral(L, "Connection already has an active query");
 		return 2;
@@ -931,7 +931,7 @@ int MySQL_Connect(lua_State* L) {
 
 int MySQL_SetAliveToken(lua_State* L) {
 	LuaMySQL* m = lua_tomysql(L, 1);
-	if (m->aliveTokenRef != LUA_NOREF) {
+	if (m->aliveTokenRef > 0) {
 		luaL_unref(L, LUA_REGISTRYINDEX, m->aliveTokenRef);
 		m->aliveTokenRef = LUA_NOREF;
 	}
@@ -952,12 +952,12 @@ int MySQL_Close(lua_State* L) {
 		FreeQuery(L, (LuaMySQLQuery*)m->activeQuery);
 	}
 
-	if (m->queryRef != LUA_NOREF) {
+	if (m->queryRef > 0) {
 		luaL_unref(L, LUA_REGISTRYINDEX, m->queryRef);
 		m->queryRef = LUA_NOREF;
 	}
 
-	if (m->aliveTokenRef != LUA_NOREF) {
+	if (m->aliveTokenRef > 0) {
 		luaL_unref(L, LUA_REGISTRYINDEX, m->aliveTokenRef);
 		m->aliveTokenRef = LUA_NOREF;
 	}

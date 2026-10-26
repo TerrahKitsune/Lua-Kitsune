@@ -909,7 +909,7 @@ int MongoDB_GC(lua_State* L) {
 	delete w;
 	m->worker = NULL;
 	m->client = NULL;
-	if (m->aliveTokenRef != LUA_NOREF) {
+	if (m->aliveTokenRef > 0) {
 		luaL_unref(L, LUA_REGISTRYINDEX, m->aliveTokenRef);
 		m->aliveTokenRef = LUA_NOREF;
 	}
@@ -922,7 +922,7 @@ int MongoDB_GC(lua_State* L) {
 // dies cleanly after the worker thread acknowledges the cancellation.
 int MongoDB_SetAliveToken(lua_State* L) {
 	LuaMongo* m = luaL_checkmongodb(L, 1);
-	if (m->aliveTokenRef != LUA_NOREF) {
+	if (m->aliveTokenRef > 0) {
 		luaL_unref(L, LUA_REGISTRYINDEX, m->aliveTokenRef);
 		m->aliveTokenRef = LUA_NOREF;
 	}
@@ -1086,7 +1086,7 @@ static int MongoWaitCont(lua_State* L, int status, lua_KContext ctx) {
 	}
 	// AliveToken check — redirect into the cancel path when disposed
 	LuaMongo* m = (LuaMongo*)luaL_testudata(L, 1, LUAMONGO);
-	if (m && m->aliveTokenRef != LUA_NOREF) {
+	if (m && m->aliveTokenRef > 0) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, m->aliveTokenRef);
 		int alive = AliveTokenIsAlive(L, -1);
 		lua_pop(L, 1);
@@ -1209,7 +1209,7 @@ static int MongoGetResultCont(lua_State* L, int status, lua_KContext ctx) {
 	}
 	// AliveToken check — redirect into the cancel path when disposed
 	LuaMongo* m = (LuaMongo*)luaL_testudata(L, 1, LUAMONGO);
-	if (m && m->aliveTokenRef != LUA_NOREF) {
+	if (m && m->aliveTokenRef > 0) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, m->aliveTokenRef);
 		int alive = AliveTokenIsAlive(L, -1);
 		lua_pop(L, 1);

@@ -18,6 +18,6 @@ void  kitsune_free(void* ptr);
 // Pass NULL for any pointer to leave that slot unchanged.
 // Must be called before any allocation if overriding the defaults.
 void kitsune_set_allocators(
-    void* (*malloc_fn)(size_t),
-    void* (*realloc_fn)(void*, size_t),
-    void  (*free_fn)(void*));
+	void* (*malloc_fn)(size_t),
+	void* (*realloc_fn)(void*, size_t),
+	void  (*free_fn)(void*));

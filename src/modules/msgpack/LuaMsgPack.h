@@ -11,12 +11,12 @@
 struct LuaStream;
 
 typedef struct LuaMsgPack {
-    msgpack_sbuffer sbuf;
+	msgpack_sbuffer sbuf;
 
-    // Anti-recursion stack (table pointer addresses while encoding)
-    uintptr_t* rec;
-    size_t     recLen;
-    size_t     recCap;
+	// Anti-recursion stack (table pointer addresses while encoding)
+	uintptr_t* rec;
+	size_t     recLen;
+	size_t     recCap;
 } LuaMsgPack;
 
 LuaMsgPack* lua_pushmsgpack(lua_State* L);

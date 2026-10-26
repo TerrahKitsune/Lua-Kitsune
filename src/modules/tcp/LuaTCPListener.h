@@ -16,49 +16,49 @@ typedef struct LuaTcpListener LuaTcpListener;
 typedef struct LuaTcpClient   LuaTcpClient;
 
 typedef struct TcpMsgNode {
-    char*              data;   /* raw bytes (may contain nulls), freed on dequeue */
-    size_t             len;
-    struct TcpMsgNode* next;
+	char*              data;   /* raw bytes (may contain nulls), freed on dequeue */
+	size_t             len;
+	struct TcpMsgNode* next;
 } TcpMsgNode;
 
 typedef struct LuaTcpListener {
-    struct event_base*     base;
-    struct evconnlistener* listener;   /* libevent evconnlistener */
-    lua_State*             L;
+	struct event_base*     base;
+	struct evconnlistener* listener;   /* libevent evconnlistener */
+	lua_State*             L;
 
-    /* Pending-accept queue: dynamic array of LuaTcpClient* that have been
-       accepted by libevent but not yet yielded to Lua via Accept(). */
-    LuaTcpClient**         pendingQueue;
-    int                    pendingCount;
-    int                    pendingCap;
+	/* Pending-accept queue: dynamic array of LuaTcpClient* that have been
+	   accepted by libevent but not yet yielded to Lua via Accept(). */
+	LuaTcpClient**         pendingQueue;
+	int                    pendingCount;
+	int                    pendingCap;
 
-    int                    selfRef;      /* keeps this userdata alive during callbacks */
-    int                    contextRef;   /* 0 until GetContext() first called */
-    int                    port;          /* listen port, for __tostring */
-    bool                   disposed;
+	int                    selfRef;      /* keeps this userdata alive during callbacks */
+	int                    contextRef;   /* 0 until GetContext() first called */
+	int                    port;          /* listen port, for __tostring */
+	bool                   disposed;
 } LuaTcpListener;
 
 typedef struct LuaTcpClient {
-    struct bufferevent*  bev;         /* libevent bufferevent (the connection)       */
-    struct event_base*   evbase;      /* borrowed from listener or self-created      */
-    lua_State*           L;
+	struct bufferevent*  bev;         /* libevent bufferevent (the connection)       */
+	struct event_base*   evbase;      /* borrowed from listener or self-created      */
+	lua_State*           L;
 
-    bool                 connected;
-    bool                 disposed;
-    bool                 ownsBase;   /* true if evbase was self-created (TCP.Connect) */
-    char*                ip;          /* cached remote IP string                     */
-    int                  port;        /* cached remote port                          */
-    char*                errorMsg;   /* set when connection drops with an error     */
+	bool                 connected;
+	bool                 disposed;
+	bool                 ownsBase;   /* true if evbase was self-created (TCP.Connect) */
+	char*                ip;          /* cached remote IP string                     */
+	int                  port;        /* cached remote port                          */
+	char*                errorMsg;   /* set when connection drops with an error     */
 
-    /* Message queue (FIFO)                                                        */
-    TcpMsgNode*          msgHead;
-    TcpMsgNode*          msgTail;
+	/* Message queue (FIFO)                                                        */
+	TcpMsgNode*          msgHead;
+	TcpMsgNode*          msgTail;
 
-    /* Registry refs                                                                        */
-    int                  selfRef;    /* keeps this userdata alive during callbacks  */
-    int                  contextRef; /* 0 until GetContext() first called           */
+	/* Registry refs                                                                        */
+	int                  selfRef;    /* keeps this userdata alive during callbacks  */
+	int                  contextRef; /* 0 until GetContext() first called           */
 
-    lua_Integer          id;
+	lua_Integer          id;
 } LuaTcpClient;
 
 /* TCP module functions */

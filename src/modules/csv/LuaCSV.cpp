@@ -102,7 +102,7 @@ static void BufferUntilNewline(LuaCsv* csv) {
 static bool IsAtEnd(LuaCsv* csv) {
 	if (csv->data)
 		return csv->pos >= (int)csv->dataLen;
-	if (csv->streamFuncRef != LUA_NOREF || csv->streamRef != LUA_NOREF)
+	if (csv->streamFuncRef > 0 || csv->streamRef > 0)
 		return csv->streamPos >= (int)csv->streamLen && csv->streamDone;
 	return true;
 }
@@ -111,7 +111,7 @@ static bool IsAtEnd(LuaCsv* csv) {
 // and the stream has not yet been marked done.  No-op in string mode and when
 // data is still available in the current buffer.
 static void EnsureStreamRefilled(LuaCsv* csv) {
-	if (csv->streamFuncRef != LUA_NOREF &&
+	if (csv->streamFuncRef > 0 &&
 		csv->streamPos >= (int)csv->streamLen &&
 		!csv->streamDone)
 		RefillStreamBuffer(csv);
@@ -128,11 +128,11 @@ static wchar_t GetNext(LuaCsv* csv, bool peek = false) {
 		} else {
 			last = L'\0';
 		}
-	} else if (csv->streamFuncRef != LUA_NOREF || csv->streamRef != LUA_NOREF) {
+	} else if (csv->streamFuncRef > 0 || csv->streamRef > 0) {
 		// Fn-backend or stream-object: read from streamBuf.
 		// Fn-backend refills here when the buffer runs out.
 		// Stream-object: the iterator pre-fills before calling DecodeOneRow; no refill here.
-		if (csv->streamFuncRef != LUA_NOREF &&
+		if (csv->streamFuncRef > 0 &&
 			csv->streamPos >= (int)csv->streamLen && !csv->streamDone)
 			RefillStreamBuffer(csv);
 		if (csv->streamPos < (int)csv->streamLen) {
@@ -583,11 +583,11 @@ int EncodeCsv(lua_State* L) {
 // __gc for the LuaCsv full-userdata that backs the iterator closure.
 static int CsvStream_GC(lua_State* L) {
 	LuaCsv* csv = (LuaCsv*)lua_touserdata(L, 1);
-	if (csv->streamFuncRef != LUA_NOREF) {
+	if (csv->streamFuncRef > 0) {
 		luaL_unref(L, LUA_REGISTRYINDEX, csv->streamFuncRef);
 		csv->streamFuncRef = LUA_NOREF;
 	}
-	if (csv->streamRef != LUA_NOREF) {
+	if (csv->streamRef > 0) {
 		luaL_unref(L, LUA_REGISTRYINDEX, csv->streamRef);
 		csv->streamRef = LUA_NOREF;
 	}
@@ -620,7 +620,7 @@ static int CsvStreamIterator(lua_State* L) {
 	LuaCsv* csv = (LuaCsv*)lua_touserdata(L, lua_upvalueindex(1));
 	csv->streamL = L;
 
-	if (csv->streamRef != LUA_NOREF) {
+	if (csv->streamRef > 0) {
 		// Stream path — works identically for sync and async streams.
 		// Keep fetching chunks until the buffer holds at least one complete row
 		// boundary (newline or CR) or the stream is done.  The same accumulation
@@ -642,7 +642,7 @@ static int CsvStreamIterator(lua_State* L) {
 				? SniffDelimiter(csv->streamBuf + csv->streamPos,
 								  csv->streamLen - (size_t)csv->streamPos)
 				: L',';
-	} else if (csv->streamFuncRef != LUA_NOREF && csv->delimiter == L'\0') {
+	} else if (csv->streamFuncRef > 0 && csv->delimiter == L'\0') {
 		// Fn-backend: accumulate at least one complete line for delimiter sniffing.
 		BufferUntilNewline(csv);
 		csv->delimiter = csv->streamLen > 0

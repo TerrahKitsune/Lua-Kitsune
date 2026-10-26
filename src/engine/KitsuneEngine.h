@@ -454,7 +454,7 @@ extern "C" {
 	// Returns NULL on failure. Thread-safe.
 	KITSUNE_API KitsuneVariable* KitsuneAnchorVariable(const KitsuneVariable* var);
 	// Snapshots the contents of a live KITSUNE_TTABLE variable into a heap-allocated KITSUNE_TTABLECONTENTS.
-	// tableVar must have type KITSUNE_TTABLE with a valid registry ref (ref != LUA_NOREF).
+	// tableVar must have type KITSUNE_TTABLE with a valid registry ref (ref > 0).
 	// Returns NULL on failure. Call KitsuneVariableFree on the result when done. Thread-safe.
 	KITSUNE_API KitsuneVariable* KitsuneGetTableContents(const KitsuneVariable* tableVar);
 	// Replaces the contents of a live Lua table (tableVar, type KITSUNE_TTABLE) with the snapshot

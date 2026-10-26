@@ -5,14 +5,14 @@ const char* PushRedisKeyName(lua_State* L, LuaRedisKey* key) {
 }
 
 void PushRedisRef(lua_State* L, LuaRedisKey* key) {
-	if (key->redisRef == LUA_NOREF) {
+	if (key->redisRef <= 0) {
 		luaL_error(L, "Redis key not available");
 	}
 	lua_rawgeti(L, LUA_REGISTRYINDEX, key->redisRef);
 }
 
 void CleanRedisKey(lua_State* L, LuaRedisKey* key) {
-	if (key->redisRef != LUA_NOREF) {
+	if (key->redisRef > 0) {
 		luaL_unref(L, LUA_REGISTRYINDEX, key->redisRef);
 		key->redisRef = LUA_NOREF;
 	}

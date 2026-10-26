@@ -140,7 +140,7 @@ int HttpClient_SetDefaultHeader(lua_State* L) {
 	luaL_checkstring(L, 2);
 	luaL_checkstring(L, 3);
 	// Get-or-create the default headers table in the registry
-	if (client->defaultHeadersRef == LUA_NOREF) {
+	if (client->defaultHeadersRef <= 0) {
 		lua_newtable(L);
 		client->defaultHeadersRef = luaL_ref(L, LUA_REGISTRYINDEX);
 	}
@@ -166,11 +166,11 @@ int HttpClient_SetVerifySSL(lua_State* L) {
 
 int HttpClient_GC(lua_State* L) {
 	LuaHttpClient* client = (LuaHttpClient*)luaL_checkudata(L, 1, LUAHTTPCLIENT);
-	if (client->defaultHeadersRef != LUA_NOREF) {
+	if (client->defaultHeadersRef > 0) {
 		luaL_unref(L, LUA_REGISTRYINDEX, client->defaultHeadersRef);
 		client->defaultHeadersRef = LUA_NOREF;
 	}
-	if (client->aliveTokenRef != LUA_NOREF) {
+	if (client->aliveTokenRef > 0) {
 		luaL_unref(L, LUA_REGISTRYINDEX, client->aliveTokenRef);
 		client->aliveTokenRef = LUA_NOREF;
 	}
@@ -226,7 +226,7 @@ static void FreeHeaderArrays(char** keys, char** vals, int count) {
 static struct curl_slist* BuildHeaders(lua_State* L, LuaHttpClient* client, int headersIdx) {
 	struct curl_slist* hdrs = NULL;
 	char buf[2048];
-	if (client->defaultHeadersRef != LUA_NOREF) {
+	if (client->defaultHeadersRef > 0) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, client->defaultHeadersRef);
 		lua_pushnil(L);
 		while (lua_next(L, -2)) {
@@ -369,11 +369,11 @@ static size_t WriteHeaderCallback(char* buffer, size_t size, size_t nitems, void
 }
 
 static int BuildHttpResultTable(lua_State* L, LuaHttpCurlRequest* req) {
-	if (req->streamOutputRef != LUA_NOREF) {
+	if (req->streamOutputRef > 0) {
 		luaL_unref(L, LUA_REGISTRYINDEX, req->streamOutputRef);
 		req->streamOutputRef = LUA_NOREF;
 	}
-	if (req->streamInputRef != LUA_NOREF) {
+	if (req->streamInputRef > 0) {
 		luaL_unref(L, LUA_REGISTRYINDEX, req->streamInputRef);
 		req->streamInputRef = LUA_NOREF;
 	}
@@ -405,7 +405,7 @@ static int HttpRequestContinuation(lua_State* L, int status, lua_KContext ctx) {
 	LuaHttpCurlRequest* req = (LuaHttpCurlRequest*)luaL_checkudata(L, 1, LUAHTTPCURLREQUEST);
 	// Check AliveToken: if the client has one and it's been disposed, let the
 	// coroutine die silently so the caller's drive loop exits via status check.
-	if (req->client && req->client->aliveTokenRef != LUA_NOREF) {
+	if (req->client && req->client->aliveTokenRef > 0) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, req->client->aliveTokenRef);
 		int alive = AliveTokenIsAlive(L, -1);
 		lua_pop(L, 1);
@@ -436,7 +436,7 @@ static int HttpRequestEntry(lua_State* L) {
 int HttpClient_Request(lua_State* L) {
 	LuaHttpClient* client = (LuaHttpClient*)luaL_checkudata(L, 1, LUAHTTPCLIENT);
 	// Early-out: if a token is attached and already dead, abort before any curl setup.
-	if (client->aliveTokenRef != LUA_NOREF) {
+	if (client->aliveTokenRef > 0) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, client->aliveTokenRef);
 		int alive = AliveTokenIsAlive(L, -1);
 		lua_pop(L, 1);
@@ -600,11 +600,11 @@ int HttpCurlRequest_GC(lua_State* L) {
 	}
 	kitsune_free(req->body);
 	req->body = NULL;
-	if (req->streamOutputRef != LUA_NOREF) {
+	if (req->streamOutputRef > 0) {
 		luaL_unref(L, LUA_REGISTRYINDEX, req->streamOutputRef);
 		req->streamOutputRef = LUA_NOREF;
 	}
-	if (req->streamInputRef != LUA_NOREF) {
+	if (req->streamInputRef > 0) {
 		luaL_unref(L, LUA_REGISTRYINDEX, req->streamInputRef);
 		req->streamInputRef = LUA_NOREF;
 	}
@@ -981,7 +981,7 @@ int HttpClient_Stream(lua_State* L) {
 
 int HttpClient_SetAliveToken(lua_State* L) {
 	LuaHttpClient* client = (LuaHttpClient*)luaL_checkudata(L, 1, LUAHTTPCLIENT);
-	if (client->aliveTokenRef != LUA_NOREF) {
+	if (client->aliveTokenRef > 0) {
 		luaL_unref(L, LUA_REGISTRYINDEX, client->aliveTokenRef);
 		client->aliveTokenRef = LUA_NOREF;
 	}
@@ -1008,7 +1008,7 @@ int HttpClient_SetAliveToken(lua_State* L) {
 static int ClientCallContinuation(lua_State* L, int status, lua_KContext ctx) {
 	// Check AliveToken before driving the inner thread another step.
 	LuaHttpClient* client = (LuaHttpClient*)luaL_testudata(L, 1, LUAHTTPCLIENT);
-	if (client && client->aliveTokenRef != LUA_NOREF) {
+	if (client && client->aliveTokenRef > 0) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, client->aliveTokenRef);
 		int alive = AliveTokenIsAlive(L, -1);
 		lua_pop(L, 1);

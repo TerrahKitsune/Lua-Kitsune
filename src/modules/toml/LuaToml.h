@@ -13,17 +13,17 @@
 // allocations. The anti-recursion stack guards against circular table refs
 // during encode. tomlc99 is used only for decode; the encoder is hand-written.
 typedef struct LuaToml {
-    int pretty;  // 0 = compact, 1 = indented (2 spaces per level)
+	int pretty;  // 0 = compact, 1 = indented (2 spaces per level)
 
-    // Encode output buffer (grows as needed, owned by kitsune allocator)
-    char*  out;
-    size_t outLen;
-    size_t outCap;
+	// Encode output buffer (grows as needed, owned by kitsune allocator)
+	char*  out;
+	size_t outLen;
+	size_t outCap;
 
-    // Anti-recursion stack (table pointer addresses while encoding)
-    uintptr_t* rec;
-    size_t     recLen;
-    size_t     recCap;
+	// Anti-recursion stack (table pointer addresses while encoding)
+	uintptr_t* rec;
+	size_t     recLen;
+	size_t     recCap;
 } LuaToml;
 
 LuaToml* lua_pushtoml(lua_State* L);

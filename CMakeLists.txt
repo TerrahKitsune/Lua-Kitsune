@@ -259,7 +259,7 @@ set_source_files_properties(${KITSUNE_VORBIS_SOURCES} PROPERTIES
 # ── KITSUNE_ALL umbrella option ───────────────────────────────────────────────
 # Mirrors the Windows KITSUNE_ALL preprocessor flag: enables every optional
 # module in a single switch and passes -DKITSUNE_ALL to the compiler so that
-# platform.h's cascade activates identically to the Windows vcxproj build.
+# src/engine/Platform.h's cascade activates identically to the Windows vcxproj build.
 option(KITSUNE_ALL "Enable all optional modules (MySQL, PostgreSQL, …)" OFF)
 
 if(KITSUNE_ALL)

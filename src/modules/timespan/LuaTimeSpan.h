@@ -9,7 +9,7 @@ static const char* LUATIMESPAN = "TIMESPAN";
 // Matches .NET System.TimeSpan's internal representation exactly.
 // Negative values represent durations directed backwards in time.
 typedef struct LuaTimeSpan {
-    int64_t ticks;
+	int64_t ticks;
 } LuaTimeSpan;
 
 #define TS_TICKS_PER_MILLISECOND  INT64_C(10000)

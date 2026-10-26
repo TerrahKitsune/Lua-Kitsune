@@ -18,10 +18,10 @@
 //   A flat two-level table is expected: { section = { key = value } }.
 //   Pass the string "__global" as a section name for top-level keys.
 typedef struct LuaIni {
-    // Encode output buffer (grows as needed, owned by kitsune allocator)
-    char*  out;
-    size_t outLen;
-    size_t outCap;
+	// Encode output buffer (grows as needed, owned by kitsune allocator)
+	char*  out;
+	size_t outLen;
+	size_t outCap;
 } LuaIni;
 
 LuaIni* lua_pushini(lua_State* L);

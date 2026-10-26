@@ -52,7 +52,7 @@ int RedisValue_Len(lua_State* L) {
 	}
 	else if (val->type == REDIS_VALUE_TYPE_SET) {
 
-		if (val->scanCacheRef != LUA_NOREF) {
+		if (val->scanCacheRef > 0) {
 			luaL_unref(L, LUA_REGISTRYINDEX, val->scanCacheRef);
 			val->scanCacheRef = LUA_NOREF;
 		}
@@ -449,7 +449,7 @@ int RedisValue_Index(lua_State* L) {
 			}
 
 			int len = 0;
-			if (val->scanCacheRef != LUA_NOREF) {
+			if (val->scanCacheRef > 0) {
 				lua_rawgeti(L, LUA_REGISTRYINDEX, val->scanCacheRef);
 				len = (int)lua_rawlen(L, -1);
 			}
@@ -486,7 +486,7 @@ int RedisValue_Index(lua_State* L) {
 						CleanReply(redis);
 						lua_pop(L, 6);
 
-						if (val->scanCacheRef != LUA_NOREF) {
+						if (val->scanCacheRef > 0) {
 							luaL_unref(L, LUA_REGISTRYINDEX, val->scanCacheRef);
 						}
 						lua_pushvalue(L, -1);
@@ -507,7 +507,7 @@ int RedisValue_Index(lua_State* L) {
 			lua_rawgeti(L, -1, setidx);
 			lua_remove(L, -2);
 			if (setidx >= len) {
-				if (val->scanCacheRef != LUA_NOREF) {
+				if (val->scanCacheRef > 0) {
 					luaL_unref(L, LUA_REGISTRYINDEX, val->scanCacheRef);
 					val->scanCacheRef = LUA_NOREF;
 				}
@@ -605,7 +605,7 @@ int RedisValue_NewIndex(lua_State* L) {
 		CleanReply(RedisCommandInternal(L));
 		lua_pop(L, 4);
 
-		if (val->scanCacheRef != LUA_NOREF) {
+		if (val->scanCacheRef > 0) {
 			luaL_unref(L, LUA_REGISTRYINDEX, val->scanCacheRef);
 			val->scanCacheRef = LUA_NOREF;
 		}
@@ -653,7 +653,7 @@ int RedisValue_GC(lua_State* L) {
 
 	LuaRedisValue* val = luaL_checkredisvalue(L, 1);
 	CleanRedisKey(L, &val->key);
-	if (val->scanCacheRef != LUA_NOREF) {
+	if (val->scanCacheRef > 0) {
 		luaL_unref(L, LUA_REGISTRYINDEX, val->scanCacheRef);
 		val->scanCacheRef = LUA_NOREF;
 	}

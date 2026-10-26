@@ -10,7 +10,7 @@ static const char* LUAUINT = "UINT";
 // natively. LuaUInt wraps a uint64_t to preserve the full unsigned range and
 // to allow faithful msgpack uint64 wire-type round-tripping.
 typedef struct LuaUInt {
-    uint64_t value;
+	uint64_t value;
 } LuaUInt;
 
 LuaUInt* lua_pushuint(lua_State* L);

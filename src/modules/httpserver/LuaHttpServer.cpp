@@ -26,7 +26,7 @@ static void SafeFreeS(char** p) {
 
 /* Tears down one HttpOpenConnection node. Idempotent. */
 static void ReleaseNode(lua_State* L, HttpOpenConnection* node) {
-	if (node->requestRef != LUA_NOREF) {
+	if (node->requestRef > 0) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, node->requestRef);
 		LuaHttpRequest* req = (LuaHttpRequest*)lua_touserdata(L, -1);
 		lua_pop(L, 1);
@@ -134,7 +134,7 @@ static void ConnCloseCleanup(LuaHttpServer* s, lua_State* L,
 	lua_pop(L, 1);
 
 	LuaHttpResponse* resp = NULL;
-	if (r && r->responseRef != LUA_NOREF) {
+	if (r && r->responseRef > 0) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, r->responseRef);
 		resp = (LuaHttpResponse*)lua_touserdata(L, -1);
 		lua_pop(L, 1);
@@ -154,7 +154,7 @@ static void ConnCloseCleanup(LuaHttpServer* s, lua_State* L,
 			r->is_error = true;
 		}
 
-		if (s->disconnectRef != LUA_NOREF) {
+		if (s->disconnectRef > 0) {
 			lua_rawgeti(L, LUA_REGISTRYINDEX, s->disconnectRef);
 			lua_pushlightuserdata(L, (void*)req);
 			lua_rawget(L, LUA_REGISTRYINDEX);
@@ -221,7 +221,7 @@ static void ConnCloseCb(struct evhttp_connection* con, void* arg) {
 	}
 	else {
 		/* Response already sent — fire the disconnect callback if registered. */
-		if (s->disconnectRef != LUA_NOREF) {
+		if (s->disconnectRef > 0) {
 			lua_rawgeti(L, LUA_REGISTRYINDEX, s->disconnectRef);
 			lua_pushlightuserdata(L, (void*)con);
 			lua_rawget(L, LUA_REGISTRYINDEX); /* push LuaHttpRequest userdata as arg */
@@ -253,7 +253,7 @@ static void ResponseCompleteCb(struct evhttp_request* req, void* arg) {
 	if (!con)
 		return;
 
-	if (s->disconnectRef != LUA_NOREF) {
+	if (s->disconnectRef > 0) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, s->disconnectRef);
 		lua_pushlightuserdata(L, (void*)con);
 		lua_rawget(L, LUA_REGISTRYINDEX); /* LuaHttpRequest userdata */
@@ -523,7 +523,7 @@ static void ServerTeardown(LuaHttpServer* s, lua_State* L) {
 	s->senders = NULL;
 
 	/* Clear coroutine + server anchor */
-	if (s->coroutineRef != LUA_NOREF) {
+	if (s->coroutineRef > 0) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, s->coroutineRef);
 		lua_State* co = lua_tothread(L, -1);
 		lua_pop(L, 1);
@@ -536,12 +536,12 @@ static void ServerTeardown(LuaHttpServer* s, lua_State* L) {
 		s->coroutineRef = LUA_NOREF;
 	}
 
-	if (s->disconnectRef != LUA_NOREF) {
+	if (s->disconnectRef > 0) {
 		luaL_unref(L, LUA_REGISTRYINDEX, s->disconnectRef);
 		s->disconnectRef = LUA_NOREF;
 	}
 
-	if (s->aliveTokenRef != LUA_NOREF) {
+	if (s->aliveTokenRef > 0) {
 		luaL_unref(L, LUA_REGISTRYINDEX, s->aliveTokenRef);
 		s->aliveTokenRef = LUA_NOREF;
 	}
@@ -559,7 +559,7 @@ static int AcceptCont(lua_State* L, int status, lua_KContext ctx) {
 	}
 
 	/* AliveToken check — treat a disposed token as a stop flag */
-	if (s->aliveTokenRef != LUA_NOREF) {
+	if (s->aliveTokenRef > 0) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, s->aliveTokenRef);
 		int alive = AliveTokenIsAlive(L, -1);
 		lua_pop(L, 1);
@@ -580,7 +580,7 @@ static int AcceptCont(lua_State* L, int status, lua_KContext ctx) {
 		HttpOpenConnection* next = sender->next;
 		bool                remove = false;
 
-		if (req && req->responseRef != LUA_NOREF && req->req) {
+		if (req && req->responseRef > 0 && req->req) {
 			lua_rawgeti(L, LUA_REGISTRYINDEX, req->responseRef);
 			LuaHttpResponse* resp = (LuaHttpResponse*)lua_touserdata(L, -1);
 			lua_pop(L, 1);
@@ -606,7 +606,7 @@ static int AcceptCont(lua_State* L, int status, lua_KContext ctx) {
 					   Null now so HttpRequestCleanup does not double-free. */
 					req->req = NULL;
 					/* Release the stream ref now that streaming is complete */
-					if (resp->streamRef != LUA_NOREF) {
+					if (resp->streamRef > 0) {
 						luaL_unref(L, LUA_REGISTRYINDEX, resp->streamRef);
 						resp->streamRef = LUA_NOREF;
 					}
@@ -740,7 +740,7 @@ int HttpServer_Listen(lua_State* L) {
 int HttpServer_Accept(lua_State* L) {
 	LuaHttpServer* s = luaL_checkhttpserver(L, 1);
 
-	if (s->coroutineRef != LUA_NOREF) {
+	if (s->coroutineRef > 0) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, s->coroutineRef);
 		return 1;
 	}
@@ -765,7 +765,7 @@ int HttpServer_Accept(lua_State* L) {
 int HttpServer_SetOnDisconnect(lua_State* L) {
 	LuaHttpServer* s = luaL_checkhttpserver(L, 1);
 	luaL_checktype(L, 2, LUA_TFUNCTION);
-	if (s->disconnectRef != LUA_NOREF) {
+	if (s->disconnectRef > 0) {
 		luaL_unref(L, LUA_REGISTRYINDEX, s->disconnectRef);
 		s->disconnectRef = LUA_NOREF;
 	}
@@ -776,7 +776,7 @@ int HttpServer_SetOnDisconnect(lua_State* L) {
 
 int HttpServer_SetAliveToken(lua_State* L) {
 	LuaHttpServer* s = luaL_checkhttpserver(L, 1);
-	if (s->aliveTokenRef != LUA_NOREF) {
+	if (s->aliveTokenRef > 0) {
 		luaL_unref(L, LUA_REGISTRYINDEX, s->aliveTokenRef);
 		s->aliveTokenRef = LUA_NOREF;
 	}

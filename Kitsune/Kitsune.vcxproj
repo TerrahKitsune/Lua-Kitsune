@@ -158,7 +158,6 @@
     <Manifest Include="kitsune.exe.manifest" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\.github\copilot-instructions.md" />
     <None Include="..\Extension functions.md" />
     <None Include="..\kitsuneengine-lua-functions.md" />
     <None Include="..\Lua\Makefile" />

@@ -12,52 +12,52 @@
 struct LuaStream;
 
 typedef struct LuaJson {
-    int    pretty;      // 0 = compact, 1 = pretty-printed (2 spaces per level)
+	int    pretty;      // 0 = compact, 1 = pretty-printed (2 spaces per level)
 
-    // Encode output buffer (grows as needed)
-    char*  out;
-    size_t outLen;
-    size_t outCap;
+	// Encode output buffer (grows as needed)
+	char*  out;
+	size_t outLen;
+	size_t outCap;
 
-    // Anti-recursion stack (table pointer addresses while encoding)
-    uintptr_t* rec;
-    size_t     recLen;
-    size_t     recCap;
+	// Anti-recursion stack (table pointer addresses while encoding)
+	uintptr_t* rec;
+	size_t     recLen;
+	size_t     recCap;
 
-    // Decode input (GC-rooted by the caller for the duration of the call)
-    const char* src;
-    size_t      srcLen;
-    size_t      srcPos;
+	// Decode input (GC-rooted by the caller for the duration of the call)
+	const char* src;
+	size_t      srcLen;
+	size_t      srcPos;
 
-    // Single-char pushback for the decoder (LIFO, max 8 chars)
-    char unget[8];
-    int  ungetLen;
+	// Single-char pushback for the decoder (LIFO, max 8 chars)
+	char unget[8];
+	int  ungetLen;
 
-    // Error position tracking for decode errors
-    size_t errLine;
-    size_t errCol;
+	// Error position tracking for decode errors
+	size_t errLine;
+	size_t errCol;
 
-    // Chunked decode: when chunkFnIdx != 0 the function at that absolute Lua
-    // stack index is called (0 args, 1 result) each time the buffer runs dry.
-    // It must return a non-empty string for each chunk, or nil/empty to signal
-    // end of input.  chunkBuf is an owned copy of the most-recent chunk.
-    int        chunkFnIdx;
-    lua_State* chunkL;
-    char*      chunkBuf;
-    size_t     chunkBufCap;
+	// Chunked decode: when chunkFnIdx != 0 the function at that absolute Lua
+	// stack index is called (0 args, 1 result) each time the buffer runs dry.
+	// It must return a non-empty string for each chunk, or nil/empty to signal
+	// end of input.  chunkBuf is an owned copy of the most-recent chunk.
+	int        chunkFnIdx;
+	lua_State* chunkL;
+	char*      chunkBuf;
+	size_t     chunkBufCap;
 
-    // Streaming encode: when non-NULL, JbufGrow flushes the output buffer to
-    // this stream before allocating more memory, keeping usage bounded.
-    struct LuaStream* encStream;
+	// Streaming encode: when non-NULL, JbufGrow flushes the output buffer to
+	// this stream before allocating more memory, keeping usage bounded.
+	struct LuaStream* encStream;
 
-    // When non-zero, JSON null is decoded as the Json.Null sentinel instead of Lua nil.
-    // Default 0 (nil — Lua falsy). Set to 1 via SetDecodeNull(true) for round-trip safety.
-    int nullAsSentinel;
+	// When non-zero, JSON null is decoded as the Json.Null sentinel instead of Lua nil.
+	// Default 0 (nil — Lua falsy). Set to 1 via SetDecodeNull(true) for round-trip safety.
+	int nullAsSentinel;
 
-    // When non-zero, an empty Lua table encodes as {} instead of [] and a decoded
-    // {} is returned as the Json.EmptyObject sentinel instead of an empty table.
-    // Default 0 ([] — treats empty tables as arrays). Set to 1 via SetEncodeEmptyObject(true).
-    int emptyObjectAsSentinel;
+	// When non-zero, an empty Lua table encodes as {} instead of [] and a decoded
+	// {} is returned as the Json.EmptyObject sentinel instead of an empty table.
+	// Default 0 ([] — treats empty tables as arrays). Set to 1 via SetEncodeEmptyObject(true).
+	int emptyObjectAsSentinel;
 } LuaJson;
 
 // Returns the unique pointer address used as the JSON null sentinel.

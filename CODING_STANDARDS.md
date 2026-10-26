@@ -57,6 +57,12 @@ Never rename:
 - Constant tables (`luaL_Reg` arrays, vtables, lookup arrays): camelCase without prefix (`jsonFunctions`, `daysInMonth`).
 - Structs mirroring a third-party ABI keep that ABI's names (e.g. the NVML declarations).
 
+## Lua registry references
+
+A `luaL_ref` value is valid only when it is `> 0`; `0` or less means no ref. Test refs with `> 0` / `<= 0`, never `== LUA_NOREF` / `!= LUA_NOREF`. Initialising or resetting a field to `LUA_NOREF` is fine.
+
+Why: zeroed memory (`calloc`, `memset`, `{}`) leaves ref fields at `0`, which a `!= LUA_NOREF` test treats as valid, and `luaL_unref(L, t, 0)` corrupts the reference free list. `LUA_REFNIL` (-1) is also no ref.
+
 ## Comments
 
 Comment only where the code can't explain itself: the why, contracts in headers, platform quirks, non-obvious constraints, license headers.

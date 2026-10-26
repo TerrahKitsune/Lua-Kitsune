@@ -5,14 +5,14 @@
 static const char* LUAIDENTIFIER = "IDENTIFIER";
 
 typedef enum {
-    IDENTIFIER_UUID = 0,
-    IDENTIFIER_OID  = 1
+	IDENTIFIER_UUID = 0,
+	IDENTIFIER_OID  = 1
 } IdentifierType;
 
 typedef struct LuaIdentifier {
-    IdentifierType type;
-    uint8_t bytes[16];
-    int len;
+	IdentifierType type;
+	uint8_t bytes[16];
+	int len;
 } LuaIdentifier;
 
 LuaIdentifier* lua_pushidentifier(lua_State* L);

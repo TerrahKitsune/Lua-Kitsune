@@ -12,7 +12,7 @@ static void RedisDispose(lua_State* L, LuaRedis* redis) {
 
 	CleanReply(redis);
 
-	if (redis->ref != LUA_NOREF) {
+	if (redis->ref > 0) {
 		luaL_unref(L, LUA_REGISTRYINDEX, redis->ref);
 		redis->ref = LUA_NOREF;
 	}
@@ -404,12 +404,12 @@ int Redis_Call(lua_State* L) {
 
 		luaRedis->cursor = 0;
 
-		if (luaRedis->ref != LUA_NOREF) {
+		if (luaRedis->ref > 0) {
 			luaL_unref(L, LUA_REGISTRYINDEX, luaRedis->ref);
 			luaRedis->ref = LUA_NOREF;
 		}
 	}
-	else if (luaRedis->ref != LUA_NOREF) {
+	else if (luaRedis->ref > 0) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, luaRedis->ref);
 		int len = (int)lua_rawlen(L, -1);
 		if (luaRedis->nth >= len) {
@@ -425,7 +425,7 @@ int Redis_Call(lua_State* L) {
 
 	lua_settop(L, idx);
 
-	if (luaRedis->ref == LUA_NOREF) {
+	if (luaRedis->ref <= 0) {
 
 		lua_pushliteral(L, "SCAN");
 		lua_pushinteger(L, luaRedis->cursor);
@@ -460,7 +460,7 @@ int Redis_Call(lua_State* L) {
 	if (lua_isnil(L, -1)) {
 		luaRedis->cursor = 0;
 
-		if (luaRedis->ref != LUA_NOREF) {
+		if (luaRedis->ref > 0) {
 			luaL_unref(L, LUA_REGISTRYINDEX, luaRedis->ref);
 			luaRedis->ref = LUA_NOREF;
 		}

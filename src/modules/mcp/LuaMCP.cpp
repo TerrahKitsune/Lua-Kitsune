@@ -134,15 +134,15 @@ int McpServer_GC(lua_State* L) {
 	server->stopRequested = true;
 
 	for (McpTool& t : server->tools) {
-		if (t.fnRef != LUA_NOREF)
+		if (t.fnRef > 0)
 			luaL_unref(L, LUA_REGISTRYINDEX, t.fnRef);
 	}
-	if (server->contextRef != LUA_NOREF)
+	if (server->contextRef > 0)
 		luaL_unref(L, LUA_REGISTRYINDEX, server->contextRef);
-	if (server->clientCapsRef != LUA_NOREF)
+	if (server->clientCapsRef > 0)
 		luaL_unref(L, LUA_REGISTRYINDEX, server->clientCapsRef);
 	for (auto& kv : server->pending) {
-		if (kv.second.msgRef != LUA_NOREF)
+		if (kv.second.msgRef > 0)
 			luaL_unref(L, LUA_REGISTRYINDEX, kv.second.msgRef);
 	}
 
@@ -151,12 +151,12 @@ int McpServer_GC(lua_State* L) {
 		server->linebuf = NULL;
 	}
 
-	if (server->taskRef != LUA_NOREF) {
+	if (server->taskRef > 0) {
 		luaL_unref(L, LUA_REGISTRYINDEX, server->taskRef);
 		server->taskRef = LUA_NOREF;
 	}
 
-	if (g_mcpInstanceRef != LUA_NOREF) {
+	if (g_mcpInstanceRef > 0) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, g_mcpInstanceRef);
 		bool sameInstance = lua_touserdata(L, -1) == (void*)server;
 		lua_pop(L, 1);
@@ -366,7 +366,7 @@ static void McpHandleInitialize(lua_State* L, LuaMcpServer* server, int paramsId
 	// our latest and let the client decide (per the lifecycle spec).
 	server->protocolVersion = mcpSupportedVersions[0];
 	server->clientElicitation = false;
-	if (server->clientCapsRef != LUA_NOREF) {
+	if (server->clientCapsRef > 0) {
 		luaL_unref(L, LUA_REGISTRYINDEX, server->clientCapsRef);
 		server->clientCapsRef = LUA_NOREF;
 	}
@@ -530,7 +530,7 @@ static int McpDispatchToolsCall(lua_State* L, LuaMcpServer* server, int paramsId
 	lua_setfield(L, -2, "Name");
 	lua_pushlstring(L, server->clientVersion.c_str(), server->clientVersion.size());
 	lua_setfield(L, -2, "Version");
-	if (server->clientCapsRef != LUA_NOREF) {
+	if (server->clientCapsRef > 0) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, server->clientCapsRef);
 		lua_setfield(L, -2, "Capabilities");
 	}
@@ -825,7 +825,7 @@ static void McpPendingErase(lua_State* L, LuaMcpServer* server, const std::strin
 	auto it = server->pending.find(key);
 	if (it == server->pending.end())
 		return;
-	if (it->second.msgRef != LUA_NOREF)
+	if (it->second.msgRef > 0)
 		luaL_unref(L, LUA_REGISTRYINDEX, it->second.msgRef);
 	server->pending.erase(it);
 }
@@ -835,7 +835,7 @@ static void McpPendingErase(lua_State* L, LuaMcpServer* server, const std::strin
 // duplicate names/values and repeated setters raise, nothing can be removed.
 
 static void McpUnref(lua_State* L, int& ref) {
-	if (ref != LUA_NOREF) {
+	if (ref > 0) {
 		luaL_unref(L, LUA_REGISTRYINDEX, ref);
 		ref = LUA_NOREF;
 	}
@@ -1430,8 +1430,8 @@ static void McpPlanCall(lua_State* L, int callsIdx, lua_Integer* n, int fnRef, c
 // A picked answer: plan its callback (or the question's), or record `true`.
 static void McpPlanAnswer(lua_State* L, int callsIdx, lua_Integer* n, int pickedIdx,
                             const McpQuestion& q, const McpAnswer& a) {
-	int fn = a.fnRef != LUA_NOREF ? a.fnRef : q.fnRef;
-	if (fn != LUA_NOREF) {
+	int fn = a.fnRef > 0 ? a.fnRef : q.fnRef;
+	if (fn > 0) {
 		lua_pushlstring(L, a.value.c_str(), a.value.size());
 		McpPlanCall(L, callsIdx, n, fn, q.name, a.value.c_str());
 	} else {
@@ -1601,7 +1601,7 @@ static int McpElicitPlan(lua_State* L, LuaMcpElicitation* e, int contentIdx) {
 		lua_pushvalue(L, v);
 		lua_setfield(L, answersIdx, qn);
 		lua_pushvalue(L, v);
-		if (q.fnRef != LUA_NOREF) {
+		if (q.fnRef > 0) {
 			McpPlanCall(L, callsIdx, &ncalls, q.fnRef, q.name, nullptr);
 		} else {
 			lua_setfield(L, resultsIdx, qn);
@@ -1903,7 +1903,7 @@ int McpServer_Stop(lua_State* L) {
 
 int McpServer_IsRunning(lua_State* L) {
 	LuaMcpServer* server = luaL_checkmcpserver(L, 1);
-	if (!server->started || server->taskRef == LUA_NOREF) {
+	if (!server->started || server->taskRef <= 0) {
 		lua_pushboolean(L, 0);
 		return 1;
 	}
@@ -1928,7 +1928,7 @@ int McpServer_IsRunning(lua_State* L) {
 }
 
 int MCP_Create(lua_State* L) {
-	if (g_mcpInstanceRef != LUA_NOREF) {
+	if (g_mcpInstanceRef > 0) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, g_mcpInstanceRef);
 		if (lua_ismcpserver(L, -1))
 			return 1;

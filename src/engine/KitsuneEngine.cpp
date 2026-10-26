@@ -678,7 +678,7 @@ void PushKitsuneVariable(lua_State* L, const KitsuneVariable* v) {
 	}
 	case LUA_TUSERDATA: {
 		// Push the original Lua userdata from the registry when available (preserves Lua identity).
-		// Fall back to constructing a new wrapper for manually built variables (ref == LUA_NOREF).
+		// Fall back to constructing a new wrapper for manually built variables (ref <= 0).
 		const KitsuneUserData* ud = v->userdata;
 		if (!ud || !ud->name) {
 			lua_pushnil(L);

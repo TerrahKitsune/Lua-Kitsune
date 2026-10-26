@@ -400,9 +400,6 @@
     </Manifest>
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\.github\copilot-instructions.md">
-      <Filter>Documentation</Filter>
-    </None>
     <None Include="..\Extension functions.md">
       <Filter>Documentation</Filter>
     </None>

@@ -119,7 +119,7 @@ int Stream_Close(lua_State* L) {
 	LuaStream* stream = lua_tostream(L, 1);
 	if (stream->vtbl) {
 		stream->vtbl->close(stream->native, L);
-	} else if (stream->backendRef != LUA_NOREF) {
+	} else if (stream->backendRef > 0) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, stream->backendRef);
 		lua_pushinteger(L, STREAM_OP_CLOSE);
 		lua_pcall_nohook(L, 1, 0, 0);
@@ -360,7 +360,7 @@ int Stream_HasData(lua_State* L) {
 			lua_Integer len = s->vtbl->getlen ? s->vtbl->getlen(s->native) : 0;
 			PushHasDataResult(L, len > pos ? len - pos : 0);
 		}
-	} else if (s->backendRef != LUA_NOREF) {
+	} else if (s->backendRef > 0) {
 		// Lua function backend: dispatch STREAM_OP_HASDATA and pass the result
 		// through as-is (caller may return false, nil, a boolean, or a count).
 		lua_rawgeti(L, LUA_REGISTRYINDEX, s->backendRef);

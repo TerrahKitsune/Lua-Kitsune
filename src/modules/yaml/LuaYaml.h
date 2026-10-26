@@ -16,17 +16,17 @@ struct LuaStream;
 // The output buffer and anti-recursion stack persist across calls and are freed
 // only in __gc, keeping allocations to a minimum.
 typedef struct LuaYaml {
-    int pretty;  // 0 = flow style, 1 = block style
+	int pretty;  // 0 = flow style, 1 = block style
 
-    // Encode output buffer (grows as needed, owned by kitsune allocator)
-    char*  out;
-    size_t outLen;
-    size_t outCap;
+	// Encode output buffer (grows as needed, owned by kitsune allocator)
+	char*  out;
+	size_t outLen;
+	size_t outCap;
 
-    // Anti-recursion stack (table pointer addresses while encoding)
-    uintptr_t* rec;
-    size_t     recLen;
-    size_t     recCap;
+	// Anti-recursion stack (table pointer addresses while encoding)
+	uintptr_t* rec;
+	size_t     recLen;
+	size_t     recCap;
 } LuaYaml;
 
 LuaYaml* lua_pushyaml(lua_State* L);

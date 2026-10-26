@@ -46,7 +46,7 @@ static int PubSubCont(lua_State* L, int status, lua_KContext ctx) {
 
 	// shouldQuit is passed as the first resume argument.
 	if (lua_toboolean(L, 1)) {
-		if (state->aliveTokenRef != LUA_NOREF) {
+		if (state->aliveTokenRef > 0) {
 			luaL_unref(L, LUA_REGISTRYINDEX, state->aliveTokenRef);
 			state->aliveTokenRef = LUA_NOREF;
 		}
@@ -67,7 +67,7 @@ static int PubSubCont(lua_State* L, int status, lua_KContext ctx) {
 	}
 
 	// AliveToken check — treat a disposed token as a stop flag
-	if (state->aliveTokenRef != LUA_NOREF) {
+	if (state->aliveTokenRef > 0) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, state->aliveTokenRef);
 		int alive = AliveTokenIsAlive(L, -1);
 		lua_pop(L, 1);
@@ -153,7 +153,7 @@ int RedisPubSubCoroutine_GC(lua_State* L) {
 	lua_rawget(L, LUA_REGISTRYINDEX);
 	LuaRedisPubSubState* state = (LuaRedisPubSubState*)lua_touserdata(L, -1);
 	if (state) {
-		if (state->aliveTokenRef != LUA_NOREF) {
+		if (state->aliveTokenRef > 0) {
 			luaL_unref(L, LUA_REGISTRYINDEX, state->aliveTokenRef);
 			state->aliveTokenRef = LUA_NOREF;
 		}
@@ -175,11 +175,11 @@ int RedisPubSubState_GC(lua_State* L) {
 		redisFree(state->context);  // closes socket; ssl is borrowed and not freed here
 		state->context = NULL;
 	}
-	if (state->redisRef != LUA_NOREF) {
+	if (state->redisRef > 0) {
 		luaL_unref(L, LUA_REGISTRYINDEX, state->redisRef);
 		state->redisRef = LUA_NOREF;
 	}
-	if (state->aliveTokenRef != LUA_NOREF) {
+	if (state->aliveTokenRef > 0) {
 		luaL_unref(L, LUA_REGISTRYINDEX, state->aliveTokenRef);
 		state->aliveTokenRef = LUA_NOREF;
 	}
@@ -356,7 +356,7 @@ int RedisPubSubCoroutine_SetAliveToken(lua_State* L) {
 	lua_pop(L, 1);
 	if (!state)
 		return 0;
-	if (state->aliveTokenRef != LUA_NOREF) {
+	if (state->aliveTokenRef > 0) {
 		luaL_unref(L, LUA_REGISTRYINDEX, state->aliveTokenRef);
 		state->aliveTokenRef = LUA_NOREF;
 	}

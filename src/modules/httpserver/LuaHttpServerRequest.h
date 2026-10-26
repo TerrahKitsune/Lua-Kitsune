@@ -17,9 +17,9 @@ typedef struct LuaHttpServer      LuaHttpServer;
  * LuaHttpServer.senders.  Never pushed to Lua directly.
  */
 typedef struct HttpOpenConnection {
-    int                        requestRef; /* luaL_ref to LuaHttpRequest userdata —
-                                               prevents __gc while queued or sending */
-    struct HttpOpenConnection* next;
+	int                        requestRef; /* luaL_ref to LuaHttpRequest userdata —
+											   prevents __gc while queued or sending */
+	struct HttpOpenConnection* next;
 } HttpOpenConnection;
 
 /*
@@ -28,22 +28,22 @@ typedef struct HttpOpenConnection {
  * the request stays alive until we call evhttp_request_free().
  */
 typedef struct LuaHttpRequest {
-    struct evhttp_request*    req;    /* owned — evhttp_request_own() was called;
-                                        NULL after response sent (evhttp_send_done frees it) */
-    struct evhttp_connection* con;    /* stable connection pointer kept for disconnect tracking;
-                                        NULL after ConnCloseCb fires                        */
-    LuaHttpServer*            server; /* back-pointer to owning server                       */
-    char*                  url;
-    char*                  method;
-    char*                  body;
-    size_t                 body_len;
-    bool                   isFinished;
-    bool                   is_error;
-    char*                  errorMsg;
-    int                    headersRef; /* luaL_ref to {[name]=value} table */
-    int                    contextRef; /* luaL_ref to context table        */
-    int                    responseRef;/* luaL_ref to LuaHttpResponse      */
-    bool                   upgraded;   /* true after UpgradeToWebSocket(); guards cleanup */
+	struct evhttp_request*    req;    /* owned — evhttp_request_own() was called;
+										NULL after response sent (evhttp_send_done frees it) */
+	struct evhttp_connection* con;    /* stable connection pointer kept for disconnect tracking;
+										NULL after ConnCloseCb fires                        */
+	LuaHttpServer*            server; /* back-pointer to owning server                       */
+	char*                  url;
+	char*                  method;
+	char*                  body;
+	size_t                 body_len;
+	bool                   isFinished;
+	bool                   is_error;
+	char*                  errorMsg;
+	int                    headersRef; /* luaL_ref to {[name]=value} table */
+	int                    contextRef; /* luaL_ref to context table        */
+	int                    responseRef;/* luaL_ref to LuaHttpResponse      */
+	bool                   upgraded;   /* true after UpgradeToWebSocket(); guards cleanup */
 } LuaHttpRequest;
 
 /*
@@ -52,12 +52,12 @@ typedef struct LuaHttpRequest {
  * evhttp_add_header(), so no extra_headers buffer is needed here.
  */
 typedef struct LuaHttpResponse {
-    LuaStream*      stream;      /* NULL = not streaming; non-NULL = active sender */
-    bool            chunked;     /* true = evhttp_send_reply_start/chunk/end path  */
-    bool            finalized;
-    int             statusCode; /* HTTP status, default 200                       */
-    int             streamRef;  /* luaL_ref keeping stream userdata alive during chunked send */
-    LuaHttpRequest* connection;  /* back-pointer, nulled before responseRef unref */
+	LuaStream*      stream;      /* NULL = not streaming; non-NULL = active sender */
+	bool            chunked;     /* true = evhttp_send_reply_start/chunk/end path  */
+	bool            finalized;
+	int             statusCode; /* HTTP status, default 200                       */
+	int             streamRef;  /* luaL_ref keeping stream userdata alive during chunked send */
+	LuaHttpRequest* connection;  /* back-pointer, nulled before responseRef unref */
 } LuaHttpResponse;
 
 /* push/check helpers */

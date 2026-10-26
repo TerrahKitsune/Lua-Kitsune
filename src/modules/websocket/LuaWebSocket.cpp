@@ -280,7 +280,7 @@ static void WsReleaseSelfRef(lua_State* L, LuaWebSocket* ws) {
 static struct curl_slist* WsBuildHeaders(lua_State* L, LuaHttpClient* client, int headersIdx) {
 	struct curl_slist* hdrs = NULL;
 	char buf[2048];
-	if (client->defaultHeadersRef != LUA_NOREF) {
+	if (client->defaultHeadersRef > 0) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, client->defaultHeadersRef);
 		lua_pushnil(L);
 		while (lua_next(L, -2)) {
@@ -458,7 +458,7 @@ static void WsDisposeNative(lua_State* L, LuaWebSocket* ws) {
 		luaL_unref(L, LUA_REGISTRYINDEX, ws->clientRef);
 		ws->clientRef = LUA_NOREF;
 	}
-	if (ws->aliveTokenRef != LUA_NOREF) {
+	if (ws->aliveTokenRef > 0) {
 		luaL_unref(L, LUA_REGISTRYINDEX, ws->aliveTokenRef);
 		ws->aliveTokenRef = LUA_NOREF;
 	}
@@ -507,7 +507,7 @@ int WebSocket_GetId(lua_State* L) {
 
 int WebSocket_GetContext(lua_State* L) {
 	LuaWebSocket* ws = (LuaWebSocket*)luaL_checkudata(L, 1, LUAWEBSOCKET);
-	if (ws->contextRef == LUA_NOREF) {
+	if (ws->contextRef <= 0) {
 		lua_newtable(L);
 		lua_pushvalue(L, -1);
 		ws->contextRef = luaL_ref(L, LUA_REGISTRYINDEX);
@@ -573,7 +573,7 @@ static int WebSocketReadContinuation(lua_State* L, int status, lua_KContext ctx)
 	LuaWebSocket* ws = (LuaWebSocket*)luaL_checkudata(L, 1, LUAWEBSOCKET);
 
 	// A disposed AliveToken means the connection is closed.
-	if (ws->aliveTokenRef != LUA_NOREF) {
+	if (ws->aliveTokenRef > 0) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, ws->aliveTokenRef);
 		int alive = AliveTokenIsAlive(L, -1);
 		lua_pop(L, 1);
@@ -718,7 +718,7 @@ int WsMessage_ToString(lua_State* L) {
 
 static int WsConnectContinuation(lua_State* L, int status, lua_KContext ctx) {
 	LuaWebSocket* ws = (LuaWebSocket*)luaL_checkudata(L, -1, LUAWEBSOCKET);
-	if (ws->aliveTokenRef != LUA_NOREF) {
+	if (ws->aliveTokenRef > 0) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, ws->aliveTokenRef);
 		int alive = AliveTokenIsAlive(L, -1);
 		lua_pop(L, 1);
@@ -807,7 +807,7 @@ int HttpClient_Connect(lua_State* L) {
 
 	// Snapshot the client's AliveToken (if any) so Read/Poll can check it
 	// without needing the client userdata to remain reachable.
-	if (client->aliveTokenRef != LUA_NOREF) {
+	if (client->aliveTokenRef > 0) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, client->aliveTokenRef);
 		ws->aliveTokenRef = luaL_ref(L, LUA_REGISTRYINDEX);
 	}

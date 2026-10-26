@@ -5,9 +5,9 @@
 extern const char* LUAMONGO;
 
 typedef struct LuaMongo {
-    void* worker;        // LuaMongoWorker* — persistent thread, lives for connection lifetime
-    void* client;        // mongoc_client_t* convenience alias; worker owns lifetime
-    int   aliveTokenRef; // LUA_NOREF when not set
+	void* worker;        // LuaMongoWorker* — persistent thread, lives for connection lifetime
+	void* client;        // mongoc_client_t* convenience alias; worker owns lifetime
+	int   aliveTokenRef; // LUA_NOREF when not set
 } LuaMongo;
 
 LuaMongo* luaL_checkmongodb(lua_State* L, int index);
