@@ -82,7 +82,8 @@ namespace KitsuneNet
                     return Guid.Empty;
                 }
 
-                return new Guid(Bytes.AsSpan(1, 16));
+                // Lua stores UUIDs in RFC 4122 (big-endian) byte order.
+                return new Guid(Bytes.AsSpan(1, 16), bigEndian: true);
             }
         }
 
@@ -314,7 +315,7 @@ namespace KitsuneNet
         {
             var blob = new byte[17];
             blob[0] = 0; // IDENTIFIER_UUID
-            v.TryWriteBytes(blob.AsSpan(1, 16));
+            v.TryWriteBytes(blob.AsSpan(1, 16), bigEndian: true, out _);
             return new() { Type = LuaType.Identifier, Bytes = blob };
         }
 

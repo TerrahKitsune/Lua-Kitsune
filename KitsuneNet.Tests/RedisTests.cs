@@ -32,7 +32,7 @@ public sealed class RedisTests : IAsyncLifetime
             local reply = redis:Command('KEYS', 'kitsune_*_' .. RUN_ID)
             if type(reply.Value) == 'table' then
                 for _, key in ipairs(reply.Value) do
-                    redis:Command('DEL', key)
+                    redis:Command('DEL', key.Value)
                 end
             end
             """);
@@ -46,9 +46,12 @@ public sealed class RedisTests : IAsyncLifetime
         LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             assert(redis, 'Open returned nil')
-            return tostring(redis):sub(1, 6)
+            local pong = redis:Command('PING').Value
+            local text = tostring(redis)
+            -- %p prints a pointer as bare hex on Windows and with a 0x prefix on Linux.
+            return pong .. ':' .. tostring(text:match('^Redis: 0?x?%x+$') ~= nil)
             """);
-        r.String.ShouldBe("Redis:");
+        r.String.ShouldBe("PONG:true");
     }
 
     [RedisFact]
@@ -57,9 +60,9 @@ public sealed class RedisTests : IAsyncLifetime
         using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync("""
             local ok, err = pcall(Redis.Open, 'invalid.host.does.not.exist', 6379, false, 1)
-            return tostring(not ok)
+            return tostring(ok) .. ':' .. tostring(tostring(err):find('Connection error:', 1, true) ~= nil)
             """);
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("false:true");
     }
 
     // Command
@@ -289,9 +292,9 @@ public sealed class RedisTests : IAsyncLifetime
             local id = stream:Add({{f1='hello', f2='world'}})
             local entry_id, fields = stream:Read()
             redis:Command('DEL', 'kitsune_test_stream_' .. RUN_ID)
-            return tostring(id ~= nil) .. ':' .. tostring(entry_id ~= nil) .. ':' .. tostring(fields ~= nil)
+            return tostring(id == entry_id) .. ':' .. fields.f1 .. ':' .. fields.f2
         ");
-        r.String.ShouldBe("true:true:true");
+        r.String.ShouldBe("true:hello:world");
     }
 
     // Key iterator
@@ -326,12 +329,13 @@ public sealed class RedisTests : IAsyncLifetime
         using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
-            local co = redis:Subscribe('kitsune_sub_type_test_' .. RUN_ID)
+            local co, errmsg = redis:Subscribe('kitsune_sub_type_test_' .. RUN_ID)
             local t = type(co)
-            coroutine.resume(co, true)
-            return t
+            local before = coroutine.status(co)
+            local ok = coroutine.resume(co, true)
+            return t .. ':' .. tostring(errmsg) .. ':' .. before .. ':' .. tostring(ok) .. ':' .. coroutine.status(co)
             """);
-        r.String.ShouldBe("thread");
+        r.String.ShouldBe("thread:nil:suspended:true:dead");
     }
 
     [RedisFact]
@@ -340,12 +344,13 @@ public sealed class RedisTests : IAsyncLifetime
         using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
-            local co = redis:PSubscribe('kitsune_psub_' .. RUN_ID .. '_*')
+            local co, errmsg = redis:PSubscribe('kitsune_psub_' .. RUN_ID .. '_*')
             local t = type(co)
-            coroutine.resume(co, true)
-            return t
+            local before = coroutine.status(co)
+            local ok = coroutine.resume(co, true)
+            return t .. ':' .. tostring(errmsg) .. ':' .. before .. ':' .. tostring(ok) .. ':' .. coroutine.status(co)
             """);
-        r.String.ShouldBe("thread");
+        r.String.ShouldBe("thread:nil:suspended:true:dead");
     }
 
     [RedisFact]
@@ -1294,12 +1299,12 @@ public sealed class RedisTests : IAsyncLifetime
         using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
-            local ok = pcall(function()
+            local ok, err = pcall(function()
                 redis:Command('SET', nil, 'value')
             end)
-            return tostring(not ok)
+            return tostring(ok) .. ':' .. tostring(tostring(err):find('command argument 2 must be a string or number (got nil)', 1, true) ~= nil)
             """);
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("false:true");
     }
 
     [RedisFact]
@@ -1308,12 +1313,12 @@ public sealed class RedisTests : IAsyncLifetime
         using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
-            local ok = pcall(function()
+            local ok, err = pcall(function()
                 redis:Command('SET', 'key', true)
             end)
-            return tostring(not ok)
+            return tostring(ok) .. ':' .. tostring(tostring(err):find('command argument 3 must be a string or number (got boolean)', 1, true) ~= nil)
             """);
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("false:true");
     }
 
     [RedisFact]
@@ -1324,13 +1329,13 @@ public sealed class RedisTests : IAsyncLifetime
             local redis = {Open()}
             redis:Command('DEL', 'kitsune_test_wt_list_' .. RUN_ID)
             redis:Command('RPUSH', 'kitsune_test_wt_list_' .. RUN_ID, 'item')
-            local ok = pcall(function()
+            local ok, err = pcall(function()
                 redis:Command('GET', 'kitsune_test_wt_list_' .. RUN_ID)
             end)
             redis:Command('DEL', 'kitsune_test_wt_list_' .. RUN_ID)
-            return tostring(not ok)
+            return tostring(ok) .. ':' .. tostring(tostring(err):find('Redis error: WRONGTYPE', 1, true) ~= nil)
             """);
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("false:true");
     }
 
     // GetString extended (more paths)
@@ -1463,13 +1468,14 @@ public sealed class RedisTests : IAsyncLifetime
             hash['data'] = {{x=1, y=2}}
             local v = hash['data']
             redis:Command('DEL', 'kitsune_test_hash_json_' .. RUN_ID)
-            return tostring(type(v) == 'string' and v:find('1', 1, true) ~= nil)
+            local decoded = Json.New():Decode(v)
+            return type(v) .. ':' .. v:sub(1, 1) .. ':' .. tostring(decoded.x) .. ':' .. tostring(decoded.y)
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("string:{:1:2");
     }
 
     [RedisFact]
-    public async Task GetHashset_Len_ReturnsZero()
+    public async Task GetHashset_Len_IsAlwaysZero()
     {
         using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($"""
@@ -1602,7 +1608,7 @@ public sealed class RedisTests : IAsyncLifetime
     }
 
     [RedisFact]
-    public async Task GetSortedSet_Len_ReturnsZero()
+    public async Task GetSortedSet_Len_IsAlwaysZero()
     {
         using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($"""
@@ -1645,10 +1651,9 @@ public sealed class RedisTests : IAsyncLifetime
         LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             local json = redis:GetJson('kitsune_test_json_' .. RUN_ID)
-            local s = tostring(json)
-            return tostring(s:find('kitsune_test_json_' .. RUN_ID, 1, true) ~= nil)
+            return tostring(json)
             """);
-        r.String.ShouldBe("true");
+        r.String.ShouldBe($"RedisJson: {TestRun.Name("kitsune_test_json")} $");
     }
 
     [RedisFact]
@@ -1831,9 +1836,9 @@ public sealed class RedisTests : IAsyncLifetime
             local t_obj = json:Type()
             local t_arr = json.TestArray:Type()
             redis:Command('JSON.DEL', 'kitsune_test_json_' .. RUN_ID)
-            return tostring(t_obj ~= nil) .. ':' .. tostring(t_arr ~= nil)
+            return tostring(t_obj) .. ':' .. tostring(t_arr)
             """);
-        r.String.ShouldBe("true:true");
+        r.String.ShouldBe("object:array");
     }
 
     [RedisFact]
@@ -1873,10 +1878,9 @@ public sealed class RedisTests : IAsyncLifetime
         LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             local json = redis:GetJson('kitsune_test_json_' .. RUN_ID)
-            local s = tostring(json.TestArray[2].Name)
-            return tostring(s:find('TestArray', 1, true) ~= nil)
+            return tostring(json.TestArray[2].Name)
             """);
-        r.String.ShouldBe("true");
+        r.String.ShouldBe($"RedisJson: {TestRun.Name("kitsune_test_json")} $.TestArray[1].Name");
     }
 
     // GetJson extended
@@ -2100,9 +2104,9 @@ public sealed class RedisTests : IAsyncLifetime
             local json = redis:GetJson('kitsune_test_json_' .. RUN_ID)
             local t = json.SomeNumber:Type()
             redis:Command('JSON.DEL', 'kitsune_test_json_' .. RUN_ID)
-            return tostring(t ~= nil and type(t) == 'string')
+            return tostring(t)
             """);
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("integer");
     }
 
     [RedisFact]
@@ -2140,8 +2144,7 @@ public sealed class RedisTests : IAsyncLifetime
     {
         using KitsuneEngine engine = TestRun.NewEngine();
 
-        // JSON.ARRLEN on a non-array type: Valkey returns a wrapped null element ? nil,
-        // or raises an error. Either outcome is correct.
+        // JSON.ARRLEN on a non-array path replies [null], which Length maps to nil.
         LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             {JsonSetup()}
@@ -2150,9 +2153,9 @@ public sealed class RedisTests : IAsyncLifetime
                 return json.SomeNumber:Length()
             end)
             redis:Command('JSON.DEL', 'kitsune_test_json_' .. RUN_ID)
-            return tostring(not ok or result == nil)
+            return tostring(ok) .. ':' .. tostring(result)
             """);
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("true:nil");
     }
 
     [RedisFact]
@@ -2161,13 +2164,14 @@ public sealed class RedisTests : IAsyncLifetime
         using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
+            {JsonSetup()}
             local json = redis:GetJson('kitsune_test_json_' .. RUN_ID)
-            local ok = pcall(function()
+            local ok, err = pcall(function()
                 local _ = json.TestArray[0]
             end)
-            return tostring(not ok)
+            return tostring(ok) .. ':' .. tostring(tostring(err):find('JSON array index must be >= 1 (got 0)', 1, true) ~= nil)
             """);
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("false:true");
     }
 
     [RedisFact]
@@ -2337,11 +2341,13 @@ public sealed class RedisTests : IAsyncLifetime
         LuaValue r = await engine.ExecuteStringAsync($"""
             local redis = {Open()}
             local co = assert(redis:Subscribe('kitsune_test_alive_' .. RUN_ID))
-            co:SetAliveToken(AliveToken.New())
+            local attached = pcall(co.SetAliveToken, co, AliveToken.New())
+            local polled = coroutine.resume(co)
+            local alive = coroutine.status(co)
             coroutine.resume(co, true)
-            return 'ok'
+            return tostring(attached) .. ':' .. tostring(polled) .. ':' .. alive .. ':' .. coroutine.status(co)
             """);
-        r.String.ShouldBe("ok");
+        r.String.ShouldBe("true:true:suspended:dead");
     }
 
     [RedisFact]

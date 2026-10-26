@@ -483,8 +483,7 @@ public sealed class SQLiteExtensionTests
             db:Close()
             return rows[1]["Data"]
             """);
-        result.String.ShouldNotBeNull();
-        result.String.ShouldContain("James");
+        result.String.ShouldBe("{\"Name\":\"James\"}");
     }
 
     // RegisterTable — nested table value in multi-field schema is serialized as JSON.
@@ -504,9 +503,7 @@ public sealed class SQLiteExtensionTests
             db:Close()
             return rows[1]["FirstName"] .. "|" .. rows[1]["Extra"]
             """);
-        result.String.ShouldNotBeNull();
-        result.String!.ShouldStartWith("John|");
-        result.String.ShouldContain("42");
+        result.String.ShouldBe("John|{\"Bla\":42}");
     }
 
     // RegisterTable — empty data table produces zero rows.
@@ -521,11 +518,11 @@ public sealed class SQLiteExtensionTests
             db:Fetch()
             local t = {}
             SQLiteExt.RegisterTable("EmptyTest", {"Id", "Data"}, t)
-            local rows = SQLiteExt.Query("SELECT * FROM EmptyTest") or {}
+            local rows = SQLiteExt.Query("SELECT * FROM EmptyTest")
             db:Close()
-            return #rows
+            return type(rows) .. "|" .. #rows
             """);
-        result.AsInt64.ShouldBe(0L);
+        result.String.ShouldBe("table|0");
     }
 
     // RegisterTable — row whose value is a scalar (not a sub-table) in a 3-field schema:
@@ -867,7 +864,7 @@ public sealed class SQLiteExtensionTests
 
     // All cursors on the same vtable share the vtable-level context.
     [WindowsOnlyFact]
-    public async Task SQLiteExtension_RegisterVirtualTable_ContextPerCursor()
+    public async Task SQLiteExtension_RegisterVirtualTable_ContextSharedAcrossCursors()
     {
         using KitsuneEngine engine = new();
         engine.SetString("extPath", ExtensionPath);
@@ -1308,11 +1305,11 @@ public sealed class SQLiteExtensionTests
             SQLiteExt.RegisterVirtualTable("EmptyRVT", {"Id", "Val"}, function(ctx, nth)
                 return nil
             end)
-            local rows = SQLiteExt.Query("SELECT * FROM EmptyRVT") or {}
+            local rows = SQLiteExt.Query("SELECT * FROM EmptyRVT")
             db:Close()
-            return #rows
+            return type(rows) .. "|" .. #rows
             """);
-        result.AsInt64.ShouldBe(0L);
+        result.String.ShouldBe("table|0");
     }
 
     // Calling RegisterVirtualTable twice with the same name replaces the first reader.

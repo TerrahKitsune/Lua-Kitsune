@@ -107,6 +107,24 @@ public sealed class KafkaTests
             return false
         end
 
+        -- The offset the next message appended to the topic partition will get
+        local function endOffset()
+            local p = newProducer()
+            local ok, low, high = p:GetOffsets(topic, part)
+            p:Close()
+            assert(ok, tostring(low))
+            return high
+        end
+
+        -- Reads from the offset until a message with the value arrives; returns it, or nil on timeout
+        local function receive(offset, value)
+            local consumer = newConsumer()
+            assert(consumer:Assign({topic .. ':' .. part .. ':' .. offset}))
+            local got = pollUntil(consumer, function(d) return d.Value == value end, 1)
+            consumer:Close()
+            return got[1]
+        end
+
         if createMainTopic then ensureTopic(topic, 1) end
     ";
 
@@ -219,17 +237,16 @@ public sealed class KafkaTests
         // Trigger at least one librdkafka log event by connecting and disconnecting
         LuaValue r = await engine.ExecuteStringAsync($@"
             -- Produce to ensure the library emits at least some internal log lines
-            local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
+            local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}', ['debug']='generic'}})
             p:Close()
             local logs1 = Kafka.Logs()
             local logs2 = Kafka.Logs()  -- second call must be empty after the clear
-            return tostring(type(logs1) == 'string') .. ':' .. tostring(logs2 == '')
+            local lineShape = '%[[^%]]*%] %[[^%]]*%] %[%d+%] %[[^%]]*%]: '
+            return type(logs1) .. ':' .. tostring(logs1:match(lineShape) ~= nil) .. ':' .. tostring(logs2 == '')
         ");
 
-        // logs1 may or may not have content (depends on broker log level) but must be a string;
-        // logs2 must always be empty after the first call clears the buffer
-        r.String.ShouldStartWith("true:");
-        r.String.ShouldEndWith(":true");
+        // The debug setting makes librdkafka log while the client starts, so logs1 has log lines
+        r.String.ShouldBe("string:true:true");
     }
 
     // producer
@@ -237,54 +254,68 @@ public sealed class KafkaTests
     public async Task Producer_Send_ReturnsTrue()
     {
         LuaValue r = await Run("send", @"
+            local value = 'send-' .. RUN_ID
+            local start = endOffset()
             local p = newProducer()
             assert(p, 'NewProducer failed')
-            local ok, err = p:Send(topic, 'test-key', 'test-value')
+            local ok, err = p:Send(topic, 'test-key', value)
             p:Close()
-            return tostring(ok) .. ':' .. tostring(err == nil)
+            local msg = receive(start, value)
+            return tostring(ok) .. ':' .. tostring(err == nil) .. ':' .. tostring(msg and msg.Key) .. ':' .. tostring(msg and msg.Value == value)
         ");
-        r.String.ShouldBe("true:true");
+        r.String.ShouldBe("true:true:test-key:true");
     }
 
     [KafkaFact]
     public async Task Producer_Send_NilKey_ReturnsTrue()
     {
         LuaValue r = await Run("send_nilkey", @"
+            local value = 'keyless-' .. RUN_ID
+            local start = endOffset()
             local p = newProducer()
             assert(p, 'NewProducer failed')
-            local ok, err = p:Send(topic, nil, 'keyless-value')
+            local ok, err = p:Send(topic, nil, value)
             p:Close()
-            return tostring(ok) .. ':' .. tostring(err == nil)
+            local msg = receive(start, value)
+            return tostring(ok) .. ':' .. tostring(err == nil) .. ':' .. tostring(msg ~= nil and msg.Key == nil) .. ':' .. tostring(msg and msg.Value == value)
         ");
-        r.String.ShouldBe("true:true");
+        r.String.ShouldBe("true:true:true:true");
     }
 
     [KafkaFact]
     public async Task Producer_Send_WithHeaders_ReturnsTrue()
     {
         LuaValue r = await Run("send_headers", @"
+            local value = 'hdr-' .. RUN_ID
+            local start = endOffset()
             local p = newProducer()
             assert(p, 'NewProducer failed')
-            local ok, err = p:Send(topic, 'hdr-key', 'hdr-value', {source='kitsune-test', version='1'})
+            local ok, err = p:Send(topic, 'hdr-key', value, {source='kitsune-test', version='1'})
             p:Close()
-            return tostring(ok) .. ':' .. tostring(err == nil)
+            local msg = receive(start, value)
+            return tostring(ok) .. ':' .. tostring(err == nil) .. ':' .. tostring(msg and msg.Key) .. ':' .. tostring(msg and msg.Value == value) ..
+                   ':' .. tostring(msg and msg.Headers.source) .. ':' .. tostring(msg and msg.Headers.version)
         ");
-        r.String.ShouldBe("true:true");
+        r.String.ShouldBe("true:true:hdr-key:true:kitsune-test:1");
     }
 
     [KafkaFact]
     public async Task Producer_Send_WithHeadersAndPartition_ReturnsTrue()
     {
         LuaValue r = await Run("send_hdrpart", @"
+            local value = 'hdrpart-' .. RUN_ID
+            local start = endOffset()
             local p = newProducer()
             assert(p, 'NewProducer failed')
             -- Exercise the branch that requires BOTH explicit partition AND headers
-            local ok, err = p:Send(topic, 'hdrpart-key', 'hdrpart-value',
+            local ok, err = p:Send(topic, 'hdrpart-key', value,
                 {src='kitsune-test'}, part)
             p:Close()
-            return tostring(ok) .. ':' .. tostring(err == nil)
+            local msg = receive(start, value)
+            return tostring(ok) .. ':' .. tostring(err == nil) .. ':' .. tostring(msg and msg.Key) .. ':' .. tostring(msg and msg.Value == value) ..
+                   ':' .. tostring(msg and msg.Partition) .. ':' .. tostring(msg and msg.Headers.src)
         ");
-        r.String.ShouldBe("true:true");
+        r.String.ShouldBe("true:true:hdrpart-key:true:0:kitsune-test");
     }
 
     [KafkaFact]
@@ -393,9 +424,22 @@ public sealed class KafkaTests
             -- One more poll commits the previously received message implicitly
             if found then consumer:Poll() end
             consumer:Close()
-            return tostring(found)
+            if not found then return 'no-message' end
+
+            -- The commit is asynchronous; Kafka stores the offset of the next message to read
+            local key = topic .. ':' .. part
+            local p = newProducer()
+            local committed
+            local deadline = Time() + 15000
+            repeat
+                local ok, offsets = p:GetGroupOffsets(groupId, {key})
+                if ok then committed = offsets[key] end
+                if committed ~= got[1].Offset + 1 then Sleep(200) end
+            until committed == got[1].Offset + 1 or Time() > deadline
+            p:Close()
+            return tostring(found) .. ':' .. tostring(got[1].Offset == hi0) .. ':' .. tostring(committed == hi0 + 1)
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("true:true:true");
     }
 
     // AutoCommit toggle
@@ -429,15 +473,29 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_ListGroups_ReturnsArray()
     {
-        using KitsuneEngine engine = TestRun.NewEngine();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
-            local ok, groups = p:ListGroups()
+        // A committed offset makes the group exist, so it must be listed
+        LuaValue r = await Run("listgroups", @"
+            local p = newProducer()
+            local key = topic .. ':' .. part
+            local okLow, low, high = p:GetOffsets(topic, part)
+            assert(okLow, tostring(low))
+            local okSet, errSet = p:SetGroupOffsets(groupId, {[key] = high})
+            assert(okSet, tostring(errSet))
+
+            local found, ok, groups = false, false, nil
+            local deadline = Time() + 15000
+            while not found and Time() < deadline do
+                ok, groups = p:ListGroups()
+                if not ok then p:Close(); return 'err:' .. tostring(groups) end
+                for _, g in ipairs(groups) do
+                    if g.GroupId == groupId then found = true; break end
+                end
+                if not found then Sleep(200) end
+            end
             p:Close()
-            if not ok then return 'err:' .. tostring(groups) end
-            return tostring(type(groups) == 'table')
+            return tostring(type(groups) == 'table') .. ':' .. tostring(found)
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("true:true");
     }
 
     [KafkaFact]
@@ -939,14 +997,25 @@ public sealed class KafkaTests
 
             local p = newProducer()
             -- replication_factor = 1 (arg 5), timeout = default
-            local ok, err = p:CreateTopic(topicName, 1, nil, nil, 1)
+            local ok, err = p:CreateTopic(topicName, 2, nil, nil, 1)
             if not ok then p:Close(); return 'failed:' .. tostring(err) end
+
+            local partitions
+            local deadline = Time() + 15000
+            while partitions == nil and Time() < deadline do
+                local okMeta, meta = p:GetMetadata()
+                if not okMeta then p:Close(); error('GetMetadata: ' .. tostring(meta)) end
+                for _, t in ipairs(meta.Topics) do
+                    if t.Name == topicName and t.ErrorCode == 0 then partitions = #t.Partitions; break end
+                end
+                if partitions == nil then Sleep(100) end
+            end
 
             p:DestroyTopic(topicName)
             p:Close()
-            return tostring(ok)
+            return tostring(ok) .. ':' .. tostring(partitions)
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("true:2");
     }
 
     [KafkaFact]

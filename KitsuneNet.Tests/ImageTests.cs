@@ -337,12 +337,12 @@ public sealed class ImageTests
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync(@"
             local img = Image.New(2, 2)
-            img:FillRect(0, 0, 2, 2, 255, 255, 255, 255)
+            img:FillRect(0, 0, 2, 2, 100, 50, 25, 255)
             img:Tint(255, 0, 0, 1.0)
             local r,g,b,a = img:GetPixel(0, 0)
             return r..','..g..','..b..','..a
         ");
-        r.String.ShouldBe("255,0,0,255");
+        r.String.ShouldBe("100,0,0,255");
     }
 
     [Fact]
@@ -621,11 +621,18 @@ public sealed class ImageTests
             local img2 = Image.New(3, 3)
             img2:FillRect(0, 0, 3, 3, 128, 128, 128, 255)
             img2:Noise(30, 42)
-            local r1,g1,b1 = img1:GetPixel(1, 1)
-            local r2,g2,b2 = img2:GetPixel(1, 1)
-            return tostring(r1 == r2 and g1 == g2 and b1 == b2)
+            local same = true
+            for y = 0, 2 do
+                for x = 0, 2 do
+                    local r1,g1,b1 = img1:GetPixel(x, y)
+                    local r2,g2,b2 = img2:GetPixel(x, y)
+                    same = same and r1 == r2 and g1 == g2 and b1 == b2
+                end
+            end
+            local r1 = img1:GetPixel(1, 1)
+            return tostring(same)..'|'..r1
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("true|121");
     }
 
     [Fact]

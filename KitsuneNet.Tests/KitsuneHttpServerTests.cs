@@ -177,18 +177,21 @@ public sealed class KitsuneHttpServerTests
         ((int)response.StatusCode).ShouldBe(404);
     }
 
-    // GetContext persists across resumes
+    // The context is per request: stable within one request, fresh for the next one.
     [Fact]
-    public async Task Server_GetContext_PersistsAcrossResumes()
+    public async Task Server_GetContext_IsPerRequestAndStableWithinRequest()
     {
         var (engine, pump) = await StartLuaServer("127.0.0.1:19808", """
-            req:GetContext().visits = (req:GetContext().visits or 0) + 1
-            resp:Send(tostring(req:GetContext().visits))
+            local ctx = req:GetContext()
+            ctx.visits = (ctx.visits or 0) + 1
+            resp:Send(tostring(req:GetContext().visits) .. ':' .. tostring(req:GetContext() == ctx))
             """);
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
-        string body = await client.GetStringAsync("http://127.0.0.1:19808/ctx");
+        string first = await client.GetStringAsync("http://127.0.0.1:19808/ctx");
+        string second = await client.GetStringAsync("http://127.0.0.1:19808/ctx");
         await StopLuaServer(engine, pump);
-        body.ShouldBe("1");
+        first.ShouldBe("1:true");
+        second.ShouldBe("1:true");
     }
 
     // Headers visible on server side
@@ -275,6 +278,9 @@ public sealed class KitsuneHttpServerTests
             local s = assert(HttpServer.Listen('127.0.0.1:19820'))
             s:Close()
             s:Close()
+            local again, err = HttpServer.Listen('127.0.0.1:19820')
+            if not again then return 'port not released: ' .. tostring(err) end
+            again:Close()
             return 'ok'
         ");
         r.String.ShouldBe("ok");
@@ -303,6 +309,9 @@ public sealed class KitsuneHttpServerTests
             s:Close()
             s = nil
             collectgarbage('collect')
+            local again, err = HttpServer.Listen('127.0.0.1:19822')
+            if not again then return 'port not released: ' .. tostring(err) end
+            again:Close()
             return 'ok'
         ");
         r.String.ShouldBe("ok");
@@ -317,6 +326,10 @@ public sealed class KitsuneHttpServerTests
                 local s = assert(HttpServer.Listen('127.0.0.1:19823'))
             end
             collectgarbage('collect')
+            collectgarbage('collect')
+            local again, err = HttpServer.Listen('127.0.0.1:19823')
+            if not again then return 'port not released by __gc: ' .. tostring(err) end
+            again:Close()
             return 'ok'
         ");
         r.String.ShouldBe("ok");
@@ -347,8 +360,7 @@ public sealed class KitsuneHttpServerTests
         // StopLuaServer disposes the engine, whose leak check covers the cleanup.
         var (engine, pump) = await StartLuaServer("127.0.0.1:19825", "_seen = true");
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-        using var cancel = new CancellationTokenSource();
-        Task<HttpResponseMessage> pending = client.GetAsync("http://127.0.0.1:19825/drop", cancel.Token);
+        Task<HttpResponseMessage> pending = client.GetAsync("http://127.0.0.1:19825/drop");
 
         bool seen = false;
         var deadline = DateTime.UtcNow.AddSeconds(5);
@@ -362,9 +374,19 @@ public sealed class KitsuneHttpServerTests
         }
 
         await StopLuaServer(engine, pump);
-        cancel.Cancel();
-        await Should.ThrowAsync<Exception>(pending);
+
+        // The teardown must drop the queued connection itself; a client timeout would surface as TaskCanceledException.
+        await Should.ThrowAsync<HttpRequestException>(pending);
         seen.ShouldBeTrue();
+
+        using KitsuneEngine rebound = new();
+        LuaValue r = await rebound.ExecuteStringAsync(@"
+            local s, err = HttpServer.Listen('127.0.0.1:19825')
+            if not s then return 'port not released: ' .. tostring(err) end
+            s:Close()
+            return 'ok'
+        ");
+        r.String.ShouldBe("ok");
     }
 
     [Fact]
@@ -394,7 +416,8 @@ public sealed class KitsuneHttpServerTests
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
         var response = await client.GetAsync("http://127.0.0.1:19832/");
         await StopLuaServer(engine, pump);
-        response.Content.Headers.ContentType?.MediaType.ShouldNotBeNullOrEmpty();
+        response.Content.Headers.ContentType.ShouldNotBeNull();
+        response.Content.Headers.ContentType.MediaType.ShouldNotBeNullOrEmpty();
     }
 
     [Fact]
@@ -458,7 +481,8 @@ public sealed class KitsuneHttpServerTests
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
         var response = await client.GetAsync("http://127.0.0.1:19836/");
         await StopLuaServer(engine, pump);
-        response.Content.Headers.ContentType?.MediaType.ShouldBe("application/json");
+        response.Content.Headers.ContentType.ShouldNotBeNull();
+        response.Content.Headers.ContentType.MediaType.ShouldBe("application/json");
     }
 
     [Fact]
@@ -488,7 +512,9 @@ public sealed class KitsuneHttpServerTests
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
         string body = await client.GetStringAsync("http://127.0.0.1:19839/");
         await StopLuaServer(engine, pump);
-        body.ShouldNotBeNullOrEmpty();
+        body.ShouldStartWith("127.0.0.1:");
+        int.TryParse(body["127.0.0.1:".Length..], out int port).ShouldBeTrue();
+        port.ShouldBeGreaterThan(0);
     }
 
     [Fact]
@@ -608,10 +634,18 @@ public sealed class KitsuneHttpServerTests
             local server = assert(HttpServer.Listen('127.0.0.1:19870'))
             local token = AliveToken.New()
             server:SetAliveToken(token)
-            server:Close()
-            return 'ok'
+            local co = server:Accept()
+            coroutine.resume(co)
+            local aliveBefore = coroutine.status(co) == 'suspended'
+            token:Dispose()
+            coroutine.resume(co)
+            local deadAfter = coroutine.status(co) == 'dead'
+            local again, err = HttpServer.Listen('127.0.0.1:19870')
+            if not again then return 'port not released: ' .. tostring(err) end
+            again:Close()
+            return tostring(aliveBefore and deadAfter)
             """);
-        r.String.ShouldBe("ok");
+        r.String.ShouldBe("true");
     }
 
     [Fact]
@@ -623,10 +657,15 @@ public sealed class KitsuneHttpServerTests
             local token = AliveToken.New()
             server:SetAliveToken(token)
             server:SetAliveToken(nil)
-            server:Close()
-            return 'ok'
+            local co = server:Accept()
+            coroutine.resume(co)
+            token:Dispose()
+            for i = 1, 3 do coroutine.resume(co) end
+            local aliveAfterDispose = coroutine.status(co) == 'suspended'
+            coroutine.resume(co, true)
+            return tostring(aliveAfterDispose and coroutine.status(co) == 'dead')
             """);
-        r.String.ShouldBe("ok");
+        r.String.ShouldBe("true");
     }
 
     [Fact]
@@ -678,9 +717,10 @@ public sealed class KitsuneHttpServerTests
         var ws = new ClientWebSocket();
         await ws.ConnectAsync(new Uri("ws://127.0.0.1:19880/"), CancellationToken.None);
 
-        // Upgrade succeeded if ConnectAsync didn't throw.
+        WebSocketState state = ws.State;
         ws.Dispose();
         await StopWsServer(engine, pump);
+        state.ShouldBe(WebSocketState.Open);
     }
 
     [Fact]
@@ -700,11 +740,12 @@ public sealed class KitsuneHttpServerTests
     {
         var (engine, pump) = await StartWsServer("127.0.0.1:19882", """
             local msg = _server_ws:Poll()
-            if msg then _server_ws:Send(msg:GetData()) end
+            if msg then _server_ws:Send(msg:GetData(), msg:GetType() == 2) end
             """);
-        var (data, _) = await WsCsEchoOnce("ws://127.0.0.1:19882/", "bindata", WebSocketMessageType.Binary);
+        var (data, type) = await WsCsEchoOnce("ws://127.0.0.1:19882/", "bindata", WebSocketMessageType.Binary);
         await StopWsServer(engine, pump);
         data.ShouldBe("bindata");
+        type.ShouldBe(WebSocketMessageType.Binary);
     }
 
     [Fact]
@@ -844,7 +885,8 @@ public sealed class KitsuneHttpServerTests
         var response = await client.GetAsync("http://127.0.0.1:19891/");
         await StopLuaServer(engine, pump);
 
-        response.Content.Headers.ContentType?.MediaType.ShouldBe("text/event-stream");
+        response.Content.Headers.ContentType.ShouldNotBeNull();
+        response.Content.Headers.ContentType.MediaType.ShouldBe("text/event-stream");
     }
 
     [Fact]

@@ -150,7 +150,7 @@ int RedisJson_Index(lua_State* L) {
 	else if (lua_isinteger(L, 2)) {
 		lua_Integer idx = lua_tointeger(L, 2);
 		if (idx < 1) {
-			luaL_error(L, "JSON array index must be >= 1 (got %lld)", (long long)idx);
+			luaL_error(L, "JSON array index must be >= 1 (got %I)", idx);
 			return 0;
 		}
 		PushJsonIndex(L, json, idx);
@@ -186,7 +186,7 @@ int RedisJson_NewIndex(lua_State* L) {
 	else if (lua_isinteger(L, 2)) {
 		lua_Integer idx = lua_tointeger(L, 2);
 		if (idx < 1) {
-			luaL_error(L, "JSON array index must be >= 1 (got %lld)", (long long)idx);
+			luaL_error(L, "JSON array index must be >= 1 (got %I)", idx);
 			return 0;
 		}
 		char buf[32];

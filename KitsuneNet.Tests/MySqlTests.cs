@@ -12,10 +12,14 @@ public sealed class MySqlTests
     public async Task Helper_MethodsExistInModuleTable()
     {
         using KitsuneEngine engine = TestRun.NewEngine();
-        LuaValue r = await engine.ExecuteStringAsync(@"
-            return tostring(type(MySQL.NonQuery)) .. ':' .. tostring(type(MySQL.Scalar)) .. ':' .. tostring(type(MySQL.QueryAll))
+        LuaValue r = await engine.ExecuteStringAsync($@"
+            local conn = assert({ConnectLua()})
+            local types = tostring(type(MySQL.NonQuery)) .. ':' .. tostring(type(MySQL.Scalar)) .. ':' .. tostring(type(MySQL.QueryAll))
+            local ok, v = MySQL.Scalar(conn, 'SELECT 42')
+            conn:Close()
+            return types .. ':' .. tostring(ok) .. ':' .. tostring(v)
         ");
-        r.String.ShouldBe("function:function:function");
+        r.String.ShouldBe("function:function:function:true:42");
     }
 
     [MySqlFact]
@@ -127,6 +131,7 @@ public sealed class MySqlTests
             local co = assert(conn:Query('SELECT 1'))
             -- after first resume T is yielded (async wait or rowcount phase)
             coroutine.resume(co)
+            local status1 = coroutine.status(co)
             local busy1 = conn:IsBusy()
             -- drive to completion
             local ok, val = coroutine.resume(co)
@@ -137,12 +142,11 @@ public sealed class MySqlTests
             ok, val = coroutine.resume(co)
             while ok and val ~= nil do ok, val = coroutine.resume(co) end
             local busy2 = conn:IsBusy()
-            return tostring(busy1) .. ':' .. tostring(busy2)
+            return status1 .. ':' .. tostring(busy1) .. ':' .. tostring(busy2)
         ");
 
-        // busy1 may be true or false depending on server speed; busy2 must be false
-        r.String.ShouldNotBeNull();
-        r.String.ShouldEndWith(":false");
+        // IsBusy is documented as true while the query coroutine is alive (suspended).
+        r.String.ShouldBe("suspended:true:false");
     }
 
     [MySqlFact]
@@ -375,9 +379,9 @@ public sealed class MySqlTests
                 local _, co = exec('SELECT Id, bool FROM test WHERE String = ?', {{'crud_tint_' .. RUN_ID}})
                 local ok, row = coroutine.resume(co)
                 coroutine.resume(co, true)
-                return tostring(math.type(row[1])) .. ':' .. tostring(math.type(row[2]))
+                return tostring(math.type(row[1])) .. ':' .. tostring(math.type(row[2])) .. ':' .. tostring(row[1] > 0) .. ':' .. tostring(row[2])
             ");
-            r.String.ShouldBe("integer:integer");
+            r.String.ShouldBe("integer:integer:true:1");
         }
         finally
         {
@@ -386,7 +390,7 @@ public sealed class MySqlTests
     }
 
     [MySqlFact]
-    public async Task Crud_Types_FloatDoubleDecimalReturnedAsNumber()
+    public async Task Crud_Types_FloatDoubleAsNumber_DecimalAsDecimal()
     {
         using KitsuneEngine engine = TestRun.NewEngine();
         try
@@ -408,9 +412,9 @@ public sealed class MySqlTests
                 local _, co = exec('SELECT `float`, `double`, `decimal` FROM test WHERE String = ?', {{'crud_tnum_' .. RUN_ID}})
                 local ok, row = coroutine.resume(co)
                 coroutine.resume(co, true)
-                return tostring(type(row[1])) .. ':' .. tostring(type(row[2])) .. ':' .. tostring(type(row[3]))
+                return tostring(type(row[1])) .. ':' .. tostring(type(row[2])) .. ':' .. tostring(type(row[3])) .. ':' .. tostring(row[1] == 1.5) .. ':' .. tostring(row[2] == 2.5) .. ':' .. tostring(row[3]:ToNumber() == 42)
             ");
-            r.String.ShouldBe("number:number:userdata");
+            r.String.ShouldBe("number:number:userdata:true:true:true");
         }
         finally
         {
@@ -441,9 +445,9 @@ public sealed class MySqlTests
                 local _, co = exec('SELECT `Blob` FROM test WHERE String = ?', {{'crud_tblob_' .. RUN_ID}})
                 local ok, row = coroutine.resume(co)
                 coroutine.resume(co, true)
-                return tostring(type(row[1]))
+                return tostring(type(row[1])) .. ':' .. tostring(row[1])
             ");
-            r.String.ShouldBe("userdata");
+            r.String.ShouldBe("userdata:hello blob");
         }
         finally
         {
@@ -486,7 +490,7 @@ public sealed class MySqlTests
     }
 
     [MySqlFact]
-    public async Task Crud_Types_DatetimeAndJsonReturnedAsString()
+    public async Task Crud_Types_DatetimeAsDateTime_JsonAsString()
     {
         using KitsuneEngine engine = TestRun.NewEngine();
         try
@@ -508,9 +512,10 @@ public sealed class MySqlTests
                 local _, co = exec('SELECT datetime, Json FROM test WHERE String = ?', {{'crud_tstr_' .. RUN_ID}})
                 local ok, row = coroutine.resume(co)
                 coroutine.resume(co, true)
-                return tostring(type(row[1])) .. ':' .. tostring(type(row[2]))
+                local nearNow = math.abs(DateTime.UnixSeconds(row[1]) - os.time()) < 172800
+                return tostring(type(row[1])) .. ':' .. tostring(type(row[2])) .. ':' .. tostring(nearNow) .. ':' .. tostring(Json.New():Decode(row[2]).k)
             ");
-            r.String.ShouldBe("userdata:string");
+            r.String.ShouldBe("userdata:string:true:1");
         }
         finally
         {
@@ -681,11 +686,13 @@ public sealed class MySqlTests
         using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
             local conn = assert({ConnectLua()})
-            conn:SetAliveToken(AliveToken.New())
+            local token = AliveToken.New()
+            local attached = pcall(conn.SetAliveToken, conn, token)
+            local ok, v = conn:Scalar('SELECT 7')
             conn:Close()
-            return 'ok'
+            return tostring(attached) .. ':' .. tostring(ok) .. ':' .. tostring(v)
         ");
-        r.String.ShouldBe("ok");
+        r.String.ShouldBe("true:true:7");
     }
 
     [MySqlFact]
@@ -697,10 +704,12 @@ public sealed class MySqlTests
             local token = AliveToken.New()
             conn:SetAliveToken(token)
             conn:SetAliveToken(nil)
+            token:Dispose()
+            local ok, v = conn:Scalar('SELECT 5')
             conn:Close()
-            return 'ok'
+            return tostring(ok) .. ':' .. tostring(v)
         ");
-        r.String.ShouldBe("ok");
+        r.String.ShouldBe("true:5");
     }
 
     [MySqlFact]

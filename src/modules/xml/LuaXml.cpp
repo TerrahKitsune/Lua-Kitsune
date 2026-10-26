@@ -70,12 +70,18 @@ LuaXml* luaL_checkxml(lua_State* L, int idx) {
 
 int Xml_Dispose(lua_State* L) {
 	LuaXml* x = luaL_checkxml(L, 1);
+	// Sizes are reset with the buffers, and Decode recreates the document, so a
+	// disposed instance can still be used.
 	delete x->doc;
 	x->doc = NULL;
 	kitsune_free(x->rec);
 	x->rec = NULL;
+	x->recLen = 0;
+	x->recCap = 0;
 	kitsune_free(x->outBuf);
 	x->outBuf = NULL;
+	x->outLen = 0;
+	x->outCap = 0;
 	return 0;
 }
 
@@ -180,6 +186,8 @@ int Xml_Decode(lua_State* L) {
 	const char* src = lua_tolstring(L, 2, &len);
 	SkipUtf8Bom(&src, &len);
 
+	if (!x->doc)
+		x->doc = new pugi::xml_document();
 	x->doc->reset();
 
 	pugi::xml_parse_result result = x->doc->load_buffer(
@@ -292,6 +300,8 @@ struct EncodeFrame {
 static void EncReset(LuaXml* x) {
 	x->outLen = 0;
 	x->recLen = 0;
+	if (!x->doc)
+		x->doc = new pugi::xml_document();
 	x->doc->reset();
 }
 

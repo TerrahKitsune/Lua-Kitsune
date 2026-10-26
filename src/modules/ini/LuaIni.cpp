@@ -21,10 +21,11 @@ LuaIni* luaL_checkini(lua_State* L, int idx) {
 
 int Ini_Dispose(lua_State* L) {
 	LuaIni* n = luaL_checkini(L, 1);
-	if (n->out) {
-		kitsune_free(n->out);
-		n->out = NULL;
-	}
+	// Sizes are reset with the buffer so a disposed instance can still be used.
+	kitsune_free(n->out);
+	n->out = NULL;
+	n->outLen = 0;
+	n->outCap = 0;
 	return 0;
 }
 

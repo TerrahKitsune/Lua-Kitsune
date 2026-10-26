@@ -25,6 +25,16 @@ namespace KitsuneNet.Tests
             end
         ";
 
+        // header(headers, name): case-insensitive response header lookup.
+        private const string HeaderLookup = @"
+            local function header(headers, name)
+                for k, v in pairs(headers) do
+                    if k:lower() == name then return v end
+                end
+                return nil
+            end
+        ";
+
         private const string StreamHelper = @"
             local _outcome = nil
             local function run_http(fn)
@@ -79,32 +89,38 @@ namespace KitsuneNet.Tests
         public async Task Http_Create_ReturnsNonNil()
         {
             using KitsuneEngine engine = NewEngine();
-            LuaValue r = await engine.ExecuteStringAsync("return tostring(HttpClient.New() ~= nil)");
-            r.String.ShouldBe("true");
+            LuaValue r = await engine.ExecuteStringAsync("return type(HttpClient.New())");
+            r.String.ShouldBe("userdata");
         }
 
         [Fact]
         public async Task Http_Create_Tostring_ReturnsNonEmptyString()
         {
             using KitsuneEngine engine = NewEngine();
-            LuaValue r = await engine.ExecuteStringAsync(@"                local s = tostring(HttpClient.New())
-                return tostring(type(s) == 'string' and #s > 0)
-            ");
-            r.String.ShouldBe("true");
+            LuaValue r = await engine.ExecuteStringAsync("return tostring(HttpClient.New())");
+            r.String.ShouldStartWith("HttpClient(");
         }
 
         [Fact]
         public async Task Http_Create_ConfigMethods_DoNotRaise()
         {
             using KitsuneEngine engine = NewEngine();
-            LuaValue r = await engine.ExecuteStringAsync(@"                local c = HttpClient.New()
+
+            // SetFollowRedirects and SetVerifySSL have no effect observable against the plain-HTTP echo server.
+            LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"                local c = HttpClient.New()
                 c:SetTimeout(5000)
                 c:SetFollowRedirects(true)
                 c:SetVerifySSL(false)
                 c:SetDefaultHeader('X-Test', '1')
-                return 'ok'
+                local ok1, echo = drain(assert(c:Request('GET', BASE .. '/get')))
+                c:SetTimeout(50)
+                local ok2, slow = drain(assert(c:Request('GET', BASE .. '/delay/10')))
+                return tostring(
+                    echo.Code == 200 and
+                    echo.Contents:find('""X-Test"":""1""', 1, true) ~= nil and
+                    slow.Code == nil)
             ");
-            r.String.ShouldBe("ok");
+            r.String.ShouldBe("true");
         }
 
         // HttpClient.UrlEncode / HttpClient.UrlDecode (no network required)
@@ -209,11 +225,13 @@ namespace KitsuneNet.Tests
         public async Task Http_GET_HeadersIsTable()
         {
             using KitsuneEngine engine = NewEngine();
-            LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"                local client = HttpClient.New()
+            LuaValue r = await engine.ExecuteStringAsync(DrainRequest + HeaderLookup + @"                local client = HttpClient.New()
                 client:SetTimeout(8000)
                 local co, err = client:Request('GET', BASE .. '/get')
                 local ok, result = drain(co)
-                return tostring(type(result.Headers) == 'table')
+                return tostring(
+                    type(result.Headers) == 'table' and
+                    (header(result.Headers, 'content-type') or ''):find('application/json', 1, true) ~= nil)
             ");
             r.String.ShouldBe("true");
         }
@@ -303,13 +321,15 @@ namespace KitsuneNet.Tests
         public async Task Http_Stream_GetInfo_HeadersIsTable()
         {
             using KitsuneEngine engine = NewEngine();
-            LuaValue r = await engine.ExecuteStringAsync(StreamHelper + @"
+            LuaValue r = await engine.ExecuteStringAsync(StreamHelper + HeaderLookup + @"
                 run_http(function()                    local client = HttpClient.New()
                     client:SetTimeout(8000)
                     local stream = stream_open(client, 'GET', BASE .. '/get')
                     local info = stream:GetInfo()
                     stream:Close()
-                    _outcome = tostring(type(info.Headers) == 'table')
+                    _outcome = tostring(
+                        type(info.Headers) == 'table' and
+                        (header(info.Headers, 'content-type') or ''):find('application/json', 1, true) ~= nil)
                 end)
                 return _outcome
             ");
@@ -929,12 +949,14 @@ namespace KitsuneNet.Tests
         public async Task Http_Call_GET_HeadersIsTable()
         {
             using KitsuneEngine engine = NewEngine();
-            LuaValue r = await engine.ExecuteStringAsync(StreamHelper + @"
+            LuaValue r = await engine.ExecuteStringAsync(StreamHelper + HeaderLookup + @"
                 run_http(function()                    local client = HttpClient.New()
                     client:SetTimeout(8000)
                     local result, err = client:Call('GET', BASE .. '/get')
                     if not result then error('Call failed: ' .. tostring(err)) end
-                    _outcome = tostring(type(result.Headers) == 'table')
+                    _outcome = tostring(
+                        type(result.Headers) == 'table' and
+                        (header(result.Headers, 'content-type') or ''):find('application/json', 1, true) ~= nil)
                 end)
                 return _outcome
             ");
@@ -1023,25 +1045,33 @@ namespace KitsuneNet.Tests
         public async Task Http_SetAliveToken_DoesNotRaise()
         {
             using KitsuneEngine engine = NewEngine();
-            LuaValue r = await engine.ExecuteStringAsync(@"                local client = HttpClient.New()
+            LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"                local client = HttpClient.New()
+                client:SetTimeout(8000)
                 local token = AliveToken.New()
                 client:SetAliveToken(token)
-                return 'ok'
+                local ok, result = drain(assert(client:Request('GET', BASE .. '/get')))
+                token:Dispose()
+                local co, err = client:Request('GET', BASE .. '/get')
+                return tostring(ok and result.Code == 200 and co == nil and err == 'aborted')
             ");
-            r.String.ShouldBe("ok");
+            r.String.ShouldBe("true");
         }
 
         [Fact]
         public async Task Http_SetAliveToken_NilDetaches()
         {
             using KitsuneEngine engine = NewEngine();
-            LuaValue r = await engine.ExecuteStringAsync(@"                local client = HttpClient.New()
+            LuaValue r = await engine.ExecuteStringAsync(DrainRequest + @"                local client = HttpClient.New()
+                client:SetTimeout(8000)
                 local token = AliveToken.New()
                 client:SetAliveToken(token)
+                token:Dispose()
+                local attachedCo, attachedErr = client:Request('GET', BASE .. '/get')
                 client:SetAliveToken(nil)
-                return 'ok'
+                local ok, result = drain(assert(client:Request('GET', BASE .. '/get')))
+                return tostring(attachedCo == nil and attachedErr == 'aborted' and ok and result.Code == 200)
             ");
-            r.String.ShouldBe("ok");
+            r.String.ShouldBe("true");
         }
 
         [Fact]

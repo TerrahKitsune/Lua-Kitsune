@@ -166,7 +166,7 @@ public sealed class KitsuneTcpTests
     }
 
     [Fact]
-    public async System.Threading.Tasks.Task MultipleClients_AcceptedInOrder()
+    public async System.Threading.Tasks.Task MultipleClients_AllAccepted()
     {
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync(AcceptHelper + @"
@@ -274,6 +274,17 @@ public sealed class KitsuneTcpTests
             listener:Dispose()
             client:Dispose()
             client:Dispose()
+            local acceptResult, acceptErr = listener:Accept()
+            if acceptResult ~= nil or type(acceptErr) ~= 'string' then
+                return 'Accept on a disposed listener must return nil, errmsg'
+            end
+            local pollData, pollErr = client:Poll()
+            if pollData ~= nil or type(pollErr) ~= 'string' then
+                return 'Poll on a disposed client must return nil, errmsg'
+            end
+            local again, err = TCP.StartListener(19208)
+            if not again then return 'port not released: ' .. tostring(err) end
+            again:Dispose()
             return 'ok'
         ");
         r.String.ShouldBe("ok");

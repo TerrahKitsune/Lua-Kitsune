@@ -44,18 +44,19 @@ LuaJson* luaL_checkjson(lua_State* L, int idx) {
 
 int Json_Dispose(lua_State* L) {
 	LuaJson* j = luaL_checkjson(L, 1);
-	if (j->out) {
-		kitsune_free(j->out);
-		j->out = NULL;
-	}
-	if (j->rec) {
-		kitsune_free(j->rec);
-		j->rec = NULL;
-	}
-	if (j->chunkBuf) {
-		kitsune_free(j->chunkBuf);
-		j->chunkBuf = NULL;
-	}
+	// Sizes are reset with the buffers so a disposed instance can still be used
+	// (it regrows from empty) instead of writing into freed memory.
+	kitsune_free(j->out);
+	j->out = NULL;
+	j->outLen = 0;
+	j->outCap = 0;
+	kitsune_free(j->rec);
+	j->rec = NULL;
+	j->recLen = 0;
+	j->recCap = 0;
+	kitsune_free(j->chunkBuf);
+	j->chunkBuf = NULL;
+	j->chunkBufCap = 0;
 	return 0;
 }
 
@@ -503,7 +504,7 @@ static void DecString(LuaJson* j, lua_State* L) {
 	for (;;) {
 		char c = JreadNext(j);
 		if (c == '\0')
-			luaL_error(L, "Json: unterminated string at line %zu", j->errLine + 1);
+			luaL_error(L, "Json: unterminated string at line %I", (lua_Integer)(j->errLine + 1));
 		if (c == '"')
 			break;
 		if (c != '\\') {
@@ -562,7 +563,7 @@ static void DecString(LuaJson* j, lua_State* L) {
 			break;
 		}
 		default:
-			luaL_error(L, "Json: unknown escape '\\%c' at line %zu", esc, j->errLine + 1);
+			luaL_error(L, "Json: unknown escape '\\%c' at line %I", esc, (lua_Integer)(j->errLine + 1));
 		}
 	}
 	luaL_pushresult(&b);
@@ -581,7 +582,7 @@ static void DecNumber(LuaJson* j, lua_State* L, char first) {
 		if ((c >= '0' && c <= '9') || c == '.' || c == 'e' || c == 'E' ||
 			c == '+' || c == '-') {
 			if (n >= (int)sizeof(buf) - 1)
-				luaL_error(L, "Json: number literal too long at line %zu", j->errLine + 1);
+				luaL_error(L, "Json: number literal too long at line %I", (lua_Integer)(j->errLine + 1));
 			buf[n++] = c;
 		} else {
 			JreadUnget(j, L, c);
@@ -617,18 +618,18 @@ static void DecObject(LuaJson* j, lua_State* L) {
 	for (;;) {
 		c = JreadSkip(j);
 		if (c != '"')
-			luaL_error(L, "Json: expected string key at line %zu", j->errLine + 1);
+			luaL_error(L, "Json: expected string key at line %I", (lua_Integer)(j->errLine + 1));
 		DecString(j, L);
 		c = JreadSkip(j);
 		if (c != ':')
-			luaL_error(L, "Json: expected ':' at line %zu", j->errLine + 1);
+			luaL_error(L, "Json: expected ':' at line %I", (lua_Integer)(j->errLine + 1));
 		DecValue(j, L);
 		lua_rawset(L, -3);
 		c = JreadSkip(j);
 		if (c == '}')
 			break;
 		if (c != ',')
-			luaL_error(L, "Json: expected ',' or '}' at line %zu", j->errLine + 1);
+			luaL_error(L, "Json: expected ',' or '}' at line %I", (lua_Integer)(j->errLine + 1));
 	}
 }
 
@@ -647,7 +648,7 @@ static void DecArray(LuaJson* j, lua_State* L) {
 		if (c == ']')
 			break;
 		if (c != ',')
-			luaL_error(L, "Json: expected ',' or ']' at line %zu", j->errLine + 1);
+			luaL_error(L, "Json: expected ',' or ']' at line %I", (lua_Integer)(j->errLine + 1));
 	}
 }
 
@@ -662,7 +663,7 @@ static void DecValue(LuaJson* j, lua_State* L) {
 	case 't': {
 		char r = JreadNext(j), u = JreadNext(j), e = JreadNext(j);
 		if (r != 'r' || u != 'u' || e != 'e')
-			luaL_error(L, "Json: invalid token at line %zu", j->errLine + 1);
+			luaL_error(L, "Json: invalid token at line %I", (lua_Integer)(j->errLine + 1));
 		lua_pushboolean(L, 1);
 		break;
 	}
@@ -670,14 +671,14 @@ static void DecValue(LuaJson* j, lua_State* L) {
 		char a = JreadNext(j), l = JreadNext(j),
 		     s = JreadNext(j), e = JreadNext(j);
 		if (a != 'a' || l != 'l' || s != 's' || e != 'e')
-			luaL_error(L, "Json: invalid token at line %zu", j->errLine + 1);
+			luaL_error(L, "Json: invalid token at line %I", (lua_Integer)(j->errLine + 1));
 		lua_pushboolean(L, 0);
 		break;
 	}
 	case 'n': {
 		char u = JreadNext(j), l1 = JreadNext(j), l2 = JreadNext(j);
 		if (u != 'u' || l1 != 'l' || l2 != 'l')
-			luaL_error(L, "Json: invalid token at line %zu", j->errLine + 1);
+			luaL_error(L, "Json: invalid token at line %I", (lua_Integer)(j->errLine + 1));
 		if (j->nullAsSentinel)
 			lua_pushlightuserdata(L, LuaJsonNull());
 		else
@@ -692,8 +693,8 @@ static void DecValue(LuaJson* j, lua_State* L) {
 			DecNumber(j, L, c);
 			break;
 		}
-		luaL_error(L, "Json: unexpected character '%c' at line %zu col %zu",
-		           c, j->errLine + 1, j->errCol);
+		luaL_error(L, "Json: unexpected character '%c' at line %I col %I",
+		           c, (lua_Integer)(j->errLine + 1), (lua_Integer)j->errCol);
 	}
 }
 

@@ -22,11 +22,14 @@ LuaMsgPack* luaL_checkmsgpack(lua_State* L, int idx) {
 
 int MsgPack_Dispose(lua_State* L) {
 	LuaMsgPack* m = luaL_checkmsgpack(L, 1);
+	// msgpack_sbuffer_destroy frees the data but leaves the pointer; re-initialising
+	// prevents a double free when __gc (also this function) runs after an explicit Dispose.
 	msgpack_sbuffer_destroy(&m->sbuf);
-	if (m->rec) {
-		kitsune_free(m->rec);
-		m->rec = NULL;
-	}
+	msgpack_sbuffer_init(&m->sbuf);
+	kitsune_free(m->rec);
+	m->rec = NULL;
+	m->recLen = 0;
+	m->recCap = 0;
 	return 0;
 }
 

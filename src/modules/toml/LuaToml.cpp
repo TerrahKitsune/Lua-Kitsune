@@ -22,14 +22,15 @@ LuaToml* luaL_checktoml(lua_State* L, int idx) {
 
 int Toml_Dispose(lua_State* L) {
 	LuaToml* t = luaL_checktoml(L, 1);
-	if (t->out) {
-		kitsune_free(t->out);
-		t->out = NULL;
-	}
-	if (t->rec) {
-		kitsune_free(t->rec);
-		t->rec = NULL;
-	}
+	// Sizes are reset with the buffers so a disposed instance can still be used.
+	kitsune_free(t->out);
+	t->out = NULL;
+	t->outLen = 0;
+	t->outCap = 0;
+	kitsune_free(t->rec);
+	t->rec = NULL;
+	t->recLen = 0;
+	t->recCap = 0;
 	return 0;
 }
 

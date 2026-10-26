@@ -49,6 +49,7 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             Should.NotThrow(() => engine.CollectGarbage());
+            engine.RunString("return 'alive'").String.ShouldBe("alive");
         }
 
         [Fact]
@@ -79,6 +80,7 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             Should.NotThrow(() => engine.CollectGarbage(3)); // pause
             Should.NotThrow(() => engine.CollectGarbage(4)); // restart
+            engine.RunString("return 'alive'").String.ShouldBe("alive");
         }
 
         [Fact]
@@ -91,10 +93,13 @@ namespace KitsuneNet.Tests
                 for (int i = 0; i < 20; i++)
                 {
                     LuaValue fn = engine.RunString("return function() return {1,2,3} end");
+                    fn.Type.ShouldBe(LuaType.Function);
                     fn.FunctionRef?.Dispose();
                 }
 
-                engine.CollectGarbage();
+                engine.CollectGarbage().ShouldBeGreaterThan(0);
+                engine.GetActiveIds().ShouldBeEmpty();
+                engine.RunString("return 'alive'").String.ShouldBe("alive");
             }
             finally
             {
@@ -149,7 +154,7 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaException ex = await Should.ThrowAsync<LuaException>(
                 engine.ExecuteStringAsync("~~~~invalid"));
-            ex.Message.ShouldNotBeNull();
+            ex.Message.ShouldContain("unexpected symbol");
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
@@ -886,7 +891,8 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaException ex = await Should.ThrowAsync<LuaException>(
                 engine.ExecuteFileAsync("nonexistent_file_xyz_99.lua"));
-            ex.Message.ShouldNotBeNull();
+            ex.Message.ShouldContain("cannot open");
+            ex.Message.ShouldContain("nonexistent_file_xyz_99.lua");
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
@@ -1233,7 +1239,7 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaException ex = await Should.ThrowAsync<LuaException>(
                 engine.ExecuteStringAsync("~~~~invalid"));
-            ex.Message.ShouldNotBeNull();
+            ex.Message.ShouldContain("unexpected symbol");
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
@@ -1363,7 +1369,7 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaException ex = await Should.ThrowAsync<LuaException>(
                 engine.ExecuteFunctionAsync("nonExistentFunction_XYZ"));
-            ex.Message.ShouldNotBeNull();
+            ex.Message.ShouldContain("function not found");
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
@@ -1452,7 +1458,7 @@ namespace KitsuneNet.Tests
             await engine.ExecuteStringAsync("Ns = {}");
             LuaException ex = await Should.ThrowAsync<LuaException>(
                 engine.ExecuteFunctionAsync("Ns.missingFn"));
-            ex.Message.ShouldNotBeNull();
+            ex.Message.ShouldContain("function not found");
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
@@ -1463,7 +1469,7 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaException ex = await Should.ThrowAsync<LuaException>(
                 engine.ExecuteFunctionAsync("NoSuchNs.fn"));
-            ex.Message.ShouldNotBeNull();
+            ex.Message.ShouldContain("function not found");
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
@@ -2119,14 +2125,14 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public void GetStatus_AfterCancelOnSleepingCoroutine_ReturnsCancelled()
+        public async Task GetStatus_AfterCancelOnSleepingCoroutine_ReturnsCancelled()
         {
-            // After Cancel, GetStatus returns Cancelled until the slot is freed.
-            // On fast schedulers (e.g. Linux) the slot may already be freed, returning None.
+            // After Cancel, GetStatus returns Cancelled until the scheduler frees the slot.
+            // Cancel and read the status from a registered function: it runs on the scheduler
+            // thread, which therefore cannot free the slot in between.
             using KitsuneEngine engine = new();
             engine.ExecuteString("Sleep(60000)");
-            SpinUntilActive(engine);
-            int id = engine.GetActiveIds()[0];
+            int id = SingleActiveId(engine);
             DateTime sleepDeadline = DateTime.UtcNow.AddSeconds(5);
             while (engine.GetStatus(id) != CoroutineStatus.Sleeping && DateTime.UtcNow < sleepDeadline)
             {
@@ -2135,11 +2141,15 @@ namespace KitsuneNet.Tests
 
             engine.GetStatus(id).ShouldBe(CoroutineStatus.Sleeping);
 
-            engine.Cancel(id);
-
-            var statusAfterCancel = engine.GetStatus(id);
-            (statusAfterCancel == CoroutineStatus.Cancelled || statusAfterCancel == CoroutineStatus.None)
-                .ShouldBeTrue($"Expected Cancelled or None after Cancel but got {statusAfterCancel}");
+            CoroutineStatus statusAfterCancel = CoroutineStatus.None;
+            engine.RegisterFunction("CancelSleeper", _ =>
+            {
+                engine.Cancel(id);
+                statusAfterCancel = engine.GetStatus(id);
+                return LuaValue.None;
+            });
+            await engine.ExecuteStringAsync("CancelSleeper()");
+            statusAfterCancel.ShouldBe(CoroutineStatus.Cancelled);
 
             engine.Wait();
             engine.GetActiveIds().ShouldBeEmpty();
@@ -2564,6 +2574,7 @@ namespace KitsuneNet.Tests
             KitsuneEngine engine = new();
             engine.RegisterFunction("Noop", _ => LuaValue.None);
             engine.RegisterFunction("Echo", args => args.FirstOrDefault());
+            engine.RunString("return Echo('alive')").String.ShouldBe("alive");
             Should.NotThrow(engine.Dispose);
         }
 
@@ -2682,7 +2693,8 @@ namespace KitsuneNet.Tests
         public async Task CFunction_Dispose_DoesNotCrash()
         {
             KitsuneEngine engine = new();
-            engine.SetVariable("Fn", LuaValue.FromCFunction(_ => LuaValue.None));
+            engine.SetVariable("Fn", LuaValue.FromCFunction(_ => (LuaValue)"alive"));
+            (await engine.ExecuteStringAsync("return Fn()")).String.ShouldBe("alive");
             Should.NotThrow(engine.Dispose);
         }
 
@@ -3578,6 +3590,8 @@ namespace KitsuneNet.Tests
             LuaTableRef tref = engine.RunString("return {}").TableRef!;
             tref.Dispose();
             Should.NotThrow(() => tref.Dispose());
+            Should.Throw<ObjectDisposedException>(() => tref.GetContents());
+            engine.GetActiveIds().ShouldBeEmpty();
         }
 
         [Fact]
@@ -4214,6 +4228,7 @@ namespace KitsuneNet.Tests
                 // Force __gc by collecting and nilifying the global.
                 await engine.ExecuteStringAsync(
                     "c = nil; collectgarbage('collect'); collectgarbage('collect')");
+                engine.GetVariableType("c").ShouldBe(LuaType.None);
                 engine.GetActiveIds().ShouldBeEmpty();
             }
             finally
@@ -4442,6 +4457,7 @@ namespace KitsuneNet.Tests
             KitsuneEngine engine = new();
             engine.RegisterUserdata<Counter>();
             engine.SetVariable("c", engine.CreateUserdata(new Counter()));
+            engine.RunString("return c:Get()").AsInt64.ShouldBe(0L);
             Should.NotThrow(engine.Dispose);
         }
 
@@ -5621,7 +5637,7 @@ namespace KitsuneNet.Tests
                 }
 
                 sw.Stop();
-                _output.WriteLine($"Elapsed time: {sw.ElapsedMilliseconds} ms  |  {sw.Elapsed.TotalMicroseconds / 1_000_000.0:F2} µs/call");
+                _output.WriteLine($"Elapsed time: {sw.ElapsedMilliseconds} ms  |  {sw.Elapsed.TotalMicroseconds / 100_000.0:F2} µs/call");
             }
         }
 
@@ -5641,7 +5657,7 @@ namespace KitsuneNet.Tests
             }
 
             sw.Stop();
-            _output.WriteLine($"Elapsed time: {sw.ElapsedMilliseconds} ms  |  {sw.Elapsed.TotalMicroseconds / 1_000_000.0:F2} µs/call");
+            _output.WriteLine($"Elapsed time: {sw.ElapsedMilliseconds} ms  |  {sw.Elapsed.TotalMicroseconds / 100_000.0:F2} µs/call");
         }
 
         [Fact]
@@ -5720,7 +5736,7 @@ namespace KitsuneNet.Tests
 
             LuaException ex = await Should.ThrowAsync<LuaException>(
                 engine.ExecuteVariableAsync(script));
-            ex.Message.ShouldNotBeNull();
+            ex.Message.ShouldContain("unexpected symbol");
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
@@ -5733,11 +5749,11 @@ namespace KitsuneNet.Tests
 
             LuaException numEx = await Should.ThrowAsync<LuaException>(
                 engine.ExecuteVariableAsync(LuaValue.FromInt64(42)));
-            numEx.Message.ShouldNotBeNull();
+            numEx.Message.ShouldContain("not executable");
 
             LuaException boolEx = await Should.ThrowAsync<LuaException>(
                 engine.ExecuteVariableAsync(LuaValue.FromBool(true)));
-            boolEx.Message.ShouldNotBeNull();
+            boolEx.Message.ShouldContain("not executable");
 
             engine.GetActiveIds().ShouldBeEmpty();
         }
@@ -5876,7 +5892,7 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaException ex = await Should.ThrowAsync<LuaException>(
                 engine.ExecuteVariableAsync(LuaValue.FromNumber(3.14)));
-            ex.Message.ShouldNotBeNull();
+            ex.Message.ShouldContain("not executable");
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
@@ -6093,6 +6109,9 @@ namespace KitsuneNet.Tests
                 })).ToArray();
                 await Task.WhenAll(tasks);
 
+                results.Count.ShouldBe(count);
+                results.ShouldAllBe(r => r.Type == LuaType.Function);
+
                 // Dispose all function refs — each enqueues to g_pendingVariableChainHead.
                 foreach (var r in results)
                 {
@@ -6100,7 +6119,8 @@ namespace KitsuneNet.Tests
                 }
 
                 // Drain cycle: scheduler processes all deferred luaL_unref calls.
-                await engine.ExecuteStringAsync("return 'drain'");
+                (await engine.ExecuteStringAsync("return 'drain'")).ShouldBe("drain");
+                engine.GetActiveIds().ShouldBeEmpty();
             }
             finally
             {
@@ -6140,6 +6160,9 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             Should.NotThrow(() => engine.Cancel(99999));
+            engine.GetStatus(99999).ShouldBe(CoroutineStatus.None);
+            engine.GetActiveIds().ShouldBeEmpty();
+            engine.RunString("return 1").AsInt64.ShouldBe(1L);
         }
 
         [Fact]
@@ -6597,7 +6620,7 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             int @ref = engine.Register((LuaValue)"hello");
-            @ref.ShouldNotBe(-2); // LUA_NOREF
+            @ref.ShouldBeGreaterThan(0);
             engine.GetByReference(@ref).String.ShouldBe("hello");
             engine.Unregister(@ref);
         }
@@ -6607,7 +6630,7 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             int @ref = engine.Register(LuaValue.FromNumber(3.14));
-            @ref.ShouldNotBe(-2);
+            @ref.ShouldBeGreaterThan(0);
             engine.GetByReference(@ref).Number.ShouldBe(3.14);
             engine.Unregister(@ref);
         }
@@ -6617,7 +6640,7 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             int @ref = engine.Register(LuaValue.FromInt64(42L));
-            @ref.ShouldNotBe(-2);
+            @ref.ShouldBeGreaterThan(0);
             engine.GetByReference(@ref).Int64.ShouldBe(42L);
             engine.Unregister(@ref);
         }
@@ -6627,7 +6650,7 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             int @ref = engine.Register(LuaValue.FromBool(true));
-            @ref.ShouldNotBe(-2);
+            @ref.ShouldBeGreaterThan(0);
             engine.GetByReference(@ref).Boolean.ShouldBeTrue();
             engine.Unregister(@ref);
         }
@@ -6673,7 +6696,7 @@ namespace KitsuneNet.Tests
                 new((LuaValue)"k", (LuaValue)"v")
             };
             int @ref = engine.Register(LuaValue.FromTable(entries.AsReadOnly()));
-            @ref.ShouldNotBe(-2);
+            @ref.ShouldBeGreaterThan(0);
             LuaValue result = engine.GetByReference(@ref);
             result.Type.ShouldBe(LuaType.Table);
             using var tableRef = result.TableRef;
@@ -6705,7 +6728,7 @@ namespace KitsuneNet.Tests
             fn.Type.ShouldBe(LuaType.Function);
 
             int @ref = engine.Register(fn);
-            @ref.ShouldNotBe(-2);
+            @ref.ShouldBeGreaterThan(0);
 
             // Release the original — the registered pin keeps the function alive.
             fn.FunctionRef!.Dispose();
@@ -6979,6 +7002,8 @@ namespace KitsuneNet.Tests
 
             tref.Dispose();
             Should.NotThrow(() => tref.Dispose());
+            Should.Throw<ObjectDisposedException>(() => tref.Step());
+            engine.GetActiveIds().ShouldBeEmpty();
         }
 
         [Fact]
@@ -6989,6 +7014,8 @@ namespace KitsuneNet.Tests
 
             fref.Dispose();
             Should.NotThrow(() => fref.Dispose());
+            Should.Throw<ObjectDisposedException>(() => fref.Invoke());
+            engine.GetActiveIds().ShouldBeEmpty();
         }
 
         [Fact]
@@ -7092,7 +7119,7 @@ namespace KitsuneNet.Tests
 
             LuaValue result = ur.CallMetamethod("__tostring");
             result.Type.ShouldBe(LuaType.String);
-            result.String.ShouldNotBeNull();
+            result.String.ShouldStartWith("Json: ");
 
             engine.GetActiveIds().ShouldBeEmpty();
         }
@@ -7412,11 +7439,15 @@ namespace KitsuneNet.Tests
             // KitsuneGCHook __gc when Lua GCs the closure, not held alive indefinitely.
             bool finalizerFired = false;
             using KitsuneEngine engine = new();
-            engine.RegisterFunction("GCTestFn", _ =>
+            WeakReference delegateTracker = RegisterTrackedFunction(engine, "GCTestFn", _ =>
             {
                 finalizerFired = true;
                 return LuaValue.None;
             });
+
+            // The GCHandle pins the delegate for as long as Lua holds the closure.
+            ForceDotNetGc();
+            delegateTracker.IsAlive.ShouldBeTrue("delegate must stay pinned while the Lua global exists");
 
             // Nil the global so the closure (and its upvalues) become unreachable.
             engine.SetVariable("GCTestFn", LuaValue.None);
@@ -7425,9 +7456,10 @@ namespace KitsuneNet.Tests
 
             finalizerFired.ShouldBeFalse("finalizer must not fire before GC");
 
-            // The KitsuneGCHook __gc fires here; LuaDelegateFinalizer frees the GCHandle.
-            // We verify the handle was freed by confirming no leak is thrown on dispose.
-            // (If the handle was double-freed or leaked, the process would crash or leak.)
+            // The KitsuneGCHook __gc fires here; LuaDelegateFinalizer frees the GCHandle,
+            // which makes the delegate collectible by .NET.
+            ForceDotNetGc();
+            delegateTracker.IsAlive.ShouldBeFalse("GCHandle must be freed once Lua collected the closure");
         }
 
         [Fact]
@@ -7437,7 +7469,7 @@ namespace KitsuneNet.Tests
             // Disposing the engine after GC must not double-free it (IsAllocated check).
             int callCount = 0;
             using KitsuneEngine engine = new();
-            engine.RegisterFunction("GCTestFn2", _ =>
+            WeakReference delegateTracker = RegisterTrackedFunction(engine, "GCTestFn2", _ =>
             {
                 callCount++;
                 return LuaValue.FromInt64(callCount);
@@ -7451,6 +7483,11 @@ namespace KitsuneNet.Tests
             engine.SetVariable("GCTestFn2", LuaValue.None);
             engine.CollectGarbage();
             engine.CollectGarbage();
+
+            // The handle is freed by the Lua GC, before the engine is disposed.
+            ForceDotNetGc();
+            delegateTracker.IsAlive.ShouldBeFalse("GCHandle must be freed by the Lua GC, not left for Dispose");
+            callCount.ShouldBe(1);
 
             // Engine dispose must not crash (no double-free).
         }
@@ -8401,6 +8438,24 @@ namespace KitsuneNet.Tests
             {
                 throw new TimeoutException($"Engine did not report IsRunning within {timeoutMs} ms");
             }
+        }
+
+        // Registers a wrapper created in this separate frame, so only the engine's GCHandle refers to
+        // it (the caller's own delegate stays alive in its frame in Debug builds); the weak reference
+        // then reports whether that GCHandle was freed.
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private static WeakReference RegisterTrackedFunction(KitsuneEngine engine, string name, LuaFunction func)
+        {
+            LuaFunction tracked = args => func(args);
+            engine.RegisterFunction(name, tracked);
+            return new WeakReference(tracked);
+        }
+
+        private static void ForceDotNetGc()
+        {
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true);
+            GC.WaitForPendingFinalizers();
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true);
         }
 
         // ExecuteString is fire-and-forget and returns no id, but it registers the slot before

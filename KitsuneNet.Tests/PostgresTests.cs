@@ -12,10 +12,14 @@ public sealed class PostgresTests
     public async Task Helper_MethodsExistInModuleTable()
     {
         using KitsuneEngine engine = TestRun.NewEngine();
-        LuaValue r = await engine.ExecuteStringAsync(@"
-			return tostring(type(Postgres.NonQuery)) .. ':' .. tostring(type(Postgres.Scalar)) .. ':' .. tostring(type(Postgres.QueryAll))
+        LuaValue r = await engine.ExecuteStringAsync($@"
+			local conn = assert({ConnectLua()})
+			local types = tostring(type(Postgres.NonQuery)) .. ':' .. tostring(type(Postgres.Scalar)) .. ':' .. tostring(type(Postgres.QueryAll))
+			local ok, v = Postgres.Scalar(conn, 'SELECT 42::int')
+			conn:Close()
+			return types .. ':' .. tostring(ok) .. ':' .. tostring(v)
 		");
-        r.String.ShouldBe("function:function:function");
+        r.String.ShouldBe("function:function:function:true:42");
     }
 
     [PostgresFact]
@@ -184,6 +188,7 @@ public sealed class PostgresTests
 			local conn = assert({ConnectLua()})
 			local co = assert(conn:Query('SELECT 1'))
 			coroutine.resume(co)
+			local status1 = coroutine.status(co)
 			local busy1 = conn:IsBusy()
 			local ok, val = coroutine.resume(co)
 			while ok and val == nil and coroutine.status(co) == 'suspended' do
@@ -192,10 +197,11 @@ public sealed class PostgresTests
 			ok, val = coroutine.resume(co)
 			while ok and val ~= nil do ok, val = coroutine.resume(co) end
 			local busy2 = conn:IsBusy()
-			return tostring(busy1) .. ':' .. tostring(busy2)
+			return status1 .. ':' .. tostring(busy1) .. ':' .. tostring(busy2)
 		");
-        r.String.ShouldNotBeNull();
-        r.String.ShouldEndWith(":false");
+
+        // IsBusy is documented as true while the query coroutine is alive (suspended).
+        r.String.ShouldBe("suspended:true:false");
     }
 
     [PostgresFact]
@@ -357,13 +363,13 @@ public sealed class PostgresTests
 			while ok and v == nil and coroutine.status(co) == 'suspended' do ok, v = coroutine.resume(co) end
 			ok, v = coroutine.resume(co)
 			coroutine.resume(co, true)
-			return tostring(math.type(v[1])) .. ':' .. tostring(math.type(v[2])) .. ':' .. tostring(math.type(v[3]))
+			return tostring(math.type(v[1])) .. ':' .. tostring(math.type(v[2])) .. ':' .. tostring(math.type(v[3])) .. ':' .. v[1] .. ':' .. v[2] .. ':' .. v[3]
 		");
-        r.String.ShouldBe("integer:integer:integer");
+        r.String.ShouldBe("integer:integer:integer:1:2:3");
     }
 
     [PostgresFact]
-    public async Task Types_FloatsReturnedAsNumber()
+    public async Task Types_FloatsAsNumber_NumericAsDecimal()
     {
         using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
@@ -373,9 +379,9 @@ public sealed class PostgresTests
 			while ok and v == nil and coroutine.status(co) == 'suspended' do ok, v = coroutine.resume(co) end
 			ok, v = coroutine.resume(co)
 			coroutine.resume(co, true)
-			return tostring(type(v[1])) .. ':' .. tostring(type(v[2])) .. ':' .. tostring(type(v[3]))
+			return tostring(type(v[1])) .. ':' .. tostring(type(v[2])) .. ':' .. tostring(type(v[3])) .. ':' .. tostring(v[1] == 1.5) .. ':' .. tostring(v[2] == 2.5) .. ':' .. tostring(v[3]:ToNumber() == 3)
 		");
-        r.String.ShouldBe("number:number:userdata");
+        r.String.ShouldBe("number:number:userdata:true:true:true");
     }
 
     [PostgresFact]
@@ -589,11 +595,13 @@ public sealed class PostgresTests
         using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
 			local conn = assert({ConnectLua()})
-			conn:SetAliveToken(AliveToken.New())
+			local token = AliveToken.New()
+			local attached = pcall(conn.SetAliveToken, conn, token)
+			local ok, v = conn:Scalar('SELECT 7::int')
 			conn:Close()
-			return 'ok'
+			return tostring(attached) .. ':' .. tostring(ok) .. ':' .. tostring(v)
 		");
-        r.String.ShouldBe("ok");
+        r.String.ShouldBe("true:true:7");
     }
 
     [PostgresFact]
@@ -605,10 +613,12 @@ public sealed class PostgresTests
 			local token = AliveToken.New()
 			conn:SetAliveToken(token)
 			conn:SetAliveToken(nil)
+			token:Dispose()
+			local ok, v = conn:Scalar('SELECT 5::int')
 			conn:Close()
-			return 'ok'
+			return tostring(ok) .. ':' .. tostring(v)
 		");
-        r.String.ShouldBe("ok");
+        r.String.ShouldBe("true:5");
     }
 
     [PostgresFact]

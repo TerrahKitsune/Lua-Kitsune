@@ -1024,8 +1024,8 @@ namespace KitsuneNet.Tests
         public async Task CRC32_ReturnsInteger()
         {
             using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("return math.type(CRC32('hello'))");
-            r.String.ShouldBe("integer");
+            LuaValue r = await engine.ExecuteStringAsync("return math.type(CRC32('hello')) .. ':' .. string.format('%x', CRC32('123456789'))");
+            r.String.ShouldBe("integer:cbf43926");
         }
 
         // Decimal
@@ -1293,7 +1293,7 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task Decimal_Json_InTable_RoundTripsAsString()
+        public async Task Decimal_Json_InTable_RoundTripsAsNumber()
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
@@ -1444,9 +1444,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local d = Decimal.FromNumber(9007199254740993)
-                return tostring(d:Scale() == 0)
+                return tostring(d:Scale() == 0) .. ':' .. tostring(d)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true:9007199254740993");
         }
 
         [Fact]
@@ -1658,9 +1658,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local d = Decimal.FromString('0.0000000000')
-                return tostring(d ~= nil)
+                return tostring(d) .. ':' .. d:Scale()
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("0.0000000000:10");
         }
 
         [Fact]
@@ -1777,14 +1777,15 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task StringEqual_TolowerDoesNotMistreatHighBytes()
         {
-            // Characters > 127 must not cause UB through the signed-char tolower path;
-            // two identical non-ASCII strings must compare equal
+            // Characters > 127 must not cause UB through the signed-char tolower path.
+            // Comparison is case-insensitive for ASCII only: the high bytes must match exactly.
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
-                local s = 'caf\xc3\xa9'
-                return tostring(string.equal(s, s) == true)
+                local same = string.equal('caf\xc3\xa9', 'CAF\xc3\xa9')
+                local differentHighByte = string.equal('caf\xc3\xa9', 'caf\xc3\x89')
+                return tostring(same) .. ':' .. tostring(differentHighByte)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true:false");
         }
 
         [Fact]
@@ -1795,11 +1796,11 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local data = 'a;b;c\nd;e;f\ng;h;i\nj;k;l\nm;n;o\n'
                 local result = CSV.New(';'):Decode(data)
-                local count = 0
-                for _ in ipairs(result.Rows) do count = count + 1 end
-                return tostring(count == 5)
+                local rows = {}
+                for _, row in ipairs(result.Rows) do rows[#rows + 1] = table.concat(row, ',') end
+                return table.concat(rows, '|')
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("a,b,c|d,e,f|g,h,i|j,k,l|m,n,o");
         }
 
         [Fact]
@@ -1820,8 +1821,10 @@ namespace KitsuneNet.Tests
         public async Task CRC64_ReturnsNumber()
         {
             using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("return type(CRC64('hello'))");
-            r.String.ShouldBe("number");
+
+            // CRC-64/GO-ISO check value for "123456789"
+            LuaValue r = await engine.ExecuteStringAsync("return type(CRC64('hello')) .. ':' .. string.format('%x', CRC64('123456789'))");
+            r.String.ShouldBe("number:b90956c775a41001");
         }
 
         [Fact]
@@ -2190,8 +2193,12 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
 
             // DEBUG is true in debug builds; the global is not defined in release builds.
-            LuaValue r = await engine.ExecuteStringAsync("local t = type(DEBUG); return tostring(t == 'boolean' or t == 'nil')");
+            LuaValue r = await engine.ExecuteStringAsync("return tostring(DEBUG)");
+#if DEBUG
             r.String.ShouldBe("true");
+#else
+            r.String.ShouldBe("nil");
+#endif
         }
 
         // Dns
@@ -4203,9 +4210,11 @@ namespace KitsuneNet.Tests
                 local result = s:Write('y')
                 s:Close()
                 os.remove(path)
-                return tostring(result == false or result == nil or result == 0)
+                return tostring(result)
             ");
-            r.String.ShouldBe("true");
+
+            // Write is documented to return the bytes written, 0 on failure.
+            r.String.ShouldBe("0");
         }
 
         // Stream (module API)
@@ -5055,16 +5064,25 @@ namespace KitsuneNet.Tests
         public async Task FileSystem_CurrentDirectory_ReturnsNonEmptyString()
         {
             using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("return tostring(#FileSystem.CurrentDirectory() > 0)");
-            r.String.ShouldBe("true");
+            LuaValue r = await engine.ExecuteStringAsync("return FileSystem.CurrentDirectory()");
+            r.String.ShouldBe(Directory.GetCurrentDirectory());
         }
 
         [Fact]
         public async Task FileSystem_GetTempFileName_ReturnsValidPath()
         {
             using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("local p = FileSystem.GetTempFileName(); return tostring(type(p)=='string' and #p>0)");
-            r.String.ShouldBe("true");
+            LuaValue r = await engine.ExecuteStringAsync("return FileSystem.GetTempFileName()");
+            string path = r.String.ShouldNotBeNull();
+            try
+            {
+                Path.IsPathRooted(path).ShouldBeTrue();
+                File.Exists(path).ShouldBeTrue();
+            }
+            finally
+            {
+                File.Delete(path);
+            }
         }
 
         [Fact]
@@ -5980,11 +5998,12 @@ namespace KitsuneNet.Tests
                 local tmp  = FileSystem.GetTempFileName() .. '_kitsune_chdir'
                 FileSystem.CreateDirectory(tmp)
                 local ok = FileSystem.SetCurrentDirectory(tmp)
+                local now = FileSystem.CurrentDirectory()
                 FileSystem.SetCurrentDirectory(orig)
                 FileSystem.RemoveDirectory(tmp)
-                return tostring(ok == true)
+                return tostring(ok == true) .. '|' .. tostring(now == tmp) .. '|' .. tostring(FileSystem.CurrentDirectory() == orig)
             ");
-                r.String.ShouldBe("true");
+                r.String.ShouldBe("true|true|true");
             }
             finally
             {
@@ -6145,9 +6164,10 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
 
-            // __tostring on a Json instance returns a pointer-format string.
-            LuaValue r = await engine.ExecuteStringAsync("return tostring(type(tostring(Json.New())) == 'string' and #tostring(Json.New()) > 0)");
-            r.String.ShouldBe("true");
+            // __tostring on a Json instance returns "Json: <pointer>".
+            LuaValue r = await engine.ExecuteStringAsync("return tostring(Json.New())");
+            r.String.ShouldStartWith("Json: ");
+            r.String.Length.ShouldBeGreaterThan("Json: ".Length);
         }
 
         [Fact]
@@ -6155,14 +6175,70 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
 
-            // Json.Dispose() is an explicit GC; calling it must not crash and the
-            // instance should still be a valid Lua value afterwards.
+            // Json.Dispose() only frees the output buffer: it is idempotent and the instance stays usable.
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local j = Json.New()
-                j:Dispose()
-                return 'ok'
+                local first = j:Dispose()
+                local second = j:Dispose()
+                return tostring(first) .. '|' .. tostring(second) .. '|' .. j:Encode({a = 1})
             ");
-            r.String.ShouldBe("ok");
+            r.String.ShouldBe("nil|nil|{\"a\":1}");
+        }
+
+        // Regression: Dispose (also the __gc handler) freed the buffers but kept their sizes,
+        // so using the instance again wrote into freed memory, and MsgPack's buffer was freed
+        // twice when __gc ran after an explicit Dispose. Encode first so there is a buffer to free.
+        [Theory]
+        [InlineData("Json", "{a = 1}", "a")]
+        [InlineData("Yaml", "{a = 1}", "a")]
+        [InlineData("Toml", "{a = 1}", "a")]
+        [InlineData("MsgPack", "{a = 1}", "a")]
+        [InlineData("Ini", "{s = {a = 1}}", "s.a")]
+        public async Task Encoder_UsedAfterDisposeAndCollected_StaysUsable(string module, string value, string field)
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync($@"
+                local x = {module}.New()
+                x:Encode({value})
+                x:Dispose()
+                local decoded = x:Decode(x:Encode({value}))
+                x = nil
+                collectgarbage()
+                collectgarbage()
+                return tostring(decoded.{field})
+            ");
+            r.String.ShouldBe("1");
+        }
+
+        // Regression: decode errors printed a literal "%zu"; Lua's own formatter has no %zu.
+        [Fact]
+        public async Task Json_DecodeError_ReportsLineNumber()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local ok, err = pcall(function() return Json.New():Decode('{""a"":1,\n""b"" 2}') end)
+                return tostring(ok) .. '|' .. tostring(err)
+            ");
+            r.String!.ShouldStartWith("false|");
+            r.String!.ShouldContain("at line 2");
+            r.String!.ShouldNotContain("%");
+        }
+
+        [Fact]
+        public async Task Xml_UsedAfterDisposeAndCollected_StaysUsable()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local x = Xml.New()
+                x:Decode('<a>1</a>')
+                x:Dispose()
+                local decoded = x:Decode('<a>1</a>')
+                x = nil
+                collectgarbage()
+                collectgarbage()
+                return type(decoded)
+            ");
+            r.String.ShouldBe("table");
         }
 
         [Fact]
@@ -6521,21 +6597,17 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task Stream_Id_MemoryStream_ChangesAfterNewStream()
+        public async Task Stream_Id_TwoLiveMemoryStreams_Differ()
         {
             using KitsuneEngine engine = new();
 
-            // Two distinct stream objects must never share an id, even if one is
-            // created shortly after the other.
+            // Id falls back to the native pointer, so it is only unique among live streams:
+            // a stream created after another was collected may reuse its id.
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local a = Stream.New('hello')
-                local id1 = a:Id()
-                a = nil
-                collectgarbage()
                 local b = Stream.New('hello')
-                local id2 = b:Id()
-                -- The ids may or may not collide due to allocator reuse, but both must be integers.
-                return tostring(math.type(id1) == 'integer' and math.type(id2) == 'integer')
+                local id1, id2 = a:Id(), b:Id()
+                return tostring(math.type(id1) == 'integer' and math.type(id2) == 'integer' and id1 ~= id2)
             ");
             r.String.ShouldBe("true");
         }
@@ -7078,11 +7150,12 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local s = Stream.New()
-                s:Write('hello')
+                local before = s:Write('hello')
                 s:Close()
-                return 'ok'
+                local after = s:Write('x')
+                return before .. '|' .. after .. '|' .. tostring(s:Read(1))
             ");
-            r.String.ShouldBe("ok");
+            r.String.ShouldBe("5|0|nil");
         }
 
         [Fact]
@@ -7562,15 +7635,18 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
 
-            // A clean command produces no stderr; result is nil or empty string.
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local is_win = package.config:sub(1,1) == '\\'
-                local cmd = is_win and 'cmd /c echo hello' or 'echo hello'
-                local proc = Process.Start(nil, cmd, nil, false, true)
+                local cmd = is_win and 'cmd /c echo err 1>&2' or ""sh -c 'echo err 1>&2'""
+                local proc = Process.Start(nil, cmd, nil, true, true)
                 assert(proc, 'Process.Start returned nil')
-                Sleep(200)
-                local err = proc:ReadErrorFromPipe()
-                return tostring(err == nil or type(err) == 'string')
+                local out = ''
+                local deadline = os.time() + 10
+                while not out:find('err') and os.time() < deadline do
+                    local chunk = proc:ReadErrorFromPipe()
+                    if chunk then out = out .. chunk else Sleep(20) end
+                end
+                return tostring(out:find('err') ~= nil)
             ");
             r.String.ShouldBe("true");
         }
@@ -7706,8 +7782,15 @@ namespace KitsuneNet.Tests
         public async Task Stream_CreateChunked_IsNotNil()
         {
             using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(MakeChunkedStream + "return tostring(makeChunkedStream({'a','b'}) ~= nil)");
-            r.String.ShouldBe("true");
+            LuaValue r = await engine.ExecuteStringAsync(RunCoroutine + MakeChunkedStream + @"
+                local result
+                run(function()
+                    local cs = makeChunkedStream({'a', 'b'})
+                    result = type(cs) .. ':' .. tostring(cs:Read()) .. tostring(cs:Read()) .. ':' .. tostring(cs:Read())
+                end)
+                return result
+            ");
+            r.String.ShouldBe("userdata:ab:nil");
         }
 
         [Fact]
@@ -8169,14 +8252,12 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task Stream_FunctionBackendSocket_HasData_ReturnsZeroBeforeFirstRead()
+        public async Task Stream_FunctionBackendSocket_HasData_NilWithoutHandler()
         {
             using KitsuneEngine engine = new();
 
-            // A function backend that has not yet delivered any data reports 0 bytes
-            // remaining via HasData() because len==0 and pos==0 (no curpos/getlen
-            // vtable — the Lua fn backend falls through to STREAM_OP_HASDATA dispatch
-            // which returns nil, treated as falsy by the caller).
+            // A function backend dispatches HasData() as STREAM_OP_HASDATA; with no handler
+            // for it the documented result is nil.
             LuaValue r = await engine.ExecuteStringAsync(SocketPrologue + @"
                 local s = Stream.New(function(op, len)
                     if op == OPEN  then return CAP_READ end
@@ -8187,7 +8268,7 @@ namespace KitsuneNet.Tests
                 -- is dispatched and the function returns nil (no handler) which
                 -- is falsy — callers should treat nil as 'no data available yet'.
                 local hd = s:HasData()
-                return tostring(hd == nil or hd == false or hd == 0)
+                return tostring(hd == nil)
             ");
             r.String.ShouldBe("true");
         }
@@ -8283,10 +8364,11 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local xml = Xml.New()
-                xml:Dispose()
-                return 'ok'
+                local first = xml:Dispose()
+                local second = xml:Dispose()
+                return tostring(first) .. '|' .. tostring(second)
             ");
-            r.String.ShouldBe("ok");
+            r.String.ShouldBe("nil|nil");
         }
 
         [Fact]
@@ -9002,10 +9084,11 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local m = MsgPack.New()
-                m:Dispose()
-                return 'ok'
+                local first = m:Dispose()
+                local second = m:Dispose()
+                return tostring(first) .. '|' .. tostring(second)
             ");
-            r.String.ShouldBe("ok");
+            r.String.ShouldBe("nil|nil");
         }
 
         // Basic type round-trips
@@ -9694,10 +9777,11 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local y = Yaml.New()
-                y:Dispose()
-                return 'ok'
+                local first = y:Dispose()
+                local second = y:Dispose()
+                return tostring(first) .. '|' .. tostring(second)
             ");
-            r.String.ShouldBe("ok");
+            r.String.ShouldBe("nil|nil");
         }
 
         [Fact]
@@ -10025,10 +10109,11 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = Toml.New()
-                t:Dispose()
-                return 'ok'
+                local first = t:Dispose()
+                local second = t:Dispose()
+                return tostring(first) .. '|' .. tostring(second)
             ");
-            r.String.ShouldBe("ok");
+            r.String.ShouldBe("nil|nil");
         }
 
         [Fact]
@@ -10400,10 +10485,11 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local i = Ini.New()
-                i:Dispose()
-                return 'ok'
+                local first = i:Dispose()
+                local second = i:Dispose()
+                return tostring(first) .. '|' .. tostring(second)
             ");
-            r.String.ShouldBe("ok");
+            r.String.ShouldBe("nil|nil");
         }
 
         [Fact]
@@ -10756,7 +10842,7 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task AliveToken_Timeout_ZeroMs_IsAlreadyDead()
+        public async Task AliveToken_Timeout_ZeroMs_MeansNoTimeout()
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
@@ -10866,7 +10952,7 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task AliveToken_Link_ChildAliveWhenOnlyOneOfTwoParentsDisposed_False()
+        public async Task AliveToken_Link_AnyDisposedParentKillsChild()
         {
             // Disposing ANY linked parent kills the child
             using KitsuneEngine engine = new();
@@ -10891,10 +10977,11 @@ namespace KitsuneNet.Tests
                 child:Link(parent)
                 parent:Dispose()
                 child:IsAlive()  -- tick to propagate
-                -- even if we create a new token and link it, child stays dead
-                return tostring(child:IsAlive())
+                local liveParent = AliveToken.New()
+                child:Link(liveParent)
+                return tostring(child:IsAlive()) .. '|' .. tostring(liveParent:IsAlive())
             ");
-            r.String.ShouldBe("false");
+            r.String.ShouldBe("false|true");
         }
 
         [Fact]
@@ -11467,10 +11554,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local j = Json.New()
-                local s = j:Encode({v = UInt.FromString('9999999999999999999')})
-                return tostring(s:find('9999999999999999999') ~= nil)
+                return j:Encode({v = UInt.FromString('9999999999999999999')})
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("{\"v\":9999999999999999999}");
         }
 
         [Fact]
@@ -11479,10 +11565,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local y = Yaml.New()
-                local s = y:Encode({v = UInt.FromString('42')})
-                return tostring(s:find('42') ~= nil)
+                return y:Encode({v = UInt.FromString('42')})
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("{\"v\": 42}\n");
         }
 
         [Fact]
@@ -11491,10 +11576,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = Toml.New()
-                local s = t:Encode({v = UInt.FromString('42')})
-                return tostring(s:find('42') ~= nil)
+                return t:Encode({v = UInt.FromString('42')})
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("v = 42\n");
         }
 
         [Fact]
@@ -11503,10 +11587,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local i = Ini.New()
-                local s = i:Encode({sec = {v = UInt.FromString('12345')}})
-                return tostring(s:find('12345') ~= nil)
+                return i:Encode({sec = {v = UInt.FromString('12345')}})
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("[sec]\nv = 12345\n\n");
         }
 
         // UInt Stream write/read
@@ -11560,10 +11643,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local j = Json.New()
-                local s = j:Encode({v = Decimal.FromString('123.456')})
-                return tostring(s:find('123.456') ~= nil)
+                return j:Encode({v = Decimal.FromString('123.456')})
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("{\"v\":123.456}");
         }
 
         [Fact]
@@ -11572,10 +11654,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local y = Yaml.New()
-                local s = y:Encode({v = Decimal.FromString('99.95')})
-                return tostring(s:find('99.95') ~= nil)
+                return y:Encode({v = Decimal.FromString('99.95')})
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("{\"v\": \"99.95\"}\n");
         }
 
         [Fact]
@@ -11584,10 +11665,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = Toml.New()
-                local s = t:Encode({v = Decimal.FromString('1.23')})
-                return tostring(s:find('1.23') ~= nil)
+                return t:Encode({v = Decimal.FromString('1.23')})
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("v = \"1.23\"\n");
         }
 
         [Fact]
@@ -11596,10 +11676,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local i = Ini.New()
-                local s = i:Encode({sec = {price = Decimal.FromString('9.99')}})
-                return tostring(s:find('9.99') ~= nil)
+                return i:Encode({sec = {price = Decimal.FromString('9.99')}})
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("[sec]\nprice = 9.99\n\n");
         }
 
         [Fact]
@@ -11720,10 +11799,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local j  = Json.New()
                 local dt = DateTime.New(2024, 6, 15, 12, 0, 0, 0, 0)
-                local s  = j:Encode({ts = dt})
-                return tostring(s:find('2024') ~= nil)
+                return j:Encode({ts = dt})
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("{\"ts\":\"2024-06-15T12:00:00.000Z\"}");
         }
 
         [Fact]
@@ -11733,10 +11811,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local y  = Yaml.New()
                 local dt = DateTime.New(2024, 6, 15, 12, 0, 0, 0, 0)
-                local s  = y:Encode({ts = dt})
-                return tostring(s:find('2024') ~= nil)
+                return y:Encode({ts = dt})
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("{\"ts\": \"2024-06-15T12:00:00.000Z\"}\n");
         }
 
         [Fact]
@@ -11812,10 +11889,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local x  = Xml.New()
                 local dt = DateTime.New(2025, 3, 1, 0, 0, 0, 0, 0)
-                local s  = x:Encode({tag='root', text=dt})
-                return tostring(s:find('2025') ~= nil)
+                return x:Encode({tag='root', text=dt})
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("<?xml version=\"1.0\" encoding=\"UTF-8\"?><root>2025-03-01T00:00:00.000Z</root>");
         }
 
         // TimeSpan
@@ -12198,10 +12274,10 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync("return TimeSpan.FromSeconds(3661)");
             r.Type.ShouldBe(LuaType.TimeSpan);
 
-            // Lua format always includes milliseconds: "01:01:01.000"
-            // .NET TimeSpan.ToString("c") omits fractional seconds when zero: "01:01:01"
-            // Verify both the Lua string and that AsTimeSpan round-trips correctly instead.
+            // Lua format always includes milliseconds, unlike .NET TimeSpan.ToString("c") which omits zero fractions.
             r.AsTimeSpan.TotalSeconds.ShouldBe(3661, tolerance: 0.001);
+            LuaValue text = await engine.ExecuteStringAsync("return tostring(TimeSpan.FromSeconds(3661))");
+            text.String.ShouldBe("01:01:01.000");
         }
 
         // DateTime bridge (typed binary)
@@ -12298,7 +12374,7 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync("return Identifier.FromString('aabbccdd-eeff-4011-8899-aabbccddeeff')");
             r.Type.ShouldBe(LuaType.Identifier);
-            r.AsGuid.ShouldNotBe(Guid.Empty);
+            r.AsGuid.ShouldBe(Guid.Parse("aabbccdd-eeff-4011-8899-aabbccddeeff"));
         }
 
         [Fact]

@@ -775,21 +775,33 @@ public sealed class SQLiteTests
     {
         using KitsuneEngine engine = new();
 
-        // Setting and then clearing a busy handler must not crash; with no
-        // contention the handler is never invoked.
+        // A second connection holding the write lock makes BEGIN IMMEDIATE contend: the installed
+        // handler is called once and gives up; after clearing it, it is no longer called.
         LuaValue r = await engine.ExecuteStringAsync(@"
-			local db = SQLite.Open()
-			local invoked = false
-			db:SetBusyHandler(function(retries)
-				invoked = true
+			local path = FileSystem.GetTempFileName()
+			local holder = SQLite.Open(path)
+			local db = SQLite.Open(path)
+			holder:Query('CREATE TABLE t (n INTEGER)')
+			holder:Query('BEGIN IMMEDIATE')
+			local calls = 0
+			db:SetBusyHandler(function(_, retries)
+				calls = calls + 1
 				return false
 			end)
-			db:Query('CREATE TABLE t (n INTEGER)'); db:Fetch()
-			db:SetBusyHandler(nil)   -- clear the handler
+			local ok, err = db:Query('BEGIN IMMEDIATE')
+			local callsWhileSet = calls
+			db:SetBusyHandler(nil)
+			db:Query('BEGIN IMMEDIATE')
+			local callsAfterClear = calls
+			holder:Query('ROLLBACK')
+			holder:Close()
 			db:Close()
-			return tostring(invoked == false)
+			FileSystem.Delete(path)
+			FileSystem.Delete(path .. '-wal')
+			FileSystem.Delete(path .. '-shm')
+			return tostring(ok) .. '|' .. tostring(err) .. '|' .. callsWhileSet .. '|' .. callsAfterClear
 		");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("false|database is locked|1|1");
     }
 
     // Open modes
@@ -798,15 +810,27 @@ public sealed class SQLiteTests
     {
         using KitsuneEngine engine = new();
 
-        // Mode 1 (multithread) must open without error and allow queries.
+        // Any non-zero mode forces WAL on a file database; the threading config itself is
+        // process-global and not observable per connection.
         LuaValue r = await engine.ExecuteStringAsync(@"
-			local db = SQLite.Open(nil, 1)
-			local ok, _ = db:Query('SELECT 1')
-			db:Fetch()
+			local path = FileSystem.GetTempFileName()
+			local db = SQLite.Open(path, 0)
+			db:Query('CREATE TABLE t (n INTEGER)')
 			db:Close()
-			return tostring(ok == true)
+			db = SQLite.Open(path, 1)
+			local ok = db:Query('SELECT 1')
+			db:Fetch()
+			db:Query('PRAGMA journal_mode')
+			db:Fetch()
+			local mode = db:GetRow(1)
+			db:Close()
+			FileSystem.Delete(path)
+			FileSystem.Delete(path .. '-wal')
+			FileSystem.Delete(path .. '-shm')
+			FileSystem.Delete(path .. '-journal')
+			return tostring(ok) .. '|' .. tostring(mode)
 		");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("true|wal");
     }
 
     [Fact]
@@ -814,15 +838,27 @@ public sealed class SQLiteTests
     {
         using KitsuneEngine engine = new();
 
-        // Mode 2 (serialized) must open without error and allow queries.
+        // Any non-zero mode forces WAL on a file database; the threading config itself is
+        // process-global and not observable per connection.
         LuaValue r = await engine.ExecuteStringAsync(@"
-			local db = SQLite.Open(nil, 2)
-			local ok, _ = db:Query('SELECT 1')
-			db:Fetch()
+			local path = FileSystem.GetTempFileName()
+			local db = SQLite.Open(path, 0)
+			db:Query('CREATE TABLE t (n INTEGER)')
 			db:Close()
-			return tostring(ok == true)
+			db = SQLite.Open(path, 2)
+			local ok = db:Query('SELECT 1')
+			db:Fetch()
+			db:Query('PRAGMA journal_mode')
+			db:Fetch()
+			local mode = db:GetRow(1)
+			db:Close()
+			FileSystem.Delete(path)
+			FileSystem.Delete(path .. '-wal')
+			FileSystem.Delete(path .. '-shm')
+			FileSystem.Delete(path .. '-journal')
+			return tostring(ok) .. '|' .. tostring(mode)
 		");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("true|wal");
     }
 
     // File database
@@ -863,17 +899,17 @@ public sealed class SQLiteTests
             using KitsuneEngine engine = new();
             engine.SetVariable("DB_PATH", dbPath);
 
-            // sqlite_master always exists; querying it must succeed and return a table.
             LuaValue r = await engine.ExecuteStringAsync(@"
 				local db = SQLite.Open(DB_PATH)
+				db:Query('CREATE TABLE _kitsune_list_tables_probe (v TEXT)')
 				local ok, err = db:Query([[SELECT name FROM sqlite_master WHERE type='table' ORDER BY name]])
 				if not ok then db:Close(); return tostring(err) end
-				local names = {}
+				local found = false
 				while db:Fetch() do
-					table.insert(names, tostring(db:GetRow(1)))
+					if db:GetRow(1) == '_kitsune_list_tables_probe' then found = true end
 				end
 				db:Close()
-				return tostring(type(names) == 'table')
+				return tostring(found)
 			");
             r.String.ShouldBe("true");
         }

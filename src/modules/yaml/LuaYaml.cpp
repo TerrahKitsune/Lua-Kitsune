@@ -21,14 +21,15 @@ LuaYaml* luaL_checkyaml(lua_State* L, int idx) {
 
 int Yaml_Dispose(lua_State* L) {
 	LuaYaml* y = luaL_checkyaml(L, 1);
-	if (y->out) {
-		kitsune_free(y->out);
-		y->out = NULL;
-	}
-	if (y->rec) {
-		kitsune_free(y->rec);
-		y->rec = NULL;
-	}
+	// Sizes are reset with the buffers so a disposed instance can still be used.
+	kitsune_free(y->out);
+	y->out = NULL;
+	y->outLen = 0;
+	y->outCap = 0;
+	kitsune_free(y->rec);
+	y->rec = NULL;
+	y->recLen = 0;
+	y->recCap = 0;
 	return 0;
 }
 

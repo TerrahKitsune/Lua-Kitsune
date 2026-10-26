@@ -266,10 +266,13 @@ public sealed class MongoTests
     public async Task GC_ExplicitClose_DoesNotCrash()
     {
         using KitsuneEngine engine = TestRun.NewEngine();
-        await RunAsync(engine, $@"
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             db:Close()
+            local ok, err = db:Find({Db()}, {Coll()}, {{}})
+            return tostring(db) .. ':' .. tostring(ok) .. ':' .. tostring(err)
         ");
+        r.String.ShouldBe("MongoDB: (closed):false:connection is closed");
     }
 
     [MongoFact]
@@ -348,7 +351,7 @@ public sealed class MongoTests
     }
 
     [MongoFact]
-    public async Task IsFinished_WhileRunning_ReturnsFalse()
+    public async Task IsFinished_AfterWait_ReturnsTrue()
     {
         using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await RunAsync(engine, $@"
@@ -447,11 +450,14 @@ public sealed class MongoTests
     {
         // luamongo_gc guards on m->worker == NULL; double-close must be safe
         using KitsuneEngine engine = TestRun.NewEngine();
-        await RunAsync(engine, $@"
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             db:Close()
-            db:Close()
+            local ok = pcall(db.Close, db)
+            local started, err = db:Find({Db()}, {Coll()}, {{}})
+            return tostring(ok) .. ':' .. tostring(db) .. ':' .. tostring(started) .. ':' .. tostring(err)
         ");
+        r.String.ShouldBe("true:MongoDB: (closed):false:connection is closed");
     }
 
     [MongoFact]
@@ -933,7 +939,7 @@ public sealed class MongoTests
             db:Command('admin', {{invalidCmd=1}})
             db:Wait()
             local res, err = db:GetResult()
-            return tostring(res == nil) .. ':' .. tostring(type(err) == 'string' and #err > 0)
+            return tostring(res == nil) .. ':' .. tostring(type(err) == 'string' and err:find('invalidCmd', 1, true) ~= nil)
         ");
         r.String.ShouldBe("true:true");
     }
@@ -1013,14 +1019,16 @@ public sealed class MongoTests
             db:Wait()
             local res, err = db:GetResult()
             if err then error(err) end
+            local again, againErr = db:GetResult()
+            local summary = tostring(res.ok == 1) .. ':' .. tostring(again) .. ':' .. tostring(againErr)
             -- Nil the local and force GC; if the anchor were still in the
             -- registry the finalizer would not run, but we can at least
             -- verify the connection remains usable (no double-free crash).
             db = nil
             collectgarbage('collect')
-            return tostring(err == nil)
+            return summary
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("true:nil:no active operation");
     }
 
     [MongoFact]
@@ -1164,6 +1172,7 @@ public sealed class MongoTests
                 b     = true,
                 n     = false,
                 dt    = now,
+                nul   = print,
             }})
             db:Wait(); db:GetResult()
             db:FindOne({Db()}, {Coll()}, {{_id=id}})
@@ -1177,6 +1186,9 @@ public sealed class MongoTests
                     and doc.b == true
                     and doc.n == false
                     and Identifier.GetType(doc._id) == 'OID'
+                    and DateTime.UnixMilliseconds(doc.dt) == DateTime.UnixMilliseconds(now)
+                    and DateTime.OffsetMinutes(doc.dt) == 0
+                    and doc.nul == nil
             return tostring(ok)
         ");
         r.String.ShouldBe("true");
@@ -1508,10 +1520,12 @@ public sealed class MongoTests
         using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
+            local before = tostring(db):sub(1, 8)
             db:Close()
-            return 'ok'
+            local started, err = db:CountDocuments({Db()}, {Coll()}, {{}})
+            return before .. ':' .. tostring(db) .. ':' .. tostring(started) .. ':' .. tostring(err)
         ");
-        r.String.ShouldBe("ok");
+        r.String.ShouldBe("MongoDB::MongoDB: (closed):false:connection is closed");
     }
 
     [MongoFact]
@@ -1527,16 +1541,22 @@ public sealed class MongoTests
                 db:InsertOne({Db()}, {Coll()}, {{tag=tag, n=i}})
                 db:Wait(); db:GetResult()
             end
-            db:Find({Db()}, {Coll()}, {{tag=tag}}, 5, 0); db:Wait(); db:GetResult()
-            db:FindOne({Db()}, {Coll()}, {{tag=tag}}); db:Wait(); db:GetResult()
-            db:CountDocuments({Db()}, {Coll()}, {{tag=tag}}); db:Wait(); db:GetResult()
-            db:UpdateMany({Db()}, {Coll()}, {{tag=tag}}, {{['$set']={{checked=true}}}}); db:Wait(); db:GetResult()
-            db:DeleteMany({Db()}, {Coll()}, {{tag=tag}}); db:Wait(); db:GetResult()
-            db:Command('admin', {{ping=1}}); db:Wait(); db:GetResult()
+            db:Find({Db()}, {Coll()}, {{tag=tag}}, 5, 0); db:Wait()
+            local rows = db:GetResult()
+            db:FindOne({Db()}, {Coll()}, {{tag=tag}}); db:Wait()
+            local one = db:GetResult()
+            db:CountDocuments({Db()}, {Coll()}, {{tag=tag}}); db:Wait()
+            local count = db:GetResult()
+            db:UpdateMany({Db()}, {Coll()}, {{tag=tag}}, {{['$set']={{checked=true}}}}); db:Wait()
+            local upd = db:GetResult()
+            db:DeleteMany({Db()}, {Coll()}, {{tag=tag}}); db:Wait()
+            local del = db:GetResult()
+            db:Command('admin', {{ping=1}}); db:Wait()
+            local ping = db:GetResult()
             db:Close()
-            return 'ok'
+            return #rows .. ':' .. tostring(one.tag == tag) .. ':' .. count .. ':' .. upd.matchedCount .. ':' .. upd.modifiedCount .. ':' .. del.deletedCount .. ':' .. tostring(ping.ok == 1) .. ':' .. tostring(db)
         ");
-        r.String.ShouldBe("ok");
+        r.String.ShouldBe("5:true:5:5:5:5:true:MongoDB: (closed)");
     }
 
     [MongoFact]
@@ -1613,12 +1633,16 @@ public sealed class MongoTests
             local doc, err = db:GetResult()
             if err then error(err) end
             db:UpdateOne({Db()}, {Coll()}, {{_id=id}}, {{['$set']={{v=2}}}})
-            db:Wait(); db:GetResult()
+            db:Wait()
+            local upd, err2 = db:GetResult()
+            if err2 then error(err2) end
             db:DeleteOne({Db()}, {Coll()}, {{_id=id}})
-            db:Wait(); db:GetResult()
-            return tostring(doc ~= nil) .. ':' .. tostring(doc.v == 1)
+            db:Wait()
+            local del, err3 = db:GetResult()
+            if err3 then error(err3) end
+            return tostring(doc ~= nil) .. ':' .. tostring(doc.v == 1) .. ':' .. tostring(upd.matchedCount) .. ':' .. tostring(upd.modifiedCount) .. ':' .. tostring(del.deletedCount)
         ");
-        r.String.ShouldBe("true:true");
+        r.String.ShouldBe("true:true:1:1:1");
     }
 
     // AliveToken integration
@@ -1629,11 +1653,13 @@ public sealed class MongoTests
         LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local token = AliveToken.New()
-            db:SetAliveToken(token)
+            local attached = pcall(db.SetAliveToken, db, token)
+            db:CountDocuments({Db()}, {Coll()}, {{}})
+            local count, err = db:GetResult()
             db:Close()
-            return 'ok'
+            return tostring(attached) .. ':' .. math.type(count) .. ':' .. tostring(err)
         ");
-        r.String.ShouldBe("ok");
+        r.String.ShouldBe("true:integer:nil");
     }
 
     [MongoFact]
@@ -1645,10 +1671,13 @@ public sealed class MongoTests
             local token = AliveToken.New()
             db:SetAliveToken(token)
             db:SetAliveToken(nil)
+            token:Dispose()
+            db:CountDocuments({Db()}, {Coll()}, {{}})
+            local count, err = db:GetResult()
             db:Close()
-            return 'ok'
+            return tostring(math.type(count)) .. ':' .. tostring(err)
         ");
-        r.String.ShouldBe("ok");
+        r.String.ShouldBe("integer:nil");
     }
 
     [MongoFact]

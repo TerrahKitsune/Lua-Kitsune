@@ -58,13 +58,14 @@ public sealed class ArchiveTests
             local arc, err = Archive.OpenRead((...))
             assert(arc, err or "failed to open archive")
             local entries = Archive.Entries(arc)
+            local sizes = {}
             for i = 1, #entries do
-                assert(entries[i].Size >= 0, "entry " .. i .. " has negative size")
+                sizes[entries[i].Name] = entries[i].Size
             end
-            return "ok"
+            return sizes["this is a test file.txt"] .. '|' .. sizes["this is also a test file.txt"]
             """,
             args: [LuaValue.FromString(path)]);
-        r.String.ShouldBe("ok");
+        r.String.ShouldBe("25|171");
     }
 
     // ReadAll
@@ -80,10 +81,10 @@ public sealed class ArchiveTests
             assert(name, "SetEntry returned nil for entry 1")
             local data = Archive.ReadAll(arc)
             assert(data ~= nil, "ReadAll returned nil")
-            return tostring(#data > 0)
+            return data
             """,
             args: [LuaValue.FromString(path)]);
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("it contains a text string");
     }
 
     [Theory]
@@ -98,10 +99,10 @@ public sealed class ArchiveTests
             assert(name, "SetEntry returned nil for entry 2")
             local data = Archive.ReadAll(arc)
             assert(data ~= nil, "ReadAll returned nil")
-            return tostring(#data > 0)
+            return data
             """,
             args: [LuaValue.FromString(path)]);
-        r.String.ShouldBe("true");
+        r.String.ShouldBe(string.Concat(Enumerable.Repeat("bla", 57)));
     }
 
     [Theory]
@@ -145,11 +146,10 @@ public sealed class ArchiveTests
                     parts[#parts + 1] = chunk
                 end
             until chunk == nil
-            local assembled = table.concat(parts)
-            return tostring(#assembled == size)
+            return table.concat(parts)
             """,
             args: [LuaValue.FromString(path)]);
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("it contains a text string");
     }
 
     // OpenRead error handling
