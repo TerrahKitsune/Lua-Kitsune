@@ -116,9 +116,9 @@ public sealed class PostgresTests
 			local stopMs = Time() - t0
 			local ok, v = conn:Scalar('SELECT 42')
 			conn:Close()
-			return tostring(ok == true and v == 42 and stopMs < 8000) .. ' ' .. tostring(v) .. ' ' .. stopMs
+			return tostring(ok) .. ':' .. tostring(v) .. ':stopMs<8000=' .. tostring(stopMs < 8000) .. ' ' .. stopMs
 		");
-        r.String.ShouldStartWith("true");
+        r.String.ShouldStartWith("true:42:stopMs<8000=true ");
     }
 
     [PostgresFact]
@@ -156,10 +156,10 @@ public sealed class PostgresTests
 			local _, ok  = conn:Scalar(""SELECT '2024-01-01 12:00:00'::timestamptz"")
 			conn:Close()
 			-- The exact LMT offset depends on the server's tzdata; it always has seconds.
-			local lmtShape = type(lmt) == 'string' and lmt:match('[+-]%d%d:%d%d:%d%d$') ~= nil
-			return type(bc) .. ':' .. tostring(bc) .. ',' .. tostring(lmtShape) .. ',' .. type(ok)
+			local lmtShape = tostring(lmt):match('[+-]%d%d:%d%d:%d%d$') ~= nil
+			return type(bc) .. ':' .. tostring(bc) .. ',' .. type(lmt) .. ':' .. tostring(lmtShape) .. ',' .. type(ok)
 		");
-        r.String.ShouldBe("string:0044-03-15 BC,true,userdata");
+        r.String.ShouldBe("string:0044-03-15 BC,string:true,userdata");
     }
 
     [PostgresFact]
@@ -461,9 +461,9 @@ public sealed class PostgresTests
         LuaValue r = await engine.ExecuteStringAsync($@"
 			local conn = assert({ConnectLua()})
 			local ok, err = conn:NonQuery('NOT VALID SQL AT ALL')
-			return tostring(ok == false and type(err) == 'string' and #err > 0)
+			return tostring(ok) .. ':' .. type(err) .. ':len>0=' .. tostring(#tostring(err) > 0)
 		");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("false:string:len>0=true");
     }
 
     [PostgresFact]
@@ -510,9 +510,9 @@ public sealed class PostgresTests
         LuaValue r = await engine.ExecuteStringAsync($@"
 			local conn = assert({ConnectLua()})
 			local ok, err = conn:Scalar('NOT VALID SQL')
-			return tostring(ok == false and type(err) == 'string')
+			return tostring(ok) .. ':' .. type(err)
 		");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("false:string");
     }
 
     [PostgresFact]
@@ -559,9 +559,9 @@ public sealed class PostgresTests
         LuaValue r = await engine.ExecuteStringAsync($@"
 			local conn = assert({ConnectLua()})
 			local ok, rows = conn:QueryAll('SELECT 10::int, 20::int, 30::int')
-			return tostring(ok and rows[1][1] == 10 and rows[1][2] == 20 and rows[1][3] == 30)
+			return tostring(ok) .. ':' .. tostring(rows[1][1]) .. ':' .. tostring(rows[1][2]) .. ':' .. tostring(rows[1][3])
 		");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("true:10:20:30");
     }
 
     [PostgresFact]
@@ -571,9 +571,9 @@ public sealed class PostgresTests
         LuaValue r = await engine.ExecuteStringAsync($@"
 			local conn = assert({ConnectLua()})
 			local ok, err = conn:QueryAll('NOT VALID SQL')
-			return tostring(ok == false and type(err) == 'string')
+			return tostring(ok) .. ':' .. type(err)
 		");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("false:string");
     }
 
     [PostgresFact]

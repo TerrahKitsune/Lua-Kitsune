@@ -34,12 +34,11 @@ public sealed class MiscBugFixTests
             arc = nil
             collectgarbage('collect')
             collectgarbage('collect')
-            return tostring(name == nil and type(msg) == 'string'
-                and name2 == nil and type(msg2) == 'string'
-                and not readOk)
+            return type(name) .. '|' .. type(msg) .. '|' .. type(name2) .. '|' .. type(msg2)
+                .. '|' .. tostring(readOk)
             """,
             args: [LuaValue.FromString(path)]);
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("nil|string|nil|string|false");
     }
 
     // Base64
@@ -49,10 +48,10 @@ public sealed class MiscBugFixTests
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync(@"
             local d = Base64.Decode('')
-            return tostring(d == '' and Base64.Decode('abc') == nil
-                and Base64.Decode(Base64.Encode('hi')) == 'hi')
+            return '[' .. tostring(d) .. ']|' .. tostring(Base64.Decode('abc')) .. '|'
+                .. tostring(Base64.Decode(Base64.Encode('hi')))
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("[]|nil|hi");
     }
 
     // Aes
@@ -72,9 +71,10 @@ public sealed class MiscBugFixTests
             ctx:SetIV(iv)
             local dec   = ctx:Decrypt(enc2)
             local tooLong = pcall(ctx.SetIV, ctx, string.rep('x', 17))
-            return tostring(enc1 == enc0 and enc1 == enc2 and dec == plain and not tooLong)
+            return tostring(enc1 == enc0) .. '|' .. tostring(enc1 == enc2) .. '|' .. tostring(dec)
+                .. '|' .. tostring(tooLong)
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("true|true|short iv round trip test|false");
     }
 
     // Hashing
@@ -87,11 +87,10 @@ public sealed class MiscBugFixTests
             local a, ra = h:Finish()
             local b, rb = h:Finish()
             local okUpdate, err = pcall(h.Update, h, 'more')
-            return tostring(a == b and ra == rb and #ra == 16
-                and a == '900150983cd24fb0d6963f7d28e17f72'
-                and not okUpdate and tostring(err):find('already finished', 1, true) ~= nil)
+            return tostring(a) .. '|' .. tostring(b) .. '|' .. tostring(ra == rb) .. '|' .. #ra
+                .. '|' .. tostring(okUpdate) .. '|' .. tostring(tostring(err):match('already finished'))
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("900150983cd24fb0d6963f7d28e17f72|900150983cd24fb0d6963f7d28e17f72|true|16|false|already finished");
     }
 
     [Fact]
@@ -103,11 +102,12 @@ public sealed class MiscBugFixTests
             local a, ra = h:Finish()
             local b, rb = h:Finish()
             local okUpdate, err = pcall(h.Update, h, 'more')
-            return tostring(a == b and ra == rb and #ra == 32
-                and a == 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
-                and not okUpdate and tostring(err):find('already finished', 1, true) ~= nil)
+            return tostring(a) .. '|' .. tostring(b) .. '|' .. tostring(ra == rb) .. '|' .. #ra
+                .. '|' .. tostring(okUpdate) .. '|' .. tostring(tostring(err):match('already finished'))
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe(
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad|"
+            + "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad|true|32|false|already finished");
     }
 
     [Fact]
@@ -118,10 +118,10 @@ public sealed class MiscBugFixTests
             local h = SHA1.New(); h:Update('abc')
             local a, ra = h:Finish()
             local b, rb = h:Finish()
-            return tostring(a == b and ra == rb and #ra == 20
-                and a == 'a9993e364706816aba3e25717850c26c9cd0d89d')
+            return tostring(a) .. '|' .. tostring(b) .. '|' .. tostring(ra == rb) .. '|' .. #ra
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe(
+            "a9993e364706816aba3e25717850c26c9cd0d89d|a9993e364706816aba3e25717850c26c9cd0d89d|true|20");
     }
 
     // GetMemory
@@ -130,8 +130,8 @@ public sealed class MiscBugFixTests
     {
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync(
-            "local m = GetMemory(); return tostring(math.type(m) == 'integer' and m > 0)");
-        r.String.ShouldBe("true");
+            "local m = GetMemory(); return tostring(math.type(m)) .. '|' .. tostring(m > 0)");
+        r.String.ShouldBe("integer|true");
     }
 
     // Dns
@@ -156,9 +156,9 @@ public sealed class MiscBugFixTests
         LuaValue r = await engine.ExecuteStringAsync(@"
             local p = Process.Open()
             local prio = p:Priority()
-            return tostring(math.type(prio) == 'integer' and prio > 1)
+            return tostring(math.type(prio)) .. '|' .. tostring(prio > 1)
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("integer|true");
     }
 
     [WindowsOnlyFact]
@@ -168,10 +168,10 @@ public sealed class MiscBugFixTests
         LuaValue r = await engine.ExecuteStringAsync(@"
             local p = Process.Open()
             local procMask, sysMask = p:Affinity()
-            return tostring(math.type(procMask) == 'integer' and math.type(sysMask) == 'integer'
-                and procMask ~= 0 and sysMask ~= 0)
+            return tostring(math.type(procMask)) .. '|' .. tostring(math.type(sysMask))
+                .. '|' .. tostring(procMask ~= 0) .. '|' .. tostring(sysMask ~= 0)
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("integer|integer|true|true");
     }
 
     // DateTime.Parse: whole-hour offsets (Postgres TIMESTAMPTZ output)

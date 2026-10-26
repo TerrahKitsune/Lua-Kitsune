@@ -261,9 +261,9 @@ public sealed class KafkaTests
             local ok, err = p:Send(topic, 'test-key', value)
             p:Close()
             local msg = receive(start, value)
-            return tostring(ok) .. ':' .. tostring(err == nil) .. ':' .. tostring(msg and msg.Key) .. ':' .. tostring(msg and msg.Value == value)
+            return tostring(ok) .. ':' .. tostring(err) .. ':' .. tostring(msg and msg.Key) .. ':' .. tostring(msg and msg.Value == value)
         ");
-        r.String.ShouldBe("true:true:test-key:true");
+        r.String.ShouldBe("true:nil:test-key:true");
     }
 
     [KafkaFact]
@@ -277,9 +277,9 @@ public sealed class KafkaTests
             local ok, err = p:Send(topic, nil, value)
             p:Close()
             local msg = receive(start, value)
-            return tostring(ok) .. ':' .. tostring(err == nil) .. ':' .. tostring(msg ~= nil and msg.Key == nil) .. ':' .. tostring(msg and msg.Value == value)
+            return tostring(ok) .. ':' .. tostring(err) .. ':' .. tostring(msg ~= nil) .. ':' .. tostring(msg and msg.Key) .. ':' .. tostring(msg and msg.Value == value)
         ");
-        r.String.ShouldBe("true:true:true:true");
+        r.String.ShouldBe("true:nil:true:nil:true");
     }
 
     [KafkaFact]
@@ -293,10 +293,10 @@ public sealed class KafkaTests
             local ok, err = p:Send(topic, 'hdr-key', value, {source='kitsune-test', version='1'})
             p:Close()
             local msg = receive(start, value)
-            return tostring(ok) .. ':' .. tostring(err == nil) .. ':' .. tostring(msg and msg.Key) .. ':' .. tostring(msg and msg.Value == value) ..
+            return tostring(ok) .. ':' .. tostring(err) .. ':' .. tostring(msg and msg.Key) .. ':' .. tostring(msg and msg.Value == value) ..
                    ':' .. tostring(msg and msg.Headers.source) .. ':' .. tostring(msg and msg.Headers.version)
         ");
-        r.String.ShouldBe("true:true:hdr-key:true:kitsune-test:1");
+        r.String.ShouldBe("true:nil:hdr-key:true:kitsune-test:1");
     }
 
     [KafkaFact]
@@ -312,10 +312,10 @@ public sealed class KafkaTests
                 {src='kitsune-test'}, part)
             p:Close()
             local msg = receive(start, value)
-            return tostring(ok) .. ':' .. tostring(err == nil) .. ':' .. tostring(msg and msg.Key) .. ':' .. tostring(msg and msg.Value == value) ..
+            return tostring(ok) .. ':' .. tostring(err) .. ':' .. tostring(msg and msg.Key) .. ':' .. tostring(msg and msg.Value == value) ..
                    ':' .. tostring(msg and msg.Partition) .. ':' .. tostring(msg and msg.Headers.src)
         ");
-        r.String.ShouldBe("true:true:hdrpart-key:true:0:kitsune-test");
+        r.String.ShouldBe("true:nil:hdrpart-key:true:0:kitsune-test");
     }
 
     [KafkaFact]
@@ -332,9 +332,9 @@ public sealed class KafkaTests
             consumer:Close()
 
             if #got == 0 then return 'no-message' end
-            return tostring(got[1].Headers.x == '42' and got[1].Headers.y == 'hello')
+            return tostring(got[1].Headers.x) .. '|' .. tostring(got[1].Headers.y)
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("42|hello");
     }
 
     // consumer
@@ -375,19 +375,11 @@ public sealed class KafkaTests
             if #got == 0 then return 'no-message' end
             local data = got[1]
             -- Verify the required fields are present and have the right types
-            local ok =
-                type(data.Value)     == 'string'  and
-                type(data.Topic)     == 'string'  and
-                type(data.Partition) == 'number'  and
-                type(data.Offset)    == 'number'  and
-                type(data.Timestamp) == 'number'  and
-                type(data.ErrorCode) == 'number'  and
-                type(data.Error)     == 'string'  and
-                type(data.Headers)   == 'table'   and
-                data.Key             == 'fields-key'
-            return tostring(ok)
+            return type(data.Value) .. '|' .. type(data.Topic) .. '|' .. type(data.Partition) .. '|' .. type(data.Offset) ..
+                   '|' .. type(data.Timestamp) .. '|' .. type(data.ErrorCode) .. '|' .. type(data.Error) ..
+                   '|' .. type(data.Headers) .. '|' .. tostring(data.Key)
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("string|string|number|number|number|number|string|table|fields-key");
     }
 
     // implicit commit via next Poll
@@ -471,12 +463,9 @@ public sealed class KafkaTests
             if not ok then return 'err:' .. tostring(descs) end
             if #descs == 0 then return 'empty' end
             local d = descs[1]
-            local valid = type(d.GroupId)  == 'string' and
-                          type(d.State)    == 'string' and
-                          type(d.Members)  == 'table'
-            return tostring(valid)
+            return type(d.GroupId) .. '|' .. type(d.State) .. '|' .. type(d.Members)
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("string|string|table");
     }
 
     [KafkaFact]
@@ -508,9 +497,9 @@ public sealed class KafkaTests
             until Time() > deadline
             p:Close()
             if not ok then return 'err:' .. tostring(offsets) end
-            return tostring(type(offsets) == 'table' and next(offsets) ~= nil)
+            return type(offsets) .. '|nonEmpty=' .. tostring(type(offsets) == 'table' and next(offsets) ~= nil)
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("table|nonEmpty=true");
     }
 
     [KafkaFact]
@@ -622,12 +611,9 @@ public sealed class KafkaTests
             p:Close()
             if not ok then return 'err:' .. tostring(cfg) end
             -- retention.ms and cleanup.policy are always present on any topic
-            local valid = type(cfg) == 'table'
-                         and cfg['retention.ms']    ~= nil
-                         and cfg['cleanup.policy']   ~= nil
-            return tostring(valid)
+            return type(cfg) .. '|retention.ms=' .. type(cfg['retention.ms']) .. '|cleanup.policy=' .. type(cfg['cleanup.policy'])
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("table|retention.ms=string|cleanup.policy=string");
     }
 
     [KafkaFact]
@@ -698,9 +684,9 @@ public sealed class KafkaTests
             local ok, cfg = c:GetTopicConfig(topic)
             c:Close()
             if not ok then return 'err:' .. tostring(cfg) end
-            return tostring(type(cfg) == 'table' and cfg['retention.ms'] ~= nil)
+            return type(cfg) .. '|retention.ms=' .. type(cfg['retention.ms'])
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("table|retention.ms=string");
     }
 
     // CreateTopic / DestroyTopic
@@ -797,9 +783,9 @@ public sealed class KafkaTests
             local p = newProducer()
             local ok, err = p:DestroyTopic(res('never_created'))
             p:Close()
-            return tostring(not ok) .. ':' .. tostring(type(err) == 'string')
+            return tostring(ok) .. ':' .. type(err)
         ");
-        r.String.ShouldBe("true:true");
+        r.String.ShouldBe("false:string");
     }
 
     // Assign with offset / Seek
@@ -853,9 +839,9 @@ public sealed class KafkaTests
             end, 1)
 
             consumer:Close()
-            return tostring(#got >= 1)
+            return 'got>=1=' .. tostring(#got >= 1) .. ' got=' .. #got
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldStartWith("got>=1=true");
     }
 
     [KafkaFact]
@@ -921,9 +907,9 @@ public sealed class KafkaTests
             local ok, descs = p:DescribeGroups({g1, g2})
             p:Close()
             if not ok then return 'err:' .. tostring(descs) end
-            return tostring(#descs == 2)
+            return tostring(#descs)
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("2");
     }
 
     [KafkaFact]
@@ -962,9 +948,9 @@ public sealed class KafkaTests
             local p = newProducer()
             local ok, cfg = p:GetTopicConfig(res('never_created'))
             p:Close()
-            return tostring(not ok) .. ':' .. tostring(type(cfg) == 'string')
+            return tostring(ok) .. ':' .. type(cfg)
         ");
-        r.String.ShouldBe("true:true");
+        r.String.ShouldBe("false:string");
     }
 
     [KafkaFact]
@@ -996,9 +982,9 @@ public sealed class KafkaTests
             local again = pollUntil(consumer, isOurs, count)
 
             consumer:Close()
-            return tostring(#again >= 1)
+            return 'again>=1=' .. tostring(#again >= 1) .. ' again=' .. #again
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldStartWith("again>=1=true");
     }
 
     [KafkaFact]
@@ -1054,10 +1040,9 @@ public sealed class KafkaTests
             p:Close()
 
             if not ok then return 'err:' .. tostring(low) end
-            local valid = type(low) == 'number' and type(high) == 'number' and high >= low
-            return tostring(valid) .. ' low=' .. low .. ' high=' .. high
+            return type(low) .. '|' .. type(high) .. '|high>=low=' .. tostring(high >= low) .. ' low=' .. low .. ' high=' .. high
         ");
-        r.String.ShouldStartWith("true");
+        r.String.ShouldStartWith("number|number|high>=low=true");
     }
 
     [KafkaFact]
@@ -1069,10 +1054,9 @@ public sealed class KafkaTests
             c:Close()
 
             if not ok then return 'err:' .. tostring(low) end
-            local valid = type(low) == 'number' and type(high) == 'number' and high >= low
-            return tostring(valid) .. ' low=' .. low .. ' high=' .. high
+            return type(low) .. '|' .. type(high) .. '|high>=low=' .. tostring(high >= low) .. ' low=' .. low .. ' high=' .. high
         ");
-        r.String.ShouldStartWith("true");
+        r.String.ShouldStartWith("number|number|high>=low=true");
     }
 
     [KafkaFact]

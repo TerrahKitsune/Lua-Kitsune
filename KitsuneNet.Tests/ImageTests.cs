@@ -118,9 +118,10 @@ public sealed class ImageTests
             local chunk = string.pack('>I4', #data) .. 'tEXt' .. data
                 .. string.pack('>I4', CRC32('tEXt' .. data) & 0xFFFFFFFF)
             local img = Image.FromBytes(png:sub(1, #png - 12) .. chunk .. png:sub(-12))
-            return tostring(img:GetMetadata().tags.Comment == '\xc2\xa9\xc3\x84')
+            local comment = tostring(img:GetMetadata().tags.Comment)
+            return (comment:gsub('.', function(c) return string.format('%02x', c:byte()) end))
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("c2a9c384");
     }
 
     [Fact]

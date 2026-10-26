@@ -396,10 +396,9 @@ public sealed class MySqlTests
                 local _, co = exec('SELECT `Blob`, Json, datetime, `float`, `double`, `decimal`, bool FROM test WHERE String = ?', {{'crud_tnull_' .. RUN_ID}})
                 local ok, row = coroutine.resume(co)
                 coroutine.resume(co, true)
-                local allnil = row[1]==nil and row[2]==nil and row[3]==nil and row[4]==nil and row[5]==nil and row[6]==nil and row[7]==nil
-                return tostring(allnil)
+                return tostring(row[1]) .. '|' .. tostring(row[2]) .. '|' .. tostring(row[3]) .. '|' .. tostring(row[4]) .. '|' .. tostring(row[5]) .. '|' .. tostring(row[6]) .. '|' .. tostring(row[7])
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("nil|nil|nil|nil|nil|nil|nil");
         }
         finally
         {
@@ -507,9 +506,9 @@ public sealed class MySqlTests
         LuaValue r = await engine.ExecuteStringAsync($@"
             local conn = assert({ConnectLua()})
             local ok, err = conn:Scalar('NOT VALID SQL')
-            return tostring(ok == false and type(err) == 'string')
+            return tostring(ok) .. ':' .. type(err)
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("false:string");
     }
 
     [MySqlFact]
@@ -556,9 +555,9 @@ public sealed class MySqlTests
         LuaValue r = await engine.ExecuteStringAsync($@"
             local conn = assert({ConnectLua()})
             local ok, rows = conn:QueryAll('SELECT 10, 20, 30')
-            return tostring(ok and rows[1][1] == 10 and rows[1][2] == 20 and rows[1][3] == 30)
+            return tostring(ok) .. ':' .. tostring(rows[1][1]) .. ':' .. tostring(rows[1][2]) .. ':' .. tostring(rows[1][3])
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("true:10:20:30");
     }
 
     [MySqlFact]
@@ -568,9 +567,9 @@ public sealed class MySqlTests
         LuaValue r = await engine.ExecuteStringAsync($@"
             local conn = assert({ConnectLua()})
             local ok, err = conn:QueryAll('NOT VALID SQL')
-            return tostring(ok == false and type(err) == 'string')
+            return tostring(ok) .. ':' .. type(err)
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("false:string");
     }
 
     [MySqlFact]

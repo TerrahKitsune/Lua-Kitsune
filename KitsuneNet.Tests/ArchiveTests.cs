@@ -166,9 +166,9 @@ public sealed class ArchiveTests
                 data = Archive.ReadAll(arc)
             end
             FileSystem.Delete(copy)
-            return tostring(arc ~= nil and count == 2 and type(data) == 'string') .. '|' .. tostring(err)
+            return tostring(arc ~= nil) .. '|' .. count .. '|' .. type(data) .. '|' .. tostring(err)
             """,
             args: [LuaValue.FromString(path)]);
-        r.String.ShouldBe("true|nil");
+        r.String.ShouldBe("true|2|string|nil");
     }
 }

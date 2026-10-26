@@ -21,10 +21,10 @@ public sealed class ModuleBugFixTests
         LuaValue r = await engine.ExecuteStringAsync(@"
             local t = CSV.Decode('a,b\n1,2')
             local t2 = CSV.Decode('a;b\n1;2')
-            return tostring(#t.Rows == 2 and t.Rows[1][1] == 'a' and t.Rows[2][2] == '2'
-                and #t2.Rows[1] == 1 and t2.Rows[1][1] == 'a;b')
+            return #t.Rows .. '|' .. tostring(t.Rows[1][1]) .. '|' .. tostring(t.Rows[2][2])
+                .. '|' .. #t2.Rows[1] .. '|' .. tostring(t2.Rows[1][1])
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("2|a|2|1|a;b");
     }
 
     [Fact]
@@ -35,11 +35,11 @@ public sealed class ModuleBugFixTests
             local t1 = CSV.Decode('a;b\n1;2', ';')
             local t2 = CSV.Decode('a|b\n1|2', 'auto')
             local t3 = CSV.Decode('a;b', string.byte(';'))
-            return tostring(t1.Rows[1][2] == 'b' and t1.Rows[2][1] == '1'
-                and t2.Rows[1][2] == 'b' and t2.Rows[2][2] == '2'
-                and t3.Rows[1][2] == 'b')
+            return tostring(t1.Rows[1][2]) .. '|' .. tostring(t1.Rows[2][1]) .. '|'
+                .. tostring(t2.Rows[1][2]) .. '|' .. tostring(t2.Rows[2][2]) .. '|'
+                .. tostring(t3.Rows[1][2])
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("b|1|b|2|b");
     }
 
     [Fact]
@@ -279,10 +279,10 @@ public sealed class ModuleBugFixTests
             local conn = assert({{MySqlConnect()}})
             local ok1, err = conn:NonQuery('THIS IS NOT SQL')
             local ok2, v = conn:Scalar('SELECT 5')
-            return tostring(ok1) .. ':' .. tostring(type(err) == 'string' and #err > 0) .. ':'
+            return tostring(ok1) .. ':' .. type(err) .. ':' .. tostring(#tostring(err) > 0) .. ':'
                 .. tostring(ok2) .. ':' .. tostring(v)
             """);
-        r.String.ShouldBe("false:true:true:5");
+        r.String.ShouldBe("false:string:true:true:5");
     }
 
     [MySqlFact]

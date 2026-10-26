@@ -85,11 +85,10 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local id = tostring(Identifier.NewUUID())
-                return tostring(type(id) == 'string' and #id == 36
-                    and id:sub(9,9) == '-' and id:sub(14,14) == '-'
-                    and id:sub(19,19) == '-' and id:sub(24,24) == '-')
+                return type(id) .. '|' .. #id .. '|' .. id:sub(9,9) .. '|' .. id:sub(14,14)
+                    .. '|' .. id:sub(19,19) .. '|' .. id:sub(24,24)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("string|36|-|-|-|-");
         }
 
         [Fact]
@@ -141,9 +140,9 @@ namespace KitsuneNet.Tests
 
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local bin = Identifier.NewUUID():AsBytes()
-                return tostring(type(bin) == 'string' and #bin == 16)
+                return type(bin) .. '|' .. #bin
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("string|16");
         }
 
         [Fact]
@@ -266,9 +265,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local id = tostring(Identifier.NewOID())
-                return tostring(type(id) == 'string' and #id == 24)
+                return type(id) .. '|' .. #id
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("string|24");
         }
 
         [Fact]
@@ -277,9 +276,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local id = tostring(Identifier.NewOID())
-                return tostring(id:match('^%x+$') ~= nil and #id == 24)
+                return tostring(id:match('^%x+$') ~= nil) .. '|' .. #id
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true|24");
         }
 
         [Fact]
@@ -296,9 +295,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local b = Identifier.NewOID():AsBytes()
-                return tostring(type(b) == 'string' and #b == 12)
+                return type(b) .. '|' .. #b
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("string|12");
         }
 
         [Fact]
@@ -329,9 +328,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local b = Identifier.NewOID():AsBytes()
                 local ts = b:byte(1) * 16777216 + b:byte(2) * 65536 + b:byte(3) * 256 + b:byte(4)
-                return tostring(ts > 1700000000 and ts < 4000000000)
+                return 'ts>1700000000=' .. tostring(ts > 1700000000) .. '|ts<4000000000=' .. tostring(ts < 4000000000)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("ts>1700000000=true|ts<4000000000=true");
         }
 
         [Fact]
@@ -437,9 +436,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local id = Identifier.FromBytes(string.rep('\0', 16))
-                return tostring(id ~= nil and id:GetType() == 'UUID')
+                return tostring(id ~= nil) .. '|' .. tostring(id and id:GetType())
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true|UUID");
         }
 
         [Fact]
@@ -460,9 +459,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local id = Identifier.FromBytes(string.rep('\0', 12))
-                return tostring(id ~= nil and id:GetType() == 'OID')
+                return tostring(id ~= nil) .. '|' .. tostring(id and id:GetType())
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true|OID");
         }
 
         [Fact]
@@ -609,9 +608,9 @@ namespace KitsuneNet.Tests
             // UTC tostring ends with 'Z'.
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local s = tostring(DateTime.UtcNow())
-                return tostring(#s >= 24 and s:sub(-1) == 'Z')
+                return 'len>=24=' .. tostring(#s >= 24) .. '|last=' .. s:sub(-1)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("len>=24=true|last=Z");
         }
 
         [Fact]
@@ -620,17 +619,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local dt = DateTime.New(2024, 3, 15, 10, 30, 45, 123, 0)
-                return tostring(
-                    dt:Year()        == 2024 and
-                    dt:Month()       == 3    and
-                    dt:Day()         == 15   and
-                    dt:Hour()        == 10   and
-                    dt:Minute()      == 30   and
-                    dt:Second()      == 45   and
-                    dt:Millisecond() == 123
-                )
+                return table.concat({dt:Year(), dt:Month(), dt:Day(), dt:Hour(), dt:Minute(), dt:Second(), dt:Millisecond()}, '|')
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("2024|3|15|10|30|45|123");
         }
 
         [Fact]
@@ -639,9 +630,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local dt = DateTime.New(2024, 1, 1)
-                return tostring(dt:Hour() == 0 and dt:Minute() == 0 and dt:Second() == 0 and dt:Millisecond() == 0)
+                return table.concat({dt:Hour(), dt:Minute(), dt:Second(), dt:Millisecond()}, '|')
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("0|0|0|0");
         }
 
         [Fact]
@@ -652,9 +643,9 @@ namespace KitsuneNet.Tests
             // Unix 0 = 1970-01-01T00:00:00.000Z
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local dt = DateTime.FromUnixSeconds(0)
-                return tostring(dt:Year() == 1970 and dt:Month() == 1 and dt:Day() == 1 and dt:Hour() == 0)
+                return table.concat({dt:Year(), dt:Month(), dt:Day(), dt:Hour()}, '|')
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("1970|1|1|0");
         }
 
         [Fact]
@@ -663,9 +654,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local dt = DateTime.FromUnixMilliseconds(0)
-                return tostring(dt:Year() == 1970 and dt:Month() == 1 and dt:Day() == 1)
+                return table.concat({dt:Year(), dt:Month(), dt:Day()}, '|')
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("1970|1|1");
         }
 
         [Fact]
@@ -697,10 +688,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local s  = '2024-03-15T10:30:45.123Z'
                 local dt = DateTime.Parse(s)
-                return tostring(dt ~= nil and dt:Year() == 2024 and dt:Month() == 3 and dt:Day() == 15
-                    and dt:Hour() == 10 and dt:Minute() == 30 and dt:Second() == 45 and dt:Millisecond() == 123)
+                return tostring(dt ~= nil) .. '|' .. table.concat({dt:Year(), dt:Month(), dt:Day(), dt:Hour(), dt:Minute(), dt:Second(), dt:Millisecond()}, '|')
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true|2024|3|15|10|30|45|123");
         }
 
         [Fact]
@@ -712,9 +702,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local dt  = DateTime.Parse('2024-06-01T12:00:00.000+02:00')
                 local utc = dt:ToUtc()
-                return tostring(utc:Hour() == 10 and utc:OffsetMinutes() == 0)
+                return utc:Hour() .. '|' .. utc:OffsetMinutes()
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("10|0");
         }
 
         [Fact]
@@ -731,9 +721,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local dt = DateTime.Parse('2024-07-04')
-                return tostring(dt ~= nil and dt:Hour() == 0 and dt:Minute() == 0 and dt:Second() == 0)
+                return tostring(dt ~= nil) .. '|' .. dt:Hour() .. '|' .. dt:Minute() .. '|' .. dt:Second()
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true|0|0|0");
         }
 
         [Fact]
@@ -743,9 +733,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local dt  = DateTime.New(2024, 1, 1, 12, 0, 0, 0, 120)
                 local utc = dt:ToUtc()
-                return tostring(utc:OffsetMinutes() == 0 and utc:Hour() == 10)
+                return utc:OffsetMinutes() .. '|' .. utc:Hour()
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("0|10");
         }
 
         [Fact]
@@ -757,9 +747,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local utc  = DateTime.New(2024, 1, 1, 12, 0, 0, 0, 0)
                 local ist  = utc:ToOffset(330)
-                return tostring(ist:Hour() == 17 and ist:Minute() == 30 and ist:OffsetMinutes() == 330)
+                return ist:Hour() .. '|' .. ist:Minute() .. '|' .. ist:OffsetMinutes()
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("17|30|330");
         }
 
         [Fact]
@@ -769,9 +759,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local dt  = DateTime.New(2024, 1, 1, 0, 0, 50, 0, 0)
                 local dt2 = dt:AddSeconds(20)
-                return tostring(dt2:Minute() == 1 and dt2:Second() == 10)
+                return dt2:Minute() .. '|' .. dt2:Second()
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("1|10");
         }
 
         [Fact]
@@ -781,9 +771,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local dt  = DateTime.New(2024, 1, 30, 0, 0, 0, 0, 0)
                 local dt2 = dt:AddDays(3)
-                return tostring(dt2:Month() == 2 and dt2:Day() == 2)
+                return dt2:Month() .. '|' .. dt2:Day()
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("2|2");
         }
 
         [Fact]
@@ -793,9 +783,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local dt  = DateTime.New(2024, 1, 1, 23, 0, 0, 0, 0)
                 local dt2 = dt:AddHours(2)
-                return tostring(dt2:Day() == 2 and dt2:Hour() == 1)
+                return dt2:Day() .. '|' .. dt2:Hour()
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("2|1");
         }
 
         [Fact]
@@ -805,9 +795,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local dt  = DateTime.New(2024, 1, 1, 0, 0, 0, 900, 0)
                 local dt2 = dt:AddMilliseconds(200)
-                return tostring(dt2:Second() == 1 and dt2:Millisecond() == 100)
+                return dt2:Second() .. '|' .. dt2:Millisecond()
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("1|100");
         }
 
         [Fact]
@@ -843,9 +833,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local a = DateTime.FromUnixSeconds(1000)
                 local b = DateTime.FromUnixSeconds(2000)
-                return tostring(a < b and not (b < a))
+                return tostring(a < b) .. '|' .. tostring(b < a)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true|false");
         }
 
         [Fact]
@@ -856,9 +846,9 @@ namespace KitsuneNet.Tests
                 local a = DateTime.FromUnixSeconds(5000)
                 local b = DateTime.FromUnixSeconds(3000)
                 local ts = a - b
-                return tostring(type(ts) == 'userdata' and math.abs(ts:TotalSeconds() - 2000) < 0.001)
+                return type(ts) .. '|' .. string.format('%.3f', ts:TotalSeconds())
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("userdata|2000.000");
         }
 
         [Fact]
@@ -927,9 +917,9 @@ namespace KitsuneNet.Tests
             // Unix seconds must be > 2024-01-01 (1704067200) and < 2100-01-01 (4102444800)
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local ts = DateTime.UtcNow():UnixSeconds()
-                return tostring(ts > 1704067200 and ts < 4102444800)
+                return 'ts>1704067200=' .. tostring(ts > 1704067200) .. '|ts<4102444800=' .. tostring(ts < 4102444800)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("ts>1704067200=true|ts<4102444800=true");
         }
 
         [Fact]
@@ -964,9 +954,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local dt  = DateTime.New(2024, 1, 1, 12, 45, 0, 0, 0)
                 local dt2 = dt:AddMinutes(30)
-                return tostring(dt2:Hour() == 13 and dt2:Minute() == 15)
+                return dt2:Hour() .. '|' .. dt2:Minute()
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("13|15");
         }
 
         [Fact]
@@ -977,9 +967,9 @@ namespace KitsuneNet.Tests
             // 2024 is a leap year
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local dt = DateTime.New(2024, 2, 29)
-                return tostring(dt:Month() == 2 and dt:Day() == 29)
+                return dt:Month() .. '|' .. dt:Day()
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("2|29");
         }
 
         [Fact]
@@ -990,9 +980,9 @@ namespace KitsuneNet.Tests
             // MySQL/Postgres often return "YYYY-MM-DD HH:MM:SS" (space separator, no offset)
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local dt = DateTime.Parse('2024-03-15 10:30:45')
-                return tostring(dt ~= nil and dt:Year() == 2024 and dt:Hour() == 10 and dt:Minute() == 30)
+                return tostring(dt ~= nil) .. '|' .. dt:Year() .. '|' .. dt:Hour() .. '|' .. dt:Minute()
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true|2024|10|30");
         }
 
         // CRC32
@@ -1101,9 +1091,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local d = Decimal.FromString('-99.9'):Abs()
-                return tostring(not d:IsNegative() and tostring(d) == '99.9')
+                return tostring(d:IsNegative()) .. '|' .. tostring(d)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("false|99.9");
         }
 
         [Fact]
@@ -1184,9 +1174,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local d = -Decimal.FromString('42.5')
-                return tostring(d:IsNegative() and tostring(d) == '-42.5')
+                return tostring(d:IsNegative()) .. '|' .. tostring(d)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true|-42.5");
         }
 
         [Fact]
@@ -1218,9 +1208,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local a = Decimal.FromString('1.0')
                 local b = Decimal.FromString('2.0')
-                return tostring(a < b and not (b < a))
+                return tostring(a < b) .. '|' .. tostring(b < a)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true|false");
         }
 
         [Fact]
@@ -1251,9 +1241,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local n = Decimal.FromString('3.14'):ToNumber()
-                return tostring(math.type(n) == 'float' and n > 3.13 and n < 3.15)
+                return math.type(n) .. '|n>3.13=' .. tostring(n > 3.13) .. '|n<3.15=' .. tostring(n < 3.15)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("float|n>3.13=true|n<3.15=true");
         }
 
         [Fact]
@@ -1287,9 +1277,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local d = Decimal.FromNumber(42.0)
-                return tostring(d ~= nil and d:ToNumber() == 42.0)
+                return tostring(d ~= nil) .. '|' .. tostring(d and d:ToNumber())
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true|42.0");
         }
 
         [Fact]
@@ -1315,9 +1305,9 @@ namespace KitsuneNet.Tests
                 local ok, err = pcall(function()
                     return Decimal.FromString('1') / Decimal.FromString('0')
                 end)
-                return tostring(not ok and err ~= nil)
+                return tostring(ok) .. '|' .. tostring(err ~= nil)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("false|true");
         }
 
         [Fact]
@@ -1445,9 +1435,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local ok, err = pcall(function() return DateTime.New(2024, 2, 30) end)
-                return tostring(not ok and err ~= nil)
+                return tostring(ok) .. '|' .. tostring(err ~= nil)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("false|true");
         }
 
         [Fact]
@@ -1457,9 +1447,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local dt = DateTime.Parse('2024-06-15T12:00:00Z', 120)
-                return tostring(dt:OffsetMinutes() == 0 and dt:Hour() == 12)
+                return dt:OffsetMinutes() .. '|' .. dt:Hour()
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("0|12");
         }
 
         [Fact]
@@ -1469,9 +1459,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local dt = DateTime.Parse('2024-06-15T12:00:00', 60)
-                return tostring(dt:OffsetMinutes() == 60 and dt:Hour() == 12)
+                return dt:OffsetMinutes() .. '|' .. dt:Hour()
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("60|12");
         }
 
         [Fact]
@@ -1547,9 +1537,9 @@ namespace KitsuneNet.Tests
                 local a = Decimal.FromString('1.23')
                 local b = Decimal.FromString('4.56')
                 local c = a * b
-                return tostring(c:Scale() == 4 and tostring(c) == '5.6088')
+                return c:Scale() .. '|' .. tostring(c)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("4|5.6088");
         }
 
         [Fact]
@@ -1648,9 +1638,9 @@ namespace KitsuneNet.Tests
                 local ok, err = pcall(function()
                     return DateTime.UtcNow():ToOffset(9999)
                 end)
-                return tostring(not ok and err ~= nil)
+                return tostring(ok) .. '|' .. tostring(err ~= nil)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("false|true");
         }
 
         [Fact]
@@ -1659,9 +1649,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local ok, err = pcall(function() return DateTime.New(2024, 1, 1, 0, 0, 0, 0, 9999) end)
-                return tostring(not ok and err ~= nil)
+                return tostring(ok) .. '|' .. tostring(err ~= nil)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("false|true");
         }
 
         [Fact]
@@ -1670,9 +1660,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local ok, err = pcall(function() return DateTime.FromUnixSeconds(0, 9999) end)
-                return tostring(not ok and err ~= nil)
+                return tostring(ok) .. '|' .. tostring(err ~= nil)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("false|true");
         }
 
         [Fact]
@@ -1681,9 +1671,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local ok, err = pcall(function() return DateTime.FromUnixMilliseconds(0, 9999) end)
-                return tostring(not ok and err ~= nil)
+                return tostring(ok) .. '|' .. tostring(err ~= nil)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("false|true");
         }
 
         [Fact]
@@ -1692,9 +1682,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local ok, err = pcall(function() return DateTime.Parse('2024-01-01T00:00:00', 9999) end)
-                return tostring(not ok and err ~= nil)
+                return tostring(ok) .. '|' .. tostring(err ~= nil)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("false|true");
         }
 
         [Fact]
@@ -1704,9 +1694,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local dt = DateTime.New(2024, 1, 1, 0, 0, 0, 0, 840)
-                return tostring(dt ~= nil and dt:OffsetMinutes() == 840)
+                return tostring(dt ~= nil) .. '|' .. tostring(dt and dt:OffsetMinutes())
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true|840");
         }
 
         // CRC32
@@ -1804,9 +1794,9 @@ namespace KitsuneNet.Tests
                 local s = Stream.New()
                 s:Write('hello')
                 local ok, err = pcall(CRC64, s)
-                return tostring(not ok and err ~= nil)
+                return tostring(ok) .. '|' .. tostring(err ~= nil)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("false|true");
         }
 
         // Time
@@ -1814,8 +1804,8 @@ namespace KitsuneNet.Tests
         public async Task Time_ReturnsPositiveInteger()
         {
             using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("local t = Time(); return tostring(t > 0 and math.type(t) == 'integer')");
-            r.String.ShouldBe("true");
+            LuaValue r = await engine.ExecuteStringAsync("local t = Time(); return 't>0=' .. tostring(t > 0) .. '|' .. math.type(t)");
+            r.String.ShouldBe("t>0=true|integer");
         }
 
         [Fact]
@@ -1857,8 +1847,8 @@ namespace KitsuneNet.Tests
         public async Task GlobalMemoryStatus_Default_ReturnsPercentageInRange()
         {
             using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("local p = GlobalMemoryStatus(); return tostring(type(p) == 'number' and p >= 0 and p <= 100)");
-            r.String.ShouldBe("true");
+            LuaValue r = await engine.ExecuteStringAsync("local p = GlobalMemoryStatus(); return type(p) .. '|p>=0=' .. tostring(p >= 0) .. '|p<=100=' .. tostring(p <= 100)");
+            r.String.ShouldBe("number|p>=0=true|p<=100=true");
         }
 
         [Fact]
@@ -2005,8 +1995,8 @@ namespace KitsuneNet.Tests
         public async Task TableSelect_NoMatches_ReturnsEmptyTable()
         {
             using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("local t = table.select({1,3,5}, function(k,v) if v%2==0 then return v end end); return tostring(type(t)=='table' and #t==0)");
-            r.String.ShouldBe("true");
+            LuaValue r = await engine.ExecuteStringAsync("local t = table.select({1,3,5}, function(k,v) if v%2==0 then return v end end); return type(t) .. '|' .. #t");
+            r.String.ShouldBe("table|0");
         }
 
         // GetIsAdmin
@@ -2023,8 +2013,8 @@ namespace KitsuneNet.Tests
         public async Task GetComputerName_ReturnsNonEmptyString()
         {
             using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("local n = GetComputerName(); return tostring(n ~= nil and #n > 0)");
-            r.String.ShouldBe("true");
+            LuaValue r = await engine.ExecuteStringAsync("local n = GetComputerName(); return type(n) .. '|len>0=' .. tostring(n ~= nil and #n > 0)");
+            r.String.ShouldBe("string|len>0=true");
         }
 
         // BencodeDecode
@@ -2036,24 +2026,24 @@ namespace KitsuneNet.Tests
             // BencodeDecode wraps each top-level decoded value in an outer array:
             // BencodeDecode(data) returns {[1]=value, [2]=value2, ...}.
             // A bencode dict is therefore at t[1], not t directly.
-            LuaValue r = await engine.ExecuteStringAsync("local t = BencodeDecode('d3:foo3:bare'); return tostring(type(t)=='table' and t[1].foo=='bar')");
-            r.String.ShouldBe("true");
+            LuaValue r = await engine.ExecuteStringAsync("local t = BencodeDecode('d3:foo3:bare'); return type(t) .. '|' .. tostring(t[1].foo)");
+            r.String.ShouldBe("table|bar");
         }
 
         [Fact]
         public async Task BencodeDecode_IntegerField_Decoded()
         {
             using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("local t = BencodeDecode('d3:numi42ee'); return tostring(type(t)=='table' and t[1].num==42)");
-            r.String.ShouldBe("true");
+            LuaValue r = await engine.ExecuteStringAsync("local t = BencodeDecode('d3:numi42ee'); return type(t) .. '|' .. tostring(t[1].num)");
+            r.String.ShouldBe("table|42");
         }
 
         [Fact]
         public async Task BencodeDecode_ListField_Decoded()
         {
             using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("local t = BencodeDecode('d4:listli1ei2ei3eee'); return tostring(type(t[1].list)=='table' and #t[1].list==3)");
-            r.String.ShouldBe("true");
+            LuaValue r = await engine.ExecuteStringAsync("local t = BencodeDecode('d4:listli1ei2ei3eee'); return type(t[1].list) .. '|' .. #t[1].list");
+            r.String.ShouldBe("table|3");
         }
 
         [Fact]
@@ -2062,8 +2052,8 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
 
             // 'd5:outerd5:inneri99eee' encodes {outer={inner=99}}
-            LuaValue r = await engine.ExecuteStringAsync("local t = BencodeDecode('d5:outerd5:inneri99eee'); return tostring(type(t[1].outer)=='table' and t[1].outer.inner==99)");
-            r.String.ShouldBe("true");
+            LuaValue r = await engine.ExecuteStringAsync("local t = BencodeDecode('d5:outerd5:inneri99eee'); return type(t[1].outer) .. '|' .. tostring(t[1].outer.inner)");
+            r.String.ShouldBe("table|99");
         }
 
         // GetLastError
@@ -2071,8 +2061,8 @@ namespace KitsuneNet.Tests
         public async Task GetLastError_WithCode2_ReturnsNonEmptyMessageAndCode()
         {
             using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("local m,c = GetLastError(2); return tostring(type(m)=='string' and #m>0 and type(c)=='number')");
-            r.String.ShouldBe("true");
+            LuaValue r = await engine.ExecuteStringAsync("local m,c = GetLastError(2); return type(m) .. '|len>0=' .. tostring(#m > 0) .. '|' .. type(c)");
+            r.String.ShouldBe("string|len>0=true|number");
         }
 
         [Fact]
@@ -2083,9 +2073,9 @@ namespace KitsuneNet.Tests
             // Localized system messages must come back as UTF-8, trimmed.
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local m = GetLastError(5)
-                return tostring(utf8.len(m) ~= nil and m:find('[\r\n]$') == nil)
+                return 'validUtf8=' .. tostring(utf8.len(m) ~= nil) .. '|noTrailingNewline=' .. tostring(m:find('[\r\n]$') == nil)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("validUtf8=true|noTrailingNewline=true");
         }
 
         [Fact]
@@ -2126,16 +2116,16 @@ namespace KitsuneNet.Tests
         public async Task VERSION_Global_IsNonEmptyString()
         {
             using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("return tostring(type(VERSION) == 'string' and #VERSION > 0)");
-            r.String.ShouldBe("true");
+            LuaValue r = await engine.ExecuteStringAsync("return type(VERSION) .. '|len>0=' .. tostring(#VERSION > 0)");
+            r.String.ShouldBe("string|len>0=true");
         }
 
         [Fact]
         public async Task CPUID_Global_IsNonEmptyString()
         {
             using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("return tostring(type(CPUID) == 'string' and #CPUID > 0)");
-            r.String.ShouldBe("true");
+            LuaValue r = await engine.ExecuteStringAsync("return type(CPUID) .. '|len>0=' .. tostring(#CPUID > 0)");
+            r.String.ShouldBe("string|len>0=true");
         }
 
         [Fact]
@@ -2157,8 +2147,8 @@ namespace KitsuneNet.Tests
         public async Task Dns_Localhost_ReturnsString()
         {
             using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("local ip = Dns('localhost'); return tostring(ip ~= nil and type(ip)=='string')");
-            r.String.ShouldBe("true");
+            LuaValue r = await engine.ExecuteStringAsync("local ip = Dns('localhost'); return tostring(ip ~= nil) .. '|' .. type(ip)");
+            r.String.ShouldBe("true|string");
         }
 
         [Fact]
@@ -2179,12 +2169,10 @@ namespace KitsuneNet.Tests
                 local results = Dns('localhost', true)
                 if type(results) ~= 'table' or #results == 0 then return 'no entries for localhost' end
                 local entry = results[1]
-                return tostring(
-                    type(entry.Type) == 'string' and
-                    type(entry.IP)   == 'string' and
-                    (entry.Type == 'IPV4' or entry.Type == 'IPV6'))
+                return type(entry.Type) .. '|' .. type(entry.IP) .. '|typeIsIpv4Or6='
+                    .. tostring(entry.Type == 'IPV4' or entry.Type == 'IPV6')
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("string|string|typeIsIpv4Or6=true");
         }
 
         // Base64
@@ -2220,9 +2208,9 @@ namespace KitsuneNet.Tests
             // The default RFC 4648 alphabet is exactly 64 characters starting with 'ABCD'.
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = Base64.GetEncodeTable()
-                return tostring(type(t) == 'string' and #t == 64 and t:sub(1, 4) == 'ABCD')
+                return type(t) .. '|' .. #t .. '|' .. t:sub(1, 4)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("string|64|ABCD");
         }
 
         [Fact]
@@ -2239,9 +2227,9 @@ namespace KitsuneNet.Tests
                 Base64.SetEncodeTable(urlsafe)
                 local url_enc = Base64.Encode(input)
                 Base64.SetEncodeTable(default)      -- restore default
-                return tostring(std_enc ~= url_enc and url_enc:sub(1,1) == '-')
+                return tostring(std_enc ~= url_enc) .. '|' .. url_enc:sub(1,1)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true|-");
         }
 
         [Fact]
@@ -2322,9 +2310,9 @@ namespace KitsuneNet.Tests
                 local h = SHA256.New()
                 h:Update('abc')
                 local hex, bin = h:Finish()
-                return tostring(type(bin) == 'string' and #bin == 32)
+                return type(bin) .. '|' .. #bin
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("string|32");
         }
 
         [Fact]
@@ -2350,9 +2338,9 @@ namespace KitsuneNet.Tests
                 local h = MD5.New()
                 h:Update('abc')
                 local hex, bin = h:Finish()
-                return tostring(type(bin) == 'string' and #bin == 16)
+                return type(bin) .. '|' .. #bin
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("string|16");
         }
 
         [Fact]
@@ -2363,9 +2351,9 @@ namespace KitsuneNet.Tests
                 local h = SHA1.New()
                 h:Update('abc')
                 local hex, bin = h:Finish()
-                return tostring(type(bin) == 'string' and #bin == 20)
+                return type(bin) .. '|' .. #bin
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("string|20");
         }
 
         // Json
@@ -2380,9 +2368,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local j = Json.New()
                 local t = j:Decode(j:Encode({x=1, y='hello', z=true}))
-                return tostring(t.x==1 and t.y=='hello' and t.z==true)
+                return tostring(t.x) .. '|' .. tostring(t.y) .. '|' .. tostring(t.z)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("1|hello|true");
         }
 
         [Fact]
@@ -2392,9 +2380,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local j = Json.New()
                 local t = j:Decode('[10,20,30]')
-                return tostring(t[1]==10 and t[2]==20 and t[3]==30)
+                return tostring(t[1]) .. '|' .. tostring(t[2]) .. '|' .. tostring(t[3])
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("10|20|30");
         }
 
         [Fact]
@@ -2428,17 +2416,10 @@ namespace KitsuneNet.Tests
                     obj = {nested = 'value'},
                 }
                 local t = j:Decode(j:Encode(orig))
-                return tostring(
-                    t.s == 'hello'   and
-                    t.n == 42        and
-                    t.f == 3.14      and
-                    t.bt == true     and
-                    t.bf == false    and
-                    #t.arr == 3      and t.arr[2] == 2 and
-                    t.obj.nested == 'value'
-                )
+                return table.concat({tostring(t.s), tostring(t.n), tostring(t.f), tostring(t.bt), tostring(t.bf),
+                    #t.arr, tostring(t.arr[2]), tostring(t.obj.nested)}, '|')
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("hello|42|3.14|true|false|3|2|value");
         }
 
         [Fact]
@@ -2453,9 +2434,9 @@ namespace KitsuneNet.Tests
                 local s2 = j:Encode({b=2})
                 local t1 = j:Decode(s1)
                 local t2 = j:Decode(s2)
-                return tostring(t1.a==1 and t2.b==2 and t1.b==nil and t2.a==nil)
+                return tostring(t1.a) .. '|' .. tostring(t2.b) .. '|' .. tostring(t1.b) .. '|' .. tostring(t2.a)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("1|2|nil|nil");
         }
 
         // Number encoding
@@ -2469,9 +2450,9 @@ namespace KitsuneNet.Tests
                 local j = Json.New()
                 local s = j:Encode(42)
                 local v = j:Decode(s)
-                return tostring(s == '42' and math.type(v) == 'integer')
+                return s .. '|' .. math.type(v)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("42|integer");
         }
 
         [Fact]
@@ -2481,9 +2462,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local j = Json.New()
                 local v = j:Decode(j:Encode(3.14))
-                return tostring(math.type(v) == 'float' and v == 3.14)
+                return math.type(v) .. '|' .. tostring(v)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("float|3.14");
         }
 
         [Fact]
@@ -2588,9 +2569,9 @@ namespace KitsuneNet.Tests
                 local j = Json.New()
                 local s = j:Encode({10, 20, 30})
                 local t = j:Decode(s)
-                return tostring(s == '[10,20,30]' and t[1]==10 and t[2]==20 and t[3]==30)
+                return s .. '|' .. tostring(t[1]) .. '|' .. tostring(t[2]) .. '|' .. tostring(t[3])
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("[10,20,30]|10|20|30");
         }
 
         [Fact]
@@ -2679,9 +2660,9 @@ namespace KitsuneNet.Tests
                 local t   = {[1]='a', b=2}
                 local s   = j:Encode(t)
                 local dec = j:Decode(s)
-                return tostring(dec['1'] == 'a' and dec.b == 2 and dec[1] == nil)
+                return tostring(dec['1']) .. '|' .. tostring(dec.b) .. '|' .. tostring(dec[1])
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("a|2|nil");
         }
 
         // String escaping
@@ -2711,13 +2692,11 @@ namespace KitsuneNet.Tests
                 local loneHigh = j:Decode([[""\uD83Dx""]])
                 local loneLow  = j:Decode([[""a\uDC00b""]])
                 local highThen = j:Decode([[""\uD83DA""]])
-                return tostring(pair == '\xf0\x9f\x98\x80'
-                    and loneHigh == '\xef\xbf\xbdx'
-                    and loneLow == 'a\xef\xbf\xbdb'
-                    and highThen == '\xef\xbf\xbdA'
-                    and utf8.len(pair .. loneHigh .. loneLow .. highThen) ~= nil)
+                local function hex(s) return (s:gsub('.', function(c) return string.format('%02x', c:byte()) end)) end
+                return hex(pair) .. '|' .. hex(loneHigh) .. '|' .. hex(loneLow) .. '|' .. hex(highThen)
+                    .. '|validUtf8=' .. tostring(utf8.len(pair .. loneHigh .. loneLow .. highThen) ~= nil)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("f09f9880|efbfbd78|61efbfbd62|efbfbd41|validUtf8=true");
         }
 
         [Fact]
@@ -2732,11 +2711,10 @@ namespace KitsuneNet.Tests
                 local strayThenPair = j:Decode([[""\uD800😀""]])
                 local twoHighs      = j:Decode([[""\uD800\uD801x""]])
                 local threeHighs    = j:Decode([[""\uD800\uD801😀""]])
-                return tostring(strayThenPair == '\xef\xbf\xbd\xf0\x9f\x98\x80'
-                    and twoHighs == '\xef\xbf\xbd\xef\xbf\xbdx'
-                    and threeHighs == '\xef\xbf\xbd\xef\xbf\xbd\xf0\x9f\x98\x80')
+                local function hex(s) return (s:gsub('.', function(c) return string.format('%02x', c:byte()) end)) end
+                return hex(strayThenPair) .. '|' .. hex(twoHighs) .. '|' .. hex(threeHighs)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("efbfbdf09f9880|efbfbdefbfbd78|efbfbdefbfbdf09f9880");
         }
 
         [Fact]
@@ -2749,10 +2727,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local j = Json.New()
                 local out = j:Encode({ ['k\xe9'] = 'caf\xe9 \xc3\xa9 \xf0\x9f\x98\x80' })
-                return tostring(out == '{""k\xef\xbf\xbd"":""caf\xef\xbf\xbd \xc3\xa9 \xf0\x9f\x98\x80""}'
-                    and utf8.len(out) ~= nil)
+                return out .. '|validUtf8=' .. tostring(utf8.len(out) ~= nil)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("{\"k�\":\"caf� é 😀\"}|validUtf8=true");
         }
 
         [Fact]
@@ -2772,9 +2749,9 @@ namespace KitsuneNet.Tests
                 end)
                 local fromStream = j:Decode(Stream.New(text))
                 local fromString = j:Decode(text)
-                return tostring(fromFn.a == 1 and fromStream.a == 1 and fromString.a == 1)
+                return tostring(fromFn.a) .. '|' .. tostring(fromStream.a) .. '|' .. tostring(fromString.a)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("1|1|1");
         }
 
         [Fact]
@@ -2788,9 +2765,9 @@ namespace KitsuneNet.Tests
                 local ok, err = pcall(function()
                     return Json.New():Decode('1234567890123456789012345678901234567890123456789012345678901234')
                 end)
-                return tostring(not ok and type(err) == 'string')
+                return tostring(ok) .. '|' .. type(err)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("false|string");
         }
 
         [Fact]
@@ -2803,9 +2780,9 @@ namespace KitsuneNet.Tests
                 local ok, v = pcall(function()
                     return Json.New():Decode('123456789012345678901234567890123456789012345678901234567890123')
                 end)
-                return tostring(ok and type(v) == 'number')
+                return tostring(ok) .. '|' .. type(v)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true|number");
         }
 
         [Fact]
@@ -2818,9 +2795,9 @@ namespace KitsuneNet.Tests
                 local j  = Json.New()
                 local a  = j:Decode('""\\u0041""')
                 local e  = j:Decode('""\\u00E9""')
-                return tostring(a == 'A' and e == '\xC3\xA9')
+                return a .. '|' .. e
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("A|é");
         }
 
         [Fact]
@@ -2845,9 +2822,9 @@ namespace KitsuneNet.Tests
                 j:SetDecodeNull(true)
                 local enc = j:Encode({v=Json.Null})
                 local dec = j:Decode(enc)
-                return tostring(dec.v == Json.Null and enc:find('null') ~= nil)
+                return tostring(dec.v == Json.Null) .. '|' .. enc
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true|{\"v\":null}");
         }
 
         [Fact]
@@ -2890,9 +2867,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local j = Json.New()
                 local t = j:Decode('{""a"":1,""b"":""hello""}')
-                return tostring(t.a == 1 and t.b == 'hello')
+                return tostring(t.a) .. '|' .. tostring(t.b)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("1|hello");
         }
 
         [Fact]
@@ -2904,9 +2881,10 @@ namespace KitsuneNet.Tests
                 local t = {}
                 t.self = t
                 local ok, err = pcall(function() j:Encode(t) end)
-                return tostring(not ok and err:find('recursion') ~= nil)
+                return tostring(ok) .. '|' .. tostring(err)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldStartWith("false|");
+            r.String.ShouldContain("recursion");
         }
 
         // Stream I/O
@@ -2920,9 +2898,9 @@ namespace KitsuneNet.Tests
                 j:EncodeIntoStream(s, {a=1, b=2})
                 s:Seek(0)
                 local t = j:Decode(s:Read())
-                return tostring(t.a == 1 and t.b == 2)
+                return tostring(t.a) .. '|' .. tostring(t.b)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("1|2");
         }
 
         [Fact]
@@ -2948,9 +2926,9 @@ namespace KitsuneNet.Tests
                 j:EncodeIntoStream(s, {x=99, y='hello', z=true})
                 s:Seek(0)
                 local t = j:DecodeFromStream(s)
-                return tostring(t.x == 99 and t.y == 'hello' and t.z == true)
+                return tostring(t.x) .. '|' .. tostring(t.y) .. '|' .. tostring(t.z)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("99|hello|true");
         }
 
         [Fact]
@@ -2979,9 +2957,9 @@ namespace KitsuneNet.Tests
                     if op == CLOSE then return true end
                 end)
                 local ok, err = j:EncodeIntoStream(s, 'test')
-                return tostring(ok == false and type(err) == 'string')
+                return tostring(ok) .. '|' .. type(err)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("false|string");
         }
 
         [Fact]
@@ -2996,9 +2974,9 @@ namespace KitsuneNet.Tests
                     if op == CLOSE then return true end
                 end)
                 local val, err = j:DecodeFromStream(s)
-                return tostring(val == nil and type(err) == 'string')
+                return tostring(val) .. '|' .. type(err)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("nil|string");
         }
 
         [Fact]
@@ -3016,9 +2994,9 @@ namespace KitsuneNet.Tests
                 j:EncodeIntoStream(s, data)
                 s:Seek(0)
                 local t = j:DecodeFromStream(s)
-                return tostring(#t == 1000 and t[1] == 1 and t[500] == 500 and t[1000] == 1000)
+                return #t .. '|' .. tostring(t[1]) .. '|' .. tostring(t[500]) .. '|' .. tostring(t[1000])
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("1000|1|500|1000");
         }
 
         [Fact]
@@ -3088,9 +3066,9 @@ namespace KitsuneNet.Tests
                 local a = j:DecodeFromStream(s)
                 local b = j:DecodeFromStream(s)
                 local c = j:DecodeFromStream(s)
-                return tostring(a.n==1 and b.n==2 and c.n==3)
+                return tostring(a.n) .. '|' .. tostring(b.n) .. '|' .. tostring(c.n)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("1|2|3");
         }
 
         [Fact]
@@ -3107,9 +3085,9 @@ namespace KitsuneNet.Tests
                 s:Seek(0)
                 local t1 = j:DecodeFromStream(s)
                 local t2 = j:DecodeFromStream(s)
-                return tostring(t1.a == 1 and t2.b == 2)
+                return tostring(t1.a) .. '|' .. tostring(t2.b)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("1|2");
         }
 
         // Encode stream as JSON value
@@ -3230,9 +3208,10 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local s = 'A\xc3\xa9\xf0\x9f\x98\x80'
                 local b = Text.ToUtf16(s)
-                return tostring(b == 'A\0\xe9\0\x3d\xd8\x00\xde' and Text.FromUtf16(b) == s)
+                local hex = b:gsub('.', function(c) return string.format('%02x', c:byte()) end)
+                return hex .. '|' .. Text.FromUtf16(b)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("4100e9003dd800de|Aé😀");
         }
 
         [Fact]
@@ -3245,9 +3224,10 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local fromBadUtf16 = Text.FromUtf16('\x3d\xd8' .. 'B\0' .. 'x')
                 local toFromBadUtf8 = Text.FromUtf16(Text.ToUtf16('a\x80b'))
-                return tostring(fromBadUtf16 == '\xef\xbf\xbdB' and toFromBadUtf8 == 'a\xef\xbf\xbdb')
+                local function hex(s) return (s:gsub('.', function(c) return string.format('%02x', c:byte()) end)) end
+                return hex(fromBadUtf16) .. '|' .. hex(toFromBadUtf8)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("efbfbd42|61efbfbd62");
         }
 
         [Fact]
@@ -3255,9 +3235,9 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
-                return tostring(Text.ToUtf16('') == '' and Text.FromUtf16('') == '')
+                return '[' .. Text.ToUtf16('') .. ']|[' .. Text.FromUtf16('') .. ']'
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("[]|[]");
         }
 
         [Fact]
@@ -3269,9 +3249,10 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local utf8 = 'caf\xc3\xa9 \xe2\x82\xac5'
                 local ansi = Text.ToCodepage(utf8, 1252)
-                return tostring(ansi == 'caf\xe9 \x805' and Text.FromCodepage(ansi, 1252) == utf8)
+                local hex = ansi:gsub('.', function(c) return string.format('%02x', c:byte()) end)
+                return hex .. '|' .. Text.FromCodepage(ansi, 1252)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("636166e9208035|café €5");
         }
 
         [Fact]
@@ -3293,9 +3274,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local ok1 = pcall(Text.FromCodepage, 'abc', 424242)
                 local ok2 = pcall(Text.ToCodepage, 'abc', 424242)
-                return tostring(not ok1 and not ok2)
+                return tostring(ok1) .. '|' .. tostring(ok2)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("false|false");
         }
 
         [WindowsOnlyFact]
@@ -3309,11 +3290,11 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local legacy = 'A\xe9\x80\xa4'
                 local text = 'caf\xc3\xa9 \xe2\x82\xac'
-                return tostring(Text.FromCodepage(legacy) == Text.FromCodepage(legacy, acp)
-                    and Text.FromCodepage(legacy, 0) == Text.FromCodepage(legacy, acp)
-                    and Text.ToCodepage(text) == Text.ToCodepage(text, acp))
+                return 'fromDefault==fromAcp=' .. tostring(Text.FromCodepage(legacy) == Text.FromCodepage(legacy, acp))
+                    .. '|fromZero==fromAcp=' .. tostring(Text.FromCodepage(legacy, 0) == Text.FromCodepage(legacy, acp))
+                    .. '|toDefault==toAcp=' .. tostring(Text.ToCodepage(text) == Text.ToCodepage(text, acp))
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("fromDefault==fromAcp=true|fromZero==fromAcp=true|toDefault==toAcp=true");
         }
 
         [Fact]
@@ -3325,9 +3306,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local upper = 'ABC \xc3\x89 \xce\xa3 \xd0\x96 1\xf0\x9f\x98\x80'
                 local lower = 'abc \xc3\xa9 \xcf\x83 \xd0\xb6 1\xf0\x9f\x98\x80'
-                return tostring(Text.Lower(upper) == lower and Text.Upper(lower) == upper)
+                return Text.Lower(upper) .. '|' .. Text.Upper(lower)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("abc é σ ж 1😀|ABC É Σ Ж 1😀");
         }
 
         [Fact]
@@ -3350,9 +3331,9 @@ namespace KitsuneNet.Tests
                 s:Seek(0)
                 local back = s:ReadUtf16()
                 -- 6 BMP characters + 1 surrogate pair = 8 units = 16 bytes
-                return tostring(written == 16 and back == text)
+                return written .. '|' .. back
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("16|héllo 😀");
         }
 
         [Fact]
@@ -3366,9 +3347,9 @@ namespace KitsuneNet.Tests
                 local first = s:ReadUtf16(2)
                 local rest = s:ReadUtf16()
                 local after = s:ReadUtf16()
-                return tostring(first == 'ab' and rest == 'cdef' and after == nil)
+                return first .. '|' .. rest .. '|' .. tostring(after)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("ab|cdef|nil");
         }
 
         [Fact]
@@ -3414,9 +3395,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = Timer.New(); t:Start(); Sleep(10); t:Stop(); t:Reset()
-                return tostring(t:Elapsed() == 0 and not t:IsRunning())
+                return tostring(t:Elapsed()) .. '|' .. tostring(t:IsRunning())
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("0.0|false");
         }
 
         [Fact]
@@ -3428,9 +3409,9 @@ namespace KitsuneNet.Tests
                 t:Start()
                 Sleep(20)
                 local ts = t:ElapsedTimeSpan()
-                return tostring(type(ts) == 'userdata' and ts:TotalMilliseconds() > 0)
+                return type(ts) .. '|ms>0=' .. tostring(ts:TotalMilliseconds() > 0)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("userdata|ms>0=true");
         }
 
         [Fact]
@@ -3562,9 +3543,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local s = Stream.New('hello')
-                return tostring(s:pos() == 0 and s:len() == 5)
+                return s:pos() .. '|' .. s:len()
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("0|5");
         }
 
         [Fact]
@@ -3647,9 +3628,9 @@ namespace KitsuneNet.Tests
                 local read = s:Read()
                 local p = s:pos()
                 local _, info = s:GetInfo()
-                return tostring(read == 'world' and p == 11 and info.len == 11)
+                return read .. '|' .. p .. '|' .. info.len
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("world|11|11");
         }
 
         [Fact]
@@ -3672,9 +3653,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local s = Stream.New()
                 s:Write('abcde')
-                return tostring(s:pos() == 5 and s:len() == 5)
+                return s:pos() .. '|' .. s:len()
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("5|5");
         }
 
         [Fact]
@@ -3685,12 +3666,10 @@ namespace KitsuneNet.Tests
                 local s = Stream.New()
                 s:Write('hello')
                 local caps, info = s:GetInfo()
-                return tostring(
-                    type(caps) == 'table' and caps.Caps > 0 and
-                    type(info) == 'table' and info.pos == 5 and info.len == 5 and info.alloc >= 5
-                )
+                return type(caps) .. '|caps>0=' .. tostring(caps.Caps > 0) .. '|' .. type(info) .. '|' .. info.pos
+                    .. '|' .. info.len .. '|alloc>=5=' .. tostring(info.alloc >= 5)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("table|caps>0=true|table|5|5|alloc>=5=true");
         }
 
         [Fact]
@@ -3871,9 +3850,10 @@ namespace KitsuneNet.Tests
                     end)
                     s:Read()
                 end)
-                return tostring(not ok and type(err) == 'string' and err:find('backend read error') ~= nil)
+                return tostring(ok) .. '|' .. type(err) .. '|' .. tostring(err)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldStartWith("false|string|");
+            r.String.ShouldContain("backend read error");
         }
 
         [Fact]
@@ -3892,9 +3872,10 @@ namespace KitsuneNet.Tests
                     end)
                     s:Write('hello')
                 end)
-                return tostring(not ok and type(err) == 'string' and err:find('backend write error') ~= nil)
+                return tostring(ok) .. '|' .. type(err) .. '|' .. tostring(err)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldStartWith("false|string|");
+            r.String.ShouldContain("backend write error");
         }
 
         [Fact]
@@ -3913,9 +3894,10 @@ namespace KitsuneNet.Tests
                     end)
                     s:Seek(5)
                 end)
-                return tostring(not ok and type(err) == 'string' and err:find('backend seek error') ~= nil)
+                return tostring(ok) .. '|' .. type(err) .. '|' .. tostring(err)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldStartWith("false|string|");
+            r.String.ShouldContain("backend seek error");
         }
 
         [Fact]
@@ -3927,9 +3909,10 @@ namespace KitsuneNet.Tests
             // a non-number return produces "Backend function failed to open".
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local ok, err = pcall(Stream.New, function(op) return 'not_a_number' end)
-                return tostring(not ok and err:find('Backend function failed to open') ~= nil)
+                return tostring(ok) .. '|' .. tostring(err)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldStartWith("false|");
+            r.String.ShouldContain("Backend function failed to open");
         }
 
         [Fact]
@@ -3940,9 +3923,10 @@ namespace KitsuneNet.Tests
             // Returning 0 caps (no operations supported) is treated as failure.
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local ok, err = pcall(Stream.New, function(op) return 0 end)
-                return tostring(not ok and err:find('Backend function failed to open') ~= nil)
+                return tostring(ok) .. '|' .. tostring(err)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldStartWith("false|");
+            r.String.ShouldContain("Backend function failed to open");
         }
 
         [Fact]
@@ -3955,9 +3939,10 @@ namespace KitsuneNet.Tests
             // intentionally; the non-number return check fires on the error object).
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local ok, err = pcall(Stream.New, function(op) error('boom') end)
-                return tostring(not ok and err:find('Backend function failed to open') ~= nil)
+                return tostring(ok) .. '|' .. tostring(err)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldStartWith("false|");
+            r.String.ShouldContain("Backend function failed to open");
         }
 
         // Stream.Open (file backend)
@@ -3989,9 +3974,9 @@ namespace KitsuneNet.Tests
                 local _, info = w:GetInfo()
                 w:Close()
                 os.remove(path)
-                return tostring(info.name == path and info.type == 'file')
+                return 'name==path=' .. tostring(info.name == path) .. '|' .. tostring(info.type)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("name==path=true|file");
         }
 
         [Fact]
@@ -4063,9 +4048,10 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local ok, err = pcall(Stream.Open, 'nonexistent_kitsune_xyz_abc_1234567890.bin', 'rb')
-                return tostring(not ok and err:find('Stream.Open') ~= nil)
+                return tostring(ok) .. '|' .. tostring(err)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldStartWith("false|");
+            r.String.ShouldContain("Stream.Open");
         }
 
         [Fact]
@@ -4237,12 +4223,9 @@ namespace KitsuneNet.Tests
             // ASCII-only cells take the fast path and come back as plain Lua strings.
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = CSV.New():Decode('hello,42,2024-01-01')
-                return tostring(
-                    type(t.Rows[1][1]) == 'string' and
-                    type(t.Rows[1][2]) == 'string' and
-                    type(t.Rows[1][3]) == 'string')
+                return type(t.Rows[1][1]) .. '|' .. type(t.Rows[1][2]) .. '|' .. type(t.Rows[1][3])
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("string|string|string");
         }
 
         [Fact]
@@ -4261,9 +4244,9 @@ namespace KitsuneNet.Tests
                 for row in CSV.New(','):DecodeFromFunction(function() i = i + 1; return chunks[i] end) do
                     first = first or row[1]
                 end
-                return tostring(t.Rows[1][1] == 'Name' and t.Rows[2][1] == '\xc3\x85sa' and first == 'Name')
+                return tostring(t.Rows[1][1]) .. '|' .. tostring(t.Rows[2][1]) .. '|' .. tostring(first)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("Name|Åsa|Name");
         }
 
         [Fact]
@@ -4280,9 +4263,9 @@ namespace KitsuneNet.Tests
                 for row in CSV.New(','):DecodeFromFunction(function() i = i + 1; return chunks[i] end) do
                     rows[#rows + 1] = row[2]
                 end
-                return tostring(#rows == 2 and rows[1] == 'caf\xc3\xa9' and rows[2] == '\xe6\xb5\x8b')
+                return #rows .. '|' .. tostring(rows[1]) .. '|' .. tostring(rows[2])
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("2|café|测");
         }
 
         [Fact]
@@ -4307,9 +4290,9 @@ namespace KitsuneNet.Tests
                 for row in CSV.New(','):DecodeFromFunction(s) do
                     rows[#rows + 1] = row
                 end
-                return tostring(#rows == 2 and rows[2][1] == 'caf\xc3\xa9' and rows[2][2] == 'x')
+                return #rows .. '|' .. tostring(rows[2] and rows[2][1]) .. '|' .. tostring(rows[2] and rows[2][2])
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("2|café|x");
         }
 
         [Fact]
@@ -4325,9 +4308,9 @@ namespace KitsuneNet.Tests
                 for row in CSV.New(','):DecodeFromFunction(function() i = i + 1; return chunks[i] end) do
                     rows[#rows + 1] = row[2]
                 end
-                return tostring(#rows == 1 and rows[1] == 'b\xef\xbf\xbd')
+                return #rows .. '|' .. tostring(rows[1])
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("1|b�");
         }
 
         [Fact]
@@ -4340,12 +4323,10 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local input = 'caf\xc3\xa9,plain,\xf0\x9f\x98\x80'
                 local t = CSV.New():Decode(input)
-                return tostring(
-                    type(t.Rows[1][1]) == 'string' and t.Rows[1][1] == 'caf\xc3\xa9' and
-                    type(t.Rows[1][2]) == 'string' and
-                    type(t.Rows[1][3]) == 'string' and t.Rows[1][3] == '\xf0\x9f\x98\x80')
+                return type(t.Rows[1][1]) .. '|' .. tostring(t.Rows[1][1]) .. '|' .. type(t.Rows[1][2]) .. '|'
+                    .. type(t.Rows[1][3]) .. '|' .. tostring(t.Rows[1][3])
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("string|café|string|string|😀");
         }
 
         [Fact]
@@ -4379,9 +4360,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = CSV.New():Decode('""hello"",""world""')
-                return tostring(tostring(t.Rows[1][1]) == 'hello' and tostring(t.Rows[1][2]) == 'world')
+                return tostring(t.Rows[1][1]) .. '|' .. tostring(t.Rows[1][2])
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("hello|world");
         }
 
         [Fact]
@@ -4418,9 +4399,9 @@ namespace KitsuneNet.Tests
             // The first non-space character after SkipForwards must be kept ("hello", not "ello").
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = CSV.New():Decode(' hello, world')
-                return tostring(tostring(t.Rows[1][1]) == 'hello' and tostring(t.Rows[1][2]) == 'world')
+                return tostring(t.Rows[1][1]) .. '|' .. tostring(t.Rows[1][2])
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("hello|world");
         }
 
         [Fact]
@@ -4432,9 +4413,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = CSV.New():Decode('a,,b')
                 local row = t.Rows[1]
-                return tostring(tostring(row[1]) == 'a' and tostring(row[2]) == '' and tostring(row[3]) == 'b')
+                return tostring(row[1]) .. '|' .. tostring(row[2]) .. '|' .. tostring(row[3])
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("a||b");
         }
 
         [Fact]
@@ -4462,9 +4443,9 @@ namespace KitsuneNet.Tests
                 for _ in ipairs(t.Comments) do commentCount = commentCount + 1 end
                 local rowCount = 0
                 for _ in ipairs(t.Rows) do rowCount = rowCount + 1 end
-                return tostring(commentCount == 1 and rowCount == 1)
+                return commentCount .. '|' .. rowCount
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("1|1");
         }
 
         [Fact]
@@ -4487,9 +4468,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = CSV.New(';'):Decode('a;b;c')
                 local row = t.Rows[1]
-                return tostring(tostring(row[1]) == 'a' and tostring(row[2]) == 'b' and tostring(row[3]) == 'c')
+                return tostring(row[1]) .. '|' .. tostring(row[2]) .. '|' .. tostring(row[3])
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("a|b|c");
         }
 
         [Fact]
@@ -4502,9 +4483,9 @@ namespace KitsuneNet.Tests
                 local t = CSV.New():Decode('a,b\r\nc,d')
                 local count = 0
                 for _ in ipairs(t.Rows) do count = count + 1 end
-                return tostring(count == 2 and tostring(t.Rows[1][1]) == 'a' and tostring(t.Rows[2][1]) == 'c')
+                return count .. '|' .. tostring(t.Rows[1][1]) .. '|' .. tostring(t.Rows[2][1])
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("2|a|c");
         }
 
         [Fact]
@@ -4525,9 +4506,9 @@ namespace KitsuneNet.Tests
                 local csv = CSV.New()
                 local encoded = csv:Encode({{'hello, world', 'end'}})
                 local decoded = csv:Decode(encoded)
-                return tostring(tostring(decoded.Rows[1][1]) == 'hello, world' and tostring(decoded.Rows[1][2]) == 'end')
+                return tostring(decoded.Rows[1][1]) .. '|' .. tostring(decoded.Rows[1][2])
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("hello, world|end");
         }
 
         [Fact]
@@ -4538,9 +4519,9 @@ namespace KitsuneNet.Tests
                 local csv = CSV.New(';')
                 local encoded = csv:Encode({{'a', 'b', 'c'}})
                 local decoded = csv:Decode(encoded)
-                return tostring(tostring(decoded.Rows[1][1]) == 'a' and tostring(decoded.Rows[1][3]) == 'c')
+                return tostring(decoded.Rows[1][1]) .. '|' .. tostring(decoded.Rows[1][3])
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("a|c");
         }
 
         [Fact]
@@ -4560,9 +4541,9 @@ namespace KitsuneNet.Tests
                 local r1 = tostring(decoded.Rows[1][1])
                 local r2 = tostring(decoded.Rows[1][2])
                 local r3 = tostring(decoded.Rows[1][3])
-                return tostring(r1 == ' leading space' and r2 == 'normal' and r3 == tab .. 'leading tab')
+                return r1 .. '|' .. r2 .. '|' .. r3
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe(" leading space|normal|\tleading tab");
         }
 
         [Fact]
@@ -4577,9 +4558,9 @@ namespace KitsuneNet.Tests
                 local rows = {{'say ""hi""', 'end'}}
                 local encoded = csv:Encode(rows)
                 local decoded = csv:Decode(encoded)
-                return tostring(tostring(decoded.Rows[1][1]) == 'say ""hi""' and tostring(decoded.Rows[1][2]) == 'end')
+                return tostring(decoded.Rows[1][1]) .. '|' .. tostring(decoded.Rows[1][2])
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("say \"hi\"|end");
         }
 
         [Fact]
@@ -4594,9 +4575,9 @@ namespace KitsuneNet.Tests
                 local rows = {{'line1\nline2', 'after'}}
                 local encoded = csv:Encode(rows)
                 local decoded = csv:Decode(encoded)
-                return tostring(tostring(decoded.Rows[1][1]) == 'line1\nline2' and tostring(decoded.Rows[1][2]) == 'after')
+                return tostring(decoded.Rows[1][1]) .. '|' .. tostring(decoded.Rows[1][2])
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("line1\nline2|after");
         }
 
         [Fact]
@@ -4608,9 +4589,9 @@ namespace KitsuneNet.Tests
             // to passing the string "auto".
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = CSV.New(true):Decode('a;b;c\n1;2;3')
-                return tostring(tostring(t.Rows[1][1]) == 'a' and tostring(t.Rows[2][3]) == '3')
+                return tostring(t.Rows[1][1]) .. '|' .. tostring(t.Rows[2][3])
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("a|3");
         }
 
         [Fact]
@@ -4621,9 +4602,9 @@ namespace KitsuneNet.Tests
             // ParseDelimiter accepts an integer codepoint (59 = ';').
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = CSV.New(59):Decode('a;b;c')
-                return tostring(tostring(t.Rows[1][1]) == 'a' and tostring(t.Rows[1][3]) == 'c')
+                return tostring(t.Rows[1][1]) .. '|' .. tostring(t.Rows[1][3])
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("a|c");
         }
 
         [Fact]
@@ -4643,9 +4624,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = CSV.New():Decode('a,b,c\n1,2,3')
-                return tostring(tostring(t.Rows[1][1]) == 'a' and tostring(t.Rows[1][3]) == 'c' and tostring(t.Rows[2][1]) == '1')
+                return tostring(t.Rows[1][1]) .. '|' .. tostring(t.Rows[1][3]) .. '|' .. tostring(t.Rows[2][1])
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("a|c|1");
         }
 
         [Fact]
@@ -4654,9 +4635,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = CSV.New():Decode('a;b;c\n1;2;3')
-                return tostring(tostring(t.Rows[1][1]) == 'a' and tostring(t.Rows[1][3]) == 'c' and tostring(t.Rows[2][2]) == '2')
+                return tostring(t.Rows[1][1]) .. '|' .. tostring(t.Rows[1][3]) .. '|' .. tostring(t.Rows[2][2])
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("a|c|2");
         }
 
         [Fact]
@@ -4665,9 +4646,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = CSV.New():Decode('a\tb\tc\n1\t2\t3')
-                return tostring(tostring(t.Rows[1][1]) == 'a' and tostring(t.Rows[1][3]) == 'c')
+                return tostring(t.Rows[1][1]) .. '|' .. tostring(t.Rows[1][3])
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("a|c");
         }
 
         [Fact]
@@ -4717,12 +4698,10 @@ namespace KitsuneNet.Tests
                 end) do
                     table.insert(rows, row)
                 end
-                return tostring(
-                    #rows == 2 and
-                    tostring(rows[1][1]) == 'hello'  and tostring(rows[1][2]) == 'world' and
-                    tostring(rows[2][1]) == 'goodbye' and tostring(rows[2][2]) == 'world')
+                return #rows .. '|' .. tostring(rows[1][1]) .. '|' .. tostring(rows[1][2]) .. '|'
+                    .. tostring(rows[2][1]) .. '|' .. tostring(rows[2][2])
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("2|hello|world|goodbye|world");
         }
 
         [Fact]
@@ -4884,9 +4863,9 @@ namespace KitsuneNet.Tests
                 m:Lock(100)
                 local locked, name = m:Info()
                 m:Unlock()
-                return tostring(locked and name == mutexName)
+                return 'locked=' .. tostring(locked) .. '|name==mutexName=' .. tostring(name == mutexName)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("locked=true|name==mutexName=true");
         }
 
         [Fact]
@@ -4934,8 +4913,8 @@ namespace KitsuneNet.Tests
         public async Task FileSystem_GetDrives_ReturnsList()
         {
             using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("local d = FileSystem.GetDrives(); return tostring(type(d)=='table' and #d>=1)");
-            r.String.ShouldBe("true");
+            LuaValue r = await engine.ExecuteStringAsync("local d = FileSystem.GetDrives(); return type(d) .. '|n>=1=' .. tostring(#d >= 1)");
+            r.String.ShouldBe("table|n>=1=true");
         }
 
         [Fact]
@@ -4944,9 +4923,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local d = FileSystem.GetDrives()
-                return tostring(type(d[1].Drive) == 'string' and #d[1].Drive > 0)
+                return type(d[1].Drive) .. '|len>0=' .. tostring(#d[1].Drive > 0)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("string|len>0=true");
         }
 
         [Fact]
@@ -4957,9 +4936,9 @@ namespace KitsuneNet.Tests
                 local dir = FileSystem.GetTempFileName() .. '_kitsune_testdir'
                 local ok1 = FileSystem.CreateDirectory(dir)
                 local ok2 = FileSystem.RemoveDirectory(dir)
-                return tostring(ok1 and ok2)
+                return tostring(ok1) .. '|' .. tostring(ok2)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true|true");
         }
 
         [Fact]
@@ -4991,9 +4970,9 @@ namespace KitsuneNet.Tests
                 f:close()
                 local info = FileSystem.GetFileInfo(path)
                 FileSystem.Delete(path)
-                return tostring(type(info) == 'table' and info.Size == 3 and info.isFolder == false)
+                return type(info) .. '|' .. tostring(info.Size) .. '|' .. tostring(info.isFolder)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("table|3|false");
         }
 
         [Fact]
@@ -5019,9 +4998,9 @@ namespace KitsuneNet.Tests
                 local exists = FileSystem.GetFileInfo(dst) ~= nil
                 FileSystem.Delete(src)
                 FileSystem.Delete(dst)
-                return tostring(ok and exists)
+                return tostring(ok) .. '|' .. tostring(exists)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true|true");
         }
 
         // FileSystem.Copy overwrite flag
@@ -5095,9 +5074,9 @@ namespace KitsuneNet.Tests
                 local srcGone = FileSystem.GetFileInfo(src) == nil
                 local dstExists = FileSystem.GetFileInfo(dst) ~= nil
                 FileSystem.Delete(dst)
-                return tostring(ok and srcGone and dstExists)
+                return tostring(ok) .. '|' .. tostring(srcGone) .. '|' .. tostring(dstExists)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true|true|true");
         }
 
         [Fact]
@@ -5112,9 +5091,9 @@ namespace KitsuneNet.Tests
                 local srcGone = FileSystem.GetFileInfo(src) == nil
                 local dstExists = FileSystem.GetFileInfo(dst) ~= nil
                 FileSystem.Delete(dst)
-                return tostring(ok and srcGone and dstExists)
+                return tostring(ok) .. '|' .. tostring(srcGone) .. '|' .. tostring(dstExists)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true|true|true");
         }
 
         [Fact]
@@ -5126,9 +5105,9 @@ namespace KitsuneNet.Tests
                 local f = FileSystem.Open(path, 'wb'); f:write('delete me'); f:close()
                 local ok = FileSystem.Delete(path)
                 local gone = FileSystem.GetFileInfo(path) == nil
-                return tostring(ok and gone)
+                return tostring(ok) .. '|' .. tostring(gone)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true|true");
         }
 
         [Fact]
@@ -5180,14 +5159,11 @@ namespace KitsuneNet.Tests
                 FileSystem.RemoveDirectory(base .. sep .. dirname)
                 FileSystem.RemoveDirectory(base)
 
-                return tostring(
-                    type(files[1]) == 'string' and files[1] == fname and
-                    type(dirs[1]) == 'string' and dirs[1] == dirname and
-                    type(info.FileName) == 'string' and info.FileName == fname and
-                    names[fname] == 'string' and names[dirname] == 'string' and
-                    type(FileSystem.CurrentDirectory()) == 'string')
+                return table.concat({type(files[1]), tostring(files[1]), type(dirs[1]), tostring(dirs[1]),
+                    type(info.FileName), tostring(info.FileName), tostring(names[fname]), tostring(names[dirname]),
+                    type(FileSystem.CurrentDirectory())}, '|')
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("string|åäö_€_😀.txt|string|_kitsune_ü测|string|åäö_€_😀.txt|string|string|string");
         }
 
         [Fact]
@@ -5204,9 +5180,9 @@ namespace KitsuneNet.Tests
                 g:close()
                 local listed = FileSystem.GetFiles(base)[1]
                 cleanup(name)
-                return tostring(data == 'hello' and listed == name)
+                return tostring(data) .. '|' .. tostring(listed)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("hello|åäö_€_😀.txt");
         }
 
         [Fact]
@@ -5219,11 +5195,11 @@ namespace KitsuneNet.Tests
                 local f, msg, code = io.open(path('missing_\xc3\xa9.txt'))
                 local f2, msg2, code2 = FileSystem.Open(path('missing_\xc3\xa9.txt'), 'rb')
                 cleanup()
-                return tostring(f == nil and type(msg) == 'string' and msg:find('missing_\xc3\xa9.txt', 1, true) ~= nil
-                    and math.type(code) == 'integer'
-                    and f2 == nil and type(msg2) == 'string' and math.type(code2) == 'integer')
+                return tostring(f) .. '|' .. type(msg) .. '|msgHasName='
+                    .. tostring(type(msg) == 'string' and msg:find('missing_\xc3\xa9.txt', 1, true) ~= nil)
+                    .. '|' .. tostring(math.type(code)) .. '|' .. tostring(f2) .. '|' .. type(msg2) .. '|' .. tostring(math.type(code2))
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("nil|string|msgHasName=true|integer|nil|string|integer");
         }
 
         [Fact]
@@ -5236,9 +5212,9 @@ namespace KitsuneNet.Tests
                 local ok1 = pcall(io.open, 'x.txt', 'rz')
                 local ok2 = pcall(FileSystem.Open, 'x.txt', 'q')
                 local ok3 = pcall(FileSystem.Open, 'x.txt', 'rbb')
-                return tostring(not ok1 and not ok2 and not ok3)
+                return tostring(ok1) .. '|' .. tostring(ok2) .. '|' .. tostring(ok3)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("false|false|false");
         }
 
         [Fact]
@@ -5255,15 +5231,16 @@ namespace KitsuneNet.Tests
                 local g, msg, code = io.open(path(name), 'rbb')
                 local result
                 if sep == '\\' then
-                    result = g == nil and msg:find(name, 1, true) ~= nil and math.type(code) == 'integer'
+                    result = 'g=' .. tostring(g) .. '|msgHasName=' .. tostring(type(msg) == 'string' and msg:find(name, 1, true) ~= nil)
+                        .. '|' .. tostring(math.type(code))
                 else
-                    result = g ~= nil and g:read('a') == 'x'
+                    result = 'g~=nil=' .. tostring(g ~= nil) .. '|' .. tostring(g and g:read('a'))
                     if g then g:close() end
                 end
                 cleanup(name)
-                return tostring(result)
+                return result
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe(OperatingSystem.IsWindows() ? "g=nil|msgHasName=true|integer" : "g~=nil=true|x");
         }
 
         [Fact]
@@ -5302,9 +5279,9 @@ namespace KitsuneNet.Tests
                 local snd2 = Sound.Open(path(sndName))
 
                 cleanup(imgName, sndName)
-                return tostring(img2:GetWidth() == 3 and g == 20 and snd2:GetFrameCount() == 800)
+                return img2:GetWidth() .. '|' .. tostring(g) .. '|' .. snd2:GetFrameCount()
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("3|20|800");
         }
 
         // Standard Lua library, non-ASCII paths
@@ -5337,13 +5314,11 @@ namespace KitsuneNet.Tests
                 local removed = os.remove(path(name))
                 local ok, err = pcall(io.lines, path('saknas_\xc3\xa9.txt'))
                 FileSystem.RemoveDirectory(base)
-                return tostring(#lines == 3 and lines[1] == 'one' and lines[3] == 'three'
-                    and #kept == 3 and kept[2] == 'two\n'
-                    and chunks[1] == 'on|e' and chunks[2] == '\nt|w'
-                    and first == 'one' and removed == true
-                    and not ok and err:find('saknas_\xc3\xa9.txt', 1, true) ~= nil)
+                return #lines .. '|' .. tostring(lines[1]) .. '|' .. tostring(lines[3]) .. '|' .. #kept .. '|' .. tostring(kept[2])
+                    .. '|' .. tostring(chunks[1]) .. '|' .. tostring(chunks[2]) .. '|' .. tostring(first) .. '|' .. tostring(removed)
+                    .. '|' .. tostring(ok) .. '|' .. tostring(type(err) == 'string' and err:find('saknas_\xc3\xa9.txt', 1, true) ~= nil)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("3|one|three|3|two\n|on|e|\nt|w|one|true|false|true");
         }
 
         [Fact]
@@ -5364,9 +5339,9 @@ namespace KitsuneNet.Tests
                 io.input(io.stdin)
 
                 cleanup(name)
-                return tostring(a == 'first' and b == 'second')
+                return tostring(a) .. '|' .. tostring(b)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("first|second");
         }
 
         [Fact]
@@ -5384,10 +5359,10 @@ namespace KitsuneNet.Tests
                 local again, msg = os.remove(path(to))
                 local remaining = #FileSystem.GetFiles(base)
                 FileSystem.RemoveDirectory(base)
-                return tostring(renamed == true and listed == to and removed == true
-                    and again == nil and msg:find(to, 1, true) ~= nil and remaining == 0)
+                return tostring(renamed) .. '|' .. tostring(listed) .. '|' .. tostring(removed) .. '|' .. tostring(again)
+                    .. '|msgHasName=' .. tostring(type(msg) == 'string' and msg:find(to, 1, true) ~= nil) .. '|' .. remaining
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true|efter_€_😀.txt|true|nil|msgHasName=true|0");
         }
 
         [Fact]
@@ -5409,11 +5384,12 @@ namespace KitsuneNet.Tests
                 local failed, err = loadfile(path(bad))
                 local missing, err2 = loadfile(path('saknas_\xe6\xb5\x8b.lua'))
                 cleanup(good, bad)
-                return tostring(a == 'loadfile' and b == '\xc3\xb6' and c == 'dofile'
-                    and failed == nil and err:find(bad, 1, true) ~= nil
-                    and missing == nil and err2:find('saknas_\xe6\xb5\x8b.lua', 1, true) ~= nil)
+                return tostring(a) .. '|' .. tostring(b) .. '|' .. tostring(c) .. '|' .. tostring(failed)
+                    .. '|errHasBad=' .. tostring(type(err) == 'string' and err:find(bad, 1, true) ~= nil)
+                    .. '|' .. tostring(missing)
+                    .. '|err2HasName=' .. tostring(type(err2) == 'string' and err2:find('saknas_\xe6\xb5\x8b.lua', 1, true) ~= nil)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("loadfile|ö|dofile|nil|errHasBad=true|nil|err2HasName=true");
         }
 
         [Fact]
@@ -5434,9 +5410,10 @@ namespace KitsuneNet.Tests
                 package.loaded['kitsune_m\xc3\xb6d_\xe6\xb5\x8b'] = nil
 
                 cleanup(file)
-                return tostring(found == path(file) and ok and mod.name == 'm\xc3\xb6d')
+                return 'found==path=' .. tostring(found == path(file)) .. '|' .. tostring(ok) .. '|'
+                    .. tostring(type(mod) == 'table' and mod.name or mod)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("found==path=true|true|möd");
         }
 
         [Fact]
@@ -5464,14 +5441,13 @@ namespace KitsuneNet.Tests
                 package.path, package.cpath = savedPath, savedCPath
 
                 cleanup(modFile, rootFile)
-                return tostring(not ok1 and e1:find('error loading module', 1, true) ~= nil
-                        and e1:find(path(modFile), 1, true) ~= nil
-                    and not ok2 and e2:find('error loading module', 1, true) ~= nil
-                        and e2:find(path(rootFile), 1, true) ~= nil
-                    and not ok3 and e3:find(path('saknas_\xc3\xa9' .. ext), 1, true) ~= nil
-                    and utf8.len(e1) ~= nil and utf8.len(e2) ~= nil)
+                local function has(s, part) return tostring(type(s) == 'string' and s:find(part, 1, true) ~= nil) end
+                return tostring(ok1) .. '|' .. has(e1, 'error loading module') .. '|' .. has(e1, path(modFile))
+                    .. '|' .. tostring(ok2) .. '|' .. has(e2, 'error loading module') .. '|' .. has(e2, path(rootFile))
+                    .. '|' .. tostring(ok3) .. '|' .. has(e3, path('saknas_\xc3\xa9' .. ext))
+                    .. '|' .. tostring(utf8.len(e1) ~= nil) .. '|' .. tostring(utf8.len(e2) ~= nil)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("false|true|true|false|true|true|false|true|true|true");
         }
 
         [WindowsOnlyFact]
@@ -5502,11 +5478,12 @@ namespace KitsuneNet.Tests
                     local p = package.path
                     local ok, mod = pcall(require, 'kitsune_envm\xc3\xb6d')
                     package.loaded['kitsune_envm\xc3\xb6d'] = nil
-                    return tostring(p:sub(1, #prefix) == prefix and #p > #prefix
-                        and not p:find(';;', 1, true) and not p:find('!', 1, true)
-                        and ok and mod == 'fr\xc3\xa5n env')
+                    return 'prefix=' .. tostring(p:sub(1, #prefix) == prefix) .. '|longer=' .. tostring(#p > #prefix)
+                        .. '|noDoubleSemicolon=' .. tostring(not p:find(';;', 1, true))
+                        .. '|noBang=' .. tostring(not p:find('!', 1, true))
+                        .. '|' .. tostring(ok) .. '|' .. tostring(mod)
                 ");
-                r.String.ShouldBe("true");
+                r.String.ShouldBe("prefix=true|longer=true|noDoubleSemicolon=true|noBang=true|true|från env");
             }
             finally
             {
@@ -5534,10 +5511,9 @@ namespace KitsuneNet.Tests
                 setenv('KITSUNE_OSGETENV_SHORT', 'v\xc3\xa4rde \xe2\x82\xac', true)
                 local a = os.getenv('KITSUNE_OSGETENV_LONG')
                 local b = os.getenv('KITSUNE_OSGETENV_SHORT')
-                return tostring(a == long and b == 'v\xc3\xa4rde \xe2\x82\xac'
-                    and os.getenv('KITSUNE_OSGETENV_NOT_SET_\xc3\xa9') == nil)
+                return 'long==a=' .. tostring(a == long) .. '|' .. tostring(b) .. '|' .. tostring(os.getenv('KITSUNE_OSGETENV_NOT_SET_\xc3\xa9'))
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("long==a=true|värde €|nil");
         }
 
         [Fact]
@@ -5553,9 +5529,9 @@ namespace KitsuneNet.Tests
                 f:write('tmp')
                 f:close()
                 local removed = os.remove(name)
-                return tostring(type(name) == 'string' and utf8.len(name) ~= nil and removed == true)
+                return type(name) .. '|validUtf8=' .. tostring(utf8.len(name) ~= nil) .. '|' .. tostring(removed)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("string|validUtf8=true|true");
         }
 
         [Fact]
@@ -5572,10 +5548,11 @@ namespace KitsuneNet.Tests
                 local ok1, e1 = pcall(io.popen, 'x', 'q')
                 local ok2 = pcall(io.popen, 'x', 'r+')
                 local ok3 = pcall(io.popen, 'x', 'a')
-                return tostring(hasShell == true and not ok1 and e1:find('invalid mode', 1, true) ~= nil
-                    and not ok2 and not ok3)
+                return tostring(hasShell) .. '|' .. tostring(ok1) .. '|e1InvalidMode='
+                    .. tostring(type(e1) == 'string' and e1:find('invalid mode', 1, true) ~= nil)
+                    .. '|' .. tostring(ok2) .. '|' .. tostring(ok3)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true|false|e1InvalidMode=true|false|false");
         }
 
         [AnnoyingFact]
@@ -5599,9 +5576,9 @@ namespace KitsuneNet.Tests
                 local exists = FileSystem.GetFileInfo(path(created)) ~= nil
 
                 cleanup(name, created)
-                return tostring(out == 'piped' and ok == true and exists)
+                return tostring(out) .. '|' .. tostring(ok) .. '|' .. tostring(exists)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("piped|true|true");
         }
 
         [WindowsOnlyFact]
@@ -5624,12 +5601,11 @@ namespace KitsuneNet.Tests
                         local fn = package.loadlib(dllPath, 'GetFileVersionInfoSizeW')
                         local noSym, err1, where1 = package.loadlib(dllPath, 'kitsune_no_such_symbol')
                         local missing, err2, where2 = package.loadlib(dllPath .. '.saknas', '*')
-                        return tostring(ok == true and type(fn) == 'function'
-                            and noSym == nil and type(err1) == 'string' and where1 == 'init'
-                            and missing == nil and type(err2) == 'string' and where2 == 'open'
-                            and utf8.len(err1) ~= nil and utf8.len(err2) ~= nil)
+                        return tostring(ok) .. '|' .. type(fn) .. '|' .. tostring(noSym) .. '|' .. type(err1) .. '|' .. tostring(where1)
+                            .. '|' .. tostring(missing) .. '|' .. type(err2) .. '|' .. tostring(where2)
+                            .. '|' .. tostring(utf8.len(err1) ~= nil) .. '|' .. tostring(utf8.len(err2) ~= nil)
                     ");
-                    r.String.ShouldBe("true");
+                    r.String.ShouldBe("true|function|nil|string|init|nil|string|open|true|true");
                 }
             }
             finally
@@ -5660,9 +5636,10 @@ namespace KitsuneNet.Tests
                 local base = os.getenv('TEMP') or '.'
                 local okLong, info = pcall(FileSystem.GetFileInfo, base .. sep .. string.rep('\xe6\xb5\x8b', 400))
                 local okHuge, err = pcall(FileSystem.GetFileInfo, base .. sep .. string.rep('\xe6\xb5\x8b', 1100))
-                return tostring(okLong and info == nil and not okHuge and err:find('too long', 1, true) ~= nil)
+                return tostring(okLong) .. '|' .. tostring(info) .. '|' .. tostring(okHuge) .. '|errTooLong='
+                    .. tostring(type(err) == 'string' and err:find('too long', 1, true) ~= nil)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true|nil|false|errTooLong=true");
         }
 
         [Fact]
@@ -5718,16 +5695,10 @@ namespace KitsuneNet.Tests
                 local entry = all[1]
                 FileSystem.Delete(base .. sep .. 'f.txt')
                 FileSystem.RemoveDirectory(base)
-                return tostring(
-                    entry ~= nil and
-                    type(entry.FileName) ~= 'nil' and
-                    type(entry.isFolder) == 'boolean' and
-                    entry.isLink == false and
-                    entry.isPlaceholder == false and
-                    type(entry.Size) == 'number'
-                )
+                return tostring(entry ~= nil) .. '|' .. type(entry.FileName) .. '|' .. type(entry.isFolder) .. '|'
+                    .. tostring(entry.isLink) .. '|' .. tostring(entry.isPlaceholder) .. '|' .. type(entry.Size)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true|string|boolean|false|false|number");
         }
 
         [WindowsFact]
@@ -5880,13 +5851,9 @@ namespace KitsuneNet.Tests
                 -- Decode the same input with both: 'a' splits on ';', 'b' does not.
                 local ta = a:Decode('x;y;z')
                 local tb = b:Decode('x;y;z')
-                return tostring(
-                    #ta.Rows[1] == 3 and          -- a splits correctly on ';'
-                    tostring(ta.Rows[1][2]) == 'y' and
-                    #tb.Rows[1] == 1              -- b looks for ',' so treats input as one field
-                )
+                return #ta.Rows[1] .. '|' .. tostring(ta.Rows[1][2]) .. '|' .. #tb.Rows[1]
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("3|y|1");
         }
 
         [Fact]
@@ -5900,12 +5867,10 @@ namespace KitsuneNet.Tests
                 local csv = CSV.New()
                 local t1 = csv:Decode('a,b,c')
                 local t2 = csv:Decode('1,2,3')
-                return tostring(
-                    tostring(t1.Rows[1][1]) == 'a' and tostring(t1.Rows[1][3]) == 'c' and
-                    tostring(t2.Rows[1][1]) == '1' and tostring(t2.Rows[1][3]) == '3'
-                )
+                return tostring(t1.Rows[1][1]) .. '|' .. tostring(t1.Rows[1][3]) .. '|'
+                    .. tostring(t2.Rows[1][1]) .. '|' .. tostring(t2.Rows[1][3])
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("a|c|1|3");
         }
 
         [Fact]
@@ -5919,12 +5884,9 @@ namespace KitsuneNet.Tests
                 local csv = CSV.New()
                 local t1 = csv:Decode('a,b,c')   -- sniffs comma
                 local t2 = csv:Decode('x;y;z')   -- must sniff semicolon, not reuse comma
-                return tostring(
-                    tostring(t1.Rows[1][2]) == 'b' and
-                    tostring(t2.Rows[1][2]) == 'y'
-                )
+                return tostring(t1.Rows[1][2]) .. '|' .. tostring(t2.Rows[1][2])
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("b|y");
         }
 
         [Fact]
@@ -5942,9 +5904,9 @@ namespace KitsuneNet.Tests
                 local ok, err = pcall(function()
                     CSV.New():DecodeFromFunction(s)
                 end)
-                return tostring(not ok and type(err) == 'string')
+                return tostring(ok) .. '|' .. type(err)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("false|string");
         }
 
         [Fact]
@@ -6101,9 +6063,9 @@ namespace KitsuneNet.Tests
                     i = i + 1
                     return chunks[i]
                 end)
-                return tostring(type(t) == 'table' and t[1] == 1 and t[2] == 2 and t[3] == 3)
+                return type(t) .. '|' .. tostring(t[1]) .. '|' .. tostring(t[2]) .. '|' .. tostring(t[3])
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("table|1|2|3");
         }
 
         [Fact]
@@ -6123,9 +6085,9 @@ namespace KitsuneNet.Tests
                     pos = pos + 2
                     return chunk
                 end)
-                return tostring(type(v) == 'table' and v[1] == 1 and v[3] == 3)
+                return type(v) .. '|' .. tostring(v[1]) .. '|' .. tostring(v[3])
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("table|1|3");
         }
 
         // Json SetDecodeNull
@@ -6347,9 +6309,9 @@ namespace KitsuneNet.Tests
                 json:SetEncodeEmptyObject(true)
                 local encoded = json:Encode({})
                 local decoded = json:Decode(encoded)
-                return tostring(decoded == Json.EmptyObject and encoded == '{}')
+                return 'decoded==sentinel=' .. tostring(decoded == Json.EmptyObject) .. '|' .. encoded
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("decoded==sentinel=true|{}");
         }
 
         [Fact]
@@ -6439,9 +6401,9 @@ namespace KitsuneNet.Tests
                 local a = Stream.New('hello')
                 local b = Stream.New('hello')
                 local id1, id2 = a:Id(), b:Id()
-                return tostring(math.type(id1) == 'integer' and math.type(id2) == 'integer' and id1 ~= id2)
+                return tostring(math.type(id1)) .. '|' .. tostring(math.type(id2)) .. '|' .. tostring(id1 ~= id2)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("integer|integer|true");
         }
 
         [Fact]
@@ -6456,9 +6418,9 @@ namespace KitsuneNet.Tests
                 local id2 = w:Id()
                 w:Close()
                 os.remove(path)
-                return tostring(id1 == id2 and math.type(id1) == 'integer')
+                return tostring(id1 == id2) .. '|' .. tostring(math.type(id1))
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true|integer");
         }
 
         [Fact]
@@ -6470,9 +6432,9 @@ namespace KitsuneNet.Tests
             // userdata pointer itself, which must be non-zero.
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local s = Stream.New(function(op) if op == 0 then return 1 end if op == 1 then return true end end)
-                return tostring(s:Id() ~= 0 and math.type(s:Id()) == 'integer')
+                return tostring(s:Id() ~= 0) .. '|' .. tostring(math.type(s:Id()))
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true|integer");
         }
 
         [Fact]
@@ -6564,9 +6526,9 @@ namespace KitsuneNet.Tests
                 s:Write('A')           -- single ASCII codepoint (U+0041)
                 s:Seek(0)
                 local bytes, cp = s:ReadUtf8()
-                return tostring(bytes == 'A' and cp == 65)
+                return tostring(bytes) .. '|' .. tostring(cp)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("A|65");
         }
 
         [Fact]
@@ -6618,9 +6580,9 @@ namespace KitsuneNet.Tests
                 local str = tostring(r)
                 r:Close()
                 os.remove(path)
-                return tostring(type(str) == 'string' and #str > 0 and str ~= 'secret')
+                return type(str) .. '|len>0=' .. tostring(#str > 0) .. '|differsFromContent=' .. tostring(str ~= 'secret')
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("string|len>0=true|differsFromContent=true");
         }
 
         [Fact]
@@ -6637,9 +6599,9 @@ namespace KitsuneNet.Tests
                     if op == CLOSE then return true end
                 end)
                 local str = tostring(s)
-                return tostring(type(str) == 'string' and #str > 0 and str ~= '')
+                return type(str) .. '|len>0=' .. tostring(#str > 0) .. '|notEmpty=' .. tostring(str ~= '')
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("string|len>0=true|notEmpty=true");
         }
 
         [Fact]
@@ -6658,9 +6620,9 @@ namespace KitsuneNet.Tests
                 end)
                 local str = tostring(s)
                 -- must be a non-empty string that is NOT the backend's read data
-                return tostring(type(str) == 'string' and #str > 0 and str ~= 'canary')
+                return type(str) .. '|len>0=' .. tostring(#str > 0) .. '|differsFromBackendData=' .. tostring(str ~= 'canary')
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("string|len>0=true|differsFromBackendData=true");
         }
 
         // Write / Read coverage
@@ -6754,9 +6716,9 @@ namespace KitsuneNet.Tests
                 local s = Stream.New('ABCD')
                 s:Seek(2)
                 local b = s:PeekByte(0)   -- peek at 'A' (65) while cursor is at 2
-                return tostring(b == 65 and s:pos() == 2)
+                return tostring(b) .. '|' .. tostring(s:pos())
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("65|2");
         }
 
         [Fact]
@@ -6779,9 +6741,9 @@ namespace KitsuneNet.Tests
                 -- Memory stream has both CAP_READ and CAP_SEEK: peek must work.
                 local m = Stream.New('AB')
                 local withSeek = m:PeekByte()
-                return tostring(noSeek == -1 and withSeek == 65)
+                return tostring(noSeek) .. '|' .. tostring(withSeek)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("-1|65");
         }
 
         // Capability-guard return values
@@ -6883,9 +6845,9 @@ namespace KitsuneNet.Tests
                 s:WriteByte(0xA9)
                 s:Seek(0)
                 local bytes, cp = s:ReadUtf8()
-                return tostring(#bytes == 2 and cp == 0xE9)
+                return #bytes .. '|' .. tostring(cp)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("2|233");
         }
 
         [Fact]
@@ -6918,9 +6880,9 @@ namespace KitsuneNet.Tests
                 s:Seek(0)
                 local b1 = s:ReadByte()
                 local b2 = s:ReadByte()
-                return tostring(info.len == 2 and b1 == 0xC3 and b2 == 0xA9)
+                return tostring(info.len) .. '|' .. tostring(b1) .. '|' .. tostring(b2)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("2|195|169");
         }
 
         // Compress / Decompress error paths
@@ -6935,9 +6897,9 @@ namespace KitsuneNet.Tests
                     if op == CLOSE then return true end
                 end)
                 local result, err = s:Compress()
-                return tostring(result == nil and type(err) == 'string')
+                return tostring(result) .. '|' .. type(err)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("nil|string");
         }
 
         [Fact]
@@ -6951,9 +6913,9 @@ namespace KitsuneNet.Tests
                     if op == CLOSE then return true end
                 end)
                 local result, err = s:Decompress()
-                return tostring(result == nil and type(err) == 'string')
+                return tostring(result) .. '|' .. type(err)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("nil|string");
         }
 
         [Fact]
@@ -6970,9 +6932,9 @@ namespace KitsuneNet.Tests
                     if op == 2     then return '' end
                 end)
                 local result, err = src:Compress(nil, ronly)
-                return tostring(result == nil and type(err) == 'string')
+                return tostring(result) .. '|' .. type(err)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("nil|string");
         }
 
         // Misc stream operations
@@ -7013,10 +6975,10 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local n = Hardware.CpuName()
                 if n == nil then return 'absent' end
-                return tostring(type(n) == 'string' and #n > 0)
+                return type(n) .. '|len>0=' .. tostring(#n > 0)
             ");
             Skip.If(r == "absent", "Hardware.CpuName() is not available on this machine");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("string|len>0=true");
         }
 
         [Fact]
@@ -7026,16 +6988,15 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local m = Hardware.Memory()
                 if m == nil then return 'nil' end
-                return tostring(
-                    type(m.TotalPhys)   == 'number' and m.TotalPhys   > 0 and
-                    type(m.AvailPhys)   == 'number' and m.AvailPhys   >= 0 and
-                    type(m.TotalSwap)   == 'number' and m.TotalSwap   >= 0 and
-                    type(m.AvailSwap)   == 'number' and m.AvailSwap   >= 0 and
-                    type(m.LoadPercent) == 'number' and
-                    m.LoadPercent >= 0 and m.LoadPercent <= 100
-                )
+                return 'TotalPhys:' .. type(m.TotalPhys) .. ':>0=' .. tostring(m.TotalPhys > 0)
+                    .. '|AvailPhys:' .. type(m.AvailPhys) .. ':>=0=' .. tostring(m.AvailPhys >= 0)
+                    .. '|TotalSwap:' .. type(m.TotalSwap) .. ':>=0=' .. tostring(m.TotalSwap >= 0)
+                    .. '|AvailSwap:' .. type(m.AvailSwap) .. ':>=0=' .. tostring(m.AvailSwap >= 0)
+                    .. '|LoadPercent:' .. type(m.LoadPercent) .. ':>=0=' .. tostring(m.LoadPercent >= 0)
+                    .. ':<=100=' .. tostring(m.LoadPercent <= 100)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("TotalPhys:number:>0=true|AvailPhys:number:>=0=true|TotalSwap:number:>=0=true"
+                + "|AvailSwap:number:>=0=true|LoadPercent:number:>=0=true:<=100=true");
         }
 
         [Fact]
@@ -7044,9 +7005,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local m = Hardware.Memory()
-                return tostring(m ~= nil and m.AvailPhys <= m.TotalPhys)
+                return tostring(m ~= nil) .. '|avail<=total=' .. tostring(m.AvailPhys <= m.TotalPhys)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true|avail<=total=true");
         }
 
         [SkippableFact]
@@ -7071,10 +7032,10 @@ namespace KitsuneNet.Tests
                 Sleep(100)
                 local v = Hardware.CpuLoad()
                 if v == nil then return 'absent' end
-                return tostring(v >= 0 and v <= 100)
+                return 'v>=0=' .. tostring(v >= 0) .. '|v<=100=' .. tostring(v <= 100)
             ");
             Skip.If(r == "absent", "Hardware.CpuLoad() is not available on this machine");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("v>=0=true|v<=100=true");
         }
 
         [Fact]
@@ -7182,9 +7143,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local ok, err = Hardware.NvidiaSetPowerLimit(9999, 100)
-                return tostring(ok == nil and type(err) == 'string' and #err > 0)
+                return tostring(ok) .. '|' .. type(err) .. '|len>0=' .. tostring(type(err) == 'string' and #err > 0)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("nil|string|len>0=true");
         }
 
         [SkippableFact]
@@ -7271,9 +7232,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local p = Process.Open()
                 local id = p:GetID()
-                return tostring(math.type(id) == 'integer' and id > 0)
+                return tostring(math.type(id)) .. '|id>0=' .. tostring(id > 0)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("integer|id>0=true");
         }
 
         [Fact]
@@ -7283,9 +7244,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local p = Process.Open()
                 local name = p:GetName()
-                return tostring(type(name) == 'string' and #name > 0)
+                return type(name) .. '|len>0=' .. tostring(#name > 0)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("string|len>0=true");
         }
 
         [Fact]
@@ -7316,9 +7277,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local p = Process.Open()
                 local s = tostring(p)
-                return tostring(type(s) == 'string' and #s > 0)
+                return type(s) .. '|len>0=' .. tostring(#s > 0)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("string|len>0=true");
         }
 
         [AnnoyingFact]
@@ -7381,9 +7342,9 @@ namespace KitsuneNet.Tests
                 Sleep(50)
                 FileSystem.Delete(dir .. sep .. 'marker.txt')
                 FileSystem.RemoveDirectory(dir)
-                return tostring(proc ~= nil and found)
+                return tostring(proc ~= nil) .. '|' .. tostring(found)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true|true");
         }
 
         [AnnoyingFact]
@@ -7476,9 +7437,9 @@ namespace KitsuneNet.Tests
                     Sleep(50)
                 end
                 local c2 = proc:GetExitCode()
-                return tostring(c1 ~= nil and c1 == c2)
+                return 'c1~=nil=' .. tostring(c1 ~= nil) .. '|c1==c2=' .. tostring(c1 == c2)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("c1~=nil=true|c1==c2=true");
         }
 
         [AnnoyingFact]
@@ -7511,9 +7472,9 @@ namespace KitsuneNet.Tests
                 assert(proc, 'Process.Start returned nil')
                 local written = proc:WriteToPipe('hello\n')
                 proc:Stop()
-                return tostring(type(written) == 'number' and written > 0)
+                return type(written) .. '|written>0=' .. tostring(type(written) == 'number' and written > 0)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("number|written>0=true");
         }
 
         [AnnoyingFact]
@@ -7527,9 +7488,9 @@ namespace KitsuneNet.Tests
                 assert(proc, 'Process.Start returned nil')
                 local id = proc:GetID()
                 proc:Stop()
-                return tostring(math.type(id) == 'integer' and id > 0)
+                return tostring(math.type(id)) .. '|id>0=' .. tostring(id > 0)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("integer|id>0=true");
         }
 
         // Async stream (CreateChunked / HasData / CSV / Compress)
@@ -7587,9 +7548,9 @@ namespace KitsuneNet.Tests
                 local available = s:HasData()   -- 5 bytes remain
                 s:Read()                        -- consume all
                 local atEnd = s:HasData()       -- 0 bytes remain -> false
-                return tostring(available == 5 and atEnd == false)
+                return tostring(available) .. '|' .. tostring(atEnd)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("5|false");
         }
 
         [Fact]
@@ -7667,9 +7628,9 @@ namespace KitsuneNet.Tests
                 dead:Close()
                 local dead_hd  = dead:HasData()   -- zeroed -> -1
 
-                return tostring(alive_hd == false and dead_hd == -1)
+                return tostring(alive_hd) .. '|' .. tostring(dead_hd)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("false|-1");
         }
 
         [Fact]
@@ -7677,17 +7638,17 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(RunCoroutine + MakeChunkedStream + @"
+                local result
                 run(function()
                     local cs = makeChunkedStream({'alpha', 'beta', 'gamma'})
                     local a = cs:Read()
                     local b = cs:Read()
                     local c = cs:Read()
-                    assert(a == 'alpha' and b == 'beta' and c == 'gamma',
-                        'chunks out of order: ' .. tostring(a) .. ',' .. tostring(b) .. ',' .. tostring(c))
+                    result = tostring(a) .. '|' .. tostring(b) .. '|' .. tostring(c)
                 end)
-                return 'ok'
+                return result
             ");
-            r.String.ShouldBe("ok");
+            r.String.ShouldBe("alpha|beta|gamma");
         }
 
         [Fact]
@@ -7755,18 +7716,18 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(RunCoroutine + MakeChunkedStream + @"
+                local result
                 run(function()
                     local cs = makeChunkedStream({'a,b,c\n', '1,2,3\n', '4,5,6\n'})
                     local rows = {}
                     for row in CSV.New():DecodeFromFunction(cs) do rows[#rows + 1] = row end
-                    assert(#rows == 3, 'expected 3 rows, got ' .. #rows)
-                    assert(tostring(rows[1][1]) == 'a' and tostring(rows[1][3]) == 'c', 'header mismatch')
-                    assert(tostring(rows[2][1]) == '1' and tostring(rows[2][3]) == '3', 'row2 mismatch')
-                    assert(tostring(rows[3][1]) == '4' and tostring(rows[3][3]) == '6', 'row3 mismatch')
+                    result = #rows .. '|' .. tostring(rows[1][1]) .. ':' .. tostring(rows[1][3])
+                        .. '|' .. tostring(rows[2][1]) .. ':' .. tostring(rows[2][3])
+                        .. '|' .. tostring(rows[3][1]) .. ':' .. tostring(rows[3][3])
                 end)
-                return 'ok'
+                return result
             ");
-            r.String.ShouldBe("ok");
+            r.String.ShouldBe("3|a:c|1:3|4:6");
         }
 
         [Fact]
@@ -7776,18 +7737,17 @@ namespace KitsuneNet.Tests
 
             // "hello" and ",world\n" arrive in separate chunks — must be joined.
             LuaValue r = await engine.ExecuteStringAsync(RunCoroutine + MakeChunkedStream + @"
+                local result
                 run(function()
                     local cs = makeChunkedStream({'hello', ',world\n', 'foo,bar\n'})
                     local rows = {}
                     for row in CSV.New():DecodeFromFunction(cs) do rows[#rows + 1] = row end
-                    assert(#rows == 2, 'expected 2 rows, got ' .. #rows)
-                    assert(tostring(rows[1][1]) == 'hello', 'col1: ' .. tostring(rows[1][1]))
-                    assert(tostring(rows[1][2]) == 'world', 'col2: ' .. tostring(rows[1][2]))
-                    assert(tostring(rows[2][1]) == 'foo' and tostring(rows[2][2]) == 'bar')
+                    result = #rows .. '|' .. tostring(rows[1][1]) .. '|' .. tostring(rows[1][2])
+                        .. '|' .. tostring(rows[2][1]) .. '|' .. tostring(rows[2][2])
                 end)
-                return 'ok'
+                return result
             ");
-            r.String.ShouldBe("ok");
+            r.String.ShouldBe("2|hello|world|foo|bar");
         }
 
         [Fact]
@@ -8002,9 +7962,9 @@ namespace KitsuneNet.Tests
                 end)
                 local j = Json.New()
                 local t = j:DecodeFromStream(s)
-                return tostring(t.name == 'kitsune' and t.version == 4 and t.active == true)
+                return tostring(t.name) .. '|' .. tostring(t.version) .. '|' .. tostring(t.active)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("kitsune|4|true");
         }
 
         [Fact]
@@ -8135,9 +8095,9 @@ namespace KitsuneNet.Tests
                 local a = Xml.New()
                 local b = a:New()
                 local doc = b:Decode('<hello/>')
-                return tostring(doc ~= nil and doc.tag == 'hello')
+                return tostring(doc ~= nil) .. '|' .. tostring(doc and doc.tag)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true|hello");
         }
 
         // Decode
@@ -8172,9 +8132,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local xml = Xml.New()
                 local doc = xml:Decode('<root/>')
-                return tostring(type(doc.attr) == 'table' and #doc.attr == 0)
+                return type(doc.attr) .. '|' .. #doc.attr
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("table|0");
         }
 
         [Fact]
@@ -8184,9 +8144,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local xml = Xml.New()
                 local doc = xml:Decode('<item id=""42""/>')
-                return tostring(doc.attr[1].key == 'id' and doc.attr[1].value == '42')
+                return tostring(doc.attr[1].key) .. '|' .. tostring(doc.attr[1].value)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("id|42");
         }
 
         [Fact]
@@ -8232,9 +8192,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local xml = Xml.New()
                 local doc = xml:Decode('<leaf/>')
-                return tostring(type(doc.children) == 'table' and #doc.children == 0)
+                return type(doc.children) .. '|' .. #doc.children
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("table|0");
         }
 
         [Fact]
@@ -8280,19 +8240,11 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local xml = Xml.New()
                 local doc = xml:Decode('<person id=""1"" active=""true""><name>Alice</name><score>42</score></person>')
-                return tostring(
-                    doc.tag == 'person' and
-                    #doc.attr == 2 and
-                    doc.attr[1].key == 'id' and
-                    doc.attr[1].value == '1' and
-                    #doc.children == 2 and
-                    doc.children[1].tag == 'name' and
-                    doc.children[1].text == 'Alice' and
-                    doc.children[2].tag == 'score' and
-                    doc.children[2].text == '42'
-                )
+                return table.concat({tostring(doc.tag), #doc.attr, tostring(doc.attr[1].key), tostring(doc.attr[1].value),
+                    #doc.children, tostring(doc.children[1].tag), tostring(doc.children[1].text),
+                    tostring(doc.children[2].tag), tostring(doc.children[2].text)}, '|')
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("person|2|id|1|2|name|Alice|score|42");
         }
 
         [Fact]
@@ -8302,9 +8254,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local xml = Xml.New()
                 local doc, err = xml:Decode('not < valid > xml <<<')
-                return tostring(doc == nil and type(err) == 'string')
+                return tostring(doc) .. '|' .. type(err)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("nil|string");
         }
 
         [Fact]
@@ -8314,9 +8266,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local xml = Xml.New()
                 local doc, err = xml:Decode('')
-                return tostring(doc == nil and type(err) == 'string')
+                return tostring(doc) .. '|' .. type(err)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("nil|string");
         }
 
         [Fact]
@@ -8338,9 +8290,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local xml = Xml.New()
                 local doc = xml:Decode('<root><!-- comment --><child/></root>')
-                return tostring(#doc.children == 1 and doc.children[1].tag == 'child')
+                return #doc.children .. '|' .. tostring(doc.children[1].tag)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("1|child");
         }
 
         [Fact]
@@ -8350,9 +8302,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local xml = Xml.New()
                 local doc = xml:Decode('<item a=""1"" b=""2"" c=""3""/>')
-                return tostring(doc.attr[1].key == 'a' and doc.attr[2].key == 'b' and doc.attr[3].key == 'c')
+                return tostring(doc.attr[1].key) .. '|' .. tostring(doc.attr[2].key) .. '|' .. tostring(doc.attr[3].key)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("a|b|c");
         }
 
         [Fact]
@@ -8362,9 +8314,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local xml = Xml.New()
                 local doc = xml:Decode('<root><first/><second/><third/></root>')
-                return tostring(doc.children[1].tag == 'first' and doc.children[2].tag == 'second' and doc.children[3].tag == 'third')
+                return tostring(doc.children[1].tag) .. '|' .. tostring(doc.children[2].tag) .. '|' .. tostring(doc.children[3].tag)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("first|second|third");
         }
 
         [Fact]
@@ -8375,9 +8327,9 @@ namespace KitsuneNet.Tests
                 local xml = Xml.New()
                 local d1  = xml:Decode('<a/>')
                 local d2  = xml:Decode('<b/>')
-                return tostring(d1.tag == 'a' and d2.tag == 'b')
+                return tostring(d1.tag) .. '|' .. tostring(d2.tag)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("a|b");
         }
 
         // Encode
@@ -8388,9 +8340,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local xml = Xml.New()
                 local s   = xml:Encode({ tag='root', attr={}, text='', children={} })
-                return tostring(type(s) == 'string' and #s > 0)
+                return type(s) .. '|len>0=' .. tostring(#s > 0)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("string|len>0=true");
         }
 
         [Fact]
@@ -8450,9 +8402,9 @@ namespace KitsuneNet.Tests
                 local ok, err = pcall(function()
                     xml:Encode({ tag='', attr={}, text='', children={} })
                 end)
-                return tostring(not ok and type(err) == 'string')
+                return tostring(ok) .. '|' .. type(err)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("false|string");
         }
 
         [Fact]
@@ -8492,9 +8444,9 @@ namespace KitsuneNet.Tests
                 }})
                 -- compact may still have a newline after the declaration line;
                 -- check that there is no indentation whitespace (tab or leading spaces before <child)
-                return tostring(s:find('\t<child') == nil and s:find('  <child') == nil)
+                return 'noTabIndent=' .. tostring(s:find('\t<child') == nil) .. '|noSpaceIndent=' .. tostring(s:find('  <child') == nil)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("noTabIndent=true|noSpaceIndent=true");
         }
 
         [Fact]
@@ -8531,9 +8483,9 @@ namespace KitsuneNet.Tests
                 local xml  = Xml.New()
                 local node = { tag='item', attr={{ key='id', value='7' }}, text='', children={} }
                 local doc  = xml:Decode(xml:Encode(node))
-                return tostring(doc.attr[1].key == 'id' and doc.attr[1].value == '7')
+                return tostring(doc.attr[1].key) .. '|' .. tostring(doc.attr[1].value)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("id|7");
         }
 
         [Fact]
@@ -8544,9 +8496,9 @@ namespace KitsuneNet.Tests
                 local xml  = Xml.New()
                 local node = { tag='item', attr={{ key='a', value='1' }, { key='b', value='2' }}, text='', children={} }
                 local doc  = xml:Decode(xml:Encode(node))
-                return tostring(#doc.attr == 2 and doc.attr[1].key == 'a' and doc.attr[2].key == 'b')
+                return #doc.attr .. '|' .. tostring(doc.attr[1].key) .. '|' .. tostring(doc.attr[2].key)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("2|a|b");
         }
 
         [Fact]
@@ -8572,9 +8524,9 @@ namespace KitsuneNet.Tests
                     { tag='child', attr={}, text='value', children={} }
                 }}
                 local doc = xml:Decode(xml:Encode(node))
-                return tostring(#doc.children == 1 and doc.children[1].tag == 'child' and doc.children[1].text == 'value')
+                return #doc.children .. '|' .. tostring(doc.children[1].tag) .. '|' .. tostring(doc.children[1].text)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("1|child|value");
         }
 
         [Fact]
@@ -8589,9 +8541,9 @@ namespace KitsuneNet.Tests
                     { tag='c', attr={}, text='3', children={} },
                 }}
                 local doc = xml:Decode(xml:Encode(node))
-                return tostring(#doc.children == 3 and doc.children[2].tag == 'b' and doc.children[2].text == '2')
+                return #doc.children .. '|' .. tostring(doc.children[2].tag) .. '|' .. tostring(doc.children[2].text)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("3|b|2");
         }
 
         [Fact]
@@ -8627,18 +8579,11 @@ namespace KitsuneNet.Tests
                     }
                 }
                 local doc = xml:Decode(xml:Encode(node))
-                return tostring(
-                    doc.tag == 'person'          and
-                    #doc.attr == 2               and
-                    doc.attr[1].key == 'id'      and
-                    doc.attr[1].value == '1'     and
-                    #doc.children == 2           and
-                    doc.children[1].tag == 'name' and
-                    doc.children[1].text == 'Alice' and
-                    doc.children[2].text == '42'
-                )
+                return table.concat({tostring(doc.tag), #doc.attr, tostring(doc.attr[1].key), tostring(doc.attr[1].value),
+                    #doc.children, tostring(doc.children[1].tag), tostring(doc.children[1].text),
+                    tostring(doc.children[2].text)}, '|')
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("person|2|id|1|2|name|Alice|42");
         }
 
         [Fact]
@@ -8651,9 +8596,9 @@ namespace KitsuneNet.Tests
                 local n2  = { tag='second', attr={}, text='two', children={} }
                 local d1  = xml:Decode(xml:Encode(n1))
                 local d2  = xml:Decode(xml:Encode(n2))
-                return tostring(d1.tag == 'first' and d1.text == 'one' and d2.tag == 'second' and d2.text == 'two')
+                return tostring(d1.tag) .. '|' .. tostring(d1.text) .. '|' .. tostring(d2.tag) .. '|' .. tostring(d2.text)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("first|one|second|two");
         }
 
         [Fact]
@@ -8664,9 +8609,9 @@ namespace KitsuneNet.Tests
                 local xml  = Xml.New()
                 local node = { tag='empty', attr={}, text='', children={} }
                 local doc  = xml:Decode(xml:Encode(node))
-                return tostring(doc.text == '' and #doc.children == 0)
+                return '[' .. tostring(doc.text) .. ']|' .. #doc.children
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("[]|0");
         }
 
         [Fact]
@@ -8701,9 +8646,9 @@ namespace KitsuneNet.Tests
                     cur = child
                 end
                 local ok, err = pcall(function() xml:Encode(root) end)
-                return tostring(not ok and type(err) == 'string')
+                return tostring(ok) .. '|' .. type(err)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("false|string");
         }
 
         [Fact]
@@ -8717,9 +8662,9 @@ namespace KitsuneNet.Tests
                 local open  = string.rep('<a>', 520)
                 local close = string.rep('</a>', 520)
                 local ok, err = pcall(function() xml:Decode(open .. close) end)
-                return tostring(not ok and type(err) == 'string')
+                return tostring(ok) .. '|' .. type(err)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("false|string");
         }
 
         [Fact]
@@ -8733,9 +8678,9 @@ namespace KitsuneNet.Tests
                     { tag='', attr={}, text='', children={} }
                 }}
                 local ok, err = pcall(function() xml:Encode(node) end)
-                return tostring(not ok and type(err) == 'string')
+                return tostring(ok) .. '|' .. type(err)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("false|string");
         }
 
         [Fact]
@@ -8745,9 +8690,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local xml = Xml.New()
                 local ok, err = pcall(function() xml:Decode(42) end)
-                return tostring(not ok and type(err) == 'string')
+                return tostring(ok) .. '|' .. type(err)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("false|string");
         }
 
         [Fact]
@@ -8757,9 +8702,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local xml = Xml.New()
                 local doc, err = xml:Decode('   ')
-                return tostring(doc == nil and type(err) == 'string')
+                return tostring(doc) .. '|' .. type(err)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("nil|string");
         }
 
         [Fact]
@@ -8830,8 +8775,8 @@ namespace KitsuneNet.Tests
         public async Task MsgPack_Tostring_ReturnsNonEmptyString()
         {
             using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("return tostring(type(tostring(MsgPack.New())) == 'string' and #tostring(MsgPack.New()) > 0)");
-            r.String.ShouldBe("true");
+            LuaValue r = await engine.ExecuteStringAsync("return type(tostring(MsgPack.New())) .. '|len>0=' .. tostring(#tostring(MsgPack.New()) > 0)");
+            r.String.ShouldBe("string|len>0=true");
         }
 
         [Fact]
@@ -8888,9 +8833,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local m = MsgPack.New()
                 local v = m:Decode(m:Encode(42))
-                return tostring(v == 42 and math.type(v) == 'integer')
+                return tostring(v) .. '|' .. tostring(math.type(v))
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("42|integer");
         }
 
         [Fact]
@@ -8935,9 +8880,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local m = MsgPack.New()
                 local v = m:Decode(m:Encode(3.14))
-                return tostring(math.type(v) == 'float' and math.abs(v - 3.14) < 1e-10)
+                return tostring(math.type(v)) .. '|diff<1e-10=' .. tostring(math.abs(v - 3.14) < 1e-10)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("float|diff<1e-10=true");
         }
 
         [Fact]
@@ -8982,9 +8927,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local m = MsgPack.New()
                 local t = m:Decode(m:Encode({10, 20, 30}))
-                return tostring(t[1] == 10 and t[2] == 20 and t[3] == 30)
+                return tostring(t[1]) .. '|' .. tostring(t[2]) .. '|' .. tostring(t[3])
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("10|20|30");
         }
 
         [Fact]
@@ -8994,9 +8939,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local m = MsgPack.New()
                 local t = m:Decode(m:Encode({name = 'kitsune', version = 1}))
-                return tostring(t.name == 'kitsune' and t.version == 1)
+                return tostring(t.name) .. '|' .. tostring(t.version)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("kitsune|1");
         }
 
         [Fact]
@@ -9039,17 +8984,10 @@ namespace KitsuneNet.Tests
                     obj = {nested = 'value'},
                 }
                 local t = m:Decode(m:Encode(orig))
-                return tostring(
-                    t.s == 'hello'       and
-                    t.n == 42            and
-                    math.abs(t.f - 3.14) < 1e-10 and
-                    t.bt == true         and
-                    t.bf == false        and
-                    #t.arr == 3          and t.arr[2] == 2 and
-                    t.obj.nested == 'value'
-                )
+                return table.concat({tostring(t.s), tostring(t.n), 'f~3.14=' .. tostring(math.abs(t.f - 3.14) < 1e-10),
+                    tostring(t.bt), tostring(t.bf), #t.arr, tostring(t.arr[2]), tostring(t.obj.nested)}, '|')
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("hello|42|f~3.14=true|true|false|3|2|value");
         }
 
         [Fact]
@@ -9062,9 +9000,9 @@ namespace KitsuneNet.Tests
                 local s2 = m:Encode({b = 2})
                 local t1 = m:Decode(s1)
                 local t2 = m:Decode(s2)
-                return tostring(t1.a == 1 and t2.b == 2 and t1.b == nil and t2.a == nil)
+                return tostring(t1.a) .. '|' .. tostring(t2.b) .. '|' .. tostring(t1.b) .. '|' .. tostring(t2.a)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("1|2|nil|nil");
         }
 
         // Encode returns binary string
@@ -9128,9 +9066,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local m = MsgPack.New()
                 local t = m:Decode(m:Encode({1, function() end, 3}))
-                return tostring(t[1] == 1 and t[2] == nil and t[3] == 3)
+                return tostring(t[1]) .. '|' .. tostring(t[2]) .. '|' .. tostring(t[3])
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("1|nil|3");
         }
 
         // Typed userdata encoding as string
@@ -9268,9 +9206,10 @@ namespace KitsuneNet.Tests
                 local t = {}
                 t.self = t
                 local ok, err = pcall(function() m:Encode(t) end)
-                return tostring(not ok and err:find('recursion') ~= nil)
+                return tostring(ok) .. '|' .. tostring(err)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldStartWith("false|");
+            r.String.ShouldContain("recursion");
         }
 
         // Decode error handling
@@ -9281,9 +9220,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local m = MsgPack.New()
                 local v, err = m:Decode('\xC1')   -- 0xC1 is never-used in msgpack
-                return tostring(v == nil and type(err) == 'string')
+                return tostring(v) .. '|' .. type(err)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("nil|string");
         }
 
         [Fact]
@@ -9293,9 +9232,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local m = MsgPack.New()
                 local v, err = m:Decode('')
-                return tostring(v == nil and type(err) == 'string')
+                return tostring(v) .. '|' .. type(err)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("nil|string");
         }
 
         [Fact]
@@ -9308,9 +9247,9 @@ namespace KitsuneNet.Tests
                 local m    = MsgPack.New()
                 local full = m:Encode({1, 2, 3})
                 local v, err = m:Decode(full:sub(1, 1))
-                return tostring(v == nil and type(err) == 'string')
+                return tostring(v) .. '|' .. type(err)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("nil|string");
         }
 
         [Fact]
@@ -9341,9 +9280,9 @@ namespace KitsuneNet.Tests
                 m:EncodeIntoStream(s, {a = 1, b = 2})
                 s:Seek(0)
                 local t = m:Decode(s:Read())
-                return tostring(t.a == 1 and t.b == 2)
+                return tostring(t.a) .. '|' .. tostring(t.b)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("1|2");
         }
 
         [Fact]
@@ -9370,9 +9309,9 @@ namespace KitsuneNet.Tests
                     if op == 1 then return true end
                 end)
                 local ok, err = m:EncodeIntoStream(s, 'test')
-                return tostring(ok == false and type(err) == 'string')
+                return tostring(ok) .. '|' .. type(err)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("false|string");
         }
 
         [Fact]
@@ -9385,9 +9324,9 @@ namespace KitsuneNet.Tests
                 m:EncodeIntoStream(s, {x = 99, y = 'hello', z = true})
                 s:Seek(0)
                 local t = m:DecodeFromStream(s)
-                return tostring(t.x == 99 and t.y == 'hello' and t.z == true)
+                return tostring(t.x) .. '|' .. tostring(t.y) .. '|' .. tostring(t.z)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("99|hello|true");
         }
 
         [Fact]
@@ -9401,9 +9340,9 @@ namespace KitsuneNet.Tests
                     if op == 1 then return true end
                 end)
                 local v, err = m:DecodeFromStream(s)
-                return tostring(v == nil and type(err) == 'string')
+                return tostring(v) .. '|' .. type(err)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("nil|string");
         }
 
         [Fact]
@@ -9455,9 +9394,9 @@ namespace KitsuneNet.Tests
                 local a = m:DecodeFromStream(s)
                 local b = m:DecodeFromStream(s)
                 local c = m:DecodeFromStream(s)
-                return tostring(a.n == 1 and b.n == 2 and c.n == 3)
+                return tostring(a.n) .. '|' .. tostring(b.n) .. '|' .. tostring(c.n)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("1|2|3");
         }
 
         [Fact]
@@ -9474,9 +9413,9 @@ namespace KitsuneNet.Tests
                 m:EncodeIntoStream(s, data)
                 s:Seek(0)
                 local t = m:DecodeFromStream(s)
-                return tostring(#t == 1000 and t[1] == 1 and t[500] == 500 and t[1000] == 1000)
+                return #t .. '|' .. tostring(t[1]) .. '|' .. tostring(t[500]) .. '|' .. tostring(t[1000])
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("1000|1|500|1000");
         }
 
         // Decode via stream (Decode(stream) delegates to DecodeFromStream)
@@ -9523,8 +9462,8 @@ namespace KitsuneNet.Tests
         public async Task Yaml_Tostring_ReturnsNonEmptyString()
         {
             using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("return tostring(type(tostring(Yaml.New())) == 'string' and #tostring(Yaml.New()) > 0)");
-            r.String.ShouldBe("true");
+            LuaValue r = await engine.ExecuteStringAsync("return type(tostring(Yaml.New())) .. '|len>0=' .. tostring(#tostring(Yaml.New()) > 0)");
+            r.String.ShouldBe("string|len>0=true");
         }
 
         [Fact]
@@ -9594,9 +9533,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local y = Yaml.New()
                 local v = y:Decode(y:Encode(42))
-                return tostring(v == 42 and math.type(v) == 'integer')
+                return tostring(v) .. '|' .. tostring(math.type(v))
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("42|integer");
         }
 
         [Fact]
@@ -9617,9 +9556,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local y = Yaml.New()
                 local v = y:Decode(y:Encode(3.14))
-                return tostring(math.type(v) == 'float' and math.abs(v - 3.14) < 1e-10)
+                return tostring(math.type(v)) .. '|diff<1e-10=' .. tostring(math.abs(v - 3.14) < 1e-10)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("float|diff<1e-10=true");
         }
 
         [Fact]
@@ -9653,9 +9592,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local y = Yaml.New()
                 local s = y:Encode({x=1, y='hello', z=true})
-                return tostring(type(s) == 'string' and #s > 0)
+                return type(s) .. '|len>0=' .. tostring(#s > 0)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("string|len>0=true");
         }
 
         [Fact]
@@ -9665,9 +9604,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local y = Yaml.New()
                 local t = y:Decode(y:Encode({x=1, y='hello', z=true}))
-                return tostring(t.x==1 and t.y=='hello' and t.z==true)
+                return tostring(t.x) .. '|' .. tostring(t.y) .. '|' .. tostring(t.z)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("1|hello|true");
         }
 
         [Fact]
@@ -9677,9 +9616,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local y = Yaml.New()
                 local t = y:Decode(y:Encode({10, 20, 30}))
-                return tostring(t[1]==10 and t[2]==20 and t[3]==30)
+                return tostring(t[1]) .. '|' .. tostring(t[2]) .. '|' .. tostring(t[3])
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("10|20|30");
         }
 
         [Fact]
@@ -9711,17 +9650,10 @@ namespace KitsuneNet.Tests
                     obj = {nested = 'value'},
                 }
                 local t = y:Decode(y:Encode(orig))
-                return tostring(
-                    t.s == 'hello'   and
-                    t.n == 42        and
-                    t.f == 3.14      and
-                    t.bt == true     and
-                    t.bf == false    and
-                    #t.arr == 3      and t.arr[2] == 2 and
-                    t.obj.nested == 'value'
-                )
+                return table.concat({tostring(t.s), tostring(t.n), tostring(t.f), tostring(t.bt), tostring(t.bf),
+                    #t.arr, tostring(t.arr[2]), tostring(t.obj.nested)}, '|')
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("hello|42|3.14|true|false|3|2|value");
         }
 
         [Fact]
@@ -9734,9 +9666,9 @@ namespace KitsuneNet.Tests
                 local s2 = y:Encode({b=2})
                 local t1 = y:Decode(s1)
                 local t2 = y:Decode(s2)
-                return tostring(t1.a==1 and t2.b==2 and t1.b==nil and t2.a==nil)
+                return tostring(t1.a) .. '|' .. tostring(t2.b) .. '|' .. tostring(t1.b) .. '|' .. tostring(t2.a)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("1|2|nil|nil");
         }
 
         // YAML-specific decode
@@ -9759,9 +9691,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local y = Yaml.New()
                 local t = y:Decode('- 1\n- 2\n- 3\n')
-                return tostring(t[1]==1 and t[2]==2 and t[3]==3)
+                return tostring(t[1]) .. '|' .. tostring(t[2]) .. '|' .. tostring(t[3])
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("1|2|3");
         }
 
         [Fact]
@@ -9783,9 +9715,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local y = Yaml.New()
                 local t = y:Decode('a: true\nb: false\nc: yes\nd: no\n')
-                return tostring(t.a==true and t.b==false and t.c==true and t.d==false)
+                return tostring(t.a) .. '|' .. tostring(t.b) .. '|' .. tostring(t.c) .. '|' .. tostring(t.d)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true|false|true|false");
         }
 
         [Fact]
@@ -9795,9 +9727,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local y = Yaml.New()
                 local t = y:Decode('n: 99')
-                return tostring(t.n == 99 and math.type(t.n) == 'integer')
+                return tostring(t.n) .. '|' .. tostring(math.type(t.n))
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("99|integer");
         }
 
         [Fact]
@@ -9807,9 +9739,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local y = Yaml.New()
                 local t = y:Decode('f: 1.5')
-                return tostring(math.type(t.f) == 'float' and t.f == 1.5)
+                return tostring(math.type(t.f)) .. '|' .. tostring(t.f)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("float|1.5");
         }
 
         // Pretty / block style
@@ -9833,9 +9765,9 @@ namespace KitsuneNet.Tests
                 local yp = Yaml.New(true)
                 local yf = Yaml.New()
                 local t = yf:Decode(yp:Encode({x=10, y=20}))
-                return tostring(t.x==10 and t.y==20)
+                return tostring(t.x) .. '|' .. tostring(t.y)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("10|20");
         }
 
         // Toml
@@ -9855,8 +9787,8 @@ namespace KitsuneNet.Tests
         public async Task Toml_Tostring_ReturnsNonEmptyString()
         {
             using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("return tostring(type(tostring(Toml.New())) == 'string' and #tostring(Toml.New()) > 0)");
-            r.String.ShouldBe("true");
+            LuaValue r = await engine.ExecuteStringAsync("return type(tostring(Toml.New())) .. '|len>0=' .. tostring(#tostring(Toml.New()) > 0)");
+            r.String.ShouldBe("string|len>0=true");
         }
 
         [Fact]
@@ -9893,9 +9825,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = Toml.New()
                 local v = t:Decode(t:Encode({a=true, b=false}))
-                return tostring(v.a==true and v.b==false)
+                return tostring(v.a) .. '|' .. tostring(v.b)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true|false");
         }
 
         [Fact]
@@ -9905,9 +9837,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = Toml.New()
                 local v = t:Decode(t:Encode({n=42}))
-                return tostring(v.n == 42 and math.type(v.n) == 'integer')
+                return tostring(v.n) .. '|' .. tostring(math.type(v.n))
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("42|integer");
         }
 
         [Fact]
@@ -9928,9 +9860,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = Toml.New()
                 local v = t:Decode(t:Encode({f=3.14}))
-                return tostring(math.type(v.f) == 'float' and math.abs(v.f - 3.14) < 1e-10)
+                return tostring(math.type(v.f)) .. '|diff<1e-10=' .. tostring(math.abs(v.f - 3.14) < 1e-10)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("float|diff<1e-10=true");
         }
 
         [Fact]
@@ -9964,9 +9896,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = Toml.New()
                 local v = t:Decode(t:Encode({x=1, y='hello', z=true}))
-                return tostring(v.x==1 and v.y=='hello' and v.z==true)
+                return tostring(v.x) .. '|' .. tostring(v.y) .. '|' .. tostring(v.z)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("1|hello|true");
         }
 
         [Fact]
@@ -9977,9 +9909,9 @@ namespace KitsuneNet.Tests
                 local t = Toml.New()
                 local orig = {database={host='localhost', port=5432}}
                 local v = t:Decode(t:Encode(orig))
-                return tostring(v.database.host == 'localhost' and v.database.port == 5432)
+                return tostring(v.database.host) .. '|' .. tostring(v.database.port)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("localhost|5432");
         }
 
         [Fact]
@@ -9989,9 +9921,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = Toml.New()
                 local v = t:Decode(t:Encode({tags={1,2,3}}))
-                return tostring(v.tags[1]==1 and v.tags[2]==2 and v.tags[3]==3)
+                return tostring(v.tags[1]) .. '|' .. tostring(v.tags[2]) .. '|' .. tostring(v.tags[3])
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("1|2|3");
         }
 
         [Fact]
@@ -10008,15 +9940,9 @@ namespace KitsuneNet.Tests
                     bf = false,
                 }
                 local v = t:Decode(t:Encode(orig))
-                return tostring(
-                    v.s  == 'hello' and
-                    v.n  == 42      and
-                    v.f  == 3.14    and
-                    v.bt == true    and
-                    v.bf == false
-                )
+                return tostring(v.s) .. '|' .. tostring(v.n) .. '|' .. tostring(v.f) .. '|' .. tostring(v.bt) .. '|' .. tostring(v.bf)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("hello|42|3.14|true|false");
         }
 
         [Fact]
@@ -10029,9 +9955,9 @@ namespace KitsuneNet.Tests
                 local s2 = t:Encode({b=2})
                 local v1 = t:Decode(s1)
                 local v2 = t:Decode(s2)
-                return tostring(v1.a==1 and v2.b==2 and v1.b==nil and v2.a==nil)
+                return tostring(v1.a) .. '|' .. tostring(v2.b) .. '|' .. tostring(v1.b) .. '|' .. tostring(v2.a)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("1|2|nil|nil");
         }
 
         // TOML-specific decode
@@ -10042,9 +9968,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = Toml.New()
                 local v = t:Decode('host = ""localhost""\nport = 5432\n')
-                return tostring(v.host == 'localhost' and v.port == 5432)
+                return tostring(v.host) .. '|' .. tostring(v.port)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("localhost|5432");
         }
 
         [Fact]
@@ -10054,9 +9980,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = Toml.New()
                 local v = t:Decode('a = true\nb = false\n')
-                return tostring(v.a == true and v.b == false)
+                return tostring(v.a) .. '|' .. tostring(v.b)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true|false");
         }
 
         [Fact]
@@ -10066,9 +9992,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = Toml.New()
                 local v = t:Decode('[database]\nhost = ""localhost""\nport = 5432\n')
-                return tostring(v.database.host == 'localhost' and v.database.port == 5432)
+                return tostring(v.database.host) .. '|' .. tostring(v.database.port)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("localhost|5432");
         }
 
         [Fact]
@@ -10078,9 +10004,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = Toml.New()
                 local v, err = t:Decode('this is not valid toml !!!@#$')
-                return tostring(v == nil and type(err) == 'string' and #err > 0)
+                return tostring(v) .. '|' .. type(err) .. '|len>0=' .. tostring(type(err) == 'string' and #err > 0)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("nil|string|len>0=true");
         }
 
         // Indented output
@@ -10104,9 +10030,9 @@ namespace KitsuneNet.Tests
                 local tp = Toml.New(true)
                 local tf = Toml.New()
                 local v = tf:Decode(tp:Encode({x=10, y=20}))
-                return tostring(v.x==10 and v.y==20)
+                return tostring(v.x) .. '|' .. tostring(v.y)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("10|20");
         }
 
         // Toml encoder
@@ -10124,14 +10050,10 @@ namespace KitsuneNet.Tests
                 local s = toml:Encode(src)
                 local t, err = toml:Decode(s)
                 if not t then return 'decode failed: ' .. tostring(err) .. '\n' .. s end
-                return tostring(
-                    t.app.sub.k == 1 and
-                    t.app.sub.deep.x == 'y' and
-                    t.list[2].a == 2 and
-                    type(t.empty) == 'table' and next(t.empty) == nil and
-                    t['app.sub'] == nil)
+                return tostring(t.app.sub.k) .. '|' .. tostring(t.app.sub.deep.x) .. '|' .. tostring(t.list[2].a) .. '|'
+                    .. type(t.empty) .. '|' .. tostring(next(t.empty)) .. '|' .. tostring(t['app.sub'])
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("1|y|2|table|nil|nil");
         }
 
         [Fact]
@@ -10142,10 +10064,9 @@ namespace KitsuneNet.Tests
                 local toml = Toml.New()
                 local s = toml:Encode({ ['my key'] = { sub = { k = 1 } } })
                 local t = toml:Decode(s)
-                return tostring(s:find('[""my key"".sub]', 1, true) ~= nil and
-                                t['my key'].sub.k == 1)
+                return 'headerFound=' .. tostring(s:find('[""my key"".sub]', 1, true) ~= nil) .. '|' .. tostring(t['my key'].sub.k)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("headerFound=true|1");
         }
 
         [Fact]
@@ -10162,9 +10083,9 @@ namespace KitsuneNet.Tests
                 }
                 local s = toml:Encode(src)
                 local t = toml:Decode(s)
-                return tostring(s:find('[[app.items]]', 1, true) ~= nil and deq(src, t))
+                return 'headerFound=' .. tostring(s:find('[[app.items]]', 1, true) ~= nil) .. '|deq=' .. tostring(deq(src, t))
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("headerFound=true|deq=true");
         }
 
         [Fact]
@@ -10196,11 +10117,10 @@ namespace KitsuneNet.Tests
                 local tc = Toml.New():Decode(compact)
                 local tp, err = Toml.New():Decode(pretty)
                 if not tp then return 'pretty decode failed: ' .. tostring(err) .. '\n' .. pretty end
-                return tostring(pretty ~= compact and
-                                pretty:find('\n  ', 1, true) ~= nil and
-                                deq(tc, tp) and deq(src, tp))
+                return 'pretty~=compact=' .. tostring(pretty ~= compact) .. '|indented=' .. tostring(pretty:find('\n  ', 1, true) ~= nil)
+                    .. '|deq(tc,tp)=' .. tostring(deq(tc, tp)) .. '|deq(src,tp)=' .. tostring(deq(src, tp))
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("pretty~=compact=true|indented=true|deq(tc,tp)=true|deq(src,tp)=true");
         }
 
         [Fact]
@@ -10231,8 +10151,8 @@ namespace KitsuneNet.Tests
         public async Task Ini_Tostring_ReturnsNonEmptyString()
         {
             using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("return tostring(type(tostring(Ini.New())) == 'string' and #tostring(Ini.New()) > 0)");
-            r.String.ShouldBe("true");
+            LuaValue r = await engine.ExecuteStringAsync("return type(tostring(Ini.New())) .. '|len>0=' .. tostring(#tostring(Ini.New()) > 0)");
+            r.String.ShouldBe("string|len>0=true");
         }
 
         [Fact]
@@ -10269,9 +10189,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local i = Ini.New()
                 local t = i:Decode('[db]\nhost=localhost\nport=5432\n')
-                return tostring(t.db.host == 'localhost' and t.db.port == '5432')
+                return tostring(t.db.host) .. '|' .. tostring(t.db.port)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("localhost|5432");
         }
 
         [Fact]
@@ -10281,9 +10201,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local i = Ini.New()
                 local t = i:Decode('version=1\nname=app\n')
-                return tostring(t.__global.version == '1' and t.__global.name == 'app')
+                return tostring(t.__global.version) .. '|' .. tostring(t.__global.name)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("1|app");
         }
 
         [Fact]
@@ -10341,9 +10261,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local i = Ini.New()
                 local t = i:Decode('[a]\nx=1\n[b]\ny=2\n')
-                return tostring(t.a.x == '1' and t.b.y == '2')
+                return tostring(t.a.x) .. '|' .. tostring(t.b.y)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("1|2");
         }
 
         [Fact]
@@ -10366,9 +10286,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local i = Ini.New()
                 local s = i:Encode({server={host='localhost', port=5432}})
-                return tostring(type(s) == 'string' and #s > 0)
+                return type(s) .. '|len>0=' .. tostring(#s > 0)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("string|len>0=true");
         }
 
         [Fact]
@@ -10390,9 +10310,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local i = Ini.New()
                 local t = i:Decode(i:Encode({s={a=true, b=false}}))
-                return tostring(t.s.a == 'true' and t.s.b == 'false')
+                return tostring(t.s.a) .. '|' .. tostring(t.s.b)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true|false");
         }
 
         [Fact]
@@ -10417,9 +10337,9 @@ namespace KitsuneNet.Tests
                 local s2 = i:Encode({b={y='2'}})
                 local t1 = i:Decode(s1)
                 local t2 = i:Decode(s2)
-                return tostring(t1.a.x=='1' and t2.b.y=='2' and t1.b==nil and t2.a==nil)
+                return tostring(t1.a.x) .. '|' .. tostring(t2.b.y) .. '|' .. tostring(t1.b) .. '|' .. tostring(t2.a)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("1|2|nil|nil");
         }
 
         // Round-trip
@@ -10431,9 +10351,9 @@ namespace KitsuneNet.Tests
                 local i = Ini.New()
                 local orig = {server={host='localhost', mode='production'}}
                 local t = i:Decode(i:Encode(orig))
-                return tostring(t.server.host=='localhost' and t.server.mode=='production')
+                return tostring(t.server.host) .. '|' .. tostring(t.server.mode)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("localhost|production");
         }
 
         [Fact]
@@ -10444,9 +10364,9 @@ namespace KitsuneNet.Tests
                 local i = Ini.New()
                 local orig = {db={host='db.local'}, app={name='myapp'}}
                 local t = i:Decode(i:Encode(orig))
-                return tostring(t.db.host=='db.local' and t.app.name=='myapp')
+                return tostring(t.db.host) .. '|' .. tostring(t.app.name)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("db.local|myapp");
         }
 
         // AliveToken
@@ -10947,9 +10867,9 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local u = UInt.FromString('1000')
-                return tostring(math.type(u:ToNumber()) == 'float' and u:ToNumber() == 1000.0)
+                return tostring(math.type(u:ToNumber())) .. '|' .. tostring(u:ToNumber())
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("float|1000.0");
         }
 
         [Fact]
@@ -11191,9 +11111,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local s = '18446744073709551615'
                 local u = UInt.FromString(s)
-                return tostring(u:ToString() == s and tostring(u) == s)
+                return u:ToString() .. '|' .. tostring(u)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("18446744073709551615|18446744073709551615");
         }
 
         // UInt Bridge (C# <-> Lua)
@@ -11275,9 +11195,9 @@ namespace KitsuneNet.Tests
                 local m = MsgPack.New()
                 local u = UInt.FromString('18446744073709551615')
                 local v = m:Decode(m:Encode(u))
-                return tostring(type(v) == 'userdata' and tostring(v) == '18446744073709551615')
+                return type(v) .. '|' .. tostring(v)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("userdata|18446744073709551615");
         }
 
         [Fact]
@@ -11352,9 +11272,9 @@ namespace KitsuneNet.Tests
                 Stream.Write(s, u)
                 s:Seek(0)
                 local v = Stream.ReadUInt64(s)
-                return tostring(type(v) == 'userdata' and tostring(v) == '18446744073709551615')
+                return type(v) .. '|' .. tostring(v)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("userdata|18446744073709551615");
         }
 
         [Fact]
@@ -11366,9 +11286,9 @@ namespace KitsuneNet.Tests
                 Stream.Write(s, UInt.FromString('18446744073709551615'))
                 s:Seek(0)
                 local v = Stream.ReadUnsignedLong(s)
-                return tostring(type(v) == 'userdata' and tostring(v) == '18446744073709551615')
+                return type(v) .. '|' .. tostring(v)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("userdata|18446744073709551615");
         }
 
         [Fact]
@@ -11380,9 +11300,9 @@ namespace KitsuneNet.Tests
                 Stream.WriteUnsignedLong(s, 42)
                 s:Seek(0)
                 local v = Stream.ReadUnsignedLong(s)
-                return tostring(v == 42 and math.type(v) == 'integer')
+                return tostring(v) .. '|' .. tostring(math.type(v))
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("42|integer");
         }
 
         // Decimal serializer coverage
@@ -11711,10 +11631,10 @@ namespace KitsuneNet.Tests
                 -- 1 day + 2 h + 3 min + 4 s + 5 ms
                 local t = TimeSpan.FromDays(1) + TimeSpan.FromHours(2) + TimeSpan.FromMinutes(3)
                         + TimeSpan.FromSeconds(4) + TimeSpan.FromMilliseconds(5)
-                return tostring(t:Days()==1 and t:Hours()==2 and t:Minutes()==3
-                    and t:Seconds()==4 and t:Milliseconds()==5)
+                return table.concat({tostring(t:Days()), tostring(t:Hours()), tostring(t:Minutes()),
+                    tostring(t:Seconds()), tostring(t:Milliseconds())}, '|')
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("1|2|3|4|5");
         }
 
         [Fact]
@@ -11756,9 +11676,9 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local neg = -TimeSpan.FromSeconds(5)
                 local pos = neg:Abs()
-                return tostring(pos:TotalSeconds() > 0 and neg:TotalSeconds() < 0)
+                return 'pos>0=' .. tostring(pos:TotalSeconds() > 0) .. '|neg<0=' .. tostring(neg:TotalSeconds() < 0)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("pos>0=true|neg<0=true");
         }
 
         // TimeSpan arithmetic
@@ -11896,9 +11816,9 @@ namespace KitsuneNet.Tests
                 local a = DateTime.New(2024, 1, 1, 1, 0, 0, 0, 0)
                 local b = DateTime.New(2024, 1, 1, 0, 0, 0, 0, 0)
                 local ts = a - b
-                return tostring(type(ts) == 'userdata' and math.abs(ts:TotalHours() - 1) < 0.0001)
+                return type(ts) .. '|hours~1=' .. tostring(math.abs(ts:TotalHours() - 1) < 0.0001)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("userdata|hours~1=true");
         }
 
         [Fact]
@@ -11922,9 +11842,9 @@ namespace KitsuneNet.Tests
                 local dt = DateTime.New(2024, 1, 1, 0, 0, 0, 0, 0)
                 local ts = TimeSpan.FromHours(2)
                 local result = dt + ts
-                return tostring(result:Hour() == 2 and result:Year() == 2024)
+                return result:Hour() .. '|' .. result:Year()
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("2|2024");
         }
 
         [Fact]
@@ -11935,9 +11855,9 @@ namespace KitsuneNet.Tests
                 local dt = DateTime.New(2024, 1, 2, 3, 0, 0, 0, 0)
                 local ts = TimeSpan.FromHours(3)
                 local result = dt - ts
-                return tostring(result:Hour() == 0 and result:Day() == 2)
+                return result:Hour() .. '|' .. result:Day()
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("0|2");
         }
 
         [Fact]
@@ -12043,8 +11963,8 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             var dto = new DateTimeOffset(2025, 7, 4, 12, 0, 0, TimeSpan.Zero);
             engine.SetVariable("dt", LuaValue.FromDateTime(dto));
-            LuaValue r = await engine.ExecuteStringAsync("return tostring(dt:Year() == 2025 and dt:Month() == 7 and dt:Day() == 4)");
-            r.String.ShouldBe("true");
+            LuaValue r = await engine.ExecuteStringAsync("return dt:Year() .. '|' .. dt:Month() .. '|' .. dt:Day()");
+            r.String.ShouldBe("2025|7|4");
         }
 
         [Fact]
@@ -12248,9 +12168,9 @@ namespace KitsuneNet.Tests
                 Stream.Write(s, ts)
                 s:Seek(0)
                 local ts2 = Stream.ReadTimeSpan(s)
-                return tostring(ts2:IsNegative() and math.abs(ts2:TotalMinutes() + 30) < 0.0001)
+                return tostring(ts2:IsNegative()) .. '|minutes~-30=' .. tostring(math.abs(ts2:TotalMinutes() + 30) < 0.0001)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true|minutes~-30=true");
         }
 
         // INI encoding of DateTime
@@ -12264,9 +12184,9 @@ namespace KitsuneNet.Tests
                 local i  = Ini.New()
                 local dt = DateTime.New(2024, 6, 15, 12, 0, 0, 0, 0)
                 local s  = i:Encode({sec = {ts = dt}})
-                return tostring(type(s) == 'string' and s:find('ts') ~= nil and s:find('2024') ~= nil)
+                return type(s) .. '|hasKey=' .. tostring(s:find('ts') ~= nil) .. '|hasYear=' .. tostring(s:find('2024') ~= nil)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("string|hasKey=true|hasYear=true");
         }
 
         // TimeSpan string form (MySQL/Postgres/Redis binders)
@@ -12323,17 +12243,9 @@ namespace KitsuneNet.Tests
                 Stream.Write(s, dt)
                 s:Seek(0)
                 local dt2 = Stream.ReadDateTime(s)
-                return tostring(
-                    dt2:Year()          == 2024 and
-                    dt2:Month()         == 6    and
-                    dt2:Day()           == 15   and
-                    dt2:Hour()          == 14   and
-                    dt2:Minute()        == 30   and
-                    dt2:Second()        == 45   and
-                    dt2:OffsetMinutes() == 120
-                )
+                return table.concat({dt2:Year(), dt2:Month(), dt2:Day(), dt2:Hour(), dt2:Minute(), dt2:Second(), dt2:OffsetMinutes()}, '|')
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("2024|6|15|14|30|45|120");
         }
 
         [System.Runtime.InteropServices.DllImport("kernel32.dll")]

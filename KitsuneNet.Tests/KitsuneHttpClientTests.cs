@@ -115,12 +115,10 @@ namespace KitsuneNet.Tests
                 local ok1, echo = drain(assert(c:Request('GET', BASE .. '/get')))
                 c:SetTimeout(50)
                 local ok2, slow = drain(assert(c:Request('GET', BASE .. '/delay/10')))
-                return tostring(
-                    echo.Code == 200 and
-                    echo.Contents:find('""X-Test"":""1""', 1, true) ~= nil and
-                    slow.Code == nil)
+                return tostring(echo.Code) .. '|xtest=' .. tostring(echo.Contents:find('""X-Test"":""1""', 1, true) ~= nil) ..
+                    '|slow=' .. tostring(slow.Code)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("200|xtest=true|slow=nil");
         }
 
         // HttpClient.UrlEncode / HttpClient.UrlDecode (no network required)
@@ -128,18 +126,18 @@ namespace KitsuneNet.Tests
         public async Task Http_UrlEncode_SpacesAreEncoded()
         {
             using KitsuneEngine engine = NewEngine();
-            LuaValue r = await engine.ExecuteStringAsync(@"                return tostring(HttpClient.UrlEncode('hello world'):find(' ') == nil)
+            LuaValue r = await engine.ExecuteStringAsync(@"                return HttpClient.UrlEncode('hello world')
             ");
-            r.String.ShouldBe("true");
+            r.String!.ShouldNotContain(" ");
         }
 
         [Fact]
         public async Task Http_UrlEncode_AmpersandIsEncoded()
         {
             using KitsuneEngine engine = NewEngine();
-            LuaValue r = await engine.ExecuteStringAsync(@"                return tostring(HttpClient.UrlEncode('a&b'):find('%%26') ~= nil)
+            LuaValue r = await engine.ExecuteStringAsync(@"                return HttpClient.UrlEncode('a&b')
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("a%26b");
         }
 
         [Fact]
@@ -147,9 +145,9 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = NewEngine();
             LuaValue r = await engine.ExecuteStringAsync(@"                local orig = 'hello world & foo=bar'
-                return tostring(HttpClient.UrlDecode(HttpClient.UrlEncode(orig)) == orig)
+                return HttpClient.UrlDecode(HttpClient.UrlEncode(orig))
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("hello world & foo=bar");
         }
 
         [Fact]
@@ -157,27 +155,27 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = NewEngine();
             LuaValue r = await engine.ExecuteStringAsync(@"                local safe = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.~'
-                return tostring(HttpClient.UrlEncode(safe) == safe)
+                return HttpClient.UrlEncode(safe)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.~");
         }
 
         [Fact]
         public async Task Http_UrlDecode_PlusDecodedAsSpace()
         {
             using KitsuneEngine engine = NewEngine();
-            LuaValue r = await engine.ExecuteStringAsync(@"                return tostring(HttpClient.UrlDecode('hello+world') == 'hello world')
+            LuaValue r = await engine.ExecuteStringAsync(@"                return HttpClient.UrlDecode('hello+world')
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("hello world");
         }
 
         [Fact]
         public async Task Http_UrlEncode_Empty_ReturnsEmpty()
         {
             using KitsuneEngine engine = NewEngine();
-            LuaValue r = await engine.ExecuteStringAsync(@"                return tostring(HttpClient.UrlEncode('') == '' and HttpClient.UrlDecode('') == '')
+            LuaValue r = await engine.ExecuteStringAsync(@"                return '[' .. HttpClient.UrlEncode('') .. ']|[' .. HttpClient.UrlDecode('') .. ']'
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("[]|[]");
         }
 
         // Buffered GET
@@ -190,14 +188,11 @@ namespace KitsuneNet.Tests
                 client:SetVerifySSL(true)
                 local co, err = client:Request('GET', BASE .. '/get')
                 local ok, result = drain(co)
-                return tostring(
-                    result.Code == 200 and
-                    result.Status == 'OK' and
-                    type(result.Contents) == 'string' and #result.Contents > 0 and
-                    type(result.Headers) == 'table' and
-                    (header(result.Headers, 'content-type') or ''):find('application/json', 1, true) ~= nil)
+                return tostring(result.Code) .. '|' .. tostring(result.Status) .. '|' .. type(result.Contents) ..
+                    '|len>0=' .. tostring(#(result.Contents or '') > 0) .. '|' .. type(result.Headers) ..
+                    '|json=' .. tostring((header(result.Headers, 'content-type') or ''):find('application/json', 1, true) ~= nil)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("200|OK|string|len>0=true|table|json=true");
         }
 
         // POST with JSON body
@@ -211,9 +206,9 @@ namespace KitsuneNet.Tests
                 local co, err = client:Request('POST', BASE .. '/post', body,
                     { ['Content-Type'] = 'application/json' })
                 local ok, result = drain(co)
-                return tostring(result.Code == 200 and result.Contents:find('kitsune') ~= nil)
+                return tostring(result.Code) .. '|contains=' .. tostring(result.Contents:find('kitsune') ~= nil)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("200|contains=true");
         }
 
         // Timeout is a transport error (Code is nil)
@@ -244,9 +239,9 @@ namespace KitsuneNet.Tests
                 local sink = Stream.New()
                 local co, err = client:Request('GET', BASE .. '/get', nil, nil, sink)
                 local ok, result = drain(co)
-                return tostring(result.Code == 200 and result.Contents == nil and sink:len() > 0)
+                return tostring(result.Code) .. '|' .. type(result.Contents) .. '|sink>0=' .. tostring(sink:len() > 0)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("200|nil|sink>0=true");
         }
 
         // Streaming GET
@@ -266,15 +261,13 @@ namespace KitsuneNet.Tests
                         chunk = stream:Read()
                     end
                     stream:Close()
-                    _outcome = tostring(
-                        info.Code == 200 and
-                        type(info.Headers) == 'table' and
-                        (header(info.Headers, 'content-type') or ''):find('application/json', 1, true) ~= nil and
-                        body:sub(1, 1) == '{')
+                    _outcome = tostring(info.Code) .. '|' .. type(info.Headers) ..
+                        '|json=' .. tostring((header(info.Headers, 'content-type') or ''):find('application/json', 1, true) ~= nil) ..
+                        '|first=' .. body:sub(1, 1)
                 end)
                 return _outcome
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("200|table|json=true|first={");
         }
 
         // DELETE
@@ -286,9 +279,9 @@ namespace KitsuneNet.Tests
                 client:SetTimeout(8000)
                 local co, err = client:Request('DELETE', BASE .. '/delete')
                 local ok, result = drain(co)
-                return tostring(result.Code == 200 and result.Contents:find('delete') ~= nil)
+                return tostring(result.Code) .. '|contains=' .. tostring(result.Contents:find('delete') ~= nil)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("200|contains=true");
         }
 
         // PUT
@@ -302,9 +295,9 @@ namespace KitsuneNet.Tests
                 local co, err = client:Request('PUT', BASE .. '/put', body,
                     { ['Content-Type'] = 'application/json' })
                 local ok, result = drain(co)
-                return tostring(result.Code == 200 and result.Contents:find('kitsune_put') ~= nil)
+                return tostring(result.Code) .. '|contains=' .. tostring(result.Contents:find('kitsune_put') ~= nil)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("200|contains=true");
         }
 
         // PATCH
@@ -318,9 +311,9 @@ namespace KitsuneNet.Tests
                 local co, err = client:Request('PATCH', BASE .. '/patch', body,
                     { ['Content-Type'] = 'application/json' })
                 local ok, result = drain(co)
-                return tostring(result.Code == 200 and result.Contents:find('kitsune_patch') ~= nil)
+                return tostring(result.Code) .. '|contains=' .. tostring(result.Contents:find('kitsune_patch') ~= nil)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("200|contains=true");
         }
 
         // Query-string args
@@ -332,12 +325,10 @@ namespace KitsuneNet.Tests
                 client:SetTimeout(8000)
                 local co, err = client:Request('GET', BASE .. '/get?kitsune=engine&version=4')
                 local ok, result = drain(co)
-                return tostring(
-                    result.Code == 200 and
-                    result.Contents:find('kitsune') ~= nil and
-                    result.Contents:find('engine')  ~= nil)
+                return tostring(result.Code) .. '|kitsune=' .. tostring(result.Contents:find('kitsune') ~= nil) ..
+                    '|engine=' .. tostring(result.Contents:find('engine') ~= nil)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("200|kitsune=true|engine=true");
         }
 
         [Fact]
@@ -349,9 +340,9 @@ namespace KitsuneNet.Tests
                 local encoded = HttpClient.UrlEncode('hello world')
                 local co, err = client:Request('GET', BASE .. '/get?q=' .. encoded)
                 local ok, result = drain(co)
-                return tostring(result.Code == 200 and result.Contents:find('hello world') ~= nil)
+                return tostring(result.Code) .. '|contains=' .. tostring(result.Contents:find('hello world') ~= nil)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("200|contains=true");
         }
 
         // Request headers
@@ -364,9 +355,9 @@ namespace KitsuneNet.Tests
                 client:SetDefaultHeader('X-Kitsune-Id', 'kitsune_default_hdr')
                 local co, err = client:Request('GET', BASE .. '/get')
                 local ok, result = drain(co)
-                return tostring(result.Code == 200 and result.Contents:find('kitsune_default_hdr') ~= nil)
+                return tostring(result.Code) .. '|contains=' .. tostring(result.Contents:find('kitsune_default_hdr') ~= nil)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("200|contains=true");
         }
 
         [Fact]
@@ -378,9 +369,9 @@ namespace KitsuneNet.Tests
                 local co, err = client:Request('GET', BASE .. '/get', nil,
                     { ['X-Kitsune-Req'] = 'kitsune_per_req_hdr' })
                 local ok, result = drain(co)
-                return tostring(result.Code == 200 and result.Contents:find('kitsune_per_req_hdr') ~= nil)
+                return tostring(result.Code) .. '|contains=' .. tostring(result.Contents:find('kitsune_per_req_hdr') ~= nil)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("200|contains=true");
         }
 
         [Fact]
@@ -393,12 +384,10 @@ namespace KitsuneNet.Tests
                 local co, err = client:Request('GET', BASE .. '/get', nil,
                     { ['X-Kitsune-PerCall'] = 'val_percall' })
                 local ok, result = drain(co)
-                return tostring(
-                    result.Code == 200 and
-                    result.Contents:find('val_default') ~= nil and
-                    result.Contents:find('val_percall') ~= nil)
+                return tostring(result.Code) .. '|default=' .. tostring(result.Contents:find('val_default') ~= nil) ..
+                    '|percall=' .. tostring(result.Contents:find('val_percall') ~= nil)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("200|default=true|percall=true");
         }
 
         // POST form-urlencoded
@@ -412,9 +401,9 @@ namespace KitsuneNet.Tests
                 local co, err = client:Request('POST', BASE .. '/post', body,
                     { ['Content-Type'] = 'application/x-www-form-urlencoded' })
                 local ok, result = drain(co)
-                return tostring(result.Code == 200 and result.Contents:find('engine=kitsune&version=4', 1, true) ~= nil)
+                return tostring(result.Code) .. '|contains=' .. tostring(result.Contents:find('engine=kitsune&version=4', 1, true) ~= nil)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("200|contains=true");
         }
 
         // Streaming for non-GET methods
@@ -433,11 +422,11 @@ namespace KitsuneNet.Tests
                     local chunk = stream:Read()
                     while chunk do body = body .. chunk; chunk = stream:Read() end
                     stream:Close()
-                    _outcome = tostring(info.Code == 200 and body:find('kitsune_stream_post') ~= nil)
+                    _outcome = tostring(info.Code) .. '|contains=' .. tostring(body:find('kitsune_stream_post') ~= nil)
                 end)
                 return _outcome
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("200|contains=true");
         }
 
         [Fact]
@@ -452,11 +441,11 @@ namespace KitsuneNet.Tests
                         { ['Content-Type'] = 'application/json' })
                     local info = stream:GetInfo()
                     stream:Close()
-                    _outcome = tostring(info.Code == 200)
+                    _outcome = tostring(info.Code)
                 end)
                 return _outcome
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("200");
         }
 
         [Fact]
@@ -471,11 +460,11 @@ namespace KitsuneNet.Tests
                         { ['Content-Type'] = 'application/json' })
                     local info = stream:GetInfo()
                     stream:Close()
-                    _outcome = tostring(info.Code == 200)
+                    _outcome = tostring(info.Code)
                 end)
                 return _outcome
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("200");
         }
 
         [Fact]
@@ -488,11 +477,11 @@ namespace KitsuneNet.Tests
                     local stream = stream_open(client, 'DELETE', BASE .. '/delete')
                     local info = stream:GetInfo()
                     stream:Close()
-                    _outcome = tostring(info.Code == 200)
+                    _outcome = tostring(info.Code)
                 end)
                 return _outcome
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("200");
         }
 
         // WebSocket
@@ -525,11 +514,11 @@ namespace KitsuneNet.Tests
                     local connected = ws:IsConnected()
                     ws:Dispose()
                     local after = ws:IsConnected()
-                    _outcome = tostring(connected == true and after == false)
+                    _outcome = tostring(connected) .. '|' .. tostring(after)
                 end)
                 return _outcome
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true|false");
         }
 
         [Fact]
@@ -544,11 +533,11 @@ namespace KitsuneNet.Tests
                     local id1 = ws:GetId()
                     local id2 = ws:GetId()
                     ws:Dispose()
-                    _outcome = tostring(type(id1) == 'number' and id1 == id2 and id1 > 0)
+                    _outcome = type(id1) .. '|same=' .. tostring(id1 == id2) .. '|>0=' .. tostring(id1 > 0)
                 end)
                 return _outcome
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("number|same=true|>0=true");
         }
 
         [Fact]
@@ -564,11 +553,11 @@ namespace KitsuneNet.Tests
                     ctx1.foo = 'bar'
                     local ctx2 = ws:GetContext()
                     ws:Dispose()
-                    _outcome = tostring(ctx2.foo == 'bar')
+                    _outcome = tostring(ctx2.foo)
                 end)
                 return _outcome
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("bar");
         }
 
         [Fact]
@@ -586,14 +575,11 @@ namespace KitsuneNet.Tests
                     local m2 = ws:Read()
                     local m3 = ws:Read()
                     ws:Dispose()
-                    _outcome = tostring(
-                        m1 ~= nil and m1:GetData() == 'frame1' and
-                        m2 ~= nil and m2:GetData() == 'frame2' and
-                        m3 ~= nil and m3:GetData() == 'frame3')
+                    _outcome = tostring(m1 and m1:GetData()) .. '|' .. tostring(m2 and m2:GetData()) .. '|' .. tostring(m3 and m3:GetData())
                 end)
                 return _outcome
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("frame1|frame2|frame3");
         }
 
         [Fact]
@@ -609,13 +595,12 @@ namespace KitsuneNet.Tests
                     local tm = ws:Read()
                     local bm = ws:Read()
                     ws:Dispose()
-                    _outcome = tostring(
-                        tm ~= nil and tm:GetData() == 'text_payload' and tm:GetType() == 1 and
-                        bm ~= nil and bm:GetData() == '\xAB\xCD'     and bm:GetType() == 2)
+                    _outcome = tostring(tm and tm:GetData()) .. '|' .. tostring(tm and tm:GetType()) ..
+                        '|binary=' .. tostring(bm and bm:GetData() == '\xAB\xCD') .. '|' .. tostring(bm and bm:GetType())
                 end)
                 return _outcome
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("text_payload|1|binary=true|2");
         }
 
         [Fact]
@@ -629,11 +614,11 @@ namespace KitsuneNet.Tests
                     if not ws then error('connect failed') end
                     ws:Dispose()
                     local msg = ws:Read()
-                    _outcome = tostring(msg == nil)
+                    _outcome = tostring(msg)
                 end)
                 return _outcome
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("nil");
         }
 
         [Fact]
@@ -646,11 +631,11 @@ namespace KitsuneNet.Tests
                     local ws = ws_connect(client, WS_URL)
                     local msg = ws:Poll()
                     ws:Dispose()
-                    _outcome = tostring(msg == nil)
+                    _outcome = tostring(msg)
                 end)
                 return _outcome
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("nil");
         }
 
         [Fact]
@@ -665,11 +650,12 @@ namespace KitsuneNet.Tests
                     ws:Send(payload)
                     local msg = ws:Read()
                     ws:Dispose()
-                    _outcome = tostring(msg ~= nil and msg:GetData() == payload)
+                    _outcome = 'msg=' .. tostring(msg ~= nil) .. '|equal=' .. tostring(msg and msg:GetData() == payload) ..
+                        '|len=' .. #(msg and msg:GetData() or '')
                 end)
                 return _outcome
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("msg=true|equal=true|len=4400");
         }
 
         // Call (simplified blocking helper)
@@ -682,15 +668,13 @@ namespace KitsuneNet.Tests
                     client:SetTimeout(8000)
                     local result, err = client:Call('GET', BASE .. '/get')
                     if not result then error('Call failed: ' .. tostring(err)) end
-                    _outcome = tostring(
-                        result.Code == 200 and
-                        type(result.Contents) == 'string' and #result.Contents > 0 and
-                        type(result.Headers) == 'table' and
-                        (header(result.Headers, 'content-type') or ''):find('application/json', 1, true) ~= nil)
+                    _outcome = tostring(result.Code) .. '|' .. type(result.Contents) ..
+                        '|len>0=' .. tostring(#(result.Contents or '') > 0) .. '|' .. type(result.Headers) ..
+                        '|json=' .. tostring((header(result.Headers, 'content-type') or ''):find('application/json', 1, true) ~= nil)
                 end)
                 return _outcome
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("200|string|len>0=true|table|json=true");
         }
 
         [Fact]
@@ -704,11 +688,11 @@ namespace KitsuneNet.Tests
                         { ['Content-Type'] = 'application/json' },
                         '{""key"":""kitsune""}')
                     if not result then error('Call failed: ' .. tostring(err)) end
-                    _outcome = tostring(result.Code == 200 and result.Contents:find('kitsune') ~= nil)
+                    _outcome = tostring(result.Code) .. '|contains=' .. tostring(result.Contents:find('kitsune') ~= nil)
                 end)
                 return _outcome
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("200|contains=true");
         }
 
         [Fact]
@@ -721,11 +705,11 @@ namespace KitsuneNet.Tests
                     local result, err = client:Call('GET', BASE .. '/get')
                     if not result then error('Call failed: ' .. tostring(err)) end
                     local ts = client:GetTimestamp()
-                    _outcome = tostring(ts:TotalMilliseconds() > 0)
+                    _outcome = 'ms>0=' .. tostring(ts:TotalMilliseconds() > 0) .. ' ms=' .. tostring(ts:TotalMilliseconds())
                 end)
                 return _outcome
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldStartWith("ms>0=true");
         }
 
         [Fact]
@@ -737,11 +721,11 @@ namespace KitsuneNet.Tests
                     client:SetTimeout(4000)
                     local result, err = client:Call('GET', 'https://this.host.does.not.exist.invalid/')
                     -- result must be nil; err must be a non-empty string
-                    _outcome = tostring(result == nil and type(err) == 'string' and #err > 0)
+                    _outcome = tostring(result) .. '|' .. type(err) .. '|len>0=' .. tostring(#tostring(err) > 0) .. '|' .. tostring(err)
                 end)
                 return _outcome
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldStartWith("nil|string|len>0=true|");
         }
 
         [Fact]
@@ -782,9 +766,9 @@ namespace KitsuneNet.Tests
                 local ok, result = drain(assert(client:Request('GET', BASE .. '/get')))
                 token:Dispose()
                 local co, err = client:Request('GET', BASE .. '/get')
-                return tostring(ok and result.Code == 200 and co == nil and err == 'aborted')
+                return tostring(ok) .. '|' .. tostring(result.Code) .. '|' .. tostring(co) .. '|' .. tostring(err)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true|200|nil|aborted");
         }
 
         [Fact]
@@ -799,9 +783,9 @@ namespace KitsuneNet.Tests
                 local attachedCo, attachedErr = client:Request('GET', BASE .. '/get')
                 client:SetAliveToken(nil)
                 local ok, result = drain(assert(client:Request('GET', BASE .. '/get')))
-                return tostring(attachedCo == nil and attachedErr == 'aborted' and ok and result.Code == 200)
+                return tostring(attachedCo) .. '|' .. tostring(attachedErr) .. '|' .. tostring(ok) .. '|' .. tostring(result.Code)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("nil|aborted|true|200");
         }
 
         [Fact]
@@ -814,9 +798,9 @@ namespace KitsuneNet.Tests
                 client:SetAliveToken(token)
                 local co = client:Request('GET', BASE .. '/get')
                 local ok, result = drain(co)
-                return tostring(ok and result ~= nil and result.Code == 200)
+                return tostring(ok) .. '|' .. tostring(type(result) == 'table' and result.Code or result)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("true|200");
         }
 
         [Fact]
@@ -829,9 +813,9 @@ namespace KitsuneNet.Tests
                 client:SetAliveToken(token)
                 token:Dispose()
                 local co, err = client:Request('GET', BASE .. '/get')
-                return tostring(co == nil and err == 'aborted')
+                return tostring(co) .. '|' .. tostring(err)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("nil|aborted");
         }
 
         [Fact]
@@ -845,11 +829,11 @@ namespace KitsuneNet.Tests
                     client:SetAliveToken(token)
                     local result, err = client:Call('GET', BASE .. '/get')
                     if not result then error('Call failed: ' .. tostring(err)) end
-                    _outcome = tostring(result.Code == 200)
+                    _outcome = tostring(result.Code)
                 end)
                 return _outcome
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("200");
         }
 
         [Fact]
@@ -863,11 +847,11 @@ namespace KitsuneNet.Tests
                     client:SetAliveToken(token)
                     token:Dispose()
                     local result, err = client:Call('GET', BASE .. '/get')
-                    _outcome = tostring(result == nil and err == 'aborted')
+                    _outcome = tostring(result) .. '|' .. tostring(err)
                 end)
                 return _outcome
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("nil|aborted");
         }
 
         // Concurrent requests sharing one CURLM*
@@ -896,11 +880,10 @@ namespace KitsuneNet.Tests
                         if v ~= nil then r2 = v end
                     end
                 end
-                return tostring(
-                    r1.Code == 200 and r1.Contents:find('alpha') ~= nil and
-                    r2.Code == 200 and r2.Contents:find('beta')  ~= nil)
+                return tostring(r1.Code) .. '|alpha=' .. tostring(r1.Contents:find('alpha') ~= nil) ..
+                    '|' .. tostring(r2.Code) .. '|beta=' .. tostring(r2.Contents:find('beta') ~= nil)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("200|alpha=true|200|beta=true");
         }
 
         [Fact]
@@ -925,9 +908,9 @@ namespace KitsuneNet.Tests
                     r2 = pump(co2, r2)
                     r3 = pump(co3, r3)
                 end
-                return tostring(r1.Code == 200 and r2.Code == 200 and r3.Code == 200)
+                return tostring(r1.Code) .. '|' .. tostring(r2.Code) .. '|' .. tostring(r3.Code)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("200|200|200");
         }
 
         [Fact]
@@ -951,12 +934,9 @@ namespace KitsuneNet.Tests
                     if coroutine.status(co1) ~= 'dead' then coroutine.resume(co1) end
                     if coroutine.status(co2) ~= 'dead' then coroutine.resume(co2) end
                 end
-                return tostring(
-                    #results == 2 and
-                    results[1] ~= nil and results[1].Code == 200 and
-                    results[2] ~= nil and results[2].Code == 200)
+                return tostring(#results) .. '|' .. tostring(results[1] and results[1].Code) .. '|' .. tostring(results[2] and results[2].Code)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("2|200|200");
         }
 
         [Fact]
@@ -983,9 +963,9 @@ namespace KitsuneNet.Tests
                         if v ~= nil then rPost = v end
                     end
                 end
-                return tostring(rGet.Code == 200 and rPost.Code == 200)
+                return tostring(rGet.Code) .. '|' .. tostring(rPost.Code)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("200|200");
         }
 
         // Real TLS certificate verification needs a public HTTPS host.

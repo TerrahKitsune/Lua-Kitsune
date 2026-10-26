@@ -135,9 +135,9 @@ public sealed class SQLiteTests
             db:Fetch()
             local row = db:GetRow()
             db:Close()
-            return tostring(math.abs(row.f - 3.14) < 0.0001)
+            return tostring(row.f)
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("3.14");
     }
 
     [Fact]
@@ -201,9 +201,9 @@ public sealed class SQLiteTests
             local db = SQLite.Open()
             local ok, err = db:Query('THIS IS NOT SQL')
             db:Close()
-            return tostring(ok == false and type(err) == 'string' and #err > 0)
+            return tostring(ok) .. '|' .. type(err) .. '|' .. tostring(#tostring(err) > 0)
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("false|string|true");
     }
 
     [Fact]
@@ -238,9 +238,9 @@ public sealed class SQLiteTests
             local db = SQLite.Open()
             db:Close()
             local ok, err = pcall(function() db:Query('SELECT 1') end)
-            return tostring(not ok and type(err) == 'string')
+            return tostring(ok) .. '|' .. type(err)
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("false|string");
     }
 
     [Fact]
@@ -276,9 +276,9 @@ public sealed class SQLiteTests
 			db:Query('CREATE TABLE t (n INTEGER)'); db:Fetch()
 			local ok, msg = db:Query('INSERT INTO t VALUES (1)')
 			db:Close()
-			return tostring(ok == true and msg == 'DONE')
+			return tostring(ok) .. '|' .. tostring(msg)
 		");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("true|DONE");
     }
 
     [Fact]
@@ -294,9 +294,9 @@ public sealed class SQLiteTests
 			local ok, msg = db:Query('SELECT n FROM t')
 			db:Finish()
 			db:Close()
-			return tostring(ok == true and msg == 'ROW')
+			return tostring(ok) .. '|' .. tostring(msg)
 		");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("true|ROW");
     }
 
     [Fact]
@@ -310,9 +310,9 @@ public sealed class SQLiteTests
 			db:Query('CREATE TABLE t (n INTEGER)'); db:Fetch()
 			local ok, msg = db:Query('SELECT n FROM t WHERE n = 9999')
 			db:Close()
-			return tostring(ok == true and msg == 'DONE')
+			return tostring(ok) .. '|' .. tostring(msg)
 		");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("true|DONE");
     }
 
     // Finish
@@ -336,9 +336,9 @@ public sealed class SQLiteTests
 			db:Fetch()
 			local count = db:GetRow(1)
 			db:Close()
-			return tostring(first == 1 and ok == true and count == 10)
+			return tostring(first) .. '|' .. tostring(ok) .. '|' .. tostring(count)
 		");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("1|true|10");
     }
 
     [Fact]
@@ -353,9 +353,9 @@ public sealed class SQLiteTests
 			db:Query('CREATE TABLE t (n INTEGER)')
 			local fetched = db:Fetch()
 			db:Close()
-			return tostring(fetched == false)
+			return tostring(fetched)
 		");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("false");
     }
 
     // GetRow edge cases
@@ -374,9 +374,9 @@ public sealed class SQLiteTests
 			local col1 = db:GetRow(1)
 			local col3 = db:GetRow(3)   -- only 2 columns
 			db:Close()
-			return tostring(col1 == 1 and col3 == nil)
+			return tostring(col1) .. '|' .. tostring(col3)
 		");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("1|nil");
     }
 
     // BLOB column
@@ -394,9 +394,9 @@ public sealed class SQLiteTests
 			db:Fetch()
 			local val = db:GetRow(1)
 			db:Close()
-			return tostring(type(val) == 'userdata')
+			return type(val)
 		");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("userdata");
     }
 
     [Fact]
@@ -505,9 +505,9 @@ public sealed class SQLiteTests
 				db:Fetch()
 				local row = db:GetRow()
 				db:Close()
-				return tostring(row.id == 42 and tostring(row.name) == 'fn_value')
+				return tostring(row.id) .. '|' .. tostring(row.name)
 		");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("42|fn_value");
     }
 
     [Fact]
@@ -525,9 +525,9 @@ public sealed class SQLiteTests
 			db:Fetch()
 			local row = db:GetRow()
 			db:Close()
-			return tostring(row.a == 1 and row.b == 0)
+			return tostring(row.a) .. '|' .. tostring(row.b)
 		");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("1|0");
     }
 
     [Fact]
@@ -544,9 +544,9 @@ public sealed class SQLiteTests
 			db:Fetch()
 			local val = db:GetRow(1)
 			db:Close()
-			return tostring(type(val) == 'string' and val == 'h\xc3\xa9llo \xf0\x9f\x98\x80')
+			return type(val) .. '|' .. tostring(val == 'h\xc3\xa9llo \xf0\x9f\x98\x80')
 		");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("string|true");
     }
 
     [Fact]
@@ -643,9 +643,9 @@ public sealed class SQLiteTests
 				db:RegisterFunction(function() return 2 end, 'myfn', 0)
 			end)
 			db:Close()
-			return tostring(not ok and type(err) == 'string')
+			return tostring(ok) .. '|' .. type(err)
 		");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("false|string");
     }
 
     [Fact]
@@ -660,9 +660,9 @@ public sealed class SQLiteTests
 				db:RegisterFunction(function() end, 'badfn', -1)
 			end)
 			db:Close()
-			return tostring(not ok and type(err) == 'string')
+			return tostring(ok) .. '|' .. type(err)
 		");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("false|string");
     }
 
     // Text columns
@@ -680,9 +680,9 @@ public sealed class SQLiteTests
 			db:Fetch()
 			local val = db:GetRow(1)
 			db:Close()
-			return tostring(type(val) == 'string' and val == 'caf\xc3\xa9 \xe6\xb5\x8b')
+			return type(val) .. '|' .. tostring(val == 'caf\xc3\xa9 \xe6\xb5\x8b')
 		");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("string|true");
     }
 
     [Fact]
@@ -710,9 +710,9 @@ public sealed class SQLiteTests
 			local db = SQLite.Open()
 			local s = tostring(db)
 			db:Close()
-			return tostring(s:find('SQLite:') ~= nil and s:find(':memory:') ~= nil)
+			return tostring(s:match('SQLite:')) .. '|' .. tostring(s:match(':memory:'))
 		");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("SQLite:|:memory:");
     }
 
     // Lua() built-in SQL function
@@ -854,9 +854,9 @@ public sealed class SQLiteTests
                 db:Fetch()
 				local v = db:GetRow(1)
 				db:Close()
-				return tostring(v ~= nil and #tostring(v) > 0)
+				return type(v) .. '|' .. tostring(#tostring(v) > 0)
             ");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("string|true");
         }
         finally
         {
@@ -965,9 +965,9 @@ public sealed class SQLiteTests
 				local db = SQLite.Open(DB_PATH)
 				local s = tostring(db)
 				db:Close()
-				return tostring(s:find('SQLite:') ~= nil and s:find(DB_PATH, 1, true) ~= nil)
+				return tostring(s:match('SQLite:')) .. '|' .. tostring(s:find(DB_PATH, 1, true) ~= nil)
 			");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("SQLite:|true");
         }
         finally
         {
@@ -991,9 +991,9 @@ public sealed class SQLiteTests
 				db:Fetch()
 				local mode = db:GetRow(1)
 				db:Close()
-				return tostring(tostring(mode) == 'wal')
+				return tostring(mode)
 			");
-            r.String.ShouldBe("true");
+            r.String.ShouldBe("wal");
         }
         finally
         {

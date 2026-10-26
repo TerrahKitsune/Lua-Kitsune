@@ -35,9 +35,10 @@ public sealed class MongoTests
         using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await RunAsync(engine, @"
             local db, err = MongoDB.Connect('mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=500')
-            return tostring(db == nil) .. ':' .. tostring(type(err) == 'string')
+            return tostring(db) .. ':' .. tostring(err)
         ");
-        r.String.ShouldBe("true:true");
+        r.String.ShouldStartWith("nil:");
+        r.String.ShouldContain("No suitable servers found");
     }
 
     [MongoFact]
@@ -59,9 +60,9 @@ public sealed class MongoTests
             local db = assert({ConnectLua()})
             db:Find({Db()}, {Coll()}, {{}})
             local ok, err = db:Find({Db()}, {Coll()}, {{}})
-            return tostring(ok) .. ':' .. tostring(type(err) == 'string')
+            return tostring(ok) .. ':' .. tostring(err)
         ");
-        r.String.ShouldBe("false:true");
+        r.String.ShouldBe("false:operation already in progress");
     }
 
     [MongoFact]
@@ -81,9 +82,9 @@ public sealed class MongoTests
             if err2 then error(err2) end
             db:DeleteOne({Db()}, {Coll()}, {{_id=id}})
             db:Wait(); db:GetResult()
-            return tostring(doc ~= nil) .. ':' .. tostring(doc and doc.val)
+            return type(doc) .. ':' .. tostring(doc and doc.val)
         ");
-        r.String.ShouldBe("true:42");
+        r.String.ShouldBe("table:42");
     }
 
     [MongoFact]
@@ -127,9 +128,9 @@ public sealed class MongoTests
             db:Wait()
             local doc, err2 = db:GetResult()
             if err2 then error(err2) end
-            return tostring(doc == nil)
+            return tostring(doc)
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("nil");
     }
 
     [MongoFact]
@@ -184,9 +185,9 @@ public sealed class MongoTests
             db:Wait()
             local doc, err = db:GetResult()
             if err then error(err) end
-            return tostring(doc ~= nil)
+            return type(doc)
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("table");
     }
 
     [MongoFact]
@@ -196,9 +197,9 @@ public sealed class MongoTests
         LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local res, err = db:GetResult()
-            return tostring(res == nil) .. ':' .. tostring(type(err) == 'string')
+            return tostring(res) .. ':' .. tostring(err)
         ");
-        r.String.ShouldBe("true:true");
+        r.String.ShouldBe("nil:no active operation");
     }
 
     [MongoFact]
@@ -229,9 +230,9 @@ public sealed class MongoTests
         LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local ok, err = db:InsertMany({Db()}, {Coll()}, {{}})
-            return tostring(ok) .. ':' .. tostring(type(err) == 'string')
+            return tostring(ok) .. ':' .. tostring(err)
         ");
-        r.String.ShouldBe("false:true");
+        r.String.ShouldBe("false:InsertMany: document array is empty");
     }
 
     [MongoFact]
@@ -241,9 +242,9 @@ public sealed class MongoTests
         LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local ok, err = db:InsertMany({Db()}, {Coll()}, {{'not a table'}})
-            return tostring(ok) .. ':' .. tostring(type(err) == 'string')
+            return tostring(ok) .. ':' .. tostring(err)
         ");
-        r.String.ShouldBe("false:true");
+        r.String.ShouldBe("false:InsertMany: array element is not a table");
     }
 
     [MongoFact]
@@ -256,9 +257,9 @@ public sealed class MongoTests
             db:Find({Db()}, 'test_no_such_collection_xyz', {{}})
             db:Wait()
             local res, err = db:GetResult()
-            return tostring(err == nil) .. ':' .. tostring(type(res) == 'table')
+            return tostring(err) .. ':' .. type(res)
         ");
-        r.String.ShouldBe("true:true");
+        r.String.ShouldBe("nil:table");
     }
 
     [MongoFact]
@@ -271,9 +272,9 @@ public sealed class MongoTests
             db:Find({Db()}, {Coll()}, {{}})
             db:Cancel()
             local res, err = db:GetResult()
-            return tostring(res == nil) .. ':' .. tostring(type(err) == 'string')
+            return tostring(res) .. ':' .. tostring(err)
         ");
-        r.String.ShouldBe("true:true");
+        r.String.ShouldBe("nil:no active operation");
     }
 
     [MongoFact]
@@ -350,9 +351,9 @@ public sealed class MongoTests
             db:Wait()
             local res, err = db:GetResult()
             if err then error(err) end
-            return tostring(type(res) == 'table') .. ':' .. tostring(#res)
+            return type(res) .. ':' .. tostring(#res)
         ");
-        r.String.ShouldBe("true:0");
+        r.String.ShouldBe("table:0");
     }
 
     [MongoFact]
@@ -366,9 +367,9 @@ public sealed class MongoTests
             db:FindOne({Db()}, {Coll()}, {{_id=id}})
             db:Wait()
             local doc, err = db:GetResult()
-            return tostring(doc == nil) .. ':' .. tostring(err == nil)
+            return tostring(doc) .. ':' .. tostring(err)
         ");
-        r.String.ShouldBe("true:true");
+        r.String.ShouldBe("nil:nil");
     }
 
     [MongoFact]
@@ -395,9 +396,9 @@ public sealed class MongoTests
             local db = assert({ConnectLua()})
             db:Close()
             local ok, err = db:Find({Db()}, {Coll()}, {{}})
-            return tostring(ok) .. ':' .. tostring(type(err) == 'string')
+            return tostring(ok) .. ':' .. tostring(err)
         ");
-        r.String.ShouldBe("false:true");
+        r.String.ShouldBe("false:connection is closed");
     }
 
     [MongoFact]
@@ -419,9 +420,9 @@ public sealed class MongoTests
             if err then error(err) end
             db:DeleteMany({Db()}, {Coll()}, {{tag=tag}})
             db:Wait(); db:GetResult()
-            return tostring(#res == 1) .. ':' .. tostring(res[1] and res[1].total)
+            return tostring(#res) .. ':' .. tostring(res[1] and res[1].total)
         ");
-        r.String.ShouldBe("true:6");
+        r.String.ShouldBe("1:6");
     }
 
     [MongoFact]
@@ -433,9 +434,10 @@ public sealed class MongoTests
             local ok, err = pcall(function()
                 db:Find('', {Coll()}, {{}})
             end)
-            return tostring(ok) .. ':' .. tostring(type(err) == 'string')
+            return tostring(ok) .. ':' .. tostring(err)
         ");
-        r.String.ShouldBe("false:true");
+        r.String.ShouldStartWith("false:");
+        r.String.ShouldContain("MongoDB: invalid database name");
     }
 
     [MongoFact]
@@ -447,9 +449,10 @@ public sealed class MongoTests
             local ok, err = pcall(function()
                 db:Find('bad/name', {Coll()}, {{}})
             end)
-            return tostring(ok) .. ':' .. tostring(type(err) == 'string')
+            return tostring(ok) .. ':' .. tostring(err)
         ");
-        r.String.ShouldBe("false:true");
+        r.String.ShouldStartWith("false:");
+        r.String.ShouldContain("MongoDB: invalid database name");
     }
 
     [MongoFact]
@@ -461,9 +464,10 @@ public sealed class MongoTests
             local ok, err = pcall(function()
                 db:Find({Db()}, '', {{}})
             end)
-            return tostring(ok) .. ':' .. tostring(type(err) == 'string')
+            return tostring(ok) .. ':' .. tostring(err)
         ");
-        r.String.ShouldBe("false:true");
+        r.String.ShouldStartWith("false:");
+        r.String.ShouldContain("MongoDB: invalid collection name");
     }
 
     [MongoFact]
@@ -475,9 +479,10 @@ public sealed class MongoTests
             local ok, err = pcall(function()
                 db:Find({Db()}, '$system', {{}})
             end)
-            return tostring(ok) .. ':' .. tostring(type(err) == 'string')
+            return tostring(ok) .. ':' .. tostring(err)
         ");
-        r.String.ShouldBe("false:true");
+        r.String.ShouldStartWith("false:");
+        r.String.ShouldContain("MongoDB: invalid collection name");
     }
 
     [MongoFact]
@@ -536,9 +541,9 @@ public sealed class MongoTests
             local doc, err = db:GetResult()
             if err then error(err) end
             db:DeleteOne({Db()}, {Coll()}, {{_id=id}}); db:Wait(); db:GetResult()
-            return tostring(doc.data ~= nil) .. ':' .. tostring((doc.data or {{}}).name)
+            return type(doc.data) .. ':' .. tostring((doc.data or {{}}).name)
         ");
-        r.String.ShouldBe("true:test");
+        r.String.ShouldBe("table:test");
     }
 
     [MongoFact]
@@ -556,9 +561,9 @@ public sealed class MongoTests
             local doc, err = db:GetResult()
             if err then error(err) end
             db:DeleteOne({Db()}, {Coll()}, {{_id=id}}); db:Wait(); db:GetResult()
-            return tostring(doc ~= nil) .. ':' .. tostring(Identifier.GetType(doc and doc.uid) == 'UUID')
+            return type(doc) .. ':' .. tostring(Identifier.GetType(doc and doc.uid))
         ");
-        r.String.ShouldBe("true:true");
+        r.String.ShouldBe("table:UUID");
     }
 
     [MongoFact]
@@ -572,9 +577,10 @@ public sealed class MongoTests
                 t.self = t
                 db:InsertOne({Db()}, {Coll()}, {{data=t}})
             end)
-            return tostring(ok) .. ':' .. tostring(type(err) == 'string')
+            return tostring(ok) .. ':' .. tostring(err)
         ");
-        r.String.ShouldBe("false:true");
+        r.String.ShouldStartWith("false:");
+        r.String.ShouldContain("MongoDB: circular reference detected in table");
     }
 
     [MongoFact]
@@ -688,9 +694,9 @@ public sealed class MongoTests
             db:Wait()
             db:GetResult()  -- consume
             local res, err = db:GetResult()  -- second call
-            return tostring(res == nil) .. ':' .. tostring(err ~= nil)
+            return tostring(res) .. ':' .. tostring(err)
         ");
-        r.String.ShouldBe("true:true");
+        r.String.ShouldBe("nil:no active operation");
     }
 
     [MongoFact]
@@ -783,9 +789,10 @@ public sealed class MongoTests
             db:Command('admin', {{invalidCmd=1}})
             db:Wait()
             local res, err = db:GetResult()
-            return tostring(res == nil) .. ':' .. tostring(type(err) == 'string' and err:find('invalidCmd', 1, true) ~= nil)
+            return tostring(res) .. ':' .. tostring(err)
         ");
-        r.String.ShouldBe("true:true");
+        r.String.ShouldStartWith("nil:");
+        r.String.ShouldContain("invalidCmd");
     }
 
     [MongoFact]
@@ -938,9 +945,9 @@ public sealed class MongoTests
             -- data comes back as a Stream; read it to get the bytes
             -- data comes back as a Stream; Stream.len gives its total length
             local len = Stream.len(doc.data)
-            return tostring(doc ~= nil) .. ':' .. tostring(len == 5)
+            return type(doc) .. ':' .. tostring(len)
         ");
-        r.String.ShouldBe("true:true");
+        r.String.ShouldBe("table:5");
     }
 
     [MongoFact]
@@ -1021,18 +1028,13 @@ public sealed class MongoTests
             local doc, err = db:GetResult()
             if err then error(err) end
             db:DeleteOne({Db()}, {Coll()}, {{_id=id}}); db:Wait(); db:GetResult()
-            local ok = doc.s == 'hello'
-                    and doc.i == 42
-                    and doc.f == 1.5
-                    and doc.b == true
-                    and doc.n == false
-                    and Identifier.GetType(doc._id) == 'OID'
-                    and DateTime.UnixMilliseconds(doc.dt) == DateTime.UnixMilliseconds(now)
-                    and DateTime.OffsetMinutes(doc.dt) == 0
-                    and doc.nul == nil
-            return tostring(ok)
+            return tostring(doc.s) .. '|' .. tostring(doc.i) .. '|' .. tostring(doc.f) .. '|' .. tostring(doc.b) .. '|' .. tostring(doc.n)
+                .. '|' .. tostring(Identifier.GetType(doc._id))
+                .. '|sameMs=' .. tostring(DateTime.UnixMilliseconds(doc.dt) == DateTime.UnixMilliseconds(now))
+                .. '|' .. tostring(DateTime.OffsetMinutes(doc.dt))
+                .. '|' .. tostring(doc.nul)
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("hello|42|1.5|true|false|OID|sameMs=true|0|nil");
     }
 
     [MongoFact]
@@ -1050,9 +1052,9 @@ public sealed class MongoTests
             local doc, err = db:GetResult()
             if err then error(err) end
             db:DeleteOne({Db()}, {Coll()}, {{_id=id}}); db:Wait(); db:GetResult()
-            return tostring(doc ~= nil) .. ':' .. tostring(doc.a == 1) .. ':' .. tostring(doc.b == nil)
+            return type(doc) .. ':' .. tostring(doc.a) .. ':' .. tostring(doc.b)
         ");
-        r.String.ShouldBe("true:true:true");
+        r.String.ShouldBe("table:1:nil");
     }
 
     [MongoFact]
@@ -1094,9 +1096,9 @@ public sealed class MongoTests
             local doc, err2 = db:GetResult()
             if err2 then error(err2) end
             db:DeleteOne({Db()}, {Coll()}, {{_id=id}}); db:Wait(); db:GetResult()
-            return tostring(doc ~= nil) .. ':' .. tostring(doc.v == 99)
+            return type(doc) .. ':' .. tostring(doc.v)
         ");
-        r.String.ShouldBe("true:true");
+        r.String.ShouldBe("table:99");
     }
 
     [MongoFact]
@@ -1181,9 +1183,9 @@ public sealed class MongoTests
             if err then error(err) end
             db:DeleteOne({Db()}, {Coll()}, {{_id=id}}); db:Wait(); db:GetResult()
             -- BSON null round-trips as nil in Lua
-            return tostring(doc ~= nil) .. ':' .. tostring(doc.n == nil)
+            return type(doc) .. ':' .. tostring(doc.n)
         ");
-        r.String.ShouldBe("true:true");
+        r.String.ShouldBe("table:nil");
     }
 
     [MongoFact]
@@ -1207,9 +1209,9 @@ public sealed class MongoTests
             local res, err = db:GetResult()
             if err then error(err) end
             db:DeleteMany({Db()}, {Coll()}, {{tag=tag}}); db:Wait(); db:GetResult()
-            return tostring(#res == 1) .. ':' .. tostring(res[1] and res[1].total)
+            return tostring(#res) .. ':' .. tostring(res[1] and res[1].total)
         ");
-        r.String.ShouldBe("true:10");
+        r.String.ShouldBe("1:10");
     }
 
     [MongoFact]
@@ -1223,9 +1225,10 @@ public sealed class MongoTests
                 local db = assert({ConnectLua()})
                 db:InsertOne({Db()}, {Coll()}, {{v = 0/0}})
             end)
-            return tostring(ok) .. ':' .. tostring(type(err) == 'string' and #err > 0)
+            return tostring(ok) .. ':' .. tostring(err)
         ");
-        r.String.ShouldBe("false:true");
+        r.String.ShouldStartWith("false:");
+        r.String.ShouldContain("NaN and Inf are not valid BSON double values");
     }
 
     [MongoFact]
@@ -1237,9 +1240,10 @@ public sealed class MongoTests
                 local db = assert({ConnectLua()})
                 db:InsertOne({Db()}, {Coll()}, {{v = math.huge}})
             end)
-            return tostring(ok) .. ':' .. tostring(type(err) == 'string' and #err > 0)
+            return tostring(ok) .. ':' .. tostring(err)
         ");
-        r.String.ShouldBe("false:true");
+        r.String.ShouldStartWith("false:");
+        r.String.ShouldContain("NaN and Inf are not valid BSON double values");
     }
 
     [MongoFact]
@@ -1251,9 +1255,10 @@ public sealed class MongoTests
                 local db = assert({ConnectLua()})
                 db:InsertOne({Db()}, {Coll()}, {{v = -math.huge}})
             end)
-            return tostring(ok) .. ':' .. tostring(type(err) == 'string' and #err > 0)
+            return tostring(ok) .. ':' .. tostring(err)
         ");
-        r.String.ShouldBe("false:true");
+        r.String.ShouldStartWith("false:");
+        r.String.ShouldContain("NaN and Inf are not valid BSON double values");
     }
 
     [MongoFact]
@@ -1266,9 +1271,10 @@ public sealed class MongoTests
             local ok, err = pcall(function()
                 db:Find({Db()}, {Coll()}, {{}}, 2.5)
             end)
-            return tostring(ok) .. ':' .. tostring(type(err) == 'string' and #err > 0)
+            return tostring(ok) .. ':' .. tostring(err)
         ");
-        r.String.ShouldBe("false:true");
+        r.String.ShouldStartWith("false:");
+        r.String.ShouldContain("MongoDB: limit must be an integer");
     }
 
     [MongoFact]
@@ -1280,9 +1286,10 @@ public sealed class MongoTests
             local ok, err = pcall(function()
                 db:Find({Db()}, {Coll()}, {{}}, 10, 1.9)
             end)
-            return tostring(ok) .. ':' .. tostring(type(err) == 'string' and #err > 0)
+            return tostring(ok) .. ':' .. tostring(err)
         ");
-        r.String.ShouldBe("false:true");
+        r.String.ShouldStartWith("false:");
+        r.String.ShouldContain("MongoDB: skip must be an integer");
     }
 
     [MongoFact]
@@ -1316,9 +1323,10 @@ public sealed class MongoTests
             local ok, err = pcall(function()
                 MongoDB.Close(42)
             end)
-            return tostring(ok) .. ':' .. tostring(type(err) == 'string' and #err > 0)
+            return tostring(ok) .. ':' .. tostring(err)
         ");
-        r.String.ShouldBe("false:true");
+        r.String.ShouldStartWith("false:");
+        r.String.ShouldContain("bad argument #1");
     }
 
     [MongoFact]
@@ -1329,9 +1337,10 @@ public sealed class MongoTests
             local ok, err = pcall(function()
                 MongoDB.Close(nil)
             end)
-            return tostring(ok) .. ':' .. tostring(type(err) == 'string' and #err > 0)
+            return tostring(ok) .. ':' .. tostring(err)
         ");
-        r.String.ShouldBe("false:true");
+        r.String.ShouldStartWith("false:");
+        r.String.ShouldContain("bad argument #1");
     }
 
     [MongoFact]
@@ -1375,9 +1384,10 @@ public sealed class MongoTests
             local ok, err = pcall(function()
                 db:Find('bad' .. string.char(0) .. 'name', {Coll()}, {{}})
             end)
-            return tostring(ok) .. ':' .. tostring(type(err) == 'string' and #err > 0)
+            return tostring(ok) .. ':' .. tostring(err)
         ");
-        r.String.ShouldBe("false:true");
+        r.String.ShouldStartWith("false:");
+        r.String.ShouldContain("MongoDB: invalid database name");
     }
 
     [MongoFact]
@@ -1389,9 +1399,10 @@ public sealed class MongoTests
             local ok, err = pcall(function()
                 db:InsertOne({Db()}, 'col' .. string.char(0) .. 'bad', {{}})
             end)
-            return tostring(ok) .. ':' .. tostring(type(err) == 'string' and #err > 0)
+            return tostring(ok) .. ':' .. tostring(err)
         ");
-        r.String.ShouldBe("false:true");
+        r.String.ShouldStartWith("false:");
+        r.String.ShouldContain("MongoDB: invalid collection name");
     }
 
     [MongoFact]
@@ -1403,9 +1414,10 @@ public sealed class MongoTests
             local ok, err = pcall(function()
                 db:Command('adm' .. string.char(0) .. 'in', {{ping=1}})
             end)
-            return tostring(ok) .. ':' .. tostring(type(err) == 'string' and #err > 0)
+            return tostring(ok) .. ':' .. tostring(err)
         ");
-        r.String.ShouldBe("false:true");
+        r.String.ShouldStartWith("false:");
+        r.String.ShouldContain("MongoDB: invalid database name");
     }
 
     [MongoFact]
@@ -1417,9 +1429,10 @@ public sealed class MongoTests
             local ok, err = pcall(function()
                 db:CountDocuments('bad' .. string.char(0) .. 'db', {Coll()}, {{}})
             end)
-            return tostring(ok) .. ':' .. tostring(type(err) == 'string' and #err > 0)
+            return tostring(ok) .. ':' .. tostring(err)
         ");
-        r.String.ShouldBe("false:true");
+        r.String.ShouldStartWith("false:");
+        r.String.ShouldContain("MongoDB: invalid database name");
     }
 
     [MongoFact]
@@ -1444,9 +1457,9 @@ public sealed class MongoTests
             db:Wait()
             local del, err3 = db:GetResult()
             if err3 then error(err3) end
-            return tostring(doc ~= nil) .. ':' .. tostring(doc.v == 1) .. ':' .. tostring(upd.matchedCount) .. ':' .. tostring(upd.modifiedCount) .. ':' .. tostring(del.deletedCount)
+            return type(doc) .. ':' .. tostring(doc.v) .. ':' .. tostring(upd.matchedCount) .. ':' .. tostring(upd.modifiedCount) .. ':' .. tostring(del.deletedCount)
         ");
-        r.String.ShouldBe("true:true:1:1:1");
+        r.String.ShouldBe("table:1:1:1:1");
     }
 
     // AliveToken integration
@@ -1495,9 +1508,9 @@ public sealed class MongoTests
             db:CountDocuments({Db()}, {Coll()}, {{}})
             local count, err = db:GetResult()
             db:Close()
-            return tostring(err == nil and count ~= nil)
+            return tostring(err) .. ':' .. tostring(count ~= nil)
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("nil:true");
     }
 
     [MongoFact]

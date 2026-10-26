@@ -88,9 +88,9 @@ public sealed class KitsuneHttpServerTests
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync(@"
             local s, err = HttpServer.Listen('not-a-valid-address:99999')
-            return tostring(s == nil and type(err) == 'string')
+            return tostring(s) .. '|' .. type(err)
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("nil|string");
     }
 
     [Fact]
@@ -101,9 +101,9 @@ public sealed class KitsuneHttpServerTests
             local s = assert(HttpServer.Listen('127.0.0.1:19801'))
             local str = tostring(s)
             s:Close()
-            return tostring(type(str) == 'string' and #str > 0)
+            return type(str) .. '|len>0=' .. tostring(#str > 0)
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("string|len>0=true");
     }
 
     // Accept idempotency
@@ -273,9 +273,9 @@ public sealed class KitsuneHttpServerTests
             local co = s:Accept()
             coroutine.resume(co)
             coroutine.resume(co, true)
-            return tostring(coroutine.status(co) == 'dead')
+            return coroutine.status(co)
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("dead");
     }
 
     [Fact]
@@ -324,11 +324,11 @@ public sealed class KitsuneHttpServerTests
             collectgarbage('collect')
             local ok = pcall(function() _savedResp:Send('again') end)
             _savedResp = nil
-            return tostring(not ok)
+            return tostring(ok)
             """);
         await StopLuaServer(engine, pump);
         body.ShouldBe("ok");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("false");
     }
 
     [Fact]
@@ -479,16 +479,16 @@ public sealed class KitsuneHttpServerTests
             server:SetAliveToken(token)
             local co = server:Accept()
             coroutine.resume(co)
-            local aliveBefore = coroutine.status(co) == 'suspended'
+            local statusBefore = coroutine.status(co)
             token:Dispose()
             coroutine.resume(co)
-            local deadAfter = coroutine.status(co) == 'dead'
+            local statusAfter = coroutine.status(co)
             local again, err = HttpServer.Listen('127.0.0.1:19870')
             if not again then return 'port not released: ' .. tostring(err) end
             again:Close()
-            return tostring(aliveBefore and deadAfter)
+            return statusBefore .. '|' .. statusAfter
             """);
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("suspended|dead");
     }
 
     [Fact]
@@ -504,11 +504,11 @@ public sealed class KitsuneHttpServerTests
             coroutine.resume(co)
             token:Dispose()
             for i = 1, 3 do coroutine.resume(co) end
-            local aliveAfterDispose = coroutine.status(co) == 'suspended'
+            local statusAfterDispose = coroutine.status(co)
             coroutine.resume(co, true)
-            return tostring(aliveAfterDispose and coroutine.status(co) == 'dead')
+            return statusAfterDispose .. '|' .. coroutine.status(co)
             """);
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("suspended|dead");
     }
 
     [Fact]
@@ -522,12 +522,12 @@ public sealed class KitsuneHttpServerTests
             local co = server:Accept()
             -- resume several times with a live token — coroutine should stay alive
             for i = 1, 5 do coroutine.resume(co) end
-            local alive = coroutine.status(co) == 'suspended'
+            local status = coroutine.status(co)
             coroutine.resume(co, true)  -- stop cleanly
             server:Close()
-            return tostring(alive)
+            return status
             """);
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("suspended");
     }
 
     // WebSocket server tests
@@ -579,10 +579,10 @@ public sealed class KitsuneHttpServerTests
         await ws.ConnectAsync(new Uri("ws://127.0.0.1:19884/"), CancellationToken.None);
         await WaitForServerWebSocketAsync(engine);
         LuaValue r = await engine.ExecuteStringAsync(
-            "return tostring(_server_ws ~= nil and _server_ws:IsConnected())");
+            "return tostring(_server_ws ~= nil) .. '|' .. tostring(_server_ws and _server_ws:IsConnected())");
         await StopWsServer(engine, pump);
         ws.Dispose();
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("true|true");
     }
 
     [Fact]
@@ -595,12 +595,12 @@ public sealed class KitsuneHttpServerTests
         LuaValue r = await engine.ExecuteStringAsync("""
             if _server_ws then
                 local id = _server_ws:GetId()
-                return tostring(type(id) == 'number' and id ~= 0)
+                return type(id) .. '|nonzero=' .. tostring(id ~= 0)
             end
-            return 'false'
+            return 'no _server_ws'
             """);
         await StopWsServer(engine, pump);
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("number|nonzero=true");
     }
 
     [Fact]
@@ -614,13 +614,13 @@ public sealed class KitsuneHttpServerTests
             if _server_ws then
                 local ctx1 = _server_ws:GetContext()
                 ctx1.x = 42
-                return tostring(_server_ws:GetContext().x == 42)
+                return tostring(_server_ws:GetContext().x)
             end
-            return 'false'
+            return 'no _server_ws'
             """);
         await StopWsServer(engine, pump);
         ws.Dispose();
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("42");
     }
 
     [Fact]
@@ -633,15 +633,15 @@ public sealed class KitsuneHttpServerTests
         LuaValue r = await engine.ExecuteStringAsync("""
             if _server_ws then
                 _server_ws:Dispose()
-                return tostring(_server_ws:Read() == nil)
+                return tostring(_server_ws:Read())
             end
-            return 'false'
+            return 'no _server_ws'
             """);
 
         // Server already disposed the WS; closing from client side would throw.
         await StopWsServer(engine, pump);
         ws.Dispose();
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("nil");
     }
 
     // SSE tests

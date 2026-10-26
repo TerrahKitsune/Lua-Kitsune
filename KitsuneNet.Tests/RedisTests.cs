@@ -292,9 +292,9 @@ public sealed class RedisTests : IAsyncLifetime
             local id = stream:Add({{f1='hello', f2='world'}})
             local entry_id, fields = stream:Read()
             redis:Command('DEL', 'kitsune_test_stream_' .. RUN_ID)
-            return tostring(type(id) == 'string' and #id > 0) .. ':' .. tostring(id == entry_id) .. ':' .. fields.f1 .. ':' .. fields.f2
+            return type(id) .. ':id>0=' .. tostring(#tostring(id) > 0) .. ':sameId=' .. tostring(id == entry_id) .. ':' .. fields.f1 .. ':' .. fields.f2
         ");
-        r.String.ShouldBe("true:true:hello:world");
+        r.String.ShouldBe("string:id>0=true:sameId=true:hello:world");
     }
 
     // Key iterator
@@ -1219,9 +1219,9 @@ public sealed class RedisTests : IAsyncLifetime
             redis:Command('SADD', 'kitsune_test_reply_arr_' .. RUN_ID, 'x', 'y')
             local reply = redis:Command('SMEMBERS', 'kitsune_test_reply_arr_' .. RUN_ID)
             redis:Command('DEL', 'kitsune_test_reply_arr_' .. RUN_ID)
-            return tostring(type(reply.Value) == 'table' and #reply.Value == 2)
+            return type(reply.Value) .. ':' .. tostring(#reply.Value)
             """);
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("table:2");
     }
 
     [RedisFact]
@@ -1248,9 +1248,9 @@ public sealed class RedisTests : IAsyncLifetime
             redis:Command('DEL', 'kitsune_test_stream_empty_' .. RUN_ID)
             local stream = redis:GetStream('kitsune_test_stream_empty_' .. RUN_ID)
             local eid, fields = stream:Read()
-            return tostring(eid == nil and fields == nil)
+            return tostring(eid) .. ':' .. tostring(fields)
             """);
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("nil:nil");
     }
 
     // Command validation
@@ -1717,9 +1717,9 @@ public sealed class RedisTests : IAsyncLifetime
             local json = redis:GetJson('kitsune_test_json_' .. RUN_ID)
             local doc = json()
             redis:Command('JSON.DEL', 'kitsune_test_json_' .. RUN_ID)
-            return tostring(type(doc) == 'table' and doc.SomeNumber == 123)
+            return type(doc) .. ':' .. tostring(doc.SomeNumber)
             """);
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("table:123");
     }
 
     [RedisFact]
@@ -1854,9 +1854,9 @@ public sealed class RedisTests : IAsyncLifetime
             local json = redis:GetJson('kitsune_test_json_' .. RUN_ID)
             local val = json.NullableGuid()
             redis:Command('JSON.DEL', 'kitsune_test_json_' .. RUN_ID)
-            return tostring(type(val) == 'table' and val.HasValue == false and val.Value == 'SomeGuidBlablabla')
+            return type(val) .. ':' .. tostring(val.HasValue) .. ':' .. tostring(val.Value)
             """);
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("table:false:SomeGuidBlablabla");
     }
 
     [RedisFact]
@@ -1869,9 +1869,9 @@ public sealed class RedisTests : IAsyncLifetime
             local json = redis:GetJson('kitsune_test_json_' .. RUN_ID)
             local val = json.TestArray()
             redis:Command('JSON.DEL', 'kitsune_test_json_' .. RUN_ID)
-            return tostring(type(val) == 'table' and #val == 2)
+            return type(val) .. ':' .. tostring(#val)
             """);
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("table:2");
     }
 
     [RedisFact]
@@ -1968,9 +1968,9 @@ public sealed class RedisTests : IAsyncLifetime
             json.NullableGuid:Set({{Value='TableSet'}})
             local raw = redis:Command('JSON.GET', 'kitsune_test_json_' .. RUN_ID, '$.NullableGuid.Value')
             redis:Command('JSON.DEL', 'kitsune_test_json_' .. RUN_ID)
-            return tostring(raw.Value ~= nil and raw.Value:find('TableSet', 1, true) ~= nil)
+            return tostring(raw.Value)
         ");
-        r.String.ShouldBe("true");
+        r.String!.ShouldContain("TableSet");
     }
 
     [RedisFact]
