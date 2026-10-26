@@ -9,10 +9,6 @@
 
 #include <SDL.h>
 
-// ---------------------------------------------------------------------------
-// SDL.GetKeyState(scancode) -> bool
-// ---------------------------------------------------------------------------
-
 static int SDLGetKeyState(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
 	KitsuneVariable r = {};
@@ -32,10 +28,6 @@ static int SDLGetKeyState(int argc, const KitsuneVariable* argv,
 	setter(&r);
 	return 1;
 }
-
-// ---------------------------------------------------------------------------
-// SDL.GetModState() -> table
-// ---------------------------------------------------------------------------
 
 static int SDLGetModState(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
@@ -71,10 +63,6 @@ static int SDLGetModState(int argc, const KitsuneVariable* argv,
 	return 1;
 }
 
-// ---------------------------------------------------------------------------
-// SDL.GetMouseState() -> x, y, buttons
-// ---------------------------------------------------------------------------
-
 static int SDLGetMouseState(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
 	int    x;
@@ -94,10 +82,6 @@ static int SDLGetMouseState(int argc, const KitsuneVariable* argv,
 	setter(&vb);
 	return 3;
 }
-
-// ---------------------------------------------------------------------------
-// SDL.GetRelativeMouseState() -> dx, dy, buttons
-// ---------------------------------------------------------------------------
 
 static int SDLGetRelativeMouseState(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
@@ -119,20 +103,12 @@ static int SDLGetRelativeMouseState(int argc, const KitsuneVariable* argv,
 	return 3;
 }
 
-// ---------------------------------------------------------------------------
-// SDL.SetRelativeMouseMode(bool)
-// ---------------------------------------------------------------------------
-
 static int SDLSetRelativeMouseMode(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
 	bool enable = argc > 0 && KitsuneAsBool(&argv[0]);
 	SDL_SetRelativeMouseMode(enable ? SDL_TRUE : SDL_FALSE);
 	return 0;
 }
-
-// ---------------------------------------------------------------------------
-// SDL.WarpMouse(x, y)
-// ---------------------------------------------------------------------------
 
 static int SDLWarpMouse(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
@@ -144,10 +120,6 @@ static int SDLWarpMouse(int argc, const KitsuneVariable* argv,
 	return 0;
 }
 
-// ---------------------------------------------------------------------------
-// SDL.GetNumJoysticks() -> integer
-// ---------------------------------------------------------------------------
-
 static int SDLGetNumJoysticks(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
 	KitsuneVariable r = {};
@@ -156,10 +128,6 @@ static int SDLGetNumJoysticks(int argc, const KitsuneVariable* argv,
 	setter(&r);
 	return 1;
 }
-
-// ---------------------------------------------------------------------------
-// SDL.GetGamepadAxis(index, axis) -> float
-// ---------------------------------------------------------------------------
 
 static int SDLGetGamepadAxis(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
@@ -182,10 +150,6 @@ static int SDLGetGamepadAxis(int argc, const KitsuneVariable* argv,
 	return 1;
 }
 
-// ---------------------------------------------------------------------------
-// SDL.GetGamepadButton(index, button) -> bool
-// ---------------------------------------------------------------------------
-
 static int SDLGetGamepadButton(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
 	KitsuneVariable r = {};
@@ -206,10 +170,7 @@ static int SDLGetGamepadButton(int argc, const KitsuneVariable* argv,
 	return 1;
 }
 
-// ---------------------------------------------------------------------------
-// SDL.Time.GetTicks() -> integer (milliseconds)
-// ---------------------------------------------------------------------------
-
+// Returns milliseconds.
 static int SDLGetTicks(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
 	KitsuneVariable r = {};
@@ -218,10 +179,6 @@ static int SDLGetTicks(int argc, const KitsuneVariable* argv,
 	setter(&r);
 	return 1;
 }
-
-// ---------------------------------------------------------------------------
-// SDL.Time.GetPerformanceCounter() / SDL.Time.GetPerformanceFrequency()
-// ---------------------------------------------------------------------------
 
 static int SDLGetPerformanceCounter(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
@@ -241,10 +198,7 @@ static int SDLGetPerformanceFrequency(int argc, const KitsuneVariable* argv,
 	return 1;
 }
 
-// ---------------------------------------------------------------------------
-// Frame timing state — shared by SDL.GetDeltaTime and SDL.GetFPS
-// ---------------------------------------------------------------------------
-
+// Frame timing state — shared by SDL.Time.GetFrameTime
 static Uint64 s_lastCounter = 0;
 static double s_deltaTime = 0.0;
 static double s_fps = 0.0;
@@ -264,10 +218,7 @@ void UpdateFrameTiming() {
 		s_fps = 0.9 * s_fps + 0.1 * (1.0 / s_deltaTime);
 }
 
-// ---------------------------------------------------------------------------
-// SDL.Time.GetFrameTime() -> dt, fps
-// ---------------------------------------------------------------------------
-
+// Returns dt, fps (fps is smoothed).
 static int SDLGetFrameTime(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
 	KitsuneVariable rdt = {};
@@ -280,10 +231,6 @@ static int SDLGetFrameTime(int argc, const KitsuneVariable* argv,
 	setter(&rfps);
 	return 2;
 }
-
-// ---------------------------------------------------------------------------
-// RegisterSDLInputFunctions
-// ---------------------------------------------------------------------------
 
 void RegisterSDLInputFunctions() {
 	KitsuneRegisterFunction("SDL.Input.GetKeyState", SDLGetKeyState, nullptr);

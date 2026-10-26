@@ -7,9 +7,7 @@
 #include "timespan/LuaTimeSpan.h"
 #include "pugixml/pugixml.hpp"
 
-// =============================================================================
 // Custom pugixml allocator
-// =============================================================================
 
 static void* XmlAlloc(size_t size) {
 	return kitsune_malloc(size);
@@ -27,11 +25,9 @@ void EnsureAllocator() {
 	}
 }
 
-// =============================================================================
 // Encode output buffer writer.
 // write() must NOT longjmp -- it is called from inside pugixml's virtual
 // dispatch.  Set oom and raise the error after print() returns.
-// =============================================================================
 
 struct LuaXmlWriter : pugi::xml_writer {
 	LuaXml* x;
@@ -58,9 +54,7 @@ struct LuaXmlWriter : pugi::xml_writer {
 	}
 };
 
-// =============================================================================
 // Instance management
-// =============================================================================
 
 LuaXml* lua_pushxml(lua_State* L) {
 	LuaXml* x = (LuaXml*)lua_newuserdata(L, sizeof(LuaXml));
@@ -100,7 +94,6 @@ int Xml_New(lua_State* L) {
 	return 1;
 }
 
-// =============================================================================
 // Decode -- pugixml DOM -> Lua tables  (fully iterative, no C recursion)
 //
 // pugixml already parsed the XML into a tree iteratively.  We walk that tree
@@ -112,7 +105,6 @@ int Xml_New(lua_State* L) {
 //
 // Each frame records the abs indices of its elem and childTbl so that when a
 // node is finished its elem can be rawseti'd into the parent's childTbl.
-// =============================================================================
 
 #define XML_MAX_DEPTH 512
 
@@ -283,14 +275,12 @@ int Xml_Decode(lua_State* L) {
 	return 1;
 }
 
-// =============================================================================
 // Encode -- Lua tables -> pugixml DOM -> string  (fully iterative, no C recursion)
 //
 // Each frame holds a luaL_ref to the Lua table (keeps it GC-rooted), the
 // pugixml node to append into, and a cursor over the children array.
 // First visit (idx == -1) writes tag/attr/text; subsequent visits step
 // through children.
-// =============================================================================
 
 struct EncodeFrame {
 	int            luaRef; // LUA_REGISTRYINDEX ref for this node's Lua table

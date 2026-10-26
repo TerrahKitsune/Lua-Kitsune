@@ -24,12 +24,12 @@ typedef struct LuaImage {
 LuaImage* lua_toimage(lua_State* L, int index);
 LuaImage* lua_pushimage(lua_State* L);
 
-// -- module-level (Image.X) --
+// module-level (Image.X)
 int Image_Open(lua_State* L);
 int Image_New(lua_State* L);
 int Image_FromBytes(lua_State* L);
 
-// -- methods (img:X) --
+// methods (img:X)
 int Image_GetMetadata(lua_State* L);
 int Image_SetMetadata(lua_State* L);
 int Image_GetWidth(lua_State* L);
@@ -50,31 +50,31 @@ int Image_ToBytes(lua_State* L);
 int Image_GC(lua_State* L);
 int Image_ToString(lua_State* L);
 
-// -- color conversion utilities (Image.X, pure, no Image object involved) --
+// color conversion utilities (Image.X, pure, no Image object involved)
 int Image_RGBtoHSV(lua_State* L);
 int Image_HSVtoRGB(lua_State* L);
 int Image_RGBtoHSL(lua_State* L);
 int Image_HSLtoRGB(lua_State* L);
 
-// -- recolor / tone (img:X, mutating) --
+// recolor / tone (img:X, mutating)
 int Image_Tint(lua_State* L);
 int Image_RecolorPalette(lua_State* L);
 int Image_AdjustHSV(lua_State* L);
 int Image_Dither(lua_State* L);
 int Image_Outline(lua_State* L);
 
-// -- brush painting (img:X, mutating) --
+// brush painting (img:X, mutating)
 int Image_Stamp(lua_State* L);
 int Image_StrokePath(lua_State* L);
 
-// -- geometric transforms (img:X, non-mutating, return a new Image) --
+// geometric transforms (img:X, non-mutating, return a new Image)
 int Image_FlipHorizontal(lua_State* L);
 int Image_FlipVertical(lua_State* L);
 int Image_Rotate90(lua_State* L);
 int Image_PadCanvas(lua_State* L);
 int Image_DropShadow(lua_State* L);
 
-// -- filters / tone (img:X, mutating) --
+// filters / tone (img:X, mutating)
 int Image_Blur(lua_State* L);
 int Image_Invert(lua_State* L);
 int Image_Grayscale(lua_State* L);
@@ -83,11 +83,11 @@ int Image_Threshold(lua_State* L);
 int Image_ApplyMask(lua_State* L);
 int Image_Noise(lua_State* L);
 
-// -- fill primitives (img:X, mutating) --
+// fill primitives (img:X, mutating)
 int Image_FillGradientLinear(lua_State* L);
 int Image_FillGradientRadial(lua_State* L);
 int Image_FillPolygon(lua_State* L);
 int Image_DrawText(lua_State* L);
 
-// -- analysis (img:X, read-only) --
+// analysis (img:X, read-only)
 int Image_ExtractPalette(lua_State* L);

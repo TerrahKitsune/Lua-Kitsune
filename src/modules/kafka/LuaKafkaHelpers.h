@@ -50,7 +50,7 @@ int KafkaGetTopicConfig(lua_State* L, rd_kafka_t* rd);
 // Returns (true) on success, (false, errmsg) on failure.
 int KafkaSetTopicConfig(lua_State* L, rd_kafka_t* rd);
 
-// ── Group admin ──────────────────────────────────────────────────────────────
+// Group admin
 
 // KafkaListGroups: list all consumer groups in the cluster.
 //   2 = timeout_ms (integer, default 5000)

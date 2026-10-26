@@ -14,7 +14,7 @@ namespace KitsuneNet.Tests;
 /// </summary>
 public sealed class SQLiteBugFixTests
 {
-    // -- RegisterFunction array growth ---------------------------------------
+    // RegisterFunction array growth
     [Fact]
     public async Task SQLite_RegisterFunction_Two_BothCallable()
     {
@@ -60,7 +60,7 @@ public sealed class SQLiteBugFixTests
         r.String.ShouldBe("f1_a,f2_b,f3_c,true");
     }
 
-    // -- Parameter binding of unsupported types -------------------------------
+    // Parameter binding of unsupported types
     [Fact]
     public async Task SQLite_Query_ParamsTable_UnsupportedValues_BindNullWithoutShift()
     {
@@ -103,7 +103,7 @@ public sealed class SQLiteBugFixTests
         r.String.ShouldBe("nil,2,nil,4,nil,six");
     }
 
-    // -- Busy handler return value --------------------------------------------
+    // Busy handler return value
     // Two connections on the same temp file: A holds an exclusive lock, B tries
     // to write. Each handler also raises after 50 calls so a regression cannot
     // hang the test run.

@@ -13,7 +13,7 @@ namespace KitsuneNet.Tests;
 [Collection("KitsuneSequential")]
 public sealed class ModuleBugFixTests
 {
-    // -- CSV: module-level forms ------------------------------------------------
+    // CSV: module-level forms
     [Fact]
     public async Task Csv_ModuleDecode_DefaultDelimiterIsComma()
     {
@@ -135,7 +135,7 @@ public sealed class ModuleBugFixTests
         r.String.ShouldBe("true:bbb");
     }
 
-    // -- Tasks: TaskStatus.Waiting ---------------------------------------------
+    // Tasks: TaskStatus.Waiting
     [Fact]
     public async Task TaskStatus_Waiting_IsNine()
     {
@@ -172,7 +172,7 @@ public sealed class ModuleBugFixTests
         r.String.ShouldBe("true:false");
     }
 
-    // -- Redis -----------------------------------------------------------------
+    // Redis
     [RedisFact]
     public async Task Redis_Resp3BoolReply_IsLuaBoolean()
     {
@@ -207,7 +207,7 @@ public sealed class ModuleBugFixTests
         r.String.ShouldBe("200:255:200,65,255");
     }
 
-    // -- MySQL -----------------------------------------------------------------
+    // MySQL
     [MySqlFact]
     public async Task MySql_StopFlagBeforeRowcount_ConnectionReusable()
     {
@@ -303,7 +303,7 @@ public sealed class ModuleBugFixTests
         r.String.ShouldBe("string,eq,userdata,bin,integer,1,129,18446744073709551615");
     }
 
-    // -- helpers ---------------------------------------------------------------
+    // helpers
     private static string RedisOpen()
     {
         var parts = Environment.GetEnvironmentVariable("KITSUNE_REDIS_TEST")!.Split(':');

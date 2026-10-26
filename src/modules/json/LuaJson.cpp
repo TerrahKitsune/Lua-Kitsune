@@ -29,9 +29,7 @@ void* LuaJsonEmptyObject(void) {
 	return &g_jsonEmptyObject;
 }
 
-// =============================================================================
 // Instance management
-// =============================================================================
 
 LuaJson* lua_pushjson(lua_State* L) {
 	LuaJson* j = (LuaJson*)lua_newuserdata(L, sizeof(LuaJson));
@@ -87,9 +85,7 @@ int Json_SetEncodeEmptyObject(lua_State* L) {
 	return 1;
 }
 
-// =============================================================================
 // Encoder — buffer helpers
-// =============================================================================
 
 static void JbufGrow(LuaJson* j, lua_State* L, size_t need) {
 	if (j->outLen + need <= j->outCap)
@@ -129,9 +125,7 @@ static void JbufEmitc(LuaJson* j, lua_State* L, char c) {
 // For string literals only — sizeof gives the compile-time length.
 #define JBUF_EMIT_LIT(j, L, s) JbufEmit(j, L, "" s, sizeof(s) - 1)
 
-// =============================================================================
 // Encoder — anti-recursion
-// =============================================================================
 
 
 static void RecPush(LuaJson* j, lua_State* L, uintptr_t addr) {
@@ -161,9 +155,7 @@ static void RecPop(LuaJson* j) {
 		j->recLen--;
 }
 
-// =============================================================================
 // Encoder — value functions
-// =============================================================================
 
 static void EncValue(LuaJson* j, lua_State* L, int depth);
 
@@ -243,7 +235,7 @@ static void EncTable(LuaJson* j, lua_State* L, int depth) {
 	int tbl = lua_gettop(L);
 	RecPush(j, L, (uintptr_t)lua_topointer(L, tbl));
 
-	// -- Classify: single scan for sequence vs object --------------------------
+	// Classify: single scan for sequence vs object
 	// Walk all key-value pairs once with lua_next.  Track whether every key is
 	// an integer in [1..n]; exit immediately on the first non-sequence key so
 	// pure-object tables pay O(1) instead of O(n) for the classification step.
@@ -279,7 +271,6 @@ static void EncTable(LuaJson* j, lua_State* L, int depth) {
 		return;
 	}
 
-	// -- Encode ----------------------------------------------------------------
 	if (seq) {
 		JbufEmitc(j, L, '[');
 		for (lua_Integer i = 1; i <= n; i++) {
@@ -302,14 +293,14 @@ static void EncTable(LuaJson* j, lua_State* L, int depth) {
 				JbufEmitc(j, L, ',');
 			first = false;
 			EncIndent(j, L, depth + 1);
-			luaL_tolstring(L, -2, NULL);   // push string form of key
+			luaL_tolstring(L, -2, NULL);
 			EncString(j, L);
-			lua_pop(L, 1);                 // pop key string
+			lua_pop(L, 1);
 			JBUF_EMIT_LIT(j, L, ":");
 			if (j->pretty)
 				JbufEmitc(j, L, ' ');
-			EncValue(j, L, depth + 1);   // encode value at -1
-			lua_pop(L, 1);                 // pop value
+			EncValue(j, L, depth + 1);
+			lua_pop(L, 1);
 		}
 		if (!first)
 			EncIndent(j, L, depth);
@@ -326,7 +317,6 @@ static void EncValue(LuaJson* j, lua_State* L, int depth) {
 		JBUF_EMIT_LIT(j, L, "null");
 		return;
 	}
-	// Check empty-object sentinel
 	if (lua_islightuserdata(L, -1) && lua_topointer(L, -1) == LuaJsonEmptyObject()) {
 		JBUF_EMIT_LIT(j, L, "{}");
 		return;
@@ -412,9 +402,7 @@ static void EncValue(LuaJson* j, lua_State* L, int depth) {
 	}
 }
 
-// =============================================================================
 // Decoder — read helpers
-// =============================================================================
 
 static char JreadNext(LuaJson* j) {
 	if (j->ungetLen > 0)
@@ -503,9 +491,7 @@ static char JreadSkip(LuaJson* j) {
 	return '\0';
 }
 
-// =============================================================================
 // Decoder — value functions
-// =============================================================================
 
 static void DecValue(LuaJson* j, lua_State* L);
 
@@ -632,12 +618,12 @@ static void DecObject(LuaJson* j, lua_State* L) {
 		c = JreadSkip(j);
 		if (c != '"')
 			luaL_error(L, "Json: expected string key at line %zu", j->errLine + 1);
-		DecString(j, L);          // push key
+		DecString(j, L);
 		c = JreadSkip(j);
 		if (c != ':')
 			luaL_error(L, "Json: expected ':' at line %zu", j->errLine + 1);
-		DecValue(j, L);           // push value
-		lua_rawset(L, -3);         // table[key] = value
+		DecValue(j, L);
+		lua_rawset(L, -3);
 		c = JreadSkip(j);
 		if (c == '}')
 			break;
@@ -711,9 +697,7 @@ static void DecValue(LuaJson* j, lua_State* L) {
 	}
 }
 
-// =============================================================================
 // Reset helpers
-// =============================================================================
 
 static void EncReset(LuaJson* j) {
 	j->outLen    = 0;
@@ -730,13 +714,11 @@ static void DecReset(LuaJson* j, const char* src, size_t len) {
 	j->errCol   = 0;
 }
 
-// =============================================================================
 // Instance method entry points (instance required as arg 1):
 //   json:Decode(str | fn | stream)  arg 2 = string, chunk-reader fn, or LuaStream
 //   json:Encode(value)              arg 2 = Lua value to encode
-// =============================================================================
 
-// Forward declaration — defined in the Stream I/O section below.
+// Defined in the Stream I/O section below.
 static int JsonStreamChunkReader(lua_State* L);
 
 // Async stream decode continuation.
@@ -847,9 +829,7 @@ int Json_Encode(lua_State* L) {
 	return 1;
 }
 
-// =============================================================================
 // Stream I/O
-// =============================================================================
 
 // C closure used by the sync-stream decode path: called repeatedly by the chunked
 // decoder.  Upvalue 1: LuaStream* (lightuserdata).

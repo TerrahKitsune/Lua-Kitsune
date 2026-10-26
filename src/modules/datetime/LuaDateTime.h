@@ -14,7 +14,6 @@ typedef struct LuaDateTime {
 	uint8_t pad[6];  // pad to 16 bytes; prevents ABI surprises across TUs
 } LuaDateTime;
 
-// Ticks per unit constants.
 #define DT_TICKS_PER_MILLISECOND  INT64_C(10000)
 #define DT_TICKS_PER_SECOND       INT64_C(10000000)
 #define DT_TICKS_PER_MINUTE       INT64_C(600000000)

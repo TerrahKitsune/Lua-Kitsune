@@ -797,7 +797,7 @@ public sealed class SQLiteExtensionTests
         result.String.ShouldBe("2|2|Jane|9|Hans");
     }
 
-    // ---- RegisterVirtualTable tests -----------------------------------------
+    // RegisterVirtualTable tests
 
     // Reader returns {name, points} rows; SELECT returns expected results (2-field).
     [WindowsOnlyFact]

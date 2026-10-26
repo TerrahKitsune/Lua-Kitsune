@@ -269,7 +269,7 @@ static int SessionConsoleWrite(int argc, const KitsuneVariable* argv, const kits
 	if (h != INVALID_HANDLE_VALUE && argc > 0 && argv[0].type == KITSUNE_TSTRING && argv[0].data) {
 		std::wstring w = session_utf8_to_wide((const char*)argv[0].data, argv[0].length);
 		DWORD chars = 0;
-		// Reports the UTF-8 byte count, as before, when the whole string was written.
+		// Reports the UTF-8 byte count when the whole string was written.
 		if (!w.empty() && WriteConsoleW(h, w.data(), (DWORD)w.size(), &chars, NULL) && chars == (DWORD)w.size())
 			written = (long long)argv[0].length;
 	}

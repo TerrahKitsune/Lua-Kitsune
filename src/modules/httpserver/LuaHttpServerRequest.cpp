@@ -3,7 +3,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-/* ── push / check helpers ─────────────────────────────────────────────────── */
+/* push / check helpers */
 
 LuaHttpRequest* lua_pushhttprequest(lua_State* L) {
     LuaHttpRequest* r = (LuaHttpRequest*)lua_newuserdata(L, sizeof(LuaHttpRequest));
@@ -40,7 +40,7 @@ LuaHttpResponse* luaL_checkhttpresponse(lua_State* L, int idx) {
     return r;
 }
 
-/* ── defensive helpers ────────────────────────────────────────────────────── */
+/* defensive helpers */
 
 static void SafeFree(char** p) {
     if (*p) {
@@ -56,7 +56,7 @@ static void SafeUnref(lua_State* L, int* ref) {
     }
 }
 
-/* ── request methods ──────────────────────────────────────────────────────── */
+/* request methods */
 
 int HttpRequest_GetId(lua_State* L) {
     LuaHttpRequest* r = luaL_checkhttprequest(L, 1);
@@ -200,7 +200,7 @@ int HttpRequest_ToString(lua_State* L) {
     return 1;
 }
 
-/* ── response cleanup / gc / tostring ────────────────────────────────────── */
+/* response cleanup / gc / tostring */
 
 void HttpResponseCleanup(lua_State* L, LuaHttpResponse* r) {
     r->connection = NULL;

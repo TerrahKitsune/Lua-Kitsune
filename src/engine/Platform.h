@@ -1,7 +1,6 @@
 ﻿#pragma once
 
-// ── Feature flag cascade ──────────────────────────────────────────────────────
-// Define KITSUNE_ALL before including platform.h to enable every optional module.
+// Define KITSUNE_ALL before including Platform.h to enable every optional module.
 // Individual flags can also be set independently (e.g. -DKITSUNE_MYSQL).
 #ifdef KITSUNE_ALL
 #	ifndef KITSUNE_MYSQL
@@ -28,19 +27,16 @@
 #endif
 
 #ifdef _WIN32
-// On Windows just pull in the real Windows.h -- it provides all Win32 types,
-// macros, and functions used throughout the codebase.
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <stdint.h>   // uint8_t, uint16_t, uint32_t, etc. for cross-platform struct fields
 #include <Windows.h>
 #else
-// ── Linux / POSIX portability layer ──────────────────────────────────────────
+// Linux / POSIX portability layer.
 // Provides the minimum set of Windows types, macros and inline helpers that
-// KitsuneEngine sources use, so every file can include "platform.h" instead
+// KitsuneEngine sources use, so every file can include "Platform.h" instead
 // of <Windows.h> and compile cleanly on Linux.
-// ─────────────────────────────────────────────────────────────────────────────
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -51,8 +47,7 @@
 #include <sched.h>      // sched_yield
 #include <algorithm>    // std::min, std::max
 
-// ── Fundamental type aliases ──────────────────────────────────────────────────
-typedef uint8_t         BYTE;
+typedef uint8_t        BYTE;
 typedef uint16_t        WORD;
 typedef uint32_t        DWORD;
 typedef int32_t         LONG;
@@ -70,14 +65,13 @@ typedef intptr_t        INT_PTR;
 #define FALSE 0
 #define INVALID_HANDLE_VALUE ((HANDLE)(intptr_t)-1)
 
-// ── Calling conventions (no-op on Linux / GCC) ───────────────────────────────
+// Calling conventions are no-ops on Linux / GCC.
 #define WINAPI
 #define APIENTRY
 #define CALLBACK
 #define __cdecl
 #define __stdcall
 
-// ── Memory helpers ────────────────────────────────────────────────────────────
 #define ZeroMemory(ptr, len)      memset((ptr), 0, (len))
 #define CopyMemory(dst, src, len) memcpy((dst), (src), (len))
 #define FillMemory(ptr, len, val) memset((ptr), (val), (len))
@@ -86,7 +80,6 @@ typedef intptr_t        INT_PTR;
 #define MAXDWORD 0xFFFFFFFFUL
 #endif
 
-// ── Sleep ─────────────────────────────────────────────────────────────────────
 // Windows Sleep() takes milliseconds.  On Linux we use nanosleep(), which
 // accepts any non-negative duration without useconds_t overflow or the old
 // POSIX < 1 s limit on usleep().  Sleep(0) yields the scheduler time-slice.
@@ -102,7 +95,6 @@ static inline void Sleep(unsigned long ms) {
 	}
 }
 
-// ── KITSUNE_API visibility ────────────────────────────────────────────────────
 // On Linux, both the export and import cases use the same GCC visibility
 // attribute -- the linker handles dynamic resolution from .so symbols without
 // needing separate import stubs.
@@ -114,11 +106,9 @@ static inline void Sleep(unsigned long ms) {
 
 #endif // _WIN32
 
-// =============================================================================
-// PlatformEvent — portable auto-reset event
+// PlatformEvent: portable auto-reset event.
 // Uses std::condition_variable; works on all platforms without any OS handle.
 // The default constructor initialises the event to un-signaled.
-// =============================================================================
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>

@@ -24,11 +24,9 @@
 #include "litehtml.h"
 #endif
 
-// ---------------------------------------------------------------------------
 // Global operator new / delete overrides
 // Route all C++ allocations in the exe through malloc/free so they are
 // tracked by the CRT heap and consistent with the engine's allocator.
-// ---------------------------------------------------------------------------
 #include <new>
 #include <cstdlib>
 #ifdef _MSC_VER

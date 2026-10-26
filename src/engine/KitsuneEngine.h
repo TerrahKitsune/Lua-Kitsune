@@ -23,7 +23,7 @@
 #define KITSUNE_TITERATOR      (-7) // Kitsune extension: iterator type; data is a pointer to a kitsune_Iterator struct containing the iteration state. Not a value returned by lua_type() — only used in KitsuneVariable for iterating tables with KitsuneGetAll, and never appears in Lua or in a variable returned by the engine. Data should be a pointer to a kitsune_Iterator.
 #define KITSUNE_TCFUNCTION     (-6) // Kitsune extension: C function pointer type; data is a pointer to a kitsune_CFunctionData struct containing the function pointer and its userdata. Not a value returned by lua_type() — only used in KitsuneVariable for passing C function pointers to Lua, and never appears in Lua or in a variable returned by the engine. Data should be a pointer to a kitsune_CFunctionData.
 #define KITSUNE_TJSON          (-5) // Kitsune extension: JSON string type; data is a UTF-8 char* and length is in bytes (excluding null terminator). Not a value returned by lua_type().
-// (-4) was KITSUNE_TCHAR16 (UTF-16 strings, removed with the Wchar type); left unused so old values are never misread.
+// (-4) is reserved and unused so that values of the former KITSUNE_TCHAR16 (UTF-16 strings) are never misread.
 #define KITSUNE_TINTEGER       (-3) // Kitsune extension: Lua 5.3+ integer subtype (lua_isinteger); not a value returned by lua_type()
 #define KITSUNE_TERROR         (-2) // Kitsune extension: The variable represents an error message (UTF-8 char*); length is in bytes (excluding null terminator). Not a value returned by lua_type(); Used to signal an error when passed too and from Lua via kitsune_ResultSetter and KitsuneVariableReturnFromLua.
 #define KITSUNE_TNONE          (-1)
@@ -55,7 +55,6 @@
 #define KITSUNE_STATUS_PAUSED    (8)  // suspended inside the coroutine via Pause(); waiting for KitsuneResume(id, value) / task:Resume(value)
 #define KITSUNE_STATUS_WAITING   (9)  // suspended inside the coroutine via task:Wait(); can be force-woken via KitsuneResume(id, NULL) — value discarded
 
-// Forward declaration
 struct KitsuneKeyValuePairVariableNode;
 // Forward declaration required so KitsuneVariable can hold a kitsune_CFunctionData* in its union;
 // the full definition follows after kitsune_CFunction is declared.
@@ -66,7 +65,6 @@ struct KitsuneIterator;
 // Forward declaration required so KitsuneVariable can hold a KitsuneUserData* in its union;
 // the full definition follows below.
 struct KitsuneUserData;
-// Forward declarations for typed structured value types stored in the union.
 struct KitsuneDateTime;
 struct KitsuneTimeSpan;
 struct KitsuneDecimal;
@@ -312,7 +310,7 @@ extern "C" {
 	// a __gc entry (releases the managed GCHandle) or a __tostring entry (enables tostring()).
 	KITSUNE_API bool KitsuneRegisterUserdata(const char* name, const KitsuneUserDataRegistration* registration);
 
-	// -- Execution
+	// Execution
 	// All four functions execute synchronously: they block the calling thread until
 	// the script finishes and return the typed result directly. Returns NULL on start
 	// failure (e.g. engine not initialised, no slots available). On success the caller
@@ -329,7 +327,7 @@ extern "C" {
 	KITSUNE_API KitsuneVariable* KitsuneExecuteFunction(const char* functionName, int argc, const KitsuneVariable* argv);
 	KITSUNE_API KitsuneVariable* KitsuneExecuteVariable(const KitsuneVariable* var, int argc, const KitsuneVariable* argv);
 
-	// -- Async Execution --------------------------------------------------------
+	// Async Execution
 	// All four functions start execution as a Lua coroutine managed by the scheduler.
 	// Returns a positive coroutine ID on success, or -1 on failure.
 	// KitsuneExecuteFunctionAsync still returns a positive ID when the named function does not exist;
@@ -341,7 +339,7 @@ extern "C" {
 	KITSUNE_API int KitsuneExecuteFunctionAsync(const char* functionName, int argc, const KitsuneVariable* argv, bool fireAndForget = false);
 	KITSUNE_API int KitsuneExecuteVariableAsync(const KitsuneVariable* var, int argc, const KitsuneVariable* argv, bool fireAndForget = false);
 
-	// -- Per-coroutine queries (id = value returned by KitsuneExecuteFileAsync/StringAsync) --
+	// Per-coroutine queries (id = value returned by KitsuneExecuteFileAsync/StringAsync)
 	// Returns true once the coroutine has finished (success or error).
 	// If len is not NULL it is set to the byte length of the string result, or 0 if the result
 	// is absent or is not a string type (number, boolean, table, etc. all yield len == 0).
@@ -382,7 +380,7 @@ extern "C" {
 	// Thread-safe.
 	KITSUNE_API int KitsuneGetStatus(int id);
 
-	// -- Global control --------------------------------------------------------
+	// Global control
 	// Returns true if any coroutine slot exists (running, sleeping, idle, or finished but not yet released). Thread-safe.
 	KITSUNE_API bool KitsuneIsRunning();
 	// Returns the ID of the first coroutine that is still running, or 0 if none are active. Thread-safe.
@@ -396,7 +394,7 @@ extern "C" {
 	// Pass a NULL buffer to query the count without filling. Thread-safe.
 	KITSUNE_API int KitsuneGetActiveIds(int* buffer, int bufferSize);
 
-	// -- Coroutine naming ------------------------------------------------------
+	// Coroutine naming
 	// Associates a human-readable name with the coroutine identified by id.
 	// Returns false if the name is already in use by another coroutine, or if id is not found.
 	// Pass NULL to clear the name. Thread-safe.
@@ -409,7 +407,7 @@ extern "C" {
 	// Returns the coroutine id whose name matches the given name, or 0 if not found. Thread-safe.
 	KITSUNE_API int KitsuneGetId(const char* name);
 
-	// -- Variable bridge -------------------------------------------------------
+	// Variable bridge
 	// Sets a Lua global at the given dot-separated path (e.g. "foo" or "foo.bar.baz").
 	// The Lua global environment is the root; intermediate tables are created automatically.
 	// Pass NULL or KITSUNE_TNONE to remove the key. Pass type==KITSUNE_TTABLE to set an empty table.
@@ -532,10 +530,8 @@ extern "C" {
 	KITSUNE_API KitsuneVariable* KitsuneToString(const KitsuneVariable* var);
 }
 
-// ---------------------------------------------------------------------------
 // Numeric coercion helpers — safe to call from any context including kitsune_CFunction.
 // These mirror Lua's own coercion rules: integer beats number beats string.
-// ---------------------------------------------------------------------------
 #include <cstdlib>
 
 // Coerce to float. Integer?cast, number?cast, string?strtof, else?fallback.

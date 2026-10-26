@@ -65,7 +65,7 @@ namespace KitsuneNet.Tests
             end
         ";
 
-        // -- UUID -----------------------------------------------------------------
+        // UUID
         [Fact]
         public async Task UUID_HasStandardFormat()
         {
@@ -246,7 +246,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("false");
         }
 
-        // -- OID ------------------------------------------------------------------
+        // OID
         [Fact]
         public async Task OID_HasStandardFormat()
         {
@@ -342,7 +342,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Identifier (FromString) ----------------------------------------------
+        // Identifier (FromString)
         [Fact]
         public async Task Identifier_FromString_UUID_RoundTrips()
         {
@@ -405,7 +405,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Identifier (FromBytes) -----------------------------------------------
+        // Identifier (FromBytes)
         [Fact]
         public async Task Identifier_FromBytes_UUID_RoundTrips()
         {
@@ -462,7 +462,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Identifier (Equality) ------------------------------------------------
+        // Identifier (Equality)
         [Fact]
         public async Task Identifier_Eq_SameUUID_IsTrue()
         {
@@ -509,7 +509,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("false");
         }
 
-        // -- Identifier (IsEmpty) -------------------------------------------------
+        // Identifier (IsEmpty)
         [Fact]
         public async Task Identifier_IsEmpty_EmptyUUID_IsTrue()
         {
@@ -556,7 +556,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("false");
         }
 
-        // -- Json encoding of Identifier ------------------------------------------
+        // Json encoding of Identifier
         [Fact]
         public async Task Json_Encode_Identifier_UUID_ProducesJsonString()
         {
@@ -595,7 +595,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- DateTime -------------------------------------------------------------
+        // DateTime
         [Fact]
         public async Task DateTime_UtcNow_IsUserdata()
         {
@@ -1006,7 +1006,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- CRC32 ----------------------------------------------------------------
+        // CRC32
         [Fact]
         public async Task CRC32_ReturnsInteger()
         {
@@ -1015,7 +1015,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("integer");
         }
 
-        // -- Decimal --------------------------------------------------------------
+        // Decimal
         [Fact]
         public async Task Decimal_FromString_IsUserdata()
         {
@@ -1732,7 +1732,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- CRC32 ----------------------------------------------------------------
+        // CRC32
         [Fact]
         public async Task CRC32_IsDeterministic()
         {
@@ -1802,7 +1802,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- CRC64 ----------------------------------------------------------------
+        // CRC64
         [Fact]
         public async Task CRC64_ReturnsNumber()
         {
@@ -1830,8 +1830,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task CRC64_WithStream_RaisesError()
         {
-            // CRC64 no longer accepts stream input — it was silently computing CRC of
-            // empty input instead of the stream contents. Now it raises an error.
+            // CRC64 rejects stream input with an error rather than silently computing the CRC of
+            // empty input.
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local s = Stream.New()
@@ -1842,7 +1842,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Time -----------------------------------------------------------------
+        // Time
         [Fact]
         public async Task Time_ReturnsPositiveInteger()
         {
@@ -1859,7 +1859,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Runtime --------------------------------------------------------------
+        // Runtime
         [Fact]
         public async Task Runtime_ReturnsNonNegativeNumber()
         {
@@ -1876,7 +1876,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- GetMemory ------------------------------------------------------------
+        // GetMemory
         [Fact]
         public async Task GetMemory_ReturnsPositiveValue()
         {
@@ -1885,7 +1885,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- GlobalMemoryStatus ---------------------------------------------------
+        // GlobalMemoryStatus
         [Fact]
         public async Task GlobalMemoryStatus_Default_ReturnsPercentageInRange()
         {
@@ -1915,7 +1915,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- string.equal ---------------------------------------------------------
+        // string.equal
         [Fact]
         public async Task StringEqual_SameString_ReturnsTrue()
         {
@@ -1940,7 +1940,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("false");
         }
 
-        // -- setenv / getenv ------------------------------------------------------
+        // setenv / getenv
         [Fact]
         public async Task SetEnv_GetEnv_RoundTrip()
         {
@@ -1994,7 +1994,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("nil");
         }
 
-        // -- table.first ----------------------------------------------------------
+        // table.first
         [Fact]
         public async Task TableFirst_UniqueMatch_ReturnsKey()
         {
@@ -2021,7 +2021,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("nil");
         }
 
-        // -- table.select ---------------------------------------------------------
+        // table.select
         [Fact]
         public async Task TableSelect_FilterEvenNumbers_ReturnsCorrectValues()
         {
@@ -2042,7 +2042,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- GetIsAdmin -----------------------------------------------------------
+        // GetIsAdmin
         [Fact]
         public async Task GetIsAdmin_ReturnsBool()
         {
@@ -2051,7 +2051,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("boolean");
         }
 
-        // -- GetComputerName ------------------------------------------------------
+        // GetComputerName
         [Fact]
         public async Task GetComputerName_ReturnsNonEmptyString()
         {
@@ -2060,7 +2060,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- BencodeDecode --------------------------------------------------------
+        // BencodeDecode
         [Fact]
         public async Task BencodeDecode_StringField_Decoded()
         {
@@ -2099,7 +2099,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- GetLastError ---------------------------------------------------------
+        // GetLastError
         [Fact]
         public async Task GetLastError_WithCode2_ReturnsNonEmptyMessageAndCode()
         {
@@ -2129,7 +2129,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("string");
         }
 
-        // -- c global variable ----------------------------------------------------
+        // c global variable
         [Fact]
         public async Task CGlobal_IsTable()
         {
@@ -2154,7 +2154,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Global variables -----------------------------------------------------
+        // Global variables
         [Fact]
         public async Task VERSION_Global_IsNonEmptyString()
         {
@@ -2181,7 +2181,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Dns ------------------------------------------------------------------
+        // Dns
         [Fact]
         public async Task Dns_Localhost_ReturnsString()
         {
@@ -2219,7 +2219,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        // -- Base64 ---------------------------------------------------------------
+        // Base64
         [Fact]
         public async Task Base64_Encode_ReturnsCorrectString()
         {
@@ -2291,7 +2291,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Hashing --------------------------------------------------------------
+        // Hashing
         [Fact]
         public async Task SHA256_OfAbc_MatchesEngineOutput()
         {
@@ -2400,11 +2400,11 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Json -----------------------------------------------------------------
+        // Json
         // All operations require an instance (Json.New() or Json.New()).
         // Json.Null is the sentinel value for JSON null.
 
-        // -- Instance round-trips ---------------------------------------------
+        // Instance round-trips
         [Fact]
         public async Task Json_Encode_ProducesValidJson()
         {
@@ -2490,7 +2490,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Number encoding --------------------------------------------------
+        // Number encoding
         [Fact]
         public async Task Json_Integer_EncodedWithoutDecimal()
         {
@@ -2584,7 +2584,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("1e+9999");
         }
 
-        // -- Boolean / nil encoding -------------------------------------------
+        // Boolean / nil encoding
         [Fact]
         public async Task Json_Boolean_True_EncodesCorrectly()
         {
@@ -2609,7 +2609,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("null");
         }
 
-        // -- Array vs object detection ----------------------------------------
+        // Array vs object detection
         [Fact]
         public async Task Json_SequenceTable_EncodesAsArray()
         {
@@ -2716,7 +2716,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- String escaping --------------------------------------------------
+        // String escaping
         [Fact]
         public async Task Json_DecodeEscapes_HandledCorrectly()
         {
@@ -2867,7 +2867,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Null sentinel ----------------------------------------------------
+        // Null sentinel
         [Fact]
         public async Task Json_NullSentinel_RoundTrips()
         {
@@ -2926,7 +2926,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Encode / Decode --------------------------------------------------
+        // Encode / Decode
         [Fact]
         public async Task Json_Decode_ReturnsTable()
         {
@@ -2990,7 +2990,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Stream I/O ----------------------------------------------------------
+        // Stream I/O
         [Fact]
         public async Task Json_EncodeIntoStream_StreamContainsValidJson()
         {
@@ -3193,7 +3193,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Encode stream as JSON value --------------------------------------------
+        // Encode stream as JSON value
         [Fact]
         public async Task Json_Encode_Stream_ReadableSeekable_ProducesJsonString()
         {
@@ -3301,7 +3301,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("null");
         }
 
-        // -- Text -----------------------------------------------------------------
+        // Text
         [Fact]
         public async Task Text_Utf16_RoundTrip_IncludingSurrogatePair()
         {
@@ -3422,7 +3422,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Stream UTF-16 read/write -----------------------------------------------
+        // Stream UTF-16 read/write
         [Fact]
         public async Task Stream_WriteUtf16_ReadUtf16_RoundTrip()
         {
@@ -3547,7 +3547,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Aes ------------------------------------------------------------------
+        // Aes
         [Fact]
         public async Task Aes_EncryptDecrypt_RoundTrip()
         {
@@ -3645,7 +3645,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Stream (in-memory) ---------------------------------------------------
+        // Stream (in-memory)
         [Fact]
         public async Task Stream_Create_FromString_LoadsDataAtPositionZero()
         {
@@ -3969,7 +3969,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Stream backend error propagation -------------------------------------
+        // Stream backend error propagation
         [Fact]
         public async Task Stream_BackendReadError_PropagatesViaPcall()
         {
@@ -4075,7 +4075,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Stream.Open (file backend) -------------------------------------------
+        // Stream.Open (file backend)
         [Fact]
         public async Task Stream_Open_WriteRead_RoundTrip()
         {
@@ -4207,7 +4207,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Stream (module API) --------------------------------------------------
+        // Stream (module API)
         [Fact]
         public async Task Stream_Seek_AllowsMultipleReads()
         {
@@ -4306,7 +4306,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("100:200:300");
         }
 
-        // -- CSV ------------------------------------------------------------------
+        // CSV
         [Fact]
         public async Task CSV_DecodeString_ParsesRows()
         {
@@ -4328,8 +4328,6 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
 
             // Decode("") must return an empty Rows table (zero rows).
-            // The old do-while loop produced one spurious empty row; the while
-            // loop introduced in Task 13 correctly produces none.
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = CSV.New():Decode('')
                 local count = 0
@@ -4536,8 +4534,7 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
 
-            // Verifies the SkipForwards fix: previously the first non-space character
-            // was silently consumed and lost, producing "ello" instead of "hello".
+            // The first non-space character after SkipForwards must be kept ("hello", not "ello").
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = CSV.New():Decode(' hello, world')
                 return tostring(tostring(t.Rows[1][1]) == 'hello' and tostring(t.Rows[1][2]) == 'world')
@@ -4850,7 +4847,7 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
 
-            // Without Task-14 buffering the sniff would run on only the first
+            // Without buffering the sniff would run on only the first
             // chunk ("hello") which contains no delimiter at all and would fall
             // back to comma.  With buffering the iterator keeps pulling chunks
             // until it sees a newline, giving SniffDelimiter enough context to
@@ -5008,7 +5005,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("x:y|z:w");
         }
 
-        // -- Mutex ----------------------------------------------------------------
+        // Mutex
         [Fact]
         public async Task Mutex_Open_LockAndUnlock_Succeeds()
         {
@@ -5051,7 +5048,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- FileSystem -----------------------------------------------------------
+        // FileSystem
         [Fact]
         public async Task FileSystem_CurrentDirectory_ReturnsNonEmptyString()
         {
@@ -5162,7 +5159,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- FileSystem.Copy overwrite flag ----------------------------------
+        // FileSystem.Copy overwrite flag
 
         [Fact]
         public async Task FileSystem_Copy_WithoutOverwrite_FailsWhenDestinationExists_WithTrueOverwrites()
@@ -5204,7 +5201,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true|data");
         }
 
-        // -- FileInfo timestamps are Unix time --------------------------------
+        // FileInfo timestamps are Unix time
 
         [Fact]
         public async Task FileSystem_GetFileInfo_WriteTime_IsCloseToOsTime()
@@ -5460,7 +5457,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Standard Lua library, non-ASCII paths ----------------------------------
+        // Standard Lua library, non-ASCII paths
         // The test host is a plain .NET process (no UTF-8 activeCodePage manifest), so on
         // Windows these only pass when Lua's io/os/package libraries use the wide CRT.
 
@@ -5914,7 +5911,7 @@ namespace KitsuneNet.Tests
 
         private static string NewLinkTestDir()
         {
-            // A long target path: the old fixed-size reparse buffer failed on these.
+            // A long target path must be read in full.
             string dir = Path.Combine(Path.GetTempPath(), "_kitsune_links_" + Guid.NewGuid().ToString("N"), new string('t', 120));
             Directory.CreateDirectory(Path.Combine(dir, "target"));
             return dir;
@@ -6005,7 +6002,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- CSV instance extras --------------------------------------------------
+        // CSV instance extras
         [Fact]
         public async Task CSV_Tostring_FixedDelimiterInstance()
         {
@@ -6144,7 +6141,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("b|y");
         }
 
-        // -- Json extras ----------------------------------------------------------
+        // Json extras
         [Fact]
         public async Task Json_NegativeInfinity_EncodesAsSpecialLiteral()
         {
@@ -6220,7 +6217,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Json SetDecodeNull ---------------------------------------------------
+        // Json SetDecodeNull
         [Fact]
         public async Task SetDecodeNull_DefaultFalse_NullDecodesAsNil()
         {
@@ -6350,7 +6347,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("1,nil,3");
         }
 
-        // -- SetEncodeEmptyObject -------------------------------------------------
+        // SetEncodeEmptyObject
         [Fact]
         public async Task SetEncodeEmptyObject_DefaultFalse_EmptyTableEncodesAsArray()
         {
@@ -6493,8 +6490,8 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("[]");
         }
 
-        // -- Stream extras --------------------------------------------------------
-        // -- Stream.Id ------------------------------------------------------------
+        // Stream extras
+        // Stream.Id
         [Fact]
         public async Task Stream_Id_ReturnsInteger()
         {
@@ -6651,9 +6648,8 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
 
-            // Previously the loop used while(*in) which stops at embedded '\0',
-            // silently dropping everything after it.  The fix uses the len from
-            // luaL_checklstring so all bytes are encoded and written.
+            // An embedded '\0' must not stop the conversion: the length from
+            // luaL_checklstring is used so all bytes are encoded and written.
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local s = Stream.New()
                 s:WriteUtf8('a\0b')   -- 3 bytes: 'a', null, 'b'
@@ -6775,7 +6771,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Write / Read coverage -------------------------------------------------
+        // Write / Read coverage
         [Fact]
         public async Task Stream_Write_ReturnsWrittenByteCount()
         {
@@ -6838,7 +6834,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("hello");
         }
 
-        // -- SetByte / PeekByte extra forms ----------------------------------------
+        // SetByte / PeekByte extra forms
         [Fact]
         public async Task Stream_SetByte_WithoutPosition_WritesAtCursorAndAdvances()
         {
@@ -6876,7 +6872,7 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
 
-            // PeekStreamByte is now gated on CAP_READ + CAP_SEEK — there is no
+            // PeekStreamByte is gated on CAP_READ + CAP_SEEK — there is no
             // separate CAP_PEEK flag.  A backend with both returns a real value;
             // a backend with only CAP_READ (no seek) returns -1.
             LuaValue r = await engine.ExecuteStringAsync(@"
@@ -6896,7 +6892,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Capability-guard return values ----------------------------------------
+        // Capability-guard return values
         [Fact]
         public async Task Stream_Seek_NonSeekable_ReturnsFalse()
         {
@@ -6942,7 +6938,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("nil");
         }
 
-        // -- WriteByte boundary and range ------------------------------------------
+        // WriteByte boundary and range
         [Fact]
         public async Task Stream_WriteByte_OutOfRange_ReturnsFalse()
         {
@@ -6968,7 +6964,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("0:255");
         }
 
-        // -- Signed short ----------------------------------------------------------
+        // Signed short
         [Fact]
         public async Task Stream_WriteShort_NegativeValue_RoundTrips()
         {
@@ -6982,7 +6978,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("-100");
         }
 
-        // -- ReadUtf8 extended coverage --------------------------------------------
+        // ReadUtf8 extended coverage
         [Fact]
         public async Task Stream_ReadUtf8_MultiByte_ReturnsCodepoint()
         {
@@ -7015,7 +7011,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("nil");
         }
 
-        // -- WriteUtf8 Latin-1 conversion ------------------------------------------
+        // WriteUtf8 Latin-1 conversion
         [Fact]
         public async Task Stream_WriteUtf8_HighByte_ConvertedToUtf8Pair()
         {
@@ -7035,7 +7031,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Compress / Decompress error paths -------------------------------------
+        // Compress / Decompress error paths
         [Fact]
         public async Task Stream_Compress_NonReadableSource_ReturnsNilAndError()
         {
@@ -7087,7 +7083,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Misc stream operations ------------------------------------------------
+        // Misc stream operations
         [Fact]
         public async Task Stream_Close_ExplicitCall_DoesNotCrash()
         {
@@ -7114,7 +7110,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("memory");
         }
 
-        // -- Hardware -------------------------------------------------------------
+        // Hardware
         [Fact]
         public async Task Hardware_CpuName_ReturnsNonEmptyStringOrNil()
         {
@@ -7393,7 +7389,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Process
+        // Process
         [Fact]
         public async Task Process_All_ReturnsTableWithAtLeastOneEntry()
         {
@@ -7721,9 +7717,8 @@ namespace KitsuneNet.Tests
             }
         }
 
-        // -- Async stream (CreateChunked / HasData / CSV / Compress) --------------
-        // All tests that involve yielding coroutines use the helper below, which
-        // mirrors the coroutine-resume loop that test scripts previously used.
+        // Async stream (CreateChunked / HasData / CSV / Compress)
+        // All tests that involve yielding coroutines use the helper below.
         [Fact]
         public async Task Stream_CreateChunked_IsNotNil()
         {
@@ -8033,7 +8028,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("ok");
         }
 
-        // -- Function-backend socket simulation -----------------------------------
+        // Function-backend socket simulation
         // These tests pass a Lua function backend to Stream.New() to simulate a
         // network socket that delivers data in small increments.  The READ handler
         // is called via lua_callk, so Sleep() inside it yields cooperatively without
@@ -8219,7 +8214,7 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
 
-            // ReadLuaStream now uses lua_callk for fn backends, so Sleep() inside
+            // ReadLuaStream uses lua_callk for fn backends, so Sleep() inside
             // the READ handler can yield the coroutine without hitting
             // "attempt to yield across a C-call boundary".
             LuaValue r = await engine.ExecuteStringAsync(RunCoroutine + SocketPrologue + @"
@@ -8287,10 +8282,10 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("ok");
         }
 
-        // -- Xml ------------------------------------------------------------------
+        // Xml
         // All operations require an instance (Xml.New() or Xml.New()).
 
-        // -- Instance creation ----------------------------------------------------
+        // Instance creation
         [Fact]
         public async Task Xml_New_ReturnsUserdata()
         {
@@ -8324,7 +8319,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Decode ---------------------------------------------------------------
+        // Decode
         [Fact]
         public async Task Xml_Decode_SimpleElement_ReturnsTable()
         {
@@ -8564,7 +8559,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Encode ---------------------------------------------------------------
+        // Encode
         [Fact]
         public async Task Xml_Encode_ReturnsString()
         {
@@ -8693,7 +8688,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Round-trip (Encode then Decode) --------------------------------------
+        // Round-trip (Encode then Decode)
         [Fact]
         public async Task Xml_RoundTrip_Tag_Preserved()
         {
@@ -8998,10 +8993,10 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("hello world");
         }
 
-        // -- MsgPack --------------------------------------------------------------
+        // MsgPack
         // All operations require an instance (MsgPack.New() or MsgPack.New()).
 
-        // -- Instance creation ----------------------------------------------------
+        // Instance creation
         [Fact]
         public async Task MsgPack_New_ReturnsUserdata()
         {
@@ -9030,7 +9025,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("ok");
         }
 
-        // -- Basic type round-trips -----------------------------------------------
+        // Basic type round-trips
         [Fact]
         public async Task MsgPack_Nil_RoundTrips()
         {
@@ -9157,7 +9152,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Table round-trips ----------------------------------------------------
+        // Table round-trips
         [Fact]
         public async Task MsgPack_SequenceTable_EncodesAsArray()
         {
@@ -9250,7 +9245,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Encode returns binary string -----------------------------------------
+        // Encode returns binary string
         [Fact]
         public async Task MsgPack_Encode_ReturnsString()
         {
@@ -9281,7 +9276,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Unrepresentable types encode as nil ----------------------------------
+        // Unrepresentable types encode as nil
         [Fact]
         public async Task MsgPack_Function_EncodesAsNil()
         {
@@ -9316,7 +9311,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Typed userdata encoding as string ------------------------------------
+        // Typed userdata encoding as string
         [Fact]
         public async Task MsgPack_Identifier_UUID_EncodesAsCanonicalString()
         {
@@ -9365,7 +9360,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Stream value encoding as bin -----------------------------------------
+        // Stream value encoding as bin
         [Fact]
         public async Task MsgPack_Stream_ReadableSeekable_EncodesAsBin()
         {
@@ -9441,7 +9436,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Recursion detection --------------------------------------------------
+        // Recursion detection
         [Fact]
         public async Task MsgPack_RecursionDetected_ThrowsError()
         {
@@ -9456,7 +9451,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Decode error handling ------------------------------------------------
+        // Decode error handling
         [Fact]
         public async Task MsgPack_Decode_InvalidBytes_ReturnsNilAndError()
         {
@@ -9513,7 +9508,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Stream I/O -----------------------------------------------------------
+        // Stream I/O
         [Fact]
         public async Task MsgPack_EncodeIntoStream_StreamContainsValidBytes()
         {
@@ -9662,7 +9657,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Decode via stream (Decode(stream) delegates to DecodeFromStream) -----
+        // Decode via stream (Decode(stream) delegates to DecodeFromStream)
         [Fact]
         public async Task MsgPack_Decode_AcceptsStream()
         {
@@ -9677,7 +9672,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- New called on instance ------------------------------------------------
+        // New called on instance
         [Fact]
         public async Task MsgPack_New_CalledOnInstance_ReturnsNewInstance()
         {
@@ -9691,7 +9686,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Yaml ------------------------------------------------------------------
+        // Yaml
         // All operations require an instance (Yaml.New() or Yaml.New()).
         // Yaml.New(true) selects block/pretty style; Yaml.New() defaults to flow style.
         [Fact]
@@ -9735,7 +9730,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Basic type round-trips ------------------------------------------------
+        // Basic type round-trips
         [Fact]
         public async Task Yaml_Nil_RoundTrips()
         {
@@ -9827,7 +9822,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Table round-trips -----------------------------------------------------
+        // Table round-trips
         [Fact]
         public async Task Yaml_Encode_ProducesString()
         {
@@ -9921,7 +9916,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- YAML-specific decode -------------------------------------------------
+        // YAML-specific decode
         [Fact]
         public async Task Yaml_Decode_BlockStyle_String()
         {
@@ -9994,7 +9989,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Pretty / block style --------------------------------------------------
+        // Pretty / block style
         [Fact]
         public async Task Yaml_PrettyNew_ProducesBlockStyle()
         {
@@ -10020,7 +10015,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Toml ------------------------------------------------------------------
+        // Toml
         // All operations require an instance (Toml.New() or Toml.New()).
         // Toml.New(true) selects indented output; Toml.New() defaults to compact.
         // Encode requires a table (TOML always has a root mapping).
@@ -10066,7 +10061,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Basic type round-trips ------------------------------------------------
+        // Basic type round-trips
         [Fact]
         public async Task Toml_Boolean_RoundTrips()
         {
@@ -10137,7 +10132,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Table round-trips -----------------------------------------------------
+        // Table round-trips
         [Fact]
         public async Task Toml_FlatTable_RoundTrips()
         {
@@ -10215,7 +10210,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- TOML-specific decode --------------------------------------------------
+        // TOML-specific decode
         [Fact]
         public async Task Toml_Decode_HandwrittenString()
         {
@@ -10264,7 +10259,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Indented output -------------------------------------------------------
+        // Indented output
         [Fact]
         public async Task Toml_PrettyNew_ProducesNewlines()
         {
@@ -10290,7 +10285,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Toml encoder -----------------------------------------------------
+        // Toml encoder
 
         [Fact]
         public async Task Toml_RoundTrip_NestedSections_ArraysOfTables_EmptyTable()
@@ -10396,7 +10391,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("[app]\n[app.sub]\nk = 1\n");
         }
 
-        // -- Ini -------------------------------------------------------------------
+        // Ini
         // All operations require an instance (Ini.New() or Ini.New()).
         // Decode returns a two-level table: { [section] = { [key] = value } }.
         // Keys before any section header land in the "__global" pseudo-section.
@@ -10442,7 +10437,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Decode ----------------------------------------------------------------
+        // Decode
         [Fact]
         public async Task Ini_Decode_SimpleSection_ReturnsTable()
         {
@@ -10539,7 +10534,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Encode ----------------------------------------------------------------
+        // Encode
         [Fact]
         public async Task Ini_Encode_ProducesString()
         {
@@ -10603,7 +10598,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Round-trip ------------------------------------------------------------
+        // Round-trip
         [Fact]
         public async Task Ini_RoundTrip_StringValues()
         {
@@ -10630,7 +10625,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- AliveToken -----------------------------------------------------------
+        // AliveToken
         [Fact]
         public async Task AliveToken_New_ReturnsUserdata()
         {
@@ -10982,7 +10977,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("false");
         }
 
-        // -- Sleep + AliveToken ---------------------------------------------------
+        // Sleep + AliveToken
         [Fact]
         public async Task Sleep_WithToken_ReturnsWhenTokenDisposed()
         {
@@ -11068,7 +11063,7 @@ namespace KitsuneNet.Tests
             sw.ElapsedMilliseconds.ShouldBeLessThan(500);
         }
 
-        // -- UInt -----------------------------------------------------------------
+        // UInt
         [Fact]
         public async Task UInt_Zero_IsUserdata()
         {
@@ -11403,7 +11398,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- UInt Bridge (C# <-> Lua) --------------------------------------------
+        // UInt Bridge (C# <-> Lua)
         [Fact]
         public async Task UInt_Bridge_SmallValue_ReturnedAsLuaType()
         {
@@ -11456,7 +11451,7 @@ namespace KitsuneNet.Tests
             r.ToString().ShouldBe("12345678901234567890");
         }
 
-        // -- UInt MsgPack round-trip ---------------------------------------------
+        // UInt MsgPack round-trip
         [Fact]
         public async Task UInt_MsgPack_SmallUInt_RoundTripsAsInteger()
         {
@@ -11503,7 +11498,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- UInt serializer coverage -------------------------------------------
+        // UInt serializer coverage
         [Fact]
         public async Task UInt_Json_EncodesAsNumber()
         {
@@ -11552,7 +11547,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- UInt Stream write/read ---------------------------------------------
+        // UInt Stream write/read
         [Fact]
         public async Task UInt_Stream_Write_Read_RoundTrips()
         {
@@ -11596,7 +11591,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Decimal serializer coverage ----------------------------------------
+        // Decimal serializer coverage
         [Fact]
         public async Task Decimal_Json_EncodesAsNumberInObject()
         {
@@ -11674,7 +11669,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- Identifier serializer coverage ------------------------------------
+        // Identifier serializer coverage
         [Fact]
         public async Task Identifier_Json_EncodesAsString()
         {
@@ -11755,7 +11750,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- DateTime serializer coverage -------------------------------------
+        // DateTime serializer coverage
         [Fact]
         public async Task DateTime_Json_EncodesAsIso8601String()
         {
@@ -11810,7 +11805,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // -- XML text field coverage ------------------------------------------
+        // XML text field coverage
         [Fact]
         public async Task Xml_UInt_InTextField_Serializes()
         {
@@ -11861,7 +11856,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // ── TimeSpan ──────────────────────────────────────────────────────────
+        // TimeSpan
         [Fact]
         public async Task TimeSpan_Zero_IsUserdata()
         {
@@ -11994,7 +11989,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // ── TimeSpan arithmetic ───────────────────────────────────────────────
+        // TimeSpan arithmetic
         [Fact]
         public async Task TimeSpan_Add_TwoSpans()
         {
@@ -12076,7 +12071,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // ── TimeSpan comparison ───────────────────────────────────────────────
+        // TimeSpan comparison
         [Fact]
         public async Task TimeSpan_Eq_SameValue()
         {
@@ -12120,7 +12115,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // ── DateTime - DateTime → TimeSpan ────────────────────────────────────
+        // DateTime - DateTime → TimeSpan
         [Fact]
         public async Task DateTime_Sub_DateTime_ReturnsTimeSpan()
         {
@@ -12187,7 +12182,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // ── TimeSpan bridge (C# ↔ Lua) ────────────────────────────────────────
+        // TimeSpan bridge (C# ↔ Lua)
         [Fact]
         public async Task TimeSpan_Bridge_SmallValue_ReturnedAsLuaType()
         {
@@ -12247,7 +12242,7 @@ namespace KitsuneNet.Tests
             r.AsTimeSpan.TotalSeconds.ShouldBe(3661, tolerance: 0.001);
         }
 
-        // ── DateTime bridge (typed binary) ────────────────────────────────────
+        // DateTime bridge (typed binary)
         [Fact]
         public async Task DateTime_Bridge_ReturnedAsLuaTypeDateTime()
         {
@@ -12292,7 +12287,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // ── Decimal bridge (typed binary) ─────────────────────────────────────
+        // Decimal bridge (typed binary)
         [Fact]
         public async Task Decimal_Bridge_ReturnedAsLuaTypeDecimal()
         {
@@ -12326,7 +12321,7 @@ namespace KitsuneNet.Tests
             r.AsDecimal.ShouldBe(-42.5m);
         }
 
-        // ── Identifier bridge (typed binary) ──────────────────────────────────
+        // Identifier bridge (typed binary)
         [Fact]
         public async Task Identifier_Bridge_ReturnedAsLuaTypeIdentifier()
         {
@@ -12364,7 +12359,7 @@ namespace KitsuneNet.Tests
             r.AsIdentifierBytes!.Length.ShouldBe(16);
         }
 
-        // ── TimeSpan serializer coverage ──────────────────────────────────────
+        // TimeSpan serializer coverage
         [Fact]
         public async Task TimeSpan_Json_EncodesAsString()
         {
@@ -12443,7 +12438,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // ── TimeSpan stream read/write ────────────────────────────────────────
+        // TimeSpan stream read/write
         [Fact]
         public async Task TimeSpan_Stream_Write_Read_RoundTrips()
         {
@@ -12486,7 +12481,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // ── Bug-fix: INI encoder was missing DateTime ─────────────────────────
+        // INI encoding of DateTime
         [Fact]
         public async Task Ini_DateTime_EncodesSomething()
         {
@@ -12506,7 +12501,7 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
 
-            // Before the fix the key was absent entirely because DateTime fell through to return 0.
+            // DateTime must not fall through to return 0, which would omit the key entirely.
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local i  = Ini.New()
                 local dt = DateTime.New(2025, 1, 1, 0, 0, 0, 0, 0)
@@ -12516,7 +12511,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // ── Bug-fix: MySQL/Postgres/Redis binder was missing TimeSpan ─────────
+        // TimeSpan string form (MySQL/Postgres/Redis binders)
         [Fact]
         public async Task TimeSpan_ToString_IsCanonical()
         {
@@ -12534,7 +12529,7 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("-01:30:00.000");
         }
 
-        // ── Bug-fix: Redis was also missing UInt ─────────────────────────────
+        // UInt string form (Redis binder)
         [Fact]
         public async Task UInt_ToString_IsDecimal()
         {
@@ -12544,13 +12539,13 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("18446744073709551615");
         }
 
-        // ── Bug-fix: stream DateTime write/read lost offset_minutes ──────────
+        // Stream DateTime write/read preserves offset_minutes
         [Fact]
         public async Task DateTime_Stream_Write_Read_PreservesNonZeroOffset()
         {
             using KitsuneEngine engine = new();
 
-            // UTC+5:30 = 330 minutes.  Before the fix offset was always read back as 0.
+            // UTC+5:30 = 330 minutes.
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local dt  = DateTime.New(2024, 6, 15, 12, 0, 0, 0, 330)
                 local s   = Stream.New()

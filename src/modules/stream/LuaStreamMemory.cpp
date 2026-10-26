@@ -8,7 +8,7 @@ struct InMemoryStream {
 	size_t alloc;
 };
 
-// -- vtable implementations ----------------------------------------------------
+// vtable implementations
 
 static int InmemStreamRead(void* native, lua_State* L, size_t len) {
 	InMemoryStream* m = (InMemoryStream*)native;
@@ -99,7 +99,7 @@ static const LuaStreamVtable inmemVtbl = {
 	InmemStreamGetId,
 };
 
-// -- Public constructor helper -------------------------------------------------
+// Public constructor helper
 
 void LuaSetupInmemoryStream(lua_State* L, LuaStream* stream) {
 	InMemoryStream* m = (InMemoryStream*)kitsune_malloc(sizeof(InMemoryStream));

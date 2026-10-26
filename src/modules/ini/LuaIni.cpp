@@ -6,9 +6,7 @@
 #include "uint/LuaUInt.h"
 #include "timespan/LuaTimeSpan.h"
 
-// =============================================================================
 // Instance management
-// =============================================================================
 
 LuaIni* lua_pushini(lua_State* L) {
     LuaIni* n = (LuaIni*)lua_newuserdata(L, sizeof(LuaIni));
@@ -40,9 +38,7 @@ int Ini_New(lua_State* L) {
     return 1;
 }
 
-// =============================================================================
-// Encoder — output buffer helpers
-// =============================================================================
+// Encoder: output buffer helpers
 
 static void IbufGrow(LuaIni* n, lua_State* L, size_t need) {
     if (n->outLen + need <= n->outCap)
@@ -69,10 +65,6 @@ static void IbufEmitc(LuaIni* n, lua_State* L, char c) {
 }
 
 #define IBUF_EMIT_LIT(n, L, s) IbufEmit(n, L, "" s, sizeof(s) - 1)
-
-// =============================================================================
-// Encoder — value stringification
-// =============================================================================
 
 // Emit a value as a string suitable for an INI value (all values are strings).
 // Tables and unsupported types are skipped (return 0); scalars return 1.
@@ -146,10 +138,6 @@ static int EncScalar(LuaIni* n, lua_State* L, int idx) {
     }
 }
 
-// =============================================================================
-// Encoder — main
-// =============================================================================
-
 int Ini_Encode(lua_State* L) {
     LuaIni* n = luaL_checkini(L, 1);
     luaL_checktype(L, 2, LUA_TTABLE);
@@ -185,18 +173,13 @@ int Ini_Encode(lua_State* L) {
                 size_t      vklen;
                 const char* vk = lua_tolstring(L, -2, &vklen);
                 if (vk && EncScalar(n, L, -1) == 0) {
-                    // skip non-scalars silently
                     lua_pop(L, 1);
                     continue;
                 }
                 if (vk) {
-                    // We already emitted the value — rewind and redo properly.
-                    n->outLen -= 0; // nothing emitted yet at this point
+                    n->outLen -= 0;
                 }
-                // Redo: emit key = value\n
                 if (vk) {
-                    // EncScalar already wrote — need to not double-emit.
-                    // Restructure: gather key first, then value.
                     lua_pop(L, 1);
                     continue;
                 }
@@ -206,7 +189,6 @@ int Ini_Encode(lua_State* L) {
         lua_pop(L, 1);
     }
 
-    // Cleaner approach: emit __global section properly.
     n->outLen = 0;
 
     // Pass 1: global keys (top-level scalars and __global section).
@@ -265,7 +247,6 @@ int Ini_Encode(lua_State* L) {
             continue;
         }
 
-        // Section header.
         IbufEmitc(n, L, '[');
         IbufEmit(n, L, k, klen);
         IBUF_EMIT_LIT(n, L, "]\n");
@@ -294,10 +275,6 @@ int Ini_Encode(lua_State* L) {
     return 1;
 }
 
-// =============================================================================
-// Decoder
-// =============================================================================
-
 // Trim leading and trailing whitespace in-place (returns pointer into s).
 static const char* Trim(const char* s, size_t* len) {
     while (*len > 0 && ((unsigned char)*s == ' ' || (unsigned char)*s == '\t'))  {
@@ -320,16 +297,14 @@ int Ini_Decode(lua_State* L) {
     const char* src = luaL_checklstring(L, 2, &srcLen);
     SkipUtf8Bom(&src, &srcLen);
 
-    // Result table.
     lua_newtable(L);
     int result = lua_gettop(L);
 
-    // Push the __global section table as the initial active section.
+    // __global is the initial active section.
     lua_pushliteral(L, "__global");
     lua_newtable(L);
     lua_rawset(L, result);
 
-    // Active section name on the Lua stack — we keep re-pushing as we change.
     const char* curSection    = "__global";
     size_t      curSectionLen = 8;
 
@@ -337,13 +312,12 @@ int Ini_Decode(lua_State* L) {
     const char* end = src + srcLen;
 
     while (p < end) {
-        // Find end of line.
         const char* lineStart = p;
         while (p < end && *p != '\n')
             p++;
         size_t lineLen = (size_t)(p - lineStart);
         if (p < end)
-            p++;  // skip '\n'
+            p++;
 
         size_t      tlen = lineLen;
         const char* line = Trim(lineStart, &tlen);
@@ -359,7 +333,6 @@ int Ini_Decode(lua_State* L) {
                 continue;
             size_t      slen = (size_t)(close - (line + 1));
             const char* sname = line + 1;
-            // Trim the section name.
             while (slen > 0 && ((unsigned char)*sname == ' ' || (unsigned char)*sname == '\t')) {
                 sname++;
                 slen--;
@@ -374,7 +347,6 @@ int Ini_Decode(lua_State* L) {
             if (slen == 0)
                 continue;
 
-            // Ensure this section table exists in the result.
             lua_pushlstring(L, sname, slen);
             lua_rawget(L, result);
             if (lua_isnil(L, -1)) {
@@ -417,7 +389,6 @@ int Ini_Decode(lua_State* L) {
                 quoted = !quoted;
             if (!quoted && (v[i] == ';' || v[i] == '#')) {
                 vlen = i;
-                // re-trim trailing whitespace after stripping comment
                 while (vlen > 0) {
                     unsigned char c = (unsigned char)v[vlen - 1];
                     if (c == ' ' || c == '\t')
@@ -435,7 +406,6 @@ int Ini_Decode(lua_State* L) {
             vlen -= 2;
         }
 
-        // Set result[curSection][key] = value.
         lua_pushlstring(L, curSection, curSectionLen);
         lua_rawget(L, result);
         int sec = lua_gettop(L);

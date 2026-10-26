@@ -41,7 +41,7 @@ struct McpPendingRequest {
 // userdata block (see lua_pushmcpserver) -- never as a plain C++ global/static,
 // since its std::string/std::vector members must be destroyed through the
 // normal Lua GC/__gc path (tied to KitsuneInit/KitsuneCleanup), not at
-// DLL-unload/static-teardown time (see luamcp.cpp for why that matters here).
+// DLL-unload/static-teardown time (see LuaMCP.cpp for why that matters here).
 struct LuaMcpServer {
 	std::string name;
 	std::string version;
@@ -93,7 +93,7 @@ bool          lua_ismcpserver(lua_State* L, int idx);
 
 // MCP.Create(opt settings, opt context) -> mcp
 // Singleton: if a live instance already exists, returns it unchanged and
-// ignores the arguments (see the singleton tracking slot in luamcp.cpp).
+// ignores the arguments (see the singleton tracking slot in LuaMCP.cpp).
 int MCP_Create(lua_State* L);
 
 // mcp:AddTool(name, description, parameters, fn)
@@ -108,12 +108,10 @@ int McpServer_Stop(lua_State* L);
 // mcp:IsRunning() -> bool
 int McpServer_IsRunning(lua_State* L);
 
-// =============================================================================
-// Elicitation -- a reusable, append-only form definition (see Plans/McpElicitation.md).
+// Elicitation -- a reusable, append-only form definition.
 // Ownership runs child -> parent: an Elicitation holds a registry ref to its MCP
 // server, a Question handle holds a registry ref to its Elicitation. Each releases
 // its parent ref in __gc, so the structure is torn down in reverse creation order.
-// =============================================================================
 
 enum McpQuestionType {
 	MCP_Q_STRING,

@@ -11,7 +11,7 @@ namespace pugi { class xml_document; }
 
 // Lua owns the LuaXml struct (raw userdata, zeroed on creation).
 // C++ owns the xml_document via normal new/delete routed through kitsune
-// allocators (operator new/delete are overridden globally in mem.cpp).
+// allocators (operator new/delete are overridden globally in Mem.cpp).
 // This keeps ownership models separate and makes double-__gc safe
 // because delete nullptr is a no-op.
 typedef struct LuaXml {

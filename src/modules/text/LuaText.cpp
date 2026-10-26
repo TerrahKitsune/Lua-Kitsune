@@ -12,7 +12,7 @@
 
 #define REPLACEMENT_CHAR 0xFFFD
 
-// -- UTF-8 / UTF-16 primitives -------------------------------------------------
+// UTF-8 / UTF-16 primitives
 
 // Decodes one UTF-8 sequence starting at s[*i] and advances *i past it.
 // Malformed, truncated, overlong and surrogate encodings return U+FFFD and consume one byte.
@@ -87,7 +87,7 @@ bool kitsune_utf8_valid(const char* s, size_t len) {
 	return true;
 }
 
-// Declared in luatext.h.
+// Declared in LuaText.h.
 size_t kitsune_utf8_encode(char* out, uint32_t cp) {
 
 	if (cp < 0x80) {
@@ -147,7 +147,7 @@ static size_t Utf16LePut(char* out, uint32_t cp) {
 	return 2;
 }
 
-// -- Shared helpers --------------------------------------------------------------
+// Shared helpers
 
 void lua_pushwideasutf8(lua_State* L, const wchar_t* str) {
 	lua_pushwideasutf8(L, str, str ? wcslen(str) : 0);
@@ -338,7 +338,7 @@ void lua_pushutf8fromutf16le(lua_State* L, const char* src, size_t len) {
 	luaL_pushresultsize(&b, n);
 }
 
-// -- Text module -----------------------------------------------------------------
+// Text module
 
 // Text.ToUtf16(str) -> UTF-16LE bytes as a Lua string (no BOM).
 int Text_ToUtf16(lua_State* L) {

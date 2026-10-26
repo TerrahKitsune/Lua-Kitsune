@@ -13,7 +13,7 @@ public sealed class ArchiveTests
         Path.Combine(AppContext.BaseDirectory, "test.zip").Replace('\\', '/'),
     ];
 
-    // -- Entries ---------------------------------------------------------------
+    // Entries
     [ArchiveTheory]
     [MemberData(nameof(ArchiveFiles))]
     public async Task Entries_Returns_TwoFiles(string path)
@@ -67,7 +67,7 @@ public sealed class ArchiveTests
         r.String.ShouldBe("ok");
     }
 
-    // -- ReadAll ---------------------------------------------------------------
+    // ReadAll
     [ArchiveTheory]
     [MemberData(nameof(ArchiveFiles))]
     public async Task ReadAll_FirstEntry_ReturnsNonEmptyData(string path)
@@ -127,7 +127,7 @@ public sealed class ArchiveTests
         r.String.ShouldBe("ok");
     }
 
-    // -- Read (chunked) --------------------------------------------------------
+    // Read (chunked)
     [ArchiveTheory]
     [MemberData(nameof(ArchiveFiles))]
     public async Task Read_ChunkedRead_ReassemblesFullEntry(string path)
@@ -152,7 +152,7 @@ public sealed class ArchiveTests
         r.String.ShouldBe("true");
     }
 
-    // -- OpenRead error handling -----------------------------------------------
+    // OpenRead error handling
     [ArchiveFact]
     public async Task OpenRead_NonExistentFile_ReturnsNilAndError()
     {
@@ -165,7 +165,7 @@ public sealed class ArchiveTests
         r.String.ShouldBe("true|true");
     }
 
-    // -- Non-ASCII archive path ------------------------------------------------
+    // Non-ASCII archive path
     [ArchiveTheory]
     [MemberData(nameof(ArchiveFiles))]
     public async Task OpenRead_NonAsciiPath_ReadsEntries(string path)

@@ -7,7 +7,7 @@ namespace KitsuneNet.Tests;
 [Collection("KitsuneSequential")]
 public sealed class MySqlTests
 {
-    // -- coroutine protocol ---------------------------------------------------
+    // coroutine protocol
     [MySqlFact]
     public async Task Helper_MethodsExistInModuleTable()
     {
@@ -170,7 +170,7 @@ public sealed class MySqlTests
         r.String.ShouldBe("ok");
     }
 
-    // -- CRUD helpers shared by every test below -------------------------------
+    // CRUD helpers shared by every test below
     //
     // exec(sql, params?) ? rowcount, co
     //   Drives the inner query coroutine T to the rowcount phase.
@@ -178,7 +178,7 @@ public sealed class MySqlTests
     //     DML  ? coroutine.resume(co, true)   (stop flag, T dies)
     //     SELECT (after reading rows) ? coroutine.resume(co, true)
 
-    // -- INSERT ----------------------------------------------------------------
+    // INSERT
     [MySqlFact]
     public async Task Crud_Insert_ReturnsOneAffectedRow()
     {
@@ -202,7 +202,7 @@ public sealed class MySqlTests
         r.String.ShouldBe("1");
     }
 
-    // -- SELECT ----------------------------------------------------------------
+    // SELECT
     [MySqlFact]
     public async Task Crud_Select_ReturnsInsertedRow()
     {
@@ -229,7 +229,7 @@ public sealed class MySqlTests
         r.String.ShouldBe("crud_sel:1");
     }
 
-    // -- UPDATE ----------------------------------------------------------------
+    // UPDATE
     [MySqlFact]
     public async Task Crud_Update_ModifiesRow()
     {
@@ -258,7 +258,7 @@ public sealed class MySqlTests
         r.String.ShouldBe("1:crud_upd_new");
     }
 
-    // -- DELETE ----------------------------------------------------------------
+    // DELETE
     [MySqlFact]
     public async Task Crud_Delete_RemovesRow()
     {
@@ -287,7 +287,7 @@ public sealed class MySqlTests
         r.String.ShouldBe("0:true");
     }
 
-    // -- multiple rows ---------------------------------------------------------
+    // multiple rows
     [MySqlFact]
     public async Task Crud_Select_MultipleRowsReturned()
     {
@@ -316,7 +316,7 @@ public sealed class MySqlTests
         r.String.ShouldBe("3:3");
     }
 
-    // -- type mapping ----------------------------------------------------------
+    // type mapping
     [MySqlFact]
     public async Task Crud_Types_IntColumnsReturnedAsInteger()
     {
@@ -448,7 +448,7 @@ public sealed class MySqlTests
         r.String.ShouldBe("userdata:string");
     }
 
-    // -- NonQuery --------------------------------------------------------------
+    // NonQuery
     [MySqlFact]
     public async Task NonQuery_Insert_ReturnsAffectedCount()
     {
@@ -487,7 +487,7 @@ public sealed class MySqlTests
         r.String.ShouldBe("false");
     }
 
-    // -- Scalar ----------------------------------------------------------------
+    // Scalar
     [MySqlFact]
     public async Task Scalar_ReturnsFirstColumnOfFirstRow()
     {
@@ -536,7 +536,7 @@ public sealed class MySqlTests
         r.String.ShouldBe("false");
     }
 
-    // -- QueryAll --------------------------------------------------------------
+    // QueryAll
     [MySqlFact]
     public async Task QueryAll_MultipleRows_ReturnsAllRows()
     {
@@ -597,7 +597,7 @@ public sealed class MySqlTests
         r.String.ShouldBe("false");
     }
 
-    // -- AliveToken integration -----------------------------------------------
+    // AliveToken integration
     [MySqlFact]
     public async Task MySQL_SetAliveToken_DoesNotRaise()
     {

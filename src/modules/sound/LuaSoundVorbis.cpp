@@ -5,11 +5,9 @@
 #include <stdlib.h>
 #include <stdio.h> // SEEK_SET/SEEK_CUR/SEEK_END
 
-// ===========================================================================
 // In-memory ov_callbacks (mirrors dr_wav's memory-decode convention in
 // LuaSound.cpp, adapted to libvorbis's stdio-style read/seek/close/tell
 // callback shape).
-// ===========================================================================
 
 struct OggMemStream {
 	const unsigned char* data;
@@ -58,10 +56,6 @@ bool IsOggData(const unsigned char* data, size_t len) {
 	return len >= 4 && memcmp(data, "OggS", 4) == 0;
 }
 
-// ===========================================================================
-// Decode
-// ===========================================================================
-
 bool DecodeOgg(const unsigned char* data, size_t len, LuaSound* snd, const char** errMsg) {
 	OggMemStream stream{ data, len, 0 };
 	ov_callbacks cb{ OggMemRead, OggMemSeek, OggMemClose, OggMemTell };
@@ -107,13 +101,11 @@ bool DecodeOgg(const unsigned char* data, size_t len, LuaSound* snd, const char*
 	return true;
 }
 
-// ===========================================================================
 // Encode -- the canonical libvorbis analysis/bitrate/muxing sequence
 // (vorbis_info_init -> vorbis_encode_init_vbr -> vorbis_analysis_init +
 // vorbis_block_init -> ogg_stream_init -> 3 header packets -> feed PCM in
 // chunks, draining blocks/packets/pages as they become available -> signal
 // end-of-stream with a zero-length vorbis_analysis_wrote, drain the rest).
-// ===========================================================================
 
 unsigned char* EncodeOgg(const LuaSound* snd, double quality, size_t* outLen) {
 	if (quality < 0.0) quality = 0.0;

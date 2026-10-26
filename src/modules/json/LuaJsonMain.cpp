@@ -39,12 +39,12 @@ int luaopen_json(lua_State* L) {
 	luaL_newmetatable(L, LUAJSON);
 	luaL_setfuncs(L, jsonMeta, 0);
 	lua_pushliteral(L, "__index");
-	lua_pushvalue(L, -3);   // module table
+	lua_pushvalue(L, -3);
 	lua_rawset(L, -3);
 	lua_pushliteral(L, "__metatable");
-	lua_pushvalue(L, -3);   // module table
+	lua_pushvalue(L, -3);
 	lua_rawset(L, -3);
 
-	lua_pop(L, 1);   // pop metatable
-	return 1;        // return module table
+	lua_pop(L, 1);
+	return 1;
 }

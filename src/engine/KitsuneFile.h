@@ -5,7 +5,7 @@
 // environment strings in the ANSI code page, so these convert to UTF-16 and use the
 // _w* variants; elsewhere they are the plain CRT calls. They set errno like the
 // originals. Deliberately free of <Windows.h> and C-compatible so any source file can
-// include it. kitsunestdlib.cpp builds Lua's io / os / loadfile / require on top of them.
+// include it. KitsuneStdlib.cpp builds Lua's io / os / loadfile / require on top of them.
 
 #ifdef __cplusplus
 extern "C" {

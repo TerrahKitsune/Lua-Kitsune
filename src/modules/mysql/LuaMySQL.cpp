@@ -24,12 +24,10 @@ static void SetDidWork(lua_State* L) {
 		slot->didWork = true;
 }
 
-// -- Helper mode constants ---------------------------------------------------
 #define MYSQL_HELPER_NONQUERY 1
 #define MYSQL_HELPER_SCALAR   2
 #define MYSQL_HELPER_QUERYALL 3
 
-// -- LuaMySQLQuery -------------------------------------------------------------
 typedef struct LuaMySQLQuery {
 	LuaMySQL*  conn;
 	int        connRef;
@@ -42,7 +40,6 @@ typedef struct LuaMySQLQuery {
 	int        accumRowIdx;   // QueryAll: 1-based row counter
 } LuaMySQLQuery;
 
-// -- PushAsParamString ---------------------------------------------------------
 static void PushAsParamString(lua_State* L, int index) {
 	if (index < 0)
 		index = lua_gettop(L) + index + 1;
@@ -82,7 +79,6 @@ static void PushAsParamString(lua_State* L, int index) {
 // as BLOB types too; only the charset tells them apart.
 #define MYSQL_BINARY_CHARSET 63
 
-// -- PushMySQLValue ------------------------------------------------------------
 static void PushMySQLValue(lua_State* L, const char* data, unsigned long length, enum_field_types type, unsigned int flags, unsigned int charsetnr) {
 	char* endptr;
 	switch (type) {
@@ -163,7 +159,6 @@ static void PushMySQLValue(lua_State* L, const char* data, unsigned long length,
 	}
 }
 
-// -- BuildQueryWithParams ------------------------------------------------------
 static void BuildQueryWithParams(LuaMySQLQuery* q, const char* sql, size_t sqllen,
 	lua_State* L, int paramTableIdx) {
 	if (!lua_istable(L, paramTableIdx)) {
@@ -300,7 +295,6 @@ static void BuildQueryWithParams(LuaMySQLQuery* q, const char* sql, size_t sqlle
 	q->sqllen = outPos;
 }
 
-// -- FreeQuery -----------------------------------------------------------------
 // Frees all resources owned by a LuaMySQLQuery. Clears conn->activeQuery and
 // conn->queryRef (including luaL_unref for the coroutine anchor) before freeing
 // the struct itself. Safe to call with individual fields already NULL.
@@ -333,7 +327,6 @@ static void FreeQuery(lua_State* L, LuaMySQLQuery* q) {
 	kitsune_free(q);
 }
 
-// -- lua_tomysql / lua_pushmysql -----------------------------------------------
 LuaMySQL* lua_tomysql(lua_State* L, int index) {
 	LuaMySQL* luamysql = (LuaMySQL*)lua_touserdata(L, index);
 	if (!luamysql) {
@@ -360,7 +353,6 @@ LuaMySQL* lua_pushmysql(lua_State* L) {
 	return luamysql;
 }
 
-// -- MySQL_EscapeValue ----------------------------------------------------------
 int MySQL_EscapeValue(lua_State* L) {
 	LuaMySQL* luamysql = lua_tomysql(L, 1);
 	size_t len;
@@ -383,7 +375,6 @@ int MySQL_EscapeValue(lua_State* L) {
 	return 1;
 }
 
-// -- MySQL_IsBusy ---------------------------------------------------------------
 int MySQL_IsBusy(lua_State* L) {
 	LuaMySQL* m = lua_tomysql(L, 1);
 	if (m->queryRef == LUA_NOREF) {
@@ -397,7 +388,7 @@ int MySQL_IsBusy(lua_State* L) {
 	return 1;
 }
 
-// -- QueryStreamCont — shared across Windows and Linux -------------------------
+// QueryStreamCont — shared across Windows and Linux.
 // Called when the query coroutine (T) is resumed after yielding the rowcount.
 // Yields one integer-keyed row table per resume; yields nil (returns) when done.
 static int QueryStreamCont(lua_State* L, int status, lua_KContext ctx) {
@@ -436,12 +427,6 @@ static int QueryStreamCont(lua_State* L, int status, lua_KContext ctx) {
 	}
 	return lua_yieldk(L, 1, ctx, QueryStreamCont);
 }
-
-// -----------------------------------------------------------------------------
-// Platform-specific query body and wait/run/store continuations
-// -----------------------------------------------------------------------------
-
-// -- Cross-platform nonblocking query continuations --------------------------
 
 // Drives a pending nonblocking query to completion and discards its result so
 // the connection can accept a new statement. The MySQL async state machine
@@ -574,7 +559,7 @@ static int MySqlQueryBody(lua_State* L) {
 	return lua_yieldk(L, 1, (lua_KContext)(intptr_t)q, QueryStoreCont);
 }
 
-// -- Internal: create and anchor a query coroutine
+// Create and anchor a query coroutine.
 // Allocates LuaMySQLQuery, builds SQL, creates T with MySqlQueryBody closure,
 // anchors T in m->queryRef, sets m->activeQuery. Leaves T on top of L's stack.
 // conn is at L stack position connIdx. paramTableIdx may be 0 (no params).
@@ -605,7 +590,6 @@ static LuaMySQLQuery* SetupQueryCoroutine(lua_State* L, LuaMySQL* m,
 	return q;
 }
 
-// -- HelperStreamCont / HelperWaitCont ----------------------------------------
 // HelperWaitCont drives T until it yields the rowcount (integer) or a
 // query-level error (string), then hands off to the mode-specific finish.
 // HelperStreamCont collects rows one-at-a-time for QueryAll.
@@ -745,9 +729,9 @@ static int HelperWaitCont(lua_State* L, int status, lua_KContext ctx) {
 		int rc2 = lua_resume(T, L, 0, &nr2); // fetch first row
 		if (rc2 == LUA_YIELD && nr2 > 0 && lua_istable(T, -1)) {
 			// Got a row — q still alive.
-			lua_rawgeti(T, -1, 1);  // col[1] onto T
-			lua_xmove(T, L, 1);     // move col[1] to L
-			lua_pop(T, nr2);        // pop row table
+			lua_rawgeti(T, -1, 1);
+			lua_xmove(T, L, 1);
+			lua_pop(T, nr2);
 			lua_pushboolean(T, 1);
 			int nr3;
 			lua_resume(T, L, 1, &nr3); // stop T — QueryStreamCont calls FreeQuery
@@ -854,7 +838,6 @@ int MySQL_NonQuery(lua_State* L) { return MySqlHelperRun(L, MYSQL_HELPER_NONQUER
 int MySQL_Scalar(lua_State* L)   { return MySqlHelperRun(L, MYSQL_HELPER_SCALAR);   }
 int MySQL_QueryAll(lua_State* L) { return MySqlHelperRun(L, MYSQL_HELPER_QUERYALL); }
 
-// -- MySQL_Query ----------------------------------------------------------------
 int MySQL_Query(lua_State* L) {
 	LuaMySQL* m = lua_tomysql(L, 1);
 
@@ -876,7 +859,6 @@ int MySQL_Query(lua_State* L) {
 	return 1;
 }
 
-// -- MySQL_Connect --------------------------------------------------------------
 static int MySqlConnectCont(lua_State* L, int status, lua_KContext ctx) {
 	(void)status;
 	int connIdx        = (int)(intptr_t)ctx;
@@ -947,7 +929,6 @@ int MySQL_Connect(lua_State* L) {
 	return lua_yieldk(L, 0, (lua_KContext)(intptr_t)connIdx, MySqlConnectCont);
 }
 
-// -- MySQL_SetAliveToken -------------------------------------------------------
 int MySQL_SetAliveToken(lua_State* L) {
 	LuaMySQL* m = lua_tomysql(L, 1);
 	if (m->aliveTokenRef != LUA_NOREF) {
@@ -962,7 +943,6 @@ int MySQL_SetAliveToken(lua_State* L) {
 	return 0;
 }
 
-// -- MySQL_Close ---------------------------------------------------------------
 int MySQL_Close(lua_State* L) {
 	LuaMySQL* m = (LuaMySQL*)lua_touserdata(L, 1);
 	if (!m)
@@ -995,7 +975,6 @@ int MySQL_Close(lua_State* L) {
 	return 0;
 }
 
-// -- MySQL_ToString ---------------------------------------------------------
 int MySQL_ToString(lua_State* L) {
 	LuaMySQL* m = lua_tomysql(L, 1);
 	char buf[64];

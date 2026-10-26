@@ -13,13 +13,8 @@
 #include <cstring>
 #include <cstdio>
 
-// ---------------------------------------------------------------------------
-// Atlas rebuild flag
-// ---------------------------------------------------------------------------
-
 static bool s_rebuildPending = false;
 
-// Forward declaration
 static void font_free(Resource* node);
 
 // Glyph ranges included in every loaded font atlas: European scripts (Latin, Greek,
@@ -62,10 +57,6 @@ void FontClearRebuildFlag() {
     s_rebuildPending = false;
 }
 
-// ---------------------------------------------------------------------------
-// Error helper
-// ---------------------------------------------------------------------------
-
 static int font_error(const kitsune_ResultSetter setter, const char* msg) {
     KitsuneVariable e = {};
     e.type = KITSUNE_TERROR;
@@ -75,10 +66,6 @@ static int font_error(const kitsune_ResultSetter setter, const char* msg) {
     return 1;
 }
 
-// ---------------------------------------------------------------------------
-// Finalizer
-// ---------------------------------------------------------------------------
-
 static void font_free(Resource* node) {
     FontResource* f = (FontResource*)node;
     // ttfData is safe to free here because ImGui is torn down before ResourceCacheShutdown.
@@ -87,21 +74,14 @@ static void font_free(Resource* node) {
     free(f);
 }
 
-// ---------------------------------------------------------------------------
-// Source key helper — "FaceName:size:style"
-// ---------------------------------------------------------------------------
-
+// Source key is "FaceName:size:style"
 static int make_font_key(char* buf, int bufLen, const char* face, float size, int style) {
     return snprintf(buf, bufLen, "%s:%.1f:%d", face, size, style);
 }
 
-// ---------------------------------------------------------------------------
-// FontResolveInternal
 // Looks up or loads a FontResource by face/size/style.
 // Returns imFont* (may be nullptr for one transitional frame before first build).
 // Sets s_rebuildPending when a new font is registered.
-// ---------------------------------------------------------------------------
-
 ImFont* FontResolveInternal(const char* face, float size, int style) {
     if (!face || size <= 0.0f)
         return nullptr;
@@ -157,9 +137,8 @@ ImFont* FontResolveInternal(const char* face, float size, int style) {
 
     if (!ttfData) {
         // Store a sentinel so we never hit the loader again for this key.
-        // But only if the atlas is not locked — if it is, we'll retry next frame.
-        // Only store a sentinel (don't retry loader) when atlas is not locked.
-        // If locked, we'll retry next frame since no cache entry exists yet.
+        // But only if the atlas is not locked — if it is, we'll retry next frame
+        // since no cache entry exists yet.
         if (!ImGui::GetIO().Fonts->Locked) {
             FontResource* sentinel = (FontResource*)calloc(1, sizeof(FontResource));
             if (sentinel) {
@@ -199,7 +178,7 @@ ImFont* FontResolveInternal(const char* face, float size, int style) {
     f->imFont      = nullptr;
 
     // If the atlas is locked (mid-frame), store with atlasLoaded=false.
-    // FontDrainPendingLoads() will call AddFontFromMemoryTTF next frame.
+    // FontLoadPending() will call AddFontFromMemoryTTF next frame.
     if (ImGui::GetIO().Fonts->Locked) {
         f->atlasLoaded = false;
         if (!ResourceCacheAdd(&f->resource)) {
@@ -229,10 +208,6 @@ ImFont* FontResolveInternal(const char* face, float size, int style) {
     return f->imFont;
 }
 
-// ---------------------------------------------------------------------------
-// FontPush / FontPop
-// ---------------------------------------------------------------------------
-
 void FontPush(ImFont* font) {
     ImGui::PushFont(font); // nullptr = ImGui default font; always safe
 }
@@ -241,10 +216,7 @@ void FontPop() {
     ImGui::PopFont();
 }
 
-// ---------------------------------------------------------------------------
 // Font.Resolve(face, size, opt bold, opt italic) -> luaId | nil
-// ---------------------------------------------------------------------------
-
 int Font_Resolve(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud) {
     KitsuneVariable r = {};
@@ -295,10 +267,7 @@ int Font_Resolve(int argc, const KitsuneVariable* argv,
     return 1;
 }
 
-// ---------------------------------------------------------------------------
 // Font.GetData(luaId) -> { face, size, style, isBuilt } | nil
-// ---------------------------------------------------------------------------
-
 int Font_GetData(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud) {
     KitsuneVariable r = {};
@@ -375,11 +344,8 @@ int Font_GetData(int argc, const KitsuneVariable* argv,
     return 1;
 }
 
-// ---------------------------------------------------------------------------
 // Font.GetId(face, size, opt bold, opt italic) -> luaId | nil
 // Lookup without triggering a load.
-// ---------------------------------------------------------------------------
-
 int Font_GetId(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud) {
     KitsuneVariable r = {};
@@ -412,13 +378,10 @@ int Font_GetId(int argc, const KitsuneVariable* argv,
     return 1;
 }
 
-// ---------------------------------------------------------------------------
 // Font.SetDefaultStyleColor(color, style)
 // Sets the fallback text color used by PushBold/PushItalic when the styled
 // font variant is not loaded. color is ImU32 (0xAABBGGRR). style is
 // FONT_STYLE_BOLD (1), FONT_STYLE_ITALIC (2), or both (3).
-// ---------------------------------------------------------------------------
-
 int Font_SetDefaultStyleColor(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud) {
     if (argc < 2)
@@ -433,13 +396,10 @@ int Font_SetDefaultStyleColor(int argc, const KitsuneVariable* argv,
     return 0;
 }
 
-// ---------------------------------------------------------------------------
 // Font.SetDefault(opt luaId)
 // Sets the ImGui default font to the given FontResource.
 // Pass 0 or nil to restore the built-in default.
 // Takes effect after the next atlas rebuild.
-// ---------------------------------------------------------------------------
-
 int Font_SetDefault(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud) {
     if (argc < 1 || argv[0].type == KITSUNE_TNIL || argv[0].type == KITSUNE_TNONE) {
@@ -457,13 +417,10 @@ int Font_SetDefault(int argc, const KitsuneVariable* argv,
     return 0;
 }
 
-// ---------------------------------------------------------------------------
 // Font.HasGlyph(codepoint)
 // Returns true if the current default ImGui font contains a glyph for the
 // given Unicode codepoint (integer). Uses FindGlyphNoFallback so the missing-
 // glyph fallback does not mask a missing character.
-// ---------------------------------------------------------------------------
-
 int Font_HasGlyph(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud) {
     KitsuneVariable r = {};
@@ -479,12 +436,9 @@ int Font_HasGlyph(int argc, const KitsuneVariable* argv,
     return 1;
 }
 
-// ---------------------------------------------------------------------------
 // Font.HasGlyphIn(luaId, codepoint)
 // Same as Font.HasGlyph but checks a specific FontResource by luaId rather
 // than the current default font.
-// ---------------------------------------------------------------------------
-
 int Font_HasGlyphIn(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud) {
     KitsuneVariable r = {};
@@ -501,13 +455,10 @@ int Font_HasGlyphIn(int argc, const KitsuneVariable* argv,
     return 1;
 }
 
-// ---------------------------------------------------------------------------
 // Font.GetGlyphCodepoints()
 // Returns a Lua array of all codepoints that have real glyphs in the current
 // default font, by iterating ImFont::Glyphs directly. This is ground-truth —
 // no fallback masking. Optionally pass a luaId to query a specific font.
-// ---------------------------------------------------------------------------
-
 int Font_GetGlyphCodepoints(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud) {
     ImFont* font = nullptr;
@@ -573,10 +524,6 @@ int Font_GetGlyphCodepoints(int argc, const KitsuneVariable* argv,
     }
     return 1;
 }
-
-// ---------------------------------------------------------------------------
-// RegisterFontFunctions
-// ---------------------------------------------------------------------------
 
 void RegisterFontFunctions() {
     KitsuneRegisterFunction("Font.Resolve", Font_Resolve, nullptr);

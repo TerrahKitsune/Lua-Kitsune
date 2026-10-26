@@ -13,10 +13,6 @@
 #include <cstring>
 #include <cstdio>
 
-// ---------------------------------------------------------------------------
-// FreeMarkdownCache
-// ---------------------------------------------------------------------------
-
 void FreeMarkdownCache(MarkdownResource* md) {
 	free(md->mdContent);
 	free(md->mdNodes);
@@ -35,12 +31,8 @@ static void markdown_finalizer(Resource* res) {
 	free(md);
 }
 
-// ---------------------------------------------------------------------------
-// ReadStreamIntoCache — uses KitsuneCallMethod only, no lua_State
-// ---------------------------------------------------------------------------
-
+// Uses KitsuneCallMethod only, no lua_State.
 void ReadStreamIntoCache(const KitsuneVariable* streamVar, MarkdownResource* md) {
-	// stream:Seek(0)
 	{
 		KitsuneVariable seekArg = {};
 		seekArg.type = KITSUNE_TINTEGER;
@@ -79,10 +71,6 @@ void ReadStreamIntoCache(const KitsuneVariable* streamVar, MarkdownResource* md)
 	}
 }
 
-// ---------------------------------------------------------------------------
-// ParseContentIntoNodes — helpers
-// ---------------------------------------------------------------------------
-
 static bool push_node(MarkdownResource* md, MarkdownNode node) {
 	if (md->mdNodeCount + 1 >= md->mdNodeAlloc) {
 		int newAlloc = md->mdNodeAlloc == 0 ? 64 : md->mdNodeAlloc * 2;
@@ -112,10 +100,7 @@ static bool push_span(MarkdownResource* md, uint8_t type,
 	return push_node(md, n);
 }
 
-// ---------------------------------------------------------------------------
-// Span parser — emits MD_SPAN_* nodes for a single line region [s, end)
-// ---------------------------------------------------------------------------
-
+// Emits MD_SPAN_* nodes for a single line region [s, end).
 static bool parse_spans(MarkdownResource* md, const char* base,
 	uint32_t s, uint32_t end) {
 	uint32_t cur = s;
@@ -210,10 +195,6 @@ static bool parse_spans(MarkdownResource* md, const char* base,
 	return push_span(md, MD_SPAN_TEXT, s, end);
 }
 
-// ---------------------------------------------------------------------------
-// ParseContentIntoNodes
-// ---------------------------------------------------------------------------
-
 void ParseContentIntoNodes(MarkdownResource* md) {
 	if (!md->mdContent || md->mdContentLen == 0)
 		return;
@@ -222,7 +203,6 @@ void ParseContentIntoNodes(MarkdownResource* md) {
 	uint32_t    total = (uint32_t)md->mdContentLen;
 	uint32_t    i = 0;
 
-	// Strip UTF-8 BOM if present
 	if (total >= 3 &&
 		(unsigned char)base[0] == 0xEF &&
 		(unsigned char)base[1] == 0xBB &&
@@ -373,7 +353,6 @@ void ParseContentIntoNodes(MarkdownResource* md) {
 			// Emit TABLE_ROW (level = column count), then interleave
 			// MD_TABLE_CELL markers with span nodes per cell.
 			{
-				// Count columns first so we can store it in level
 				uint8_t colCount = 0;
 				{
 					uint32_t p2 = lineStart;
@@ -405,7 +384,6 @@ void ParseContentIntoNodes(MarkdownResource* md) {
 					while (cellEnd > cellStart && base[cellEnd - 1] == ' ') cellEnd--;
 
 					if (!firstCell) {
-						// Cell boundary marker
 						MarkdownNode cellMark = {};
 						cellMark.type = MD_TABLE_CELL;
 						if (!push_node(md, cellMark)) return;
@@ -446,10 +424,6 @@ void ParseContentIntoNodes(MarkdownResource* md) {
 		push_node(md, n);
 	}
 }
-
-// ---------------------------------------------------------------------------
-// RenderFromNodes helpers
-// ---------------------------------------------------------------------------
 
 // Returns the index of the first node after lineIdx that is not a span node.
 static int next_line_node(MarkdownResource* md, int lineIdx) {
@@ -581,10 +555,6 @@ static void render_spans(MarkdownResource* md, ImguiWindowContext* ctx, int line
 				i++;
 			}
 		}
-
-// ---------------------------------------------------------------------------
-// RenderFromNodes
-// ---------------------------------------------------------------------------
 
 void RenderFromNodes(MarkdownResource* md, ImguiWindowContext* ctx, float w, float h) {
 	if (md->mdCacheError) {
@@ -752,7 +722,6 @@ void RenderFromNodes(MarkdownResource* md, ImguiWindowContext* ctx, float w, flo
 							continue;
 						}
 
-						// One row
 						ImGui::TableNextRow();
 						ImGui::TableNextColumn();
 						j++; // skip the TABLE_ROW node itself
@@ -764,7 +733,6 @@ void RenderFromNodes(MarkdownResource* md, ImguiWindowContext* ctx, float w, flo
 								j++;
 								continue;
 							}
-							// Span node
 							const MarkdownNode& sn = md->mdNodes[j];
 							switch (sn.type) {
 							case MD_SPAN_TEXT:
@@ -831,10 +799,6 @@ void RenderFromNodes(MarkdownResource* md, ImguiWindowContext* ctx, float w, flo
 
 }
 
-// ---------------------------------------------------------------------------
-// Markdown.Parse(text|stream) -> luaId  |  Markdown.Destroy(luaId)
-// ---------------------------------------------------------------------------
-
 // Markdown.Parse(text|stream) -> integer luaId | nil
 static int Markdown_Parse(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
@@ -895,7 +859,7 @@ static int Markdown_Parse(int argc, const KitsuneVariable* argv,
 	return 1;
 }
 
-// Markdown.Destroy(luaId) — remove from cache and free
+// Markdown.Destroy(luaId) — removes from cache and frees
 static int Markdown_Destroy(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
 	if (argc < 1)

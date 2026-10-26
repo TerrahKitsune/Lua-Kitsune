@@ -16,7 +16,7 @@ namespace KitsuneNet.Tests;
 /// </summary>
 public sealed class SQLiteTests
 {
-    // -- In-memory ------------------------------------------------------------
+    // In-memory
     [Fact]
     public async Task SQLite_InMemory_CreateInsertSelect()
     {
@@ -248,7 +248,7 @@ public sealed class SQLiteTests
         r.String.ShouldBe("2:first");
     }
 
-    // -- Query return values --------------------------------------------------
+    // Query return values
     [Fact]
     public async Task SQLite_Query_DML_Returns_Done()
     {
@@ -299,7 +299,7 @@ public sealed class SQLiteTests
         r.String.ShouldBe("true");
     }
 
-    // -- Finish ---------------------------------------------------------------
+    // Finish
     [Fact]
     public async Task SQLite_Finish_AbandonsMidQuery_AllowsNextQuery()
     {
@@ -342,7 +342,7 @@ public sealed class SQLiteTests
         r.String.ShouldBe("true");
     }
 
-    // -- GetRow edge cases ----------------------------------------------------
+    // GetRow edge cases
     [Fact]
     public async Task SQLite_GetRow_OutOfRange_ReturnsNil()
     {
@@ -363,7 +363,7 @@ public sealed class SQLiteTests
         r.String.ShouldBe("true");
     }
 
-    // -- BLOB column ----------------------------------------------------------
+    // BLOB column
     [Fact]
     public async Task SQLite_BlobColumn_ReturnsStreamUserdata()
     {
@@ -470,7 +470,7 @@ public sealed class SQLiteTests
         r.String.ShouldBe("blob,0");
     }
 
-    // -- Parameter binding ----------------------------------------------------
+    // Parameter binding
     [Fact]
     public async Task SQLite_ParameterizedQuery_FunctionBind()
     {
@@ -557,7 +557,7 @@ public sealed class SQLiteTests
         r.String.ShouldBe("aaa_,bbb_");
     }
 
-    // -- Custom functions -----------------------------------------------------
+    // Custom functions
     [Fact]
     public async Task SQLite_RegisterFunction_ReturnsString()
     {
@@ -649,7 +649,7 @@ public sealed class SQLiteTests
         r.String.ShouldBe("true");
     }
 
-    // -- Text columns ---------------------------------------------------------
+    // Text columns
     [Fact]
     public async Task SQLite_TextColumn_NonAscii_ComesBackAsUtf8String()
     {
@@ -683,7 +683,7 @@ public sealed class SQLiteTests
         r.String.ShouldBe("false");
     }
 
-    // -- __tostring -----------------------------------------------------------
+    // __tostring
     [Fact]
     public async Task SQLite_Tostring_InMemory_ContainsPointerAndMemoryKeyword()
     {
@@ -699,7 +699,7 @@ public sealed class SQLiteTests
         r.String.ShouldBe("true");
     }
 
-    // -- Lua() built-in SQL function ------------------------------------------
+    // Lua() built-in SQL function
     [Fact]
     public async Task SQLite_LuaBuiltinFunction_CanRunScript()
     {
@@ -753,7 +753,7 @@ public sealed class SQLiteTests
         r.String.ShouldBe("hello_from_lua");
     }
 
-    // -- SetBusyHandler -------------------------------------------------------
+    // SetBusyHandler
     [Fact]
     public async Task SQLite_SetBusyHandler_SetAndClear_DoesNotCrash()
     {
@@ -776,7 +776,7 @@ public sealed class SQLiteTests
         r.String.ShouldBe("true");
     }
 
-    // -- Open modes -----------------------------------------------------------
+    // Open modes
     [Fact]
     public async Task SQLite_Open_Mode1_Multithread_OpensSuccessfully()
     {
@@ -809,7 +809,7 @@ public sealed class SQLiteTests
         r.String.ShouldBe("true");
     }
 
-    // -- File database --------------------------------------------------------
+    // File database
     [SQLiteFact]
     public async Task SQLite_FileDatabase_OpenAndVersion()
     {
@@ -955,7 +955,7 @@ public sealed class SQLiteTests
         r.String.ShouldBe("onetwo|false");
     }
 
-    // -- Open without a mode keeps the database's journal mode -----------------
+    // Open without a mode keeps the database's journal mode
 
     private const string JournalModeHelpers = @"
 			local function journal(db)

@@ -13,7 +13,7 @@
 
 typedef luaL_Stream LStream;
 
-// -- io.open -----------------------------------------------------------------------
+// io.open
 
 static int StreamFclose(lua_State* L) {
 
@@ -68,7 +68,7 @@ int kitsune_io_open_strict(lua_State* L) {
 	return StdlibOpenFile(L, true);
 }
 
-// -- luaL_loadfilex -------------------------------------------------------------------
+// luaL_loadfilex
 
 #ifdef _WIN32
 
@@ -181,7 +181,7 @@ int kitsune_loadfilex(lua_State* L, const char* filename, const char* mode) {
 
 #ifdef _WIN32
 
-// -- io.lines / io.input / io.output / io.popen -----------------------------------------
+// io.lines / io.input / io.output / io.popen
 
 // liolib's opencheck: pushes the opened file or raises.
 static void OpenCheck(lua_State* L, const char* fname, const char* mode) {
@@ -268,7 +268,7 @@ static int io_popen(lua_State* L) {
 	return (p->f == NULL) ? luaL_fileresult(L, 0, command) : 1;
 }
 
-// -- os ----------------------------------------------------------------------------
+// os
 
 static int os_execute(lua_State* L) {
 
@@ -311,7 +311,7 @@ static int os_getenv(lua_State* L) {
 	return 1;
 }
 
-// -- loadfile / dofile ----------------------------------------------------------------
+// loadfile / dofile
 
 // lbaselib's LoadAux.
 static int LoadAux(lua_State* L, int status, int envidx) {
@@ -362,7 +362,7 @@ static int Global_dofile(lua_State* L) {
 	return DofileCont(L, 0, 0);
 }
 
-// -- package ---------------------------------------------------------------------------
+// package
 
 #define PKG_CLIBS    "_CLIBS"     // registry table of loaded C libraries (shared with loadlib.c)
 #define PKG_POF      "luaopen_"  // prefix for open functions in C libraries
@@ -642,7 +642,7 @@ static void SetPath(lua_State* L, int pkg, const char* field, const char* envnam
 	lua_settop(L, top);
 }
 
-// -- Installation ------------------------------------------------------------------
+// Installation
 
 // t[name] = closure(fn, stock t[name], extra upvalue if extra != NULL).
 static void ReplaceWithStock(lua_State* L, int t, const char* name, lua_CFunction fn, const char* extra) {

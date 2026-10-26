@@ -16,7 +16,7 @@ public sealed class RedisTests
 
     public RedisTests(ITestOutputHelper output) => _output = output;
 
-    // -- Connection ------------------------------------------------------------
+    // Connection
     [RedisFact]
     public async Task Open_ValidHost_ToStringStartsWithRedis()
     {
@@ -40,7 +40,7 @@ public sealed class RedisTests
         r.String.ShouldBe("true");
     }
 
-    // -- Command ---------------------------------------------------------------
+    // Command
     [RedisFact]
     public async Task Command_PING_ReturnsPong()
     {
@@ -81,7 +81,7 @@ public sealed class RedisTests
         r.String.ShouldBe("1");
     }
 
-    // -- GetString -------------------------------------------------------------
+    // GetString
     [RedisFact]
     public async Task GetString_Set_Tostring_RoundTrip()
     {
@@ -127,7 +127,7 @@ public sealed class RedisTests
         r.String.ShouldBe("true");
     }
 
-    // -- GetKey ----------------------------------------------------------------
+    // GetKey
     [RedisFact]
     public async Task GetKey_Tostring_ReturnsKeyName()
     {
@@ -168,7 +168,7 @@ public sealed class RedisTests
         r.String.ShouldBe("true");
     }
 
-    // -- GetHashset ------------------------------------------------------------
+    // GetHashset
     [RedisFact]
     public async Task GetHashset_SetGet_RoundTrip()
     {
@@ -201,7 +201,7 @@ public sealed class RedisTests
         r.String.ShouldBe("true");
     }
 
-    // -- GetList ---------------------------------------------------------------
+    // GetList
     [RedisFact]
     public async Task GetList_RPUSH_ThenIndex_ReturnsValues()
     {
@@ -219,7 +219,7 @@ public sealed class RedisTests
         r.String.ShouldBe("first:second");
     }
 
-    // -- GetSet ----------------------------------------------------------------
+    // GetSet
     [RedisFact]
     public async Task GetSet_SADD_IsMember_ReturnsTrueAndFalse()
     {
@@ -237,7 +237,7 @@ public sealed class RedisTests
         r.String.ShouldBe("true:false");
     }
 
-    // -- GetSortedSet ----------------------------------------------------------
+    // GetSortedSet
     [RedisFact]
     public async Task GetSortedSet_ZADD_IndexByRank_ReturnsLowestScoreMember()
     {
@@ -255,7 +255,7 @@ public sealed class RedisTests
         r.String.ShouldBe("memberA");
     }
 
-    // -- GetStream -------------------------------------------------------------
+    // GetStream
     [RedisFact]
     public async Task GetStream_Add_Then_Read_ReturnsEntry()
     {
@@ -272,7 +272,7 @@ public sealed class RedisTests
         r.String.ShouldBe("true:true:true");
     }
 
-    // -- Key iterator ----------------------------------------------------------
+    // Key iterator
     [RedisFact]
     public async Task KeyIterator_SCAN_FindsInsertedKeys()
     {
@@ -297,7 +297,7 @@ public sealed class RedisTests
         r.String.ShouldBe("true");
     }
 
-    // -- Subscribe -------------------------------------------------------------
+    // Subscribe
     [RedisFact]
     public async Task Subscribe_ReturnsThread()
     {
@@ -407,7 +407,7 @@ public sealed class RedisTests
         r.String.ShouldStartWith("kitsune_pps_*:kitsune_pps_test:");
     }
 
-    // -- RedisString extended --------------------------------------------------
+    // RedisString extended
     [RedisFact]
     public async Task GetString_Set_ReturnsOldValue()
     {
@@ -609,7 +609,7 @@ public sealed class RedisTests
         r.String.ShouldBe("kitsune_test_str_call");
     }
 
-    // -- RedisKey extended -----------------------------------------------------
+    // RedisKey extended
     [RedisFact]
     public async Task GetKey_SetTTL_GetTTL_RoundTrip()
     {
@@ -686,7 +686,7 @@ public sealed class RedisTests
         r.String.ShouldBe("none");
     }
 
-    // -- GetHashset extended ---------------------------------------------------
+    // GetHashset extended
     [RedisFact]
     public async Task GetHashset_MultipleFields_RoundTrip()
     {
@@ -752,7 +752,7 @@ public sealed class RedisTests
         r.String.ShouldBe("kitsune_test_hash_call:1");
     }
 
-    // -- GetList extended ------------------------------------------------------
+    // GetList extended
     [RedisFact]
     public async Task GetList_Len_ReturnsCount()
     {
@@ -879,7 +879,7 @@ public sealed class RedisTests
         r.String.ShouldBe("kitsune_test_list_call:2");
     }
 
-    // -- GetSet extended -------------------------------------------------------
+    // GetSet extended
     [RedisFact]
     public async Task GetSet_Srandmember_ReturnsAMember()
     {
@@ -1038,7 +1038,7 @@ public sealed class RedisTests
         r.String.ShouldBe("kitsune_test_set_call:3");
     }
 
-    // -- GetSortedSet extended -------------------------------------------------
+    // GetSortedSet extended
     [RedisFact]
     public async Task GetSortedSet_GetScore_ByMemberName()
     {
@@ -1134,7 +1134,7 @@ public sealed class RedisTests
         r.String.ShouldBe("kitsune_test_zset_call:4");
     }
 
-    // -- GetStream extended ----------------------------------------------------
+    // GetStream extended
     [RedisFact]
     public async Task GetStream_Add_IdIsNonEmptyString()
     {
@@ -1213,7 +1213,7 @@ public sealed class RedisTests
         r.String.ShouldBe("kitsune_test_stream_call");
     }
 
-    // -- Command reply ---------------------------------------------------------
+    // Command reply
     [RedisFact]
     public async Task Command_GET_NonExistentKey_NilValue()
     {
@@ -1271,7 +1271,7 @@ public sealed class RedisTests
         r.String.ShouldBe("true");
     }
 
-    // -- Command validation ----------------------------------------------------
+    // Command validation
     [RedisFact]
     public async Task Command_NilArgument_Raises()
     {
@@ -1317,7 +1317,7 @@ public sealed class RedisTests
         r.String.ShouldBe("true");
     }
 
-    // -- GetString extended (new paths) ----------------------------------------
+    // GetString extended (more paths)
     [RedisFact]
     public async Task GetString_GetSet_IsAliasOfGetOrSet()
     {
@@ -1392,7 +1392,7 @@ public sealed class RedisTests
         r.String.ShouldBe("true");
     }
 
-    // -- GetKey extended (new paths) -------------------------------------------
+    // GetKey extended (more paths)
     [RedisFact]
     public async Task GetKey_GetTTL_NonExistentKey_ReturnsNil()
     {
@@ -1419,7 +1419,7 @@ public sealed class RedisTests
         r.String.ShouldBe("false");
     }
 
-    // -- GetHashset extended (new paths) --------------------------------------
+    // GetHashset extended (more paths)
     [RedisFact]
     public async Task GetHashset_StoreAndRetrieveNumber()
     {
@@ -1467,7 +1467,7 @@ public sealed class RedisTests
         r.String.ShouldBe("0");
     }
 
-    // -- GetList extended (new paths) ------------------------------------------
+    // GetList extended (more paths)
     [RedisFact]
     public async Task GetList_Len_EmptyList_ReturnsZero()
     {
@@ -1512,7 +1512,7 @@ public sealed class RedisTests
         r.String.ShouldBe("prepended");
     }
 
-    // -- GetSet extended (new paths) -------------------------------------------
+    // GetSet extended (more paths)
     [RedisFact]
     public async Task GetSet_IndexedAccess_BeyondSize_ReturnsNil()
     {
@@ -1552,7 +1552,7 @@ public sealed class RedisTests
         r.String.ShouldBe("true");
     }
 
-    // -- GetSortedSet extended (new paths) -------------------------------------
+    // GetSortedSet extended (more paths)
     [RedisFact]
     public async Task GetSortedSet_IndexByRank_OutOfRange_ReturnsNil()
     {
@@ -1863,7 +1863,7 @@ public sealed class RedisTests
         r.String.ShouldBe("true");
     }
 
-    // -- GetJson extended ------------------------------------------------------
+    // GetJson extended
     [RedisFact]
     public async Task GetJson_GetNull_ReturnsJsonNullSentinel()
     {
@@ -2184,7 +2184,7 @@ public sealed class RedisTests
         r.String.ShouldBe("true");
     }
 
-    // -- GetJson pairs ---------------------------------------------------------
+    // GetJson pairs
     [RedisFact]
     public async Task GetJson_Pairs_OnObject_IteratesKeyValuePairs()
     {
@@ -2313,7 +2313,7 @@ public sealed class RedisTests
         r.String.ShouldBe("2");
     }
 
-    // -- AliveToken integration -----------------------------------------------
+    // AliveToken integration
     [RedisFact]
     public async Task Redis_Subscribe_SetAliveToken_DoesNotRaise()
     {
@@ -2388,7 +2388,7 @@ public sealed class RedisTests
         return $"Redis.Open('{Host()}', {Port()}, false, 10, nil, {passLua})";
     }
 
-    // -- GetJson ---------------------------------------------------------------
+    // GetJson
     private string JsonSetup(string key = "kitsune_test_json") =>
         $"redis:Command('JSON.SET', '{key}', '$', '{JsonDoc}')";
 }

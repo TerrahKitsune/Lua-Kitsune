@@ -9,8 +9,6 @@
 #include <Windows.h>
 #endif
 
-// ── Userdata helpers ──────────────────────────────────────────────────────────
-
 LuaDateTime* lua_pushdatetime(lua_State* L) {
 	LuaDateTime* dt = (LuaDateTime*)lua_newuserdata(L, sizeof(LuaDateTime));
 	memset(dt, 0, sizeof(LuaDateTime));
@@ -30,8 +28,6 @@ int lua_isdatetime(lua_State* L, int index) {
 	lua_pop(L, 2);
 	return result;
 }
-
-// ── Internal calendar helpers ─────────────────────────────────────────────────
 
 // Days per month (non-leap / leap).
 static const int daysInMonth[2][13] = {
@@ -111,9 +107,6 @@ static int64_t FieldsToTicks(int y, int mo, int d, int h, int mi, int s, int ms)
 		+ (int64_t)ms * DT_TICKS_PER_MILLISECOND;
 }
 
-// ── Platform clock ────────────────────────────────────────────────────────────
-
-// Returns current UTC ticks and the local UTC offset in minutes.
 static int64_t GetUtcTicks(void) {
 #ifdef _WIN32
 	FILETIME ft;
@@ -142,7 +135,7 @@ static int16_t GetLocalOffsetMinutes(void) {
 	if (r == TIME_ZONE_ID_DAYLIGHT)
 		bias += (int)tz.DaylightBias;
 	else
-		bias += (int)tz.StandardBias;  // applies in standard time (and unknown)
+		bias += (int)tz.StandardBias;
 	return (int16_t)(-bias);
 #else
 	time_t t = time(NULL);
@@ -152,12 +145,9 @@ static int16_t GetLocalOffsetMinutes(void) {
 #endif
 }
 
-// ── ISO 8601 formatting ───────────────────────────────────────────────────────
-
 // Writes ISO 8601: "YYYY-MM-DDTHH:MM:SS.mmmZ" (UTC) or with "+HH:MM" offset.
 // buf must be at least 35 chars.
 static int FormatIso8601(const LuaDateTime* dt, char* buf, size_t bufsz) {
-	// Apply offset to get local ticks for display.
 	int64_t localTicks = dt->ticks + (int64_t)dt->offsetMinutes * DT_TICKS_PER_MINUTE;
 	DtFields f;
 	TicksToFields(localTicks, &f);
@@ -186,8 +176,6 @@ void lua_pushdatetimestring(lua_State* L, int index) {
 	FormatIso8601(dt, buf, sizeof(buf));
 	lua_pushstring(L, buf);
 }
-
-// ── ISO 8601 parsing ──────────────────────────────────────────────────────────
 
 // Parses "YYYY-MM-DD[T HH:MM[:SS[.fff]]][Z|+HH:MM|-HH:MM]".
 // Returns 1 on success and fills *out (UTC ticks + offset), 0 on failure.
@@ -260,7 +248,6 @@ static int ParseIso8601(const char* s, LuaDateTime* out, int* hasOffsetOut, cons
 
 	int16_t offsetMin = (int16_t)(offSign * totalOff);
 	int64_t localTicks = FieldsToTicks(y, mo, d, h, mi, sec, ms);
-	// Convert to UTC by subtracting the offset.
 	int64_t utcTicks = localTicks - (int64_t)offsetMin * DT_TICKS_PER_MINUTE;
 
 	out->ticks = utcTicks;
@@ -270,7 +257,7 @@ static int ParseIso8601(const char* s, LuaDateTime* out, int* hasOffsetOut, cons
 	return 1;
 }
 
-// ── Constructors ──────────────────────────────────────────────────────────────
+// Constructors
 
 int DateTime_Now(lua_State* L) {
 	LuaDateTime* dt = lua_pushdatetime(L);
@@ -363,7 +350,6 @@ int DateTime_Parse(lua_State* L) {
 		lua_pushnil(L);
 		return 1;
 	}
-	// If no offset was embedded in the string, apply the fallback.
 	if (!hasExplicitOffset) {
 		tmp.ticks -= (int64_t)fallbackOffset * DT_TICKS_PER_MINUTE;
 		tmp.offsetMinutes = fallbackOffset;
@@ -373,7 +359,7 @@ int DateTime_Parse(lua_State* L) {
 	return 1;
 }
 
-// ── Component getters ─────────────────────────────────────────────────────────
+// Component getters
 
 static DtFields GetLocalFields(lua_State* L) {
 	LuaDateTime* dt = lua_todatetime(L, 1);
@@ -445,7 +431,7 @@ int DateTime_OffsetMinutes(lua_State* L) {
 	return 1;
 }
 
-// ── Conversion ───────────────────────────────────────────────────────────────
+// Conversion
 
 int DateTime_UnixSeconds(lua_State* L) {
 	LuaDateTime* dt = lua_todatetime(L, 1);
@@ -498,14 +484,12 @@ int DateTime_Format(lua_State* L) {
 	TicksToFields(localTicks, &f);
 
 	if (!fmt) {
-		// Default: ISO 8601
 		char buf[35];
 		FormatIso8601(dt, buf, sizeof(buf));
 		lua_pushstring(L, buf);
 		return 1;
 	}
 
-	// Simple strftime-style substitution.
 	char buf[256];
 	struct tm t;
 	memset(&t, 0, sizeof(t));
@@ -538,7 +522,7 @@ int DateTime_IsEmpty(lua_State* L) {
 	return 1;
 }
 
-// ── Arithmetic ───────────────────────────────────────────────────────────────
+// Arithmetic
 
 static int AddTicks(lua_State* L, int64_t delta) {
 	LuaDateTime* src = lua_todatetime(L, 1);
@@ -573,7 +557,7 @@ int DateTime_AddMilliseconds(lua_State* L) {
 	return AddTicks(L, (int64_t)(n * (lua_Number)DT_TICKS_PER_MILLISECOND));
 }
 
-// ── Metamethods ───────────────────────────────────────────────────────────────
+// Metamethods
 
 int DateTime_ToString(lua_State* L) {
 	LuaDateTime* dt = lua_todatetime(L, 1);
@@ -606,7 +590,7 @@ int DateTime_Le(lua_State* L) {
 	return 1;
 }
 
-// ── DateTime + TimeSpan arithmetic ───────────────────────────────────────────
+// DateTime + TimeSpan arithmetic
 
 // __add: DateTime + TimeSpan → DateTime
 int DateTime_AddTimeSpan(lua_State* L) {
@@ -633,14 +617,12 @@ int DateTime_AddTimeSpan(lua_State* L) {
 // __sub: DateTime - DateTime → TimeSpan; DateTime - TimeSpan → DateTime
 int DateTime_Sub(lua_State* L) {
 	if (lua_isdatetime(L, 1) && lua_isdatetime(L, 2)) {
-		// DateTime - DateTime → LuaTimeSpan
 		LuaDateTime* a = lua_todatetime(L, 1);
 		LuaDateTime* b = lua_todatetime(L, 2);
 		lua_pushtimespan(L)->ticks = a->ticks - b->ticks;
 		return 1;
 	}
 	if (lua_isdatetime(L, 1) && lua_istimespan(L, 2)) {
-		// DateTime - TimeSpan → DateTime
 		LuaDateTime* dt = lua_todatetime(L, 1);
 		LuaTimeSpan* ts = lua_totimespan(L, 2);
 		LuaDateTime* result = lua_pushdatetime(L);

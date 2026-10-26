@@ -14,10 +14,6 @@
 // Stays true even after FreeConsole() so toggle buttons remain usable.
 static bool g_ownsConsole = false;
 
-// ---------------------------------------------------------------------------
-// Win32.OwnsConsole() -> bool
-// ---------------------------------------------------------------------------
-
 static int Win32OwnsConsole(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
 	KitsuneVariable r = {};
@@ -26,10 +22,6 @@ static int Win32OwnsConsole(int argc, const KitsuneVariable* argv,
 	setter(&r);
 	return 1;
 }
-
-// ---------------------------------------------------------------------------
-// Win32.Console(show) -> bool
-// ---------------------------------------------------------------------------
 
 static int Win32Console(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
@@ -49,10 +41,6 @@ static int Win32Console(int argc, const KitsuneVariable* argv,
 	return 0;
 }
 
-// ---------------------------------------------------------------------------
-// Win32.DestroyConsole() -> bool
-// ---------------------------------------------------------------------------
-
 static int Win32DestroyConsole(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
 	bool ok = false;
@@ -66,10 +54,6 @@ static int Win32DestroyConsole(int argc, const KitsuneVariable* argv,
 	setter(&r);
 	return 1;
 }
-
-// ---------------------------------------------------------------------------
-// RegisterWin32ConsoleFunctions
-// ---------------------------------------------------------------------------
 
 void RegisterWin32ConsoleFunctions() {
 #ifdef _WIN32

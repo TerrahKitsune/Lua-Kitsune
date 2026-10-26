@@ -47,11 +47,10 @@ static void CurlmStep(CURLM* multi) {
 	DrainCurlm(multi);
 }
 
-// -- Registry anchor keys (static-address trick) -------------------------------
+// Registry anchor keys (static-address trick)
 const char CURLM_KEY    = 0;
 const char SENTINEL_KEY = 0;
 
-// -- CURLM* sentinel __gc -----------------------------------------------------
 int HttpSentinel_GC(lua_State* L) {
 	lua_rawgetp(L, LUA_REGISTRYINDEX, &CURLM_KEY);
 	CURLM* multi = (CURLM*)lua_touserdata(L, -1);
@@ -63,10 +62,6 @@ int HttpSentinel_GC(lua_State* L) {
 	}
 	return 0;
 }
-
-// -----------------------------------------------------------------------------
-// T4b ? Http.HttpClient_UrlEncode / Http.HttpClient_UrlDecode
-// -----------------------------------------------------------------------------
 
 int HttpClient_UrlEncode(lua_State* L) {
 	size_t len;
@@ -122,10 +117,6 @@ int HttpClient_UrlDecode(lua_State* L) {
 	kitsune_free(buf);
 	return 1;
 }
-
-// -----------------------------------------------------------------------------
-// T4c-f ? LuaHttpClient methods
-// -----------------------------------------------------------------------------
 
 int HttpClient_New(lua_State* L) {
 	LuaHttpClient* client = (LuaHttpClient*)lua_newuserdata(L, sizeof(LuaHttpClient));
@@ -191,9 +182,7 @@ int HttpClient_ToString(lua_State* L) {
 	return 1;
 }
 
-// -----------------------------------------------------------------------------
 // Header array helpers shared by buffered and streaming paths
-// -----------------------------------------------------------------------------
 
 static bool AppendHeader(char*** keys, char*** vals, int* count, int* alloc,
 	const char* key, size_t keyLen, const char* val, size_t valLen) {
@@ -266,10 +255,6 @@ static struct curl_slist* BuildHeaders(lua_State* L, LuaHttpClient* client, int 
 	return hdrs;
 }
 
-// -----------------------------------------------------------------------------
-// T5a ? WriteBodyCallback
-// -----------------------------------------------------------------------------
-
 static size_t WriteBodyCallback(char* ptr, size_t size, size_t nmemb, void* userdata) {
 	LuaHttpCurlRequest* req = (LuaHttpCurlRequest*)userdata;
 	size_t total = size * nmemb;
@@ -292,10 +277,6 @@ static size_t WriteBodyCallback(char* ptr, size_t size, size_t nmemb, void* user
 	req->body[req->bodyLen] = '\0';
 	return total;
 }
-
-// -----------------------------------------------------------------------------
-// T5b ? ReadBodyCallback
-// -----------------------------------------------------------------------------
 
 static size_t ReadBodyCallback(char* buffer, size_t size, size_t nitems, void* userdata) {
 	LuaHttpCurlRequest* req = (LuaHttpCurlRequest*)userdata;
@@ -349,10 +330,6 @@ static const char* HttpReasonPhrase(long code) {
 	return "";
 }
 
-// -----------------------------------------------------------------------------
-// T5c ? WriteHeaderCallback (buffered request path)
-// -----------------------------------------------------------------------------
-
 static size_t WriteHeaderCallback(char* buffer, size_t size, size_t nitems, void* userdata) {
 	LuaHttpCurlRequest* req = (LuaHttpCurlRequest*)userdata;
 	size_t total = size * nitems;
@@ -391,10 +368,6 @@ static size_t WriteHeaderCallback(char* buffer, size_t size, size_t nitems, void
 	return total;
 }
 
-// -----------------------------------------------------------------------------
-// T5e ? BuildHttpResultTable
-// -----------------------------------------------------------------------------
-
 static int BuildHttpResultTable(lua_State* L, LuaHttpCurlRequest* req) {
 	if (req->streamOutputRef != LUA_NOREF) {
 		luaL_unref(L, LUA_REGISTRYINDEX, req->streamOutputRef);
@@ -428,10 +401,6 @@ static int BuildHttpResultTable(lua_State* L, LuaHttpCurlRequest* req) {
 	return 1;
 }
 
-// -----------------------------------------------------------------------------
-// T5d ? HttpRequestContinuation
-// -----------------------------------------------------------------------------
-
 static int HttpRequestContinuation(lua_State* L, int status, lua_KContext ctx) {
 	LuaHttpCurlRequest* req = (LuaHttpCurlRequest*)luaL_checkudata(L, 1, LUAHTTPCURLREQUEST);
 	// Check AliveToken: if the client has one and it's been disposed, let the
@@ -463,10 +432,6 @@ static int HttpRequestContinuation(lua_State* L, int status, lua_KContext ctx) {
 static int HttpRequestEntry(lua_State* L) {
 	return HttpRequestContinuation(L, LUA_OK, 0);
 }
-
-// -----------------------------------------------------------------------------
-// T5f ? HttpClient_Request
-// -----------------------------------------------------------------------------
 
 int HttpClient_Request(lua_State* L) {
 	LuaHttpClient* client = (LuaHttpClient*)luaL_checkudata(L, 1, LUAHTTPCLIENT);
@@ -619,10 +584,6 @@ int HttpClient_Request(lua_State* L) {
 	return 1;  // T is on top of L's stack
 }
 
-// -----------------------------------------------------------------------------
-// T5g ? HttpCurlRequest_GC
-// -----------------------------------------------------------------------------
-
 int HttpCurlRequest_GC(lua_State* L) {
 	LuaHttpCurlRequest* req = (LuaHttpCurlRequest*)luaL_checkudata(L, 1, LUAHTTPCURLREQUEST);
 	if (req->addedToMulti && req->multi && req->easy) {
@@ -656,10 +617,6 @@ int HttpCurlRequest_GC(lua_State* L) {
 	return 0;
 }
 
-// -----------------------------------------------------------------------------
-// T6a ? WriteStreamBodyCallback
-// -----------------------------------------------------------------------------
-
 static size_t WriteStreamBodyCallback(char* ptr, size_t size, size_t nmemb, void* userdata) {
 	LuaHttpStreamNative* h = (LuaHttpStreamNative*)userdata;
 	size_t total = size * nmemb;
@@ -681,10 +638,6 @@ static size_t WriteStreamBodyCallback(char* ptr, size_t size, size_t nmemb, void
 	h->chunkTail = node;
 	return total;
 }
-
-// -----------------------------------------------------------------------------
-// T6b ? WriteStreamHeaderCallback
-// -----------------------------------------------------------------------------
 
 static size_t WriteStreamHeaderCallback(char* buffer, size_t size, size_t nitems, void* userdata) {
 	LuaHttpStreamNative* h = (LuaHttpStreamNative*)userdata;
@@ -723,10 +676,6 @@ static size_t WriteStreamHeaderCallback(char* buffer, size_t size, size_t nitems
 		buffer, keyLen, valStart, valLen);
 	return total;
 }
-
-// -----------------------------------------------------------------------------
-// T6c ? HttpStreamRead / HttpStreamReadContinuation
-// -----------------------------------------------------------------------------
 
 static int HttpStreamReadContinuation(lua_State* L, int status, lua_KContext ctx);
 
@@ -767,10 +716,6 @@ static int HttpStreamReadContinuation(lua_State* L, int status, lua_KContext ctx
 	return lua_yieldk(L, 0, 0, HttpStreamReadContinuation);
 }
 
-// -----------------------------------------------------------------------------
-// T6d ? HttpStreamInfo / HttpStreamInfoContinuation
-// -----------------------------------------------------------------------------
-
 static int HttpStreamInfo(void* native, lua_State* L) {
 	LuaHttpStreamNative* h = (LuaHttpStreamNative*)native;
 	lua_newtable(L);
@@ -802,10 +747,6 @@ static int HttpStreamInfo(void* native, lua_State* L) {
 	return 1;
 }
 
-// -----------------------------------------------------------------------------
-// T6e ? HttpStreamHasdata
-// -----------------------------------------------------------------------------
-
 static int HttpStreamHasdata(void* native) {
 	LuaHttpStreamNative* h = (LuaHttpStreamNative*)native;
 	if (h->done)
@@ -820,10 +761,6 @@ static int HttpStreamHasdata(void* native) {
 	}
 	return h->chunkHead != NULL ? 1 : (h->done ? -1 : 0);
 }
-
-// -----------------------------------------------------------------------------
-// T6f ? HttpStreamClose
-// -----------------------------------------------------------------------------
 
 static void HttpStreamClose(void* native, lua_State* L) {
 	LuaHttpStreamNative* h = (LuaHttpStreamNative*)native;
@@ -858,9 +795,6 @@ static void HttpStreamClose(void* native, lua_State* L) {
 	kitsune_free(h);
 }
 
-// -----------------------------------------------------------------------------
-// T6g ? g_httpStreamVtable
-// -----------------------------------------------------------------------------
 
 static const LuaStreamVtable g_httpStreamVtable = {
 	HttpStreamRead,    // read - may call lua_yieldk
@@ -1059,7 +993,6 @@ int HttpClient_SetAliveToken(lua_State* L) {
 	return 0;
 }
 
-// -----------------------------------------------------------------------------
 // HttpClient_Call — simplified blocking helper.
 // Signature (mirrors Request but yields the outer coroutine until done):
 //   result        = client:Call(method, url [, headers [, body]])
@@ -1069,7 +1002,6 @@ int HttpClient_SetAliveToken(lua_State* L) {
 // the coroutine nor the pump loop.  On success returns the same result table
 // as Request.  On transport failure (curl error, timeout, disconnect) returns
 // nil + a short error string.
-// -----------------------------------------------------------------------------
 
 // Continuation: resumes the inner Request thread (at top of L's stack) until
 // it finishes, then extracts and post-processes the result.

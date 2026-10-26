@@ -21,9 +21,7 @@
 
 #include "sound/LuaSoundVorbis.h"
 
-// ===========================================================================
 // Userdata plumbing (mirrors LuaImage.cpp)
-// ===========================================================================
 
 LuaSound* lua_tosound(lua_State* L, int index) {
 	// luaL_checkudata already raises a Lua error (and never returns) on mismatch.
@@ -57,9 +55,7 @@ int Sound_GC(lua_State* L) {
 	return 0;
 }
 
-// ===========================================================================
 // Small internal helpers
-// ===========================================================================
 
 static inline float ClampSample(double v) {
 	return (float)(v < -1.0 ? -1.0 : (v > 1.0 ? 1.0 : v));
@@ -83,9 +79,7 @@ static void CheckArgs(lua_State* L, int sampleRate, int channels, int frameCount
 		luaL_error(L, "%s: frameCount must be positive", who);
 }
 
-// ===========================================================================
 // Module-level constructors
-// ===========================================================================
 
 int Sound_New(lua_State* L) {
 	int sampleRate = (int)luaL_checkinteger(L, 1);
@@ -174,7 +168,7 @@ int Sound_Noise(lua_State* L) {
 	LuaSound* snd = PushBlankSound(L, sampleRate, channels, frameCount);
 
 	// All three types carry per-channel state (pink/brown's filters; even
-	// "white" now needs a per-sample Gaussian draw rather than a bulk fill),
+	// "white" needs a per-sample Gaussian draw rather than a bulk fill),
 	// so every channel is generated independently -- otherwise channel 2's
 	// "previous sample" would really be channel 1's.
 	double* raw = (double*)kitsune_malloc((size_t)frameCount * sizeof(double));
@@ -300,9 +294,7 @@ int Sound_FromBytes(lua_State* L) {
 	return 1;
 }
 
-// ===========================================================================
 // Accessors
-// ===========================================================================
 
 int Sound_GetSampleRate(lua_State* L) {
 	LuaSound* snd = lua_tosound(L, 1);
@@ -349,9 +341,7 @@ int Sound_SetSample(lua_State* L) {
 	return 0;
 }
 
-// ===========================================================================
 // Non-mutating transforms (Clone/Slice/Concat/Resample)
-// ===========================================================================
 
 int Sound_Clone(lua_State* L) {
 	LuaSound* snd = lua_tosound(L, 1);
@@ -451,9 +441,7 @@ int Sound_ToChannels(lua_State* L) {
 	return 1;
 }
 
-// ===========================================================================
 // In-place editing (Mix/ApplyGain/Fade/Normalize/Reverse/Filter)
-// ===========================================================================
 
 // Additive mix, clamped -- clips silently at the buffer's edges the same way
 // Image:Composite clips off-canvas pixels, rather than growing self.
@@ -614,9 +602,7 @@ int Sound_Filter(lua_State* L) {
 	return 0;
 }
 
-// ===========================================================================
 // Analysis (read-only)
-// ===========================================================================
 
 int Sound_GetPeak(lua_State* L) {
 	LuaSound* snd = lua_tosound(L, 1);
@@ -648,11 +634,9 @@ int Sound_GetRMS(lua_State* L) {
 	return 1;
 }
 
-// ===========================================================================
 // Encode / persist -- always emits 16-bit PCM WAV, the most broadly
 // compatible subformat and the one SDL_mixer's Mix_LoadWAV_RW already
 // expects, so a Sound saved here is directly playable via SDL.Audio.LoadRaw.
-// ===========================================================================
 
 static unsigned char* EncodeToWav(const LuaSound* snd, size_t* outLen) {
 	drwav_data_format format;

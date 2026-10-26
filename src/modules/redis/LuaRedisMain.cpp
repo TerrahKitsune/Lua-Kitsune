@@ -81,8 +81,8 @@ int luaopen_redis(lua_State* L) {
 	lua_setfield(L, -2, "__gc");
 	lua_pushvalue(L, methodsIdx);                // __index = methods table
 	lua_setfield(L, -2, "__index");
-	lua_pop(L, 1);   // pop metatable
-	lua_pop(L, 1);   // pop methods table
+	lua_pop(L, 1);
+	lua_pop(L, 1);
 
 	return 1;
 }

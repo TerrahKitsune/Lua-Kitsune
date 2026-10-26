@@ -12,7 +12,6 @@
 #define RESOURCE_MARKDOWN    6
 #define RESOURCE_HTML        7
 
-// Forward declaration
 struct Resource;
 
 // Called by ResourceCacheRemove to free a resource's contents and the node itself.
@@ -36,10 +35,6 @@ struct GenericResource {
 	uint8_t*  data;       // heap-owned byte buffer; nullptr = empty sentinel
 	size_t    length;     // byte count; 0 when data is nullptr
 };
-
-// ---------------------------------------------------------------------------
-// ResourceCache API
-// ---------------------------------------------------------------------------
 
 // Initialises the global resource cache. Called once at session start.
 void ResourceCacheInit();
@@ -82,7 +77,6 @@ void ResourceCacheIterate(ResourceCacheIteratorFn fn, const void* userdata);
 // Returns the next available luaId without consuming it. Useful for previewing.
 int ResourceCachePeekNextId();
 
-// ---------------------------------------------------------------------------
 // Resource loader
 //
 // A single session-wide loader handles all resource types so Lua has one place
@@ -94,7 +88,6 @@ int ResourceCachePeekNextId();
 //
 // type is a RESOURCE_* integer constant so the script knows what is being
 // requested and can return the correct stream or nil to signal unknown.
-// ---------------------------------------------------------------------------
 
 // Registers Resource.SetLoader into Lua. Called from RegisterImguiFunctions().
 void ResourceCacheRegisterLoaderFunction();

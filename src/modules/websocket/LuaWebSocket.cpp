@@ -48,16 +48,14 @@ static void SetDidWork(lua_State* L) {
 		slot->didWork = true;
 }
 
-// Shared CURLM* registry key defined in HttpCurl.cpp
+// Shared CURLM* registry key defined in LuaHttpClient.cpp
 extern const char CURLM_KEY;
 
-// ---- global next-ID counter -------------------------------------------------
 static lua_Integer g_nextWsId = 1;
 
-// ---- forward declarations ---------------------------------------------------
 static void WsDisposeNative(lua_State* L, LuaWebSocket* ws);
 
-// ---- message queue helpers --------------------------------------------------
+// Message queue
 
 static WsMsgNode* WsMsgAlloc(const char* data, size_t len, int type) {
 	WsMsgNode* node = (WsMsgNode*)kitsune_malloc(sizeof(WsMsgNode));
@@ -119,7 +117,7 @@ static void WsDrainQueue(LuaWebSocket* ws) {
 	ws->msgTail = NULL;
 }
 
-// ---- curl fragment reassembly helpers ---------------------------------------
+// Curl fragment reassembly
 
 static bool WsFragAppend(LuaWebSocket* ws, const char* data, size_t len) {
 	if (ws->fragLen + len + 1 > ws->fragAlloc) {
@@ -142,8 +140,7 @@ static void WsFragReset(LuaWebSocket* ws) {
 	ws->fragAlloc = 0;
 }
 
-// ---- DrainCurlm / CurlmStep (duplicated minimally; extern in HttpCurl.cpp)
-// These are file-static copies so LuaWebSocket.cpp does not need to expose them.
+// File-static copies of DrainCurlm / CurlmStep from LuaHttpClient.cpp so this file does not need them exported.
 
 static void WsDrainCurlm(CURLM* multi) {
 	int msgsLeft;
@@ -223,7 +220,7 @@ static void WsServerSendPing(struct evws_connection* evws) {
 	bufferevent_write(bev, hdr, 2);
 }
 
-// ---- libevent evws callbacks ------------------------------------------------
+// libevent evws callbacks
 
 static void EvwsMsgCb(struct evws_connection* conn, int type,
 	const unsigned char* data, size_t len, void* arg)
@@ -279,8 +276,7 @@ static void WsReleaseSelfRef(lua_State* L, LuaWebSocket* ws) {
 	}
 }
 
-// ---- curl BuildHeaders (local helper; mirrors HttpCurl.cpp) ----------------
-
+// Mirrors BuildHeaders in LuaHttpClient.cpp.
 static struct curl_slist* WsBuildHeaders(lua_State* L, LuaHttpClient* client, int headersIdx) {
 	struct curl_slist* hdrs = NULL;
 	char buf[2048];
@@ -313,8 +309,6 @@ static struct curl_slist* WsBuildHeaders(lua_State* L, LuaHttpClient* client, in
 	return hdrs;
 }
 
-// ---- push helpers -----------------------------------------------------------
-
 // Push a new WSMESSAGE userdata owning the given WsMsgNode's payload.
 // Takes ownership: the node is freed after data is transferred.
 static void lua_pushwsmessage(lua_State* L, WsMsgNode* node) {
@@ -324,12 +318,10 @@ static void lua_pushwsmessage(lua_State* L, WsMsgNode* node) {
 	msg->data = node->data;
 	msg->len = node->len;
 	msg->type = node->type;
-	// The WsMsgNode wrapper is no longer needed (message userdata owns data now).
 	node->data = NULL;
 	WsMsgFree(node);
 }
 
-// Push a new WEBSOCKET userdata initialised to defaults.
 static LuaWebSocket* lua_pushwebsocket(lua_State* L) {
 	LuaWebSocket* ws = (LuaWebSocket*)lua_newuserdata(L, sizeof(LuaWebSocket));
 	luaL_getmetatable(L, LUAWEBSOCKET);
@@ -344,11 +336,8 @@ static LuaWebSocket* lua_pushwebsocket(lua_State* L) {
 	return ws;
 }
 
-// ---- poll curl for a new message (called by ws_client_poll) -----------------
-
 // Returns true if a message was appended to the queue.
 static bool WsClientRecvOne(LuaWebSocket* ws) {
-	// Grow the reusable receive buffer on demand (initial 64 KB).
 	if (!ws->recvBuf) {
 		ws->recvAlloc = 65536;
 		ws->recvBuf = (char*)kitsune_malloc(ws->recvAlloc);
@@ -399,7 +388,6 @@ static bool WsClientRecvOne(LuaWebSocket* ws) {
 	}
 	if (meta->bytesleft > 0)
 		return false; // more fragments coming; caller should loop
-	// Complete message assembled.
 	const char* payload = ws->fragLen > 0 ? ws->fragBuf : buf;
 	size_t payloadLen = ws->fragLen > 0 ? ws->fragLen : nrecv;
 	if (ws->maxMsgSize == 0 || payloadLen <= ws->maxMsgSize) {
@@ -410,8 +398,6 @@ static bool WsClientRecvOne(LuaWebSocket* ws) {
 	return true;
 }
 
-// ---- dispose ----------------------------------------------------------------
-
 static void WsDisposeNative(lua_State* L, LuaWebSocket* ws) {
 	if (ws->closed)
 		return;
@@ -420,7 +406,7 @@ static void WsDisposeNative(lua_State* L, LuaWebSocket* ws) {
 	ws->closed = true;
 	ws->connected = false;
 
-	// --- server side ---------------------------------------------------------
+	// Server side
 	if (ws->evws) {
 		// evws_close() queues a close frame; libevent then calls
 		// evws_connection_free() automatically via close_after_write_cb /
@@ -445,7 +431,7 @@ static void WsDisposeNative(lua_State* L, LuaWebSocket* ws) {
 	// because it fires from inside event_base_loop.
 	WsReleaseSelfRef(L, ws);
 
-	// --- client side
+	// Client side
 	if (ws->easy) {
 		if (ws->multi)
 			curl_multi_remove_handle(ws->multi, ws->easy);
@@ -477,7 +463,6 @@ static void WsDisposeNative(lua_State* L, LuaWebSocket* ws) {
 		ws->aliveTokenRef = LUA_NOREF;
 	}
 
-	// --- shared ---------------------------------------------------------------
 	WsDrainQueue(ws);
 	if (ws->contextRef > 0) {
 		luaL_unref(L, LUA_REGISTRYINDEX, ws->contextRef);
@@ -485,9 +470,7 @@ static void WsDisposeNative(lua_State* L, LuaWebSocket* ws) {
 	}
 }
 
-// =============================================================================
 // Shared WEBSOCKET methods
-// =============================================================================
 
 int WebSocket_IsConnected(lua_State* L) {
 	LuaWebSocket* ws = (LuaWebSocket*)luaL_checkudata(L, 1, LUAWEBSOCKET);
@@ -555,7 +538,6 @@ int WebSocket_Poll(lua_State* L) {
 	}
 
 	if (ws->easy) {
-		// Client: advance curl multi and drain all available fragments.
 		WsCurlmStep(ws->multi);
 		while (WsClientRecvOne(ws))
 			;
@@ -590,7 +572,7 @@ static int WebSocketReadContinuation(lua_State* L, int status, lua_KContext ctx)
 static int WebSocketReadContinuation(lua_State* L, int status, lua_KContext ctx) {
 	LuaWebSocket* ws = (LuaWebSocket*)luaL_checkudata(L, 1, LUAWEBSOCKET);
 
-	// AliveToken check — treat a disposed token as connection closed
+	// A disposed AliveToken means the connection is closed.
 	if (ws->aliveTokenRef != LUA_NOREF) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, ws->aliveTokenRef);
 		int alive = AliveTokenIsAlive(L, -1);
@@ -621,7 +603,7 @@ static int WebSocketReadContinuation(lua_State* L, int status, lua_KContext ctx)
 
 	WsMsgNode* node = WsDequeue(ws);
 	if (node) {
-		SetDidWork(L);  // dequeued a message
+		SetDidWork(L);
 		lua_pushwsmessage(L, node);
 		return 1;
 	}
@@ -629,7 +611,7 @@ static int WebSocketReadContinuation(lua_State* L, int status, lua_KContext ctx)
 		lua_pushnil(L);
 		return 1;
 	}
-	return lua_yieldk(L, 0, 0, WebSocketReadContinuation);  // no message — no work done
+	return lua_yieldk(L, 0, 0, WebSocketReadContinuation);
 }
 
 int WebSocket_Read(lua_State* L) {
@@ -656,7 +638,6 @@ int WebSocket_Ping(lua_State* L) {
 		lua_pushboolean(L, 1);
 	}
 	else {
-		// Client-side: use curl to send a ping frame
 		size_t nsent = 0;
 		CURLcode rc = curl_ws_send(ws->easy, "", 0, &nsent, 0, CURLWS_PING);
 		lua_pushboolean(L, rc == CURLE_OK ? 1 : 0);
@@ -678,7 +659,6 @@ int WebSocket_Send(lua_State* L) {
 	if (ws->maxMsgSize > 0 && len > ws->maxMsgSize) {
 		fprintf(stderr, "[WS] Send: oversized payload len=%zu (max=%zu) id=%lld\n",
 			len, ws->maxMsgSize, (long long)ws->id);
-		// Oversized send: return false without closing.
 		lua_pushboolean(L, 0);
 		return 1;
 	}
@@ -691,7 +671,6 @@ int WebSocket_Send(lua_State* L) {
 		ok = true;
 	}
 	else if (ws->easy) {
-		// Client side: honour binary flag.
 		size_t nsent = 0;
 		unsigned int flags = binary ? CURLWS_BINARY : CURLWS_TEXT;
 		CURLcode rc = curl_ws_send(ws->easy, data, len, &nsent, 0, flags);
@@ -701,9 +680,7 @@ int WebSocket_Send(lua_State* L) {
 	return 1;
 }
 
-// =============================================================================
 // WSMESSAGE methods
-// =============================================================================
 
 int WsMessage_GetData(lua_State* L) {
 	LuaWsMessage* msg = (LuaWsMessage*)luaL_checkudata(L, 1, LUAWSMESSAGE);
@@ -733,17 +710,14 @@ int WsMessage_ToString(lua_State* L) {
 	return 1;
 }
 
-// =============================================================================
 // Client entry point: HttpClient_Connect
 // Called as: client:Connect(url [, headers])
 // Yields until the WebSocket handshake completes.
 // On success returns the WEBSOCKET userdata.
 // On failure returns nil, errmsg.
-// =============================================================================
 
 static int WsConnectContinuation(lua_State* L, int status, lua_KContext ctx) {
 	LuaWebSocket* ws = (LuaWebSocket*)luaL_checkudata(L, -1, LUAWEBSOCKET);
-	// AliveToken check
 	if (ws->aliveTokenRef != LUA_NOREF) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, ws->aliveTokenRef);
 		int alive = AliveTokenIsAlive(L, -1);
@@ -777,7 +751,7 @@ int HttpClient_Connect(lua_State* L) {
 	const char* url = luaL_checkstring(L, 2);
 	int headersIdx = lua_istable(L, 3) ? 3 : 0;
 
-	// Retrieve the shared CURLM* from the Lua registry (same key as HttpCurl.cpp).
+	// Retrieve the shared CURLM* from the Lua registry (same key as LuaHttpClient.cpp).
 	lua_rawgetp(L, LUA_REGISTRYINDEX, &CURLM_KEY);
 	CURLM* multi = (CURLM*)lua_touserdata(L, -1);
 	lua_pop(L, 1);
@@ -788,7 +762,6 @@ int HttpClient_Connect(lua_State* L) {
 	}
 
 	LuaWebSocket* ws = lua_pushwebsocket(L);
-	// Stack: [client, url, (headers?), ws]
 
 	ws->curlMsg = (CurlMsg*)kitsune_malloc(sizeof(CurlMsg));
 	if (!ws->curlMsg) {
@@ -839,17 +812,14 @@ int HttpClient_Connect(lua_State* L) {
 		ws->aliveTokenRef = luaL_ref(L, LUA_REGISTRYINDEX);
 	}
 
-	// The WEBSOCKET userdata is at the top of the stack; yield until connected.
 	WsCurlmStep(multi);
 	return lua_yieldk(L, 0, 0, WsConnectContinuation);
 }
 
-// =============================================================================
 // Server entry point: HttpResponse_UpgradeToWebSocket
 // Called as: resp:UpgradeToWebSocket()
 // Synchronous: evws_new_session handles the HTTP 101 upgrade immediately.
 // Returns the WEBSOCKET userdata or nil, errmsg.
-// =============================================================================
 
 int HttpResponse_UpgradeToWebSocket(lua_State* L) {
 	LuaHttpResponse* resp = (LuaHttpResponse*)luaL_checkudata(L, 1, LUAHTTPRESPONSE);
@@ -867,7 +837,6 @@ int HttpResponse_UpgradeToWebSocket(lua_State* L) {
 	LuaHttpRequest* req = resp->connection;
 
 	LuaWebSocket* ws = lua_pushwebsocket(L);
-	// Stack: [resp, ws]
 
 	// evhttp_start_ws_() (called inside evws_new_session) calls
 	// evhttp_connection_free() which synchronously fires ConnCloseCb on the
@@ -934,7 +903,6 @@ int HttpResponse_UpgradeToWebSocket(lua_State* L) {
 			bufferevent_event_cb eventcb = NULL;
 			void*                cbarg   = NULL;
 			bufferevent_getcb(bev, &readcb, &writecb, &eventcb, &cbarg);
-			// Install our fixed error handler, preserving the read callback.
 			bufferevent_setcb(bev, readcb, writecb,
 				[](struct bufferevent*, short what, void* arg) {
 					// Close the WS connection on any bufferevent error or EOF.

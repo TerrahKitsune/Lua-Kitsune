@@ -9,7 +9,7 @@
 #define LUAHTTPCLIENT      "LuaHTTPClient"
 #define LUAHTTPCURLREQUEST "LuaHTTPRequest"
 
-// -- CurlMsg — per-easy-handle completion record ------------------------------
+// Per-easy-handle completion record.
 // Allocated alongside each easy handle; stored as CURLOPT_PRIVATE so that
 // DrainCurlm can dispatch CURLMSG_DONE to the correct struct even when
 // multiple concurrent coroutines are pumping the same CURLM*.
@@ -18,14 +18,13 @@ typedef struct CurlMsg {
 	CURLcode result;  // the CURLcode from the CURLMSG_DONE message
 } CurlMsg;
 
-// -- ChunkNode — streaming chunk queue ----------------------------------------
+// Streaming chunk queue
 typedef struct ChunkNode {
 	char*             data;
 	size_t            len;
 	struct ChunkNode* next;
 } ChunkNode;
 
-// -- LuaHttpClient -------------------------------------------------------------
 typedef struct LuaHttpClient {
 	int    defaultHeadersRef;
 	long   timeoutMs;
@@ -36,7 +35,6 @@ typedef struct LuaHttpClient {
 	int64_t  lastRequestElapsedTicks;  // duration of the last completed request in 100-ns ticks
 } LuaHttpClient;
 
-// -- LuaHttpCurlRequest -------------------------------------------------------
 typedef struct LuaHttpCurlRequest {
 	CURL*              easy;
 	CURLM*             multi;           // borrowed; do NOT free here
@@ -70,7 +68,6 @@ typedef struct LuaHttpCurlRequest {
 	CurlMsg*           curlMsg;        // heap-allocated; freed in __gc
 } LuaHttpCurlRequest;
 
-// -- LuaHttpStreamNative -------------------------------------------------------
 typedef struct LuaHttpStreamNative {
 	CURL*              easy;
 	CURLM*             multi;           // borrowed
@@ -92,7 +89,7 @@ typedef struct LuaHttpStreamNative {
 
 // WebSocket types are defined in LuaWebSocket.h
 
-// -- Functions defined in HttpCurl.cpp; referenced by HttpCurlMain.cpp ---------
+// Functions defined in LuaHttpClient.cpp; referenced by LuaHttpClientMain.cpp
 extern const char CURLM_KEY;
 extern const char SENTINEL_KEY;
 int HttpSentinel_GC(lua_State* L);

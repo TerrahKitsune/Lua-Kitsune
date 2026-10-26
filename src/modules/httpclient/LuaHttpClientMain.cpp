@@ -5,10 +5,6 @@
 #include "websocket/LuaWebSocket.h"
 #include "websocket/LuaWebSocketMain.h"
 
-// -----------------------------------------------------------------------------
-// Module registration tables  (wchar pattern)
-// -----------------------------------------------------------------------------
-
 // All Http module-level functions AND LuaHttpClient instance methods in one table.
 // The table is returned as the Http global so both Http.Create() and
 // client:Request() resolve through the same __index chain.
@@ -35,12 +31,7 @@ static const luaL_Reg httpclientMeta[] = {
 	{ NULL, NULL }
 };
 
-// -----------------------------------------------------------------------------
-// luaopen_httpclient  (wchar pattern)
-// -----------------------------------------------------------------------------
-
 int luaopen_httpclient(lua_State* L) {
-	// -- CURLM* lifetime -------------------------------------------------------
 	CURLM* multi = curl_multi_init();
 	if (!multi)
 		return luaL_error(L, "curl_multi_init failed");
@@ -56,7 +47,6 @@ int luaopen_httpclient(lua_State* L) {
 	lua_setmetatable(L, -2);
 	lua_rawsetp(L, LUA_REGISTRYINDEX, &SENTINEL_KEY);
 
-	// -- LUAHTTPCLIENT — wchar pattern -----------------------------------------
 	// Create the Http module table first; it doubles as the __index for
 	// LuaHttpClient instances so both Http.Create() and client:Request() work.
 	luaL_newlibtable(L, httpclientFunctions);
@@ -65,23 +55,20 @@ int luaopen_httpclient(lua_State* L) {
 	luaL_newmetatable(L, LUAHTTPCLIENT);
 	luaL_setfuncs(L, httpclientMeta, 0);
 	lua_pushliteral(L, "__index");
-	lua_pushvalue(L, -3);       // the Http module table
+	lua_pushvalue(L, -3);
 	lua_rawset(L, -3);
 	lua_pushliteral(L, "__metatable");
-	lua_pushvalue(L, -3);       // the Http module table
+	lua_pushvalue(L, -3);
 	lua_rawset(L, -3);
-	lua_pop(L, 1);              // pop LUAHTTPCLIENT metatable
+	lua_pop(L, 1);
 
-	// -- LUAHTTPCURLREQUEST metatable (internal; __gc only) ------------------------
 	luaL_newmetatable(L, LUAHTTPCURLREQUEST);
 	lua_pushcfunction(L, HttpCurlRequest_GC);
 	lua_setfield(L, -2, "__gc");
 	lua_pop(L, 1);
 
-	// Register WEBSOCKET and WSMESSAGE metatables.
 	luaopen_websocket(L);
 
-	// Http module table is on top — return it as the Http global
 	return 1;
 }
 

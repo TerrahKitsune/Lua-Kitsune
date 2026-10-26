@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include "Mem.h"
 
-// ── Userdata helpers ──────────────────────────────────────────────────────────
+// Userdata helpers
 
 LuaTimeSpan* lua_pushtimespan(lua_State* L) {
     LuaTimeSpan* ts = (LuaTimeSpan*)lua_newuserdata(L, sizeof(LuaTimeSpan));
@@ -26,7 +26,6 @@ int lua_istimespan(lua_State* L, int index) {
     return result;
 }
 
-// ── Formatting ────────────────────────────────────────────────────────────────
 // Produces [-]D.HH:MM:SS.mmm matching .NET TimeSpan.ToString("c") canonical form.
 
 static int TimeSpanFormat(int64_t ticks, char* buf, size_t bufsz) {
@@ -70,7 +69,7 @@ void lua_pushtimespanstring(lua_State* L, int index) {
     lua_pushstring(L, buf);
 }
 
-// ── Constructors ──────────────────────────────────────────────────────────────
+// Constructors
 
 int TimeSpan_Zero(lua_State* L) {
     lua_pushtimespan(L); // already zeroed
@@ -112,7 +111,7 @@ int TimeSpan_FromDays(lua_State* L) {
     return 1;
 }
 
-// ── Inspection ────────────────────────────────────────────────────────────────
+// Inspection
 
 int TimeSpan_ToString(lua_State* L) {
     LuaTimeSpan* ts = lua_totimespan(L, 1);
@@ -200,7 +199,7 @@ int TimeSpan_Abs(lua_State* L) {
     return 1;
 }
 
-// ── Arithmetic ────────────────────────────────────────────────────────────────
+// Arithmetic
 
 int TimeSpan_Add(lua_State* L) {
     if (!lua_istimespan(L, 1) || !lua_istimespan(L, 2))
@@ -247,7 +246,7 @@ int TimeSpan_Unm(lua_State* L) {
     return 1;
 }
 
-// ── Comparison ────────────────────────────────────────────────────────────────
+// Comparison
 
 int TimeSpan_Eq(lua_State* L) {
     if (!lua_istimespan(L, 1) || !lua_istimespan(L, 2)) {

@@ -9,7 +9,7 @@
 
 // Route stb's internal allocations through the engine's tracked allocator so
 // Image buffers show up in the same Process_GetRAM()/CollectGarbage() accounting
-// as every other module (see base64.cpp for the same convention).
+// as every other module (see LuaBase64.cpp for the same convention).
 #define STBI_MALLOC(sz)          kitsune_malloc(sz)
 #define STBI_REALLOC(p, newsz)   kitsune_realloc(p, newsz)
 #define STBI_FREE(p)             kitsune_free(p)
@@ -21,10 +21,6 @@
 #define STBIW_FREE(p)            kitsune_free(p)
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb/stb_image_write.h"
-
-// ===========================================================================
-// Userdata plumbing (mirrors LuaProcess.cpp)
-// ===========================================================================
 
 LuaImage* lua_toimage(lua_State* L, int index) {
 	// luaL_checkudata already raises a Lua error (and never returns) on mismatch.
@@ -67,10 +63,6 @@ int Image_GC(lua_State* L) {
 	img->tagCapacity = 0;
 	return 0;
 }
-
-// ===========================================================================
-// Small internal helpers
-// ===========================================================================
 
 static char* DupString(const char* s, size_t len) {
 	char* out = (char*)kitsune_malloc(len + 1);
@@ -182,12 +174,9 @@ static LuaImage* PushBlankImage(lua_State* L, int width, int height) {
 	return img;
 }
 
-// ===========================================================================
-// PNG tEXt/zTXt/iTXt chunk handling (hand-rolled -- see plan notes: PNG
-// chunks are [4B length][4B type][data][4B CRC32], and CRC32 is already
-// available via miniz's mz_crc32, so no second PNG library is needed just
-// for metadata).
-// ===========================================================================
+// PNG tEXt/zTXt/iTXt chunk handling (hand-rolled: PNG chunks are
+// [4B length][4B type][data][4B CRC32], and CRC32 is already available via
+// miniz's mz_crc32, so no second PNG library is needed just for metadata).
 
 static uint32_t ReadBE32(const unsigned char* p) {
 	return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) | (uint32_t)p[3];
@@ -354,9 +343,7 @@ static unsigned char* EncodeWithTags(const LuaImage* img, size_t* outLen) {
 	return out;
 }
 
-// ===========================================================================
 // Module-level constructors
-// ===========================================================================
 
 int Image_Open(lua_State* L) {
 	const char* path = luaL_checkstring(L, 1);
@@ -421,9 +408,7 @@ int Image_FromBytes(lua_State* L) {
 	return 1;
 }
 
-// ===========================================================================
 // Metadata
-// ===========================================================================
 
 int Image_GetMetadata(lua_State* L) {
 	LuaImage* img = lua_toimage(L, 1);
@@ -469,9 +454,7 @@ int Image_GetHeight(lua_State* L) {
 	return 1;
 }
 
-// ===========================================================================
 // Pixel access
-// ===========================================================================
 
 int Image_GetPixel(lua_State* L) {
 	LuaImage* img = lua_toimage(L, 1);
@@ -502,9 +485,7 @@ int Image_SetPixel(lua_State* L) {
 	return 0;
 }
 
-// ===========================================================================
 // Non-mutating transforms (Crop/Resize/Clone)
-// ===========================================================================
 
 int Image_Crop(lua_State* L) {
 	LuaImage* img = lua_toimage(L, 1);
@@ -593,9 +574,7 @@ int Image_Clone(lua_State* L) {
 	return 1;
 }
 
-// ===========================================================================
 // In-place drawing primitives (all alpha-composited via BlendPx)
-// ===========================================================================
 
 int Image_FillRect(lua_State* L) {
 	LuaImage* img = lua_toimage(L, 1);
@@ -755,11 +734,9 @@ int Image_Composite(lua_State* L) {
 	return 0;
 }
 
-// ===========================================================================
 // Diff -- answers "what region did the user hand-edit", so a canonical
 // source can be updated by transplanting just the changed rectangle instead
 // of the whole file (see pipeline-notes.md).
-// ===========================================================================
 
 int Image_Diff(lua_State* L) {
 	LuaImage* img = lua_toimage(L, 1);
@@ -801,9 +778,7 @@ int Image_Diff(lua_State* L) {
 	return 5;
 }
 
-// ===========================================================================
 // Encode / persist
-// ===========================================================================
 
 int Image_Save(lua_State* L) {
 	LuaImage* img = lua_toimage(L, 1);
@@ -840,12 +815,10 @@ int Image_ToBytes(lua_State* L) {
 	return 1;
 }
 
-// ===========================================================================
 // RGB/HSV/HSL conversion (shared math + thin Lua wrappers). Standard
 // formulas; h in [0,360), s/v/l in [0,1]. Used internally by Tint/AdjustHSV
 // and also exposed directly since callers doing their own color math (e.g.
 // picking N evenly-spaced hues for a palette) need it too.
-// ===========================================================================
 
 static void RgbToHsvD(double r, double g, double b, double& h, double& s, double& v) {
 	r /= 255.0; g /= 255.0; b /= 255.0;
@@ -941,9 +914,7 @@ int Image_HSLtoRGB(lua_State* L) {
 	return 3;
 }
 
-// ===========================================================================
 // Recolor / tone (all mutate in place, like FillRect/SetPixel)
-// ===========================================================================
 
 // Recolors every opaque pixel toward (r,g,b)'s hue/saturation while keeping
 // each pixel's own brightness (HSV value) -- preserves shading/highlights so
@@ -1157,10 +1128,8 @@ int Image_Outline(lua_State* L) {
 	return 0;
 }
 
-// ===========================================================================
 // Brush painting (mutate in place, built on BlendPx like every other
 // drawing primitive)
-// ===========================================================================
 
 // Pastes `brush` centered on (cx,cy), alpha-blended, its own per-pixel alpha
 // further scaled by `opacity`. Shared by Image_Stamp and Image_StrokePath.
@@ -1237,10 +1206,8 @@ int Image_StrokePath(lua_State* L) {
 	return 0;
 }
 
-// ===========================================================================
 // Geometric transforms (non-mutating, like Crop/Resize/Clone -- return a new
 // Image rather than modifying the receiver)
-// ===========================================================================
 
 int Image_FlipHorizontal(lua_State* L) {
 	LuaImage* img = lua_toimage(L, 1);
@@ -1311,9 +1278,7 @@ int Image_PadCanvas(lua_State* L) {
 	return 1;
 }
 
-// ===========================================================================
 // Blur (separable box blur, alpha-aware). Reused by DropShadow below.
-// ===========================================================================
 
 // Box-blurs `img` in place, `passes` times (3 box-blur passes closely
 // approximates a Gaussian without needing a real Gaussian kernel). Blurs
@@ -1437,9 +1402,7 @@ int Image_DropShadow(lua_State* L) {
 	return 1;
 }
 
-// ===========================================================================
 // Filters / tone (mutate in place)
-// ===========================================================================
 
 int Image_Invert(lua_State* L) {
 	LuaImage* img = lua_toimage(L, 1);
@@ -1599,9 +1562,7 @@ int Image_Noise(lua_State* L) {
 	return 0;
 }
 
-// ===========================================================================
 // Fill primitives (mutate in place, alpha-composited via BlendPx)
-// ===========================================================================
 
 int Image_FillGradientLinear(lua_State* L) {
 	LuaImage* img = lua_toimage(L, 1);
@@ -1728,10 +1689,8 @@ int Image_FillPolygon(lua_State* L) {
 	return 0;
 }
 
-// ===========================================================================
 // Text (bundled minimal 3x5 bitmap font: digits + a few symbols -- enough
 // for numeric labels/coordinates/counters, not a full alphabet)
-// ===========================================================================
 
 struct Glyph3x5 { char ch; unsigned char rows[5]; };
 
@@ -1797,9 +1756,7 @@ int Image_DrawText(lua_State* L) {
 	return 0;
 }
 
-// ===========================================================================
 // Analysis (read-only)
-// ===========================================================================
 
 // Returns the top `n` most common colors as { {r=,g=,b=,count=}, ... },
 // ranked by frequency. Colors are bucketed to 5 bits/channel (32768 buckets)

@@ -4,8 +4,7 @@
 
 static const char* STREAM = "STREAM";
 
-// ── Capability flags ──────────────────────────────────────────────────────────
-// Stored in LuaStream::caps.
+// Capability flags, stored in LuaStream::caps.
 #define STREAM_CAP_READ   (1 << 0)
 #define STREAM_CAP_WRITE  (1 << 1)
 #define STREAM_CAP_SEEK   (1 << 2)
@@ -14,7 +13,7 @@ static const char* STREAM = "STREAM";
 // save-pos / read / restore-pos path.  Lua fn backends that still return bit 3
 // in their open caps have it silently stored but it is never consulted.
 
-// ── Backend operation codes ───────────────────────────────────────────────────
+// Backend operation codes.
 // Used only by Lua function backends (Stream.Create(fn)).
 // Native C backends (memory, file) use the vtable below instead.
 #define STREAM_OP_OPEN    0   // ()     -> integer caps
@@ -27,7 +26,7 @@ static const char* STREAM = "STREAM";
 #define STREAM_OP_INFO    7   // ()     -> table
 #define STREAM_OP_HASDATA 8   // ()     -> integer bytes_ready | false
 
-// ── Native C vtable ───────────────────────────────────────────────────────────
+// Native C vtable.
 // Implemented by memory and file backends.  A NULL vtbl means Lua fn backend.
 // All functions receive the opaque 'native' pointer so the vtable itself is
 // stateless and stored as a static const.
@@ -71,7 +70,6 @@ typedef struct LuaStream {
 static const size_t MIN_STREAM_SIZE  = 1024;
 static const BYTE   HEAP_STREAM_CAPS = STREAM_CAP_READ | STREAM_CAP_WRITE | STREAM_CAP_SEEK;
 
-// ── Constructor helpers ───────────────────────────────────────────────────────
 LuaStream* lua_pushstream(lua_State* L);
 LuaStream* lua_pushstream(lua_State* L, const BYTE* data, size_t len);
 // Pushes a native-backed LuaStream (STREAM metatable) with the given vtable,
@@ -104,18 +102,18 @@ lua_Integer LuaStreamGetLen(lua_State* L, LuaStream* s);
 // Calls vtbl->getid if available; falls back to (uint64_t)native, then (uint64_t)stream.
 uint64_t LuaStreamGetId(const LuaStream* s);
 
-// ── Stream construction
+// Stream construction
 int Stream_New(lua_State* L);
 int Stream_Open(lua_State* L);
 
-// ── Stream info
+// Stream info
 int Stream_pos(lua_State* L);
 int Stream_len(lua_State* L);
 int Stream_Seek(lua_State* L);
 int Stream_GetInfo(lua_State* L);
 int Stream_Id(lua_State* L);
 
-// ── Read operations ───────────────────────────────────────────────────────────
+// Read operations
 int Stream_Read(lua_State* L);
 int Stream_ReadByte(lua_State* L);
 int Stream_PeekByte(lua_State* L);
@@ -140,7 +138,7 @@ int Stream_ReadTimeSpan(lua_State* L);
 int Stream_ReadUtf16(lua_State* L);
 int Stream_WriteUtf16(lua_State* L);
 
-// ── Write operations ──────────────────────────────────────────────────────────
+// Write operations
 int Stream_Write(lua_State* L);
 int Stream_WriteByte(lua_State* L);
 int Stream_SetByte(lua_State* L);
@@ -154,10 +152,10 @@ int Stream_WriteUnsignedInt(lua_State* L);
 int Stream_WriteLong(lua_State* L);
 int Stream_WriteUnsignedLong(lua_State* L);
 
-// ── Compression ───────────────────────────────────────────────────────────────
+// Compression
 int Stream_Compress(lua_State* L);
 int Stream_Decompress(lua_State* L);
 
-// ── Metamethods ───────────────────────────────────────────────────────────────
+// Metamethods
 int Stream_Close(lua_State* L);
 int Stream_ToString(lua_State* L);

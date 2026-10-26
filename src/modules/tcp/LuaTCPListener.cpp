@@ -24,15 +24,9 @@ static char* kitsune_strdup(const char* s) {
     return copy;
 }
 
-/* -- Global next-ID counter -------------------------------------------------- */
 static lua_Integer g_nextTcpId = 1;
 
-/* -- Forward declarations ---------------------------------------------------- */
 static void TcpClientDisposeNative(lua_State* L, LuaTcpClient* client);
-
-/* =============================================================================
-   Message queue helpers
-   ============================================================================= */
 
 static TcpMsgNode* TcpMsgAlloc(const char* data, size_t len) {
     TcpMsgNode* node = (TcpMsgNode*)kitsune_malloc(sizeof(TcpMsgNode));
@@ -86,10 +80,6 @@ static void TcpDrainQueue(LuaTcpClient* client) {
     client->msgTail = NULL;
 }
 
-/* =============================================================================
-   Push / check helpers
-   ============================================================================= */
-
 static LuaTcpListener* lua_pushtcplistener(lua_State* L) {
     LuaTcpListener* s = (LuaTcpListener*)lua_newuserdata(L, sizeof(LuaTcpListener));
     luaL_getmetatable(L, LUATCPLISTENER);
@@ -112,10 +102,6 @@ static LuaTcpClient* lua_pushtcpclient(lua_State* L) {
     return c;
 }
 
-/* =============================================================================
-   Bufferevent callbacks
-   ============================================================================= */
-
 static void TcpReadCb(struct bufferevent* bev, void* ctx) {
     LuaTcpClient* client = (LuaTcpClient*)ctx;
     if (!client || client->disposed) return;
@@ -124,7 +110,6 @@ static void TcpReadCb(struct bufferevent* bev, void* ctx) {
     size_t len = evbuffer_get_length(input);
     if (len == 0) return;
 
-    /* Allocate the message node and its data buffer in one go */
     TcpMsgNode* node = (TcpMsgNode*)kitsune_malloc(sizeof(TcpMsgNode));
     if (!node) return;
     node->data = (char*)kitsune_malloc(len);
@@ -148,7 +133,6 @@ static void TcpEventCb(struct bufferevent* bev, short what, void* ctx) {
         return;
     }
 
-    /* Disconnected / error */
     client->connected = false;
 
     if (what & BEV_EVENT_ERROR) {
@@ -168,9 +152,7 @@ static void TcpEventCb(struct bufferevent* bev, short what, void* ctx) {
     }
 }
 
-/* =============================================================================
-   Accept callback — called by libevent when a new connection arrives
-   ============================================================================= */
+/* Accept callback — called by libevent when a new connection arrives */
 
 static void TcpAcceptCb(struct evconnlistener* listener,
     evutil_socket_t fd, struct sockaddr* addr, int socklen, void* ctx)
@@ -182,7 +164,6 @@ static void TcpAcceptCb(struct evconnlistener* listener,
     }
     lua_State* L = s->L;
 
-    /* -- Create LuaTcpClient -- */
     LuaTcpClient* client = lua_pushtcpclient(L);
     // Stack: [client_ud]
 
@@ -190,7 +171,6 @@ static void TcpAcceptCb(struct evconnlistener* listener,
     lua_pushvalue(L, -1);
     client->selfRef = luaL_ref(L, LUA_REGISTRYINDEX);
 
-    /* Extract remote IP / port */
     if (addr && addr->sa_family == AF_INET) {
         struct sockaddr_in* sin = (struct sockaddr_in*)addr;
         char ipbuf[64];
@@ -208,12 +188,11 @@ static void TcpAcceptCb(struct evconnlistener* listener,
         client->port = 0;
     }
 
-    /* Create bufferevent on the listener's event base */
     struct bufferevent* bev = bufferevent_socket_new(s->base, fd,
         BEV_OPT_CLOSE_ON_FREE | BEV_OPT_DEFER_CALLBACKS);
     if (!bev) {
         evutil_closesocket(fd);
-        lua_pop(L, 1); /* pop client */
+        lua_pop(L, 1);
         return;
     }
     client->bev = bev;
@@ -224,7 +203,6 @@ static void TcpAcceptCb(struct evconnlistener* listener,
     bufferevent_enable(bev, EV_READ | EV_WRITE);
     client->connected = true;
 
-    /* Enqueue into the listener's pending queue */
     if (s->pendingCount >= s->pendingCap) {
         int newCap = s->pendingCap ? s->pendingCap * 2 : 8;
         LuaTcpClient** newQ = (LuaTcpClient**)kitsune_realloc(
@@ -244,15 +222,10 @@ static void TcpAcceptCb(struct evconnlistener* listener,
     lua_pop(L, 1);
 }
 
-/* =============================================================================
-   Listener teardown
-   ============================================================================= */
-
 static void TcpListenerDisposeNative(lua_State* L, LuaTcpListener* s) {
     if (s->disposed) return;
     s->disposed = true;
 
-    /* Free the listener (stops accepting) */
     if (s->listener) {
         evconnlistener_free(s->listener);
         s->listener = NULL;
@@ -262,7 +235,6 @@ static void TcpListenerDisposeNative(lua_State* L, LuaTcpListener* s) {
        and share it. The base is freed in __gc when the listener is fully
        torn down and all clients should have been disposed by then. */
 
-    /* Free pending queue */
     for (int i = 0; i < s->pendingCount; i++) {
         LuaTcpClient* c = s->pendingQueue[i];
         if (c) {
@@ -283,10 +255,6 @@ static void TcpListenerDisposeNative(lua_State* L, LuaTcpListener* s) {
         s->contextRef = 0;
     }
 }
-
-/* =============================================================================
-   Client dispose
-   ============================================================================= */
 
 static void TcpClientDisposeNative(lua_State* L, LuaTcpClient* client) {
     if (client->disposed) return;
@@ -315,10 +283,6 @@ static void TcpClientDisposeNative(lua_State* L, LuaTcpClient* client) {
         client->contextRef = 0;
     }
 }
-
-/* =============================================================================
-   TCP module functions
-   ============================================================================= */
 
 int TCP_StartListener(lua_State* L) {
     int port = (int)luaL_checkinteger(L, 1);
@@ -389,7 +353,6 @@ int TCP_Connect(lua_State* L) {
         return 2;
     }
 
-    /* Resolve address */
     struct sockaddr_in sin;
     memset(&sin, 0, sizeof(sin));
     sin.sin_family = AF_INET;
@@ -403,7 +366,6 @@ int TCP_Connect(lua_State* L) {
     struct sockaddr_storage ss;
     int ssLen = sizeof(ss);
     if (evutil_parse_sockaddr_port(addrStr, (struct sockaddr*)&ss, &ssLen) == 0) {
-        /* Use the resolved address */
         if (bufferevent_socket_connect(bev, (struct sockaddr*)&ss, ssLen) < 0) {
             bufferevent_free(bev);
             event_base_free(base);
@@ -460,12 +422,6 @@ int TCP_Connect(lua_State* L) {
 
     return 1;
 }
-
-/* =============================================================================
-   Listener methods
-   ============================================================================= */
-
-/* -- Accept coroutine continuation ------------------------------------------ */
 
 int TcpListener_Accept(lua_State* L) {
     LuaTcpListener* s = (LuaTcpListener*)luaL_checkudata(L, 1, LUATCPLISTENER);
@@ -545,10 +501,6 @@ int TcpListener_ToString(lua_State* L) {
     return 1;
 }
 
-/* =============================================================================
-   Client methods
-   ============================================================================= */
-
 int TcpClient_Poll(lua_State* L) {
     LuaTcpClient* client = (LuaTcpClient*)luaL_checkudata(L, 1, LUATCPCLIENT);
 
@@ -562,15 +514,13 @@ int TcpClient_Poll(lua_State* L) {
     if (client->evbase)
         event_base_loop(client->evbase, EVLOOP_NONBLOCK);
 
-    /* Dequeue one message */
     TcpMsgNode* node = TcpDequeue(client);
     if (node) {
         lua_pushlstring(L, node->data, node->len);
         TcpMsgFree(node);
-        return 1;  /* data, nil */
+        return 1;
     }
 
-    /* No data in queue */
     if (!client->connected) {
         if (client->errorMsg) {
             lua_pushnil(L);
@@ -583,7 +533,6 @@ int TcpClient_Poll(lua_State* L) {
         return 2;
     }
 
-    /* Connected but no data */
     lua_pushliteral(L, "");
     return 1;
 }

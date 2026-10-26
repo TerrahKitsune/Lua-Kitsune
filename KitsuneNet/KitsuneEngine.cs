@@ -26,7 +26,7 @@ namespace KitsuneNet
 
         public KitsuneEngine()
         {
-            // KitsuneInit now returns true only when it creates a new state (we own it)
+            // KitsuneInit returns true only when it creates a new state (we own it)
             // and false when the engine is already initialised by another caller. Call it
             // only on the first instance (_refCount 0 ? 1); subsequent instances share the
             // existing state and must not attempt to re-initialise or re-claim ownership.
@@ -1746,7 +1746,7 @@ namespace KitsuneNet
             {
                 // The embedded variable holds a live luaL_ref (valid for the duration of the
                 // enclosing native call). Snapshot it immediately so the returned LuaValue has
-                // .Table populated — restoring the behaviour callers expect for callback args.
+                // .Table populated.
                 unsafe
                 {
                     KitsuneVariable local = nv;

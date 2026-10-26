@@ -6,9 +6,7 @@
 #include "uint/LuaUInt.h"
 #include "timespan/LuaTimeSpan.h"
 
-// =============================================================================
 // Instance management
-// =============================================================================
 
 LuaYaml* lua_pushyaml(lua_State* L) {
     LuaYaml* y = (LuaYaml*)lua_newuserdata(L, sizeof(LuaYaml));
@@ -46,9 +44,7 @@ int Yaml_New(lua_State* L) {
     return 1;
 }
 
-// =============================================================================
 // Anti-recursion
-// =============================================================================
 
 static void RecPush(LuaYaml* y, lua_State* L, uintptr_t addr) {
     for (size_t i = 0; i < y->recLen; i++) {
@@ -71,9 +67,7 @@ static void RecPop(LuaYaml* y) {
         y->recLen--;
 }
 
-// =============================================================================
 // Encoder — output buffer helpers
-// =============================================================================
 
 static int YamlWriteCb(void* data, unsigned char* buf, size_t size) {
     LuaYaml* y = (LuaYaml*)data;
@@ -93,9 +87,7 @@ static int YamlWriteCb(void* data, unsigned char* buf, size_t size) {
     return 1;
 }
 
-// =============================================================================
 // Encoder — push Lua value as YAML events
-// =============================================================================
 
 static void EncValue(LuaYaml* y, yaml_emitter_t* em, lua_State* L);
 
@@ -258,9 +250,7 @@ static void EncValue(LuaYaml* y, yaml_emitter_t* em, lua_State* L) {
     }
 }
 
-// =============================================================================
 // Decoder — walk libyaml events and push Lua values
-// =============================================================================
 
 // Nesting limit for sequences/mappings; the decoder recurses on the C stack.
 #define YAML_DECODE_MAX_DEPTH 1000
@@ -556,9 +546,7 @@ static void DecDocument(lua_State* L, YamlDecodeState* s) {
     }
 }
 
-// =============================================================================
 // Lua API entry points
-// =============================================================================
 
 int Yaml_Encode(lua_State* L) {
     LuaYaml* y = luaL_checkyaml(L, 1);

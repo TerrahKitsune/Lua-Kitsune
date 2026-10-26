@@ -6,20 +6,17 @@
 #include <atomic>
 #include "Platform.h"
 
-// ── Debug allocation counter ───────────────────────────────────────────────────
 #ifdef _DEBUG
 static std::atomic<size_t> g_liveAllocs{ 0 };
 static std::atomic<size_t> g_permanentAllocs{ 0 };
 #endif
 
-// ── Base allocator function pointers ──────────────────────────────────────────
 // Defaults are the standard C allocators (cross-platform).
 // Call kitsune_set_allocators() to override at runtime.
 static void* (*g_mallocFn)(size_t) = ::malloc;
 static void* (*g_reallocFn)(void*, size_t) = ::realloc;
 static void  (*g_freeFn)(void*) = ::free;
 
-// ── Platform-specific backend implementations ──────────────────────────────────
 #ifdef USEMEMORYMANAGER
 #include "MemoryManager.h"
 
@@ -46,7 +43,6 @@ static void* MemHeapRealloc(void* ptr, size_t size) { return HeapReAlloc(GetProc
 static void  MemHeapFree(void* ptr) { assert(HeapFree(GetProcessHeap(), 0, ptr)); }
 #endif
 
-// ── Memory manager lifecycle ───────────────────────────────────────────────────
 size_t EndMemoryManager() {
 #ifdef USEMEMORYMANAGER
 	assert(memState);
@@ -94,7 +90,6 @@ void kitsune_snapshot_permanent_allocs() {
 #endif
 }
 
-// ── Public allocator override ──────────────────────────────────────────────────
 void kitsune_set_allocators(
 	void* (*malloc_fn)(size_t),
 	void* (*realloc_fn)(void*, size_t),
@@ -110,7 +105,6 @@ void kitsune_set_allocators(
 		g_freeFn = free_fn;
 }
 
-// ── Core allocators ────────────────────────────────────────────────────────────
 void* kitsune_malloc(size_t size) {
 	void* p = (g_mallocFn ? g_mallocFn : ::malloc)(size);
 #ifdef _DEBUG
@@ -148,7 +142,7 @@ void* kitsune_calloc(size_t num, size_t size) {
 	return ptr;
 }
 
-// ── Global operator new / delete overrides
+// Global operator new / delete overrides
 // Route every C++ heap allocation in this DLL through kitsune_malloc / kitsune_free
 // so the memory-manager counter (g_liveAllocs or MemoryStateAlloc) tracks all allocations,
 // including those from STL containers, std::thread, and any third-party C++ code linked in.

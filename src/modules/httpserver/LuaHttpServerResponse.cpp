@@ -7,8 +7,6 @@
 #include <string.h>
 #include <stdio.h>
 
-/* ── internal guard ───────────────────────────────────────────────────────── */
-
 static LuaHttpResponse* ResponseGuard(lua_State* L, bool checkFinalized) {
     LuaHttpResponse* r = luaL_checkhttpresponse(L, 1);
     if (!r->connection)
@@ -17,8 +15,6 @@ static LuaHttpResponse* ResponseGuard(lua_State* L, bool checkFinalized) {
         luaL_error(L, "HttpResponse: response already finalized");
     return r;
 }
-
-/* ── Reason phrase ────────────────────────────────────────────────────────── */
 
 /* Standard reason phrase for a status code (RFC 9110 and common extensions).
    Passed to libevent explicitly: it only documents a NULL default for
@@ -97,15 +93,11 @@ static const char* HttpReasonPhrase(int code) {
     return "Unknown";
 }
 
-/* ── SetCode ──────────────────────────────────────────────────────────────── */
-
 int HttpResponse_SetCode(lua_State* L) {
     LuaHttpResponse* r = ResponseGuard(L, true);
     r->statusCode = (int)luaL_checkinteger(L, 2);
     return 0;
 }
-
-/* ── SetHeader ────────────────────────────────────────────────────────────── */
 
 int HttpResponse_SetHeader(lua_State* L) {
     LuaHttpResponse* r = ResponseGuard(L, true);
@@ -116,8 +108,6 @@ int HttpResponse_SetHeader(lua_State* L) {
     evhttp_add_header(evhttp_request_get_output_headers(r->connection->req), name, value);
     return 0;
 }
-
-/* ── Send() / Send(string) / Send(Stream) ─────────────────────────────────── */
 
 int HttpResponse_Send(lua_State* L) {
     LuaHttpResponse* r = ResponseGuard(L, true);
@@ -210,8 +200,6 @@ int HttpResponse_Send(lua_State* L) {
     return 0;
 }
 
-/* ── Reject ───────────────────────────────────────────────────────────────── */
-
 int HttpResponse_Reject(lua_State* L) {
     LuaHttpResponse* r    = ResponseGuard(L, true);
     int              code = (int)luaL_checkinteger(L, 2);
@@ -229,8 +217,6 @@ int HttpResponse_Reject(lua_State* L) {
     r->finalized       = true;
     return 0;
 }
-
-/* ── Close ────────────────────────────────────────────────────────────────── */
 
 int HttpResponse_Close(lua_State* L) {
     LuaHttpResponse* r   = ResponseGuard(L, true);

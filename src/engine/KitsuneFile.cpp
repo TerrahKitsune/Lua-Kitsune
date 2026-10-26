@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// UTF-8 C-runtime wrappers declared in kitsunefile.h. On Windows the narrow CRT interprets
+// UTF-8 C-runtime wrappers declared in KitsuneFile.h. On Windows the narrow CRT interprets
 // paths and environment strings in the ANSI code page, so they are converted to UTF-16 for the
 // _w* variants; elsewhere these are the plain CRT calls.
 

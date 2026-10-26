@@ -254,12 +254,10 @@ int Tasks_Wait(lua_State* L) {
     }
     if (caller->isInline.load()) {
         // Inline (RunString / RunFunction) callers cannot yield — lua_yield would cross
-        // a C-call boundary and crash. Treat as a no-op so the caller can still check
-        // Finished() manually if needed.
+        // a C-call boundary and crash.
         g_state->slotsLock.unlock();
         return luaL_error(L, "task:Wait: cannot yield from an inline coroutine");
     }
-    // Fast path: target already done or gone.
     if (!target) {
         g_state->slotsLock.unlock();
         return 0;
@@ -391,7 +389,6 @@ int Tasks_OnError(lua_State* L) {
             slot->onErrorRef = luaL_ref(L, LUA_REGISTRYINDEX);
     }
     g_state->slotsLock.unlock();
-    // Return self for method chaining.
     lua_pushvalue(L, 1);
     return 1;
 }

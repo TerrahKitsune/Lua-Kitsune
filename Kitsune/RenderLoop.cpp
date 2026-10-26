@@ -34,9 +34,7 @@
 #include <windows.h>
 #endif
 
-// ---------------------------------------------------------------------------
 // Scheduled call helpers
-// ---------------------------------------------------------------------------
 
 // Single function handles both submission and completion polling.
 // Calls with runningId==0 are submitted (fireAndForget=false so we own the result).
@@ -124,10 +122,6 @@ bool ImguiStackPop(int id) {
 	return false;
 }
 
-// ---------------------------------------------------------------------------
-// Imgui.Start
-// ---------------------------------------------------------------------------
-
 static int ImguiStart(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* userdata) {
 	if (g_imguiCtx) {
@@ -188,10 +182,6 @@ static int ImguiStart(int argc, const KitsuneVariable* argv,
 
 	return 0;
 }
-
-// ---------------------------------------------------------------------------
-// RunImguiSession
-// ---------------------------------------------------------------------------
 
 bool RunImguiSession() {
 	ImguiWindowContext* ctx = g_imguiCtx;
@@ -421,10 +411,6 @@ bool RunImguiSession() {
 
 	return rendererCreated && !stoppedByError;
 }
-
-// ---------------------------------------------------------------------------
-// RegisterRenderLoopFunctions
-// ---------------------------------------------------------------------------
 
 void RegisterRenderLoopFunctions() {
 	KitsuneRegisterFunction("Imgui.Start", ImguiStart, nullptr);

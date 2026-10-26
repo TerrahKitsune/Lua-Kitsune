@@ -1,6 +1,6 @@
 ﻿// KitsuneLuaDebug.cpp
 // Implementation of the dual-slot Lua hook dispatch layer.
-// Including kitsune_internal.h here is safe: .cpp files are never included.
+// Including KitsuneInternal.h here is safe: .cpp files are never included.
 #include "KitsuneInternal.h"
 #include "KitsuneLuaDebug.h"
 
@@ -53,9 +53,7 @@ static void kitsune_recompute(lua_State* L, KitsuneHookState& s) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // kitsune_* — scheduler-owned hook slot
-// ---------------------------------------------------------------------------
 void kitsune_sethook(lua_State* L, lua_Hook func, int mask, int count) {
 	if (!g_debugState) {
 		lua_sethook_real(L, func, mask, count);
@@ -91,10 +89,8 @@ int kitsune_gethookcount(lua_State* L) {
 	return (it != g_debugState->hookMap.end()) ? it->second.kitsune.count : 0;
 }
 
-// ---------------------------------------------------------------------------
 // lua_sethook / lua_gethook* — external/debugger-owned hook slot
 // extern "C" so GetProcAddress finds undecorated "lua_sethook" etc.
-// ---------------------------------------------------------------------------
 extern "C" {
 
 LUA_API void lua_sethook(lua_State* L, lua_Hook func, int mask, int count) {
@@ -134,9 +130,7 @@ LUA_API int lua_gethookcount(lua_State* L) {
 
 } // extern "C"
 
-// ---------------------------------------------------------------------------
-// kitsune_hook_remove_state — call before any lua_State* becomes invalid
-// ---------------------------------------------------------------------------
+// Call before any lua_State* becomes invalid.
 void kitsune_hook_remove_state(lua_State* L) {
 	if (!L || !g_debugState)
 		return;
@@ -145,13 +139,10 @@ void kitsune_hook_remove_state(lua_State* L) {
 	lua_sethook_real(L, nullptr, 0, 0);
 }
 
-// ---------------------------------------------------------------------------
-// kitsune_inherit_external_hook — copy the external (debugger) hook slot
-// from src to dst. Called when a new coroutine thread is created so that
+// Copies the external (debugger) hook slot from src to dst. Called when a new coroutine thread is created so that
 // luadebug.dll's hook (installed on the main state during -e bootstrap)
 // is active on the thread that actually runs the user script.
 // Caller must hold LuaAccess but must NOT hold hookMtx.
-// ---------------------------------------------------------------------------
 void kitsune_inherit_external_hook(lua_State* src, lua_State* dst) {
 	if (!g_debugState || !src || !dst)
 		return;

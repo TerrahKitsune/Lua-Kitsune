@@ -5,7 +5,7 @@
 #include <ctype.h>
 #include "Mem.h"
 
-// ── Userdata helpers ──────────────────────────────────────────────────────────
+// Userdata helpers
 
 LuaUInt* lua_pushuint(lua_State* L) {
     LuaUInt* u = (LuaUInt*)lua_newuserdata(L, sizeof(LuaUInt));
@@ -27,7 +27,7 @@ int lua_isuint(lua_State* L, int index) {
     return result;
 }
 
-// ── String helpers ────────────────────────────────────────────────────────────
+// String helpers
 
 // Format uint64 as a decimal string into buf (must be at least 21 bytes).
 static int UIntFormat(uint64_t v, char* buf, size_t bufsz) {
@@ -116,7 +116,7 @@ static int CoerceUInt(lua_State* L, int index, uint64_t* out) {
     return 0;
 }
 
-// ── Constructors ──────────────────────────────────────────────────────────────
+// Constructors
 
 int UInt_FromString(lua_State* L) {
     size_t len;
@@ -152,7 +152,7 @@ int UInt_Zero(lua_State* L) {
     return 1;
 }
 
-// ── Inspection ────────────────────────────────────────────────────────────────
+// Inspection
 
 int UInt_ToString(lua_State* L) {
     LuaUInt* u = lua_touint(L, 1);
@@ -188,7 +188,7 @@ int UInt_IsZero(lua_State* L) {
     return 1;
 }
 
-// ── Arithmetic ────────────────────────────────────────────────────────────────
+// Arithmetic
 
 int UInt_Add(lua_State* L) {
     uint64_t a, b;
@@ -234,7 +234,7 @@ int UInt_Mod(lua_State* L) {
     return 1;
 }
 
-// ── Bitwise ───────────────────────────────────────────────────────────────────
+// Bitwise
 
 int UInt_BAnd(lua_State* L) {
     uint64_t a, b;
@@ -282,7 +282,7 @@ int UInt_Shr(lua_State* L) {
     return 1;
 }
 
-// ── Comparison ────────────────────────────────────────────────────────────────
+// Comparison
 
 int UInt_Eq(lua_State* L) {
     uint64_t a, b;

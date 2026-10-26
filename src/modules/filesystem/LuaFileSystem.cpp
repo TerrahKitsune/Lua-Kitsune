@@ -15,9 +15,7 @@ int FileSystem_Open(lua_State* L) {
 	return kitsune_io_open_strict(L);
 }
 
-// =========================================================
 // Windows implementation
-// =========================================================
 #ifdef _WIN32
 
 #include <Windows.h>
@@ -557,9 +555,7 @@ int FileSystem_GetDrives(lua_State* L) {
 	return 1;
 }
 
-// =========================================================
 // Linux implementation
-// =========================================================
 #else
 
 #include <unistd.h>

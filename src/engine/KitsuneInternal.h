@@ -1,6 +1,6 @@
 ﻿#pragma once
 // Internal engine types and helpers shared between KitsuneEngine.cpp and sibling modules
-// (e.g. luatask.cpp). Not part of the public KitsuneEngine.h API surface.
+// (e.g. LuaTasks.cpp). Not part of the public KitsuneEngine.h API surface.
 
 #include <atomic>
 #include <mutex>
@@ -15,7 +15,6 @@
 
 #define KITSUNE_MAX_COROUTINES 256
 
-// -- KitsuneCoroutine state values --------------------------------------------
 #define KITSUNE_COROUTINE_STATE_NOT_USED    0  // slot is zeroed and ready for reuse
 #define KITSUNE_COROUTINE_STATE_WORKING     1  // alive and being scheduled normally
 #define KITSUNE_COROUTINE_STATE_DONE        2  // finished; result/error can be collected
@@ -25,7 +24,6 @@
 #define KITSUNE_COROUTINE_STATE_PAUSED      6  // suspended until KitsuneResume is called
 #define KITSUNE_COROUTINE_STATE_WAITING     7  // suspended until a target coroutine finishes (or timeout)
 
-// -- Per-coroutine slot -------------------------------------------------------
 struct KitsuneCoroutine {
     int           id;
     int           threadRef;
@@ -48,7 +46,6 @@ struct KitsuneCoroutine {
     bool          didWork;  // set by Yield(true) or cooperative C yields with data; cleared by scheduler each tick
 };
 
-// -- Engine state -------------------------------------------------------------
 struct KitsuneState {
     lua_State*    L;
     double        pcFreq;
@@ -87,10 +84,10 @@ struct KitsuneState {
     std::unordered_map<lua_State*, KitsuneHookState> hookMap;
 };
 
-// -- Global state (defined in KitsuneEngine.cpp) ------------------------------
+// Defined in KitsuneEngine.cpp
 extern KitsuneState* g_state;
 
-// -- Internal helpers (defined in KitsuneEngine.cpp) --------------------------
+// Internal helpers (defined in KitsuneEngine.cpp)
 KitsuneCoroutine* FindSlot(KitsuneState* state, int id);
 int               GetSlotStatus(KitsuneState* state, KitsuneCoroutine* slot);
 double            GetCounter(KitsuneState* state);

@@ -59,7 +59,6 @@ static const luaL_Reg httpresponseMethods[] = {
 };
 
 int luaopen_httpserver(lua_State* L) {
-    /* HttpServer module table */
     luaL_newlibtable(L, httpserverFunctions);
     luaL_setfuncs(L, httpserverFunctions, 0);
 
@@ -74,7 +73,6 @@ int luaopen_httpserver(lua_State* L) {
     lua_rawset(L, -3);
     lua_pop(L, 1);
 
-    /* HttpRequest metatable */
     luaL_newmetatable(L, LUAHTTPREQUEST);
     luaL_setfuncs(L, httprequestMeta, 0);
     lua_pushliteral(L, "__index");
@@ -83,7 +81,6 @@ int luaopen_httpserver(lua_State* L) {
     lua_rawset(L, -3);
     lua_pop(L, 1);
 
-    /* HttpResponse metatable */
     luaL_newmetatable(L, LUAHTTPRESPONSE);
     luaL_setfuncs(L, httpresponseMeta, 0);
     lua_pushliteral(L, "__index");
@@ -92,5 +89,5 @@ int luaopen_httpserver(lua_State* L) {
     lua_rawset(L, -3);
     lua_pop(L, 1);
 
-    return 1; /* return module table */
+    return 1;
 }

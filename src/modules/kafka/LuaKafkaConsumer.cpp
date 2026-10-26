@@ -4,10 +4,6 @@
 #include <string.h>
 #include <stdlib.h>
 
-// ---------------------------------------------------------------------------
-// push/get helpers
-// ---------------------------------------------------------------------------
-
 LuaKafkaConsumer* lua_pushkafkaconsumer(lua_State* L) {
 	LuaKafkaConsumer* c = (LuaKafkaConsumer*)lua_newuserdata(L, sizeof(LuaKafkaConsumer));
 	if (!c)
@@ -24,10 +20,6 @@ LuaKafkaConsumer* luaL_checkkafkaconsumer(lua_State* L, int index) {
 		luaL_error(L, "parameter is not a %s", LUAKAFKACONSUMER);
 	return c;
 }
-
-// ---------------------------------------------------------------------------
-// Message table builder
-// ---------------------------------------------------------------------------
 
 static void PushConsumeMessage(lua_State* L, const rd_kafka_message_t* msg) {
 	lua_createtable(L, 0, 10);
@@ -98,10 +90,6 @@ static void PushConsumeMessage(lua_State* L, const rd_kafka_message_t* msg) {
 	lua_settable(L, t);
 }
 
-// ---------------------------------------------------------------------------
-// Offset helpers
-// ---------------------------------------------------------------------------
-
 // Converts a string offset keyword or stringified integer to a librdkafka
 // offset constant. Accepts "earliest"/"beginning", "latest"/"end", "stored",
 // or any integer value (including librdkafka sentinel values like -2).
@@ -127,14 +115,11 @@ static int64_t LuaKafkaOffset(lua_State* L, int idx) {
 	return (int64_t)luaL_checkinteger(L, idx);
 }
 
-// ---------------------------------------------------------------------------
-// Internal helper — builds the topic/partition list from a Lua array.
+// Builds the topic/partition list from a Lua array.
 // Assign entries have the form "topic", "topic:partition", or
 // "topic:partition:offset" where offset is a number or keyword.
 // Subscribe entries are plain topic name strings (partition ignored).
 // Returns NULL and pushes false + errmsg on error (caller should return 2).
-// ---------------------------------------------------------------------------
-
 static rd_kafka_topic_partition_list_t* BuildPartitionList(lua_State* L, int table_idx, bool withPartitions) {
 	if (!lua_istable(L, table_idx)) {
 		lua_pushboolean(L, false);
@@ -194,10 +179,6 @@ static rd_kafka_topic_partition_list_t* BuildPartitionList(lua_State* L, int tab
 
 	return list;
 }
-
-// ---------------------------------------------------------------------------
-// Consumer API
-// ---------------------------------------------------------------------------
 
 int Kafka_NewConsumer(lua_State* L) {
 	rd_kafka_conf_t* conf = ToKafkaConf(L, 1, "LUAC");

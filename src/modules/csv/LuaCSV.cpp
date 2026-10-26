@@ -236,8 +236,8 @@ static void DecodeComments(LuaCsv* csv, lua_State* L) {
 		return;
 
 	int nth = 0;
-	GetNext(csv);         // consume the '*' marker (SkipForwards only peeked it)
-	next = GetNext(csv);  // read first char of comment text
+	GetNext(csv);  // SkipForwards only peeked the '*' marker
+	next = GetNext(csv);
 
 	while (true) {
 		while (!IsEndline(csv)) {
@@ -253,8 +253,8 @@ static void DecodeComments(LuaCsv* csv, lua_State* L) {
 		next = SkipForwards(csv);
 		if (next != L'*') break;
 
-		GetNext(csv);         // consume the '*' of the next comment line
-		next = GetNext(csv);  // read first char of that line's text
+		GetNext(csv);
+		next = GetNext(csv);
 	}
 }
 
@@ -396,7 +396,7 @@ static wchar_t SniffDelimiter(const wchar_t* data, size_t len) {
 	}
 	if (nLines == 0) return L',';
 
-	int bestCand  = 0;  // default to comma
+	int bestCand  = 0;
 	int bestCount = 0;
 	for (int c = 0; c < nCand; c++) {
 		int first = counts[c][0];
@@ -413,7 +413,7 @@ static wchar_t SniffDelimiter(const wchar_t* data, size_t len) {
 	return candidates[bestCand];
 }
 
-// -- Parse delimiter from arg at stack index idx ------------------------------
+// Parses the delimiter from the arg at stack index idx.
 // Returns `noArgDefault` when the caller passes nothing or nil.
 //   noArgDefault == L'\0'  ?  auto-detect mode (used by CSV.New)
 //   noArgDefault == L','   ?  explicit comma (used by free-function calls)
@@ -578,7 +578,7 @@ int EncodeCsv(lua_State* L) {
 	return EncodeCsvWithDelimiter(L, delimiter);
 }
 
-// -- Streaming iterator --------------------------------------------------------
+// Streaming iterator
 
 // __gc for the LuaCsv full-userdata that backs the iterator closure.
 static int CsvStream_GC(lua_State* L) {
@@ -751,7 +751,7 @@ int DecodeFromFunction(lua_State* L) {
 	return CreateCsvIterator(L, ParseDelimiter(L, 2, L','));
 }
 
-// -- CSV instance API ----------------------------------------------------------
+// CSV instance API
 
 int CSV_GC(lua_State* L) {
 	LuaCsv* csv = (LuaCsv*)luaL_checkudata(L, 1, LUACSV);

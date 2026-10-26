@@ -15,7 +15,7 @@
 #define _strdup strdup
 #endif
 
-/* ── defensive helpers ────────────────────────────────────────────────────── */
+/* defensive helpers */
 
 static void SafeFreeS(char** p) {
 	if (*p) {
@@ -23,8 +23,6 @@ static void SafeFreeS(char** p) {
 		*p = NULL;
 	}
 }
-
-/* ── node release ─────────────────────────────────────────────────────────── */
 
 /* Tears down one HttpOpenConnection node. Idempotent. */
 static void ReleaseNode(lua_State* L, HttpOpenConnection* node) {
@@ -40,7 +38,7 @@ static void ReleaseNode(lua_State* L, HttpOpenConnection* node) {
 	kitsune_free(node);
 }
 
-/* ── push / check ─────────────────────────────────────────────────────────── */
+/* push / check */
 
 LuaHttpServer* lua_pushhttpserver(lua_State* L) {
 	LuaHttpServer* s = (LuaHttpServer*)lua_newuserdata(L, sizeof(LuaHttpServer));
@@ -60,7 +58,7 @@ LuaHttpServer* luaL_checkhttpserver(lua_State* L, int idx) {
 	return s;
 }
 
-/* ── per-request queue / sender cleanup ───────────────────────────────────── */
+/* per-request queue / sender cleanup */
 
 static void QueueRemoveReq(LuaHttpServer* s, lua_State* L, struct evhttp_request* req) {
 	HttpOpenConnection* prev = NULL;
@@ -195,8 +193,6 @@ static void ConnCloseCleanup(LuaHttpServer* s, lua_State* L,
 	lua_rawset(L, LUA_REGISTRYINDEX);
 }
 
-/* ── connection close callback ────────────────────────────────────────────── */
-
 /* Called by libevent when a TCP connection closes.  Looks up the request that
    was registered under Registry[con*] in HttpRequestCb.
    - If r->req is still set, the connection closed before we responded:
@@ -238,8 +234,6 @@ static void ConnCloseCb(struct evhttp_connection* con, void* arg) {
 		lua_rawset(L, LUA_REGISTRYINDEX);
 	}
 }
-
-/* ── response complete callback ───────────────────────────────────────────── */
 
 /* Fires when evhttp has fully written the response to the socket (just before
    evhttp_request_free is called by evhttp_send_done).  This is the evhttp
@@ -289,7 +283,7 @@ static void ResponseCompleteCb(struct evhttp_request* req, void* arg) {
 	lua_rawset(L, LUA_REGISTRYINDEX);
 }
 
-/* ── method enum → string ─────────────────────────────────────────────────── */
+/* method enum → string */
 
 static const char* CmdToStr(enum evhttp_cmd_type t) {
 	switch (t) {
@@ -315,7 +309,7 @@ static const char* CmdToStr(enum evhttp_cmd_type t) {
 	}
 }
 
-/* ── address parser ───────────────────────────────────────────────────────── */
+/* address parser */
 
 /* Accepts: "host:port", "http://host:port", "https://host:port", ":port" */
 static bool ParseListenAddr(const char* addr, char* hostOut, size_t hostSz,
@@ -349,7 +343,7 @@ static bool ParseListenAddr(const char* addr, char* hostOut, size_t hostSz,
 	return true;
 }
 
-/* ── libevent request callback ────────────────────────────────────────────── */
+/* libevent request callback */
 
 static void HttpRequestCb(struct evhttp_request* req, void* arg) {
 	LuaHttpServer* s = (LuaHttpServer*)arg;
@@ -367,7 +361,7 @@ static void HttpRequestCb(struct evhttp_request* req, void* arg) {
 	if (con)
 		evhttp_connection_set_closecb(con, ConnCloseCb, s);
 
-	/* ── Build LuaHttpRequest ── */
+	/* Build LuaHttpRequest */
 	lua_pushhttprequest(L);                                        /* [req_ud] */
 	LuaHttpRequest* r = (LuaHttpRequest*)lua_touserdata(L, -1);
 	r->req = req;
@@ -455,7 +449,7 @@ static void HttpRequestCb(struct evhttp_request* req, void* arg) {
 	}
 }
 
-/* ── server teardown — idempotent, shared by Close/__gc/stop-flag ─────────── */
+/* server teardown — idempotent, shared by Close/__gc/stop-flag */
 
 static void ServerTeardown(LuaHttpServer* s, lua_State* L) {
 	if (!s->httpInit)
@@ -553,7 +547,7 @@ static void ServerTeardown(LuaHttpServer* s, lua_State* L) {
 	}
 }
 
-/* ── coroutine continuation ───────────────────────────────────────────────── */
+/* coroutine continuation */
 
 static int AcceptCont(lua_State* L, int status, lua_KContext ctx) {
 	LuaHttpServer* s = (LuaHttpServer*)ctx;
@@ -670,8 +664,6 @@ static int AcceptBody(lua_State* L) {
 	return AcceptCont(L, LUA_OK, (lua_KContext)s);
 }
 
-/* ── HttpServer.Listen ────────────────────────────────────────────────────── */
-
 int HttpServer_Listen(lua_State* L) {
 	const char* addr = luaL_checkstring(L, 1);
 
@@ -745,8 +737,6 @@ int HttpServer_Listen(lua_State* L) {
 	return 1;
 }
 
-/* ── server:Accept ────────────────────────────────────────────────────────── */
-
 int HttpServer_Accept(lua_State* L) {
 	LuaHttpServer* s = luaL_checkhttpserver(L, 1);
 
@@ -772,8 +762,6 @@ int HttpServer_Accept(lua_State* L) {
 	return 1;
 }
 
-/* ── server:SetOnDisconnect ───────────────────────────────────────────────── */
-
 int HttpServer_SetOnDisconnect(lua_State* L) {
 	LuaHttpServer* s = luaL_checkhttpserver(L, 1);
 	luaL_checktype(L, 2, LUA_TFUNCTION);
@@ -785,8 +773,6 @@ int HttpServer_SetOnDisconnect(lua_State* L) {
 	s->disconnectRef = luaL_ref(L, LUA_REGISTRYINDEX);
 	return 0;
 }
-
-/* ── server:SetAliveToken ─────────────────────────────────────────────────── */
 
 int HttpServer_SetAliveToken(lua_State* L) {
 	LuaHttpServer* s = luaL_checkhttpserver(L, 1);
@@ -801,8 +787,6 @@ int HttpServer_SetAliveToken(lua_State* L) {
 	}
 	return 0;
 }
-
-/* ── server:Close / __gc / __tostring ────────────────────────────────────── */
 
 int HttpServer_Close(lua_State* L) {
 	LuaHttpServer* s = luaL_checkhttpserver(L, 1);

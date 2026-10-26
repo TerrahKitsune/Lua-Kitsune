@@ -83,7 +83,6 @@ int luaopen_kafka(lua_State* L) {
     RegisterType(L, LUAKAFKAPRODUCER, kafkaproducerfunctions, kafkaproducermeta);
     RegisterType(L, LUAKAFKACONSUMER, kafkaconsumerfunctions, kafkaconsumermeta);
 
-    // Module table returned to Lua
     luaL_newlibtable(L, kafkamodule);
     luaL_setfuncs(L, kafkamodule, 0);
 

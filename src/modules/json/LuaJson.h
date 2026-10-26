@@ -8,7 +8,7 @@
 
 #define LUAJSON "LUAJSON"
 
-// Forward declaration — full definition in stream.h, used only for streaming encode.
+// Full definition in LuaStream.h, used only for streaming encode.
 struct LuaStream;
 
 typedef struct LuaJson {

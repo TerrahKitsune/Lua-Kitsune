@@ -10,17 +10,17 @@
 // all other fields are re-initialised at the start of each operation.
 // delimiter == L'\0' means auto-detect on every call.
 typedef struct LuaCsv {
-    // ── String-mode source (data != NULL) ────────────────────────────────────
+    // String-mode source (data != NULL)
     int            pos;
     const wchar_t* data;     // decoded input (owned by a userdata on the Lua stack)
     size_t         dataLen;  // wchar_t count in data
     wchar_t        last;
-    // ── Field write buffer ───────────────────────────────────────────────────
+    // Field write buffer
     size_t    len;
     size_t    alloc;
     wchar_t*  buffer;
     wchar_t   delimiter;
-    // ── Streaming-mode source (data == NULL, streamFuncRef != LUA_NOREF) ─────
+    // Streaming-mode source (data == NULL, streamFuncRef != LUA_NOREF)
     lua_State* streamL;        // current calling thread; updated on each iterator call
     int        streamFuncRef;  // LUA_REGISTRYINDEX ref to the chunk-supplier function
     wchar_t*   streamBuf;      // decoded chunk waiting to be parsed
@@ -30,7 +30,7 @@ typedef struct LuaCsv {
     bool       streamDone;     // supplier returned nil/false/empty — no more data
     KitsuneUtf8Carry utf8Carry; // UTF-8 sequence split across the previous chunk boundary
     bool       bomChecked;     // first decoded character has been checked for a BOM
-    // ── Stream-object source (streamRef != LUA_NOREF) ────────────────────────
+    // Stream-object source (streamRef != LUA_NOREF)
     // A LuaStream* is called via lua_callk rather than lua_call_nohook so that
     // async streams can yield cooperatively.  Sync streams simply return
     // immediately without yielding — the lua_callk machinery is transparent.
@@ -39,7 +39,7 @@ typedef struct LuaCsv {
     int        streamRef;      // LUA_REGISTRYINDEX ref to the LuaStream userdata
 } LuaCsv;
 
-// ── Entry points ──────────────────────────────────────────────────────────────
+// Entry points
 // Decode / Encode / DecodeFromFunction accept either a LUACSV instance at arg 1
 // (csv:Xxx(...), uses the instance delimiter) or no instance (CSV.Xxx(...),
 // optional delimiter as the last argument, default ',').

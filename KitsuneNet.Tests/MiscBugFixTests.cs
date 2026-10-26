@@ -11,7 +11,7 @@ namespace KitsuneNet.Tests;
 [Collection("KitsuneSequential")]
 public sealed class MiscBugFixTests
 {
-    // -- Archive ---------------------------------------------------------------
+    // Archive
     [ArchiveTheory]
     [MemberData(nameof(ArchiveTests.ArchiveFiles), MemberType = typeof(ArchiveTests))]
     public async Task Archive_SetEntry_AfterFileDeleted_ReturnsErrorAndGcIsSafe(string path)
@@ -42,7 +42,7 @@ public sealed class MiscBugFixTests
         r.String.ShouldBe("true");
     }
 
-    // -- Base64 ----------------------------------------------------------------
+    // Base64
     [Fact]
     public async Task Base64_Decode_EmptyString_ReturnsEmptyString()
     {
@@ -55,7 +55,7 @@ public sealed class MiscBugFixTests
         r.String.ShouldBe("true");
     }
 
-    // -- Aes -------------------------------------------------------------------
+    // Aes
     [Fact]
     public async Task Aes_SetIV_ShortIV_IsZeroPaddedLikeNew()
     {
@@ -77,7 +77,7 @@ public sealed class MiscBugFixTests
         r.String.ShouldBe("true");
     }
 
-    // -- Hashing ---------------------------------------------------------------
+    // Hashing
     [Fact]
     public async Task MD5_FinishTwice_ReturnsSameDigest()
     {
@@ -124,7 +124,7 @@ public sealed class MiscBugFixTests
         r.String.ShouldBe("true");
     }
 
-    // -- GetMemory -------------------------------------------------------------
+    // GetMemory
     [Fact]
     public async Task GetMemory_ReturnsPositiveInteger()
     {
@@ -134,7 +134,7 @@ public sealed class MiscBugFixTests
         r.String.ShouldBe("true");
     }
 
-    // -- Dns -------------------------------------------------------------------
+    // Dns
     [Fact]
     public async Task Dns_IPv6Only_ReturnsNil()
     {
@@ -148,7 +148,7 @@ public sealed class MiscBugFixTests
         r.String.ShouldBe("nil");
     }
 
-    // -- Process ---------------------------------------------------------------
+    // Process
     [WindowsOnlyFact]
     public async Task Process_Priority_NoArgument_ReturnsPriorityClass()
     {
@@ -174,7 +174,7 @@ public sealed class MiscBugFixTests
         r.String.ShouldBe("true");
     }
 
-    // -- DateTime.Parse: whole-hour offsets (Postgres TIMESTAMPTZ output) --------
+    // DateTime.Parse: whole-hour offsets (Postgres TIMESTAMPTZ output)
     [Fact]
     public async Task DateTime_Parse_HourOnlyOffset()
     {
@@ -195,7 +195,7 @@ public sealed class MiscBugFixTests
         r.String.ShouldBe("0,1704110400.0,-300,12,123,17,330,330,nil,nil");
     }
 
-    // -- Identifier == other userdata ----------------------------------------------
+    // Identifier == other userdata
     [Fact]
     public async Task Identifier_Eq_OtherUserdata_IsFalse()
     {
@@ -209,7 +209,7 @@ public sealed class MiscBugFixTests
         r.String.ShouldBe("false:false:true");
     }
 
-    // -- Yaml anchors, aliases and merge keys ------------------------------------------
+    // Yaml anchors, aliases and merge keys
     [Fact]
     public async Task Yaml_Decode_ScalarAlias_Resolves()
     {
@@ -280,8 +280,8 @@ many:
     [Fact]
     public async Task Yaml_Decode_NullAndComplexKeys_DoNotBreakParsing()
     {
-        // A null key can't be stored in a Lua table and used to raise; a
-        // non-scalar key used to leave its events unconsumed and derail the parse.
+        // A null key can't be stored in a Lua table and must not raise; a
+        // non-scalar key must still have its events consumed so the parse is not derailed.
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync(@"
             local t = Yaml.New():Decode('~: 1\n? [a, b]\n: 2\nc: 3\n')

@@ -16,7 +16,7 @@
 #include <dlfcn.h>
 #endif
 
-// ── Minimal NVML ABI ──────────────────────────────────────────────────────────
+// Minimal NVML ABI
 // Declared here so the build needs no CUDA toolkit; NVML itself ships with the
 // NVIDIA driver and is loaded at runtime (the same library nvidia-smi uses).
 typedef int   nvmlReturn_t;
@@ -107,7 +107,7 @@ typedef struct {
 // some symbols and many queries are unsupported on GeForce or under WDDM.
 #define NVML_OK(nv, fn, ...) ((nv)->fn && (nv)->fn(__VA_ARGS__) == NVML_SUCCESS)
 
-// ── Library loading ───────────────────────────────────────────────────────────
+// Library loading
 static void* NvmlOpenLibrary()
 {
 #ifdef _WIN32
@@ -173,7 +173,7 @@ static const NvmlApi* GetNvmlApi()
     return api;
 }
 
-// ── Lua table helpers (set a field on the table at the top of the stack) ──────
+// Lua table helpers (set a field on the table at the top of the stack)
 static void SetInt(lua_State* L, const char* key, long long v)
 {
     lua_pushinteger(L, (lua_Integer)v);
@@ -203,7 +203,7 @@ static long long BytesToMb(unsigned long long bytes)
     return (long long)(bytes / (1024 * 1024));
 }
 
-// ── Per-GPU sections ──────────────────────────────────────────────────────────
+// Per-GPU sections
 static void PushIdentity(lua_State* L, const NvmlApi* nv, nvmlDevice_t dev)
 {
     char buf[128];
@@ -411,7 +411,7 @@ static void PushModes(lua_State* L, const NvmlApi* nv, nvmlDevice_t dev)
         SetBool(L, "EccEnabled", mode != 0);
 }
 
-// ── Processes ─────────────────────────────────────────────────────────────────
+// Processes
 
 // Returns a kitsune_calloc'd list (caller frees) or NULL when there are none.
 static NvmlProcessInfo* NvmlGetProcesses(NvmlGetProcessesFn fn, nvmlDevice_t dev, unsigned int* count)
@@ -534,7 +534,6 @@ static void PushGpu(lua_State* L, const NvmlApi* nv, unsigned int index, nvmlDev
     PushProcesses(L, nv, dev);
 }
 
-// ── Hardware.NvidiaSmi ────────────────────────────────────────────────────────
 int Hardware_NvidiaSmi(lua_State* L)
 {
     const NvmlApi* nv = GetNvmlApi();
@@ -571,7 +570,6 @@ int Hardware_NvidiaSmi(lua_State* L)
     return 1;
 }
 
-// ── Hardware.NvidiaSetPowerLimit ──────────────────────────────────────────────
 // Equivalent of `nvidia-smi -i <index> -pl <watts>`. Returns true, or nil plus
 // NVML's error message. Needs admin/root; the limit lasts until reboot or driver reload.
 int Hardware_NvidiaSetPowerLimit(lua_State* L)

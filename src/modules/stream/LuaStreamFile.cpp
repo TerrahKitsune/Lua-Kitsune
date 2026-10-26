@@ -57,8 +57,6 @@ static BYTE ModeToCaps(const char* mode) {
 	return caps;
 }
 
-// -- vtable implementations ----------------------------------------------------
-
 static int FileStreamRead(void* native, lua_State* L, size_t len) {
 	InFileStream* f = (InFileStream*)native;
 	if (!f->file) {
@@ -177,8 +175,6 @@ static const LuaStreamVtable fileVtbl = {
 	NULL,
 	FileStreamGetId,
 };
-
-// -- Public constructor helper -------------------------------------------------
 
 LuaStream* lua_pushfilestream(lua_State* L, const char* filename, const char* mode) {
 	FILE* f = kitsune_fopen(filename, mode);

@@ -7,7 +7,6 @@
 #define LUAHTTPRESPONSE "HTTPRESPONSE"
 #define LUAHTTPSERVER   "HTTPSERVER"
 
-/* Forward declarations */
 typedef struct LuaHttpResponse    LuaHttpResponse;
 typedef struct LuaHttpRequest     LuaHttpRequest;
 typedef struct HttpOpenConnection HttpOpenConnection;

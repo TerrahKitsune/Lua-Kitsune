@@ -30,6 +30,6 @@ int luaopen_toml(lua_State* L) {
     lua_pushvalue(L, -3);   // module table
     lua_rawset(L, -3);
 
-    lua_pop(L, 1);   // pop metatable
-    return 1;        // return module table
+    lua_pop(L, 1);
+    return 1;
 }

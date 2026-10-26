@@ -3,7 +3,7 @@
 
 static const char* LUAMUTEX = "LUAMUTEX";
 
-// ── Windows ───────────────────────────────────────────────────────────────────
+// Windows
 #ifdef _WIN32
 #include <Windows.h>
 
@@ -13,7 +13,7 @@ typedef struct LuaMutex {
 	bool   istaken;
 } LuaMutex;
 
-// ── Linux ─────────────────────────────────────────────────────────────────────
+// Linux
 #else
 #include <semaphore.h>
 

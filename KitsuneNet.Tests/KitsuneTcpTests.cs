@@ -27,9 +27,6 @@ public sealed class KitsuneTcpTests
         end
     ";
 
-    // -------------------------------------------------------------------------
-    // 1. Module is a table
-    // -------------------------------------------------------------------------
     [WebSocketFact]
     public async System.Threading.Tasks.Task Tcp_Module_IsTable()
     {
@@ -38,9 +35,6 @@ public sealed class KitsuneTcpTests
         r.String.ShouldBe("table");
     }
 
-    // -------------------------------------------------------------------------
-    // 2. Listener binds successfully
-    // -------------------------------------------------------------------------
     [WebSocketFact]
     public async System.Threading.Tasks.Task StartListener_BindsSuccessfully()
     {
@@ -55,9 +49,6 @@ public sealed class KitsuneTcpTests
         r.String.ShouldBe("ok");
     }
 
-    // -------------------------------------------------------------------------
-    // 3. Connect returns a TcpClient
-    // -------------------------------------------------------------------------
     [WebSocketFact]
     public async System.Threading.Tasks.Task Connect_ReturnsClient()
     {
@@ -74,9 +65,6 @@ public sealed class KitsuneTcpTests
         r.String.ShouldBe("ok");
     }
 
-    // -------------------------------------------------------------------------
-    // 4. Accept returns nil, nil when no client has connected yet
-    // -------------------------------------------------------------------------
     [WebSocketFact]
     public async System.Threading.Tasks.Task Accept_ReturnsNilNil_WhenNoPendingClient()
     {
@@ -92,9 +80,6 @@ public sealed class KitsuneTcpTests
         r.String.ShouldBe("ok");
     }
 
-    // -------------------------------------------------------------------------
-    // 5. Accept returns a client after TCP.Connect + Sleep
-    // -------------------------------------------------------------------------
     [WebSocketFact]
     public async System.Threading.Tasks.Task Accept_ReturnsClient_AfterConnect()
     {
@@ -112,9 +97,6 @@ public sealed class KitsuneTcpTests
         r.String.ShouldBe("ok");
     }
 
-    // -------------------------------------------------------------------------
-    // 6. Echo round-trip
-    // -------------------------------------------------------------------------
     [WebSocketFact]
     public async System.Threading.Tasks.Task EchoRoundTrip_WorksCorrectly()
     {
@@ -171,9 +153,6 @@ public sealed class KitsuneTcpTests
         r.String.ShouldBe("ok");
     }
 
-    // -------------------------------------------------------------------------
-    // 7. Multiple clients are accepted in order
-    // -------------------------------------------------------------------------
     [WebSocketFact]
     public async System.Threading.Tasks.Task MultipleClients_AcceptedInOrder()
     {
@@ -205,9 +184,6 @@ public sealed class KitsuneTcpTests
         r.String.ShouldBe("ok");
     }
 
-    // -------------------------------------------------------------------------
-    // 8. Poll returns nil + error when client disconnects
-    // -------------------------------------------------------------------------
     [WebSocketFact]
     public async System.Threading.Tasks.Task Poll_ReturnsNilAndError_WhenClientDisconnects()
     {
@@ -252,9 +228,6 @@ public sealed class KitsuneTcpTests
         r.String.ShouldBe("ok");
     }
 
-    // -------------------------------------------------------------------------
-    // 9. GetIP returns loopback; GetPort returns the listener port
-    // -------------------------------------------------------------------------
     [WebSocketFact]
     public async System.Threading.Tasks.Task GetIP_GetPort_ReturnExpectedValues()
     {
@@ -280,9 +253,6 @@ public sealed class KitsuneTcpTests
         r.String.ShouldBe("ok");
     }
 
-    // -------------------------------------------------------------------------
-    // 10. Dispose is idempotent
-    // -------------------------------------------------------------------------
     [WebSocketFact]
     public async System.Threading.Tasks.Task Dispose_IsIdempotent()
     {
@@ -299,9 +269,6 @@ public sealed class KitsuneTcpTests
         r.String.ShouldBe("ok");
     }
 
-    // -------------------------------------------------------------------------
-    // 11. GetContext returns a persistent per-object table
-    // -------------------------------------------------------------------------
     [WebSocketFact]
     public async System.Threading.Tasks.Task GetContext_ReturnsPersistentTable()
     {
@@ -330,9 +297,6 @@ public sealed class KitsuneTcpTests
         r.String.ShouldBe("ok");
     }
 
-    // -------------------------------------------------------------------------
-    // 12. Large payload round-trip
-    // -------------------------------------------------------------------------
     [WebSocketFact]
     public async System.Threading.Tasks.Task LargePayload_EchoesCorrectly()
     {

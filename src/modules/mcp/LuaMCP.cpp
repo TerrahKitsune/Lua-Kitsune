@@ -14,24 +14,17 @@
 #include <fcntl.h>
 #endif
 
-// =============================================================================
 // Singleton tracking -- a plain POD registry-ref int. Deliberately NOT a
 // pointer/object with a constructor or destructor: any global with a
 // std::vector/std::string member (or one that owns one) would have its
 // destructor run at DLL-unload/static-teardown time, governed by the loader
 // rather than by KitsuneCleanup()/EndMemoryManager() -- a real hazard in this
-// codebase (mem.cpp routes all C++ allocation, STL included, through
+// codebase (Mem.cpp routes all C++ allocation, STL included, through
 // kitsune_malloc/kitsune_free; EndMemoryManager's USEMEMORYMANAGER path can
 // tear the backing allocator down before such a global would be destructed).
 // LuaMcpServer itself only ever exists via placement-new inside a Lua
 // userdata (see lua_pushmcpserver), so its lifetime is tied to Lua GC / __gc.
-// =============================================================================
-
 static int g_mcpInstanceRef = LUA_NOREF;
-
-// =============================================================================
-// Forward declarations (mutually-referential dispatch/poll functions)
-// =============================================================================
 
 static int  McpPollStep(lua_State* L, LuaMcpServer* server);
 static int  McpPollContinuation(lua_State* L, int status, lua_KContext ctx);
@@ -44,13 +37,11 @@ static void McpHandleInitialize(lua_State* L, LuaMcpServer* server, int paramsId
 static int  McpNextLine(LuaMcpServer* server, std::string& out);
 static void McpRouteResponse(lua_State* L, LuaMcpServer* server, int msgIdx, int idIdx);
 
-// =============================================================================
 // Platform: stdio availability + non-blocking poll.
 // Direct adaptation of LuaProcess.cpp's Process_ReadFromPipe/ReadNonblocking, pointed
 // at our own inherited stdin/stdout instead of a child process's pipe.
 // Returns from McpPollStdin: >0 = bytes read, 0 = nothing available right
 // now, <0 = EOF (stdin closed -- the normal MCP client-disconnect path).
-// =============================================================================
 
 #ifdef _WIN32
 
@@ -118,9 +109,7 @@ static int McpPollStdin(char* buf, size_t bufsize) {
 
 #endif
 
-// =============================================================================
 // Userdata lifecycle
-// =============================================================================
 
 LuaMcpServer* lua_pushmcpserver(lua_State* L) {
 	LuaMcpServer* s = (LuaMcpServer*)lua_newuserdata(L, sizeof(LuaMcpServer));
@@ -187,10 +176,8 @@ int McpServer_ToString(lua_State* L) {
 	return 1;
 }
 
-// =============================================================================
 // JSON bridge helpers -- everything goes through the shared LuaJson bridge
 // instance (LuaJsonBridgeRegistryKey()). No hand-rolled JSON anywhere.
-// =============================================================================
 
 // Decodes `data`/`len` (a JSON-RPC line) into a Lua value, pushing the result.
 // Returns true on success (value on top of stack); false on failure (nothing pushed).
@@ -277,9 +264,7 @@ static void McpSendError(lua_State* L, int idIdx, int code, const char* message)
 	lua_pop(L, 1);
 }
 
-// =============================================================================
 // Result builders
-// =============================================================================
 
 static void McpPushEmptyObject(lua_State* L) {
 	// Guarantees `{}` on encode regardless of the bridge's emptyObjectAsSentinel
@@ -364,9 +349,7 @@ static void McpPushToolsListResult(lua_State* L, LuaMcpServer* server) {
 	lua_setfield(L, -2, "tools");
 }
 
-// =============================================================================
 // Dispatch: initialize
-// =============================================================================
 
 // Protocol revisions this server can speak, newest first. None of the changes
 // between them affect what this server sends for tools; the newer revisions are
@@ -426,7 +409,6 @@ static void McpHandleInitialize(lua_State* L, LuaMcpServer* server, int paramsId
 	lua_pop(L, 1); // result table
 }
 
-// =============================================================================
 // Dispatch: tools/call -- yield-safe via a lua_pcallk continuation. MCP
 // dispatches exactly one call per request, so no batch bookkeeping is
 // needed. `server` itself (already Lua-GC-owned) is passed as the lua_KContext,
@@ -437,7 +419,6 @@ static void McpHandleInitialize(lua_State* L, LuaMcpServer* server, int paramsId
 // resolves (synchronously or via the continuation), Lua guarantees the stack
 // looks like [..., msg, id, params, method, result_or_error] -- so
 // McpToolFinish can derive every needed index purely from lua_gettop(L).
-// =============================================================================
 
 static int McpToolFinish(lua_State* L, LuaMcpServer* server, int pcallStatus) {
 	server->toolThread = nullptr;
@@ -562,10 +543,6 @@ static int McpDispatchToolsCall(lua_State* L, LuaMcpServer* server, int paramsId
 	return McpToolFinish(L, server, rc);
 }
 
-// =============================================================================
-// Dispatch: one decoded JSON-RPC line
-// =============================================================================
-
 static int McpDispatchLine(lua_State* L, LuaMcpServer* server, const char* data, size_t len) {
 	if (!McpJsonDecode(L, data, len)) {
 		lua_pushnil(L);
@@ -620,13 +597,11 @@ static int McpDispatchLine(lua_State* L, LuaMcpServer* server, const char* data,
 	return McpPollStep(L, server);
 }
 
-// =============================================================================
-// Poll loop -- modeled on HttpCurl.cpp's HttpClient_Call/ClientCallContinuation:
+// Poll loop -- modeled on LuaHttpClient.cpp's HttpClient_Call/ClientCallContinuation:
 // a native call that transparently yields when invoked directly from the
 // top-level script, with no Tasks.New/coroutine.resume boilerplate needed.
 // Runs as its own independently-scheduled coroutine (see McpServer_Start),
 // so it cooperates with the scheduler on its own, fire-and-forget.
-// =============================================================================
 
 static void McpLinebufAppend(LuaMcpServer* server, const char* data, size_t len) {
 	size_t needed = server->linebufLen + len;
@@ -711,7 +686,6 @@ static int McpPollEntrypoint(lua_State* L) {
 	return McpPollStep(L, server);
 }
 
-// =============================================================================
 // print()/io.write() overrides -- installed globally the moment Start()
 // succeeds. stdout is reserved for JSON-RPC responses; nothing in this
 // process may write to it directly once the server is running, regardless
@@ -719,7 +693,6 @@ static int McpPollEntrypoint(lua_State* L) {
 // rather than silently discarded, so a tool callback's debug output can be
 // merged into that call's response -- see McpDispatchToolsCall (clears
 // the buffer before dispatch) and McpToolFinish (merges it after).
-// =============================================================================
 
 static int McpPrintOverride(lua_State* L) {
 	LuaMcpServer* server = (LuaMcpServer*)lua_touserdata(L, lua_upvalueindex(1));
@@ -768,14 +741,12 @@ static void McpInstallOutputRedirect(lua_State* L, LuaMcpServer* server) {
 	lua_pop(L, 1); // io table
 }
 
-// =============================================================================
 // Server-to-client requests: waiting for a response
 //
 // Elicit writes elicitation/create, then waits for the response by reading stdin
 // itself -- it only runs inside a tool callback, where the poll loop is suspended
 // and can't read it for us. While waiting it answers `ping`, parks responses in
 // `pending` by id, and defers every other message for the poll loop to dispatch later.
-// =============================================================================
 
 static double McpNowMs() {
 	using namespace std::chrono;
@@ -859,11 +830,9 @@ static void McpPendingErase(lua_State* L, LuaMcpServer* server, const std::strin
 	server->pending.erase(it);
 }
 
-// =============================================================================
 // Elicitation / Question userdata -- definition side.
-// Everything is append-only and write-once (see Plans/McpElicitation.md):
+// Everything is append-only and write-once:
 // duplicate names/values and repeated setters raise, nothing can be removed.
-// =============================================================================
 
 static void McpUnref(lua_State* L, int& ref) {
 	if (ref != LUA_NOREF) {
@@ -1194,9 +1163,7 @@ int McpQuestion_ToString(lua_State* L) {
 	return 1;
 }
 
-// =============================================================================
 // Elicitation -- building the form
-// =============================================================================
 
 // Definition errors that can only be seen once everything is added (e.g. a
 // default that isn't one of the answers). Programming errors: they raise.
@@ -1323,7 +1290,6 @@ static void McpPushElicitationSchema(lua_State* L, LuaMcpElicitation* e, bool ti
 	lua_setfield(L, schemaIdx, "properties");
 }
 
-// =============================================================================
 // Elicitation -- asking, and turning the answer into results
 //
 // Elicit's stack, shared by every stage and continuation:
@@ -1333,7 +1299,6 @@ static void McpPushElicitationSchema(lua_State* L, LuaMcpElicitation* e, bool ti
 // Callbacks run through lua_pcallk so they may yield (Sleep, database calls, ...).
 // No stage holds a C++ object with a destructor across a yield: Lua is built as
 // C and longjmps past destructors.
-// =============================================================================
 
 enum {
 	EL_SELF = 1, EL_CONTEXT, EL_REQUEST, EL_ID, EL_DEADLINE,
@@ -1833,9 +1798,7 @@ int McpElicitation_Elicit(lua_State* L) {
 	return McpElicitWait(L, e);
 }
 
-// =============================================================================
 // Lua-facing API
-// =============================================================================
 
 int McpServer_AddTool(lua_State* L) {
 	LuaMcpServer* server = luaL_checkmcpserver(L, 1);

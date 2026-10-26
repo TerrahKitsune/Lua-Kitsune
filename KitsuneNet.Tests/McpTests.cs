@@ -89,7 +89,7 @@ public sealed class McpTests
     private static readonly string KitsuneExe = Path.GetFullPath(Path.Combine(
         AppContext.BaseDirectory, "..", "..", "..", "..", "x64", Configuration, "Kitsune.exe"));
 
-    // -- Where Elicit may be called ---------------------------------------------
+    // Where Elicit may be called
     [Fact]
     public async Task Elicit_AtLoadTime_Throws()
     {
@@ -125,7 +125,7 @@ public sealed class McpTests
         (await client.CallToolAsync("no_yield")).ShouldContain("Elicit: can't wait here");
     }
 
-    // -- JSON null in the client's messages --------------------------------------
+    // JSON null in the client's messages
     [WindowsFact]
     public async Task Elicit_OptionalAnswerNull_IsAbsent()
     {
@@ -167,7 +167,7 @@ public sealed class McpTests
         (await client.CallToolAsync("can_elicit")).ShouldBe("true");
     }
 
-    // -- Client side ------------------------------------------------------------
+    // Client side
     private sealed class McpClient : IAsyncDisposable
     {
         private static readonly TimeSpan ReadTimeout = TimeSpan.FromSeconds(10);

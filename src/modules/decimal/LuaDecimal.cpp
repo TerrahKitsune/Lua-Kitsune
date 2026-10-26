@@ -5,8 +5,6 @@
 #include <ctype.h>
 #include "Mem.h"
 
-// ── Userdata helpers ──────────────────────────────────────────────────────────
-
 LuaDecimal* lua_pushdecimal(lua_State* L) {
 	LuaDecimal* d = (LuaDecimal*)lua_newuserdata(L, sizeof(LuaDecimal));
 	memset(d, 0, sizeof(LuaDecimal));
@@ -27,8 +25,7 @@ int lua_isdecimal(lua_State* L, int index) {
 	return result;
 }
 
-// ── 128-bit unsigned integer arithmetic ──────────────────────────────────────
-// We represent 128-bit unsigned integers as { uint64_t lo, uint64_t hi }.
+// 128-bit unsigned integer arithmetic. We represent 128-bit unsigned integers as { uint64_t lo, uint64_t hi }.
 
 static int U128IsZero(uint64_t lo, uint64_t hi) {
 	return lo == 0 && hi == 0;
@@ -150,8 +147,6 @@ static uint64_t U128Div10(uint64_t* lo, uint64_t* hi) {
 	uint64_t rhi = *hi / 10;
 	uint64_t remHi = *hi % 10;
 	// Combine remainder from high with low: (remHi * 2^64 + lo) / 10
-	// Use the identity: remHi * 2^64 = remHi * (10 * 1844674407370955161 + 6)
-	// Simpler: do it in two 64-bit halves.
 	uint64_t loVal = *lo;
 	// high 32 bits of lo
 	uint64_t loHiWord = (remHi << 32) | (loVal >> 32);
@@ -182,8 +177,6 @@ static void U128ScaleUp(uint64_t* lo, uint64_t* hi, int n) {
 	for (int i = 0; i < n; i++)
 		U128Mul10(lo, hi);
 }
-
-// ── Parse / format ────────────────────────────────────────────────────────────
 
 int DecimalParseC(const char* s, size_t len, LuaDecimal* out) {
 	if (!s || len == 0) return 0;
@@ -260,7 +253,6 @@ static int DecimalFormat(const LuaDecimal* d, char* buf, size_t bufsz) {
 		return snprintf(buf, bufsz, "0");
 	}
 
-	// Extract digits by repeated division
 	char digits[44];  // 2^127 has 39 decimal digits; 44 gives a safe margin
 	int ndigits = 0;
 	uint64_t lo = d->lo, hi = d->hi;
@@ -286,7 +278,6 @@ static int DecimalFormat(const LuaDecimal* d, char* buf, size_t bufsz) {
 		for (int j = ndigits - 1; j >= 0 && p < end; j--) *p++ = digits[j];
 	}
 	else {
-		// Has integer part
 		for (int j = ndigits - 1; j >= 0 && p < end; j--) {
 			*p++ = digits[j];
 			if (dotFromRight > 0 && j == dotFromRight && p < end)
@@ -303,8 +294,6 @@ void lua_pushdecimalstring(lua_State* L, int index) {
 	DecimalFormat(d, buf, sizeof(buf));
 	lua_pushstring(L, buf);
 }
-
-// ── Direct numeric conversion (no Lua string heap roundtrip) ─────────────────
 
 // Convert a C int64 directly into a LuaDecimal (exact, scale=0).
 static void DecimalFromInteger(int64_t v, LuaDecimal* out) {
@@ -356,8 +345,6 @@ static LuaDecimal* CoerceDecimal(lua_State* L, int index, LuaDecimal* tmp) {
 	return NULL;
 }
 
-// ── Constructors ──────────────────────────────────────────────────────────────
-
 int Decimal_FromString(lua_State* L) {
 	size_t len;
 	const char* s = luaL_checklstring(L, 1, &len);
@@ -388,8 +375,6 @@ int Decimal_Zero(lua_State* L) {
 	lua_pushdecimal(L);  // already zeroed by lua_pushdecimal
 	return 1;
 }
-
-// ── Inspection ───────────────────────────────────────────────────────────────
 
 int Decimal_ToString(lua_State* L) {
 	LuaDecimal* d = lua_todecimal(L, 1);
@@ -439,8 +424,6 @@ int Decimal_Abs(lua_State* L) {
 	return 1;
 }
 
-// ── Arithmetic helpers ────────────────────────────────────────────────────────
-
 // Align two decimals to the same scale, modifying copies.
 // The one with smaller scale gets its coefficient scaled up.
 static void AlignScales(LuaDecimal* a, LuaDecimal* b) {
@@ -485,8 +468,6 @@ static void SignedAdd(const LuaDecimal* a, const LuaDecimal* b, LuaDecimal* r) {
 	}
 	if (U128IsZero(r->lo, r->hi)) r->negative = 0;
 }
-
-// ── Arithmetic operations ─────────────────────────────────────────────────────
 
 // U128Divmod: quotient *q = n / d, remainder *rem = n % d.  d must be non-zero.
 static void U128Divmod(
@@ -545,7 +526,6 @@ int Decimal_Sub(lua_State* L) {
 	LuaDecimal* a = CoerceDecimal(L, 1, &ta);
 	LuaDecimal* b = CoerceDecimal(L, 2, &tb);
 	if (!a || !b) return luaL_error(L, "Decimal expected for subtraction");
-	// negate b then add
 	LuaDecimal nb = *b;
 	if (!U128IsZero(nb.lo, nb.hi)) nb.negative = nb.negative ^ 1;
 	LuaDecimal* r = lua_pushdecimal(L);
@@ -636,8 +616,6 @@ int Decimal_Mod(lua_State* L) {
 	return 1;
 }
 
-// ── Comparison ────────────────────────────────────────────────────────────────
-
 // Returns -1, 0, +1 comparing a and b numerically
 static int DecimalCmp(const LuaDecimal* a, const LuaDecimal* b) {
 	LuaDecimal ta = *a, tb = *b;
@@ -678,8 +656,6 @@ int Decimal_Le(lua_State* L) {
 	lua_pushboolean(L, DecimalCmp(a, b) <= 0 ? 1 : 0);
 	return 1;
 }
-
-// ── Rounding ─────────────────────────────────────────────────────────────────
 
 int Decimal_Round(lua_State* L) {
 	LuaDecimal* src = lua_todecimal(L, 1);

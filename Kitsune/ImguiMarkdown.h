@@ -5,10 +5,6 @@
 #include "ResourceCache.h"
 #include "KitsuneEngine.h"
 
-// ---------------------------------------------------------------------------
-// Node type constants
-// ---------------------------------------------------------------------------
-
 // Line-level types
 #define MD_PARA         0
 #define MD_H1           1
@@ -31,10 +27,6 @@
 #define MD_SPAN_LINK    20  // text in offset/len, URL in urlOffset/urlLen
 #define MD_IMAGE        21  // alt text in offset/len, id in urlOffset/urlLen
 
-// ---------------------------------------------------------------------------
-// Node struct
-// ---------------------------------------------------------------------------
-
 struct MarkdownNode {
 	uint32_t offset;    // byte offset into mdContent
 	uint32_t len;       // byte length in mdContent
@@ -44,10 +36,8 @@ struct MarkdownNode {
 	uint8_t  level;     // nesting level for lists; 0 otherwise
 };
 
-// ---------------------------------------------------------------------------
 // MarkdownResource — cache-managed parsed document. Resource must be first field.
 // Lifetime is owned by the ResourceCache; luaId is the Lua-facing handle.
-// ---------------------------------------------------------------------------
 
 struct MarkdownResource {
 	Resource       resource;      // type=RESOURCE_MARKDOWN; luaId and source live here
@@ -58,10 +48,6 @@ struct MarkdownResource {
 	int            mdNodeAlloc;
 	const char*    mdCacheError;  // points to a static string or nullptr
 };
-
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
 
 // Reads the full stream content into md->mdContent via KitsuneCallMethod.
 void ReadStreamIntoCache(const KitsuneVariable* streamVar, MarkdownResource* md);

@@ -214,7 +214,6 @@ int RedisString_len(lua_State* L) {
 
 int RedisString_Concat(lua_State* L) {
 
-	//First arg
 	if (luaL_testudata(L, -2, REDISSTRING)) {
 		lua_pushvalue(L, -2);
 		RedisString_ToString(L);
@@ -285,12 +284,6 @@ int RedisString_ToString(lua_State* L) {
 
 	LuaRedisString* redisString = luaL_checkredisstring(L, -1);
 
-	//if (antiRecursion > 0) {
-	//	char tim[200];
-	//	sprintf(tim, "RedisString: 0x%016X", (void*)redisString);
-	//	lua_pushstring(L, tim);
-	//	return 1;
-	//}
 	PushRedisRef(L, &redisString->key);
 	lua_pushstring(L, "GET");
 	PushRedisKeyName(L, &redisString->key);

@@ -8,8 +8,6 @@
 SQLITE_EXTENSION_INIT3
 #include "kitsuneext.h"
 
-// ---- structs -----------------------------------------------------------------
-
 struct LuaVTabModule {
 	KitsuneVariable* readFunc;    // anchored via lua_add_kitsune_state; NOT freed in destructor
 	KitsuneVariable* indexFunc;   // anchored via lua_add_kitsune_state; NULL = full-scan only
@@ -32,8 +30,7 @@ struct LuaVTabCursor {
 	int eof;
 };
 
-// ---- module destructor — sole cleanup path for LuaVTabModule ----------------
-
+// Module destructor: sole cleanup path for LuaVTabModule.
 static void lua_vtab_free_module(void* pAux) {
 	LuaVTabModule* mod = (LuaVTabModule*)pAux;
 	if (!mod)
@@ -48,8 +45,6 @@ static void lua_vtab_free_module(void* pAux) {
 	sqlite3_free(mod);
 }
 
-// ---- op string helper -------------------------------------------------------
-
 static const char* vtab_op_string(unsigned char op) {
 	switch (op) {
 	case SQLITE_INDEX_CONSTRAINT_EQ: return "=";
@@ -61,7 +56,7 @@ static const char* vtab_op_string(unsigned char op) {
 	}
 }
 
-// ---- reader call helper (shared by xFilter and xNext) -----------------------
+// Reader call shared by xFilter and xNext.
 // Calls readFunc(ctx, nth, index) where index is nil for a full scan.
 // Stores result in cursor->currentRow and sets cursor->eof on nil/error/non-table.
 
@@ -87,8 +82,7 @@ static void lua_vtab_call_reader(LuaVTabCursor* cursor, LuaVTabModule* mod) {
 	}
 }
 
-// ---- xConnect / xCreate — same function -------------------------------------
-
+// xConnect and xCreate share this function.
 static int lua_vtab_connect(sqlite3* db, void* pAux, int argc, const char* const* argv,
 	sqlite3_vtab** ppVtab, char** pzErr) {
 	(void)argc; (void)argv; (void)pzErr;
@@ -118,7 +112,7 @@ static int lua_vtab_connect(sqlite3* db, void* pAux, int argc, const char* const
 	return SQLITE_OK;
 }
 
-// ---- xBestIndex -------------------------------------------------------------
+// xBestIndex
 // For each usable constraint with a supported op, call indexFunc(ctx, op, colName).
 // Constraints where indexFunc returns truthy are marked as handled; SQLite post-filters
 // the rest. indexFunc is called once per constraint so partial acceptance is natural.
@@ -156,7 +150,7 @@ static int lua_vtab_best_index(sqlite3_vtab* pVtab, sqlite3_index_info* info) {
 			continue;
 		const char* colName = mod->fieldNames[colIdx];
 
-		// Call indexFunc(ctx, op, colName) — once per constraint candidate.
+		// Call indexFunc(ctx, op, colName) â€” once per constraint candidate.
 		// Return value convention:
 		//   nil / false / 0 / negative  ? decline this constraint
 		//   true                        ? accept, unique (SQLITE_INDEX_SCAN_UNIQUE, estimatedRows=1)
@@ -192,7 +186,6 @@ static int lua_vtab_best_index(sqlite3_vtab* pVtab, sqlite3_index_info* info) {
 				cost = result->number;
 				hasExplicitCost = true;
 			}
-			// nil / false / 0 / negative ? decline (no action)
 		}
 		KitsuneVariableFree(result);
 
@@ -211,7 +204,7 @@ static int lua_vtab_best_index(sqlite3_vtab* pVtab, sqlite3_index_info* info) {
 	}
 
 	if (argvIdx == 1) {
-		// No constraints accepted — full scan.
+		// No constraints accepted â€” full scan.
 		sqlite3_free(idxStr);
 		return SQLITE_OK;
 	}
@@ -231,14 +224,11 @@ static int lua_vtab_best_index(sqlite3_vtab* pVtab, sqlite3_index_info* info) {
 	return SQLITE_OK;
 }
 
-// ---- xDisconnect / xDestroy - same function ---------------------------------
-
+// xDisconnect and xDestroy share this function.
 static int lua_vtab_disconnect(sqlite3_vtab* pVtab) {
 	sqlite3_free(pVtab); // free vtab shell only; mod is owned by the module destructor
 	return SQLITE_OK;
 }
-
-// ---- xOpen -------------------------------------------------------------------
 
 static int lua_vtab_open(sqlite3_vtab* pVtab, sqlite3_vtab_cursor** ppCursor) {
 	(void)pVtab;
@@ -250,8 +240,6 @@ static int lua_vtab_open(sqlite3_vtab* pVtab, sqlite3_vtab_cursor** ppCursor) {
 	return SQLITE_OK;
 }
 
-// ---- xClose ------------------------------------------------------------------
-
 static int lua_vtab_close(sqlite3_vtab_cursor* pCursor) {
 	LuaVTabCursor* cursor = (LuaVTabCursor*)pCursor;
 	KitsuneVariableFree(cursor->currentRow);
@@ -260,10 +248,10 @@ static int lua_vtab_close(sqlite3_vtab_cursor* pCursor) {
 	return SQLITE_OK;
 }
 
-// ---- xFilter -----------------------------------------------------------------
+// xFilter
 //
-// idxNum == 0: full scan — reader called with (ctx, nth, nil).
-// idxNum == 1: index scan — parse idxStr ("colnum:op," pairs) + argv values to
+// idxNum == 0: full scan â€” reader called with (ctx, nth, nil).
+// idxNum == 1: index scan â€” parse idxStr ("colnum:op," pairs) + argv values to
 //              build the anchored index table {[1]={Column=name,Op=op,Value=v},...},
 //              reader called with (ctx, nth, index).
 //
@@ -314,7 +302,6 @@ static int lua_vtab_filter(sqlite3_vtab_cursor* pCursor, int idxNum, const char*
 			KitsuneVariable val = {};
 			sqlite_val_to_kitsune(argv[count], &val);
 
-			// node 0: Column (field name string)
 			innerNodes[count][0].key.type = KITSUNE_TSTRING;
 			innerNodes[count][0].key.data = (unsigned char*)"Column";
 			innerNodes[count][0].key.length = 6;
@@ -323,7 +310,6 @@ static int lua_vtab_filter(sqlite3_vtab_cursor* pCursor, int idxNum, const char*
 			innerNodes[count][0].value.length = strlen(vtab->mod->fieldNames[col - 1]);
 			innerNodes[count][0].next = &innerNodes[count][1];
 
-			// node 1: Op
 			innerNodes[count][1].key.type = KITSUNE_TSTRING;
 			innerNodes[count][1].key.data = (unsigned char*)"Op";
 			innerNodes[count][1].key.length = 2;
@@ -332,7 +318,6 @@ static int lua_vtab_filter(sqlite3_vtab_cursor* pCursor, int idxNum, const char*
 			innerNodes[count][1].value.length = (size_t)opLen;
 			innerNodes[count][1].next = &innerNodes[count][2];
 
-			// node 2: Value
 			innerNodes[count][2].key.type = KITSUNE_TSTRING;
 			innerNodes[count][2].key.data = (unsigned char*)"Value";
 			innerNodes[count][2].key.length = 5;
@@ -364,8 +349,6 @@ static int lua_vtab_filter(sqlite3_vtab_cursor* pCursor, int idxNum, const char*
 	return SQLITE_OK;
 }
 
-// ---- xNext -------------------------------------------------------------------
-
 static int lua_vtab_next(sqlite3_vtab_cursor* pCursor) {
 	LuaVTabCursor* cursor = (LuaVTabCursor*)pCursor;
 	LuaVTabVTab* vtab = (LuaVTabVTab*)pCursor->pVtab;
@@ -376,13 +359,11 @@ static int lua_vtab_next(sqlite3_vtab_cursor* pCursor) {
 	return SQLITE_OK;
 }
 
-// ---- xEof --------------------------------------------------------------------
-
 static int lua_vtab_eof(sqlite3_vtab_cursor* pCursor) {
 	return ((LuaVTabCursor*)pCursor)->eof;
 }
 
-// ---- xColumn -----------------------------------------------------------------
+// xColumn
 // currentRow is a KITSUNE_TTABLE ref (result of KitsuneExecuteVariable).
 // Use KitsuneGetIndex with a 1-based integer key to retrieve each column.
 
@@ -401,15 +382,14 @@ static int lua_vtab_column(sqlite3_vtab_cursor* pCursor, sqlite3_context* ctx, i
 	return SQLITE_OK;
 }
 
-// ---- xRowid - no-op for WITHOUT ROWID tables --------------------------------
-
+// xRowid is a no-op for WITHOUT ROWID tables.
 static int lua_vtab_rowid(sqlite3_vtab_cursor* pCursor, sqlite_int64* pRowid) {
 	(void)pCursor;
 	*pRowid = 0;
 	return SQLITE_OK;
 }
 
-// ---- xUpdate -----------------------------------------------------------------
+// xUpdate
 //
 // WITHOUT ROWID argv layout (single-column PRIMARY KEY):
 //
@@ -449,12 +429,11 @@ static int lua_vtab_update(sqlite3_vtab* pVtab, int argc, sqlite3_value** argv,
 	args[0] = *mod->contextVar;
 
 	if (argc == 1) {
-		// DELETE
 		sqlite_val_to_kitsune(argv[0], &args[1]);
 		args[2] = nil;
 	}
 	else {
-		// INSERT or UPDATE — build data table from argv[2..argc-1] on the stack.
+		// INSERT or UPDATE â€” build data table from argv[2..argc-1] on the stack.
 		int dataCount = argc - 2;
 		KitsuneKeyValuePairVariableNode dataNodes[VTAB_MAX_FIELDS];
 		memset(dataNodes, 0, sizeof(dataNodes));
@@ -490,8 +469,6 @@ static int lua_vtab_update(sqlite3_vtab* pVtab, int argc, sqlite3_value** argv,
 	return SQLITE_OK;
 }
 
-// ---- static module ----------------------------------------------------------
-
 static sqlite3_module g_luaVTabModule = {
 	0,                        // iVersion
 	lua_vtab_connect,         // xCreate
@@ -514,8 +491,6 @@ static sqlite3_module g_luaVTabModule = {
 	NULL                      // xShadowName
 };
 
-// ---- register_virtual_table_cb ----------------------------------------------
-
 int register_virtual_table_cb(int argc, const KitsuneVariable* argv,
 	kitsune_ResultSetter resultSetter, void* userdata) {
 
@@ -530,7 +505,6 @@ int register_virtual_table_cb(int argc, const KitsuneVariable* argv,
 
 	const char* name = (const char*)argv[0].data;
 
-	// Get field count.
 	KitsuneVariable* lenVar = KitsuneGetLength(&argv[1]);
 	if (!lenVar || lenVar->type != KITSUNE_TINTEGER || lenVar->integer < 2) {
 		KitsuneVariableFree(lenVar);
@@ -557,7 +531,6 @@ int register_virtual_table_cb(int argc, const KitsuneVariable* argv,
 	}
 	memset(mod->fieldNames, 0, sizeof(char*) * N);
 
-	// Fetch and validate each field name (letters only, matching RegisterTable).
 	for (int i = 0; i < N; i++) {
 		KitsuneVariable intKey = {};
 		intKey.type = KITSUNE_TINTEGER;
@@ -589,7 +562,6 @@ int register_virtual_table_cb(int argc, const KitsuneVariable* argv,
 		KitsuneVariableFree(fieldVar);
 	}
 
-	// Anchor required reader function.
 	mod->readFunc = lua_add_kitsune_state(&argv[2]);
 	if (!mod->readFunc) {
 		lua_vtab_free_module(mod);
@@ -622,7 +594,7 @@ int register_virtual_table_cb(int argc, const KitsuneVariable* argv,
 		sqlite3_free(dropSql);
 	}
 
-	// Create the vtable-level shared context (passed to reader, indexFunc, updateFunc).
+	// Shared context passed to reader, indexFunc and updateFunc.
 	KitsuneVariable cv = {};
 	cv.type = KITSUNE_TTABLECONTENTS;
 	mod->contextVar = KitsuneAnchorVariable(&cv);
@@ -631,15 +603,15 @@ int register_virtual_table_cb(int argc, const KitsuneVariable* argv,
 		return vtab_cb_error(resultSetter, "RegisterVirtualTable: out of memory");
 	}
 
-	// Register the module (destructor takes ownership of mod).
+	// The module destructor takes ownership of mod.
 	sqlite3_create_module_v2(db, name, &g_luaVTabModule, mod, lua_vtab_free_module);
 
-	// Create the virtual table (triggers xConnect with the fresh mod).
+	// Triggers xConnect with the fresh mod.
 	char* createSql = sqlite3_mprintf("CREATE VIRTUAL TABLE \"%w\" USING \"%w\"", name, name);
 	if (createSql) {
 		sqlite3_exec(db, createSql, NULL, NULL, NULL);
 		sqlite3_free(createSql);
 	}
 
-	return 1; // success; RegisterVirtualTable returns nothing to Lua
+	return 1; // RegisterVirtualTable returns nothing to Lua
 }

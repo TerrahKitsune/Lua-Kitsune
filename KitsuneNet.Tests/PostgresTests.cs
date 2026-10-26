@@ -7,7 +7,7 @@ namespace KitsuneNet.Tests;
 [Collection("KitsuneSequential")]
 public sealed class PostgresTests
 {
-    // -- coroutine protocol ---------------------------------------------------
+    // Coroutine protocol
     [PostgresFact]
     public async Task Helper_MethodsExistInModuleTable()
     {
@@ -120,8 +120,8 @@ public sealed class PostgresTests
     [PostgresFact]
     public async Task Timestamptz_WholeHourAndMinuteOffsets_ReturnDateTime()
     {
-        // Postgres prints whole-hour offsets as "+00" / "-05"; those used to come
-        // back as strings instead of DateTime.
+        // Postgres prints whole-hour offsets as "+00" / "-05"; they must still
+        // come back as DateTime.
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
 			local conn = assert({ConnectLua()})
@@ -141,8 +141,8 @@ public sealed class PostgresTests
     [PostgresFact]
     public async Task Dates_WithUnparsedSuffix_FallBackToString()
     {
-        // A BC date or a pre-1900 local-mean-time offset with seconds used to parse
-        // as a wrong DateTime (the suffix was ignored); they now come back as strings.
+        // A BC date or a pre-1900 local-mean-time offset with seconds must come back
+        // as a string; parsing it as DateTime would silently ignore the suffix.
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
 			local conn = assert({ConnectLua()})
@@ -211,7 +211,7 @@ public sealed class PostgresTests
         r.String.ShouldBe("ok");
     }
 
-    // -- CRUD -----------------------------------------------------------------
+    // CRUD
     [PostgresFact]
     public async Task Crud_Insert_ReturnsOneAffectedRow()
     {
@@ -317,7 +317,7 @@ public sealed class PostgresTests
         r.String.ShouldBe("0:true");
     }
 
-    // -- type mapping ----------------------------------------------------------
+    // Type mapping
     [PostgresFact]
     public async Task Types_IntegersReturnedAsInteger()
     {
@@ -398,7 +398,7 @@ public sealed class PostgresTests
         r.String.ShouldBe("true:true");
     }
 
-    // -- NonQuery --------------------------------------------------------------
+    // NonQuery
     [PostgresFact]
     public async Task NonQuery_Insert_ReturnsAffectedCount()
     {
@@ -437,7 +437,7 @@ public sealed class PostgresTests
         r.String.ShouldBe("false");
     }
 
-    // -- Scalar ----------------------------------------------------------------
+    // Scalar
     [PostgresFact]
     public async Task Scalar_ReturnsFirstColumnOfFirstRow()
     {
@@ -486,7 +486,7 @@ public sealed class PostgresTests
         r.String.ShouldBe("false");
     }
 
-    // -- QueryAll --------------------------------------------------------------
+    // QueryAll
     [PostgresFact]
     public async Task QueryAll_MultipleRows_ReturnsAllRows()
     {
@@ -547,7 +547,7 @@ public sealed class PostgresTests
         r.String.ShouldBe("false");
     }
 
-    // -- AliveToken integration -----------------------------------------------
+    // AliveToken integration
     [PostgresFact]
     public async Task Postgres_SetAliveToken_DoesNotRaise()
     {

@@ -40,8 +40,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 	return TRUE;
 }
 
-// -- SQLite extension functions -----------------------------------------------
-
 static void kitsune_version_func(sqlite3_context* context, int argc, sqlite3_value** argv) {
 	sqlite3_result_text(context, KITSUNE_EXTENSION_VERSION, -1, SQLITE_STATIC);
 }

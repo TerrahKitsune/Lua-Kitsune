@@ -15,14 +15,14 @@ typedef struct LuaSound {
 LuaSound* lua_tosound(lua_State* L, int index);
 LuaSound* lua_pushsound(lua_State* L);
 
-// -- module-level (Sound.X) --
+// Module-level (Sound.X)
 int Sound_New(lua_State* L);
 int Sound_Tone(lua_State* L);
 int Sound_Noise(lua_State* L);
 int Sound_Open(lua_State* L);
 int Sound_FromBytes(lua_State* L);
 
-// -- methods (snd:X) --
+// Methods (snd:X)
 int Sound_GetSampleRate(lua_State* L);
 int Sound_GetChannels(lua_State* L);
 int Sound_GetFrameCount(lua_State* L);

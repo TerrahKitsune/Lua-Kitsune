@@ -12,18 +12,15 @@
 #define LUATCPLISTENER "TCPLISTENER"
 #define LUATCPCLIENT   "TCPCLIENT"
 
-/* ── Forward declarations ─────────────────────────────────────────────────── */
 typedef struct LuaTcpListener LuaTcpListener;
 typedef struct LuaTcpClient   LuaTcpClient;
 
-/* ── Message queue node ───────────────────────────────────────────────────── */
 typedef struct TcpMsgNode {
     char*              data;   /* raw bytes (may contain nulls), freed on dequeue */
     size_t             len;
     struct TcpMsgNode* next;
 } TcpMsgNode;
 
-/* ── LuaTcpListener userdata ──────────────────────────────────────────────── */
 typedef struct LuaTcpListener {
     struct event_base*     base;
     struct evconnlistener* listener;   /* libevent evconnlistener */
@@ -41,7 +38,6 @@ typedef struct LuaTcpListener {
     bool                   disposed;
 } LuaTcpListener;
 
-/* ── LuaTcpClient userdata ────────────────────────────────────────────────── */
 typedef struct LuaTcpClient {
     struct bufferevent*  bev;         /* libevent bufferevent (the connection)       */
     struct event_base*   evbase;      /* borrowed from listener or self-created      */
@@ -65,18 +61,18 @@ typedef struct LuaTcpClient {
     lua_Integer          id;
 } LuaTcpClient;
 
-/* ── TCP module functions ─────────────────────────────────────────────────── */
+/* TCP module functions */
 int TCP_StartListener(lua_State* L);
 int TCP_Connect(lua_State* L);
 
-/* ── Listener methods ─────────────────────────────────────────────────────── */
+/* Listener methods */
 int TcpListener_Accept     (lua_State* L);
 int TcpListener_Dispose    (lua_State* L);
 int TcpListener_GetContext (lua_State* L);
 int TcpListener_GC         (lua_State* L);
 int TcpListener_ToString   (lua_State* L);
 
-/* ── Client methods ───────────────────────────────────────────────────────── */
+/* Client methods */
 int TcpClient_Poll         (lua_State* L);
 int TcpClient_Send         (lua_State* L);
 int TcpClient_GetIP        (lua_State* L);

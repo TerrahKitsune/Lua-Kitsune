@@ -9,10 +9,8 @@
 #include "Imgui/imgui.h"
 #include <SDL.h>
 
-// ---------------------------------------------------------------------------
 // HtmlResource — cache-managed parsed litehtml document. Resource must be first field.
 // Lifetime is owned by the ResourceCache; luaId is the Lua-facing handle.
-// ---------------------------------------------------------------------------
 
 struct HtmlResource {
     Resource                 resource;       // type=RESOURCE_HTML; luaId and source live here
@@ -30,11 +28,9 @@ struct HtmlResource {
     bool                     hasPendingClick = false;
 };
 
-// ---------------------------------------------------------------------------
 // KitsuneHtmlContainer — litehtml document_container implementation.
 // One instance shared across all HtmlDocument renders; stateless between calls
 // except for draw-time context set via Begin/End.
-// ---------------------------------------------------------------------------
 
 class KitsuneHtmlContainer : public litehtml::document_container {
 public:
@@ -112,23 +108,17 @@ public:
     struct HtmlResource* activeDoc = nullptr;
 };
 
-// ---------------------------------------------------------------------------
 // Global container instance — one per session, reused across all HtmlDocuments.
-// ---------------------------------------------------------------------------
 
 KitsuneHtmlContainer* HtmlGetContainer();
 
-// ---------------------------------------------------------------------------
 // Module registration — called from RegisterImguiFunctions()
-// ---------------------------------------------------------------------------
 
 void RegisterHtmlFunctions();
 // Force all live HTML documents to re-layout next render (e.g. after atlas rebuild).
 void HtmlInvalidateAll();
 
-// ---------------------------------------------------------------------------
 // renderer:Html binding — declared here, registered in add_imgui_meta_bindings
-// ---------------------------------------------------------------------------
 
 int ImguiRenderer_Html(int argc, const KitsuneVariable* argv,
                        const kitsune_ResultSetter setter, void* ud);

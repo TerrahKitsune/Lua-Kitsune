@@ -12,7 +12,7 @@ public sealed class KafkaTests
 
     public KafkaTests(ITestOutputHelper output) => _output = output;
 
-    // -- creation -------------------------------------------------------------
+    // creation
     [KafkaFact]
     public async Task NewProducer_ValidConfig_ReturnsUserdata()
     {
@@ -135,7 +135,7 @@ public sealed class KafkaTests
         r.String.ShouldEndWith(":true");
     }
 
-    // -- producer -------------------------------------------------------------
+    // producer
     [KafkaFact]
     public async Task Producer_Send_ReturnsTrue()
     {
@@ -238,7 +238,7 @@ public sealed class KafkaTests
         r.String.ShouldBe("true");
     }
 
-    // -- consumer -------------------------------------------------------------
+    // consumer
     [KafkaFact]
     public async Task Consumer_Subscribe_ToMultipleTopics_Succeeds()
     {
@@ -271,7 +271,7 @@ public sealed class KafkaTests
         r.String.ShouldBe("true");
     }
 
-    // -- round-trip -----------------------------------------------------------
+    // round-trip
     [KafkaFact]
     public async Task Consumer_RoundTrip_ReceivesProducedMessage()
     {
@@ -369,7 +369,7 @@ public sealed class KafkaTests
         r.String.ShouldBe("true");
     }
 
-    // -- implicit commit via next Poll -----------------------------------------
+    // implicit commit via next Poll
     [KafkaFact]
     public async Task Consumer_Poll_CommitsImplicitlyOnNextCall()
     {
@@ -410,7 +410,7 @@ public sealed class KafkaTests
         r.String.ShouldBe("true");
     }
 
-    // -- AutoCommit toggle -----------------------------------------------------
+    // AutoCommit toggle
     [KafkaFact]
     public async Task Consumer_Assign_Partition_RoundTrip()
     {
@@ -462,7 +462,7 @@ public sealed class KafkaTests
         r.String.ShouldBe("5/5");
     }
 
-    // -- Group operations ------------------------------------------------------
+    // Group operations
     [KafkaFact]
     public async Task Producer_ListGroups_ReturnsArray()
     {
@@ -672,7 +672,7 @@ public sealed class KafkaTests
         r.String.ShouldBe("true:true:true");
     }
 
-    // -- GetTopicConfig / SetTopicConfig --------------------------------------
+    // GetTopicConfig / SetTopicConfig
     [KafkaFact]
     public async Task Producer_GetTopicConfig_ReturnsTable()
     {
@@ -771,7 +771,7 @@ public sealed class KafkaTests
         r.String.ShouldBe("true");
     }
 
-    // -- CreateTopic / DestroyTopic --------------------------------------------
+    // CreateTopic / DestroyTopic
     [KafkaFact]
     public async Task Producer_CreateTopic_And_DestroyTopic()
     {
@@ -876,7 +876,7 @@ public sealed class KafkaTests
         r.String.ShouldBe("true:true");
     }
 
-    // -- Assign with offset / Seek ---------------------------------------------
+    // Assign with offset / Seek
     [KafkaFact]
     public async Task Consumer_Assign_WithExplicitOffset_StartsFromThatOffset()
     {
@@ -1389,7 +1389,7 @@ public sealed class KafkaTests
         }
     }
 
-    // -- Cleanup utility -------------------------------------------------------
+    // Cleanup utility
     [KafkaFact]
     public async Task Cleanup_DeleteTestConsumerGroups()
     {

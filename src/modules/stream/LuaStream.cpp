@@ -12,7 +12,6 @@
 #include "stream/LuaStreamMemory.h"
 #include "stream/LuaStreamFile.h"
 
-// Forward declarations for the centralized dispatch helpers defined later.
 static bool        StreamWrite(lua_State* L, LuaStream* s, const BYTE* data, size_t len);
 static bool        StreamSetPosC(lua_State* L, LuaStream* s, lua_Integer pos);
 static lua_Integer StreamCurPosC(lua_State* L, LuaStream* s);
@@ -62,7 +61,7 @@ static bool StreamWrite(lua_State* L, LuaStream* s, const BYTE* data, size_t len
 	return result;
 }
 
-// -- Centralized C-level helpers for pos/len/setpos ----------------------------
+// Centralized C-level helpers for pos/len/setpos.
 // These never push to the Lua stack — they return C values directly.
 // All Lua API functions and internal operations route through these so call
 // sites stay clean regardless of whether the stream uses a vtable or Lua fn.
@@ -680,7 +679,7 @@ int Stream_ReadIdentifier(lua_State* L) {
 	id->type = IDENTIFIER_UUID;
 	id->len  = 16;
 	memcpy(id->bytes, raw, 16);
-	lua_remove(L, -2); // pop the string
+	lua_remove(L, -2);
 	return 1;
 }
 
@@ -1015,16 +1014,15 @@ int Stream_WriteUtf8(lua_State* L) {
 	return 1;
 }
 
-// -- Compress / Decompress -----------------------------------------------------
-// Unified implementation using miniz (cross-platform, no system dependency).
+// Compress / Decompress
+// Implementation uses miniz (cross-platform, no system dependency).
 //
 // Wire format — a stream of zero or more chunks, each:
 //   [uint32_le uncompressedSize][uint32_le compressedSize][compressedBytes]
 // An empty uncompressedSize or compressedSize field signals end-of-stream.
 // compressedBytes are zlib-format (deflate + 2-byte header + 4-byte Adler32).
 //
-// The second Lua argument is now a compression level (0–9, default MZ_DEFAULT_COMPRESSION).
-// The Windows COMPRESS_ALGORITHM_* integer is no longer accepted.
+// The second Lua argument is a compression level (0–9, default MZ_DEFAULT_COMPRESSION).
 
 static const size_t STREAM_COMPRESS_CHUNK = 65536u;
 

@@ -34,9 +34,7 @@
         setter(&_e); return 1; \
     } } while(0)
 
-// ---------------------------------------------------------------------------
 // Metamethods
-// ---------------------------------------------------------------------------
 
 static int imgui_gc(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
@@ -106,11 +104,9 @@ static int imgui_tostring(int argc, const KitsuneVariable* argv,
 	return 1;
 }
 
-// ---------------------------------------------------------------------------
 // Hand-written overrides: Text variants
 // These take a format string + varargs in C++ but in Lua we just take the
 // already-formatted string and pass it to the Unformatted variants.
-// ---------------------------------------------------------------------------
 
 static int ImguiRenderer_Text(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
@@ -209,10 +205,6 @@ static int ImguiRenderer_BulletText(int argc, const KitsuneVariable* argv,
 	return 0;
 }
 
-// ---------------------------------------------------------------------------
-// Hand-written override: InputText
-// ---------------------------------------------------------------------------
-
 static int ImguiRenderer_InputText(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
 	ImguiWindowContext* ctx = IMGUI_CTX;
@@ -291,10 +283,6 @@ static int ImguiRenderer_InputText(int argc, const KitsuneVariable* argv,
 	return 2;
 }
 
-// ---------------------------------------------------------------------------
-// Hand-written override: InputTextMultiline
-// ---------------------------------------------------------------------------
-
 static int ImguiRenderer_InputTextMultiline(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
 	ImguiWindowContext* ctx = IMGUI_CTX;
@@ -364,10 +352,6 @@ static int ImguiRenderer_InputTextMultiline(int argc, const KitsuneVariable* arg
 	return 2;
 }
 
-// ---------------------------------------------------------------------------
-// Hand-written override: PlotLines
-// ---------------------------------------------------------------------------
-
 static int ImguiRenderer_PlotLines(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
 	const int _argc = IMGUI_ARGC;
@@ -415,10 +399,6 @@ static int ImguiRenderer_PlotLines(int argc, const KitsuneVariable* argv,
 	if (labelOwned) KitsuneVariableFree(labelOwned);
 	return 0;
 }
-
-// ---------------------------------------------------------------------------
-// Hand-written override: Combo (string list variant)
-// ---------------------------------------------------------------------------
 
 static int ImguiRenderer_Combo(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
@@ -479,10 +459,6 @@ static int ImguiRenderer_Combo(int argc, const KitsuneVariable* argv,
 	setter(&r2);
 	return 2;
 }
-
-// ---------------------------------------------------------------------------
-// Hand-written override: ListBox (string list variant)
-// ---------------------------------------------------------------------------
 
 static int ImguiRenderer_ListBox(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
@@ -545,10 +521,7 @@ static int ImguiRenderer_ListBox(int argc, const KitsuneVariable* argv,
 	return 2;
 }
 
-// ---------------------------------------------------------------------------
-// MarkdownRender
 // renderer:MarkdownRender(luaId [, w [, h]])
-// ---------------------------------------------------------------------------
 
 static int ImguiRenderer_MarkdownRender(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
@@ -570,9 +543,7 @@ static int ImguiRenderer_MarkdownRender(int argc, const KitsuneVariable* argv,
 	return 0;
 }
 
-// ---------------------------------------------------------------------------
 // Registration helpers
-// ---------------------------------------------------------------------------
 
 static void prepend_meta(KitsuneUserDataRegistration* reg,
 	const char* name, kitsune_CFunction func) {
@@ -617,9 +588,7 @@ void ImguiSetFontStyleFallback(int styleBit, float r, float g, float b, float a)
 #define IMGUI_STACK_BOLD   1
 #define IMGUI_STACK_ITALIC 2
 
-// ---------------------------------------------------------------------------
 // FontStyle stack helpers — shared by renderer functions and markdown renderer
-// ---------------------------------------------------------------------------
 
 struct FontStyleData {
 	bool usedFont; // true = FontPop(), false = ImGui::PopStyleColor()
@@ -774,9 +743,7 @@ void add_imgui_meta_bindings(KitsuneUserDataRegistration* reg) {
 	prepend_fn(reg, "ImageFrame", ImguiRenderer_ImageFrame);
 }
 
-// ---------------------------------------------------------------------------
 // renderer:Image(handle, width, height [, uv0x, uv0y, uv1x, uv1y])
-// ---------------------------------------------------------------------------
 
 int ImguiRenderer_Image(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
@@ -802,9 +769,7 @@ int ImguiRenderer_Image(int argc, const KitsuneVariable* argv,
 	return 0;
 }
 
-// ---------------------------------------------------------------------------
 // renderer:ImageButton(label, id, w, h [, uv0x, uv0y, uv1x, uv1y])
-// ---------------------------------------------------------------------------
 
 int ImguiRenderer_ImageButton(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
@@ -876,9 +841,7 @@ int ImguiRenderer_ImageButton(int argc, const KitsuneVariable* argv,
 	return 1;
 }
 
-// ---------------------------------------------------------------------------
 // renderer:ImageFrame(id, w, h, frameIndex, cols, rows [, flipX [, flipY]])
-// ---------------------------------------------------------------------------
 
 int ImguiRenderer_ImageFrame(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {

@@ -16,19 +16,11 @@
 #include <cstdio>
 #include <cstdint>
 
-// ---------------------------------------------------------------------------
-// Global container instance
-// ---------------------------------------------------------------------------
-
 static KitsuneHtmlContainer s_container;
 
 KitsuneHtmlContainer* HtmlGetContainer() {
     return &s_container;
 }
-
-// ---------------------------------------------------------------------------
-// HtmlResource helpers
-// ---------------------------------------------------------------------------
 
 static int html_error(const kitsune_ResultSetter setter, const char* msg) {
     KitsuneVariable e = {};
@@ -60,17 +52,11 @@ static void html_finalizer(Resource* res) {
     delete d;
 }
 
-// ---------------------------------------------------------------------------
-// Web color -> ImU32
-// ---------------------------------------------------------------------------
-
 static ImU32 web_color_to_imu32(const litehtml::web_color& c) {
     return IM_COL32(c.red, c.green, c.blue, c.alpha);
 }
 
-// ---------------------------------------------------------------------------
 // KitsuneHtmlContainer — document_container implementation
-// ---------------------------------------------------------------------------
 
 litehtml::uint_ptr KitsuneHtmlContainer::create_font(
     const litehtml::font_description& descr,
@@ -313,7 +299,6 @@ void KitsuneHtmlContainer::import_css(
         KitsuneVariable* streamVar = ResourceCacheCallLoader(
             RESOURCE_GENERIC, url.c_str(), (int)url.size());
         if (streamVar) {
-            // Read bytes
             if (streamVar->type == KITSUNE_TSTRING && streamVar->length > 0) {
                 text.assign((const char*)streamVar->data, streamVar->length);
             }
@@ -430,7 +415,6 @@ static KitsuneVariable* build_element_table(const litehtml::element::ptr& el) {
     setstr("class",  el->get_attr("class"));
     setstr("href",   el->get_attr("href"));
 
-    // attrs sub-table
     KitsuneVariable attrsVar = {};
     attrsVar.type  = KITSUNE_TTABLECONTENTS;
     attrsVar.table = nullptr;
@@ -475,10 +459,6 @@ static void fire_event(HtmlResource* d, int luaId, const char* eventtype,
     KitsuneVariable* result = KitsuneExecuteVariable(d->eventHandler, 3, args);
     KitsuneVariableFree(result);
 }
-
-// ---------------------------------------------------------------------------
-// parse helpers
-// ---------------------------------------------------------------------------
 
 static litehtml::document::ptr parse_html_from_bytes(const uint8_t* data, size_t length) {
     if (!data || length == 0)
@@ -555,9 +535,7 @@ int Html_Parse(int argc, const KitsuneVariable* argv,
     return store_html_resource(d, setter);
 }
 
-// ---------------------------------------------------------------------------
 // HtmlDocument methods (flat, id-based)
-// ---------------------------------------------------------------------------
 
 static int html_SetEventHandler(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud)
@@ -706,10 +684,7 @@ static int html_Destroy(int argc, const KitsuneVariable* argv,
     return 0;
 }
 
-// ---------------------------------------------------------------------------
 // renderer:Html(doc, opt w, opt h) -> true | false, errmsg
-// ---------------------------------------------------------------------------
-
 int ImguiRenderer_Html(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud)
 {
@@ -749,17 +724,14 @@ int ImguiRenderer_Html(int argc, const KitsuneVariable* argv,
     ImVec2 origin   = ImGui::GetCursorScreenPos();
     ImDrawList* dl  = ImGui::GetWindowDrawList();
 
-    // Clip rect
     ImVec2 clipMax(origin.x + w, origin.y + (h > 0 ? h : renderedH));
     dl->PushClipRect(origin, clipMax, true);
 
-    // Set container draw context
     container->drawList   = dl;
     container->origin     = origin;
     container->clientSize = ImVec2(w, h > 0 ? h : renderedH);
     container->activeDoc  = d;
 
-    // Draw
     litehtml::position clip;
     clip.x      = 0;
     clip.y      = 0;
@@ -767,7 +739,6 @@ int ImguiRenderer_Html(int argc, const KitsuneVariable* argv,
     clip.height = (int)(h > 0 ? h : renderedH);
     d->doc->draw((litehtml::uint_ptr)dl, 0, 0, &clip);
 
-    // Clear draw context
     container->drawList  = nullptr;
     container->activeDoc = nullptr;
     dl->PopClipRect();
@@ -797,7 +768,6 @@ int ImguiRenderer_Html(int argc, const KitsuneVariable* argv,
                 d->hoveredEl = curHover;
             }
 
-            // Click
             if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
                 d->doc->on_lbutton_down(lx, ly, lx, ly, redraw);
             }
@@ -826,7 +796,6 @@ int ImguiRenderer_Html(int argc, const KitsuneVariable* argv,
         }
     }
 
-    // Advance cursor
     ImGui::Dummy(ImVec2(w, renderedH));
 
     KitsuneVariable ok = {};
@@ -836,10 +805,7 @@ int ImguiRenderer_Html(int argc, const KitsuneVariable* argv,
     return 1;
 }
 
-// ---------------------------------------------------------------------------
 // HtmlInvalidateAll — iterate cache and re-parse all HTML resources
-// ---------------------------------------------------------------------------
-
 static bool html_invalidate_iter(Resource* res, const void* ud) {
     HtmlResource* d = (HtmlResource*)res;
     if (!d || !d->doc)
@@ -871,10 +837,6 @@ void HtmlInvalidateAll() {
         return true;
     }, nullptr);
 }
-
-// ---------------------------------------------------------------------------
-// RegisterHtmlFunctions
-// ---------------------------------------------------------------------------
 
 void RegisterHtmlFunctions() {
     KitsuneRegisterFunction("Html.Parse",           Html_Parse,           nullptr);

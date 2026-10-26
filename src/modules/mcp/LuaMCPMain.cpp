@@ -1,10 +1,6 @@
 #include "mcp/LuaMCP.h"
 #include "mcp/LuaMCPMain.h"
 
-// =============================================================================
-// Module registration
-// =============================================================================
-
 static const luaL_Reg mcpFunctions[] = {
 	{ "Create", MCP_Create },
 	{ NULL, NULL }

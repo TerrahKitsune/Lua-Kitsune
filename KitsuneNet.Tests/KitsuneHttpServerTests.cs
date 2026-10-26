@@ -70,7 +70,7 @@ public sealed class KitsuneHttpServerTests
         end
         """;
 
-    // -- C# HttpClient tests --------------------------------------------------
+    // C# HttpClient tests
     // Pattern: three separate scripts on the same engine share Lua globals.
     //   Script 1 (awaited):  _server = HttpServer.Listen(port)
     //                        Server is bound before this returns, so the C#
@@ -86,7 +86,7 @@ public sealed class KitsuneHttpServerTests
         coroutine.resume(co, true)
         """;
 
-    // -- Module availability ---------------------------------------------------
+    // Module availability
     [Fact]
     public async Task HttpServer_Module_IsTable()
     {
@@ -95,7 +95,7 @@ public sealed class KitsuneHttpServerTests
         r.String.ShouldBe("table");
     }
 
-    // -- Listen ----------------------------------------------------------------
+    // Listen
     [Fact]
     public async Task Listen_ValidAddress_ReturnsServer()
     {
@@ -137,7 +137,7 @@ public sealed class KitsuneHttpServerTests
         }
     }
 
-    // -- Accept idempotency ---------------------------------------------------
+    // Accept idempotency
     [Fact]
     public async Task Accept_CalledTwice_ReturnsSameCoroutine()
     {
@@ -156,7 +156,7 @@ public sealed class KitsuneHttpServerTests
         }
     }
 
-    // -- GET returns 200 ------------------------------------------------------
+    // GET returns 200
     [Fact]
     public async Task Server_GET_RespondsWith200()
     {
@@ -184,7 +184,7 @@ public sealed class KitsuneHttpServerTests
         r.String.ShouldBe("200");
     }
 
-    // -- Response body --------------------------------------------------------
+    // Response body
     [Fact]
     public async Task Server_GET_ResponseBodyIsReturned()
     {
@@ -211,7 +211,7 @@ public sealed class KitsuneHttpServerTests
         r.String.ShouldBe("hello world");
     }
 
-    // -- URL and method visible on server side --------------------------------
+    // URL and method visible on server side
     [Fact]
     public async Task Server_Request_GetUrlAndMethod()
     {
@@ -238,7 +238,7 @@ public sealed class KitsuneHttpServerTests
         r.String.ShouldBe("GET:/test/path");
     }
 
-    // -- POST body echoed back ------------------------------------------------
+    // POST body echoed back
     [Fact]
     public async Task Server_POST_BodyIsReceived()
     {
@@ -265,7 +265,7 @@ public sealed class KitsuneHttpServerTests
         r.String.ShouldBe("ping payload");
     }
 
-    // -- Reject returns error code --------------------------------------------
+    // Reject returns error code
     [Fact]
     public async Task Server_Reject_Returns404()
     {
@@ -292,7 +292,7 @@ public sealed class KitsuneHttpServerTests
         r.String.ShouldBe("404");
     }
 
-    // -- GetContext persists across resumes -----------------------------------
+    // GetContext persists across resumes
     [Fact]
     public async Task Server_GetContext_PersistsAcrossResumes()
     {
@@ -320,7 +320,7 @@ public sealed class KitsuneHttpServerTests
         r.String.ShouldBe("1");
     }
 
-    // -- Headers visible on server side ---------------------------------------
+    // Headers visible on server side
     [Fact]
     public async Task Server_GetHeaders_ContainsCustomHeader()
     {
@@ -348,7 +348,7 @@ public sealed class KitsuneHttpServerTests
         r.String.ShouldBe("testvalue");
     }
 
-    // -- Send(Stream) ---------------------------------------------------------
+    // Send(Stream)
     [Fact]
     public async Task Server_SendStream_BodyIsReceived()
     {
@@ -377,7 +377,7 @@ public sealed class KitsuneHttpServerTests
         r.String.ShouldBe("stream body content");
     }
 
-    // -- Double-send raises error ---------------------------------------------
+    // Double-send raises error
     [Fact]
     public async Task Response_SendTwice_RaisesError()
     {
@@ -408,7 +408,7 @@ public sealed class KitsuneHttpServerTests
         r.String.ShouldBe("true");
     }
 
-    // -- SetOnDisconnect called after response --------------------------------
+    // SetOnDisconnect called after response
     [Fact]
     public async Task Server_SetOnDisconnect_CalledAfterResponse()
     {
@@ -446,7 +446,7 @@ public sealed class KitsuneHttpServerTests
         r.String.ShouldBe("true");
     }
 
-    // -- Teardown tests -------------------------------------------------------
+    // Teardown tests
     [Fact]
     public async Task Server_Close_IsIdempotent()
     {
@@ -707,7 +707,7 @@ public sealed class KitsuneHttpServerTests
         ((int)response.StatusCode).ShouldBe(503);
     }
 
-    // -- Chunked stream tests (Lua client) ------------------------------------
+    // Chunked stream tests (Lua client)
     [Fact]
     public async Task Server_SendChunkedStream_BodyIsReceived()
     {
@@ -799,7 +799,7 @@ public sealed class KitsuneHttpServerTests
         r.String.ShouldBe("true");
     }
 
-    // -- Chunked stream tests (C# client) ------------------------------------
+    // Chunked stream tests (C# client)
     [Fact]
     public async Task CSharpClient_SendChunkedStream_BodyIsReceived()
     {
@@ -848,7 +848,7 @@ public sealed class KitsuneHttpServerTests
         response.Headers.TransferEncodingChunked.ShouldBe(true);
     }
 
-    // -- AliveToken integration -----------------------------------------------
+    // AliveToken integration
     [Fact]
     public async Task Server_SetAliveToken_DoesNotRaise()
     {
@@ -917,7 +917,7 @@ public sealed class KitsuneHttpServerTests
         r.String.ShouldBe("true");
     }
 
-    // -- WebSocket server tests -----------------------------------------------
+    // WebSocket server tests
     // All WS server tests use C# ClientWebSocket against a background Lua server
     // (StartWsServer) so curl and libevent never share a single-threaded pump loop.
     [WebSocketFact]
@@ -1041,7 +1041,7 @@ public sealed class KitsuneHttpServerTests
         data.ShouldBe("hello from csharp");
     }
 
-    // -- SSE tests ------------------------------------------------------------
+    // SSE tests
     [Fact]
     public async Task Server_SSE_EventsDeliveredInOrder()
     {

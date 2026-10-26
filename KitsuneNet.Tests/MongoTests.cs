@@ -892,8 +892,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task InsertOne_StringWithEmbeddedNul_RoundTrips()
     {
-        // BSON_APPEND_UTF8 used strlen so embedded NULs were silently truncated.
-        // Fixed by using bson_append_utf8 with explicit length.
+        // BSON_APPEND_UTF8 uses strlen and would truncate embedded NULs, so
+        // bson_append_utf8 with an explicit length is required.
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
             local db = assert({ConnectLua()})
@@ -934,7 +934,7 @@ public sealed class MongoTests
     [MongoFact]
     public async Task WriteError_NotOverwrittenBySecondError()
     {
-        // WriteError now guards against overwriting an already-set error.
+        // WriteError guards against overwriting an already-set error.
         // Send an invalid command that will fail; the first error must survive.
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
@@ -1057,7 +1057,7 @@ public sealed class MongoTests
     [MongoFact]
     public async Task InsertOne_DeepNestedTable_CircularFalsePositiveNotTriggered()
     {
-        // bson_rec_pop was skipped on throw, leaving addresses in the rec stack.
+        // bson_rec_pop must run on throw, otherwise addresses stay in the rec stack.
         // A non-circular nested table that shared an ancestor address with a
         // previously converted sibling would false-positive as circular.
         // This test reuses the same sub-table object in two sibling fields —
@@ -1083,8 +1083,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task InsertOne_StreamField_RoundTrips()
     {
-        // Exercises the stream path in LuaToBsonValue; previously lua_tolstring
-        // result was not checked for NULL.
+        // Exercises the stream path in LuaToBsonValue, where the lua_tolstring
+        // result must be checked for NULL.
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
             local db = assert({ConnectLua()})
@@ -1128,9 +1128,9 @@ public sealed class MongoTests
     [MongoFact]
     public async Task TwoEngines_MongocInitCalledOnce_NoCrash()
     {
-        // luaopen_mongo previously called mongoc_init() + atexit(mongoc_cleanup)
-        // on every engine creation. mongoc requires exactly one init/cleanup pair.
-        // The once_flag fix prevents double-init on a second engine.
+        // luaopen_mongo must not call mongoc_init() + atexit(mongoc_cleanup)
+        // on every engine creation. mongoc requires exactly one init/cleanup pair,
+        // so a once_flag prevents double-init on a second engine.
         using KitsuneEngine e1 = new();
         using KitsuneEngine e2 = new();
         using KitsuneEngine e3 = new();
@@ -1262,9 +1262,8 @@ public sealed class MongoTests
     public async Task Find_WithLimitSkipAndSortOpts_Correct()
     {
         // Exercises BuildFindOpts with all three paths: limit, skip, and opts
-        // table (sort).  Previously BuildFindOpts returned bson_t* and the
-        // caller assigned op->opts after the call, leaving it unowned on throw.
-        // Now BuildFindOpts assigns directly to op->opts.
+        // table (sort).  BuildFindOpts assigns directly to op->opts so the
+        // options stay owned if a later step throws.
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
             local db = assert({ConnectLua()})
@@ -1309,8 +1308,7 @@ public sealed class MongoTests
     [MongoFact]
     public async Task Find_NoOpts_StillWorks()
     {
-        // Confirms Find with no limit/skip/opts arguments doesn't crash after
-        // BuildFindOpts refactor.
+        // Confirms Find with no limit/skip/opts arguments doesn't crash.
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
             local db = assert({ConnectLua()})
@@ -1379,7 +1377,7 @@ public sealed class MongoTests
     [MongoFact]
     public async Task InsertOne_NanDouble_ThrowsLuaError()
     {
-        // MongoDB rejects NaN; we now catch it at the Lua boundary with a clear
+        // MongoDB rejects NaN; it is caught at the Lua boundary with a clear
         // error instead of sending invalid BSON to the server.
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
@@ -1423,7 +1421,7 @@ public sealed class MongoTests
     [MongoFact]
     public async Task Find_FloatLimit_ThrowsLuaError()
     {
-        // Passing a float as limit was silently truncated; now it's a Lua error.
+        // Passing a float as limit is a Lua error, not silently truncated.
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
             local db = assert({ConnectLua()})
@@ -1452,7 +1450,7 @@ public sealed class MongoTests
     [MongoFact]
     public async Task InsertOne_ValidFloat_StillWorks()
     {
-        // Confirm normal finite floats are still accepted after the isfinite guard.
+        // Confirm normal finite floats are accepted by the isfinite guard.
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
             local db = assert({ConnectLua()})
@@ -1472,7 +1470,7 @@ public sealed class MongoTests
     [MongoFact]
     public async Task Find_IntegerLimitAndSkip_StillWork()
     {
-        // Confirm integer limit/skip still work after adding the isinteger guard.
+        // Confirm integer limit/skip are accepted by the isinteger guard.
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
             local db = assert({ConnectLua()})
@@ -1494,9 +1492,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task Close_WithWrongType_ThrowsTypeError()
     {
-        // luamongo_gc was registered as Close, using lua_touserdata with no type
-        // check.  Calling Close on a non-MongoDB value silently returned 0.
-        // MongoClose now uses luaL_checkudata, raising a proper type error.
+        // MongoClose uses luaL_checkudata, so calling Close on a non-MongoDB value
+        // raises a proper type error instead of silently returning 0.
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync(@"
             local ok, err = pcall(function()
@@ -1537,7 +1534,7 @@ public sealed class MongoTests
     public async Task AllOps_AfterManySequentialOps_NoMemoryLeak()
     {
         // Exercises SetupOp new LuaMongoOp{} across all op types to verify
-        // the bad_alloc guard didn't break anything.  Uses the _DEBUG live
+        // the bad_alloc guard.  Uses the _DEBUG live
         // allocs counter indirectly by running many ops without crashing.
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
@@ -1621,8 +1618,7 @@ public sealed class MongoTests
     [MongoFact]
     public async Task AllOps_NormalNames_StillWork()
     {
-        // Regression: confirm all ops still accept normal (NUL-free) names after
-        // the luaL_checklstring refactor.
+        // Confirm all ops still accept normal (NUL-free) names.
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync($@"
             local db = assert({ConnectLua()})
@@ -1642,7 +1638,7 @@ public sealed class MongoTests
         r.String.ShouldBe("true:true");
     }
 
-    // -- AliveToken integration -----------------------------------------------
+    // AliveToken integration
     [MongoFact]
     public async Task Mongo_SetAliveToken_DoesNotRaise()
     {

@@ -26,7 +26,7 @@ void lua_init_kitsune_state() {
 
 // Anchors a Lua function variable in the registry and adds it to the extension state.
 // Returns a kitsune_malloc'd KitsuneVariable* with its own independent registry ref.
-// The caller must NOT free it — it is owned by g_extState and freed by
+// The caller must NOT free it â€” it is owned by g_extState and freed by
 // lua_cleanup_kitsune_state via KitsuneVariableFree. Returns NULL on failure.
 KitsuneVariable* lua_add_kitsune_state(const KitsuneVariable* var) {
 	if (!g_extState || !var) return NULL;
@@ -69,9 +69,8 @@ static int reg_error(kitsune_ResultSetter resultSetter, const char* msg) {
 	return 1;
 }
 
-// -- Static helpers for SQLiteExt.Query --------------------------------------
+// Helpers for SQLiteExt.Query
 
-// Bind a KitsuneVariable value to a prepared statement parameter by index.
 static void bind_kv_to_stmt(sqlite3_stmt* stmt, int idx, const KitsuneVariable* v) {
 	if (!v) { sqlite3_bind_null(stmt, idx); return; }
 	switch (v->type) {
@@ -220,7 +219,7 @@ static void bind_params_from_table(sqlite3_stmt* stmt, KitsuneKeyValuePairVariab
 	}
 }
 
-// SQLiteExt.Query(sql[, params]) — executes a SQL query and returns all rows as a table.
+// SQLiteExt.Query(sql[, params]) â€” executes a SQL query and returns all rows as a table.
 // params: optional {paramName = value} table for @paramName placeholders.
 // Returns: { [1] = { col = val, ... }, [2] = { ... }, ... }
 static int query_cb(int argc, const KitsuneVariable* argv, kitsune_ResultSetter resultSetter, void* userdata) {
@@ -256,7 +255,7 @@ static int query_cb(int argc, const KitsuneVariable* argv, kitsune_ResultSetter 
 	return 1;
 }
 
-// SQLiteExt.Scalar(sql[, params]) — executes a SQL query and returns the first column of the first row.
+// SQLiteExt.Scalar(sql[, params]) â€” executes a SQL query and returns the first column of the first row.
 // Returns nil if the query produces no rows. params follow the same @paramName convention as Query.
 static int scalar_cb(int argc, const KitsuneVariable* argv, kitsune_ResultSetter resultSetter, void* userdata) {
 	sqlite3* db = ((KitsuneExtState*)userdata)->db;
@@ -305,8 +304,6 @@ static void lua_registered_func_callback(sqlite3_context* context, int argc, sql
 	if (args) sqlite3_free(args);
 	kitsune_result_to_sqlite(context, result);
 }
-
-// -- RegisterAggregate --------------------------------------------------------
 
 // SQLite aggregate xStep: called once per row.
 // Calls funcVar with (ctx, false, col1, col2, ...) as direct parameters.
@@ -369,7 +366,7 @@ static void lua_aggregate_step(sqlite3_context* context, int argc, sqlite3_value
 static void lua_aggregate_final(sqlite3_context* context) {
 	KitsuneVariable* funcVar = (KitsuneVariable*)sqlite3_user_data(context);
 
-	// Retrieve the per-group context (may be NULL if no rows were processed).
+	// May be NULL if no rows were processed.
 	KitsuneVariable** pCtx = (KitsuneVariable**)sqlite3_aggregate_context(context, sizeof(KitsuneVariable*));
 
 	KitsuneVariable args[2] = {};
@@ -414,18 +411,17 @@ static int register_aggregate_cb(int argc, const KitsuneVariable* argv, kitsune_
 	sqlite3_create_function(((KitsuneExtState*)userdata)->db, (const char*)argv[0].data, -1,
 		SQLITE_UTF8, funcVar, NULL, lua_aggregate_step, lua_aggregate_final);
 
-	return 1; // success; RegisterAggregate returns nothing to Lua
+	return 1; // RegisterAggregate returns nothing to Lua
 }
 
 // Kitsune callback for RegisterFunction(name, fn).
 // argv[0] = SQL function name (KITSUNE_TSTRING)
 // argv[1] = Lua function to register (KITSUNE_TFUNCTION)
-// userdata = sqlite3* db
+// userdata = KitsuneExtState*
 static int register_function_cb(int argc, const KitsuneVariable* argv, kitsune_ResultSetter resultSetter, void* userdata) {
 	if (argc < 2 || argv[0].type != KITSUNE_TSTRING || argv[1].type != KITSUNE_TFUNCTION || !g_extState)
 		return reg_error(resultSetter, "RegisterFunction(name, function): invalid arguments");
 
-	// Register the function on the Lua environment and anchor it in g_extState.
 	KitsuneVariable* funcVar = lua_add_kitsune_state(&argv[1]);
 	if (!funcVar)
 		return reg_error(resultSetter, "RegisterFunction: failed to anchor function");
@@ -433,7 +429,7 @@ static int register_function_cb(int argc, const KitsuneVariable* argv, kitsune_R
 	sqlite3_create_function(((KitsuneExtState*)userdata)->db, (const char*)argv[0].data, -1,
 		SQLITE_UTF8, funcVar, lua_registered_func_callback, NULL, NULL);
 
-	return 1; // success; RegisterFunction returns nothing to Lua
+	return 1; // RegisterFunction returns nothing to Lua
 }
 
 int lua_register_kitsune_functions(sqlite3* db, char** pzErrMsg) {

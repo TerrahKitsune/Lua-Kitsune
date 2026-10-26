@@ -58,7 +58,7 @@ namespace KitsuneNet.Tests
             end
         ";
 
-        // -- Http module availability ------------------------------------------
+        // Http module availability
         [Fact]
         public async Task Http_Module_IsTableWhenAvailable()
         {
@@ -70,7 +70,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        // -- HttpClient.Create -------------------------------------------------------
+        // HttpClient.Create
         [Fact]
         public async Task Http_Create_ReturnsNonNil()
         {
@@ -116,7 +116,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        // -- HttpClient.UrlEncode / HttpClient.UrlDecode (no network required) -------------
+        // HttpClient.UrlEncode / HttpClient.UrlDecode (no network required)
         [Fact]
         public async Task Http_UrlEncode_SpacesAreEncoded()
         {
@@ -203,7 +203,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        // -- Buffered GET ------------------------------------------------------
+        // Buffered GET
         [Fact]
         public async Task Http_GET_Returns200()
         {
@@ -277,7 +277,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        // -- POST with JSON body -----------------------------------------------
+        // POST with JSON body
         [Fact]
         public async Task Http_POST_JsonBody_EchoesPostedData()
         {
@@ -298,7 +298,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        // -- Timeout ? transport error (Code is nil) ---------------------------
+        // Timeout ? transport error (Code is nil)
         [Fact]
         public async Task Http_Timeout_TransportError_CodeIsNil()
         {
@@ -343,7 +343,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        // -- Buffered request with outStream -----------------------------------
+        // Buffered request with outStream
         [Fact]
         public async Task Http_Request_OutStream_ContentsIsNil()
         {
@@ -363,7 +363,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        // -- Streaming GET -----------------------------------------------------
+        // Streaming GET
         [Fact]
         public async Task Http_Stream_GetInfo_Returns200()
         {
@@ -464,7 +464,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        // -- DELETE ------------------------------------------------------------
+        // DELETE
         [Fact]
         public async Task Http_DELETE_Returns200()
         {
@@ -501,7 +501,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        // -- PUT ---------------------------------------------------------------
+        // PUT
         [Fact]
         public async Task Http_PUT_Returns200()
         {
@@ -542,7 +542,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        // -- PATCH -------------------------------------------------------------
+        // PATCH
         [Fact]
         public async Task Http_PATCH_Returns200()
         {
@@ -583,7 +583,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        // -- Query-string args -------------------------------------------------
+        // Query-string args
         [Fact]
         public async Task Http_GET_QueryArgs_EchoedInArgsField()
         {
@@ -624,7 +624,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        // -- Request headers ---------------------------------------------------
+        // Request headers
         [Fact]
         public async Task Http_DefaultHeader_AppearsInEchoedHeaders()
         {
@@ -686,7 +686,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        // -- POST form-urlencoded ----------------------------------------------
+        // POST form-urlencoded
         [Fact]
         public async Task Http_POST_FormUrlEncoded_EchoedInFormField()
         {
@@ -707,7 +707,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        // -- Streaming for non-GET methods -------------------------------------
+        // Streaming for non-GET methods
         [Fact]
         public async Task Http_Stream_POST_Returns200()
         {
@@ -829,7 +829,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        // -- WebSocket ---------------------------------------------------------
+        // WebSocket
         [WebSocketFact]
         public async Task Http_WebSocket_Connect_Succeeds()
         {
@@ -1144,7 +1144,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        // -- Call (simplified blocking helper) ---------------------------------
+        // Call (simplified blocking helper)
         [Fact]
         public async Task Http_Call_GET_Returns200()
         {
@@ -1309,7 +1309,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        // -- AliveToken integration --------------------------------------------
+        // AliveToken integration
         [Fact]
         public async Task Http_SetAliveToken_DoesNotRaise()
         {
@@ -1431,9 +1431,8 @@ namespace KitsuneNet.Tests
             }
         }
 
-        // -- Concurrent requests (shared CURLM* drain bug regression) ----------
-        // These tests specifically exercise the fix for the shared-CURLM* race
-        // where concurrent coroutines could steal each other's CURLMSG_DONE and
+        // Concurrent requests sharing one CURLM*
+        // Concurrent coroutines must not steal each other's CURLMSG_DONE and
         // stall forever.  Each test fires two or more requests simultaneously
         // inside the same Lua coroutine drive loop and asserts both complete.
 

@@ -7,18 +7,14 @@
 #include <string.h>
 #include <stdio.h>
 
-// ---------------------------------------------------------------------------
 // Global cache state — not exposed externally
-// ---------------------------------------------------------------------------
 
 static Resource** s_slots = nullptr;
 static int        s_count = 0;
 static int        s_alloc = 0;
 static int        s_nextId = 1;
 
-// ---------------------------------------------------------------------------
 // Internal helpers
-// ---------------------------------------------------------------------------
 
 static bool sources_match(const Resource* node, const char* source) {
 	if (!node->source && !source)
@@ -51,14 +47,11 @@ static void free_node(Resource* node) {
 		node->fn(node);
 		return;
 	}
-	// Default: free source and the node itself
 	free(node->source);
 	free(node);
 }
 
-// ---------------------------------------------------------------------------
 // Public API
-// ---------------------------------------------------------------------------
 
 void ResourceCacheInit() {
 	s_slots = nullptr;
@@ -215,9 +208,7 @@ int ResourceCachePeekNextId() {
 	return s_nextId;
 }
 
-// ---------------------------------------------------------------------------
 // Resource loader state
-// ---------------------------------------------------------------------------
 
 static KitsuneVariable* s_loader = nullptr;
 static KitsuneVariable* s_postLoader = nullptr;
@@ -311,9 +302,7 @@ void ResourceCacheCallPostLoader(int type, int luaId, const char* source, int so
 	KitsuneVariableFree(result);
 }
 
-// ---------------------------------------------------------------------------
 // Resource.GetType(id) -> integer (0 = invalid/unknown)
-// ---------------------------------------------------------------------------
 
 // Finalizer for GenericResource nodes.
 static void generic_free(Resource* node) {
@@ -375,7 +364,6 @@ static int ResourceGetType(int argc, const KitsuneVariable* argv,
 	if (argc >= 1) {
 		int luaId = (int)KitsuneAsInt(&argv[0], 0);
 		if (luaId > 0) {
-			// Check each known type
 			const int types[] = { RESOURCE_TEXTURE, RESOURCE_AUDIO_SFX, RESOURCE_AUDIO_MUSIC, RESOURCE_FONT, RESOURCE_GENERIC };
 			for (int i = 0; i < (int)(sizeof(types) / sizeof(types[0])); i++) {
 				Resource* res = ResourceCacheGetById(luaId, types[i]);
@@ -390,9 +378,7 @@ static int ResourceGetType(int argc, const KitsuneVariable* argv,
 	return 1;
 }
 
-// ---------------------------------------------------------------------------
 // Resource.GetSource(id) -> string | nil
-// ---------------------------------------------------------------------------
 
 static int ResourceGetSource(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
@@ -425,9 +411,7 @@ static int ResourceGetSource(int argc, const KitsuneVariable* argv,
 	return 1;
 }
 
-// ---------------------------------------------------------------------------
 // Resource.Destroy(id) — removes and finalizes any resource type by luaId
-// ---------------------------------------------------------------------------
 
 static int ResourceDestroy(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
@@ -454,9 +438,7 @@ static int ResourceDestroy(int argc, const KitsuneVariable* argv,
 	return 1;
 }
 
-// ---------------------------------------------------------------------------
 // Resource.GetAll() -> table of { id, type, source } tables
-// ---------------------------------------------------------------------------
 
 struct GetAllState { KitsuneVariable* tbl; int seq; };
 
@@ -549,12 +531,10 @@ static int ResourceGetAll(int argc, const KitsuneVariable* argv,
 	return 1;
 }
 
-// ---------------------------------------------------------------------------
 // Resource.Resolve(source) -> luaId | nil
 // Looks up RESOURCE_GENERIC by source. On miss calls the loader; if the loader
 // returns a stream or string the bytes are stored as a new GenericResource.
 // Safe to call every frame — returns the cached id on hit with no allocation.
-// ---------------------------------------------------------------------------
 
 static int ResourceResolve(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
@@ -612,11 +592,9 @@ static int ResourceResolve(int argc, const KitsuneVariable* argv,
 	return 1;
 }
 
-// ---------------------------------------------------------------------------
 // Resource.Load(stream_or_string, source) -> luaId | nil
 // Stores bytes directly as RESOURCE_GENERIC. If a node with the same source
 // already exists it is replaced (same luaId). source is optional.
-// ---------------------------------------------------------------------------
 
 static int ResourceLoad(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
@@ -666,12 +644,10 @@ static int ResourceLoad(int argc, const KitsuneVariable* argv,
 	return 1;
 }
 
-// ---------------------------------------------------------------------------
 // Resource.Replace(luaId, stream_or_string_or_nil) -> true | false
 // Replaces the data of an existing RESOURCE_GENERIC in place, preserving its
 // luaId and source. Passing nil zeroes the buffer (data=nullptr, length=0) —
 // the node remains in the cache as an empty sentinel; callers must check data.
-// ---------------------------------------------------------------------------
 
 static int ResourceReplace(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
@@ -710,12 +686,10 @@ static int ResourceReplace(int argc, const KitsuneVariable* argv,
 	return 1;
 }
 
-// ---------------------------------------------------------------------------
 // Resource.Get(luaId) -> string | "" | nil
 // Returns RESOURCE_GENERIC contents as a Lua string.
 // Returns "" if the node exists but data is nullptr (empty sentinel).
 // Returns nil if luaId is not a RESOURCE_GENERIC or does not exist.
-// ---------------------------------------------------------------------------
 
 static int ResourceGet(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
@@ -742,10 +716,8 @@ static int ResourceGet(int argc, const KitsuneVariable* argv,
 	return 1;
 }
 
-// ---------------------------------------------------------------------------
 // Resource.Info(luaId) -> { id, type, source } | nil
 // Returns a single entry table for any resource type, or nil if not found.
-// ---------------------------------------------------------------------------
 
 static int ResourceInfo(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
@@ -781,10 +753,8 @@ static int ResourceInfo(int argc, const KitsuneVariable* argv,
 	return 1;
 }
 
-// ---------------------------------------------------------------------------
 // Resource.GetIdBySource(source, opt type) -> luaId | nil
 // Looks up a resource by source string. type defaults to RESOURCE_GENERIC.
-// ---------------------------------------------------------------------------
 
 static int ResourceGetIdBySource(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
@@ -807,11 +777,9 @@ static int ResourceGetIdBySource(int argc, const KitsuneVariable* argv,
 	return 1;
 }
 
-// ---------------------------------------------------------------------------
 // Resource.GetAllIds(opt allTypes) -> flat integer array of luaIds
 // allTypes=true returns ids for all resource types.
 // allTypes=false/nil (default) returns only RESOURCE_GENERIC ids.
-// ---------------------------------------------------------------------------
 
 struct GetAllIdsState { KitsuneVariable* tbl; int seq; bool allTypes; };
 
@@ -845,11 +813,9 @@ static int ResourceGetAllIds(int argc, const KitsuneVariable* argv,
 	return 1;
 }
 
-// ---------------------------------------------------------------------------
 // Resource.SetPermanent(id) -> true | false
 // Marks a resource as permanent so Resource.Destroy cannot remove it.
 // Cannot be used to unset permanent — once permanent, always permanent.
-// ---------------------------------------------------------------------------
 
 static int ResourceSetPermanent(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {

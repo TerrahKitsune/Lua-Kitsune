@@ -10,8 +10,6 @@
 #include <tlhelp32.h>
 #endif
 
-// -- Common --------------------------------------------------------------------
-
 LuaProcess* lua_toprocess(lua_State* L, int index) {
 	LuaProcess* proc = (LuaProcess*)lua_touserdata(L, index);
 	if (proc == NULL)
@@ -51,7 +49,6 @@ int Process_ToString(lua_State* L) {
 	return 1;
 }
 
-// -- Windows -------------------------------------------------------------------
 #ifdef _WIN32
 
 // Pushes the executable name of process id as UTF-8 ("" when it cannot be queried).
@@ -609,7 +606,6 @@ int Process_GC(lua_State* L) {
 	return 0;
 }
 
-// -- Linux / POSIX -------------------------------------------------------------
 #else
 
 int Process_All(lua_State* L) {

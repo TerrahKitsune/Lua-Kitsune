@@ -11,7 +11,7 @@
 #include <time.h>
 #endif
 
-// ── Random byte generators ────────────────────────────────────────────────────
+// Random byte generators
 
 #ifdef _WIN32
 static int GenerateUuidBytes(uint8_t* out) {
@@ -49,7 +49,7 @@ static int GenerateRandomBytes(uint8_t* out, int n) {
 }
 #endif
 
-// ── OID counter (MongoDB ObjectID: 4-byte timestamp + 5-byte random + 3-byte counter) ──
+// OID counter (MongoDB ObjectID: 4-byte timestamp + 5-byte random + 3-byte counter)
 
 static std::atomic<uint32_t> g_oidCounter(0);
 
@@ -71,7 +71,7 @@ static int GenerateOidBytes(uint8_t* out) {
     return 1;
 }
 
-// ── String formatters ─────────────────────────────────────────────────────────
+// String formatters
 
 static void UuidBytesToString(const uint8_t* b, char* out) {
     sprintf(out,
@@ -89,7 +89,7 @@ static void OidBytesToString(const uint8_t* b, char* out) {
     out[24] = '\0';
 }
 
-// ── push / to helpers ─────────────────────────────────────────────────────────
+// push / to helpers
 
 LuaIdentifier* lua_pushidentifier(lua_State* L) {
     LuaIdentifier* id = (LuaIdentifier*)lua_newuserdata(L, sizeof(LuaIdentifier));
@@ -110,7 +110,7 @@ LuaIdentifier* lua_toidentifier(lua_State* L, int index) {
     return id;
 }
 
-// ── Constructor functions ─────────────────────────────────────────────────────
+// Constructor functions
 
 int Identifier_NewUUID(lua_State* L) {
     LuaIdentifier* id = lua_pushidentifier(L);
@@ -205,7 +205,7 @@ int Identifier_FromBytes(lua_State* L) {
     return 1;
 }
 
-// ── Instance methods ──────────────────────────────────────────────────────────
+// Instance methods
 
 int Identifier_GetType(lua_State* L) {
     LuaIdentifier* id = lua_toidentifier(L, 1);
@@ -245,7 +245,7 @@ int Identifier_AsString(lua_State* L) {
     return Identifier_ToString(L);
 }
 
-// ── Metamethods ───────────────────────────────────────────────────────────────
+// Metamethods
 
 int Identifier_Eq(lua_State* L) {
     // Like the other typed values, comparing with a different kind of userdata is

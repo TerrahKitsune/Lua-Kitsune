@@ -29,9 +29,7 @@
         return 1; \
     } } while(0)
 
-// ---------------------------------------------------------------------------
 // Texture finalizer — called by ResourceCacheRemoveById/BySource/ClearType
-// ---------------------------------------------------------------------------
 
 static void texture_finalizer(Resource* res) {
 	ImguiTexture* tex = (ImguiTexture*)res;
@@ -53,9 +51,7 @@ static void texture_finalizer(Resource* res) {
 	free(tex);
 }
 
-// ---------------------------------------------------------------------------
 // Internal helpers
-// ---------------------------------------------------------------------------
 
 static int terror(const kitsune_ResultSetter setter, const char* msg) {
 	KitsuneVariable e = {};
@@ -245,9 +241,7 @@ static bool load_texture_from_bytes(const unsigned char* data, int dataLen, Imgu
 	return true;
 }
 
-// ---------------------------------------------------------------------------
 // FBO function pointers
-// ---------------------------------------------------------------------------
 
 typedef void   (APIENTRY* PFNGLGENFRAMEBUFFERS_T)         (GLsizei, GLuint*);
 typedef void   (APIENTRY* PFNGLDELETEFRAMEBUFFERS_T)      (GLsizei, const GLuint*);
@@ -322,9 +316,7 @@ static GLuint blit_texture(GLuint srcGlId, int srcW, int srcH, int dstW, int dst
 	return dstId;
 }
 
-// ---------------------------------------------------------------------------
 // resolve_texture — used by OpenGL.ResolveTexture and markdown renderer
-// ---------------------------------------------------------------------------
 
 // Cache hit on live or sentinel -> return it (sentinel means "tried, don't retry").
 // No hit -> call Resource.SetLoader -> decode -> upload -> store (sentinel on failure).
@@ -390,10 +382,8 @@ const ImguiTexture* resolve_texture(ImguiWindowContext* ctx,
 	return tex;
 }
 
-// ---------------------------------------------------------------------------
 // ResolveTextureGlId — used by renderer:Image / renderer:ImageFrame
 // Advances GIF animation by the current frame's delta time before returning.
-// ---------------------------------------------------------------------------
 
 unsigned int ResolveTextureGlId(int luaId) {
 	ImguiTexture* tex = (ImguiTexture*)ResourceCacheGetById(luaId, RESOURCE_TEXTURE);
@@ -411,13 +401,9 @@ unsigned int ResolveTextureGlId(int luaId) {
 	return tex->glId;
 }
 
-// ---------------------------------------------------------------------------
 // OpenGL.SetResourceLoader(loader [, postLoader])
-// ---------------------------------------------------------------------------
 
-// ---------------------------------------------------------------------------
 // OpenGL.ResolveTexture(source) -> integer | nil
-// ---------------------------------------------------------------------------
 
 int OpenGL_ResolveTexture(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
@@ -444,9 +430,7 @@ int OpenGL_ResolveTexture(int argc, const KitsuneVariable* argv,
 	return 1;
 }
 
-// ---------------------------------------------------------------------------
 // OpenGL.LoadTexture(stream [, source]) -> integer
-// ---------------------------------------------------------------------------
 
 int OpenGL_LoadTexture(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
@@ -499,9 +483,7 @@ int OpenGL_LoadTexture(int argc, const KitsuneVariable* argv,
 	return 1;
 }
 
-// ---------------------------------------------------------------------------
 // OpenGL.UnloadTexture(id)
-// ---------------------------------------------------------------------------
 
 int OpenGL_UnloadTexture(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
@@ -532,9 +514,7 @@ int OpenGL_UnloadTexture(int argc, const KitsuneVariable* argv,
 	return 0;
 }
 
-// ---------------------------------------------------------------------------
 // OpenGL.DestroyTexture(id)
-// ---------------------------------------------------------------------------
 
 int OpenGL_DestroyTexture(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
@@ -545,9 +525,7 @@ int OpenGL_DestroyTexture(int argc, const KitsuneVariable* argv,
 	return 0;
 }
 
-// ---------------------------------------------------------------------------
 // OpenGL.DestroyAll()
-// ---------------------------------------------------------------------------
 
 int OpenGL_DestroyAllTextures(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
@@ -555,9 +533,7 @@ int OpenGL_DestroyAllTextures(int argc, const KitsuneVariable* argv,
 	return 0;
 }
 
-// ---------------------------------------------------------------------------
 // OpenGL.ResizeTexture(id, newW, newH [, source]) -> integer | nil
-// ---------------------------------------------------------------------------
 
 int OpenGL_ResizeTexture(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
@@ -657,12 +633,10 @@ int OpenGL_ResizeTexture(int argc, const KitsuneVariable* argv,
 	return 1;
 }
 
-// ---------------------------------------------------------------------------
 // OpenGL.CopyTexture(id, newSource [, frame]) -> integer | nil
 // Copies a texture into a new static resource under newSource.
 // For GIFs: if frame is given (1-based), copies that specific frame.
 //           if frame is nil/omitted, copies the current animated frame (src->glId).
-// ---------------------------------------------------------------------------
 
 int OpenGL_CopyTexture(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
@@ -739,9 +713,7 @@ int OpenGL_CopyTexture(int argc, const KitsuneVariable* argv,
 	return 1;
 }
 
-// ---------------------------------------------------------------------------
 // OpenGL.GetId(source) -> integer | nil
-// ---------------------------------------------------------------------------
 
 int OpenGL_GetId(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
@@ -774,9 +746,7 @@ int OpenGL_GetId(int argc, const KitsuneVariable* argv,
 	return 1;
 }
 
-// ---------------------------------------------------------------------------
 // OpenGL.GetData(id) -> table | nil
-// ---------------------------------------------------------------------------
 
 int OpenGL_GetData(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
@@ -880,9 +850,7 @@ int OpenGL_GetData(int argc, const KitsuneVariable* argv,
 	return 1;
 }
 
-// ---------------------------------------------------------------------------
 // OpenGL.IsLoaded(id) -> bool
-// ---------------------------------------------------------------------------
 
 int OpenGL_IsLoaded(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
@@ -900,9 +868,7 @@ int OpenGL_IsLoaded(int argc, const KitsuneVariable* argv,
 	return 1;
 }
 
-// ---------------------------------------------------------------------------
 // OpenGL.GetTextureCount() -> count, bytes
-// ---------------------------------------------------------------------------
 
 struct CountState { int count; long long bytes; };
 
@@ -934,9 +900,7 @@ int OpenGL_GetTextureCount(int argc, const KitsuneVariable* argv,
 	return 2;
 }
 
-// ---------------------------------------------------------------------------
 // OpenGL.GetAllLoadedTextures() -> table
-// ---------------------------------------------------------------------------
 
 struct CollectState { KitsuneVariable* tbl; int seq; };
 
@@ -974,9 +938,7 @@ int OpenGL_GetAllLoadedTextures(int argc, const KitsuneVariable* argv,
 	return 1;
 }
 
-// ---------------------------------------------------------------------------
 // OpenGL.GetFrameUVs(id, frameIndex, cols, rows) -> u0, v0, u1, v1
-// ---------------------------------------------------------------------------
 
 int OpenGL_GetFrameUVs(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
@@ -1015,10 +977,6 @@ int OpenGL_GetFrameUVs(int argc, const KitsuneVariable* argv,
 	setter(&rv1);
 	return 4;
 }
-
-// ---------------------------------------------------------------------------
-// RegisterOpenGLFunctions
-// ---------------------------------------------------------------------------
 
 void RegisterOpenGLFunctions() {
 	KitsuneRegisterFunction("OpenGL.LoadTexture",          OpenGL_LoadTexture,          nullptr);

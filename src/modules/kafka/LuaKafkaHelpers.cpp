@@ -178,13 +178,11 @@ int KafkaQueryWatermarks(lua_State* L, rd_kafka_t* rd) {
 	return 3;
 }
 
-// ---------------------------------------------------------------------------
 // Shared helper: polls an admin queue and extracts per-topic error.
 // On timeout or event-level error pushes false+msg and returns 2.
 // On per-topic error pushes false+msg and returns 2.
 // On success pushes true and returns 1.
 // The caller must have already issued the admin request to rkqu.
-// ---------------------------------------------------------------------------
 static int KafkaPollAdminResult(
 	lua_State* L,
 	rd_kafka_queue_t* rkqu,
@@ -522,9 +520,7 @@ int KafkaSetTopicConfig(lua_State* L, rd_kafka_t* rd) {
 	return 1;
 }
 
-// ---------------------------------------------------------------------------
 // Internal helpers: build rd_kafka_topic_partition_list_t from Lua values
-// ---------------------------------------------------------------------------
 
 // Parses a "topic:N" string into topic + partition.
 static void KafkaParseTpKey(const char* entry, char* tbuf, size_t tbufSz, int32_t* outPart) {
@@ -608,10 +604,6 @@ static int KafkaCheckEventError(lua_State* L, rd_kafka_event_t* event) {
 	return 2;
 }
 
-// ---------------------------------------------------------------------------
-// KafkaListGroups
-// ---------------------------------------------------------------------------
-
 int KafkaListGroups(lua_State* L, rd_kafka_t* rd) {
 	int timeout_ms = (int)luaL_optinteger(L, 2, 5000);
 
@@ -661,10 +653,6 @@ int KafkaListGroups(lua_State* L, rd_kafka_t* rd) {
 	rd_kafka_event_destroy(event);
 	return 2;
 }
-
-// ---------------------------------------------------------------------------
-// KafkaDescribeGroups
-// ---------------------------------------------------------------------------
 
 int KafkaDescribeGroups(lua_State* L, rd_kafka_t* rd) {
 	luaL_checktype(L, 2, LUA_TTABLE);
@@ -808,10 +796,6 @@ int KafkaDescribeGroups(lua_State* L, rd_kafka_t* rd) {
 	return 2;
 }
 
-// ---------------------------------------------------------------------------
-// KafkaDeleteGroup
-// ---------------------------------------------------------------------------
-
 int KafkaDeleteGroup(lua_State* L, rd_kafka_t* rd) {
 	const char* group_id = luaL_checkstring(L, 2);
 	int timeout_ms = (int)luaL_optinteger(L, 3, 10000);
@@ -857,10 +841,6 @@ int KafkaDeleteGroup(lua_State* L, rd_kafka_t* rd) {
 	lua_pushboolean(L, true);
 	return 1;
 }
-
-// ---------------------------------------------------------------------------
-// KafkaGetGroupOffsets
-// ---------------------------------------------------------------------------
 
 int KafkaGetGroupOffsets(lua_State* L, rd_kafka_t* rd) {
 	const char* group_id = luaL_checkstring(L, 2);
@@ -930,10 +910,6 @@ int KafkaGetGroupOffsets(lua_State* L, rd_kafka_t* rd) {
 	return 2;
 }
 
-// ---------------------------------------------------------------------------
-// KafkaSetGroupOffsets
-// ---------------------------------------------------------------------------
-
 int KafkaSetGroupOffsets(lua_State* L, rd_kafka_t* rd) {
 	const char* group_id = luaL_checkstring(L, 2);
 	int timeout_ms = (int)luaL_optinteger(L, 4, 10000);
@@ -984,10 +960,6 @@ int KafkaSetGroupOffsets(lua_State* L, rd_kafka_t* rd) {
 	lua_pushboolean(L, true);
 	return 1;
 }
-
-// ---------------------------------------------------------------------------
-// KafkaDeleteGroupOffsets
-// ---------------------------------------------------------------------------
 
 int KafkaDeleteGroupOffsets(lua_State* L, rd_kafka_t* rd) {
 	const char* group_id = luaL_checkstring(L, 2);

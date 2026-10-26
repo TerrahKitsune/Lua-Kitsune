@@ -11,10 +11,6 @@
 #include <cstdlib>
 #include <cstring>
 
-// ---------------------------------------------------------------------------
-// Shared error helper
-// ---------------------------------------------------------------------------
-
 // luaId of the LuaMusic resource currently playing; 0 = none.
 static int s_currentMusicId = 0;
 
@@ -27,10 +23,7 @@ static int sdlaudio_error(const kitsune_ResultSetter setter, const char* msg) {
     return 1;
 }
 
-// ---------------------------------------------------------------------------
 // Heap-copies a source string onto a Resource. Returns false on OOM.
-// ---------------------------------------------------------------------------
-
 static bool sdlaudio_set_source(Resource* res, const char* source, int sourceLen) {
     if (!source || sourceLen <= 0) {
         res->source = nullptr;
@@ -44,10 +37,7 @@ static bool sdlaudio_set_source(Resource* res, const char* source, int sourceLen
     return true;
 }
 
-// ---------------------------------------------------------------------------
 // Finalizers — called by ResourceCache on remove/clear/shutdown
-// ---------------------------------------------------------------------------
-
 static void sfx_finalizer(Resource* res) {
     LuaAudio* a = (LuaAudio*)res;
     if (a->chunk)
@@ -70,10 +60,6 @@ static void music_finalizer(Resource* res) {
     free(m);
 }
 
-// ---------------------------------------------------------------------------
-// Allocators
-// ---------------------------------------------------------------------------
-
 static LuaAudio* sdlaudio_alloc_sfx() {
     LuaAudio* a = (LuaAudio*)calloc(1, sizeof(LuaAudio));
     if (!a)
@@ -93,10 +79,6 @@ static LuaMusic* sdlaudio_alloc_music() {
     return m;
 }
 
-// ---------------------------------------------------------------------------
-// Read raw bytes from a Kitsune stream variable
-// ---------------------------------------------------------------------------
-
 static KitsuneVariable* sdlaudio_read_stream(const KitsuneVariable* streamVar) {
     KitsuneVariable seekArg = {};
     seekArg.type = KITSUNE_TINTEGER;
@@ -114,10 +96,7 @@ static KitsuneVariable* sdlaudio_read_stream(const KitsuneVariable* streamVar) {
     return readResult;
 }
 
-// ---------------------------------------------------------------------------
 // Decode helpers — SDL_RWops over in-memory bytes so no temp files are needed
-// ---------------------------------------------------------------------------
-
 static Mix_Chunk* sdlaudio_decode_chunk(const unsigned char* data, int dataLen) {
     SDL_RWops* rw = SDL_RWFromConstMem(data, dataLen);
     if (!rw)
@@ -135,10 +114,7 @@ static Mix_Music* sdlaudio_decode_music(void* heapBuffer, int dataLen) {
     return Mix_LoadMUS_RW(rw, 1);
 }
 
-// ---------------------------------------------------------------------------
 // SDLAudioInit / SDLAudioShutdown — called from RenderLoop
-// ---------------------------------------------------------------------------
-
 bool SDLAudioInit() {
     if (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 2048) < 0) {
         fprintf(stderr, "Mix_OpenAudio failed: %s\n", Mix_GetError());
@@ -156,11 +132,8 @@ void SDLAudioShutdown() {
     Mix_Quit();
 }
 
-// ---------------------------------------------------------------------------
 // SDL.Audio.Load(stream [, source]) -> luaId
 // Loads a sound effect from a Kitsune stream, decoded by SDL_mixer.
-// ---------------------------------------------------------------------------
-
 int SDLAudioLoad(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud) {
     if (argc < 1 || argv[0].type != KITSUNE_TUSERDATA)
@@ -206,11 +179,8 @@ int SDLAudioLoad(int argc, const KitsuneVariable* argv,
     return 1;
 }
 
-// ---------------------------------------------------------------------------
 // SDL.Audio.LoadRaw(data [, source]) -> luaId
 // Loads a sound effect from a raw byte string (e.g. already-read file data).
-// ---------------------------------------------------------------------------
-
 int SDLAudioLoadRaw(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud) {
     if (argc < 1 || argv[0].type != KITSUNE_TSTRING || argv[0].length == 0)
@@ -251,11 +221,8 @@ int SDLAudioLoadRaw(int argc, const KitsuneVariable* argv,
     return 1;
 }
 
-// ---------------------------------------------------------------------------
 // SDL.Audio.LoadMusic(stream [, source]) -> luaId
 // Loads streaming music (OGG, MP3, FLAC, etc.) from a Kitsune stream.
-// ---------------------------------------------------------------------------
-
 int SDLAudioLoadMusic(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud) {
     if (argc < 1 || argv[0].type != KITSUNE_TUSERDATA)
@@ -315,11 +282,8 @@ int SDLAudioLoadMusic(int argc, const KitsuneVariable* argv,
     return 1;
 }
 
-// ---------------------------------------------------------------------------
 // SDL.Audio.Unload(luaId)
 // Frees the Mix_Chunk but keeps the cache slot as a sentinel.
-// ---------------------------------------------------------------------------
-
 int SDLAudioUnload(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud) {
     if (argc < 1)
@@ -336,10 +300,7 @@ int SDLAudioUnload(int argc, const KitsuneVariable* argv,
     return 0;
 }
 
-// ---------------------------------------------------------------------------
 // SDL.Audio.Destroy(luaId) — removes and frees a sound-effect resource
-// ---------------------------------------------------------------------------
-
 int SDLAudioDestroy(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud) {
     if (argc < 1)
@@ -349,10 +310,7 @@ int SDLAudioDestroy(int argc, const KitsuneVariable* argv,
     return 0;
 }
 
-// ---------------------------------------------------------------------------
 // SDL.Audio.DestroyMusic(luaId) — removes and frees a music resource
-// ---------------------------------------------------------------------------
-
 int SDLAudioDestroyMusic(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud) {
     if (argc < 1)
@@ -362,10 +320,7 @@ int SDLAudioDestroyMusic(int argc, const KitsuneVariable* argv,
     return 0;
 }
 
-// ---------------------------------------------------------------------------
 // SDL.Audio.DestroyAll() — halts all playback and clears all audio resources
-// ---------------------------------------------------------------------------
-
 int SDLAudioDestroyAll(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud) {
     Mix_HaltChannel(-1);
@@ -376,11 +331,8 @@ int SDLAudioDestroyAll(int argc, const KitsuneVariable* argv,
     return 0;
 }
 
-// ---------------------------------------------------------------------------
 // SDL.Audio.Play(luaId [, loops]) -> channel | nil
 // loops: 0 = play once (default), -1 = infinite, n = repeat n extra times
-// ---------------------------------------------------------------------------
-
 int SDLAudioPlay(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud) {
     if (argc < 1)
@@ -413,11 +365,8 @@ int SDLAudioPlay(int argc, const KitsuneVariable* argv,
     return 1;
 }
 
-// ---------------------------------------------------------------------------
 // SDL.Audio.PlayMusic(luaId [, loops]) -> bool
 // loops: -1 = infinite (default)
-// ---------------------------------------------------------------------------
-
 int SDLAudioPlayMusic(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud) {
     if (argc < 1)
@@ -439,10 +388,7 @@ int SDLAudioPlayMusic(int argc, const KitsuneVariable* argv,
     return 1;
 }
 
-// ---------------------------------------------------------------------------
 // SDL.Audio.Stop([luaId]) — stops the channel the sfx is playing on, or all
-// ---------------------------------------------------------------------------
-
 int SDLAudioStop(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud) {
     if (argc < 1) {
@@ -462,10 +408,6 @@ int SDLAudioStop(int argc, const KitsuneVariable* argv,
     return 0;
 }
 
-// ---------------------------------------------------------------------------
-// SDL.Audio.StopMusic()
-// ---------------------------------------------------------------------------
-
 int SDLAudioStopMusic(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud) {
     Mix_HaltMusic();
@@ -473,10 +415,7 @@ int SDLAudioStopMusic(int argc, const KitsuneVariable* argv,
     return 0;
 }
 
-// ---------------------------------------------------------------------------
 // SDL.Audio.SetVolume(luaId, volume) — volume 0..128
-// ---------------------------------------------------------------------------
-
 int SDLAudioSetVolume(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud) {
     if (argc < 2)
@@ -493,10 +432,7 @@ int SDLAudioSetVolume(int argc, const KitsuneVariable* argv,
     return 0;
 }
 
-// ---------------------------------------------------------------------------
 // SDL.Audio.SetMusicVolume(volume) — volume 0..128
-// ---------------------------------------------------------------------------
-
 int SDLAudioSetMusicVolume(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud) {
     int vol = argc > 0 ? (int)KitsuneAsInt(&argv[0], MIX_MAX_VOLUME) : MIX_MAX_VOLUME;
@@ -507,10 +443,6 @@ int SDLAudioSetMusicVolume(int argc, const KitsuneVariable* argv,
     Mix_VolumeMusic(vol);
     return 0;
 }
-
-// ---------------------------------------------------------------------------
-// SDL.Audio.IsPlaying(luaId) -> bool
-// ---------------------------------------------------------------------------
 
 int SDLAudioIsPlaying(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud) {
@@ -527,10 +459,6 @@ int SDLAudioIsPlaying(int argc, const KitsuneVariable* argv,
     return 1;
 }
 
-// ---------------------------------------------------------------------------
-// SDL.Audio.IsMusicPlaying() -> bool
-// ---------------------------------------------------------------------------
-
 int SDLAudioIsMusicPlaying(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud) {
     KitsuneVariable r = {};
@@ -540,11 +468,8 @@ int SDLAudioIsMusicPlaying(int argc, const KitsuneVariable* argv,
     return 1;
 }
 
-// ---------------------------------------------------------------------------
 // SDL.Audio.GetId(source) -> luaId | nil
 // Searches sfx first, then music.
-// ---------------------------------------------------------------------------
-
 int SDLAudioGetId(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud) {
     if (argc < 1 || argv[0].type != KITSUNE_TSTRING)
@@ -573,11 +498,8 @@ int SDLAudioGetId(int argc, const KitsuneVariable* argv,
     return 1;
 }
 
-// ---------------------------------------------------------------------------
 // SDL.Audio.GetData(luaId) -> { source, isLoaded, type } | nil
 // type is "sfx" or "music"
-// ---------------------------------------------------------------------------
-
 int SDLAudioGetData(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud) {
     if (argc < 1)
@@ -650,10 +572,6 @@ int SDLAudioGetData(int argc, const KitsuneVariable* argv,
     return 1;
 }
 
-// ---------------------------------------------------------------------------
-// SDL.Audio.FadeIn(luaId, ms [, loops]) -> channel | nil
-// ---------------------------------------------------------------------------
-
 int SDLAudioFadeIn(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud) {
     if (argc < 2)
@@ -687,10 +605,6 @@ int SDLAudioFadeIn(int argc, const KitsuneVariable* argv,
     return 1;
 }
 
-// ---------------------------------------------------------------------------
-// SDL.Audio.FadeOut(luaId, ms)
-// ---------------------------------------------------------------------------
-
 int SDLAudioFadeOut(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud) {
     if (argc < 2)
@@ -702,10 +616,6 @@ int SDLAudioFadeOut(int argc, const KitsuneVariable* argv,
         Mix_FadeOutChannel(a->channel, ms);
     return 0;
 }
-
-// ---------------------------------------------------------------------------
-// SDL.Audio.PauseMusic() / SDL.Audio.ResumeMusic()
-// ---------------------------------------------------------------------------
 
 int SDLAudioPauseMusic(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud) {
@@ -719,10 +629,6 @@ int SDLAudioResumeMusic(int argc, const KitsuneVariable* argv,
     return 0;
 }
 
-// ---------------------------------------------------------------------------
-// SDL.Audio.IsMusicPaused() -> bool
-// ---------------------------------------------------------------------------
-
 int SDLAudioIsMusicPaused(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud) {
     KitsuneVariable r = {};
@@ -731,10 +637,6 @@ int SDLAudioIsMusicPaused(int argc, const KitsuneVariable* argv,
     setter(&r);
     return 1;
 }
-
-// ---------------------------------------------------------------------------
-// SDL.Audio.GetCurrentMusic() -> luaId | nil
-// ---------------------------------------------------------------------------
 
 int SDLAudioGetCurrentMusic(int argc, const KitsuneVariable* argv,
     const kitsune_ResultSetter setter, void* ud) {
@@ -752,10 +654,6 @@ int SDLAudioGetCurrentMusic(int argc, const KitsuneVariable* argv,
     setter(&r);
     return 1;
 }
-
-// ---------------------------------------------------------------------------
-// RegisterSDLAudioFunctions
-// ---------------------------------------------------------------------------
 
 void RegisterSDLAudioFunctions() {
     KitsuneRegisterFunction("SDL.Audio.Load",              SDLAudioLoad,              nullptr);

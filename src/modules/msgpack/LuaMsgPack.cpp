@@ -6,9 +6,7 @@
 #include "uint/LuaUInt.h"
 #include "timespan/LuaTimeSpan.h"
 
-// =============================================================================
 // Instance management
-// =============================================================================
 
 LuaMsgPack* lua_pushmsgpack(lua_State* L) {
     LuaMsgPack* m = (LuaMsgPack*)lua_newuserdata(L, sizeof(LuaMsgPack));
@@ -42,9 +40,7 @@ int MsgPack_New(lua_State* L) {
     return 1;
 }
 
-// =============================================================================
 // Anti-recursion
-// =============================================================================
 
 static void RecPush(LuaMsgPack* m, lua_State* L, uintptr_t addr) {
     for (size_t i = 0; i < m->recLen; i++) {
@@ -67,9 +63,7 @@ static void RecPop(LuaMsgPack* m) {
         m->recLen--;
 }
 
-// =============================================================================
 // Encoder
-// =============================================================================
 
 static void EncValue(LuaMsgPack* m, msgpack_packer* pk, lua_State* L);
 
@@ -232,9 +226,7 @@ static void EncValue(LuaMsgPack* m, msgpack_packer* pk, lua_State* L) {
     }
 }
 
-// =============================================================================
 // Decoder
-// =============================================================================
 
 static void DecObject(lua_State* L, const msgpack_object* obj) {
     switch (obj->type) {
@@ -292,9 +284,7 @@ static void DecObject(lua_State* L, const msgpack_object* obj) {
     }
 }
 
-// =============================================================================
 // Lua API
-// =============================================================================
 
 int MsgPack_Encode(lua_State* L) {
     LuaMsgPack* m = luaL_checkmsgpack(L, 1);
@@ -439,7 +429,7 @@ int MsgPack_DecodeFromStream(lua_State* L) {
         }
     }
 
-    lua_pop(L, 1);  // pop the string
+    lua_pop(L, 1);
 
     if (ret == MSGPACK_UNPACK_SUCCESS || ret == MSGPACK_UNPACK_EXTRA_BYTES) {
         DecObject(L, &result.data);

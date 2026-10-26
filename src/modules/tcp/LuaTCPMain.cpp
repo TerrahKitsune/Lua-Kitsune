@@ -40,11 +40,9 @@ static const luaL_Reg tcpclientMethods[] = {
 };
 
 int luaopen_tcp(lua_State* L) {
-    /* TCP module table */
     luaL_newlibtable(L, tcpFunctions);
     luaL_setfuncs(L, tcpFunctions, 0);
 
-    /* TCPLISTENER metatable */
     luaL_newmetatable(L, LUATCPLISTENER);
     luaL_setfuncs(L, tcplistenerMeta, 0);
     lua_pushliteral(L, "__index");
@@ -53,7 +51,6 @@ int luaopen_tcp(lua_State* L) {
     lua_rawset(L, -3);
     lua_pop(L, 1);
 
-    /* TCPCLIENT metatable */
     luaL_newmetatable(L, LUATCPCLIENT);
     luaL_setfuncs(L, tcpclientMeta, 0);
     lua_pushliteral(L, "__index");
@@ -62,7 +59,7 @@ int luaopen_tcp(lua_State* L) {
     lua_rawset(L, -3);
     lua_pop(L, 1);
 
-    return 1; /* return module table */
+    return 1;
 }
 
 #endif /* KITSUNE_HTTP */

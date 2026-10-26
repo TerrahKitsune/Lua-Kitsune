@@ -40,10 +40,6 @@ const char* LUAMONGO = "LuaMongo";
 #include <pthread.h>
 #endif
 
-// =============================================================================
-// Op types and states
-// =============================================================================
-
 enum MongoOpType : int {
 	MONGO_OP_FIND = 0,
 	MONGO_OP_FIND_ONE = 1,
@@ -65,10 +61,7 @@ enum MongoState : int {
 	MONGO_STATE_ERROR = 3,
 };
 
-// =============================================================================
-// LuaMongoOp — per-operation data (Lua owns; worker only writes output fields)
-// =============================================================================
-
+// Per-operation data (Lua owns; worker only writes output fields)
 struct LuaMongoOp {
 	// Input — written by Lua before DispatchOp; read-only by worker
 	char* db;
@@ -90,10 +83,7 @@ struct LuaMongoOp {
 	bool         errorIsStatic; // true when error points at a static string (do not free)
 };
 
-// =============================================================================
-// LuaMongoWorker — persistent thread; one per connection
-// =============================================================================
-
+// Persistent thread; one per connection
 struct LuaMongoWorker {
 	mongoc_client_t* client;
 	std::thread       thread;
@@ -105,10 +95,7 @@ struct LuaMongoWorker {
 	LuaMongoOp* op;
 };
 
-// =============================================================================
-// FreeOp — frees op data only; never touches the worker thread or client
-// =============================================================================
-
+// Frees op data only; never touches the worker thread or client
 static void FreeOp(LuaMongoOp* op) {
 	if (!op)
 		return;
@@ -131,9 +118,7 @@ static void FreeOp(LuaMongoOp* op) {
 	delete op;
 }
 
-// =============================================================================
 // BSON <-> Lua type mapping
-// =============================================================================
 
 static void BsonToLua(lua_State* L, const bson_t* doc, int depth);
 
@@ -527,9 +512,7 @@ static void LuaToBsonArray(lua_State* L, int idx, bson_t* doc, BsonWriteCtx* ctx
 	}
 }
 
-// =============================================================================
 // Worker thread
-// =============================================================================
 
 static void WriteError(LuaMongoWorker* w, const bson_error_t* err) {
 	if (w->op->error)
@@ -877,10 +860,6 @@ static void MongoWorkerThread(LuaMongoWorker* w) {
 	}
 }
 
-// =============================================================================
-// luaL_checkmongodb / lua_pushmongodb
-// =============================================================================
-
 LuaMongo* luaL_checkmongodb(lua_State* L, int index) {
 	return (LuaMongo*)luaL_checkudata(L, index, LUAMONGO);
 }
@@ -893,10 +872,6 @@ LuaMongo* lua_pushmongodb(lua_State* L) {
 	lua_setmetatable(L, -2);
 	return m;
 }
-
-// =============================================================================
-// MongoDB_GC / MongoDB_ToString
-// =============================================================================
 
 int MongoDB_GC(lua_State* L) {
 	LuaMongo* m = (LuaMongo*)lua_touserdata(L, 1);
@@ -980,10 +955,6 @@ int MongoDB_ToString(lua_State* L) {
 	return 1;
 }
 
-// =============================================================================
-// Name validation
-// =============================================================================
-
 // MongoDB rules: db name must be non-empty, < 64 chars, no special characters.
 // Collection name must be non-empty, < 120 chars, no '$' or leading '\0'.
 // We enforce the strict superset: non-null, non-empty, no embedded NUL.
@@ -1012,10 +983,6 @@ static bool ValidateCollName(const char* name, size_t len) {
 	}
 	return true;
 }
-
-// =============================================================================
-// Entry point guard macro and helpers
-// =============================================================================
 
 #define MONGO_GUARD(L, m, w) \
     LuaMongo* m = luaL_checkmongodb(L, 1); \
@@ -1082,10 +1049,6 @@ static void DispatchOp(LuaMongoWorker* w) {
 	w->state.store(MONGO_STATE_RUNNING, std::memory_order_release);
 	w->workReady.Set();
 }
-
-// =============================================================================
-// IsFinished / Wait / Cancel / GetResult
-// =============================================================================
 
 // Pin/unpin the LuaMongo userdata in the Lua registry while a coroutine is
 // suspended so the GC cannot collect it and leave the continuation's w pointer
@@ -1272,10 +1235,6 @@ int MongoDB_GetResult(lua_State* L) {
 	return lua_yieldk(L, 0, (lua_KContext)(intptr_t)w, MongoGetResultCont);
 }
 
-// =============================================================================
-// MongoDB_Connect
-// =============================================================================
-
 int MongoDB_Connect(lua_State* L) {
 	const char* uri_string = luaL_checkstring(L, 1);
 
@@ -1342,9 +1301,7 @@ int MongoDB_Connect(lua_State* L) {
 	return 1;
 }
 
-// =============================================================================
 // Operation entry points
-// =============================================================================
 
 // Helper: build opts bson from Lua table, appending limit/skip integers if provided.
 // Assigns directly to op->opts so FreeOp can clean it up if LuaToBson throws.

@@ -20,15 +20,8 @@
 #include "SDLAudio.h"
 #include "ResourceCache.h"
 
-// ---------------------------------------------------------------------------
 // Global session pointer — shared across all Imgui* / SDL* / OpenGL* files
-// ---------------------------------------------------------------------------
-
 ImguiWindowContext* g_imguiCtx = nullptr;
-
-// ---------------------------------------------------------------------------
-// RegisterImguiFunctions
-// ---------------------------------------------------------------------------
 
 void RegisterImguiFunctions() {
 	RegisterRenderLoopFunctions();

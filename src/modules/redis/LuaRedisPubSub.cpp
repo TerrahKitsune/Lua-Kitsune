@@ -311,7 +311,6 @@ static int InternalSubscribe(lua_State* L, bool isPattern) {
 		return 2;
 	}
 
-	// Flush the output buffer to the socket.
 	int done = 0;
 	while (!done) {
 		if (redisBufferWrite(subCtx, &done) == REDIS_ERR) {

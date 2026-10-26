@@ -7,9 +7,7 @@
 #include "timespan/LuaTimeSpan.h"
 #include <math.h>
 
-// =============================================================================
 // Instance management
-// =============================================================================
 
 LuaToml* lua_pushtoml(lua_State* L) {
     LuaToml* t = (LuaToml*)lua_newuserdata(L, sizeof(LuaToml));
@@ -47,9 +45,7 @@ int Toml_New(lua_State* L) {
     return 1;
 }
 
-// =============================================================================
 // Anti-recursion
-// =============================================================================
 
 static void RecPush(LuaToml* t, lua_State* L, uintptr_t addr) {
     for (size_t i = 0; i < t->recLen; i++) {
@@ -72,9 +68,7 @@ static void RecPop(LuaToml* t) {
         t->recLen--;
 }
 
-// =============================================================================
 // Encoder — output buffer helpers
-// =============================================================================
 
 static void TbufGrow(LuaToml* t, lua_State* L, size_t need) {
     if (t->outLen + need <= t->outCap)
@@ -102,9 +96,7 @@ static void TbufEmitC(LuaToml* t, lua_State* L, char c) {
 
 #define TBUF_EMIT_LIT(t, L, s) TbufEmit(t, L, "" s, sizeof(s) - 1)
 
-// =============================================================================
 // Encoder — scalar helpers
-// =============================================================================
 
 // Emit a TOML basic string (double-quoted, with escapes).
 static void EncString(LuaToml* t, lua_State* L, const char* s, size_t len) {
@@ -162,16 +154,10 @@ static const char* KeyText(lua_State* L, size_t* len) {
     return lua_tolstring(L, -1, len);
 }
 
-// =============================================================================
-// Encoder — forward declarations
-// =============================================================================
-
 static void EncValue(LuaToml* t, lua_State* L, int depth, int isInline);
 static void EncTable(LuaToml* t, lua_State* L, int depth, const char* path, size_t pathLen);
 
-// =============================================================================
 // Encoder — classify a Lua table
-// =============================================================================
 
 // Returns 1 if the table on top of the stack is a pure array (1..n integer keys).
 static int IsArray(lua_State* L) {
@@ -239,9 +225,7 @@ static int TableKind(lua_State* L) {
     return TOML_KIND_TABLE_ARRAY;
 }
 
-// =============================================================================
 // Encoder — inline value emitter (used for array elements and inline tables)
-// =============================================================================
 
 static void EncInlineArray(LuaToml* t, lua_State* L, int depth);
 static void EncInlineTable(LuaToml* t, lua_State* L, int depth);
@@ -388,9 +372,7 @@ static void EncInlineTable(LuaToml* t, lua_State* L, int depth) {
     RecPop(t);
 }
 
-// =============================================================================
 // Encoder — top-level section emitter
-// =============================================================================
 
 // Emit indent (2 spaces per level) when pretty mode is on.
 static void EncIndent(LuaToml* t, lua_State* L, int depth) {
@@ -505,9 +487,7 @@ static void EncTableBody(LuaToml* t, lua_State* L, int depth,
     RecPop(t);
 }
 
-// =============================================================================
 // Decoder — tomlc99 DOM -> Lua tables
-// =============================================================================
 
 static void DecTable(lua_State* L, toml_table_t* tab);
 static void DecArray(lua_State* L, toml_array_t* arr);
@@ -653,9 +633,6 @@ static void DecTable(lua_State* L, toml_table_t* tab) {
     }
 }
 
-// =============================================================================
-// Lua API entry points
-// =============================================================================
 
 int Toml_Encode(lua_State* L) {
     LuaToml* t = luaL_checktoml(L, 1);

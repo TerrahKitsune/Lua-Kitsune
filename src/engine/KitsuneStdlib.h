@@ -9,7 +9,7 @@
 // but other hosts (such as .NET applications) keep e.g. Windows-1252. The vendored Lua
 // sources in Lua/ are kept unmodified, so on Windows the affected functions are replaced
 // after luaL_openlibs by equivalents that behave the same but use kitsune_fopen and the
-// other wrappers in kitsunefile.h.
+// other wrappers in KitsuneFile.h.
 
 // luaL_loadfilex for a UTF-8 path (same chunk name, BOM / '#' line handling, text or
 // binary chunks and error messages). filename == NULL loads stdin, as luaL_loadfilex.

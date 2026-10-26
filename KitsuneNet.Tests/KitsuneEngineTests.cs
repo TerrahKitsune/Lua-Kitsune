@@ -22,7 +22,7 @@ namespace KitsuneNet.Tests
             _output = output;
         }
 
-        // -- Init / Dispose -------------------------------------------------------
+        // Init / Dispose
         [Fact]
         public void Init_CreatesEngine_WithoutThrowing()
         {
@@ -115,7 +115,7 @@ namespace KitsuneNet.Tests
             await disposeTask;
         }
 
-        // -- ExecuteString (sync) -------------------------------------------------
+        // ExecuteString (sync)
         [Fact]
         public void ExecuteString_Returns_PositiveId_On_Success()
         {
@@ -170,7 +170,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        // -- GetResult / HasResult ------------------------------------------------
+        // GetResult / HasResult
         [Fact]
         public void GetResult_ReturnsRawBytes()
         {
@@ -265,7 +265,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        // -- SetString / SetBool / SetNumber / GetVariable -------------------------
+        // SetString / SetBool / SetNumber / GetVariable
         [Fact]
         public async Task SetString_StringValue_IsVisibleInScript()
         {
@@ -640,7 +640,7 @@ namespace KitsuneNet.Tests
             tref!.GetIndex(LuaValue.FromString("testGlobalLookup_xyz")).String.ShouldBe("hello from _G");
         }
 
-        // -- Variable bridge path notation ----------------------------------------
+        // Variable bridge path notation
         [Fact]
         public void SetVariable_DotPath_WritesToSubtable()
         {
@@ -733,7 +733,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        // -- ExecuteFile ----------------------------------------------------------
+        // ExecuteFile
         [Fact]
         public void ExecuteFile_CreatesFileRunsAndCleansUp()
         {
@@ -875,7 +875,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        // -- IsRunning / Interrupt / Wait -----------------------------------------
+        // IsRunning / Interrupt / Wait
         [Fact]
         public void IsRunning_DuringExecution_ReturnsTrue()
         {
@@ -1010,7 +1010,7 @@ namespace KitsuneNet.Tests
             await allDone;
         }
 
-        // -- Concurrency ----------------------------------------------------------
+        // Concurrency
         [Fact]
         public async Task ConcurrentCoroutines_AllReturnDistinctValues()
         {
@@ -1117,7 +1117,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        // -- GetActiveIds ---------------------------------------------------------
+        // GetActiveIds
         [Fact]
         public void GetActiveIds_NoCoroutines_ReturnsEmpty()
         {
@@ -1164,14 +1164,14 @@ namespace KitsuneNet.Tests
 
             engine.GetActiveIds().Length.ShouldBe(count);
 
-            // Wait(CancellationToken) now uses KitsuneGetActiveIds, not IsRunning, so it
+            // Wait(CancellationToken) uses KitsuneGetActiveIds, not IsRunning, so it
             // correctly blocks for sleeping coroutines between scheduler ticks.
             using CancellationTokenSource cts = new(TimeSpan.FromSeconds(10));
             engine.Wait(cts.Token);
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        // -- Async execution ------------------------------------------------------
+        // Async execution
         [Fact]
         public async Task ExecuteStringAsync_ReturnsResult()
         {
@@ -1254,7 +1254,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        // -- Sleep ----------------------------------------------------------------
+        // Sleep
         [Fact]
         public async Task Sleep_ReturnsResultAfterDelay()
         {
@@ -1307,7 +1307,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        // -- ExecuteFunction ------------------------------------------------------
+        // ExecuteFunction
         [Fact]
         public async Task ExecuteFunction_NoArgs_ReturnsResult()
         {
@@ -1397,7 +1397,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        // -- Dot-path notation for ExecuteFunction and RegisterFunction -----------
+        // Dot-path notation for ExecuteFunction and RegisterFunction
         [Fact]
         public async Task ExecuteFunction_DotPath_CallsNestedFunction()
         {
@@ -1505,7 +1505,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        // -- Pause / Resume -------------------------------------------------------
+        // Pause / Resume
         [Fact]
         public async Task TaskPause_SuspendsCoroutine_ResumeUnblocks()
         {
@@ -1633,7 +1633,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldNotContain(id);
         }
 
-        // -- Pause/Resume value passing -------------------------------------------
+        // Pause/Resume value passing
         [Fact]
         public async Task Pause_ResumedWithoutValue_ReturnsNil()
         {
@@ -1947,7 +1947,7 @@ namespace KitsuneNet.Tests
                 .ShouldBe(disposeTask);
         }
 
-        // -- Cancel ---------------------------------------------------------------
+        // Cancel
         [Fact]
         public void Cancel_RunningCoroutine_SetsErrorAndFreesSlot()
         {
@@ -2010,7 +2010,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        // -- GetStatus ------------------------------------------------------------
+        // GetStatus
         [Fact]
         public void GetStatus_NonExistentId_ReturnsNone()
         {
@@ -2138,7 +2138,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        // -- GetRuntime -----------------------------------------------------------
+        // GetRuntime
         [Fact]
         public void GetRuntime_WhileRunning_ReturnsPositiveValue()
         {
@@ -2169,7 +2169,7 @@ namespace KitsuneNet.Tests
             engine.GetRuntime(99999).ShouldBe(0.0);  // non-existent id returns 0
         }
 
-        // -- Stress tests ---------------------------------------------------------
+        // Stress tests
         [Fact]
         public async Task Stress_HighThroughput_SequentialBatches_AllCorrect()
         {
@@ -2338,7 +2338,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        // -- RegisterFunction -----------------------------------------------------
+        // RegisterFunction
         [Fact]
         public async Task RegisterFunction_ReturnsString_LuaReceivesIt()
         {
@@ -2612,7 +2612,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        // -- CFunction (SetVariable / args / return) ----------------------------
+        // CFunction (SetVariable / args / return)
         [Fact]
         public async Task CFunction_SetVariable_LuaCanCallIt()
         {
@@ -2673,7 +2673,7 @@ namespace KitsuneNet.Tests
             Should.NotThrow(engine.Dispose);
         }
 
-        // -- Thread (coroutine) iterator ----------------------------------------
+        // Thread (coroutine) iterator
         [Fact]
         public async Task Thread_IterateAsync_YieldsValues()
         {
@@ -2978,7 +2978,7 @@ namespace KitsuneNet.Tests
             await engine.ExecuteStringAsync("Sleep(0)");
         }
 
-        // -- Thread (coroutine) synchronous iterator
+        // Thread (coroutine) synchronous iterator
         [Fact]
         public void Thread_Iterate_YieldsValues()
         {
@@ -3281,7 +3281,7 @@ namespace KitsuneNet.Tests
             await engine.ExecuteStringAsync("Sleep(0)");
         }
 
-        // -- Shallow / deep table bridge
+        // Shallow / deep table bridge
         [Fact]
         public void GetVariable_TableValue_IsOpaqueWithNoContents()
         {
@@ -3349,7 +3349,7 @@ namespace KitsuneNet.Tests
             received.Value.Table!.ShouldContain(kvp => kvp.Key.String == "b" && kvp.Value.AsDouble == 99);
         }
 
-        // -- LuaTableRef lifecycle ------------------------------------------------
+        // LuaTableRef lifecycle
         [Fact]
         public void LuaTableRef_DoubleDispose_DoesNotThrow()
         {
@@ -3377,7 +3377,7 @@ namespace KitsuneNet.Tests
             Should.Throw<ObjectDisposedException>(() => tref.SetContents([]));
         }
 
-        // -- GetVariable returns a live TableRef, GetAll does not -----------------
+        // GetVariable returns a live TableRef, GetAll does not
         [Fact]
         public void GetVariable_TableRef_IsNotNull_ContentsAccessible()
         {
@@ -3394,7 +3394,7 @@ namespace KitsuneNet.Tests
             contents.ShouldContain(kvp => kvp.Key.String == "y" && kvp.Value.AsDouble == 2);
         }
 
-        // -- TableRef.GetContents -------------------------------------------------
+        // TableRef.GetContents
         [Fact]
         public void TableRef_GetContents_ConsistentOnMultipleCalls()
         {
@@ -3438,7 +3438,7 @@ namespace KitsuneNet.Tests
             innerEntry.Value.Table!.ShouldContain(kvp => kvp.Key.String == "b" && kvp.Value.AsDouble == 20);
         }
 
-        // -- TableRef.SetContents -------------------------------------------------
+        // TableRef.SetContents
         [Fact]
         public async Task TableRef_SetContents_LuaReadsUpdatedValues()
         {
@@ -3492,7 +3492,7 @@ namespace KitsuneNet.Tests
             readBack.ShouldContain(kvp => kvp.Key.Type == LuaType.Integer && kvp.Key.AsInt64 == 1 && kvp.Value.AsDouble == 42);
         }
 
-        // -- Live-table SetVariable round-trip ------------------------------------
+        // Live-table SetVariable round-trip
         [Fact]
         public async Task SetVariable_WithTableRef_AliasesLiveLuaTable()
         {
@@ -3512,7 +3512,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        // -- TableRef stability ---------------------------------------------------
+        // TableRef stability
         [Fact]
         public void TableRef_RemainsValidAfterGcCycles_AndConcurrentCoroutines()
         {
@@ -3646,7 +3646,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        // -- Lua coroutine interop -------------------------------------------------
+        // Lua coroutine interop
         [Fact]
         public async Task Coroutine_SubCoroutine_YieldAndResume_WorksCorrectly()
         {
@@ -3784,7 +3784,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        // -- Userdata __name bridge ------------------------------------------------
+        // Userdata __name bridge
         [Fact]
         public async Task Userdata_RegisterFunction_ArgHasTypeNameInBytes()
         {
@@ -3842,7 +3842,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        // -- RegisterUserdata / CreateUserdata ------------------------------------
+        // RegisterUserdata / CreateUserdata
         [Fact]
         public async Task RegisterUserdata_MethodsCallable_FromLua()
         {
@@ -4218,8 +4218,8 @@ namespace KitsuneNet.Tests
         [Fact]
         public void RegisterUserdata_DuplicateMethodName_ThrowsInvalidOperationException()
         {
-            // Two [LuaMethod] attributes that map to the same Lua name silently overwrite each
-            // other in the dictionary; the earlier fix makes this a hard error instead.
+            // Two [LuaMethod] attributes that map to the same Lua name would silently overwrite
+            // each other in the dictionary; this is a hard error instead.
             using KitsuneEngine engine = new();
             Should.Throw<InvalidOperationException>(() => engine.RegisterUserdata<TypeWithDuplicateLuaMethod>())
                 .Message.ShouldContain("Foo");
@@ -4395,7 +4395,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        // -- Json bridge ----------------------------------------------------------
+        // Json bridge
         [Fact]
         public void Json_FromJson_Null_ReturnsNone()
         {
@@ -4629,7 +4629,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        // -- RunString / RunFile / RunFunction (sync blocking) --------------------
+        // RunString / RunFile / RunFunction (sync blocking)
         [Fact]
         public void RunString_ReturnsStringResult()
         {
@@ -4711,7 +4711,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        // -- Inline path: error surfacing -----------------------------------------
+        // Inline path: error surfacing
         [Fact]
         public void RunString_SyntaxError_ThrowsLuaException()
         {
@@ -4750,7 +4750,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        // -- Inline path: slot lifecycle ------------------------------------------
+        // Inline path: slot lifecycle
         [Fact]
         public void RunString_SlotLifecycle_VisibleDuringExecution_GoneAfter()
         {
@@ -4814,7 +4814,7 @@ namespace KitsuneNet.Tests
             capturedRuntime.ShouldBeGreaterThan(0);
         }
 
-        // -- Inline path: Sleep / Yield -------------------------------------------
+        // Inline path: Sleep / Yield
         [Fact]
         public void RunString_WithSleep_ResultIsCorrect()
         {
@@ -4878,7 +4878,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task RunString_Yield_AsyncCoroutine_DoesNotBreakSchedulerCycle()
         {
-            // Verify Yield() on an async coroutine is unaffected by the inline refactor.
+            // Verify Yield() on an async coroutine is unaffected by inline calls.
             // The async coroutine uses coroutine.yield(); scheduler must resume it.
             using KitsuneEngine engine = new();
             LuaValue result = await engine.ExecuteStringAsync(@"
@@ -4890,7 +4890,7 @@ namespace KitsuneNet.Tests
             result.AsInt64.ShouldBe(2L);
         }
 
-        // -- Inline path: GetStatus == Inline during yield window -----------------
+        // Inline path: GetStatus == Inline during yield window
         [Fact]
         public async Task RunString_GetStatus_IsInline_DuringYieldWindow()
         {
@@ -4925,7 +4925,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        // -- Inline path: Cancel --------------------------------------------------
+        // Inline path: Cancel
         [Fact]
         public async Task RunString_Cancel_FromAnotherThread_Interrupts()
         {
@@ -4964,7 +4964,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        // -- Inline path: WaitAsync blocks until inline call completes ------------
+        // Inline path: WaitAsync blocks until inline call completes
         [Fact]
         public async Task RunString_WaitAsync_BlocksUntilInlineCallCompletes()
         {
@@ -4995,7 +4995,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        // -- Inline path: rapid sequential calls (slot reuse) ---------------------
+        // Inline path: rapid sequential calls (slot reuse)
         [Fact]
         public void RunString_RapidSequential_CorrectResultsNoSlotLeak()
         {
@@ -5023,7 +5023,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        // -- Non-recursive guard: Execute* rejected inside registered functions ---
+        // Non-recursive guard: Execute* rejected inside registered functions
         [Fact]
         public async Task RegisterFunction_CallingRunString_ReturnsResult()
         {
@@ -5163,7 +5163,7 @@ namespace KitsuneNet.Tests
             fn.FunctionRef?.Dispose();
         }
 
-        // -- Async Execute functions blocked from inside registered function callbacks --------
+        // Async Execute functions blocked from inside registered function callbacks
         [Fact]
         public async Task RegisterFunction_CallingExecuteStringAsync_ThrowsLuaException()
         {
@@ -5237,7 +5237,7 @@ namespace KitsuneNet.Tests
             fn.FunctionRef?.Dispose();
         }
 
-        // -- Sync Execute from callback: behavioral tests -------------------------
+        // Sync Execute from callback: behavioral tests
         [Fact]
         public void RegisterFunction_CallingRunString_FromSyncCoroutine_ReturnsResult()
         {
@@ -5316,7 +5316,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        // -- ExecuteVariable / ExecuteVariableAsync / RunVariable -------------------------
+        // ExecuteVariable / ExecuteVariableAsync / RunVariable
         [Fact]
         public async Task ExecuteVariable_FunctionValue_CallsFunction()
         {
@@ -5332,7 +5332,7 @@ namespace KitsuneNet.Tests
             fn.FunctionRef?.Dispose();
         }
 
-        // -- Spam tests (per-call performance measurement) --------------------------
+        // Spam tests (per-call performance measurement)
         [Fact]
         public async Task Spam_FunctionRef_Invoke_TimeTaken()
         {
@@ -5546,7 +5546,7 @@ namespace KitsuneNet.Tests
             fn.FunctionRef?.Dispose();
         }
 
-        // -- ExecuteVariable / ExecuteVariableAsync / RunVariable (boundary cases) ------
+        // ExecuteVariable / ExecuteVariableAsync / RunVariable (boundary cases)
         [Fact]
         public async Task ExecuteVariable_FunctionValue_IdIsPositive()
         {
@@ -5586,7 +5586,7 @@ namespace KitsuneNet.Tests
             fn.FunctionRef?.Dispose();
         }
 
-        // -- Function results (LuaType.Function) -----------------------------------------
+        // Function results (LuaType.Function)
         // These tests exercise:
         //   (a) the explicit LUA_TFUNCTION branch in KitsuneGetResult that zeroes slot->result.integer
         //   (b) the pendingResults[] array in scheduler step 4 that defers FreeVariableData outside slotsLock
@@ -5643,7 +5643,7 @@ namespace KitsuneNet.Tests
             // ReleaseResult marks the slot for scheduler cleanup without the C# side consuming
             // the result.  The scheduler's step-4 pendingResults array takes ownership of the
             // TFUNCTION result and calls FreeVariableData (? luaL_unref) in phase 2 outside
-            // slotsLock.  This is the specific code path changed by the pendingResults fix.
+            // slotsLock.
             var engine = new KitsuneEngine();
             try
             {
@@ -5664,7 +5664,7 @@ namespace KitsuneNet.Tests
         public void ReleaseResult_TableWithFunctionResult_SchedulerFreesViaPendingResults_NoLeak()
         {
             // A table result containing function entries: FreeKVNode must luaL_unref every
-            // nested function ref.  With the pendingResults fix this happens outside slotsLock
+            // nested function ref.  This happens outside slotsLock
             // (phase 2), so concurrent KitsuneCancel / KitsuneGetActiveIds callers are not blocked.
             var engine = new KitsuneEngine();
             try
@@ -5779,7 +5779,7 @@ namespace KitsuneNet.Tests
             }
         }
 
-        // -- Boundary / edge cases --------------------------------------------------------
+        // Boundary / edge cases
         [Fact]
         public void GetError_NonExistentId_ReturnsNull()
         {
@@ -5842,7 +5842,7 @@ namespace KitsuneNet.Tests
             result.FunctionRef?.Dispose();
         }
 
-        // -- LuaFunctionRef.Invoke / InvokeAsync ---------------------------------
+        // LuaFunctionRef.Invoke / InvokeAsync
         [Fact]
         public void FunctionRef_Invoke_NoArgs_ReturnsResult()
         {
@@ -5987,7 +5987,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        // -- Userdata ref round-trip -----------------------------------------------
+        // Userdata ref round-trip
         [Fact]
         public void Userdata_LuaNativeRoundTrip_OriginalObjectPushedBack()
         {
@@ -6064,7 +6064,7 @@ namespace KitsuneNet.Tests
             Should.Throw<ObjectDisposedException>(() => funcRef.InvokeAsync());
         }
 
-        // -- KITSUNE_TITERATOR tests --------------------------------------------
+        // KITSUNE_TITERATOR tests
         [Fact]
         public async Task Iterator_BasicIteration_ReceivesAllValuesInOrder()
         {
@@ -6250,7 +6250,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        // -- Registry references (Register / GetByReference / Unregister) ----------
+        // Registry references (Register / GetByReference / Unregister)
         [Fact]
         public void Register_String_GetByReference_ReturnsEqualValue()
         {
@@ -6379,7 +6379,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        // -- Thread step with arguments -------------------------------------------
+        // Thread step with arguments
         [Fact]
         public void Thread_Step_PassesArgAndReceivesYieldedValue()
         {
@@ -6649,7 +6649,7 @@ namespace KitsuneNet.Tests
             Should.Throw<ObjectDisposedException>(() => tref.Step());
         }
 
-        // -- CallMetamethod -------------------------------------------------------
+        // CallMetamethod
         [Fact]
         public void TableRef_CallMetamethod_InvokesNamedMetamethod()
         {
@@ -6720,7 +6720,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        // -- CallMethod -----------------------------------------------------------
+        // CallMethod
         [Fact]
         public void UserdataRef_CallMethod_InvokesMethodWithSelf()
         {
@@ -6828,7 +6828,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        // -- GetIndex / SetIndex / GetLength -------------------------------------
+        // GetIndex / SetIndex / GetLength
         [Fact]
         public void TableRef_GetIndex_ReturnsValue()
         {
@@ -6957,7 +6957,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        // -- KitsuneNext --------------------------------------------------------
+        // KitsuneNext
         [Fact]
         public void TableRef_Pairs_IteratesAllEntries()
         {
@@ -7009,7 +7009,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        // -- KitsuneGCHook / delegate-lifetime tests ---------------------------
+        // KitsuneGCHook / delegate-lifetime tests
         [Fact]
         public void GCHook_RegisterFunction_DelegateFreedAfterGlobalNilledAndCollected()
         {
@@ -7118,7 +7118,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
-        // -- Ticker pause/resume currentCoroutineId regression --------------------
+        // Ticker pause/resume currentCoroutineId regression
         [Fact]
         public async Task Sleep_InsideTask_WhileExternalThreadHoldsLuaAccess_YieldsNotOsSleeps()
         {
@@ -7177,7 +7177,7 @@ namespace KitsuneNet.Tests
             engine.GetActiveIds().ShouldNotContain(id);
         }
 
-        // -- Tasks.GetCurrentId() -------------------------------------------------
+        // Tasks.GetCurrentId()
         [Fact]
         public async Task GetCurrentId_InsideAsyncCoroutine_ReturnsNonZero()
         {
@@ -7237,7 +7237,7 @@ namespace KitsuneNet.Tests
             engine.GetBool("idsDistinct").ShouldBe(true);
         }
 
-        // -- task:Wait ------------------------------------------------------------
+        // task:Wait
         [Fact]
         public async Task TaskWait_SuspendsCallerUntilTargetFinishes()
         {
@@ -7413,7 +7413,7 @@ namespace KitsuneNet.Tests
             engine.GetBool("waitReturned").ShouldBe(true);
         }
 
-        // -- Resume waking Sleeping / Waiting tasks --------------------------------
+        // Resume waking Sleeping / Waiting tasks
         [Fact]
         public async Task Resume_SleepingTask_WakesImmediately()
         {
@@ -7576,7 +7576,7 @@ namespace KitsuneNet.Tests
             await engine.WaitAsync(outerId);
         }
 
-        // -- Lua-side Resume waking Sleeping / Waiting tasks -----------------------
+        // Lua-side Resume waking Sleeping / Waiting tasks
         [Fact]
         public async Task LuaResume_WakesSleepingTask_FromAnotherCoroutine()
         {
@@ -7669,7 +7669,7 @@ namespace KitsuneNet.Tests
             engine.GetBool("resumeResult").ShouldBe(true);
         }
 
-        // -- ConsumeResult --------------------------------------------------------
+        // ConsumeResult
         [Fact]
         public async Task ConsumeResult_ReturnsValueAndReleasesSlot()
         {
@@ -7794,7 +7794,7 @@ namespace KitsuneNet.Tests
             engine.GetInt64("second").ShouldBeNull();
         }
 
-        // -- task:OnError tests -------------------------------------------------------
+        // task:OnError tests
         [Fact]
         public async Task OnError_FireAndForget_CalledOnFault()
         {
@@ -7934,7 +7934,7 @@ namespace KitsuneNet.Tests
             engine.GetVariable("capturedErr").String!.ShouldContain("chain-test");
         }
 
-        // -- Tasks.ActiveCount / Tasks.MaxSlots tests ---------------------------------
+        // Tasks.ActiveCount / Tasks.MaxSlots tests
         [Fact]
         public async Task ActiveCount_WhileCoroutineRunning_IsPositive()
         {

@@ -10,10 +10,6 @@
 #include <SDL.h>
 #include <cstring>
 
-// ---------------------------------------------------------------------------
-// SDL.GetWindowWidth / GetWindowHeight
-// ---------------------------------------------------------------------------
-
 static int SDLGetWindowWidth(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
 	if (!g_imguiCtx || !g_imguiCtx->window)
@@ -41,10 +37,6 @@ static int SDLGetWindowHeight(int argc, const KitsuneVariable* argv,
 	setter(&r);
 	return 1;
 }
-
-// ---------------------------------------------------------------------------
-// SDL.GetWindowX / GetWindowY
-// ---------------------------------------------------------------------------
 
 static int SDLGetWindowX(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
@@ -74,10 +66,6 @@ static int SDLGetWindowY(int argc, const KitsuneVariable* argv,
 	return 1;
 }
 
-// ---------------------------------------------------------------------------
-// SDL.SetWindowSize / SetWindowPosition / SetWindowTitle
-// ---------------------------------------------------------------------------
-
 static int SDLSetWindowSize(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
 	if (!g_imguiCtx || !g_imguiCtx->window || argc < 2)
@@ -105,10 +93,6 @@ static int SDLSetWindowTitle(int argc, const KitsuneVariable* argv,
 	SDL_SetWindowTitle(g_imguiCtx->window, (const char*)argv[0].data);
 	return 0;
 }
-
-// ---------------------------------------------------------------------------
-// SDL.IsMinimized / IsFocused / SetFullscreen
-// ---------------------------------------------------------------------------
 
 static int SDLIsMinimized(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
@@ -144,10 +128,6 @@ static int SDLSetFullscreen(int argc, const KitsuneVariable* argv,
 	return 0;
 }
 
-// ---------------------------------------------------------------------------
-// SDL.GetMonitor
-// ---------------------------------------------------------------------------
-
 static int SDLGetMonitor(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
 	if (!g_imguiCtx || !g_imguiCtx->window)
@@ -179,10 +159,6 @@ static int SDLGetMonitor(int argc, const KitsuneVariable* argv,
 	vi.integer = mode.refresh_rate; setter(&vi);
 	return 7;
 }
-
-// ---------------------------------------------------------------------------
-// RegisterSDLWindowFunctions
-// ---------------------------------------------------------------------------
 
 void RegisterSDLWindowFunctions() {
 	KitsuneRegisterFunction("SDL.Window.GetWindowWidth", SDLGetWindowWidth, nullptr);
