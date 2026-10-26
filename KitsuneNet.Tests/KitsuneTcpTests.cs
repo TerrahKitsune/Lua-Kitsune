@@ -40,7 +40,7 @@ public sealed class KitsuneTcpTests
         end
     ";
 
-    [WebSocketFact]
+    [Fact]
     public async System.Threading.Tasks.Task Tcp_Module_IsTable()
     {
         using KitsuneEngine engine = new();
@@ -48,7 +48,7 @@ public sealed class KitsuneTcpTests
         r.String.ShouldBe("table");
     }
 
-    [WebSocketFact]
+    [Fact]
     public async System.Threading.Tasks.Task StartListener_BindsSuccessfully()
     {
         using KitsuneEngine engine = new();
@@ -62,7 +62,7 @@ public sealed class KitsuneTcpTests
         r.String.ShouldBe("ok");
     }
 
-    [WebSocketFact]
+    [Fact]
     public async System.Threading.Tasks.Task Connect_ReturnsClient()
     {
         using KitsuneEngine engine = new();
@@ -78,7 +78,7 @@ public sealed class KitsuneTcpTests
         r.String.ShouldBe("ok");
     }
 
-    [WebSocketFact]
+    [Fact]
     public async System.Threading.Tasks.Task Accept_ReturnsNilNil_WhenNoPendingClient()
     {
         using KitsuneEngine engine = new();
@@ -93,7 +93,7 @@ public sealed class KitsuneTcpTests
         r.String.ShouldBe("ok");
     }
 
-    [WebSocketFact]
+    [Fact]
     public async System.Threading.Tasks.Task Accept_ReturnsClient_AfterConnect()
     {
         using KitsuneEngine engine = new();
@@ -109,7 +109,7 @@ public sealed class KitsuneTcpTests
         r.String.ShouldBe("ok");
     }
 
-    [WebSocketFact]
+    [Fact]
     public async System.Threading.Tasks.Task EchoRoundTrip_WorksCorrectly()
     {
         using KitsuneEngine engine = new();
@@ -165,7 +165,7 @@ public sealed class KitsuneTcpTests
         r.String.ShouldBe("ok");
     }
 
-    [WebSocketFact]
+    [Fact]
     public async System.Threading.Tasks.Task MultipleClients_AcceptedInOrder()
     {
         using KitsuneEngine engine = new();
@@ -195,7 +195,7 @@ public sealed class KitsuneTcpTests
         r.String.ShouldBe("ok");
     }
 
-    [WebSocketFact]
+    [Fact]
     public async System.Threading.Tasks.Task Poll_ReturnsNilAndError_WhenClientDisconnects()
     {
         using KitsuneEngine engine = new();
@@ -239,7 +239,7 @@ public sealed class KitsuneTcpTests
         r.String.ShouldBe("ok");
     }
 
-    [WebSocketFact]
+    [Fact]
     public async System.Threading.Tasks.Task GetIP_GetPort_ReturnExpectedValues()
     {
         using KitsuneEngine engine = new();
@@ -263,7 +263,7 @@ public sealed class KitsuneTcpTests
         r.String.ShouldBe("ok");
     }
 
-    [WebSocketFact]
+    [Fact]
     public async System.Threading.Tasks.Task Dispose_IsIdempotent()
     {
         using KitsuneEngine engine = new();
@@ -279,7 +279,7 @@ public sealed class KitsuneTcpTests
         r.String.ShouldBe("ok");
     }
 
-    [WebSocketFact]
+    [Fact]
     public async System.Threading.Tasks.Task GetContext_ReturnsPersistentTable()
     {
         using KitsuneEngine engine = new();
@@ -306,7 +306,7 @@ public sealed class KitsuneTcpTests
         r.String.ShouldBe("ok");
     }
 
-    [WebSocketFact]
+    [Fact]
     public async System.Threading.Tasks.Task LargePayload_EchoesCorrectly()
     {
         using KitsuneEngine engine = new();

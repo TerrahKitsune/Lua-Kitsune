@@ -12,7 +12,7 @@ namespace KitsuneNet.Tests;
 public sealed class MiscBugFixTests
 {
     // Archive
-    [ArchiveTheory]
+    [Theory]
     [MemberData(nameof(ArchiveTests.ArchiveFiles), MemberType = typeof(ArchiveTests))]
     public async Task Archive_SetEntry_AfterFileDeleted_ReturnsErrorAndGcIsSafe(string path)
     {

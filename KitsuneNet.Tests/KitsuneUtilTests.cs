@@ -2219,17 +2219,14 @@ namespace KitsuneNet.Tests
             // Each entry must have a string 'Type' ("IPV4" or "IPV6") and a string 'IP'.
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local results = Dns('localhost', true)
-                if type(results) ~= 'table' or #results == 0 then return 'skip' end
+                if type(results) ~= 'table' or #results == 0 then return 'no entries for localhost' end
                 local entry = results[1]
                 return tostring(
                     type(entry.Type) == 'string' and
                     type(entry.IP)   == 'string' and
                     (entry.Type == 'IPV4' or entry.Type == 'IPV6'))
             ");
-            if (r != "skip")
-            {
-                r.String.ShouldBe("true");
-            }
+            r.String.ShouldBe("true");
         }
 
         // Base64
@@ -5933,9 +5930,10 @@ namespace KitsuneNet.Tests
             }
         }
 
-        [WindowsFact]
+        [SkippableFact]
         public async Task FileSystem_Symlinks_AbsoluteAndRelativeTargets()
         {
+            Skip.IfNot(OperatingSystem.IsWindows(), "Windows-only test");
             string dir = NewLinkTestDir();
             string target = Path.Combine(dir, "target");
             try
@@ -5948,7 +5946,7 @@ namespace KitsuneNet.Tests
                 }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException)
                 {
-                    return;  // creating symlinks needs Developer Mode or elevation
+                    Skip.If(true, "Creating symlinks needs Developer Mode or elevation");
                 }
 
                 using KitsuneEngine engine = new();
@@ -7101,14 +7099,18 @@ namespace KitsuneNet.Tests
         }
 
         // Hardware
-        [Fact]
+        // Hardware readings that a machine may not have return nil; those tests skip
+        // instead of passing, so a run shows which checks did not happen.
+        [SkippableFact]
         public async Task Hardware_CpuName_ReturnsNonEmptyStringOrNil()
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local n = Hardware.CpuName()
-                return tostring(n == nil or (type(n) == 'string' and #n > 0))
+                if n == nil then return 'absent' end
+                return tostring(type(n) == 'string' and #n > 0)
             ");
+            Skip.If(r == "absent", "Hardware.CpuName() is not available on this machine");
             r.String.ShouldBe("true");
         }
 
@@ -7153,18 +7155,20 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        [Fact]
+        [SkippableFact]
         public async Task Hardware_CpuLoad_ReturnsNumberOrNil()
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local v = Hardware.CpuLoad()
-                return tostring(v == nil or type(v) == 'number')
+                if v == nil then return 'absent' end
+                return tostring(type(v) == 'number')
             ");
+            Skip.If(r == "absent", "Hardware.CpuLoad() is not available on this machine");
             r.String.ShouldBe("true");
         }
 
-        [Fact]
+        [SkippableFact]
         public async Task Hardware_CpuLoad_SecondCallInRange()
         {
             using KitsuneEngine engine = new();
@@ -7172,8 +7176,10 @@ namespace KitsuneNet.Tests
                 Hardware.CpuLoad()   -- prime baseline
                 Sleep(100)
                 local v = Hardware.CpuLoad()
-                return tostring(v == nil or (v >= 0 and v <= 100))
+                if v == nil then return 'absent' end
+                return tostring(v >= 0 and v <= 100)
             ");
+            Skip.If(r == "absent", "Hardware.CpuLoad() is not available on this machine");
             r.String.ShouldBe("true");
         }
 
@@ -7204,24 +7210,26 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        [Fact]
+        [SkippableFact]
         public async Task Hardware_GpuMemory_ReturnsTableOrNil()
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = Hardware.GpuMemory()
-                return tostring(t == nil or type(t) == 'table')
+                if t == nil then return 'absent' end
+                return tostring(type(t) == 'table')
             ");
+            Skip.If(r == "absent", "Hardware.GpuMemory() is not available on this machine");
             r.String.ShouldBe("true");
         }
 
-        [Fact]
+        [SkippableFact]
         public async Task Hardware_GpuMemory_AdapterEntriesHaveMemoryFields()
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = Hardware.GpuMemory()
-                if t == nil then return 'true' end
+                if t == nil then return 'absent' end
                 for adapter, m in pairs(t) do
                     if type(adapter) ~= 'string' then return 'bad adapter key' end
                     if type(m) ~= 'table' then return 'bad adapter value' end
@@ -7231,27 +7239,30 @@ namespace KitsuneNet.Tests
                 end
                 return 'true'
             ");
+            Skip.If(r == "absent", "Hardware.GpuMemory() is not available on this machine");
             r.String.ShouldBe("true");
         }
 
-        [Fact]
+        [SkippableFact]
         public async Task Hardware_GpuLoad_ReturnsTableOrNil()
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = Hardware.GpuLoad()
-                return tostring(t == nil or type(t) == 'table')
+                if t == nil then return 'absent' end
+                return tostring(type(t) == 'table')
             ");
+            Skip.If(r == "absent", "Hardware.GpuLoad() is not available on this machine");
             r.String.ShouldBe("true");
         }
 
-        [Fact]
+        [SkippableFact]
         public async Task Hardware_GpuLoad_EngineValuesArePercentages()
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = Hardware.GpuLoad()
-                if t == nil then return 'true' end
+                if t == nil then return 'absent' end
                 for adapter, engines in pairs(t) do
                     if type(adapter) ~= 'string' then return 'bad adapter key' end
                     if type(engines) ~= 'table'  then return 'bad engines value' end
@@ -7263,29 +7274,31 @@ namespace KitsuneNet.Tests
                 end
                 return 'true'
             ");
+            Skip.If(r == "absent", "Hardware.GpuLoad() is not available on this machine");
             r.String.ShouldBe("true");
         }
 
-        [Fact]
+        [SkippableFact]
         public async Task Hardware_NvidiaSmi_ReturnsTableOrNil()
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = Hardware.NvidiaSmi()
-                if t == nil then return 'true' end
+                if t == nil then return 'absent' end
                 if type(t.Gpus) ~= 'table' then return 'missing Gpus' end
                 return 'true'
             ");
+            Skip.If(r == "absent", "Hardware.NvidiaSmi() is not available on this machine (no NVIDIA driver)");
             r.String.ShouldBe("true");
         }
 
-        [Fact]
+        [SkippableFact]
         public async Task Hardware_NvidiaSmi_GpuEntriesAreWellFormed()
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = Hardware.NvidiaSmi()
-                if t == nil then return 'true' end
+                if t == nil then return 'absent' end
                 for i, g in ipairs(t.Gpus) do
                     if math.type(g.Index) ~= 'integer' then return 'bad Index' end
                     if type(g.Name) ~= 'string' then return 'bad Name' end
@@ -7304,6 +7317,7 @@ namespace KitsuneNet.Tests
                 end
                 return 'true'
             ");
+            Skip.If(r == "absent", "Hardware.NvidiaSmi() is not available on this machine (no NVIDIA driver)");
             r.String.ShouldBe("true");
         }
 
@@ -7318,18 +7332,20 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        [Fact]
+        [SkippableFact]
         public async Task Hardware_CpuTemp_ReturnsTableOrNil()
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = Hardware.CpuTemp()
-                return tostring(t == nil or type(t) == 'table')
+                if t == nil then return 'absent' end
+                return tostring(type(t) == 'table')
             ");
+            Skip.If(r == "absent", "Hardware.CpuTemp() is not available on this machine");
             r.String.ShouldBe("true");
         }
 
-        [Fact]
+        [SkippableFact]
         public async Task Hardware_CpuTemp_ValuesAreReasonableWhenPresent()
         {
             using KitsuneEngine engine = new();
@@ -7337,7 +7353,7 @@ namespace KitsuneNet.Tests
             // Each entry is {Name=string, Value=number} in -10..150°C
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = Hardware.CpuTemp()
-                if t == nil then return 'true' end
+                if t == nil then return 'absent' end
                 for _, entry in ipairs(t) do
                     if type(entry.Name)  ~= 'string' then return 'false' end
                     if type(entry.Value) ~= 'number' then return 'false' end
@@ -7345,27 +7361,30 @@ namespace KitsuneNet.Tests
                 end
                 return 'true'
             ");
+            Skip.If(r == "absent", "Hardware.CpuTemp() is not available on this machine");
             r.String.ShouldBe("true");
         }
 
-        [Fact]
+        [SkippableFact]
         public async Task Hardware_Battery_ReturnsTableOrNil()
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local b = Hardware.Battery()
-                return tostring(b == nil or type(b) == 'table')
+                if b == nil then return 'absent' end
+                return tostring(type(b) == 'table')
             ");
+            Skip.If(r == "absent", "Hardware.Battery() reports no battery on this machine");
             r.String.ShouldBe("true");
         }
 
-        [Fact]
+        [SkippableFact]
         public async Task Hardware_Battery_FieldTypesAreCorrectWhenPresent()
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local b = Hardware.Battery()
-                if b == nil then return 'true' end
+                if b == nil then return 'absent' end
                 if type(b.ACLine)   ~= 'boolean' then return 'bad ACLine'   end
                 if type(b.Charging) ~= 'boolean' then return 'bad Charging' end
                 if b.Percent ~= nil and (type(b.Percent) ~= 'number' or b.Percent < 0 or b.Percent > 100) then
@@ -7376,6 +7395,7 @@ namespace KitsuneNet.Tests
                 end
                 return 'true'
             ");
+            Skip.If(r == "absent", "Hardware.Battery() reports no battery on this machine");
             r.String.ShouldBe("true");
         }
 
@@ -7494,7 +7514,7 @@ namespace KitsuneNet.Tests
                 local cmd = is_win and 'cmd /c echo hello' or 'echo hello'
                 -- noconsole=true so stdout goes to the pipe, not a new console window
                 local proc = Process.Start(nil, cmd, nil, true, true)
-                if proc == nil then return 'skip' end
+                assert(proc, 'Process.Start returned nil')
                 -- ReadFromPipe does not block, so poll until the output arrives.
                 local out = ''
                 local deadline = os.time() + 10
@@ -7504,10 +7524,7 @@ namespace KitsuneNet.Tests
                 end
                 return tostring(out:find('hello') ~= nil)
             ");
-            if (r != "skip")
-            {
-                r.String.ShouldBe("true");
-            }
+            r.String.ShouldBe("true");
         }
 
         [Fact]
@@ -7550,15 +7567,12 @@ namespace KitsuneNet.Tests
                 local is_win = package.config:sub(1,1) == '\\'
                 local cmd = is_win and 'cmd /c echo hello' or 'echo hello'
                 local proc = Process.Start(nil, cmd, nil, false, true)
-                if proc == nil then return 'skip' end
+                assert(proc, 'Process.Start returned nil')
                 Sleep(200)
                 local err = proc:ReadErrorFromPipe()
                 return tostring(err == nil or type(err) == 'string')
             ");
-            if (r != "skip")
-            {
-                r.String.ShouldBe("true");
-            }
+            r.String.ShouldBe("true");
         }
 
         [AnnoyingFact]
@@ -7569,15 +7583,12 @@ namespace KitsuneNet.Tests
                 local is_win = package.config:sub(1,1) == '\\'
                 local cmd = is_win and 'cmd /c ping 127.0.0.1 -n 10 >nul 2>&1' or 'sleep 10'
                 local proc = Process.Start(nil, cmd, nil, false, false)
-                if proc == nil then return 'skip' end
+                assert(proc, 'Process.Start returned nil')
                 local code = proc:GetExitCode()
                 proc:Stop()
                 return tostring(code == nil)
             ");
-            if (r != "skip")
-            {
-                r.String.ShouldBe("true");
-            }
+            r.String.ShouldBe("true");
         }
 
         [AnnoyingFact]
@@ -7588,13 +7599,10 @@ namespace KitsuneNet.Tests
                 local is_win = package.config:sub(1,1) == '\\'
                 local cmd = is_win and 'cmd /c ping 127.0.0.1 -n 10 >nul 2>&1' or 'sleep 10'
                 local proc = Process.Start(nil, cmd, nil, false, false)
-                if proc == nil then return 'skip' end
+                assert(proc, 'Process.Start returned nil')
                 return tostring(proc:Stop() == true)
             ");
-            if (r != "skip")
-            {
-                r.String.ShouldBe("true");
-            }
+            r.String.ShouldBe("true");
         }
 
         [Fact]
@@ -7605,7 +7613,7 @@ namespace KitsuneNet.Tests
                 local is_win = package.config:sub(1,1) == '\\'
                 local cmd = is_win and 'cmd /c exit 0' or 'true'
                 local proc = Process.Start(nil, cmd, nil, true, false)
-                if proc == nil then return 'skip' end
+                assert(proc, 'Process.Start returned nil')
                 local code = nil
                 for _ = 1, 200 do
                     code = proc:GetExitCode()
@@ -7614,10 +7622,7 @@ namespace KitsuneNet.Tests
                 end
                 return tostring(type(code) == 'number')
             ");
-            if (r != "skip")
-            {
-                r.String.ShouldBe("true");
-            }
+            r.String.ShouldBe("true");
         }
 
         [Fact]
@@ -7631,7 +7636,7 @@ namespace KitsuneNet.Tests
                 local is_win = package.config:sub(1,1) == '\\'
                 local cmd = is_win and 'cmd /c exit 0' or 'true'
                 local proc = Process.Start(nil, cmd, nil, true, false)
-                if proc == nil then return 'skip' end
+                assert(proc, 'Process.Start returned nil')
                 local c1 = nil
                 for _ = 1, 200 do
                     c1 = proc:GetExitCode()
@@ -7641,10 +7646,7 @@ namespace KitsuneNet.Tests
                 local c2 = proc:GetExitCode()
                 return tostring(c1 ~= nil and c1 == c2)
             ");
-            if (r != "skip")
-            {
-                r.String.ShouldBe("true");
-            }
+            r.String.ShouldBe("true");
         }
 
         [AnnoyingFact]
@@ -7657,13 +7659,10 @@ namespace KitsuneNet.Tests
                 local is_win = package.config:sub(1,1) == '\\'
                 local cmd = is_win and 'cmd /c exit 0' or 'true'
                 local proc = Process.Start(nil, cmd, nil, false, false)
-                if proc == nil then return 'skip' end
+                assert(proc, 'Process.Start returned nil')
                 return tostring(proc:ReadFromPipe() == nil)
             ");
-            if (r != "skip")
-            {
-                r.String.ShouldBe("true");
-            }
+            r.String.ShouldBe("true");
         }
 
         [AnnoyingFact]
@@ -7677,15 +7676,12 @@ namespace KitsuneNet.Tests
                 local is_win = package.config:sub(1,1) == '\\'
                 local cmd = is_win and 'cmd /c more' or 'cat'
                 local proc = Process.Start(nil, cmd, nil, false, 7)
-                if proc == nil then return 'skip' end
+                assert(proc, 'Process.Start returned nil')
                 local written = proc:WriteToPipe('hello\n')
                 proc:Stop()
                 return tostring(type(written) == 'number' and written > 0)
             ");
-            if (r != "skip")
-            {
-                r.String.ShouldBe("true");
-            }
+            r.String.ShouldBe("true");
         }
 
         [AnnoyingFact]
@@ -7696,15 +7692,12 @@ namespace KitsuneNet.Tests
                 local is_win = package.config:sub(1,1) == '\\'
                 local cmd = is_win and 'cmd /c ping 127.0.0.1 -n 5 >nul 2>&1' or 'sleep 5'
                 local proc = Process.Start(nil, cmd, nil, false, false)
-                if proc == nil then return 'skip' end
+                assert(proc, 'Process.Start returned nil')
                 local id = proc:GetID()
                 proc:Stop()
                 return tostring(math.type(id) == 'integer' and id > 0)
             ");
-            if (r != "skip")
-            {
-                r.String.ShouldBe("true");
-            }
+            r.String.ShouldBe("true");
         }
 
         // Async stream (CreateChunked / HasData / CSV / Compress)

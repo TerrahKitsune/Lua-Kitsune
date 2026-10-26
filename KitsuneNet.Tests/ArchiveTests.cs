@@ -14,7 +14,7 @@ public sealed class ArchiveTests
     ];
 
     // Entries
-    [ArchiveTheory]
+    [Theory]
     [MemberData(nameof(ArchiveFiles))]
     public async Task Entries_Returns_TwoFiles(string path)
     {
@@ -29,7 +29,7 @@ public sealed class ArchiveTests
         r.String.ShouldBe("2");
     }
 
-    [ArchiveTheory]
+    [Theory]
     [MemberData(nameof(ArchiveFiles))]
     public async Task Entries_ContainsExpectedFileNames(string path)
     {
@@ -49,7 +49,7 @@ public sealed class ArchiveTests
         r.String.ShouldBe("this is a test file.txt|this is also a test file.txt");
     }
 
-    [ArchiveTheory]
+    [Theory]
     [MemberData(nameof(ArchiveFiles))]
     public async Task Entries_ReportsCorrectFileSizes(string path)
     {
@@ -68,7 +68,7 @@ public sealed class ArchiveTests
     }
 
     // ReadAll
-    [ArchiveTheory]
+    [Theory]
     [MemberData(nameof(ArchiveFiles))]
     public async Task ReadAll_FirstEntry_ReturnsNonEmptyData(string path)
     {
@@ -86,7 +86,7 @@ public sealed class ArchiveTests
         r.String.ShouldBe("true");
     }
 
-    [ArchiveTheory]
+    [Theory]
     [MemberData(nameof(ArchiveFiles))]
     public async Task ReadAll_SecondEntry_ReturnsNonEmptyData(string path)
     {
@@ -104,7 +104,7 @@ public sealed class ArchiveTests
         r.String.ShouldBe("true");
     }
 
-    [ArchiveTheory]
+    [Theory]
     [MemberData(nameof(ArchiveFiles))]
     public async Task ReadAll_BothEntries_DataMatchesDeclaredSize(string path)
     {
@@ -128,7 +128,7 @@ public sealed class ArchiveTests
     }
 
     // Read (chunked)
-    [ArchiveTheory]
+    [Theory]
     [MemberData(nameof(ArchiveFiles))]
     public async Task Read_ChunkedRead_ReassemblesFullEntry(string path)
     {
@@ -153,7 +153,7 @@ public sealed class ArchiveTests
     }
 
     // OpenRead error handling
-    [ArchiveFact]
+    [Fact]
     public async Task OpenRead_NonExistentFile_ReturnsNilAndError()
     {
         using KitsuneEngine engine = new();
@@ -166,7 +166,7 @@ public sealed class ArchiveTests
     }
 
     // Non-ASCII archive path
-    [ArchiveTheory]
+    [Theory]
     [MemberData(nameof(ArchiveFiles))]
     public async Task OpenRead_NonAsciiPath_ReadsEntries(string path)
     {

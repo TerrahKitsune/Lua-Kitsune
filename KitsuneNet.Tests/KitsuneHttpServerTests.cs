@@ -98,16 +98,12 @@ public sealed class KitsuneHttpServerTests
     {
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync(@"
-            local s = HttpServer.Listen('127.0.0.1:19801')
-            if not s then return 'skip' end
+            local s = assert(HttpServer.Listen('127.0.0.1:19801'))
             local str = tostring(s)
             s:Close()
             return tostring(type(str) == 'string' and #str > 0)
         ");
-        if (r != "skip")
-        {
-            r.String.ShouldBe("true");
-        }
+        r.String.ShouldBe("true");
     }
 
     // Accept idempotency
@@ -116,17 +112,13 @@ public sealed class KitsuneHttpServerTests
     {
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync(@"
-            local s = HttpServer.Listen('127.0.0.1:19802')
-            if not s then return 'skip' end
+            local s = assert(HttpServer.Listen('127.0.0.1:19802'))
             local co1 = s:Accept()
             local co2 = s:Accept()
             s:Close()
             return tostring(co1 == co2)
         ");
-        if (r != "skip")
-        {
-            r.String.ShouldBe("true");
-        }
+        r.String.ShouldBe("true");
     }
 
     // GET returns 200
@@ -679,7 +671,7 @@ public sealed class KitsuneHttpServerTests
     // WebSocket server tests
     // All WS server tests use C# ClientWebSocket against a background Lua server
     // (StartWsServer) so curl and libevent never share a single-threaded pump loop.
-    [WebSocketFact]
+    [Fact]
     public async Task Server_WebSocket_Upgrade_Succeeds()
     {
         var (engine, pump) = await StartWsServer("127.0.0.1:19880", string.Empty);
@@ -691,7 +683,7 @@ public sealed class KitsuneHttpServerTests
         await StopWsServer(engine, pump);
     }
 
-    [WebSocketFact]
+    [Fact]
     public async Task Server_WebSocket_Echo_TextFrame_RoundTrips()
     {
         var (engine, pump) = await StartWsServer("127.0.0.1:19881", """
@@ -703,7 +695,7 @@ public sealed class KitsuneHttpServerTests
         data.ShouldBe("hello server");
     }
 
-    [WebSocketFact]
+    [Fact]
     public async Task Server_WebSocket_Echo_BinaryFrame_RoundTrips()
     {
         var (engine, pump) = await StartWsServer("127.0.0.1:19882", """
@@ -715,7 +707,7 @@ public sealed class KitsuneHttpServerTests
         data.ShouldBe("bindata");
     }
 
-    [WebSocketFact]
+    [Fact]
     public async Task Server_WebSocket_IsConnected_TrueAfterUpgrade()
     {
         var (engine, pump) = await StartWsServer("127.0.0.1:19884", string.Empty);
@@ -729,7 +721,7 @@ public sealed class KitsuneHttpServerTests
         r.String.ShouldBe("true");
     }
 
-    [WebSocketFact]
+    [Fact]
     public async Task Server_WebSocket_GetId_IsNonZero()
     {
         var (engine, pump) = await StartWsServer("127.0.0.1:19885", string.Empty);
@@ -747,7 +739,7 @@ public sealed class KitsuneHttpServerTests
         r.String.ShouldBe("true");
     }
 
-    [WebSocketFact]
+    [Fact]
     public async Task Server_WebSocket_GetContext_ReturnsSameTable()
     {
         var (engine, pump) = await StartWsServer("127.0.0.1:19886", string.Empty);
@@ -767,7 +759,7 @@ public sealed class KitsuneHttpServerTests
         r.String.ShouldBe("true");
     }
 
-    [WebSocketFact]
+    [Fact]
     public async Task Server_WebSocket_Dispose_AfterDispose_ReadReturnsNil()
     {
         var (engine, pump) = await StartWsServer("127.0.0.1:19887", string.Empty);
@@ -788,7 +780,7 @@ public sealed class KitsuneHttpServerTests
         r.String.ShouldBe("true");
     }
 
-    [WebSocketFact]
+    [Fact]
     public async Task Server_WebSocket_CSharpClient_TextEcho_RoundTrips()
     {
         var (engine, pump) = await StartWsServer("127.0.0.1:19888", """
@@ -862,14 +854,6 @@ public sealed class KitsuneHttpServerTests
         // The client stream runs as a second scheduler coroutine so both can yield
         // independently — stream:Read() yields back to the scheduler which resumes
         // the server pump, advancing the chunked sender between reads.
-        using (var probe = new KitsuneEngine())
-        {
-            if ((await probe.ExecuteStringAsync("return type(HttpClient)")).String == "nil")
-            {
-                return; // HttpClient not compiled in
-            }
-        }
-
         var (engine, pump) = await StartLuaServer("127.0.0.1:19892", """
             resp:SetHeader('Content-Type', 'text/event-stream')
             local events = { 'alpha', 'beta' }
