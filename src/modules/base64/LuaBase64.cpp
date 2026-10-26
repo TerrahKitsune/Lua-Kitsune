@@ -25,7 +25,7 @@ char *Base64Encode(const unsigned char *data,
 	char *encodedData = (char *)kitsune_malloc(*output_length);
 	if (encodedData == NULL) return NULL;
 
-	for (int i = 0, j = 0; i < input_length;) {
+	for (size_t i = 0, j = 0; i < input_length;) {
 
 		uint32_t octetA = i < input_length ? (unsigned char)data[i++] : 0;
 		uint32_t octetB = i < input_length ? (unsigned char)data[i++] : 0;
@@ -59,12 +59,16 @@ unsigned char *Base64Decode(const char *data,
 	unsigned char *decodedData = (unsigned char *)kitsune_malloc(*output_length);
 	if (decodedData == NULL) return NULL;
 
-	for (int i = 0, j = 0; i < input_length;) {
+	for (size_t i = 0, j = 0; i < input_length;) {
 
-		uint32_t sextetA = data[i] == '=' ? 0 & i++ : g_decodingTable[(unsigned char)data[i++]];
-		uint32_t sextetB = data[i] == '=' ? 0 & i++ : g_decodingTable[(unsigned char)data[i++]];
-		uint32_t sextetC = data[i] == '=' ? 0 & i++ : g_decodingTable[(unsigned char)data[i++]];
-		uint32_t sextetD = data[i] == '=' ? 0 & i++ : g_decodingTable[(unsigned char)data[i++]];
+		uint32_t sextetA = data[i] == '=' ? 0 : g_decodingTable[(unsigned char)data[i]];
+		i++;
+		uint32_t sextetB = data[i] == '=' ? 0 : g_decodingTable[(unsigned char)data[i]];
+		i++;
+		uint32_t sextetC = data[i] == '=' ? 0 : g_decodingTable[(unsigned char)data[i]];
+		i++;
+		uint32_t sextetD = data[i] == '=' ? 0 : g_decodingTable[(unsigned char)data[i]];
+		i++;
 
 		uint32_t triple = (sextetA << 3 * 6)
 			+ (sextetB << 2 * 6)

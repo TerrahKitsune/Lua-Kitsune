@@ -64,7 +64,7 @@ void PushKafkaPartition(lua_State* L, const rd_kafka_metadata_partition* partiti
 
 	lua_pushstring(L, "InSyncReplicas");
 	lua_createtable(L, partition->isr_cnt, 0);
-	for (size_t i = 0; i < partition->isr_cnt; i++)
+	for (int i = 0; i < partition->isr_cnt; i++)
 	{
 		lua_pushinteger(L, partition->isrs[i]);
 		lua_rawseti(L, -2, i + 1);
@@ -73,7 +73,7 @@ void PushKafkaPartition(lua_State* L, const rd_kafka_metadata_partition* partiti
 
 	lua_pushstring(L, "Replicas");
 	lua_createtable(L, partition->replica_cnt, 0);
-	for (size_t i = 0; i < partition->replica_cnt; i++)
+	for (int i = 0; i < partition->replica_cnt; i++)
 	{
 		lua_pushinteger(L, partition->replicas[i]);
 		lua_rawseti(L, -2, i + 1);
@@ -99,7 +99,7 @@ void PushKafkaTopic(lua_State* L, const rd_kafka_metadata_topic* topic) {
 
 	lua_pushstring(L, "Partitions");
 	lua_createtable(L, topic->partition_cnt, 0);
-	for (size_t i = 0; i < topic->partition_cnt; i++)
+	for (int i = 0; i < topic->partition_cnt; i++)
 	{
 		PushKafkaPartition(L, &topic->partitions[i]);
 		lua_rawseti(L, -2, i + 1);

@@ -1286,8 +1286,10 @@ int Hardware_Battery(lua_State* L)
 		snprintf(typepath, sizeof(typepath), "/sys/class/power_supply/%s/type", ent->d_name);
 		char type[32] = {};
 		if (SysfsReadStr(typepath, type, sizeof(type)) && strcmp(type, "Battery") == 0) {
-			snprintf(batpath, sizeof(batpath), "/sys/class/power_supply/%s", ent->d_name);
-			break;
+			int batLen = snprintf(batpath, sizeof(batpath), "/sys/class/power_supply/%s", ent->d_name);
+			if (batLen < (int)sizeof(batpath))
+				break;
+			batpath[0] = '\0';
 		}
 	}
 	closedir(d);
@@ -1392,7 +1394,7 @@ int Hardware_DiskIO(lua_State* L)
 		// Skip partitions (sda1, sdb2 etc.) — only keep whole disks
 		if (minor != 0 && (name[strlen(name)-1] >= '0' && name[strlen(name)-1] <= '9'))
 			continue;
-		strncpy(cur[curCount].name, name, 63);
+		snprintf(cur[curCount].name, sizeof(cur[curCount].name), "%s", name);
 		cur[curCount].rsect = rdSectors;
 		cur[curCount].wsect = wrSectors;
 		curCount++;
@@ -1454,17 +1456,18 @@ int Hardware_NetworkIO(lua_State* L)
 
 	char line[256];
 	// First two lines are headers
-	fgets(line, sizeof(line), f);
-	fgets(line, sizeof(line), f);
+	bool hasHeaders = fgets(line, sizeof(line), f) && fgets(line, sizeof(line), f);
 
-	while (fgets(line, sizeof(line), f) && curCount < 64) {
+	while (hasHeaders && fgets(line, sizeof(line), f) && curCount < 64) {
 		char* colon = strchr(line, ':');
 		if (!colon)
 			continue;
 		*colon = '\0';
 		const char* nameptr = line;
 		while (*nameptr == ' ') nameptr++;
-		strncpy(cur[curCount].name, nameptr, 63);
+		size_t nameLen = strnlen(nameptr, sizeof(cur[curCount].name) - 1);
+		memcpy(cur[curCount].name, nameptr, nameLen);
+		cur[curCount].name[nameLen] = '\0';
 
 		unsigned long long rx = 0, tx = 0, dummy = 0;
 		// Fields after ':': rx_bytes rx_packets rx_errs rx_drop rx_fifo rx_frame rx_compressed rx_multicast

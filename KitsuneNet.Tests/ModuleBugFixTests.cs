@@ -17,7 +17,7 @@ public sealed class ModuleBugFixTests
     [Fact]
     public async Task Csv_ModuleDecode_DefaultDelimiterIsComma()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync(@"
             local t = CSV.Decode('a,b\n1,2')
             local t2 = CSV.Decode('a;b\n1;2')
@@ -30,7 +30,7 @@ public sealed class ModuleBugFixTests
     [Fact]
     public async Task Csv_ModuleDecode_ExplicitAndAutoDelimiter()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync(@"
             local t1 = CSV.Decode('a;b\n1;2', ';')
             local t2 = CSV.Decode('a|b\n1|2', 'auto')
@@ -45,7 +45,7 @@ public sealed class ModuleBugFixTests
     [Fact]
     public async Task Csv_ModuleDecode_NoArgument_RaisesArgumentError()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync(@"
             local ok, err = pcall(CSV.Decode)
             return tostring(ok) .. ':' .. tostring(type(err) == 'string')
@@ -56,7 +56,7 @@ public sealed class ModuleBugFixTests
     [Fact]
     public async Task Csv_ModuleEncode_DefaultAndExplicitDelimiter()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync(@"
             local rows = { {'a', 'b'}, {'c', 'd'} }
             return CSV.Encode(rows) .. '|' .. CSV.Encode(rows, ';')
@@ -67,7 +67,7 @@ public sealed class ModuleBugFixTests
     [Fact]
     public async Task Csv_ModuleDecodeFromFunction_DefaultAndExplicitDelimiter()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync(@"
             local function supplier(chunks)
                 local i = 0
@@ -88,7 +88,7 @@ public sealed class ModuleBugFixTests
     [Fact]
     public async Task Csv_ModuleDecodeFromFunction_NonFunction_RaisesError()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync(@"
             local ok = pcall(CSV.DecodeFromFunction, 42)
             return tostring(ok)
@@ -99,7 +99,7 @@ public sealed class ModuleBugFixTests
     [Fact]
     public async Task Csv_InstanceForms_StillWork()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync(@"
             local sc = CSV.New(';')
             local t = sc:Decode('a;b\n1;2')
@@ -124,7 +124,7 @@ public sealed class ModuleBugFixTests
     public async Task Csv_ModuleAndInstanceDecode_ShareTheSameFunction()
     {
         // CSV.Decode is also the instance method (module table is __index).
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync(@"
             local csv = CSV.New(';')
             local a = CSV.Decode('a;b', ';')
@@ -139,7 +139,7 @@ public sealed class ModuleBugFixTests
     [Fact]
     public async Task TaskStatus_Waiting_IsNine()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync(@"
             return tostring(TaskStatus.Waiting)
         ");
@@ -149,7 +149,7 @@ public sealed class ModuleBugFixTests
     [Fact]
     public async Task TaskStatus_TaskSuspendedInWait_ReportsWaiting()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync(@"
             local blocker = Tasks.New(function() Pause() end)
             for i = 1, 2000 do
@@ -176,7 +176,7 @@ public sealed class ModuleBugFixTests
     [RedisFact]
     public async Task Redis_Resp3BoolReply_IsLuaBoolean()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($$"""
             local redis = {{RedisOpen()}}
             redis:Command('HELLO', '3')
@@ -191,27 +191,37 @@ public sealed class ModuleBugFixTests
     [RedisFact]
     public async Task Redis_StringAt_ByteAbove127_IsUnsigned()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($$"""
-            local redis = {{RedisOpen()}}
-            local key = 'kitsune_test_bugfix_bytes'
-            redis:Command('SET', key, string.char(200, 65, 255))
-            local s = redis:GetString(key)
-            local at = s:At(1)
-            local idx = s[3]
-            local it = {}
-            for _, b in pairs(s) do it[#it + 1] = tostring(b) end
-            redis:Command('DEL', key)
-            return tostring(at) .. ':' .. tostring(idx) .. ':' .. table.concat(it, ',')
-            """);
-        r.String.ShouldBe("200:255:200,65,255");
+        using KitsuneEngine engine = TestRun.NewEngine();
+        try
+        {
+            LuaValue r = await engine.ExecuteStringAsync($$"""
+                local redis = {{RedisOpen()}}
+                local key = 'kitsune_test_bugfix_bytes_' .. RUN_ID
+                redis:Command('SET', key, string.char(200, 65, 255))
+                local s = redis:GetString(key)
+                local at = s:At(1)
+                local idx = s[3]
+                local it = {}
+                for _, b in pairs(s) do it[#it + 1] = tostring(b) end
+                redis:Command('DEL', key)
+                return tostring(at) .. ':' .. tostring(idx) .. ':' .. table.concat(it, ',')
+                """);
+            r.String.ShouldBe("200:255:200,65,255");
+        }
+        finally
+        {
+            await engine.ExecuteStringAsync($$"""
+                local redis = {{RedisOpen()}}
+                redis:Command('DEL', 'kitsune_test_bugfix_bytes_' .. RUN_ID)
+                """);
+        }
     }
 
     // MySQL
     [MySqlFact]
     public async Task MySql_StopFlagBeforeRowcount_ConnectionReusable()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($$"""
             local conn = assert({{MySqlConnect()}})
             local co = assert(conn:Query('SELECT SLEEP(0.2)'))
@@ -231,7 +241,7 @@ public sealed class ModuleBugFixTests
     {
         // Stop after 0..6 plain resumes, covering: before start, query in
         // flight, result store pending, and rows streaming.
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($$"""
             local conn = assert({{MySqlConnect()}})
             for k = 0, 6 do
@@ -253,7 +263,7 @@ public sealed class ModuleBugFixTests
     [MySqlFact]
     public async Task MySql_RawQueryError_ConnectionReusableWithoutExtraResume()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($$"""
             local conn = assert({{MySqlConnect()}})
             local co = assert(conn:Query('SELECT * FROM _no_such_table_xyz'))
@@ -273,7 +283,7 @@ public sealed class ModuleBugFixTests
     [MySqlFact]
     public async Task MySql_HelperQueryError_ConnectionReusable()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($$"""
             local conn = assert({{MySqlConnect()}})
             local ok1, err = conn:NonQuery('THIS IS NOT SQL')
@@ -287,7 +297,7 @@ public sealed class ModuleBugFixTests
     [MySqlFact]
     public async Task MySql_TextIsString_BlobIsStream_BitIsInteger()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($$"""
             local conn = assert({{MySqlConnect()}})
             assert(conn:NonQuery('CREATE TEMPORARY TABLE kt_types (t TEXT, b BLOB, b1 BIT(1), b8 BIT(8), b64 BIT(64))'))

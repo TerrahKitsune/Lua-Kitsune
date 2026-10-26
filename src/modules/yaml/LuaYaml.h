@@ -4,6 +4,10 @@
 #include <stdlib.h>
 #include <stdint.h>
 
+// libyaml is compiled into the engine; without this its header declares the API as dllimport.
+#ifndef YAML_DECLARE_STATIC
+#define YAML_DECLARE_STATIC
+#endif
 #include "libyaml/include/yaml.h"
 
 #define LUAYAML "LUAYAML"

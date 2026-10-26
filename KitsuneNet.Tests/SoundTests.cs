@@ -50,17 +50,25 @@ public sealed class SoundTests
     [Fact]
     public async Task Sound_Save_Open_RoundTrips_WithinQuantizationTolerance()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync(@"
-            local path = FileSystem.GetTempFileName() .. '_kitsune_sound_roundtrip.wav'
-            local snd = Sound.New(22050, 1, 20)
-            snd:SetSample(10, 0, 0.75)
-            snd:Save(path)
-            local snd2 = Sound.Open(path)
-            local diff = math.abs(snd2:GetSample(10, 0) - 0.75)
-            return snd2:GetSampleRate()..','..snd2:GetChannels()..','..snd2:GetFrameCount()..','..tostring(diff < 0.001)
-        ");
-        r.String.ShouldBe("22050,1,20,true");
+        string path = Path.Combine(Path.GetTempPath(), $"kitsune_sound_roundtrip_{Guid.NewGuid():N}.wav");
+        try
+        {
+            using KitsuneEngine engine = new();
+            engine.SetVariable("path", path);
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local snd = Sound.New(22050, 1, 20)
+                snd:SetSample(10, 0, 0.75)
+                snd:Save(path)
+                local snd2 = Sound.Open(path)
+                local diff = math.abs(snd2:GetSample(10, 0) - 0.75)
+                return snd2:GetSampleRate()..','..snd2:GetChannels()..','..snd2:GetFrameCount()..','..tostring(diff < 0.001)
+            ");
+            r.String.ShouldBe("22050,1,20,true");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
     }
 
     [Fact]
@@ -256,7 +264,7 @@ public sealed class SoundTests
             local magic = oggBytes:sub(1, 4)
             return magic..','..tostring(#oggBytes < #wavBytes)..','..#wavBytes..','..#oggBytes
         ");
-        var parts = r.String.Split(',');
+        var parts = r.String!.Split(',');
         parts[0].ShouldBe("OggS");
         parts[1].ShouldBe("true");
     }
@@ -272,7 +280,7 @@ public sealed class SoundTests
             local mn, mx = snd2:GetPeak()
             return snd2:GetSampleRate()..','..snd2:GetChannels()..','..mx
         ");
-        var parts = r.String.Split(',');
+        var parts = r.String!.Split(',');
         parts[0].ShouldBe("44100");
         parts[1].ShouldBe("1");
         double peak = double.Parse(parts[2], System.Globalization.CultureInfo.InvariantCulture);
@@ -282,15 +290,23 @@ public sealed class SoundTests
     [Fact]
     public async Task Sound_Save_Ogg_RoundTrips_ThroughDisk()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync(@"
-            local path = FileSystem.GetTempFileName() .. '_kitsune_sound_roundtrip.ogg'
-            local snd = Sound.Tone(44100, 2, 22050, 440, 'sine', 0.5)
-            snd:Save(path, 'ogg', 0.6)
-            local snd2 = Sound.Open(path)
-            return snd2:GetSampleRate()..','..snd2:GetChannels()
-        ");
-        r.String.ShouldBe("44100,2");
+        string path = Path.Combine(Path.GetTempPath(), $"kitsune_sound_roundtrip_{Guid.NewGuid():N}.ogg");
+        try
+        {
+            using KitsuneEngine engine = new();
+            engine.SetVariable("path", path);
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local snd = Sound.Tone(44100, 2, 22050, 440, 'sine', 0.5)
+                snd:Save(path, 'ogg', 0.6)
+                local snd2 = Sound.Open(path)
+                return snd2:GetSampleRate()..','..snd2:GetChannels()
+            ");
+            r.String.ShouldBe("44100,2");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
     }
 
     [Fact]

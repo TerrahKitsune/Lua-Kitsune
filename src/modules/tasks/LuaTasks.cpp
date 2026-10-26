@@ -269,7 +269,9 @@ int Tasks_Wait(lua_State* L) {
 	}
 	caller->waitingForId = target->id;
 	caller->sleepUntil = (timeoutMs > 0.0) ? (GetCounter(g_state) + timeoutMs) : 0.0;
-	caller->state.store(KITSUNE_COROUTINE_STATE_WAITING);
+	// A Cancel that arrived while this coroutine was running must survive the yield.
+	if (caller->state.load() != KITSUNE_COROUTINE_STATE_ABORTED)
+		caller->state.store(KITSUNE_COROUTINE_STATE_WAITING);
 	g_state->slotsLock.unlock();
 	return lua_yield(L, 0);
 }

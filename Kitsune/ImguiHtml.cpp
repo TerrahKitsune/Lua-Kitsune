@@ -11,6 +11,7 @@
 #include "Imgui/imgui.h"
 #include <SDL.h>
 #include <SDL_opengl.h>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <cstdio>
@@ -78,10 +79,10 @@ litehtml::uint_ptr KitsuneHtmlContainer::create_font(
         metricFont = ImGui::GetIO().Fonts->Fonts[0];
 
     if (fm && metricFont) {
-        fm->ascent      = (int)metricFont->Ascent;
-        fm->descent     = (int)-metricFont->Descent;
-        fm->height      = (int)metricFont->FontSize;
-        fm->x_height    = (int)(metricFont->FontSize * 0.5f);
+        fm->ascent      = std::trunc(metricFont->Ascent);
+        fm->descent     = std::trunc(-metricFont->Descent);
+        fm->height      = std::trunc(metricFont->FontSize);
+        fm->x_height    = std::trunc(metricFont->FontSize * 0.5f);
         fm->draw_spaces = true;
     }
 
@@ -341,8 +342,8 @@ void KitsuneHtmlContainer::del_clip() {
 void KitsuneHtmlContainer::get_viewport(litehtml::position& viewport) const {
     viewport.x      = 0;
     viewport.y      = 0;
-    viewport.width  = (int)clientSize.x;
-    viewport.height = (int)clientSize.y;
+    viewport.width  = std::trunc(clientSize.x);
+    viewport.height = std::trunc(clientSize.y);
 }
 
 litehtml::element::ptr KitsuneHtmlContainer::create_element(
@@ -355,8 +356,8 @@ litehtml::element::ptr KitsuneHtmlContainer::create_element(
 
 void KitsuneHtmlContainer::get_media_features(litehtml::media_features& media) const {
     media.type        = litehtml::media_type_screen;
-    media.width       = (int)clientSize.x;
-    media.height      = (int)clientSize.y;
+    media.width       = std::trunc(clientSize.x);
+    media.height      = std::trunc(clientSize.y);
     media.color       = 8;
     media.monochrome  = 0;
     media.color_index = 256;
@@ -364,12 +365,12 @@ void KitsuneHtmlContainer::get_media_features(litehtml::media_features& media) c
     if (window) {
         int w = 0, h = 0;
         SDL_GetWindowSize(window, &w, &h);
-        media.device_width  = w;
-        media.device_height = h;
+        media.device_width  = (litehtml::pixel_t)w;
+        media.device_height = (litehtml::pixel_t)h;
     }
     else {
-        media.device_width  = (int)clientSize.x;
-        media.device_height = (int)clientSize.y;
+        media.device_width  = std::trunc(clientSize.x);
+        media.device_height = std::trunc(clientSize.y);
     }
 }
 
@@ -735,8 +736,8 @@ int ImguiRenderer_Html(int argc, const KitsuneVariable* argv,
     litehtml::position clip;
     clip.x      = 0;
     clip.y      = 0;
-    clip.width  = (int)w;
-    clip.height = (int)(h > 0 ? h : renderedH);
+    clip.width  = std::trunc(w);
+    clip.height = std::trunc(h > 0 ? h : renderedH);
     d->doc->draw((litehtml::uint_ptr)dl, 0, 0, &clip);
 
     container->drawList  = nullptr;

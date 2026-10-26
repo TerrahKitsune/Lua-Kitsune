@@ -51,17 +51,25 @@ public sealed class ImageTests
     [Fact]
     public async Task Image_Save_Open_RoundTrips_Pixels_And_Dimensions()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync(@"
-            local path = FileSystem.GetTempFileName() .. '_kitsune_image_roundtrip.png'
-            local img = Image.New(3, 3)
-            img:SetPixel(1, 1, 200, 100, 50, 255)
-            img:Save(path)
-            local img2 = Image.Open(path)
-            local r,g,b,a = img2:GetPixel(1, 1)
-            return img2:GetWidth()..'x'..img2:GetHeight()..':'..r..','..g..','..b..','..a
-        ");
-        r.String.ShouldBe("3x3:200,100,50,255");
+        string path = Path.Combine(Path.GetTempPath(), $"kitsune_image_roundtrip_{Guid.NewGuid():N}.png");
+        try
+        {
+            using KitsuneEngine engine = new();
+            engine.SetVariable("path", path);
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local img = Image.New(3, 3)
+                img:SetPixel(1, 1, 200, 100, 50, 255)
+                img:Save(path)
+                local img2 = Image.Open(path)
+                local r,g,b,a = img2:GetPixel(1, 1)
+                return img2:GetWidth()..'x'..img2:GetHeight()..':'..r..','..g..','..b..','..a
+            ");
+            r.String.ShouldBe("3x3:200,100,50,255");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
     }
 
     [Fact]
@@ -76,17 +84,25 @@ public sealed class ImageTests
     [Fact]
     public async Task Image_SetMetadata_RoundTrips_ThroughSaveAndOpen()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync(@"
-            local path = FileSystem.GetTempFileName() .. '_kitsune_image_meta.png'
-            local img = Image.New(2, 2)
-            img:SetMetadata('location', 'sight-glass-1')
-            img:Save(path)
-            local img2 = Image.Open(path)
-            local meta = img2:GetMetadata()
-            return meta.width..'x'..meta.height..':'..tostring(meta.tags.location)
-        ");
-        r.String.ShouldBe("2x2:sight-glass-1");
+        string path = Path.Combine(Path.GetTempPath(), $"kitsune_image_meta_{Guid.NewGuid():N}.png");
+        try
+        {
+            using KitsuneEngine engine = new();
+            engine.SetVariable("path", path);
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local img = Image.New(2, 2)
+                img:SetMetadata('location', 'sight-glass-1')
+                img:Save(path)
+                local img2 = Image.Open(path)
+                local meta = img2:GetMetadata()
+                return meta.width..'x'..meta.height..':'..tostring(meta.tags.location)
+            ");
+            r.String.ShouldBe("2x2:sight-glass-1");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
     }
 
     [Fact]

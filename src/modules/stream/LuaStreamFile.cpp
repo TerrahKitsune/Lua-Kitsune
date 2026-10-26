@@ -183,7 +183,8 @@ LuaStream* lua_pushfilestream(lua_State* L, const char* filename, const char* mo
 #ifdef _WIN32
 		strerror_s(errbuf, sizeof(errbuf), errno);
 #else
-		strerror_r(errno, errbuf, sizeof(errbuf));
+		// strerror rather than strerror_r: glibc's GNU strerror_r may leave errbuf unwritten.
+		snprintf(errbuf, sizeof(errbuf), "%s", strerror(errno));
 #endif
 		luaL_error(L, "Stream.Open: cannot open '%s' (%s)", filename, errbuf);
 		return NULL;

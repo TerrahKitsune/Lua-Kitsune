@@ -54,7 +54,7 @@ int PairsNext(lua_State* L) {
 		lua_getglobal(L, "pairs");
 		lua_pushvalue(L, -2);
 
-		if (lua_pcall_nohook(L, 1, 3, NULL)) {
+		if (lua_pcall_nohook(L, 1, 3, 0)) {
 			lua_error(L);
 			return 0;
 		}
@@ -64,7 +64,7 @@ int PairsNext(lua_State* L) {
 		lua_rotate(L, -3, -1);
 		lua_rotate(L, -2, -1);
 
-		if (lua_pcall_nohook(L, 2, 2, NULL)) {
+		if (lua_pcall_nohook(L, 2, 2, 0)) {
 			lua_error(L);
 			return 0;
 		}
@@ -79,7 +79,7 @@ int PairsNext(lua_State* L) {
 	lua_pushvalue(L, -4);
 	lua_pushvalue(L, -3);
 
-	if (lua_pcall_nohook(L, 2, 2, NULL)) {
+	if (lua_pcall_nohook(L, 2, 2, 0)) {
 		lua_error(L);
 		return 0;
 	}

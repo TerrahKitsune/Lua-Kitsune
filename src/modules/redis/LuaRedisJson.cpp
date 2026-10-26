@@ -20,7 +20,7 @@ static void PushJsonEncoded(lua_State* L, int valueIdx) {
 	lua_pushcfunction(L, Json_Encode);
 	lua_rawgetp(L, LUA_REGISTRYINDEX, LuaJsonBridgeRegistryKey());
 	lua_pushvalue(L, valueIdx);
-	if (lua_pcall_nohook(L, 2, 1, NULL)) {
+	if (lua_pcall_nohook(L, 2, 1, 0)) {
 		lua_error(L);
 	}
 }
@@ -32,7 +32,7 @@ static void PushDecodedJson(lua_State* L, const char* str, size_t len) {
 	lua_pushcfunction(L, Json_Decode);
 	lua_rawgetp(L, LUA_REGISTRYINDEX, LuaJsonBridgeRegistryKey());
 	lua_pushlstring(L, str, len);
-	if (lua_pcall_nohook(L, 2, 1, NULL)) {
+	if (lua_pcall_nohook(L, 2, 1, 0)) {
 		lua_error(L);
 		return;
 	}

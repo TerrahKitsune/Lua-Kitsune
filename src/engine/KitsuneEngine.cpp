@@ -1123,7 +1123,10 @@ static void SchedulerProc(KitsuneState* state) {
 					}
 					if (!wake)
 						continue;
-					slot->state.store(KITSUNE_COROUTINE_STATE_WORKING);
+					// Fails only if KitsuneCancel stored ABORTED meanwhile; the next pass releases it.
+					long expected = KITSUNE_COROUTINE_STATE_SLEEPING;
+					if (!slot->state.compare_exchange_strong(expected, KITSUNE_COROUTINE_STATE_WORKING))
+						continue;
 				}
 				// Waiting coroutine: wake when the target task is done, released, or gone (or timeout).
 				if (slotState == KITSUNE_COROUTINE_STATE_WAITING) {
@@ -1148,7 +1151,10 @@ static void SchedulerProc(KitsuneState* state) {
 						continue;
 					slot->waitingForId = 0;
 					slot->sleepUntil = 0.0;
-					slot->state.store(KITSUNE_COROUTINE_STATE_WORKING);
+					// Fails only if KitsuneCancel stored ABORTED meanwhile; the next pass releases it.
+					long expected = KITSUNE_COROUTINE_STATE_WAITING;
+					if (!slot->state.compare_exchange_strong(expected, KITSUNE_COROUTINE_STATE_WORKING))
+						continue;
 				}
 				anyActive = true;
 
@@ -1383,8 +1389,13 @@ static int Global_Sleep(lua_State* L) {
 		// Only enter SLEEPING state if there is actually something to wait on AND this is a
 		// scheduler-managed slot. Inline slots manage their own sleep loop in RunInline;
 		// the scheduler must never see them as SLEEPING.
-		if (!slot->isInline.load() && (slot->sleepUntil != 0.0 || slot->sleepTokenRef > 0))
-			slot->state.store(KITSUNE_COROUTINE_STATE_SLEEPING);
+		// A KitsuneCancel that arrived while this coroutine was running (no lock held here)
+		// must not be overwritten; the scheduler releases an ABORTED slot on its next pass.
+		if (!slot->isInline.load() && (slot->sleepUntil != 0.0 || slot->sleepTokenRef > 0)) {
+			long current = slot->state.load();
+			if (current != KITSUNE_COROUTINE_STATE_ABORTED)
+				slot->state.compare_exchange_strong(current, KITSUNE_COROUTINE_STATE_SLEEPING);
+		}
 		return lua_yieldk(L, 0, 0, SleepContinuation);
 	}
 
@@ -1429,7 +1440,9 @@ static int Global_Pause(lua_State* L) {
 		state->slotsLock.unlock();
 		return 0;
 	}
-	slot->state.store(KITSUNE_COROUTINE_STATE_PAUSED);
+	// A Cancel that arrived while this coroutine was running must survive the yield.
+	if (slot->state.load() != KITSUNE_COROUTINE_STATE_ABORTED)
+		slot->state.store(KITSUNE_COROUTINE_STATE_PAUSED);
 	state->slotsLock.unlock();
 	return lua_yieldk(L, 0, 0, PauseContinuation);
 }
@@ -1738,13 +1751,15 @@ void FreeSlot(KitsuneState* state, KitsuneCoroutine* slot) {
 	kitsune_free(slot->error);
 	kitsune_free(slot->name);
 	--state->runningCount;
-	memset(slot, 0, sizeof(KitsuneCoroutine));
+	new (slot) KitsuneCoroutine();
 }
 
 // Acquires a slot (reusing a zeroed one or allocating a new one), assigns the next id,
 // increments runningCount, and registers it in slots[] under slotsLock. Sets isInline and
 // fireAndForget as requested. This is the only function that sets id to a non-zero value
 // and elevates state to WORKING. Returns NULL if at capacity or OOM.
+// Caller must have Lua access (AcquireLuaAccess, or the scheduler thread): at capacity a
+// RELEASED slot is freed here, which unrefs registry entries.
 KitsuneCoroutine* AcquireSlot(KitsuneState* state, bool isInline, bool fireAndForget) {
 	KitsuneCoroutine* slot = NULL;
 
@@ -1753,6 +1768,17 @@ KitsuneCoroutine* AcquireSlot(KitsuneState* state, bool isInline, bool fireAndFo
 		if (state->slots[i]->id == 0) {
 			slot = state->slots[i];
 			break;
+		}
+	}
+	// A slot whose result was already handed back stays RELEASED until the scheduler's
+	// Step 4 sweep, which can lag under sustained load; reclaim one instead of failing.
+	if (!slot && state->slotCount >= KITSUNE_MAX_COROUTINES) {
+		for (int i = 0; i < state->slotCount; i++) {
+			if (state->slots[i]->state.load() == KITSUNE_COROUTINE_STATE_RELEASED) {
+				slot = state->slots[i];
+				FreeSlot(state, slot);
+				break;
+			}
 		}
 	}
 	if (!slot) {

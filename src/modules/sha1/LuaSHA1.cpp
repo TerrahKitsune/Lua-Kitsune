@@ -8,7 +8,7 @@ int SHA1_New(lua_State* L) {
 	LuaSHA1* luasha1 = lua_pushsha1(L);
 	if (!luasha1) {
 		luaL_error(L, "Unable to push sha1 instance");
-		return NULL;
+		return 0;
 	}
 
 	SHA1Init(&luasha1->ctx);
@@ -21,7 +21,7 @@ int SHA1_Update(lua_State* L) {
 	LuaSHA1* luasha1 = lua_tosha1(L, 1);
 	if (!luasha1) {
 		luaL_error(L, "Unable to push sha1 instance");
-		return NULL;
+		return 0;
 	}
 	else if (luasha1->finished) {
 		luaL_error(L, "Cannot update already finished sha1 digest");
@@ -59,7 +59,7 @@ int SHA1_Finish(lua_State* L) {
 	LuaSHA1* luasha1 = lua_tosha1(L, 1);
 	if (!luasha1) {
 		luaL_error(L, "Unable to push sha1 instance");
-		return NULL;
+		return 0;
 	}
 	else if (!luasha1->finished) {
 		SHA1Final(luasha1->hash, &luasha1->ctx);

@@ -8,6 +8,108 @@ namespace KitsuneNet.Tests;
 [Collection("KitsuneSequential")]
 public sealed class KafkaTests
 {
+    // Lua locals bootstrap, topic, groupId, part and createMainTopic are declared before this.
+    private const string LuaPrelude = @"
+        local function res(s) return 'kitsune_' .. RUN_ID .. '_' .. s end
+
+        local function newProducer()
+            return Kafka.NewProducer({['bootstrap.servers'] = bootstrap})
+        end
+
+        local function newConsumer(offsetReset)
+            local conf = {['bootstrap.servers'] = bootstrap, ['group.id'] = groupId}
+            if offsetReset then conf['auto.offset.reset'] = offsetReset end
+            return Kafka.NewConsumer(conf)
+        end
+
+        -- Creates the topic and waits until its metadata is listed and every partition answers GetOffsets
+        local function ensureTopic(name, count)
+            local p = newProducer()
+            local created, createErr = p:CreateTopic(name, count)
+            if not created then p:Close(); error('CreateTopic failed: ' .. tostring(createErr)) end
+            local deadline = Time() + 30000
+            while Time() < deadline do
+                local ok, meta = p:GetMetadata()
+                local ready = false
+                if ok then
+                    for _, t in ipairs(meta.Topics) do
+                        if t.Name == name and t.ErrorCode == 0 then ready = true; break end
+                    end
+                end
+                for i = 0, count - 1 do
+                    if ready then ready = p:GetOffsets(name, i) end
+                end
+                if ready then p:Close(); return end
+                Sleep(100)
+            end
+            p:Close()
+            error('topic ' .. name .. ' not usable before the deadline')
+        end
+
+        -- Sends messages ({key, value, headers}) to the partition, waits until the broker
+        -- reports them, and returns the offset of the first one.
+        local function produce(messages, partition)
+            partition = partition or part
+            local p = newProducer()
+            local okLow, low, firstOffset = p:GetOffsets(topic, partition)
+            assert(okLow, tostring(low))
+            for _, m in ipairs(messages) do
+                local ok, err = p:Send(topic, m.key, m.value, m.headers, partition)
+                assert(ok, tostring(err))
+            end
+            p:Close()
+
+            local reader = newProducer()
+            local wanted = firstOffset + #messages
+            local high = firstOffset
+            local deadline = Time() + 20000
+            while high < wanted and Time() < deadline do
+                local ok, _, h = reader:GetOffsets(topic, partition)
+                if ok then high = h end
+                if high < wanted then Sleep(100) end
+            end
+            reader:Close()
+            assert(high >= wanted, 'produced messages were not reported by the broker')
+            return firstOffset
+        end
+
+        -- Polls until need distinct messages (by partition and offset) satisfy accept, or the deadline passes
+        local function pollUntil(consumer, accept, need, timeoutMs)
+            local got, seen = {}, {}
+            local deadline = Time() + (timeoutMs or 20000)
+            while #got < need and Time() < deadline do
+                local ok, d = consumer:Poll()
+                if not ok then error(tostring(d)) end
+                if d and d.ErrorCode == 0 and accept(d) then
+                    local id = d.Partition .. ':' .. d.Offset
+                    if not seen[id] then
+                        seen[id] = true
+                        got[#got + 1] = d
+                    end
+                end
+                if not d then Sleep(50) end
+            end
+            return got
+        end
+
+        -- Drives polls until the group coordinator shows the consumer holding a partition
+        local function waitGroupAssigned(consumer, timeoutMs)
+            local deadline = Time() + (timeoutMs or 30000)
+            while Time() < deadline do
+                local ok, msg = consumer:Poll()
+                if not ok then error(tostring(msg)) end
+                local okDesc, descs = consumer:DescribeGroups({groupId})
+                if okDesc and descs[1] and #descs[1].Members > 0 and #descs[1].Members[1].Partitions > 0 then
+                    return true
+                end
+                Sleep(200)
+            end
+            return false
+        end
+
+        if createMainTopic then ensureTopic(topic, 1) end
+    ";
+
     private readonly ITestOutputHelper _output;
 
     public KafkaTests(ITestOutputHelper output) => _output = output;
@@ -16,7 +118,7 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task NewProducer_ValidConfig_ReturnsUserdata()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
             local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
             assert(p, 'NewProducer returned nil')
@@ -28,7 +130,7 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task NewConsumer_ValidConfig_ReturnsUserdata()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
             local c = Kafka.NewConsumer({{['bootstrap.servers']='{Bootstrap()}'}})  
             assert(c, 'NewConsumer returned nil')
@@ -40,13 +142,9 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Consumer_Subscribe_ReturnsTrue()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local c = Kafka.NewConsumer({{
-                ['bootstrap.servers'] = '{Bootstrap()}',
-                ['group.id']          = 'test_kitsune'
-            }})
-            local ok, err = c:Subscribe({{'{Topic()}'}})
+        LuaValue r = await Run("subscribe", @"
+            local c = newConsumer()
+            local ok, err = c:Subscribe({topic})
             c:Close()
             return tostring(ok) .. ':' .. tostring(err == nil)
         ");
@@ -56,13 +154,9 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Consumer_Assign_ReturnsTrue()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local c = Kafka.NewConsumer({{
-                ['bootstrap.servers'] = '{Bootstrap()}',
-                ['group.id']          = 'test_kitsune'
-            }})
-            local ok, err = c:Assign({{'{Topic()}:{Partition()}'}})
+        LuaValue r = await Run("assign_ok", @"
+            local c = newConsumer()
+            local ok, err = c:Assign({topic .. ':' .. part})
             c:Close()
             return tostring(ok) .. ':' .. tostring(err == nil)
         ");
@@ -72,17 +166,20 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Consumer_Poll_IdleReturnsTrue()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local c = Kafka.NewConsumer({{
-                ['bootstrap.servers'] = '{Bootstrap()}',
-                ['group.id']          = 'test_kitsune',
-                ['auto.offset.reset'] = 'latest'
-            }})
-            assert(c:Subscribe({{'{Topic()}'}}))
-            local ok, msg = c:Poll()
+        LuaValue r = await Run("poll_idle", @"
+            local c = newConsumer('latest')
+            assert(c:Subscribe({topic}))
+            assert(waitGroupAssigned(c), 'group assignment not confirmed')
+
+            -- idle: ok=true, msg=nil; events queued by the rebalance are drained first
+            local ok, msg
+            local deadline = Time() + 10000
+            repeat
+                ok, msg = c:Poll()
+                if not ok then error(tostring(msg)) end
+                if msg then Sleep(50) end
+            until msg == nil or Time() > deadline
             c:Close()
-            -- idle: ok=true, msg=nil
             return tostring(ok) .. ':' .. tostring(msg == nil)
         ");
         r.String.ShouldBe("true:true");
@@ -91,7 +188,7 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_Close_IsIdempotent()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
             local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
             p:Close()
@@ -104,7 +201,7 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Consumer_Close_IsIdempotent()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
             local c = Kafka.NewConsumer({{['bootstrap.servers']='{Bootstrap()}'}})
             c:Close()
@@ -117,7 +214,7 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Logs_ReturnsAccumulatedLogsThenClears()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
 
         // Trigger at least one librdkafka log event by connecting and disconnecting
         LuaValue r = await engine.ExecuteStringAsync($@"
@@ -139,11 +236,10 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_Send_ReturnsTrue()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
+        LuaValue r = await Run("send", @"
+            local p = newProducer()
             assert(p, 'NewProducer failed')
-            local ok, err = p:Send('{Topic()}', 'test-key', 'test-value')
+            local ok, err = p:Send(topic, 'test-key', 'test-value')
             p:Close()
             return tostring(ok) .. ':' .. tostring(err == nil)
         ");
@@ -153,11 +249,10 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_Send_NilKey_ReturnsTrue()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
+        LuaValue r = await Run("send_nilkey", @"
+            local p = newProducer()
             assert(p, 'NewProducer failed')
-            local ok, err = p:Send('{Topic()}', nil, 'keyless-value')
+            local ok, err = p:Send(topic, nil, 'keyless-value')
             p:Close()
             return tostring(ok) .. ':' .. tostring(err == nil)
         ");
@@ -167,11 +262,10 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_Send_WithHeaders_ReturnsTrue()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
+        LuaValue r = await Run("send_headers", @"
+            local p = newProducer()
             assert(p, 'NewProducer failed')
-            local ok, err = p:Send('{Topic()}', 'hdr-key', 'hdr-value', {{source='kitsune-test', version='1'}})
+            local ok, err = p:Send(topic, 'hdr-key', 'hdr-value', {source='kitsune-test', version='1'})
             p:Close()
             return tostring(ok) .. ':' .. tostring(err == nil)
         ");
@@ -181,13 +275,12 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_Send_WithHeadersAndPartition_ReturnsTrue()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
+        LuaValue r = await Run("send_hdrpart", @"
+            local p = newProducer()
             assert(p, 'NewProducer failed')
             -- Exercise the branch that requires BOTH explicit partition AND headers
-            local ok, err = p:Send('{Topic()}', 'hdrpart-key', 'hdrpart-value',
-                {{src='kitsune-test'}}, {Partition()})
+            local ok, err = p:Send(topic, 'hdrpart-key', 'hdrpart-value',
+                {src='kitsune-test'}, part)
             p:Close()
             return tostring(ok) .. ':' .. tostring(err == nil)
         ");
@@ -197,43 +290,18 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_Send_Headers_AreReceivedByConsumer()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local bootstrap = '{Bootstrap()}'
-            local topic     = '{Topic()}'
-            local part      = {Partition()}
+        LuaValue r = await Run("hdr_recv", @"
+            local uniqueVal = 'hdr-recv-' .. RUN_ID
+            local hi0 = produce({{key='hkey', value=uniqueVal, headers={x='42', y='hello'}}})
 
-            local producer = Kafka.NewProducer({{['bootstrap.servers'] = bootstrap}})
-            -- Snapshot the high-water mark so the consumer starts exactly here,
-            -- avoiding any backlog on untracked partitions.
-            local ok0, lo0, hi0 = producer:GetOffsets(topic, part)
-            assert(ok0, tostring(lo0))
+            local consumer = newConsumer()
+            assert(consumer:Assign({topic .. ':' .. part .. ':' .. hi0}))
 
-            local uniqueVal = 'hdr-recv-' .. tostring(Time())
-            local ok, err = producer:Send(topic, 'hkey', uniqueVal,
-                {{x='42', y='hello'}}, part)
-            assert(ok, err or 'Send failed')
-            producer:Close()
-
-            local consumer = Kafka.NewConsumer({{
-                ['bootstrap.servers'] = bootstrap,
-                ['group.id']          = 'test_kitsune',
-            }})
-            assert(consumer:Assign({{topic .. ':' .. part .. ':' .. hi0}}))
-
-            local deadline = Time() + 15000
-            local data = nil
-            while Time() < deadline do
-                local ok2, d = consumer:Poll()
-                if not ok2 then error(tostring(d)) end
-                if d and d.Value == uniqueVal then data = d; break end
-                if not d then Sleep(50) end
-            end
-
+            local got = pollUntil(consumer, function(d) return d.Value == uniqueVal end, 1)
             consumer:Close()
 
-            if not data then return 'no-message' end
-            return tostring(data.Headers.x == '42' and data.Headers.y == 'hello')
+            if #got == 0 then return 'no-message' end
+            return tostring(got[1].Headers.x == '42' and got[1].Headers.y == 'hello')
         ");
         r.String.ShouldBe("true");
     }
@@ -242,29 +310,17 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Consumer_Subscribe_ToMultipleTopics_Succeeds()
     {
-        using KitsuneEngine engine = new();
+        LuaValue r = await Run("multi_subscribe", new[] { "multi" }, @"
+            local topic2 = res('multi')
 
-        // Create a temporary second topic to subscribe to alongside the default one
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local bootstrap = '{Bootstrap()}'
-            local topic1    = '{Topic()}'
-            local topic2    = 'kitsune-multi-' .. tostring(Time())
-
-            local p = Kafka.NewProducer({{['bootstrap.servers'] = bootstrap}})
+            local p = newProducer()
             local ok, err = p:CreateTopic(topic2, 1)
             assert(ok, tostring(err))
             p:Close()
 
-            local c = Kafka.NewConsumer({{
-                ['bootstrap.servers'] = bootstrap,
-                ['group.id']          = 'test_kitsune'
-            }})
-            local ok2, err2 = c:Subscribe({{topic1, topic2}})
+            local c = newConsumer()
+            local ok2, err2 = c:Subscribe({topic, topic2})
             c:Close()
-
-            local p2 = Kafka.NewProducer({{['bootstrap.servers'] = bootstrap}})
-            p2:DestroyTopic(topic2)
-            p2:Close()
 
             return tostring(ok2)
         ");
@@ -275,41 +331,16 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Consumer_RoundTrip_ReceivesProducedMessage()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local bootstrap = '{Bootstrap()}'
-            local topic     = '{Topic()}'
-            local part      = {Partition()}
-            local uniqueVal = 'kitsune-rt-' .. tostring(Time())
+        LuaValue r = await Run("roundtrip", @"
+            local uniqueVal = 'kitsune-rt-' .. RUN_ID
+            local hi0 = produce({{key='rt-key', value=uniqueVal}})
 
-            local producer = Kafka.NewProducer({{['bootstrap.servers'] = bootstrap}})
-            -- Snapshot before producing so the consumer starts exactly at this message.
-            local ok0, lo0, hi0 = producer:GetOffsets(topic, part)
-            assert(ok0, tostring(lo0))
-            local ok, err = producer:Send(topic, 'rt-key', uniqueVal, nil, part)
-            assert(ok, err or 'Send failed')
-            producer:Close()
+            local consumer = newConsumer()
+            assert(consumer:Assign({topic .. ':' .. part .. ':' .. hi0}))
 
-            local consumer = Kafka.NewConsumer({{
-                ['bootstrap.servers'] = bootstrap,
-                ['group.id']          = 'test_kitsune',
-            }})
-            assert(consumer:Assign({{topic .. ':' .. part .. ':' .. hi0}}))
-
-            local deadline = Time() + 15000
-            local received = nil
-            while Time() < deadline do
-                local ok2, data = consumer:Poll()
-                if not ok2 then error(tostring(data)) end
-                if data and data.Value == uniqueVal then
-                    received = data.Value
-                    break
-                end
-                if not data then Sleep(50) end
-            end
-
+            local got = pollUntil(consumer, function(d) return d.Value == uniqueVal end, 1)
             consumer:Close()
-            return tostring(received ~= nil)
+            return tostring(#got > 0)
         ");
         r.String.ShouldBe("true");
     }
@@ -317,42 +348,18 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Consumer_RoundTrip_MessageFieldsArePopulated()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local bootstrap = '{Bootstrap()}'
-            local topic     = '{Topic()}'
-            local part      = {Partition()}
-            local uniqueVal = 'kitsune-fields-' .. tostring(Time())
+        LuaValue r = await Run("fields", @"
+            local uniqueVal = 'kitsune-fields-' .. RUN_ID
+            local hi0 = produce({{key='fields-key', value=uniqueVal}})
 
-            local producer = Kafka.NewProducer({{['bootstrap.servers'] = bootstrap}})
-            -- Snapshot before producing so the consumer starts exactly at this message.
-            local ok0, lo0, hi0 = producer:GetOffsets(topic, part)
-            assert(ok0, tostring(lo0))
-            local ok, err = producer:Send(topic, 'fields-key', uniqueVal, nil, part)
-            assert(ok, err or 'Send failed')
-            producer:Close()
+            local consumer = newConsumer()
+            assert(consumer:Assign({topic .. ':' .. part .. ':' .. hi0}))
 
-            local consumer = Kafka.NewConsumer({{
-                ['bootstrap.servers'] = bootstrap,
-                ['group.id']          = 'test_kitsune',
-            }})
-            assert(consumer:Assign({{topic .. ':' .. part .. ':' .. hi0}}))
-
-            local deadline = Time() + 15000
-            local data = nil
-            while Time() < deadline do
-                local ok2, d = consumer:Poll()
-                if not ok2 then error(tostring(d)) end
-                if d and d.Value == uniqueVal then
-                    data = d
-                    break
-                end
-                if not d then Sleep(50) end
-            end
-
+            local got = pollUntil(consumer, function(d) return d.Value == uniqueVal end, 1)
             consumer:Close()
 
-            if not data then return 'no-message' end
+            if #got == 0 then return 'no-message' end
+            local data = got[1]
             -- Verify the required fields are present and have the right types
             local ok =
                 type(data.Value)     == 'string'  and
@@ -373,34 +380,15 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Consumer_Poll_CommitsImplicitlyOnNextCall()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local bootstrap = '{Bootstrap()}'
-            local topic     = '{Topic()}'
-            local part      = {Partition()}
-            local uniqueVal = 'kitsune-commit-' .. tostring(Time())
+        LuaValue r = await Run("commit", @"
+            local uniqueVal = 'kitsune-commit-' .. RUN_ID
+            local hi0 = produce({{key='commit-key', value=uniqueVal}})
 
-            local producer = Kafka.NewProducer({{['bootstrap.servers'] = bootstrap}})
-            local ok0, lo0, hi0 = producer:GetOffsets(topic, part)
-            assert(ok0, tostring(lo0))
-            local ok, err = producer:Send(topic, 'commit-key', uniqueVal, nil, part)
-            assert(ok, err or 'Send failed')
-            producer:Close()
+            local consumer = newConsumer()
+            assert(consumer:Assign({topic .. ':' .. part .. ':' .. hi0}))
 
-            local consumer = Kafka.NewConsumer({{
-                ['bootstrap.servers'] = bootstrap,
-                ['group.id']          = 'test_kitsune',
-            }})
-            assert(consumer:Assign({{topic .. ':' .. part .. ':' .. hi0}}))
-
-            local deadline = Time() + 15000
-            local found = false
-            while Time() < deadline do
-                local ok2, d = consumer:Poll()
-                if not ok2 then error(tostring(d)) end
-                if d and d.Value == uniqueVal then found = true; break end
-                if not d then Sleep(50) end
-            end
+            local got = pollUntil(consumer, function(d) return d.Value == uniqueVal end, 1)
+            local found = #got > 0
 
             -- One more poll commits the previously received message implicitly
             if found then consumer:Poll() end
@@ -414,50 +402,25 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Consumer_Assign_Partition_RoundTrip()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local bootstrap = '{Bootstrap()}'
-            local topic     = '{Topic()}'
-            local part      = {Partition()}
-            local runId     = tostring(Time())
-            local count     = 5
-            local prefix    = 'assign-p' .. part .. '-' .. runId .. '-'
+        LuaValue r = await Run("assign_rt", @"
+            local count  = 5
+            local prefix = 'assign-p' .. part .. '-' .. RUN_ID .. '-'
 
-            -- Send all messages to the configured partition explicitly
-            local producer = Kafka.NewProducer({{['bootstrap.servers'] = bootstrap}})
-            -- Snapshot the high-water mark before producing so the consumer starts
-            -- exactly at our messages rather than scanning from the beginning.
-            local ok_hw, lo_hw, hi_hw = producer:GetOffsets(topic, part)
-            assert(ok_hw, tostring(lo_hw))
+            local messages = {}
             for i = 1, count do
-                local ok, err = producer:Send(topic, 'pk-' .. i, prefix .. i, nil, part)
-                assert(ok, err or 'Send ' .. i .. ' failed on partition ' .. part)
+                messages[i] = {key = 'pk-' .. i, value = prefix .. i}
             end
-            producer:Close()
+            local hi0 = produce(messages)
 
-            -- Assign starting from exactly where our messages begin
-            local consumer = Kafka.NewConsumer({{
-                ['bootstrap.servers'] = bootstrap,
-                ['group.id']          = 'test_kitsune',
-            }})
-            assert(consumer:Assign({{topic .. ':' .. part .. ':' .. hi_hw}}))
+            local consumer = newConsumer()
+            assert(consumer:Assign({topic .. ':' .. part .. ':' .. hi0}))
 
-            -- Receive exactly the messages we just produced; no historical backlog
-            local deadline = Time() + 15000
-            local found = 0
-            while Time() < deadline do
-                local ok2, data = consumer:Poll()
-                if not ok2 then error(tostring(data)) end
-                if data and data.ErrorCode == 0 and
-                   string.sub(data.Value, 1, #prefix) == prefix then
-                    found = found + 1
-                    if found >= count then break end
-                end
-                if not data then Sleep(50) end
-            end
+            local got = pollUntil(consumer, function(d)
+                return string.sub(d.Value, 1, #prefix) == prefix
+            end, count)
 
             consumer:Close()
-            return tostring(found) .. '/' .. tostring(count)
+            return tostring(#got) .. '/' .. tostring(count)
         ");
         r.String.ShouldBe("5/5");
     }
@@ -466,7 +429,7 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_ListGroups_ReturnsArray()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
             local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
             local ok, groups = p:ListGroups()
@@ -480,26 +443,15 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_DescribeGroups_ReturnsDescription()
     {
-        using KitsuneEngine engine = new();
-
-        // First produce a message so the test group is created, then describe it
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local bootstrap = '{Bootstrap()}'
-            local topic     = '{Topic()}'
-            local groupId   = 'test_kitsune'
-
-            -- Spin up a real consumer to ensure the group exists
-            local consumer = Kafka.NewConsumer({{
-                ['bootstrap.servers'] = bootstrap,
-                ['group.id']          = groupId,
-                ['auto.offset.reset'] = 'latest'
-            }})
-            assert(consumer:Subscribe({{topic}}))
-            consumer:Poll()  -- one poll to register
+        // Subscribe and wait for the assignment so the group exists, then describe it
+        LuaValue r = await Run("describe", @"
+            local consumer = newConsumer('latest')
+            assert(consumer:Subscribe({topic}))
+            assert(waitGroupAssigned(consumer), 'group assignment not confirmed')
             consumer:Close()
 
-            local p = Kafka.NewProducer({{['bootstrap.servers'] = bootstrap}})
-            local ok, descs = p:DescribeGroups({{groupId}})
+            local p = newProducer()
+            local ok, descs = p:DescribeGroups({groupId})
             p:Close()
 
             if not ok then return 'err:' .. tostring(descs) end
@@ -516,47 +468,30 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_GetGroupOffsets_ReturnsTable()
     {
-        using KitsuneEngine engine = new();
-
         // Create a group with committed offsets, then query them
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local bootstrap = '{Bootstrap()}'
-            local topic     = '{Topic()}'
-            local part      = {Partition()}
-            local groupId   = 'test_kitsune'
-            local uniqueVal = 'getoff-' .. tostring(Time())
+        LuaValue r = await Run("getoff", @"
+            local uniqueVal = 'getoff-' .. RUN_ID
+            local hi0 = produce({{value=uniqueVal}})
 
-            -- Produce a message and consume + commit it to create committed offsets.
-            -- Snapshot before producing so the consumer starts exactly at this message.
-            local producer = Kafka.NewProducer({{['bootstrap.servers'] = bootstrap}})
-            local ok0, lo0, hi0 = producer:GetOffsets(topic, part)
-            assert(ok0, tostring(lo0))
-            producer:Send(topic, nil, uniqueVal, nil, part)
-            producer:Close()
+            local consumer = newConsumer()
+            assert(consumer:Assign({topic .. ':' .. part .. ':' .. hi0}))
 
-            local consumer = Kafka.NewConsumer({{
-                ['bootstrap.servers'] = bootstrap,
-                ['group.id']          = groupId,
-            }})
-            assert(consumer:Assign({{topic .. ':' .. part .. ':' .. hi0}}))
-
-            local deadline = Time() + 10000
-            local data = nil
-            while Time() < deadline do
-                local ok2, d = consumer:Poll()
-                if not ok2 then error(tostring(d)) end
-                if d and d.Value == uniqueVal then data = d; break end
-                if not d then Sleep(50) end
-            end
+            local got = pollUntil(consumer, function(d) return d.Value == uniqueVal end, 1)
             -- Poll once more to commit the pending message implicitly
-            if data then consumer:Poll() end
+            if #got > 0 then consumer:Poll() end
             consumer:Close()
 
-            if not data then return 'no-message' end
+            if #got == 0 then return 'no-message' end
 
-            -- Query the committed offsets
-            local p = Kafka.NewProducer({{['bootstrap.servers'] = bootstrap}})
-            local ok, offsets = p:GetGroupOffsets(groupId)
+            -- Query the committed offsets; the commit is asynchronous
+            local p = newProducer()
+            local ok, offsets
+            local deadline = Time() + 15000
+            repeat
+                ok, offsets = p:GetGroupOffsets(groupId)
+                if ok and next(offsets) ~= nil then break end
+                Sleep(200)
+            until Time() > deadline
             p:Close()
             if not ok then return 'err:' .. tostring(offsets) end
             return tostring(type(offsets) == 'table' and next(offsets) ~= nil)
@@ -567,28 +502,24 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_SetGroupOffsets_ResetsPosition()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local bootstrap = '{Bootstrap()}'
-            local topic     = '{Topic()}'
-            local part      = {Partition()}
-            local groupId   = 'test_kitsune'
+        LuaValue r = await Run("setoff", @"
+            -- Messages make the high watermark non-zero, so the stored offset is not a default
+            produce({{value='setoff-1'}, {value='setoff-2'}, {value='setoff-3'}})
 
-            -- Snapshot the current high watermark before any messages
-            local p = Kafka.NewProducer({{['bootstrap.servers'] = bootstrap}})
+            local p = newProducer()
             local ok0, lo0, hi0 = p:GetOffsets(topic, part)
             assert(ok0, tostring(lo0))
 
             -- Reset the group's offset for this partition to hi0 (current end)
             local key = topic .. ':' .. part
-            local ok, err = p:SetGroupOffsets(groupId, {{[key] = hi0}})
+            local ok, err = p:SetGroupOffsets(groupId, {[key] = hi0})
             p:Close()
 
             if not ok then return 'set-failed:' .. tostring(err) end
 
             -- Read back to confirm
-            local p2 = Kafka.NewProducer({{['bootstrap.servers'] = bootstrap}})
-            local ok2, offsets = p2:GetGroupOffsets(groupId, {{key}})
+            local p2 = newProducer()
+            local ok2, offsets = p2:GetGroupOffsets(groupId, {key})
             p2:Close()
             if not ok2 then return 'get-failed:' .. tostring(offsets) end
 
@@ -601,31 +532,31 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_DeleteGroup_DeletesInactiveGroup()
     {
-        using KitsuneEngine engine = new();
-        const string groupId = "test_kitsune_delgrp";
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local bootstrap = '{Bootstrap()}'
-            local topic     = '{Topic()}'
-            local groupId   = '{groupId}'
+        LuaValue r = await Run("delgrp_topic", new[] { "delgrp" }, @"
+            local deleteGroupId = res('delgrp')
 
             -- Create a committed offset so the group exists in the broker
-            local p = Kafka.NewProducer({{['bootstrap.servers'] = bootstrap}})
+            local p = newProducer()
             local key = topic .. ':0'
             local ok0, lo0, hi0 = p:GetOffsets(topic, 0)
             assert(ok0, tostring(lo0))
-            local ok, err = p:SetGroupOffsets(groupId, {{[key] = hi0}})
+            local ok, err = p:SetGroupOffsets(deleteGroupId, {[key] = hi0})
             assert(ok, tostring(err))
 
             -- Verify it appears in list
-            local ok2, groups = p:ListGroups()
-            assert(ok2, tostring(groups))
             local found = false
-            for _, g in ipairs(groups) do
-                if g.GroupId == groupId then found = true; break end
+            local deadline = Time() + 15000
+            while not found and Time() < deadline do
+                local ok2, groups = p:ListGroups()
+                assert(ok2, tostring(groups))
+                for _, g in ipairs(groups) do
+                    if g.GroupId == deleteGroupId then found = true; break end
+                end
+                if not found then Sleep(200) end
             end
 
             -- Delete it
-            local ok3, err3 = p:DeleteGroup(groupId)
+            local ok3, err3 = p:DeleteGroup(deleteGroupId)
 
             p:Close()
             return tostring(found) .. ':' .. tostring(ok3)
@@ -636,33 +567,28 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_DeleteGroupOffsets_RemovesOffsets()
     {
-        using KitsuneEngine engine = new();
-        const string groupId = "test_kitsune_deloff";
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local bootstrap = '{Bootstrap()}'
-            local topic     = '{Topic()}'
-            local part      = {Partition()}
-            local groupId   = '{groupId}'
+        LuaValue r = await Run("deloff_topic", new[] { "deloff" }, @"
+            local offsetsGroupId = res('deloff')
 
-            local p = Kafka.NewProducer({{['bootstrap.servers'] = bootstrap}})
+            local p = newProducer()
             local key = topic .. ':' .. part
             local ok0, lo0, hi0 = p:GetOffsets(topic, part)
             assert(ok0, tostring(lo0))
 
             -- Create committed offset
-            local ok, err = p:SetGroupOffsets(groupId, {{[key] = hi0}})
+            local ok, err = p:SetGroupOffsets(offsetsGroupId, {[key] = hi0})
             assert(ok, tostring(err))
 
             -- Confirm it exists
-            local ok2, before = p:GetGroupOffsets(groupId, {{key}})
+            local ok2, before = p:GetGroupOffsets(offsetsGroupId, {key})
             assert(ok2, tostring(before))
             local hadOffset = before[key] ~= nil
 
             -- Delete the committed offset
-            local ok3, err3 = p:DeleteGroupOffsets(groupId, {{key}})
+            local ok3, err3 = p:DeleteGroupOffsets(offsetsGroupId, {key})
 
             -- After deletion the offset should be INVALID (-1001) or absent
-            local ok4, after = p:GetGroupOffsets(groupId, {{key}})
+            local ok4, after = p:GetGroupOffsets(offsetsGroupId, {key})
             assert(ok4, tostring(after))
             local goneOrInvalid = after[key] == nil or after[key] == -1001
 
@@ -676,11 +602,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_GetTopicConfig_ReturnsTable()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local bootstrap = '{Bootstrap()}'
-            local topic     = '{Topic()}'
-            local p = Kafka.NewProducer({{['bootstrap.servers'] = bootstrap}})
+        LuaValue r = await Run("cfg_get", @"
+            local p = newProducer()
             local ok, cfg = p:GetTopicConfig(topic)
             p:Close()
             if not ok then return 'err:' .. tostring(cfg) end
@@ -696,12 +619,10 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_SetTopicConfig_ChangesRetention()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local bootstrap = '{Bootstrap()}'
-            local topicName = 'kitsune-cfg-' .. tostring(Time())
+        LuaValue r = await RunWithoutTopic("cfg_set", new[] { "cfg_set_topic" }, $@"
+            local topicName = res('cfg_set_topic')
 
-            local p = Kafka.NewProducer({{['bootstrap.servers'] = bootstrap}})
+            local p = newProducer()
 
             local function waitForTopic(name, want)
                 local dl = Time() + 15000
@@ -758,11 +679,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Consumer_GetTopicConfig_ReturnsTable()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local bootstrap = '{Bootstrap()}'
-            local topic     = '{Topic()}'
-            local c = Kafka.NewConsumer({{['bootstrap.servers'] = bootstrap}})
+        LuaValue r = await Run("cfg_get_consumer", @"
+            local c = newConsumer()
             local ok, cfg = c:GetTopicConfig(topic)
             c:Close()
             if not ok then return 'err:' .. tostring(cfg) end
@@ -775,12 +693,10 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_CreateTopic_And_DestroyTopic()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local bootstrap = '{Bootstrap()}'
-            local topicName = 'kitsune-test-' .. tostring(Time())
+        LuaValue r = await RunWithoutTopic("create", new[] { "create_topic" }, @"
+            local topicName = res('create_topic')
 
-            local p = Kafka.NewProducer({{['bootstrap.servers'] = bootstrap}})
+            local p = newProducer()
 
             -- Polls GetMetadata until the topic reaches the expected presence, up to 15 s
             local function waitForTopic(name, wantExists)
@@ -823,12 +739,10 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_CreateTopic_WithRetention_Succeeds()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local bootstrap = '{Bootstrap()}'
-            local topicName = 'kitsune-ret-' .. tostring(Time())
+        LuaValue r = await RunWithoutTopic("retention", new[] { "retention_topic" }, @"
+            local topicName = res('retention_topic')
 
-            local p = Kafka.NewProducer({{['bootstrap.servers'] = bootstrap}})
+            local p = newProducer()
 
             local function waitForTopic(name, wantExists)
                 local deadline = Time() + 15000
@@ -865,11 +779,9 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_DestroyTopic_NonExistent_ReturnsError()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local bootstrap = '{Bootstrap()}'
-            local p = Kafka.NewProducer({{['bootstrap.servers'] = bootstrap}})
-            local ok, err = p:DestroyTopic('kitsune-nonexistent-' .. tostring(Time()))
+        LuaValue r = await RunWithoutTopic("destroy_missing", Array.Empty<string>(), @"
+            local p = newProducer()
+            local ok, err = p:DestroyTopic(res('never_created'))
             p:Close()
             return tostring(not ok) .. ':' .. tostring(type(err) == 'string')
         ");
@@ -880,52 +792,29 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Consumer_Assign_WithExplicitOffset_StartsFromThatOffset()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local bootstrap = '{Bootstrap()}'
-            local topic     = '{Topic()}'
-            local part      = {Partition()}
-            local runId     = tostring(Time())
-            local count     = 4
-            local prefix    = 'seek-offset-' .. runId .. '-'
+        LuaValue r = await Run("assign_offset", @"
+            local count  = 4
+            local prefix = 'seek-offset-' .. RUN_ID .. '-'
 
-            local producer = Kafka.NewProducer({{['bootstrap.servers'] = bootstrap}})
+            -- Earlier messages that the explicit offset must skip
+            produce({{value='before-1'}, {value='before-2'}})
 
-            -- Snapshot the high-water mark before producing
-            local ok0, lo0, hi0 = producer:GetOffsets(topic, part)
-            assert(ok0, tostring(lo0))
-
-            -- Produce count messages to the configured partition
+            local messages = {}
             for i = 1, count do
-                local ok, err = producer:Send(topic, nil, prefix .. i, nil, part)
-                assert(ok, err or 'Send ' .. i .. ' failed')
+                messages[i] = {value = prefix .. i}
             end
-            producer:Close()
+            local hi0 = produce(messages)
 
-            -- Assign to the partition starting at the pre-produce high-water mark
-            -- so we receive exactly our count messages and nothing before them
-            local consumer = Kafka.NewConsumer({{
-                ['bootstrap.servers'] = bootstrap,
-                ['group.id']          = 'test_kitsune',
-                ['auto.offset.reset'] = 'latest'
-            }})
-            assert(consumer:Assign({{topic .. ':' .. part .. ':' .. hi0}}))
+            -- Assign at the offset where our messages begin so nothing before them arrives
+            local consumer = newConsumer('latest')
+            assert(consumer:Assign({topic .. ':' .. part .. ':' .. hi0}))
 
-            local deadline = Time() + 15000
-            local found = 0
-            while Time() < deadline do
-                local ok2, data = consumer:Poll()
-                if not ok2 then error(tostring(data)) end
-                if data and data.ErrorCode == 0 and
-                   string.sub(data.Value, 1, #prefix) == prefix then
-                    found = found + 1
-                    if found >= count then break end
-                end
-                if not data then Sleep(50) end
-            end
+            local got = pollUntil(consumer, function(d)
+                return string.sub(d.Value, 1, #prefix) == prefix
+            end, count)
 
             consumer:Close()
-            return tostring(found) .. '/' .. tostring(count)
+            return tostring(#got) .. '/' .. tostring(count)
         ");
         r.String.ShouldBe("4/4");
     }
@@ -933,36 +822,22 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Consumer_Assign_WithEarliestKeyword_ReceivesMessages()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local bootstrap = '{Bootstrap()}'
-            local topic     = '{Topic()}'
-            local part      = {Partition()}
+        LuaValue r = await Run("assign_earliest", @"
+            local prefix = 'assign-earliest-' .. RUN_ID .. '-'
+            produce({{value=prefix .. 1}, {value=prefix .. 2}})
 
             -- 'earliest' in the Assign string sets OFFSET_BEGINNING directly,
             -- independent of auto.offset.reset config
-            local consumer = Kafka.NewConsumer({{
-                ['bootstrap.servers'] = bootstrap,
-                ['group.id']          = 'test_kitsune',
-                ['auto.offset.reset'] = 'latest'   -- config says latest…
-            }})
-            -- …but the ':earliest' keyword in the Assign string overrides it
-            assert(consumer:Assign({{topic .. ':' .. part .. ':earliest'}}))
+            local consumer = newConsumer('latest')   -- config says latest...
+            -- ...but the ':earliest' keyword in the Assign string overrides it
+            assert(consumer:Assign({topic .. ':' .. part .. ':earliest'}))
 
-            local deadline = Time() + 10000
-            local received = 0
-            while Time() < deadline do
-                local ok2, data = consumer:Poll()
-                if not ok2 then error(tostring(data)) end
-                if data and data.ErrorCode == 0 then
-                    received = received + 1
-                    if received >= 1 then break end
-                end
-                if not data then Sleep(50) end
-            end
+            local got = pollUntil(consumer, function(d)
+                return string.sub(d.Value, 1, #prefix) == prefix
+            end, 1)
 
             consumer:Close()
-            return tostring(received >= 1)
+            return tostring(#got >= 1)
         ");
         r.String.ShouldBe("true");
     }
@@ -970,88 +845,59 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Consumer_Seek_RepositionsToSpecificOffset()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local bootstrap = '{Bootstrap()}'
-            local topic     = '{Topic()}'
-            local part      = {Partition()}
-            local runId     = tostring(Time())
-            local count     = 3
-            local prefix    = 'seek-specific-' .. runId .. '-'
+        LuaValue r = await Run("seek_offset", @"
+            local count      = 3
+            local prefix     = 'seek-specific-' .. RUN_ID .. '-'
+            local skipPrefix = 'seek-skip-' .. RUN_ID .. '-'
 
-            local producer = Kafka.NewProducer({{['bootstrap.servers'] = bootstrap}})
+            produce({{value=skipPrefix .. 1}, {value=skipPrefix .. 2}})
 
-            -- Snapshot the current end — our messages will land at this offset onwards
-            local ok0, lo0, hi0 = producer:GetOffsets(topic, part)
-            assert(ok0, tostring(lo0))
-
+            -- Our messages land at targetStart onwards
+            local targets = {}
             for i = 1, count do
-                local ok, err = producer:Send(topic, nil, prefix .. i, nil, part)
-                assert(ok, err or 'Send ' .. i .. ' failed')
+                targets[i] = {value = prefix .. i}
             end
-            producer:Close()
+            local targetStart = produce(targets)
 
             -- Assign from earliest so the partition is active from the start
-            local consumer = Kafka.NewConsumer({{
-                ['bootstrap.servers'] = bootstrap,
-                ['group.id']          = 'test_kitsune',
-                ['auto.offset.reset'] = 'earliest'
-            }})
-            assert(consumer:Assign({{topic .. ':' .. part}}))
+            local consumer = newConsumer('earliest')
+            assert(consumer:Assign({topic .. ':' .. part}))
 
-            -- Warm up: drive polls for a fixed 3 s window to ensure librdkafka has
-            -- fully established the partition assignment before Seek is called.
-            local warmDeadline = Time() + 3000
-            while Time() < warmDeadline do
-                consumer:Poll()
-                Sleep(50)
-            end
+            -- Receiving a skipped message shows the assignment is active, so Seek applies
+            local first = pollUntil(consumer, function(d)
+                return string.sub(d.Value, 1, #skipPrefix) == skipPrefix
+            end, 1)
+            assert(#first == 1, 'assignment never delivered a message')
 
-            -- Seek to hi0 (the pre-produce high-water mark) — this skips all older
-            -- messages and positions us exactly at the first message we produced
-            local ok, err = consumer:Seek(topic, part, hi0)
+            -- Seek to targetStart: this skips all older messages and positions us
+            -- exactly at the first message we produced
+            local ok, err = consumer:Seek(topic, part, targetStart)
             assert(ok, err or 'Seek failed')
 
-            -- Now collect exactly our count messages
-            local deadline = Time() + 15000
-            local found = 0
-            while Time() < deadline do
-                local ok2, data = consumer:Poll()
-                if not ok2 then error(tostring(data)) end
-                if data and data.ErrorCode == 0 and
-                   string.sub(data.Value, 1, #prefix) == prefix then
-                    found = found + 1
-                    if found >= count then break end
-                end
-                if not data then Sleep(50) end
-            end
+            local got = pollUntil(consumer, function(d)
+                return string.sub(d.Value, 1, #prefix) == prefix
+            end, count)
 
             consumer:Close()
-            return tostring(found) .. '/' .. tostring(count)
+            return tostring(#got) .. '/' .. tostring(count)
         ");
         r.String.ShouldBe("3/3");
     }
 
-
     [KafkaFact]
     public async Task Consumer_GetGroupOffsets_WithPartitionFilter()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local bootstrap = '{Bootstrap()}'
-            local topic     = '{Topic()}'
-            local part      = {Partition()}
-            local groupId   = 'test_kitsune'
-            local key       = topic .. ':' .. part
+        LuaValue r = await Run("groupoff_filter", @"
+            local key = topic .. ':' .. part
 
-            local p = Kafka.NewProducer({{['bootstrap.servers'] = bootstrap}})
+            local p = newProducer()
             local ok0, lo0, hi0 = p:GetOffsets(topic, part)
             assert(ok0, tostring(lo0))
-            local ok, err = p:SetGroupOffsets(groupId, {{[key] = hi0}})
+            local ok, err = p:SetGroupOffsets(groupId, {[key] = hi0})
             assert(ok, tostring(err))
 
             -- GetGroupOffsets with an explicit partition list
-            local ok2, offsets = p:GetGroupOffsets(groupId, {{key}})
+            local ok2, offsets = p:GetGroupOffsets(groupId, {key})
             p:Close()
             if not ok2 then return 'err:' .. tostring(offsets) end
             return tostring(offsets[key] == hi0)
@@ -1062,28 +908,22 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_DescribeGroups_MultipleGroups()
     {
-        using KitsuneEngine engine = new();
-        const string g1 = "test_kitsune";
-        const string g2 = "test_kitsune2";
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local bootstrap = '{Bootstrap()}'
-            local topic     = '{Topic()}'
-            local part      = {Partition()}
-            local g1        = '{g1}'
-            local g2        = '{g2}'
+        LuaValue r = await Run("describe_multi", new[] { "describe_multi_second" }, @"
+            local g1 = groupId
+            local g2 = res('describe_multi_second')
 
-            local p = Kafka.NewProducer({{['bootstrap.servers'] = bootstrap}})
+            local p = newProducer()
             local ok0, lo0, hi0 = p:GetOffsets(topic, part)
             assert(ok0, tostring(lo0))
             local key = topic .. ':' .. part
 
             -- Create both groups via committed offsets
-            local ok1, e1 = p:SetGroupOffsets(g1, {{[key] = hi0}})
-            local ok2, e2 = p:SetGroupOffsets(g2, {{[key] = hi0}})
+            local ok1, e1 = p:SetGroupOffsets(g1, {[key] = hi0})
+            local ok2, e2 = p:SetGroupOffsets(g2, {[key] = hi0})
             assert(ok1, tostring(e1))
             assert(ok2, tostring(e2))
 
-            local ok, descs = p:DescribeGroups({{g1, g2}})
+            local ok, descs = p:DescribeGroups({g1, g2})
             p:Close()
             if not ok then return 'err:' .. tostring(descs) end
             return tostring(#descs == 2)
@@ -1094,12 +934,10 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task CreateTopic_WithReplicationFactor_Succeeds()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local bootstrap = '{Bootstrap()}'
-            local topicName = 'kitsune-rf-' .. tostring(Time())
+        LuaValue r = await RunWithoutTopic("rf", new[] { "rf_topic" }, @"
+            local topicName = res('rf_topic')
 
-            local p = Kafka.NewProducer({{['bootstrap.servers'] = bootstrap}})
+            local p = newProducer()
             -- replication_factor = 1 (arg 5), timeout = default
             local ok, err = p:CreateTopic(topicName, 1, nil, nil, 1)
             if not ok then p:Close(); return 'failed:' .. tostring(err) end
@@ -1114,10 +952,9 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task GetTopicConfig_NonExistentTopic_ReturnsError()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local p = Kafka.NewProducer({{['bootstrap.servers'] = '{Bootstrap()}'}})
-            local ok, cfg = p:GetTopicConfig('kitsune-does-not-exist-' .. tostring(Time()))
+        LuaValue r = await RunWithoutTopic("cfg_missing", Array.Empty<string>(), @"
+            local p = newProducer()
+            local ok, cfg = p:GetTopicConfig(res('never_created'))
             p:Close()
             return tostring(not ok) .. ':' .. tostring(type(cfg) == 'string')
         ");
@@ -1127,47 +964,33 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Consumer_Seek_WithEarliestKeyword_ReceivesMessages()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local bootstrap = '{Bootstrap()}'
-            local topic     = '{Topic()}'
-            local part      = {Partition()}
-            local runId     = tostring(Time())
+        LuaValue r = await Run("seek_earliest", @"
+            local count  = 3
+            local prefix = 'seek-earliest-' .. RUN_ID .. '-'
+            local function isOurs(d) return string.sub(d.Value, 1, #prefix) == prefix end
 
-            local consumer = Kafka.NewConsumer({{
-                ['bootstrap.servers'] = bootstrap,
-                ['group.id']          = 'test_kitsune',
-                ['auto.offset.reset'] = 'latest'
-            }})
-            assert(consumer:Assign({{topic .. ':' .. part}}))
-
-            -- Warm-up: drive polls for a fixed 5 s window so librdkafka has fully
-            -- established the Assign-based partition assignment before Seek is called.
-            local warmDeadline = Time() + 5000
-            while Time() < warmDeadline do
-                consumer:Poll()
-                Sleep(50)
+            local messages = {}
+            for i = 1, count do
+                messages[i] = {value = prefix .. i}
             end
+            produce(messages)
+
+            local consumer = newConsumer('latest')
+            assert(consumer:Assign({topic .. ':' .. part .. ':earliest'}))
+
+            -- Reading everything once shows the assignment is active, so Seek applies
+            local first = pollUntil(consumer, isOurs, count)
+            assert(#first == count, 'initial read did not return all messages')
 
             -- Seek to earliest using the string keyword
             local ok, err = consumer:Seek(topic, part, 'earliest')
             assert(ok, err or 'Seek failed')
 
-            -- Should now receive messages from the beginning of the partition
-            local deadline = Time() + 10000
-            local received = 0
-            while Time() < deadline do
-                local ok2, data = consumer:Poll()
-                if not ok2 then error(tostring(data)) end
-                if data and data.ErrorCode == 0 then
-                    received = received + 1
-                    break
-                end
-                if not data then Sleep(50) end
-            end
+            -- Should now receive the messages from the beginning of the partition again
+            local again = pollUntil(consumer, isOurs, count)
 
             consumer:Close()
-            return tostring(received >= 1)
+            return tostring(#again >= 1)
         ");
         r.String.ShouldBe("true");
     }
@@ -1175,48 +998,52 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Consumer_Assign_WithLatestKeyword_NoOldMessages()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local bootstrap = '{Bootstrap()}'
-            local topic     = '{Topic()}'
-            local part      = {Partition()}
-            local runId     = tostring(Time())
+        LuaValue r = await Run("assign_latest", @"
+            local oldValue = 'latest-old-' .. RUN_ID
+            local newPrefix = 'latest-new-' .. RUN_ID .. '-'
+            produce({{value=oldValue}})
 
             -- 'latest' in the Assign string should mean no old messages come through
-            local consumer = Kafka.NewConsumer({{
-                ['bootstrap.servers'] = bootstrap,
-                ['group.id']          = 'test_kitsune',
-                ['auto.offset.reset'] = 'earliest'  -- config says earliest...
-            }})
+            local consumer = newConsumer('earliest')   -- config says earliest...
             -- ...but ':latest' in the string overrides it
-            assert(consumer:Assign({{topic .. ':' .. part .. ':latest'}}))
+            assert(consumer:Assign({topic .. ':' .. part .. ':latest'}))
 
-            -- Poll for 2 seconds; no old messages should arrive
-            local deadline = Time() + 2000
-            local received = 0
-            while Time() < deadline do
-                local ok2, data = consumer:Poll()
-                if not ok2 then error(tostring(data)) end
-                if data and data.ErrorCode == 0 then received = received + 1 end
-                if not data then Sleep(50) end
+            -- Assigning at the end resolves lazily, so keep producing new messages
+            -- until one arrives: that proves the position was set past the old message
+            local p = newProducer()
+            local sawOld, sawNew = false, false
+            local sent = 0
+            local deadline = Time() + 30000
+            while Time() < deadline and not sawNew do
+                sent = sent + 1
+                assert(p:Send(topic, nil, newPrefix .. sent, nil, part))
+                local pollEnd = Time() + 300
+                while Time() < pollEnd do
+                    local ok, data = consumer:Poll()
+                    if not ok then error(tostring(data)) end
+                    if data and data.ErrorCode == 0 then
+                        if data.Value == oldValue then
+                            sawOld = true
+                        elseif string.sub(data.Value, 1, #newPrefix) == newPrefix then
+                            sawNew = true
+                        end
+                    end
+                    if not data then Sleep(50) end
+                end
             end
 
+            p:Close()
             consumer:Close()
-            return tostring(received == 0)
+            return tostring(sawNew) .. ':' .. tostring(sawOld)
         ");
-        r.String.ShouldBe("true");
+        r.String.ShouldBe("true:false");
     }
 
     [KafkaFact]
     public async Task Producer_GetOffsets_ReturnsLowHigh()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local bootstrap = '{Bootstrap()}'
-            local topic     = '{Topic()}'
-            local part      = {Partition()}
-
-            local p = Kafka.NewProducer({{['bootstrap.servers'] = bootstrap}})
+        LuaValue r = await Run("offsets_producer", @"
+            local p = newProducer()
             local ok, low, high = p:GetOffsets(topic, part)
             p:Close()
 
@@ -1230,13 +1057,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Consumer_GetOffsets_ReturnsLowHigh()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local bootstrap = '{Bootstrap()}'
-            local topic     = '{Topic()}'
-            local part      = {Partition()}
-
-            local c = Kafka.NewConsumer({{['bootstrap.servers'] = bootstrap}})
+        LuaValue r = await Run("offsets_consumer", @"
+            local c = newConsumer()
             local ok, low, high = c:GetOffsets(topic, part)
             c:Close()
 
@@ -1250,13 +1072,8 @@ public sealed class KafkaTests
     [KafkaFact]
     public async Task Producer_GetOffsets_AfterSend_HighIncreases()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local bootstrap = '{Bootstrap()}'
-            local topic     = '{Topic()}'
-            local part      = {Partition()}
-
-            local p = Kafka.NewProducer({{['bootstrap.servers'] = bootstrap}})
+        LuaValue r = await Run("offsets_send", @"
+            local p = newProducer()
 
             local ok1, lo1, hi1 = p:GetOffsets(topic, part)
             assert(ok1, tostring(lo1))
@@ -1265,31 +1082,36 @@ public sealed class KafkaTests
             assert(ok, err or 'Send failed')
             p:Close()
 
-            -- Re-open a new producer to query (ensures fresh metadata)
-            local p2 = Kafka.NewProducer({{['bootstrap.servers'] = bootstrap}})
-            local ok2, lo2, hi2 = p2:GetOffsets(topic, part)
+            -- Re-open a new producer to query (ensures fresh metadata); delivery is asynchronous
+            local p2 = newProducer()
+            local ok2, lo2, hi2
+            local deadline = Time() + 15000
+            repeat
+                ok2, lo2, hi2 = p2:GetOffsets(topic, part)
+                assert(ok2, tostring(lo2))
+                if hi2 > hi1 then break end
+                Sleep(100)
+            until Time() > deadline
             p2:Close()
-            assert(ok2, tostring(lo2))
 
             return tostring(hi2 > hi1) .. ' before=' .. hi1 .. ' after=' .. hi2
         ");
         r.String.ShouldStartWith("true");
     }
 
-
     [KafkaFact]
     public async Task StressTest_OneProducerTwoConsumers_SharedGroupSplitPartitions()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         string guid = Guid.NewGuid().ToString("N");
         const int countPerPartition = 50;
         const int totalCount = countPerPartition * 2;
-        string stressTopic = $"stress2-{guid}";
-        string groupId = $"stress2-{guid}";
+        string stressTopic = Resource($"stress2_{guid}");
+        string groupId = stressTopic;
 
         // Create a 2-partition topic and wait for it to appear in metadata so
         // both consumers can each be assigned one partition by the group coordinator.
-        await engine.ExecuteStringAsync($@"
+        string createLua = $@"
             local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
             local ok, err = p:CreateTopic('{stressTopic}', 2)
             assert(ok, tostring(err))
@@ -1305,7 +1127,7 @@ public sealed class KafkaTests
             end
             p:Close()
             error('topic did not appear in metadata')
-        ");
+        ";
 
         // Producer sends countPerPartition messages to each partition.
         // No need to wait for group stability since consumers use Assign, not Subscribe.
@@ -1355,21 +1177,23 @@ public sealed class KafkaTests
 
         try
         {
+            await engine.ExecuteStringAsync(createLua);
+
             // Start consumers and producer concurrently.  Consumers use Assign so they
             // start reading immediately without waiting for group rebalance.
             var consumer1Task = Task.Run(async () =>
             {
-                using KitsuneEngine e = new();
+                using KitsuneEngine e = TestRun.NewEngine();
                 return await e.ExecuteStringAsync(MakeConsumerLua(0)).ConfigureAwait(false);
             });
             var consumer2Task = Task.Run(async () =>
             {
-                using KitsuneEngine e = new();
+                using KitsuneEngine e = TestRun.NewEngine();
                 return await e.ExecuteStringAsync(MakeConsumerLua(1)).ConfigureAwait(false);
             });
             var producerTask = Task.Run(async () =>
             {
-                using KitsuneEngine e = new();
+                using KitsuneEngine e = TestRun.NewEngine();
                 return await e.ExecuteStringAsync(producerLua).ConfigureAwait(false);
             });
             await Task.WhenAll(producerTask, consumer1Task, consumer2Task);
@@ -1381,91 +1205,69 @@ public sealed class KafkaTests
         }
         finally
         {
-            await engine.ExecuteStringAsync($@"
-                local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
-                p:DestroyTopic('{stressTopic}')
-                p:Close()
-            ");
+            await CleanupAsync(engine, new[] { stressTopic });
         }
     }
 
-    // Cleanup utility
-    [KafkaFact]
-    public async Task Cleanup_DeleteTestConsumerGroups()
-    {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
-
-            local function startsWith(s, prefix)
-                return string.sub(s, 1, #prefix) == prefix
-            end
-
-            local function isTestGroup(id)
-                return startsWith(id, 'test_')
-                    or startsWith(id, 'stress-')
-                    or startsWith(id, 'stress2-')
-                    or startsWith(id, 'kitsune-')
-            end
-
-            local lines   = {{}}
-            local deleted = 0
-
-            -- Retry up to 6 times with 10 s gaps.  Ghost members from consumers
-            -- closed via NO_CONSUMER_CLOSE remain Active until the session timeout
-            -- (~45 s) expires; waiting in short increments lets us delete each
-            -- group as soon as the broker marks it Empty, without a single long wait.
-            for attempt = 1, 6 do
-                local ok, groups = p:ListGroups()
-                assert(ok, tostring(groups))
-
-                local pending = 0
-                for _, g in ipairs(groups) do
-                    local id = g.GroupId
-                    if isTestGroup(id) then
-                        local ok2, err2 = p:DeleteGroup(id)
-                        if ok2 then
-                            deleted = deleted + 1
-                            lines[#lines+1] = 'DELETED  ' .. id
-                        else
-                            pending = pending + 1
-                            lines[#lines+1] = 'SKIPPED  ' .. id .. ' (' .. tostring(err2) .. ')'
-                        end
-                    end
-                end
-
-                if pending == 0 then break end
-                lines[#lines+1] = '--- attempt ' .. attempt .. ' done, ' .. pending .. ' still active, waiting 10 s ---'
-                if attempt < 6 then Sleep(10000) end
-            end
-
-            p:Close()
-            lines[#lines+1] = 'total deleted: ' .. deleted
-            local result = table.concat(lines, '\n');
-            print(result)
-            return result
-        ");
-        r.String.ShouldNotBeNull();
-        r.String.ShouldContain("total deleted:");
-    }
-
-    // Parses KITSUNE_KAFKA_TEST=host:port:topic:partition
+    // Parses KITSUNE_KAFKA_TEST=host:port:topic:partition; only the broker address is used
     private static string Bootstrap()
     {
         var parts = Environment.GetEnvironmentVariable("KITSUNE_KAFKA_TEST")!.Split(':');
         return $"{parts[0]}:{parts[1]}";
     }
 
-    private static string Topic()
+    private static string Resource(string suffix) => $"kitsune_{TestRun.Id}_{suffix}";
+
+    // Runs the body against a fresh run-unique topic whose name doubles as the consumer group.
+    private static Task<LuaValue> Run(string suffix, string body) =>
+        Execute(suffix, Array.Empty<string>(), true, body);
+
+    private static Task<LuaValue> Run(string suffix, string[] extraSuffixes, string body) =>
+        Execute(suffix, extraSuffixes, true, body);
+
+    private static Task<LuaValue> RunWithoutTopic(string suffix, string[] extraSuffixes, string body) =>
+        Execute(suffix, extraSuffixes, false, body);
+
+    private static async Task<LuaValue> Execute(string suffix, string[] extraSuffixes, bool createTopic, string body)
     {
-        var parts = Environment.GetEnvironmentVariable("KITSUNE_KAFKA_TEST")!.Split(':');
-        return parts[2];
+        using KitsuneEngine engine = TestRun.NewEngine();
+        try
+        {
+            string script =
+                $"local bootstrap = '{Bootstrap()}'\n" +
+                $"local topic = '{Resource(suffix)}'\n" +
+                "local groupId = topic\n" +
+                "local part = 0\n" +
+                $"local createMainTopic = {(createTopic ? "true" : "false")}\n" +
+                LuaPrelude + "\n" +
+                body;
+            return await engine.ExecuteStringAsync(script);
+        }
+        finally
+        {
+            await CleanupAsync(engine, extraSuffixes.Append(suffix).Select(Resource));
+        }
     }
 
-    private static int Partition()
+    // Deletes leftovers; groups still held by lingering closed consumers cannot be deleted
+    // yet and are left for the broker to expire.
+    private static async Task CleanupAsync(KitsuneEngine engine, IEnumerable<string> names)
     {
-        var parts = Environment.GetEnvironmentVariable("KITSUNE_KAFKA_TEST")!.Split(':');
-        return parts.Length > 3 && int.TryParse(parts[3], out int p) ? p : 0;
+        try
+        {
+            string luaNames = string.Join(", ", names.Select(n => $"'{n}'"));
+            await engine.ExecuteStringAsync($@"
+                local p = Kafka.NewProducer({{['bootstrap.servers'] = '{Bootstrap()}'}})
+                for _, name in ipairs({{{luaNames}}}) do
+                    p:DestroyTopic(name)
+                    p:DeleteGroup(name)
+                end
+                p:Close()
+            ");
+        }
+        catch (Exception)
+        {
+        }
     }
 
     private static string LuaValueToString(LuaValue v) => v.Type switch

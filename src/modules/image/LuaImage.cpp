@@ -128,8 +128,14 @@ static inline void GetPx(const LuaImage* img, int x, int y, unsigned char out[4]
 // Bounds-checked read that clamps to the edge instead of returning
 // transparent -- used by Resize so edges don't fade to black.
 static inline void GetPxClamped(const LuaImage* img, int x, int y, unsigned char out[4]) {
-	if (x < 0) x = 0; if (x >= img->width) x = img->width - 1;
-	if (y < 0) y = 0; if (y >= img->height) y = img->height - 1;
+	if (x < 0)
+		x = 0;
+	if (x >= img->width)
+		x = img->width - 1;
+	if (y < 0)
+		y = 0;
+	if (y >= img->height)
+		y = img->height - 1;
 	const unsigned char* p = img->pixels + (size_t)(y * img->width + x) * 4;
 	out[0] = p[0]; out[1] = p[1]; out[2] = p[2]; out[3] = p[3];
 }

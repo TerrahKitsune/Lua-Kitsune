@@ -14,6 +14,33 @@ namespace KitsuneNet.Tests;
 /// </summary>
 public sealed class SQLiteBugFixTests
 {
+    // Busy handler setup: two connections on the same temp file, A holds an exclusive
+    // lock and B tries to write. Each handler also raises after 50 calls so a
+    // regression cannot hang the test run. cleanup() is also exposed as the global
+    // _busyCleanup and runs at most once, so RunBusyTestAsync can call it after a failure.
+    private const string BusySetup = @"
+			local path = FileSystem.GetTempFileName()   -- empty file: SQLite treats it as a new database
+			local A = SQLite.Open(path)
+			A:Query('PRAGMA journal_mode=DELETE')  -- new databases default to WAL; these tests need rollback locking
+			A:Finish()
+			A:Query('CREATE TABLE t (n INTEGER)')
+			local B = SQLite.Open(path)
+			B:Query('SELECT count(*) FROM t')   -- load the schema on B
+			B:Finish()                           -- release B's read lock
+			local locked = A:Query('BEGIN EXCLUSIVE')
+			local cleaned = false
+			local function cleanup()
+				if cleaned then return end
+				cleaned = true
+				A:Query('COMMIT')
+				A:Close()
+				B:Close()
+				FileSystem.Delete(path)
+				FileSystem.Delete(path .. '-journal')
+			end
+			_busyCleanup = cleanup
+";
+
     // RegisterFunction array growth
     [Fact]
     public async Task SQLite_RegisterFunction_Two_BothCallable()
@@ -104,34 +131,11 @@ public sealed class SQLiteBugFixTests
     }
 
     // Busy handler return value
-    // Two connections on the same temp file: A holds an exclusive lock, B tries
-    // to write. Each handler also raises after 50 calls so a regression cannot
-    // hang the test run.
-
-    private const string BusySetup = @"
-			local path = FileSystem.GetTempFileName()   -- empty file: SQLite treats it as a new database
-			local A = SQLite.Open(path)
-			A:Query('PRAGMA journal_mode=DELETE')  -- new databases default to WAL; these tests need rollback locking
-			A:Finish()
-			A:Query('CREATE TABLE t (n INTEGER)')
-			local B = SQLite.Open(path)
-			B:Query('SELECT count(*) FROM t')   -- load the schema on B
-			B:Finish()                           -- release B's read lock
-			local locked = A:Query('BEGIN EXCLUSIVE')
-			local function cleanup()
-				A:Query('COMMIT')
-				A:Close()
-				B:Close()
-				FileSystem.Delete(path)
-				FileSystem.Delete(path .. '-journal')
-			end
-";
-
     [Fact]
     public async Task SQLite_SetBusyHandler_ReturnFalse_GivesUpWithBusyError()
     {
         using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync(BusySetup + @"
+        LuaValue r = await RunBusyTestAsync(engine, @"
 			local calls, firstArg, firstRetry = 0, nil, nil
 			B:SetBusyHandler(function(sqlite, retries)
 				calls = calls + 1
@@ -153,7 +157,7 @@ public sealed class SQLiteBugFixTests
     public async Task SQLite_SetBusyHandler_ReturnTrue_RetriesUntilFalse()
     {
         using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync(BusySetup + @"
+        LuaValue r = await RunBusyTestAsync(engine, @"
 			local calls = 0
 			B:SetBusyHandler(function(sqlite, retries)
 				calls = calls + 1
@@ -171,7 +175,7 @@ public sealed class SQLiteBugFixTests
     public async Task SQLite_SetBusyHandler_HandlerError_GivesUp()
     {
         using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync(BusySetup + @"
+        LuaValue r = await RunBusyTestAsync(engine, @"
 			local calls = 0
 			B:SetBusyHandler(function()
 				calls = calls + 1
@@ -184,5 +188,17 @@ public sealed class SQLiteBugFixTests
 				tostring(calls >= 1 and calls <= 5)
 		");
         r.String.ShouldBe("true,false,true,true");
+    }
+
+    private static async Task<LuaValue> RunBusyTestAsync(KitsuneEngine engine, string body)
+    {
+        try
+        {
+            return await engine.ExecuteStringAsync(BusySetup + body);
+        }
+        finally
+        {
+            await engine.ExecuteStringAsync("if _busyCleanup then _busyCleanup() end");
+        }
     }
 }

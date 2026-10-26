@@ -30,7 +30,7 @@ int MD5_New(lua_State *L){
 	LuaMD5 * luamd5 = lua_pushmd5(L);
 	if (!luamd5) {
 		luaL_error(L, "Unable to push md5 instance");
-		return NULL;
+		return 0;
 	}
 
 	MD5Init(&luamd5->md5);

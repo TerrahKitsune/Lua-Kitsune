@@ -18,7 +18,7 @@ int Global_BencodeDecode(lua_State* L) {
 	lua_createtable(L, 0, 0);
 	int n = 0;
 	int pos = 0;
-	while (pos < len) {
+	while ((size_t)pos < len) {
 		pos = DecodeValue(data, len, pos, L);
 		lua_rawseti(L, -2, ++n);
 	}
@@ -100,7 +100,7 @@ int DecodeString(const char* data, size_t len, int pos, lua_State* L) {
 
 	pos = end + 1;
 
-	if (length < 0 || length + pos >= len) {
+	if (length < 0 || (size_t)length + (size_t)pos >= len) {
 		luaL_error(L, "Bencode decode binary string invalid length");
 		return 0;
 	}

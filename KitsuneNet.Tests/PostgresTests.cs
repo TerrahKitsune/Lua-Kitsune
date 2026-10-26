@@ -11,7 +11,7 @@ public sealed class PostgresTests
     [PostgresFact]
     public async Task Helper_MethodsExistInModuleTable()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync(@"
 			return tostring(type(Postgres.NonQuery)) .. ':' .. tostring(type(Postgres.Scalar)) .. ':' .. tostring(type(Postgres.QueryAll))
 		");
@@ -21,7 +21,7 @@ public sealed class PostgresTests
     [PostgresFact]
     public async Task Connect_ValidCredentials_ReturnsUserdata()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
 			local conn, err = {ConnectLua()}
 			if not conn then error(err) end
@@ -33,7 +33,7 @@ public sealed class PostgresTests
     [PostgresFact]
     public async Task Connect_BadCredentials_ReturnsNilAndError()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync(@"
 			local conn, err = Postgres.Connect('host=127.0.0.1 user=bad_user password=bad_pass dbname=bad_db')
 			return tostring(conn == nil) .. ':' .. tostring(type(err) == 'string')
@@ -44,7 +44,7 @@ public sealed class PostgresTests
     [PostgresFact]
     public async Task RawSelect_CoroutineProtocol_YieldsNilThenRowcountThenRows()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
 			local conn, err = {ConnectLua()}
 			if not conn then error(err) end
@@ -69,7 +69,7 @@ public sealed class PostgresTests
     [PostgresFact]
     public async Task RawQuery_Error_Phase2YieldsString()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
 			local conn = assert({ConnectLua()})
 			local co = assert(conn:Query('SELECT * FROM _no_such_table_xyz'))
@@ -85,7 +85,7 @@ public sealed class PostgresTests
     [PostgresFact]
     public async Task StopFlag_MidWait_ConnNotBusy()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
 			local conn = assert({ConnectLua()})
 			local co = assert(conn:Query('SELECT 1'))
@@ -101,10 +101,10 @@ public sealed class PostgresTests
         // Stopping once the statement is on the server must cancel it and drain its
         // result; otherwise the next query fails with "another command is already in
         // progress" (or waits for the whole pg_sleep).
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
 			local conn = assert({ConnectLua()})
-			local co = assert(conn:Query('SELECT pg_sleep(5)'))
+			local co = assert(conn:Query('SELECT pg_sleep(10)'))
 			coroutine.resume(co)          -- sends the statement
 			coroutine.resume(co)          -- polling: the server is still sleeping
 			local t0 = Time()
@@ -112,7 +112,7 @@ public sealed class PostgresTests
 			local stopMs = Time() - t0
 			local ok, v = conn:Scalar('SELECT 42')
 			conn:Close()
-			return tostring(ok == true and v == 42 and stopMs < 4000) .. ' ' .. tostring(v) .. ' ' .. stopMs
+			return tostring(ok == true and v == 42 and stopMs < 8000) .. ' ' .. tostring(v) .. ' ' .. stopMs
 		");
         r.String.ShouldStartWith("true");
     }
@@ -122,7 +122,7 @@ public sealed class PostgresTests
     {
         // Postgres prints whole-hour offsets as "+00" / "-05"; they must still
         // come back as DateTime.
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
 			local conn = assert({ConnectLua()})
 			local out = {{}}
@@ -143,7 +143,7 @@ public sealed class PostgresTests
     {
         // A BC date or a pre-1900 local-mean-time offset with seconds must come back
         // as a string; parsing it as DateTime would silently ignore the suffix.
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
 			local conn = assert({ConnectLua()})
 			assert(conn:NonQuery(""SET TIME ZONE 'Europe/Stockholm'""))
@@ -161,7 +161,7 @@ public sealed class PostgresTests
     [PostgresFact]
     public async Task StopFlag_MidStream_ConnNotBusy()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
 			local conn = assert({ConnectLua()})
 			local co = assert(conn:Query('SELECT generate_series(1,3)'))
@@ -179,7 +179,7 @@ public sealed class PostgresTests
     [PostgresFact]
     public async Task IsBusy_TrueWhileSuspended_FalseOnceDead()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
 			local conn = assert({ConnectLua()})
 			local co = assert(conn:Query('SELECT 1'))
@@ -201,7 +201,7 @@ public sealed class PostgresTests
     [PostgresFact]
     public async Task Close_IsIdempotent()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
 			local conn = assert({ConnectLua()})
 			conn:Close()
@@ -215,113 +215,141 @@ public sealed class PostgresTests
     [PostgresFact]
     public async Task Crud_Insert_ReturnsOneAffectedRow()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-			local conn = assert({ConnectLua()})
-			local function exec(sql, p)
-				local co = assert(conn:Query(sql, p))
-				local ok, v = coroutine.resume(co)
-				while ok and v == nil and coroutine.status(co) == 'suspended' do ok, v = coroutine.resume(co) end
-				if not ok then error(tostring(v)) end
-				if type(v) == 'string' then error(v) end
-				return v, co
-			end
-			local _, c0 = exec('DELETE FROM test WHERE string = $1', {{'crud_insert'}})
-			coroutine.resume(c0, true)
-			local rowcount, c1 = exec('INSERT INTO test (string) VALUES ($1)', {{'crud_insert'}})
-			coroutine.resume(c1, true)
-			return tostring(rowcount)
-		");
-        r.String.ShouldBe("1");
+        using KitsuneEngine engine = TestRun.NewEngine();
+        try
+        {
+            LuaValue r = await engine.ExecuteStringAsync($@"
+				local conn = assert({ConnectLua()})
+				local function exec(sql, p)
+					local co = assert(conn:Query(sql, p))
+					local ok, v = coroutine.resume(co)
+					while ok and v == nil and coroutine.status(co) == 'suspended' do ok, v = coroutine.resume(co) end
+					if not ok then error(tostring(v)) end
+					if type(v) == 'string' then error(v) end
+					return v, co
+				end
+				local _, c0 = exec('DELETE FROM test WHERE string = $1', {{'crud_insert_' .. RUN_ID}})
+				coroutine.resume(c0, true)
+				local rowcount, c1 = exec('INSERT INTO test (string) VALUES ($1)', {{'crud_insert_' .. RUN_ID}})
+				coroutine.resume(c1, true)
+				return tostring(rowcount)
+			");
+            r.String.ShouldBe("1");
+        }
+        finally
+        {
+            await DeleteTestRowsAsync(engine, "crud_insert");
+        }
     }
 
     [PostgresFact]
     public async Task Crud_Select_ReturnsInsertedRow()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-			local conn = assert({ConnectLua()})
-			local function exec(sql, p)
-				local co = assert(conn:Query(sql, p))
-				local ok, v = coroutine.resume(co)
-				while ok and v == nil and coroutine.status(co) == 'suspended' do ok, v = coroutine.resume(co) end
-				if not ok then error(tostring(v)) end
-				if type(v) == 'string' then error(v) end
-				return v, co
-			end
-			local _, c0 = exec('DELETE FROM test WHERE string = $1', {{'crud_sel'}})
-			coroutine.resume(c0, true)
-			local _, c1 = exec('INSERT INTO test (string) VALUES ($1)', {{'crud_sel'}})
-			coroutine.resume(c1, true)
-			local _, co = exec('SELECT string FROM test WHERE string = $1', {{'crud_sel'}})
-			local ok, row = coroutine.resume(co)
-			coroutine.resume(co, true)
-			return tostring(row[1])
-		");
-        r.String.ShouldBe("crud_sel");
+        using KitsuneEngine engine = TestRun.NewEngine();
+        try
+        {
+            LuaValue r = await engine.ExecuteStringAsync($@"
+				local conn = assert({ConnectLua()})
+				local function exec(sql, p)
+					local co = assert(conn:Query(sql, p))
+					local ok, v = coroutine.resume(co)
+					while ok and v == nil and coroutine.status(co) == 'suspended' do ok, v = coroutine.resume(co) end
+					if not ok then error(tostring(v)) end
+					if type(v) == 'string' then error(v) end
+					return v, co
+				end
+				local _, c0 = exec('DELETE FROM test WHERE string = $1', {{'crud_sel_' .. RUN_ID}})
+				coroutine.resume(c0, true)
+				local _, c1 = exec('INSERT INTO test (string) VALUES ($1)', {{'crud_sel_' .. RUN_ID}})
+				coroutine.resume(c1, true)
+				local _, co = exec('SELECT string FROM test WHERE string = $1', {{'crud_sel_' .. RUN_ID}})
+				local ok, row = coroutine.resume(co)
+				coroutine.resume(co, true)
+				return tostring(row[1])
+			");
+            r.String.ShouldBe(TestRun.Name("crud_sel"));
+        }
+        finally
+        {
+            await DeleteTestRowsAsync(engine, "crud_sel");
+        }
     }
 
     [PostgresFact]
     public async Task Crud_Update_ModifiesRow()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-			local conn = assert({ConnectLua()})
-			local function exec(sql, p)
-				local co = assert(conn:Query(sql, p))
-				local ok, v = coroutine.resume(co)
-				while ok and v == nil and coroutine.status(co) == 'suspended' do ok, v = coroutine.resume(co) end
-				if not ok then error(tostring(v)) end
-				if type(v) == 'string' then error(v) end
-				return v, co
-			end
-			local _, c0 = exec('DELETE FROM test WHERE string IN ($1, $2)', {{'crud_upd_old', 'crud_upd_new'}})
-			coroutine.resume(c0, true)
-			local _, c1 = exec('INSERT INTO test (string) VALUES ($1)', {{'crud_upd_old'}})
-			coroutine.resume(c1, true)
-			local affected, c2 = exec('UPDATE test SET string = $1 WHERE string = $2', {{'crud_upd_new', 'crud_upd_old'}})
-			coroutine.resume(c2, true)
-			local _, co = exec('SELECT string FROM test WHERE string = $1', {{'crud_upd_new'}})
-			local ok, row = coroutine.resume(co)
-			coroutine.resume(co, true)
-			return tostring(affected) .. ':' .. tostring(row[1])
-		");
-        r.String.ShouldBe("1:crud_upd_new");
+        using KitsuneEngine engine = TestRun.NewEngine();
+        try
+        {
+            LuaValue r = await engine.ExecuteStringAsync($@"
+				local conn = assert({ConnectLua()})
+				local function exec(sql, p)
+					local co = assert(conn:Query(sql, p))
+					local ok, v = coroutine.resume(co)
+					while ok and v == nil and coroutine.status(co) == 'suspended' do ok, v = coroutine.resume(co) end
+					if not ok then error(tostring(v)) end
+					if type(v) == 'string' then error(v) end
+					return v, co
+				end
+				local _, c0 = exec('DELETE FROM test WHERE string IN ($1, $2)', {{'crud_upd_old_' .. RUN_ID, 'crud_upd_new_' .. RUN_ID}})
+				coroutine.resume(c0, true)
+				local _, c1 = exec('INSERT INTO test (string) VALUES ($1)', {{'crud_upd_old_' .. RUN_ID}})
+				coroutine.resume(c1, true)
+				local affected, c2 = exec('UPDATE test SET string = $1 WHERE string = $2', {{'crud_upd_new_' .. RUN_ID, 'crud_upd_old_' .. RUN_ID}})
+				coroutine.resume(c2, true)
+				local _, co = exec('SELECT string FROM test WHERE string = $1', {{'crud_upd_new_' .. RUN_ID}})
+				local ok, row = coroutine.resume(co)
+				coroutine.resume(co, true)
+				return tostring(affected) .. ':' .. tostring(row[1])
+			");
+            r.String.ShouldBe("1:" + TestRun.Name("crud_upd_new"));
+        }
+        finally
+        {
+            await DeleteTestRowsAsync(engine, "crud_upd_old", "crud_upd_new");
+        }
     }
 
     [PostgresFact]
     public async Task Crud_Delete_RemovesRow()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-			local conn = assert({ConnectLua()})
-			local function exec(sql, p)
-				local co = assert(conn:Query(sql, p))
-				local ok, v = coroutine.resume(co)
-				while ok and v == nil and coroutine.status(co) == 'suspended' do ok, v = coroutine.resume(co) end
-				if not ok then error(tostring(v)) end
-				if type(v) == 'string' then error(v) end
-				return v, co
-			end
-			local _, c0 = exec('DELETE FROM test WHERE string = $1', {{'crud_del'}})
-			coroutine.resume(c0, true)
-			local _, c1 = exec('INSERT INTO test (string) VALUES ($1)', {{'crud_del'}})
-			coroutine.resume(c1, true)
-			local _, c2 = exec('DELETE FROM test WHERE string = $1', {{'crud_del'}})
-			coroutine.resume(c2, true)
-			local rowcount, co = exec('SELECT id FROM test WHERE string = $1', {{'crud_del'}})
-			local ok, row = coroutine.resume(co)
-			coroutine.resume(co, true)
-			return tostring(rowcount) .. ':' .. tostring(row == nil)
-		");
-        r.String.ShouldBe("0:true");
+        using KitsuneEngine engine = TestRun.NewEngine();
+        try
+        {
+            LuaValue r = await engine.ExecuteStringAsync($@"
+				local conn = assert({ConnectLua()})
+				local function exec(sql, p)
+					local co = assert(conn:Query(sql, p))
+					local ok, v = coroutine.resume(co)
+					while ok and v == nil and coroutine.status(co) == 'suspended' do ok, v = coroutine.resume(co) end
+					if not ok then error(tostring(v)) end
+					if type(v) == 'string' then error(v) end
+					return v, co
+				end
+				local _, c0 = exec('DELETE FROM test WHERE string = $1', {{'crud_del_' .. RUN_ID}})
+				coroutine.resume(c0, true)
+				local _, c1 = exec('INSERT INTO test (string) VALUES ($1)', {{'crud_del_' .. RUN_ID}})
+				coroutine.resume(c1, true)
+				local _, c2 = exec('DELETE FROM test WHERE string = $1', {{'crud_del_' .. RUN_ID}})
+				coroutine.resume(c2, true)
+				local rowcount, co = exec('SELECT id FROM test WHERE string = $1', {{'crud_del_' .. RUN_ID}})
+				local ok, row = coroutine.resume(co)
+				coroutine.resume(co, true)
+				return tostring(rowcount) .. ':' .. tostring(row == nil)
+			");
+            r.String.ShouldBe("0:true");
+        }
+        finally
+        {
+            await DeleteTestRowsAsync(engine, "crud_del");
+        }
     }
 
     // Type mapping
     [PostgresFact]
     public async Task Types_IntegersReturnedAsInteger()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
 			local conn = assert({ConnectLua()})
 			local co = assert(conn:Query('SELECT 1::int2, 2::int4, 3::int8'))
@@ -337,7 +365,7 @@ public sealed class PostgresTests
     [PostgresFact]
     public async Task Types_FloatsReturnedAsNumber()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
 			local conn = assert({ConnectLua()})
 			local co = assert(conn:Query('SELECT 1.5::float4, 2.5::float8, 3.0::numeric'))
@@ -353,7 +381,7 @@ public sealed class PostgresTests
     [PostgresFact]
     public async Task Types_BoolReturnedAsBoolean()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
 			local conn = assert({ConnectLua()})
 			local co = assert(conn:Query('SELECT true::bool, false::bool'))
@@ -369,7 +397,7 @@ public sealed class PostgresTests
     [PostgresFact]
     public async Task Types_TextReturnedAsString()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
 			local conn = assert({ConnectLua()})
 			local co = assert(conn:Query(""SELECT 'hello'::text, 'world'::varchar""))
@@ -385,7 +413,7 @@ public sealed class PostgresTests
     [PostgresFact]
     public async Task Types_NullReturnedAsNil()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
 			local conn = assert({ConnectLua()})
 			local co = assert(conn:Query('SELECT NULL::int, NULL::text'))
@@ -402,21 +430,28 @@ public sealed class PostgresTests
     [PostgresFact]
     public async Task NonQuery_Insert_ReturnsAffectedCount()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-			local conn = assert({ConnectLua()})
-			conn:NonQuery('DELETE FROM test WHERE string = $1', {{'helper_nq'}})
-			local ok, n = conn:NonQuery('INSERT INTO test (string) VALUES ($1)', {{'helper_nq'}})
-			conn:NonQuery('DELETE FROM test WHERE string = $1', {{'helper_nq'}})
-			return tostring(ok) .. ':' .. tostring(n)
-		");
-        r.String.ShouldBe("true:1");
+        using KitsuneEngine engine = TestRun.NewEngine();
+        try
+        {
+            LuaValue r = await engine.ExecuteStringAsync($@"
+				local conn = assert({ConnectLua()})
+				conn:NonQuery('DELETE FROM test WHERE string = $1', {{'helper_nq_' .. RUN_ID}})
+				local ok, n = conn:NonQuery('INSERT INTO test (string) VALUES ($1)', {{'helper_nq_' .. RUN_ID}})
+				conn:NonQuery('DELETE FROM test WHERE string = $1', {{'helper_nq_' .. RUN_ID}})
+				return tostring(ok) .. ':' .. tostring(n)
+			");
+            r.String.ShouldBe("true:1");
+        }
+        finally
+        {
+            await DeleteTestRowsAsync(engine, "helper_nq");
+        }
     }
 
     [PostgresFact]
     public async Task NonQuery_InvalidSql_ReturnsFalseAndError()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
 			local conn = assert({ConnectLua()})
 			local ok, err = conn:NonQuery('NOT VALID SQL AT ALL')
@@ -428,7 +463,7 @@ public sealed class PostgresTests
     [PostgresFact]
     public async Task NonQuery_ConnectionNotBusy_AfterCompletion()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
 			local conn = assert({ConnectLua()})
 			conn:NonQuery('SELECT 1')
@@ -441,7 +476,7 @@ public sealed class PostgresTests
     [PostgresFact]
     public async Task Scalar_ReturnsFirstColumnOfFirstRow()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
 			local conn = assert({ConnectLua()})
 			local ok, v = conn:Scalar('SELECT 42::int')
@@ -453,7 +488,7 @@ public sealed class PostgresTests
     [PostgresFact]
     public async Task Scalar_NoMatchingRow_ReturnsNil()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
 			local conn = assert({ConnectLua()})
 			local ok, v = conn:Scalar('SELECT 1 WHERE 1 = 0')
@@ -465,7 +500,7 @@ public sealed class PostgresTests
     [PostgresFact]
     public async Task Scalar_InvalidSql_ReturnsFalseAndError()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
 			local conn = assert({ConnectLua()})
 			local ok, err = conn:Scalar('NOT VALID SQL')
@@ -477,7 +512,7 @@ public sealed class PostgresTests
     [PostgresFact]
     public async Task Scalar_ConnectionNotBusy_AfterCompletion()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
 			local conn = assert({ConnectLua()})
 			conn:Scalar('SELECT 1')
@@ -490,7 +525,7 @@ public sealed class PostgresTests
     [PostgresFact]
     public async Task QueryAll_MultipleRows_ReturnsAllRows()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
 			local conn = assert({ConnectLua()})
 			local ok, rows = conn:QueryAll('SELECT generate_series(1,3)')
@@ -502,7 +537,7 @@ public sealed class PostgresTests
     [PostgresFact]
     public async Task QueryAll_EmptyResult_ReturnsEmptyTable()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
 			local conn = assert({ConnectLua()})
 			local ok, rows = conn:QueryAll('SELECT 1 WHERE 1 = 0')
@@ -514,7 +549,7 @@ public sealed class PostgresTests
     [PostgresFact]
     public async Task QueryAll_RowValuesAccessible()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
 			local conn = assert({ConnectLua()})
 			local ok, rows = conn:QueryAll('SELECT 10::int, 20::int, 30::int')
@@ -526,7 +561,7 @@ public sealed class PostgresTests
     [PostgresFact]
     public async Task QueryAll_InvalidSql_ReturnsFalseAndError()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
 			local conn = assert({ConnectLua()})
 			local ok, err = conn:QueryAll('NOT VALID SQL')
@@ -538,7 +573,7 @@ public sealed class PostgresTests
     [PostgresFact]
     public async Task QueryAll_ConnectionNotBusy_AfterCompletion()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
 			local conn = assert({ConnectLua()})
 			conn:QueryAll('SELECT 1')
@@ -551,7 +586,7 @@ public sealed class PostgresTests
     [PostgresFact]
     public async Task Postgres_SetAliveToken_DoesNotRaise()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
 			local conn = assert({ConnectLua()})
 			conn:SetAliveToken(AliveToken.New())
@@ -564,7 +599,7 @@ public sealed class PostgresTests
     [PostgresFact]
     public async Task Postgres_SetAliveToken_NilDetaches()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
 			local conn = assert({ConnectLua()})
 			local token = AliveToken.New()
@@ -579,7 +614,7 @@ public sealed class PostgresTests
     [PostgresFact]
     public async Task Postgres_AliveToken_LiveToken_NonQueryCompletes()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
 			local conn = assert({ConnectLua()})
 			local token = AliveToken.New()
@@ -594,7 +629,7 @@ public sealed class PostgresTests
     [PostgresFact]
     public async Task Postgres_AliveToken_DisposedBeforeCall_ReturnsCancelled()
     {
-        using KitsuneEngine engine = new();
+        using KitsuneEngine engine = TestRun.NewEngine();
         LuaValue r = await engine.ExecuteStringAsync($@"
 			local conn = assert({ConnectLua()})
 			local token = AliveToken.New()
@@ -605,6 +640,18 @@ public sealed class PostgresTests
 			return tostring(ok) .. '|' .. tostring(err)
 		");
         r.String.ShouldBe("false|cancelled");
+    }
+
+    private static async Task DeleteTestRowsAsync(KitsuneEngine engine, params string[] markers)
+    {
+        var markerList = string.Join(", ", markers.Select(m => $"'{m}'"));
+        await engine.ExecuteStringAsync($@"
+			local conn = assert({ConnectLua()})
+			for _, m in ipairs({{{markerList}}}) do
+				conn:NonQuery('DELETE FROM test WHERE string = $1', {{m .. '_' .. RUN_ID}})
+			end
+			conn:Close()
+		");
     }
 
     // Reads KITSUNE_POSTGRES_TEST=<libpq conninfo>

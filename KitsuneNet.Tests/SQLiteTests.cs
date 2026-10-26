@@ -16,6 +16,22 @@ namespace KitsuneNet.Tests;
 /// </summary>
 public sealed class SQLiteTests
 {
+    private const string JournalModeHelpers = @"
+			local function journal(db)
+				db:Query('PRAGMA journal_mode')
+				db:Fetch()
+				local m = db:GetRow(1)
+				db:Finish()
+				return tostring(m)
+			end
+			local function cleanup(path)
+				FileSystem.Delete(path)
+				FileSystem.Delete(path .. '-wal')
+				FileSystem.Delete(path .. '-shm')
+				FileSystem.Delete(path .. '-journal')
+			end
+";
+
     // In-memory
     [Fact]
     public async Task SQLite_InMemory_CreateInsertSelect()
@@ -810,114 +826,169 @@ public sealed class SQLiteTests
     }
 
     // File database
+    // File database. Each test works on its own copy of the configured database (Lua global
+    // DB_PATH), so overlapping or repeated runs never share tables or the journal mode.
     [SQLiteFact]
     public async Task SQLite_FileDatabase_OpenAndVersion()
     {
-        using KitsuneEngine engine = new();
+        string dbPath = CopyConfiguredDatabase();
+        try
+        {
+            using KitsuneEngine engine = new();
+            engine.SetVariable("DB_PATH", dbPath);
 
-        // Opens the configured database and confirms SQLite returns a version string.
-        LuaValue r = await engine.ExecuteStringAsync(@"
-            local db = SQLite.Open(os.getenv('KITSUNE_SQLITE_TEST'))
-            db:Query('SELECT sqlite_version()')
-            db:Fetch()
-			local v = db:GetRow(1)
-			db:Close()
-			return tostring(v ~= nil and #tostring(v) > 0)
-        ");
-        r.String.ShouldBe("true");
+            // Opens the database and confirms SQLite returns a version string.
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local db = SQLite.Open(DB_PATH)
+                db:Query('SELECT sqlite_version()')
+                db:Fetch()
+				local v = db:GetRow(1)
+				db:Close()
+				return tostring(v ~= nil and #tostring(v) > 0)
+            ");
+            r.String.ShouldBe("true");
+        }
+        finally
+        {
+            DeleteDatabaseCopy(dbPath);
+        }
     }
 
     [SQLiteFact]
     public async Task SQLite_FileDatabase_ListTables_ReturnsTable()
     {
-        using KitsuneEngine engine = new();
+        string dbPath = CopyConfiguredDatabase();
+        try
+        {
+            using KitsuneEngine engine = new();
+            engine.SetVariable("DB_PATH", dbPath);
 
-        // sqlite_master always exists; querying it must succeed and return a table.
-        LuaValue r = await engine.ExecuteStringAsync(@"
-			local db = SQLite.Open(os.getenv('KITSUNE_SQLITE_TEST'))
-			local ok, err = db:Query([[SELECT name FROM sqlite_master WHERE type='table' ORDER BY name]])
-			if not ok then db:Close(); return tostring(err) end
-			local names = {}
-			while db:Fetch() do
-				table.insert(names, tostring(db:GetRow(1)))
-			end
-			db:Close()
-			return tostring(type(names) == 'table')
-		");
-        r.String.ShouldBe("true");
+            // sqlite_master always exists; querying it must succeed and return a table.
+            LuaValue r = await engine.ExecuteStringAsync(@"
+				local db = SQLite.Open(DB_PATH)
+				local ok, err = db:Query([[SELECT name FROM sqlite_master WHERE type='table' ORDER BY name]])
+				if not ok then db:Close(); return tostring(err) end
+				local names = {}
+				while db:Fetch() do
+					table.insert(names, tostring(db:GetRow(1)))
+				end
+				db:Close()
+				return tostring(type(names) == 'table')
+			");
+            r.String.ShouldBe("true");
+        }
+        finally
+        {
+            DeleteDatabaseCopy(dbPath);
+        }
     }
 
     [SQLiteFact]
     public async Task SQLite_FileDatabase_WriteAndRead_RoundTrip()
     {
-        using KitsuneEngine engine = new();
+        string dbPath = CopyConfiguredDatabase();
+        try
+        {
+            using KitsuneEngine engine = new();
+            engine.SetVariable("DB_PATH", dbPath);
 
-        // Creates a temporary table, inserts a row, reads it back, then drops the table.
-        LuaValue r = await engine.ExecuteStringAsync(@"
-            local db = SQLite.Open(os.getenv('KITSUNE_SQLITE_TEST'))
-            db:Query('CREATE TABLE IF NOT EXISTS _kitsune_test (v TEXT)'); db:Fetch()
-            db:Query([[INSERT INTO _kitsune_test VALUES ('round_trip')]]); db:Fetch()
-            db:Query([[SELECT v FROM _kitsune_test WHERE v = 'round_trip']])
-            db:Fetch()
-            local val = db:GetRow(1)
-            db:Query('DROP TABLE _kitsune_test'); db:Fetch()
-            db:Close()
-            return tostring(val)
-        ");
-        r.String.ShouldBe("round_trip");
+            // Creates a table, inserts a row, reads it back, then drops the table.
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local db = SQLite.Open(DB_PATH)
+                db:Query('CREATE TABLE IF NOT EXISTS _kitsune_test (v TEXT)'); db:Fetch()
+                db:Query([[INSERT INTO _kitsune_test VALUES ('round_trip')]]); db:Fetch()
+                db:Query([[SELECT v FROM _kitsune_test WHERE v = 'round_trip']])
+                db:Fetch()
+                local val = db:GetRow(1)
+                db:Query('DROP TABLE _kitsune_test'); db:Fetch()
+                db:Close()
+                return tostring(val)
+            ");
+            r.String.ShouldBe("round_trip");
+        }
+        finally
+        {
+            DeleteDatabaseCopy(dbPath);
+        }
     }
 
     [SQLiteFact]
     public async Task SQLite_FileDatabase_ParameterizedQuery_RoundTrips()
     {
-        using KitsuneEngine engine = new();
+        string dbPath = CopyConfiguredDatabase();
+        try
+        {
+            using KitsuneEngine engine = new();
+            engine.SetVariable("DB_PATH", dbPath);
 
-        // Verifies that named parameters work against the file-backed database.
-        LuaValue r = await engine.ExecuteStringAsync(@"
-			local db = SQLite.Open(os.getenv('KITSUNE_SQLITE_TEST'))
-			db:Query('CREATE TABLE IF NOT EXISTS _kitsune_param (id INTEGER, name TEXT)'); db:Fetch()
-			db:Query('INSERT INTO _kitsune_param VALUES (:id, :name)', {id=99, name='kitsune_file'}); db:Fetch()
-			db:Query('SELECT name FROM _kitsune_param WHERE id = 99')
-			db:Fetch()
-			local val = db:GetRow(1)
-			db:Query('DROP TABLE _kitsune_param'); db:Fetch()
-			db:Close()
-			return tostring(val)
-		");
-        r.String.ShouldBe("kitsune_file");
+            // Verifies that named parameters work against the file-backed database.
+            LuaValue r = await engine.ExecuteStringAsync(@"
+				local db = SQLite.Open(DB_PATH)
+				db:Query('CREATE TABLE IF NOT EXISTS _kitsune_param (id INTEGER, name TEXT)'); db:Fetch()
+				db:Query('INSERT INTO _kitsune_param VALUES (:id, :name)', {id=99, name='kitsune_file'}); db:Fetch()
+				db:Query('SELECT name FROM _kitsune_param WHERE id = 99')
+				db:Fetch()
+				local val = db:GetRow(1)
+				db:Query('DROP TABLE _kitsune_param'); db:Fetch()
+				db:Close()
+				return tostring(val)
+			");
+            r.String.ShouldBe("kitsune_file");
+        }
+        finally
+        {
+            DeleteDatabaseCopy(dbPath);
+        }
     }
 
     [SQLiteFact]
     public async Task SQLite_FileDatabase_Tostring_ContainsFilePath()
     {
-        using KitsuneEngine engine = new();
+        string dbPath = CopyConfiguredDatabase();
+        try
+        {
+            using KitsuneEngine engine = new();
+            engine.SetVariable("DB_PATH", dbPath);
 
-        // __tostring for a file database must include the file path.
-        LuaValue r = await engine.ExecuteStringAsync(@"
-			local path = os.getenv('KITSUNE_SQLITE_TEST')
-			local db = SQLite.Open(path)
-			local s = tostring(db)
-			db:Close()
-			return tostring(s:find('SQLite:') ~= nil and s:find(path, 1, true) ~= nil)
-		");
-        r.String.ShouldBe("true");
+            // __tostring for a file database must include the file path.
+            LuaValue r = await engine.ExecuteStringAsync(@"
+				local db = SQLite.Open(DB_PATH)
+				local s = tostring(db)
+				db:Close()
+				return tostring(s:find('SQLite:') ~= nil and s:find(DB_PATH, 1, true) ~= nil)
+			");
+            r.String.ShouldBe("true");
+        }
+        finally
+        {
+            DeleteDatabaseCopy(dbPath);
+        }
     }
 
     [SQLiteFact]
     public async Task SQLite_FileDatabase_Mode1_WAL_JournalModeIsWal()
     {
-        using KitsuneEngine engine = new();
+        string dbPath = CopyConfiguredDatabase();
+        try
+        {
+            using KitsuneEngine engine = new();
+            engine.SetVariable("DB_PATH", dbPath);
 
-        // Mode 1 (multithread) sets WAL journal mode on the file database.
-        LuaValue r = await engine.ExecuteStringAsync(@"
-			local db = SQLite.Open(os.getenv('KITSUNE_SQLITE_TEST'), 1)
-			db:Query('PRAGMA journal_mode')
-			db:Fetch()
-			local mode = db:GetRow(1)
-			db:Close()
-			return tostring(tostring(mode) == 'wal')
-		");
-        r.String.ShouldBe("true");
+            // Mode 1 (multithread) sets WAL journal mode on the file database.
+            LuaValue r = await engine.ExecuteStringAsync(@"
+				local db = SQLite.Open(DB_PATH, 1)
+				db:Query('PRAGMA journal_mode')
+				db:Fetch()
+				local mode = db:GetRow(1)
+				db:Close()
+				return tostring(tostring(mode) == 'wal')
+			");
+            r.String.ShouldBe("true");
+        }
+        finally
+        {
+            DeleteDatabaseCopy(dbPath);
+        }
     }
 
     [Fact]
@@ -956,23 +1027,6 @@ public sealed class SQLiteTests
     }
 
     // Open without a mode keeps the database's journal mode
-
-    private const string JournalModeHelpers = @"
-			local function journal(db)
-				db:Query('PRAGMA journal_mode')
-				db:Fetch()
-				local m = db:GetRow(1)
-				db:Finish()
-				return tostring(m)
-			end
-			local function cleanup(path)
-				FileSystem.Delete(path)
-				FileSystem.Delete(path .. '-wal')
-				FileSystem.Delete(path .. '-shm')
-				FileSystem.Delete(path .. '-journal')
-			end
-";
-
     [Fact]
     public async Task SQLite_Open_NoMode_NewDatabaseIsWal()
     {
@@ -1041,5 +1095,26 @@ public sealed class SQLiteTests
 			return m
 		");
         r.String.ShouldBe("delete");
+    }
+
+    private static string CopyConfiguredDatabase()
+    {
+        // A configured path that does not exist yet means a new, empty database (SQLite creates it).
+        string source = Environment.GetEnvironmentVariable("KITSUNE_SQLITE_TEST")!;
+        string copy = Path.Combine(Path.GetTempPath(), $"kitsune_sqlite_{TestRun.Id}_{Guid.NewGuid():N}.sqlite");
+        if (File.Exists(source))
+        {
+            File.Copy(source, copy);
+        }
+
+        return copy;
+    }
+
+    private static void DeleteDatabaseCopy(string path)
+    {
+        foreach (string suffix in new[] { string.Empty, "-wal", "-shm", "-journal" })
+        {
+            File.Delete(path + suffix);
+        }
     }
 }

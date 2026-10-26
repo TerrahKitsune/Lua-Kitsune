@@ -14,12 +14,6 @@ namespace KitsuneNet.Tests;
 [Collection("KitsuneSequential")]
 public sealed class McpTests
 {
-#if DEBUG
-    private const string Configuration = "Debug";
-#else
-    private const string Configuration = "Release";
-#endif
-
     // Every tool returns a string; "ERR:" marks an Elicit that returned false.
     private const string ServerScript = @"
         local mcp = MCP.Create({ Name = 'test', Version = '1' }, {})
@@ -85,9 +79,7 @@ public sealed class McpTests
 
     private const string ElicitingCapabilities = @"{""elicitation"":{}}";
 
-    // bin\{Configuration}\net10.0\ -> repo root
-    private static readonly string KitsuneExe = Path.GetFullPath(Path.Combine(
-        AppContext.BaseDirectory, "..", "..", "..", "..", "x64", Configuration, "Kitsune.exe"));
+    private static readonly string KitsuneExe = KitsuneExeFactAttribute.ExePath;
 
     // Where Elicit may be called
     [Fact]
@@ -104,21 +96,21 @@ public sealed class McpTests
         r.String.ShouldBe("false|Elicit: must be called from inside a tool call");
     }
 
-    [WindowsFact]
+    [KitsuneExeFact]
     public async Task Elicit_AtLoadTime_ThrowsAndSendsNothing()
     {
         await using var client = await McpClient.StartAsync(ElicitingCapabilities);
         (await client.CallToolAsync("load_time")).ShouldBe("Elicit: must be called from inside a tool call");
     }
 
-    [WindowsFact]
+    [KitsuneExeFact]
     public async Task Elicit_FromTaskStartedByTool_ThrowsAndSendsNothing()
     {
         await using var client = await McpClient.StartAsync(ElicitingCapabilities);
         (await client.CallToolAsync("in_task")).ShouldContain("Elicit: must be called from inside a tool call");
     }
 
-    [WindowsFact]
+    [KitsuneExeFact]
     public async Task Elicit_FromNonYieldableCallback_ThrowsAndSendsNothing()
     {
         await using var client = await McpClient.StartAsync(ElicitingCapabilities);
@@ -126,7 +118,7 @@ public sealed class McpTests
     }
 
     // JSON null in the client's messages
-    [WindowsFact]
+    [KitsuneExeFact]
     public async Task Elicit_OptionalAnswerNull_IsAbsent()
     {
         await using var client = await McpClient.StartAsync(ElicitingCapabilities);
@@ -135,7 +127,7 @@ public sealed class McpTests
         text.ShouldBe("nil|5");
     }
 
-    [WindowsFact]
+    [KitsuneExeFact]
     public async Task Elicit_RequiredAnswerNull_IsMissing()
     {
         await using var client = await McpClient.StartAsync(ElicitingCapabilities);
@@ -144,7 +136,7 @@ public sealed class McpTests
         text.ShouldBe("ERR:invalid response from client: missing required answer 'n'");
     }
 
-    [WindowsFact]
+    [KitsuneExeFact]
     public async Task Elicit_AcceptWithNullContent_GivesEmptyResults()
     {
         await using var client = await McpClient.StartAsync(ElicitingCapabilities);
@@ -153,14 +145,14 @@ public sealed class McpTests
         text.ShouldBe("empty");
     }
 
-    [WindowsFact]
+    [KitsuneExeFact]
     public async Task Initialize_ElicitationCapabilityNull_CannotElicit()
     {
         await using var client = await McpClient.StartAsync(@"{""elicitation"":null}");
         (await client.CallToolAsync("can_elicit")).ShouldBe("false");
     }
 
-    [WindowsFact]
+    [KitsuneExeFact]
     public async Task Initialize_ElicitationCapabilityEmptyObject_CanElicit()
     {
         await using var client = await McpClient.StartAsync(ElicitingCapabilities);

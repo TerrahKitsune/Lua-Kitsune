@@ -16,7 +16,7 @@ int InternalPushValue(lua_State* L, int index) {
 		lua_pushcfunction(L, Json_Encode);
 		lua_rawgetp(L, LUA_REGISTRYINDEX, LuaJsonBridgeRegistryKey());
 		lua_pushvalue(L, lua_absindex(L, index));
-		if (lua_pcall_nohook(L, 2, 1, NULL)) {
+		if (lua_pcall_nohook(L, 2, 1, 0)) {
 			lua_error(L);
 			return 0;
 		}

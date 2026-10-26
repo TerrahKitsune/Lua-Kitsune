@@ -10,8 +10,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task MethodsExistInModuleTable()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync(@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, @"
             return type(MongoDB.Find) .. ':' .. type(MongoDB.InsertOne) .. ':' .. type(MongoDB.GetResult)
         ");
         r.String.ShouldBe("function:function:function");
@@ -20,8 +20,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task Connect_ValidUri_ReturnsUserdata()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db, err = {ConnectLua()}
             if not db then error(err) end
             return tostring(db):sub(1, 8)
@@ -32,8 +32,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task Connect_BadUri_ReturnsNilAndError()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync(@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, @"
             local db, err = MongoDB.Connect('mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=500')
             return tostring(db == nil) .. ':' .. tostring(type(err) == 'string')
         ");
@@ -43,8 +43,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task IsFinished_NoOp_ReturnsTrue()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             return tostring(db:IsFinished())
         ");
@@ -54,8 +54,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task Find_WhileRunning_SecondFindReturnsError()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             db:Find({Db()}, {Coll()}, {{}})
             local ok, err = db:Find({Db()}, {Coll()}, {{}})
@@ -67,8 +67,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task InsertOne_ThenFindOne_RoundTrips()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local id = Identifier.NewOID()
             db:InsertOne({Db()}, {Coll()}, {{_id=id, val=42}})
@@ -89,8 +89,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task InsertOne_ObjectId_RoundTrips()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local id = Identifier.NewOID()
             db:InsertOne({Db()}, {Coll()}, {{_id=id, x=1}})
@@ -111,8 +111,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task InsertOne_DateTime_RoundTrips()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local id = Identifier.NewOID()
             local now = DateTime.UtcNow()
@@ -134,8 +134,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task UpdateOne_ModifiesDocument()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local id = Identifier.NewOID()
             db:InsertOne({Db()}, {Coll()}, {{_id=id, v=1}})
@@ -158,8 +158,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task DeleteOne_RemovesDocument()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local id = Identifier.NewOID()
             db:InsertOne({Db()}, {Coll()}, {{_id=id, x=1}})
@@ -180,10 +180,9 @@ public sealed class MongoTests
     [MongoFact]
     public async Task Find_WithLimitAndSkip_ReturnsCorrectSlice()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        LuaValue r = await RunTaggedAsync("page", $@"
             local db = assert({ConnectLua()})
-            local tag = 'test_page_' .. tostring(os.time())
+            local tag = TEST_TAG
             for i=1,5 do
                 db:InsertOne({Db()}, {Coll()}, {{tag=tag, n=i}})
                 db:Wait(); db:GetResult()
@@ -202,10 +201,9 @@ public sealed class MongoTests
     [MongoFact]
     public async Task CountDocuments_ReturnsCount()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        LuaValue r = await RunTaggedAsync("cnt", $@"
             local db = assert({ConnectLua()})
-            local tag = 'test_cnt_' .. tostring(os.time())
+            local tag = TEST_TAG
             for i=1,3 do
                 db:InsertOne({Db()}, {Coll()}, {{tag=tag}})
                 db:Wait(); db:GetResult()
@@ -224,8 +222,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task Command_Ping_ReturnsOk()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             db:Command('admin', {{ping=1}})
             db:Wait()
@@ -239,8 +237,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task GetResult_WithNoOp_ReturnsNilError()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local res, err = db:GetResult()
             return tostring(res == nil) .. ':' .. tostring(type(err) == 'string')
@@ -251,8 +249,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task Cancel_WhileRunning_ConnectionStaysAlive()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             db:Find({Db()}, {Coll()}, {{}})
             db:Cancel()
@@ -267,8 +265,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task GC_ExplicitClose_DoesNotCrash()
     {
-        using KitsuneEngine engine = new();
-        await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             db:Close()
         ");
@@ -277,10 +275,9 @@ public sealed class MongoTests
     [MongoFact]
     public async Task InsertMany_MultipleDocuments_AllInserted()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        LuaValue r = await RunTaggedAsync("im", $@"
             local db = assert({ConnectLua()})
-            local tag = 'test_im_' .. tostring(os.time())
+            local tag = TEST_TAG
             db:InsertMany({Db()}, {Coll()}, {{{{tag=tag,n=1}},{{tag=tag,n=2}},{{tag=tag,n=3}}}})
             db:Wait()
             local _, err = db:GetResult()
@@ -299,8 +296,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task InsertMany_EmptyArray_ReturnsError()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local ok, err = db:InsertMany({Db()}, {Coll()}, {{}})
             return tostring(ok) .. ':' .. tostring(type(err) == 'string')
@@ -311,8 +308,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task InsertMany_NonTableElement_ReturnsError()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local ok, err = db:InsertMany({Db()}, {Coll()}, {{'not a table'}})
             return tostring(ok) .. ':' .. tostring(type(err) == 'string')
@@ -324,8 +321,8 @@ public sealed class MongoTests
     public async Task Find_NonexistentCollection_ReturnsEmptyNotError()
     {
         // A collection that doesn't exist is not an error in MongoDB — returns empty
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             db:Find({Db()}, 'test_no_such_collection_xyz', {{}})
             db:Wait()
@@ -339,8 +336,8 @@ public sealed class MongoTests
     public async Task GetResult_AfterCancel_ReturnsNoActiveOperation()
     {
         // After Cancel, GetResult should return nil,"no active operation" not partial data
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             db:Find({Db()}, {Coll()}, {{}})
             db:Cancel()
@@ -353,8 +350,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task IsFinished_WhileRunning_ReturnsFalse()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             db:Find({Db()}, {Coll()}, {{}})
             -- IsFinished is non-yielding; may be true or false depending on timing,
@@ -368,10 +365,9 @@ public sealed class MongoTests
     [MongoFact]
     public async Task UpdateMany_ModifiesMultipleDocuments()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        LuaValue r = await RunTaggedAsync("um", $@"
             local db = assert({ConnectLua()})
-            local tag = 'test_um_' .. tostring(os.time())
+            local tag = TEST_TAG
             for i=1,3 do
                 db:InsertOne({Db()}, {Coll()}, {{tag=tag, v=0}})
                 db:Wait(); db:GetResult()
@@ -394,10 +390,9 @@ public sealed class MongoTests
     [MongoFact]
     public async Task DeleteMany_RemovesAllMatching()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        LuaValue r = await RunTaggedAsync("dm", $@"
             local db = assert({ConnectLua()})
-            local tag = 'test_dm_' .. tostring(os.time())
+            local tag = TEST_TAG
             for i=1,4 do
                 db:InsertOne({Db()}, {Coll()}, {{tag=tag}})
                 db:Wait(); db:GetResult()
@@ -419,10 +414,9 @@ public sealed class MongoTests
     public async Task Find_EmptyCollection_ReturnsEmptyTable()
     {
         // Verifies Find returns {}, nil (not nil, nil) when no documents match
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        LuaValue r = await RunTaggedAsync("empty", $@"
             local db = assert({ConnectLua()})
-            local tag = 'test_empty_' .. tostring(os.time())
+            local tag = TEST_TAG
             db:Find({Db()}, {Coll()}, {{tag=tag}})
             db:Wait()
             local res, err = db:GetResult()
@@ -436,8 +430,8 @@ public sealed class MongoTests
     public async Task FindOne_NoMatch_ReturnsNilNil()
     {
         // Verifies FindOne returns nil, nil (not an error) when document is absent
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local id = Identifier.NewOID()
             db:FindOne({Db()}, {Coll()}, {{_id=id}})
@@ -452,8 +446,8 @@ public sealed class MongoTests
     public async Task Close_CalledTwice_DoesNotCrash()
     {
         // luamongo_gc guards on m->worker == NULL; double-close must be safe
-        using KitsuneEngine engine = new();
-        await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             db:Close()
             db:Close()
@@ -463,8 +457,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task Operations_AfterClose_ReturnError()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             db:Close()
             local ok, err = db:Find({Db()}, {Coll()}, {{}})
@@ -476,10 +470,9 @@ public sealed class MongoTests
     [MongoFact]
     public async Task Aggregate_Pipeline_ReturnsResults()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        LuaValue r = await RunTaggedAsync("agg", $@"
             local db = assert({ConnectLua()})
-            local tag = 'test_agg_' .. tostring(os.time())
+            local tag = TEST_TAG
             for i=1,3 do
                 db:InsertOne({Db()}, {Coll()}, {{tag=tag, v=i}})
                 db:Wait(); db:GetResult()
@@ -501,8 +494,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task Find_EmptyDbName_ThrowsLuaError()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local ok, err = pcall(function()
                 db:Find('', {Coll()}, {{}})
@@ -515,8 +508,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task Find_InvalidDbNameChars_ThrowsLuaError()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local ok, err = pcall(function()
                 db:Find('bad/name', {Coll()}, {{}})
@@ -529,8 +522,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task Find_EmptyCollectionName_ThrowsLuaError()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local ok, err = pcall(function()
                 db:Find({Db()}, '', {{}})
@@ -543,8 +536,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task Find_DollarPrefixCollectionName_ThrowsLuaError()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local ok, err = pcall(function()
                 db:Find({Db()}, '$system', {{}})
@@ -557,8 +550,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task InsertOne_NestedDocument_RoundTrips()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local id = Identifier.NewOID()
             db:InsertOne({Db()}, {Coll()}, {{_id=id, nested={{x=1, y={{z=2}}}}}})
@@ -576,8 +569,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task InsertOne_ArrayField_RoundTrips()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local id = Identifier.NewOID()
             db:InsertOne({Db()}, {Coll()}, {{_id=id, arr={{10, 20, 30}}}})
@@ -597,8 +590,8 @@ public sealed class MongoTests
     {
         // A table with both integer and string keys must round-trip as a document,
         // not an array that would silently drop the string-keyed fields.
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local id = Identifier.NewOID()
             local mixed = {{name='test'}}
@@ -618,8 +611,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task InsertOne_UuidIdentifier_RoundTrips()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local id  = Identifier.NewOID()
             local uid = Identifier.NewUUID()
@@ -638,8 +631,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task InsertOne_BoolFields_RoundTrip()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local id = Identifier.NewOID()
             db:InsertOne({Db()}, {Coll()}, {{_id=id, flag=true, nothing=false}})
@@ -657,8 +650,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task InsertOne_FloatField_RoundTrips()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local id = Identifier.NewOID()
             db:InsertOne({Db()}, {Coll()}, {{_id=id, f=3.14}})
@@ -676,8 +669,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task InsertOne_CircularReference_ThrowsLuaError()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local ok, err = pcall(function()
                 local t = {{}}
@@ -692,16 +685,16 @@ public sealed class MongoTests
     [MongoFact]
     public async Task TwoEngines_IndependentConnections_DoNotInterfere()
     {
-        using KitsuneEngine e1 = new();
-        using KitsuneEngine e2 = new();
-        var t1 = e1.ExecuteStringAsync($@"
+        using KitsuneEngine e1 = TestRun.NewEngine();
+        using KitsuneEngine e2 = TestRun.NewEngine();
+        var t1 = RunAsync(e1, $@"
             local db = assert({ConnectLua()})
             db:Command('admin', {{ping=1}})
             db:Wait()
             local doc, err = db:GetResult()
             return tostring(err == nil)
         ");
-        var t2 = e2.ExecuteStringAsync($@"
+        var t2 = RunAsync(e2, $@"
             local db = assert({ConnectLua()})
             db:Command('admin', {{ping=1}})
             db:Wait()
@@ -716,10 +709,9 @@ public sealed class MongoTests
     [MongoFact]
     public async Task Find_SortDescending_ReturnsCorrectOrder()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        LuaValue r = await RunTaggedAsync("sort", $@"
             local db = assert({ConnectLua()})
-            local tag = 'test_sort_' .. tostring(os.time())
+            local tag = TEST_TAG
             for i=1,3 do
                 db:InsertOne({Db()}, {Coll()}, {{tag=tag, n=i}})
                 db:Wait(); db:GetResult()
@@ -739,8 +731,8 @@ public sealed class MongoTests
     {
         // Verifies result is returned (not nil) even when GetResult is the only
         // live reference to the in-progress operation.
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local id = Identifier.NewOID()
             db:InsertOne({Db()}, {Coll()}, {{_id=id, v=99}})
@@ -758,8 +750,8 @@ public sealed class MongoTests
     {
         // Verifies the reply doc from InsertOne is returned, not silently nil
         // (exercises the bson_copy OOM guard path under normal operation).
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local id = Identifier.NewOID()
             db:InsertOne({Db()}, {Coll()}, {{_id=id, check=true}})
@@ -775,8 +767,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task UpdateOne_ThenGetResult_ReturnsReplyNotNil()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local id = Identifier.NewOID()
             db:InsertOne({Db()}, {Coll()}, {{_id=id, v=1}})
@@ -794,8 +786,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task DeleteOne_ThenGetResult_ReturnsReplyNotNil()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local id = Identifier.NewOID()
             db:InsertOne({Db()}, {Coll()}, {{_id=id, v=1}})
@@ -816,8 +808,8 @@ public sealed class MongoTests
         // userdata while a coroutine is suspended inside Wait.  This test
         // creates an op, starts waiting in a coroutine, then lets the engine
         // run GC before the result is collected — the connection must survive.
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local id = Identifier.NewOID()
             db:InsertOne({Db()}, {Coll()}, {{_id=id, v=1}})
@@ -839,8 +831,8 @@ public sealed class MongoTests
     {
         // After GetResult consumes the op, a second call must return the
         // "no active operation" error, not a stale result or nil,nil.
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             db:Command('admin', {{ping=1}})
             db:Wait()
@@ -857,8 +849,8 @@ public sealed class MongoTests
         // MONGO_GUARD calls FreeOp on a pending uncollected result before
         // dispatching a new op — old result must be discarded cleanly (no leak,
         // no crash) and the new op must succeed.
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             db:Command('admin', {{ping=1}})
             db:Wait()
@@ -875,10 +867,9 @@ public sealed class MongoTests
     [MongoFact]
     public async Task InsertMany_ThenGetResult_ReturnsReplyNotNil()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        LuaValue r = await RunTaggedAsync("im2", $@"
             local db = assert({ConnectLua()})
-            local tag = 'test_im2_' .. tostring(os.time())
+            local tag = TEST_TAG
             db:InsertMany({Db()}, {Coll()}, {{{{tag=tag,n=1}},{{tag=tag,n=2}}}})
             db:Wait()
             local reply, err = db:GetResult()
@@ -894,8 +885,8 @@ public sealed class MongoTests
     {
         // BSON_APPEND_UTF8 uses strlen and would truncate embedded NULs, so
         // bson_append_utf8 with an explicit length is required.
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local id = Identifier.NewOID()
             -- Build a string with an embedded NUL via string.char
@@ -915,8 +906,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task InsertOne_EmptyString_RoundTrips()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local id = Identifier.NewOID()
             db:InsertOne({Db()}, {Coll()}, {{_id=id, s=''}})
@@ -936,8 +927,8 @@ public sealed class MongoTests
     {
         // WriteError guards against overwriting an already-set error.
         // Send an invalid command that will fail; the first error must survive.
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             db:Command('admin', {{invalidCmd=1}})
             db:Wait()
@@ -952,10 +943,9 @@ public sealed class MongoTests
     {
         // AppendResultDoc doubles capacity starting at 64; inserting 70 docs
         // forces one realloc to 128.
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        LuaValue r = await RunTaggedAsync("large", $@"
             local db = assert({ConnectLua()})
-            local tag = 'test_large_' .. tostring(os.time())
+            local tag = TEST_TAG
             for i=1,70 do
                 db:InsertOne({Db()}, {Coll()}, {{tag=tag, n=i}})
                 db:Wait(); db:GetResult()
@@ -976,8 +966,8 @@ public sealed class MongoTests
         // While a coroutine is suspended in Wait, the LuaMongo userdata must
         // not be collected.  Forcing GC mid-wait and then completing the
         // operation must still return a valid result.
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local id = Identifier.NewOID()
             db:InsertOne({Db()}, {Coll()}, {{_id=id, anchor_test=true}})
@@ -995,10 +985,9 @@ public sealed class MongoTests
     [MongoFact]
     public async Task MongoCancel_AnchorPreventsCollectionDuringCancel()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        LuaValue r = await RunTaggedAsync("cancel_anchor", $@"
             local db = assert({ConnectLua()})
-            local tag = 'test_cancel_anchor_' .. tostring(os.time())
+            local tag = TEST_TAG
             db:Find({Db()}, {Coll()}, {{tag=tag}})
             collectgarbage('collect')
             db:Cancel()
@@ -1017,8 +1006,8 @@ public sealed class MongoTests
     {
         // After GetResult returns, the registry entry must be removed so it
         // does not prevent GC of the connection indefinitely.
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             db:Command('admin', {{ping=1}})
             db:Wait()
@@ -1038,8 +1027,8 @@ public sealed class MongoTests
     public async Task Close_AfterOperationCompletes_DoesNotDeadlock()
     {
         // Exercises the idle branch of luamongo_gc (state != RUNNING).
-        using KitsuneEngine engine = new();
-        var task = engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        var task = RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             db:Command('admin', {{ping=1}})
             db:Wait()
@@ -1063,8 +1052,8 @@ public sealed class MongoTests
         // This test reuses the same sub-table object in two sibling fields —
         // which IS circular only if the same object appears in its own ancestry;
         // here we just verify deeply nested but non-circular tables work.
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local id = Identifier.NewOID()
             local inner = {{v=1}}
@@ -1085,8 +1074,8 @@ public sealed class MongoTests
     {
         // Exercises the stream path in LuaToBsonValue, where the lua_tolstring
         // result must be checked for NULL.
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local id = Identifier.NewOID()
             local s = Stream.New('hello')
@@ -1110,8 +1099,8 @@ public sealed class MongoTests
     {
         // Empty stream -> lua_stream_read_chunk may push nil; the NULL sdata
         // guard must handle this without crashing.
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local id = Identifier.NewOID()
             local s = Stream.New('')
@@ -1131,22 +1120,22 @@ public sealed class MongoTests
         // luaopen_mongo must not call mongoc_init() + atexit(mongoc_cleanup)
         // on every engine creation. mongoc requires exactly one init/cleanup pair,
         // so a once_flag prevents double-init on a second engine.
-        using KitsuneEngine e1 = new();
-        using KitsuneEngine e2 = new();
-        using KitsuneEngine e3 = new();
-        var t1 = e1.ExecuteStringAsync($@"
+        using KitsuneEngine e1 = TestRun.NewEngine();
+        using KitsuneEngine e2 = TestRun.NewEngine();
+        using KitsuneEngine e3 = TestRun.NewEngine();
+        var t1 = RunAsync(e1, $@"
             local db = assert({ConnectLua()})
             db:Command('admin', {{ping=1}}); db:Wait()
             local r, err = db:GetResult()
             return tostring(err == nil)
         ");
-        var t2 = e2.ExecuteStringAsync($@"
+        var t2 = RunAsync(e2, $@"
             local db = assert({ConnectLua()})
             db:Command('admin', {{ping=1}}); db:Wait()
             local r, err = db:GetResult()
             return tostring(err == nil)
         ");
-        var t3 = e3.ExecuteStringAsync($@"
+        var t3 = RunAsync(e3, $@"
             local db = assert({ConnectLua()})
             db:Command('admin', {{ping=1}}); db:Wait()
             local r, err = db:GetResult()
@@ -1162,8 +1151,8 @@ public sealed class MongoTests
     public async Task InsertOne_AllScalarTypes_RoundTrip()
     {
         // Comprehensive scalar round-trip: string, integer, float, bool, null, OID, DateTime
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local id  = Identifier.NewOID()
             local now = DateTime.Now()
@@ -1197,8 +1186,8 @@ public sealed class MongoTests
     public async Task Find_ProjectionOpts_LimitsFields()
     {
         // Exercises the opts table path through BuildFindOpts/LuaToBson.
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local id = Identifier.NewOID()
             db:InsertOne({Db()}, {Coll()}, {{_id=id, a=1, b=2}})
@@ -1216,10 +1205,9 @@ public sealed class MongoTests
     [MongoFact]
     public async Task CountDocuments_WithFilter_ReturnsFilteredCount()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        LuaValue r = await RunTaggedAsync("count", $@"
             local db = assert({ConnectLua()})
-            local tag = 'test_count_' .. tostring(os.time())
+            local tag = TEST_TAG
             for i=1,5 do
                 db:InsertOne({Db()}, {Coll()}, {{tag=tag, even=(i % 2 == 0)}})
                 db:Wait(); db:GetResult()
@@ -1237,8 +1225,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task UpdateOne_Upsert_InsertsWhenNotFound()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local id = Identifier.NewOID()
             db:UpdateOne({Db()}, {Coll()},
@@ -1264,10 +1252,9 @@ public sealed class MongoTests
         // Exercises BuildFindOpts with all three paths: limit, skip, and opts
         // table (sort).  BuildFindOpts assigns directly to op->opts so the
         // options stay owned if a later step throws.
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        LuaValue r = await RunTaggedAsync("lss", $@"
             local db = assert({ConnectLua()})
-            local tag = 'test_lss_' .. tostring(os.time())
+            local tag = TEST_TAG
             for i=1,5 do
                 db:InsertOne({Db()}, {Coll()}, {{tag=tag, n=i}})
                 db:Wait(); db:GetResult()
@@ -1288,8 +1275,8 @@ public sealed class MongoTests
     public async Task InsertOne_DecimalField_RoundTrips()
     {
         // Exercises the decimal128 path in LuaToBsonValue and BsonIterValueToLua.
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local id = Identifier.NewOID()
             local d = Decimal.FromString('123.456')
@@ -1309,10 +1296,9 @@ public sealed class MongoTests
     public async Task Find_NoOpts_StillWorks()
     {
         // Confirms Find with no limit/skip/opts arguments doesn't crash.
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        LuaValue r = await RunTaggedAsync("noopt", $@"
             local db = assert({ConnectLua()})
-            local tag = 'test_noopt_' .. tostring(os.time())
+            local tag = TEST_TAG
             db:InsertOne({Db()}, {Coll()}, {{tag=tag, v=1}})
             db:Wait(); db:GetResult()
             db:Find({Db()}, {Coll()}, {{tag=tag}})
@@ -1330,8 +1316,8 @@ public sealed class MongoTests
     {
         // Exercises the LUA_TNIL ? BSON_APPEND_NULL path and the default
         // BsonIterValueToLua path returning nil for unknown BSON types.
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local id = Identifier.NewOID()
             db:InsertOne({Db()}, {Coll()}, {{_id=id, n=nil}})
@@ -1351,10 +1337,9 @@ public sealed class MongoTests
     public async Task Aggregate_MultiStagePipeline_Correct()
     {
         // Verifies LuaToBsonArray builds the pipeline with correct 0-indexed keys.
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        LuaValue r = await RunTaggedAsync("agg2", $@"
             local db = assert({ConnectLua()})
-            local tag = 'test_agg2_' .. tostring(os.time())
+            local tag = TEST_TAG
             for i=1,4 do
                 db:InsertOne({Db()}, {Coll()}, {{tag=tag, v=i}})
                 db:Wait(); db:GetResult()
@@ -1379,8 +1364,8 @@ public sealed class MongoTests
     {
         // MongoDB rejects NaN; it is caught at the Lua boundary with a clear
         // error instead of sending invalid BSON to the server.
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local ok, err = pcall(function()
                 local db = assert({ConnectLua()})
                 db:InsertOne({Db()}, {Coll()}, {{v = 0/0}})
@@ -1393,8 +1378,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task InsertOne_InfDouble_ThrowsLuaError()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local ok, err = pcall(function()
                 local db = assert({ConnectLua()})
                 db:InsertOne({Db()}, {Coll()}, {{v = math.huge}})
@@ -1407,8 +1392,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task InsertOne_NegInfDouble_ThrowsLuaError()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local ok, err = pcall(function()
                 local db = assert({ConnectLua()})
                 db:InsertOne({Db()}, {Coll()}, {{v = -math.huge}})
@@ -1422,8 +1407,8 @@ public sealed class MongoTests
     public async Task Find_FloatLimit_ThrowsLuaError()
     {
         // Passing a float as limit is a Lua error, not silently truncated.
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local ok, err = pcall(function()
                 db:Find({Db()}, {Coll()}, {{}}, 2.5)
@@ -1436,8 +1421,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task Find_FloatSkip_ThrowsLuaError()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local ok, err = pcall(function()
                 db:Find({Db()}, {Coll()}, {{}}, 10, 1.9)
@@ -1451,8 +1436,8 @@ public sealed class MongoTests
     public async Task InsertOne_ValidFloat_StillWorks()
     {
         // Confirm normal finite floats are accepted by the isfinite guard.
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local id = Identifier.NewOID()
             db:InsertOne({Db()}, {Coll()}, {{_id=id, v=3.14}})
@@ -1471,10 +1456,9 @@ public sealed class MongoTests
     public async Task Find_IntegerLimitAndSkip_StillWork()
     {
         // Confirm integer limit/skip are accepted by the isinteger guard.
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        LuaValue r = await RunTaggedAsync("intls", $@"
             local db = assert({ConnectLua()})
-            local tag = 'test_intls_' .. tostring(os.time())
+            local tag = TEST_TAG
             for i=1,3 do
                 db:InsertOne({Db()}, {Coll()}, {{tag=tag, n=i}})
                 db:Wait(); db:GetResult()
@@ -1494,8 +1478,8 @@ public sealed class MongoTests
     {
         // MongoClose uses luaL_checkudata, so calling Close on a non-MongoDB value
         // raises a proper type error instead of silently returning 0.
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync(@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, @"
             local ok, err = pcall(function()
                 MongoDB.Close(42)
             end)
@@ -1507,8 +1491,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task Close_WithNil_ThrowsTypeError()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync(@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, @"
             local ok, err = pcall(function()
                 MongoDB.Close(nil)
             end)
@@ -1521,8 +1505,8 @@ public sealed class MongoTests
     public async Task Close_WithValidConnection_Works()
     {
         // Regression: confirm MongoClose still works for a real connection.
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             db:Close()
             return 'ok'
@@ -1536,10 +1520,9 @@ public sealed class MongoTests
         // Exercises SetupOp new LuaMongoOp{} across all op types to verify
         // the bad_alloc guard.  Uses the _DEBUG live
         // allocs counter indirectly by running many ops without crashing.
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        LuaValue r = await RunTaggedAsync("seq", $@"
             local db = assert({ConnectLua()})
-            local tag = 'test_seq_' .. tostring(os.time())
+            local tag = TEST_TAG
             for i=1,5 do
                 db:InsertOne({Db()}, {Coll()}, {{tag=tag, n=i}})
                 db:Wait(); db:GetResult()
@@ -1562,8 +1545,8 @@ public sealed class MongoTests
         // luaL_checkstring + strlen would truncate at the NUL, silently accepting
         // e.g. "bad\0ignored" as "bad".  luaL_checklstring passes the full length
         // to ValidateDbName which rejects embedded NUL bytes.
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local ok, err = pcall(function()
                 db:Find('bad' .. string.char(0) .. 'name', {Coll()}, {{}})
@@ -1576,8 +1559,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task InsertOne_CollNameWithEmbeddedNul_ThrowsLuaError()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local ok, err = pcall(function()
                 db:InsertOne({Db()}, 'col' .. string.char(0) .. 'bad', {{}})
@@ -1590,8 +1573,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task Command_DbNameWithEmbeddedNul_ThrowsLuaError()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local ok, err = pcall(function()
                 db:Command('adm' .. string.char(0) .. 'in', {{ping=1}})
@@ -1604,8 +1587,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task CountDocuments_DbNameWithEmbeddedNul_ThrowsLuaError()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local ok, err = pcall(function()
                 db:CountDocuments('bad' .. string.char(0) .. 'db', {Coll()}, {{}})
@@ -1619,8 +1602,8 @@ public sealed class MongoTests
     public async Task AllOps_NormalNames_StillWork()
     {
         // Confirm all ops still accept normal (NUL-free) names.
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local id = Identifier.NewOID()
             db:InsertOne({Db()}, {Coll()}, {{_id=id, v=1}})
@@ -1642,8 +1625,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task Mongo_SetAliveToken_DoesNotRaise()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local token = AliveToken.New()
             db:SetAliveToken(token)
@@ -1656,8 +1639,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task Mongo_SetAliveToken_NilDetaches()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local token = AliveToken.New()
             db:SetAliveToken(token)
@@ -1671,8 +1654,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task Mongo_AliveToken_LiveToken_GetResultCompletes()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local token = AliveToken.New()
             db:SetAliveToken(token)
@@ -1687,8 +1670,8 @@ public sealed class MongoTests
     [MongoFact]
     public async Task Mongo_AliveToken_DisposedDuringWait_CoroutineDies()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($@"
+        using KitsuneEngine engine = TestRun.NewEngine();
+        LuaValue r = await RunAsync(engine, $@"
             local db = assert({ConnectLua()})
             local token = AliveToken.New()
             db:SetAliveToken(token)
@@ -1706,6 +1689,28 @@ public sealed class MongoTests
             return tostring(coroutine.status(co) == 'dead')
         ");
         r.String.ShouldBe("true");
+    }
+
+    private static System.Threading.Tasks.Task<LuaValue> RunAsync(KitsuneEngine engine, string lua) =>
+        engine.ExecuteStringAsync(lua).WaitAsync(System.TimeSpan.FromSeconds(30));
+
+    private static async System.Threading.Tasks.Task<LuaValue> RunTaggedAsync(string suffix, string lua)
+    {
+        using KitsuneEngine engine = TestRun.NewEngine();
+        string tagLua = $"local TEST_TAG = RUN_ID .. '_{suffix}'; ";
+        try
+        {
+            return await RunAsync(engine, tagLua + lua);
+        }
+        finally
+        {
+            await RunAsync(engine, tagLua + $@"
+                local db = assert({ConnectLua()})
+                db:DeleteMany({Db()}, {Coll()}, {{tag=TEST_TAG}})
+                db:Wait(); db:GetResult()
+                db:Close()
+            ");
+        }
     }
 
     private static string ConnectLua() =>

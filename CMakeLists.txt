@@ -16,10 +16,6 @@ endif()
 # repo so no exclusion is needed.
 file(GLOB LUA_SOURCES "${CMAKE_SOURCE_DIR}/Lua/*.c")
 add_library(lua_core STATIC ${LUA_SOURCES})
-
-target_compile_definitions(lua_core PRIVATE
-	LUA_CORE          # compiling the Lua core itself (exposes private headers)
-)
 target_include_directories(lua_core PUBLIC "${CMAKE_SOURCE_DIR}/Lua")
 
 # Lua objects are linked into KitsuneEngine.so — must be position-independent.

@@ -33,7 +33,8 @@ public sealed class SQLiteFactAttribute : FactAttribute
         // on Linux so that file-database tests can run without a separate runsettings.
         if (!OperatingSystem.IsWindows() && raw.Length >= 2 && raw[1] == ':')
         {
-            string translated = Path.Combine("/tmp", Path.GetFileName(raw));
+            // Path.GetFileName does not split on '\' outside Windows.
+            string translated = Path.Combine("/tmp", raw[(raw.LastIndexOfAny(['\\', '/']) + 1)..]);
             Environment.SetEnvironmentVariable("KITSUNE_SQLITE_TEST", translated);
             return translated;
         }

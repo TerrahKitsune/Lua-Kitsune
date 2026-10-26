@@ -660,9 +660,9 @@ int FileSystem_GetAll(lua_State* L) {
 				continue;
 
 			char full[MAX_PATH_LENGTH];
-			snprintf(full, sizeof(full), "%s/%s", dirpath, e->d_name);
+			int fullLen = snprintf(full, sizeof(full), "%s/%s", dirpath, e->d_name);
 			struct stat st;
-			bool statok = stat(full, &st) == 0;
+			bool statok = fullLen < (int)sizeof(full) && stat(full, &st) == 0;
 
 			struct stat lst;
 			bool islink = e->d_type == DT_LNK ||

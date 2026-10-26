@@ -27,6 +27,19 @@ public sealed class KitsuneTcpTests
         end
     ";
 
+    // Accept() does not block; retry until a client is queued or 10 s pass.
+    private const string AcceptHelper = @"
+        local function accept_within(listener)
+            local deadline = os.time() + 10
+            repeat
+                local c, err = listener:Accept()
+                if c or err then return c, err end
+                Sleep(10)
+            until os.time() > deadline
+            return nil, 'timed out waiting for a client'
+        end
+    ";
+
     [WebSocketFact]
     public async System.Threading.Tasks.Task Tcp_Module_IsTable()
     {
@@ -84,11 +97,10 @@ public sealed class KitsuneTcpTests
     public async System.Threading.Tasks.Task Accept_ReturnsClient_AfterConnect()
     {
         using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync(@"
+        LuaValue r = await engine.ExecuteStringAsync(AcceptHelper + @"
             local listener = assert(TCP.StartListener(19203))
             TCP.Connect('127.0.0.1', 19203)
-            Sleep(80)
-            local accepted, err = listener:Accept()
+            local accepted, err = accept_within(listener)
             if not accepted then return 'Accept returned nil: ' .. tostring(err) end
             accepted:Dispose()
             listener:Dispose()
@@ -157,17 +169,16 @@ public sealed class KitsuneTcpTests
     public async System.Threading.Tasks.Task MultipleClients_AcceptedInOrder()
     {
         using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync(@"
+        LuaValue r = await engine.ExecuteStringAsync(AcceptHelper + @"
             local listener = assert(TCP.StartListener(19205))
             local N = 3
             local clients = {}
             for i = 1, N do
                 clients[i] = assert(TCP.Connect('127.0.0.1', 19205))
             end
-            Sleep(100)
             local accepted = {}
             for i = 1, N do
-                local c, err = listener:Accept()
+                local c, err = accept_within(listener)
                 if not c then return 'Accept ' .. i .. ' returned nil: ' .. tostring(err) end
                 accepted[i] = c
             end
@@ -232,11 +243,10 @@ public sealed class KitsuneTcpTests
     public async System.Threading.Tasks.Task GetIP_GetPort_ReturnExpectedValues()
     {
         using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync(@"
+        LuaValue r = await engine.ExecuteStringAsync(AcceptHelper + @"
             local listener = assert(TCP.StartListener(19207))
             TCP.Connect('127.0.0.1', 19207)
-            Sleep(80)
-            local accepted = listener:Accept()
+            local accepted = accept_within(listener)
             if not accepted then return 'no accepted client' end
             local ip   = accepted:GetIP()
             local port = accepted:GetPort()
@@ -273,11 +283,10 @@ public sealed class KitsuneTcpTests
     public async System.Threading.Tasks.Task GetContext_ReturnsPersistentTable()
     {
         using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync(@"
+        LuaValue r = await engine.ExecuteStringAsync(AcceptHelper + @"
             local listener = assert(TCP.StartListener(19209))
             TCP.Connect('127.0.0.1', 19209)
-            Sleep(80)
-            local accepted = listener:Accept()
+            local accepted = accept_within(listener)
             if not accepted then return 'no accepted client' end
 
             local ctx1 = accepted:GetContext()

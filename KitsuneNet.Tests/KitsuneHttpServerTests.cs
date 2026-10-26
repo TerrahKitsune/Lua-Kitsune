@@ -3,6 +3,7 @@ using Shouldly;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Net;
 using System.Net.Http;
 using System.Net.WebSockets;
 using System.Text;
@@ -16,40 +17,12 @@ namespace KitsuneNet.Tests;
 
 /// <summary>
 /// Tests for the HttpServer module.
-/// Spins up a real HttpServer inside a Lua coroutine, uses HttpClient.New() to
-/// send requests against it, and verifies responses. No external services required.
-/// Each test uses a unique port to avoid cross-test conflicts.
-/// Tests skip when Http is unavailable (needed to send requests).
-/// HttpServer is always compiled in so no separate skip guard is needed.
+/// Spins up a real HttpServer inside a Lua coroutine and sends requests to it with the
+/// .NET HttpClient / ClientWebSocket, so only the server side is Kitsune code.
+/// No external services required. Each test uses a unique port.
 /// </summary>
 public sealed class KitsuneHttpServerTests
 {
-    // Drives server_co and client_co together until the client produces a result.
-    // handler(req) is called when req:IsFinished() is true.
-    // The client coroutine is the one returned by c:Request() directly.
-    private const string RunHelper = @"
-        local function run(server_co, client_co, handler, max_ms)
-            max_ms = max_ms or 3000
-            local deadline = os.clock() * 1000 + max_ms
-            local result = nil
-            while result == nil and (os.clock() * 1000) < deadline do
-                local ok, req = coroutine.resume(server_co)
-                if not ok then error('server: ' .. tostring(req)) end
-                if req and req:IsFinished() then
-                    handler(req)
-                end
-                if coroutine.status(client_co) ~= 'dead' then
-                    local ok2, v = coroutine.resume(client_co)
-                    if not ok2 then error('client: ' .. tostring(v)) end
-                    if v ~= nil then result = v end
-                end
-            end
-            coroutine.resume(server_co, true)
-            if result == nil then error('timeout waiting for response') end
-            return result
-        end
-    ";
-
     // A non-seekable read-only stream forces Transfer-Encoding: chunked.
     // Stream.New(string) is seekable, so we use a function-backend stream
     // that only advertises CAP_READ (1) — no CAP_SEEK (4).
@@ -160,251 +133,114 @@ public sealed class KitsuneHttpServerTests
     [Fact]
     public async Task Server_GET_RespondsWith200()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($$"""
-            if HttpClient == nil then return 'skip' end
-            {{RunHelper}}
-            local port = '127.0.0.1:19803'
-            local server = assert(HttpServer.Listen(port))
-            local server_co = server:Accept()
-            local c = HttpClient.New()
-            c:SetVerifySSL(false)
-            local client_co = c:Request('GET', 'http://' .. port .. '/hello')
-            local result = run(server_co, client_co, function(req)
-                req:GetResponse():SetCode(200)
-                req:GetResponse():Send('hello')
-            end)
-            return tostring(result.Code)
-        """);
-        if (r == "skip")
-        {
-            return;
-        }
-
-        r.String.ShouldBe("200");
+        var (engine, pump) = await StartLuaServer("127.0.0.1:19803", "resp:SetCode(200); resp:Send('hello')");
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
+        var response = await client.GetAsync("http://127.0.0.1:19803/hello");
+        await StopLuaServer(engine, pump);
+        ((int)response.StatusCode).ShouldBe(200);
     }
 
     // Response body
     [Fact]
     public async Task Server_GET_ResponseBodyIsReturned()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($$"""
-            if HttpClient == nil then return 'skip' end
-            {{RunHelper}}
-            local port = '127.0.0.1:19804'
-            local server = assert(HttpServer.Listen(port))
-            local server_co = server:Accept()
-            local c = HttpClient.New()
-            c:SetVerifySSL(false)
-            local client_co = c:Request('GET', 'http://' .. port .. '/body')
-            local result = run(server_co, client_co, function(req)
-                req:GetResponse():Send('hello world')
-            end)
-            return result.Contents
-        """);
-        if (r == "skip")
-        {
-            return;
-        }
-
-        r.String.ShouldBe("hello world");
+        var (engine, pump) = await StartLuaServer("127.0.0.1:19804", "resp:Send('hello world')");
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
+        string body = await client.GetStringAsync("http://127.0.0.1:19804/body");
+        await StopLuaServer(engine, pump);
+        body.ShouldBe("hello world");
     }
 
     // URL and method visible on server side
     [Fact]
     public async Task Server_Request_GetUrlAndMethod()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($$"""
-            if HttpClient == nil then return 'skip' end
-            {{RunHelper}}
-            local port = '127.0.0.1:19805'
-            local server = assert(HttpServer.Listen(port))
-            local server_co = server:Accept()
-            local c = HttpClient.New()
-            c:SetVerifySSL(false)
-            local client_co = c:Request('GET', 'http://' .. port .. '/test/path')
-            local result = run(server_co, client_co, function(req)
-                req:GetResponse():Send(req:GetMethod() .. ':' .. req:GetUrl())
-            end)
-            return result.Contents
-        """);
-        if (r == "skip")
-        {
-            return;
-        }
-
-        r.String.ShouldBe("GET:/test/path");
+        var (engine, pump) = await StartLuaServer("127.0.0.1:19805", "resp:Send(req:GetMethod() .. ':' .. req:GetUrl())");
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
+        string body = await client.GetStringAsync("http://127.0.0.1:19805/test/path");
+        await StopLuaServer(engine, pump);
+        body.ShouldBe("GET:/test/path");
     }
 
     // POST body echoed back
     [Fact]
     public async Task Server_POST_BodyIsReceived()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($$"""
-            if HttpClient == nil then return 'skip' end
-            {{RunHelper}}
-            local port = '127.0.0.1:19806'
-            local server = assert(HttpServer.Listen(port))
-            local server_co = server:Accept()
-            local c = HttpClient.New()
-            c:SetVerifySSL(false)
-            local client_co = c:Request('POST', 'http://' .. port .. '/echo', 'ping payload')
-            local result = run(server_co, client_co, function(req)
-                req:GetResponse():Send(req:GetBody())
-            end)
-            return result.Contents
-        """);
-        if (r == "skip")
-        {
-            return;
-        }
-
-        r.String.ShouldBe("ping payload");
+        var (engine, pump) = await StartLuaServer("127.0.0.1:19806", "resp:Send(req:GetBody())");
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
+        var response = await client.PostAsync("http://127.0.0.1:19806/echo", new StringContent("ping payload"));
+        string body = await response.Content.ReadAsStringAsync();
+        await StopLuaServer(engine, pump);
+        body.ShouldBe("ping payload");
     }
 
     // Reject returns error code
     [Fact]
     public async Task Server_Reject_Returns404()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($$"""
-            if HttpClient == nil then return 'skip' end
-            {{RunHelper}}
-            local port = '127.0.0.1:19807'
-            local server = assert(HttpServer.Listen(port))
-            local server_co = server:Accept()
-            local c = HttpClient.New()
-            c:SetVerifySSL(false)
-            local client_co = c:Request('GET', 'http://' .. port .. '/gone')
-            local result = run(server_co, client_co, function(req)
-                req:GetResponse():Reject(404, 'Not Found')
-            end)
-            return tostring(result.Code)
-        """);
-        if (r == "skip")
-        {
-            return;
-        }
-
-        r.String.ShouldBe("404");
+        var (engine, pump) = await StartLuaServer("127.0.0.1:19807", "resp:Reject(404, 'Not Found')");
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
+        var response = await client.GetAsync("http://127.0.0.1:19807/gone");
+        await StopLuaServer(engine, pump);
+        ((int)response.StatusCode).ShouldBe(404);
     }
 
     // GetContext persists across resumes
     [Fact]
     public async Task Server_GetContext_PersistsAcrossResumes()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($$"""
-            if HttpClient == nil then return 'skip' end
-            {{RunHelper}}
-            local port = '127.0.0.1:19808'
-            local server = assert(HttpServer.Listen(port))
-            local server_co = server:Accept()
-            local c = HttpClient.New()
-            c:SetVerifySSL(false)
-            local client_co = c:Request('GET', 'http://' .. port .. '/ctx')
-            local result = run(server_co, client_co, function(req)
-                req:GetContext().visits = (req:GetContext().visits or 0) + 1
-                req:GetResponse():Send(tostring(req:GetContext().visits))
-            end)
-            return result.Contents
-        """);
-        if (r == "skip")
-        {
-            return;
-        }
-
-        r.String.ShouldBe("1");
+        var (engine, pump) = await StartLuaServer("127.0.0.1:19808", """
+            req:GetContext().visits = (req:GetContext().visits or 0) + 1
+            resp:Send(tostring(req:GetContext().visits))
+            """);
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
+        string body = await client.GetStringAsync("http://127.0.0.1:19808/ctx");
+        await StopLuaServer(engine, pump);
+        body.ShouldBe("1");
     }
 
     // Headers visible on server side
     [Fact]
     public async Task Server_GetHeaders_ContainsCustomHeader()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($$"""
-            if HttpClient == nil then return 'skip' end
-            {{RunHelper}}
-            local port = '127.0.0.1:19809'
-            local server = assert(HttpServer.Listen(port))
-            local server_co = server:Accept()
-            local c = HttpClient.New()
-            c:SetVerifySSL(false)
-            c:SetDefaultHeader('X-Kitsune', 'testvalue')
-            local client_co = c:Request('GET', 'http://' .. port .. '/headers')
-            local result = run(server_co, client_co, function(req)
-                req:GetResponse():Send(tostring(req:GetHeaders()['x-kitsune']))
-            end)
-            return result.Contents
-        """);
-        if (r == "skip")
-        {
-            return;
-        }
-
-        r.String.ShouldBe("testvalue");
+        var (engine, pump) = await StartLuaServer("127.0.0.1:19809", "resp:Send(tostring(req:GetHeaders()['x-kitsune']))");
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
+        var request = new HttpRequestMessage(HttpMethod.Get, "http://127.0.0.1:19809/headers");
+        request.Headers.Add("X-Kitsune", "testvalue");
+        var response = await client.SendAsync(request);
+        string body = await response.Content.ReadAsStringAsync();
+        await StopLuaServer(engine, pump);
+        body.ShouldBe("testvalue");
     }
 
     // Send(Stream)
     [Fact]
     public async Task Server_SendStream_BodyIsReceived()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($$"""
-            if HttpClient == nil then return 'skip' end
-            {{RunHelper}}
-            local port = '127.0.0.1:19810'
-            local server = assert(HttpServer.Listen(port))
-            local server_co = server:Accept()
-            local c = HttpClient.New()
-            c:SetVerifySSL(false)
-            local client_co = c:Request('GET', 'http://' .. port .. '/stream')
-            local result = run(server_co, client_co, function(req)
-                local stream = Stream.New('stream body content')
-                req:GetResponse():SetHeader('Content-Type', 'text/plain')
-                req:GetResponse():Send(stream)
-            end)
-            return result.Contents
-        """);
-        if (r == "skip")
-        {
-            return;
-        }
-
-        r.String.ShouldBe("stream body content");
+        var (engine, pump) = await StartLuaServer("127.0.0.1:19810", """
+            resp:SetHeader('Content-Type', 'text/plain')
+            resp:Send(Stream.New('stream body content'))
+            """);
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
+        string body = await client.GetStringAsync("http://127.0.0.1:19810/stream");
+        await StopLuaServer(engine, pump);
+        body.ShouldBe("stream body content");
     }
 
     // Double-send raises error
     [Fact]
     public async Task Response_SendTwice_RaisesError()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($$"""
-            if HttpClient == nil then return 'skip' end
-            {{RunHelper}}
-            local port = '127.0.0.1:19811'
-            local server = assert(HttpServer.Listen(port))
-            local server_co = server:Accept()
-            local c = HttpClient.New()
-            c:SetVerifySSL(false)
-            local client_co = c:Request('GET', 'http://' .. port .. '/dbl')
-            local double_send_errored = false
-            local result = run(server_co, client_co, function(req)
-                local resp = req:GetResponse()
-                resp:Send('first')
-                local ok, err = pcall(function() resp:Send('second') end)
-                double_send_errored = not ok
-            end)
-            return tostring(double_send_errored)
-        """);
-        if (r == "skip")
-        {
-            return;
-        }
-
+        var (engine, pump) = await StartLuaServer("127.0.0.1:19811", """
+            resp:Send('first')
+            local ok = pcall(function() resp:Send('second') end)
+            _doubleSendErrored = not ok
+            """);
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
+        string body = await client.GetStringAsync("http://127.0.0.1:19811/dbl");
+        LuaValue r = await engine.ExecuteStringAsync("return tostring(_doubleSendErrored)");
+        await StopLuaServer(engine, pump);
+        body.ShouldBe("first");
         r.String.ShouldBe("true");
     }
 
@@ -412,38 +248,30 @@ public sealed class KitsuneHttpServerTests
     [Fact]
     public async Task Server_SetOnDisconnect_CalledAfterResponse()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($$"""
-            if HttpClient == nil then return 'skip' end
-            {{RunHelper}}
-            local port = '127.0.0.1:19812'
-            local server = assert(HttpServer.Listen(port))
-            local disconnected = false
-            server:SetOnDisconnect(function(req)
-                disconnected = true
-            end)
-            local server_co = server:Accept()
-            local c = HttpClient.New()
-            c:SetVerifySSL(false)
-            local client_co = c:Request('GET', 'http://' .. port .. '/disc')
-            local result = run(server_co, client_co, function(req)
-                req:GetResponse():Send('bye')
-            end)
-            -- The client has received the response and closed its end.
-            -- Pump the server until MG_EV_CLOSE fires (client disconnect).
-            local deadline = os.clock() * 1000 + 1000
-            while not disconnected and (os.clock() * 1000) < deadline do
-                coroutine.resume(server_co)
-            end
-            coroutine.resume(server_co, true)
-            return tostring(result.Code == 200 and disconnected)
-        """);
-        if (r == "skip")
+        var (engine, pump) = await StartLuaServer("127.0.0.1:19812", "resp:Send('bye')");
+        await engine.ExecuteStringAsync("_server:SetOnDisconnect(function(req) _disconnected = true end)");
+        HttpStatusCode status;
+        using (var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) })
         {
-            return;
+            var response = await client.GetAsync("http://127.0.0.1:19812/disc");
+            status = response.StatusCode;
         }
 
-        r.String.ShouldBe("true");
+        // Disposing the client closes its pooled connection, which fires the callback.
+        bool disconnected = false;
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (!disconnected && DateTime.UtcNow < deadline)
+        {
+            disconnected = (await engine.ExecuteStringAsync("return tostring(_disconnected == true)")).String == "true";
+            if (!disconnected)
+            {
+                await Task.Delay(20);
+            }
+        }
+
+        await StopLuaServer(engine, pump);
+        ((int)status).ShouldBe(200);
+        disconnected.ShouldBeTrue();
     }
 
     // Teardown tests
@@ -505,60 +333,46 @@ public sealed class KitsuneHttpServerTests
     [Fact]
     public async Task Response_AfterRequestGC_RaisesError()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($$"""
-            if HttpClient == nil then return 'skip' end
-            {{RunHelper}}
-            local port = '127.0.0.1:19824'
-            local server = assert(HttpServer.Listen(port))
-            local server_co = server:Accept()
-            local c = HttpClient.New()
-            c:SetVerifySSL(false)
-            local client_co = c:Request('GET', 'http://' .. port .. '/stale')
-            local saved_resp = nil
-            local result = run(server_co, client_co, function(req)
-                saved_resp = req:GetResponse()
-                req:GetResponse():Send('ok')
-            end)
+        var (engine, pump) = await StartLuaServer("127.0.0.1:19824", "_savedResp = resp; resp:Send('ok')");
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
+        string body = await client.GetStringAsync("http://127.0.0.1:19824/stale");
+        LuaValue r = await engine.ExecuteStringAsync("""
             collectgarbage('collect')
             collectgarbage('collect')
-            local ok, err = pcall(function() saved_resp:Send('again') end)
+            local ok = pcall(function() _savedResp:Send('again') end)
+            _savedResp = nil
             return tostring(not ok)
-        """);
-        if (r == "skip")
-        {
-            return;
-        }
-
+            """);
+        await StopLuaServer(engine, pump);
+        body.ShouldBe("ok");
         r.String.ShouldBe("true");
     }
 
     [Fact]
     public async Task Server_QueuedRequestsCleanedUp_OnStopFlag()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($$"""
-            if HttpClient == nil then return 'skip' end
-            local port = '127.0.0.1:19825'
-            local server = assert(HttpServer.Listen(port))
-            local server_co = server:Accept()
-            local c = HttpClient.New()
-            c:SetVerifySSL(false)
-            local client_co = c:Request('GET', 'http://' .. port .. '/drop')
-            local deadline = os.clock() * 1000 + 1000
-            while (os.clock() * 1000) < deadline do
-                coroutine.resume(server_co)
-            end
-            coroutine.resume(server_co, true)
-            collectgarbage('collect')
-            return 'ok'
-        """);
-        if (r == "skip")
+        // The handler never answers, so the request is still queued when the server stops;
+        // StopLuaServer disposes the engine, whose leak check covers the cleanup.
+        var (engine, pump) = await StartLuaServer("127.0.0.1:19825", "_seen = true");
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+        using var cancel = new CancellationTokenSource();
+        Task<HttpResponseMessage> pending = client.GetAsync("http://127.0.0.1:19825/drop", cancel.Token);
+
+        bool seen = false;
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (!seen && DateTime.UtcNow < deadline)
         {
-            return;
+            seen = (await engine.ExecuteStringAsync("return tostring(_seen == true)")).String == "true";
+            if (!seen)
+            {
+                await Task.Delay(20);
+            }
         }
 
-        r.String.ShouldBe("ok");
+        await StopLuaServer(engine, pump);
+        cancel.Cancel();
+        await Should.ThrowAsync<Exception>(pending);
+        seen.ShouldBeTrue();
     }
 
     [Fact]
@@ -707,96 +521,41 @@ public sealed class KitsuneHttpServerTests
         ((int)response.StatusCode).ShouldBe(503);
     }
 
-    // Chunked stream tests (Lua client)
+    // Chunked stream tests
     [Fact]
     public async Task Server_SendChunkedStream_BodyIsReceived()
     {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($$"""
-            if HttpClient == nil then return 'skip' end
-            {{RunHelper}}
-            {{MakeChunkedStream}}
-            local port = '127.0.0.1:19850'
-            local server = assert(HttpServer.Listen(port))
-            local server_co = server:Accept()
-            local c = HttpClient.New()
-            c:SetVerifySSL(false)
-            local client_co = c:Request('GET', 'http://' .. port .. '/chunked')
-            local result = run(server_co, client_co, function(req)
-                local stream = make_chunked_stream('chunked body content')
-                req:GetResponse():Send(stream)
-            end)
-            return result.Contents
-        """);
-        if (r == "skip")
-        {
-            return;
-        }
-
-        r.String.ShouldBe("chunked body content");
+        var (engine, pump) = await StartLuaServer("127.0.0.1:19850",
+            MakeChunkedStream + "\nresp:Send(make_chunked_stream('chunked body content'))");
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
+        string body = await client.GetStringAsync("http://127.0.0.1:19850/chunked");
+        await StopLuaServer(engine, pump);
+        body.ShouldBe("chunked body content");
     }
 
     [Fact]
     public async Task Server_SendChunkedStream_TransferEncodingIsChunked()
     {
-        // The Lua HttpClient (libcurl) transparently decodes chunked transfer
-        // encoding and does not expose Transfer-Encoding in result.Headers.
-        // Verify chunked delivery via the C# client instead — this test just
-        // confirms the body arrives intact when the stream has no CAP_SEEK.
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($$"""
-            if HttpClient == nil then return 'skip' end
-            {{RunHelper}}
-            {{MakeChunkedStream}}
-            local port = '127.0.0.1:19851'
-            local server = assert(HttpServer.Listen(port))
-            local server_co = server:Accept()
-            local c = HttpClient.New()
-            c:SetVerifySSL(false)
-            local client_co = c:Request('GET', 'http://' .. port .. '/chunked')
-            local result = run(server_co, client_co, function(req)
-                local stream = make_chunked_stream('hello chunked')
-                req:GetResponse():Send(stream)
-            end)
-            return result.Contents
-        """);
-        if (r == "skip")
-        {
-            return;
-        }
-
-        r.String.ShouldBe("hello chunked");
+        var (engine, pump) = await StartLuaServer("127.0.0.1:19851",
+            MakeChunkedStream + "\nresp:Send(make_chunked_stream('hello chunked'))");
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
+        var response = await client.GetAsync("http://127.0.0.1:19851/chunked");
+        string body = await response.Content.ReadAsStringAsync();
+        await StopLuaServer(engine, pump);
+        response.Headers.TransferEncodingChunked.ShouldBe(true);
+        body.ShouldBe("hello chunked");
     }
 
     [Fact]
     public async Task Server_SendChunkedStream_MultipleChunks_BodyIsReassembled()
     {
-        // Build a large body so the 65536-byte pump window definitely splits it
-        // into multiple chunks.
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync($$"""
-            if HttpClient == nil then return 'skip' end
-            {{RunHelper}}
-            {{MakeChunkedStream}}
-            local port = '127.0.0.1:19852'
-            local server = assert(HttpServer.Listen(port))
-            local server_co = server:Accept()
-            local c = HttpClient.New()
-            c:SetVerifySSL(false)
-            local client_co = c:Request('GET', 'http://' .. port .. '/big')
-            local big = string.rep('x', 200000)
-            local result = run(server_co, client_co, function(req)
-                local stream = make_chunked_stream(big)
-                req:GetResponse():Send(stream)
-            end)
-            return tostring(#result.Contents == 200000)
-        """);
-        if (r == "skip")
-        {
-            return;
-        }
-
-        r.String.ShouldBe("true");
+        // Large enough that the 65536-byte pump window splits it into several chunks.
+        var (engine, pump) = await StartLuaServer("127.0.0.1:19852",
+            MakeChunkedStream + "\nresp:Send(make_chunked_stream(string.rep('x', 200000)))");
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
+        string body = await client.GetStringAsync("http://127.0.0.1:19852/big");
+        await StopLuaServer(engine, pump);
+        body.Length.ShouldBe(200000);
     }
 
     // Chunked stream tests (C# client)
@@ -854,7 +613,7 @@ public sealed class KitsuneHttpServerTests
     {
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync("""
-            local server = assert(HttpServer.Listen('0.0.0.0:19870'))
+            local server = assert(HttpServer.Listen('127.0.0.1:19870'))
             local token = AliveToken.New()
             server:SetAliveToken(token)
             server:Close()
@@ -868,7 +627,7 @@ public sealed class KitsuneHttpServerTests
     {
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync("""
-            local server = assert(HttpServer.Listen('0.0.0.0:19871'))
+            local server = assert(HttpServer.Listen('127.0.0.1:19871'))
             local token = AliveToken.New()
             server:SetAliveToken(token)
             server:SetAliveToken(nil)
@@ -886,7 +645,7 @@ public sealed class KitsuneHttpServerTests
         // Start the server, run one pump iteration to prime it, dispose the token,
         // then resume — the coroutine should die without hanging.
         LuaValue r = await engine.ExecuteStringAsync("""
-            local server = assert(HttpServer.Listen('0.0.0.0:19872'))
+            local server = assert(HttpServer.Listen('127.0.0.1:19872'))
             local token = AliveToken.New()
             server:SetAliveToken(token)
             local co = server:Accept()
@@ -903,7 +662,7 @@ public sealed class KitsuneHttpServerTests
     {
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync("""
-            local server = assert(HttpServer.Listen('0.0.0.0:19873'))
+            local server = assert(HttpServer.Listen('127.0.0.1:19873'))
             local token = AliveToken.New()
             server:SetAliveToken(token)
             local co = server:Accept()
@@ -962,7 +721,7 @@ public sealed class KitsuneHttpServerTests
         var (engine, pump) = await StartWsServer("127.0.0.1:19884", string.Empty);
         var ws = new ClientWebSocket();
         await ws.ConnectAsync(new Uri("ws://127.0.0.1:19884/"), CancellationToken.None);
-        await Task.Delay(100); // let the pump see the upgrade
+        await WaitForServerWebSocketAsync(engine);
         LuaValue r = await engine.ExecuteStringAsync(
             "return tostring(_server_ws ~= nil and _server_ws:IsConnected())");
         await StopWsServer(engine, pump);
@@ -976,7 +735,7 @@ public sealed class KitsuneHttpServerTests
         var (engine, pump) = await StartWsServer("127.0.0.1:19885", string.Empty);
         using var ws = new ClientWebSocket();
         await ws.ConnectAsync(new Uri("ws://127.0.0.1:19885/"), CancellationToken.None);
-        await Task.Delay(100); // let the pump see the upgrade
+        await WaitForServerWebSocketAsync(engine);
         LuaValue r = await engine.ExecuteStringAsync("""
             if _server_ws then
                 local id = _server_ws:GetId()
@@ -994,7 +753,7 @@ public sealed class KitsuneHttpServerTests
         var (engine, pump) = await StartWsServer("127.0.0.1:19886", string.Empty);
         var ws = new ClientWebSocket();
         await ws.ConnectAsync(new Uri("ws://127.0.0.1:19886/"), CancellationToken.None);
-        await Task.Delay(100);
+        await WaitForServerWebSocketAsync(engine);
         LuaValue r = await engine.ExecuteStringAsync("""
             if _server_ws then
                 local ctx1 = _server_ws:GetContext()
@@ -1014,7 +773,7 @@ public sealed class KitsuneHttpServerTests
         var (engine, pump) = await StartWsServer("127.0.0.1:19887", string.Empty);
         var ws = new ClientWebSocket();
         await ws.ConnectAsync(new Uri("ws://127.0.0.1:19887/"), CancellationToken.None);
-        await Task.Delay(100);
+        await WaitForServerWebSocketAsync(engine);
         LuaValue r = await engine.ExecuteStringAsync("""
             if _server_ws then
                 _server_ws:Dispose()
@@ -1103,9 +862,12 @@ public sealed class KitsuneHttpServerTests
         // The client stream runs as a second scheduler coroutine so both can yield
         // independently — stream:Read() yields back to the scheduler which resumes
         // the server pump, advancing the chunked sender between reads.
-        if ((await new KitsuneEngine().ExecuteStringAsync("return type(HttpClient)")).String == "nil")
+        using (var probe = new KitsuneEngine())
         {
-            return; // HttpClient not compiled in
+            if ((await probe.ExecuteStringAsync("return type(HttpClient)")).String == "nil")
+            {
+                return; // HttpClient not compiled in
+            }
         }
 
         var (engine, pump) = await StartLuaServer("127.0.0.1:19892", """
@@ -1172,7 +934,8 @@ public sealed class KitsuneHttpServerTests
             coroutine.resume(co, true)
             """));
 
-        await Task.Delay(50);
+        // The listener is already bound, so a client connecting before the pump starts
+        // simply waits in the accept backlog.
         return (engine, pumpTask);
     }
 
@@ -1181,6 +944,21 @@ public sealed class KitsuneHttpServerTests
         await engine.ExecuteStringAsync("_stop = true");
         await pumpTask;
         engine.Dispose();
+    }
+
+    // The client's ConnectAsync can return before the server pump has stored the upgraded socket.
+    private static async Task WaitForServerWebSocketAsync(KitsuneEngine engine)
+    {
+        DateTime deadline = DateTime.UtcNow.AddSeconds(5);
+        while ((await engine.ExecuteStringAsync("return tostring(_server_ws ~= nil)")).String != "true")
+        {
+            if (DateTime.UtcNow > deadline)
+            {
+                throw new TimeoutException("The server never stored the upgraded WebSocket");
+            }
+
+            await Task.Delay(10);
+        }
     }
 
     private static async Task<(string Data, WebSocketMessageType Type)> WsCsEchoOnce(

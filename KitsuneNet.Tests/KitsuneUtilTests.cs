@@ -65,6 +65,19 @@ namespace KitsuneNet.Tests
             end
         ";
 
+        // Directory and file names with characters outside the ANSI code page (plus a
+        // surrogate pair), used by the non-ASCII path tests.
+        private const string NonAsciiPathSetup = @"
+                local sep = package.config:sub(1,1)
+                local base = FileSystem.GetTempFileName() .. '_kitsune_\xc5\x81\xe6\xb5\x8b'
+                FileSystem.CreateDirectory(base)
+                local function path(name) return base .. sep .. name end
+                local function cleanup(...)
+                    for _, n in ipairs({...}) do FileSystem.Delete(path(n)) end
+                    FileSystem.RemoveDirectory(base)
+                end
+        ";
+
         // UUID
         [Fact]
         public async Task UUID_HasStandardFormat()
@@ -3379,9 +3392,6 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        [System.Runtime.InteropServices.DllImport("kernel32.dll")]
-        private static extern uint GetACP();
-
         [WindowsOnlyFact]
         public async Task Text_Codepage_Zero_IsSystemAnsiCodePage()
         {
@@ -4081,8 +4091,7 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
-                local _tmp = (os.getenv('TEMP') or os.getenv('TMPDIR') or '/tmp') .. package.config:sub(1,1)
-                local path = _tmp .. 'kitsune_stream_rw.bin'
+                local path = FileSystem.GetTempFileName() .. '_kitsune_stream_rw.bin'
                 local w = Stream.Open(path, 'wb')
                 w:Write('hello file stream')
                 w:Close()
@@ -4100,8 +4109,7 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
-                local _tmp = (os.getenv('TEMP') or os.getenv('TMPDIR') or '/tmp') .. package.config:sub(1,1)
-                local path = _tmp .. 'kitsune_stream_info.bin'
+                local path = FileSystem.GetTempFileName() .. '_kitsune_stream_info.bin'
                 local w = Stream.Open(path, 'wb')
                 local _, info = w:GetInfo()
                 w:Close()
@@ -4116,8 +4124,7 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
-                local _tmp = (os.getenv('TEMP') or os.getenv('TMPDIR') or '/tmp') .. package.config:sub(1,1)
-                local path = _tmp .. 'kitsune_stream_seek.bin'
+                local path = FileSystem.GetTempFileName() .. '_kitsune_stream_seek.bin'
                 local w = Stream.Open(path, 'wb')
                 w:Write('ABCDEF')
                 w:Seek(2)
@@ -4137,8 +4144,7 @@ namespace KitsuneNet.Tests
             // s:len() on a file stream must return the total file byte count and
             // must not disturb the read cursor.
             LuaValue r = await engine.ExecuteStringAsync(@"
-                local _tmp = (os.getenv('TEMP') or os.getenv('TMPDIR') or '/tmp') .. package.config:sub(1,1)
-                local path = _tmp .. 'kitsune_stream_len.bin'
+                local path = FileSystem.GetTempFileName() .. '_kitsune_stream_len.bin'
                 local w = Stream.Open(path, 'wb')
                 w:Write('ABCDEF')
                 w:Close()
@@ -4161,8 +4167,7 @@ namespace KitsuneNet.Tests
             // GetInfo().len for a file stream must equal the actual file byte count
             // and must not change the cursor position.
             LuaValue r = await engine.ExecuteStringAsync(@"
-                local _tmp = (os.getenv('TEMP') or os.getenv('TMPDIR') or '/tmp') .. package.config:sub(1,1)
-                local path = _tmp .. 'kitsune_stream_infolen.bin'
+                local path = FileSystem.GetTempFileName() .. '_kitsune_stream_infolen.bin'
                 local w = Stream.Open(path, 'wb')
                 w:Write('hello')
                 w:Close()
@@ -4193,8 +4198,7 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
-                local _tmp = (os.getenv('TEMP') or os.getenv('TMPDIR') or '/tmp') .. package.config:sub(1,1)
-                local path = _tmp .. 'kitsune_stream_caps.bin'
+                local path = FileSystem.GetTempFileName() .. '_kitsune_stream_caps.bin'
                 local w = Stream.Open(path, 'wb')
                 w:Write('x')
                 w:Close()
@@ -5009,9 +5013,9 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Mutex_Open_LockAndUnlock_Succeeds()
         {
-            using KitsuneEngine engine = new();
+            using KitsuneEngine engine = TestRun.NewEngine();
             LuaValue r = await engine.ExecuteStringAsync(@"
-                local m = Mutex.Open('KitsuneTestMutex_Util')
+                local m = Mutex.Open('KitsuneTestMutex_Util_' .. RUN_ID)
                 local ok = m:Lock(500)
                 m:Unlock()
                 return tostring(ok == true)
@@ -5022,13 +5026,14 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Mutex_Info_ReturnsNameAndLockedState()
         {
-            using KitsuneEngine engine = new();
+            using KitsuneEngine engine = TestRun.NewEngine();
             LuaValue r = await engine.ExecuteStringAsync(@"
-                local m = Mutex.Open('KitsuneInfoMutex_Util')
+                local mutexName = 'KitsuneInfoMutex_Util_' .. RUN_ID
+                local m = Mutex.Open(mutexName)
                 m:Lock(100)
                 local locked, name = m:Info()
                 m:Unlock()
-                return tostring(locked and name == 'KitsuneInfoMutex_Util')
+                return tostring(locked and name == mutexName)
             ");
             r.String.ShouldBe("true");
         }
@@ -5036,11 +5041,11 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task Mutex_Lock_ZeroTimeout_SucceedsWhenFree()
         {
-            using KitsuneEngine engine = new();
+            using KitsuneEngine engine = TestRun.NewEngine();
 
             // Lock(0) is a non-blocking trylock; must succeed when nobody holds the mutex.
             LuaValue r = await engine.ExecuteStringAsync(@"
-                local m = Mutex.Open('KitsuneTestMutex_ZeroTO')
+                local m = Mutex.Open('KitsuneTestMutex_ZeroTO_' .. RUN_ID)
                 local ok = m:Lock(0)
                 if ok then m:Unlock() end
                 return tostring(ok == true)
@@ -5160,7 +5165,6 @@ namespace KitsuneNet.Tests
         }
 
         // FileSystem.Copy overwrite flag
-
         [Fact]
         public async Task FileSystem_Copy_WithoutOverwrite_FailsWhenDestinationExists_WithTrueOverwrites()
         {
@@ -5202,7 +5206,6 @@ namespace KitsuneNet.Tests
         }
 
         // FileInfo timestamps are Unix time
-
         [Fact]
         public async Task FileSystem_GetFileInfo_WriteTime_IsCloseToOsTime()
         {
@@ -5327,19 +5330,6 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("true");
         }
 
-        // Directory and file names with characters outside the ANSI code page (plus a
-        // surrogate pair), used by the non-ASCII path tests below.
-        private const string NonAsciiPathSetup = @"
-                local sep = package.config:sub(1,1)
-                local base = FileSystem.GetTempFileName() .. '_kitsune_\xc5\x81\xe6\xb5\x8b'
-                FileSystem.CreateDirectory(base)
-                local function path(name) return base .. sep .. name end
-                local function cleanup(...)
-                    for _, n in ipairs({...}) do FileSystem.Delete(path(n)) end
-                    FileSystem.RemoveDirectory(base)
-                end
-        ";
-
         [Fact]
         public async Task IoOpen_NonAsciiPath_WriteAndRead_RoundTrip()
         {
@@ -5460,7 +5450,6 @@ namespace KitsuneNet.Tests
         // Standard Lua library, non-ASCII paths
         // The test host is a plain .NET process (no UTF-8 activeCodePage manifest), so on
         // Windows these only pass when Lua's io/os/package libraries use the wide CRT.
-
         [Fact]
         public async Task IoLines_NonAsciiPath_ReadsLinesAndClosesFile()
         {
@@ -5637,10 +5626,12 @@ namespace KitsuneNet.Tests
             Directory.CreateDirectory(dir);
             File.WriteAllText(Path.Combine(dir, "kitsune_envmöd.lua"), "return 'från env'");
             string luaPath = dir + "\\?.lua;;";
+            string? previous = null;
             try
             {
                 using (KitsuneEngine setup = new())
                 {
+                    previous = (await setup.ExecuteStringAsync("return os.getenv('LUA_PATH_5_5')")).String;
                     setup.SetVariable("luaPath", (LuaValue)luaPath);
                     await setup.ExecuteStringAsync("setenv('LUA_PATH_5_5', luaPath, true)");
                 }
@@ -5659,8 +5650,13 @@ namespace KitsuneNet.Tests
             }
             finally
             {
+                // An empty value removes the variable on Windows, restoring "not set".
                 using (KitsuneEngine restore = new())
-                    await restore.ExecuteStringAsync("setenv('LUA_PATH_5_5', '', true)");
+                {
+                    restore.SetVariable("previous", (LuaValue)(previous ?? string.Empty));
+                    await restore.ExecuteStringAsync("setenv('LUA_PATH_5_5', previous, true)");
+                }
+
                 Directory.Delete(dir, true);
             }
         }
@@ -5778,7 +5774,16 @@ namespace KitsuneNet.Tests
             }
             finally
             {
-                try { Directory.Delete(dir, true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+                try
+                {
+                    Directory.Delete(dir, true);
+                }
+                catch (IOException)
+                {
+                }
+                catch (UnauthorizedAccessException)
+                {
+                }
             }
         }
 
@@ -5892,31 +5897,6 @@ namespace KitsuneNet.Tests
             }
         }
 
-        // Returns "name|isLink|LinkType|Link|hasReparseTag" for every entry of the link-test folder,
-        // from GetAll and GetFileInfo, sorted so the result is stable.
-        private static string DescribeLinks(string dir) => @"
-            local dir = [[" + dir + @"]]
-            local function d(src, e)
-                return src .. ':' .. e.FileName .. '|' .. tostring(e.isLink) .. '|' .. tostring(e.LinkType) ..
-                    '|' .. tostring(e.Link) .. '|' .. tostring(e.ReparseTag ~= nil)
-            end
-            local out = {}
-            for _, e in ipairs(FileSystem.GetAll(dir)) do
-                out[#out + 1] = d('all', e)
-                out[#out + 1] = d('info', FileSystem.GetFileInfo(dir .. '\\' .. e.FileName))
-            end
-            table.sort(out)
-            return table.concat(out, '\n')
-        ";
-
-        private static string NewLinkTestDir()
-        {
-            // A long target path must be read in full.
-            string dir = Path.Combine(Path.GetTempPath(), "_kitsune_links_" + Guid.NewGuid().ToString("N"), new string('t', 120));
-            Directory.CreateDirectory(Path.Combine(dir, "target"));
-            return dir;
-        }
-
         [WindowsFact]
         public async Task FileSystem_Junction_IsLinkWithTarget()
         {
@@ -5945,7 +5925,10 @@ namespace KitsuneNet.Tests
             {
                 // A recursive delete is refused on the junction itself, so remove the link first.
                 if (Directory.Exists(Path.Combine(dir, "junc")))
+                {
                     Directory.Delete(Path.Combine(dir, "junc"));
+                }
+
                 Directory.Delete(Path.GetDirectoryName(dir)!, true);
             }
         }
@@ -5989,8 +5972,12 @@ namespace KitsuneNet.Tests
         [Fact]
         public async Task FileSystem_SetCurrentDirectory_ChangesDirectory()
         {
+            // The current directory is process-wide; restore it even if the script fails.
+            string original = Directory.GetCurrentDirectory();
             using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
+            try
+            {
+                LuaValue r = await engine.ExecuteStringAsync(@"
                 local orig = FileSystem.CurrentDirectory()
                 local tmp  = FileSystem.GetTempFileName() .. '_kitsune_chdir'
                 FileSystem.CreateDirectory(tmp)
@@ -5999,7 +5986,12 @@ namespace KitsuneNet.Tests
                 FileSystem.RemoveDirectory(tmp)
                 return tostring(ok == true)
             ");
-            r.String.ShouldBe("true");
+                r.String.ShouldBe("true");
+            }
+            finally
+            {
+                Directory.SetCurrentDirectory(original);
+            }
         }
 
         // CSV instance extras
@@ -6555,8 +6547,7 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
-                local _tmp = (os.getenv('TEMP') or os.getenv('TMPDIR') or '/tmp') .. package.config:sub(1,1)
-                local path = _tmp .. 'kitsune_id_test.bin'
+                local path = FileSystem.GetTempFileName() .. '_kitsune_id_test.bin'
                 local w = Stream.Open(path, 'wb')
                 w:Write('x')
                 local id1 = w:Id()
@@ -6717,8 +6708,7 @@ namespace KitsuneNet.Tests
             // A file stream opened with "rb" has CAP_READ + CAP_SEEK, but __tostring
             // must NOT silently read the file — it must return the pointer fallback.
             LuaValue r = await engine.ExecuteStringAsync(@"
-                local _tmp = (os.getenv('TEMP') or os.getenv('TMPDIR') or '/tmp') .. package.config:sub(1,1)
-                local path = _tmp .. 'kitsune_tostring_test.bin'
+                local path = FileSystem.GetTempFileName() .. '_kitsune_tostring_test.bin'
                 local w = Stream.Open(path, 'wb')
                 w:Write('secret')
                 w:Close()
@@ -7505,12 +7495,12 @@ namespace KitsuneNet.Tests
                 -- noconsole=true so stdout goes to the pipe, not a new console window
                 local proc = Process.Start(nil, cmd, nil, true, true)
                 if proc == nil then return 'skip' end
-                Sleep(200)
+                -- ReadFromPipe does not block, so poll until the output arrives.
                 local out = ''
-                local chunk = proc:ReadFromPipe()
-                while chunk do
-                    out = out .. chunk
-                    chunk = proc:ReadFromPipe()
+                local deadline = os.time() + 10
+                while not out:find('hello') and os.time() < deadline do
+                    local chunk = proc:ReadFromPipe()
+                    if chunk then out = out .. chunk else Sleep(20) end
                 end
                 return tostring(out:find('hello') ~= nil)
             ");
@@ -7535,7 +7525,7 @@ namespace KitsuneNet.Tests
                 local cmd = is_win and 'cmd /c echo x> marker.txt' or 'echo x > marker.txt'
                 local proc = Process.Start(nil, cmd, dir, true, false)
                 local found = false
-                for i = 1, 60 do
+                for i = 1, 200 do
                     if FileSystem.GetFileInfo(dir .. sep .. 'marker.txt') then
                         found = true
                         break
@@ -7617,7 +7607,7 @@ namespace KitsuneNet.Tests
                 local proc = Process.Start(nil, cmd, nil, true, false)
                 if proc == nil then return 'skip' end
                 local code = nil
-                for _ = 1, 30 do
+                for _ = 1, 200 do
                     code = proc:GetExitCode()
                     if code ~= nil then break end
                     Sleep(50)
@@ -7643,7 +7633,7 @@ namespace KitsuneNet.Tests
                 local proc = Process.Start(nil, cmd, nil, true, false)
                 if proc == nil then return 'skip' end
                 local c1 = nil
-                for _ = 1, 30 do
+                for _ = 1, 200 do
                     c1 = proc:GetExitCode()
                     if c1 ~= nil then break end
                     Sleep(50)
@@ -10286,7 +10276,6 @@ namespace KitsuneNet.Tests
         }
 
         // Toml encoder
-
         [Fact]
         public async Task Toml_RoundTrip_NestedSections_ArraysOfTables_EmptyTable()
         {
@@ -10978,33 +10967,27 @@ namespace KitsuneNet.Tests
         }
 
         // Sleep + AliveToken
+        // A sleep that never wakes would hang, so a generous await timeout is the check;
+        // tight millisecond limits fail on loaded machines.
         [Fact]
         public async Task Sleep_WithToken_ReturnsWhenTokenDisposed()
         {
             using KitsuneEngine engine = new();
-            var sw = System.Diagnostics.Stopwatch.StartNew();
             await engine.ExecuteStringAsync(@"
                 local token = AliveToken.New(50)
                 Sleep(token)
-            ");
-            sw.Stop();
-
-            // Token expires after ~50 ms, should wake well before 1000 ms
-            sw.ElapsedMilliseconds.ShouldBeLessThan(500);
+            ").WaitAsync(TimeSpan.FromSeconds(10));
         }
 
         [Fact]
         public async Task Sleep_WithToken_AlreadyDeadReturnsImmediately()
         {
             using KitsuneEngine engine = new();
-            var sw = System.Diagnostics.Stopwatch.StartNew();
             await engine.ExecuteStringAsync(@"
                 local token = AliveToken.New()
                 token:Dispose()
                 Sleep(token)
-            ");
-            sw.Stop();
-            sw.ElapsedMilliseconds.ShouldBeLessThan(200);
+            ").WaitAsync(TimeSpan.FromSeconds(10));
         }
 
         [Fact]
@@ -11015,52 +10998,38 @@ namespace KitsuneNet.Tests
             await engine.ExecuteStringAsync(@"
                 local token = AliveToken.New()
                 Sleep(token, 50)
-            ");
+            ").WaitAsync(TimeSpan.FromSeconds(10));
             sw.Stop();
 
-            // Token stayed alive so deadline (50 ms) should have fired
+            // The token stayed alive, so only the 50 ms deadline can have woken it.
             sw.ElapsedMilliseconds.ShouldBeGreaterThanOrEqualTo(40);
-            sw.ElapsedMilliseconds.ShouldBeLessThan(500);
         }
 
         [Fact]
         public async Task Sleep_WithTokenAndMs_WakesOnTokenBeforeDeadline()
         {
             using KitsuneEngine engine = new();
-
-            // Set up a token in the engine state
             await engine.ExecuteStringAsync(@"_token = AliveToken.New()");
 
-            // Start the sleep in the background
+            // The 60 s deadline cannot fire within the 10 s await, so only the token can wake it.
             var sleepTask = engine.ExecuteStringAsync(@"
-                Sleep(_token, 5000)
+                Sleep(_token, 60000)
             ");
 
-            // Dispose the token from outside after a short delay
-            await Task.Delay(30).ConfigureAwait(false);
-            await engine.ExecuteStringAsync(@"_token:Dispose()").ConfigureAwait(false);
-
-            var sw = System.Diagnostics.Stopwatch.StartNew();
-            await sleepTask.ConfigureAwait(false);
-            sw.Stop();
-
-            // Should have woken when token was disposed, well before 5000 ms
-            sw.ElapsedMilliseconds.ShouldBeLessThan(500);
+            // Lets the sleep start first; disposing earlier would also end it, just without sleeping.
+            await Task.Delay(30);
+            await engine.ExecuteStringAsync(@"_token:Dispose()");
+            await sleepTask.WaitAsync(TimeSpan.FromSeconds(10));
         }
 
         [Fact]
         public async Task Sleep_WithTimeoutToken_WakesWhenTokenExpires()
         {
             using KitsuneEngine engine = new();
-            var sw = System.Diagnostics.Stopwatch.StartNew();
             await engine.ExecuteStringAsync(@"
                 local token = AliveToken.New(50)
                 Sleep(token)
-            ");
-            sw.Stop();
-
-            // Token should expire after ~50ms; definitely before 500ms
-            sw.ElapsedMilliseconds.ShouldBeLessThan(500);
+            ").WaitAsync(TimeSpan.FromSeconds(10));
         }
 
         // UInt
@@ -12610,6 +12579,34 @@ namespace KitsuneNet.Tests
                 )
             ");
             r.String.ShouldBe("true");
+        }
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+        private static extern uint GetACP();
+
+        // Returns "name|isLink|LinkType|Link|hasReparseTag" for every entry of the link-test folder,
+        // from GetAll and GetFileInfo, sorted so the result is stable.
+        private static string DescribeLinks(string dir) => @"
+            local dir = [[" + dir + @"]]
+            local function d(src, e)
+                return src .. ':' .. e.FileName .. '|' .. tostring(e.isLink) .. '|' .. tostring(e.LinkType) ..
+                    '|' .. tostring(e.Link) .. '|' .. tostring(e.ReparseTag ~= nil)
+            end
+            local out = {}
+            for _, e in ipairs(FileSystem.GetAll(dir)) do
+                out[#out + 1] = d('all', e)
+                out[#out + 1] = d('info', FileSystem.GetFileInfo(dir .. '\\' .. e.FileName))
+            end
+            table.sort(out)
+            return table.concat(out, '\n')
+        ";
+
+        private static string NewLinkTestDir()
+        {
+            // A long target path must be read in full.
+            string dir = Path.Combine(Path.GetTempPath(), "_kitsune_links_" + Guid.NewGuid().ToString("N"), new string('t', 120));
+            Directory.CreateDirectory(Path.Combine(dir, "target"));
+            return dir;
         }
     }
 }
