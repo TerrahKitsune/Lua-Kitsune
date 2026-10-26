@@ -31,10 +31,10 @@ typedef struct LuaMutex {
 LuaMutex* lua_pushmutex(lua_State* L);
 LuaMutex* lua_tomutex(lua_State* L, int index);
 
-int LuaCreateMutex(lua_State* L);
-int LuaLockMutex(lua_State* L);
-int LuaUnlockMutex(lua_State* L);
-int LuaGetMutexInfo(lua_State* L);
+int Mutex_Open(lua_State* L);
+int Mutex_Lock(lua_State* L);
+int Mutex_Unlock(lua_State* L);
+int Mutex_Info(lua_State* L);
 
-int mutex_gc(lua_State* L);
-int mutex_tostring(lua_State* L);
+int Mutex_GC(lua_State* L);
+int Mutex_ToString(lua_State* L);

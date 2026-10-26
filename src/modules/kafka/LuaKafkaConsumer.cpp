@@ -18,7 +18,7 @@ LuaKafkaConsumer* lua_pushkafkaconsumer(lua_State* L) {
 	return c;
 }
 
-LuaKafkaConsumer* lua_tokafkaconsumer(lua_State* L, int index) {
+LuaKafkaConsumer* luaL_checkkafkaconsumer(lua_State* L, int index) {
 	LuaKafkaConsumer* c = (LuaKafkaConsumer*)luaL_checkudata(L, index, LUAKAFKACONSUMER);
 	if (!c)
 		luaL_error(L, "parameter is not a %s", LUAKAFKACONSUMER);
@@ -29,7 +29,7 @@ LuaKafkaConsumer* lua_tokafkaconsumer(lua_State* L, int index) {
 // Message table builder
 // ---------------------------------------------------------------------------
 
-static void push_consume_message(lua_State* L, const rd_kafka_message_t* msg) {
+static void PushConsumeMessage(lua_State* L, const rd_kafka_message_t* msg) {
 	lua_createtable(L, 0, 10);
 	int t = lua_gettop(L);
 
@@ -105,7 +105,7 @@ static void push_consume_message(lua_State* L, const rd_kafka_message_t* msg) {
 // Converts a string offset keyword or stringified integer to a librdkafka
 // offset constant. Accepts "earliest"/"beginning", "latest"/"end", "stored",
 // or any integer value (including librdkafka sentinel values like -2).
-static int64_t kafka_offset_from_str(const char* s) {
+static int64_t KafkaOffsetFromStr(const char* s) {
 	if (strcmp(s, "earliest") == 0 || strcmp(s, "beginning") == 0)
 		return RD_KAFKA_OFFSET_BEGINNING;
 	if (strcmp(s, "latest") == 0 || strcmp(s, "end") == 0)
@@ -121,9 +121,9 @@ static int64_t kafka_offset_from_str(const char* s) {
 
 // Reads a Kafka offset from a Lua value at index idx.
 // Accepts a string keyword ("earliest", "latest", "stored") or an integer.
-static int64_t luakafkaoffset(lua_State* L, int idx) {
+static int64_t LuaKafkaOffset(lua_State* L, int idx) {
 	if (lua_type(L, idx) == LUA_TSTRING)
-		return kafka_offset_from_str(lua_tostring(L, idx));
+		return KafkaOffsetFromStr(lua_tostring(L, idx));
 	return (int64_t)luaL_checkinteger(L, idx);
 }
 
@@ -135,7 +135,7 @@ static int64_t luakafkaoffset(lua_State* L, int idx) {
 // Returns NULL and pushes false + errmsg on error (caller should return 2).
 // ---------------------------------------------------------------------------
 
-static rd_kafka_topic_partition_list_t* build_partition_list(lua_State* L, int table_idx, bool with_partitions) {
+static rd_kafka_topic_partition_list_t* BuildPartitionList(lua_State* L, int table_idx, bool with_partitions) {
 	if (!lua_istable(L, table_idx)) {
 		lua_pushboolean(L, false);
 		lua_pushstring(L, "expected array of topic strings");
@@ -180,7 +180,7 @@ static rd_kafka_topic_partition_list_t* build_partition_list(lua_State* L, int t
 				if (end != after_part && (*end == '\0' || *end == ':') && p >= 0) {
 					partition = (int32_t)p;
 					if (*end == ':')
-						offset = kafka_offset_from_str(end + 1);
+						offset = KafkaOffsetFromStr(end + 1);
 				}
 			}
 
@@ -199,9 +199,9 @@ static rd_kafka_topic_partition_list_t* build_partition_list(lua_State* L, int t
 // Consumer API
 // ---------------------------------------------------------------------------
 
-int CreateConsumer(lua_State* L) {
-	rd_kafka_conf_t* conf = lua_tokafkaconf(L, 1, "LUAC");
-	rd_kafka_conf_set_log_cb(conf, kafka_logger);
+int Kafka_NewConsumer(lua_State* L) {
+	rd_kafka_conf_t* conf = ToKafkaConf(L, 1, "LUAC");
+	rd_kafka_conf_set_log_cb(conf, KafkaLogger);
 
 	// Force manual offset commit so Poll() controls exactly when offsets
 	// advance. This prevents librdkafka's background auto-commit from racing
@@ -227,12 +227,12 @@ int CreateConsumer(lua_State* L) {
 
 // consumer:Subscribe({"topic-a", "topic-b"}) -> true | false, errmsg
 // Overwrites any previous subscription or assignment.
-int ConsumerSubscribe(lua_State* L) {
-	LuaKafkaConsumer* c = lua_tokafkaconsumer(L, 1);
+int KafkaConsumer_Subscribe(lua_State* L) {
+	LuaKafkaConsumer* c = luaL_checkkafkaconsumer(L, 1);
 	if (!c->rd)
 		return luaL_error(L, "Consumer not open");
 
-	rd_kafka_topic_partition_list_t* list = build_partition_list(L, 2, false);
+	rd_kafka_topic_partition_list_t* list = BuildPartitionList(L, 2, false);
 	if (!list)
 		return 2;
 
@@ -254,12 +254,12 @@ int ConsumerSubscribe(lua_State* L) {
 // Offset keywords: "earliest" = beginning, "latest" = end, omitted/nil = stored.
 // Seek cannot be called until Assign has been called and librdkafka has established
 // the partition assignment (drive Poll() for a short warm-up period first).
-int ConsumerAssign(lua_State* L) {
-	LuaKafkaConsumer* c = lua_tokafkaconsumer(L, 1);
+int KafkaConsumer_Assign(lua_State* L) {
+	LuaKafkaConsumer* c = luaL_checkkafkaconsumer(L, 1);
 	if (!c->rd)
 		return luaL_error(L, "Consumer not open");
 
-	rd_kafka_topic_partition_list_t* list = build_partition_list(L, 2, true);
+	rd_kafka_topic_partition_list_t* list = BuildPartitionList(L, 2, true);
 	if (!list)
 		return 2;
 
@@ -286,8 +286,8 @@ int ConsumerAssign(lua_State* L) {
 //
 // Commit happens automatically at the top of Poll() for the message returned
 // by the previous Poll() call. There is no separate Commit() method.
-int ConsumerPoll(lua_State* L) {
-	LuaKafkaConsumer* c = lua_tokafkaconsumer(L, 1);
+int KafkaConsumer_Poll(lua_State* L) {
+	LuaKafkaConsumer* c = luaL_checkkafkaconsumer(L, 1);
 	if (!c->rd) {
 		lua_pushboolean(L, false);
 		lua_pushstring(L, "Consumer not open");
@@ -316,7 +316,7 @@ int ConsumerPoll(lua_State* L) {
 	if (msg->err == RD_KAFKA_RESP_ERR_NO_ERROR)
 		c->msg = msg;
 
-	push_consume_message(L, msg);
+	PushConsumeMessage(L, msg);
 
 	// If the message was not stored (error/status), free it now; all data has
 	// been copied into the Lua table.
@@ -328,21 +328,21 @@ int ConsumerPoll(lua_State* L) {
 	return 2;
 }
 
-int ConsumerGetOffsets(lua_State* L) {
-	LuaKafkaConsumer* c = lua_tokafkaconsumer(L, 1);
+int KafkaConsumer_GetOffsets(lua_State* L) {
+	LuaKafkaConsumer* c = luaL_checkkafkaconsumer(L, 1);
 	if (!c->rd)
 		return luaL_error(L, "Consumer not open");
-	return kafka_query_watermarks(L, c->rd);
+	return KafkaQueryWatermarks(L, c->rd);
 }
 
-int ConsumerSeek(lua_State* L) {
-	LuaKafkaConsumer* c = lua_tokafkaconsumer(L, 1);
+int KafkaConsumer_Seek(lua_State* L) {
+	LuaKafkaConsumer* c = luaL_checkkafkaconsumer(L, 1);
 	if (!c->rd)
 		return luaL_error(L, "Consumer not open");
 
 	const char* topic = luaL_checkstring(L, 2);
 	int32_t partition = (int32_t)luaL_checkinteger(L, 3);
-	int64_t offset = luakafkaoffset(L, 4);
+	int64_t offset = LuaKafkaOffset(L, 4);
 	int timeout = (int)luaL_optinteger(L, 5, 5000);
 
 	rd_kafka_topic_partition_list_t* parts = rd_kafka_topic_partition_list_new(1);
@@ -362,71 +362,71 @@ int ConsumerSeek(lua_State* L) {
 	return 1;
 }
 
-int ConsumerGetMetadata(lua_State* L) {
-	LuaKafkaConsumer* c = lua_tokafkaconsumer(L, 1);
+int KafkaConsumer_GetMetadata(lua_State* L) {
+	LuaKafkaConsumer* c = luaL_checkkafkaconsumer(L, 1);
 	if (!c->rd)
 		return luaL_error(L, "Consumer not open");
-	return kafka_get_metadata(L, c->rd);
+	return KafkaGetMetadata(L, c->rd);
 }
 
-int ConsumerGetTopicConfig(lua_State* L) {
-	LuaKafkaConsumer* c = lua_tokafkaconsumer(L, 1);
+int KafkaConsumer_GetTopicConfig(lua_State* L) {
+	LuaKafkaConsumer* c = luaL_checkkafkaconsumer(L, 1);
 	if (!c->rd)
 		return luaL_error(L, "Consumer not open");
-	return kafka_get_topic_config(L, c->rd);
+	return KafkaGetTopicConfig(L, c->rd);
 }
 
-int ConsumerSetTopicConfig(lua_State* L) {
-	LuaKafkaConsumer* c = lua_tokafkaconsumer(L, 1);
+int KafkaConsumer_SetTopicConfig(lua_State* L) {
+	LuaKafkaConsumer* c = luaL_checkkafkaconsumer(L, 1);
 	if (!c->rd)
 		return luaL_error(L, "Consumer not open");
-	return kafka_set_topic_config(L, c->rd);
+	return KafkaSetTopicConfig(L, c->rd);
 }
 
-int ConsumerListGroups(lua_State* L) {
-	LuaKafkaConsumer* c = lua_tokafkaconsumer(L, 1);
+int KafkaConsumer_ListGroups(lua_State* L) {
+	LuaKafkaConsumer* c = luaL_checkkafkaconsumer(L, 1);
 	if (!c->rd)
 		return luaL_error(L, "Consumer not open");
-	return kafka_list_groups(L, c->rd);
+	return KafkaListGroups(L, c->rd);
 }
 
-int ConsumerDescribeGroups(lua_State* L) {
-	LuaKafkaConsumer* c = lua_tokafkaconsumer(L, 1);
+int KafkaConsumer_DescribeGroups(lua_State* L) {
+	LuaKafkaConsumer* c = luaL_checkkafkaconsumer(L, 1);
 	if (!c->rd)
 		return luaL_error(L, "Consumer not open");
-	return kafka_describe_groups(L, c->rd);
+	return KafkaDescribeGroups(L, c->rd);
 }
 
-int ConsumerDeleteGroup(lua_State* L) {
-	LuaKafkaConsumer* c = lua_tokafkaconsumer(L, 1);
+int KafkaConsumer_DeleteGroup(lua_State* L) {
+	LuaKafkaConsumer* c = luaL_checkkafkaconsumer(L, 1);
 	if (!c->rd)
 		return luaL_error(L, "Consumer not open");
-	return kafka_delete_group(L, c->rd);
+	return KafkaDeleteGroup(L, c->rd);
 }
 
-int ConsumerGetGroupOffsets(lua_State* L) {
-	LuaKafkaConsumer* c = lua_tokafkaconsumer(L, 1);
+int KafkaConsumer_GetGroupOffsets(lua_State* L) {
+	LuaKafkaConsumer* c = luaL_checkkafkaconsumer(L, 1);
 	if (!c->rd)
 		return luaL_error(L, "Consumer not open");
-	return kafka_get_group_offsets(L, c->rd);
+	return KafkaGetGroupOffsets(L, c->rd);
 }
 
-int ConsumerSetGroupOffsets(lua_State* L) {
-	LuaKafkaConsumer* c = lua_tokafkaconsumer(L, 1);
+int KafkaConsumer_SetGroupOffsets(lua_State* L) {
+	LuaKafkaConsumer* c = luaL_checkkafkaconsumer(L, 1);
 	if (!c->rd)
 		return luaL_error(L, "Consumer not open");
-	return kafka_set_group_offsets(L, c->rd);
+	return KafkaSetGroupOffsets(L, c->rd);
 }
 
-int ConsumerDeleteGroupOffsets(lua_State* L) {
-	LuaKafkaConsumer* c = lua_tokafkaconsumer(L, 1);
+int KafkaConsumer_DeleteGroupOffsets(lua_State* L) {
+	LuaKafkaConsumer* c = luaL_checkkafkaconsumer(L, 1);
 	if (!c->rd)
 		return luaL_error(L, "Consumer not open");
-	return kafka_delete_group_offsets(L, c->rd);
+	return KafkaDeleteGroupOffsets(L, c->rd);
 }
 
-int ConsumerGC(lua_State* L) {
-	LuaKafkaConsumer* c = lua_tokafkaconsumer(L, 1);
+int KafkaConsumer_Close(lua_State* L) {
+	LuaKafkaConsumer* c = luaL_checkkafkaconsumer(L, 1);
 	if (c->rd) {
 		// Free any pending message before closing so rd_kafka_destroy does not
 		// see an outstanding reference.
@@ -472,9 +472,9 @@ int ConsumerGC(lua_State* L) {
 	return 0;
 }
 
-int ConsumerToString(lua_State* L) {
+int KafkaConsumer_ToString(lua_State* L) {
 	char buf[64];
-	sprintf(buf, "KafkaConsumer: %p", (void*)lua_tokafkaconsumer(L, 1));
+	sprintf(buf, "KafkaConsumer: %p", (void*)luaL_checkkafkaconsumer(L, 1));
 	lua_pushstring(L, buf);
 	return 1;
 }

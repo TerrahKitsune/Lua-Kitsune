@@ -26,7 +26,7 @@ memset(db, 0, sizeof(LuaDuckDB));
 return db;
 }
 
-void DuckDB_FinalizeStmt(LuaDuckDB *state) {
+void DuckDBFinalizeStmt(LuaDuckDB *state) {
 if (state->has_result) {
 duckdb_destroy_result(&state->result);
 memset(&state->result, 0, sizeof(state->result));
@@ -40,7 +40,7 @@ state->stmt = NULL;
 }
 }
 
-static void push_duckdb_value(lua_State *L, duckdb_result *result, idx_t col, idx_t row) {
+static void PushDuckdbValue(lua_State *L, duckdb_result *result, idx_t col, idx_t row) {
 if (duckdb_value_is_null(result, col, row)) {
 lua_pushnil(L);
 return;
@@ -100,7 +100,7 @@ break;
 }
 }
 
-static int bind_params_from_table(lua_State *L, LuaDuckDB *db, int tableIdx) {
+static int BindParamsFromTable(lua_State *L, LuaDuckDB *db, int tableIdx) {
 idx_t nparams = duckdb_nparams(db->stmt);
 for (idx_t n = 0; n < nparams; n++) {
 lua_rawgeti(L, tableIdx, (lua_Integer)(n + 1));
@@ -133,7 +133,7 @@ lua_pop(L, 1);
 return 0;
 }
 
-static int bind_params_from_function(lua_State *L, LuaDuckDB *db, int fnIdx) {
+static int BindParamsFromFunction(lua_State *L, LuaDuckDB *db, int fnIdx) {
 idx_t nparams = duckdb_nparams(db->stmt);
 for (idx_t n = 0; n < nparams; n++) {
 lua_pushvalue(L, fnIdx);
@@ -216,28 +216,28 @@ return luaL_error(L, "DuckDB instance has been closed");
 
 const char *query = luaL_checkstring(L, 2);
 
-DuckDB_FinalizeStmt(db);
+DuckDBFinalizeStmt(db);
 
 if (duckdb_prepare(db->con, query, &db->stmt) == DuckDBError) {
 const char *err = duckdb_prepare_error(db->stmt);
 lua_pop(L, lua_gettop(L));
 lua_pushboolean(L, 0);
 lua_pushstring(L, err ? err : "prepare error");
-DuckDB_FinalizeStmt(db);
+DuckDBFinalizeStmt(db);
 return 2;
 }
 
 if (lua_istable(L, 3))
-bind_params_from_table(L, db, 3);
+BindParamsFromTable(L, db, 3);
 else if (lua_isfunction(L, 3))
-bind_params_from_function(L, db, 3);
+BindParamsFromFunction(L, db, 3);
 
 if (duckdb_execute_prepared(db->stmt, &db->result) == DuckDBError) {
 const char *err = duckdb_result_error(&db->result);
 lua_pop(L, lua_gettop(L));
 lua_pushboolean(L, 0);
 lua_pushstring(L, err ? err : "execute error");
-DuckDB_FinalizeStmt(db);
+DuckDBFinalizeStmt(db);
 return 2;
 }
 
@@ -254,7 +254,7 @@ if (db->row_count > 0) {
 else {
 	lua_pushboolean(L, 1);
 	lua_pushstring(L, "DONE");
-	DuckDB_FinalizeStmt(db);
+	DuckDBFinalizeStmt(db);
 }
 
 return 2;
@@ -278,7 +278,7 @@ if (db->current_row <= db->row_count) {
 	return 1;
 }
 
-DuckDB_FinalizeStmt(db);
+DuckDBFinalizeStmt(db);
 lua_pushboolean(L, 0);
 return 1;
 }
@@ -304,7 +304,7 @@ lua_pop(L, lua_gettop(L));
 if ((idx_t)idx >= ncols)
 lua_pushnil(L);
 else
-push_duckdb_value(L, &db->result, (idx_t)idx, row);
+PushDuckdbValue(L, &db->result, (idx_t)idx, row);
 return 1;
 }
 
@@ -313,7 +313,7 @@ lua_pop(L, lua_gettop(L));
 lua_createtable(L, 0, (int)ncols);
 for (idx_t n = 0; n < ncols; n++) {
 lua_pushstring(L, duckdb_column_name(&db->result, n));
-push_duckdb_value(L, &db->result, n, row);
+PushDuckdbValue(L, &db->result, n, row);
 lua_settable(L, -3);
 }
 return 1;
@@ -321,13 +321,13 @@ return 1;
 
 int DuckDB_Finish(lua_State *L) {
 LuaDuckDB *db = luaL_checkduckdb(L, 1);
-DuckDB_FinalizeStmt(db);
+DuckDBFinalizeStmt(db);
 return 0;
 }
 
-int DuckDB_GC(lua_State *L) {
+int DuckDB_Close(lua_State *L) {
 LuaDuckDB *db = luaL_checkduckdb(L, 1);
-DuckDB_FinalizeStmt(db);
+DuckDBFinalizeStmt(db);
 if (db->con) {
 duckdb_disconnect(&db->con);
 db->con = NULL;

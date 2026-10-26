@@ -2,16 +2,16 @@
 #include "toml/LuaTomlMain.h"
 
 static const struct luaL_Reg toml_functions[] = {
-    { "New",     lua_toml_new    },  // Toml.New([pretty])
-    { "Decode",  lua_toml_decode },  // toml:Decode(str) -> table, or nil, errmsg
-    { "Encode",  lua_toml_encode },  // toml:Encode(table) -> str
-    { "Dispose", lua_toml_gc     },  // toml:Dispose()
+    { "New",     Toml_New    },  // Toml.New([pretty])
+    { "Decode",  Toml_Decode },  // toml:Decode(str) -> table, or nil, errmsg
+    { "Encode",  Toml_Encode },  // toml:Encode(table) -> str
+    { "Dispose", Toml_Dispose     },  // toml:Dispose()
     { NULL, NULL }
 };
 
 static const struct luaL_Reg toml_meta[] = {
-    { "__gc",       lua_toml_gc       },
-    { "__tostring", lua_toml_tostring },
+    { "__gc",       Toml_Dispose       },
+    { "__tostring", Toml_ToString },
     { NULL, NULL }
 };
 

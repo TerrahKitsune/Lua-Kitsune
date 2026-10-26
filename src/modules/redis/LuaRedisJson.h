@@ -9,43 +9,43 @@ typedef struct LuaRedisJson {
 	size_t      pathlen;
 } LuaRedisJson;
 
-LuaRedisJson* lua_toredisjon(lua_State* L, int index);
+LuaRedisJson* luaL_checkredisjson(lua_State* L, int index);
 int RedisPushJsonInternal(lua_State* L, int redisIdx, const char* rediskey, size_t rediskeylen, const char* path, size_t pathlen);
 
-int redisjson_gc(lua_State* L);
-int redisjson_tostring(lua_State* L);
-int redisjson_index(lua_State* L);
-int redisjson_newindex(lua_State* L);
-int redisjson_call(lua_State* L);
-int redisjson_get(lua_State* L);
-int redisjson_set(lua_State* L);
-int redisjson_delete(lua_State* L);
-int redisjson_type(lua_State* L);
-int redisjson_length(lua_State* L);
-int redisjson_pairs(lua_State* L);
+int RedisJson_GC(lua_State* L);
+int RedisJson_ToString(lua_State* L);
+int RedisJson_Index(lua_State* L);
+int RedisJson_NewIndex(lua_State* L);
+int RedisJson_Call(lua_State* L);
+int RedisJson_Get(lua_State* L);
+int RedisJson_Set(lua_State* L);
+int RedisJson_Delete(lua_State* L);
+int RedisJson_Type(lua_State* L);
+int RedisJson_Length(lua_State* L);
+int RedisJson_Pairs(lua_State* L);
 
 static const struct luaL_Reg redisjsonfunctions[] = {
-	{ "Get",    redisjson_get    },
-	{ "Set",    redisjson_set    },
-	{ "Delete", redisjson_delete },
-	{ "Type",   redisjson_type   },
-	{ "Length", redisjson_length },
-	{ "Pairs",  redisjson_pairs  },
+	{ "Get",    RedisJson_Get    },
+	{ "Set",    RedisJson_Set    },
+	{ "Delete", RedisJson_Delete },
+	{ "Type",   RedisJson_Type   },
+	{ "Length", RedisJson_Length },
+	{ "Pairs",  RedisJson_Pairs  },
 	{ NULL, NULL }
 };
 
 static const luaL_Reg redisjsonmeta[] = {
-	{ "__gc",       redisjson_gc       },
-	{ "__tostring", redisjson_tostring },
-	{ "__call",     redisjson_call     },
-	{ "__len",      redisjson_length   },
-	{ "__pairs",    redisjson_pairs    },
+	{ "__gc",       RedisJson_GC       },
+	{ "__tostring", RedisJson_ToString },
+	{ "__call",     RedisJson_Call     },
+	{ "__len",      RedisJson_Length   },
+	{ "__pairs",    RedisJson_Pairs    },
 	{ NULL, NULL }
 };
 
-static int internal_luaopen_redisjson(lua_State* L) {
+static int InternalLuaOpenRedisJson(lua_State* L) {
 
-	lua_pushcfunction(L, redisjson_index);
+	lua_pushcfunction(L, RedisJson_Index);
 
 	luaL_newmetatable(L, REDISJSON);
 	luaL_setfuncs(L, redisjsonmeta, 0);
@@ -55,7 +55,7 @@ static int internal_luaopen_redisjson(lua_State* L) {
 	lua_rawset(L, -3);
 
 	lua_pushliteral(L, "__newindex");
-	lua_pushcfunction(L, redisjson_newindex);
+	lua_pushcfunction(L, RedisJson_NewIndex);
 	lua_rawset(L, -3);
 
 	lua_pushliteral(L, "__metatable");

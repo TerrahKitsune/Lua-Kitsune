@@ -2,7 +2,7 @@
 #include "redis/LuaRedisKey.h"
 #include "json/LuaJson.h"
 
-LuaRedisValue* lua_toredisvalue(lua_State* L, int index) {
+LuaRedisValue* luaL_checkredisvalue(lua_State* L, int index) {
 	LuaRedisValue* val = (LuaRedisValue*)luaL_checkudata(L, index, REDISVALUE);
 	if (!val) {
 		luaL_error(L, "parameter is not a %s", REDISVALUE);
@@ -13,8 +13,8 @@ LuaRedisValue* lua_toredisvalue(lua_State* L, int index) {
 int InternalPushValue(lua_State* L, int index) {
 
 	if (lua_istable(L, index)) {
-		lua_pushcfunction(L, lua_json_encode);
-		lua_rawgetp(L, LUA_REGISTRYINDEX, lua_json_bridge_registry_key());
+		lua_pushcfunction(L, Json_Encode);
+		lua_rawgetp(L, LUA_REGISTRYINDEX, LuaJsonBridgeRegistryKey());
 		lua_pushvalue(L, lua_absindex(L, index));
 		if (lua_pcall_nohook(L, 2, 1, NULL)) {
 			lua_error(L);
@@ -35,15 +35,15 @@ int InternalPushValue(lua_State* L, int index) {
 	return 1;
 }
 
-int redisvalue_len(lua_State* L) {
+int RedisValue_Len(lua_State* L) {
 
-	LuaRedisValue* val = lua_toredisvalue(L, 1);
+	LuaRedisValue* val = luaL_checkredisvalue(L, 1);
 
 	if (val->type == REDIS_VALUE_TYPE_LIST) {
 
-		lua_pushredisref(L, &val->key);
+		PushRedisRef(L, &val->key);
 		lua_pushliteral(L, "LLEN");
-		lua_pushrediskey(L, &val->key);
+		PushRedisKeyName(L, &val->key);
 		LuaRedis* redis = RedisCommandInternal(L);
 		lua_pop(L, 3);
 
@@ -57,9 +57,9 @@ int redisvalue_len(lua_State* L) {
 			val->scan_cache_ref = LUA_NOREF;
 		}
 
-		lua_pushredisref(L, &val->key);
+		PushRedisRef(L, &val->key);
 		lua_pushliteral(L, "SCARD");
-		lua_pushrediskey(L, &val->key);
+		PushRedisKeyName(L, &val->key);
 		LuaRedis* redis = RedisCommandInternal(L);
 		lua_pop(L, 3);
 
@@ -73,9 +73,9 @@ int redisvalue_len(lua_State* L) {
 	return 1;
 }
 
-int redisvalue_iter(lua_State* L) {
+int RedisValueIter(lua_State* L) {
 
-	LuaRedisValue* val = lua_toredisvalue(L, 1);
+	LuaRedisValue* val = luaL_checkredisvalue(L, 1);
 	int type = val->type;
 
 	if (type == REDIS_VALUE_TYPE_HASHSET) {
@@ -107,9 +107,9 @@ int redisvalue_iter(lua_State* L) {
 
 			while (true) {
 
-				lua_pushredisref(L, key);
+				PushRedisRef(L, key);
 				lua_pushliteral(L, "HSCAN");
-				lua_pushrediskey(L, key);
+				PushRedisKeyName(L, key);
 				lua_pushstring(L, cursor);
 				lua_pushliteral(L, "COUNT");
 				lua_pushinteger(L, 1);
@@ -186,7 +186,7 @@ int redisvalue_iter(lua_State* L) {
 		lua_Integer idx = lua_tointeger(L, -1) + 1;
 		lua_pop(L, 1);
 		lua_pushinteger(L, idx);
-		redisvalue_index(L);
+		RedisValue_Index(L);
 
 		if (lua_isnil(L, -1)) {
 			lua_pop(L, 2);
@@ -205,9 +205,9 @@ int redisvalue_iter(lua_State* L) {
 		}
 
 		LuaRedisKey* key = &val->key;
-		lua_pushredisref(L, key);
+		PushRedisRef(L, key);
 		lua_pushliteral(L, "ZRANGE");
-		lua_pushrediskey(L, key);
+		PushRedisKeyName(L, key);
 		lua_pushvalue(L, -4);
 		lua_pushvalue(L, -5);
 		lua_pushliteral(L, "WITHSCORES");
@@ -257,18 +257,18 @@ int redisvalue_iter(lua_State* L) {
 	return 0;
 }
 
-int redisvalue_pairs(lua_State* L) {
+int RedisValue_Pairs(lua_State* L) {
 
 	lua_pushliteral(L, "0");
 	lua_pushnil(L);
 	lua_pushnil(L);
-	lua_pushcclosure(L, redisvalue_iter, 3);
+	lua_pushcclosure(L, RedisValueIter, 3);
 	lua_pushvalue(L, 1);
 	lua_pushnil(L);
 	return 3;
 }
 
-int push_redisvalue(lua_State* L, int redisIdx, int type, const char* key, size_t keylen) {
+int lua_pushredisvalue(lua_State* L, int redisIdx, int type, const char* key, size_t keylen) {
 
 	luaL_checkudata(L, redisIdx, REDIS);
 	redisIdx = lua_absindex(L, redisIdx);
@@ -295,27 +295,27 @@ int push_redisvalue(lua_State* L, int redisIdx, int type, const char* key, size_
 	return 1;
 }
 
-int redisvalue_call(lua_State* L) {
+int RedisValue_Call(lua_State* L) {
 
-	LuaRedisValue* val = lua_toredisvalue(L, 1);
-	lua_pushredisref(L, &val->key);
-	lua_createrediskey(L, -1, val->key.key, val->key.keylen);
+	LuaRedisValue* val = luaL_checkredisvalue(L, 1);
+	PushRedisRef(L, &val->key);
+	lua_pushrediskey(L, -1, val->key.key, val->key.keylen);
 	lua_remove(L, -2);
 	lua_pushinteger(L, val->type);
 	return 2;
 }
 
-int redisvalue_index(lua_State* L) {
+int RedisValue_Index(lua_State* L) {
 
-	LuaRedisValue* val = lua_toredisvalue(L, 1);
+	LuaRedisValue* val = luaL_checkredisvalue(L, 1);
 	LuaRedisKey* key = &val->key;
 	int type = val->type;
 
 	if (type == REDIS_VALUE_TYPE_HASHSET) {
 
-		lua_pushredisref(L, key);
+		PushRedisRef(L, key);
 		lua_pushliteral(L, "HGET");
-		lua_pushrediskey(L, key);
+		PushRedisKeyName(L, key);
 		lua_pushvalue(L, 2);
 		LuaRedis* redis = RedisCommandInternal(L);
 		lua_pop(L, 4);
@@ -332,17 +332,17 @@ int redisvalue_index(lua_State* L) {
 		int top = lua_gettop(L);
 
 		if (lua_isinteger(L, 2)) {
-			lua_pushredisref(L, key);
+			PushRedisRef(L, key);
 			lua_pushliteral(L, "ZRANGE");
-			lua_pushrediskey(L, key);
+			PushRedisKeyName(L, key);
 			lua_Integer idx = lua_tointeger(L, 2);
 			lua_pushinteger(L, idx - 1);
 			lua_pushinteger(L, idx - 1);
 		}
 		else if (lua_isstring(L, 2)) {
-			lua_pushredisref(L, key);
+			PushRedisRef(L, key);
 			lua_pushliteral(L, "ZMSCORE");
-			lua_pushrediskey(L, key);
+			PushRedisKeyName(L, key);
 			lua_pushvalue(L, 2);
 		}
 		else {
@@ -384,9 +384,9 @@ int redisvalue_index(lua_State* L) {
 		lua_Integer realIdx = idx > 0 ? idx - 1 : idx;
 
 		if (idx == 0) {
-			lua_pushredisref(L, key);
+			PushRedisRef(L, key);
 			lua_pushliteral(L, "LPOP");
-			lua_pushrediskey(L, key);
+			PushRedisKeyName(L, key);
 			LuaRedis* redis = RedisCommandInternal(L);
 			lua_pop(L, 3);
 			if (redis->reply->type == REDIS_REPLY_NIL) {
@@ -399,9 +399,9 @@ int redisvalue_index(lua_State* L) {
 		}
 		else {
 
-			lua_pushredisref(L, key);
+			PushRedisRef(L, key);
 			lua_pushliteral(L, "LINDEX");
-			lua_pushrediskey(L, key);
+			PushRedisKeyName(L, key);
 			lua_pushinteger(L, realIdx);
 			LuaRedis* redis = RedisCommandInternal(L);
 			lua_pop(L, 4);
@@ -427,14 +427,14 @@ int redisvalue_index(lua_State* L) {
 			}
 			else if (setidx <= 0) {
 
-				lua_pushredisref(L, key);
+				PushRedisRef(L, key);
 				if (setidx == 0) {
 					lua_pushliteral(L, "SRANDMEMBER");
 				}
 				else {
 					lua_pushliteral(L, "SPOP");
 				}
-				lua_pushrediskey(L, key);
+				PushRedisKeyName(L, key);
 				LuaRedis* redis = RedisCommandInternal(L);
 				lua_pop(L, 3);
 
@@ -460,9 +460,9 @@ int redisvalue_index(lua_State* L) {
 			if (setidx == 1 || len <= 0) {
 				lua_pop(L, 1);
 				lua_newtable(L);
-				lua_pushredisref(L, key);
+				PushRedisRef(L, key);
 				lua_pushliteral(L, "SSCAN");
-				lua_pushrediskey(L, key);
+				PushRedisKeyName(L, key);
 				lua_pushliteral(L, "0");
 				lua_pushliteral(L, "COUNT");
 				lua_pushliteral(L, "100");
@@ -519,9 +519,9 @@ int redisvalue_index(lua_State* L) {
 			return 0;
 		}
 		else {
-			lua_pushredisref(L, key);
+			PushRedisRef(L, key);
 			lua_pushliteral(L, "SISMEMBER");
-			lua_pushrediskey(L, key);
+			PushRedisKeyName(L, key);
 			lua_pushvalue(L, -4);
 			LuaRedis* redis = RedisCommandInternal(L);
 			lua_pop(L, 4);
@@ -539,26 +539,26 @@ int redisvalue_index(lua_State* L) {
 	return 1;
 }
 
-int redisvalue_newindex(lua_State* L) {
+int RedisValue_NewIndex(lua_State* L) {
 
-	LuaRedisValue* val = lua_toredisvalue(L, 1);
+	LuaRedisValue* val = luaL_checkredisvalue(L, 1);
 	LuaRedisKey* key = &val->key;
 	int type = val->type;
 
 	if (type == REDIS_VALUE_TYPE_HASHSET) {
 
 		if (lua_isnil(L, 3)) {
-			lua_pushredisref(L, key);
+			PushRedisRef(L, key);
 			lua_pushliteral(L, "HDEL");
-			lua_pushrediskey(L, key);
+			PushRedisKeyName(L, key);
 			lua_pushvalue(L, 2);
 			CleanReply(RedisCommandInternal(L));
 			lua_pop(L, 4);
 		}
 		else {
-			lua_pushredisref(L, key);
+			PushRedisRef(L, key);
 			lua_pushliteral(L, "HSET");
-			lua_pushrediskey(L, key);
+			PushRedisKeyName(L, key);
 			lua_pushvalue(L, 2);
 			InternalPushValue(L, 3);
 			CleanReply(RedisCommandInternal(L));
@@ -570,18 +570,18 @@ int redisvalue_newindex(lua_State* L) {
 	if (type == REDIS_VALUE_TYPE_SORTEDSET) {
 
 		if (lua_isnumber(L, 3)) {
-			lua_pushredisref(L, key);
+			PushRedisRef(L, key);
 			lua_pushliteral(L, "ZADD");
-			lua_pushrediskey(L, key);
+			PushRedisKeyName(L, key);
 			lua_pushvalue(L, 3);
 			lua_pushvalue(L, 2);
 			CleanReply(RedisCommandInternal(L));
 			lua_pop(L, 5);
 		}
 		else {
-			lua_pushredisref(L, key);
+			PushRedisRef(L, key);
 			lua_pushliteral(L, "ZREM");
-			lua_pushrediskey(L, key);
+			PushRedisKeyName(L, key);
 			lua_pushvalue(L, 2);
 			CleanReply(RedisCommandInternal(L));
 			lua_pop(L, 4);
@@ -591,7 +591,7 @@ int redisvalue_newindex(lua_State* L) {
 	}
 	else if (type == REDIS_VALUE_TYPE_SET) {
 
-		lua_pushredisref(L, key);
+		PushRedisRef(L, key);
 
 		if (lua_isnil(L, 3) || (lua_isboolean(L, 3) && !lua_toboolean(L, 3))) {
 			lua_pushliteral(L, "SREM");
@@ -600,7 +600,7 @@ int redisvalue_newindex(lua_State* L) {
 			lua_pushliteral(L, "SADD");
 		}
 
-		lua_pushrediskey(L, key);
+		PushRedisKeyName(L, key);
 		lua_pushvalue(L, 2);
 		CleanReply(RedisCommandInternal(L));
 		lua_pop(L, 4);
@@ -612,29 +612,29 @@ int redisvalue_newindex(lua_State* L) {
 	}
 	else if (type == REDIS_VALUE_TYPE_LIST) {
 
-		redisvalue_len(L);
+		RedisValue_Len(L);
 		int len = (int)lua_tointeger(L, -1);
 		lua_pop(L, 1);
 		lua_Integer idx = luaL_checkinteger(L, 2);
 		lua_Integer realIdx = idx > 0 ? idx - 1 : idx;
 
 		if (idx == 0 || abs(realIdx) >= len) {
-			lua_pushredisref(L, key);
+			PushRedisRef(L, key);
 			if (idx >= 0) {
 				lua_pushliteral(L, "RPUSH");
 			}
 			else {
 				lua_pushliteral(L, "LPUSH");
 			}
-			lua_pushrediskey(L, key);
+			PushRedisKeyName(L, key);
 			InternalPushValue(L, 3);
 			CleanReply(RedisCommandInternal(L));
 			lua_pop(L, 4);
 		}
 		else {
-			lua_pushredisref(L, key);
+			PushRedisRef(L, key);
 			lua_pushliteral(L, "LSET");
-			lua_pushrediskey(L, key);
+			PushRedisKeyName(L, key);
 			lua_pushinteger(L, realIdx);
 			InternalPushValue(L, 3);
 			CleanReply(RedisCommandInternal(L));
@@ -649,9 +649,9 @@ int redisvalue_newindex(lua_State* L) {
 	return 0;
 }
 
-int redisvalue_gc(lua_State* L) {
+int RedisValue_GC(lua_State* L) {
 
-	LuaRedisValue* val = lua_toredisvalue(L, 1);
+	LuaRedisValue* val = luaL_checkredisvalue(L, 1);
 	CleanRedisKey(L, &val->key);
 	if (val->scan_cache_ref != LUA_NOREF) {
 		luaL_unref(L, LUA_REGISTRYINDEX, val->scan_cache_ref);
@@ -660,9 +660,9 @@ int redisvalue_gc(lua_State* L) {
 	return 0;
 }
 
-int redisvalue_tostring(lua_State* L) {
+int RedisValue_ToString(lua_State* L) {
 
-	LuaRedisValue* val = lua_toredisvalue(L, 1);
+	LuaRedisValue* val = luaL_checkredisvalue(L, 1);
 
 	switch (val->type) {
 	case REDIS_VALUE_TYPE_HASHSET:   lua_pushfstring(L, "RedisValue: hash (%s)",      val->key.key); break;

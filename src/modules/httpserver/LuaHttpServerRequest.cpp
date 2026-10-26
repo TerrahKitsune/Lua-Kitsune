@@ -16,7 +16,7 @@ LuaHttpRequest* lua_pushhttprequest(lua_State* L) {
     return r;
 }
 
-LuaHttpRequest* lua_checkhttprequest(lua_State* L, int idx) {
+LuaHttpRequest* luaL_checkhttprequest(lua_State* L, int idx) {
     LuaHttpRequest* r = (LuaHttpRequest*)luaL_checkudata(L, idx, LUAHTTPREQUEST);
     if (!r)
         luaL_error(L, "parameter is not a %s", LUAHTTPREQUEST);
@@ -33,7 +33,7 @@ LuaHttpResponse* lua_pushhttpresponse(lua_State* L) {
     return r;
 }
 
-LuaHttpResponse* lua_checkhttpresponse(lua_State* L, int idx) {
+LuaHttpResponse* luaL_checkhttpresponse(lua_State* L, int idx) {
     LuaHttpResponse* r = (LuaHttpResponse*)luaL_checkudata(L, idx, LUAHTTPRESPONSE);
     if (!r)
         luaL_error(L, "parameter is not a %s", LUAHTTPRESPONSE);
@@ -42,14 +42,14 @@ LuaHttpResponse* lua_checkhttpresponse(lua_State* L, int idx) {
 
 /* ── defensive helpers ────────────────────────────────────────────────────── */
 
-static void safe_free(char** p) {
+static void SafeFree(char** p) {
     if (*p) {
         free(*p);
         *p = NULL;
     }
 }
 
-static void safe_unref(lua_State* L, int* ref) {
+static void SafeUnref(lua_State* L, int* ref) {
     if (*ref != LUA_NOREF) {
         luaL_unref(L, LUA_REGISTRYINDEX, *ref);
         *ref = LUA_NOREF;
@@ -59,25 +59,25 @@ static void safe_unref(lua_State* L, int* ref) {
 /* ── request methods ──────────────────────────────────────────────────────── */
 
 int HttpRequest_GetId(lua_State* L) {
-    LuaHttpRequest* r = lua_checkhttprequest(L, 1);
+    LuaHttpRequest* r = luaL_checkhttprequest(L, 1);
     lua_pushinteger(L, (lua_Integer)(uintptr_t)r->req);
     return 1;
 }
 
 int HttpRequest_GetUrl(lua_State* L) {
-    LuaHttpRequest* r = lua_checkhttprequest(L, 1);
+    LuaHttpRequest* r = luaL_checkhttprequest(L, 1);
     lua_pushstring(L, r->url ? r->url : "");
     return 1;
 }
 
 int HttpRequest_GetMethod(lua_State* L) {
-    LuaHttpRequest* r = lua_checkhttprequest(L, 1);
+    LuaHttpRequest* r = luaL_checkhttprequest(L, 1);
     lua_pushstring(L, r->method ? r->method : "");
     return 1;
 }
 
 int HttpRequest_GetHeaders(lua_State* L) {
-    LuaHttpRequest* r = lua_checkhttprequest(L, 1);
+    LuaHttpRequest* r = luaL_checkhttprequest(L, 1);
     if (r->headers_ref != LUA_NOREF) {
         lua_rawgeti(L, LUA_REGISTRYINDEX, r->headers_ref);
     } else {
@@ -87,7 +87,7 @@ int HttpRequest_GetHeaders(lua_State* L) {
 }
 
 int HttpRequest_GetIp(lua_State* L) {
-    LuaHttpRequest* r = lua_checkhttprequest(L, 1);
+    LuaHttpRequest* r = luaL_checkhttprequest(L, 1);
     if (!r->req) {
         lua_pushstring(L, "");
         return 1;
@@ -111,13 +111,13 @@ int HttpRequest_GetIp(lua_State* L) {
 }
 
 int HttpRequest_IsFinished(lua_State* L) {
-    LuaHttpRequest* r = lua_checkhttprequest(L, 1);
+    LuaHttpRequest* r = luaL_checkhttprequest(L, 1);
     lua_pushboolean(L, r->is_finished);
     return 1;
 }
 
 int HttpRequest_GetBody(lua_State* L) {
-    LuaHttpRequest* r = lua_checkhttprequest(L, 1);
+    LuaHttpRequest* r = luaL_checkhttprequest(L, 1);
     if (r->body && r->body_len > 0) {
         lua_pushlstring(L, r->body, r->body_len);
     } else {
@@ -127,7 +127,7 @@ int HttpRequest_GetBody(lua_State* L) {
 }
 
 int HttpRequest_GetContext(lua_State* L) {
-    LuaHttpRequest* r = lua_checkhttprequest(L, 1);
+    LuaHttpRequest* r = luaL_checkhttprequest(L, 1);
     if (r->context_ref == LUA_NOREF) {
         lua_newtable(L);
         lua_pushvalue(L, -1);
@@ -139,7 +139,7 @@ int HttpRequest_GetContext(lua_State* L) {
 }
 
 int HttpRequest_GetResponse(lua_State* L) {
-    LuaHttpRequest* r = lua_checkhttprequest(L, 1);
+    LuaHttpRequest* r = luaL_checkhttprequest(L, 1);
     if (r->response_ref == LUA_NOREF)
         luaL_error(L, "HttpRequest: no response object");
     lua_rawgeti(L, LUA_REGISTRYINDEX, r->response_ref);
@@ -147,7 +147,7 @@ int HttpRequest_GetResponse(lua_State* L) {
 }
 
 int HttpRequest_GetError(lua_State* L) {
-    LuaHttpRequest* r = lua_checkhttprequest(L, 1);
+    LuaHttpRequest* r = luaL_checkhttprequest(L, 1);
     if (r->is_error && r->error_msg) {
         lua_pushstring(L, r->error_msg);
     } else {
@@ -156,14 +156,14 @@ int HttpRequest_GetError(lua_State* L) {
     return 1;
 }
 
-void HttpRequest_Cleanup(lua_State* L, LuaHttpRequest* r) {
-    safe_free(&r->url);
-    safe_free(&r->method);
+void HttpRequestCleanup(lua_State* L, LuaHttpRequest* r) {
+    SafeFree(&r->url);
+    SafeFree(&r->method);
     // body is allocated via kitsune_malloc, not strdup — must match
     kitsune_free(r->body);
     r->body = NULL;
-    safe_free(&r->error_msg);
-    safe_unref(L, &r->headers_ref);
+    SafeFree(&r->error_msg);
+    SafeUnref(L, &r->headers_ref);
 
     /* Teardown response before releasing its ref — mirrors build order */
     if (r->response_ref != LUA_NOREF) {
@@ -171,11 +171,11 @@ void HttpRequest_Cleanup(lua_State* L, LuaHttpRequest* r) {
         LuaHttpResponse* resp = (LuaHttpResponse*)lua_touserdata(L, -1);
         lua_pop(L, 1);
         if (resp)
-            HttpResponse_Cleanup(L, resp);
-        safe_unref(L, &r->response_ref);
+            HttpResponseCleanup(L, resp);
+        SafeUnref(L, &r->response_ref);
     }
 
-    safe_unref(L, &r->context_ref);
+    SafeUnref(L, &r->context_ref);
 
     /* Do NOT call evhttp_request_free here.
        Send paths null r->req immediately so evhttp_send_done handles the free.
@@ -187,13 +187,13 @@ void HttpRequest_Cleanup(lua_State* L, LuaHttpRequest* r) {
 }
 
 int HttpRequest_GC(lua_State* L) {
-    LuaHttpRequest* r = lua_checkhttprequest(L, 1);
-    HttpRequest_Cleanup(L, r);
+    LuaHttpRequest* r = luaL_checkhttprequest(L, 1);
+    HttpRequestCleanup(L, r);
     return 0;
 }
 
 int HttpRequest_ToString(lua_State* L) {
-    LuaHttpRequest* r = lua_checkhttprequest(L, 1);
+    LuaHttpRequest* r = luaL_checkhttprequest(L, 1);
     lua_pushfstring(L, "HttpRequest(%s %s)",
         r->method ? r->method : "?",
         r->url    ? r->url    : "?");
@@ -202,20 +202,20 @@ int HttpRequest_ToString(lua_State* L) {
 
 /* ── response cleanup / gc / tostring ────────────────────────────────────── */
 
-void HttpResponse_Cleanup(lua_State* L, LuaHttpResponse* r) {
+void HttpResponseCleanup(lua_State* L, LuaHttpResponse* r) {
     r->connection = NULL;
     r->stream     = NULL;
-    safe_unref(L, &r->stream_ref);
+    SafeUnref(L, &r->stream_ref);
 }
 
 int HttpResponse_GC(lua_State* L) {
-    LuaHttpResponse* r = lua_checkhttpresponse(L, 1);
-    HttpResponse_Cleanup(L, r);
+    LuaHttpResponse* r = luaL_checkhttpresponse(L, 1);
+    HttpResponseCleanup(L, r);
     return 0;
 }
 
 int HttpResponse_ToString(lua_State* L) {
-    LuaHttpResponse* r = lua_checkhttpresponse(L, 1);
+    LuaHttpResponse* r = luaL_checkhttpresponse(L, 1);
     lua_pushfstring(L, "HttpResponse(%s)", r->finalized ? "finalized" : "open");
     return 1;
 }

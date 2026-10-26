@@ -4,31 +4,31 @@
 
 int luaopen_tasks(lua_State* L) {
     static const struct luaL_Reg taskfunctions[] = {
-        { "New",             task_new             },
-        { "Open",            task_open            },
-        { "Resume",          task_resume          },
-        { "Cancel",          task_cancel          },
-        { "Dispose",         task_gc              },
-        { "GetId",           task_getid           },
-        { "GetStatus",       task_getstatus       },
-        { "SetName",         task_setname         },
-        { "GetName",         task_getname         },
-        { "Finished",        task_finished        },
-        { "Wait",            task_wait            },
-        { "GetError",        task_geterror        },
-        { "GetResult",       task_getresult       },
-        { "ConsumeResult",   task_consumeresult   },
-        { "GetAllIds",       task_getallids       },
-        { "SetErrorHandler", task_seterrorhandler },
-        { "GetCurrentId",    task_getcurrentid    },
-        { "OnError",         task_onerror         },
-        { "ActiveCount",     task_activecount     },
-        { "GetIdByName",     task_getidbyname     },
+        { "New",             Tasks_New             },
+        { "Open",            Tasks_Open            },
+        { "Resume",          Tasks_Resume          },
+        { "Cancel",          Tasks_Cancel          },
+        { "Dispose",         Tasks_Dispose              },
+        { "GetId",           Tasks_GetId          },
+        { "GetStatus",       Tasks_GetStatus       },
+        { "SetName",         Tasks_SetName         },
+        { "GetName",         Tasks_GetName         },
+        { "Finished",        Tasks_Finished        },
+        { "Wait",            Tasks_Wait            },
+        { "GetError",        Tasks_GetError        },
+        { "GetResult",       Tasks_GetResult       },
+        { "ConsumeResult",   Tasks_ConsumeResult   },
+        { "GetAllIds",       Tasks_GetAllIds       },
+        { "SetErrorHandler", Tasks_SetErrorHandler },
+        { "GetCurrentId",    Tasks_GetCurrentId    },
+        { "OnError",         Tasks_OnError         },
+        { "ActiveCount",     Tasks_ActiveCount     },
+        { "GetIdByName",     Tasks_GetIdByName     },
         { NULL, NULL }
     };
     static const struct luaL_Reg taskmeta[] = {
-        { "__gc",       task_gc       },
-        { "__tostring", task_tostring },
+        { "__gc",       Tasks_Dispose       },
+        { "__tostring", Tasks_ToString },
         { NULL, NULL }
     };
     luaL_newlibtable(L, taskfunctions);

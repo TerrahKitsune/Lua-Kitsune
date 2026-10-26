@@ -1,6 +1,6 @@
 ﻿#include "KitsuneUserdata.h"
 
-bool lua_registerkitsuneuserdata(lua_State* L, const char* name, const KitsuneUserDataRegistration* registration, lua_CFunction cfunctionWrapper, void (*pushGCHook)(lua_State*, void*, kitsune_Finalizer)) {
+bool RegisterKitsuneUserdata(lua_State* L, const char* name, const KitsuneUserDataRegistration* registration, lua_CFunction cfunctionWrapper, void (*pushGCHook)(lua_State*, void*, kitsune_Finalizer)) {
 	if (!L || !name || !registration || !cfunctionWrapper)
 		return false;
 
@@ -41,7 +41,7 @@ bool lua_registerkitsuneuserdata(lua_State* L, const char* name, const KitsuneUs
 	// FillKitsuneVariableFromStack checks for it to distinguish Kitsune-registered
 	// userdatas (which expose their instance pointer) from foreign userdatas.
 	lua_pushliteral(L, "__kitsune_userdata");
-	lua_pushlightuserdata(L, (void*)lua_registerkitsuneuserdata);
+	lua_pushlightuserdata(L, (void*)RegisterKitsuneUserdata);
 	lua_rawset(L, meta_idx);
 
 	// Build the methods table and set it as __index so obj:Method() works.

@@ -30,7 +30,7 @@
 // ── PDH helper: expand a wildcard counter path into all instance paths ────────
 // Returns an array of null-terminated strings in *out (caller must free).
 // *count is set to the number of strings found.
-static PDH_STATUS pdh_expand_wildcards(const char* path, char** out, DWORD* count)
+static PDH_STATUS PdhExpandWildcards(const char* path, char** out, DWORD* count)
 {
     DWORD bufsz = 0;
     PDH_STATUS st = PdhExpandCounterPathA(path, NULL, &bufsz);
@@ -62,11 +62,11 @@ static PDH_STATUS pdh_expand_wildcards(const char* path, char** out, DWORD* coun
 typedef struct { char name[256]; double value; } PdhSample;
 
 // Snapshot counter (e.g. Temperature): one collect, no sleep.
-static int pdh_sample_snapshot(const char* wildcard, PdhSample** samplesOut, int* nOut)
+static int PdhSampleSnapshot(const char* wildcard, PdhSample** samplesOut, int* nOut)
 {
     char* paths = NULL;
     DWORD count = 0;
-    if (pdh_expand_wildcards(wildcard, &paths, &count) != ERROR_SUCCESS || count == 0)
+    if (PdhExpandWildcards(wildcard, &paths, &count) != ERROR_SUCCESS || count == 0)
         return 0;
 
     PdhSample* samples = (PdhSample*)kitsune_calloc(count, sizeof(PdhSample));
@@ -132,7 +132,7 @@ static int pdh_sample_snapshot(const char* wildcard, PdhSample** samplesOut, int
 // query alive we use the OS's own measurement window instead of sleeping.
 typedef struct { char name[256]; PDH_HCOUNTER ctr; } PdhCoreEntry;
 
-static PdhSample* pdh_collect_core_load(int* nOut)
+static PdhSample* PdhCollectCoreLoad(int* nOut)
 {
     static PDH_HQUERY  s_query   = NULL;
     static PdhCoreEntry* s_cores = NULL;
@@ -143,7 +143,7 @@ static PdhSample* pdh_collect_core_load(int* nOut)
     if (!s_ready) {
         char* paths = NULL;
         DWORD count = 0;
-        if (pdh_expand_wildcards(
+        if (PdhExpandWildcards(
                 "\\Processor Information(*)\\% Processor Time",
                 &paths, &count) != ERROR_SUCCESS || count == 0)
             return NULL;
@@ -218,7 +218,7 @@ static PdhSample* pdh_collect_core_load(int* nOut)
 // ── Convert a raw PDH thermal zone value (tenths of Kelvin) to Celsius ────────
 // Both "Temperature" and "High Precision Temperature" counters use this unit.
 // Returns false when the value is below 200 K (uninitialized / zero / garbage).
-static bool pdh_kelvin_to_celsius(double raw, double* out)
+static bool PdhKelvinToCelsius(double raw, double* out)
 {
     if (raw < 2000.0)
         return false;
@@ -231,7 +231,7 @@ static bool pdh_kelvin_to_celsius(double raw, double* out)
 // back to "Temperature". Both counters are snapshots — one collect, no sleep.
 // Returns heap-allocated samples that the caller must free(); *nOut is the
 // number of valid (>= 200 K) entries already filtered and converted to Celsius.
-static PdhSample* pdh_collect_thermal_zones(int* nOut)
+static PdhSample* PdhCollectThermalZones(int* nOut)
 {
     static const char* counters[] = {
         "\\Thermal Zone Information(*)\\High Precision Temperature",
@@ -242,7 +242,7 @@ static PdhSample* pdh_collect_thermal_zones(int* nOut)
     for (int c = 0; counters[c]; c++) {
         PdhSample* raw = NULL;
         int n = 0;
-        if (!pdh_sample_snapshot(counters[c], &raw, &n) || n == 0) {
+        if (!PdhSampleSnapshot(counters[c], &raw, &n) || n == 0) {
             free(raw);
             continue;
         }
@@ -250,7 +250,7 @@ static PdhSample* pdh_collect_thermal_zones(int* nOut)
         int valid = 0;
         for (int i = 0; i < n; i++) {
             double celsius;
-            if (pdh_kelvin_to_celsius(raw[i].value, &celsius)) {
+            if (PdhKelvinToCelsius(raw[i].value, &celsius)) {
                 raw[valid] = raw[i];
                 raw[valid].value = celsius;
                 valid++;
@@ -271,10 +271,10 @@ static PdhSample* pdh_collect_thermal_zones(int* nOut)
 // ── CPU temperature ───────────────────────────────────────────────────────────
 // Returns an array of tables: { {Name="TZ00", Value=46.8}, ... }
 // Returns nil when no valid thermal zones are found.
-int hardware_cpu_temp(lua_State* L)
+int Hardware_CpuTemp(lua_State* L)
 {
     int n = 0;
-    PdhSample* samples = pdh_collect_thermal_zones(&n);
+    PdhSample* samples = PdhCollectThermalZones(&n);
 
     if (!samples || n == 0) {
         kitsune_free(samples);
@@ -299,10 +299,10 @@ int hardware_cpu_temp(lua_State* L)
 // ── Per-hardware-thread CPU load
 // Returns {["0,0"] = 12.5, ["0,1"] = 8.0, ...} — persistent PDH query,
 // no sleep needed between calls.
-int hardware_cpu_threads_load(lua_State* L)
+int Hardware_CpuThreadsLoad(lua_State* L)
 {
     int n = 0;
-    PdhSample* samples = pdh_collect_core_load(&n);
+    PdhSample* samples = PdhCollectCoreLoad(&n);
 
     lua_newtable(L);
     if (samples) {
@@ -318,7 +318,7 @@ int hardware_cpu_threads_load(lua_State* L)
 }
 
 // ── CPU load via PDH
-int hardware_cpu_load(lua_State* L)
+int Hardware_CpuLoad(lua_State* L)
 {
     static PDH_HQUERY query = NULL;
     static PDH_HCOUNTER counter = NULL;
@@ -352,7 +352,7 @@ int hardware_cpu_load(lua_State* L)
 }
 
 // ── Memory info ───────────────────────────────────────────────────────────────
-int hardware_memory(lua_State* L)
+int Hardware_Memory(lua_State* L)
 {
     MEMORYSTATUSEX ms = {};
     ms.dwLength = sizeof(ms);
@@ -382,7 +382,7 @@ int hardware_memory(lua_State* L)
 }
 
 // ── CPU brand string via CPUID ────────────────────────────────────────────────
-int hardware_cpu_name(lua_State* L)
+int Hardware_CpuName(lua_State* L)
 {
     char brand[49] = {};
     int info[4] = {};
@@ -409,7 +409,7 @@ int hardware_cpu_name(lua_State* L)
 // ── Battery info via GetSystemPowerStatus ─────────────────────────────────────
 // Returns a table: { Percent, Charging, ACLine, TimeRemaining }
 // or nil if no battery is present.
-int hardware_battery(lua_State* L)
+int Hardware_Battery(lua_State* L)
 {
     SYSTEM_POWER_STATUS sps = {};
     if (!GetSystemPowerStatus(&sps)) {
@@ -463,7 +463,7 @@ int hardware_battery(lua_State* L)
 //   pid_1234_luid_0x00000000_0x000172E4_phys_0_eng_0_engtype_3d
 // Writes the canonical "0x00000000_0x000172E4" string into out (must be >= 32).
 // Returns true on success.
-static bool pdh_parse_luid(const char* instance, char* out, size_t outsz)
+static bool PdhParseLuid(const char* instance, char* out, size_t outsz)
 {
     const char* p = strstr(instance, "luid_");
     if (!p)
@@ -492,7 +492,7 @@ static bool pdh_parse_luid(const char* instance, char* out, size_t outsz)
 //   pid_..._engtype_3d  →  "3d"
 //   pid_..._engtype_copy  →  "copy"
 // Writes into out (must be >= 64). Returns true on success.
-static bool pdh_parse_engtype(const char* instance, char* out, size_t outsz)
+static bool PdhParseEngtype(const char* instance, char* out, size_t outsz)
 {
     const char* p = strstr(instance, "engtype_");
     if (!p)
@@ -511,7 +511,7 @@ static bool pdh_parse_engtype(const char* instance, char* out, size_t outsz)
 // Map a LUID string "0x00000000_0xNNNNNNNN" to a friendly adapter name via
 // EnumDisplayDevices + DXGI.  Falls back to the luid string itself on failure.
 // The LUID from PDH is the DXGI adapter LUID split into high/low 32-bit words.
-static void pdh_luid_to_adapter_name(const char* luid_str, char* out, size_t outsz)
+static void PdhLuidToAdapterName(const char* luid_str, char* out, size_t outsz)
 {
     // Parse the two hex words
     unsigned long hi = 0, lo = 0;
@@ -603,7 +603,7 @@ static void pdh_luid_to_adapter_name(const char* luid_str, char* out, size_t out
 //     SharedUsageMB    = 348,
 //     TotalCommittedMB = 3816,
 // }, ... }
-int hardware_gpu_memory(lua_State* L)
+int Hardware_GpuMemory(lua_State* L)
 {
     // Three snapshot counters, all per adapter (luid_..._phys_0)
     static const char* const mem_counters[] = {
@@ -624,18 +624,18 @@ int hardware_gpu_memory(lua_State* L)
     for (int ci = 0; mem_counters[ci]; ci++) {
         PdhSample* samples = NULL;
         int n = 0;
-        if (!pdh_sample_snapshot(mem_counters[ci], &samples, &n)) {
+        if (!PdhSampleSnapshot(mem_counters[ci], &samples, &n)) {
             kitsune_free(samples);
             continue;
         }
         for (int i = 0; i < n; i++) {
             char luid[64] = {};
-            if (!pdh_parse_luid(samples[i].name, luid, sizeof(luid)))
+            if (!PdhParseLuid(samples[i].name, luid, sizeof(luid)))
                 continue;
 
             // Get or create the adapter sub-table, keyed by friendly name
             char adapterName[256] = {};
-            pdh_luid_to_adapter_name(luid, adapterName, sizeof(adapterName));
+            PdhLuidToAdapterName(luid, adapterName, sizeof(adapterName));
 
             // Check if key already exists in result table
             lua_getfield(L, -1, adapterName);
@@ -664,7 +664,7 @@ int hardware_gpu_memory(lua_State* L)
 //     ...
 // }, ... }
 // Uses a persistent PDH query so no sleep is needed between calls.
-int hardware_gpu_load(lua_State* L)
+int Hardware_GpuLoad(lua_State* L)
 {
     // --- persistent query state ---
     typedef struct {
@@ -681,7 +681,7 @@ int hardware_gpu_load(lua_State* L)
     if (!s_ready) {
         char* paths = NULL;
         DWORD count = 0;
-        if (pdh_expand_wildcards(
+        if (PdhExpandWildcards(
                 "\\GPU Engine(*)\\Utilization Percentage",
                 &paths, &count) != ERROR_SUCCESS || count == 0) {
             kitsune_free(paths);
@@ -717,8 +717,8 @@ int hardware_gpu_load(lua_State* L)
                     memcpy(instance, open + 1, ilen);
                     char luid[64] = {};
                     char eng[64]  = {};
-                    if (pdh_parse_luid(instance, luid, sizeof(luid)) &&
-                        pdh_parse_engtype(instance, eng, sizeof(eng))) {
+                    if (PdhParseLuid(instance, luid, sizeof(luid)) &&
+                        PdhParseEngtype(instance, eng, sizeof(eng))) {
                         strncpy(s_entries[kept].luid,    luid, 63);
                         strncpy(s_entries[kept].engtype, eng,  63);
                         PdhAddCounterA(s_query, p, 0, &s_entries[kept].ctr);
@@ -777,7 +777,7 @@ int hardware_gpu_load(lua_State* L)
 
     for (int j = 0; j < nagg; j++) {
         char adapterName[256] = {};
-        pdh_luid_to_adapter_name(agg[j].luid, adapterName, sizeof(adapterName));
+        PdhLuidToAdapterName(agg[j].luid, adapterName, sizeof(adapterName));
 
         lua_getfield(L, -1, adapterName);
         if (lua_isnil(L, -1)) {
@@ -799,7 +799,7 @@ int hardware_gpu_load(lua_State* L)
 // ── Disk I/O throughput per physical disk ────────────────────────────────────
 // Returns { ["0 C: D:"] = { ReadBytesPerSec=..., WriteBytesPerSec=..., ActivePercent=... }, ... }
 // Uses a persistent PDH query — no sleep needed between calls.
-int hardware_disk_io(lua_State* L)
+int Hardware_DiskIO(lua_State* L)
 {
     typedef struct {
         char         name[256];
@@ -816,7 +816,7 @@ int hardware_disk_io(lua_State* L)
     if (!s_ready) {
         char* paths = NULL;
         DWORD count = 0;
-        if (pdh_expand_wildcards(
+        if (PdhExpandWildcards(
                 "\\PhysicalDisk(*)\\Disk Read Bytes/sec",
                 &paths, &count) != ERROR_SUCCESS || count == 0) {
             kitsune_free(paths);
@@ -914,7 +914,7 @@ int hardware_disk_io(lua_State* L)
 // ── Network I/O throughput per adapter ───────────────────────────────────────
 // Returns { ["Ethernet"] = { RecvBytesPerSec=..., SendBytesPerSec=..., TotalBytesPerSec=... }, ... }
 // Uses a persistent PDH query — no sleep needed between calls.
-int hardware_network_io(lua_State* L)
+int Hardware_NetworkIO(lua_State* L)
 {
     typedef struct {
         char         name[256];
@@ -930,7 +930,7 @@ int hardware_network_io(lua_State* L)
     if (!s_ready) {
         char* paths = NULL;
         DWORD count = 0;
-        if (pdh_expand_wildcards(
+        if (PdhExpandWildcards(
                 "\\Network Interface(*)\\Bytes Received/sec",
                 &paths, &count) != ERROR_SUCCESS || count == 0) {
             kitsune_free(paths);
@@ -1020,7 +1020,7 @@ int hardware_network_io(lua_State* L)
 #else
 
 // Helper: read a single integer from a sysfs file (e.g. /sys/class/hwmon/.../temp1_input)
-static int sysfs_read_int(const char* path, long long* out)
+static int SysfsReadInt(const char* path, long long* out)
 {
     FILE* f = fopen(path, "r");
     if (!f)
@@ -1031,7 +1031,7 @@ static int sysfs_read_int(const char* path, long long* out)
 }
 
 // Helper: read a string from a sysfs file (e.g. name, label)
-static int sysfs_read_str(const char* path, char* buf, size_t bufsz)
+static int SysfsReadStr(const char* path, char* buf, size_t bufsz)
 {
     FILE* f = fopen(path, "r");
     if (!f)
@@ -1049,7 +1049,7 @@ static int sysfs_read_str(const char* path, char* buf, size_t bufsz)
 }
 
 // ── CPU temperature: first temperature sensor from hwmon that looks like CPU ─
-int hardware_cpu_temp(lua_State* L)
+int Hardware_CpuTemp(lua_State* L)
 {
     // Look through hwmon devices for a chip named "coretemp" or "k10temp" (AMD)
     // or "zenpower", then collect all temp*_input values.
@@ -1070,7 +1070,7 @@ int hardware_cpu_temp(lua_State* L)
         char namepath[512];
         snprintf(namepath, sizeof(namepath), "/sys/class/hwmon/%s/name", ent->d_name);
         char chipname[64] = {};
-        if (!sysfs_read_str(namepath, chipname, sizeof(chipname)))
+        if (!SysfsReadStr(namepath, chipname, sizeof(chipname)))
             continue;
 
         // Only CPU temperature chips
@@ -1085,7 +1085,7 @@ int hardware_cpu_temp(lua_State* L)
             char inp[512];
             snprintf(inp, sizeof(inp), "/sys/class/hwmon/%s/temp%d_input", ent->d_name, i);
             long long raw = 0;
-            if (!sysfs_read_int(inp, &raw))
+            if (!SysfsReadInt(inp, &raw))
                 break;
             // sysfs reports millidegrees Celsius
             double celsius = raw / 1000.0;
@@ -1124,7 +1124,7 @@ static const SensorKind sensor_kinds[] = {
 
 // ── Per-hardware-thread CPU load from /proc/stat
 // Returns {["cpu0"] = 12.5, ["cpu1"] = 8.0, ...}
-int hardware_cpu_threads_load(lua_State* L)
+int Hardware_CpuThreadsLoad(lua_State* L)
 {
     // Static arrays for per-cpu delta computation.
     static long long prev_idle[512]  = {};
@@ -1186,7 +1186,7 @@ int hardware_cpu_threads_load(lua_State* L)
 
 
 // ── CPU load via /proc/stat ───────────────────────────────────────────────────
-int hardware_cpu_load(lua_State* L)
+int Hardware_CpuLoad(lua_State* L)
 {
     // We need two samples to compute a delta; use static state.
     static long long prev_idle = 0, prev_total = 0;
@@ -1232,7 +1232,7 @@ int hardware_cpu_load(lua_State* L)
 }
 
 // ── Memory info via /proc/meminfo ─────────────────────────────────────────────
-int hardware_memory(lua_State* L)
+int Hardware_Memory(lua_State* L)
 {
     FILE* f = fopen("/proc/meminfo", "r");
     if (!f) {
@@ -1279,7 +1279,7 @@ int hardware_memory(lua_State* L)
 }
 
 // ── CPU brand string via /proc/cpuinfo ───────────────────────────────────────
-int hardware_cpu_name(lua_State* L)
+int Hardware_CpuName(lua_State* L)
 {
     FILE* f = fopen("/proc/cpuinfo", "r");
     if (!f) {
@@ -1311,7 +1311,7 @@ int hardware_cpu_name(lua_State* L)
 }
 
 // ── Battery info via /sys/class/power_supply/ ─────────────────────────────────
-int hardware_battery(lua_State* L)
+int Hardware_Battery(lua_State* L)
 {
     // Find the first battery device (type == "Battery")
     DIR* d = opendir("/sys/class/power_supply");
@@ -1328,7 +1328,7 @@ int hardware_battery(lua_State* L)
         char typepath[512];
         snprintf(typepath, sizeof(typepath), "/sys/class/power_supply/%s/type", ent->d_name);
         char type[32] = {};
-        if (sysfs_read_str(typepath, type, sizeof(type)) && strcmp(type, "Battery") == 0) {
+        if (SysfsReadStr(typepath, type, sizeof(type)) && strcmp(type, "Battery") == 0) {
             snprintf(batpath, sizeof(batpath), "/sys/class/power_supply/%s", ent->d_name);
             break;
         }
@@ -1346,7 +1346,7 @@ int hardware_battery(lua_State* L)
     char cappath[512];
     snprintf(cappath, sizeof(cappath), "%s/capacity", batpath);
     long long cap = 0;
-    if (sysfs_read_int(cappath, &cap)) {
+    if (SysfsReadInt(cappath, &cap)) {
         lua_pushinteger(L, (lua_Integer)cap);
         lua_setfield(L, -2, "Percent");
     }
@@ -1359,7 +1359,7 @@ int hardware_battery(lua_State* L)
     char statuspath[512];
     snprintf(statuspath, sizeof(statuspath), "%s/status", batpath);
     char status[64] = {};
-    sysfs_read_str(statuspath, status, sizeof(status));
+    SysfsReadStr(statuspath, status, sizeof(status));
 
     lua_pushboolean(L, strcmp(status, "Charging") == 0 || strcmp(status, "Full") == 0);
     lua_setfield(L, -2, "ACLine");
@@ -1372,7 +1372,7 @@ int hardware_battery(lua_State* L)
     snprintf(enpath, sizeof(enpath), "%s/energy_now", batpath);
     snprintf(pwpath, sizeof(pwpath), "%s/power_now", batpath);
     long long energy_now = 0, power_now = 0;
-    if (sysfs_read_int(enpath, &energy_now) && sysfs_read_int(pwpath, &power_now) && power_now > 0) {
+    if (SysfsReadInt(enpath, &energy_now) && SysfsReadInt(pwpath, &power_now) && power_now > 0) {
         long long secs = (energy_now * 3600LL) / power_now;
         lua_pushinteger(L, (lua_Integer)secs);
         lua_setfield(L, -2, "SecondsRemaining");
@@ -1387,13 +1387,13 @@ int hardware_battery(lua_State* L)
 
 // GPU functions are Windows-only (PDH + DXGI).
 // Return nil on Linux rather than omitting the symbols entirely.
-int hardware_gpu_memory(lua_State* L)
+int Hardware_GpuMemory(lua_State* L)
 {
     lua_pushnil(L);
     return 1;
 }
 
-int hardware_gpu_load(lua_State* L)
+int Hardware_GpuLoad(lua_State* L)
 {
     lua_pushnil(L);
     return 1;
@@ -1402,7 +1402,7 @@ int hardware_gpu_load(lua_State* L)
 // ── Disk I/O throughput per physical disk via /proc/diskstats ─────────────────
 // Returns { ["sda"] = { ReadBytesPerSec=..., WriteBytesPerSec=... }, ... }
 // Rate is computed from the delta between two successive calls.
-int hardware_disk_io(lua_State* L)
+int Hardware_DiskIO(lua_State* L)
 {
     typedef struct {
         char name[64];
@@ -1477,7 +1477,7 @@ int hardware_disk_io(lua_State* L)
 // ── Network I/O throughput per adapter via /proc/net/dev ─────────────────────
 // Returns { ["eth0"] = { RecvBytesPerSec=..., SendBytesPerSec=..., TotalBytesPerSec=... }, ... }
 // Rate is computed from the delta between two successive calls.
-int hardware_network_io(lua_State* L)
+int Hardware_NetworkIO(lua_State* L)
 {
     typedef struct {
         char               name[64];

@@ -10,7 +10,7 @@
 #include "alivetoken/LuaAliveToken.h"
 #include "KitsuneInternal.h"
 
-static void set_did_work(lua_State* L) {
+static void SetDidWork(lua_State* L) {
 	void* ud;
 	lua_getallocf(L, &ud);
 	KitsuneState* state = (KitsuneState*)ud;
@@ -187,7 +187,7 @@ static void BsonIterValueToLua(lua_State* L, bson_iter_t* iter, int depth) {
 			memcpy(id->bytes, data, 16);
 		}
 		else {
-			lua_pushluastream(L, data, blen);
+			lua_pushstream(L, data, blen);
 		}
 		break;
 	}
@@ -197,7 +197,7 @@ static void BsonIterValueToLua(lua_State* L, bson_iter_t* iter, int depth) {
 		char buf[BSON_DECIMAL128_STRING];
 		bson_decimal128_to_string(&d128, buf);
 		LuaDecimal* dec = lua_pushdecimal(L);
-		decimal_parse_c(buf, strlen(buf), dec);
+		DecimalParseC(buf, strlen(buf), dec);
 		break;
 	}
 	case BSON_TYPE_DOCUMENT: {
@@ -292,7 +292,7 @@ struct BsonWriteCtx {
 	int        recCap;
 };
 
-static void bson_rec_push(lua_State* L, BsonWriteCtx* ctx, uintptr_t addr) {
+static void BsonRecPush(lua_State* L, BsonWriteCtx* ctx, uintptr_t addr) {
 	for (int i = 0; i < ctx->recLen; i++) {
 		if (ctx->rec[i] == addr) {
 			kitsune_free(ctx->rec);
@@ -320,7 +320,7 @@ static void bson_rec_push(lua_State* L, BsonWriteCtx* ctx, uintptr_t addr) {
 	ctx->rec[ctx->recLen++] = addr;
 }
 
-static void bson_rec_pop(BsonWriteCtx* ctx) {
+static void BsonRecPop(BsonWriteCtx* ctx) {
 	if (ctx->recLen > 0)
 		ctx->recLen--;
 }
@@ -329,12 +329,12 @@ static void LuaToBsonValue(lua_State* L, int idx, bson_t* doc, const char* key, 
 static void LuaToBson(lua_State* L, int idx, bson_t* doc, BsonWriteCtx* ctx);
 static void LuaToBsonArray(lua_State* L, int idx, bson_t* doc, BsonWriteCtx* ctx);
 
-// RAII guard that calls bson_rec_pop even when luaL_error throws (longjmp).
+// RAII guard that calls BsonRecPop even when luaL_error throws (longjmp).
 // NOTE: longjmp skips C++ destructors unless the platform uses SEH or the
 // compiler is configured to unwind C++ on longjmp (MSVC /EHa, or Lua built
 // with C++ exceptions).  For maximum safety the table value is removed from
 // the rec stack at the start of EACH recursive LuaToBsonValue call via an
-// explicit bson_rec_pop in the error handler for the OOM path in bson_rec_push,
+// explicit BsonRecPop in the error handler for the OOM path in BsonRecPush,
 // and here we use a plain struct + explicit call so the intent is clear.
 // In practice Lua's longjmp on MSVC with /EHsc does NOT run destructors, so
 // this guard only helps on platforms/configs that do.  The worst case is a
@@ -343,7 +343,7 @@ static void LuaToBsonArray(lua_State* L, int idx, bson_t* doc, BsonWriteCtx* ctx
 struct BsonRecGuard {
 	BsonWriteCtx* ctx;
 	BsonRecGuard(BsonWriteCtx* c) : ctx(c) {}
-	~BsonRecGuard() { bson_rec_pop(ctx); }
+	~BsonRecGuard() { BsonRecPop(ctx); }
 };
 
 static void LuaToBsonValue(lua_State* L, int idx, bson_t* doc, const char* key, BsonWriteCtx* ctx) {
@@ -375,7 +375,7 @@ static void LuaToBsonValue(lua_State* L, int idx, bson_t* doc, const char* key, 
 	}
 
 	if (lua_isdecimal(L, idx)) {
-		lua_decimal_push_string(L, idx);
+		lua_pushdecimalstring(L, idx);
 		const char* buf = lua_tostring(L, -1);
 		bson_decimal128_t d128;
 		bson_decimal128_from_string(buf, &d128);
@@ -402,11 +402,11 @@ static void LuaToBsonValue(lua_State* L, int idx, bson_t* doc, const char* key, 
 	}
 
 	if (lua_isstream(L, idx)) {
-		LuaStream* s = lua_toluastream(L, idx);
-		lua_Integer pos = lua_stream_curpos(L, s);
-		lua_stream_setpos(L, s, 0);
-		lua_Integer slen = lua_stream_getlen(L, s);
-		lua_stream_read_chunk(L, s, (size_t)slen);
+		LuaStream* s = lua_tostream(L, idx);
+		lua_Integer pos = LuaStreamCurPos(L, s);
+		LuaStreamSetPos(L, s, 0);
+		lua_Integer slen = LuaStreamGetLen(L, s);
+		LuaStreamReadChunk(L, s, (size_t)slen);
 		size_t rlen = 0;
 		const char* sdata = lua_tolstring(L, -1, &rlen);
 		if (sdata) {
@@ -416,7 +416,7 @@ static void LuaToBsonValue(lua_State* L, int idx, bson_t* doc, const char* key, 
 			BSON_APPEND_BINARY(doc, key, BSON_SUBTYPE_BINARY, (const uint8_t*)"", 0);
 		}
 		lua_pop(L, 1);
-		lua_stream_setpos(L, s, pos);  // restore position
+		LuaStreamSetPos(L, s, pos);  // restore position
 		return;
 	}
 
@@ -450,7 +450,7 @@ static void LuaToBsonValue(lua_State* L, int idx, bson_t* doc, const char* key, 
 		break;
 	case LUA_TTABLE: {
 		uintptr_t addr = (uintptr_t)lua_topointer(L, idx);
-		bson_rec_push(L, ctx, addr);
+		BsonRecPush(L, ctx, addr);
 		BsonRecGuard rg(ctx);  // pops addr even if LuaToBson/LuaToBsonArray throws
 
 		// Detect array vs document: array only if ALL keys are sequential
@@ -878,14 +878,14 @@ static void MongoWorkerThread(LuaMongoWorker* w) {
 }
 
 // =============================================================================
-// lua_tomongo / lua_pushmongo
+// luaL_checkmongodb / lua_pushmongodb
 // =============================================================================
 
-LuaMongo* lua_tomongo(lua_State* L, int index) {
+LuaMongo* luaL_checkmongodb(lua_State* L, int index) {
 	return (LuaMongo*)luaL_checkudata(L, index, LUAMONGO);
 }
 
-LuaMongo* lua_pushmongo(lua_State* L) {
+LuaMongo* lua_pushmongodb(lua_State* L) {
 	LuaMongo* m = (LuaMongo*)lua_newuserdata(L, sizeof(LuaMongo));
 	memset(m, 0, sizeof(LuaMongo));
 	m->aliveTokenRef = LUA_NOREF;
@@ -895,10 +895,10 @@ LuaMongo* lua_pushmongo(lua_State* L) {
 }
 
 // =============================================================================
-// luamongo_gc / luamongo_tostring
+// MongoDB_GC / MongoDB_ToString
 // =============================================================================
 
-int luamongo_gc(lua_State* L) {
+int MongoDB_GC(lua_State* L) {
 	LuaMongo* m = (LuaMongo*)lua_touserdata(L, 1);
 	if (!m || !m->worker)
 		return 0;
@@ -941,12 +941,12 @@ int luamongo_gc(lua_State* L) {
 	return 0;
 }
 
-// MongoSetAliveToken — attach or detach an AliveToken from this connection.
+// MongoDB_SetAliveToken — attach or detach an AliveToken from this connection.
 // When the token is disposed while a Wait or GetResult is polling, the
 // operation is cancelled (same as calling mongo:Cancel()) and the coroutine
 // dies cleanly after the worker thread acknowledges the cancellation.
-int MongoSetAliveToken(lua_State* L) {
-	LuaMongo* m = lua_tomongo(L, 1);
+int MongoDB_SetAliveToken(lua_State* L) {
+	LuaMongo* m = luaL_checkmongodb(L, 1);
 	if (m->aliveTokenRef != LUA_NOREF) {
 		luaL_unref(L, LUA_REGISTRYINDEX, m->aliveTokenRef);
 		m->aliveTokenRef = LUA_NOREF;
@@ -959,16 +959,16 @@ int MongoSetAliveToken(lua_State* L) {
 	return 0;
 }
 
-// MongoClose is the Lua-callable Close() method.
+// MongoDB_Close is the Lua-callable Close() method.
 // is called by the GC and must not error), this validates that arg 1 is
 // actually a LuaMongo userdata so MongoDB.Close(wrong_value) raises a clear
 // type error instead of silently returning.
-int MongoClose(lua_State* L) {
+int MongoDB_Close(lua_State* L) {
 	luaL_checkudata(L, 1, LUAMONGO);
-	return luamongo_gc(L);
+	return MongoDB_GC(L);
 }
 
-int luamongo_tostring(lua_State* L) {
+int MongoDB_ToString(lua_State* L) {
 	LuaMongo* m = (LuaMongo*)lua_touserdata(L, 1);
 	if (!m || !m->worker) {
 		lua_pushliteral(L, "MongoDB: (closed)");
@@ -1018,7 +1018,7 @@ static bool ValidateCollName(const char* name, size_t len) {
 // =============================================================================
 
 #define MONGO_GUARD(L, m, w) \
-    LuaMongo* m = lua_tomongo(L, 1); \
+    LuaMongo* m = luaL_checkmongodb(L, 1); \
     if (!m->worker || !m->client) { \
         lua_pushboolean(L, 0); \
         lua_pushliteral(L, "connection is closed"); \
@@ -1102,8 +1102,8 @@ static void MongoUnanchor(lua_State* L, LuaMongoWorker* w) {
 	lua_rawset(L, LUA_REGISTRYINDEX);
 }
 
-int MongoIsFinished(lua_State* L) {
-	LuaMongo* m = lua_tomongo(L, 1);
+int MongoDB_IsFinished(lua_State* L) {
+	LuaMongo* m = luaL_checkmongodb(L, 1);
 	LuaMongoWorker* w = m->worker ? (LuaMongoWorker*)m->worker : NULL;
 	if (!w) {
 		lua_pushboolean(L, 1);
@@ -1125,7 +1125,7 @@ static int MongoWaitCont(lua_State* L, int status, lua_KContext ctx) {
 	LuaMongo* m = (LuaMongo*)luaL_testudata(L, 1, LUAMONGO);
 	if (m && m->aliveTokenRef != LUA_NOREF) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, m->aliveTokenRef);
-		int alive = lua_alivetoken_isalive(L, -1);
+		int alive = AliveTokenIsAlive(L, -1);
 		lua_pop(L, 1);
 		if (alive == 0) {
 			w->cancelled.store(true, std::memory_order_release);
@@ -1135,8 +1135,8 @@ static int MongoWaitCont(lua_State* L, int status, lua_KContext ctx) {
 	return lua_yieldk(L, 0, ctx, MongoWaitCont);
 }
 
-int MongoWait(lua_State* L) {
-	LuaMongo* m = lua_tomongo(L, 1);
+int MongoDB_Wait(lua_State* L) {
+	LuaMongo* m = luaL_checkmongodb(L, 1);
 	LuaMongoWorker* w = m->worker ? (LuaMongoWorker*)m->worker : NULL;
 	if (!w || w->state.load(std::memory_order_acquire) != MONGO_STATE_RUNNING)
 		return 0;
@@ -1157,8 +1157,8 @@ static int MongoCancelCont(lua_State* L, int status, lua_KContext ctx) {
 	return 0;
 }
 
-int MongoCancel(lua_State* L) {
-	LuaMongo* m = lua_tomongo(L, 1);
+int MongoDB_Cancel(lua_State* L) {
+	LuaMongo* m = luaL_checkmongodb(L, 1);
 	LuaMongoWorker* w = m->worker ? (LuaMongoWorker*)m->worker : NULL;
 	if (!w || w->state.load(std::memory_order_acquire) != MONGO_STATE_RUNNING)
 		return 0;
@@ -1239,7 +1239,7 @@ static int PushOpResult(lua_State* L, LuaMongoWorker* w) {
 static int MongoGetResultCont(lua_State* L, int status, lua_KContext ctx) {
 	LuaMongoWorker* w = (LuaMongoWorker*)(intptr_t)ctx;
 	if (w->state.load(std::memory_order_acquire) != MONGO_STATE_RUNNING) {
-		set_did_work(L);  // operation completed — result ready
+		SetDidWork(L);  // operation completed — result ready
 		int n = PushOpResult(L, w);
 		MongoUnanchor(L, w);
 		return n;
@@ -1248,7 +1248,7 @@ static int MongoGetResultCont(lua_State* L, int status, lua_KContext ctx) {
 	LuaMongo* m = (LuaMongo*)luaL_testudata(L, 1, LUAMONGO);
 	if (m && m->aliveTokenRef != LUA_NOREF) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, m->aliveTokenRef);
-		int alive = lua_alivetoken_isalive(L, -1);
+		int alive = AliveTokenIsAlive(L, -1);
 		lua_pop(L, 1);
 		if (alive == 0) {
 			w->cancelled.store(true, std::memory_order_release);
@@ -1258,8 +1258,8 @@ static int MongoGetResultCont(lua_State* L, int status, lua_KContext ctx) {
 	return lua_yieldk(L, 0, ctx, MongoGetResultCont);  // still running — no work done
 }
 
-int MongoGetResult(lua_State* L) {
-	LuaMongo* m = lua_tomongo(L, 1);
+int MongoDB_GetResult(lua_State* L) {
+	LuaMongo* m = luaL_checkmongodb(L, 1);
 	LuaMongoWorker* w = m->worker ? (LuaMongoWorker*)m->worker : NULL;
 	if (!w || !w->op) {
 		lua_pushnil(L);
@@ -1273,10 +1273,10 @@ int MongoGetResult(lua_State* L) {
 }
 
 // =============================================================================
-// MongoConnect
+// MongoDB_Connect
 // =============================================================================
 
-int MongoConnect(lua_State* L) {
+int MongoDB_Connect(lua_State* L) {
 	const char* uri_string = luaL_checkstring(L, 1);
 
 	bson_error_t err;
@@ -1336,7 +1336,7 @@ int MongoConnect(lua_State* L) {
 		return 2;
 	}
 
-	LuaMongo* m = lua_pushmongo(L);
+	LuaMongo* m = lua_pushmongodb(L);
 	m->client = client;
 	m->worker = w;
 	return 1;
@@ -1369,7 +1369,7 @@ static void BuildFindOpts(lua_State* L, LuaMongoOp* op, int optsIdx, int limitId
 	}
 }
 
-int MongoFind(lua_State* L) {
+int MongoDB_Find(lua_State* L) {
 	MONGO_GUARD(L, m, w);
 	size_t dblen, colllen;
 	const char* db = luaL_checklstring(L, 2, &dblen);
@@ -1394,7 +1394,7 @@ int MongoFind(lua_State* L) {
 	return 2;
 }
 
-int MongoFindOne(lua_State* L) {
+int MongoDB_FindOne(lua_State* L) {
 	MONGO_GUARD(L, m, w);
 	size_t dblen, colllen;
 	const char* db = luaL_checklstring(L, 2, &dblen);
@@ -1422,7 +1422,7 @@ int MongoFindOne(lua_State* L) {
 	return 2;
 }
 
-int MongoInsertOne(lua_State* L) {
+int MongoDB_InsertOne(lua_State* L) {
 	MONGO_GUARD(L, m, w);
 	size_t dblen, colllen;
 	const char* db = luaL_checklstring(L, 2, &dblen);
@@ -1443,7 +1443,7 @@ int MongoInsertOne(lua_State* L) {
 	return 2;
 }
 
-int MongoInsertMany(lua_State* L) {
+int MongoDB_InsertMany(lua_State* L) {
 	MONGO_GUARD(L, m, w);
 	size_t dblen, colllen;
 	const char* db = luaL_checklstring(L, 2, &dblen);
@@ -1502,7 +1502,7 @@ int MongoInsertMany(lua_State* L) {
 	return 2;
 }
 
-int MongoUpdateOne(lua_State* L) {
+int MongoDB_UpdateOne(lua_State* L) {
 	MONGO_GUARD(L, m, w);
 	size_t dblen, colllen;
 	const char* db = luaL_checklstring(L, 2, &dblen);
@@ -1533,7 +1533,7 @@ int MongoUpdateOne(lua_State* L) {
 	return 2;
 }
 
-int MongoUpdateMany(lua_State* L) {
+int MongoDB_UpdateMany(lua_State* L) {
 	MONGO_GUARD(L, m, w);
 	size_t dblen, colllen;
 	const char* db = luaL_checklstring(L, 2, &dblen);
@@ -1564,7 +1564,7 @@ int MongoUpdateMany(lua_State* L) {
 	return 2;
 }
 
-int MongoDeleteOne(lua_State* L) {
+int MongoDB_DeleteOne(lua_State* L) {
 	MONGO_GUARD(L, m, w);
 	size_t dblen, colllen;
 	const char* db = luaL_checklstring(L, 2, &dblen);
@@ -1585,7 +1585,7 @@ int MongoDeleteOne(lua_State* L) {
 	return 2;
 }
 
-int MongoDeleteMany(lua_State* L) {
+int MongoDB_DeleteMany(lua_State* L) {
 	MONGO_GUARD(L, m, w);
 	size_t dblen, colllen;
 	const char* db = luaL_checklstring(L, 2, &dblen);
@@ -1606,7 +1606,7 @@ int MongoDeleteMany(lua_State* L) {
 	return 2;
 }
 
-int MongoAggregate(lua_State* L) {
+int MongoDB_Aggregate(lua_State* L) {
 	MONGO_GUARD(L, m, w);
 	size_t dblen, colllen;
 	const char* db = luaL_checklstring(L, 2, &dblen);
@@ -1634,7 +1634,7 @@ int MongoAggregate(lua_State* L) {
 	return 2;
 }
 
-int MongoCommand(lua_State* L) {
+int MongoDB_Command(lua_State* L) {
 	MONGO_GUARD(L, m, w);
 	size_t dblen;
 	const char* db = luaL_checklstring(L, 2, &dblen);
@@ -1655,7 +1655,7 @@ int MongoCommand(lua_State* L) {
 	return 2;
 }
 
-int MongoCountDocuments(lua_State* L) {
+int MongoDB_CountDocuments(lua_State* L) {
 	MONGO_GUARD(L, m, w);
 	size_t dblen, colllen;
 	const char* db = luaL_checklstring(L, 2, &dblen);
@@ -1684,26 +1684,26 @@ int MongoCountDocuments(lua_State* L) {
 
 #else // !KITSUNE_MONGO — stub out everything so the header still compiles
 
-LuaMongo* lua_tomongo(lua_State* L, int index) { (void)L; (void)index; return NULL; }
-LuaMongo* lua_pushmongo(lua_State* L) { (void)L; return NULL; }
-int MongoConnect(lua_State* L) { lua_pushnil(L); lua_pushliteral(L, "MongoDB support not compiled"); return 2; }
-int MongoIsFinished(lua_State* L) { lua_pushboolean(L, 1); return 1; }
-int MongoWait(lua_State* L) { (void)L; return 0; }
-int MongoCancel(lua_State* L) { (void)L; return 0; }
-int MongoGetResult(lua_State* L) { lua_pushnil(L); lua_pushliteral(L, "MongoDB support not compiled"); return 2; }
-int MongoFind(lua_State* L) { lua_pushboolean(L, 0); lua_pushliteral(L, "MongoDB support not compiled"); return 2; }
-int MongoFindOne(lua_State* L) { lua_pushboolean(L, 0); lua_pushliteral(L, "MongoDB support not compiled"); return 2; }
-int MongoInsertOne(lua_State* L) { lua_pushboolean(L, 0); lua_pushliteral(L, "MongoDB support not compiled"); return 2; }
-int MongoInsertMany(lua_State* L) { lua_pushboolean(L, 0); lua_pushliteral(L, "MongoDB support not compiled"); return 2; }
-int MongoUpdateOne(lua_State* L) { lua_pushboolean(L, 0); lua_pushliteral(L, "MongoDB support not compiled"); return 2; }
-int MongoUpdateMany(lua_State* L) { lua_pushboolean(L, 0); lua_pushliteral(L, "MongoDB support not compiled"); return 2; }
-int MongoDeleteOne(lua_State* L) { lua_pushboolean(L, 0); lua_pushliteral(L, "MongoDB support not compiled"); return 2; }
-int MongoDeleteMany(lua_State* L) { lua_pushboolean(L, 0); lua_pushliteral(L, "MongoDB support not compiled"); return 2; }
-int MongoAggregate(lua_State* L) { lua_pushboolean(L, 0); lua_pushliteral(L, "MongoDB support not compiled"); return 2; }
-int MongoCommand(lua_State* L) { lua_pushboolean(L, 0); lua_pushliteral(L, "MongoDB support not compiled"); return 2; }
-int MongoCountDocuments(lua_State* L) { lua_pushboolean(L, 0); lua_pushliteral(L, "MongoDB support not compiled"); return 2; }
-int MongoClose(lua_State* L) { luaL_checkudata(L, 1, LUAMONGO); return 0; }
-int luamongo_gc(lua_State* L) { (void)L; return 0; }
-int luamongo_tostring(lua_State* L) { lua_pushliteral(L, "MongoDB: (not compiled)"); return 1; }
+LuaMongo* luaL_checkmongodb(lua_State* L, int index) { (void)L; (void)index; return NULL; }
+LuaMongo* lua_pushmongodb(lua_State* L) { (void)L; return NULL; }
+int MongoDB_Connect(lua_State* L) { lua_pushnil(L); lua_pushliteral(L, "MongoDB support not compiled"); return 2; }
+int MongoDB_IsFinished(lua_State* L) { lua_pushboolean(L, 1); return 1; }
+int MongoDB_Wait(lua_State* L) { (void)L; return 0; }
+int MongoDB_Cancel(lua_State* L) { (void)L; return 0; }
+int MongoDB_GetResult(lua_State* L) { lua_pushnil(L); lua_pushliteral(L, "MongoDB support not compiled"); return 2; }
+int MongoDB_Find(lua_State* L) { lua_pushboolean(L, 0); lua_pushliteral(L, "MongoDB support not compiled"); return 2; }
+int MongoDB_FindOne(lua_State* L) { lua_pushboolean(L, 0); lua_pushliteral(L, "MongoDB support not compiled"); return 2; }
+int MongoDB_InsertOne(lua_State* L) { lua_pushboolean(L, 0); lua_pushliteral(L, "MongoDB support not compiled"); return 2; }
+int MongoDB_InsertMany(lua_State* L) { lua_pushboolean(L, 0); lua_pushliteral(L, "MongoDB support not compiled"); return 2; }
+int MongoDB_UpdateOne(lua_State* L) { lua_pushboolean(L, 0); lua_pushliteral(L, "MongoDB support not compiled"); return 2; }
+int MongoDB_UpdateMany(lua_State* L) { lua_pushboolean(L, 0); lua_pushliteral(L, "MongoDB support not compiled"); return 2; }
+int MongoDB_DeleteOne(lua_State* L) { lua_pushboolean(L, 0); lua_pushliteral(L, "MongoDB support not compiled"); return 2; }
+int MongoDB_DeleteMany(lua_State* L) { lua_pushboolean(L, 0); lua_pushliteral(L, "MongoDB support not compiled"); return 2; }
+int MongoDB_Aggregate(lua_State* L) { lua_pushboolean(L, 0); lua_pushliteral(L, "MongoDB support not compiled"); return 2; }
+int MongoDB_Command(lua_State* L) { lua_pushboolean(L, 0); lua_pushliteral(L, "MongoDB support not compiled"); return 2; }
+int MongoDB_CountDocuments(lua_State* L) { lua_pushboolean(L, 0); lua_pushliteral(L, "MongoDB support not compiled"); return 2; }
+int MongoDB_Close(lua_State* L) { luaL_checkudata(L, 1, LUAMONGO); return 0; }
+int MongoDB_GC(lua_State* L) { (void)L; return 0; }
+int MongoDB_ToString(lua_State* L) { lua_pushliteral(L, "MongoDB: (not compiled)"); return 1; }
 
 #endif // KITSUNE_MONGO

@@ -4,8 +4,8 @@
 #include "tcp/LuaTCPListener.h"
 
 static const luaL_Reg tcp_functions[] = {
-    { "StartListener", Tcp_StartListener },
-    { "Connect",       Tcp_Connect       },
+    { "StartListener", TCP_StartListener },
+    { "Connect",       TCP_Connect       },
     { NULL, NULL }
 };
 

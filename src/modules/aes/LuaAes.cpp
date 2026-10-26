@@ -4,7 +4,7 @@
 #include <errno.h>
 #include <stdlib.h>
 
-int LuaCreateContext(lua_State* L) {
+int Aes_New(lua_State* L) {
 
 	size_t keylen;
 	size_t ivlen;
@@ -14,7 +14,7 @@ int LuaCreateContext(lua_State* L) {
 	uint8_t key[AES_KEYLEN];
 	uint8_t iv[AES_BLOCKLEN];
 
-	LuaAes* luaaes = lua_pushluaaes(L);
+	LuaAes* luaaes = lua_pushaes(L);
 
 	if (keylen > AES_KEYLEN) {
 
@@ -49,9 +49,9 @@ int LuaCreateContext(lua_State* L) {
 	return 1;
 }
 
-int LuaSetIV(lua_State* L) {
+int Aes_SetIV(lua_State* L) {
 
-	LuaAes* luaaes = lua_toluaaes(L, 1);
+	LuaAes* luaaes = lua_toaes(L, 1);
 	size_t len;
 	const char* data = lua_tolstring(L, 2, &len);
 
@@ -78,9 +78,9 @@ int LuaSetIV(lua_State* L) {
 	return 0;
 }
 
-int LuaAesEncrypt(lua_State* L) {
+int Aes_Encrypt(lua_State* L) {
 
-	LuaAes* luaaes = lua_toluaaes(L, 1);
+	LuaAes* luaaes = lua_toaes(L, 1);
 	size_t len;
 	const char* data = luaL_checklstring(L, 2, &len);
 
@@ -122,9 +122,9 @@ int LuaAesEncrypt(lua_State* L) {
 	return 1;
 }
 
-int LuaAesDecrypt(lua_State* L) {
+int Aes_Decrypt(lua_State* L) {
 
-	LuaAes* luaaes = lua_toluaaes(L, 1);
+	LuaAes* luaaes = lua_toaes(L, 1);
 	size_t len;
 	const char* data = luaL_checklstring(L, 2, &len);
 
@@ -181,7 +181,7 @@ int LuaAesDecrypt(lua_State* L) {
 	return 1;
 }
 
-LuaAes* lua_pushluaaes(lua_State* L) {
+LuaAes* lua_pushaes(lua_State* L) {
 
 	LuaAes* luaaes = (LuaAes*)lua_newuserdata(L, sizeof(LuaAes));
 
@@ -195,24 +195,24 @@ LuaAes* lua_pushluaaes(lua_State* L) {
 	return luaaes;
 }
 
-LuaAes* lua_toluaaes(lua_State* L, int index) {
+LuaAes* lua_toaes(lua_State* L, int index) {
 	LuaAes* luaaes = (LuaAes*)luaL_checkudata(L, index, LUAES);
 	if (luaaes == NULL)
 		luaL_error(L, "parameter is not a %s", LUAES);
 	return luaaes;
 }
 
-int luaaes_gc(lua_State* L) {
+int Aes_GC(lua_State* L) {
 
-	LuaAes* luaaes = lua_toluaaes(L, 1);
+	LuaAes* luaaes = lua_toaes(L, 1);
 
 	return 0;
 }
 
-int luaaes_tostring(lua_State* L) {
+int Aes_ToString(lua_State* L) {
 	
 	char tim[100];
-	LuaAes* luaaes = lua_toluaaes(L, 1);
+	LuaAes* luaaes = lua_toaes(L, 1);
 
 	switch (luaaes->type) {
 

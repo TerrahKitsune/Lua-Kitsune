@@ -10,27 +10,27 @@ typedef struct LuaMongo {
     int   aliveTokenRef; // LUA_NOREF when not set
 } LuaMongo;
 
-LuaMongo* lua_tomongo(lua_State* L, int index);
-LuaMongo* lua_pushmongo(lua_State* L);
+LuaMongo* luaL_checkmongodb(lua_State* L, int index);
+LuaMongo* lua_pushmongodb(lua_State* L);
 
-int MongoConnect(lua_State* L);
-int MongoIsFinished(lua_State* L);
-int MongoWait(lua_State* L);
-int MongoCancel(lua_State* L);
-int MongoSetAliveToken(lua_State* L);
-int MongoGetResult(lua_State* L);
-int MongoFind(lua_State* L);
-int MongoFindOne(lua_State* L);
-int MongoInsertOne(lua_State* L);
-int MongoInsertMany(lua_State* L);
-int MongoUpdateOne(lua_State* L);
-int MongoUpdateMany(lua_State* L);
-int MongoDeleteOne(lua_State* L);
-int MongoDeleteMany(lua_State* L);
-int MongoAggregate(lua_State* L);
-int MongoCommand(lua_State* L);
-int MongoCountDocuments(lua_State* L);
+int MongoDB_Connect(lua_State* L);
+int MongoDB_IsFinished(lua_State* L);
+int MongoDB_Wait(lua_State* L);
+int MongoDB_Cancel(lua_State* L);
+int MongoDB_SetAliveToken(lua_State* L);
+int MongoDB_GetResult(lua_State* L);
+int MongoDB_Find(lua_State* L);
+int MongoDB_FindOne(lua_State* L);
+int MongoDB_InsertOne(lua_State* L);
+int MongoDB_InsertMany(lua_State* L);
+int MongoDB_UpdateOne(lua_State* L);
+int MongoDB_UpdateMany(lua_State* L);
+int MongoDB_DeleteOne(lua_State* L);
+int MongoDB_DeleteMany(lua_State* L);
+int MongoDB_Aggregate(lua_State* L);
+int MongoDB_Command(lua_State* L);
+int MongoDB_CountDocuments(lua_State* L);
 
-int MongoClose(lua_State* L);
-int luamongo_gc(lua_State* L);
-int luamongo_tostring(lua_State* L);
+int MongoDB_Close(lua_State* L);
+int MongoDB_GC(lua_State* L);
+int MongoDB_ToString(lua_State* L);

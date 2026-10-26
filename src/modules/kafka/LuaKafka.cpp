@@ -11,7 +11,7 @@ static char lasterror[kafka_last_error_buffer_len] = { 0 };
 static FILE* KafkaLogFile = NULL;
 static std::mutex kafka_log_mutex;
 
-void kafka_logger(const rd_kafka_t* rk, int level, const char* fac, const char* buf) {
+void KafkaLogger(const rd_kafka_t* rk, int level, const char* fac, const char* buf) {
 
     time_t rawtime;
     time(&rawtime);
@@ -35,7 +35,7 @@ void kafka_logger(const rd_kafka_t* rk, int level, const char* fac, const char* 
     snprintf(&lasterror[len], kafka_last_error_buffer_len - len - 1, "[%s] [%p] [%d] [%s]: %s\n", timestamp, (const void*)rk, level, fac, buf);
 }
 
-int GetLastLogs(lua_State* L) {
+int Kafka_Logs(lua_State* L) {
 
     const char* logfile = luaL_optstring(L, lua_type(L, 1) == LUA_TSTRING ? 1 : 2, NULL);
 

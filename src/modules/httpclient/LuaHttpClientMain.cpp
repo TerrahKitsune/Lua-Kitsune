@@ -13,33 +13,33 @@
 // The table is returned as the Http global so both Http.Create() and
 // client:Request() resolve through the same __index chain.
 static const luaL_Reg httpclient_functions[] = {
-	{ "New",               http_create },
-	{ "UrlEncode",          UrlEncode },
-	{ "UrlDecode",          UrlDecode },
-	{ "Request",            client_request },
-	{ "Call",               client_call },
-	{ "Stream",             client_stream },
-	{ "Connect",            ws_client_connect },
-	{ "SetTimeout",         client_set_timeout },
-	{ "SetDefaultHeader",   client_set_default_header },
-	{ "SetFollowRedirects", client_set_follow_redirects },
-	{ "SetVerifySSL",       client_set_verify_ssl },
-	{ "SetAliveToken",      client_set_alive_token },
-	{ "GetTimestamp",       client_get_timestamp },
+	{ "New",               HttpClient_New },
+	{ "UrlEncode",          HttpClient_UrlEncode },
+	{ "UrlDecode",          HttpClient_UrlDecode },
+	{ "Request",            HttpClient_Request },
+	{ "Call",               HttpClient_Call },
+	{ "Stream",             HttpClient_Stream },
+	{ "Connect",            HttpClient_Connect },
+	{ "SetTimeout",         HttpClient_SetTimeout },
+	{ "SetDefaultHeader",   HttpClient_SetDefaultHeader },
+	{ "SetFollowRedirects", HttpClient_SetFollowRedirects },
+	{ "SetVerifySSL",       HttpClient_SetVerifySSL },
+	{ "SetAliveToken",      HttpClient_SetAliveToken },
+	{ "GetTimestamp",       HttpClient_GetTimestamp },
 	{ NULL, NULL }
 };
 
 static const luaL_Reg httpclient_meta[] = {
-	{ "__gc",       luahttpclient_gc },
-	{ "__tostring", luahttpclient_tostring },
+	{ "__gc",       HttpClient_GC },
+	{ "__tostring", HttpClient_ToString },
 	{ NULL, NULL }
 };
 
 // -----------------------------------------------------------------------------
-// luaopen_http  (wchar pattern)
+// luaopen_httpclient  (wchar pattern)
 // -----------------------------------------------------------------------------
 
-int luaopen_http(lua_State* L) {
+int luaopen_httpclient(lua_State* L) {
 	// -- CURLM* lifetime -------------------------------------------------------
 	CURLM* multi = curl_multi_init();
 	if (!multi)
@@ -51,7 +51,7 @@ int luaopen_http(lua_State* L) {
 	// Sentinel userdata: __gc fires curl_multi_cleanup when the Lua state closes
 	lua_newuserdata(L, 1);
 	lua_newtable(L);
-	lua_pushcfunction(L, http_sentinel_gc);
+	lua_pushcfunction(L, HttpSentinel_GC);
 	lua_setfield(L, -2, "__gc");
 	lua_setmetatable(L, -2);
 	lua_rawsetp(L, LUA_REGISTRYINDEX, &g_sentinel_key);
@@ -74,7 +74,7 @@ int luaopen_http(lua_State* L) {
 
 	// -- LUAHTTPCURLREQUEST metatable (internal; __gc only) ------------------------
 	luaL_newmetatable(L, LUAHTTPCURLREQUEST);
-	lua_pushcfunction(L, luahttprequest_gc);
+	lua_pushcfunction(L, HttpCurlRequest_GC);
 	lua_setfield(L, -2, "__gc");
 	lua_pop(L, 1);
 

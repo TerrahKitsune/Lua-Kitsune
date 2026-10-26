@@ -29,7 +29,7 @@ int lua_istimespan(lua_State* L, int index) {
 // ── Formatting ────────────────────────────────────────────────────────────────
 // Produces [-]D.HH:MM:SS.mmm matching .NET TimeSpan.ToString("c") canonical form.
 
-static int timespan_format(int64_t ticks, char* buf, size_t bufsz) {
+static int TimeSpanFormat(int64_t ticks, char* buf, size_t bufsz) {
     int neg = ticks < 0;
     // Use unsigned arithmetic to avoid INT64_MIN UB.
     uint64_t abs_ticks = neg ? (ticks == INT64_MIN ? (uint64_t)INT64_MAX + 1ULL : (uint64_t)(-ticks)) : (uint64_t)ticks;
@@ -63,50 +63,50 @@ static int timespan_format(int64_t ticks, char* buf, size_t bufsz) {
     return n;
 }
 
-void lua_timespan_push_string(lua_State* L, int index) {
+void lua_pushtimespanstring(lua_State* L, int index) {
     LuaTimeSpan* ts = (LuaTimeSpan*)lua_touserdata(L, index);
     char buf[48];
-    timespan_format(ts->ticks, buf, sizeof(buf));
+    TimeSpanFormat(ts->ticks, buf, sizeof(buf));
     lua_pushstring(L, buf);
 }
 
 // ── Constructors ──────────────────────────────────────────────────────────────
 
-int timespan_zero(lua_State* L) {
+int TimeSpan_Zero(lua_State* L) {
     lua_pushtimespan(L); // already zeroed
     return 1;
 }
 
-int timespan_fromticks(lua_State* L) {
+int TimeSpan_FromTicks(lua_State* L) {
     lua_pushtimespan(L)->ticks = (int64_t)luaL_checkinteger(L, 1);
     return 1;
 }
 
-int timespan_fromseconds(lua_State* L) {
+int TimeSpan_FromSeconds(lua_State* L) {
     double v = luaL_checknumber(L, 1);
     lua_pushtimespan(L)->ticks = (int64_t)(v * (double)TS_TICKS_PER_SECOND);
     return 1;
 }
 
-int timespan_frommilliseconds(lua_State* L) {
+int TimeSpan_FromMilliseconds(lua_State* L) {
     double v = luaL_checknumber(L, 1);
     lua_pushtimespan(L)->ticks = (int64_t)(v * (double)TS_TICKS_PER_MILLISECOND);
     return 1;
 }
 
-int timespan_fromminutes(lua_State* L) {
+int TimeSpan_FromMinutes(lua_State* L) {
     double v = luaL_checknumber(L, 1);
     lua_pushtimespan(L)->ticks = (int64_t)(v * (double)TS_TICKS_PER_MINUTE);
     return 1;
 }
 
-int timespan_fromhours(lua_State* L) {
+int TimeSpan_FromHours(lua_State* L) {
     double v = luaL_checknumber(L, 1);
     lua_pushtimespan(L)->ticks = (int64_t)(v * (double)TS_TICKS_PER_HOUR);
     return 1;
 }
 
-int timespan_fromdays(lua_State* L) {
+int TimeSpan_FromDays(lua_State* L) {
     double v = luaL_checknumber(L, 1);
     lua_pushtimespan(L)->ticks = (int64_t)(v * (double)TS_TICKS_PER_DAY);
     return 1;
@@ -114,86 +114,86 @@ int timespan_fromdays(lua_State* L) {
 
 // ── Inspection ────────────────────────────────────────────────────────────────
 
-int timespan_tostring(lua_State* L) {
+int TimeSpan_ToString(lua_State* L) {
     LuaTimeSpan* ts = lua_totimespan(L, 1);
     char buf[48];
-    timespan_format(ts->ticks, buf, sizeof(buf));
+    TimeSpanFormat(ts->ticks, buf, sizeof(buf));
     lua_pushstring(L, buf);
     return 1;
 }
 
-int timespan_ticks(lua_State* L) {
+int TimeSpan_Ticks(lua_State* L) {
     lua_pushinteger(L, (lua_Integer)lua_totimespan(L, 1)->ticks);
     return 1;
 }
 
-int timespan_totalseconds(lua_State* L) {
+int TimeSpan_TotalSeconds(lua_State* L) {
     lua_pushnumber(L, (double)lua_totimespan(L, 1)->ticks / (double)TS_TICKS_PER_SECOND);
     return 1;
 }
 
-int timespan_totalmilliseconds(lua_State* L) {
+int TimeSpan_TotalMilliseconds(lua_State* L) {
     lua_pushnumber(L, (double)lua_totimespan(L, 1)->ticks / (double)TS_TICKS_PER_MILLISECOND);
     return 1;
 }
 
-int timespan_totalminutes(lua_State* L) {
+int TimeSpan_TotalMinutes(lua_State* L) {
     lua_pushnumber(L, (double)lua_totimespan(L, 1)->ticks / (double)TS_TICKS_PER_MINUTE);
     return 1;
 }
 
-int timespan_totalhours(lua_State* L) {
+int TimeSpan_TotalHours(lua_State* L) {
     lua_pushnumber(L, (double)lua_totimespan(L, 1)->ticks / (double)TS_TICKS_PER_HOUR);
     return 1;
 }
 
-int timespan_totaldays(lua_State* L) {
+int TimeSpan_TotalDays(lua_State* L) {
     lua_pushnumber(L, (double)lua_totimespan(L, 1)->ticks / (double)TS_TICKS_PER_DAY);
     return 1;
 }
 
 // Component getters — signed, matching .NET TimeSpan component properties.
-int timespan_days(lua_State* L) {
+int TimeSpan_Days(lua_State* L) {
     int64_t t = lua_totimespan(L, 1)->ticks;
     lua_pushinteger(L, (lua_Integer)(t / TS_TICKS_PER_DAY));
     return 1;
 }
 
-int timespan_hours(lua_State* L) {
+int TimeSpan_Hours(lua_State* L) {
     int64_t t = lua_totimespan(L, 1)->ticks;
     lua_pushinteger(L, (lua_Integer)((t / TS_TICKS_PER_HOUR) % 24));
     return 1;
 }
 
-int timespan_minutes(lua_State* L) {
+int TimeSpan_Minutes(lua_State* L) {
     int64_t t = lua_totimespan(L, 1)->ticks;
     lua_pushinteger(L, (lua_Integer)((t / TS_TICKS_PER_MINUTE) % 60));
     return 1;
 }
 
-int timespan_seconds(lua_State* L) {
+int TimeSpan_Seconds(lua_State* L) {
     int64_t t = lua_totimespan(L, 1)->ticks;
     lua_pushinteger(L, (lua_Integer)((t / TS_TICKS_PER_SECOND) % 60));
     return 1;
 }
 
-int timespan_milliseconds(lua_State* L) {
+int TimeSpan_Milliseconds(lua_State* L) {
     int64_t t = lua_totimespan(L, 1)->ticks;
     lua_pushinteger(L, (lua_Integer)((t / TS_TICKS_PER_MILLISECOND) % 1000));
     return 1;
 }
 
-int timespan_iszero(lua_State* L) {
+int TimeSpan_IsZero(lua_State* L) {
     lua_pushboolean(L, lua_totimespan(L, 1)->ticks == 0 ? 1 : 0);
     return 1;
 }
 
-int timespan_isnegative(lua_State* L) {
+int TimeSpan_IsNegative(lua_State* L) {
     lua_pushboolean(L, lua_totimespan(L, 1)->ticks < 0 ? 1 : 0);
     return 1;
 }
 
-int timespan_abs(lua_State* L) {
+int TimeSpan_Abs(lua_State* L) {
     int64_t t = lua_totimespan(L, 1)->ticks;
     int64_t abs_t = t < 0 ? (t == INT64_MIN ? INT64_MAX : -t) : t;
     lua_pushtimespan(L)->ticks = abs_t;
@@ -202,21 +202,21 @@ int timespan_abs(lua_State* L) {
 
 // ── Arithmetic ────────────────────────────────────────────────────────────────
 
-int timespan_add(lua_State* L) {
+int TimeSpan_Add(lua_State* L) {
     if (!lua_istimespan(L, 1) || !lua_istimespan(L, 2))
         return luaL_error(L, "TimeSpan: __add requires two TimeSpan values");
     lua_pushtimespan(L)->ticks = lua_totimespan(L, 1)->ticks + lua_totimespan(L, 2)->ticks;
     return 1;
 }
 
-int timespan_sub(lua_State* L) {
+int TimeSpan_Sub(lua_State* L) {
     if (!lua_istimespan(L, 1) || !lua_istimespan(L, 2))
         return luaL_error(L, "TimeSpan: __sub requires two TimeSpan values");
     lua_pushtimespan(L)->ticks = lua_totimespan(L, 1)->ticks - lua_totimespan(L, 2)->ticks;
     return 1;
 }
 
-int timespan_mul(lua_State* L) {
+int TimeSpan_Mul(lua_State* L) {
     // Supports span * number and number * span.
     if (lua_istimespan(L, 1) && lua_type(L, 2) == LUA_TNUMBER) {
         double factor = lua_tonumber(L, 2);
@@ -231,7 +231,7 @@ int timespan_mul(lua_State* L) {
     return luaL_error(L, "TimeSpan: __mul requires TimeSpan and a number");
 }
 
-int timespan_div(lua_State* L) {
+int TimeSpan_Div(lua_State* L) {
     if (!lua_istimespan(L, 1) || lua_type(L, 2) != LUA_TNUMBER)
         return luaL_error(L, "TimeSpan: __div requires TimeSpan / number");
     double divisor = lua_tonumber(L, 2);
@@ -241,7 +241,7 @@ int timespan_div(lua_State* L) {
     return 1;
 }
 
-int timespan_unm(lua_State* L) {
+int TimeSpan_Unm(lua_State* L) {
     int64_t t = lua_totimespan(L, 1)->ticks;
     lua_pushtimespan(L)->ticks = (t == INT64_MIN) ? INT64_MAX : -t;
     return 1;
@@ -249,7 +249,7 @@ int timespan_unm(lua_State* L) {
 
 // ── Comparison ────────────────────────────────────────────────────────────────
 
-int timespan_eq(lua_State* L) {
+int TimeSpan_Eq(lua_State* L) {
     if (!lua_istimespan(L, 1) || !lua_istimespan(L, 2)) {
         lua_pushboolean(L, 0);
         return 1;
@@ -258,14 +258,14 @@ int timespan_eq(lua_State* L) {
     return 1;
 }
 
-int timespan_lt(lua_State* L) {
+int TimeSpan_Lt(lua_State* L) {
     if (!lua_istimespan(L, 1) || !lua_istimespan(L, 2))
         return luaL_error(L, "TimeSpan: cannot compare incompatible types");
     lua_pushboolean(L, lua_totimespan(L, 1)->ticks < lua_totimespan(L, 2)->ticks ? 1 : 0);
     return 1;
 }
 
-int timespan_le(lua_State* L) {
+int TimeSpan_Le(lua_State* L) {
     if (!lua_istimespan(L, 1) || !lua_istimespan(L, 2))
         return luaL_error(L, "TimeSpan: cannot compare incompatible types");
     lua_pushboolean(L, lua_totimespan(L, 1)->ticks <= lua_totimespan(L, 2)->ticks ? 1 : 0);

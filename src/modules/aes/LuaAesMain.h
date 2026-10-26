@@ -1,2 +1,2 @@
 #pragma once
-int luaopen_luaaes(lua_State *L);
+int luaopen_aes(lua_State *L);

@@ -8,7 +8,7 @@
 #include <stdint.h>
 
 // Route stb's internal allocations through the engine's tracked allocator so
-// Image buffers show up in the same GetMemory()/CollectGarbage() accounting
+// Image buffers show up in the same Process_GetRAM()/CollectGarbage() accounting
 // as every other module (see base64.cpp for the same convention).
 #define STBI_MALLOC(sz)          kitsune_malloc(sz)
 #define STBI_REALLOC(p, newsz)   kitsune_realloc(p, newsz)
@@ -41,13 +41,13 @@ LuaImage* lua_pushimage(lua_State* L) {
 	return img;
 }
 
-int image_tostring(lua_State* L) {
+int Image_ToString(lua_State* L) {
 	LuaImage* img = lua_toimage(L, 1);
 	lua_pushfstring(L, "Image: %dx%d", img->width, img->height);
 	return 1;
 }
 
-int image_gc(lua_State* L) {
+int Image_GC(lua_State* L) {
 	LuaImage* img = (LuaImage*)lua_touserdata(L, 1);
 	if (!img)
 		return 0;
@@ -847,7 +847,7 @@ int Image_ToBytes(lua_State* L) {
 // picking N evenly-spaced hues for a palette) need it too.
 // ===========================================================================
 
-static void RGBtoHSV_d(double r, double g, double b, double& h, double& s, double& v) {
+static void RgbToHsvD(double r, double g, double b, double& h, double& s, double& v) {
 	r /= 255.0; g /= 255.0; b /= 255.0;
 	double mx = MAX(r, MAX(g, b));
 	double mn = MIN(r, MIN(g, b));
@@ -871,7 +871,7 @@ static void HueToRGBPrime(double h, double c, double x, double& rp, double& gp, 
 	else              { rp = c; gp = 0; bp = x; }
 }
 
-static void HSVtoRGB_d(double h, double s, double v, double& r, double& g, double& b) {
+static void HsvToRgbD(double h, double s, double v, double& r, double& g, double& b) {
 	h = fmod(h, 360.0); if (h < 0.0) h += 360.0;
 	double c = v * s;
 	double x = c * (1.0 - fabs(fmod(h / 60.0, 2.0) - 1.0));
@@ -881,7 +881,7 @@ static void HSVtoRGB_d(double h, double s, double v, double& r, double& g, doubl
 	r = (rp + m) * 255.0; g = (gp + m) * 255.0; b = (bp + m) * 255.0;
 }
 
-static void RGBtoHSL_d(double r, double g, double b, double& h, double& s, double& l) {
+static void RgbToHslD(double r, double g, double b, double& h, double& s, double& l) {
 	r /= 255.0; g /= 255.0; b /= 255.0;
 	double mx = MAX(r, MAX(g, b));
 	double mn = MIN(r, MIN(g, b));
@@ -895,7 +895,7 @@ static void RGBtoHSL_d(double r, double g, double b, double& h, double& s, doubl
 	if (h < 0.0) h += 360.0;
 }
 
-static void HSLtoRGB_d(double h, double s, double l, double& r, double& g, double& b) {
+static void HslToRgbD(double h, double s, double l, double& r, double& g, double& b) {
 	h = fmod(h, 360.0); if (h < 0.0) h += 360.0;
 	double c = (1.0 - fabs(2.0 * l - 1.0)) * s;
 	double x = c * (1.0 - fabs(fmod(h / 60.0, 2.0) - 1.0));
@@ -907,7 +907,7 @@ static void HSLtoRGB_d(double h, double s, double l, double& r, double& g, doubl
 
 int Image_RGBtoHSV(lua_State* L) {
 	double h, s, v;
-	RGBtoHSV_d(luaL_checknumber(L, 1), luaL_checknumber(L, 2), luaL_checknumber(L, 3), h, s, v);
+	RgbToHsvD(luaL_checknumber(L, 1), luaL_checknumber(L, 2), luaL_checknumber(L, 3), h, s, v);
 	lua_pushnumber(L, h);
 	lua_pushnumber(L, s);
 	lua_pushnumber(L, v);
@@ -916,7 +916,7 @@ int Image_RGBtoHSV(lua_State* L) {
 
 int Image_HSVtoRGB(lua_State* L) {
 	double r, g, b;
-	HSVtoRGB_d(luaL_checknumber(L, 1), luaL_checknumber(L, 2), luaL_checknumber(L, 3), r, g, b);
+	HsvToRgbD(luaL_checknumber(L, 1), luaL_checknumber(L, 2), luaL_checknumber(L, 3), r, g, b);
 	lua_pushinteger(L, ClampByte((int)(r + 0.5)));
 	lua_pushinteger(L, ClampByte((int)(g + 0.5)));
 	lua_pushinteger(L, ClampByte((int)(b + 0.5)));
@@ -925,7 +925,7 @@ int Image_HSVtoRGB(lua_State* L) {
 
 int Image_RGBtoHSL(lua_State* L) {
 	double h, s, l;
-	RGBtoHSL_d(luaL_checknumber(L, 1), luaL_checknumber(L, 2), luaL_checknumber(L, 3), h, s, l);
+	RgbToHslD(luaL_checknumber(L, 1), luaL_checknumber(L, 2), luaL_checknumber(L, 3), h, s, l);
 	lua_pushnumber(L, h);
 	lua_pushnumber(L, s);
 	lua_pushnumber(L, l);
@@ -934,7 +934,7 @@ int Image_RGBtoHSL(lua_State* L) {
 
 int Image_HSLtoRGB(lua_State* L) {
 	double r, g, b;
-	HSLtoRGB_d(luaL_checknumber(L, 1), luaL_checknumber(L, 2), luaL_checknumber(L, 3), r, g, b);
+	HslToRgbD(luaL_checknumber(L, 1), luaL_checknumber(L, 2), luaL_checknumber(L, 3), r, g, b);
 	lua_pushinteger(L, ClampByte((int)(r + 0.5)));
 	lua_pushinteger(L, ClampByte((int)(g + 0.5)));
 	lua_pushinteger(L, ClampByte((int)(b + 0.5)));
@@ -958,16 +958,16 @@ int Image_Tint(lua_State* L) {
 	if (strength > 1.0) strength = 1.0;
 
 	double th, ts, tv;
-	RGBtoHSV_d(r, g, b, th, ts, tv);
+	RgbToHsvD(r, g, b, th, ts, tv);
 
 	size_t count = (size_t)img->width * img->height;
 	for (size_t i = 0; i < count; i++) {
 		unsigned char* p = img->pixels + i * 4;
 		if (p[3] == 0) continue;
 		double h, s, v;
-		RGBtoHSV_d(p[0], p[1], p[2], h, s, v);
+		RgbToHsvD(p[0], p[1], p[2], h, s, v);
 		double nr, ng, nb;
-		HSVtoRGB_d(th, ts, v, nr, ng, nb);
+		HsvToRgbD(th, ts, v, nr, ng, nb);
 		p[0] = ClampByte((int)(p[0] + (nr - p[0]) * strength + 0.5));
 		p[1] = ClampByte((int)(p[1] + (ng - p[1]) * strength + 0.5));
 		p[2] = ClampByte((int)(p[2] + (nb - p[2]) * strength + 0.5));
@@ -1044,12 +1044,12 @@ int Image_AdjustHSV(lua_State* L) {
 			unsigned char* p = img->pixels + (size_t)(yy * img->width + xx) * 4;
 			if (p[3] == 0) continue;
 			double hh, ss, vv;
-			RGBtoHSV_d(p[0], p[1], p[2], hh, ss, vv);
+			RgbToHsvD(p[0], p[1], p[2], hh, ss, vv);
 			hh = fmod(hh + hueShift, 360.0); if (hh < 0.0) hh += 360.0;
 			ss = MAX(0.0, MIN(1.0, ss * satMul));
 			vv = MAX(0.0, MIN(1.0, vv * valMul));
 			double r, g, b;
-			HSVtoRGB_d(hh, ss, vv, r, g, b);
+			HsvToRgbD(hh, ss, vv, r, g, b);
 			p[0] = ClampByte((int)(r + 0.5));
 			p[1] = ClampByte((int)(g + 0.5));
 			p[2] = ClampByte((int)(b + 0.5));

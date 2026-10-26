@@ -18,23 +18,23 @@ typedef struct LuaIdentifier {
 LuaIdentifier* lua_pushidentifier(lua_State* L);
 LuaIdentifier* lua_toidentifier(lua_State* L, int index);
 
-int identifier_newuuid(lua_State* L);
-int identifier_newoid(lua_State* L);
-int identifier_fromstring(lua_State* L);
-int identifier_frombytes(lua_State* L);
-int identifier_gettype(lua_State* L);
-int identifier_asbytes(lua_State* L);
-int identifier_asstring(lua_State* L);
-int identifier_isempty(lua_State* L);
+int Identifier_NewUUID(lua_State* L);
+int Identifier_NewOID(lua_State* L);
+int Identifier_FromString(lua_State* L);
+int Identifier_FromBytes(lua_State* L);
+int Identifier_GetType(lua_State* L);
+int Identifier_AsBytes(lua_State* L);
+int Identifier_AsString(lua_State* L);
+int Identifier_IsEmpty(lua_State* L);
 
-int identifier_eq(lua_State* L);
-int identifier_tostring(lua_State* L);
+int Identifier_Eq(lua_State* L);
+int Identifier_ToString(lua_State* L);
 
 // Returns non-zero if the value at the given stack index is a LuaIdentifier.
 int lua_isidentifier(lua_State* L, int index);
 // Pushes the canonical string representation of the LuaIdentifier at the given index.
 // The caller must ensure the value at index is a LuaIdentifier.
-void lua_identifier_push_string(lua_State* L, int index);
+void lua_pushidentifierstring(lua_State* L, int index);
 // Parses a 36-char UUID string (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx) and pushes
 // a LuaIdentifier. Returns the new identifier on success, or NULL and pushes nil on failure.
-LuaIdentifier* lua_pushidentifier_fromstring(lua_State* L, const char* str, size_t len);
+LuaIdentifier* lua_pushidentifierfromstring(lua_State* L, const char* str, size_t len);

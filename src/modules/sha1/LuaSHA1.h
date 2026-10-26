@@ -12,9 +12,9 @@ typedef struct LuaSHA1 {
 LuaSHA1* lua_tosha1(lua_State* L, int index);
 LuaSHA1* lua_pushsha1(lua_State* L);
 
-int NewSHA1(lua_State* L);
-int UpdateSHA1(lua_State* L);
-int FinalSHA1(lua_State* L);
+int SHA1_New(lua_State* L);
+int SHA1_Update(lua_State* L);
+int SHA1_Finish(lua_State* L);
 
-int sha1_gc(lua_State* L);
-int sha1_tostring(lua_State* L);
+int SHA1_GC(lua_State* L);
+int SHA1_ToString(lua_State* L);

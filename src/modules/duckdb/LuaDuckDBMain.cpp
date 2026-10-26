@@ -3,7 +3,7 @@
 
 static const struct luaL_Reg laduckdbfunctions[] = {
 { "Open", DuckDB_Open },
-{ "Close", DuckDB_GC },
+{ "Close", DuckDB_Close },
 { "Execute", DuckDB_Execute },
 { "Query", DuckDB_Execute },
 { "Fetch", DuckDB_Fetch },
@@ -13,7 +13,7 @@ static const struct luaL_Reg laduckdbfunctions[] = {
 };
 
 static const luaL_Reg luaduckdbmeta[] = {
-{ "__gc", DuckDB_GC },
+{ "__gc", DuckDB_Close },
 { "__tostring", DuckDB_ToString },
 { NULL, NULL }
 };

@@ -8,7 +8,7 @@
 #else
 #include <sys/stat.h>
 // Returns file size in bytes using fstat; -1 on error.
-static int64_t posix_filelength(int fd) {
+static int64_t PosixFileLength(int fd) {
 	struct stat st;
 	if (fstat(fd, &st) == 0)
 		return (int64_t)st.st_size;
@@ -28,7 +28,7 @@ struct InFileStream {
 //   'w'          -> WRITE | SEEK
 //   'a'          -> WRITE  (append forces writes to EOF; seek would mislead)
 //   any '+' form -> adds both READ and WRITE
-static BYTE mode_to_caps(const char* mode) {
+static BYTE ModeToCaps(const char* mode) {
 	bool has_read   = false;
 	bool has_write  = false;
 	bool has_append = false;
@@ -59,7 +59,7 @@ static BYTE mode_to_caps(const char* mode) {
 
 // -- vtable implementations ----------------------------------------------------
 
-static int file_read(void* native, lua_State* L, size_t len) {
+static int FileStreamRead(void* native, lua_State* L, size_t len) {
 	InFileStream* f = (InFileStream*)native;
 	if (!f->file) {
 		lua_pushboolean(L, false);
@@ -71,7 +71,7 @@ static int file_read(void* native, lua_State* L, size_t len) {
 		__int64 fileSize = _filelengthi64(_fileno(f->file));
 #else
 		int64_t cur      = (int64_t)ftello(f->file);
-		int64_t fileSize = posix_filelength(fileno(f->file));
+		int64_t fileSize = PosixFileLength(fileno(f->file));
 #endif
 		if (fileSize < 0 || fileSize <= cur) {
 			lua_pushboolean(L, false);
@@ -95,14 +95,14 @@ static int file_read(void* native, lua_State* L, size_t len) {
 	return 1;
 }
 
-static bool file_write(void* native, const BYTE* data, size_t len) {
+static bool FileStreamWrite(void* native, const BYTE* data, size_t len) {
 	InFileStream* f = (InFileStream*)native;
 	if (!f->file || !data || len == 0)
 		return true;
 	return fwrite(data, 1, len, f->file) == len;
 }
 
-static bool file_setpos(void* native, lua_Integer pos) {
+static bool FileStreamSetPos(void* native, lua_Integer pos) {
 	InFileStream* f = (InFileStream*)native;
 	if (pos < 0)
 		pos = 0;
@@ -113,7 +113,7 @@ static bool file_setpos(void* native, lua_Integer pos) {
 #endif
 }
 
-static lua_Integer file_curpos(void* native) {
+static lua_Integer FileStreamCurPos(void* native) {
 #ifdef _WIN32
 	__int64 pos = _ftelli64(((InFileStream*)native)->file);
 #else
@@ -122,31 +122,31 @@ static lua_Integer file_curpos(void* native) {
 	return pos < 0 ? 0 : (lua_Integer)pos;
 }
 
-static lua_Integer file_getlen(void* native) {
+static lua_Integer FileStreamGetLen(void* native) {
 	InFileStream* f = (InFileStream*)native;
 #ifdef _WIN32
 	__int64 size = _filelengthi64(_fileno(f->file));
 #else
-	int64_t size = posix_filelength(fileno(f->file));
+	int64_t size = PosixFileLength(fileno(f->file));
 #endif
 	return size < 0 ? 0 : (lua_Integer)size;
 }
 
-static void file_close(void* native, lua_State* L) {
+static void FileStreamClose(void* native, lua_State* L) {
 	InFileStream* f = (InFileStream*)native;
 	if (f->file)
 		fclose(f->file);
 	kitsune_free(f);
 }
 
-static int file_info(void* native, lua_State* L) {
+static int FileStreamGetInfo(void* native, lua_State* L) {
 	InFileStream* f = (InFileStream*)native;
 #ifdef _WIN32
 	__int64 cur      = _ftelli64(f->file);
 	__int64 fileSize = _filelengthi64(_fileno(f->file));
 #else
 	int64_t cur      = (int64_t)ftello(f->file);
-	int64_t fileSize = posix_filelength(fileno(f->file));
+	int64_t fileSize = PosixFileLength(fileno(f->file));
 #endif
 	lua_createtable(L, 0, 5);
 	lua_pushinteger(L, (lua_Integer)cur);
@@ -162,20 +162,20 @@ static int file_info(void* native, lua_State* L) {
 	return 1;
 }
 
-static uint64_t file_getid(void* native) {
+static uint64_t FileStreamGetId(void* native) {
 	return (uint64_t)((InFileStream*)native)->file;
 }
 
 static const LuaStreamVtable g_file_vtbl = {
-	file_read,
-	file_write,
-	file_setpos,
-	file_curpos,
-	file_getlen,
-	file_close,
-	file_info,
+	FileStreamRead,
+	FileStreamWrite,
+	FileStreamSetPos,
+	FileStreamCurPos,
+	FileStreamGetLen,
+	FileStreamClose,
+	FileStreamGetInfo,
 	NULL,
-	file_getid,
+	FileStreamGetId,
 };
 
 // -- Public constructor helper -------------------------------------------------
@@ -201,7 +201,7 @@ LuaStream* lua_pushfilestream(lua_State* L, const char* filename, const char* mo
 	}
 	ZeroMemory(fs, sizeof(InFileStream));
 	fs->file = f;
-	fs->caps = mode_to_caps(mode);
+	fs->caps = ModeToCaps(mode);
 #ifdef _WIN32
 	strncpy_s(fs->mode,     sizeof(fs->mode),     mode,     _TRUNCATE);
 	strncpy_s(fs->filename, sizeof(fs->filename), filename, _TRUNCATE);

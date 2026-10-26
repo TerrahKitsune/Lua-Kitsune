@@ -11,7 +11,7 @@
 
 // FileSystem.Open is io.open (UTF-8 path, nil, "<path>: <error>", errno on failure) with a
 // stricter mode: '[rwa]%+?b?' only, where io.open also accepts repeated 'b'.
-int OpenFileWide(lua_State* L) {
+int FileSystem_Open(lua_State* L) {
 	return kitsune_io_open_strict(L);
 }
 
@@ -69,7 +69,7 @@ typedef struct REPARSE_DATA {
 // Internal: copy the UTF-8 string argument at idx into dst as a null-terminated wide string.
 // Creates no Lua objects, so the result cannot be garbage collected mid-use.
 // Returns the number of wchar_t written, or -1 if it does not fit in cap (including the terminator).
-static int arg_to_wide(lua_State* L, int idx, wchar_t* dst, int cap) {
+static int ArgToWide(lua_State* L, int idx, wchar_t* dst, int cap) {
 
 	size_t len;
 	const char* s = luaL_checklstring(L, idx, &len);
@@ -81,9 +81,9 @@ static int arg_to_wide(lua_State* L, int idx, wchar_t* dst, int cap) {
 }
 
 // Internal: convert a UTF-8 path to wchar_t (normalises slashes, optionally appends "\*").
-static const wchar_t* to_pathw(lua_State* L, int idx, bool wildcard = false) {
+static const wchar_t* ToPathW(lua_State* L, int idx, bool wildcard = false) {
 
-	int len = arg_to_wide(L, idx, _PATHW, MAX_PATH_LENGTH);
+	int len = ArgToWide(L, idx, _PATHW, MAX_PATH_LENGTH);
 	if (len < 0)
 		luaL_error(L, "path is too long (max %d characters)", MAX_PATH_LENGTH - 1);
 
@@ -104,7 +104,7 @@ static const wchar_t* to_pathw(lua_State* L, int idx, bool wildcard = false) {
 	return _PATHW;
 }
 
-static time_t FILETIME_to_time_t(const FILETIME* ft) {
+static time_t FileTimeToTimeT(const FILETIME* ft) {
 
 	/* FILETIME is UTC in 100ns ticks since 1601-01-01; convert straight to
 	   Unix seconds (no local-time round trip through mktime). */
@@ -117,7 +117,7 @@ static time_t FILETIME_to_time_t(const FILETIME* ft) {
 	return (time_t)((ull.QuadPart - epoch_diff) / 10000000ULL);
 }
 
-static void push_find_dataw(lua_State* L, const WIN32_FIND_DATAW* d) {
+static void PushFindDataW(lua_State* L, const WIN32_FIND_DATAW* d) {
 
 	lua_createtable(L, 0, 13);
 
@@ -142,15 +142,15 @@ static void push_find_dataw(lua_State* L, const WIN32_FIND_DATAW* d) {
 	lua_settable(L, -3);
 
 	lua_pushstring(L, "Creation");
-	lua_pushinteger(L, FILETIME_to_time_t(&d->ftCreationTime));
+	lua_pushinteger(L, FileTimeToTimeT(&d->ftCreationTime));
 	lua_settable(L, -3);
 
 	lua_pushstring(L, "Access");
-	lua_pushinteger(L, FILETIME_to_time_t(&d->ftLastAccessTime));
+	lua_pushinteger(L, FileTimeToTimeT(&d->ftLastAccessTime));
 	lua_settable(L, -3);
 
 	lua_pushstring(L, "Write");
-	lua_pushinteger(L, FILETIME_to_time_t(&d->ftLastWriteTime));
+	lua_pushinteger(L, FileTimeToTimeT(&d->ftLastWriteTime));
 	lua_settable(L, -3);
 
 	// dwReserved0 holds the reparse tag, but only when the entry is a reparse point.
@@ -177,7 +177,7 @@ static void push_find_dataw(lua_State* L, const WIN32_FIND_DATAW* d) {
 
 // Internal: push a link target read from a substitute name ("\??\C:\x", "\??\UNC\srv\share",
 // "\??\Volume{guid}\") as a Win32 path: drive paths lose the prefix, the rest get "\\?\".
-static void push_substitute_name(lua_State* L, const wchar_t* name, size_t len) {
+static void PushSubstituteName(lua_State* L, const wchar_t* name, size_t len) {
 
 	if (len >= 4 && wcsncmp(name, L"\\??\\", 4) == 0) {
 		name += 4;
@@ -194,7 +194,7 @@ static void push_substitute_name(lua_State* L, const wchar_t* name, size_t len) 
 
 // Internal: add LinkType and Link to the FileInfo table on top of the stack for the link at path.
 // Only called for name surrogates, so cloud placeholders are never opened (which could recall them).
-static void push_link_target(lua_State* L, const wchar_t* path) {
+static void PushLinkTarget(lua_State* L, const wchar_t* path) {
 
 	HANDLE fh = CreateFileW(path, 0,
 		FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
@@ -268,18 +268,18 @@ static void push_link_target(lua_State* L, const wchar_t* path) {
 	if (printLen > 0)
 		lua_pushwideasutf8(L, (const WCHAR*)((const BYTE*)pathbuf + printOff), printLen / sizeof(WCHAR));
 	else
-		push_substitute_name(L, sub, subLen / sizeof(WCHAR));
+		PushSubstituteName(L, sub, subLen / sizeof(WCHAR));
 	lua_settable(L, -3);
 }
 
-int GetCurrent(lua_State* L) {
+int FileSystem_CurrentDirectory(lua_State* L) {
 
 	DWORD len = GetCurrentDirectoryW(MAX_PATH_LENGTH, _PATHW);
 	lua_pushwideasutf8(L, _PATHW, (len < MAX_PATH_LENGTH) ? len : 0);
 	return 1;
 }
 
-int GetSpecialFolder(lua_State* L) {
+int FileSystem_GetSpecialFolder(lua_State* L) {
 
 	if (SUCCEEDED(SHGetFolderPathW(NULL, (int)luaL_optinteger(L, 1, CSIDL_DESKTOPDIRECTORY), NULL, 0, _PATHW)))
 		lua_pushwideasutf8(L, _PATHW);
@@ -288,9 +288,9 @@ int GetSpecialFolder(lua_State* L) {
 	return 1;
 }
 
-int GetFiles(lua_State* L) {
+int FileSystem_GetFiles(lua_State* L) {
 
-	const wchar_t* path = to_pathw(L, 1, true);
+	const wchar_t* path = ToPathW(L, 1, true);
 	WIN32_FIND_DATAW ffd;
 	HANDLE h = FindFirstFileW(path, &ffd);
 	lua_pop(L, lua_gettop(L));
@@ -313,9 +313,9 @@ int GetFiles(lua_State* L) {
 	return 1;
 }
 
-int GetDirectories(lua_State* L) {
+int FileSystem_GetDirectories(lua_State* L) {
 
-	const wchar_t* path = to_pathw(L, 1, true);
+	const wchar_t* path = ToPathW(L, 1, true);
 	WIN32_FIND_DATAW ffd;
 	HANDLE h = FindFirstFileW(path, &ffd);
 	lua_pop(L, lua_gettop(L));
@@ -338,9 +338,9 @@ int GetDirectories(lua_State* L) {
 	return 1;
 }
 
-int GetAllInFolder(lua_State* L) {
+int FileSystem_GetAll(lua_State* L) {
 
-	const wchar_t* path = to_pathw(L, 1, true);
+	const wchar_t* path = ToPathW(L, 1, true);
 	WIN32_FIND_DATAW ffd;
 	HANDLE h = FindFirstFileW(path, &ffd);
 	lua_pop(L, lua_gettop(L));
@@ -355,10 +355,10 @@ int GetAllInFolder(lua_State* L) {
 	if (h != INVALID_HANDLE_VALUE) {
 		do {
 			if (wcscmp(ffd.cFileName, L".") != 0 && wcscmp(ffd.cFileName, L"..") != 0) {
-				push_find_dataw(L, &ffd);
+				PushFindDataW(L, &ffd);
 				if ((ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) && IsReparseTagNameSurrogate(ffd.dwReserved0)) {
 					wcscpy(full + dirlen, ffd.cFileName);
-					push_link_target(L, full);
+					PushLinkTarget(L, full);
 				}
 				lua_rawseti(L, -2, ++n);
 			}
@@ -369,9 +369,9 @@ int GetAllInFolder(lua_State* L) {
 	return 1;
 }
 
-int GetFileInfo(lua_State* L) {
+int FileSystem_GetFileInfo(lua_State* L) {
 
-	const wchar_t* path = to_pathw(L, 1);
+	const wchar_t* path = ToPathW(L, 1);
 	WIN32_FIND_DATAW data;
 	HANDLE h = FindFirstFileW(path, &data);
 
@@ -383,76 +383,76 @@ int GetFileInfo(lua_State* L) {
 
 	FindClose(h);
 	lua_pop(L, 1);
-	push_find_dataw(L, &data);
+	PushFindDataW(L, &data);
 
 	if ((data.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) && IsReparseTagNameSurrogate(data.dwReserved0))
-		push_link_target(L, path);
+		PushLinkTarget(L, path);
 
 	return 1;
 }
 
-int lua_CopyFile(lua_State* L) {
+int FileSystem_Copy(lua_State* L) {
 
-	const wchar_t* src = to_pathw(L, 1);
+	const wchar_t* src = ToPathW(L, 1);
 	wchar_t srccopy[MAX_PATH_LENGTH];
 	wcsncpy(srccopy, src, MAX_PATH_LENGTH - 1);
 	srccopy[MAX_PATH_LENGTH - 1] = 0;
-	const wchar_t* dst = to_pathw(L, 2);
+	const wchar_t* dst = ToPathW(L, 2);
 	BOOL no_overwrite = !lua_toboolean(L, 3);
 	lua_pop(L, lua_gettop(L));
 	lua_pushboolean(L, CopyFileW(srccopy, dst, no_overwrite));
 	return 1;
 }
 
-int lua_MoveFile(lua_State* L) {
+int FileSystem_Move(lua_State* L) {
 
-	const wchar_t* src = to_pathw(L, 1);
+	const wchar_t* src = ToPathW(L, 1);
 	wchar_t srccopy[MAX_PATH_LENGTH];
 	wcsncpy(srccopy, src, MAX_PATH_LENGTH - 1);
 	srccopy[MAX_PATH_LENGTH - 1] = 0;
-	const wchar_t* dst = to_pathw(L, 2);
+	const wchar_t* dst = ToPathW(L, 2);
 	lua_pop(L, lua_gettop(L));
 	lua_pushboolean(L, MoveFileW(srccopy, dst));
 	return 1;
 }
 
-int lua_DeleteFile(lua_State* L) {
+int FileSystem_Delete(lua_State* L) {
 
-	const wchar_t* path = to_pathw(L, 1);
+	const wchar_t* path = ToPathW(L, 1);
 	lua_pop(L, lua_gettop(L));
 	lua_pushboolean(L, DeleteFileW(path));
 	return 1;
 }
 
-int lua_CreateDirectory(lua_State* L) {
+int FileSystem_CreateDirectory(lua_State* L) {
 
-	const wchar_t* path = to_pathw(L, 1);
+	const wchar_t* path = ToPathW(L, 1);
 	lua_pop(L, lua_gettop(L));
 	lua_pushboolean(L, CreateDirectoryW(path, NULL));
 	return 1;
 }
 
-int lua_RemoveDirectory(lua_State* L) {
+int FileSystem_RemoveDirectory(lua_State* L) {
 
-	const wchar_t* path = to_pathw(L, 1);
+	const wchar_t* path = ToPathW(L, 1);
 	lua_pop(L, lua_gettop(L));
 	lua_pushboolean(L, RemoveDirectoryW(path));
 	return 1;
 }
 
-int lua_Rename(lua_State* L) {
+int FileSystem_Rename(lua_State* L) {
 
-	const wchar_t* src = to_pathw(L, 1);
+	const wchar_t* src = ToPathW(L, 1);
 	wchar_t srccopy[MAX_PATH_LENGTH];
 	wcsncpy(srccopy, src, MAX_PATH_LENGTH - 1);
 	srccopy[MAX_PATH_LENGTH - 1] = 0;
-	const wchar_t* dst = to_pathw(L, 2);
+	const wchar_t* dst = ToPathW(L, 2);
 	lua_pop(L, lua_gettop(L));
 	lua_pushboolean(L, MoveFileW(srccopy, dst));
 	return 1;
 }
 
-int lua_TempFile(lua_State* L) {
+int FileSystem_GetTempFileName(lua_State* L) {
 
 	wchar_t temp[MAX_PATH_LENGTH];
 	GetTempPathW(MAX_PATH_LENGTH, temp);
@@ -469,17 +469,17 @@ int lua_TempFile(lua_State* L) {
 	return 1;
 }
 
-int lua_SetCurrentDirectory(lua_State* L) {
+int FileSystem_SetCurrentDirectory(lua_State* L) {
 
-	const wchar_t* path = to_pathw(L, 1);
+	const wchar_t* path = ToPathW(L, 1);
 	lua_pop(L, lua_gettop(L));
 	lua_pushboolean(L, SetCurrentDirectoryW(path));
 	return 1;
 }
 
-int lua_SetFileAttributes(lua_State* L) {
+int FileSystem_SetAttributes(lua_State* L) {
 
-	const wchar_t* path = to_pathw(L, 1);
+	const wchar_t* path = ToPathW(L, 1);
 	DWORD mask = (DWORD)luaL_checkinteger(L, 2);
 	lua_pop(L, lua_gettop(L));
 	lua_pushboolean(L, SetFileAttributesW(path, mask));
@@ -520,7 +520,7 @@ static void PushDrive(lua_State* L, const char* drive) {
 	lua_settable(L, -3);
 }
 
-int lua_GetAllAvailableDrives(lua_State* L) {
+int FileSystem_GetDrives(lua_State* L) {
 
 	size_t len;
 	const char* opt = luaL_optlstring(L, 1, NULL, &len);
@@ -574,7 +574,7 @@ int lua_GetAllAvailableDrives(lua_State* L) {
 static char _PATH[MAX_PATH_LENGTH];
 
 // Internal: copy the UTF-8 path argument into a caller-supplied buffer.
-static const char* dup_path(lua_State* L, int idx, char* buf, size_t bufsz) {
+static const char* DupPath(lua_State* L, int idx, char* buf, size_t bufsz) {
 
 	size_t len;
 	const char* p = luaL_checklstring(L, idx, &len);
@@ -584,7 +584,7 @@ static const char* dup_path(lua_State* L, int idx, char* buf, size_t bufsz) {
 	return buf;
 }
 
-int GetCurrent(lua_State* L) {
+int FileSystem_CurrentDirectory(lua_State* L) {
 
 	if (!getcwd(_PATH, sizeof(_PATH)))
 		luaL_error(L, "getcwd failed: %s", strerror(errno));
@@ -592,16 +592,16 @@ int GetCurrent(lua_State* L) {
 	return 1;
 }
 
-int GetSpecialFolder(lua_State* L) {
+int FileSystem_GetSpecialFolder(lua_State* L) {
 	(void)L;
 	lua_pushnil(L);
 	return 1;
 }
 
-int GetFiles(lua_State* L) {
+int FileSystem_GetFiles(lua_State* L) {
 
 	char dirpath[MAX_PATH_LENGTH];
-	dup_path(L, 1, dirpath, sizeof(dirpath));
+	DupPath(L, 1, dirpath, sizeof(dirpath));
 	lua_pop(L, lua_gettop(L));
 	lua_newtable(L);
 	int n = 0;
@@ -623,10 +623,10 @@ int GetFiles(lua_State* L) {
 	return 1;
 }
 
-int GetDirectories(lua_State* L) {
+int FileSystem_GetDirectories(lua_State* L) {
 
 	char dirpath[MAX_PATH_LENGTH];
-	dup_path(L, 1, dirpath, sizeof(dirpath));
+	DupPath(L, 1, dirpath, sizeof(dirpath));
 	lua_pop(L, lua_gettop(L));
 	lua_newtable(L);
 	int n = 0;
@@ -648,10 +648,10 @@ int GetDirectories(lua_State* L) {
 	return 1;
 }
 
-int GetAllInFolder(lua_State* L) {
+int FileSystem_GetAll(lua_State* L) {
 
 	char dirpath[MAX_PATH_LENGTH];
-	dup_path(L, 1, dirpath, sizeof(dirpath));
+	DupPath(L, 1, dirpath, sizeof(dirpath));
 	lua_pop(L, lua_gettop(L));
 	lua_newtable(L);
 	int n = 0;
@@ -733,10 +733,10 @@ int GetAllInFolder(lua_State* L) {
 			return 1;
 		}
 
-		int GetFileInfo(lua_State* L) {
+		int FileSystem_GetFileInfo(lua_State* L) {
 
 	char path[MAX_PATH_LENGTH];
-	dup_path(L, 1, path, sizeof(path));
+	DupPath(L, 1, path, sizeof(path));
 	struct stat st;
 
 	if (stat(path, &st) != 0) {
@@ -802,12 +802,12 @@ int GetAllInFolder(lua_State* L) {
 	return 1;
 }
 
-int lua_CopyFile(lua_State* L) {
+int FileSystem_Copy(lua_State* L) {
 
 	char src[MAX_PATH_LENGTH];
-	dup_path(L, 1, src, sizeof(src));
+	DupPath(L, 1, src, sizeof(src));
 	char dst[MAX_PATH_LENGTH];
-	dup_path(L, 2, dst, sizeof(dst));
+	DupPath(L, 2, dst, sizeof(dst));
 	bool overwrite = lua_toboolean(L, 3) != 0;
 	lua_pop(L, lua_gettop(L));
 
@@ -849,57 +849,57 @@ int lua_CopyFile(lua_State* L) {
 	return 1;
 }
 
-int lua_MoveFile(lua_State* L) {
+int FileSystem_Move(lua_State* L) {
 
 	char src[MAX_PATH_LENGTH];
-	dup_path(L, 1, src, sizeof(src));
+	DupPath(L, 1, src, sizeof(src));
 	char dst[MAX_PATH_LENGTH];
-	dup_path(L, 2, dst, sizeof(dst));
+	DupPath(L, 2, dst, sizeof(dst));
 	lua_pop(L, lua_gettop(L));
 	lua_pushboolean(L, rename(src, dst) == 0);
 	return 1;
 }
 
-int lua_DeleteFile(lua_State* L) {
+int FileSystem_Delete(lua_State* L) {
 
 	char path[MAX_PATH_LENGTH];
-	dup_path(L, 1, path, sizeof(path));
+	DupPath(L, 1, path, sizeof(path));
 	lua_pop(L, lua_gettop(L));
 	lua_pushboolean(L, unlink(path) == 0 || rmdir(path) == 0);
 	return 1;
 }
 
-int lua_CreateDirectory(lua_State* L) {
+int FileSystem_CreateDirectory(lua_State* L) {
 
 	char path[MAX_PATH_LENGTH];
-	dup_path(L, 1, path, sizeof(path));
+	DupPath(L, 1, path, sizeof(path));
 	lua_pop(L, lua_gettop(L));
 	lua_pushboolean(L, mkdir(path, 0755) == 0);
 	return 1;
 }
 
-int lua_RemoveDirectory(lua_State* L) {
+int FileSystem_RemoveDirectory(lua_State* L) {
 
 	char path[MAX_PATH_LENGTH];
-	dup_path(L, 1, path, sizeof(path));
+	DupPath(L, 1, path, sizeof(path));
 	lua_pop(L, lua_gettop(L));
 	lua_pushboolean(L, rmdir(path) == 0);
 	return 1;
 }
 
-int lua_Rename(lua_State* L) {
+int FileSystem_Rename(lua_State* L) {
 
 	char src[MAX_PATH_LENGTH];
-	dup_path(L, 1, src, sizeof(src));
+	DupPath(L, 1, src, sizeof(src));
 	char dst[MAX_PATH_LENGTH];
-	dup_path(L, 2, dst, sizeof(dst));
+	DupPath(L, 2, dst, sizeof(dst));
 	lua_pop(L, lua_gettop(L));
 	lua_pushboolean(L, rename(src, dst) == 0);
 	return 1;
 }
 
 
-int lua_TempFile(lua_State* L) {
+int FileSystem_GetTempFileName(lua_State* L) {
 
 	char tmpl[] = "/tmp/gff_XXXXXX";
 	int fd = mkstemp(tmpl);
@@ -912,23 +912,23 @@ int lua_TempFile(lua_State* L) {
 	return 1;
 }
 
-int lua_SetCurrentDirectory(lua_State* L) {
+int FileSystem_SetCurrentDirectory(lua_State* L) {
 
 	char path[MAX_PATH_LENGTH];
-	dup_path(L, 1, path, sizeof(path));
+	DupPath(L, 1, path, sizeof(path));
 	lua_pop(L, lua_gettop(L));
 	lua_pushboolean(L, chdir(path) == 0);
 	return 1;
 }
 
-int lua_SetFileAttributes(lua_State* L) {
+int FileSystem_SetAttributes(lua_State* L) {
 
 	(void)L;
 	lua_pushboolean(L, false);
 	return 1;
 }
 
-int lua_GetAllAvailableDrives(lua_State* L) {
+int FileSystem_GetDrives(lua_State* L) {
 
 	lua_pop(L, lua_gettop(L));
 	lua_newtable(L);

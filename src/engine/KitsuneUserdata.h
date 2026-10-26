@@ -16,4 +16,4 @@ struct LuaKitsuneUserdata {
 // cfunctionWrapper must be the LuaCFunctionWrapper trampoline from KitsuneEngine.cpp.
 // pushGCHook must be the PushGCHook helper from KitsuneEngine.cpp; it is called for each
 // named function that has a non-NULL finalizer, pushing a KitsuneGCHookUD as upvalue 3.
-bool lua_registerkitsuneuserdata(lua_State* L, const char* name, const KitsuneUserDataRegistration* registration, lua_CFunction cfunctionWrapper, void (*pushGCHook)(lua_State*, void*, kitsune_Finalizer));
+bool RegisterKitsuneUserdata(lua_State* L, const char* name, const KitsuneUserDataRegistration* registration, lua_CFunction cfunctionWrapper, void (*pushGCHook)(lua_State*, void*, kitsune_Finalizer));

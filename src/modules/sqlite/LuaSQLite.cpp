@@ -35,7 +35,7 @@ LuaSQLite* lua_pushsqlite(lua_State* L) {
 	return luasqlite;
 }
 
-void push_sqlitevalue(lua_State* L, sqlite3_stmt* pStmt, int idx) {
+void PushSqliteValue(lua_State* L, sqlite3_stmt* pStmt, int idx) {
 	switch (sqlite3_column_type(pStmt, idx)) {
 	case SQLITE_INTEGER:
 		lua_pushinteger(L, sqlite3_column_int64(pStmt, idx));
@@ -52,7 +52,7 @@ void push_sqlitevalue(lua_State* L, sqlite3_stmt* pStmt, int idx) {
 
 	case SQLITE_BLOB:
 
-		lua_pushluastream(L, (const BYTE*)sqlite3_column_blob(pStmt, idx), sqlite3_column_bytes(pStmt, idx));
+		lua_pushstream(L, (const BYTE*)sqlite3_column_blob(pStmt, idx), sqlite3_column_bytes(pStmt, idx));
 		break;
 	case SQLITE_NULL:
 	default:
@@ -64,25 +64,25 @@ void push_sqlitevalue(lua_State* L, sqlite3_stmt* pStmt, int idx) {
 // Pushes the full content of the stream at the top of the Lua stack as a string, leaving its cursor
 // where it was. Returns false without pushing when the stream can't be rewound; callers then use NULL,
 // matching how Json and MsgPack encode such streams.
-static bool push_stream_content(lua_State* L) {
-	LuaStream* s = lua_toluastream(L, -1);
+static bool PushStreamContent(lua_State* L) {
+	LuaStream* s = lua_tostream(L, -1);
 	if (!(s->Caps & STREAM_CAP_READ) || !(s->Caps & STREAM_CAP_SEEK))
 		return false;
 
-	lua_Integer saved = lua_stream_curpos(L, s);
-	lua_stream_setpos(L, s, 0);
-	lua_stream_read_chunk(L, s, 0);
+	lua_Integer saved = LuaStreamCurPos(L, s);
+	LuaStreamSetPos(L, s, 0);
+	LuaStreamReadChunk(L, s, 0);
 	if (!lua_isstring(L, -1)) {
 		lua_pop(L, 1);
 		lua_pushliteral(L, "");
 	}
-	lua_stream_setpos(L, s, saved);
+	LuaStreamSetPos(L, s, saved);
 	return true;
 }
 
 // A non-NULL pointer with length 0 gives an empty BLOB rather than NULL.
-static void bind_stream_blob(lua_State* L, sqlite3_stmt* stmt, int param) {
-	if (!push_stream_content(L)) {
+static void BindStreamBlob(lua_State* L, sqlite3_stmt* stmt, int param) {
+	if (!PushStreamContent(L)) {
 		sqlite3_bind_null(stmt, param);
 		return;
 	}
@@ -92,8 +92,8 @@ static void bind_stream_blob(lua_State* L, sqlite3_stmt* stmt, int param) {
 	lua_pop(L, 1);
 }
 
-static void result_stream_blob(lua_State* L, sqlite3_context* context) {
-	if (!push_stream_content(L)) {
+static void ResultStreamBlob(lua_State* L, sqlite3_context* context) {
+	if (!PushStreamContent(L)) {
 		sqlite3_result_null(context);
 		return;
 	}
@@ -103,7 +103,7 @@ static void result_stream_blob(lua_State* L, sqlite3_context* context) {
 	lua_pop(L, 1);
 }
 
-int SQLiteGetRow(lua_State* L) {
+int SQLite_GetRow(lua_State* L) {
 
 	LuaSQLite* luasqlite = (LuaSQLite*)luaL_checksqlite(L, 1);
 	if (luasqlite->db == NULL) {
@@ -133,7 +133,7 @@ int SQLiteGetRow(lua_State* L) {
 		}
 		else {
 			lua_pop(L, lua_gettop(L));
-			push_sqlitevalue(L, luasqlite->stmt, idx);
+			PushSqliteValue(L, luasqlite->stmt, idx);
 		}
 		return 1;
 	}
@@ -144,14 +144,14 @@ int SQLiteGetRow(lua_State* L) {
 	for (int n = 0; n < cnt; n++) {
 
 		lua_pushstring(L, sqlite3_column_name(luasqlite->stmt, n));
-		push_sqlitevalue(L, luasqlite->stmt, n);
+		PushSqliteValue(L, luasqlite->stmt, n);
 		lua_settable(L, -3);
 	}
 
 	return 1;
 }
 
-int SQLiteGetColumns(lua_State* L) {
+int SQLite_GetColumns(lua_State* L) {
 
 	LuaSQLite* luasqlite = (LuaSQLite*)luaL_checksqlite(L, 1);
 	if (luasqlite->db == NULL) {
@@ -170,7 +170,7 @@ int SQLiteGetColumns(lua_State* L) {
 	return 1;
 }
 
-int SQLiteFetch(lua_State* L) {
+int SQLite_Fetch(lua_State* L) {
 
 	LuaSQLite* luasqlite = (LuaSQLite*)luaL_checksqlite(L, 1);
 	if (luasqlite->db == NULL)
@@ -213,13 +213,13 @@ int SQLiteFetch(lua_State* L) {
 	return 1;
 }
 
-int SQLiteFinish(lua_State* L) {
+int SQLite_Finish(lua_State* L) {
 	LuaSQLite* luasqlite = (LuaSQLite*)luaL_checksqlite(L, 1);
 	FinalizeStmt(luasqlite);
 	return 0;
 }
 
-int SQLiteExecute(lua_State* L) {
+int SQLite_Query(lua_State* L) {
 
 	LuaSQLite* luasqlite = (LuaSQLite*)luaL_checksqlite(L, 1);
 	if (luasqlite->db == NULL) {
@@ -281,7 +281,7 @@ int SQLiteExecute(lua_State* L) {
 				break;
 			case LUA_TUSERDATA:
 				if (lua_isstream(L, -1))
-					bind_stream_blob(L, luasqlite->stmt, ++cnt);
+					BindStreamBlob(L, luasqlite->stmt, ++cnt);
 				else
 					sqlite3_bind_null(luasqlite->stmt, ++cnt);
 				break;
@@ -338,7 +338,7 @@ int SQLiteExecute(lua_State* L) {
 				break;
 			case LUA_TUSERDATA:
 				if (lua_isstream(L, -1))
-					bind_stream_blob(L, luasqlite->stmt, ++cnt);
+					BindStreamBlob(L, luasqlite->stmt, ++cnt);
 				else
 					sqlite3_bind_null(luasqlite->stmt, ++cnt);
 				break;
@@ -417,7 +417,7 @@ static int BusyHandler(void* d, int retries) {
 	return retry;
 }
 
-int SQLiteSetBusyHandler(lua_State* L) {
+int SQLite_SetBusyHandler(lua_State* L) {
 
 	LuaSQLite* luasqlite = (LuaSQLite*)luaL_checksqlite(L, 1);
 	if (luasqlite->db == NULL)
@@ -496,7 +496,7 @@ void SqlitePCallFunction(bool isFinish, LuaSQLiteFunction* function, sqlite3_con
 			lua_pushlstring(L, (const char*)sqlite3_value_text(argv[n]), sqlite3_value_bytes(argv[n]));
 			break;
 		case SQLITE_BLOB:
-			lua_pushluastream(L, (const BYTE*)sqlite3_value_blob(argv[n]), sqlite3_value_bytes(argv[n]));
+			lua_pushstream(L, (const BYTE*)sqlite3_value_blob(argv[n]), sqlite3_value_bytes(argv[n]));
 			break;
 		default:
 			lua_pushnil(L);
@@ -552,7 +552,7 @@ void SqlitePCallFunction(bool isFinish, LuaSQLiteFunction* function, sqlite3_con
 	}
 	else if (type == LUA_TUSERDATA) {
 		if (lua_isstream(L, -1)) {
-			result_stream_blob(L, context);
+			ResultStreamBlob(L, context);
 			lua_pop(L, 1);
 			return;
 		}
@@ -668,15 +668,15 @@ int RegisterFunction(lua_State* L, bool isAggregate) {
 	return 0;
 }
 
-int SQLiteRegisterFunction(lua_State* L) {
+int SQLite_RegisterFunction(lua_State* L) {
 	return RegisterFunction(L, false);
 }
 
-int SQLiteRegisterAggregateFunction(lua_State* L) {
+int SQLite_RegisterAggregateFunction(lua_State* L) {
 	return RegisterFunction(L, true);
 }
 
-int SQLiteConnect(lua_State* L) {
+int SQLite_Open(lua_State* L) {
 
 	size_t len;
 	const char* db = luaL_optlstring(L, 1, ":memory:", &len);
@@ -766,7 +766,7 @@ sqlite3_create_function(luasqlite->db, "Lua", 1, SQLITE_UTF8, L, SqliteLuaFuncti
 	return 1;
 }
 
-int SQLite_GC(lua_State* L) {
+int SQLite_Close(lua_State* L) {
 
 	LuaSQLite* luasqlite = (LuaSQLite*)luaL_checksqlite(L, 1);
 

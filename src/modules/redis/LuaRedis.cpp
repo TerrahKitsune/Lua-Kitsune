@@ -113,7 +113,7 @@ int PushReply(lua_State* L, redisReply* reply) {
 	return 1;
 }
 
-int RedisOpen(lua_State* L) {
+int Redis_Open(lua_State* L) {
 
 	const char* host = luaL_checkstring(L, 1);
 	int port = (int)luaL_optinteger(L, 2, 6379);
@@ -277,7 +277,7 @@ LuaRedis* RedisCommandInternal(lua_State* L) {
 		return NULL;
 	}
 
-	LuaRedis* luaRedis = lua_toredis(L, idx);
+	LuaRedis* luaRedis = luaL_checkredis(L, idx);
 	size_t paramLen = 0;
 	const char* command;
 
@@ -295,23 +295,23 @@ LuaRedis* RedisCommandInternal(lua_State* L) {
 		for (int n = 0; n < top; n++) {
 			int argIdx = n + idx + 1;
 			if (lua_isidentifier(L, argIdx)) {
-				lua_identifier_push_string(L, argIdx);
+				lua_pushidentifierstring(L, argIdx);
 				lua_replace(L, argIdx);
 			}
 			if (lua_isdatetime(L, argIdx)) {
-				lua_datetime_push_string(L, argIdx);
+				lua_pushdatetimestring(L, argIdx);
 				lua_replace(L, argIdx);
 			}
 			if (lua_isdecimal(L, argIdx)) {
-				lua_decimal_push_string(L, argIdx);
+				lua_pushdecimalstring(L, argIdx);
 				lua_replace(L, argIdx);
 			}
 			if (lua_isuint(L, argIdx)) {
-				lua_uint_push_string(L, argIdx);
+				lua_pushuintstring(L, argIdx);
 				lua_replace(L, argIdx);
 			}
 			if (lua_istimespan(L, argIdx)) {
-				lua_timespan_push_string(L, argIdx);
+				lua_pushtimespanstring(L, argIdx);
 				lua_replace(L, argIdx);
 			}
 		}
@@ -361,7 +361,7 @@ LuaRedis* RedisCommandInternal(lua_State* L) {
 	return luaRedis;
 }
 
-int RedisCommand(lua_State* L) {
+int Redis_Command(lua_State* L) {
 	LuaRedis* luaRedis = RedisCommandInternal(L);
 
 	int result = PushReply(L, luaRedis->reply);
@@ -370,7 +370,7 @@ int RedisCommand(lua_State* L) {
 	return 1;
 }
 
-int RedisGetKey(lua_State* L) {
+int Redis_GetKey(lua_State* L) {
 
 	size_t len;
 	const char* str = luaL_checklstring(L, 2, &len);
@@ -378,11 +378,11 @@ int RedisGetKey(lua_State* L) {
 		luaL_error(L, "Key cannot be string empty");
 		return 0;
 	}
-	lua_createrediskey(L, 1, str, len);
+	lua_pushrediskey(L, 1, str, len);
 	return 1;
 }
 
-int RedisGetKeyIterator(lua_State* L) {
+int Redis_Call(lua_State* L) {
 
 	int idx = 0;
 	for (int i = lua_gettop(L); i > 0; i--)
@@ -398,7 +398,7 @@ int RedisGetKeyIterator(lua_State* L) {
 		return 0;
 	}
 
-	LuaRedis* luaRedis = lua_toredis(L, idx);
+	LuaRedis* luaRedis = luaL_checkredis(L, idx);
 
 	if (lua_isnil(L, -1)) {
 
@@ -470,12 +470,12 @@ int RedisGetKeyIterator(lua_State* L) {
 
 	size_t len;
 	const char* str = lua_tolstring(L, -1, &len);
-	lua_createrediskey(L, idx, str, len);
+	lua_pushrediskey(L, idx, str, len);
 
 	return 1;
 }
 
-int RedisGetStream(lua_State* L) {
+int Redis_GetStream(lua_State* L) {
 
 	luaL_checkudata(L, 1, REDIS);
 	size_t len;
@@ -488,7 +488,7 @@ int RedisGetStream(lua_State* L) {
 	return 1;
 }
 
-int RedisGetSortedSet(lua_State* L) {
+int Redis_GetSortedSet(lua_State* L) {
 
 	luaL_checkudata(L, 1, REDIS);
 	size_t len;
@@ -497,11 +497,11 @@ int RedisGetSortedSet(lua_State* L) {
 		luaL_error(L, "Key cannot be empty");
 		return 0;
 	}
-	push_redisvalue(L, 1, REDIS_VALUE_TYPE_SORTEDSET, key, len);
+	lua_pushredisvalue(L, 1, REDIS_VALUE_TYPE_SORTEDSET, key, len);
 	return 1;
 }
 
-int RedisGetSet(lua_State* L) {
+int Redis_GetSet(lua_State* L) {
 
 	luaL_checkudata(L, 1, REDIS);
 	size_t len;
@@ -510,11 +510,11 @@ int RedisGetSet(lua_State* L) {
 		luaL_error(L, "Key cannot be empty");
 		return 0;
 	}
-	push_redisvalue(L, 1, REDIS_VALUE_TYPE_SET, key, len);
+	lua_pushredisvalue(L, 1, REDIS_VALUE_TYPE_SET, key, len);
 	return 1;
 }
 
-int RedisGetList(lua_State* L) {
+int Redis_GetList(lua_State* L) {
 
 	luaL_checkudata(L, 1, REDIS);
 	size_t len;
@@ -523,11 +523,11 @@ int RedisGetList(lua_State* L) {
 		luaL_error(L, "Key cannot be empty");
 		return 0;
 	}
-	push_redisvalue(L, 1, REDIS_VALUE_TYPE_LIST, key, len);
+	lua_pushredisvalue(L, 1, REDIS_VALUE_TYPE_LIST, key, len);
 	return 1;
 }
 
-int RedisGetHashset(lua_State* L) {
+int Redis_GetHashset(lua_State* L) {
 
 	luaL_checkudata(L, 1, REDIS);
 	size_t len;
@@ -536,11 +536,11 @@ int RedisGetHashset(lua_State* L) {
 		luaL_error(L, "Key cannot be empty");
 		return 0;
 	}
-	push_redisvalue(L, 1, REDIS_VALUE_TYPE_HASHSET, key, len);
+	lua_pushredisvalue(L, 1, REDIS_VALUE_TYPE_HASHSET, key, len);
 	return 1;
 }
 
-int RedisGetString(lua_State* L) {
+int Redis_GetString(lua_State* L) {
 
 	luaL_checkudata(L, 1, REDIS);
 	size_t len;
@@ -553,7 +553,7 @@ int RedisGetString(lua_State* L) {
 	return 1;
 }
 
-int RedisGetJson(lua_State* L) {
+int Redis_GetJson(lua_State* L) {
 
 	luaL_checkudata(L, 1, REDIS);
 	size_t len;
@@ -580,7 +580,7 @@ LuaRedis* lua_pushredis(lua_State* L) {
 	return redis;
 }
 
-LuaRedis* lua_toredis(lua_State* L, int index) {
+LuaRedis* luaL_checkredis(lua_State* L, int index) {
 	LuaRedis* redis = (LuaRedis*)luaL_checkudata(L, index, REDIS);
 	if (redis == NULL) {
 		luaL_error(L, "parameter is not a %s", REDIS);
@@ -588,20 +588,20 @@ LuaRedis* lua_toredis(lua_State* L, int index) {
 	return redis;
 }
 
-int redis_dispose(lua_State* L) {
-	RedisDispose(L, lua_toredis(L, 1));
+int Redis_Dispose(lua_State* L) {
+	RedisDispose(L, luaL_checkredis(L, 1));
 	lua_pushboolean(L, 1);
 	return 1;
 }
 
-int redis_gc(lua_State* L) {
-	RedisDispose(L, lua_toredis(L, 1));
+int Redis_GC(lua_State* L) {
+	RedisDispose(L, luaL_checkredis(L, 1));
 	return 0;
 }
 
-int redis_tostring(lua_State* L) {
+int Redis_ToString(lua_State* L) {
 	char tim[200];
-	sprintf(tim, "Redis: %p", (void*)lua_toredis(L, 1));
+	sprintf(tim, "Redis: %p", (void*)luaL_checkredis(L, 1));
 	lua_pushstring(L, tim);
 	return 1;
 }

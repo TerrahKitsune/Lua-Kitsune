@@ -45,12 +45,12 @@ static const int s_days_before_month[2][14] = {
 	{ 0, 0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335, 366 }
 };
 
-static int is_leap(int y) {
+static int IsLeap(int y) {
 	return (y % 4 == 0 && y % 100 != 0) || (y % 400 == 0);
 }
 
 // Days from 0001-01-01 to start of year y (1-based).
-static int64_t days_before_year(int y) {
+static int64_t DaysBeforeYear(int y) {
 	int n = y - 1;
 	return (int64_t)n * 365 + n / 4 - n / 100 + n / 400;
 }
@@ -60,7 +60,7 @@ typedef struct {
 } DtFields;
 
 // Decompose ticks (UTC absolute) into calendar fields.
-static void ticks_to_fields(int64_t ticks, DtFields* f) {
+static void TicksToFields(int64_t ticks, DtFields* f) {
 	int64_t total_days = ticks / DT_TICKS_PER_DAY;
 	int64_t time_ticks = ticks % DT_TICKS_PER_DAY;
 	if (time_ticks < 0) {
@@ -82,7 +82,7 @@ static void ticks_to_fields(int64_t ticks, DtFields* f) {
 
 	f->year = (int)(n400 * 400 + n100 * 100 + n4 * 4 + n1 + 1);
 
-	int leap = is_leap(f->year);
+	int leap = IsLeap(f->year);
 	int m = 1;
 	while (m <= 12 && s_days_before_month[leap][m + 1] <= (int64_t)total_days)
 		m++;
@@ -99,9 +99,9 @@ static void ticks_to_fields(int64_t ticks, DtFields* f) {
 }
 
 // Compose calendar fields into ticks (UTC absolute).
-static int64_t fields_to_ticks(int y, int mo, int d, int h, int mi, int s, int ms) {
-	int leap = is_leap(y);
-	int64_t days = days_before_year(y)
+static int64_t FieldsToTicks(int y, int mo, int d, int h, int mi, int s, int ms) {
+	int leap = IsLeap(y);
+	int64_t days = DaysBeforeYear(y)
 		+ s_days_before_month[leap][mo]
 		+ (d - 1);
 	return days * DT_TICKS_PER_DAY
@@ -114,7 +114,7 @@ static int64_t fields_to_ticks(int y, int mo, int d, int h, int mi, int s, int m
 // ── Platform clock ────────────────────────────────────────────────────────────
 
 // Returns current UTC ticks and the local UTC offset in minutes.
-static int64_t get_utc_ticks(void) {
+static int64_t GetUtcTicks(void) {
 #ifdef _WIN32
 	FILETIME ft;
 	GetSystemTimeAsFileTime(&ft);
@@ -132,7 +132,7 @@ static int64_t get_utc_ticks(void) {
 #endif
 }
 
-static int16_t get_local_offset_minutes(void) {
+static int16_t GetLocalOffsetMinutes(void) {
 #ifdef _WIN32
 	TIME_ZONE_INFORMATION tz;
 	DWORD r = GetTimeZoneInformation(&tz);
@@ -156,11 +156,11 @@ static int16_t get_local_offset_minutes(void) {
 
 // Writes ISO 8601: "YYYY-MM-DDTHH:MM:SS.mmmZ" (UTC) or with "+HH:MM" offset.
 // buf must be at least 35 chars.
-static int format_iso8601(const LuaDateTime* dt, char* buf, size_t bufsz) {
+static int FormatIso8601(const LuaDateTime* dt, char* buf, size_t bufsz) {
 	// Apply offset to get local ticks for display.
 	int64_t local_ticks = dt->ticks + (int64_t)dt->offset_minutes * DT_TICKS_PER_MINUTE;
 	DtFields f;
-	ticks_to_fields(local_ticks, &f);
+	TicksToFields(local_ticks, &f);
 
 	if (dt->offset_minutes == 0) {
 		return snprintf(buf, bufsz,
@@ -180,10 +180,10 @@ static int format_iso8601(const LuaDateTime* dt, char* buf, size_t bufsz) {
 	}
 }
 
-void lua_datetime_push_string(lua_State* L, int index) {
+void lua_pushdatetimestring(lua_State* L, int index) {
 	LuaDateTime* dt = (LuaDateTime*)lua_touserdata(L, index);
 	char buf[35];
-	format_iso8601(dt, buf, sizeof(buf));
+	FormatIso8601(dt, buf, sizeof(buf));
 	lua_pushstring(L, buf);
 }
 
@@ -193,7 +193,7 @@ void lua_datetime_push_string(lua_State* L, int index) {
 // Returns 1 on success and fills *out (UTC ticks + offset), 0 on failure.
 // *has_offset_out is set to 1 if an explicit Z or +/-offset was present.
 // end_out (optional) receives the position after the last character consumed.
-static int parse_iso8601(const char* s, LuaDateTime* out, int* has_offset_out, const char** end_out = NULL) {
+static int ParseIso8601(const char* s, LuaDateTime* out, int* has_offset_out, const char** end_out = NULL) {
 	int y = 0, mo = 0, d = 0, h = 0, mi = 0, sec = 0, ms = 0;
 	int off_h = 0, off_m = 0;
 	int off_sign = 0; // 0 = not set/Z, +1 = east, -1 = west
@@ -202,7 +202,7 @@ static int parse_iso8601(const char* s, LuaDateTime* out, int* has_offset_out, c
 
 	if (sscanf(s, "%d-%d-%d%n", &y, &mo, &d, &n) < 3) return 0;
 	if (y < 1 || y > 9999 || mo < 1 || mo > 12 || d < 1 || d > 31) return 0;
-	if (d > s_days_in_month[is_leap(y)][mo]) return 0;
+	if (d > s_days_in_month[IsLeap(y)][mo]) return 0;
 
 	const char* p = s + n;
 	if (*p == 'T' || *p == ' ') {
@@ -259,7 +259,7 @@ static int parse_iso8601(const char* s, LuaDateTime* out, int* has_offset_out, c
 	if (total_off > 840) return 0;  // beyond legal UTC offset range
 
 	int16_t offset_min = (int16_t)(off_sign * total_off);
-	int64_t local_ticks = fields_to_ticks(y, mo, d, h, mi, sec, ms);
+	int64_t local_ticks = FieldsToTicks(y, mo, d, h, mi, sec, ms);
 	// Convert to UTC by subtracting the offset.
 	int64_t utc_ticks = local_ticks - (int64_t)offset_min * DT_TICKS_PER_MINUTE;
 
@@ -272,21 +272,21 @@ static int parse_iso8601(const char* s, LuaDateTime* out, int* has_offset_out, c
 
 // ── Constructors ──────────────────────────────────────────────────────────────
 
-int datetime_now(lua_State* L) {
+int DateTime_Now(lua_State* L) {
 	LuaDateTime* dt = lua_pushdatetime(L);
-	dt->ticks = get_utc_ticks();
-	dt->offset_minutes = get_local_offset_minutes();
+	dt->ticks = GetUtcTicks();
+	dt->offset_minutes = GetLocalOffsetMinutes();
 	return 1;
 }
 
-int datetime_utcnow(lua_State* L) {
+int DateTime_UtcNow(lua_State* L) {
 	LuaDateTime* dt = lua_pushdatetime(L);
-	dt->ticks = get_utc_ticks();
+	dt->ticks = GetUtcTicks();
 	dt->offset_minutes = 0;
 	return 1;
 }
 
-int datetime_new(lua_State* L) {
+int DateTime_New(lua_State* L) {
 	int y = (int)luaL_checkinteger(L, 1);
 	int mo = (int)luaL_checkinteger(L, 2);
 	int d = (int)luaL_checkinteger(L, 3);
@@ -304,17 +304,17 @@ int datetime_new(lua_State* L) {
 		ms < 0 || ms > 999) {
 		luaL_error(L, "DateTime.New: invalid component value");
 	}
-	if (d > s_days_in_month[is_leap(y)][mo])
+	if (d > s_days_in_month[IsLeap(y)][mo])
 		luaL_error(L, "DateTime.New: day out of range for month");
 
 	LuaDateTime* dt = lua_pushdatetime(L);
-	int64_t local_ticks = fields_to_ticks(y, mo, d, h, mi, s, ms);
+	int64_t local_ticks = FieldsToTicks(y, mo, d, h, mi, s, ms);
 	dt->ticks = local_ticks - (int64_t)offset_min * DT_TICKS_PER_MINUTE;
 	dt->offset_minutes = offset_min;
 	return 1;
 }
 
-int datetime_fromunixseconds(lua_State* L) {
+int DateTime_FromUnixSeconds(lua_State* L) {
 	lua_Number ts = luaL_checknumber(L, 1);
 	lua_Integer raw_off = luaL_optinteger(L, 2, 0);
 	if (raw_off < -840 || raw_off > 840)
@@ -326,7 +326,7 @@ int datetime_fromunixseconds(lua_State* L) {
 	return 1;
 }
 
-int datetime_fromunixmilliseconds(lua_State* L) {
+int DateTime_FromUnixMilliseconds(lua_State* L) {
 	lua_Integer ts = luaL_checkinteger(L, 1);
 	lua_Integer raw_off = luaL_optinteger(L, 2, 0);
 	if (raw_off < -840 || raw_off > 840)
@@ -338,17 +338,17 @@ int datetime_fromunixmilliseconds(lua_State* L) {
 	return 1;
 }
 
-// parse_iso8601 is exposed as datetime_parse_c for C callers (MySQL/Postgres).
+// ParseIso8601 is exposed as DateTimeParseC for C callers (MySQL/Postgres).
 // Unlike DateTime.Parse it must consume the whole value, so server output it
 // doesn't fully understand (Postgres "0044-03-15 BC", an LMT offset with
 // seconds) falls back to a string instead of becoming a wrong DateTime.
-int datetime_parse_c(const char* s, LuaDateTime* out) {
+int DateTimeParseC(const char* s, LuaDateTime* out) {
 	int has_offset;
 	const char* end = NULL;
-	return parse_iso8601(s, out, &has_offset, &end) && *end == '\0';
+	return ParseIso8601(s, out, &has_offset, &end) && *end == '\0';
 }
 
-int datetime_parse(lua_State* L) {
+int DateTime_Parse(lua_State* L) {
 	size_t len;
 	const char* s = luaL_checklstring(L, 1, &len);
 	lua_Integer raw_off = luaL_optinteger(L, 2, 0);
@@ -359,7 +359,7 @@ int datetime_parse(lua_State* L) {
 	LuaDateTime tmp;
 	memset(&tmp, 0, sizeof(tmp));
 	int has_explicit_offset = 0;
-	if (!parse_iso8601(s, &tmp, &has_explicit_offset)) {
+	if (!ParseIso8601(s, &tmp, &has_explicit_offset)) {
 		lua_pushnil(L);
 		return 1;
 	}
@@ -375,57 +375,57 @@ int datetime_parse(lua_State* L) {
 
 // ── Component getters ─────────────────────────────────────────────────────────
 
-static DtFields get_local_fields(lua_State* L) {
+static DtFields GetLocalFields(lua_State* L) {
 	LuaDateTime* dt = lua_todatetime(L, 1);
 	int64_t local_ticks = dt->ticks + (int64_t)dt->offset_minutes * DT_TICKS_PER_MINUTE;
 	DtFields f;
-	ticks_to_fields(local_ticks, &f);
+	TicksToFields(local_ticks, &f);
 	return f;
 }
 
-int datetime_year(lua_State* L) {
-	DtFields f = get_local_fields(L);
+int DateTime_Year(lua_State* L) {
+	DtFields f = GetLocalFields(L);
 	lua_pushinteger(L, f.year);
 	return 1;
 }
 
-int datetime_month(lua_State* L) {
-	DtFields f = get_local_fields(L);
+int DateTime_Month(lua_State* L) {
+	DtFields f = GetLocalFields(L);
 	lua_pushinteger(L, f.month);
 	return 1;
 }
 
-int datetime_day(lua_State* L) {
-	DtFields f = get_local_fields(L);
+int DateTime_Day(lua_State* L) {
+	DtFields f = GetLocalFields(L);
 	lua_pushinteger(L, f.day);
 	return 1;
 }
 
-int datetime_hour(lua_State* L) {
-	DtFields f = get_local_fields(L);
+int DateTime_Hour(lua_State* L) {
+	DtFields f = GetLocalFields(L);
 	lua_pushinteger(L, f.hour);
 	return 1;
 }
 
-int datetime_minute(lua_State* L) {
-	DtFields f = get_local_fields(L);
+int DateTime_Minute(lua_State* L) {
+	DtFields f = GetLocalFields(L);
 	lua_pushinteger(L, f.minute);
 	return 1;
 }
 
-int datetime_second(lua_State* L) {
-	DtFields f = get_local_fields(L);
+int DateTime_Second(lua_State* L) {
+	DtFields f = GetLocalFields(L);
 	lua_pushinteger(L, f.second);
 	return 1;
 }
 
-int datetime_millisecond(lua_State* L) {
-	DtFields f = get_local_fields(L);
+int DateTime_Millisecond(lua_State* L) {
+	DtFields f = GetLocalFields(L);
 	lua_pushinteger(L, f.millisecond);
 	return 1;
 }
 
-int datetime_dayofweek(lua_State* L) {
+int DateTime_DayOfWeek(lua_State* L) {
 	LuaDateTime* dt = lua_todatetime(L, 1);
 	// Day 0 in ticks is a Monday (0001-01-01).
 	// .NET DayOfWeek: 0=Sunday, 1=Monday, ..., 6=Saturday.
@@ -439,7 +439,7 @@ int datetime_dayofweek(lua_State* L) {
 	return 1;
 }
 
-int datetime_offsetminutes(lua_State* L) {
+int DateTime_OffsetMinutes(lua_State* L) {
 	LuaDateTime* dt = lua_todatetime(L, 1);
 	lua_pushinteger(L, dt->offset_minutes);
 	return 1;
@@ -447,21 +447,21 @@ int datetime_offsetminutes(lua_State* L) {
 
 // ── Conversion ───────────────────────────────────────────────────────────────
 
-int datetime_unixseconds(lua_State* L) {
+int DateTime_UnixSeconds(lua_State* L) {
 	LuaDateTime* dt = lua_todatetime(L, 1);
 	lua_Number secs = (lua_Number)(dt->ticks - DT_UNIX_EPOCH_TICKS) / (lua_Number)DT_TICKS_PER_SECOND;
 	lua_pushnumber(L, secs);
 	return 1;
 }
 
-int datetime_unixmilliseconds(lua_State* L) {
+int DateTime_UnixMilliseconds(lua_State* L) {
 	LuaDateTime* dt = lua_todatetime(L, 1);
 	lua_Integer ms = (dt->ticks - DT_UNIX_EPOCH_TICKS) / DT_TICKS_PER_MILLISECOND;
 	lua_pushinteger(L, ms);
 	return 1;
 }
 
-int datetime_toutc(lua_State* L) {
+int DateTime_ToUtc(lua_State* L) {
 	LuaDateTime* src = lua_todatetime(L, 1);
 	LuaDateTime* dst = lua_pushdatetime(L);
 	dst->ticks = src->ticks;
@@ -469,15 +469,15 @@ int datetime_toutc(lua_State* L) {
 	return 1;
 }
 
-int datetime_tolocal(lua_State* L) {
+int DateTime_ToLocal(lua_State* L) {
 	LuaDateTime* src = lua_todatetime(L, 1);
 	LuaDateTime* dst = lua_pushdatetime(L);
 	dst->ticks = src->ticks;
-	dst->offset_minutes = get_local_offset_minutes();
+	dst->offset_minutes = GetLocalOffsetMinutes();
 	return 1;
 }
 
-int datetime_tooffset(lua_State* L) {
+int DateTime_ToOffset(lua_State* L) {
 	LuaDateTime* src = lua_todatetime(L, 1);
 	lua_Integer raw = luaL_checkinteger(L, 2);
 	if (raw < -840 || raw > 840)
@@ -489,18 +489,18 @@ int datetime_tooffset(lua_State* L) {
 	return 1;
 }
 
-int datetime_format(lua_State* L) {
+int DateTime_Format(lua_State* L) {
 	LuaDateTime* dt = lua_todatetime(L, 1);
 	const char* fmt = luaL_optstring(L, 2, NULL);
 
 	int64_t local_ticks = dt->ticks + (int64_t)dt->offset_minutes * DT_TICKS_PER_MINUTE;
 	DtFields f;
-	ticks_to_fields(local_ticks, &f);
+	TicksToFields(local_ticks, &f);
 
 	if (!fmt) {
 		// Default: ISO 8601
 		char buf[35];
-		format_iso8601(dt, buf, sizeof(buf));
+		FormatIso8601(dt, buf, sizeof(buf));
 		lua_pushstring(L, buf);
 		return 1;
 	}
@@ -515,15 +515,15 @@ int datetime_format(lua_State* L) {
 	t.tm_hour = f.hour;
 	t.tm_min = f.minute;
 	t.tm_sec = f.second;
-	t.tm_yday = s_days_before_month[is_leap(f.year)][f.month] + (f.day - 1);
+	t.tm_yday = s_days_before_month[IsLeap(f.year)][f.month] + (f.day - 1);
 	t.tm_isdst = -1;  // unknown; let strftime decide
 	// Day-of-week: compute from the local (offset-adjusted) date, not raw UTC ticks.
-	// days_before_year(f.year) + s_days_before_month[leap][f.month] + (f.day - 1) gives
+	// DaysBeforeYear(f.year) + s_days_before_month[leap][f.month] + (f.day - 1) gives
 	// the absolute day number; day 0001-01-01 was a Monday (weekday 1 in .NET / 1 in tm).
 	// tm_wday: 0=Sun, 1=Mon, ..., 6=Sat.
 	{
-		int64_t abs_day = days_before_year(f.year)
-			+ s_days_before_month[is_leap(f.year)][f.month]
+		int64_t abs_day = DaysBeforeYear(f.year)
+			+ s_days_before_month[IsLeap(f.year)][f.month]
 			+ (f.day - 1);
 		t.tm_wday = (int)((abs_day + 1) % 7);  // +1: 0001-01-01 was Monday(1), Mon%7=1
 	}
@@ -532,7 +532,7 @@ int datetime_format(lua_State* L) {
 	return 1;
 }
 
-int datetime_isempty(lua_State* L) {
+int DateTime_IsEmpty(lua_State* L) {
 	LuaDateTime* dt = lua_todatetime(L, 1);
 	lua_pushboolean(L, dt->ticks == 0 ? 1 : 0);
 	return 1;
@@ -540,7 +540,7 @@ int datetime_isempty(lua_State* L) {
 
 // ── Arithmetic ───────────────────────────────────────────────────────────────
 
-static int add_ticks(lua_State* L, int64_t delta) {
+static int AddTicks(lua_State* L, int64_t delta) {
 	LuaDateTime* src = lua_todatetime(L, 1);
 	LuaDateTime* dst = lua_pushdatetime(L);
 	dst->ticks = src->ticks + delta;
@@ -548,42 +548,42 @@ static int add_ticks(lua_State* L, int64_t delta) {
 	return 1;
 }
 
-int datetime_adddays(lua_State* L) {
+int DateTime_AddDays(lua_State* L) {
 	lua_Number n = luaL_checknumber(L, 2);
-	return add_ticks(L, (int64_t)(n * (lua_Number)DT_TICKS_PER_DAY));
+	return AddTicks(L, (int64_t)(n * (lua_Number)DT_TICKS_PER_DAY));
 }
 
-int datetime_addhours(lua_State* L) {
+int DateTime_AddHours(lua_State* L) {
 	lua_Number n = luaL_checknumber(L, 2);
-	return add_ticks(L, (int64_t)(n * (lua_Number)DT_TICKS_PER_HOUR));
+	return AddTicks(L, (int64_t)(n * (lua_Number)DT_TICKS_PER_HOUR));
 }
 
-int datetime_addminutes(lua_State* L) {
+int DateTime_AddMinutes(lua_State* L) {
 	lua_Number n = luaL_checknumber(L, 2);
-	return add_ticks(L, (int64_t)(n * (lua_Number)DT_TICKS_PER_MINUTE));
+	return AddTicks(L, (int64_t)(n * (lua_Number)DT_TICKS_PER_MINUTE));
 }
 
-int datetime_addseconds(lua_State* L) {
+int DateTime_AddSeconds(lua_State* L) {
 	lua_Number n = luaL_checknumber(L, 2);
-	return add_ticks(L, (int64_t)(n * (lua_Number)DT_TICKS_PER_SECOND));
+	return AddTicks(L, (int64_t)(n * (lua_Number)DT_TICKS_PER_SECOND));
 }
 
-int datetime_addmilliseconds(lua_State* L) {
+int DateTime_AddMilliseconds(lua_State* L) {
 	lua_Number n = luaL_checknumber(L, 2);
-	return add_ticks(L, (int64_t)(n * (lua_Number)DT_TICKS_PER_MILLISECOND));
+	return AddTicks(L, (int64_t)(n * (lua_Number)DT_TICKS_PER_MILLISECOND));
 }
 
 // ── Metamethods ───────────────────────────────────────────────────────────────
 
-int datetime_tostring(lua_State* L) {
+int DateTime_ToString(lua_State* L) {
 	LuaDateTime* dt = lua_todatetime(L, 1);
 	char buf[35];
-	format_iso8601(dt, buf, sizeof(buf));
+	FormatIso8601(dt, buf, sizeof(buf));
 	lua_pushstring(L, buf);
 	return 1;
 }
 
-int datetime_eq(lua_State* L) {
+int DateTime_Eq(lua_State* L) {
 	LuaDateTime* a = (LuaDateTime*)luaL_testudata(L, 1, LUADATETIME);
 	LuaDateTime* b = (LuaDateTime*)luaL_testudata(L, 2, LUADATETIME);
 	if (!a || !b) { lua_pushboolean(L, 0); return 1; }
@@ -592,14 +592,14 @@ int datetime_eq(lua_State* L) {
 	return 1;
 }
 
-int datetime_lt(lua_State* L) {
+int DateTime_Lt(lua_State* L) {
 	LuaDateTime* a = lua_todatetime(L, 1);
 	LuaDateTime* b = lua_todatetime(L, 2);
 	lua_pushboolean(L, a->ticks < b->ticks ? 1 : 0);
 	return 1;
 }
 
-int datetime_le(lua_State* L) {
+int DateTime_Le(lua_State* L) {
 	LuaDateTime* a = lua_todatetime(L, 1);
 	LuaDateTime* b = lua_todatetime(L, 2);
 	lua_pushboolean(L, a->ticks <= b->ticks ? 1 : 0);
@@ -609,7 +609,7 @@ int datetime_le(lua_State* L) {
 // ── DateTime + TimeSpan arithmetic ───────────────────────────────────────────
 
 // __add: DateTime + TimeSpan → DateTime
-int datetime_addtimespan(lua_State* L) {
+int DateTime_AddTimeSpan(lua_State* L) {
 	LuaDateTime* dt = NULL;
 	LuaTimeSpan* ts = NULL;
 	// Support both orderings: dt + span and span + dt (commutative for add).
@@ -631,7 +631,7 @@ int datetime_addtimespan(lua_State* L) {
 }
 
 // __sub: DateTime - DateTime → TimeSpan; DateTime - TimeSpan → DateTime
-int datetime_sub(lua_State* L) {
+int DateTime_Sub(lua_State* L) {
 	if (lua_isdatetime(L, 1) && lua_isdatetime(L, 2)) {
 		// DateTime - DateTime → LuaTimeSpan
 		LuaDateTime* a = lua_todatetime(L, 1);

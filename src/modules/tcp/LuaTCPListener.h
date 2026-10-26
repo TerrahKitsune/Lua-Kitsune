@@ -66,8 +66,8 @@ typedef struct LuaTcpClient {
 } LuaTcpClient;
 
 /* ── TCP module functions ─────────────────────────────────────────────────── */
-int Tcp_StartListener(lua_State* L);
-int Tcp_Connect(lua_State* L);
+int TCP_StartListener(lua_State* L);
+int TCP_Connect(lua_State* L);
 
 /* ── Listener methods ─────────────────────────────────────────────────────── */
 int TcpListener_Accept     (lua_State* L);

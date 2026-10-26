@@ -6,56 +6,56 @@
 // =============================================================================
 
 static const luaL_Reg mcp_functions[] = {
-	{ "Create", lua_mcp_create },
+	{ "Create", MCP_Create },
 	{ NULL, NULL }
 };
 
 static const luaL_Reg mcp_meta[] = {
-	{ "__gc",       lua_mcp_gc       },
-	{ "__tostring", lua_mcp_tostring },
+	{ "__gc",       McpServer_GC       },
+	{ "__tostring", McpServer_ToString },
 	{ NULL, NULL }
 };
 
 static const luaL_Reg mcp_methods[] = {
-	{ "AddTool",   lua_mcp_addtool   },
-	{ "Start",     lua_mcp_start     },
-	{ "Stop",      lua_mcp_stop      },
-	{ "IsRunning", lua_mcp_isrunning },
-	{ "CreateElicitation", lua_mcp_createelicitation },
+	{ "AddTool",   McpServer_AddTool   },
+	{ "Start",     McpServer_Start     },
+	{ "Stop",      McpServer_Stop      },
+	{ "IsRunning", McpServer_IsRunning },
+	{ "CreateElicitation", McpServer_CreateElicitation },
 	{ NULL, NULL }
 };
 
 static const luaL_Reg mcp_elicitation_meta[] = {
-	{ "__gc",       lua_mcp_elicitation_gc       },
-	{ "__tostring", lua_mcp_elicitation_tostring },
+	{ "__gc",       McpElicitation_GC       },
+	{ "__tostring", McpElicitation_ToString },
 	{ NULL, NULL }
 };
 
 static const luaL_Reg mcp_elicitation_methods[] = {
-	{ "AddQuestion", lua_mcp_elicitation_addquestion },
-	{ "Elicit",      lua_mcp_elicitation_elicit      },
+	{ "AddQuestion", McpElicitation_AddQuestion },
+	{ "Elicit",      McpElicitation_Elicit      },
 	{ NULL, NULL }
 };
 
 static const luaL_Reg mcp_question_meta[] = {
-	{ "__gc",       lua_mcp_question_gc       },
-	{ "__tostring", lua_mcp_question_tostring },
+	{ "__gc",       McpQuestion_GC       },
+	{ "__tostring", McpQuestion_ToString },
 	{ NULL, NULL }
 };
 
 static const luaL_Reg mcp_question_methods[] = {
-	{ "AddAnswer",      lua_mcp_question_addanswer      },
-	{ "SetDescription", lua_mcp_question_setdescription },
-	{ "SetDefault",     lua_mcp_question_setdefault     },
-	{ "SetRange",       lua_mcp_question_setrange       },
-	{ "SetLength",      lua_mcp_question_setlength      },
-	{ "SetFormat",      lua_mcp_question_setformat      },
-	{ "SetMultiple",    lua_mcp_question_setmultiple    },
-	{ "SetCallback",    lua_mcp_question_setcallback    },
+	{ "AddAnswer",      McpQuestion_AddAnswer      },
+	{ "SetDescription", McpQuestion_SetDescription },
+	{ "SetDefault",     McpQuestion_SetDefault     },
+	{ "SetRange",       McpQuestion_SetRange       },
+	{ "SetLength",      McpQuestion_SetLength      },
+	{ "SetFormat",      McpQuestion_SetFormat      },
+	{ "SetMultiple",    McpQuestion_SetMultiple    },
+	{ "SetCallback",    McpQuestion_SetCallback    },
 	{ NULL, NULL }
 };
 
-static void mcp_register_type(lua_State* L, const char* name, const luaL_Reg* meta, const luaL_Reg* methods) {
+static void McpRegisterType(lua_State* L, const char* name, const luaL_Reg* meta, const luaL_Reg* methods) {
 	luaL_newmetatable(L, name);
 	luaL_setfuncs(L, meta, 0);
 	lua_pushliteral(L, "__index");
@@ -69,9 +69,9 @@ int luaopen_mcp(lua_State* L) {
 	luaL_newlibtable(L, mcp_functions);
 	luaL_setfuncs(L, mcp_functions, 0);
 
-	mcp_register_type(L, LUAMCP,            mcp_meta,             mcp_methods);
-	mcp_register_type(L, LUAMCPELICITATION, mcp_elicitation_meta, mcp_elicitation_methods);
-	mcp_register_type(L, LUAMCPQUESTION,    mcp_question_meta,    mcp_question_methods);
+	McpRegisterType(L, LUAMCP,            mcp_meta,             mcp_methods);
+	McpRegisterType(L, LUAMCPELICITATION, mcp_elicitation_meta, mcp_elicitation_methods);
+	McpRegisterType(L, LUAMCPQUESTION,    mcp_question_meta,    mcp_question_methods);
 
 	return 1;
 }

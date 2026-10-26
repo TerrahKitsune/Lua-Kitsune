@@ -16,7 +16,7 @@
 
 // Decodes one UTF-8 sequence starting at s[*i] and advances *i past it.
 // Malformed, truncated, overlong and surrogate encodings return U+FFFD and consume one byte.
-static uint32_t utf8_next(const unsigned char* s, size_t len, size_t* i) {
+static uint32_t Utf8Next(const unsigned char* s, size_t len, size_t* i) {
 
 	unsigned char c = s[*i];
 	if (c < 0x80) {
@@ -68,7 +68,7 @@ static uint32_t utf8_next(const unsigned char* s, size_t len, size_t* i) {
 }
 
 uint32_t kitsune_utf8_next(const char* s, size_t len, size_t* i) {
-	return utf8_next((const unsigned char*)s, len, i);
+	return Utf8Next((const unsigned char*)s, len, i);
 }
 
 bool kitsune_utf8_valid(const char* s, size_t len) {
@@ -81,7 +81,7 @@ bool kitsune_utf8_valid(const char* s, size_t len) {
 		}
 		size_t start = i;
 		// A genuine U+FFFD is EF BF BD; anything else decoding to U+FFFD was malformed.
-		if (utf8_next(u, len, &i) == REPLACEMENT_CHAR && !(i - start == 3 && u[start] == 0xEF && u[start + 1] == 0xBF && u[start + 2] == 0xBD))
+		if (Utf8Next(u, len, &i) == REPLACEMENT_CHAR && !(i - start == 3 && u[start] == 0xEF && u[start + 1] == 0xBF && u[start + 2] == 0xBD))
 			return false;
 	}
 	return true;
@@ -114,7 +114,7 @@ size_t kitsune_utf8_encode(char* out, uint32_t cp) {
 
 // Decodes the code point starting at UTF-16 unit u0 (u1 is the following unit, valid only
 // when hasNext). Sets *used to the units consumed. Unpaired surrogates return U+FFFD.
-static uint32_t utf16_decode(uint32_t u0, bool hasNext, uint32_t u1, int* used) {
+static uint32_t Utf16Decode(uint32_t u0, bool hasNext, uint32_t u1, int* used) {
 
 	*used = 1;
 	if (u0 >= 0xD800 && u0 <= 0xDBFF) {
@@ -130,7 +130,7 @@ static uint32_t utf16_decode(uint32_t u0, bool hasNext, uint32_t u1, int* used) 
 }
 
 // Writes the UTF-16LE encoding of cp to out (room for 4 bytes); returns the byte count.
-static size_t utf16le_put(char* out, uint32_t cp) {
+static size_t Utf16LePut(char* out, uint32_t cp) {
 
 	if (cp >= 0x10000) {
 		uint32_t v = cp - 0x10000;
@@ -170,7 +170,7 @@ void lua_pushwideasutf8(lua_State* L, const wchar_t* str, size_t len) {
 #if WCHAR_MAX <= 0xFFFF
 		int used;
 		uint32_t next = (i + 1 < len) ? (uint32_t)str[i + 1] : 0;
-		uint32_t cp = utf16_decode((uint32_t)str[i], i + 1 < len, next, &used);
+		uint32_t cp = Utf16Decode((uint32_t)str[i], i + 1 < len, next, &used);
 		i += (size_t)used;
 #else
 		uint32_t cp = (uint32_t)str[i];
@@ -190,7 +190,7 @@ size_t kitsune_utf8_to_wide(const char* src, size_t len, wchar_t* dst) {
 	size_t n = 0;
 
 	for (size_t i = 0; i < len;) {
-		uint32_t cp = utf8_next(s, len, &i);
+		uint32_t cp = Utf8Next(s, len, &i);
 #if WCHAR_MAX <= 0xFFFF
 		if (cp >= 0x10000) {
 			uint32_t v = cp - 0x10000;
@@ -211,7 +211,7 @@ size_t kitsune_utf8_wide_len(const char* src, size_t len) {
 	const unsigned char* s = (const unsigned char*)src;
 	size_t n = 0;
 	for (size_t i = 0; i < len;) {
-		uint32_t cp = utf8_next(s, len, &i);
+		uint32_t cp = Utf8Next(s, len, &i);
 		n += (WCHAR_MAX <= 0xFFFF && cp >= 0x10000) ? 2 : 1;
 	}
 	return n;
@@ -230,7 +230,7 @@ wchar_t* kitsune_utf8_to_wide_alloc(const char* src) {
 
 // Total length of the UTF-8 sequence introduced by lead byte c (1 for ASCII and for
 // bytes that cannot start a sequence).
-static size_t utf8_seq_len(unsigned char c) {
+static size_t Utf8SeqLen(unsigned char c) {
 
 	if ((c & 0xE0) == 0xC0)
 		return 2;
@@ -243,7 +243,7 @@ static size_t utf8_seq_len(unsigned char c) {
 
 // Length of an incomplete sequence at the end of s: a lead byte followed by fewer
 // continuation bytes than it announces. 0 when s ends on a complete (or invalid) sequence.
-static size_t utf8_incomplete_tail(const unsigned char* s, size_t len) {
+static size_t Utf8IncompleteTail(const unsigned char* s, size_t len) {
 
 	size_t back = 0;
 	while (back < 3 && back < len && (s[len - 1 - back] & 0xC0) == 0x80)
@@ -252,7 +252,7 @@ static size_t utf8_incomplete_tail(const unsigned char* s, size_t len) {
 		return 0;
 
 	size_t have = back + 1;
-	size_t need = utf8_seq_len(s[len - have]);
+	size_t need = Utf8SeqLen(s[len - have]);
 	return (need > 1 && have < need) ? have : 0;
 }
 
@@ -265,7 +265,7 @@ size_t kitsune_utf8_to_wide_chunk(KitsuneUtf8Carry* carry, const char* src, size
 	if (carry->len > 0) {
 		if (src) {
 			// Complete the carried sequence with continuation bytes from this chunk.
-			size_t need = utf8_seq_len(carry->bytes[0]);
+			size_t need = Utf8SeqLen(carry->bytes[0]);
 			while (carry->len < need && start < len && (s[start] & 0xC0) == 0x80)
 				carry->bytes[carry->len++] = s[start++];
 			if (carry->len < need && start == len) {
@@ -284,7 +284,7 @@ size_t kitsune_utf8_to_wide_chunk(KitsuneUtf8Carry* carry, const char* src, size
 		return n;
 	}
 
-	size_t tail = utf8_incomplete_tail(s + start, len - start);
+	size_t tail = Utf8IncompleteTail(s + start, len - start);
 	n += kitsune_utf8_to_wide(src + start, len - start - tail, dst + n);
 	memcpy(carry->bytes, s + len - tail, tail);
 	carry->len = (unsigned char)tail;
@@ -305,7 +305,7 @@ void lua_pushutf16lefromutf8(lua_State* L, const char* src, size_t len) {
 	size_t n = 0;
 
 	for (size_t i = 0; i < len;)
-		n += utf16le_put(out + n, utf8_next(s, len, &i));
+		n += Utf16LePut(out + n, Utf8Next(s, len, &i));
 
 	luaL_pushresultsize(&b, n);
 }
@@ -330,7 +330,7 @@ void lua_pushutf8fromutf16le(lua_State* L, const char* src, size_t len) {
 		if (i + 1 < units)
 			u1 = (uint32_t)s[i * 2 + 2] | ((uint32_t)s[i * 2 + 3] << 8);
 		int used;
-		uint32_t cp = utf16_decode(u0, i + 1 < units, u1, &used);
+		uint32_t cp = Utf16Decode(u0, i + 1 < units, u1, &used);
 		i += (size_t)used;
 		n += kitsune_utf8_encode(out + n, cp);
 	}
@@ -341,7 +341,7 @@ void lua_pushutf8fromutf16le(lua_State* L, const char* src, size_t len) {
 // -- Text module -----------------------------------------------------------------
 
 // Text.ToUtf16(str) -> UTF-16LE bytes as a Lua string (no BOM).
-int TextToUtf16(lua_State* L) {
+int Text_ToUtf16(lua_State* L) {
 
 	size_t len;
 	const char* s = luaL_checklstring(L, 1, &len);
@@ -350,7 +350,7 @@ int TextToUtf16(lua_State* L) {
 }
 
 // Text.FromUtf16(bytes) -> UTF-8 string. A leading BOM is kept as U+FEFF.
-int TextFromUtf16(lua_State* L) {
+int Text_FromUtf16(lua_State* L) {
 
 	size_t len;
 	const char* s = luaL_checklstring(L, 1, &len);
@@ -362,7 +362,7 @@ int TextFromUtf16(lua_State* L) {
 // Code page 0 means the system's ANSI code page. That is looked up from the system locale
 // rather than CP_ACP, which a process manifest (kitsune.exe's activeCodePage) can switch to
 // UTF-8 and would make legacy text convert differently depending on the host process.
-static UINT resolve_codepage(lua_Integer cp) {
+static UINT ResolveCodepage(lua_Integer cp) {
 
 	if (cp != 0)
 		return (UINT)cp;
@@ -374,7 +374,7 @@ static UINT resolve_codepage(lua_Integer cp) {
 }
 #else
 // Maps a Windows code page number to an iconv charset name; 0 means the locale's charset.
-static void iconv_charset(lua_Integer cp, char* out, size_t cap) {
+static void IconvCharset(lua_Integer cp, char* out, size_t cap) {
 
 	if (cp == 0)
 		snprintf(out, cap, "%s", "");
@@ -390,7 +390,7 @@ static void iconv_charset(lua_Integer cp, char* out, size_t cap) {
 
 // Runs src through cd and pushes the result. An invalid or unmappable input sequence
 // appends 'bad' and skips one input character (one UTF-8 sequence when utf8Input).
-static void iconv_push(lua_State* L, iconv_t cd, const char* src, size_t len, const char* bad, bool utf8Input) {
+static void IconvPush(lua_State* L, iconv_t cd, const char* src, size_t len, const char* bad, bool utf8Input) {
 
 	luaL_Buffer b;
 	luaL_buffinit(L, &b);
@@ -410,7 +410,7 @@ static void iconv_push(lua_State* L, iconv_t cd, const char* src, size_t len, co
 		size_t skip = 1;
 		if (utf8Input) {
 			skip = 0;
-			utf8_next((const unsigned char*)in, inLeft, &skip);
+			Utf8Next((const unsigned char*)in,inLeft, &skip);
 		}
 		in += skip;
 		inLeft -= skip;
@@ -428,7 +428,7 @@ static void iconv_push(lua_State* L, iconv_t cd, const char* src, size_t len, co
 // Text.FromCodepage(bytes, opt codepage) -> UTF-8 string.
 // codepage is a Windows code page number (1252, 437, 932, 28591, ...); omitted or 0 means the
 // system ANSI code page on Windows and the locale's charset elsewhere. Undecodable bytes become U+FFFD.
-int TextFromCodepage(lua_State* L) {
+int Text_FromCodepage(lua_State* L) {
 
 	size_t len;
 	const char* s = luaL_checklstring(L, 1, &len);
@@ -440,7 +440,7 @@ int TextFromCodepage(lua_State* L) {
 	}
 
 #ifdef _WIN32
-	UINT wcp = resolve_codepage(cp);
+	UINT wcp = ResolveCodepage(cp);
 	int wlen = MultiByteToWideChar(wcp, 0, s, (int)len, NULL, 0);
 	if (wlen <= 0)
 		return luaL_error(L, "Text.FromCodepage: unsupported code page %d", (int)cp);
@@ -449,11 +449,11 @@ int TextFromCodepage(lua_State* L) {
 	lua_pushwideasutf8(L, wide, (size_t)wlen);
 #else
 	char charset[32];
-	iconv_charset(cp, charset, sizeof(charset));
+	IconvCharset(cp, charset, sizeof(charset));
 	iconv_t cd = iconv_open("UTF-8", charset);
 	if (cd == (iconv_t)-1)
 		return luaL_error(L, "Text.FromCodepage: unsupported code page %d", (int)cp);
-	iconv_push(L, cd, s, len, "\xEF\xBF\xBD", false);
+	IconvPush(L, cd, s, len, "\xEF\xBF\xBD", false);
 	iconv_close(cd);
 #endif
 	return 1;
@@ -461,7 +461,7 @@ int TextFromCodepage(lua_State* L) {
 
 // Text.ToCodepage(str, opt codepage) -> bytes in that code page.
 // Same codepage rules as FromCodepage. Characters the code page cannot represent become '?'.
-int TextToCodepage(lua_State* L) {
+int Text_ToCodepage(lua_State* L) {
 
 	size_t len;
 	const char* s = luaL_checklstring(L, 1, &len);
@@ -475,7 +475,7 @@ int TextToCodepage(lua_State* L) {
 #ifdef _WIN32
 	wchar_t* wide = (wchar_t*)lua_newuserdatauv(L, (len + 1) * sizeof(wchar_t), 0);
 	size_t wlen = kitsune_utf8_to_wide(s, len, wide);
-	UINT wcp = resolve_codepage(cp);
+	UINT wcp = ResolveCodepage(cp);
 	int blen = WideCharToMultiByte(wcp, 0, wide, (int)wlen, NULL, 0, NULL, NULL);
 	if (blen <= 0)
 		return luaL_error(L, "Text.ToCodepage: unsupported code page %d", (int)cp);
@@ -485,11 +485,11 @@ int TextToCodepage(lua_State* L) {
 	luaL_pushresultsize(&b, (size_t)blen);
 #else
 	char charset[32];
-	iconv_charset(cp, charset, sizeof(charset));
+	IconvCharset(cp, charset, sizeof(charset));
 	iconv_t cd = iconv_open(charset, "UTF-8");
 	if (cd == (iconv_t)-1)
 		return luaL_error(L, "Text.ToCodepage: unsupported code page %d", (int)cp);
-	iconv_push(L, cd, s, len, "?", true);
+	IconvPush(L, cd, s, len, "?", true);
 	iconv_close(cd);
 #endif
 	return 1;
@@ -498,7 +498,7 @@ int TextToCodepage(lua_State* L) {
 #ifndef _WIN32
 // A UTF-8 LC_CTYPE locale for Unicode case mapping, independent of the process locale
 // (towlower in the default "C" locale only maps ASCII). NULL if none is installed.
-static locale_t utf8_ctype_locale() {
+static locale_t Utf8CtypeLocale() {
 
 	static locale_t loc = []() {
 		locale_t l = newlocale(LC_CTYPE_MASK, "C.UTF-8", (locale_t)0);
@@ -511,7 +511,7 @@ static locale_t utf8_ctype_locale() {
 #endif
 
 // Unicode-aware case conversion of a UTF-8 string (simple, locale-independent mappings).
-static int change_case(lua_State* L, bool upper) {
+static int ChangeCase(lua_State* L, bool upper) {
 
 	size_t len;
 	const char* s = luaL_checklstring(L, 1, &len);
@@ -532,13 +532,13 @@ static int change_case(lua_State* L, bool upper) {
 	LCMapStringEx(LOCALE_NAME_INVARIANT, flags, wide, (int)wlen, mapped, mlen, NULL, NULL, 0);
 	lua_pushwideasutf8(L, mapped, (size_t)mlen);
 #else
-	locale_t loc = utf8_ctype_locale();
+	locale_t loc = Utf8CtypeLocale();
 	const unsigned char* src = (const unsigned char*)s;
 	luaL_Buffer b;
 	luaL_buffinit(L, &b);
 
 	for (size_t i = 0; i < len;) {
-		wint_t cp = (wint_t)utf8_next(src, len, &i);
+		wint_t cp = (wint_t)Utf8Next(src, len, &i);
 		wint_t m;
 		if (loc)
 			m = upper ? towupper_l(cp, loc) : towlower_l(cp, loc);
@@ -554,11 +554,11 @@ static int change_case(lua_State* L, bool upper) {
 }
 
 // Text.Lower(str) -> str with every letter lower-cased (all scripts, not only ASCII).
-int TextLower(lua_State* L) {
-	return change_case(L, false);
+int Text_Lower(lua_State* L) {
+	return ChangeCase(L, false);
 }
 
 // Text.Upper(str) -> str with every letter upper-cased (all scripts, not only ASCII).
-int TextUpper(lua_State* L) {
-	return change_case(L, true);
+int Text_Upper(lua_State* L) {
+	return ChangeCase(L, true);
 }

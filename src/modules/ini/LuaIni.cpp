@@ -10,19 +10,19 @@
 // Instance management
 // =============================================================================
 
-LuaIni* lua_ini_push(lua_State* L) {
+LuaIni* lua_pushini(lua_State* L) {
     LuaIni* n = (LuaIni*)lua_newuserdata(L, sizeof(LuaIni));
     memset(n, 0, sizeof(LuaIni));
     luaL_setmetatable(L, LUAINI);
     return n;
 }
 
-LuaIni* lua_ini_check(lua_State* L, int idx) {
+LuaIni* luaL_checkini(lua_State* L, int idx) {
     return (LuaIni*)luaL_checkudata(L, idx, LUAINI);
 }
 
-int lua_ini_gc(lua_State* L) {
-    LuaIni* n = lua_ini_check(L, 1);
+int Ini_Dispose(lua_State* L) {
+    LuaIni* n = luaL_checkini(L, 1);
     if (n->out) {
         kitsune_free(n->out);
         n->out = NULL;
@@ -30,13 +30,13 @@ int lua_ini_gc(lua_State* L) {
     return 0;
 }
 
-int lua_ini_tostring(lua_State* L) {
-    lua_pushfstring(L, "Ini: %p", lua_ini_check(L, 1));
+int Ini_ToString(lua_State* L) {
+    lua_pushfstring(L, "Ini: %p", luaL_checkini(L, 1));
     return 1;
 }
 
-int lua_ini_new(lua_State* L) {
-    lua_ini_push(L);
+int Ini_New(lua_State* L) {
+    lua_pushini(L);
     return 1;
 }
 
@@ -44,7 +44,7 @@ int lua_ini_new(lua_State* L) {
 // Encoder — output buffer helpers
 // =============================================================================
 
-static void ibuf_grow(LuaIni* n, lua_State* L, size_t need) {
+static void IbufGrow(LuaIni* n, lua_State* L, size_t need) {
     if (n->outLen + need <= n->outCap)
         return;
     size_t cap = n->outCap ? n->outCap * 2 : 512;
@@ -57,18 +57,18 @@ static void ibuf_grow(LuaIni* n, lua_State* L, size_t need) {
     n->outCap = cap;
 }
 
-static void ibuf_emit(LuaIni* n, lua_State* L, const char* data, size_t len) {
-    ibuf_grow(n, L, len);
+static void IbufEmit(LuaIni* n, lua_State* L, const char* data, size_t len) {
+    IbufGrow(n, L, len);
     memcpy(n->out + n->outLen, data, len);
     n->outLen += len;
 }
 
-static void ibuf_emitc(LuaIni* n, lua_State* L, char c) {
-    ibuf_grow(n, L, 1);
+static void IbufEmitc(LuaIni* n, lua_State* L, char c) {
+    IbufGrow(n, L, 1);
     n->out[n->outLen++] = c;
 }
 
-#define ibuf_emitlit(n, L, s) ibuf_emit(n, L, "" s, sizeof(s) - 1)
+#define ibuf_emitlit(n, L, s) IbufEmit(n, L, "" s, sizeof(s) - 1)
 
 // =============================================================================
 // Encoder — value stringification
@@ -76,7 +76,7 @@ static void ibuf_emitc(LuaIni* n, lua_State* L, char c) {
 
 // Emit a value as a string suitable for an INI value (all values are strings).
 // Tables and unsupported types are skipped (return 0); scalars return 1.
-static int enc_scalar(LuaIni* n, lua_State* L, int idx) {
+static int EncScalar(LuaIni* n, lua_State* L, int idx) {
     switch (lua_type(L, idx)) {
     case LUA_TBOOLEAN:
         if (lua_toboolean(L, idx))
@@ -88,55 +88,55 @@ static int enc_scalar(LuaIni* n, lua_State* L, int idx) {
         if (lua_isinteger(L, idx)) {
             char buf[32];
             int  len = snprintf(buf, sizeof(buf), "%lld", (long long)lua_tointeger(L, idx));
-            ibuf_emit(n, L, buf, (size_t)len);
+            IbufEmit(n, L, buf, (size_t)len);
         } else {
             char buf[64];
             int  len = snprintf(buf, sizeof(buf), "%.17g", (double)lua_tonumber(L, idx));
-            ibuf_emit(n, L, buf, (size_t)len);
+            IbufEmit(n, L, buf, (size_t)len);
         }
         return 1;
     case LUA_TSTRING: {
         size_t      len;
         const char* s = lua_tolstring(L, idx, &len);
-        ibuf_emit(n, L, s, len);
+        IbufEmit(n, L, s, len);
         return 1;
     }
     case LUA_TUSERDATA:
         if (lua_isuint(L, idx)) {
             char buf[21];
             int  len = snprintf(buf, sizeof(buf), "%llu", (unsigned long long)lua_touint(L, idx)->value);
-            ibuf_emit(n, L, buf, (size_t)len);
+            IbufEmit(n, L, buf, (size_t)len);
             return 1;
         }
         if (lua_isdecimal(L, idx)) {
-            lua_decimal_push_string(L, idx);
+            lua_pushdecimalstring(L, idx);
             size_t      len;
             const char* s = lua_tolstring(L, -1, &len);
-            if (s) ibuf_emit(n, L, s, len);
+            if (s) IbufEmit(n, L, s, len);
             lua_pop(L, 1);
             return 1;
         }
         if (lua_isidentifier(L, idx)) {
-            lua_identifier_push_string(L, idx);
+            lua_pushidentifierstring(L, idx);
             size_t      len;
             const char* s = lua_tolstring(L, -1, &len);
-            if (s) ibuf_emit(n, L, s, len);
+            if (s) IbufEmit(n, L, s, len);
             lua_pop(L, 1);
             return 1;
         }
         if (lua_isdatetime(L, idx)) {
-            lua_datetime_push_string(L, idx);
+            lua_pushdatetimestring(L, idx);
             size_t      len;
             const char* s = lua_tolstring(L, -1, &len);
-            if (s) ibuf_emit(n, L, s, len);
+            if (s) IbufEmit(n, L, s, len);
             lua_pop(L, 1);
             return 1;
         }
         if (lua_istimespan(L, idx)) {
-            lua_timespan_push_string(L, idx);
+            lua_pushtimespanstring(L, idx);
             size_t      len;
             const char* s = lua_tolstring(L, -1, &len);
-            if (s) ibuf_emit(n, L, s, len);
+            if (s) IbufEmit(n, L, s, len);
             lua_pop(L, 1);
             return 1;
         }
@@ -150,8 +150,8 @@ static int enc_scalar(LuaIni* n, lua_State* L, int idx) {
 // Encoder — main
 // =============================================================================
 
-int lua_ini_encode(lua_State* L) {
-    LuaIni* n = lua_ini_check(L, 1);
+int Ini_Encode(lua_State* L) {
+    LuaIni* n = luaL_checkini(L, 1);
     luaL_checktype(L, 2, LUA_TTABLE);
 
     n->outLen = 0;
@@ -167,10 +167,10 @@ int lua_ini_encode(lua_State* L) {
             size_t      klen;
             const char* k = lua_tolstring(L, -2, &klen);
             if (k) {
-                ibuf_emit(n, L, k, klen);
+                IbufEmit(n, L, k, klen);
                 ibuf_emitlit(n, L, " = ");
-                enc_scalar(n, L, -1);
-                ibuf_emitc(n, L, '\n');
+                EncScalar(n, L, -1);
+                IbufEmitc(n, L, '\n');
             }
             lua_pop(L, 1);
             continue;
@@ -184,7 +184,7 @@ int lua_ini_encode(lua_State* L) {
             while (lua_next(L, sec) != 0) {
                 size_t      vklen;
                 const char* vk = lua_tolstring(L, -2, &vklen);
-                if (vk && enc_scalar(n, L, -1) == 0) {
+                if (vk && EncScalar(n, L, -1) == 0) {
                     // skip non-scalars silently
                     lua_pop(L, 1);
                     continue;
@@ -195,7 +195,7 @@ int lua_ini_encode(lua_State* L) {
                 }
                 // Redo: emit key = value\n
                 if (vk) {
-                    // enc_scalar already wrote — need to not double-emit.
+                    // EncScalar already wrote — need to not double-emit.
                     // Restructure: gather key first, then value.
                     lua_pop(L, 1);
                     continue;
@@ -221,10 +221,10 @@ int lua_ini_encode(lua_State* L) {
 
         if (lua_type(L, -1) != LUA_TTABLE) {
             // Bare scalar at root level.
-            ibuf_emit(n, L, k, klen);
+            IbufEmit(n, L, k, klen);
             ibuf_emitlit(n, L, " = ");
-            enc_scalar(n, L, -1);
-            ibuf_emitc(n, L, '\n');
+            EncScalar(n, L, -1);
+            IbufEmitc(n, L, '\n');
             lua_pop(L, 1);
             continue;
         }
@@ -236,13 +236,13 @@ int lua_ini_encode(lua_State* L) {
                 if (lua_type(L, -2) == LUA_TSTRING) {
                     size_t      vklen;
                     const char* vk = lua_tolstring(L, -2, &vklen);
-                    ibuf_emit(n, L, vk, vklen);
+                    IbufEmit(n, L, vk, vklen);
                     ibuf_emitlit(n, L, " = ");
-                    if (!enc_scalar(n, L, -1)) {
+                    if (!EncScalar(n, L, -1)) {
                         // Non-scalar: remove the "key = " we just emitted.
                         n->outLen -= vklen + 3;
                     } else {
-                        ibuf_emitc(n, L, '\n');
+                        IbufEmitc(n, L, '\n');
                     }
                 }
                 lua_pop(L, 1);
@@ -266,8 +266,8 @@ int lua_ini_encode(lua_State* L) {
         }
 
         // Section header.
-        ibuf_emitc(n, L, '[');
-        ibuf_emit(n, L, k, klen);
+        IbufEmitc(n, L, '[');
+        IbufEmit(n, L, k, klen);
         ibuf_emitlit(n, L, "]\n");
 
         int sec = lua_gettop(L);
@@ -276,17 +276,17 @@ int lua_ini_encode(lua_State* L) {
             if (lua_type(L, -2) == LUA_TSTRING) {
                 size_t      vklen;
                 const char* vk = lua_tolstring(L, -2, &vklen);
-                ibuf_emit(n, L, vk, vklen);
+                IbufEmit(n, L, vk, vklen);
                 ibuf_emitlit(n, L, " = ");
-                if (!enc_scalar(n, L, -1)) {
+                if (!EncScalar(n, L, -1)) {
                     n->outLen -= vklen + 3;
                 } else {
-                    ibuf_emitc(n, L, '\n');
+                    IbufEmitc(n, L, '\n');
                 }
             }
             lua_pop(L, 1);
         }
-        ibuf_emitc(n, L, '\n');
+        IbufEmitc(n, L, '\n');
         lua_pop(L, 1);
     }
 
@@ -299,7 +299,7 @@ int lua_ini_encode(lua_State* L) {
 // =============================================================================
 
 // Trim leading and trailing whitespace in-place (returns pointer into s).
-static const char* trim(const char* s, size_t* len) {
+static const char* Trim(const char* s, size_t* len) {
     while (*len > 0 && ((unsigned char)*s == ' ' || (unsigned char)*s == '\t'))  {
         s++;
         (*len)--;
@@ -314,8 +314,8 @@ static const char* trim(const char* s, size_t* len) {
     return s;
 }
 
-int lua_ini_decode(lua_State* L) {
-    lua_ini_check(L, 1);
+int Ini_Decode(lua_State* L) {
+    luaL_checkini(L, 1);
     size_t      srcLen;
     const char* src = luaL_checklstring(L, 2, &srcLen);
     skip_utf8_bom(&src, &srcLen);
@@ -346,7 +346,7 @@ int lua_ini_decode(lua_State* L) {
             p++;  // skip '\n'
 
         size_t      tlen = lineLen;
-        const char* line = trim(lineStart, &tlen);
+        const char* line = Trim(lineStart, &tlen);
 
         // Skip empty lines and comments (; and #).
         if (tlen == 0 || line[0] == ';' || line[0] == '#')
@@ -402,13 +402,13 @@ int lua_ini_decode(lua_State* L) {
             continue;
 
         size_t      klen = (size_t)(eq - line);
-        const char* k    = trim(line, &klen);
+        const char* k    = Trim(line, &klen);
         if (klen == 0)
             continue;
 
         const char* vstart = eq + 1;
         size_t      vlen   = tlen - (size_t)(vstart - line);
-        const char* v      = trim(vstart, &vlen);
+        const char* v      = Trim(vstart, &vlen);
 
         // Strip optional inline comment (; or #) not inside quotes.
         int quoted = 0;

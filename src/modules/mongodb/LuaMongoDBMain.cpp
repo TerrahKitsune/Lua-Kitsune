@@ -79,34 +79,34 @@ static void MongoGlobalInit() {
 }
 
 static const luaL_Reg mongofunctions[] = {
-    { "Connect",        MongoConnect        },
-    { "IsFinished",     MongoIsFinished     },
-    { "Wait",           MongoWait           },
-    { "Cancel",         MongoCancel         },
-    { "SetAliveToken",  MongoSetAliveToken  },
-    { "GetResult",      MongoGetResult      },
-    { "Find",           MongoFind           },
-    { "FindOne",        MongoFindOne        },
-    { "InsertOne",      MongoInsertOne      },
-    { "InsertMany",     MongoInsertMany     },
-    { "UpdateOne",      MongoUpdateOne      },
-    { "UpdateMany",     MongoUpdateMany     },
-    { "DeleteOne",      MongoDeleteOne      },
-    { "DeleteMany",     MongoDeleteMany     },
-    { "Aggregate",      MongoAggregate      },
-    { "Command",        MongoCommand        },
-    { "CountDocuments", MongoCountDocuments },
-    { "Close",          MongoClose          },
+    { "Connect",        MongoDB_Connect        },
+    { "IsFinished",     MongoDB_IsFinished     },
+    { "Wait",           MongoDB_Wait           },
+    { "Cancel",         MongoDB_Cancel         },
+    { "SetAliveToken",  MongoDB_SetAliveToken  },
+    { "GetResult",      MongoDB_GetResult      },
+    { "Find",           MongoDB_Find          },
+    { "FindOne",        MongoDB_FindOne        },
+    { "InsertOne",      MongoDB_InsertOne      },
+    { "InsertMany",     MongoDB_InsertMany     },
+    { "UpdateOne",      MongoDB_UpdateOne      },
+    { "UpdateMany",     MongoDB_UpdateMany     },
+    { "DeleteOne",      MongoDB_DeleteOne      },
+    { "DeleteMany",     MongoDB_DeleteMany     },
+    { "Aggregate",      MongoDB_Aggregate      },
+    { "Command",        MongoDB_Command        },
+    { "CountDocuments", MongoDB_CountDocuments },
+    { "Close",          MongoDB_Close          },
     { NULL, NULL }
 };
 
 static const luaL_Reg mongometa[] = {
-    { "__gc",       luamongo_gc       },
-    { "__tostring", luamongo_tostring },
+    { "__gc",       MongoDB_GC       },
+    { "__tostring", MongoDB_ToString },
     { NULL, NULL }
 };
 
-int luaopen_mongo(lua_State* L) {
+int luaopen_mongodb(lua_State* L) {
 #ifdef KITSUNE_MONGO
     MongoGlobalInit();
 #endif

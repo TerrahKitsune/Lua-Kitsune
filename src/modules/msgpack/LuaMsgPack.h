@@ -19,13 +19,13 @@ typedef struct LuaMsgPack {
     size_t     recCap;
 } LuaMsgPack;
 
-LuaMsgPack* lua_msgpack_push(lua_State* L);
-LuaMsgPack* lua_msgpack_check(lua_State* L, int idx);
+LuaMsgPack* lua_pushmsgpack(lua_State* L);
+LuaMsgPack* luaL_checkmsgpack(lua_State* L, int idx);
 
-int lua_msgpack_gc(lua_State* L);
-int lua_msgpack_tostring(lua_State* L);
-int lua_msgpack_new(lua_State* L);
-int lua_msgpack_encode(lua_State* L);
-int lua_msgpack_decode(lua_State* L);
-int lua_msgpack_encode_into_stream(lua_State* L);
-int lua_msgpack_decode_from_stream(lua_State* L);
+int MsgPack_Dispose(lua_State* L);
+int MsgPack_ToString(lua_State* L);
+int MsgPack_New(lua_State* L);
+int MsgPack_Encode(lua_State* L);
+int MsgPack_Decode(lua_State* L);
+int MsgPack_EncodeIntoStream(lua_State* L);
+int MsgPack_DecodeFromStream(lua_State* L);

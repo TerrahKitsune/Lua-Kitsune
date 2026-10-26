@@ -100,7 +100,7 @@
 #include "KitsuneInternal.h"
 
 // Unique address used as the Lua registry key for the shared bridge LuaJson instance.
-// Defined in luajson.cpp; accessed via lua_json_bridge_registry_key().
+// Defined in luajson.cpp; accessed via LuaJsonBridgeRegistryKey().
 
 #ifdef _WIN32
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved) {
@@ -312,9 +312,9 @@ struct KitsuneGCHookUD {
 
 // Forward declarations — defined inside extern "C" below alongside LuaCFunctionWrapper.
 extern "C" {
-	static int KitsuneIteratorUD_gc(lua_State* L);
+	static int KitsuneIteratorUD_GC(lua_State* L);
 	static int KitsuneIteratorWrapper(lua_State* L);
-	static int KitsuneGCHookUD_gc(lua_State* L);
+	static int KitsuneGCHookUD_GC(lua_State* L);
 	static void PushGCHook(lua_State* L, void* userdata, kitsune_Finalizer finalizer);
 }
 
@@ -421,7 +421,7 @@ static void FillKitsuneVariableFromStack(lua_State* L, int idx, KitsuneVariable*
 		if (lua_getmetatable(L, abs_idx)) {
 			lua_pushliteral(L, "__kitsune_userdata");
 			lua_rawget(L, -2);
-			bool isKitsuneRegistered = lua_touserdata(L, -1) == (void*)lua_registerkitsuneuserdata;
+			bool isKitsuneRegistered = lua_touserdata(L, -1) == (void*)RegisterKitsuneUserdata;
 			lua_pop(L, 1);  // pop sentinel value
 
 			lua_getfield(L, -1, "__name");
@@ -577,8 +577,8 @@ void PushKitsuneVariable(lua_State* L, const KitsuneVariable* v) {
 	case KITSUNE_TJSON: {
 		// Decode JSON using the shared bridge instance (avoids GC churn per call).
 		if (v->data && v->length > 0) {
-			lua_pushcfunction(L, lua_json_decode);
-			lua_rawgetp(L, LUA_REGISTRYINDEX, lua_json_bridge_registry_key());
+			lua_pushcfunction(L, Json_Decode);
+			lua_rawgetp(L, LUA_REGISTRYINDEX, LuaJsonBridgeRegistryKey());
 			lua_pushlstring(L, (const char*)v->data, v->length);
 			if (lua_pcall_nohook(L, 2, 1, 0) != LUA_OK) {
 				lua_pop(L, 1);
@@ -788,7 +788,7 @@ static void SetSlotResult(KitsuneCoroutine* slot, lua_State* T, int idx) {
 		if (lua_getmetatable(T, idx)) {
 			lua_pushliteral(T, "__kitsune_userdata");
 			lua_rawget(T, -2);
-			bool isKitsuneRegistered = lua_touserdata(T, -1) == (void*)lua_registerkitsuneuserdata;
+			bool isKitsuneRegistered = lua_touserdata(T, -1) == (void*)RegisterKitsuneUserdata;
 			lua_pop(T, 1);  // pop sentinel value
 
 			lua_getfield(T, -1, "__name");
@@ -908,7 +908,7 @@ static void Ticker(lua_State* L, lua_Debug* ar) {
 		// Save and restore currentCoroutineId: the external thread that acquires Lua
 		// access (e.g. RunInline for Imgui.Start's render callback) will overwrite it
 		// with its own inline slot id and then zero it when done.  Without the restore
-		// the scheduler-managed coroutine resumes with id==0, causing L_Sleep to miss
+		// the scheduler-managed coroutine resumes with id==0, causing Global_Sleep to miss
 		// FindSlot and fall through to a blocking OS sleep.
 		long savedId = state->currentCoroutineId.load();
 		state->pausedEvent.Set();
@@ -1110,7 +1110,7 @@ static void SchedulerProc(KitsuneState* state) {
 					bool wake = false;
 					if (slot->sleepTokenRef > 0) {
 						lua_rawgeti(state->L, LUA_REGISTRYINDEX, slot->sleepTokenRef);
-						bool tokenDead = (lua_alivetoken_isalive(state->L, -1) == 0);
+						bool tokenDead = (AliveTokenIsAlive(state->L, -1) == 0);
 						lua_pop(state->L, 1);
 						if (tokenDead) {
 							luaL_unref(state->L, LUA_REGISTRYINDEX, slot->sleepTokenRef);
@@ -1273,7 +1273,7 @@ static void SchedulerProc(KitsuneState* state) {
 	state->schedulerDoneEvent.Set();
 }
 
-static int L_GetRuntime(lua_State* L) {
+static int Global_Runtime(lua_State* L) {
 	void* ud;
 	lua_getallocf(L, &ud);
 	KitsuneState* state = (KitsuneState*)ud;
@@ -1293,7 +1293,7 @@ static int L_GetRuntime(lua_State* L) {
 	return 1;
 }
 
-static int L_SleepContinuation(lua_State* L, int status, lua_KContext ctx) {
+static int SleepContinuation(lua_State* L, int status, lua_KContext ctx) {
 	(void)status; (void)ctx;
 	void* ud;
 	lua_getallocf(L, &ud);
@@ -1317,7 +1317,7 @@ static int L_SleepContinuation(lua_State* L, int status, lua_KContext ctx) {
 // scheduler and variable bridge can service their queues before the call is resumed.
 // Errors if called from a non-yieldable context that is not the scheduler thread.
 // No-op if called from a scheduler-thread nohook callback (yielding is not possible there).
-static int L_Yield(lua_State* L) {
+static int Global_Yield(lua_State* L) {
 	if (!lua_isyieldable(L)) {
 		if (g_isSchedulerThread)
 			return 0;  // nohook callback on scheduler thread — no-op, not an error
@@ -1341,7 +1341,7 @@ static int L_Yield(lua_State* L) {
 // Sleep(token, ms) or Sleep(ms, token) — yields until whichever comes first.
 // Errors if called from a non-yieldable context while running under the engine.
 // Falls back to a blocking OS sleep only when called outside any engine-managed slot.
-static int L_Sleep(lua_State* L) {
+static int Global_Sleep(lua_State* L) {
 	int nargs = lua_gettop(L);
 
 	lua_Number ms = 0.0;
@@ -1378,7 +1378,7 @@ static int L_Sleep(lua_State* L) {
 		if (tokenIdx > 0) {
 			LuaAliveToken* token = (LuaAliveToken*)luaL_testudata(L, tokenIdx, LUAALIVETOKEN);
 			// Tick immediately — if already dead, return without sleeping.
-			alivetoken_tick(token, L);
+			AliveTokenTick(token, L);
 			if (!token->alive)
 				return 0;
 			lua_pushvalue(L, tokenIdx);
@@ -1391,7 +1391,7 @@ static int L_Sleep(lua_State* L) {
 		// the scheduler must never see them as SLEEPING.
 		if (!slot->isInline.load() && (slot->sleepUntil != 0.0 || slot->sleepTokenRef > 0))
 			slot->state.store(KITSUNE_COROUTINE_STATE_SLEEPING);
-		return lua_yieldk(L, 0, 0, L_SleepContinuation);
+		return lua_yieldk(L, 0, 0, SleepContinuation);
 	}
 
 	// No engine slot — called from plain Lua outside any engine-managed coroutine.
@@ -1404,7 +1404,7 @@ static int L_Sleep(lua_State* L) {
 // Continuation for Pause(): runs when the scheduler resumes the coroutine via lua_resume(T,L,1).
 // The resume value (if any) is already on the Lua stack as the single argument — returning 1
 // passes it through as the return value of Pause() in the Lua script.
-static int L_PauseContinuation(lua_State* L, int status, lua_KContext ctx) {
+static int PauseContinuation(lua_State* L, int status, lua_KContext ctx) {
 	(void)status; (void)ctx;
 	// The scheduler pushed 0 or 1 values onto T before calling lua_resume.
 	// They appear at the top of the stack; return however many were pushed.
@@ -1416,7 +1416,7 @@ static int L_PauseContinuation(lua_State* L, int status, lua_KContext ctx) {
 // Only valid inside a scheduler-managed async coroutine.
 // Errors if called from a non-yieldable context.
 // Silent no-op if called from inline or external-C contexts where yielding is not meaningful.
-static int L_Pause(lua_State* L) {
+static int Global_Pause(lua_State* L) {
 	// Inline or external — Pause() is meaningless, no-op silently.
 	if (g_inlineExecution || !g_isSchedulerThread)
 		return 0;
@@ -1437,10 +1437,10 @@ static int L_Pause(lua_State* L) {
 	}
 	slot->state.store(KITSUNE_COROUTINE_STATE_PAUSED);
 	state->slotsLock.unlock();
-	return lua_yieldk(L, 0, 0, L_PauseContinuation);
+	return lua_yieldk(L, 0, 0, PauseContinuation);
 }
 
-static void* l_alloc(void* ud, void* ptr, size_t osize, size_t nsize) {
+static void* LAlloc(void* ud, void* ptr, size_t osize, size_t nsize) {
 	if (nsize == 0) {
 		kitsune_free(ptr);
 		return NULL;
@@ -1574,7 +1574,7 @@ extern "C" {
 
 		unsigned int seed = (unsigned int)std::chrono::duration_cast<std::chrono::nanoseconds>(
 			std::chrono::steady_clock::now().time_since_epoch()).count();
-		state->L = lua_newstate(l_alloc, state, seed);
+		state->L = lua_newstate(LAlloc, state, seed);
 		if (!state->L) {
 			delete state;
 #ifdef _WIN32
@@ -1624,11 +1624,11 @@ extern "C" {
 		luaopen_redis(L);        lua_setglobal(L, "Redis");
 #endif
 #ifdef KITSUNE_MONGO
-		luaopen_mongo(L);        lua_setglobal(L, "MongoDB");
+		luaopen_mongodb(L);        lua_setglobal(L, "MongoDB");
 #endif
 		luaopen_process(L);      lua_setglobal(L, "Process");
 		luaopen_hardware(L);     lua_setglobal(L, "Hardware");
-		luaopen_luaaes(L);       lua_setglobal(L, "Aes");
+		luaopen_aes(L);       lua_setglobal(L, "Aes");
 		luaopen_sqlite(L);       lua_setglobal(L, "SQLite");
 		luaopen_duckdb(L);       lua_setglobal(L, "DuckDB");
 		luaopen_timer(L);        lua_setglobal(L, "Timer");
@@ -1638,16 +1638,16 @@ extern "C" {
 		luaopen_md5(L);          lua_setglobal(L, "MD5");
 		luaopen_stream(L);       lua_setglobal(L, "Stream");
 #ifdef KITSUNE_HTTP
-		luaopen_http(L);         lua_setglobal(L, "HttpClient");
+		luaopen_httpclient(L);        lua_setglobal(L, "HttpClient");
 #endif
 		luaopen_sha256(L);       lua_setglobal(L, "SHA256");
 		luaopen_mutex(L);        lua_setglobal(L, "Mutex");
 		luaopen_json(L);         lua_setglobal(L, "Json");
 		// Store a single LuaJson instance in the registry for the C bridge to reuse
 		// when decoding KITSUNE_TJSON values — avoids one GC allocation per bridge call.
-		lua_json_push(L);
-		lua_json_check(L, -1)->nullAsSentinel = true; // Bridge uses nullAsSentinel = true
-		lua_rawsetp(L, LUA_REGISTRYINDEX, lua_json_bridge_registry_key());
+		lua_pushjson(L);
+		luaL_checkjson(L, -1)->nullAsSentinel = true; // Bridge uses nullAsSentinel = true
+		lua_rawsetp(L, LUA_REGISTRYINDEX, LuaJsonBridgeRegistryKey());
 		luaopen_msgpack(L);      lua_setglobal(L, "MsgPack");
 		luaopen_xml(L);          lua_setglobal(L, "Xml");
 		luaopen_yaml(L);         lua_setglobal(L, "Yaml");
@@ -1670,29 +1670,29 @@ extern "C" {
 		luaopen_tasks(L);        lua_setglobal(L, "Tasks");
 		luaopen_mcp(L);          lua_setglobal(L, "MCP");
 
-		lua_pushcfunction(L, L_GetRuntime);    lua_setglobal(L, "Runtime");
+		lua_pushcfunction(L, Global_Runtime);    lua_setglobal(L, "Runtime");
 #ifdef _WIN32
-		lua_pushcfunction(L, L_ShellExecute);  lua_setglobal(L, "ShellExecute");
+		lua_pushcfunction(L, Global_ShellExecute);  lua_setglobal(L, "ShellExecute");
 #endif
-		lua_pushcfunction(L, L_GetMemory);     lua_setglobal(L, "GetMemory");
+		lua_pushcfunction(L, Global_GetMemory);     lua_setglobal(L, "GetMemory");
 
 		luaopen_misc(L);
-		lua_pushcfunction(L, L_Sleep);
+		lua_pushcfunction(L, Global_Sleep);
 		lua_setglobal(L, "Sleep");
-		lua_pushcfunction(L, L_Yield);
+		lua_pushcfunction(L, Global_Yield);
 		lua_setglobal(L, "Yield");
-		lua_pushcfunction(L, L_Pause);
+		lua_pushcfunction(L, Global_Pause);
 		lua_setglobal(L, "Pause");
 
 		// Register the KitsuneIterator metatable used by KITSUNE_TITERATOR closures.
 		luaL_newmetatable(L, "KitsuneIterator");
-		lua_pushcfunction(L, KitsuneIteratorUD_gc);
+		lua_pushcfunction(L, KitsuneIteratorUD_GC);
 		lua_setfield(L, -2, "__gc");
 		lua_pop(L, 1);
 
 		// Register the KitsuneGCHook metatable — general-purpose finalizer anchor.
 		luaL_newmetatable(L, "KitsuneGCHook");
-		lua_pushcfunction(L, KitsuneGCHookUD_gc);
+		lua_pushcfunction(L, KitsuneGCHookUD_GC);
 		lua_setfield(L, -2, "__gc");
 		lua_pop(L, 1);
 
@@ -2107,7 +2107,7 @@ extern "C" {
 					::Sleep(1);
 					AcquireLuaAccess(state);
 					lua_rawgeti(state->L, LUA_REGISTRYINDEX, sleepTokenRef);
-					int alive = lua_alivetoken_isalive(state->L, -1);
+					int alive = AliveTokenIsAlive(state->L, -1);
 					lua_pop(state->L, 1);
 					ReleaseLuaAccess(state);
 					if (alive == 0)
@@ -2734,7 +2734,7 @@ extern "C" {
 	// Caller must hold slotsLock (or be on the scheduler thread with exclusive access).
 } // end extern "C"
 
-// Internal variant used by task_resume in luatask.cpp — takes ownership of a pre-created
+// Internal variant used by Tasks_Resume in luatask.cpp — takes ownership of a pre-created
 // registry ref (Lua value already pinned). Caller must NOT use luaRef after this returns.
 bool KitsuneResumeRef(int id, int luaRef) {
 	KitsuneState* state = g_state;
@@ -3303,7 +3303,7 @@ extern "C" {
 
 	// Called by Lua GC when a KitsuneGCHookUD full-userdata is collected.
 	// Calls finalizer(userdata) once then nulls both fields to prevent double-fire.
-	static int KitsuneGCHookUD_gc(lua_State* L) {
+	static int KitsuneGCHookUD_GC(lua_State* L) {
 		KitsuneGCHookUD* ud = (KitsuneGCHookUD*)lua_touserdata(L, 1);
 		if (!ud || !ud->finalizer)
 			return 0;
@@ -3331,7 +3331,7 @@ extern "C" {
 	// Sets state=3 before calling finalized so any reentrant call is a no-op.
 	// Passes a no-op resultSetter — never nullptr — to avoid a null-pointer crash
 	// in LuaFunctionTrampoline when finalized tries to return a value.
-	static int KitsuneIteratorUD_gc(lua_State* L) {
+	static int KitsuneIteratorUD_GC(lua_State* L) {
 		KitsuneIteratorUD* ud = (KitsuneIteratorUD*)lua_touserdata(L, 1);
 		if (!ud || ud->state == 3)
 			return 0;
@@ -3433,7 +3433,7 @@ extern "C" {
 		KitsuneState* state = g_state;
 		if (!state || !state->L || !name || !*name || !registration) return false;
 		LuaAccessGuard lock(state);
-		return lua_registerkitsuneuserdata(state->L, name, registration, LuaCFunctionWrapper, PushGCHook);
+		return RegisterKitsuneUserdata(state->L, name, registration, LuaCFunctionWrapper, PushGCHook);
 	}
 
 	KITSUNE_API int KitsuneRegister(const KitsuneVariable* var) {
@@ -3534,8 +3534,8 @@ extern "C" {
 		LuaAccessGuard lock(state);
 		int stackBefore = lua_gettop(state->L);
 
-		lua_pushcfunction(state->L, lua_json_encode);
-		lua_rawgetp(state->L, LUA_REGISTRYINDEX, lua_json_bridge_registry_key());
+		lua_pushcfunction(state->L, Json_Encode);
+		lua_rawgetp(state->L, LUA_REGISTRYINDEX, LuaJsonBridgeRegistryKey());
 		lua_rawgeti(state->L, LUA_REGISTRYINDEX, var->ref);
 
 		if (lua_pcall_nohook(state->L, 2, 1, 0) != LUA_OK) {
@@ -4039,7 +4039,7 @@ extern "C" {
 
 				// Kill the app-level AliveToken before GC/close so any coroutine still
 				// holding a reference to it sees it as dead on the next tick.
-				lua_alivetoken_app_kill(state->L);
+				AliveTokenAppKill(state->L);
 
 				lua_gc(state->L, LUA_GCCOLLECT, 0);
 				kitsune_hook_remove_state(state->L);

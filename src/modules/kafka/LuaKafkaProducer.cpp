@@ -14,16 +14,16 @@ LuaKafkaProducer* lua_pushkafkaproducer(lua_State* L) {
 	return p;
 }
 
-LuaKafkaProducer* lua_tokafkaproducer(lua_State* L, int index) {
+LuaKafkaProducer* luaL_checkkafkaproducer(lua_State* L, int index) {
 	LuaKafkaProducer* p = (LuaKafkaProducer*)luaL_checkudata(L, index, LUAKAFKAPRODUCER);
 	if (!p)
 		luaL_error(L, "parameter is not a %s", LUAKAFKAPRODUCER);
 	return p;
 }
 
-int CreateProducer(lua_State* L) {
-	rd_kafka_conf_t* conf = lua_tokafkaconf(L, 1, "LUAP");
-	rd_kafka_conf_set_log_cb(conf, kafka_logger);
+int Kafka_NewProducer(lua_State* L) {
+	rd_kafka_conf_t* conf = ToKafkaConf(L, 1, "LUAP");
+	rd_kafka_conf_set_log_cb(conf, KafkaLogger);
 
 	char errbuf[kafka_error_buffer_len];
 	rd_kafka_t* rd = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errbuf, kafka_error_buffer_len);
@@ -39,8 +39,8 @@ int CreateProducer(lua_State* L) {
 	return 1;
 }
 
-int ProducerSend(lua_State* L) {
-	LuaKafkaProducer* p = lua_tokafkaproducer(L, 1);
+int KafkaProducer_Send(lua_State* L) {
+	LuaKafkaProducer* p = luaL_checkkafkaproducer(L, 1);
 	if (!p->rd) {
 		luaL_error(L, "Producer not open");
 		return 0;
@@ -139,116 +139,116 @@ int ProducerSend(lua_State* L) {
 	return 1;
 }
 
-int ProducerGetOffsets(lua_State* L) {
-	LuaKafkaProducer* p = lua_tokafkaproducer(L, 1);
+int KafkaProducer_GetOffsets(lua_State* L) {
+	LuaKafkaProducer* p = luaL_checkkafkaproducer(L, 1);
 	if (!p->rd) {
 		luaL_error(L, "Producer not open");
 		return 0;
 	}
-	return kafka_query_watermarks(L, p->rd);
+	return KafkaQueryWatermarks(L, p->rd);
 }
 
-int ProducerGetMetadata(lua_State* L) {
-	LuaKafkaProducer* p = lua_tokafkaproducer(L, 1);
+int KafkaProducer_GetMetadata(lua_State* L) {
+	LuaKafkaProducer* p = luaL_checkkafkaproducer(L, 1);
 	if (!p->rd) {
 		luaL_error(L, "Producer not open");
 		return 0;
 	}
-	return kafka_get_metadata(L, p->rd);
+	return KafkaGetMetadata(L, p->rd);
 }
 
-int ProducerCreateTopic(lua_State* L) {
-	LuaKafkaProducer* p = lua_tokafkaproducer(L, 1);
+int KafkaProducer_CreateTopic(lua_State* L) {
+	LuaKafkaProducer* p = luaL_checkkafkaproducer(L, 1);
 	if (!p->rd) {
 		luaL_error(L, "Producer not open");
 		return 0;
 	}
-	return kafka_admin_create_topic(L, p->rd);
+	return KafkaAdminCreateTopic(L, p->rd);
 }
 
-int ProducerDestroyTopic(lua_State* L) {
-	LuaKafkaProducer* p = lua_tokafkaproducer(L, 1);
+int KafkaProducer_DestroyTopic(lua_State* L) {
+	LuaKafkaProducer* p = luaL_checkkafkaproducer(L, 1);
 	if (!p->rd) {
 		luaL_error(L, "Producer not open");
 		return 0;
 	}
-	return kafka_admin_destroy_topic(L, p->rd);
+	return KafkaAdminDestroyTopic(L, p->rd);
 }
 
-int ProducerGetTopicConfig(lua_State* L) {
-	LuaKafkaProducer* p = lua_tokafkaproducer(L, 1);
+int KafkaProducer_GetTopicConfig(lua_State* L) {
+	LuaKafkaProducer* p = luaL_checkkafkaproducer(L, 1);
 	if (!p->rd) {
 		luaL_error(L, "Producer not open");
 		return 0;
 	}
-	return kafka_get_topic_config(L, p->rd);
+	return KafkaGetTopicConfig(L, p->rd);
 }
 
-int ProducerSetTopicConfig(lua_State* L) {
-	LuaKafkaProducer* p = lua_tokafkaproducer(L, 1);
+int KafkaProducer_SetTopicConfig(lua_State* L) {
+	LuaKafkaProducer* p = luaL_checkkafkaproducer(L, 1);
 	if (!p->rd) {
 		luaL_error(L, "Producer not open");
 		return 0;
 	}
-	return kafka_set_topic_config(L, p->rd);
+	return KafkaSetTopicConfig(L, p->rd);
 }
 
-int ProducerListGroups(lua_State* L) {
-	LuaKafkaProducer* p = lua_tokafkaproducer(L, 1);
+int KafkaProducer_ListGroups(lua_State* L) {
+	LuaKafkaProducer* p = luaL_checkkafkaproducer(L, 1);
 	if (!p->rd) {
 		luaL_error(L, "Producer not open");
 		return 0;
 	}
-	return kafka_list_groups(L, p->rd);
+	return KafkaListGroups(L, p->rd);
 }
 
-int ProducerDescribeGroups(lua_State* L) {
-	LuaKafkaProducer* p = lua_tokafkaproducer(L, 1);
+int KafkaProducer_DescribeGroups(lua_State* L) {
+	LuaKafkaProducer* p = luaL_checkkafkaproducer(L, 1);
 	if (!p->rd) {
 		luaL_error(L, "Producer not open");
 		return 0;
 	}
-	return kafka_describe_groups(L, p->rd);
+	return KafkaDescribeGroups(L, p->rd);
 }
 
-int ProducerDeleteGroup(lua_State* L) {
-	LuaKafkaProducer* p = lua_tokafkaproducer(L, 1);
+int KafkaProducer_DeleteGroup(lua_State* L) {
+	LuaKafkaProducer* p = luaL_checkkafkaproducer(L, 1);
 	if (!p->rd) {
 		luaL_error(L, "Producer not open");
 		return 0;
 	}
-	return kafka_delete_group(L, p->rd);
+	return KafkaDeleteGroup(L, p->rd);
 }
 
-int ProducerGetGroupOffsets(lua_State* L) {
-	LuaKafkaProducer* p = lua_tokafkaproducer(L, 1);
+int KafkaProducer_GetGroupOffsets(lua_State* L) {
+	LuaKafkaProducer* p = luaL_checkkafkaproducer(L, 1);
 	if (!p->rd) {
 		luaL_error(L, "Producer not open");
 		return 0;
 	}
-	return kafka_get_group_offsets(L, p->rd);
+	return KafkaGetGroupOffsets(L, p->rd);
 }
 
-int ProducerSetGroupOffsets(lua_State* L) {
-	LuaKafkaProducer* p = lua_tokafkaproducer(L, 1);
+int KafkaProducer_SetGroupOffsets(lua_State* L) {
+	LuaKafkaProducer* p = luaL_checkkafkaproducer(L, 1);
 	if (!p->rd) {
 		luaL_error(L, "Producer not open");
 		return 0;
 	}
-	return kafka_set_group_offsets(L, p->rd);
+	return KafkaSetGroupOffsets(L, p->rd);
 }
 
-int ProducerDeleteGroupOffsets(lua_State* L) {
-	LuaKafkaProducer* p = lua_tokafkaproducer(L, 1);
+int KafkaProducer_DeleteGroupOffsets(lua_State* L) {
+	LuaKafkaProducer* p = luaL_checkkafkaproducer(L, 1);
 	if (!p->rd) {
 		luaL_error(L, "Producer not open");
 		return 0;
 	}
-	return kafka_delete_group_offsets(L, p->rd);
+	return KafkaDeleteGroupOffsets(L, p->rd);
 }
 
-int ProducerGC(lua_State* L) {
-	LuaKafkaProducer* p = lua_tokafkaproducer(L, 1);
+int KafkaProducer_Close(lua_State* L) {
+	LuaKafkaProducer* p = luaL_checkkafkaproducer(L, 1);
 	if (p->rd) {
 		rd_kafka_flush(p->rd, 5000);
 		rd_kafka_destroy(p->rd);
@@ -257,9 +257,9 @@ int ProducerGC(lua_State* L) {
 	return 0;
 }
 
-int ProducerToString(lua_State* L) {
+int KafkaProducer_ToString(lua_State* L) {
 	char buf[64];
-	sprintf(buf, "KafkaProducer: %p", (void*)lua_tokafkaproducer(L, 1));
+	sprintf(buf, "KafkaProducer: %p", (void*)luaL_checkkafkaproducer(L, 1));
 	lua_pushstring(L, buf);
 	return 1;
 }

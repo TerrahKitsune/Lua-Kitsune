@@ -3,21 +3,21 @@
 #include "alivetoken/LuaAliveToken.h"
 
 static const luaL_Reg connfunctions[] = {
-	{ "Connect",        MySqlConnect        },
-	{ "IsBusy",         MySqlIsBusy         },
-	{ "EscapeValue",    MySqlEscapeValue    },
-	{ "Query",          MySqlQuery          },
-	{ "NonQuery",       MySqlNonQuery       },
-	{ "Scalar",         MySqlScalar         },
-	{ "QueryAll",       MySqlQueryAll       },
-	{ "SetAliveToken",  MySqlSetAliveToken  },
-	{ "Close",          luamysql_gc         },
+	{ "Connect",        MySQL_Connect        },
+	{ "IsBusy",         MySQL_IsBusy         },
+	{ "EscapeValue",    MySQL_EscapeValue    },
+	{ "Query",          MySQL_Query          },
+	{ "NonQuery",       MySQL_NonQuery       },
+	{ "Scalar",         MySQL_Scalar         },
+	{ "QueryAll",       MySQL_QueryAll       },
+	{ "SetAliveToken",  MySQL_SetAliveToken  },
+	{ "Close",          MySQL_Close         },
 	{ NULL, NULL }
 };
 
 static const luaL_Reg connmeta[] = {
-	{ "__gc",       luamysql_gc       },
-	{ "__tostring", luamysql_tostring },
+	{ "__gc",       MySQL_Close       },
+	{ "__tostring", MySQL_ToString },
 	{ NULL, NULL }
 };
 

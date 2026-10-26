@@ -60,8 +60,8 @@ static const struct luaL_Reg imagefunctions[] = {
 };
 
 static const luaL_Reg imagemeta[] = {
-	{ "__gc", image_gc },
-	{ "__tostring", image_tostring },
+	{ "__gc", Image_GC },
+	{ "__tostring", Image_ToString },
 	{ NULL, NULL }
 };
 

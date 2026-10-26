@@ -3,21 +3,21 @@
 #include "alivetoken/LuaAliveToken.h"
 
 static const luaL_Reg postgresfunctions[] = {
-	{ "Connect",        PostgresConnect        },
-	{ "IsBusy",         PostgresIsBusy         },
-	{ "EscapeValue",    PostgresEscapeValue    },
-	{ "Query",          PostgresQuery          },
-	{ "NonQuery",       PostgresNonQuery       },
-	{ "Scalar",         PostgresScalar         },
-	{ "QueryAll",       PostgresQueryAll       },
-	{ "SetAliveToken",  PostgresSetAliveToken  },
-	{ "Close",          luapostgres_gc         },
+	{ "Connect",        Postgres_Connect        },
+	{ "IsBusy",         Postgres_IsBusy         },
+	{ "EscapeValue",    Postgres_EscapeValue    },
+	{ "Query",          Postgres_Query          },
+	{ "NonQuery",       Postgres_NonQuery       },
+	{ "Scalar",         Postgres_Scalar         },
+	{ "QueryAll",       Postgres_QueryAll       },
+	{ "SetAliveToken",  Postgres_SetAliveToken  },
+	{ "Close",          Postgres_Close          },
 	{ NULL, NULL }
 };
 
 static const luaL_Reg postgresmeta[] = {
-	{ "__gc",       luapostgres_gc       },
-	{ "__tostring", luapostgres_tostring },
+	{ "__gc",       Postgres_Close       },
+	{ "__tostring", Postgres_ToString },
 	{ NULL, NULL }
 };
 

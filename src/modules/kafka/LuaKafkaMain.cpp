@@ -4,62 +4,62 @@
 #include "kafka/LuaKafkaConsumer.h"
 
 static const luaL_Reg kafkaproducerfunctions[] = {
-    { "Send",               ProducerSend               },
-    { "GetOffsets",         ProducerGetOffsets         },
-    { "GetMetadata",        ProducerGetMetadata        },
-    { "CreateTopic",        ProducerCreateTopic        },
-    { "DestroyTopic",       ProducerDestroyTopic       },
-    { "GetTopicConfig",     ProducerGetTopicConfig     },
-    { "SetTopicConfig",     ProducerSetTopicConfig     },
-    { "ListGroups",         ProducerListGroups         },
-    { "DescribeGroups",     ProducerDescribeGroups     },
-    { "DeleteGroup",        ProducerDeleteGroup        },
-    { "GetGroupOffsets",    ProducerGetGroupOffsets    },
-    { "SetGroupOffsets",    ProducerSetGroupOffsets    },
-    { "DeleteGroupOffsets", ProducerDeleteGroupOffsets },
-    { "Close",              ProducerGC                 },
+    { "Send",               KafkaProducer_Send               },
+    { "GetOffsets",         KafkaProducer_GetOffsets         },
+    { "GetMetadata",        KafkaProducer_GetMetadata        },
+    { "CreateTopic",        KafkaProducer_CreateTopic        },
+    { "DestroyTopic",       KafkaProducer_DestroyTopic       },
+    { "GetTopicConfig",     KafkaProducer_GetTopicConfig     },
+    { "SetTopicConfig",     KafkaProducer_SetTopicConfig     },
+    { "ListGroups",         KafkaProducer_ListGroups         },
+    { "DescribeGroups",     KafkaProducer_DescribeGroups     },
+    { "DeleteGroup",        KafkaProducer_DeleteGroup        },
+    { "GetGroupOffsets",    KafkaProducer_GetGroupOffsets    },
+    { "SetGroupOffsets",    KafkaProducer_SetGroupOffsets    },
+    { "DeleteGroupOffsets", KafkaProducer_DeleteGroupOffsets },
+    { "Close",              KafkaProducer_Close                 },
     { NULL, NULL }
 };
 
 static const luaL_Reg kafkaproducermeta[] = {
-    { "__gc",       ProducerGC       },
-    { "__tostring", ProducerToString },
+    { "__gc",       KafkaProducer_Close       },
+    { "__tostring", KafkaProducer_ToString },
     { NULL, NULL }
 };
 
 static const luaL_Reg kafkaconsumerfunctions[] = {
-    { "Subscribe",          ConsumerSubscribe          },
-    { "Assign",             ConsumerAssign             },
-    { "Poll",               ConsumerPoll               },
-    { "Seek",               ConsumerSeek               },
-    { "GetOffsets",         ConsumerGetOffsets         },
-    { "GetMetadata",        ConsumerGetMetadata        },
-    { "GetTopicConfig",     ConsumerGetTopicConfig     },
-    { "SetTopicConfig",     ConsumerSetTopicConfig     },
-    { "ListGroups",         ConsumerListGroups         },
-    { "DescribeGroups",     ConsumerDescribeGroups     },
-    { "DeleteGroup",        ConsumerDeleteGroup        },
-    { "GetGroupOffsets",    ConsumerGetGroupOffsets    },
-    { "SetGroupOffsets",    ConsumerSetGroupOffsets    },
-    { "DeleteGroupOffsets", ConsumerDeleteGroupOffsets },
-    { "Close",              ConsumerGC                 },
+    { "Subscribe",          KafkaConsumer_Subscribe          },
+    { "Assign",             KafkaConsumer_Assign             },
+    { "Poll",               KafkaConsumer_Poll               },
+    { "Seek",               KafkaConsumer_Seek               },
+    { "GetOffsets",         KafkaConsumer_GetOffsets         },
+    { "GetMetadata",        KafkaConsumer_GetMetadata        },
+    { "GetTopicConfig",     KafkaConsumer_GetTopicConfig     },
+    { "SetTopicConfig",     KafkaConsumer_SetTopicConfig     },
+    { "ListGroups",         KafkaConsumer_ListGroups         },
+    { "DescribeGroups",     KafkaConsumer_DescribeGroups     },
+    { "DeleteGroup",        KafkaConsumer_DeleteGroup        },
+    { "GetGroupOffsets",    KafkaConsumer_GetGroupOffsets    },
+    { "SetGroupOffsets",    KafkaConsumer_SetGroupOffsets    },
+    { "DeleteGroupOffsets", KafkaConsumer_DeleteGroupOffsets },
+    { "Close",              KafkaConsumer_Close                 },
     { NULL, NULL }
 };
 
 static const luaL_Reg kafkaconsumermeta[] = {
-    { "__gc",       ConsumerGC       },
-    { "__tostring", ConsumerToString },
+    { "__gc",       KafkaConsumer_Close       },
+    { "__tostring", KafkaConsumer_ToString },
     { NULL, NULL }
 };
 
 static const luaL_Reg kafkamodule[] = {
-    { "NewProducer", CreateProducer },
-    { "NewConsumer", CreateConsumer },
-    { "Logs",        GetLastLogs    },
+    { "NewProducer", Kafka_NewProducer },
+    { "NewConsumer", Kafka_NewConsumer },
+    { "Logs",        Kafka_Logs    },
     { NULL, NULL }
 };
 
-static void register_type(lua_State* L, const char* metaname,
+static void RegisterType(lua_State* L, const char* metaname,
     const luaL_Reg* functions, const luaL_Reg* meta) {
 
     lua_newtable(L);
@@ -80,8 +80,8 @@ static void register_type(lua_State* L, const char* metaname,
 
 int luaopen_kafka(lua_State* L) {
 
-    register_type(L, LUAKAFKAPRODUCER, kafkaproducerfunctions, kafkaproducermeta);
-    register_type(L, LUAKAFKACONSUMER, kafkaconsumerfunctions, kafkaconsumermeta);
+    RegisterType(L, LUAKAFKAPRODUCER, kafkaproducerfunctions, kafkaproducermeta);
+    RegisterType(L, LUAKAFKACONSUMER, kafkaconsumerfunctions, kafkaconsumermeta);
 
     // Module table returned to Lua
     luaL_newlibtable(L, kafkamodule);

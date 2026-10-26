@@ -2,18 +2,18 @@
 #include "msgpack/LuaMsgPackMain.h"
 
 static const struct luaL_Reg msgpack_functions[] = {
-    { "New",              lua_msgpack_new               },  // MsgPack.New()
-    { "Decode",           lua_msgpack_decode            },  // msgpack:Decode(str | stream)
-    { "Encode",           lua_msgpack_encode            },  // msgpack:Encode(value)
-    { "EncodeIntoStream", lua_msgpack_encode_into_stream },  // msgpack:EncodeIntoStream(stream, value)
-    { "DecodeFromStream", lua_msgpack_decode_from_stream },  // msgpack:DecodeFromStream(stream)
-    { "Dispose",          lua_msgpack_gc                },  // msgpack:Dispose()
+    { "New",              MsgPack_New               },  // MsgPack.New()
+    { "Decode",           MsgPack_Decode            },  // msgpack:Decode(str | stream)
+    { "Encode",           MsgPack_Encode            },  // msgpack:Encode(value)
+    { "EncodeIntoStream", MsgPack_EncodeIntoStream },  // msgpack:EncodeIntoStream(stream, value)
+    { "DecodeFromStream", MsgPack_DecodeFromStream },  // msgpack:DecodeFromStream(stream)
+    { "Dispose",          MsgPack_Dispose                },  // msgpack:Dispose()
     { NULL, NULL }
 };
 
 static const struct luaL_Reg msgpack_meta[] = {
-    { "__gc",       lua_msgpack_gc       },
-    { "__tostring", lua_msgpack_tostring },
+    { "__gc",       MsgPack_Dispose       },
+    { "__tostring", MsgPack_ToString },
     { NULL, NULL }
 };
 

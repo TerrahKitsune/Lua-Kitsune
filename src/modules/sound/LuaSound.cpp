@@ -40,13 +40,13 @@ LuaSound* lua_pushsound(lua_State* L) {
 	return snd;
 }
 
-int sound_tostring(lua_State* L) {
+int Sound_ToString(lua_State* L) {
 	LuaSound* snd = lua_tosound(L, 1);
 	lua_pushfstring(L, "Sound: %dch %dHz %dframes", snd->channels, snd->sampleRate, snd->frameCount);
 	return 1;
 }
 
-int sound_gc(lua_State* L) {
+int Sound_GC(lua_State* L) {
 	LuaSound* snd = (LuaSound*)lua_touserdata(L, 1);
 	if (!snd)
 		return 0;

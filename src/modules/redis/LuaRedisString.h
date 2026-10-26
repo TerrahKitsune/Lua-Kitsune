@@ -7,43 +7,43 @@ typedef struct LuaRedisString {
 	LuaRedisKey key;
 } LuaRedisString;
 
-int redisstring_gc(lua_State* L);
-int redisstring_tostring(lua_State* L);
-int redisstring_concat(lua_State* L);
-int redisstring_len(lua_State* L);
-int redisstring_set(lua_State* L);
-int redisstring_getorset(lua_State* L);
-int redisstring_at(lua_State* L);
-int redisstring_setat(lua_State* L);
-int redisstring_pairs(lua_State* L);
-int redisstring_getttl(lua_State* L);
-int redisstring_setttl(lua_State* L);
-int redisstring_delete(lua_State* L);
-int redisstring_call(lua_State* L);
+int RedisString_GC(lua_State* L);
+int RedisString_ToString(lua_State* L);
+int RedisString_Concat(lua_State* L);
+int RedisString_len(lua_State* L);
+int RedisString_Set(lua_State* L);
+int RedisString_GetOrSet(lua_State* L);
+int RedisString_At(lua_State* L);
+int RedisString_NewIndex(lua_State* L);
+int RedisString_Pairs(lua_State* L);
+int RedisString_GetTTL(lua_State* L);
+int RedisString_SetTTL(lua_State* L);
+int RedisString_Delete(lua_State* L);
+int RedisString_Call(lua_State* L);
 
 static const struct luaL_Reg redisstringfunctions[] = {
-	{ "At", redisstring_at },
-	{ "len", redisstring_len },
-	{ "Set", redisstring_set },
-	{ "Delete", redisstring_delete },
-	{ "GetOrSet", redisstring_getorset },
-	{ "GetSet", redisstring_getorset },
-	{ "SetTTL", redisstring_setttl },
-	{ "GetTTL", redisstring_getttl },
+	{ "At", RedisString_At },
+	{ "len", RedisString_len },
+	{ "Set", RedisString_Set },
+	{ "Delete", RedisString_Delete },
+	{ "GetOrSet", RedisString_GetOrSet },
+	{ "GetSet", RedisString_GetOrSet },
+	{ "SetTTL", RedisString_SetTTL },
+	{ "GetTTL", RedisString_GetTTL },
 	{ NULL, NULL }
 };
 
 static const luaL_Reg redisstringmeta[] = {
-	{ "__call", redisstring_call },
-	{ "__pairs", redisstring_pairs },
-	{ "__len",  redisstring_len },
-	{ "__gc",  redisstring_gc },
-	{ "__tostring",  redisstring_tostring },
-	{ "__concat",  redisstring_concat },
+	{ "__call", RedisString_Call },
+	{ "__pairs", RedisString_Pairs },
+	{ "__len",  RedisString_len },
+	{ "__gc",  RedisString_GC },
+	{ "__tostring",  RedisString_ToString },
+	{ "__concat",  RedisString_Concat },
 	{ NULL, NULL }
 };
 
-static int lua_redisstringindex(lua_State* L) {
+static int RedisString_Index(lua_State* L) {
 	
 	if (lua_type(L, -1) == LUA_TSTRING) 
 	{
@@ -63,12 +63,12 @@ static int lua_redisstringindex(lua_State* L) {
 		luaL_error(L, "Unknown field: %s", value);
 	}
 
-	return redisstring_at(L);
+	return RedisString_At(L);
 }
 
-static int internal_open_redisstring(lua_State* L) {
+static int InternalOpenRedisString(lua_State* L) {
 
-	lua_pushcfunction(L, lua_redisstringindex);
+	lua_pushcfunction(L, RedisString_Index);
 
 	luaL_newmetatable(L, REDISSTRING);
 	luaL_setfuncs(L, redisstringmeta, 0);
@@ -78,7 +78,7 @@ static int internal_open_redisstring(lua_State* L) {
 	lua_rawset(L, -3);
 
 	lua_pushliteral(L, "__newindex");
-	lua_pushcfunction(L, redisstring_setat);
+	lua_pushcfunction(L, RedisString_NewIndex);
 	lua_rawset(L, -3);
 
 	lua_pushliteral(L, "__metatable");

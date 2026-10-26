@@ -11,18 +11,18 @@
 // Custom pugixml allocator
 // =============================================================================
 
-static void* xml_alloc(size_t size) {
+static void* XmlAlloc(size_t size) {
 	return kitsune_malloc(size);
 }
 
-static void xml_dealloc(void* ptr) {
+static void XmlDealloc(void* ptr) {
 	kitsune_free(ptr);
 }
 
-void ensure_allocator() {
+void EnsureAllocator() {
 	static bool installed = false;
 	if (!installed) {
-		pugi::set_memory_management_functions(xml_alloc, xml_dealloc);
+		pugi::set_memory_management_functions(XmlAlloc, XmlDealloc);
 		installed = true;
 	}
 }
@@ -62,7 +62,7 @@ struct LuaXmlWriter : pugi::xml_writer {
 // Instance management
 // =============================================================================
 
-LuaXml* lua_xml_push(lua_State* L) {
+LuaXml* lua_pushxml(lua_State* L) {
 	LuaXml* x = (LuaXml*)lua_newuserdata(L, sizeof(LuaXml));
 	memset(x, 0, sizeof(LuaXml));
 	x->doc = new pugi::xml_document();
@@ -70,12 +70,12 @@ LuaXml* lua_xml_push(lua_State* L) {
 	return x;
 }
 
-LuaXml* lua_xml_check(lua_State* L, int idx) {
+LuaXml* luaL_checkxml(lua_State* L, int idx) {
 	return (LuaXml*)luaL_checkudata(L, idx, LUAXML);
 }
 
-int lua_xml_gc(lua_State* L) {
-	LuaXml* x = lua_xml_check(L, 1);
+int Xml_Dispose(lua_State* L) {
+	LuaXml* x = luaL_checkxml(L, 1);
 	delete x->doc;
 	x->doc = NULL;
 	kitsune_free(x->rec);
@@ -85,18 +85,18 @@ int lua_xml_gc(lua_State* L) {
 	return 0;
 }
 
-int lua_xml_tostring(lua_State* L) {
-	lua_pushfstring(L, "Xml: %p", lua_xml_check(L, 1));
+int Xml_ToString(lua_State* L) {
+	lua_pushfstring(L, "Xml: %p", luaL_checkxml(L, 1));
 	return 1;
 }
 
-int lua_xml_new(lua_State* L) {
+int Xml_New(lua_State* L) {
 	int indent = 0;
 	if (lua_isboolean(L, 1))
 		indent = lua_toboolean(L, 1);
 	else if (lua_isboolean(L, 2))
 		indent = lua_toboolean(L, 2);
-	lua_xml_push(L)->indent = indent;
+	lua_pushxml(L)->indent = indent;
 	return 1;
 }
 
@@ -123,14 +123,14 @@ struct DecodeFrame {
 	int            childSeq;    // next 1-based rawseti index into parent childTbl
 };
 
-static pugi::xml_node xml_first_elem_child(const pugi::xml_node& n) {
+static pugi::xml_node XmlFirstElemChild(const pugi::xml_node& n) {
 	pugi::xml_node c = n.first_child();
 	while (c && c.type() != pugi::node_element)
 		c = c.next_sibling();
 	return c;
 }
 
-static pugi::xml_node xml_next_elem_sibling(const pugi::xml_node& n) {
+static pugi::xml_node XmlNextElemSibling(const pugi::xml_node& n) {
 	pugi::xml_node s = n.next_sibling();
 	while (s && s.type() != pugi::node_element)
 		s = s.next_sibling();
@@ -140,7 +140,7 @@ static pugi::xml_node xml_next_elem_sibling(const pugi::xml_node& n) {
 // Push tag/attr/text/children tables for one element.
 // After call stack top is the children table; elem table is one below.
 // Returns the abs Lua stack index of the children table.
-static int decode_push_elem(lua_State* L, const pugi::xml_node& node) {
+static int DecodePushElem(lua_State* L, const pugi::xml_node& node) {
 	lua_newtable(L);
 	int ei = lua_gettop(L);
 
@@ -180,8 +180,8 @@ static int decode_push_elem(lua_State* L, const pugi::xml_node& node) {
 	return ci;
 }
 
-int lua_xml_decode(lua_State* L) {
-	LuaXml* x = lua_xml_check(L, 1);
+int Xml_Decode(lua_State* L) {
+	LuaXml* x = luaL_checkxml(L, 1);
 	if (lua_type(L, 2) != LUA_TSTRING)
 		luaL_argerror(L, 2, "string expected");
 	size_t      len = 0;
@@ -229,7 +229,7 @@ int lua_xml_decode(lua_State* L) {
 		lua_pushliteral(L, "Xml.Decode: out of memory");
 		return 2;
 	}
-	int ci = decode_push_elem(L, root);
+	int ci = DecodePushElem(L, root);
 	stack[0].node       = root;
 	stack[0].elemIdx    = ci - 1;
 	stack[0].childTblIdx = ci;
@@ -237,7 +237,7 @@ int lua_xml_decode(lua_State* L) {
 	int depth = 1;
 
 	// cur: the next element child to descend into for the current top frame.
-	pugi::xml_node cur = xml_first_elem_child(root);
+	pugi::xml_node cur = XmlFirstElemChild(root);
 
 	while (depth > 0) {
 		if (!cur) {
@@ -252,7 +252,7 @@ int lua_xml_decode(lua_State* L) {
 			lua_pushvalue(L, done.elemIdx);
 			lua_rawseti(L, parent.childTblIdx, parent.childSeq++);
 			lua_pop(L, 2); // pop done.elemIdx and done.childTblIdx
-			cur = xml_next_elem_sibling(done.node);
+			cur = XmlNextElemSibling(done.node);
 			depth--;
 			continue;
 		}
@@ -266,13 +266,13 @@ int lua_xml_decode(lua_State* L) {
 		}
 
 		// Descend into cur.
-		int nci = decode_push_elem(L, cur);
+		int nci = DecodePushElem(L, cur);
 		stack[depth].node       = cur;
 		stack[depth].elemIdx    = nci - 1;
 		stack[depth].childTblIdx = nci;
 		stack[depth].childSeq   = 1;
 		depth++;
-		cur = xml_first_elem_child(cur);
+		cur = XmlFirstElemChild(cur);
 	}
 
 	kitsune_free(stack);
@@ -299,17 +299,17 @@ struct EncodeFrame {
 	lua_Integer    len;    // length of children array
 };
 
-static void enc_reset(LuaXml* x) {
+static void EncReset(LuaXml* x) {
 	x->outLen = 0;
 	x->recLen = 0;
 	x->doc->reset();
 }
 
-int lua_xml_encode(lua_State* L) {
-	LuaXml* x = lua_xml_check(L, 1);
+int Xml_Encode(lua_State* L) {
+	LuaXml* x = luaL_checkxml(L, 1);
 	luaL_checktype(L, 2, LUA_TTABLE);
 
-	enc_reset(x);
+	EncReset(x);
 
 	EncodeFrame* stack = (EncodeFrame*)kitsune_malloc(XML_MAX_DEPTH * sizeof(EncodeFrame));
 	if (!stack)
@@ -379,7 +379,7 @@ int lua_xml_encode(lua_State* L) {
 					tlen = (size_t)n;
 				}
 				else if (lua_isdecimal(L, -1)) {
-					lua_decimal_push_string(L, -1);
+					lua_pushdecimalstring(L, -1);
 					tv = lua_tolstring(L, -1, &tlen);
 					if (tv && tlen > 0)
 						elem.append_child(pugi::node_pcdata).set_value(tv);
@@ -387,7 +387,7 @@ int lua_xml_encode(lua_State* L) {
 					tv = NULL;
 				}
 				else if (lua_isidentifier(L, -1)) {
-					lua_identifier_push_string(L, -1);
+					lua_pushidentifierstring(L, -1);
 					tv = lua_tolstring(L, -1, &tlen);
 					if (tv && tlen > 0)
 						elem.append_child(pugi::node_pcdata).set_value(tv);
@@ -395,7 +395,7 @@ int lua_xml_encode(lua_State* L) {
 					tv = NULL;
 				}
 				else if (lua_isdatetime(L, -1)) {
-					lua_datetime_push_string(L, -1);
+					lua_pushdatetimestring(L, -1);
 					tv = lua_tolstring(L, -1, &tlen);
 					if (tv && tlen > 0)
 						elem.append_child(pugi::node_pcdata).set_value(tv);
@@ -403,7 +403,7 @@ int lua_xml_encode(lua_State* L) {
 					tv = NULL;
 				}
 				else if (lua_istimespan(L, -1)) {
-					lua_timespan_push_string(L, -1);
+					lua_pushtimespanstring(L, -1);
 					tv = lua_tolstring(L, -1, &tlen);
 					if (tv && tlen > 0)
 						elem.append_child(pugi::node_pcdata).set_value(tv);

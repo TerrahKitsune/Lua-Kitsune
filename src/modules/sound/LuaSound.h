@@ -50,5 +50,5 @@ int Sound_GetRMS(lua_State* L);
 int Sound_Save(lua_State* L);
 int Sound_ToBytes(lua_State* L);
 
-int sound_gc(lua_State* L);
-int sound_tostring(lua_State* L);
+int Sound_GC(lua_State* L);
+int Sound_ToString(lua_State* L);

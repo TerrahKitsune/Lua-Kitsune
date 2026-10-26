@@ -2,5 +2,5 @@
 #ifdef KITSUNE_HTTP
 #include "LuaMainInclude.h"
 #include <curl/curl.h>
-int luaopen_http(lua_State* L);
+int luaopen_httpclient(lua_State* L);
 #endif

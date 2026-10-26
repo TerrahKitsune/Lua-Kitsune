@@ -4,7 +4,7 @@
 #include "websocket/LuaWebSocketMain.h"
 
 // =============================================================================
-// Module init — called by luaopen_http (in HttpCurlMain.cpp or equivalent)
+// Module init — called by luaopen_httpclient (in HttpCurlMain.cpp or equivalent)
 // =============================================================================
 
 int luaopen_websocket(lua_State* L) {

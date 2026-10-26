@@ -2,16 +2,16 @@
 #include "mutex/LuaMutexMain.h"
 
 static const struct luaL_Reg mutexfunctions[] = {
-	{ "Open", LuaCreateMutex },
-	{ "Lock", LuaLockMutex },
-	{ "Info", LuaGetMutexInfo },
-	{ "Unlock", LuaUnlockMutex },
+	{ "Open", Mutex_Open },
+	{ "Lock", Mutex_Lock },
+	{ "Info", Mutex_Info },
+	{ "Unlock", Mutex_Unlock },
 	{ NULL, NULL }
 };
 
 static const luaL_Reg mutexmeta[] = {
-	{ "__gc",  mutex_gc },
-	{ "__tostring",  mutex_tostring },
+	{ "__gc",  Mutex_GC },
+	{ "__tostring",  Mutex_ToString },
 { NULL, NULL }
 };
 

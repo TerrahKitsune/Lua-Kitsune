@@ -29,11 +29,11 @@ typedef struct LuaYaml {
     size_t     recCap;
 } LuaYaml;
 
-LuaYaml* lua_yaml_push(lua_State* L);
-LuaYaml* lua_yaml_check(lua_State* L, int idx);
+LuaYaml* lua_pushyaml(lua_State* L);
+LuaYaml* luaL_checkyaml(lua_State* L, int idx);
 
-int lua_yaml_gc(lua_State* L);
-int lua_yaml_tostring(lua_State* L);
-int lua_yaml_new(lua_State* L);
-int lua_yaml_encode(lua_State* L);
-int lua_yaml_decode(lua_State* L);
+int Yaml_Dispose(lua_State* L);
+int Yaml_ToString(lua_State* L);
+int Yaml_New(lua_State* L);
+int Yaml_Encode(lua_State* L);
+int Yaml_Decode(lua_State* L);

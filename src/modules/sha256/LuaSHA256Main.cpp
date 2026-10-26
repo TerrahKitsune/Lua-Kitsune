@@ -2,15 +2,15 @@
 #include "sha256/LuaSHA256.h"
 
 static const struct luaL_Reg sha256functions[] = {
-	{ "New", NewSHA256 },
-	{ "Update", UpdateSHA256 },
-	{ "Finish", FinalSHA256 },
+	{ "New", SHA256_New },
+	{ "Update", SHA256_Update },
+	{ "Finish", SHA256_Finish },
 	{ NULL, NULL }
 };
 
 static const luaL_Reg sha256meta[] = {
-	{ "__gc", sha256_gc },
-	{ "__tostring", sha256_tostring },
+	{ "__gc", SHA256_GC },
+	{ "__tostring", SHA256_ToString },
 { NULL, NULL }
 };
 

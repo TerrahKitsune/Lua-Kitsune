@@ -51,13 +51,13 @@ size_t DestroyMemoryState(MemoryState * state) {
 	return leaked;
 }
 
-void _AddToState(MemoryState * state, MemoryAlloc * alloc) {
+void AddToState(MemoryState * state, MemoryAlloc * alloc) {
 
 	alloc->next = state->alloc;
 	state->alloc = alloc;
 }
 
-MemoryAlloc * _RemoveFromState(MemoryState * state, void * ptr) {
+MemoryAlloc * RemoveFromState(MemoryState * state, void * ptr) {
 
 	MemoryAlloc * temp = NULL;
 
@@ -109,7 +109,7 @@ void * MemoryStateAlloc(MemoryState * state, size_t size) {
 	newAlloc->sizeRequested = size;
 	newAlloc->sizeAllocated = actual - sizeof(MemoryAlloc);
 	
-	_AddToState(state, newAlloc);
+	AddToState(state, newAlloc);
 
 	return newAlloc->ptr;
 }
@@ -128,14 +128,14 @@ void * MemoryStateRealloc(MemoryState * state, void * ptr, size_t size) {
 		return MemoryStateAlloc(state, size);
 	}
 
-	MemoryAlloc*toRealloc = _RemoveFromState(state, ptr);
+	MemoryAlloc*toRealloc = RemoveFromState(state, ptr);
 
 	assert(toRealloc);
 	void * newMem;
 
 	if (toRealloc->sizeAllocated >= size) {
 		toRealloc->sizeRequested = size;
-		_AddToState(state, toRealloc);
+		AddToState(state, toRealloc);
 		return toRealloc->ptr;
 	}
 	else if (state->reallocator) {
@@ -166,7 +166,7 @@ void * MemoryStateRealloc(MemoryState * state, void * ptr, size_t size) {
 			toRealloc->sizeAllocated = actual - sizeof(MemoryAlloc);
 			toRealloc->sizeRequested = size;
 
-			_AddToState(state, toRealloc);
+			AddToState(state, toRealloc);
 
 			return toRealloc->ptr;
 		}
@@ -180,7 +180,7 @@ void * MemoryStateRealloc(MemoryState * state, void * ptr, size_t size) {
 			toRealloc->sizeRequested = size;		
 			toRealloc->ptr = ((char*)newMem + sizeof(MemoryAlloc));
 
-			_AddToState(state, toRealloc);
+			AddToState(state, toRealloc);
 
 			return toRealloc->ptr;
 		}
@@ -204,7 +204,7 @@ void MemoryStateDealloc(MemoryState * state, void * ptr) {
 		return;
 	}
 
-	MemoryAlloc*toDie = _RemoveFromState(state, ptr);
+	MemoryAlloc*toDie = RemoveFromState(state, ptr);
 
 	assert(toDie);
 

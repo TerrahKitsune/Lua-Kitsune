@@ -33,51 +33,51 @@ int lua_isdatetime(lua_State* L, int index);
 
 // Pushes the ISO 8601 string representation of the LuaDateTime at the given index.
 // Caller must ensure the value at index is a LuaDateTime.
-void lua_datetime_push_string(lua_State* L, int index);
+void lua_pushdatetimestring(lua_State* L, int index);
 
 // Parses an ISO 8601 / SQL date-time string into *out (UTC ticks + offset).
 // Returns 1 on success, 0 on failure. Does not interact with the Lua stack.
-int datetime_parse_c(const char* s, LuaDateTime* out);
+int DateTimeParseC(const char* s, LuaDateTime* out);
 
 // Constructors
-int datetime_now(lua_State* L);
-int datetime_utcnow(lua_State* L);
-int datetime_new(lua_State* L);
-int datetime_fromunixseconds(lua_State* L);
-int datetime_fromunixmilliseconds(lua_State* L);
-int datetime_parse(lua_State* L);
+int DateTime_Now(lua_State* L);
+int DateTime_UtcNow(lua_State* L);
+int DateTime_New(lua_State* L);
+int DateTime_FromUnixSeconds(lua_State* L);
+int DateTime_FromUnixMilliseconds(lua_State* L);
+int DateTime_Parse(lua_State* L);
 
 // Component getters
-int datetime_year(lua_State* L);
-int datetime_month(lua_State* L);
-int datetime_day(lua_State* L);
-int datetime_hour(lua_State* L);
-int datetime_minute(lua_State* L);
-int datetime_second(lua_State* L);
-int datetime_millisecond(lua_State* L);
-int datetime_dayofweek(lua_State* L);
-int datetime_offsetminutes(lua_State* L);
+int DateTime_Year(lua_State* L);
+int DateTime_Month(lua_State* L);
+int DateTime_Day(lua_State* L);
+int DateTime_Hour(lua_State* L);
+int DateTime_Minute(lua_State* L);
+int DateTime_Second(lua_State* L);
+int DateTime_Millisecond(lua_State* L);
+int DateTime_DayOfWeek(lua_State* L);
+int DateTime_OffsetMinutes(lua_State* L);
 
 // Conversion
-int datetime_unixseconds(lua_State* L);
-int datetime_unixmilliseconds(lua_State* L);
-int datetime_toutc(lua_State* L);
-int datetime_tolocal(lua_State* L);
-int datetime_tooffset(lua_State* L);
-int datetime_format(lua_State* L);
-int datetime_isempty(lua_State* L);
+int DateTime_UnixSeconds(lua_State* L);
+int DateTime_UnixMilliseconds(lua_State* L);
+int DateTime_ToUtc(lua_State* L);
+int DateTime_ToLocal(lua_State* L);
+int DateTime_ToOffset(lua_State* L);
+int DateTime_Format(lua_State* L);
+int DateTime_IsEmpty(lua_State* L);
 
 // Arithmetic
-int datetime_adddays(lua_State* L);
-int datetime_addhours(lua_State* L);
-int datetime_addminutes(lua_State* L);
-int datetime_addseconds(lua_State* L);
-int datetime_addmilliseconds(lua_State* L);
-int datetime_addtimespan(lua_State* L); // __add(DateTime, TimeSpan) -> DateTime
+int DateTime_AddDays(lua_State* L);
+int DateTime_AddHours(lua_State* L);
+int DateTime_AddMinutes(lua_State* L);
+int DateTime_AddSeconds(lua_State* L);
+int DateTime_AddMilliseconds(lua_State* L);
+int DateTime_AddTimeSpan(lua_State* L); // __add(DateTime, TimeSpan) -> DateTime
 
 // Metamethods
-int datetime_tostring(lua_State* L);
-int datetime_eq(lua_State* L);
-int datetime_lt(lua_State* L);
-int datetime_le(lua_State* L);
-int datetime_sub(lua_State* L);
+int DateTime_ToString(lua_State* L);
+int DateTime_Eq(lua_State* L);
+int DateTime_Lt(lua_State* L);
+int DateTime_Le(lua_State* L);
+int DateTime_Sub(lua_State* L);

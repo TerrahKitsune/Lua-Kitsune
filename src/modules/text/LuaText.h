@@ -57,9 +57,9 @@ void lua_pushutf16lefromutf8(lua_State* L, const char* src, size_t len);
 void lua_pushutf8fromutf16le(lua_State* L, const char* src, size_t len);
 
 // Text module functions (registered by luaopen_text).
-int TextToUtf16(lua_State* L);
-int TextFromUtf16(lua_State* L);
-int TextFromCodepage(lua_State* L);
-int TextToCodepage(lua_State* L);
-int TextLower(lua_State* L);
-int TextUpper(lua_State* L);
+int Text_ToUtf16(lua_State* L);
+int Text_FromUtf16(lua_State* L);
+int Text_FromCodepage(lua_State* L);
+int Text_ToCodepage(lua_State* L);
+int Text_Lower(lua_State* L);
+int Text_Upper(lua_State* L);

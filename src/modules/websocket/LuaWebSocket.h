@@ -86,16 +86,16 @@ typedef struct LuaWebSocket {
     // lastDataMs is updated when a TEXT/BINARY frame arrives from the client.
     // A ping frame is sent after WS_PING_AFTER_MS of silence to keep the TCP
     // connection alive during long LLM generations.  Pong frames are consumed
-    // internally by libevent (evws_msg_cb is never called for them), so dead
+    // internally by libevent (EvwsMsgCb is never called for them), so dead
     // connection detection is left entirely to the TCP stack.
     uint64_t lastDataMs;   // ms timestamp of last received client frame
 } LuaWebSocket;
 
 // ---- client entry point (replaces old client_connect in HttpCurl.cpp) -------
-int ws_client_connect(lua_State* L);
+int HttpClient_Connect(lua_State* L);
 
 // ---- server entry point (called from HttpResponse_UpgradeToWebSocket) -------
-int ws_server_upgrade(lua_State* L);
+int HttpResponse_UpgradeToWebSocket(lua_State* L);
 
 // ---- shared method implementations (registered via metatables) --------------
 int WebSocket_IsConnected    (lua_State* L);

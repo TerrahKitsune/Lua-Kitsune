@@ -2,15 +2,15 @@
 #include "sha1/LuaSHA1.h"
 
 static const struct luaL_Reg sha1functions[] = {
-	{ "New", NewSHA1 },
-	{ "Update", UpdateSHA1 },
-	{ "Finish", FinalSHA1 },
+	{ "New", SHA1_New },
+	{ "Update", SHA1_Update },
+	{ "Finish", SHA1_Finish },
 	{ NULL, NULL }
 };
 
 static const luaL_Reg sha1meta[] = {
-	{ "__gc", sha1_gc },
-	{ "__tostring", sha1_tostring },
+	{ "__gc", SHA1_GC },
+	{ "__tostring", SHA1_ToString },
 	{ NULL, NULL }
 };
 

@@ -25,14 +25,14 @@ static void  (*s_free_fn)(void*) = ::free;
 
 static MemoryState* memState = NULL;
 
-static void* mm_alloc_raw(size_t requested, size_t* actual) {
+static void* MmAllocRaw(size_t requested, size_t* actual) {
 	*actual = requested;
 	return HeapAlloc(GetProcessHeap(), 0, *actual);
 }
-static void mm_dealloc_raw(void* ptr) {
+static void MmDeallocRaw(void* ptr) {
 	assert(HeapFree(GetProcessHeap(), 0, ptr));
 }
-static void* mm_realloc_raw(void* ptr, size_t requested, size_t* actual) {
+static void* MmReallocRaw(void* ptr, size_t requested, size_t* actual) {
 	*actual = requested;
 	return HeapReAlloc(GetProcessHeap(), 0, ptr, *actual);
 }
@@ -65,7 +65,7 @@ size_t EndMemoryManager() {
 void InitMemoryManager() {
 #ifdef USEMEMORYMANAGER
 	assert(!memState);
-	memState = CreateNewMemoryState(mm_alloc_raw, mm_dealloc_raw, mm_realloc_raw);
+	memState = CreateNewMemoryState(MmAllocRaw, MmDeallocRaw, MmReallocRaw);
 	s_malloc_fn = mm_malloc;
 	s_realloc_fn = mm_realloc;
 	s_free_fn = mm_free;

@@ -1,36 +1,36 @@
 #pragma once
 #include "redis/LuaRedis.h"
 
-const char* lua_pushrediskey(lua_State* L, LuaRedisKey* key);
-void lua_pushredisref(lua_State* L, LuaRedisKey* key);
+const char* PushRedisKeyName(lua_State* L, LuaRedisKey* key);
+void PushRedisRef(lua_State* L, LuaRedisKey* key);
 void CleanRedisKey(lua_State* L, LuaRedisKey* key);
-int lua_pushredisttl(lua_State* L, LuaRedisKey* key);
-int lua_setredisttl(lua_State* L, LuaRedisKey* key, lua_Integer expireTime);
-LuaRedisKey* lua_torediskey(lua_State* L, int idx);
+int PushRedisTtl(lua_State* L, LuaRedisKey* key);
+int SetRedisTtl(lua_State* L, LuaRedisKey* key, lua_Integer expireTime);
+LuaRedisKey* luaL_checkrediskey(lua_State* L, int idx);
 
-int rediskey_gc(lua_State* L);
-int rediskey_tostring(lua_State* L);
+int RedisKey_GC(lua_State* L);
+int RedisKey_ToString(lua_State* L);
 
-int rediskey_getttl(lua_State* L);
-int rediskey_setttl(lua_State* L);
-int rediskey_gettype(lua_State* L);
-int rediskey_delete(lua_State* L);
+int RedisKey_GetTTL(lua_State* L);
+int RedisKey_SetTTL(lua_State* L);
+int RedisKey_Type(lua_State* L);
+int RedisKey_Delete(lua_State* L);
 
 static const struct luaL_Reg rediskeyfunctions[] = {
-	{ "Delete", rediskey_delete },
-	{ "Type", rediskey_gettype },
-	{ "SetTTL", rediskey_setttl },
-	{ "GetTTL", rediskey_getttl },
+	{ "Delete", RedisKey_Delete },
+	{ "Type", RedisKey_Type },
+	{ "SetTTL", RedisKey_SetTTL },
+	{ "GetTTL", RedisKey_GetTTL },
 	{ NULL, NULL }
 };
 
 static const luaL_Reg rediskeymeta[] = {
-	{ "__gc",  rediskey_gc },
-	{ "__tostring",  rediskey_tostring },
+	{ "__gc",  RedisKey_GC },
+	{ "__tostring",  RedisKey_ToString },
 	{ NULL, NULL }
 };
 
-static int internal_luaopen_rediskey(lua_State* L) {
+static int InternalLuaOpenRedisKey(lua_State* L) {
 
 	luaL_newlibtable(L, rediskeyfunctions);
 	luaL_setfuncs(L, rediskeyfunctions, 0);

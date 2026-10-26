@@ -10,7 +10,7 @@
 // Instance management
 // =============================================================================
 
-LuaMsgPack* lua_msgpack_push(lua_State* L) {
+LuaMsgPack* lua_pushmsgpack(lua_State* L) {
     LuaMsgPack* m = (LuaMsgPack*)lua_newuserdata(L, sizeof(LuaMsgPack));
     memset(m, 0, sizeof(LuaMsgPack));
     msgpack_sbuffer_init(&m->sbuf);
@@ -18,12 +18,12 @@ LuaMsgPack* lua_msgpack_push(lua_State* L) {
     return m;
 }
 
-LuaMsgPack* lua_msgpack_check(lua_State* L, int idx) {
+LuaMsgPack* luaL_checkmsgpack(lua_State* L, int idx) {
     return (LuaMsgPack*)luaL_checkudata(L, idx, LUAMSGPACK);
 }
 
-int lua_msgpack_gc(lua_State* L) {
-    LuaMsgPack* m = lua_msgpack_check(L, 1);
+int MsgPack_Dispose(lua_State* L) {
+    LuaMsgPack* m = luaL_checkmsgpack(L, 1);
     msgpack_sbuffer_destroy(&m->sbuf);
     if (m->rec) {
         kitsune_free(m->rec);
@@ -32,13 +32,13 @@ int lua_msgpack_gc(lua_State* L) {
     return 0;
 }
 
-int lua_msgpack_tostring(lua_State* L) {
-    lua_pushfstring(L, "MsgPack: %p", lua_msgpack_check(L, 1));
+int MsgPack_ToString(lua_State* L) {
+    lua_pushfstring(L, "MsgPack: %p", luaL_checkmsgpack(L, 1));
     return 1;
 }
 
-int lua_msgpack_new(lua_State* L) {
-    lua_msgpack_push(L);
+int MsgPack_New(lua_State* L) {
+    lua_pushmsgpack(L);
     return 1;
 }
 
@@ -46,7 +46,7 @@ int lua_msgpack_new(lua_State* L) {
 // Anti-recursion
 // =============================================================================
 
-static void rec_push(LuaMsgPack* m, lua_State* L, uintptr_t addr) {
+static void RecPush(LuaMsgPack* m, lua_State* L, uintptr_t addr) {
     for (size_t i = 0; i < m->recLen; i++) {
         if (m->rec[i] == addr)
             luaL_error(L, "MsgPack: recursion detected");
@@ -62,7 +62,7 @@ static void rec_push(LuaMsgPack* m, lua_State* L, uintptr_t addr) {
     m->rec[m->recLen++] = addr;
 }
 
-static void rec_pop(LuaMsgPack* m) {
+static void RecPop(LuaMsgPack* m) {
     if (m->recLen > 0)
         m->recLen--;
 }
@@ -71,17 +71,17 @@ static void rec_pop(LuaMsgPack* m) {
 // Encoder
 // =============================================================================
 
-static void enc_value(LuaMsgPack* m, msgpack_packer* pk, lua_State* L);
+static void EncValue(LuaMsgPack* m, msgpack_packer* pk, lua_State* L);
 
-static void enc_string_value(msgpack_packer* pk, const char* s, size_t len) {
+static void EncStringValue(msgpack_packer* pk, const char* s, size_t len) {
     msgpack_pack_str(pk, len);
     if (len > 0)
         msgpack_pack_str_body(pk, s, len);
 }
 
-static void enc_table(LuaMsgPack* m, msgpack_packer* pk, lua_State* L) {
+static void EncTable(LuaMsgPack* m, msgpack_packer* pk, lua_State* L) {
     int tbl = lua_gettop(L);
-    rec_push(m, L, (uintptr_t)lua_topointer(L, tbl));
+    RecPush(m, L, (uintptr_t)lua_topointer(L, tbl));
 
     // Classify: detect array (sequential integer keys 1..n) vs map
     lua_Integer n     = (lua_Integer)lua_rawlen(L, tbl);
@@ -112,7 +112,7 @@ static void enc_table(LuaMsgPack* m, msgpack_packer* pk, lua_State* L) {
         msgpack_pack_array(pk, (uint32_t)n);
         for (lua_Integer i = 1; i <= n; i++) {
             lua_rawgeti(L, tbl, i);
-            enc_value(m, pk, L);
+            EncValue(m, pk, L);
             lua_pop(L, 1);
         }
     } else {
@@ -126,19 +126,19 @@ static void enc_table(LuaMsgPack* m, msgpack_packer* pk, lua_State* L) {
         msgpack_pack_map(pk, (uint32_t)pairs);
         lua_pushnil(L);
         while (lua_next(L, tbl) != 0) {
-            // key at -2, value at -1 — push a copy of the key for enc_value
+            // key at -2, value at -1 — push a copy of the key for EncValue
             lua_pushvalue(L, -2);
-            enc_value(m, pk, L);
+            EncValue(m, pk, L);
             lua_pop(L, 1);
-            enc_value(m, pk, L);
+            EncValue(m, pk, L);
             lua_pop(L, 1);
         }
     }
 
-    rec_pop(m);
+    RecPop(m);
 }
 
-static void enc_value(LuaMsgPack* m, msgpack_packer* pk, lua_State* L) {
+static void EncValue(LuaMsgPack* m, msgpack_packer* pk, lua_State* L) {
     switch (lua_type(L, -1)) {
     case LUA_TNIL:
         msgpack_pack_nil(pk);
@@ -159,11 +159,11 @@ static void enc_value(LuaMsgPack* m, msgpack_packer* pk, lua_State* L) {
     case LUA_TSTRING: {
         size_t      len;
         const char* s = lua_tolstring(L, -1, &len);
-        enc_string_value(pk, s, len);
+        EncStringValue(pk, s, len);
         break;
     }
     case LUA_TTABLE:
-        enc_table(m, pk, L);
+        EncTable(m, pk, L);
         break;
     case LUA_TUSERDATA:
         if (lua_isuint(L, -1)) {
@@ -172,7 +172,7 @@ static void enc_value(LuaMsgPack* m, msgpack_packer* pk, lua_State* L) {
         }
         if (lua_istimespan(L, -1)) {
             // Encode as a string so the receiver can reconstruct the duration from the canonical form.
-            lua_timespan_push_string(L, -1);
+            lua_pushtimespanstring(L, -1);
             size_t len;
             const char* s = lua_tolstring(L, -1, &len);
             if (s) msgpack_pack_str_with_body(pk, s, len);
@@ -180,35 +180,35 @@ static void enc_value(LuaMsgPack* m, msgpack_packer* pk, lua_State* L) {
             break;
         }
         if (lua_isidentifier(L, -1)) {
-            lua_identifier_push_string(L, -1);
+            lua_pushidentifierstring(L, -1);
             size_t      len;
             const char* s = lua_tolstring(L, -1, &len);
-            enc_string_value(pk, s, len);
+            EncStringValue(pk, s, len);
             lua_pop(L, 1);
             break;
         }
         if (lua_isdatetime(L, -1)) {
-            lua_datetime_push_string(L, -1);
+            lua_pushdatetimestring(L, -1);
             size_t      len;
             const char* s = lua_tolstring(L, -1, &len);
-            enc_string_value(pk, s, len);
+            EncStringValue(pk, s, len);
             lua_pop(L, 1);
             break;
         }
         if (lua_isdecimal(L, -1)) {
-            lua_decimal_push_string(L, -1);
+            lua_pushdecimalstring(L, -1);
             size_t      len;
             const char* s = lua_tolstring(L, -1, &len);
-            enc_string_value(pk, s, len);
+            EncStringValue(pk, s, len);
             lua_pop(L, 1);
             break;
         }
         if (lua_isstream(L, -1)) {
-            LuaStream* s = lua_toluastream(L, -1);
+            LuaStream* s = lua_tostream(L, -1);
             if (s && (s->Caps & STREAM_CAP_READ) && (s->Caps & STREAM_CAP_SEEK)) {
-                lua_Integer saved = lua_stream_curpos(L, s);
-                lua_stream_setpos(L, s, 0);
-                lua_stream_read_chunk(L, s, 0);
+                lua_Integer saved = LuaStreamCurPos(L, s);
+                LuaStreamSetPos(L, s, 0);
+                LuaStreamReadChunk(L, s, 0);
                 if (lua_type(L, -1) == LUA_TSTRING) {
                     size_t      len;
                     const char* data = lua_tolstring(L, -1, &len);
@@ -219,7 +219,7 @@ static void enc_value(LuaMsgPack* m, msgpack_packer* pk, lua_State* L) {
                     msgpack_pack_nil(pk);
                 }
                 lua_pop(L, 1);
-                lua_stream_setpos(L, s, saved);
+                LuaStreamSetPos(L, s, saved);
                 break;
             }
         }
@@ -236,7 +236,7 @@ static void enc_value(LuaMsgPack* m, msgpack_packer* pk, lua_State* L) {
 // Decoder
 // =============================================================================
 
-static void dec_object(lua_State* L, const msgpack_object* obj) {
+static void DecObject(lua_State* L, const msgpack_object* obj) {
     switch (obj->type) {
     case MSGPACK_OBJECT_NIL:
         lua_pushnil(L);
@@ -263,12 +263,12 @@ static void dec_object(lua_State* L, const msgpack_object* obj) {
         break;
     case MSGPACK_OBJECT_BIN:
         // bin → in-memory Stream pre-loaded with the bytes, seeked to 0
-        lua_pushluastream(L, (const BYTE*)obj->via.bin.ptr, obj->via.bin.size);
+        lua_pushstream(L, (const BYTE*)obj->via.bin.ptr, obj->via.bin.size);
         break;
     case MSGPACK_OBJECT_ARRAY: {
         lua_createtable(L, (int)obj->via.array.size, 0);
         for (uint32_t i = 0; i < obj->via.array.size; i++) {
-            dec_object(L, &obj->via.array.ptr[i]);
+            DecObject(L, &obj->via.array.ptr[i]);
             lua_rawseti(L, -2, (lua_Integer)(i + 1));
         }
         break;
@@ -276,8 +276,8 @@ static void dec_object(lua_State* L, const msgpack_object* obj) {
     case MSGPACK_OBJECT_MAP: {
         lua_createtable(L, 0, (int)obj->via.map.size);
         for (uint32_t i = 0; i < obj->via.map.size; i++) {
-            dec_object(L, &obj->via.map.ptr[i].key);
-            dec_object(L, &obj->via.map.ptr[i].val);
+            DecObject(L, &obj->via.map.ptr[i].key);
+            DecObject(L, &obj->via.map.ptr[i].val);
             lua_rawset(L, -3);
         }
         break;
@@ -296,8 +296,8 @@ static void dec_object(lua_State* L, const msgpack_object* obj) {
 // Lua API
 // =============================================================================
 
-int lua_msgpack_encode(lua_State* L) {
-    LuaMsgPack* m = lua_msgpack_check(L, 1);
+int MsgPack_Encode(lua_State* L) {
+    LuaMsgPack* m = luaL_checkmsgpack(L, 1);
     luaL_checkany(L, 2);
 
     msgpack_sbuffer_clear(&m->sbuf);
@@ -307,18 +307,18 @@ int lua_msgpack_encode(lua_State* L) {
     msgpack_packer_init(&pk, &m->sbuf, msgpack_sbuffer_write);
 
     lua_pushvalue(L, 2);
-    enc_value(m, &pk, L);
+    EncValue(m, &pk, L);
     lua_pop(L, 1);
 
     lua_pushlstring(L, m->sbuf.data ? m->sbuf.data : "", m->sbuf.size);
     return 1;
 }
 
-int lua_msgpack_decode(lua_State* L) {
-    lua_msgpack_check(L, 1);
+int MsgPack_Decode(lua_State* L) {
+    luaL_checkmsgpack(L, 1);
 
     if (lua_isstream(L, 2))
-        return lua_msgpack_decode_from_stream(L);
+        return MsgPack_DecodeFromStream(L);
 
     size_t      len;
     const char* data = luaL_checklstring(L, 2, &len);
@@ -330,7 +330,7 @@ int lua_msgpack_decode(lua_State* L) {
     msgpack_unpack_return ret = msgpack_unpack_next(&result, data, len, &off);
 
     if (ret == MSGPACK_UNPACK_SUCCESS || ret == MSGPACK_UNPACK_EXTRA_BYTES) {
-        dec_object(L, &result.data);
+        DecObject(L, &result.data);
         msgpack_unpacked_destroy(&result);
         return 1;
     }
@@ -353,22 +353,22 @@ typedef struct {
     int        failed;
 } MsgPackStreamCtx;
 
-static int msgpack_stream_write_cb(void* data, const char* buf, size_t len) {
+static int MsgpackStreamWriteCb(void* data, const char* buf, size_t len) {
     MsgPackStreamCtx* ctx = (MsgPackStreamCtx*)data;
     if (ctx->failed)
         return -1;
-    lua_stream_write_bytes(ctx->L, ctx->st, buf, len);
+    LuaStreamWriteBytes(ctx->L, ctx->st, buf, len);
     lua_pop(ctx->L, 1);
     return 0;
 }
 
-int lua_msgpack_encode_into_stream(lua_State* L) {
-    LuaMsgPack* m = lua_msgpack_check(L, 1);
+int MsgPack_EncodeIntoStream(lua_State* L) {
+    LuaMsgPack* m = luaL_checkmsgpack(L, 1);
 
     if (!lua_isstream(L, 2))
         return luaL_argerror(L, 2, "stream expected");
 
-    LuaStream* st = lua_toluastream(L, 2);
+    LuaStream* st = lua_tostream(L, 2);
     if (!(st->Caps & STREAM_CAP_WRITE)) {
         lua_pushboolean(L, false);
         lua_pushstring(L, "stream is not writable");
@@ -384,10 +384,10 @@ int lua_msgpack_encode_into_stream(lua_State* L) {
     ctx.failed = 0;
 
     msgpack_packer pk;
-    msgpack_packer_init(&pk, &ctx, msgpack_stream_write_cb);
+    msgpack_packer_init(&pk, &ctx, MsgpackStreamWriteCb);
 
     lua_pushvalue(L, 3);
-    enc_value(m, &pk, L);
+    EncValue(m, &pk, L);
     lua_pop(L, 1);
 
     if (ctx.failed) {
@@ -399,13 +399,13 @@ int lua_msgpack_encode_into_stream(lua_State* L) {
     return 1;
 }
 
-int lua_msgpack_decode_from_stream(lua_State* L) {
-    lua_msgpack_check(L, 1);
+int MsgPack_DecodeFromStream(lua_State* L) {
+    luaL_checkmsgpack(L, 1);
 
     if (!lua_isstream(L, 2))
         return luaL_argerror(L, 2, "stream expected");
 
-    LuaStream* st = lua_toluastream(L, 2);
+    LuaStream* st = lua_tostream(L, 2);
     if (!(st->Caps & STREAM_CAP_READ)) {
         lua_pushnil(L);
         lua_pushstring(L, "stream is not readable");
@@ -413,7 +413,7 @@ int lua_msgpack_decode_from_stream(lua_State* L) {
     }
 
     // Read all available bytes from the stream into a Lua string
-    lua_stream_read_chunk(L, st, 0);
+    LuaStreamReadChunk(L, st, 0);
     if (lua_type(L, -1) != LUA_TSTRING) {
         lua_pop(L, 1);
         lua_pushnil(L);
@@ -434,15 +434,15 @@ int lua_msgpack_decode_from_stream(lua_State* L) {
     if (st->Caps & STREAM_CAP_SEEK) {
         size_t unconsumed = len - off;
         if (unconsumed > 0) {
-            lua_Integer curPos = lua_stream_curpos(L, st);
-            lua_stream_setpos(L, st, curPos - (lua_Integer)unconsumed);
+            lua_Integer curPos = LuaStreamCurPos(L, st);
+            LuaStreamSetPos(L, st, curPos - (lua_Integer)unconsumed);
         }
     }
 
     lua_pop(L, 1);  // pop the string
 
     if (ret == MSGPACK_UNPACK_SUCCESS || ret == MSGPACK_UNPACK_EXTRA_BYTES) {
-        dec_object(L, &result.data);
+        DecObject(L, &result.data);
         msgpack_unpacked_destroy(&result);
         return 1;
     }

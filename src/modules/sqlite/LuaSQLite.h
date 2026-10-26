@@ -22,15 +22,15 @@ typedef struct LuaSQLite {
 	LuaSQLiteFunction** functions;
 } LuaSQLite;
 
-int SQLiteConnect(lua_State *L);
-int SQLiteExecute(lua_State *L);
-int SQLiteFetch(lua_State *L);
-int SQLiteGetRow(lua_State *L);
-int SQLiteGetColumns(lua_State *L);
-int SQLiteSetBusyHandler(lua_State *L);
-int SQLiteRegisterFunction(lua_State* L);
-int SQLiteRegisterAggregateFunction(lua_State* L);
-int SQLiteFinish(lua_State* L);
+int SQLite_Open(lua_State *L);
+int SQLite_Query(lua_State *L);
+int SQLite_Fetch(lua_State *L);
+int SQLite_GetRow(lua_State *L);
+int SQLite_GetColumns(lua_State *L);
+int SQLite_SetBusyHandler(lua_State *L);
+int SQLite_RegisterFunction(lua_State* L);
+int SQLite_RegisterAggregateFunction(lua_State* L);
+int SQLite_Finish(lua_State* L);
 
 int SQLite_ToString(lua_State *L);
-int SQLite_GC(lua_State *L);
+int SQLite_Close(lua_State *L);

@@ -2,15 +2,15 @@
 #include "md5/LuaMD5.h"
 
 static const struct luaL_Reg md5functions[] = {
-	{ "New", NewMD5 },
-	{ "Update", UpdateMD5 },
-	{ "Finish", FinalMD5 },
+	{ "New", MD5_New },
+	{ "Update", MD5_Update },
+	{ "Finish", MD5_Finish },
 	{ NULL, NULL }
 };
 
 static const luaL_Reg md5meta[] = {
-	{ "__gc", md5_gc },
-	{ "__tostring", md5_tostring },
+	{ "__gc", MD5_GC },
+	{ "__tostring", MD5_ToString },
 	{ NULL, NULL }
 };
 

@@ -10,7 +10,7 @@
 #include <windows.h>
 #include <sddl.h>
 
-int LuaCreateMutex(lua_State* L) {
+int Mutex_Open(lua_State* L) {
 
 	size_t nameLen;
 	const char* name = luaL_checklstring(L, 1, &nameLen);
@@ -41,7 +41,7 @@ int LuaCreateMutex(lua_State* L) {
 	luamutex->mutex = mutex;
 	return 1;
 }
-int LuaLockMutex(lua_State* L) {
+int Mutex_Lock(lua_State* L) {
 
 	LuaMutex* mutex = lua_tomutex(L, 1);
 	lua_Integer timeout = luaL_optinteger(L, 2, 0);
@@ -66,7 +66,7 @@ int LuaLockMutex(lua_State* L) {
 	return 1;
 }
 
-int LuaUnlockMutex(lua_State* L) {
+int Mutex_Unlock(lua_State* L) {
 
 	LuaMutex* mutex = lua_tomutex(L, 1);
 
@@ -81,7 +81,7 @@ int LuaUnlockMutex(lua_State* L) {
 	return 0;
 }
 
-int LuaGetMutexInfo(lua_State* L) {
+int Mutex_Info(lua_State* L) {
 
 	LuaMutex* mutex = lua_tomutex(L, 1);
 	lua_pop(L, lua_gettop(L));
@@ -91,7 +91,7 @@ int LuaGetMutexInfo(lua_State* L) {
 	return 3;
 }
 
-int mutex_gc(lua_State* L) {
+int Mutex_GC(lua_State* L) {
 
 	LuaMutex* mutex = lua_tomutex(L, 1);
 
@@ -105,7 +105,7 @@ int mutex_gc(lua_State* L) {
 	return 0;
 }
 
-int mutex_tostring(lua_State* L) {
+int Mutex_ToString(lua_State* L) {
 
 	LuaMutex* mutex = lua_tomutex(L, 1);
 	lua_pushfstring(L, "Mutex: %p %s", (void*)mutex, mutex->mutexname);
@@ -119,7 +119,7 @@ int mutex_tostring(lua_State* L) {
 #include <errno.h>
 #include <time.h>
 
-static void sem_normalize(const char* src, char* semname, char* mutexname, size_t n) {
+static void SemNormalize(const char* src, char* semname, char* mutexname, size_t n) {
 
 	strncpy(mutexname, src, n - 1);
 	mutexname[n - 1] = 0;
@@ -135,13 +135,13 @@ static void sem_normalize(const char* src, char* semname, char* mutexname, size_
 	}
 }
 
-int LuaCreateMutex(lua_State* L) {
+int Mutex_Open(lua_State* L) {
 
 	const char* name = luaL_checkstring(L, 1);
 	lua_pop(L, lua_gettop(L));
 
 	LuaMutex* m = lua_pushmutex(L);
-	sem_normalize(name, m->semname, m->mutexname, MUTEX_NAME_MAX);
+	SemNormalize(name, m->semname, m->mutexname, MUTEX_NAME_MAX);
 
 	m->sem = sem_open(m->semname, O_CREAT, 0666, 1);
 	if (m->sem == SEM_FAILED) {
@@ -155,7 +155,7 @@ int LuaCreateMutex(lua_State* L) {
 	return 1;
 }
 
-int LuaLockMutex(lua_State* L) {
+int Mutex_Lock(lua_State* L) {
 
 	LuaMutex* m = lua_tomutex(L, 1);
 	lua_Integer timeout_ms = luaL_optinteger(L, 2, 0);
@@ -190,7 +190,7 @@ int LuaLockMutex(lua_State* L) {
 	return 1;
 }
 
-int LuaUnlockMutex(lua_State* L) {
+int Mutex_Unlock(lua_State* L) {
 
 	LuaMutex* m = lua_tomutex(L, 1);
 	lua_pop(L, lua_gettop(L));
@@ -203,7 +203,7 @@ int LuaUnlockMutex(lua_State* L) {
 	return 0;
 }
 
-int LuaGetMutexInfo(lua_State* L) {
+int Mutex_Info(lua_State* L) {
 
 	LuaMutex* m = lua_tomutex(L, 1);
 	lua_pop(L, lua_gettop(L));
@@ -213,7 +213,7 @@ int LuaGetMutexInfo(lua_State* L) {
 	return 3;
 }
 
-int mutex_gc(lua_State* L) {
+int Mutex_GC(lua_State* L) {
 
 	LuaMutex* m = lua_tomutex(L, 1);
 
@@ -227,7 +227,7 @@ int mutex_gc(lua_State* L) {
 	return 0;
 }
 
-int mutex_tostring(lua_State* L) {
+int Mutex_ToString(lua_State* L) {
 
 	LuaMutex* m = lua_tomutex(L, 1);
 	lua_pushfstring(L, "Mutex: %p %s", (void*)m, m->mutexname);

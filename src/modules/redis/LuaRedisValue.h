@@ -1,30 +1,30 @@
 #pragma once
 #include "redis/LuaRedis.h"
 
-int redisvalue_gc(lua_State* L);
-int redisvalue_tostring(lua_State* L);
-int redisvalue_index(lua_State* L);
-int redisvalue_newindex(lua_State* L);
-int redisvalue_call(lua_State* L);
-int redisvalue_pairs(lua_State* L);
-int redisvalue_len(lua_State* L);
+int RedisValue_GC(lua_State* L);
+int RedisValue_ToString(lua_State* L);
+int RedisValue_Index(lua_State* L);
+int RedisValue_NewIndex(lua_State* L);
+int RedisValue_Call(lua_State* L);
+int RedisValue_Pairs(lua_State* L);
+int RedisValue_Len(lua_State* L);
 
 static const struct luaL_Reg redisvaluefunctions[] = {
 	{ NULL, NULL }
 };
 
 static const luaL_Reg redisvaluemeta[] = {
-	{ "__len", redisvalue_len },
-	{ "__pairs", redisvalue_pairs },
-	{ "__gc",  redisvalue_gc },
-	{ "__tostring",  redisvalue_tostring },
-	{ "__call",  redisvalue_call },
+	{ "__len", RedisValue_Len },
+	{ "__pairs", RedisValue_Pairs },
+	{ "__gc",  RedisValue_GC },
+	{ "__tostring",  RedisValue_ToString },
+	{ "__call",  RedisValue_Call },
 	{ NULL, NULL }
 };
 
-static int internal_luaopen_redisvalue(lua_State* L) {
+static int InternalLuaOpenRedisValue(lua_State* L) {
 
-	lua_pushcfunction(L, redisvalue_index);
+	lua_pushcfunction(L, RedisValue_Index);
 
 	luaL_newmetatable(L, REDISVALUE);
 	luaL_setfuncs(L, redisvaluemeta, 0);
@@ -33,7 +33,7 @@ static int internal_luaopen_redisvalue(lua_State* L) {
 	lua_pushvalue(L, -3);
 	lua_rawset(L, -3);
 	lua_pushliteral(L, "__newindex");
-	lua_pushcfunction(L, redisvalue_newindex);
+	lua_pushcfunction(L, RedisValue_NewIndex);
 	lua_rawset(L, -3);
 	lua_pushliteral(L, "__metatable");
 	lua_pushvalue(L, -3);

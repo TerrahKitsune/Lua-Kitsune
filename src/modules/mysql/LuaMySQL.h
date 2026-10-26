@@ -17,15 +17,15 @@ typedef struct LuaMySQL {
 LuaMySQL* lua_tomysql(lua_State* L, int index);
 LuaMySQL* lua_pushmysql(lua_State* L);
 
-int MySqlIsBusy(lua_State* L);
-int MySqlConnect(lua_State* L);
-int MySqlQuery(lua_State* L);
-int MySqlNonQuery(lua_State* L);
-int MySqlScalar(lua_State* L);
-int MySqlQueryAll(lua_State* L);
-int MySqlEscapeValue(lua_State* L);
+int MySQL_IsBusy(lua_State* L);
+int MySQL_Connect(lua_State* L);
+int MySQL_Query(lua_State* L);
+int MySQL_NonQuery(lua_State* L);
+int MySQL_Scalar(lua_State* L);
+int MySQL_QueryAll(lua_State* L);
+int MySQL_EscapeValue(lua_State* L);
 
-int MySqlSetAliveToken(lua_State* L);
+int MySQL_SetAliveToken(lua_State* L);
 
-int luamysql_gc(lua_State* L);
-int luamysql_tostring(lua_State* L);
+int MySQL_Close(lua_State* L);
+int MySQL_ToString(lua_State* L);

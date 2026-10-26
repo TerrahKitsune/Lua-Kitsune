@@ -54,7 +54,7 @@ void kitsune_inherit_external_hook(lua_State* src, lua_State* dst);
 //   kitsune slot  — owned by the scheduler (Ticker, nohook save/restore)
 //   external slot — owned by outside callers (e.g. lua-debug DAP adapter)
 //
-// A single merged_hook dispatcher is passed to lua_sethook_real and fires
+// A single MergedHook dispatcher is passed to lua_sethook_real and fires
 // each slot whose own mask covers the current event.
 //
 //   Merged mask  = kitsune_mask | external_mask

@@ -14,7 +14,7 @@
 #include "KitsuneInternal.h"
 
 // Mark the current scheduler slot as having done work this tick.
-static void set_did_work(lua_State* L) {
+static void SetDidWork(lua_State* L) {
 	void* ud;
 	lua_getallocf(L, &ud);
 	KitsuneState* state = (KitsuneState*)ud;
@@ -28,13 +28,13 @@ static void set_did_work(lua_State* L) {
 
 // -- Platform helper: set socket non-blocking ----------------------------------
 #ifdef _WIN32
-static void set_fd_nonblocking(int fd) {
+static void SetFdNonblocking(int fd) {
 	u_long one = 1;
 	ioctlsocket((SOCKET)(uintptr_t)fd, FIONBIO, &one);
 }
 #else
 #include <fcntl.h>
-static void set_fd_nonblocking(int fd) {
+static void SetFdNonblocking(int fd) {
 	int flags = fcntl(fd, F_GETFL, 0);
 	if (flags >= 0)
 		fcntl(fd, F_SETFL, flags | O_NONBLOCK);
@@ -118,28 +118,28 @@ static void PushAsParamString(lua_State* L, int index) {
 	if (lua_istable(L, index)) {
 		// Use the shared bridge LuaJson instance stored in the registry by KitsuneInit.
 		// This is always valid for the current engine session and requires no per-session state.
-		lua_rawgetp(L, LUA_REGISTRYINDEX, lua_json_bridge_registry_key());
+		lua_rawgetp(L, LUA_REGISTRYINDEX, LuaJsonBridgeRegistryKey());
 		lua_pushvalue(L, index);
-		if (lua_json_encode(L) != 1) {
+		if (Json_Encode(L) != 1) {
 			lua_error(L);
 			return;
 		}
 		lua_remove(L, -2);
 	}
 	else if (lua_isidentifier(L, index)) {
-		lua_identifier_push_string(L, index);
+		lua_pushidentifierstring(L, index);
 	}
 	else if (lua_isdatetime(L, index)) {
-		lua_datetime_push_string(L, index);
+		lua_pushdatetimestring(L, index);
 	}
 	else if (lua_isdecimal(L, index)) {
-		lua_decimal_push_string(L, index);
+		lua_pushdecimalstring(L, index);
 	}
 	else if (lua_isuint(L, index)) {
-		lua_uint_push_string(L, index);
+		lua_pushuintstring(L, index);
 	}
 	else if (lua_istimespan(L, index)) {
-		lua_timespan_push_string(L, index);
+		lua_pushtimespanstring(L, index);
 	}
 	else {
 		luaL_tolstring(L, index, NULL);
@@ -168,14 +168,14 @@ static void PushPostgresValue(lua_State* L, const char* val, int len, Oid type) 
 		break;
 	case NUMERICOID: {
 		LuaDecimal tmp;
-		if (decimal_parse_c(val, (size_t)len, &tmp))
+		if (DecimalParseC(val, (size_t)len, &tmp))
 			*lua_pushdecimal(L) = tmp;
 		else
 			lua_pushlstring(L, val, (size_t)len);
 		break;
 	}
 	case UUIDOID:
-		if (!lua_pushidentifier_fromstring(L, val, (size_t)len))
+		if (!lua_pushidentifierfromstring(L, val, (size_t)len))
 			lua_pushlstring(L, val, (size_t)len);
 		break;
 	case DATEOID:
@@ -185,7 +185,7 @@ static void PushPostgresValue(lua_State* L, const char* val, int len, Oid type) 
 	case TIMESTAMPTZOID: {
 		LuaDateTime tmp;
 		memset(&tmp, 0, sizeof(tmp));
-		if (datetime_parse_c(val, &tmp))
+		if (DateTimeParseC(val, &tmp))
 			*lua_pushdatetime(L) = tmp;
 		else
 			lua_pushlstring(L, val, (size_t)len);
@@ -345,14 +345,14 @@ LuaPostgres* lua_pushpostgres(lua_State* L) {
 	memset(pg, 0, sizeof(LuaPostgres));
 	pg->queryRef      = LUA_NOREF;
 	pg->aliveTokenRef = LUA_NOREF;
-	lua_rawgetp(L, LUA_REGISTRYINDEX, lua_alivetoken_app_registry_key());
+	lua_rawgetp(L, LUA_REGISTRYINDEX, AliveTokenAppRegistryKey());
 	pg->appToken = luaL_testudata(L, -1, LUAALIVETOKEN);
 	lua_pop(L, 1);
 	return pg;
 }
 
-// -- PostgresEscapeValue -------------------------------------------------------
-int PostgresEscapeValue(lua_State* L) {
+// -- Postgres_EscapeValue -------------------------------------------------------
+int Postgres_EscapeValue(lua_State* L) {
 	LuaPostgres* pg = lua_topostgres(L, 1);
 	size_t len;
 	const char* str = luaL_checklstring(L, 2, &len);
@@ -373,8 +373,8 @@ int PostgresEscapeValue(lua_State* L) {
 	return 1;
 }
 
-// -- PostgresIsBusy ------------------------------------------------------------
-int PostgresIsBusy(lua_State* L) {
+// -- Postgres_IsBusy ------------------------------------------------------------
+int Postgres_IsBusy(lua_State* L) {
 	LuaPostgres* pg = lua_topostgres(L, 1);
 	if (pg->queryRef == LUA_NOREF) {
 		lua_pushboolean(L, false);
@@ -388,7 +388,7 @@ int PostgresIsBusy(lua_State* L) {
 }
 
 // -- Connect -------------------------------------------------------------------
-int PostgresConnect(lua_State* L) {
+int Postgres_Connect(lua_State* L) {
 	const char* conninfo = luaL_checkstring(L, 1);
 	LuaPostgres* pg = lua_pushpostgres(L);
 
@@ -411,7 +411,7 @@ int PostgresConnect(lua_State* L) {
 	PQsetClientEncoding(pg->connection, "UTF8");
 	// Put the socket into non-blocking mode so PQconsumeInput/PQflush
 	// return immediately when no data is available during query polling.
-	set_fd_nonblocking(PQsocket(pg->connection));
+	SetFdNonblocking(PQsocket(pg->connection));
 	return 1;
 }
 
@@ -498,7 +498,7 @@ static int QueryPollCont(lua_State* L, int status, lua_KContext ctx) {
 	}
 
 	if (!PQconsumeInput(q->conn->connection)) {
-		set_did_work(L);  // error is a result — don't idle-sleep
+		SetDidWork(L);  // error is a result — don't idle-sleep
 		return QueryFinishWithError(L, q, PQerrorMessage(q->conn->connection), "PQconsumeInput error");
 	}
 
@@ -517,7 +517,7 @@ static int QueryPollCont(lua_State* L, int status, lua_KContext ctx) {
 		PQclear(extra);
 
 	if (!result) {
-		set_did_work(L);
+		SetDidWork(L);
 		return QueryFinishWithError(L, q, NULL, "PQgetResult returned NULL");
 	}
 
@@ -528,7 +528,7 @@ static int QueryPollCont(lua_State* L, int status, lua_KContext ctx) {
 		lua_Integer affected = (t && t[0]) ? (lua_Integer)strtoll(t, NULL, 10) : 0;
 		PQclear(result);
 		lua_pushinteger(L, affected);
-		set_did_work(L);
+		SetDidWork(L);
 		return lua_yieldk(L, 1, ctx, QueryStreamCont);
 	}
 
@@ -536,7 +536,7 @@ static int QueryPollCont(lua_State* L, int status, lua_KContext ctx) {
 		q->result      = result;
 		q->accumRowIdx = 0;
 		lua_pushinteger(L, (lua_Integer)PQntuples(result));
-		set_did_work(L);
+		SetDidWork(L);
 		return lua_yieldk(L, 1, ctx, QueryStreamCont);
 	}
 
@@ -544,7 +544,7 @@ static int QueryPollCont(lua_State* L, int status, lua_KContext ctx) {
 	const char* err = PQresultErrorMessage(result);
 	lua_pushstring(L, err && err[0] ? err : "query error");
 	PQclear(result);
-	set_did_work(L);
+	SetDidWork(L);
 	FreeQuery(L, q);  // release the connection before handing back the error
 	return 1;
 }
@@ -627,8 +627,8 @@ static LuaPostgresQuery* SetupQueryCoroutine(lua_State* L, LuaPostgres* pg,
 	return q;
 }
 
-// -- PostgresQuery -------------------------------------------------------------
-int PostgresQuery(lua_State* L) {
+// -- Postgres_Query -------------------------------------------------------------
+int Postgres_Query(lua_State* L) {
 	LuaPostgres* pg = lua_topostgres(L, 1);
 
 	if (!pg->connection) {
@@ -679,7 +679,7 @@ static int HelperWaitCont(lua_State* L, int status, lua_KContext ctx) {
 
 	if (q->conn->aliveTokenRef != LUA_NOREF) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, q->conn->aliveTokenRef);
-		int alive = lua_alivetoken_isalive(L, -1);
+		int alive = AliveTokenIsAlive(L, -1);
 		lua_pop(L, 1);
 		if (alive == 0) {
 			LuaPostgres* conn = q->conn;
@@ -849,7 +849,7 @@ static int PostgresHelperRun(lua_State* L, int mode) {
 	// Early-out: if a token is attached and already disposed, abort before setup.
 	if (pg->aliveTokenRef != LUA_NOREF) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, pg->aliveTokenRef);
-		int alive = lua_alivetoken_isalive(L, -1);
+		int alive = AliveTokenIsAlive(L, -1);
 		lua_pop(L, 1);
 		if (alive == 0) {
 			lua_pushboolean(L, 0);
@@ -888,12 +888,12 @@ static int PostgresHelperRun(lua_State* L, int mode) {
 	return lua_yieldk(L, 0, (lua_KContext)(intptr_t)q, HelperWaitCont);
 }
 
-int PostgresNonQuery(lua_State* L) { return PostgresHelperRun(L, PG_HELPER_NONQUERY); }
-int PostgresScalar(lua_State* L)   { return PostgresHelperRun(L, PG_HELPER_SCALAR);   }
-int PostgresQueryAll(lua_State* L) { return PostgresHelperRun(L, PG_HELPER_QUERYALL); }
+int Postgres_NonQuery(lua_State* L) { return PostgresHelperRun(L, PG_HELPER_NONQUERY); }
+int Postgres_Scalar(lua_State* L)   { return PostgresHelperRun(L, PG_HELPER_SCALAR);   }
+int Postgres_QueryAll(lua_State* L) { return PostgresHelperRun(L, PG_HELPER_QUERYALL); }
 
-// -- PostgresSetAliveToken ----------------------------------------------------
-int PostgresSetAliveToken(lua_State* L) {
+// -- Postgres_SetAliveToken ----------------------------------------------------
+int Postgres_SetAliveToken(lua_State* L) {
 	LuaPostgres* pg = lua_topostgres(L, 1);
 	if (pg->aliveTokenRef != LUA_NOREF) {
 		luaL_unref(L, LUA_REGISTRYINDEX, pg->aliveTokenRef);
@@ -907,8 +907,8 @@ int PostgresSetAliveToken(lua_State* L) {
 	return 0;
 }
 
-// -- luapostgres_gc ------------------------------------------------------------
-int luapostgres_gc(lua_State* L) {
+// -- Postgres_Close ------------------------------------------------------------
+int Postgres_Close(lua_State* L) {
 	LuaPostgres* pg = (LuaPostgres*)lua_touserdata(L, 1);
 	if (!pg)
 		return 0;
@@ -939,8 +939,8 @@ int luapostgres_gc(lua_State* L) {
 	return 0;
 }
 
-// -- luapostgres_tostring ------------------------------------------------------
-int luapostgres_tostring(lua_State* L) {
+// -- Postgres_ToString ------------------------------------------------------
+int Postgres_ToString(lua_State* L) {
 	LuaPostgres* pg = lua_topostgres(L, 1);
 	char buf[64];
 	snprintf(buf, sizeof(buf), "Postgres: 0x%016" PRIx64, (uint64_t)(uintptr_t)pg);

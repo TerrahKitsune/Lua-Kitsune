@@ -3,7 +3,7 @@
 #include <string.h>
 #include "stream/LuaStream.h"
 
-int NewSHA1(lua_State* L) {
+int SHA1_New(lua_State* L) {
 
 	LuaSHA1* luasha1 = lua_pushsha1(L);
 	if (!luasha1) {
@@ -16,7 +16,7 @@ int NewSHA1(lua_State* L) {
 	return 1;
 }
 
-int UpdateSHA1(lua_State* L) {
+int SHA1_Update(lua_State* L) {
 
 	LuaSHA1* luasha1 = lua_tosha1(L, 1);
 	if (!luasha1) {
@@ -54,7 +54,7 @@ int UpdateSHA1(lua_State* L) {
 }
 
 
-int FinalSHA1(lua_State* L) {
+int SHA1_Finish(lua_State* L) {
 
 	LuaSHA1* luasha1 = lua_tosha1(L, 1);
 	if (!luasha1) {
@@ -102,14 +102,14 @@ LuaSHA1* lua_pushsha1(lua_State* L) {
 	return luasha1;
 }
 
-int sha1_gc(lua_State* L) {
+int SHA1_GC(lua_State* L) {
 
 	LuaSHA1* luasha1 = lua_tosha1(L, 1);
 
 	return 0;
 }
 
-int sha1_tostring(lua_State* L) {
+int SHA1_ToString(lua_State* L) {
 
 	char sha1[100];
 	sprintf(sha1, "SHA1: %p", (void*)lua_tosha1(L, 1));

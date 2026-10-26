@@ -3,17 +3,17 @@
 
 static const struct luaL_Reg archivefunctions[] = {
 
-	{ "Read", ReadEntry },
-	{ "ReadAll", ReadAllEntry },
-	{ "SetEntry", SetReadEntry },
-	{ "Entries", ReadArchiveEntries },
-	{ "OpenRead", OpenReadArchive },
+	{ "Read", Archive_Read },
+	{ "ReadAll", Archive_ReadAll },
+	{ "SetEntry", Archive_SetEntry },
+	{ "Entries", Archive_Entries },
+	{ "OpenRead", Archive_OpenRead },
 	{ NULL, NULL }
 };
 
 static const luaL_Reg archivemeta[] = {
-	{ "__gc",  archive_gc },
-	{ "__tostring",  archive_tostring },
+	{ "__gc",  Archive_GC },
+	{ "__tostring",  Archive_ToString },
 	{ NULL, NULL }
 };
 

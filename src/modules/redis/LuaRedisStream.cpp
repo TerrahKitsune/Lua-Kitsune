@@ -26,7 +26,7 @@ int RedisPushStreamInternal(lua_State* L, int redisIdx, const char* key, size_t 
 	return 1;
 }
 
-LuaRedisStream* lua_toredisstream(lua_State* L, int idx) {
+LuaRedisStream* luaL_checkredisstream(lua_State* L, int idx) {
 
 	LuaRedisStream* redis = (LuaRedisStream*)luaL_checkudata(L, idx, REDISSTREAM);
 	if (redis == NULL) {
@@ -36,16 +36,16 @@ LuaRedisStream* lua_toredisstream(lua_State* L, int idx) {
 	return redis;
 }
 
-int redisstream_call(lua_State* L) {
+int RedisStream_Call(lua_State* L) {
 
 	LuaRedisStream* redis = (LuaRedisStream*)luaL_checkudata(L, -1, REDISSTREAM);
-	lua_pushredisref(L, &redis->key);
-	lua_createrediskey(L, -1, redis->key.key, redis->key.keylen);
+	PushRedisRef(L, &redis->key);
+	lua_pushrediskey(L, -1, redis->key.key, redis->key.keylen);
 
 	return 1;
 }
 
-int lua_pairs(lua_State* L) {
+int PairsNext(lua_State* L) {
 
 	if (lua_isnil(L, -1) && lua_isnil(L, -2)) {
 
@@ -95,12 +95,12 @@ int lua_pairs(lua_State* L) {
 	return 3;
 }
 
-int redisstream_trim(lua_State* L) {
+int RedisStream_Trim(lua_State* L) {
 
-	LuaRedisStream* redisStream = lua_toredisstream(L, 1); 
-	lua_pushredisref(L, &redisStream->key);
+	LuaRedisStream* redisStream = luaL_checkredisstream(L, 1); 
+	PushRedisRef(L, &redisStream->key);
 	lua_pushliteral(L, "XTRIM");
-	lua_pushrediskey(L, &redisStream->key);
+	PushRedisKeyName(L, &redisStream->key);
 	if (lua_isinteger(L, 2)) {
 		lua_pushliteral(L, "MAXLEN");
 		lua_pushvalue(L, 2);
@@ -117,15 +117,15 @@ int redisstream_trim(lua_State* L) {
 	return 1;
 }
 
-int redisstream_read(lua_State* L) {
+int RedisStream_Read(lua_State* L) {
 
-	LuaRedisStream* redisStream = lua_toredisstream(L, 1);
+	LuaRedisStream* redisStream = luaL_checkredisstream(L, 1);
 	size_t len;
 	const char * id = luaL_optlstring(L, 2, "0-0", &len);
 	int blocking = (int)luaL_optinteger(L, 3, 0);
 	int expectedTop = lua_gettop(L);
 
-	lua_pushredisref(L, &redisStream->key);
+	PushRedisRef(L, &redisStream->key);
 	lua_pushliteral(L, "XREAD");
 	lua_pushliteral(L, "COUNT");
 	lua_pushliteral(L, "1");
@@ -134,7 +134,7 @@ int redisstream_read(lua_State* L) {
 		lua_pushinteger(L, blocking);
 	}
 	lua_pushliteral(L, "STREAMS");
-	lua_pushrediskey(L, &redisStream->key);
+	PushRedisKeyName(L, &redisStream->key);
 	lua_pushlstring(L, id, len);
 	LuaRedis* redis = RedisCommandInternal(L);
 	lua_settop(L, expectedTop);
@@ -185,21 +185,21 @@ int redisstream_read(lua_State* L) {
 	return 2;
 }
 
-int redisstream_add(lua_State* L) {
+int RedisStream_Add(lua_State* L) {
 
 	luaL_checktype(L, 2, LUA_TTABLE);
 	int expectedTop = lua_gettop(L);
-	LuaRedisStream* redisStream = lua_toredisstream(L, 1);
+	LuaRedisStream* redisStream = luaL_checkredisstream(L, 1);
 
-	lua_pushredisref(L, &redisStream->key);
+	PushRedisRef(L, &redisStream->key);
 	lua_pushliteral(L, "XADD");
-	lua_pushrediskey(L, &redisStream->key);
+	PushRedisKeyName(L, &redisStream->key);
 	lua_pushliteral(L, "*");
 
 	lua_pushvalue(L, 2);
 	lua_pushnil(L);
 	lua_pushnil(L);
-	while (lua_pairs(L)) {
+	while (PairsNext(L)) {
 
 		lua_checkstack(L, lua_gettop(L) + 5);
 		InternalPushValue(L, -1);
@@ -219,15 +219,15 @@ int redisstream_add(lua_State* L) {
 	return 1;
 }
 
-int redisstream_tostring(lua_State* L) {
+int RedisStream_ToString(lua_State* L) {
 	LuaRedisStream* redis = (LuaRedisStream*)luaL_checkudata(L, -1, REDISSTREAM);
 	lua_pushfstring(L, "RedisValue: stream (%s)", redis->key.key);
 	return 1;
 }
 
-int redisstream_gc(lua_State* L) {
+int RedisStream_GC(lua_State* L) {
 
-	LuaRedisStream* stream = lua_toredisstream(L, -1);
+	LuaRedisStream* stream = luaL_checkredisstream(L, -1);
 	CleanRedisKey(L, &stream->key);
 	return 0;
 }

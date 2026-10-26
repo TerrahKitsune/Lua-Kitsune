@@ -2,20 +2,20 @@
 #include "identifier/LuaIdentifierMain.h"
 
 static const struct luaL_Reg identifierfunctions[] = {
-    { "NewUUID",    identifier_newuuid    },
-    { "NewOID",     identifier_newoid     },
-    { "FromString", identifier_fromstring },
-    { "FromBytes",  identifier_frombytes  },
-    { "GetType",    identifier_gettype    },
-    { "AsBytes",    identifier_asbytes    },
-    { "AsString",   identifier_asstring   },
-    { "IsEmpty",    identifier_isempty    },
+    { "NewUUID",    Identifier_NewUUID    },
+    { "NewOID",     Identifier_NewOID     },
+    { "FromString", Identifier_FromString },
+    { "FromBytes",  Identifier_FromBytes  },
+    { "GetType",    Identifier_GetType    },
+    { "AsBytes",    Identifier_AsBytes    },
+    { "AsString",   Identifier_AsString   },
+    { "IsEmpty",    Identifier_IsEmpty    },
     { NULL, NULL }
 };
 
 static const luaL_Reg identifiermeta[] = {
-    { "__eq",       identifier_eq         },
-    { "__tostring", identifier_tostring   },
+    { "__eq",       Identifier_Eq         },
+    { "__tostring", Identifier_ToString   },
     { NULL, NULL }
 };
 

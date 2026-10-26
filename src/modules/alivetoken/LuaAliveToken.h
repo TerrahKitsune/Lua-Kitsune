@@ -13,22 +13,22 @@ typedef struct {
 
 // Central liveness check: updates alive (timeout + linked parents) then returns alive.
 // Pass L to enable parent-chain walking. All internal C++ callsites should pass L.
-void alivetoken_tick(LuaAliveToken* t, lua_State* L);
+void AliveTokenTick(LuaAliveToken* t, lua_State* L);
 
-LuaAliveToken* lua_alivetoken_check(lua_State* L, int idx);
+LuaAliveToken* luaL_checkalivetoken(lua_State* L, int idx);
 // Returns 1 if alive, 0 if disposed/timed-out, -1 if not a token.
-int lua_alivetoken_isalive(lua_State* L, int idx);
+int AliveTokenIsAlive(lua_State* L, int idx);
 
-int lua_alivetoken_new(lua_State* L);
-int lua_alivetoken_isalive_method(lua_State* L);
-int lua_alivetoken_dispose(lua_State* L);
-int lua_alivetoken_error_if_dead(lua_State* L);
-int lua_alivetoken_link(lua_State* L);
-int lua_alivetoken_gc(lua_State* L);
-int lua_alivetoken_tostring(lua_State* L);
+int AliveToken_New(lua_State* L);
+int AliveToken_IsAlive(lua_State* L);
+int AliveToken_Dispose(lua_State* L);
+int AliveToken_ErrorIfDead(lua_State* L);
+int AliveToken_Link(lua_State* L);
+int AliveToken_GC(lua_State* L);
+int AliveToken_ToString(lua_State* L);
 
 // Returns the lightuserdata key used to store the app-level AliveToken in the Lua registry.
-const void* lua_alivetoken_app_registry_key();
+const void* AliveTokenAppRegistryKey();
 // Kills the app-level AliveToken stored in the registry. Call before lua_close.
-void lua_alivetoken_app_kill(lua_State* L);
+void AliveTokenAppKill(lua_State* L);
 

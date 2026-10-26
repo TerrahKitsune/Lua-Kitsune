@@ -24,7 +24,7 @@
 // kitsune_malloc/kitsune_free; EndMemoryManager's USEMEMORYMANAGER path can
 // tear the backing allocator down before such a global would be destructed).
 // LuaMcpServer itself only ever exists via placement-new inside a Lua
-// userdata (see lua_mcp_push), so its lifetime is tied to Lua GC / __gc.
+// userdata (see lua_pushmcpserver), so its lifetime is tied to Lua GC / __gc.
 // =============================================================================
 
 static int g_mcpInstanceRef = LUA_NOREF;
@@ -33,35 +33,35 @@ static int g_mcpInstanceRef = LUA_NOREF;
 // Forward declarations (mutually-referential dispatch/poll functions)
 // =============================================================================
 
-static int  mcp_poll_step(lua_State* L, LuaMcpServer* server);
-static int  mcp_poll_continuation(lua_State* L, int status, lua_KContext ctx);
-static int  mcp_poll_entrypoint(lua_State* L);
-static int  mcp_dispatch_line(lua_State* L, LuaMcpServer* server, const char* data, size_t len);
-static int  mcp_dispatch_tools_call(lua_State* L, LuaMcpServer* server, int params_idx, int id_idx);
-static int  mcp_tool_finish(lua_State* L, LuaMcpServer* server, int pcall_status);
-static int  mcp_tool_continuation(lua_State* L, int status, lua_KContext ctx);
-static void mcp_handle_initialize(lua_State* L, LuaMcpServer* server, int params_idx, int id_idx);
-static int  mcp_next_line(LuaMcpServer* server, std::string& out);
-static void mcp_route_response(lua_State* L, LuaMcpServer* server, int msg_idx, int id_idx);
+static int  McpPollStep(lua_State* L, LuaMcpServer* server);
+static int  McpPollContinuation(lua_State* L, int status, lua_KContext ctx);
+static int  McpPollEntrypoint(lua_State* L);
+static int  McpDispatchLine(lua_State* L, LuaMcpServer* server, const char* data, size_t len);
+static int  McpDispatchToolsCall(lua_State* L, LuaMcpServer* server, int params_idx, int id_idx);
+static int  McpToolFinish(lua_State* L, LuaMcpServer* server, int pcall_status);
+static int  McpToolContinuation(lua_State* L, int status, lua_KContext ctx);
+static void McpHandleInitialize(lua_State* L, LuaMcpServer* server, int params_idx, int id_idx);
+static int  McpNextLine(LuaMcpServer* server, std::string& out);
+static void McpRouteResponse(lua_State* L, LuaMcpServer* server, int msg_idx, int id_idx);
 
 // =============================================================================
 // Platform: stdio availability + non-blocking poll.
-// Direct adaptation of LuaProcess.cpp's ReadFromPipe/read_nonblocking, pointed
+// Direct adaptation of LuaProcess.cpp's Process_ReadFromPipe/ReadNonblocking, pointed
 // at our own inherited stdin/stdout instead of a child process's pipe.
-// Returns from mcp_poll_stdin: >0 = bytes read, 0 = nothing available right
+// Returns from McpPollStdin: >0 = bytes read, 0 = nothing available right
 // now, <0 = EOF (stdin closed -- the normal MCP client-disconnect path).
 // =============================================================================
 
 #ifdef _WIN32
 
-static bool mcp_stdio_available() {
+static bool McpStdioAvailable() {
 	HANDLE hin  = GetStdHandle(STD_INPUT_HANDLE);
 	HANDLE hout = GetStdHandle(STD_OUTPUT_HANDLE);
 	return hin != NULL && hin != INVALID_HANDLE_VALUE &&
 	       hout != NULL && hout != INVALID_HANDLE_VALUE;
 }
 
-static int mcp_poll_stdin(char* buf, size_t bufsize) {
+static int McpPollStdin(char* buf, size_t bufsize) {
 	HANDLE hin = GetStdHandle(STD_INPUT_HANDLE);
 	if (hin == NULL || hin == INVALID_HANDLE_VALUE)
 		return -1;
@@ -93,11 +93,11 @@ static int mcp_poll_stdin(char* buf, size_t bufsize) {
 
 #else
 
-static bool mcp_stdio_available() {
+static bool McpStdioAvailable() {
 	return fcntl(0, F_GETFD) != -1 && fcntl(1, F_GETFD) != -1;
 }
 
-static int mcp_poll_stdin(char* buf, size_t bufsize) {
+static int McpPollStdin(char* buf, size_t bufsize) {
 	struct pollfd pfd;
 	pfd.fd      = 0;
 	pfd.events  = POLLIN;
@@ -122,25 +122,25 @@ static int mcp_poll_stdin(char* buf, size_t bufsize) {
 // Userdata lifecycle
 // =============================================================================
 
-LuaMcpServer* lua_mcp_push(lua_State* L) {
+LuaMcpServer* lua_pushmcpserver(lua_State* L) {
 	LuaMcpServer* s = (LuaMcpServer*)lua_newuserdata(L, sizeof(LuaMcpServer));
 	new (s) LuaMcpServer();
 	luaL_setmetatable(L, LUAMCP);
 	return s;
 }
 
-LuaMcpServer* lua_mcp_check(lua_State* L, int idx) {
+LuaMcpServer* luaL_checkmcpserver(lua_State* L, int idx) {
 	return (LuaMcpServer*)luaL_checkudata(L, idx, LUAMCP);
 }
 
-bool lua_mcp_is(lua_State* L, int idx) {
+bool lua_ismcpserver(lua_State* L, int idx) {
 	if (!lua_isuserdata(L, idx))
 		return false;
 	return luaL_testudata(L, idx, LUAMCP) != NULL;
 }
 
-int lua_mcp_gc(lua_State* L) {
-	LuaMcpServer* server = lua_mcp_check(L, 1);
+int McpServer_GC(lua_State* L) {
+	LuaMcpServer* server = luaL_checkmcpserver(L, 1);
 
 	server->stopRequested = true;
 
@@ -181,22 +181,22 @@ int lua_mcp_gc(lua_State* L) {
 	return 0;
 }
 
-int lua_mcp_tostring(lua_State* L) {
-	LuaMcpServer* server = lua_mcp_check(L, 1);
+int McpServer_ToString(lua_State* L) {
+	LuaMcpServer* server = luaL_checkmcpserver(L, 1);
 	lua_pushfstring(L, "MCP(%d tools)", (int)server->tools.size());
 	return 1;
 }
 
 // =============================================================================
 // JSON bridge helpers -- everything goes through the shared LuaJson bridge
-// instance (lua_json_bridge_registry_key()). No hand-rolled JSON anywhere.
+// instance (LuaJsonBridgeRegistryKey()). No hand-rolled JSON anywhere.
 // =============================================================================
 
 // Decodes `data`/`len` (a JSON-RPC line) into a Lua value, pushing the result.
 // Returns true on success (value on top of stack); false on failure (nothing pushed).
-static bool mcp_json_decode(lua_State* L, const char* data, size_t len) {
-	lua_pushcfunction(L, lua_json_decode);
-	lua_rawgetp(L, LUA_REGISTRYINDEX, lua_json_bridge_registry_key());
+static bool McpJsonDecode(lua_State* L, const char* data, size_t len) {
+	lua_pushcfunction(L, Json_Decode);
+	lua_rawgetp(L, LUA_REGISTRYINDEX, LuaJsonBridgeRegistryKey());
 	lua_pushlstring(L, data, len);
 	if (lua_pcall(L, 2, 1, 0) != LUA_OK) {
 		lua_pop(L, 1);
@@ -207,10 +207,10 @@ static bool mcp_json_decode(lua_State* L, const char* data, size_t len) {
 
 // Encodes the Lua value at stack index `value_idx` to a JSON string, pushing
 // the result string. Returns true on success (string on top of stack).
-static bool mcp_json_encode(lua_State* L, int value_idx) {
+static bool McpJsonEncode(lua_State* L, int value_idx) {
 	value_idx = lua_absindex(L, value_idx);
-	lua_pushcfunction(L, lua_json_encode);
-	lua_rawgetp(L, LUA_REGISTRYINDEX, lua_json_bridge_registry_key());
+	lua_pushcfunction(L, Json_Encode);
+	lua_rawgetp(L, LUA_REGISTRYINDEX, LuaJsonBridgeRegistryKey());
 	lua_pushvalue(L, value_idx);
 	if (lua_pcall(L, 2, 1, 0) != LUA_OK) {
 		lua_pop(L, 1);
@@ -220,18 +220,18 @@ static bool mcp_json_encode(lua_State* L, int value_idx) {
 }
 
 // The bridge decodes JSON null as the Json.Null sentinel, not nil: treat both as absent.
-static bool mcp_is_null(lua_State* L, int idx) {
-	return lua_isnil(L, idx) || lua_touserdata(L, idx) == lua_json_null();
+static bool McpIsNull(lua_State* L, int idx) {
+	return lua_isnil(L, idx) || lua_touserdata(L, idx) == LuaJsonNull();
 }
 
-static void mcp_write_line(const char* data, size_t len) {
+static void McpWriteLine(const char* data, size_t len) {
 	fwrite(data, 1, len, stdout);
 	fputc('\n', stdout);
 	fflush(stdout);
 }
 
 // Writes {jsonrpc="2.0", id=<value at id_idx>, result=<value at result_idx>}.
-static void mcp_send_result(lua_State* L, int id_idx, int result_idx) {
+static void McpSendResult(lua_State* L, int id_idx, int result_idx) {
 	id_idx     = lua_absindex(L, id_idx);
 	result_idx = lua_absindex(L, result_idx);
 
@@ -243,16 +243,16 @@ static void mcp_send_result(lua_State* L, int id_idx, int result_idx) {
 	lua_pushvalue(L, result_idx);
 	lua_setfield(L, -2, "result");
 
-	if (mcp_json_encode(L, -1)) {
+	if (McpJsonEncode(L, -1)) {
 		size_t len;
 		const char* s = lua_tolstring(L, -1, &len);
-		if (s) mcp_write_line(s, len);
+		if (s) McpWriteLine(s, len);
 		lua_pop(L, 1); // encoded string
 	}
 	lua_pop(L, 1); // envelope table
 }
 
-static void mcp_send_error(lua_State* L, int id_idx, int code, const char* message) {
+static void McpSendError(lua_State* L, int id_idx, int code, const char* message) {
 	id_idx = lua_absindex(L, id_idx);
 
 	lua_newtable(L); // envelope
@@ -268,10 +268,10 @@ static void mcp_send_error(lua_State* L, int id_idx, int code, const char* messa
 	lua_setfield(L, -2, "message");
 	lua_setfield(L, -2, "error");
 
-	if (mcp_json_encode(L, -1)) {
+	if (McpJsonEncode(L, -1)) {
 		size_t len;
 		const char* s = lua_tolstring(L, -1, &len);
-		if (s) mcp_write_line(s, len);
+		if (s) McpWriteLine(s, len);
 		lua_pop(L, 1);
 	}
 	lua_pop(L, 1);
@@ -281,20 +281,20 @@ static void mcp_send_error(lua_State* L, int id_idx, int code, const char* messa
 // Result builders
 // =============================================================================
 
-static void mcp_push_empty_object(lua_State* L) {
+static void McpPushEmptyObject(lua_State* L) {
 	// Guarantees `{}` on encode regardless of the bridge's emptyObjectAsSentinel
 	// setting (default off, which would otherwise encode an empty Lua table as `[]`).
-	lua_pushlightuserdata(L, lua_json_empty_object());
+	lua_pushlightuserdata(L, LuaJsonEmptyObject());
 }
 
-static void mcp_push_initialize_result(lua_State* L, LuaMcpServer* server) {
+static void McpPushInitializeResult(lua_State* L, LuaMcpServer* server) {
 	lua_newtable(L); // result
 
 	lua_pushlstring(L, server->protocolVersion.c_str(), server->protocolVersion.size());
 	lua_setfield(L, -2, "protocolVersion");
 
 	lua_newtable(L); // capabilities
-	mcp_push_empty_object(L);
+	McpPushEmptyObject(L);
 	lua_setfield(L, -2, "tools");
 	lua_setfield(L, -2, "capabilities");
 
@@ -311,13 +311,13 @@ static void mcp_push_initialize_result(lua_State* L, LuaMcpServer* server) {
 	}
 }
 
-static void mcp_push_tool_input_schema(lua_State* L, const McpTool& tool) {
+static void McpPushToolInputSchema(lua_State* L, const McpTool& tool) {
 	lua_newtable(L); // schema
 	lua_pushliteral(L, "object");
 	lua_setfield(L, -2, "type");
 
 	if (tool.params.empty()) {
-		mcp_push_empty_object(L);
+		McpPushEmptyObject(L);
 	} else {
 		lua_newtable(L); // properties
 		for (const McpToolParam& p : tool.params) {
@@ -344,21 +344,21 @@ static void mcp_push_tool_input_schema(lua_State* L, const McpTool& tool) {
 	lua_setfield(L, -2, "required");
 }
 
-static void mcp_push_tool_descriptor(lua_State* L, const McpTool& tool) {
+static void McpPushToolDescriptor(lua_State* L, const McpTool& tool) {
 	lua_newtable(L);
 	lua_pushlstring(L, tool.name.c_str(), tool.name.size());
 	lua_setfield(L, -2, "name");
 	lua_pushlstring(L, tool.description.c_str(), tool.description.size());
 	lua_setfield(L, -2, "description");
-	mcp_push_tool_input_schema(L, tool);
+	McpPushToolInputSchema(L, tool);
 	lua_setfield(L, -2, "inputSchema");
 }
 
-static void mcp_push_tools_list_result(lua_State* L, LuaMcpServer* server) {
+static void McpPushToolsListResult(lua_State* L, LuaMcpServer* server) {
 	lua_newtable(L); // result
 	lua_newtable(L); // tools array
 	for (size_t i = 0; i < server->tools.size(); i++) {
-		mcp_push_tool_descriptor(L, server->tools[i]);
+		McpPushToolDescriptor(L, server->tools[i]);
 		lua_rawseti(L, -2, (int)(i + 1));
 	}
 	lua_setfield(L, -2, "tools");
@@ -378,7 +378,7 @@ static const char* const mcp_supported_versions[] = {
 	"2024-11-05",
 };
 
-static void mcp_handle_initialize(lua_State* L, LuaMcpServer* server, int params_idx, int id_idx) {
+static void McpHandleInitialize(lua_State* L, LuaMcpServer* server, int params_idx, int id_idx) {
 	// Echo the client's requested version when we support it, otherwise offer
 	// our latest and let the client decide (per the lifecycle spec).
 	server->protocolVersion = mcp_supported_versions[0];
@@ -401,7 +401,7 @@ static void mcp_handle_initialize(lua_State* L, LuaMcpServer* server, int params
 		lua_getfield(L, params_idx, "capabilities");
 		if (lua_istable(L, -1)) {
 			lua_getfield(L, -1, "elicitation"); // `{}` decodes to an empty table, so test for presence
-			server->clientElicitation = !mcp_is_null(L, -1);
+			server->clientElicitation = !McpIsNull(L, -1);
 			lua_pop(L, 1);
 			server->clientCapsRef = luaL_ref(L, LUA_REGISTRYINDEX); // pops capabilities
 		} else {
@@ -421,8 +421,8 @@ static void mcp_handle_initialize(lua_State* L, LuaMcpServer* server, int params
 		lua_pop(L, 1); // clientInfo
 	}
 
-	mcp_push_initialize_result(L, server);
-	mcp_send_result(L, id_idx, -1);
+	McpPushInitializeResult(L, server);
+	McpSendResult(L, id_idx, -1);
 	lua_pop(L, 1); // result table
 }
 
@@ -436,10 +436,10 @@ static void mcp_handle_initialize(lua_State* L, LuaMcpServer* server, int params
 // [..., msg, id, params, method, fn, context, request]. After the call
 // resolves (synchronously or via the continuation), Lua guarantees the stack
 // looks like [..., msg, id, params, method, result_or_error] -- so
-// mcp_tool_finish can derive every needed index purely from lua_gettop(L).
+// McpToolFinish can derive every needed index purely from lua_gettop(L).
 // =============================================================================
 
-static int mcp_tool_finish(lua_State* L, LuaMcpServer* server, int pcall_status) {
+static int McpToolFinish(lua_State* L, LuaMcpServer* server, int pcall_status) {
 	server->toolThread = nullptr;
 	int top      = lua_gettop(L);
 	int id_idx   = top - 3;
@@ -476,18 +476,18 @@ static int mcp_tool_finish(lua_State* L, LuaMcpServer* server, int pcall_status)
 		lua_setfield(L, -2, "isError");
 	}
 
-	mcp_send_result(L, id_idx, -1);
+	McpSendResult(L, id_idx, -1);
 	lua_pop(L, 1); // envelope
 
 	lua_settop(L, msg_idx - 1); // drop msg/id/params/method/result entirely
-	return mcp_poll_step(L, server);
+	return McpPollStep(L, server);
 }
 
-static int mcp_tool_continuation(lua_State* L, int status, lua_KContext ctx) {
-	return mcp_tool_finish(L, (LuaMcpServer*)ctx, status);
+static int McpToolContinuation(lua_State* L, int status, lua_KContext ctx) {
+	return McpToolFinish(L, (LuaMcpServer*)ctx, status);
 }
 
-static int mcp_dispatch_tools_call(lua_State* L, LuaMcpServer* server, int params_idx, int id_idx) {
+static int McpDispatchToolsCall(lua_State* L, LuaMcpServer* server, int params_idx, int id_idx) {
 	int msg_idx = id_idx - 1;
 
 	lua_getfield(L, params_idx, "name");
@@ -502,9 +502,9 @@ static int mcp_dispatch_tools_call(lua_State* L, LuaMcpServer* server, int param
 	lua_pop(L, 1); // name
 
 	if (!tool) {
-		mcp_send_error(L, id_idx, -32602, tool_name ? "Unknown tool" : "Missing tool name");
+		McpSendError(L, id_idx, -32602, tool_name ? "Unknown tool" : "Missing tool name");
 		lua_settop(L, msg_idx - 1);
-		return mcp_poll_step(L, server);
+		return McpPollStep(L, server);
 	}
 
 	lua_getfield(L, params_idx, "arguments"); // table or nil
@@ -520,7 +520,7 @@ static int mcp_dispatch_tools_call(lua_State* L, LuaMcpServer* server, int param
 	int req_idx = lua_gettop(L);
 
 	if (has_args) lua_pushvalue(L, args_idx);
-	else          mcp_push_empty_object(L);
+	else          McpPushEmptyObject(L);
 	lua_setfield(L, req_idx, "Arguments");
 
 	lua_newtable(L); // Parameters (positional, declared order)
@@ -558,26 +558,26 @@ static int mcp_dispatch_tools_call(lua_State* L, LuaMcpServer* server, int param
 	lua_remove(L, args_idx); // fn/context/request shift down by one to become contiguous
 
 	server->toolThread = L; // lets Elicit tell it's inside this call
-	int rc = lua_pcallk(L, 2, 1, 0, (lua_KContext)server, mcp_tool_continuation);
-	return mcp_tool_finish(L, server, rc);
+	int rc = lua_pcallk(L, 2, 1, 0, (lua_KContext)server, McpToolContinuation);
+	return McpToolFinish(L, server, rc);
 }
 
 // =============================================================================
 // Dispatch: one decoded JSON-RPC line
 // =============================================================================
 
-static int mcp_dispatch_line(lua_State* L, LuaMcpServer* server, const char* data, size_t len) {
-	if (!mcp_json_decode(L, data, len)) {
+static int McpDispatchLine(lua_State* L, LuaMcpServer* server, const char* data, size_t len) {
+	if (!McpJsonDecode(L, data, len)) {
 		lua_pushnil(L);
-		mcp_send_error(L, -1, -32700, "Parse error");
+		McpSendError(L, -1, -32700, "Parse error");
 		lua_pop(L, 1);
-		return mcp_poll_step(L, server);
+		return McpPollStep(L, server);
 	}
 
 	int msg_idx = lua_gettop(L);
 	if (!lua_istable(L, msg_idx)) {
 		lua_settop(L, msg_idx - 1);
-		return mcp_poll_step(L, server);
+		return McpPollStep(L, server);
 	}
 
 	lua_getfield(L, msg_idx, "id");
@@ -596,39 +596,39 @@ static int mcp_dispatch_line(lua_State* L, LuaMcpServer* server, const char* dat
 		lua_getfield(L, msg_idx, "error");
 		bool is_response = !lua_isnil(L, -2) || !lua_isnil(L, -1);
 		lua_pop(L, 2);
-		if (is_response)     mcp_route_response(L, server, msg_idx, id_idx);
-		else if (has_id)     mcp_send_error(L, id_idx, -32600, "Invalid Request");
+		if (is_response)     McpRouteResponse(L, server, msg_idx, id_idx);
+		else if (has_id)     McpSendError(L, id_idx, -32600, "Invalid Request");
 	} else if (strcmp(method, "initialize") == 0) {
-		mcp_handle_initialize(L, server, params_idx, id_idx);
+		McpHandleInitialize(L, server, params_idx, id_idx);
 	} else if (strcmp(method, "notifications/initialized") == 0) {
 		// no response
 	} else if (strcmp(method, "ping") == 0) {
-		mcp_push_empty_object(L);
-		mcp_send_result(L, id_idx, -1);
+		McpPushEmptyObject(L);
+		McpSendResult(L, id_idx, -1);
 		lua_pop(L, 1);
 	} else if (strcmp(method, "tools/list") == 0) {
-		mcp_push_tools_list_result(L, server);
-		mcp_send_result(L, id_idx, -1);
+		McpPushToolsListResult(L, server);
+		McpSendResult(L, id_idx, -1);
 		lua_pop(L, 1);
 	} else if (strcmp(method, "tools/call") == 0) {
-		return mcp_dispatch_tools_call(L, server, params_idx, id_idx); // may yield; tail return
+		return McpDispatchToolsCall(L, server, params_idx, id_idx); // may yield; tail return
 	} else {
-		if (has_id) mcp_send_error(L, id_idx, -32601, "Method not found");
+		if (has_id) McpSendError(L, id_idx, -32601, "Method not found");
 	}
 
 	lua_settop(L, msg_idx - 1); // drop method/params/id/msg
-	return mcp_poll_step(L, server);
+	return McpPollStep(L, server);
 }
 
 // =============================================================================
-// Poll loop -- modeled on HttpCurl.cpp's client_call/client_call_continuation:
+// Poll loop -- modeled on HttpCurl.cpp's HttpClient_Call/ClientCallContinuation:
 // a native call that transparently yields when invoked directly from the
 // top-level script, with no Tasks.New/coroutine.resume boilerplate needed.
-// Runs as its own independently-scheduled coroutine (see lua_mcp_start),
+// Runs as its own independently-scheduled coroutine (see McpServer_Start),
 // so it cooperates with the scheduler on its own, fire-and-forget.
 // =============================================================================
 
-static void mcp_linebuf_append(LuaMcpServer* server, const char* data, size_t len) {
+static void McpLinebufAppend(LuaMcpServer* server, const char* data, size_t len) {
 	size_t needed = server->linebufLen + len;
 	if (needed > server->linebufCap) {
 		size_t newCap = server->linebufCap ? server->linebufCap : 256;
@@ -648,7 +648,7 @@ static void mcp_linebuf_append(LuaMcpServer* server, const char* data, size_t le
 // stdin as needed. Shared by the poll loop and waiting Elicit calls, so both
 // consume the same stream. Returns 1 = line in `out`, 0 = nothing available
 // right now, -1 = EOF (also latched in server->eof).
-static int mcp_next_line(LuaMcpServer* server, std::string& out) {
+static int McpNextLine(LuaMcpServer* server, std::string& out) {
 	for (;;) {
 		void* nl = server->linebuf ? memchr(server->linebuf, '\n', server->linebufLen) : NULL;
 		if (nl) {
@@ -665,18 +665,18 @@ static int mcp_next_line(LuaMcpServer* server, std::string& out) {
 			return -1;
 
 		char buf[4096];
-		int  n = mcp_poll_stdin(buf, sizeof(buf));
+		int  n = McpPollStdin(buf, sizeof(buf));
 		if (n < 0) {
 			server->eof = true;
 			return -1;
 		}
 		if (n == 0)
 			return 0;
-		mcp_linebuf_append(server, buf, (size_t)n); // more may already be buffered; check again immediately
+		McpLinebufAppend(server, buf, (size_t)n); // more may already be buffered; check again immediately
 	}
 }
 
-static int mcp_poll_step(lua_State* L, LuaMcpServer* server) {
+static int McpPollStep(lua_State* L, LuaMcpServer* server) {
 	if (server->stopRequested)
 		return 0;
 
@@ -689,26 +689,26 @@ static int mcp_poll_step(lua_State* L, LuaMcpServer* server) {
 	if (!server->deferred.empty()) {
 		line = std::move(server->deferred.front());
 		server->deferred.pop_front();
-		return mcp_dispatch_line(L, server, line.data(), line.size());
+		return McpDispatchLine(L, server, line.data(), line.size());
 	}
 
-	int r = mcp_next_line(server, line);
+	int r = McpNextLine(server, line);
 	if (r > 0)
-		return mcp_dispatch_line(L, server, line.data(), line.size());
+		return McpDispatchLine(L, server, line.data(), line.size());
 	if (r < 0)
 		return 0; // EOF -- client disconnected; return for real, ending this coroutine
 
-	return lua_yieldk(L, 0, (lua_KContext)server, mcp_poll_continuation);
+	return lua_yieldk(L, 0, (lua_KContext)server, McpPollContinuation);
 }
 
-static int mcp_poll_continuation(lua_State* L, int status, lua_KContext ctx) {
+static int McpPollContinuation(lua_State* L, int status, lua_KContext ctx) {
 	(void)status;
-	return mcp_poll_step(L, (LuaMcpServer*)ctx);
+	return McpPollStep(L, (LuaMcpServer*)ctx);
 }
 
-static int mcp_poll_entrypoint(lua_State* L) {
+static int McpPollEntrypoint(lua_State* L) {
 	LuaMcpServer* server = (LuaMcpServer*)lua_touserdata(L, lua_upvalueindex(1));
-	return mcp_poll_step(L, server);
+	return McpPollStep(L, server);
 }
 
 // =============================================================================
@@ -717,11 +717,11 @@ static int mcp_poll_entrypoint(lua_State* L) {
 // process may write to it directly once the server is running, regardless
 // of which coroutine tries. Output is captured into server->capturedOutput
 // rather than silently discarded, so a tool callback's debug output can be
-// merged into that call's response -- see mcp_dispatch_tools_call (clears
-// the buffer before dispatch) and mcp_tool_finish (merges it after).
+// merged into that call's response -- see McpDispatchToolsCall (clears
+// the buffer before dispatch) and McpToolFinish (merges it after).
 // =============================================================================
 
-static int mcp_print_override(lua_State* L) {
+static int McpPrintOverride(lua_State* L) {
 	LuaMcpServer* server = (LuaMcpServer*)lua_touserdata(L, lua_upvalueindex(1));
 	int n = lua_gettop(L);
 	for (int i = 1; i <= n; i++) {
@@ -735,7 +735,7 @@ static int mcp_print_override(lua_State* L) {
 	return 0;
 }
 
-static int mcp_iowrite_override(lua_State* L) {
+static int McpIoWriteOverride(lua_State* L) {
 	LuaMcpServer* server = (LuaMcpServer*)lua_touserdata(L, lua_upvalueindex(1));
 	int n = lua_gettop(L);
 	for (int i = 1; i <= n; i++) {
@@ -749,21 +749,21 @@ static int mcp_iowrite_override(lua_State* L) {
 
 // io.write is always captured (above), so redirecting the default output with io.output
 // would silently have no effect. It is disabled instead, so the limitation is explicit.
-static int mcp_iooutput_disabled(lua_State* L) {
+static int McpIoOutputDisabled(lua_State* L) {
 	return luaL_error(L, "io.output is not available in MCP mode (stdout carries the JSON-RPC "
 		"stream and io.write is captured); write to a file handle from io.open instead");
 }
 
-static void mcp_install_output_redirect(lua_State* L, LuaMcpServer* server) {
+static void McpInstallOutputRedirect(lua_State* L, LuaMcpServer* server) {
 	lua_pushlightuserdata(L, server);
-	lua_pushcclosure(L, mcp_print_override, 1);
+	lua_pushcclosure(L, McpPrintOverride, 1);
 	lua_setglobal(L, "print");
 
 	lua_getglobal(L, "io");
 	lua_pushlightuserdata(L, server);
-	lua_pushcclosure(L, mcp_iowrite_override, 1);
+	lua_pushcclosure(L, McpIoWriteOverride, 1);
 	lua_setfield(L, -2, "write");
-	lua_pushcfunction(L, mcp_iooutput_disabled);
+	lua_pushcfunction(L, McpIoOutputDisabled);
 	lua_setfield(L, -2, "output");
 	lua_pop(L, 1); // io table
 }
@@ -777,14 +777,14 @@ static void mcp_install_output_redirect(lua_State* L, LuaMcpServer* server) {
 // `pending` by id, and defers every other message for the poll loop to dispatch later.
 // =============================================================================
 
-static double mcp_now_ms() {
+static double McpNowMs() {
 	using namespace std::chrono;
 	return (double)duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
 }
 
 // Parks a response in `pending` if something is waiting for it. Anything else
 // (a late answer to a timed-out request, an id we never sent) is dropped.
-static void mcp_route_response(lua_State* L, LuaMcpServer* server, int msg_idx, int id_idx) {
+static void McpRouteResponse(lua_State* L, LuaMcpServer* server, int msg_idx, int id_idx) {
 	msg_idx = lua_absindex(L, msg_idx);
 	lua_pushvalue(L, id_idx);
 	const char* key = lua_tostring(L, -1); // converts the copy, never the original id
@@ -797,9 +797,9 @@ static void mcp_route_response(lua_State* L, LuaMcpServer* server, int msg_idx, 
 	it->second.done    = true;
 }
 
-static void mcp_handle_line_while_waiting(lua_State* L, LuaMcpServer* server, std::string& line) {
+static void McpHandleLineWhileWaiting(lua_State* L, LuaMcpServer* server, std::string& line) {
 	int base = lua_gettop(L);
-	if (mcp_json_decode(L, line.data(), line.size()) && lua_istable(L, -1)) {
+	if (McpJsonDecode(L, line.data(), line.size()) && lua_istable(L, -1)) {
 		int msg_idx = lua_gettop(L);
 		lua_getfield(L, msg_idx, "id");
 		int id_idx = lua_gettop(L);
@@ -812,13 +812,13 @@ static void mcp_handle_line_while_waiting(lua_State* L, LuaMcpServer* server, st
 			bool is_response = !lua_isnil(L, -2) || !lua_isnil(L, -1);
 			lua_pop(L, 2);
 			if (is_response) {
-				mcp_route_response(L, server, msg_idx, id_idx);
+				McpRouteResponse(L, server, msg_idx, id_idx);
 				lua_settop(L, base);
 				return;
 			}
 		} else if (strcmp(method, "ping") == 0 && !lua_isnil(L, id_idx)) {
-			mcp_push_empty_object(L);
-			mcp_send_result(L, id_idx, -1);
+			McpPushEmptyObject(L);
+			McpSendResult(L, id_idx, -1);
 			lua_settop(L, base);
 			return;
 		}
@@ -828,7 +828,7 @@ static void mcp_handle_line_while_waiting(lua_State* L, LuaMcpServer* server, st
 	server->deferred.push_back(std::move(line));
 }
 
-static void mcp_send_cancelled(lua_State* L, const char* id, const char* reason) {
+static void McpSendCancelled(lua_State* L, const char* id, const char* reason) {
 	lua_newtable(L);
 	lua_pushliteral(L, "2.0");
 	lua_setfield(L, -2, "jsonrpc");
@@ -841,16 +841,16 @@ static void mcp_send_cancelled(lua_State* L, const char* id, const char* reason)
 	lua_setfield(L, -2, "reason");
 	lua_setfield(L, -2, "params");
 
-	if (mcp_json_encode(L, -1)) {
+	if (McpJsonEncode(L, -1)) {
 		size_t len;
 		const char* s = lua_tolstring(L, -1, &len);
-		if (s) mcp_write_line(s, len);
+		if (s) McpWriteLine(s, len);
 		lua_pop(L, 1);
 	}
 	lua_pop(L, 1);
 }
 
-static void mcp_pending_erase(lua_State* L, LuaMcpServer* server, const std::string& key) {
+static void McpPendingErase(lua_State* L, LuaMcpServer* server, const std::string& key) {
 	auto it = server->pending.find(key);
 	if (it == server->pending.end())
 		return;
@@ -865,24 +865,24 @@ static void mcp_pending_erase(lua_State* L, LuaMcpServer* server, const std::str
 // duplicate names/values and repeated setters raise, nothing can be removed.
 // =============================================================================
 
-static void mcp_unref(lua_State* L, int& ref) {
+static void McpUnref(lua_State* L, int& ref) {
 	if (ref != LUA_NOREF) {
 		luaL_unref(L, LUA_REGISTRYINDEX, ref);
 		ref = LUA_NOREF;
 	}
 }
 
-static LuaMcpElicitation* mcp_elicitation_check(lua_State* L, int idx) {
+static LuaMcpElicitation* luaL_checkmcpelicitation(lua_State* L, int idx) {
 	return (LuaMcpElicitation*)luaL_checkudata(L, idx, LUAMCPELICITATION);
 }
 
 // The returned reference is only valid until the next AddQuestion on the same elicitation.
-static McpQuestion& mcp_question_check(lua_State* L, int idx) {
+static McpQuestion& luaL_checkmcpquestion(lua_State* L, int idx) {
 	LuaMcpQuestion* h = (LuaMcpQuestion*)luaL_checkudata(L, idx, LUAMCPQUESTION);
 	return h->elicitation->questions[h->index];
 }
 
-static const char* mcp_question_type_name(McpQuestionType t) {
+static const char* McpQuestionTypeName(McpQuestionType t) {
 	switch (t) {
 	case MCP_Q_INTEGER: return "integer";
 	case MCP_Q_NUMBER:  return "number";
@@ -891,21 +891,21 @@ static const char* mcp_question_type_name(McpQuestionType t) {
 	}
 }
 
-static const McpAnswer* mcp_find_answer(const McpQuestion& q, const char* value) {
+static const McpAnswer* McpFindAnswer(const McpQuestion& q, const char* value) {
 	for (const McpAnswer& a : q.answers) {
 		if (a.value == value) return &a;
 	}
 	return nullptr;
 }
 
-static void mcp_once(lua_State* L, bool& flag, const char* setter, const McpQuestion& q) {
+static void McpOnce(lua_State* L, bool& flag, const char* setter, const McpQuestion& q) {
 	if (flag)
 		luaL_error(L, "%s: already set on question '%s'", setter, q.name.c_str());
 	flag = true;
 }
 
 // Accepts an integer, or a float with an integral value. Pushes nothing.
-static bool mcp_to_integer(lua_State* L, int idx, lua_Integer* out) {
+static bool McpToInteger(lua_State* L, int idx, lua_Integer* out) {
 	if (lua_isinteger(L, idx)) {
 		*out = lua_tointeger(L, idx);
 		return true;
@@ -921,7 +921,7 @@ static bool mcp_to_integer(lua_State* L, int idx, lua_Integer* out) {
 	return false;
 }
 
-static lua_Integer mcp_utf8_length(const char* s, size_t len) {
+static lua_Integer McpUtf8Length(const char* s, size_t len) {
 	lua_Integer n = 0;
 	for (size_t i = 0; i < len; i++) {
 		if (((unsigned char)s[i] & 0xC0) != 0x80) n++;
@@ -930,21 +930,21 @@ static lua_Integer mcp_utf8_length(const char* s, size_t len) {
 }
 
 // Reads an optional non-negative integer bound at `idx` (nil = no bound).
-static bool mcp_opt_count(lua_State* L, int idx, const char* setter, lua_Integer* out) {
+static bool McpOptCount(lua_State* L, int idx, const char* setter, lua_Integer* out) {
 	if (lua_isnoneornil(L, idx))
 		return false;
-	if (!mcp_to_integer(L, idx, out) || *out < 0)
+	if (!McpToInteger(L, idx, out) || *out < 0)
 		luaL_error(L, "%s: bounds must be non-negative integers or nil", setter);
 	return true;
 }
 
-int lua_mcp_createelicitation(lua_State* L) {
-	LuaMcpServer* server = lua_mcp_check(L, 1);
+int McpServer_CreateElicitation(lua_State* L) {
+	LuaMcpServer* server = luaL_checkmcpserver(L, 1);
 	size_t mlen;
 	const char* message = luaL_checklstring(L, 2, &mlen);
 	luaL_checktype(L, 3, LUA_TFUNCTION);
 	lua_Integer timeout = 0;
-	if (!lua_isnoneornil(L, 4) && (!mcp_to_integer(L, 4, &timeout) || timeout < 0))
+	if (!lua_isnoneornil(L, 4) && (!McpToInteger(L, 4, &timeout) || timeout < 0))
 		return luaL_argerror(L, 4, "timeout must be a non-negative integer (milliseconds) or nil");
 
 	LuaMcpElicitation* e = (LuaMcpElicitation*)lua_newuserdata(L, sizeof(LuaMcpElicitation));
@@ -961,8 +961,8 @@ int lua_mcp_createelicitation(lua_State* L) {
 	return 1;
 }
 
-int lua_mcp_elicitation_addquestion(lua_State* L) {
-	LuaMcpElicitation* e = mcp_elicitation_check(L, 1);
+int McpElicitation_AddQuestion(lua_State* L) {
+	LuaMcpElicitation* e = luaL_checkmcpelicitation(L, 1);
 	const char* name  = luaL_checkstring(L, 2);
 	const char* tname = luaL_checkstring(L, 3);
 	const char* title = luaL_checkstring(L, 4);
@@ -999,18 +999,18 @@ int lua_mcp_elicitation_addquestion(lua_State* L) {
 	return 1;
 }
 
-int lua_mcp_question_addanswer(lua_State* L) {
-	McpQuestion& q = mcp_question_check(L, 1);
+int McpQuestion_AddAnswer(lua_State* L) {
+	McpQuestion& q = luaL_checkmcpquestion(L, 1);
 	const char* value = luaL_checkstring(L, 2);
 	const char* label = luaL_checkstring(L, 3);
 	if (!lua_isnoneornil(L, 4))
 		luaL_checktype(L, 4, LUA_TFUNCTION);
 
 	if (q.type != MCP_Q_STRING)
-		return luaL_error(L, "AddAnswer: question '%s' is %s; answers are only allowed on string questions", q.name.c_str(), mcp_question_type_name(q.type));
+		return luaL_error(L, "AddAnswer: question '%s' is %s; answers are only allowed on string questions", q.name.c_str(), McpQuestionTypeName(q.type));
 	if (q.hasLength || q.hasFormat)
 		return luaL_error(L, "AddAnswer: question '%s' is free text (SetLength/SetFormat); it can't also have answers", q.name.c_str());
-	if (mcp_find_answer(q, value))
+	if (McpFindAnswer(q, value))
 		return luaL_error(L, "AddAnswer: question '%s' already has an answer '%s'", q.name.c_str(), value);
 
 	McpAnswer a;
@@ -1024,16 +1024,16 @@ int lua_mcp_question_addanswer(lua_State* L) {
 	return 0;
 }
 
-int lua_mcp_question_setdescription(lua_State* L) {
-	McpQuestion& q = mcp_question_check(L, 1);
+int McpQuestion_SetDescription(lua_State* L) {
+	McpQuestion& q = luaL_checkmcpquestion(L, 1);
 	const char* text = luaL_checkstring(L, 2);
-	mcp_once(L, q.hasDescription, "SetDescription", q);
+	McpOnce(L, q.hasDescription, "SetDescription", q);
 	q.description = text;
 	return 0;
 }
 
-int lua_mcp_question_setdefault(lua_State* L) {
-	McpQuestion& q = mcp_question_check(L, 1);
+int McpQuestion_SetDefault(lua_State* L) {
+	McpQuestion& q = luaL_checkmcpquestion(L, 1);
 	luaL_checkany(L, 2);
 	lua_settop(L, 2);
 
@@ -1044,7 +1044,7 @@ int lua_mcp_question_setdefault(lua_State* L) {
 		break;
 	case MCP_Q_INTEGER: {
 		lua_Integer i;
-		if (!mcp_to_integer(L, 2, &i))
+		if (!McpToInteger(L, 2, &i))
 			return luaL_error(L, "SetDefault: question '%s' is integer; got %s", q.name.c_str(), luaL_typename(L, 2));
 		lua_pushinteger(L, i);
 		lua_replace(L, 2);
@@ -1063,16 +1063,16 @@ int lua_mcp_question_setdefault(lua_State* L) {
 		break;
 	}
 
-	mcp_once(L, q.hasDefault, "SetDefault", q);
+	McpOnce(L, q.hasDefault, "SetDefault", q);
 	lua_pushvalue(L, 2);
 	q.default_ref = luaL_ref(L, LUA_REGISTRYINDEX);
 	return 0;
 }
 
-int lua_mcp_question_setrange(lua_State* L) {
-	McpQuestion& q = mcp_question_check(L, 1);
+int McpQuestion_SetRange(lua_State* L) {
+	McpQuestion& q = luaL_checkmcpquestion(L, 1);
 	if (q.type != MCP_Q_INTEGER && q.type != MCP_Q_NUMBER)
-		return luaL_error(L, "SetRange: question '%s' is %s; SetRange needs integer or number", q.name.c_str(), mcp_question_type_name(q.type));
+		return luaL_error(L, "SetRange: question '%s' is %s; SetRange needs integer or number", q.name.c_str(), McpQuestionTypeName(q.type));
 	if (lua_isnoneornil(L, 2) && lua_isnoneornil(L, 3))
 		return luaL_error(L, "SetRange: give a minimum, a maximum, or both");
 
@@ -1080,7 +1080,7 @@ int lua_mcp_question_setrange(lua_State* L) {
 	lua_Integer minI = 0, maxI = 0;
 	lua_Number  minN = 0, maxN = 0;
 	if (q.type == MCP_Q_INTEGER) {
-		if ((hasMin && !mcp_to_integer(L, 2, &minI)) || (hasMax && !mcp_to_integer(L, 3, &maxI)))
+		if ((hasMin && !McpToInteger(L, 2, &minI)) || (hasMax && !McpToInteger(L, 3, &maxI)))
 			return luaL_error(L, "SetRange: question '%s' is integer; bounds must be integers or nil", q.name.c_str());
 		if (hasMin && hasMax && minI > maxI)
 			return luaL_error(L, "SetRange: minimum is greater than maximum");
@@ -1091,100 +1091,100 @@ int lua_mcp_question_setrange(lua_State* L) {
 			return luaL_error(L, "SetRange: minimum is greater than maximum");
 	}
 
-	mcp_once(L, q.hasRange, "SetRange", q);
+	McpOnce(L, q.hasRange, "SetRange", q);
 	q.hasMin = hasMin; q.hasMax = hasMax;
 	q.minI = minI; q.maxI = maxI;
 	q.minN = minN; q.maxN = maxN;
 	return 0;
 }
 
-int lua_mcp_question_setlength(lua_State* L) {
-	McpQuestion& q = mcp_question_check(L, 1);
+int McpQuestion_SetLength(lua_State* L) {
+	McpQuestion& q = luaL_checkmcpquestion(L, 1);
 	if (q.type != MCP_Q_STRING || !q.answers.empty() || q.multiple)
 		return luaL_error(L, "SetLength: question '%s' isn't free text; SetLength needs a string question without answers", q.name.c_str());
 	lua_Integer mn = 0, mx = 0;
-	bool hasMin = mcp_opt_count(L, 2, "SetLength", &mn);
-	bool hasMax = mcp_opt_count(L, 3, "SetLength", &mx);
+	bool hasMin = McpOptCount(L, 2, "SetLength", &mn);
+	bool hasMax = McpOptCount(L, 3, "SetLength", &mx);
 	if (!hasMin && !hasMax)
 		return luaL_error(L, "SetLength: give a minimum, a maximum, or both");
 	if (hasMin && hasMax && mn > mx)
 		return luaL_error(L, "SetLength: minimum is greater than maximum");
 
-	mcp_once(L, q.hasLength, "SetLength", q);
+	McpOnce(L, q.hasLength, "SetLength", q);
 	q.hasMinLen = hasMin; q.hasMaxLen = hasMax;
 	q.minLen = mn; q.maxLen = mx;
 	return 0;
 }
 
-int lua_mcp_question_setformat(lua_State* L) {
-	McpQuestion& q = mcp_question_check(L, 1);
+int McpQuestion_SetFormat(lua_State* L) {
+	McpQuestion& q = luaL_checkmcpquestion(L, 1);
 	const char* fmt = luaL_checkstring(L, 2);
 	if (q.type != MCP_Q_STRING || !q.answers.empty() || q.multiple)
 		return luaL_error(L, "SetFormat: question '%s' isn't free text; SetFormat needs a string question without answers", q.name.c_str());
 	if (strcmp(fmt, "email") != 0 && strcmp(fmt, "uri") != 0 && strcmp(fmt, "date") != 0 && strcmp(fmt, "date-time") != 0)
 		return luaL_error(L, "SetFormat: unknown format '%s' (expected \"email\", \"uri\", \"date\" or \"date-time\")", fmt);
 
-	mcp_once(L, q.hasFormat, "SetFormat", q);
+	McpOnce(L, q.hasFormat, "SetFormat", q);
 	q.format = fmt;
 	return 0;
 }
 
-int lua_mcp_question_setmultiple(lua_State* L) {
-	McpQuestion& q = mcp_question_check(L, 1);
+int McpQuestion_SetMultiple(lua_State* L) {
+	McpQuestion& q = luaL_checkmcpquestion(L, 1);
 	if (q.type != MCP_Q_STRING || q.hasLength || q.hasFormat)
 		return luaL_error(L, "SetMultiple: question '%s' can't be multi-select; SetMultiple needs a string question with answers", q.name.c_str());
 	if (q.hasDefault)
 		return luaL_error(L, "SetMultiple: call SetMultiple before SetDefault on question '%s' (the default becomes a list)", q.name.c_str());
 	lua_Integer mn = 0, mx = 0;
-	bool hasMin = mcp_opt_count(L, 2, "SetMultiple", &mn);
-	bool hasMax = mcp_opt_count(L, 3, "SetMultiple", &mx);
+	bool hasMin = McpOptCount(L, 2, "SetMultiple", &mn);
+	bool hasMax = McpOptCount(L, 3, "SetMultiple", &mx);
 	if (hasMin && hasMax && mn > mx)
 		return luaL_error(L, "SetMultiple: minimum is greater than maximum");
 
-	mcp_once(L, q.multiple, "SetMultiple", q);
+	McpOnce(L, q.multiple, "SetMultiple", q);
 	q.hasMinItems = hasMin; q.hasMaxItems = hasMax;
 	q.minItems = mn; q.maxItems = mx;
 	return 0;
 }
 
-int lua_mcp_question_setcallback(lua_State* L) {
-	McpQuestion& q = mcp_question_check(L, 1);
+int McpQuestion_SetCallback(lua_State* L) {
+	McpQuestion& q = luaL_checkmcpquestion(L, 1);
 	luaL_checktype(L, 2, LUA_TFUNCTION);
-	mcp_once(L, q.hasCallback, "SetCallback", q);
+	McpOnce(L, q.hasCallback, "SetCallback", q);
 	lua_pushvalue(L, 2);
 	q.fn_ref = luaL_ref(L, LUA_REGISTRYINDEX);
 	return 0;
 }
 
-int lua_mcp_elicitation_gc(lua_State* L) {
-	LuaMcpElicitation* e = mcp_elicitation_check(L, 1);
+int McpElicitation_GC(lua_State* L) {
+	LuaMcpElicitation* e = luaL_checkmcpelicitation(L, 1);
 	for (McpQuestion& q : e->questions) {
-		mcp_unref(L, q.fn_ref);
-		mcp_unref(L, q.default_ref);
+		McpUnref(L, q.fn_ref);
+		McpUnref(L, q.default_ref);
 		for (McpAnswer& a : q.answers)
-			mcp_unref(L, a.fn_ref);
+			McpUnref(L, a.fn_ref);
 	}
-	mcp_unref(L, e->default_ref);
-	mcp_unref(L, e->mcp_ref); // releases the parent last
+	McpUnref(L, e->default_ref);
+	McpUnref(L, e->mcp_ref); // releases the parent last
 	e->server = nullptr;
 	e->~LuaMcpElicitation();
 	return 0;
 }
 
-int lua_mcp_elicitation_tostring(lua_State* L) {
-	LuaMcpElicitation* e = mcp_elicitation_check(L, 1);
+int McpElicitation_ToString(lua_State* L) {
+	LuaMcpElicitation* e = luaL_checkmcpelicitation(L, 1);
 	lua_pushfstring(L, "Elicitation(%d questions)", (int)e->questions.size());
 	return 1;
 }
 
-int lua_mcp_question_gc(lua_State* L) {
+int McpQuestion_GC(lua_State* L) {
 	LuaMcpQuestion* h = (LuaMcpQuestion*)luaL_checkudata(L, 1, LUAMCPQUESTION);
-	mcp_unref(L, h->elicitation_ref);
+	McpUnref(L, h->elicitation_ref);
 	h->elicitation = nullptr;
 	return 0;
 }
 
-int lua_mcp_question_tostring(lua_State* L) {
+int McpQuestion_ToString(lua_State* L) {
 	LuaMcpQuestion* h = (LuaMcpQuestion*)luaL_checkudata(L, 1, LUAMCPQUESTION);
 	if (!h->elicitation) {
 		lua_pushliteral(L, "Question(released)");
@@ -1200,7 +1200,7 @@ int lua_mcp_question_tostring(lua_State* L) {
 
 // Definition errors that can only be seen once everything is added (e.g. a
 // default that isn't one of the answers). Programming errors: they raise.
-static void mcp_validate_elicitation(lua_State* L, LuaMcpElicitation* e) {
+static void McpValidateElicitation(lua_State* L, LuaMcpElicitation* e) {
 	for (const McpQuestion& q : e->questions) {
 		if (q.multiple && q.answers.empty())
 			luaL_error(L, "Elicit: question '%s' is multi-select but has no answers", q.name.c_str());
@@ -1212,11 +1212,11 @@ static void mcp_validate_elicitation(lua_State* L, LuaMcpElicitation* e) {
 			int n = (int)lua_rawlen(L, -1);
 			for (int i = 1; i <= n; i++) {
 				lua_rawgeti(L, -1, i);
-				if (lua_type(L, -1) != LUA_TSTRING || !mcp_find_answer(q, lua_tostring(L, -1)))
+				if (lua_type(L, -1) != LUA_TSTRING || !McpFindAnswer(q, lua_tostring(L, -1)))
 					luaL_error(L, "Elicit: default of question '%s' contains something that isn't one of its answers", q.name.c_str());
 				lua_pop(L, 1);
 			}
-		} else if (!mcp_find_answer(q, lua_tostring(L, -1))) {
+		} else if (!McpFindAnswer(q, lua_tostring(L, -1))) {
 			luaL_error(L, "Elicit: default '%s' of question '%s' isn't one of its answers", lua_tostring(L, -1), q.name.c_str());
 		}
 		lua_pop(L, 1);
@@ -1224,7 +1224,7 @@ static void mcp_validate_elicitation(lua_State* L, LuaMcpElicitation* e) {
 }
 
 // Pushes an array of { const = value, title = label }.
-static void mcp_push_titled_answers(lua_State* L, const McpQuestion& q) {
+static void McpPushTitledAnswers(lua_State* L, const McpQuestion& q) {
 	lua_newtable(L);
 	for (size_t i = 0; i < q.answers.size(); i++) {
 		lua_newtable(L);
@@ -1239,7 +1239,7 @@ static void mcp_push_titled_answers(lua_State* L, const McpQuestion& q) {
 // `titled`: the client speaks 2025-11-25+, where titled answers are oneOf/anyOf
 // of {const,title}. Older revisions get enum + enumNames (multi-select never
 // reaches here for them -- Elicit treats it as unsupported).
-static void mcp_push_elicitation_schema(lua_State* L, LuaMcpElicitation* e, bool titled) {
+static void McpPushElicitationSchema(lua_State* L, LuaMcpElicitation* e, bool titled) {
 	lua_newtable(L);
 	int schema_idx = lua_gettop(L);
 	lua_pushliteral(L, "object");
@@ -1259,7 +1259,7 @@ static void mcp_push_elicitation_schema(lua_State* L, LuaMcpElicitation* e, bool
 			lua_pushliteral(L, "array");
 			lua_setfield(L, p, "type");
 			lua_newtable(L); // items
-			mcp_push_titled_answers(L, q);
+			McpPushTitledAnswers(L, q);
 			lua_setfield(L, -2, "anyOf");
 			lua_setfield(L, p, "items");
 			if (q.hasMinItems) { lua_pushinteger(L, q.minItems); lua_setfield(L, p, "minItems"); }
@@ -1268,7 +1268,7 @@ static void mcp_push_elicitation_schema(lua_State* L, LuaMcpElicitation* e, bool
 			lua_pushliteral(L, "string");
 			lua_setfield(L, p, "type");
 			if (titled) {
-				mcp_push_titled_answers(L, q);
+				McpPushTitledAnswers(L, q);
 				lua_setfield(L, p, "oneOf");
 			} else {
 				lua_newtable(L);
@@ -1283,7 +1283,7 @@ static void mcp_push_elicitation_schema(lua_State* L, LuaMcpElicitation* e, bool
 				lua_setfield(L, p, "enum");
 			}
 		} else {
-			lua_pushstring(L, mcp_question_type_name(q.type));
+			lua_pushstring(L, McpQuestionTypeName(q.type));
 			lua_setfield(L, p, "type");
 			if (q.hasMinLen) { lua_pushinteger(L, q.minLen); lua_setfield(L, p, "minLength"); }
 			if (q.hasMaxLen) { lua_pushinteger(L, q.maxLen); lua_setfield(L, p, "maxLength"); }
@@ -1318,7 +1318,7 @@ static void mcp_push_elicitation_schema(lua_State* L, LuaMcpElicitation* e, bool
 	lua_setfield(L, schema_idx, "required");
 	if (e->questions.empty()) {
 		lua_pop(L, 1);
-		mcp_push_empty_object(L); // `{}`, not `[]`
+		McpPushEmptyObject(L); // `{}`, not `[]`
 	}
 	lua_setfield(L, schema_idx, "properties");
 }
@@ -1340,14 +1340,14 @@ enum {
 	EL_ANSWERS, EL_RESULTS, EL_CALLS, EL_NEXT, EL_ENTRY
 };
 
-static int mcp_elicit_fail(lua_State* L, const char* err) {
+static int McpElicitFail(lua_State* L, const char* err) {
 	lua_pushboolean(L, 0);
 	lua_pushstring(L, err);
 	return 2;
 }
 
 // Detail string on top -> false, "invalid response from client: <detail>".
-static int mcp_elicit_invalid(lua_State* L) {
+static int McpElicitInvalid(lua_State* L) {
 	lua_pushfstring(L, "invalid response from client: %s", lua_tostring(L, -1));
 	lua_pushboolean(L, 0);
 	lua_insert(L, -2);
@@ -1355,18 +1355,18 @@ static int mcp_elicit_invalid(lua_State* L) {
 }
 
 // Error object on top (from a failed callback) -> false, message.
-static int mcp_elicit_callback_error(lua_State* L) {
+static int McpElicitCallbackError(lua_State* L) {
 	luaL_tolstring(L, -1, NULL);
 	lua_pushboolean(L, 0);
 	lua_insert(L, -2);
 	return 2;
 }
 
-static int mcp_elicit_default_continuation(lua_State* L, int status, lua_KContext ctx);
+static int McpElicitDefaultContinuation(lua_State* L, int status, lua_KContext ctx);
 
-static int mcp_elicit_default_finish(lua_State* L, int status) {
+static int McpElicitDefaultFinish(lua_State* L, int status) {
 	if (status != LUA_OK && status != LUA_YIELD)
-		return mcp_elicit_callback_error(L);
+		return McpElicitCallbackError(L);
 	if (lua_isnil(L, -1)) {
 		lua_pop(L, 1);
 		lua_pushboolean(L, 1); // ran fine, returned nothing
@@ -1376,27 +1376,27 @@ static int mcp_elicit_default_finish(lua_State* L, int status) {
 	return 2; // true, <default's return>
 }
 
-static int mcp_elicit_default_continuation(lua_State* L, int status, lua_KContext ctx) {
+static int McpElicitDefaultContinuation(lua_State* L, int status, lua_KContext ctx) {
 	(void)ctx;
-	return mcp_elicit_default_finish(L, status);
+	return McpElicitDefaultFinish(L, status);
 }
 
 // `reason` must be a string literal: the stack is trimmed before it's pushed.
-static int mcp_elicit_run_default(lua_State* L, LuaMcpElicitation* e, const char* reason) {
+static int McpElicitRunDefault(lua_State* L, LuaMcpElicitation* e, const char* reason) {
 	lua_settop(L, EL_DEADLINE);
 	lua_rawgeti(L, LUA_REGISTRYINDEX, e->default_ref);
 	lua_pushvalue(L, EL_CONTEXT);
 	lua_pushvalue(L, EL_REQUEST);
 	lua_pushstring(L, reason);
-	int rc = lua_pcallk(L, 3, 1, 0, (lua_KContext)e, mcp_elicit_default_continuation);
-	return mcp_elicit_default_finish(L, rc);
+	int rc = lua_pcallk(L, 3, 1, 0, (lua_KContext)e, McpElicitDefaultContinuation);
+	return McpElicitDefaultFinish(L, rc);
 }
 
-static int mcp_elicit_cb_step(lua_State* L, LuaMcpElicitation* e);
+static int McpElicitCbStep(lua_State* L, LuaMcpElicitation* e);
 
-static int mcp_elicit_cb_finish(lua_State* L, LuaMcpElicitation* e, int status) {
+static int McpElicitCbFinish(lua_State* L, LuaMcpElicitation* e, int status) {
 	if (status != LUA_OK && status != LUA_YIELD)
-		return mcp_elicit_callback_error(L);
+		return McpElicitCallbackError(L);
 	if (lua_isnil(L, -1)) {
 		lua_pop(L, 1);
 		lua_pushboolean(L, 1); // ran fine, returned nothing
@@ -1420,14 +1420,14 @@ static int mcp_elicit_cb_finish(lua_State* L, LuaMcpElicitation* e, int status) 
 
 	lua_pushinteger(L, lua_tointeger(L, EL_NEXT) + 1);
 	lua_replace(L, EL_NEXT);
-	return mcp_elicit_cb_step(L, e);
+	return McpElicitCbStep(L, e);
 }
 
-static int mcp_elicit_cb_continuation(lua_State* L, int status, lua_KContext ctx) {
-	return mcp_elicit_cb_finish(L, (LuaMcpElicitation*)ctx, status);
+static int McpElicitCbContinuation(lua_State* L, int status, lua_KContext ctx) {
+	return McpElicitCbFinish(L, (LuaMcpElicitation*)ctx, status);
 }
 
-static int mcp_elicit_cb_step(lua_State* L, LuaMcpElicitation* e) {
+static int McpElicitCbStep(lua_State* L, LuaMcpElicitation* e) {
 	lua_settop(L, EL_NEXT);
 	lua_Integer i = lua_tointeger(L, EL_NEXT);
 	if (i > (lua_Integer)lua_rawlen(L, EL_CALLS)) {
@@ -1442,12 +1442,12 @@ static int mcp_elicit_cb_step(lua_State* L, LuaMcpElicitation* e) {
 	lua_pushvalue(L, EL_REQUEST);
 	lua_rawgeti(L, EL_ENTRY, 2);
 	lua_pushvalue(L, EL_ANSWERS);
-	int rc = lua_pcallk(L, 4, 1, 0, (lua_KContext)e, mcp_elicit_cb_continuation);
-	return mcp_elicit_cb_finish(L, e, rc);
+	int rc = lua_pcallk(L, 4, 1, 0, (lua_KContext)e, McpElicitCbContinuation);
+	return McpElicitCbFinish(L, e, rc);
 }
 
 // Value on top -> appended to the planned callbacks as { fn, value, qname, answer }.
-static void mcp_plan_call(lua_State* L, int calls_idx, lua_Integer* n, int fn_ref, const std::string& qname, const char* answer) {
+static void McpPlanCall(lua_State* L, int calls_idx, lua_Integer* n, int fn_ref, const std::string& qname, const char* answer) {
 	lua_newtable(L);
 	lua_insert(L, -2);
 	lua_rawseti(L, -2, 2);
@@ -1463,12 +1463,12 @@ static void mcp_plan_call(lua_State* L, int calls_idx, lua_Integer* n, int fn_re
 }
 
 // A picked answer: plan its callback (or the question's), or record `true`.
-static void mcp_plan_answer(lua_State* L, int calls_idx, lua_Integer* n, int picked_idx,
+static void McpPlanAnswer(lua_State* L, int calls_idx, lua_Integer* n, int picked_idx,
                             const McpQuestion& q, const McpAnswer& a) {
 	int fn = a.fn_ref != LUA_NOREF ? a.fn_ref : q.fn_ref;
 	if (fn != LUA_NOREF) {
 		lua_pushlstring(L, a.value.c_str(), a.value.size());
-		mcp_plan_call(L, calls_idx, n, fn, q.name, a.value.c_str());
+		McpPlanCall(L, calls_idx, n, fn, q.name, a.value.c_str());
 	} else {
 		lua_pushboolean(L, 1);
 		lua_setfield(L, picked_idx, a.value.c_str());
@@ -1477,7 +1477,7 @@ static void mcp_plan_answer(lua_State* L, int calls_idx, lua_Integer* n, int pic
 
 // Validates the accepted `content` (at content_idx) against the definition and
 // plans the callbacks. Nothing here yields.
-static int mcp_elicit_plan(lua_State* L, LuaMcpElicitation* e, int content_idx) {
+static int McpElicitPlan(lua_State* L, LuaMcpElicitation* e, int content_idx) {
 	lua_newtable(L);
 	int answers_idx = lua_gettop(L);
 	lua_newtable(L);
@@ -1491,7 +1491,7 @@ static int mcp_elicit_plan(lua_State* L, LuaMcpElicitation* e, int content_idx) 
 		lua_pop(L, 1);
 		if (lua_type(L, -1) != LUA_TSTRING) {
 			lua_pushliteral(L, "answer keys must be strings");
-			return mcp_elicit_invalid(L);
+			return McpElicitInvalid(L);
 		}
 		const char* key = lua_tostring(L, -1);
 		bool known = false;
@@ -1500,7 +1500,7 @@ static int mcp_elicit_plan(lua_State* L, LuaMcpElicitation* e, int content_idx) 
 		}
 		if (!known) {
 			lua_pushfstring(L, "unknown question '%s'", key);
-			return mcp_elicit_invalid(L);
+			return McpElicitInvalid(L);
 		}
 	}
 
@@ -1511,10 +1511,10 @@ static int mcp_elicit_plan(lua_State* L, LuaMcpElicitation* e, int content_idx) 
 		lua_getfield(L, content_idx, qn);
 		int v = lua_gettop(L);
 
-		if (mcp_is_null(L, v)) {
+		if (McpIsNull(L, v)) {
 			if (q.required) {
 				lua_pushfstring(L, "missing required answer '%s'", qn);
-				return mcp_elicit_invalid(L);
+				return McpElicitInvalid(L);
 			}
 			continue;
 		}
@@ -1522,12 +1522,12 @@ static int mcp_elicit_plan(lua_State* L, LuaMcpElicitation* e, int content_idx) 
 		if (q.multiple) {
 			if (!lua_istable(L, v)) {
 				lua_pushfstring(L, "'%s' should be a list", qn);
-				return mcp_elicit_invalid(L);
+				return McpElicitInvalid(L);
 			}
 			lua_Integer n = (lua_Integer)lua_rawlen(L, v);
 			if ((q.hasMinItems && n < q.minItems) || (q.hasMaxItems && n > q.maxItems)) {
 				lua_pushfstring(L, "'%s' has %d picks, outside the allowed range", qn, (int)n);
-				return mcp_elicit_invalid(L);
+				return McpElicitInvalid(L);
 			}
 			lua_newtable(L);
 			int set = lua_gettop(L);
@@ -1535,15 +1535,15 @@ static int mcp_elicit_plan(lua_State* L, LuaMcpElicitation* e, int content_idx) 
 			int copy = lua_gettop(L);
 			for (lua_Integer i = 1; i <= n; i++) {
 				lua_rawgeti(L, v, i);
-				if (lua_type(L, -1) != LUA_TSTRING || !mcp_find_answer(q, lua_tostring(L, -1))) {
+				if (lua_type(L, -1) != LUA_TSTRING || !McpFindAnswer(q, lua_tostring(L, -1))) {
 					lua_pushfstring(L, "'%s' contains something that isn't one of its answers", qn);
-					return mcp_elicit_invalid(L);
+					return McpElicitInvalid(L);
 				}
 				lua_pushvalue(L, -1);
 				lua_rawget(L, set);
 				if (!lua_isnil(L, -1)) {
 					lua_pushfstring(L, "'%s' contains the same answer twice", qn);
-					return mcp_elicit_invalid(L);
+					return McpElicitInvalid(L);
 				}
 				lua_pop(L, 1);
 				lua_pushvalue(L, -1);
@@ -1563,16 +1563,16 @@ static int mcp_elicit_plan(lua_State* L, LuaMcpElicitation* e, int content_idx) 
 				bool isPicked = !lua_isnil(L, -1);
 				lua_pop(L, 1);
 				if (isPicked)
-					mcp_plan_answer(L, calls_idx, &ncalls, picked, q, a);
+					McpPlanAnswer(L, calls_idx, &ncalls, picked, q, a);
 			}
 			continue;
 		}
 
 		if (!q.answers.empty()) {
-			const McpAnswer* a = lua_type(L, v) == LUA_TSTRING ? mcp_find_answer(q, lua_tostring(L, v)) : nullptr;
+			const McpAnswer* a = lua_type(L, v) == LUA_TSTRING ? McpFindAnswer(q, lua_tostring(L, v)) : nullptr;
 			if (!a) {
 				lua_pushfstring(L, "'%s' isn't one of the answers of '%s'", luaL_tolstring(L, v, NULL), qn);
-				return mcp_elicit_invalid(L);
+				return McpElicitInvalid(L);
 			}
 			lua_pushvalue(L, v);
 			lua_setfield(L, answers_idx, qn);
@@ -1580,7 +1580,7 @@ static int mcp_elicit_plan(lua_State* L, LuaMcpElicitation* e, int content_idx) 
 			int picked = lua_gettop(L);
 			lua_pushvalue(L, picked);
 			lua_setfield(L, results_idx, qn);
-			mcp_plan_answer(L, calls_idx, &ncalls, picked, q, *a);
+			McpPlanAnswer(L, calls_idx, &ncalls, picked, q, *a);
 			continue;
 		}
 
@@ -1588,26 +1588,26 @@ static int mcp_elicit_plan(lua_State* L, LuaMcpElicitation* e, int content_idx) 
 		case MCP_Q_STRING: {
 			if (lua_type(L, v) != LUA_TSTRING) {
 				lua_pushfstring(L, "'%s' should be a string", qn);
-				return mcp_elicit_invalid(L);
+				return McpElicitInvalid(L);
 			}
 			size_t len;
 			const char* s = lua_tolstring(L, v, &len);
-			lua_Integer chars = mcp_utf8_length(s, len);
+			lua_Integer chars = McpUtf8Length(s, len);
 			if ((q.hasMinLen && chars < q.minLen) || (q.hasMaxLen && chars > q.maxLen)) {
 				lua_pushfstring(L, "'%s' has a length outside the allowed range", qn);
-				return mcp_elicit_invalid(L);
+				return McpElicitInvalid(L);
 			}
 			break;
 		}
 		case MCP_Q_INTEGER: {
 			lua_Integer i;
-			if (!mcp_to_integer(L, v, &i)) {
+			if (!McpToInteger(L, v, &i)) {
 				lua_pushfstring(L, "'%s' should be an integer", qn);
-				return mcp_elicit_invalid(L);
+				return McpElicitInvalid(L);
 			}
 			if ((q.hasMin && i < q.minI) || (q.hasMax && i > q.maxI)) {
 				lua_pushfstring(L, "'%s' is outside the allowed range", qn);
-				return mcp_elicit_invalid(L);
+				return McpElicitInvalid(L);
 			}
 			lua_pushinteger(L, i);
 			lua_replace(L, v);
@@ -1616,19 +1616,19 @@ static int mcp_elicit_plan(lua_State* L, LuaMcpElicitation* e, int content_idx) 
 		case MCP_Q_NUMBER: {
 			if (lua_type(L, v) != LUA_TNUMBER) {
 				lua_pushfstring(L, "'%s' should be a number", qn);
-				return mcp_elicit_invalid(L);
+				return McpElicitInvalid(L);
 			}
 			lua_Number x = lua_tonumber(L, v);
 			if ((q.hasMin && x < q.minN) || (q.hasMax && x > q.maxN)) {
 				lua_pushfstring(L, "'%s' is outside the allowed range", qn);
-				return mcp_elicit_invalid(L);
+				return McpElicitInvalid(L);
 			}
 			break;
 		}
 		case MCP_Q_BOOLEAN:
 			if (!lua_isboolean(L, v)) {
 				lua_pushfstring(L, "'%s' should be a boolean", qn);
-				return mcp_elicit_invalid(L);
+				return McpElicitInvalid(L);
 			}
 			break;
 		}
@@ -1637,7 +1637,7 @@ static int mcp_elicit_plan(lua_State* L, LuaMcpElicitation* e, int content_idx) 
 		lua_setfield(L, answers_idx, qn);
 		lua_pushvalue(L, v);
 		if (q.fn_ref != LUA_NOREF) {
-			mcp_plan_call(L, calls_idx, &ncalls, q.fn_ref, q.name, nullptr);
+			McpPlanCall(L, calls_idx, &ncalls, q.fn_ref, q.name, nullptr);
 		} else {
 			lua_setfield(L, results_idx, qn);
 		}
@@ -1649,11 +1649,11 @@ static int mcp_elicit_plan(lua_State* L, LuaMcpElicitation* e, int content_idx) 
 	lua_pushinteger(L, 1);
 	lua_copy(L, -1, EL_NEXT);
 	lua_settop(L, EL_NEXT);
-	return mcp_elicit_cb_step(L, e);
+	return McpElicitCbStep(L, e);
 }
 
 // The client's response message is on top (at EL_ANSWERS, the first free slot).
-static int mcp_elicit_process(lua_State* L, LuaMcpElicitation* e) {
+static int McpElicitProcess(lua_State* L, LuaMcpElicitation* e) {
 	lua_settop(L, EL_ANSWERS);
 	int msg = EL_ANSWERS;
 
@@ -1672,42 +1672,42 @@ static int mcp_elicit_process(lua_State* L, LuaMcpElicitation* e) {
 	int result = lua_gettop(L);
 	if (!lua_istable(L, result)) {
 		lua_pushliteral(L, "missing result");
-		return mcp_elicit_invalid(L);
+		return McpElicitInvalid(L);
 	}
 	lua_getfield(L, result, "action");
 	const char* action = lua_type(L, -1) == LUA_TSTRING ? lua_tostring(L, -1) : NULL;
 	if (!action) {
 		lua_pushliteral(L, "missing action");
-		return mcp_elicit_invalid(L);
+		return McpElicitInvalid(L);
 	}
 	if (strcmp(action, "decline") == 0)
-		return mcp_elicit_run_default(L, e, "decline");
+		return McpElicitRunDefault(L, e, "decline");
 	if (strcmp(action, "cancel") == 0)
-		return mcp_elicit_run_default(L, e, "cancel");
+		return McpElicitRunDefault(L, e, "cancel");
 	if (strcmp(action, "accept") != 0) {
 		lua_pushfstring(L, "unknown action '%s'", action);
-		return mcp_elicit_invalid(L);
+		return McpElicitInvalid(L);
 	}
 
 	lua_getfield(L, result, "content");
-	if (mcp_is_null(L, -1) || lua_touserdata(L, -1) == lua_json_empty_object()) {
+	if (McpIsNull(L, -1) || lua_touserdata(L, -1) == LuaJsonEmptyObject()) {
 		lua_pop(L, 1);
 		lua_newtable(L);
 	} else if (!lua_istable(L, -1)) {
 		lua_pushliteral(L, "content is not an object");
-		return mcp_elicit_invalid(L);
+		return McpElicitInvalid(L);
 	}
-	return mcp_elicit_plan(L, e, lua_gettop(L));
+	return McpElicitPlan(L, e, lua_gettop(L));
 }
 
 // One wait attempt. Returns: >= 0 results pushed (an error), -1 = nothing yet
 // (yield), -2 = response message pushed, -3 = timed out.
 // Kept free of any C++ object that would be live across the caller's yield.
-static int mcp_elicit_poll(lua_State* L, LuaMcpServer* server, const std::string& key) {
+static int McpElicitPoll(lua_State* L, LuaMcpServer* server, const std::string& key) {
 	for (;;) {
 		auto it = server->pending.find(key);
 		if (it == server->pending.end())
-			return mcp_elicit_fail(L, "elicitation request was abandoned");
+			return McpElicitFail(L, "elicitation request was abandoned");
 		if (it->second.done) {
 			int ref = it->second.msg_ref;
 			server->pending.erase(it);
@@ -1716,59 +1716,59 @@ static int mcp_elicit_poll(lua_State* L, LuaMcpServer* server, const std::string
 			return -2;
 		}
 		if (server->stopRequested) {
-			mcp_pending_erase(L, server, key);
-			return mcp_elicit_fail(L, "MCP server stopped");
+			McpPendingErase(L, server, key);
+			return McpElicitFail(L, "MCP server stopped");
 		}
 		if (server->eof) {
-			mcp_pending_erase(L, server, key);
-			return mcp_elicit_fail(L, "client disconnected");
+			McpPendingErase(L, server, key);
+			return McpElicitFail(L, "client disconnected");
 		}
-		if (!lua_isnil(L, EL_DEADLINE) && mcp_now_ms() >= lua_tonumber(L, EL_DEADLINE)) {
-			mcp_send_cancelled(L, key.c_str(), "timeout");
-			mcp_pending_erase(L, server, key);
+		if (!lua_isnil(L, EL_DEADLINE) && McpNowMs() >= lua_tonumber(L, EL_DEADLINE)) {
+			McpSendCancelled(L, key.c_str(), "timeout");
+			McpPendingErase(L, server, key);
 			return -3;
 		}
 
 		std::string line;
-		int r = mcp_next_line(server, line);
+		int r = McpNextLine(server, line);
 		if (r > 0)
-			mcp_handle_line_while_waiting(L, server, line);
+			McpHandleLineWhileWaiting(L, server, line);
 		else if (r == 0)
 			return -1;
 		// r < 0: eof is latched; the next iteration reports it
 	}
 }
 
-static int mcp_elicit_wait_continuation(lua_State* L, int status, lua_KContext ctx);
+static int McpElicitWaitContinuation(lua_State* L, int status, lua_KContext ctx);
 
-static int mcp_elicit_wait(lua_State* L, LuaMcpElicitation* e) {
+static int McpElicitWait(lua_State* L, LuaMcpElicitation* e) {
 	lua_settop(L, EL_DEADLINE); // drop anything the scheduler passed on resume
 	int code;
 	{
 		std::string key(lua_tostring(L, EL_ID));
-		code = mcp_elicit_poll(L, e->server, key);
+		code = McpElicitPoll(L, e->server, key);
 	}
 	if (code >= 0)
 		return code;
 	if (code == -2)
-		return mcp_elicit_process(L, e);
+		return McpElicitProcess(L, e);
 	if (code == -3)
-		return mcp_elicit_run_default(L, e, "timeout");
-	return lua_yieldk(L, 0, (lua_KContext)e, mcp_elicit_wait_continuation);
+		return McpElicitRunDefault(L, e, "timeout");
+	return lua_yieldk(L, 0, (lua_KContext)e, McpElicitWaitContinuation);
 }
 
-static int mcp_elicit_wait_continuation(lua_State* L, int status, lua_KContext ctx) {
+static int McpElicitWaitContinuation(lua_State* L, int status, lua_KContext ctx) {
 	(void)status;
-	return mcp_elicit_wait(L, (LuaMcpElicitation*)ctx);
+	return McpElicitWait(L, (LuaMcpElicitation*)ctx);
 }
 
-int lua_mcp_elicitation_elicit(lua_State* L) {
-	LuaMcpElicitation* e = mcp_elicitation_check(L, 1);
+int McpElicitation_Elicit(lua_State* L) {
+	LuaMcpElicitation* e = luaL_checkmcpelicitation(L, 1);
 	luaL_checkany(L, 2);
 	luaL_checktype(L, 3, LUA_TTABLE);
 	lua_settop(L, EL_REQUEST);
 
-	mcp_validate_elicitation(L, e);
+	McpValidateElicitation(L, e);
 
 	// Waiting means yielding the tool's coroutine, so only a running tool call
 	// can ask. Checked before anything is sent: a failed yield after sending
@@ -1779,7 +1779,7 @@ int lua_mcp_elicitation_elicit(lua_State* L) {
 	if (!lua_isyieldable(L))
 		return luaL_error(L, "Elicit: can't wait here (called through a C function that doesn't allow yielding)");
 	if (!server || !server->started || server->stopRequested || server->eof)
-		return mcp_elicit_fail(L, "MCP server is not running");
+		return McpElicitFail(L, "MCP server is not running");
 
 	lua_pushnil(L); // EL_ID
 	lua_pushnil(L); // EL_DEADLINE
@@ -1790,7 +1790,7 @@ int lua_mcp_elicitation_elicit(lua_State* L) {
 	for (const McpQuestion& q : e->questions)
 		needsMultiple = needsMultiple || q.multiple;
 	if (!server->clientElicitation || (needsMultiple && !titled))
-		return mcp_elicit_run_default(L, e, "unsupported");
+		return McpElicitRunDefault(L, e, "unsupported");
 
 	char id[32];
 	snprintf(id, sizeof(id), "kitsune-%lld", server->nextRequestId++);
@@ -1805,40 +1805,40 @@ int lua_mcp_elicitation_elicit(lua_State* L) {
 	lua_newtable(L); // params
 	lua_pushlstring(L, e->message.c_str(), e->message.size());
 	lua_setfield(L, -2, "message");
-	mcp_push_elicitation_schema(L, e, titled);
+	McpPushElicitationSchema(L, e, titled);
 	lua_setfield(L, -2, "requestedSchema");
 	lua_setfield(L, -2, "params");
 
 	bool sent = false;
-	if (mcp_json_encode(L, -1)) {
+	if (McpJsonEncode(L, -1)) {
 		size_t len;
 		const char* s = lua_tolstring(L, -1, &len);
 		if (s) {
-			mcp_write_line(s, len);
+			McpWriteLine(s, len);
 			sent = true;
 		}
 	}
 	lua_settop(L, EL_DEADLINE);
 	if (!sent)
-		return mcp_elicit_fail(L, "could not encode the elicitation request");
+		return McpElicitFail(L, "could not encode the elicitation request");
 
 	server->pending[id] = McpPendingRequest();
 
 	lua_pushstring(L, id);
 	lua_replace(L, EL_ID);
 	if (e->timeoutMs > 0) {
-		lua_pushnumber(L, mcp_now_ms() + (double)e->timeoutMs);
+		lua_pushnumber(L, McpNowMs() + (double)e->timeoutMs);
 		lua_replace(L, EL_DEADLINE);
 	}
-	return mcp_elicit_wait(L, e);
+	return McpElicitWait(L, e);
 }
 
 // =============================================================================
 // Lua-facing API
 // =============================================================================
 
-int lua_mcp_addtool(lua_State* L) {
-	LuaMcpServer* server = lua_mcp_check(L, 1);
+int McpServer_AddTool(lua_State* L) {
+	LuaMcpServer* server = luaL_checkmcpserver(L, 1);
 	const char* name        = luaL_checkstring(L, 2);
 	const char* description = luaL_checkstring(L, 3);
 	luaL_checktype(L, 4, LUA_TTABLE);
@@ -1889,21 +1889,21 @@ int lua_mcp_addtool(lua_State* L) {
 	return 1;
 }
 
-int lua_mcp_start(lua_State* L) {
-	LuaMcpServer* server = lua_mcp_check(L, 1);
+int McpServer_Start(lua_State* L) {
+	LuaMcpServer* server = luaL_checkmcpserver(L, 1);
 
 	if (server->started) {
 		lua_pushboolean(L, 1);
 		return 1;
 	}
 
-	if (!mcp_stdio_available()) {
+	if (!McpStdioAvailable()) {
 		lua_pushboolean(L, 0);
 		lua_pushliteral(L, "stdin/stdout not available");
 		return 2;
 	}
 
-	mcp_install_output_redirect(L, server);
+	McpInstallOutputRedirect(L, server);
 
 	// Tasks.New(fn) -- the engine's own Lua-facing primitive for spinning up an
 	// independently-scheduled coroutine. Called here as a plain Lua function
@@ -1916,7 +1916,7 @@ int lua_mcp_start(lua_State* L) {
 	lua_remove(L, -2); // drop the Tasks table, keep New on top
 
 	lua_pushlightuserdata(L, server);
-	lua_pushcclosure(L, mcp_poll_entrypoint, 1);
+	lua_pushcclosure(L, McpPollEntrypoint, 1);
 
 	if (lua_pcall(L, 1, 1, 0) != LUA_OK) {
 		const char* err = lua_tostring(L, -1);
@@ -1932,14 +1932,14 @@ int lua_mcp_start(lua_State* L) {
 	return 1;
 }
 
-int lua_mcp_stop(lua_State* L) {
-	LuaMcpServer* server = lua_mcp_check(L, 1);
+int McpServer_Stop(lua_State* L) {
+	LuaMcpServer* server = luaL_checkmcpserver(L, 1);
 	server->stopRequested = true;
 	return 0;
 }
 
-int lua_mcp_isrunning(lua_State* L) {
-	LuaMcpServer* server = lua_mcp_check(L, 1);
+int McpServer_IsRunning(lua_State* L) {
+	LuaMcpServer* server = luaL_checkmcpserver(L, 1);
 	if (!server->started || server->taskRef == LUA_NOREF) {
 		lua_pushboolean(L, 0);
 		return 1;
@@ -1964,10 +1964,10 @@ int lua_mcp_isrunning(lua_State* L) {
 	return 1;
 }
 
-int lua_mcp_create(lua_State* L) {
+int MCP_Create(lua_State* L) {
 	if (g_mcpInstanceRef != LUA_NOREF) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, g_mcpInstanceRef);
-		if (lua_mcp_is(L, -1))
+		if (lua_ismcpserver(L, -1))
 			return 1;
 		// Stale ref -- shouldn't normally happen since __gc clears it, but
 		// recover cleanly rather than trust a dangling registry slot.
@@ -1976,7 +1976,7 @@ int lua_mcp_create(lua_State* L) {
 		g_mcpInstanceRef = LUA_NOREF;
 	}
 
-	LuaMcpServer* server = lua_mcp_push(L);
+	LuaMcpServer* server = lua_pushmcpserver(L);
 
 	if (lua_istable(L, 1)) {
 		lua_getfield(L, 1, "Name");

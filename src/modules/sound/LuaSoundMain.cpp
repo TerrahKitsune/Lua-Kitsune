@@ -38,8 +38,8 @@ static const struct luaL_Reg soundfunctions[] = {
 };
 
 static const luaL_Reg soundmeta[] = {
-	{ "__gc", sound_gc },
-	{ "__tostring", sound_tostring },
+	{ "__gc", Sound_GC },
+	{ "__tostring", Sound_ToString },
 	{ NULL, NULL }
 };
 

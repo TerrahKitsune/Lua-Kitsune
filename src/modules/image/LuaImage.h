@@ -47,8 +47,8 @@ int Image_Diff(lua_State* L);
 int Image_Save(lua_State* L);
 int Image_ToBytes(lua_State* L);
 
-int image_gc(lua_State* L);
-int image_tostring(lua_State* L);
+int Image_GC(lua_State* L);
+int Image_ToString(lua_State* L);
 
 // -- color conversion utilities (Image.X, pure, no Image object involved) --
 int Image_RGBtoHSV(lua_State* L);

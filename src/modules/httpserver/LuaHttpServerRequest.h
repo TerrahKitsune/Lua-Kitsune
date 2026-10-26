@@ -32,7 +32,7 @@ typedef struct LuaHttpRequest {
     struct evhttp_request*    req;    /* owned — evhttp_request_own() was called;
                                         NULL after response sent (evhttp_send_done frees it) */
     struct evhttp_connection* con;    /* stable connection pointer kept for disconnect tracking;
-                                        NULL after conn_close_cb fires                        */
+                                        NULL after ConnCloseCb fires                        */
     LuaHttpServer*            server; /* back-pointer to owning server                       */
     char*                  url;
     char*                  method;
@@ -63,15 +63,15 @@ typedef struct LuaHttpResponse {
 
 /* push/check helpers */
 LuaHttpRequest*  lua_pushhttprequest (lua_State* L);
-LuaHttpRequest*  lua_checkhttprequest(lua_State* L, int idx);
+LuaHttpRequest*  luaL_checkhttprequest(lua_State* L, int idx);
 LuaHttpResponse* lua_pushhttpresponse(lua_State* L);
-LuaHttpResponse* lua_checkhttpresponse(lua_State* L, int idx);
+LuaHttpResponse* luaL_checkhttpresponse(lua_State* L, int idx);
 
 /* Direct cleanup — take a pointer, no stack slot dependency.
    Idempotent: safe to call multiple times on the same object.
-   HttpRequest_Cleanup calls HttpResponse_Cleanup on the owned response. */
-void HttpRequest_Cleanup (lua_State* L, LuaHttpRequest*  r);
-void HttpResponse_Cleanup(lua_State* L, LuaHttpResponse* r);
+   HttpRequestCleanup calls HttpResponseCleanup on the owned response. */
+void HttpRequestCleanup (lua_State* L, LuaHttpRequest*  r);
+void HttpResponseCleanup(lua_State* L, LuaHttpResponse* r);
 
 /* Request methods */
 int HttpRequest_GetId      (lua_State* L);

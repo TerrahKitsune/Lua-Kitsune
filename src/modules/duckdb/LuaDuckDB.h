@@ -18,7 +18,7 @@ typedef struct LuaDuckDB {
 LuaDuckDB *luaL_checkduckdb(lua_State *L, int index);
 LuaDuckDB *lua_pushduckdb(lua_State *L);
 
-void DuckDB_FinalizeStmt(LuaDuckDB *state);
+void DuckDBFinalizeStmt(LuaDuckDB *state);
 
 int DuckDB_Open(lua_State *L);
 int DuckDB_Execute(lua_State *L);
@@ -26,4 +26,4 @@ int DuckDB_Fetch(lua_State *L);
 int DuckDB_GetRow(lua_State *L);
 int DuckDB_Finish(lua_State *L);
 int DuckDB_ToString(lua_State *L);
-int DuckDB_GC(lua_State *L);
+int DuckDB_Close(lua_State *L);

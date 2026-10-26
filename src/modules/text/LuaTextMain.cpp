@@ -2,12 +2,12 @@
 #include "text/LuaText.h"
 
 static const struct luaL_Reg textfunctions[] = {
-	{ "ToUtf16",      TextToUtf16 },
-	{ "FromUtf16",    TextFromUtf16 },
-	{ "FromCodepage", TextFromCodepage },
-	{ "ToCodepage",   TextToCodepage },
-	{ "Lower",        TextLower },
-	{ "Upper",        TextUpper },
+	{ "ToUtf16",      Text_ToUtf16 },
+	{ "FromUtf16",    Text_FromUtf16 },
+	{ "FromCodepage", Text_FromCodepage },
+	{ "ToCodepage",   Text_ToCodepage },
+	{ "Lower",        Text_Lower },
+	{ "Upper",        Text_Upper },
 	{ NULL, NULL }
 };
 

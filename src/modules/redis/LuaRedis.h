@@ -65,27 +65,27 @@ void CleanReply(LuaRedis* luaRedis);
 LuaRedis* RedisCommandInternal(lua_State* L);
 int RedisPushStringInternal(lua_State* L, int redisIdx, const char* key, size_t keylength);
 int RedisPushStreamInternal(lua_State* L, int redisIdx, const char* key, size_t keylength);
-LuaRedisKey* lua_createrediskey(lua_State* L, int redisIdx, const char* key, size_t keylen);
-int push_redisvalue(lua_State* L, int redisIdx, int type, const char* key, size_t keylen);
-LuaRedisValue* lua_toredisvalue(lua_State* L, int index);
+LuaRedisKey* lua_pushrediskey(lua_State* L, int redisIdx, const char* key, size_t keylen);
+int lua_pushredisvalue(lua_State* L, int redisIdx, int type, const char* key, size_t keylen);
+LuaRedisValue* luaL_checkredisvalue(lua_State* L, int index);
 int InternalPushValue(lua_State* L, int index);
 
-int RedisGetJson(lua_State* L);
+int Redis_GetJson(lua_State* L);
 
 LuaRedis* lua_pushredis(lua_State* L);
-LuaRedis* lua_toredis(lua_State* L, int index);
+LuaRedis* luaL_checkredis(lua_State* L, int index);
 
-int RedisOpen(lua_State* L);
-int RedisCommand(lua_State* L);
-int RedisGetString(lua_State* L);
-int RedisGetKey(lua_State* L);
-int RedisGetKeyIterator(lua_State* L);
-int RedisGetHashset(lua_State* L);
-int RedisGetList(lua_State* L);
-int RedisGetSet(lua_State* L);
-int RedisGetSortedSet(lua_State* L);
-int RedisGetStream(lua_State* L);
+int Redis_Open(lua_State* L);
+int Redis_Command(lua_State* L);
+int Redis_GetString(lua_State* L);
+int Redis_GetKey(lua_State* L);
+int Redis_Call(lua_State* L);
+int Redis_GetHashset(lua_State* L);
+int Redis_GetList(lua_State* L);
+int Redis_GetSet(lua_State* L);
+int Redis_GetSortedSet(lua_State* L);
+int Redis_GetStream(lua_State* L);
 
-int redis_dispose(lua_State* L);
-int redis_gc(lua_State* L);
-int redis_tostring(lua_State* L);
+int Redis_Dispose(lua_State* L);
+int Redis_GC(lua_State* L);
+int Redis_ToString(lua_State* L);

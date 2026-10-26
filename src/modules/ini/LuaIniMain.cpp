@@ -2,16 +2,16 @@
 #include "ini/LuaIniMain.h"
 
 static const struct luaL_Reg ini_functions[] = {
-    { "New",     lua_ini_new    },  // Ini.New()
-    { "Decode",  lua_ini_decode },  // ini:Decode(str) -> table
-    { "Encode",  lua_ini_encode },  // ini:Encode(table) -> str
-    { "Dispose", lua_ini_gc     },  // ini:Dispose()
+    { "New",     Ini_New    },  // Ini.New()
+    { "Decode",  Ini_Decode },  // ini:Decode(str) -> table
+    { "Encode",  Ini_Encode },  // ini:Encode(table) -> str
+    { "Dispose", Ini_Dispose     },  // ini:Dispose()
     { NULL, NULL }
 };
 
 static const struct luaL_Reg ini_meta[] = {
-    { "__gc",       lua_ini_gc       },
-    { "__tostring", lua_ini_tostring },
+    { "__gc",       Ini_Dispose       },
+    { "__tostring", Ini_ToString },
     { NULL, NULL }
 };
 

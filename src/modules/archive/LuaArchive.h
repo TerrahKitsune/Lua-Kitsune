@@ -29,11 +29,11 @@ typedef struct LuaArchive {
 LuaArchive* lua_pusharchive(lua_State* L);
 LuaArchive* lua_toarchive(lua_State* L, int index);
 
-int OpenReadArchive(lua_State* L);
-int ReadArchiveEntries(lua_State* L);
-int SetReadEntry(lua_State* L);
-int ReadEntry(lua_State* L);
-int ReadAllEntry(lua_State* L);
+int Archive_OpenRead(lua_State* L);
+int Archive_Entries(lua_State* L);
+int Archive_SetEntry(lua_State* L);
+int Archive_Read(lua_State* L);
+int Archive_ReadAll(lua_State* L);
 
-int archive_gc(lua_State* L);
-int archive_tostring(lua_State* L);
+int Archive_GC(lua_State* L);
+int Archive_ToString(lua_State* L);

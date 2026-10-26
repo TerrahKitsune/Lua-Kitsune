@@ -16,7 +16,7 @@ static char decoding_table[256];
 static int mod_table[] = { 0, 2, 1 };
 
 
-char *base64_encode(const unsigned char *data,
+char *Base64Encode(const unsigned char *data,
 	size_t input_length,
 	size_t *output_length) {
 
@@ -46,7 +46,7 @@ char *base64_encode(const unsigned char *data,
 }
 
 
-unsigned char *base64_decode(const char *data,
+unsigned char *Base64Decode(const char *data,
 	size_t input_length,
 	size_t *output_length) {
 
@@ -80,7 +80,7 @@ unsigned char *base64_decode(const char *data,
 }
 
 
-void build_decoding_table() {
+void BuildDecodingTable() {
 
 	memset(decoding_table, 0, sizeof(decoding_table));   // drop entries from a previous table
 	for (int i = 0; i < 64; i++) {
@@ -88,13 +88,13 @@ void build_decoding_table() {
 	}
 }
 
-int lua_base64encode(lua_State *L) {
+int Base64_Encode(lua_State *L) {
 
 	size_t len;
 	const char * data = luaL_checklstring(L, 1, &len);
 	
 	size_t encodedlen;
-	char* encoded = base64_encode((const unsigned char*)data, len, &encodedlen);
+	char* encoded = Base64Encode((const unsigned char*)data, len, &encodedlen);
 
 	if (encoded) {
 		lua_pushlstring(L, encoded, encodedlen);
@@ -107,7 +107,7 @@ int lua_base64encode(lua_State *L) {
 	return 1;
 }
 
-int lua_base64decode(lua_State *L) {
+int Base64_Decode(lua_State *L) {
 
 	size_t len;
 	const char * data = luaL_checklstring(L, 1, &len);
@@ -118,7 +118,7 @@ int lua_base64decode(lua_State *L) {
 	}
 
 	size_t encodedlen;
-	unsigned char* decoded = base64_decode(data, len, &encodedlen);
+	unsigned char* decoded = Base64Decode(data, len, &encodedlen);
 
 	if (decoded) {
 		lua_pushlstring(L, (const char*)decoded, encodedlen);
@@ -131,13 +131,13 @@ int lua_base64decode(lua_State *L) {
 	return 1;
 }
 
-int lua_base64getencodingtable(lua_State *L) {
+int Base64_GetEncodeTable(lua_State *L) {
 
 	lua_pushlstring(L, encoding_table, 64);
 	return 1;
 }
 
-int lua_base64setencodingtable(lua_State *L) {
+int Base64_SetEncodeTable(lua_State *L) {
 
 	size_t len;
 	const char * data = luaL_checklstring(L, 1, &len);
@@ -159,7 +159,7 @@ int lua_base64setencodingtable(lua_State *L) {
 	}
 
 	memcpy(&encoding_table[0], data, 64);
-	build_decoding_table();
+	BuildDecodingTable();
 
 	return 0;
 }

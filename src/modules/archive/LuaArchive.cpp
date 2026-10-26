@@ -4,7 +4,7 @@
 
 // Entry names are always returned as UTF-8 strings. archive_entry_pathname() uses the
 // locale's code page on Windows, so the UTF-8 and wide forms are tried first.
-static void push_entry_name(lua_State* L, struct archive_entry* entry) {
+static void PushEntryName(lua_State* L, struct archive_entry* entry) {
 
 	const char* utf8 = archive_entry_pathname_utf8(entry);
 	if (utf8) {
@@ -23,7 +23,7 @@ static void push_entry_name(lua_State* L, struct archive_entry* entry) {
 }
 
 // Pushes libarchive's error message for a, or a generic one when it has none.
-static void push_archive_error(lua_State* L, struct archive* a, const char* fallback) {
+static void PushArchiveError(lua_State* L, struct archive* a, const char* fallback) {
 
 	const char* err = a ? archive_error_string(a) : NULL;
 	lua_pushstring(L, err ? err : fallback);
@@ -31,7 +31,7 @@ static void push_archive_error(lua_State* L, struct archive* a, const char* fall
 
 // Opens a UTF-8 path. archive_read_open_filename() reads the path in the ANSI code
 // page on Windows, so the wide-char variant is used there.
-static int open_archive_file(struct archive* a, const char* path) {
+static int OpenArchiveFile(struct archive* a, const char* path) {
 #ifdef _WIN32
 	wchar_t* wpath = kitsune_utf8_to_wide_alloc(path);
 	if (!wpath) {
@@ -48,7 +48,7 @@ static int open_archive_file(struct archive* a, const char* path) {
 }
 
 // The optional second argument (usewchar) is accepted for compatibility and ignored.
-int OpenReadArchive(lua_State* L) {
+int Archive_OpenRead(lua_State* L) {
 
 	size_t len;
 	const char* file = luaL_checklstring(L, 1, &len);
@@ -67,7 +67,7 @@ int OpenReadArchive(lua_State* L) {
 	archive_read_support_filter_all(a);
 	archive_read_support_format_all(a);
 
-	r = open_archive_file(a, file);
+	r = OpenArchiveFile(a, file);
 
 	if (r != ARCHIVE_OK) {
 
@@ -99,7 +99,7 @@ int OpenReadArchive(lua_State* L) {
 	return 1;
 }
 
-int ReadArchiveEntries(lua_State* L) {
+int Archive_Entries(lua_State* L) {
 
 	LuaArchive* arc = lua_toarchive(L, 1);
 
@@ -124,12 +124,12 @@ int ReadArchiveEntries(lua_State* L) {
 	archive_read_support_filter_all(a);
 	archive_read_support_format_all(a);
 
-	r = open_archive_file(a, arc->file);
+	r = OpenArchiveFile(a, arc->file);
 
 	if (r != ARCHIVE_OK) {
 
 		lua_pushnil(L);
-		push_archive_error(L, a, "error reading archive");
+		PushArchiveError(L, a, "error reading archive");
 		archive_read_free(a);
 		return 2;
 	}
@@ -143,7 +143,7 @@ int ReadArchiveEntries(lua_State* L) {
 		lua_createtable(L, 0, 2);
 
 		lua_pushstring(L, "Name");
-		push_entry_name(L, entry);
+		PushEntryName(L, entry);
 		lua_settable(L, -3);
 
 		lua_pushstring(L, "Size");
@@ -160,7 +160,7 @@ int ReadArchiveEntries(lua_State* L) {
 
 		lua_pop(L, lua_gettop(L));
 		lua_pushnil(L);
-		push_archive_error(L, a, "error reading archive");
+		PushArchiveError(L, a, "error reading archive");
 		archive_read_free(a);
 		return 2;
 	}
@@ -170,7 +170,7 @@ int ReadArchiveEntries(lua_State* L) {
 	return 1;
 }
 
-int ReadEntry(lua_State* L) {
+int Archive_Read(lua_State* L) {
 
 	LuaArchive* arc = lua_toarchive(L, 1);
 	int buffer = (int)luaL_optinteger(L, 2, 1024);
@@ -217,7 +217,7 @@ int ReadEntry(lua_State* L) {
 	return 1;
 }
 
-int ReadAllEntry(lua_State* L) {
+int Archive_ReadAll(lua_State* L) {
 
 	LuaArchive* arc = lua_toarchive(L, 1);
 
@@ -267,7 +267,7 @@ int ReadAllEntry(lua_State* L) {
 	return 1;
 }
 
-int SetReadEntry(lua_State* L) {
+int Archive_SetEntry(lua_State* L) {
 
 	LuaArchive* arc = lua_toarchive(L, 1);
 	int target = (int)luaL_checkinteger(L, 2);
@@ -297,7 +297,7 @@ int SetReadEntry(lua_State* L) {
 	archive_read_support_filter_all(arc->a);
 	archive_read_support_format_all(arc->a);
 
-	r = open_archive_file(arc->a, arc->file);
+	r = OpenArchiveFile(arc->a, arc->file);
 
 	if (r != ARCHIVE_OK) {
 
@@ -315,7 +315,7 @@ int SetReadEntry(lua_State* L) {
 	while (r == ARCHIVE_OK) {
 
 		if (target == ++nth) {
-			push_entry_name(L, arc->entry);
+			PushEntryName(L, arc->entry);
 			lua_pushinteger(L, archive_entry_size(arc->entry));
 			return 2;
 		}
@@ -330,7 +330,7 @@ int SetReadEntry(lua_State* L) {
 
 		lua_pop(L, lua_gettop(L));
 		lua_pushnil(L);
-		push_archive_error(L, arc->a, "error reading archive");
+		PushArchiveError(L, arc->a, "error reading archive");
 
 		return 2;
 	}
@@ -365,7 +365,7 @@ LuaArchive* lua_toarchive(lua_State* L, int index) {
 	return archive;
 }
 
-int archive_gc(lua_State* L) {
+int Archive_GC(lua_State* L) {
 
 	LuaArchive* arc = lua_toarchive(L, 1);
 
@@ -389,7 +389,7 @@ int archive_gc(lua_State* L) {
 	return 0;
 }
 
-int archive_tostring(lua_State* L) {
+int Archive_ToString(lua_State* L) {
 	char tim[100];
 	sprintf(tim, "Archive: %p", (void*)lua_toarchive(L, 1));
 	lua_pushfstring(L, tim);

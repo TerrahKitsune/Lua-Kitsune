@@ -5,7 +5,7 @@
 
 // Single cross-platform time source: steady_clock nanoseconds.
 // On Windows this is backed by QueryPerformanceCounter; on Linux by CLOCK_MONOTONIC.
-static inline int64_t timer_now_ns() {
+static inline int64_t TimerNowNs() {
 	return (int64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(
 		std::chrono::steady_clock::now().time_since_epoch()
 	).count();
@@ -37,12 +37,12 @@ Timer * lua_pushtimer(lua_State *L) {
 	return timer;
 }
 
-int TimerNew(lua_State *L) {
+int Timer_New(lua_State *L) {
 	lua_pushtimer(L);
 	return 1;
 }
 
-int TimerIsRunning(lua_State *L) {
+int Timer_IsRunning(lua_State *L) {
 	Timer * timer = luaL_checktimer(L, 1);
 	int started = timer->CounterStart > 0 && timer->CounterStop <= 0;
 	lua_pop(L, 1);
@@ -50,7 +50,7 @@ int TimerIsRunning(lua_State *L) {
 	return 1;
 }
 
-int TimerReset(lua_State *L) {
+int Timer_Reset(lua_State *L) {
 	Timer * timer = luaL_checktimer(L, 1);
 	timer->CounterStart = 0;
 	timer->CounterStop  = 0;
@@ -60,34 +60,34 @@ int TimerReset(lua_State *L) {
 	return 0;
 }
 
-int TimerStart(lua_State *L) {
+int Timer_Start(lua_State *L) {
 	Timer * timer = luaL_checktimer(L, 1);
 
 	if (timer->CounterStart > 0) {
-		int64_t end = (timer->CounterStop > 0) ? timer->CounterStop : timer_now_ns();
+		int64_t end = (timer->CounterStop > 0) ? timer->CounterStop : TimerNowNs();
 		timer->StoredTime += (double)(end - timer->CounterStart) / TIMER_NS_PER_MS;
 	}
 
 	timer->PCFreq       = TIMER_NS_PER_MS;
-	timer->CounterStart = timer_now_ns();
+	timer->CounterStart = TimerNowNs();
 	timer->CounterStop  = 0;
 
 	lua_pop(L, 1);
 	return 0;
 }
 
-int TimerStop(lua_State *L) {
+int Timer_Stop(lua_State *L) {
 	Timer * timer = luaL_checktimer(L, 1);
 
 	if (timer->CounterStop <= 0)
-		timer->CounterStop = timer_now_ns();
+		timer->CounterStop = TimerNowNs();
 
 	lua_pop(L, 1);
 	lua_pushnumber(L, (double)(timer->CounterStop - timer->CounterStart) / TIMER_NS_PER_MS);
 	return 1;
 }
 
-int TimerGetElapsed(lua_State *L) {
+int Timer_Elapsed(lua_State *L) {
 	Timer * timer = luaL_checktimer(L, 1);
 
 	if (timer->CounterStart <= 0) {
@@ -96,7 +96,7 @@ int TimerGetElapsed(lua_State *L) {
 	}
 	else if (timer->CounterStop <= 0) {
 		lua_pop(L, 1);
-		lua_pushnumber(L, timer->StoredTime + (double)(timer_now_ns() - timer->CounterStart) / TIMER_NS_PER_MS);
+		lua_pushnumber(L, timer->StoredTime + (double)(TimerNowNs() - timer->CounterStart) / TIMER_NS_PER_MS);
 	}
 	else {
 		lua_pop(L, 1);
@@ -105,14 +105,14 @@ int TimerGetElapsed(lua_State *L) {
 	return 1;
 }
 
-int TimerGetElapsedTimeSpan(lua_State *L) {
+int Timer_ElapsedTimeSpan(lua_State *L) {
 	Timer * timer = luaL_checktimer(L, 1);
 	double elapsed_ms;
 	if (timer->CounterStart <= 0) {
 		elapsed_ms = 0.0;
 	}
 	else if (timer->CounterStop <= 0) {
-		elapsed_ms = timer->StoredTime + (double)(timer_now_ns() - timer->CounterStart) / TIMER_NS_PER_MS;
+		elapsed_ms = timer->StoredTime + (double)(TimerNowNs() - timer->CounterStart) / TIMER_NS_PER_MS;
 	}
 	else {
 		elapsed_ms = timer->StoredTime + (double)(timer->CounterStop - timer->CounterStart) / TIMER_NS_PER_MS;
@@ -123,11 +123,11 @@ int TimerGetElapsedTimeSpan(lua_State *L) {
 	return 1;
 }
 
-int Timer_gc(lua_State *L) {
+int Timer_GC(lua_State *L) {
 	return 0;
 }
 
-int Timer_tostring(lua_State *L) {
+int Timer_ToString(lua_State *L) {
 	char tim[100];
 	sprintf(tim, "Timer: 0x%016llX", (unsigned long long)(uintptr_t)lua_totimer(L, 1));
 	lua_pushfstring(L, tim);

@@ -12,7 +12,7 @@
 #pragma comment(lib, "mysql/libmysql.lib")
 #endif
 
-static void set_did_work(lua_State* L) {
+static void SetDidWork(lua_State* L) {
 	void* ud;
 	lua_getallocf(L, &ud);
 	KitsuneState* state = (KitsuneState*)ud;
@@ -50,28 +50,28 @@ static void PushAsParamString(lua_State* L, int index) {
 	if (lua_istable(L, index)) {
 		// Use the shared bridge LuaJson instance stored in the registry by KitsuneInit.
 		// This is always valid for the current engine session and requires no per-session state.
-		lua_rawgetp(L, LUA_REGISTRYINDEX, lua_json_bridge_registry_key());
+		lua_rawgetp(L, LUA_REGISTRYINDEX, LuaJsonBridgeRegistryKey());
 		lua_pushvalue(L, index);
-		if (lua_json_encode(L) != 1) {
+		if (Json_Encode(L) != 1) {
 			lua_error(L);
 			return;
 		}
 		lua_remove(L, -2);
 	}
 	else if (lua_isidentifier(L, index)) {
-		lua_identifier_push_string(L, index);
+		lua_pushidentifierstring(L, index);
 	}
 	else if (lua_isdatetime(L, index)) {
-		lua_datetime_push_string(L, index);
+		lua_pushdatetimestring(L, index);
 	}
 	else if (lua_isdecimal(L, index)) {
-		lua_decimal_push_string(L, index);
+		lua_pushdecimalstring(L, index);
 	}
 	else if (lua_isuint(L, index)) {
-		lua_uint_push_string(L, index);
+		lua_pushuintstring(L, index);
 	}
 	else if (lua_istimespan(L, index)) {
-		lua_timespan_push_string(L, index);
+		lua_pushtimespanstring(L, index);
 	}
 	else {
 		luaL_tolstring(L, index, NULL);
@@ -92,7 +92,7 @@ static void PushMySQLValue(lua_State* L, const char* data, unsigned long length,
 	case MYSQL_TYPE_DECIMAL:
 	case MYSQL_TYPE_NEWDECIMAL: {
 		LuaDecimal tmp;
-		if (data && length > 0 && decimal_parse_c(data, (size_t)length, &tmp))
+		if (data && length > 0 && DecimalParseC(data, (size_t)length, &tmp))
 			*lua_pushdecimal(L) = tmp;
 		else if (data && length > 0)
 			lua_pushlstring(L, data, length);
@@ -139,7 +139,7 @@ static void PushMySQLValue(lua_State* L, const char* data, unsigned long length,
 	case MYSQL_TYPE_BLOB:
 		// TEXT family (a real charset) → string; BLOB family (binary) → stream.
 		if (charsetnr == MYSQL_BINARY_CHARSET)
-			lua_pushluastream(L, (uint8_t*)data, length);
+			lua_pushstream(L, (uint8_t*)data, length);
 		else
 			lua_pushlstring(L, data ? data : "", length);
 		break;
@@ -149,7 +149,7 @@ static void PushMySQLValue(lua_State* L, const char* data, unsigned long length,
 	case MYSQL_TYPE_NEWDATE: {
 		LuaDateTime tmp;
 		memset(&tmp, 0, sizeof(tmp));
-		if (data && length > 0 && datetime_parse_c(data, &tmp))
+		if (data && length > 0 && DateTimeParseC(data, &tmp))
 			*lua_pushdatetime(L) = tmp;
 		else if (data && length > 0)
 			lua_pushlstring(L, data, length);
@@ -354,14 +354,14 @@ LuaMySQL* lua_pushmysql(lua_State* L) {
 	memset(luamysql, 0, sizeof(LuaMySQL));
 	luamysql->queryRef      = LUA_NOREF;
 	luamysql->aliveTokenRef = LUA_NOREF;
-	lua_rawgetp(L, LUA_REGISTRYINDEX, lua_alivetoken_app_registry_key());
+	lua_rawgetp(L, LUA_REGISTRYINDEX, AliveTokenAppRegistryKey());
 	luamysql->appToken = luaL_testudata(L, -1, LUAALIVETOKEN);
 	lua_pop(L, 1);
 	return luamysql;
 }
 
-// -- MySqlEscapeValue ----------------------------------------------------------
-int MySqlEscapeValue(lua_State* L) {
+// -- MySQL_EscapeValue ----------------------------------------------------------
+int MySQL_EscapeValue(lua_State* L) {
 	LuaMySQL* luamysql = lua_tomysql(L, 1);
 	size_t len;
 	const char* str = luaL_checklstring(L, 2, &len);
@@ -383,8 +383,8 @@ int MySqlEscapeValue(lua_State* L) {
 	return 1;
 }
 
-// -- MySqlIsBusy ---------------------------------------------------------------
-int MySqlIsBusy(lua_State* L) {
+// -- MySQL_IsBusy ---------------------------------------------------------------
+int MySQL_IsBusy(lua_State* L) {
 	LuaMySQL* m = lua_tomysql(L, 1);
 	if (m->queryRef == LUA_NOREF) {
 		lua_pushboolean(L, false);
@@ -537,12 +537,12 @@ static int QueryRunCont(lua_State* L, int status, lua_KContext ctx) {
 	}
 
 	if (nas == NET_ASYNC_ERROR) {
-		set_did_work(L);  // error is a result
+		SetDidWork(L);  // error is a result
 		return QueryFinishWithError(L, q, "mysql_real_query_nonblocking error");
 	}
 
 	lua_pushnil(L);
-	set_did_work(L);  // query completed
+	SetDidWork(L);  // query completed
 	return lua_yieldk(L, 1, ctx, QueryStoreCont);
 }
 
@@ -565,12 +565,12 @@ static int MySqlQueryBody(lua_State* L) {
 	}
 
 	if (nas == NET_ASYNC_ERROR) {
-		set_did_work(L);  // error is a result
+		SetDidWork(L);  // error is a result
 		return QueryFinishWithError(L, q, "mysql_real_query_nonblocking error");
 	}
 
 	lua_pushnil(L);
-	set_did_work(L);  // query completed
+	SetDidWork(L);  // query completed
 	return lua_yieldk(L, 1, (lua_KContext)(intptr_t)q, QueryStoreCont);
 }
 
@@ -655,7 +655,7 @@ static int HelperWaitCont(lua_State* L, int status, lua_KContext ctx) {
 	// which releases the query state itself on stop.
 	if (conn->aliveTokenRef != LUA_NOREF) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, conn->aliveTokenRef);
-		int alive = lua_alivetoken_isalive(L, -1);
+		int alive = AliveTokenIsAlive(L, -1);
 		lua_pop(L, 1);
 		if (alive == 0) {
 			lua_rawgeti(L, LUA_REGISTRYINDEX, conn->queryRef);
@@ -810,7 +810,7 @@ static int MySqlHelperRun(lua_State* L, int mode) {
 	// Early-out: if a token is attached and already disposed, abort before setup.
 	if (m->aliveTokenRef != LUA_NOREF) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, m->aliveTokenRef);
-		int alive = lua_alivetoken_isalive(L, -1);
+		int alive = AliveTokenIsAlive(L, -1);
 		lua_pop(L, 1);
 		if (alive == 0) {
 			lua_pushboolean(L, 0);
@@ -850,12 +850,12 @@ static int MySqlHelperRun(lua_State* L, int mode) {
 	return lua_yieldk(L, 0, (lua_KContext)(intptr_t)q, HelperWaitCont);
 }
 
-int MySqlNonQuery(lua_State* L) { return MySqlHelperRun(L, MYSQL_HELPER_NONQUERY); }
-int MySqlScalar(lua_State* L)   { return MySqlHelperRun(L, MYSQL_HELPER_SCALAR);   }
-int MySqlQueryAll(lua_State* L) { return MySqlHelperRun(L, MYSQL_HELPER_QUERYALL); }
+int MySQL_NonQuery(lua_State* L) { return MySqlHelperRun(L, MYSQL_HELPER_NONQUERY); }
+int MySQL_Scalar(lua_State* L)   { return MySqlHelperRun(L, MYSQL_HELPER_SCALAR);   }
+int MySQL_QueryAll(lua_State* L) { return MySqlHelperRun(L, MYSQL_HELPER_QUERYALL); }
 
-// -- MySqlQuery ----------------------------------------------------------------
-int MySqlQuery(lua_State* L) {
+// -- MySQL_Query ----------------------------------------------------------------
+int MySQL_Query(lua_State* L) {
 	LuaMySQL* m = lua_tomysql(L, 1);
 
 	if (!m->connection) {
@@ -876,7 +876,7 @@ int MySqlQuery(lua_State* L) {
 	return 1;
 }
 
-// -- MySqlConnect --------------------------------------------------------------
+// -- MySQL_Connect --------------------------------------------------------------
 static int MySqlConnectCont(lua_State* L, int status, lua_KContext ctx) {
 	(void)status;
 	int connIdx        = (int)(intptr_t)ctx;
@@ -906,7 +906,7 @@ static int MySqlConnectCont(lua_State* L, int status, lua_KContext ctx) {
 	return 1;
 }
 
-int MySqlConnect(lua_State* L) {
+int MySQL_Connect(lua_State* L) {
 	const char* host     = luaL_checkstring(L, 1);
 	const char* user     = luaL_checkstring(L, 2);
 	const char* password = luaL_checkstring(L, 3);
@@ -947,8 +947,8 @@ int MySqlConnect(lua_State* L) {
 	return lua_yieldk(L, 0, (lua_KContext)(intptr_t)connIdx, MySqlConnectCont);
 }
 
-// -- MySqlSetAliveToken -------------------------------------------------------
-int MySqlSetAliveToken(lua_State* L) {
+// -- MySQL_SetAliveToken -------------------------------------------------------
+int MySQL_SetAliveToken(lua_State* L) {
 	LuaMySQL* m = lua_tomysql(L, 1);
 	if (m->aliveTokenRef != LUA_NOREF) {
 		luaL_unref(L, LUA_REGISTRYINDEX, m->aliveTokenRef);
@@ -962,8 +962,8 @@ int MySqlSetAliveToken(lua_State* L) {
 	return 0;
 }
 
-// -- luamysql_gc ---------------------------------------------------------------
-int luamysql_gc(lua_State* L) {
+// -- MySQL_Close ---------------------------------------------------------------
+int MySQL_Close(lua_State* L) {
 	LuaMySQL* m = (LuaMySQL*)lua_touserdata(L, 1);
 	if (!m)
 		return 0;
@@ -995,8 +995,8 @@ int luamysql_gc(lua_State* L) {
 	return 0;
 }
 
-// -- luamysql_tostring ---------------------------------------------------------
-int luamysql_tostring(lua_State* L) {
+// -- MySQL_ToString ---------------------------------------------------------
+int MySQL_ToString(lua_State* L) {
 	LuaMySQL* m = lua_tomysql(L, 1);
 	char buf[64];
 	snprintf(buf, sizeof(buf), "MySQL: 0x%016" PRIx64, (uint64_t)(uintptr_t)m);

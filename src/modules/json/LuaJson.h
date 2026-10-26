@@ -46,7 +46,7 @@ typedef struct LuaJson {
     char*      chunkBuf;
     size_t     chunkBufCap;
 
-    // Streaming encode: when non-NULL, jbuf_grow flushes the output buffer to
+    // Streaming encode: when non-NULL, JbufGrow flushes the output buffer to
     // this stream before allocating more memory, keeping usage bounded.
     struct LuaStream* encStream;
 
@@ -61,34 +61,34 @@ typedef struct LuaJson {
 } LuaJson;
 
 // Returns the unique pointer address used as the JSON null sentinel.
-// lua_pushlightuserdata(L, lua_json_null()) produces the Json.Null value.
-void*    lua_json_null(void);
+// lua_pushlightuserdata(L, LuaJsonNull()) produces the Json.Null value.
+void*    LuaJsonNull(void);
 
 // Returns the unique pointer address used as the JSON empty-object sentinel.
-// lua_pushlightuserdata(L, lua_json_empty_object()) produces the Json.EmptyObject value.
-void*    lua_json_empty_object(void);
+// lua_pushlightuserdata(L, LuaJsonEmptyObject()) produces the Json.EmptyObject value.
+void*    LuaJsonEmptyObject(void);
 
 // Returns the unique pointer address used as the registry key for the shared
 // bridge LuaJson instance stored by KitsuneInit.
-// Use:  lua_rawgetp(L, LUA_REGISTRYINDEX, lua_json_bridge_registry_key())
-void*    lua_json_bridge_registry_key(void);
+// Use:  lua_rawgetp(L, LUA_REGISTRYINDEX, LuaJsonBridgeRegistryKey())
+void*    LuaJsonBridgeRegistryKey(void);
 
-LuaJson* lua_json_push(lua_State* L);           // push a fresh GC-managed instance
-LuaJson* lua_json_check(lua_State* L, int idx); // check + return instance at idx
+LuaJson* lua_pushjson(lua_State* L);           // push a fresh GC-managed instance
+LuaJson* luaL_checkjson(lua_State* L, int idx); // check + return instance at idx
 
 // json:Encode(value) — encodes Lua value at position 2 to a JSON string.
-// Arg 1 must be a LuaJson instance (use lua_json_bridge_registry_key()).
-int      lua_json_encode(lua_State* L);
+// Arg 1 must be a LuaJson instance (use LuaJsonBridgeRegistryKey()).
+int      Json_Encode(lua_State* L);
 
 // json:Decode(str | fn | stream) — decodes JSON at position 2 to a Lua value.
-// Arg 1 must be a LuaJson instance (use lua_json_bridge_registry_key()).
-int      lua_json_decode(lua_State* L);
+// Arg 1 must be a LuaJson instance (use LuaJsonBridgeRegistryKey()).
+int      Json_Decode(lua_State* L);
 
-int lua_json_gc(lua_State* L);
-int lua_json_tostring(lua_State* L);
-int lua_json_new(lua_State* L);                      // Json.New([pretty])
-int lua_json_set_decode_null(lua_State* L);          // json:SetDecodeNull(bool)
-int lua_json_set_encode_empty_object(lua_State* L);  // json:SetEncodeEmptyObject(bool)
+int Json_Dispose(lua_State* L);
+int Json_ToString(lua_State* L);
+int Json_New(lua_State* L);                      // Json.New([pretty])
+int Json_SetDecodeNull(lua_State* L);          // json:SetDecodeNull(bool)
+int Json_SetEncodeEmptyObject(lua_State* L);  // json:SetEncodeEmptyObject(bool)
 
 // Both functions handle the static and instance calling conventions:
 //   Json.Decode(str)             /  json:Decode(str)
@@ -101,7 +101,7 @@ int lua_json_set_encode_empty_object(lua_State* L);  // json:SetEncodeEmptyObjec
 // For the stream form: sync streams are read chunk-by-chunk directly; async
 // streams (vtbl->hasdata != NULL) accumulate via lua_callk (may yield), then
 // parse the complete buffer — identical result, no manual accumulation in Lua.
-int lua_json_decode(lua_State* L);
-int lua_json_encode(lua_State* L);
-int lua_json_encode_into_stream(lua_State* L);
-int lua_json_decode_from_stream(lua_State* L);
+int Json_Decode(lua_State* L);
+int Json_Encode(lua_State* L);
+int Json_EncodeIntoStream(lua_State* L);
+int Json_DecodeFromStream(lua_State* L);

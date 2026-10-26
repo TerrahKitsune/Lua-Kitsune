@@ -1,10 +1,10 @@
 #include "redis/LuaRedisKey.h"
 
-const char* lua_pushrediskey(lua_State* L, LuaRedisKey* key) {
+const char* PushRedisKeyName(lua_State* L, LuaRedisKey* key) {
 	return lua_pushlstring(L, key->key, key->keylen);
 }
 
-void lua_pushredisref(lua_State* L, LuaRedisKey* key) {
+void PushRedisRef(lua_State* L, LuaRedisKey* key) {
 	if (key->redis_ref == LUA_NOREF) {
 		luaL_error(L, "Redis key not available");
 	}
@@ -24,23 +24,23 @@ void CleanRedisKey(lua_State* L, LuaRedisKey* key) {
 	}
 }
 
-int lua_setredisttl(lua_State* L, LuaRedisKey* key, lua_Integer expireTime) {
+int SetRedisTtl(lua_State* L, LuaRedisKey* key, lua_Integer expireTime) {
 
 	LuaRedis* redis;
 
 	if (expireTime > 0) {
-		lua_pushredisref(L, key);
+		PushRedisRef(L, key);
 		lua_pushliteral(L, "PEXPIRE");
-		lua_pushrediskey(L, key);
+		PushRedisKeyName(L, key);
 		lua_pushinteger(L, expireTime);
 
 		redis = RedisCommandInternal(L);
 		lua_pop(L, 4);
 	}
 	else {
-		lua_pushredisref(L, key);
+		PushRedisRef(L, key);
 		lua_pushliteral(L, "PERSIST");
-		lua_pushrediskey(L, key);
+		PushRedisKeyName(L, key);
 
 		redis = RedisCommandInternal(L);
 		lua_pop(L, 3);
@@ -58,11 +58,11 @@ int lua_setredisttl(lua_State* L, LuaRedisKey* key, lua_Integer expireTime) {
 	return 1;
 }
 
-int lua_pushredisttl(lua_State* L, LuaRedisKey* key) {
+int PushRedisTtl(lua_State* L, LuaRedisKey* key) {
 
-	lua_pushredisref(L, key);
+	PushRedisRef(L, key);
 	lua_pushliteral(L, "PTTL");
-	lua_pushrediskey(L, key);
+	PushRedisKeyName(L, key);
 
 	LuaRedis* redis = RedisCommandInternal(L);
 	lua_pop(L, 3);
@@ -79,7 +79,7 @@ int lua_pushredisttl(lua_State* L, LuaRedisKey* key) {
 	return 1;
 }
 
-LuaRedisKey* lua_createrediskey(lua_State* L, int redisIdx, const char* key, size_t keylen) {
+LuaRedisKey* lua_pushrediskey(lua_State* L, int redisIdx, const char* key, size_t keylen) {
 
 	luaL_checkudata(L, redisIdx, REDIS);
 	lua_pushvalue(L, redisIdx);
@@ -108,7 +108,7 @@ LuaRedisKey* lua_createrediskey(lua_State* L, int redisIdx, const char* key, siz
 	return redisKey;
 }
 
-LuaRedisKey* lua_torediskey(lua_State* L, int idx) {
+LuaRedisKey* luaL_checkrediskey(lua_State* L, int idx) {
 	LuaRedisKey* redis = (LuaRedisKey*)luaL_checkudata(L, idx, REDISKEY);
 	if (redis == NULL) {
 		luaL_error(L, "parameter is not a %s", REDISKEY);
@@ -117,11 +117,11 @@ LuaRedisKey* lua_torediskey(lua_State* L, int idx) {
 	return redis;
 }
 
-int rediskey_delete(lua_State* L) {
-	LuaRedisKey* key = lua_torediskey(L, -1);
-	lua_pushredisref(L, key);
+int RedisKey_Delete(lua_State* L) {
+	LuaRedisKey* key = luaL_checkrediskey(L, -1);
+	PushRedisRef(L, key);
 	lua_pushliteral(L, "DEL");
-	lua_pushrediskey(L, key);
+	PushRedisKeyName(L, key);
 	LuaRedis* redis = RedisCommandInternal(L);
 	lua_pop(L, 3);
 	lua_pushboolean(L, redis->reply->type == REDIS_REPLY_INTEGER && redis->reply->integer != 0);
@@ -129,24 +129,24 @@ int rediskey_delete(lua_State* L) {
 	return 1;
 }
 
-int rediskey_setttl(lua_State* L) {
+int RedisKey_SetTTL(lua_State* L) {
 
-	LuaRedisKey* redisKey = lua_torediskey(L, 1);
-	return lua_setredisttl(L, redisKey, luaL_checkinteger(L, 2));
+	LuaRedisKey* redisKey = luaL_checkrediskey(L, 1);
+	return SetRedisTtl(L, redisKey, luaL_checkinteger(L, 2));
 }
 
-int rediskey_getttl(lua_State* L) {
+int RedisKey_GetTTL(lua_State* L) {
 
-	LuaRedisKey* redisKey = lua_torediskey(L, -1);
-	return lua_pushredisttl(L, redisKey);
+	LuaRedisKey* redisKey = luaL_checkrediskey(L, -1);
+	return PushRedisTtl(L, redisKey);
 }
 
-int rediskey_gettype(lua_State* L) {
+int RedisKey_Type(lua_State* L) {
 
-	LuaRedisKey* key = lua_torediskey(L, -1);
-	lua_pushredisref(L, key);
+	LuaRedisKey* key = luaL_checkrediskey(L, -1);
+	PushRedisRef(L, key);
 	lua_pushliteral(L, "TYPE");
-	lua_pushrediskey(L, key);
+	PushRedisKeyName(L, key);
 	LuaRedis* redis = RedisCommandInternal(L);
 	lua_pop(L, 3);
 	lua_pushlstring(L, redis->reply->str, redis->reply->len);
@@ -154,13 +154,13 @@ int rediskey_gettype(lua_State* L) {
 	return 1;
 }
 
-int rediskey_gc(lua_State* L) {
-	LuaRedisKey* key = lua_torediskey(L, -1);
+int RedisKey_GC(lua_State* L) {
+	LuaRedisKey* key = luaL_checkrediskey(L, -1);
 	CleanRedisKey(L, key);
 	return 0;
 }
 
-int rediskey_tostring(lua_State* L) {
+int RedisKey_ToString(lua_State* L) {
 	LuaRedisKey* redis = (LuaRedisKey*)luaL_checkudata(L, -1, REDISKEY);
 	lua_pushlstring(L, redis->key, redis->keylen);
 	return 1;

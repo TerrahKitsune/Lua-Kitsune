@@ -26,11 +26,11 @@ typedef struct LuaToml {
     size_t     recCap;
 } LuaToml;
 
-LuaToml* lua_toml_push(lua_State* L);
-LuaToml* lua_toml_check(lua_State* L, int idx);
+LuaToml* lua_pushtoml(lua_State* L);
+LuaToml* luaL_checktoml(lua_State* L, int idx);
 
-int lua_toml_gc(lua_State* L);
-int lua_toml_tostring(lua_State* L);
-int lua_toml_new(lua_State* L);
-int lua_toml_encode(lua_State* L);
-int lua_toml_decode(lua_State* L);
+int Toml_Dispose(lua_State* L);
+int Toml_ToString(lua_State* L);
+int Toml_New(lua_State* L);
+int Toml_Encode(lua_State* L);
+int Toml_Decode(lua_State* L);

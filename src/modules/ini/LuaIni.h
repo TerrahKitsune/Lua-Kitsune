@@ -24,11 +24,11 @@ typedef struct LuaIni {
     size_t outCap;
 } LuaIni;
 
-LuaIni* lua_ini_push(lua_State* L);
-LuaIni* lua_ini_check(lua_State* L, int idx);
+LuaIni* lua_pushini(lua_State* L);
+LuaIni* luaL_checkini(lua_State* L, int idx);
 
-int lua_ini_gc(lua_State* L);
-int lua_ini_tostring(lua_State* L);
-int lua_ini_new(lua_State* L);
-int lua_ini_encode(lua_State* L);
-int lua_ini_decode(lua_State* L);
+int Ini_Dispose(lua_State* L);
+int Ini_ToString(lua_State* L);
+int Ini_New(lua_State* L);
+int Ini_Encode(lua_State* L);
+int Ini_Decode(lua_State* L);

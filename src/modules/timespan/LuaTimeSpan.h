@@ -23,42 +23,42 @@ LuaTimeSpan* lua_totimespan(lua_State* L, int index);
 int          lua_istimespan(lua_State* L, int index);
 
 // Pushes the canonical [-]D.HH:MM:SS.mmm string representation.
-void lua_timespan_push_string(lua_State* L, int index);
+void lua_pushtimespanstring(lua_State* L, int index);
 
 // Constructors
-int timespan_zero(lua_State* L);            // Zero()
-int timespan_fromticks(lua_State* L);       // FromTicks(n)
-int timespan_fromseconds(lua_State* L);     // FromSeconds(n)
-int timespan_frommilliseconds(lua_State* L);// FromMilliseconds(n)
-int timespan_fromminutes(lua_State* L);     // FromMinutes(n)
-int timespan_fromhours(lua_State* L);       // FromHours(n)
-int timespan_fromdays(lua_State* L);        // FromDays(n)
+int TimeSpan_Zero(lua_State* L);            // Zero()
+int TimeSpan_FromTicks(lua_State* L);       // FromTicks(n)
+int TimeSpan_FromSeconds(lua_State* L);     // FromSeconds(n)
+int TimeSpan_FromMilliseconds(lua_State* L);// FromMilliseconds(n)
+int TimeSpan_FromMinutes(lua_State* L);     // FromMinutes(n)
+int TimeSpan_FromHours(lua_State* L);       // FromHours(n)
+int TimeSpan_FromDays(lua_State* L);        // FromDays(n)
 
 // Inspection
-int timespan_tostring(lua_State* L);       // __tostring / ToString
-int timespan_ticks(lua_State* L);          // Ticks()
-int timespan_totalseconds(lua_State* L);   // TotalSeconds()
-int timespan_totalmilliseconds(lua_State* L); // TotalMilliseconds()
-int timespan_totalminutes(lua_State* L);   // TotalMinutes()
-int timespan_totalhours(lua_State* L);     // TotalHours()
-int timespan_totaldays(lua_State* L);      // TotalDays()
-int timespan_days(lua_State* L);           // Days()
-int timespan_hours(lua_State* L);          // Hours()
-int timespan_minutes(lua_State* L);        // Minutes()
-int timespan_seconds(lua_State* L);        // Seconds()
-int timespan_milliseconds(lua_State* L);   // Milliseconds()
-int timespan_iszero(lua_State* L);         // IsZero()
-int timespan_isnegative(lua_State* L);     // IsNegative()
-int timespan_abs(lua_State* L);            // Abs()
+int TimeSpan_ToString(lua_State* L);       // __tostring / ToString
+int TimeSpan_Ticks(lua_State* L);          // Ticks()
+int TimeSpan_TotalSeconds(lua_State* L);   // TotalSeconds()
+int TimeSpan_TotalMilliseconds(lua_State* L); // TotalMilliseconds()
+int TimeSpan_TotalMinutes(lua_State* L);   // TotalMinutes()
+int TimeSpan_TotalHours(lua_State* L);     // TotalHours()
+int TimeSpan_TotalDays(lua_State* L);      // TotalDays()
+int TimeSpan_Days(lua_State* L);           // Days()
+int TimeSpan_Hours(lua_State* L);          // Hours()
+int TimeSpan_Minutes(lua_State* L);        // Minutes()
+int TimeSpan_Seconds(lua_State* L);        // Seconds()
+int TimeSpan_Milliseconds(lua_State* L);   // Milliseconds()
+int TimeSpan_IsZero(lua_State* L);         // IsZero()
+int TimeSpan_IsNegative(lua_State* L);     // IsNegative()
+int TimeSpan_Abs(lua_State* L);            // Abs()
 
 // Arithmetic metamethods
-int timespan_add(lua_State* L);   // __add  span+span
-int timespan_sub(lua_State* L);   // __sub  span-span
-int timespan_mul(lua_State* L);   // __mul  span*number or number*span
-int timespan_div(lua_State* L);   // __div  span/number
-int timespan_unm(lua_State* L);   // __unm  -span
+int TimeSpan_Add(lua_State* L);   // __add  span+span
+int TimeSpan_Sub(lua_State* L);   // __sub  span-span
+int TimeSpan_Mul(lua_State* L);   // __mul  span*number or number*span
+int TimeSpan_Div(lua_State* L);   // __div  span/number
+int TimeSpan_Unm(lua_State* L);   // __unm  -span
 
 // Comparison metamethods
-int timespan_eq(lua_State* L);    // __eq
-int timespan_lt(lua_State* L);    // __lt
-int timespan_le(lua_State* L);    // __le
+int TimeSpan_Eq(lua_State* L);    // __eq
+int TimeSpan_Lt(lua_State* L);    // __lt
+int TimeSpan_Le(lua_State* L);    // __le

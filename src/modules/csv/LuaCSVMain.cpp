@@ -2,16 +2,16 @@
 #include "csv/LuaCSVMain.h"
 
 static const struct luaL_Reg csv_functions[] = {
-	{ "New",               lua_csv_new                   },  // CSV.New([delim])
-	{ "Decode",            lua_csv_decode                },  // csv:Decode(str) / CSV.Decode(str [, delim])
-	{ "Encode",            lua_csv_encode                },  // csv:Encode(rows) / CSV.Encode(rows [, delim])
-	{ "DecodeFromFunction", lua_csv_decode_from_function },  // csv:DecodeFromFunction(fn_or_stream) / CSV.DecodeFromFunction(fn_or_stream [, delim])
+	{ "New",               CSV_New                   },  // CSV.New([delim])
+	{ "Decode",            CSV_Decode               },  // csv:Decode(str) / CSV.Decode(str [, delim])
+	{ "Encode",            CSV_Encode                },  // csv:Encode(rows) / CSV.Encode(rows [, delim])
+	{ "DecodeFromFunction", CSV_DecodeFromFunction },  // csv:DecodeFromFunction(fn_or_stream) / CSV.DecodeFromFunction(fn_or_stream [, delim])
 	{ NULL, NULL }
 };
 
 static const struct luaL_Reg csv_meta[] = {
-	{ "__gc",       lua_csv_gc       },
-	{ "__tostring", lua_csv_tostring },
+	{ "__gc",       CSV_GC       },
+	{ "__tostring", CSV_ToString },
 	{ NULL, NULL }
 };
 

@@ -18,7 +18,7 @@ typedef struct LuaHttpServer {
 } LuaHttpServer;
 
 LuaHttpServer* lua_pushhttpserver (lua_State* L);
-LuaHttpServer* lua_checkhttpserver(lua_State* L, int idx);
+LuaHttpServer* luaL_checkhttpserver(lua_State* L, int idx);
 
 int HttpServer_Listen          (lua_State* L);
 int HttpServer_Accept          (lua_State* L);

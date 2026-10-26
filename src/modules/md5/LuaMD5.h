@@ -14,9 +14,9 @@ typedef struct LuaMD5 {
 LuaMD5 * lua_tomd5(lua_State *L, int index);
 LuaMD5 * lua_pushmd5(lua_State *L);
 
-int NewMD5(lua_State *L);
-int UpdateMD5(lua_State *L);
-int FinalMD5(lua_State *L);
+int MD5_New(lua_State *L);
+int MD5_Update(lua_State *L);
+int MD5_Finish(lua_State *L);
 
-int md5_gc(lua_State *L);
-int md5_tostring(lua_State *L);
+int MD5_GC(lua_State *L);
+int MD5_ToString(lua_State *L);

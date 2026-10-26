@@ -2,21 +2,21 @@
 #include "xml/LuaXmlMain.h"
 
 static const struct luaL_Reg xml_functions[] = {
-    { "New",     lua_xml_new    },  // Xml.New([indent])
-    { "Decode",  lua_xml_decode },  // xml:Decode(string)
-    { "Encode",  lua_xml_encode },  // xml:Encode(table)
-    { "Dispose", lua_xml_gc     },  // xml:Dispose()
+    { "New",     Xml_New    },  // Xml.New([indent])
+    { "Decode",  Xml_Decode },  // xml:Decode(string)
+    { "Encode",  Xml_Encode },  // xml:Encode(table)
+    { "Dispose", Xml_Dispose     },  // xml:Dispose()
     { NULL, NULL }
 };
 
 static const struct luaL_Reg xml_meta[] = {
-    { "__gc",       lua_xml_gc       },
-    { "__tostring", lua_xml_tostring },
+    { "__gc",       Xml_Dispose       },
+    { "__tostring", Xml_ToString },
     { NULL, NULL }
 };
 
 int luaopen_xml(lua_State* L) {
-    ensure_allocator();
+    EnsureAllocator();
     luaL_newlibtable(L, xml_functions);
     luaL_setfuncs(L, xml_functions, 0);
 

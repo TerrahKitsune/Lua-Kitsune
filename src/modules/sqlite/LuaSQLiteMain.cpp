@@ -2,21 +2,21 @@
 #include "sqlite/LuaSQLite.h"
 
 static const struct luaL_Reg lasqlitefunctions[] = {
-	{ "Finish" , SQLiteFinish },
-	{ "Open", SQLiteConnect },
-	{ "Close", SQLite_GC },
-	{ "Query", SQLiteExecute },	
-	{ "Fetch", SQLiteFetch },
-	{ "GetRow", SQLiteGetRow },
-	{ "GetColumns", SQLiteGetColumns },
-	{ "SetBusyHandler", SQLiteSetBusyHandler },
-	{ "RegisterFunction", SQLiteRegisterFunction },
-	{ "RegisterAggregateFunction", SQLiteRegisterAggregateFunction },
+	{ "Finish" , SQLite_Finish },
+	{ "Open", SQLite_Open },
+	{ "Close", SQLite_Close },
+	{ "Query", SQLite_Query },	
+	{ "Fetch", SQLite_Fetch },
+	{ "GetRow", SQLite_GetRow },
+	{ "GetColumns", SQLite_GetColumns },
+	{ "SetBusyHandler", SQLite_SetBusyHandler },
+	{ "RegisterFunction", SQLite_RegisterFunction },
+	{ "RegisterAggregateFunction", SQLite_RegisterAggregateFunction },
 	{ NULL, NULL }
 };
 
 static const luaL_Reg luasqlmeta[] = {
-	{ "__gc", SQLite_GC },
+	{ "__gc", SQLite_Close },
 	{ "__tostring", SQLite_ToString },
 	{ NULL, NULL }
 };
@@ -32,15 +32,15 @@ static const luaL_Reg luasqlmeta[] = {
 // SQLite use its own built-in malloc/free which are already the same functions.
 static struct sqlite3_mem_methods sqlitemalloc;
 
-void * sqlite_malloc(int size) {
+void * SqliteMalloc(int size) {
 	return kitsune_malloc(size);
 }
 
-void sqlite_free(void * ptr) {
+void SqliteFree(void * ptr) {
 	kitsune_free(ptr);
 }
 
-void * sqlite_realloc(void * ptr, int size) {
+void * SqliteRealloc(void * ptr, int size) {
 	return kitsune_realloc(ptr, size);
 }
 #endif
@@ -50,9 +50,9 @@ int luaopen_sqlite(lua_State *L) {
 	sqlite3_config(SQLITE_CONFIG_MEMSTATUS, 0);
 #ifdef _WIN32
 	sqlite3_config(SQLITE_CONFIG_GETMALLOC, &sqlitemalloc);
-	sqlitemalloc.xMalloc = sqlite_malloc;
-	sqlitemalloc.xFree = sqlite_free;
-	sqlitemalloc.xRealloc = sqlite_realloc;
+	sqlitemalloc.xMalloc = SqliteMalloc;
+	sqlitemalloc.xFree = SqliteFree;
+	sqlitemalloc.xRealloc = SqliteRealloc;
 	sqlite3_config(SQLITE_CONFIG_MALLOC, &sqlitemalloc);
 #endif
 

@@ -54,7 +54,7 @@ static const luaL_Reg httpresponse_methods[] = {
     { "Send",                 HttpResponse_Send                 },
     { "Reject",               HttpResponse_Reject               },
     { "Close",                HttpResponse_Close                },
-    { "UpgradeToWebSocket",   ws_server_upgrade                 },
+    { "UpgradeToWebSocket",   HttpResponse_UpgradeToWebSocket                 },
     { NULL, NULL }
 };
 

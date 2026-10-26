@@ -21,7 +21,7 @@ LuaSHA256 * lua_pushsha256(lua_State *L) {
 	return luasha256;
 }
 
-int NewSHA256(lua_State *L) {
+int SHA256_New(lua_State *L) {
 
 	LuaSHA256 * luasha256 = lua_pushsha256(L);
 	if (!luasha256)
@@ -32,7 +32,7 @@ int NewSHA256(lua_State *L) {
 	return 1;
 }
 
-int UpdateSHA256(lua_State *L) {
+int SHA256_Update(lua_State *L) {
 
 	LuaSHA256 * luasha256 = lua_tosha256(L, 1);
 	if (!luasha256)
@@ -49,7 +49,7 @@ int UpdateSHA256(lua_State *L) {
 	return 0;
 }
 
-int FinalSHA256(lua_State *L) {
+int SHA256_Finish(lua_State *L) {
 
 	LuaSHA256 * luasha256 = lua_tosha256(L, 1);
 	if (!luasha256->finished) {
@@ -68,13 +68,13 @@ int FinalSHA256(lua_State *L) {
 	return 2;
 }
 
-int sha256_gc(lua_State *L) {
+int SHA256_GC(lua_State *L) {
 
 	lua_tosha256(L, 1);   // nothing to free: the context lives inside the userdata
 	return 0;
 }
 
-int sha256_tostring(lua_State *L) {
+int SHA256_ToString(lua_State *L) {
 
 	char sha256[100];
 	sprintf(sha256, "SHA256: %p", (void*)lua_tosha256(L, 1));

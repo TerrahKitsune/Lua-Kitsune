@@ -32,7 +32,7 @@
 #define DIV 1024
 
 #ifdef _WIN32
-static int GetLastErrorAsMessage(lua_State* L)
+static int Global_GetLastError(lua_State* L)
 {
 	DWORD lasterror = (DWORD)luaL_optinteger(L, 1, GetLastError());
 	wchar_t err[1024];
@@ -51,7 +51,7 @@ static int GetLastErrorAsMessage(lua_State* L)
 }
 
 
-int GetIsAdmin(lua_State* L) {
+int Global_GetIsAdmin(lua_State* L) {
 
 	BOOL isAdmin = FALSE;
 	SID_IDENTIFIER_AUTHORITY authority = SECURITY_NT_AUTHORITY;
@@ -73,7 +73,7 @@ int GetIsAdmin(lua_State* L) {
 	return 1;
 }
 #else
-static int GetLastErrorAsMessage(lua_State* L) {
+static int Global_GetLastError(lua_State* L) {
 	int code = (int)luaL_optinteger(L, 1, errno);
 	lua_pop(L, lua_gettop(L));
 	char buf[256] = {};
@@ -93,14 +93,14 @@ static int GetLastErrorAsMessage(lua_State* L) {
 	return 2;
 }
 
-static int GetIsAdmin(lua_State* L) {
+static int Global_GetIsAdmin(lua_State* L) {
 	lua_pushboolean(L, geteuid() == 0);
 	return 1;
 }
 #endif
 
 #ifdef _WIN32
-int Time(lua_State* L) {
+int Global_Time(lua_State* L) {
 
 	//https://gist.github.com/e-yes/278302
 	FILETIME ft;
@@ -121,7 +121,7 @@ int Time(lua_State* L) {
 	return 1;
 }
 #else
-int Time(lua_State* L) {
+int Global_Time(lua_State* L) {
 	struct timespec ts;
 	clock_gettime(CLOCK_REALTIME, &ts);
 	lua_pushinteger(L, (lua_Integer)ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
@@ -129,7 +129,7 @@ int Time(lua_State* L) {
 }
 #endif
 
-int GetStringEqual(lua_State* L) {
+int string_equal(lua_State* L) {
 
 	size_t len1;
 	size_t len2;
@@ -162,7 +162,7 @@ int GetStringEqual(lua_State* L) {
 	return 1;
 }
 
-int TableFirst(lua_State* L) {
+int table_first(lua_State* L) {
 
 	luaL_checktype(L, 1, LUA_TTABLE);
 	luaL_checktype(L, 2, LUA_TFUNCTION);
@@ -198,7 +198,7 @@ int TableFirst(lua_State* L) {
 	return 1;
 }
 
-int TableSelect(lua_State* L) {
+int table_select(lua_State* L) {
 
 	luaL_checktype(L, 1, LUA_TTABLE);
 	luaL_checktype(L, 2, LUA_TFUNCTION);
@@ -238,7 +238,7 @@ int TableSelect(lua_State* L) {
 	return 1;
 }
 
-DWORD crc32(uint8_t* data, size_t size, DWORD crc)
+DWORD Crc32(uint8_t* data, size_t size, DWORD crc)
 {
 	DWORD r = crc;
 	uint8_t* end = data + size;
@@ -258,7 +258,7 @@ DWORD crc32(uint8_t* data, size_t size, DWORD crc)
 	return ~r;
 }
 
-int CRC32(lua_State* L) {
+int Global_CRC32(lua_State* L) {
 
 	size_t size;
 	const char* data = lua_tolstring(L, 1, &size);
@@ -268,7 +268,7 @@ int CRC32(lua_State* L) {
 		crc = ~(DWORD)lua_tonumber(L, 2);
 	}
 
-	crc = crc32((BYTE*)data, (int)size, crc);
+	crc = Crc32((BYTE*)data, (int)size, crc);
 
 	lua_pop(L, lua_gettop(L));
 
@@ -279,7 +279,7 @@ int CRC32(lua_State* L) {
 
 #ifdef _WIN32
 // Wide CRT environment so UTF-8 names/values reach child processes and W APIs intact.
-static int setenv_win(const char* name, const char* value, int overwrite)
+static int SetenvWin(const char* name, const char* value, int overwrite)
 {
 	wchar_t* wname = kitsune_utf8_to_wide_alloc(name);
 	wchar_t* wvalue = kitsune_utf8_to_wide_alloc(value);
@@ -302,7 +302,7 @@ static int setenv_win(const char* name, const char* value, int overwrite)
 }
 #endif
 
-int luasetenv(lua_State* L) {
+int Global_setenv(lua_State* L) {
 
 	const char* var = luaL_checkstring(L, 1);
 	const char* value = luaL_checkstring(L, 2);
@@ -311,7 +311,7 @@ int luasetenv(lua_State* L) {
 	lua_pop(L, lua_gettop(L));
 
 #ifdef _WIN32
-	lua_pushinteger(L, setenv_win(var, value, allowOverwrite));
+	lua_pushinteger(L, SetenvWin(var, value, allowOverwrite));
 #else
 	lua_pushinteger(L, setenv(var, value, allowOverwrite));
 #endif
@@ -319,7 +319,7 @@ int luasetenv(lua_State* L) {
 	return 1;
 }
 
-int luagetenv(lua_State* L) {
+int Global_getenv(lua_State* L) {
 
 	const char* var = luaL_checkstring(L, 1);
 
@@ -356,7 +356,7 @@ int luagetenv(lua_State* L) {
 	return 1;
 }
 
-static int L_GetHost(lua_State* L) {
+static int Global_Dns(lua_State* L) {
 
 	const char* data = lua_tostring(L, 1);
 	struct addrinfo* result = NULL, * ptr = NULL, hints;
@@ -446,7 +446,7 @@ static int L_GetHost(lua_State* L) {
 }
 
 #ifdef _WIN32
-static int L_GetComputerName(lua_State* L) {
+static int Global_GetComputerName(lua_State* L) {
 
 	// A fully qualified DNS name can be up to 255 characters, far more than
 	// MAX_COMPUTERNAME_LENGTH; len is the buffer size in and the name length out.
@@ -465,7 +465,7 @@ static int L_GetComputerName(lua_State* L) {
 	return 1;
 }
 #else
-static int L_GetComputerName(lua_State* L) {
+static int Global_GetComputerName(lua_State* L) {
 	char data[256];
 	lua_pop(L, lua_gettop(L));
 	if (gethostname(data, sizeof(data)) == 0)
@@ -477,7 +477,7 @@ static int L_GetComputerName(lua_State* L) {
 #endif
 
 #ifdef _WIN32
-int L_GetGlobalMemoryStatus(lua_State* L) {
+int Global_GlobalMemoryStatus(lua_State* L) {
 
 	int type = (int)luaL_optinteger(L, 1, 0);
 
@@ -499,9 +499,9 @@ int L_GetGlobalMemoryStatus(lua_State* L) {
 	return 1;
 }
 
-static int L_DebugBreak(lua_State* L) { return 0; }
+static int Global_Break(lua_State* L) { return 0; }
 #else
-static int L_GetGlobalMemoryStatus(lua_State* L) {
+static int Global_GlobalMemoryStatus(lua_State* L) {
 	int type = (int)luaL_optinteger(L, 1, 0);
 	// Parse /proc/meminfo for portable memory statistics.
 	// Fields are reported in kB; multiply by 1024 then divide by DIV (1024) = value in kB.
@@ -534,10 +534,10 @@ static int L_GetGlobalMemoryStatus(lua_State* L) {
 	return 1;
 }
 
-static int L_DebugBreak(lua_State* L) { return 0; }
+static int Global_Break(lua_State* L) { return 0; }
 #endif
 
-static const char* cpuId(void)
+static const char* CpuId(void)
 {
 	static char buf[100];
 #ifdef _WIN32
@@ -564,7 +564,7 @@ static const char* cpuId(void)
 
 #define CRC64_POLY 0xD800000000000000ULL
 
-static int crc64(lua_State* L) {
+static int Global_CRC64(lua_State* L) {
 
 	const BYTE* data;
 	size_t len;
@@ -600,7 +600,7 @@ static int crc64(lua_State* L) {
 	return 1;
 }
 
-int Test(lua_State* L) {
+int Global_Test(lua_State* L) {
 
 	return 0;
 }
@@ -725,59 +725,59 @@ int luaopen_misc(lua_State* L) {
 
 	lua_getglobal(L, "string");
 	lua_pushstring(L, "equal");
-	lua_pushcfunction(L, GetStringEqual);
+	lua_pushcfunction(L, string_equal);
 	lua_settable(L, -3);
 	lua_pop(L, 1);
 
 	lua_getglobal(L, "table");
 	lua_pushstring(L, "first");
-	lua_pushcfunction(L, TableFirst);
+	lua_pushcfunction(L, table_first);
 	lua_settable(L, -3);
 	lua_pushstring(L, "select");
-	lua_pushcfunction(L, TableSelect);
+	lua_pushcfunction(L, table_select);
 	lua_settable(L, -3);
 	lua_pop(L, 1);
 
-	lua_pushcfunction(L, Test);
+	lua_pushcfunction(L, Global_Test);
 	lua_setglobal(L, "Test");
 
-	lua_pushcfunction(L, crc64);
+	lua_pushcfunction(L, Global_CRC64);
 	lua_setglobal(L, "CRC64");
 
-	lua_pushstring(L, cpuId());
+	lua_pushstring(L, CpuId());
 	lua_setglobal(L, "CPUID");
 
-	lua_pushcfunction(L, L_DebugBreak);
+	lua_pushcfunction(L, Global_Break);
 	lua_setglobal(L, "Break");
 
-	lua_pushcfunction(L, L_GetGlobalMemoryStatus);
+	lua_pushcfunction(L, Global_GlobalMemoryStatus);
 	lua_setglobal(L, "GlobalMemoryStatus");
 
-	lua_pushcfunction(L, L_GetHost);
+	lua_pushcfunction(L, Global_Dns);
 	lua_setglobal(L, "Dns");
 
-	lua_pushcfunction(L, L_GetComputerName);
+	lua_pushcfunction(L, Global_GetComputerName);
 	lua_setglobal(L, "GetComputerName");
 
-	lua_pushcfunction(L, GetLastErrorAsMessage);
+	lua_pushcfunction(L, Global_GetLastError);
 	lua_setglobal(L, "GetLastError");
 
-	lua_pushcfunction(L, GetIsAdmin);
+	lua_pushcfunction(L, Global_GetIsAdmin);
 	lua_setglobal(L, "GetIsAdmin");
 
-	lua_pushcfunction(L, Time);
+	lua_pushcfunction(L, Global_Time);
 	lua_setglobal(L, "Time");
 
-	lua_pushcfunction(L, CRC32);
+	lua_pushcfunction(L, Global_CRC32);
 	lua_setglobal(L, "CRC32");
 
-	lua_pushcfunction(L, BencodeDecode);
+	lua_pushcfunction(L, Global_BencodeDecode);
 	lua_setglobal(L, "BencodeDecode");
 
-	lua_pushcfunction(L, luasetenv);
+	lua_pushcfunction(L, Global_setenv);
 	lua_setglobal(L, "setenv");
 
-	lua_pushcfunction(L, luagetenv);
+	lua_pushcfunction(L, Global_getenv);
 	lua_setglobal(L, "getenv");
 
 	return 0;

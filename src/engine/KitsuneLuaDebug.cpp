@@ -12,7 +12,7 @@ void InitLuaDebug(KitsuneState* state) {
 
 // Single hook function installed via lua_sethook_real.
 // Snapshots both slots under the lock so neither is called while locked.
-static void merged_hook(lua_State* L, lua_Debug* ar) {
+static void MergedHook(lua_State* L, lua_Debug* ar) {
 	if (!g_debugState)
 		return;
 	KitsuneHookState snap;
@@ -49,7 +49,7 @@ static void kitsune_recompute(lua_State* L, KitsuneHookState& s) {
 		lua_sethook_real(L, nullptr, 0, 0);
 	}
 	else {
-		lua_sethook_real(L, merged_hook, merged_mask, merged_count);
+		lua_sethook_real(L, MergedHook, merged_mask, merged_count);
 	}
 }
 

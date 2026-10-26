@@ -25,7 +25,7 @@ int RedisPushStringInternal(lua_State* L, int redisIdx, const char* key, size_t 
 	return 1;
 }
 
-LuaRedisString* lua_toredisstring(lua_State* L, int idx) {
+LuaRedisString* luaL_checkredisstring(lua_State* L, int idx) {
 	LuaRedisString* redis = (LuaRedisString*)luaL_checkudata(L, idx, REDISSTRING);
 	if (redis == NULL) {
 		luaL_error(L, "parameter is not a %s", REDISSTRING);
@@ -33,13 +33,13 @@ LuaRedisString* lua_toredisstring(lua_State* L, int idx) {
 	return redis;
 }
 
-int redisstring_getorset(lua_State* L) {
+int RedisString_GetOrSet(lua_State* L) {
 
-	LuaRedisString* redisString = lua_toredisstring(L, 1);
+	LuaRedisString* redisString = luaL_checkredisstring(L, 1);
 
-	lua_pushredisref(L, &redisString->key);
+	PushRedisRef(L, &redisString->key);
 	lua_pushstring(L, "SET");
-	lua_pushrediskey(L, &redisString->key);
+	PushRedisKeyName(L, &redisString->key);
 	lua_pushvalue(L, 2);
 	lua_pushstring(L, "NX");
 	lua_pushstring(L, "GET");
@@ -58,13 +58,13 @@ int redisstring_getorset(lua_State* L) {
 	return 1;
 }
 
-int redisstring_set(lua_State* L) {
+int RedisString_Set(lua_State* L) {
 
-	LuaRedisString* redisString = lua_toredisstring(L, 1);
+	LuaRedisString* redisString = luaL_checkredisstring(L, 1);
 
-	lua_pushredisref(L, &redisString->key);
+	PushRedisRef(L, &redisString->key);
 	lua_pushstring(L, "SET");
-	lua_pushrediskey(L, &redisString->key);
+	PushRedisKeyName(L, &redisString->key);
 	lua_pushvalue(L, 2);
 	lua_pushstring(L, "GET");
 	lua_pushstring(L, "KEEPTTL");
@@ -82,9 +82,9 @@ int redisstring_set(lua_State* L) {
 	return 1;
 }
 
-int redisstring_setat(lua_State* L) {
+int RedisString_NewIndex(lua_State* L) {
 
-	LuaRedisString* redisString = lua_toredisstring(L, -3);
+	LuaRedisString* redisString = luaL_checkredisstring(L, -3);
 
 	lua_Integer idx = luaL_checkinteger(L, -2);
 	if (idx <= 0) {
@@ -98,9 +98,9 @@ int redisstring_setat(lua_State* L) {
 		return 0;
 	}
 
-	lua_pushredisref(L, &redisString->key);
+	PushRedisRef(L, &redisString->key);
 	lua_pushstring(L, "SETRANGE");
-	lua_pushrediskey(L, &redisString->key);
+	PushRedisKeyName(L, &redisString->key);
 	lua_pushinteger(L, idx - 1);
 	char byte_val = (char)(unsigned char)data;
 	lua_pushlstring(L, &byte_val, 1);
@@ -110,9 +110,9 @@ int redisstring_setat(lua_State* L) {
 	return 0;
 }
 
-int redisstring_at(lua_State* L) {
+int RedisString_At(lua_State* L) {
 
-	LuaRedisString* redisString = lua_toredisstring(L, 1);
+	LuaRedisString* redisString = luaL_checkredisstring(L, 1);
 
 	lua_Integer idx = luaL_checkinteger(L, 2);
 	if (idx <= 0) {
@@ -120,9 +120,9 @@ int redisstring_at(lua_State* L) {
 		return 0;
 	}
 
-	lua_pushredisref(L, &redisString->key);
+	PushRedisRef(L, &redisString->key);
 	lua_pushstring(L, "GETRANGE");
-	lua_pushrediskey(L, &redisString->key);
+	PushRedisKeyName(L, &redisString->key);
 	lua_pushinteger(L, idx - 1);
 	lua_pushinteger(L, idx - 1);
 	LuaRedis* redis = RedisCommandInternal(L);
@@ -138,12 +138,12 @@ int redisstring_at(lua_State* L) {
 	return 1;
 }
 
-int redisstring_iter(lua_State* L) {
+int RedisStringIter(lua_State* L) {
 
 	lua_Integer idx = lua_tointeger(L, -1);
 	lua_pop(L, 1);
 	lua_pushinteger(L, ++idx);
-	redisstring_at(L);
+	RedisString_At(L);
 
 	if (lua_isnil(L, -1)) {
 		return 0;
@@ -152,33 +152,33 @@ int redisstring_iter(lua_State* L) {
 	return 2;
 }
 
-int redisstring_pairs(lua_State* L) {
+int RedisString_Pairs(lua_State* L) {
 
-	lua_pushcfunction(L, redisstring_iter);
+	lua_pushcfunction(L, RedisStringIter);
 	lua_pushvalue(L, 1);
 	lua_pushinteger(L, 0);
 	return 3;
 }
 
-int redisstring_setttl(lua_State* L) {
+int RedisString_SetTTL(lua_State* L) {
 
-	LuaRedisString* redisString = lua_toredisstring(L, 1);
-	return lua_setredisttl(L, &redisString->key, luaL_checkinteger(L, 2));
+	LuaRedisString* redisString = luaL_checkredisstring(L, 1);
+	return SetRedisTtl(L, &redisString->key, luaL_checkinteger(L, 2));
 }
 
-int redisstring_getttl(lua_State* L) {
+int RedisString_GetTTL(lua_State* L) {
 
-	LuaRedisString* redisString = lua_toredisstring(L, -1);
-	return lua_pushredisttl(L, &redisString->key);
+	LuaRedisString* redisString = luaL_checkredisstring(L, -1);
+	return PushRedisTtl(L, &redisString->key);
 }
 
-int redisstring_delete(lua_State* L) {
+int RedisString_Delete(lua_State* L) {
 
-	LuaRedisString* redisString = lua_toredisstring(L, -1);
+	LuaRedisString* redisString = luaL_checkredisstring(L, -1);
 
-	lua_pushredisref(L, &redisString->key);
+	PushRedisRef(L, &redisString->key);
 	lua_pushstring(L, "GETDEL");
-	lua_pushrediskey(L, &redisString->key);
+	PushRedisKeyName(L, &redisString->key);
 	LuaRedis* redis = RedisCommandInternal(L);
 	lua_pop(L, 3);
 
@@ -194,13 +194,13 @@ int redisstring_delete(lua_State* L) {
 	return 1;
 }
 
-int redisstring_len(lua_State* L) {
+int RedisString_len(lua_State* L) {
 
-	LuaRedisString* redisString = lua_toredisstring(L, -1);
+	LuaRedisString* redisString = luaL_checkredisstring(L, -1);
 
-	lua_pushredisref(L, &redisString->key);
+	PushRedisRef(L, &redisString->key);
 	lua_pushstring(L, "STRLEN");
-	lua_pushrediskey(L, &redisString->key);
+	PushRedisKeyName(L, &redisString->key);
 	LuaRedis* redis = RedisCommandInternal(L);
 
 	lua_Integer result = redis->reply->type == REDIS_REPLY_INTEGER ? redis->reply->integer : 0;
@@ -212,12 +212,12 @@ int redisstring_len(lua_State* L) {
 	return 1;
 }
 
-int redisstring_concat(lua_State* L) {
+int RedisString_Concat(lua_State* L) {
 
 	//First arg
 	if (luaL_testudata(L, -2, REDISSTRING)) {
 		lua_pushvalue(L, -2);
-		redisstring_tostring(L);
+		RedisString_ToString(L);
 		lua_remove(L, -2);
 	}
 	else {
@@ -227,7 +227,7 @@ int redisstring_concat(lua_State* L) {
 	// Second arg; +1 to stack
 	if (luaL_testudata(L, -2, REDISSTRING)) {
 		lua_pushvalue(L, -2);
-		redisstring_tostring(L);
+		RedisString_ToString(L);
 		lua_remove(L, -2);
 	}
 	else {
@@ -263,27 +263,27 @@ size_t len2;
 	return 1;
 }
 
-int redisstring_call(lua_State* L) {
+int RedisString_Call(lua_State* L) {
 
 	LuaRedisString* redis = (LuaRedisString*)luaL_checkudata(L, -1, REDISSTRING);
-	lua_pushredisref(L, &redis->key);
-	lua_createrediskey(L, -1, redis->key.key, redis->key.keylen);
+	PushRedisRef(L, &redis->key);
+	lua_pushrediskey(L, -1, redis->key.key, redis->key.keylen);
 
 	return 1;
 }
 
-int redisstring_gc(lua_State* L) {
+int RedisString_GC(lua_State* L) {
 
-	LuaRedisString* redisString = lua_toredisstring(L, -1);
+	LuaRedisString* redisString = luaL_checkredisstring(L, -1);
 
 	CleanRedisKey(L, &redisString->key);
 
 	return 0;
 }
 
-int redisstring_tostring(lua_State* L) {
+int RedisString_ToString(lua_State* L) {
 
-	LuaRedisString* redisString = lua_toredisstring(L, -1);
+	LuaRedisString* redisString = luaL_checkredisstring(L, -1);
 
 	//if (antiRecursion > 0) {
 	//	char tim[200];
@@ -291,9 +291,9 @@ int redisstring_tostring(lua_State* L) {
 	//	lua_pushstring(L, tim);
 	//	return 1;
 	//}
-	lua_pushredisref(L, &redisString->key);
+	PushRedisRef(L, &redisString->key);
 	lua_pushstring(L, "GET");
-	lua_pushrediskey(L, &redisString->key);
+	PushRedisKeyName(L, &redisString->key);
 	LuaRedis* redis = RedisCommandInternal(L);
 
 	if (redis->reply->type != REDIS_REPLY_STRING) {

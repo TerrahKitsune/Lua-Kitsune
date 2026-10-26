@@ -1,6 +1,6 @@
 ﻿#include "kafka/LuaKafkaHelpers.h"
 
-rd_kafka_conf_t* lua_tokafkaconf(lua_State* L, int idx, const char* defaultgroup) {
+rd_kafka_conf_t* ToKafkaConf(lua_State* L, int idx, const char* defaultgroup) {
 
 	rd_kafka_conf_t* conf = rd_kafka_conf_new();
 	bool didGroup = false;
@@ -42,7 +42,7 @@ rd_kafka_conf_t* lua_tokafkaconf(lua_State* L, int idx, const char* defaultgroup
 	return conf;
 }
 
-void lua_pushkafkapartition(lua_State* L, const rd_kafka_metadata_partition* partition) {
+void PushKafkaPartition(lua_State* L, const rd_kafka_metadata_partition* partition) {
 
 	lua_createtable(L, 0, 6);
 
@@ -81,7 +81,7 @@ void lua_pushkafkapartition(lua_State* L, const rd_kafka_metadata_partition* par
 	lua_settable(L, -3);
 }
 
-void lua_pushkafkatopic(lua_State* L, const rd_kafka_metadata_topic* topic) {
+void PushKafkaTopic(lua_State* L, const rd_kafka_metadata_topic* topic) {
 
 	lua_createtable(L, 0, 5);
 
@@ -101,13 +101,13 @@ void lua_pushkafkatopic(lua_State* L, const rd_kafka_metadata_topic* topic) {
 	lua_createtable(L, topic->partition_cnt, 0);
 	for (size_t i = 0; i < topic->partition_cnt; i++)
 	{
-		lua_pushkafkapartition(L, &topic->partitions[i]);
+		PushKafkaPartition(L, &topic->partitions[i]);
 		lua_rawseti(L, -2, i + 1);
 	}
 	lua_settable(L, -3);
 }
 
-void lua_pushkafkaptopicpartition(lua_State* L, const rd_kafka_topic_partition_t* topic) {
+void PushKafkaTopicPartition(lua_State* L, const rd_kafka_topic_partition_t* topic) {
 
 	lua_createtable(L, 0, 6);
 
@@ -139,7 +139,7 @@ void lua_pushkafkaptopicpartition(lua_State* L, const rd_kafka_topic_partition_t
 	lua_settable(L, -3);
 }
 
-void lua_pushkafkabroker(lua_State* L, const rd_kafka_metadata_broker* broker) {
+void PushKafkaBroker(lua_State* L, const rd_kafka_metadata_broker* broker) {
 
 	lua_createtable(L, 0, 3);
 
@@ -156,7 +156,7 @@ void lua_pushkafkabroker(lua_State* L, const rd_kafka_metadata_broker* broker) {
 	lua_settable(L, -3);
 }
 
-int kafka_query_watermarks(lua_State* L, rd_kafka_t* rd) {
+int KafkaQueryWatermarks(lua_State* L, rd_kafka_t* rd) {
 	const char* topic = luaL_checkstring(L, 2);
 	int32_t partition = (int32_t)luaL_checkinteger(L, 3);
 	int timeout = (int)luaL_optinteger(L, 4, 5000);
@@ -185,7 +185,7 @@ int kafka_query_watermarks(lua_State* L, rd_kafka_t* rd) {
 // On success pushes true and returns 1.
 // The caller must have already issued the admin request to rkqu.
 // ---------------------------------------------------------------------------
-static int kafka_poll_admin_result(
+static int KafkaPollAdminResult(
 	lua_State* L,
 	rd_kafka_queue_t* rkqu,
 	int poll_timeout_ms,
@@ -242,7 +242,7 @@ static int kafka_poll_admin_result(
 	return 1;
 }
 
-int kafka_admin_create_topic(lua_State* L, rd_kafka_t* rd) {
+int KafkaAdminCreateTopic(lua_State* L, rd_kafka_t* rd) {
 	const char* name = luaL_checkstring(L, 2);
 	int num_partitions = (int)luaL_checkinteger(L, 3);
 	int replication_factor = lua_isnoneornil(L, 6) ? -1 : (int)luaL_checkinteger(L, 6);
@@ -292,12 +292,12 @@ int kafka_admin_create_topic(lua_State* L, rd_kafka_t* rd) {
 	rd_kafka_NewTopic_destroy(new_topic);
 	rd_kafka_AdminOptions_destroy(options);
 
-	int ret = kafka_poll_admin_result(L, queue, timeout_ms + 5000, true);
+	int ret = KafkaPollAdminResult(L, queue, timeout_ms + 5000, true);
 	rd_kafka_queue_destroy(queue);
 	return ret;
 }
 
-int kafka_admin_destroy_topic(lua_State* L, rd_kafka_t* rd) {
+int KafkaAdminDestroyTopic(lua_State* L, rd_kafka_t* rd) {
 	const char* name = luaL_checkstring(L, 2);
 	int timeout_ms = (int)luaL_optinteger(L, 3, 10000);
 
@@ -313,12 +313,12 @@ int kafka_admin_destroy_topic(lua_State* L, rd_kafka_t* rd) {
 	rd_kafka_DeleteTopic_destroy(del_topic);
 	rd_kafka_AdminOptions_destroy(options);
 
-	int ret = kafka_poll_admin_result(L, queue, timeout_ms + 5000, false);
+	int ret = KafkaPollAdminResult(L, queue, timeout_ms + 5000, false);
 	rd_kafka_queue_destroy(queue);
 	return ret;
 }
 
-int kafka_get_metadata(lua_State* L, rd_kafka_t* rd) {
+int KafkaGetMetadata(lua_State* L, rd_kafka_t* rd) {
 	int timeout_ms = (int)luaL_optinteger(L, 2, 5000);
 
 	const struct rd_kafka_metadata* metadata = NULL;
@@ -337,7 +337,7 @@ int kafka_get_metadata(lua_State* L, rd_kafka_t* rd) {
 	lua_pushstring(L, "Brokers");
 	lua_createtable(L, metadata->broker_cnt, 0);
 	for (int i = 0; i < metadata->broker_cnt; i++) {
-		lua_pushkafkabroker(L, &metadata->brokers[i]);
+		PushKafkaBroker(L, &metadata->brokers[i]);
 		lua_rawseti(L, -2, i + 1);
 	}
 	lua_settable(L, -3);
@@ -345,7 +345,7 @@ int kafka_get_metadata(lua_State* L, rd_kafka_t* rd) {
 	lua_pushstring(L, "Topics");
 	lua_createtable(L, metadata->topic_cnt, 0);
 	for (int i = 0; i < metadata->topic_cnt; i++) {
-		lua_pushkafkatopic(L, &metadata->topics[i]);
+		PushKafkaTopic(L, &metadata->topics[i]);
 		lua_rawseti(L, -2, i + 1);
 	}
 	lua_settable(L, -3);
@@ -362,7 +362,7 @@ int kafka_get_metadata(lua_State* L, rd_kafka_t* rd) {
 	return 2;
 }
 
-int kafka_get_topic_config(lua_State* L, rd_kafka_t* rd) {
+int KafkaGetTopicConfig(lua_State* L, rd_kafka_t* rd) {
 	const char* topic_name = luaL_checkstring(L, 2);
 	int timeout_ms = (int)luaL_optinteger(L, 3, 5000);
 
@@ -440,7 +440,7 @@ int kafka_get_topic_config(lua_State* L, rd_kafka_t* rd) {
 	return 2;
 }
 
-int kafka_set_topic_config(lua_State* L, rd_kafka_t* rd) {
+int KafkaSetTopicConfig(lua_State* L, rd_kafka_t* rd) {
 	const char* topic_name = luaL_checkstring(L, 2);
 	luaL_checktype(L, 3, LUA_TTABLE);
 	int timeout_ms = (int)luaL_optinteger(L, 4, 10000);
@@ -527,7 +527,7 @@ int kafka_set_topic_config(lua_State* L, rd_kafka_t* rd) {
 // ---------------------------------------------------------------------------
 
 // Parses a "topic:N" string into topic + partition.
-static void kafka_parse_tp_key(const char* entry, char* tbuf, size_t tbuf_sz, int32_t* out_part) {
+static void KafkaParseTpKey(const char* entry, char* tbuf, size_t tbuf_sz, int32_t* out_part) {
 	*out_part = RD_KAFKA_PARTITION_UA;
 	const char* colon = strchr(entry, ':');
 	if (colon) {
@@ -549,7 +549,7 @@ static void kafka_parse_tp_key(const char* entry, char* tbuf, size_t tbuf_sz, in
 
 // Builds a partition list from a Lua array {"topic:N", ...} at idx.
 // Returns NULL when idx is nil/absent (caller treats as "all").
-static rd_kafka_topic_partition_list_t* kafka_build_tplist(lua_State* L, int idx) {
+static rd_kafka_topic_partition_list_t* KafkaBuildTplist(lua_State* L, int idx) {
 	if (lua_isnoneornil(L, idx))
 		return NULL;
 	luaL_checktype(L, idx, LUA_TTABLE);
@@ -563,14 +563,14 @@ static rd_kafka_topic_partition_list_t* kafka_build_tplist(lua_State* L, int idx
 		if (!entry)
 			continue;
 		int32_t part;
-		kafka_parse_tp_key(entry, tbuf, sizeof(tbuf), &part);
+		KafkaParseTpKey(entry, tbuf, sizeof(tbuf), &part);
 		rd_kafka_topic_partition_list_add(list, tbuf, part);
 	}
 	return list;
 }
 
 // Builds a partition+offset list from a Lua table {['topic:N']=offset, ...}.
-static rd_kafka_topic_partition_list_t* kafka_build_offset_tplist(lua_State* L, int idx) {
+static rd_kafka_topic_partition_list_t* KafkaBuildOffsetTplist(lua_State* L, int idx) {
 	luaL_checktype(L, idx, LUA_TTABLE);
 	int count = 0;
 	lua_pushnil(L);
@@ -588,7 +588,7 @@ static rd_kafka_topic_partition_list_t* kafka_build_offset_tplist(lua_State* L, 
 		if (!key)
 			continue;
 		int32_t part;
-		kafka_parse_tp_key(key, tbuf, sizeof(tbuf), &part);
+		KafkaParseTpKey(key, tbuf, sizeof(tbuf), &part);
 		rd_kafka_topic_partition_t* tp = rd_kafka_topic_partition_list_add(list, tbuf, part);
 		tp->offset = offset;
 	}
@@ -597,7 +597,7 @@ static rd_kafka_topic_partition_list_t* kafka_build_offset_tplist(lua_State* L, 
 
 // Shared event-level error check. Returns 0 on success (does not push).
 // On failure pushes false+errmsg and returns 2.
-static int kafka_check_event_error(lua_State* L, rd_kafka_event_t* event) {
+static int KafkaCheckEventError(lua_State* L, rd_kafka_event_t* event) {
 	rd_kafka_resp_err_t err = rd_kafka_event_error(event);
 	if (!err)
 		return 0;
@@ -609,10 +609,10 @@ static int kafka_check_event_error(lua_State* L, rd_kafka_event_t* event) {
 }
 
 // ---------------------------------------------------------------------------
-// kafka_list_groups
+// KafkaListGroups
 // ---------------------------------------------------------------------------
 
-int kafka_list_groups(lua_State* L, rd_kafka_t* rd) {
+int KafkaListGroups(lua_State* L, rd_kafka_t* rd) {
 	int timeout_ms = (int)luaL_optinteger(L, 2, 5000);
 
 	char opts_errstr[256];
@@ -632,7 +632,7 @@ int kafka_list_groups(lua_State* L, rd_kafka_t* rd) {
 		return 2;
 	}
 
-	int r = kafka_check_event_error(L, event);
+	int r = KafkaCheckEventError(L, event);
 	if (r)
 		return r;
 
@@ -663,10 +663,10 @@ int kafka_list_groups(lua_State* L, rd_kafka_t* rd) {
 }
 
 // ---------------------------------------------------------------------------
-// kafka_describe_groups
+// KafkaDescribeGroups
 // ---------------------------------------------------------------------------
 
-int kafka_describe_groups(lua_State* L, rd_kafka_t* rd) {
+int KafkaDescribeGroups(lua_State* L, rd_kafka_t* rd) {
 	luaL_checktype(L, 2, LUA_TTABLE);
 	int timeout_ms = (int)luaL_optinteger(L, 3, 5000);
 
@@ -701,7 +701,7 @@ int kafka_describe_groups(lua_State* L, rd_kafka_t* rd) {
 		return 2;
 	}
 
-	int r = kafka_check_event_error(L, event);
+	int r = KafkaCheckEventError(L, event);
 	if (r)
 		return r;
 
@@ -809,10 +809,10 @@ int kafka_describe_groups(lua_State* L, rd_kafka_t* rd) {
 }
 
 // ---------------------------------------------------------------------------
-// kafka_delete_group
+// KafkaDeleteGroup
 // ---------------------------------------------------------------------------
 
-int kafka_delete_group(lua_State* L, rd_kafka_t* rd) {
+int KafkaDeleteGroup(lua_State* L, rd_kafka_t* rd) {
 	const char* group_id = luaL_checkstring(L, 2);
 	int timeout_ms = (int)luaL_optinteger(L, 3, 10000);
 
@@ -836,7 +836,7 @@ int kafka_delete_group(lua_State* L, rd_kafka_t* rd) {
 		return 2;
 	}
 
-	int r = kafka_check_event_error(L, event);
+	int r = KafkaCheckEventError(L, event);
 	if (r)
 		return r;
 
@@ -859,14 +859,14 @@ int kafka_delete_group(lua_State* L, rd_kafka_t* rd) {
 }
 
 // ---------------------------------------------------------------------------
-// kafka_get_group_offsets
+// KafkaGetGroupOffsets
 // ---------------------------------------------------------------------------
 
-int kafka_get_group_offsets(lua_State* L, rd_kafka_t* rd) {
+int KafkaGetGroupOffsets(lua_State* L, rd_kafka_t* rd) {
 	const char* group_id = luaL_checkstring(L, 2);
 	int timeout_ms = (int)luaL_optinteger(L, 4, 5000);
 
-	rd_kafka_topic_partition_list_t* parts = kafka_build_tplist(L, 3);
+	rd_kafka_topic_partition_list_t* parts = KafkaBuildTplist(L, 3);
 
 	rd_kafka_ListConsumerGroupOffsets_t* req = rd_kafka_ListConsumerGroupOffsets_new(group_id, parts);
 	if (parts)
@@ -890,7 +890,7 @@ int kafka_get_group_offsets(lua_State* L, rd_kafka_t* rd) {
 		return 2;
 	}
 
-	int r = kafka_check_event_error(L, event);
+	int r = KafkaCheckEventError(L, event);
 	if (r)
 		return r;
 
@@ -931,14 +931,14 @@ int kafka_get_group_offsets(lua_State* L, rd_kafka_t* rd) {
 }
 
 // ---------------------------------------------------------------------------
-// kafka_set_group_offsets
+// KafkaSetGroupOffsets
 // ---------------------------------------------------------------------------
 
-int kafka_set_group_offsets(lua_State* L, rd_kafka_t* rd) {
+int KafkaSetGroupOffsets(lua_State* L, rd_kafka_t* rd) {
 	const char* group_id = luaL_checkstring(L, 2);
 	int timeout_ms = (int)luaL_optinteger(L, 4, 10000);
 
-	rd_kafka_topic_partition_list_t* parts = kafka_build_offset_tplist(L, 3);
+	rd_kafka_topic_partition_list_t* parts = KafkaBuildOffsetTplist(L, 3);
 
 	rd_kafka_AlterConsumerGroupOffsets_t* req = rd_kafka_AlterConsumerGroupOffsets_new(group_id, parts);
 	rd_kafka_topic_partition_list_destroy(parts);
@@ -961,7 +961,7 @@ int kafka_set_group_offsets(lua_State* L, rd_kafka_t* rd) {
 		return 2;
 	}
 
-	int r = kafka_check_event_error(L, event);
+	int r = KafkaCheckEventError(L, event);
 	if (r)
 		return r;
 
@@ -986,14 +986,14 @@ int kafka_set_group_offsets(lua_State* L, rd_kafka_t* rd) {
 }
 
 // ---------------------------------------------------------------------------
-// kafka_delete_group_offsets
+// KafkaDeleteGroupOffsets
 // ---------------------------------------------------------------------------
 
-int kafka_delete_group_offsets(lua_State* L, rd_kafka_t* rd) {
+int KafkaDeleteGroupOffsets(lua_State* L, rd_kafka_t* rd) {
 	const char* group_id = luaL_checkstring(L, 2);
 	int timeout_ms = (int)luaL_optinteger(L, 4, 10000);
 
-	rd_kafka_topic_partition_list_t* parts = kafka_build_tplist(L, 3);
+	rd_kafka_topic_partition_list_t* parts = KafkaBuildTplist(L, 3);
 	if (!parts) {
 		lua_pushboolean(L, false);
 		lua_pushstring(L, "partitions array required for DeleteGroupOffsets");
@@ -1021,7 +1021,7 @@ int kafka_delete_group_offsets(lua_State* L, rd_kafka_t* rd) {
 		return 2;
 	}
 
-	int r = kafka_check_event_error(L, event);
+	int r = KafkaCheckEventError(L, event);
 	if (r)
 		return r;
 

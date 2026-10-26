@@ -2,16 +2,16 @@
 #include "yaml/LuaYamlMain.h"
 
 static const struct luaL_Reg yaml_functions[] = {
-    { "New",     lua_yaml_new    },  // Yaml.New([pretty])
-    { "Decode",  lua_yaml_decode },  // yaml:Decode(str)
-    { "Encode",  lua_yaml_encode },  // yaml:Encode(value)
-    { "Dispose", lua_yaml_gc     },  // yaml:Dispose()
+    { "New",     Yaml_New    },  // Yaml.New([pretty])
+    { "Decode",  Yaml_Decode },  // yaml:Decode(str)
+    { "Encode",  Yaml_Encode },  // yaml:Encode(value)
+    { "Dispose", Yaml_Dispose     },  // yaml:Dispose()
     { NULL, NULL }
 };
 
 static const struct luaL_Reg yaml_meta[] = {
-    { "__gc",       lua_yaml_gc       },
-    { "__tostring", lua_yaml_tostring },
+    { "__gc",       Yaml_Dispose       },
+    { "__tostring", Yaml_ToString },
     { NULL, NULL }
 };
 

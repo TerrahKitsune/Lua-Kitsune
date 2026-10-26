@@ -11,7 +11,7 @@
 
 // -- CurlMsg — per-easy-handle completion record ------------------------------
 // Allocated alongside each easy handle; stored as CURLOPT_PRIVATE so that
-// drain_curlm can dispatch CURLMSG_DONE to the correct struct even when
+// DrainCurlm can dispatch CURLMSG_DONE to the correct struct even when
 // multiple concurrent coroutines are pumping the same CURLM*.
 typedef struct CurlMsg {
 	bool     done;    // true once CURLMSG_DONE has been dispatched here
@@ -74,7 +74,7 @@ typedef struct LuaHttpCurlRequest {
 typedef struct LuaHttpStreamNative {
 	CURL*              easy;
 	CURLM*             multi;           // borrowed
-	struct curl_slist* requestHdrs;     // owned; freed in http_stream_close
+	struct curl_slist* requestHdrs;     // owned; freed in HttpStreamClose
 	ChunkNode*         chunkHead;
 	ChunkNode*         chunkTail;
 	bool               headersComplete; // blank separator line received
@@ -87,7 +87,7 @@ typedef struct LuaHttpStreamNative {
 	char               errorBuf[CURL_ERROR_SIZE];
 	bool               addedToMulti;
 	bool               done;            // CURLMSG_DONE received
-	CurlMsg*           curlMsg;        // heap-allocated; freed in http_stream_close
+	CurlMsg*           curlMsg;        // heap-allocated; freed in HttpStreamClose
 } LuaHttpStreamNative;
 
 // WebSocket types are defined in LuaWebSocket.h
@@ -95,21 +95,21 @@ typedef struct LuaHttpStreamNative {
 // -- Functions defined in HttpCurl.cpp; referenced by HttpCurlMain.cpp ---------
 extern const char g_curlm_key;
 extern const char g_sentinel_key;
-int http_sentinel_gc(lua_State* L);
-int UrlEncode(lua_State* L);
-int UrlDecode(lua_State* L);
-int http_create(lua_State* L);
-int client_set_timeout(lua_State* L);
-int client_set_default_header(lua_State* L);
-int client_set_follow_redirects(lua_State* L);
-int client_set_verify_ssl(lua_State* L);
-int luahttpclient_gc(lua_State* L);
-int luahttpclient_tostring(lua_State* L);
-int luahttprequest_gc(lua_State* L);
-int client_request(lua_State* L);
-int client_call(lua_State* L);     // blocking helper: drives Request and returns the result table directly
-int client_stream(lua_State* L);
-int client_set_alive_token(lua_State* L); // called as client:SetAliveToken(token)
-int client_get_timestamp(lua_State* L); // returns last request duration as a TimeSpan
+int HttpSentinel_GC(lua_State* L);
+int HttpClient_UrlEncode(lua_State* L);
+int HttpClient_UrlDecode(lua_State* L);
+int HttpClient_New(lua_State* L);
+int HttpClient_SetTimeout(lua_State* L);
+int HttpClient_SetDefaultHeader(lua_State* L);
+int HttpClient_SetFollowRedirects(lua_State* L);
+int HttpClient_SetVerifySSL(lua_State* L);
+int HttpClient_GC(lua_State* L);
+int HttpClient_ToString(lua_State* L);
+int HttpCurlRequest_GC(lua_State* L);
+int HttpClient_Request(lua_State* L);
+int HttpClient_Call(lua_State* L);     // blocking helper: drives Request and returns the result table directly
+int HttpClient_Stream(lua_State* L);
+int HttpClient_SetAliveToken(lua_State* L); // called as client:SetAliveToken(token)
+int HttpClient_GetTimestamp(lua_State* L); // returns last request duration as a TimeSpan
 
 #endif  // KITSUNE_HTTP

@@ -9,8 +9,8 @@
 
 /* ── internal guard ───────────────────────────────────────────────────────── */
 
-static LuaHttpResponse* response_guard(lua_State* L, bool check_finalized) {
-    LuaHttpResponse* r = lua_checkhttpresponse(L, 1);
+static LuaHttpResponse* ResponseGuard(lua_State* L, bool check_finalized) {
+    LuaHttpResponse* r = luaL_checkhttpresponse(L, 1);
     if (!r->connection)
         luaL_error(L, "HttpResponse: connection is no longer alive");
     if (check_finalized && r->finalized)
@@ -23,7 +23,7 @@ static LuaHttpResponse* response_guard(lua_State* L, bool check_finalized) {
 /* Standard reason phrase for a status code (RFC 9110 and common extensions).
    Passed to libevent explicitly: it only documents a NULL default for
    evhttp_send_error, not for evhttp_send_reply / evhttp_send_reply_start. */
-static const char* http_reason_phrase(int code) {
+static const char* HttpReasonPhrase(int code) {
     switch (code) {
     case 100: return "Continue";
     case 101: return "Switching Protocols";
@@ -100,7 +100,7 @@ static const char* http_reason_phrase(int code) {
 /* ── SetCode ──────────────────────────────────────────────────────────────── */
 
 int HttpResponse_SetCode(lua_State* L) {
-    LuaHttpResponse* r = response_guard(L, true);
+    LuaHttpResponse* r = ResponseGuard(L, true);
     r->status_code = (int)luaL_checkinteger(L, 2);
     return 0;
 }
@@ -108,7 +108,7 @@ int HttpResponse_SetCode(lua_State* L) {
 /* ── SetHeader ────────────────────────────────────────────────────────────── */
 
 int HttpResponse_SetHeader(lua_State* L) {
-    LuaHttpResponse* r = response_guard(L, true);
+    LuaHttpResponse* r = ResponseGuard(L, true);
     const char* name  = luaL_checkstring(L, 2);
     const char* value = luaL_checkstring(L, 3);
     if (!r->connection->req)
@@ -120,7 +120,7 @@ int HttpResponse_SetHeader(lua_State* L) {
 /* ── Send() / Send(string) / Send(Stream) ─────────────────────────────────── */
 
 int HttpResponse_Send(lua_State* L) {
-    LuaHttpResponse* r = response_guard(L, true);
+    LuaHttpResponse* r = ResponseGuard(L, true);
 
     if (!r->connection->is_finished) {
         lua_pushboolean(L, false);
@@ -138,10 +138,10 @@ int HttpResponse_Send(lua_State* L) {
     if (type == LUA_TNONE || type == LUA_TNIL) {
         /* Send() — no body */
         struct evbuffer* buf = evbuffer_new();
-        evhttp_send_reply(req, r->status_code, http_reason_phrase(r->status_code), buf);
+        evhttp_send_reply(req, r->status_code, HttpReasonPhrase(r->status_code), buf);
         evbuffer_free(buf);
         /* evhttp_send_done will free req after the write drains — do NOT call
-           evhttp_request_free here. Null now so HttpRequest_Cleanup skips it. */
+           evhttp_request_free here. Null now so HttpRequestCleanup skips it. */
         r->connection->req = NULL;
         r->finalized       = true;
         lua_pushboolean(L, true);
@@ -155,7 +155,7 @@ int HttpResponse_Send(lua_State* L) {
         struct evbuffer* buf = evbuffer_new();
         if (buf)
             evbuffer_add(buf, body, len);
-        evhttp_send_reply(req, r->status_code, http_reason_phrase(r->status_code), buf);
+        evhttp_send_reply(req, r->status_code, HttpReasonPhrase(r->status_code), buf);
         if (buf)
             evbuffer_free(buf);
         /* evhttp_send_done owns the free — do NOT call evhttp_request_free. */
@@ -174,7 +174,7 @@ int HttpResponse_Send(lua_State* L) {
             luaL_error(L, "HttpResponse:Send — stream must have STREAM_CAP_READ");
 
         /* evhttp always uses chunked TE for the send_reply_start path */
-        evhttp_send_reply_start(req, r->status_code, http_reason_phrase(r->status_code));
+        evhttp_send_reply_start(req, r->status_code, HttpReasonPhrase(r->status_code));
 
         r->stream    = stream;
         r->chunked   = true;
@@ -185,7 +185,7 @@ int HttpResponse_Send(lua_State* L) {
         lua_pushvalue(L, 2);
         r->stream_ref = luaL_ref(L, LUA_REGISTRYINDEX);
 
-        /* Enqueue into server senders so accept_cont pumps chunks each tick */
+        /* Enqueue into server senders so AcceptCont pumps chunks each tick */
         LuaHttpServer* server = r->connection->server;
         if (server) {
             lua_pushlightuserdata(L, (void*)req);
@@ -213,7 +213,7 @@ int HttpResponse_Send(lua_State* L) {
 /* ── Reject ───────────────────────────────────────────────────────────────── */
 
 int HttpResponse_Reject(lua_State* L) {
-    LuaHttpResponse* r    = response_guard(L, true);
+    LuaHttpResponse* r    = ResponseGuard(L, true);
     int              code = (int)luaL_checkinteger(L, 2);
     const char*      msg  = luaL_checkstring(L, 3);
     struct evhttp_request* req = r->connection->req;
@@ -221,7 +221,7 @@ int HttpResponse_Reject(lua_State* L) {
     struct evbuffer* buf = evbuffer_new();
     if (buf)
         evbuffer_add(buf, msg, strlen(msg));
-    evhttp_send_reply(req, code, http_reason_phrase(code), buf);
+    evhttp_send_reply(req, code, HttpReasonPhrase(code), buf);
     if (buf)
         evbuffer_free(buf);
     /* evhttp_send_done owns the free. */
@@ -233,7 +233,7 @@ int HttpResponse_Reject(lua_State* L) {
 /* ── Close ────────────────────────────────────────────────────────────────── */
 
 int HttpResponse_Close(lua_State* L) {
-    LuaHttpResponse* r   = response_guard(L, true);
+    LuaHttpResponse* r   = ResponseGuard(L, true);
     struct evhttp_request* req = r->connection->req;
     evhttp_add_header(evhttp_request_get_output_headers(req), "Connection", "close");
     struct evbuffer* buf = evbuffer_new();

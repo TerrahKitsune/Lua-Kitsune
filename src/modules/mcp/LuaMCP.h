@@ -38,7 +38,7 @@ struct McpPendingRequest {
 };
 
 // The MCP server userdata. Only ever exists via placement-new inside a Lua
-// userdata block (see lua_mcp_push) -- never as a plain C++ global/static,
+// userdata block (see lua_pushmcpserver) -- never as a plain C++ global/static,
 // since its std::string/std::vector members must be destroyed through the
 // normal Lua GC/__gc path (tied to KitsuneInit/KitsuneCleanup), not at
 // DLL-unload/static-teardown time (see luamcp.cpp for why that matters here).
@@ -62,7 +62,7 @@ struct LuaMcpServer {
 	// response (e.g. a second tools/call). Held raw and dispatched by the poll
 	// loop, in order, before it reads anything new.
 	std::deque<std::string> deferred;
-	std::string line; // the poll loop's current line (see mcp_poll_step)
+	std::string line; // the poll loop's current line (see McpPollStep)
 	bool eof = false; // stdin reached EOF (client disconnected)
 	lua_State* toolThread = nullptr; // coroutine running the current tool callback, null between calls
 
@@ -87,26 +87,26 @@ struct LuaMcpServer {
 	size_t linebufCap = 0;
 };
 
-LuaMcpServer* lua_mcp_push(lua_State* L);
-LuaMcpServer* lua_mcp_check(lua_State* L, int idx);
-bool          lua_mcp_is(lua_State* L, int idx);
+LuaMcpServer* lua_pushmcpserver(lua_State* L);
+LuaMcpServer* luaL_checkmcpserver(lua_State* L, int idx);
+bool          lua_ismcpserver(lua_State* L, int idx);
 
 // MCP.Create(opt settings, opt context) -> mcp
 // Singleton: if a live instance already exists, returns it unchanged and
 // ignores the arguments (see the singleton tracking slot in luamcp.cpp).
-int lua_mcp_create(lua_State* L);
+int MCP_Create(lua_State* L);
 
 // mcp:AddTool(name, description, parameters, fn)
-int lua_mcp_addtool(lua_State* L);
+int McpServer_AddTool(lua_State* L);
 
 // mcp:Start() -> ok [, errmsg]
-int lua_mcp_start(lua_State* L);
+int McpServer_Start(lua_State* L);
 
 // mcp:Stop()
-int lua_mcp_stop(lua_State* L);
+int McpServer_Stop(lua_State* L);
 
 // mcp:IsRunning() -> bool
-int lua_mcp_isrunning(lua_State* L);
+int McpServer_IsRunning(lua_State* L);
 
 // =============================================================================
 // Elicitation -- a reusable, append-only form definition (see Plans/McpElicitation.md).
@@ -164,7 +164,7 @@ struct McpQuestion {
 	int  fn_ref      = LUA_NOREF;
 };
 
-// Only ever exists via placement-new inside a Lua userdata (lua_mcp_createelicitation).
+// Only ever exists via placement-new inside a Lua userdata (McpServer_CreateElicitation).
 struct LuaMcpElicitation {
 	std::string   message;
 	int           default_ref = LUA_NOREF;
@@ -183,23 +183,23 @@ struct LuaMcpQuestion {
 };
 
 // mcp:CreateElicitation(message, defaultCallback [, timeout]) -> Elicitation
-int lua_mcp_createelicitation(lua_State* L);
+int McpServer_CreateElicitation(lua_State* L);
 
-int lua_mcp_gc(lua_State* L);
-int lua_mcp_tostring(lua_State* L);
+int McpServer_GC(lua_State* L);
+int McpServer_ToString(lua_State* L);
 
-int lua_mcp_elicitation_addquestion(lua_State* L);
-int lua_mcp_elicitation_elicit(lua_State* L);
-int lua_mcp_elicitation_gc(lua_State* L);
-int lua_mcp_elicitation_tostring(lua_State* L);
+int McpElicitation_AddQuestion(lua_State* L);
+int McpElicitation_Elicit(lua_State* L);
+int McpElicitation_GC(lua_State* L);
+int McpElicitation_ToString(lua_State* L);
 
-int lua_mcp_question_addanswer(lua_State* L);
-int lua_mcp_question_setdescription(lua_State* L);
-int lua_mcp_question_setdefault(lua_State* L);
-int lua_mcp_question_setrange(lua_State* L);
-int lua_mcp_question_setlength(lua_State* L);
-int lua_mcp_question_setformat(lua_State* L);
-int lua_mcp_question_setmultiple(lua_State* L);
-int lua_mcp_question_setcallback(lua_State* L);
-int lua_mcp_question_gc(lua_State* L);
-int lua_mcp_question_tostring(lua_State* L);
+int McpQuestion_AddAnswer(lua_State* L);
+int McpQuestion_SetDescription(lua_State* L);
+int McpQuestion_SetDefault(lua_State* L);
+int McpQuestion_SetRange(lua_State* L);
+int McpQuestion_SetLength(lua_State* L);
+int McpQuestion_SetFormat(lua_State* L);
+int McpQuestion_SetMultiple(lua_State* L);
+int McpQuestion_SetCallback(lua_State* L);
+int McpQuestion_GC(lua_State* L);
+int McpQuestion_ToString(lua_State* L);

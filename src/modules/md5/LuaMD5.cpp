@@ -25,7 +25,7 @@ LuaMD5 * lua_pushmd5(lua_State *L){
 	return luamd5;
 }
 
-int NewMD5(lua_State *L){
+int MD5_New(lua_State *L){
 
 	LuaMD5 * luamd5 = lua_pushmd5(L);
 	if (!luamd5) {
@@ -38,7 +38,7 @@ int NewMD5(lua_State *L){
 	return 1;
 }
 
-int UpdateMD5(lua_State *L){
+int MD5_Update(lua_State *L){
 
 	LuaMD5 * luamd5 = lua_tomd5(L, 1);
 	if (!luamd5) {
@@ -75,7 +75,7 @@ int UpdateMD5(lua_State *L){
 	return 0;
 }
 
-int FinalMD5(lua_State *L){
+int MD5_Finish(lua_State *L){
 
 	LuaMD5 * luamd5 = lua_tomd5(L, 1);
 	if (!luamd5->finished){
@@ -94,13 +94,13 @@ int FinalMD5(lua_State *L){
 	return 2;
 }
 
-int md5_gc(lua_State *L){
+int MD5_GC(lua_State *L){
 
 	lua_tomd5(L, 1);   // nothing to free: the context lives inside the userdata
 	return 0;
 }
 
-int md5_tostring(lua_State *L){
+int MD5_ToString(lua_State *L){
 
 	char md5s[100];
 	sprintf(md5s, "MD5: %p", (void*)lua_tomd5(L, 1));

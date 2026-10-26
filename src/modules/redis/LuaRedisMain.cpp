@@ -8,26 +8,26 @@
 #include "redis/LuaRedisPubSub.h"
 
 static const struct luaL_Reg redisfunctions[] = {
-	{ "Command", RedisCommand },
-	{ "GetString", RedisGetString },
-	{ "GetHashset", RedisGetHashset },
-	{ "GetList", RedisGetList },
-	{ "GetSortedSet", RedisGetSortedSet },
-	{ "GetStream", RedisGetStream },
-	{ "GetSet", RedisGetSet },
-	{ "GetJson", RedisGetJson },
-	{ "GetKey", RedisGetKey },
-	{ "Subscribe", RedisSubscribe },
-	{ "PSubscribe", RedisPSubscribe },
-	{ "Open", RedisOpen },
-	{ "Dispose", redis_dispose },
+	{ "Command", Redis_Command },
+	{ "GetString", Redis_GetString },
+	{ "GetHashset", Redis_GetHashset },
+	{ "GetList", Redis_GetList },
+	{ "GetSortedSet", Redis_GetSortedSet },
+	{ "GetStream", Redis_GetStream },
+	{ "GetSet", Redis_GetSet },
+	{ "GetJson", Redis_GetJson },
+	{ "GetKey", Redis_GetKey },
+	{ "Subscribe", Redis_Subscribe },
+	{ "PSubscribe", Redis_PSubscribe },
+	{ "Open", Redis_Open },
+	{ "Dispose", Redis_Dispose },
 	{ NULL, NULL }
 };
 
 static const luaL_Reg redismeta[] = {
-	{ "__call", RedisGetKeyIterator },
-	{ "__gc",  redis_gc },
-	{ "__tostring",  redis_tostring },
+	{ "__call", Redis_Call },
+	{ "__gc",  Redis_GC },
+	{ "__tostring",  Redis_ToString },
 	{ NULL, NULL }
 };
 
@@ -48,36 +48,36 @@ int luaopen_redis(lua_State* L) {
 	lua_pushvalue(L, -3);
 	lua_rawset(L, -3);
 
-	internal_open_redisstring(L);
+	InternalOpenRedisString(L);
 	lua_pop(L, 2);
 
-	internal_luaopen_rediskey(L);
+	InternalLuaOpenRedisKey(L);
 	lua_pop(L, 2);
 
-	internal_luaopen_redisvalue(L);
+	InternalLuaOpenRedisValue(L);
 	lua_pop(L, 2);
 
-	internal_luaopen_redisstream(L);
+	InternalLuaOpenRedisStream(L);
 	lua_pop(L, 2);
 
-	internal_luaopen_redisjson(L);
+	InternalLuaOpenRedisJson(L);
 	lua_pop(L, 2);
 
 	// REDISPUBSUBSTATE
 	luaL_newmetatable(L, REDISPUBSUBSTATE);
-	lua_pushcfunction(L, PubSubStateGC);
+	lua_pushcfunction(L, RedisPubSubState_GC);
 	lua_setfield(L, -2, "__gc");
 	lua_pop(L, 1);
 
 	// REDISPUBSUBCOROUTINE — coroutine thread metatable
 	// Methods table so co:SetAliveToken() is reachable on the thread.
 	lua_newtable(L);                              // methods table
-	lua_pushcfunction(L, PubSubSetAliveToken);
+	lua_pushcfunction(L, RedisPubSubCoroutine_SetAliveToken);
 	lua_setfield(L, -2, "SetAliveToken");
 	int methods_idx = lua_gettop(L);
 
 	luaL_newmetatable(L, REDISPUBSUBCOROUTINE);
-	lua_pushcfunction(L, PubSubCoroutineGC);
+	lua_pushcfunction(L, RedisPubSubCoroutine_GC);
 	lua_setfield(L, -2, "__gc");
 	lua_pushvalue(L, methods_idx);                // __index = methods table
 	lua_setfield(L, -2, "__index");

@@ -48,24 +48,24 @@ typedef struct LuaProcess {
 LuaProcess* lua_toprocess(lua_State* L, int index);
 LuaProcess* lua_pushprocess(lua_State* L);
 
-int LuaOpenProcess(lua_State* L);
-int StartNewProcess(lua_State* L);
-int StopProcess(lua_State* L);
-int GetExitCode(lua_State* L);
-int GetProcId(lua_State* L);
-int GetProcName(lua_State* L);
-int GetMemory(lua_State* L);
-int ReadFromPipe(lua_State* L);
-int WriteToPipe(lua_State* L);
-int ErrorFromPipe(lua_State* L);
-int process_gc(lua_State* L);
-int process_tostring(lua_State* L);
+int Process_Open(lua_State* L);
+int Process_Start(lua_State* L);
+int Process_Stop(lua_State* L);
+int Process_GetExitCode(lua_State* L);
+int Process_GetID(lua_State* L);
+int Process_GetName(lua_State* L);
+int Process_GetRAM(lua_State* L);
+int Process_ReadFromPipe(lua_State* L);
+int Process_WriteToPipe(lua_State* L);
+int Process_ReadErrorFromPipe(lua_State* L);
+int Process_GC(lua_State* L);
+int Process_ToString(lua_State* L);
 
-int GetAllProcesses(lua_State* L);
+int Process_All(lua_State* L);
 
 #ifdef _WIN32
-int GetSetAffinity(lua_State* L);
-int GetSetPriority(lua_State* L);
-int GetCPU(lua_State* L);
-int GetThreads(lua_State* L);
+int Process_Affinity(lua_State* L);
+int Process_Priority(lua_State* L);
+int Process_GetCPU(lua_State* L);
+int Process_Threads(lua_State* L);
 #endif

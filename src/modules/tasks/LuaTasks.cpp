@@ -11,12 +11,12 @@ static LuaTask* lua_pushtask(lua_State* L) {
     return t;
 }
 
-static LuaTask* lua_totask(lua_State* L, int index) {
+static LuaTask* luaL_checktask(lua_State* L, int index) {
     return (LuaTask*)luaL_checkudata(L, index, LUATASK_META);
 }
 
-int task_gc(lua_State* L) {
-    LuaTask* task = lua_totask(L, 1);
+int Tasks_Dispose(lua_State* L) {
+    LuaTask* task = luaL_checktask(L, 1);
     if (task->id == 0)
         return 0;
     if (!g_state) {
@@ -42,8 +42,8 @@ int task_gc(lua_State* L) {
     return 0;
 }
 
-int task_tostring(lua_State* L) {
-    LuaTask* task = lua_totask(L, 1);
+int Tasks_ToString(lua_State* L) {
+    LuaTask* task = luaL_checktask(L, 1);
     if (task->id == 0) {
         lua_pushliteral(L, "Task(released)");
         return 1;
@@ -58,7 +58,7 @@ int task_tostring(lua_State* L) {
     return 1;
 }
 
-int task_new(lua_State* L) {
+int Tasks_New(lua_State* L) {
     if (!lua_isfunction(L, 1))
         return luaL_error(L, "Tasks.New: first argument must be a function");
     int n = lua_gettop(L); // fn + args
@@ -80,8 +80,8 @@ int task_new(lua_State* L) {
     return 1;
 }
 
-int task_resume(lua_State* L) {
-    LuaTask* task = lua_totask(L, 1);
+int Tasks_Resume(lua_State* L) {
+    LuaTask* task = luaL_checktask(L, 1);
     if (task->id == 0) {
         lua_pushboolean(L, 0);
         return 1;
@@ -97,7 +97,7 @@ int task_resume(lua_State* L) {
     return 1;
 }
 
-int task_open(lua_State* L) {
+int Tasks_Open(lua_State* L) {
     int id = (int)luaL_checkinteger(L, 1);
     if (!g_state || id <= 0) {
         lua_pushnil(L);
@@ -118,8 +118,8 @@ int task_open(lua_State* L) {
     return 1;
 }
 
-int task_getstatus(lua_State* L) {
-    LuaTask* task = lua_totask(L, 1);
+int Tasks_GetStatus(lua_State* L) {
+    LuaTask* task = luaL_checktask(L, 1);
     if (task->id == 0 || !g_state) {
         lua_pushinteger(L, KITSUNE_STATUS_NONE);
         return 1;
@@ -132,8 +132,8 @@ int task_getstatus(lua_State* L) {
     return 1;
 }
 
-int task_setname(lua_State* L) {
-    LuaTask* task = lua_totask(L, 1);
+int Tasks_SetName(lua_State* L) {
+    LuaTask* task = luaL_checktask(L, 1);
     if (task->id == 0 || !g_state) {
         lua_pushboolean(L, 0);
         return 1;
@@ -165,8 +165,8 @@ int task_setname(lua_State* L) {
     return 1;
 }
 
-int task_getname(lua_State* L) {
-    LuaTask* task = lua_totask(L, 1);
+int Tasks_GetName(lua_State* L) {
+    LuaTask* task = luaL_checktask(L, 1);
     if (task->id == 0 || !g_state) {
         lua_pushnil(L);
         return 1;
@@ -183,7 +183,7 @@ int task_getname(lua_State* L) {
     return 1;
 }
 
-int task_getallids(lua_State* L) {
+int Tasks_GetAllIds(lua_State* L) {
     lua_newtable(L);
     if (!g_state)
         return 1;
@@ -200,8 +200,8 @@ int task_getallids(lua_State* L) {
     return 1;
 }
 
-int task_cancel(lua_State* L) {
-    LuaTask* task = lua_totask(L, 1);
+int Tasks_Cancel(lua_State* L) {
+    LuaTask* task = luaL_checktask(L, 1);
     if (task->id == 0 || !g_state)
         return 0;
     g_state->slotsLock.lock();
@@ -214,13 +214,13 @@ int task_cancel(lua_State* L) {
     return 0;
 }
 
-int task_getid(lua_State* L) {
-    LuaTask* task = lua_totask(L, 1);
+int Tasks_GetId(lua_State* L) {
+    LuaTask* task = luaL_checktask(L, 1);
     lua_pushinteger(L, task->id);
     return 1;
 }
 
-int task_getcurrentid(lua_State* L) {
+int Tasks_GetCurrentId(lua_State* L) {
     if (!g_state) {
         lua_pushnil(L);
         return 1;
@@ -233,8 +233,8 @@ int task_getcurrentid(lua_State* L) {
     return 1;
 }
 
-int task_wait(lua_State* L) {
-    LuaTask* task = lua_totask(L, 1);
+int Tasks_Wait(lua_State* L) {
+    LuaTask* task = luaL_checktask(L, 1);
     if (!g_state)
         return luaL_error(L, "task:Wait: engine not initialized");
     int callerSlotId = (int)g_state->currentCoroutineId.load();
@@ -276,8 +276,8 @@ int task_wait(lua_State* L) {
     return lua_yield(L, 0);
 }
 
-int task_finished(lua_State* L) {
-    LuaTask* task = lua_totask(L, 1);
+int Tasks_Finished(lua_State* L) {
+    LuaTask* task = luaL_checktask(L, 1);
     if (task->id == 0 || !g_state) {
         lua_pushboolean(L, 1);
         return 1;
@@ -291,8 +291,8 @@ int task_finished(lua_State* L) {
     return 1;
 }
 
-int task_geterror(lua_State* L) {
-    LuaTask* task = lua_totask(L, 1);
+int Tasks_GetError(lua_State* L) {
+    LuaTask* task = luaL_checktask(L, 1);
     if (task->id == 0 || !g_state) {
         lua_pushnil(L);
         return 1;
@@ -310,8 +310,8 @@ int task_geterror(lua_State* L) {
     return 1;
 }
 
-int task_getresult(lua_State* L) {
-    LuaTask* task = lua_totask(L, 1);
+int Tasks_GetResult(lua_State* L) {
+    LuaTask* task = luaL_checktask(L, 1);
     if (task->id == 0 || !g_state) {
         lua_pushnil(L);
         return 1;
@@ -329,8 +329,8 @@ int task_getresult(lua_State* L) {
     return 1;
 }
 
-int task_consumeresult(lua_State* L) {
-    LuaTask* task = lua_totask(L, 1);
+int Tasks_ConsumeResult(lua_State* L) {
+    LuaTask* task = luaL_checktask(L, 1);
     if (task->id == 0 || !g_state) {
         lua_pushnil(L);
         return 1;
@@ -362,7 +362,7 @@ int task_consumeresult(lua_State* L) {
     return 1;
 }
 
-int task_seterrorhandler(lua_State* L) {
+int Tasks_SetErrorHandler(lua_State* L) {
     if (!g_state)
         return 0;
     if (g_state->taskErrorHandlerRef > 0) {
@@ -374,8 +374,8 @@ int task_seterrorhandler(lua_State* L) {
     return 0;
 }
 
-int task_onerror(lua_State* L) {
-    LuaTask* task = lua_totask(L, 1);
+int Tasks_OnError(lua_State* L) {
+    LuaTask* task = luaL_checktask(L, 1);
     if (task->id == 0 || !g_state) {
         lua_pushvalue(L, 1);
         return 1;
@@ -396,7 +396,7 @@ int task_onerror(lua_State* L) {
     return 1;
 }
 
-int task_getidbyname(lua_State* L) {
+int Tasks_GetIdByName(lua_State* L) {
     const char* name = luaL_checkstring(L, 1);
     if (!g_state) {
         lua_pushnil(L);
@@ -420,7 +420,7 @@ int task_getidbyname(lua_State* L) {
     return 1;
 }
 
-int task_activecount(lua_State* L) {
+int Tasks_ActiveCount(lua_State* L) {
     if (!g_state) {
         lua_pushinteger(L, 0);
         return 1;

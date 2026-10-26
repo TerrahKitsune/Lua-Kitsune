@@ -5,7 +5,7 @@
 
 int DecodeValue(const char* data, size_t len, int pos, lua_State* L);
 
-int BencodeDecode(lua_State* L) {
+int Global_BencodeDecode(lua_State* L) {
 
 	size_t len;
 	const char* data = luaL_checklstring(L, -1, &len);

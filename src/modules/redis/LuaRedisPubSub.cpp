@@ -3,7 +3,7 @@
 #include "KitsuneInternal.h"
 #include <string.h>
 
-static void set_did_work(lua_State* L) {
+static void SetDidWork(lua_State* L) {
 	void* ud;
 	lua_getallocf(L, &ud);
 	KitsuneState* state = (KitsuneState*)ud;
@@ -21,7 +21,7 @@ static void set_did_work(lua_State* L) {
 
 // Returns true if the socket has data ready to read without blocking.
 // On Windows select() ignores the first argument; on Linux it must be fd+1.
-static bool redis_data_available(redisContext* ctx) {
+static bool RedisDataAvailable(redisContext* ctx) {
 	fd_set rfds;
 	FD_ZERO(&rfds);
 	FD_SET(ctx->fd, &rfds);
@@ -33,14 +33,14 @@ static bool redis_data_available(redisContext* ctx) {
 #endif
 }
 
-static int pubsub_cont(lua_State* L, int status, lua_KContext ctx);
+static int PubSubCont(lua_State* L, int status, lua_KContext ctx);
 
 int PubSubCoroutineBody(lua_State* L) {
 	LuaRedisPubSubState* state = (LuaRedisPubSubState*)lua_touserdata(L, lua_upvalueindex(1));
-	return pubsub_cont(L, LUA_OK, (lua_KContext)(intptr_t)state);
+	return PubSubCont(L, LUA_OK, (lua_KContext)(intptr_t)state);
 }
 
-static int pubsub_cont(lua_State* L, int status, lua_KContext ctx) {
+static int PubSubCont(lua_State* L, int status, lua_KContext ctx) {
 	LuaRedisPubSubState* state = (LuaRedisPubSubState*)(intptr_t)ctx;
 	(void)status;
 
@@ -69,7 +69,7 @@ static int pubsub_cont(lua_State* L, int status, lua_KContext ctx) {
 	// AliveToken check — treat a disposed token as a stop flag
 	if (state->aliveTokenRef != LUA_NOREF) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, state->aliveTokenRef);
-		int alive = lua_alivetoken_isalive(L, -1);
+		int alive = AliveTokenIsAlive(L, -1);
 		lua_pop(L, 1);
 		if (alive == 0) {
 			luaL_unref(L, LUA_REGISTRYINDEX, state->aliveTokenRef);
@@ -99,8 +99,8 @@ static int pubsub_cont(lua_State* L, int status, lua_KContext ctx) {
 		return 2;
 	}
 
-	if (!redis_data_available(state->context))
-		return lua_yieldk(L, 0, ctx, pubsub_cont);  // no data — no work done
+	if (!RedisDataAvailable(state->context))
+		return lua_yieldk(L, 0, ctx, PubSubCont);  // no data — no work done
 
 	void* reply_ptr = NULL;
 	if (redisGetReply(state->context, &reply_ptr) == REDIS_ERR || !reply_ptr) {
@@ -121,8 +121,8 @@ static int pubsub_cont(lua_State* L, int status, lua_KContext ctx) {
 					lua_pushlstring(L, r->element[1]->str, r->element[1]->len);  // channel
 					lua_pushlstring(L, r->element[2]->str, r->element[2]->len);  // message
 					freeReplyObject(r);
-					set_did_work(L);  // received a message
-					return lua_yieldk(L, 2, ctx, pubsub_cont);
+					SetDidWork(L);  // received a message
+					return lua_yieldk(L, 2, ctx, PubSubCont);
 				}
 				// PSUBSCRIBE message: ["pmessage", pattern, channel, payload]
 				if (r->elements >= 4 &&
@@ -133,17 +133,17 @@ static int pubsub_cont(lua_State* L, int status, lua_KContext ctx) {
 					lua_pushlstring(L, r->element[2]->str, r->element[2]->len);  // channel
 					lua_pushlstring(L, r->element[3]->str, r->element[3]->len);  // message
 					freeReplyObject(r);
-					set_did_work(L);  // received a message
-					return lua_yieldk(L, 3, ctx, pubsub_cont);
+					SetDidWork(L);  // received a message
+					return lua_yieldk(L, 3, ctx, PubSubCont);
 				}
 			}
 
 			// Subscribe ack, unsubscribe notification, or other non-message frame: yield 0.
 				freeReplyObject(r);
-				return lua_yieldk(L, 0, ctx, pubsub_cont);
+				return lua_yieldk(L, 0, ctx, PubSubCont);
 }
 
-int PubSubCoroutineGC(lua_State* L) {
+int RedisPubSubCoroutine_GC(lua_State* L) {
 	lua_State* co = lua_tothread(L, 1);
 	if (!co)
 		return 0;
@@ -169,7 +169,7 @@ int PubSubCoroutineGC(lua_State* L) {
 	return 0;
 }
 
-int PubSubStateGC(lua_State* L) {
+int RedisPubSubState_GC(lua_State* L) {
 	LuaRedisPubSubState* state = (LuaRedisPubSubState*)luaL_checkudata(L, 1, REDISPUBSUBSTATE);
 	if (state->context) {
 		redisFree(state->context);  // closes socket; ssl is borrowed and not freed here
@@ -186,7 +186,7 @@ int PubSubStateGC(lua_State* L) {
 	return 0;
 }
 
-static int make_subscribe_coroutine(lua_State* L, LuaRedisPubSubState* state) {
+static int MakeSubscribeCoroutine(lua_State* L, LuaRedisPubSubState* state) {
 	int state_idx = lua_gettop(L);  // state userdata is on top
 
 	lua_State* co = lua_newthread(L);
@@ -199,7 +199,7 @@ static int make_subscribe_coroutine(lua_State* L, LuaRedisPubSubState* state) {
 	// co stack: [PubSubCoroutineBody_closure]
 	// L stack:  [..., state, co_thread]
 
-	// registry[co] = state — PubSubCoroutineGC uses this to clear registry[state].
+	// registry[co] = state — RedisPubSubCoroutine_GC uses this to clear registry[state].
 	lua_pushlightuserdata(L, (void*)co);
 	lua_pushvalue(L, state_idx);
 	lua_rawset(L, LUA_REGISTRYINDEX);
@@ -215,8 +215,8 @@ static int make_subscribe_coroutine(lua_State* L, LuaRedisPubSubState* state) {
 	return 1;  // co_thread is on top
 }
 
-static int internal_subscribe(lua_State* L, bool is_pattern) {
-	LuaRedis* redis = lua_toredis(L, 1);
+static int InternalSubscribe(lua_State* L, bool is_pattern) {
+	LuaRedis* redis = luaL_checkredis(L, 1);
 	if (!redis->context) {
 		lua_pushnil(L);
 		lua_pushstring(L, "Redis not connected");
@@ -343,11 +343,11 @@ static int internal_subscribe(lua_State* L, bool is_pattern) {
 	lua_pushvalue(L, 1);
 	state->redis_ref = luaL_ref(L, LUA_REGISTRYINDEX);
 
-	return make_subscribe_coroutine(L, state);
+	return MakeSubscribeCoroutine(L, state);
 }
 
 // co:SetAliveToken(token | nil) — arg 1 is the coroutine thread, arg 2 is the token or nil.
-int PubSubSetAliveToken(lua_State* L) {
+int RedisPubSubCoroutine_SetAliveToken(lua_State* L) {
 	lua_State* co = lua_tothread(L, 1);
 	if (!co)
 		return luaL_argerror(L, 1, "expected coroutine");
@@ -369,10 +369,10 @@ int PubSubSetAliveToken(lua_State* L) {
 	return 0;
 }
 
-int RedisSubscribe(lua_State* L) {
-	return internal_subscribe(L, false);
+int Redis_Subscribe(lua_State* L) {
+	return InternalSubscribe(L, false);
 }
 
-int RedisPSubscribe(lua_State* L) {
-	return internal_subscribe(L, true);
+int Redis_PSubscribe(lua_State* L) {
+	return InternalSubscribe(L, true);
 }

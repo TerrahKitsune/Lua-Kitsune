@@ -16,7 +16,7 @@ namespace pugi { class xml_document; }
 // because delete nullptr is a no-op.
 typedef struct LuaXml {
 	int                  indent;  // 0 = compact, 1 = indented
-	pugi::xml_document* doc;     // heap-allocated; NULL until lua_xml_push
+	pugi::xml_document* doc;     // heap-allocated; NULL until lua_pushxml
 
 	// Anti-recursion stack for Encode (table pointer addresses on the call stack)
 	uintptr_t* rec;
@@ -28,13 +28,13 @@ typedef struct LuaXml {
 	size_t               outCap;
 } LuaXml;
 
-void    ensure_allocator(void);
+void    EnsureAllocator(void);
 
-LuaXml* lua_xml_push(lua_State* L);
-LuaXml* lua_xml_check(lua_State* L, int idx);
+LuaXml* lua_pushxml(lua_State* L);
+LuaXml* luaL_checkxml(lua_State* L, int idx);
 
-int lua_xml_gc(lua_State* L);
-int lua_xml_tostring(lua_State* L);
-int lua_xml_new(lua_State* L);
-int lua_xml_encode(lua_State* L);
-int lua_xml_decode(lua_State* L);
+int Xml_Dispose(lua_State* L);
+int Xml_ToString(lua_State* L);
+int Xml_New(lua_State* L);
+int Xml_Encode(lua_State* L);
+int Xml_Decode(lua_State* L);

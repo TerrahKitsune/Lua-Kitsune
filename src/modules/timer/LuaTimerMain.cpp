@@ -2,19 +2,19 @@
 #include "timer/LuaTimer.h"
 
 static const struct luaL_Reg timerfunctions[] = {
-	{ "New", TimerNew },
-	{ "IsRunning", TimerIsRunning },
-	{ "Reset", TimerReset },
-	{ "Start", TimerStart },
-	{ "Stop", TimerStop },
-	{ "Elapsed", TimerGetElapsed },
-	{ "ElapsedTimeSpan", TimerGetElapsedTimeSpan },
+	{ "New", Timer_New },
+	{ "IsRunning", Timer_IsRunning },
+	{ "Reset", Timer_Reset },
+	{ "Start", Timer_Start },
+	{ "Stop", Timer_Stop },
+	{ "Elapsed", Timer_Elapsed },
+	{ "ElapsedTimeSpan", Timer_ElapsedTimeSpan },
 	{ NULL, NULL }
 };
 
 static const luaL_Reg timermeta[] = {
-	{ "__gc", Timer_gc },
-	{ "__tostring", Timer_tostring },
+	{ "__gc", Timer_GC },
+	{ "__tostring", Timer_ToString },
 	{ NULL, NULL }
 };
 

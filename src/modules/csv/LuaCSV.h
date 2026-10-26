@@ -47,24 +47,24 @@ typedef struct LuaCsv {
 // CSV.New([delim]) / CSV.Create([delim])  →  LuaCsvInst userdata.
 //   Omitting delimiter (or passing nil / "auto") enables auto-detection per call.
 //   When called as csv:New([delim]), the existing instance at arg 1 is ignored.
-int lua_csv_new(lua_State* L);
+int CSV_New(lua_State* L);
 
 // csv:Decode(str) / CSV.Decode(str [, delim])
 //   Returns {Comments={...}, Rows={{field,...},...}}; fields are UTF-8 strings.
-int lua_csv_decode(lua_State* L);
+int CSV_Decode(lua_State* L);
 
 // csv:Encode(rows) / CSV.Encode(rows [, delim])
 //   rows: array-of-arrays; each field is converted via tostring.
 //   Returns a UTF-8 CSV string.
-int lua_csv_encode(lua_State* L);
+int CSV_Encode(lua_State* L);
 
 // csv:DecodeFromFunction(fn_or_stream) / CSV.DecodeFromFunction(fn_or_stream [, delim])
 //   fn:     called with no arguments; returns a string chunk, or nil/false/"" to stop.
 //   stream: read with stream:Read() (whatever is available per call); the iterator keeps
 //           the stream alive until GC. A UTF-8 character split across reads is reassembled.
 //   Each iteration of the returned iterator yields one row as a table of UTF-8 strings.
-int lua_csv_decode_from_function(lua_State* L);
+int CSV_DecodeFromFunction(lua_State* L);
 
 // Metamethods registered on the LUACSV metatable.
-int lua_csv_gc(lua_State* L);
-int lua_csv_tostring(lua_State* L);
+int CSV_GC(lua_State* L);
+int CSV_ToString(lua_State* L);

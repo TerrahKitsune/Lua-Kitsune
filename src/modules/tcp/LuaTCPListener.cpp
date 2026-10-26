@@ -28,13 +28,13 @@ static char* kitsune_strdup(const char* s) {
 static lua_Integer g_next_tcp_id = 1;
 
 /* -- Forward declarations ---------------------------------------------------- */
-static void tcp_client_dispose_native(lua_State* L, LuaTcpClient* client);
+static void TcpClientDisposeNative(lua_State* L, LuaTcpClient* client);
 
 /* =============================================================================
    Message queue helpers
    ============================================================================= */
 
-static TcpMsgNode* tcp_msg_alloc(const char* data, size_t len) {
+static TcpMsgNode* TcpMsgAlloc(const char* data, size_t len) {
     TcpMsgNode* node = (TcpMsgNode*)kitsune_malloc(sizeof(TcpMsgNode));
     if (!node) return NULL;
     node->data = (char*)kitsune_malloc(len);
@@ -48,13 +48,13 @@ static TcpMsgNode* tcp_msg_alloc(const char* data, size_t len) {
     return node;
 }
 
-static void tcp_msg_free(TcpMsgNode* node) {
+static void TcpMsgFree(TcpMsgNode* node) {
     if (!node) return;
     kitsune_free(node->data);
     kitsune_free(node);
 }
 
-static void tcp_enqueue(LuaTcpClient* client, TcpMsgNode* node) {
+static void TcpEnqueue(LuaTcpClient* client, TcpMsgNode* node) {
     if (!node) return;
     if (client->msg_tail) {
         client->msg_tail->next = node;
@@ -65,7 +65,7 @@ static void tcp_enqueue(LuaTcpClient* client, TcpMsgNode* node) {
     }
 }
 
-static TcpMsgNode* tcp_dequeue(LuaTcpClient* client) {
+static TcpMsgNode* TcpDequeue(LuaTcpClient* client) {
     TcpMsgNode* node = client->msg_head;
     if (!node) return NULL;
     client->msg_head = node->next;
@@ -75,11 +75,11 @@ static TcpMsgNode* tcp_dequeue(LuaTcpClient* client) {
     return node;
 }
 
-static void tcp_drain_queue(LuaTcpClient* client) {
+static void TcpDrainQueue(LuaTcpClient* client) {
     TcpMsgNode* node = client->msg_head;
     while (node) {
         TcpMsgNode* next = node->next;
-        tcp_msg_free(node);
+        TcpMsgFree(node);
         node = next;
     }
     client->msg_head = NULL;
@@ -90,7 +90,7 @@ static void tcp_drain_queue(LuaTcpClient* client) {
    Push / check helpers
    ============================================================================= */
 
-static LuaTcpListener* tcp_push_listener(lua_State* L) {
+static LuaTcpListener* lua_pushtcplistener(lua_State* L) {
     LuaTcpListener* s = (LuaTcpListener*)lua_newuserdata(L, sizeof(LuaTcpListener));
     luaL_getmetatable(L, LUATCPLISTENER);
     lua_setmetatable(L, -2);
@@ -100,7 +100,7 @@ static LuaTcpListener* tcp_push_listener(lua_State* L) {
     return s;
 }
 
-static LuaTcpClient* tcp_push_client(lua_State* L) {
+static LuaTcpClient* lua_pushtcpclient(lua_State* L) {
     LuaTcpClient* c = (LuaTcpClient*)lua_newuserdata(L, sizeof(LuaTcpClient));
     luaL_getmetatable(L, LUATCPCLIENT);
     lua_setmetatable(L, -2);
@@ -116,7 +116,7 @@ static LuaTcpClient* tcp_push_client(lua_State* L) {
    Bufferevent callbacks
    ============================================================================= */
 
-static void tcp_read_cb(struct bufferevent* bev, void* ctx) {
+static void TcpReadCb(struct bufferevent* bev, void* ctx) {
     LuaTcpClient* client = (LuaTcpClient*)ctx;
     if (!client || client->disposed) return;
 
@@ -136,10 +136,10 @@ static void tcp_read_cb(struct bufferevent* bev, void* ctx) {
     node->len = len;
     node->next = NULL;
 
-        tcp_enqueue(client, node);
+        TcpEnqueue(client, node);
 }
 
-static void tcp_event_cb(struct bufferevent* bev, short what, void* ctx) {
+static void TcpEventCb(struct bufferevent* bev, short what, void* ctx) {
     LuaTcpClient* client = (LuaTcpClient*)ctx;
     if (!client || client->disposed) return;
 
@@ -172,7 +172,7 @@ static void tcp_event_cb(struct bufferevent* bev, short what, void* ctx) {
    Accept callback — called by libevent when a new connection arrives
    ============================================================================= */
 
-static void tcp_accept_cb(struct evconnlistener* listener,
+static void TcpAcceptCb(struct evconnlistener* listener,
     evutil_socket_t fd, struct sockaddr* addr, int socklen, void* ctx)
 {
     LuaTcpListener* s = (LuaTcpListener*)ctx;
@@ -183,7 +183,7 @@ static void tcp_accept_cb(struct evconnlistener* listener,
     lua_State* L = s->L;
 
     /* -- Create LuaTcpClient -- */
-    LuaTcpClient* client = tcp_push_client(L);
+    LuaTcpClient* client = lua_pushtcpclient(L);
     // Stack: [client_ud]
 
     /* Store a registry ref so the client survives until Accept() hands it out */
@@ -220,7 +220,7 @@ static void tcp_accept_cb(struct evconnlistener* listener,
     client->evbase = s->base;
     client->owns_base = false; /* borrowed from listener */
 
-    bufferevent_setcb(bev, tcp_read_cb, NULL, tcp_event_cb, client);
+    bufferevent_setcb(bev, TcpReadCb, NULL, TcpEventCb, client);
     bufferevent_enable(bev, EV_READ | EV_WRITE);
     client->connected = true;
 
@@ -231,7 +231,7 @@ static void tcp_accept_cb(struct evconnlistener* listener,
             s->pending_queue, (size_t)new_cap * sizeof(LuaTcpClient*));
         if (!new_q) {
             /* Out of memory — dispose the client */
-            tcp_client_dispose_native(L, client);
+            TcpClientDisposeNative(L, client);
             lua_pop(L, 1);
             return;
         }
@@ -248,7 +248,7 @@ static void tcp_accept_cb(struct evconnlistener* listener,
    Listener teardown
    ============================================================================= */
 
-static void tcp_listener_dispose_native(lua_State* L, LuaTcpListener* s) {
+static void TcpListenerDisposeNative(lua_State* L, LuaTcpListener* s) {
     if (s->disposed) return;
     s->disposed = true;
 
@@ -266,7 +266,7 @@ static void tcp_listener_dispose_native(lua_State* L, LuaTcpListener* s) {
     for (int i = 0; i < s->pending_count; i++) {
         LuaTcpClient* c = s->pending_queue[i];
         if (c) {
-            tcp_client_dispose_native(L, c);
+            TcpClientDisposeNative(L, c);
             if (c->self_ref > 0) {
                 luaL_unref(L, LUA_REGISTRYINDEX, c->self_ref);
                 c->self_ref = 0;
@@ -288,7 +288,7 @@ static void tcp_listener_dispose_native(lua_State* L, LuaTcpListener* s) {
    Client dispose
    ============================================================================= */
 
-static void tcp_client_dispose_native(lua_State* L, LuaTcpClient* client) {
+static void TcpClientDisposeNative(lua_State* L, LuaTcpClient* client) {
     if (client->disposed) return;
     client->disposed = true;
     client->connected = false;
@@ -303,7 +303,7 @@ static void tcp_client_dispose_native(lua_State* L, LuaTcpClient* client) {
         client->evbase = NULL;
     }
 
-    tcp_drain_queue(client);
+    TcpDrainQueue(client);
 
     kitsune_free(client->ip);
     client->ip = NULL;
@@ -320,7 +320,7 @@ static void tcp_client_dispose_native(lua_State* L, LuaTcpClient* client) {
    TCP module functions
    ============================================================================= */
 
-int Tcp_StartListener(lua_State* L) {
+int TCP_StartListener(lua_State* L) {
     int port = (int)luaL_checkinteger(L, 1);
     if (port <= 0 || port > 65535) {
         lua_pushnil(L);
@@ -342,7 +342,7 @@ int Tcp_StartListener(lua_State* L) {
     sin.sin_port = htons((ev_uint16_t)port);
 
     struct evconnlistener* listener = evconnlistener_new_bind(base,
-        tcp_accept_cb, NULL,
+        TcpAcceptCb, NULL,
         LEV_OPT_CLOSE_ON_FREE | LEV_OPT_REUSEABLE,
         128, (struct sockaddr*)&sin, sizeof(sin));
 
@@ -353,18 +353,18 @@ int Tcp_StartListener(lua_State* L) {
         return 2;
     }
 
-    LuaTcpListener* s = tcp_push_listener(L);
+    LuaTcpListener* s = lua_pushtcplistener(L);
     s->base = base;
     s->listener = listener;
     s->L = L;
     s->port = port;
 
-    evconnlistener_set_cb(listener, tcp_accept_cb, s);
+    evconnlistener_set_cb(listener, TcpAcceptCb, s);
 
     return 1;
 }
 
-int Tcp_Connect(lua_State* L) {
+int TCP_Connect(lua_State* L) {
     const char* host = luaL_checkstring(L, 1);
     int port = (int)luaL_checkinteger(L, 2);
     if (port <= 0 || port > 65535) {
@@ -444,7 +444,7 @@ int Tcp_Connect(lua_State* L) {
         freeaddrinfo(ai);
     }
 
-    LuaTcpClient* client = tcp_push_client(L);
+    LuaTcpClient* client = lua_pushtcpclient(L);
     client->bev = bev;
     client->evbase = base;
     client->owns_base = true; /* client-initiated connection owns its base */
@@ -452,7 +452,7 @@ int Tcp_Connect(lua_State* L) {
     client->ip = kitsune_strdup(host);
     client->port = port;
 
-    bufferevent_setcb(bev, tcp_read_cb, NULL, tcp_event_cb, client);
+    bufferevent_setcb(bev, TcpReadCb, NULL, TcpEventCb, client);
     bufferevent_enable(bev, EV_READ | EV_WRITE);
 
     /* Pump once to kick off the non-blocking connect */
@@ -504,7 +504,7 @@ int TcpListener_Accept(lua_State* L) {
 
 int TcpListener_Dispose(lua_State* L) {
     LuaTcpListener* s = (LuaTcpListener*)luaL_checkudata(L, 1, LUATCPLISTENER);
-    tcp_listener_dispose_native(L, s);
+    TcpListenerDisposeNative(L, s);
     return 0;
 }
 
@@ -532,7 +532,7 @@ int TcpListener_GC(lua_State* L) {
         s->base = NULL;
     }
 
-    tcp_listener_dispose_native(L, s);
+    TcpListenerDisposeNative(L, s);
     return 0;
 }
 
@@ -563,10 +563,10 @@ int TcpClient_Poll(lua_State* L) {
         event_base_loop(client->evbase, EVLOOP_NONBLOCK);
 
     /* Dequeue one message */
-    TcpMsgNode* node = tcp_dequeue(client);
+    TcpMsgNode* node = TcpDequeue(client);
     if (node) {
         lua_pushlstring(L, node->data, node->len);
-        tcp_msg_free(node);
+        TcpMsgFree(node);
         return 1;  /* data, nil */
     }
 
@@ -657,7 +657,7 @@ int TcpClient_IsConnected(lua_State* L) {
 
 int TcpClient_Dispose(lua_State* L) {
     LuaTcpClient* client = (LuaTcpClient*)luaL_checkudata(L, 1, LUATCPCLIENT);
-    tcp_client_dispose_native(L, client);
+    TcpClientDisposeNative(L, client);
     return 0;
 }
 
@@ -675,7 +675,7 @@ int TcpClient_GetContext(lua_State* L) {
 
 int TcpClient_GC(lua_State* L) {
     LuaTcpClient* client = (LuaTcpClient*)luaL_checkudata(L, 1, LUATCPCLIENT);
-    tcp_client_dispose_native(L, client);
+    TcpClientDisposeNative(L, client);
     return 0;
 }
 

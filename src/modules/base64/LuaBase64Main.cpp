@@ -3,23 +3,23 @@
 
 int luaopen_base64(lua_State *L) {
 
-	build_decoding_table();
+	BuildDecodingTable();
 	lua_newtable(L);
 
 	lua_pushstring(L, "Encode");
-	lua_pushcfunction(L, lua_base64encode);
+	lua_pushcfunction(L, Base64_Encode);
 	lua_settable(L, -3);
 
 	lua_pushstring(L, "Decode");
-	lua_pushcfunction(L, lua_base64decode);
+	lua_pushcfunction(L, Base64_Decode);
 	lua_settable(L, -3);
 
 	lua_pushstring(L, "GetEncodeTable");
-	lua_pushcfunction(L, lua_base64getencodingtable);
+	lua_pushcfunction(L, Base64_GetEncodeTable);
 	lua_settable(L, -3);
 
 	lua_pushstring(L, "SetEncodeTable");
-	lua_pushcfunction(L, lua_base64setencodingtable);
+	lua_pushcfunction(L, Base64_SetEncodeTable);
 	lua_settable(L, -3);
 
 	return 1;

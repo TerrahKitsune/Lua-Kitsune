@@ -22,13 +22,13 @@ typedef struct LuaAes {
 } LuaAes;
 
 
-LuaAes * lua_pushluaaes(lua_State *L);
-LuaAes * lua_toluaaes(lua_State *L, int index);
+LuaAes * lua_pushaes(lua_State *L);
+LuaAes * lua_toaes(lua_State *L, int index);
 
-int LuaCreateContext(lua_State *L);
-int LuaAesEncrypt(lua_State *L);
-int LuaAesDecrypt(lua_State *L);
-int LuaSetIV(lua_State *L);
+int Aes_New(lua_State *L);
+int Aes_Encrypt(lua_State *L);
+int Aes_Decrypt(lua_State *L);
+int Aes_SetIV(lua_State *L);
 
-int luaaes_gc(lua_State *L);
-int luaaes_tostring(lua_State *L);
+int Aes_GC(lua_State *L);
+int Aes_ToString(lua_State *L);

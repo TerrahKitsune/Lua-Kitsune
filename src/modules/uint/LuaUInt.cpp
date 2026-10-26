@@ -30,7 +30,7 @@ int lua_isuint(lua_State* L, int index) {
 // ── String helpers ────────────────────────────────────────────────────────────
 
 // Format uint64 as a decimal string into buf (must be at least 21 bytes).
-static int uint_format(uint64_t v, char* buf, size_t bufsz) {
+static int UIntFormat(uint64_t v, char* buf, size_t bufsz) {
     if (v == 0) {
         buf[0] = '0';
         buf[1] = '\0';
@@ -51,16 +51,16 @@ static int uint_format(uint64_t v, char* buf, size_t bufsz) {
     return n;
 }
 
-void lua_uint_push_string(lua_State* L, int index) {
+void lua_pushuintstring(lua_State* L, int index) {
     LuaUInt* u = (LuaUInt*)lua_touserdata(L, index);
     char buf[21];
-    uint_format(u->value, buf, sizeof(buf));
+    UIntFormat(u->value, buf, sizeof(buf));
     lua_pushstring(L, buf);
 }
 
 // Parse an unsigned decimal string (no sign allowed, no fractions).
 // Returns 1 on success, 0 on failure. Does not touch the Lua stack.
-static int uint_parse_c(const char* s, size_t len, uint64_t* out) {
+static int UIntParseC(const char* s, size_t len, uint64_t* out) {
     if (!s || len == 0)
         return 0;
     size_t i = 0;
@@ -91,7 +91,7 @@ static int uint_parse_c(const char* s, size_t len, uint64_t* out) {
 // Coerce argument at stack index to a uint64_t value.
 // Accepts: LuaUInt, Lua integer (reinterpret bits), Lua number (truncate), string.
 // Returns 1 on success, 0 on failure (does not error — caller decides).
-static int coerce_uint(lua_State* L, int index, uint64_t* out) {
+static int CoerceUInt(lua_State* L, int index, uint64_t* out) {
     if (lua_isuint(L, index)) {
         *out = lua_touint(L, index)->value;
         return 1;
@@ -111,18 +111,18 @@ static int coerce_uint(lua_State* L, int index, uint64_t* out) {
     if (lua_type(L, index) == LUA_TSTRING) {
         size_t len;
         const char* s = lua_tolstring(L, index, &len);
-        return uint_parse_c(s, len, out);
+        return UIntParseC(s, len, out);
     }
     return 0;
 }
 
 // ── Constructors ──────────────────────────────────────────────────────────────
 
-int uint_fromstring(lua_State* L) {
+int UInt_FromString(lua_State* L) {
     size_t len;
     const char* s = luaL_checklstring(L, 1, &len);
     uint64_t v = 0;
-    if (!uint_parse_c(s, len, &v)) {
+    if (!UIntParseC(s, len, &v)) {
         lua_pushnil(L);
         return 1;
     }
@@ -130,7 +130,7 @@ int uint_fromstring(lua_State* L) {
     return 1;
 }
 
-int uint_fromnumber(lua_State* L) {
+int UInt_FromNumber(lua_State* L) {
     double d = luaL_checknumber(L, 1);
     if (d < 0.0 || d > (double)UINT64_MAX) {
         lua_pushnil(L);
@@ -140,49 +140,49 @@ int uint_fromnumber(lua_State* L) {
     return 1;
 }
 
-int uint_fromunsigned(lua_State* L) {
+int UInt_FromUnsigned(lua_State* L) {
     lua_Integer i = luaL_checkinteger(L, 1);
     // Reinterpret the signed int64 bit pattern as uint64.
     lua_pushuint(L)->value = (uint64_t)i;
     return 1;
 }
 
-int uint_zero(lua_State* L) {
+int UInt_Zero(lua_State* L) {
     lua_pushuint(L); // already zeroed
     return 1;
 }
 
 // ── Inspection ────────────────────────────────────────────────────────────────
 
-int uint_tostring(lua_State* L) {
+int UInt_ToString(lua_State* L) {
     LuaUInt* u = lua_touint(L, 1);
     char buf[21];
-    uint_format(u->value, buf, sizeof(buf));
+    UIntFormat(u->value, buf, sizeof(buf));
     lua_pushstring(L, buf);
     return 1;
 }
 
-int uint_tonumber(lua_State* L) {
+int UInt_ToNumber(lua_State* L) {
     LuaUInt* u = lua_touint(L, 1);
     lua_pushnumber(L, (lua_Number)u->value);
     return 1;
 }
 
-int uint_tointeger(lua_State* L) {
+int UInt_ToInteger(lua_State* L) {
     LuaUInt* u = lua_touint(L, 1);
     // Truncate to the lower 63 bits (signed int64 range).
     lua_pushinteger(L, (lua_Integer)(u->value & (uint64_t)LUA_MAXINTEGER));
     return 1;
 }
 
-int uint_tounsigned(lua_State* L) {
+int UInt_ToUnsigned(lua_State* L) {
     LuaUInt* u = lua_touint(L, 1);
     // Reinterpret the uint64 bit pattern as a signed int64.
     lua_pushinteger(L, (lua_Integer)u->value);
     return 1;
 }
 
-int uint_iszero(lua_State* L) {
+int UInt_IsZero(lua_State* L) {
     LuaUInt* u = lua_touint(L, 1);
     lua_pushboolean(L, u->value == 0 ? 1 : 0);
     return 1;
@@ -190,33 +190,33 @@ int uint_iszero(lua_State* L) {
 
 // ── Arithmetic ────────────────────────────────────────────────────────────────
 
-int uint_add(lua_State* L) {
+int UInt_Add(lua_State* L) {
     uint64_t a, b;
-    if (!coerce_uint(L, 1, &a) || !coerce_uint(L, 2, &b))
+    if (!CoerceUInt(L, 1, &a) || !CoerceUInt(L, 2, &b))
         return luaL_error(L, "UInt: cannot add incompatible types");
     lua_pushuint(L)->value = a + b; // wraps on overflow, matching unsigned semantics
     return 1;
 }
 
-int uint_sub(lua_State* L) {
+int UInt_Sub(lua_State* L) {
     uint64_t a, b;
-    if (!coerce_uint(L, 1, &a) || !coerce_uint(L, 2, &b))
+    if (!CoerceUInt(L, 1, &a) || !CoerceUInt(L, 2, &b))
         return luaL_error(L, "UInt: cannot subtract incompatible types");
     lua_pushuint(L)->value = a - b; // wraps on underflow, matching unsigned semantics
     return 1;
 }
 
-int uint_mul(lua_State* L) {
+int UInt_Mul(lua_State* L) {
     uint64_t a, b;
-    if (!coerce_uint(L, 1, &a) || !coerce_uint(L, 2, &b))
+    if (!CoerceUInt(L, 1, &a) || !CoerceUInt(L, 2, &b))
         return luaL_error(L, "UInt: cannot multiply incompatible types");
     lua_pushuint(L)->value = a * b;
     return 1;
 }
 
-int uint_div(lua_State* L) {
+int UInt_Div(lua_State* L) {
     uint64_t a, b;
-    if (!coerce_uint(L, 1, &a) || !coerce_uint(L, 2, &b))
+    if (!CoerceUInt(L, 1, &a) || !CoerceUInt(L, 2, &b))
         return luaL_error(L, "UInt: cannot divide incompatible types");
     if (b == 0)
         return luaL_error(L, "UInt: division by zero");
@@ -224,9 +224,9 @@ int uint_div(lua_State* L) {
     return 1;
 }
 
-int uint_mod(lua_State* L) {
+int UInt_Mod(lua_State* L) {
     uint64_t a, b;
-    if (!coerce_uint(L, 1, &a) || !coerce_uint(L, 2, &b))
+    if (!CoerceUInt(L, 1, &a) || !CoerceUInt(L, 2, &b))
         return luaL_error(L, "UInt: cannot mod incompatible types");
     if (b == 0)
         return luaL_error(L, "UInt: modulo by zero");
@@ -236,47 +236,47 @@ int uint_mod(lua_State* L) {
 
 // ── Bitwise ───────────────────────────────────────────────────────────────────
 
-int uint_band(lua_State* L) {
+int UInt_BAnd(lua_State* L) {
     uint64_t a, b;
-    if (!coerce_uint(L, 1, &a) || !coerce_uint(L, 2, &b))
+    if (!CoerceUInt(L, 1, &a) || !CoerceUInt(L, 2, &b))
         return luaL_error(L, "UInt: cannot band incompatible types");
     lua_pushuint(L)->value = a & b;
     return 1;
 }
 
-int uint_bor(lua_State* L) {
+int UInt_BOr(lua_State* L) {
     uint64_t a, b;
-    if (!coerce_uint(L, 1, &a) || !coerce_uint(L, 2, &b))
+    if (!CoerceUInt(L, 1, &a) || !CoerceUInt(L, 2, &b))
         return luaL_error(L, "UInt: cannot bor incompatible types");
     lua_pushuint(L)->value = a | b;
     return 1;
 }
 
-int uint_bxor(lua_State* L) {
+int UInt_BXor(lua_State* L) {
     uint64_t a, b;
-    if (!coerce_uint(L, 1, &a) || !coerce_uint(L, 2, &b))
+    if (!CoerceUInt(L, 1, &a) || !CoerceUInt(L, 2, &b))
         return luaL_error(L, "UInt: cannot bxor incompatible types");
     lua_pushuint(L)->value = a ^ b;
     return 1;
 }
 
-int uint_bnot(lua_State* L) {
+int UInt_BNot(lua_State* L) {
     LuaUInt* u = lua_touint(L, 1);
     lua_pushuint(L)->value = ~u->value;
     return 1;
 }
 
-int uint_shl(lua_State* L) {
+int UInt_Shl(lua_State* L) {
     uint64_t a, b;
-    if (!coerce_uint(L, 1, &a) || !coerce_uint(L, 2, &b))
+    if (!CoerceUInt(L, 1, &a) || !CoerceUInt(L, 2, &b))
         return luaL_error(L, "UInt: cannot shl incompatible types");
     lua_pushuint(L)->value = (b >= 64) ? 0 : (a << b);
     return 1;
 }
 
-int uint_shr(lua_State* L) {
+int UInt_Shr(lua_State* L) {
     uint64_t a, b;
-    if (!coerce_uint(L, 1, &a) || !coerce_uint(L, 2, &b))
+    if (!CoerceUInt(L, 1, &a) || !CoerceUInt(L, 2, &b))
         return luaL_error(L, "UInt: cannot shr incompatible types");
     lua_pushuint(L)->value = (b >= 64) ? 0 : (a >> b);
     return 1;
@@ -284,9 +284,9 @@ int uint_shr(lua_State* L) {
 
 // ── Comparison ────────────────────────────────────────────────────────────────
 
-int uint_eq(lua_State* L) {
+int UInt_Eq(lua_State* L) {
     uint64_t a, b;
-    if (!coerce_uint(L, 1, &a) || !coerce_uint(L, 2, &b)) {
+    if (!CoerceUInt(L, 1, &a) || !CoerceUInt(L, 2, &b)) {
         lua_pushboolean(L, 0);
         return 1;
     }
@@ -294,17 +294,17 @@ int uint_eq(lua_State* L) {
     return 1;
 }
 
-int uint_lt(lua_State* L) {
+int UInt_Lt(lua_State* L) {
     uint64_t a, b;
-    if (!coerce_uint(L, 1, &a) || !coerce_uint(L, 2, &b))
+    if (!CoerceUInt(L, 1, &a) || !CoerceUInt(L, 2, &b))
         return luaL_error(L, "UInt: cannot compare incompatible types");
     lua_pushboolean(L, a < b ? 1 : 0);
     return 1;
 }
 
-int uint_le(lua_State* L) {
+int UInt_Le(lua_State* L) {
     uint64_t a, b;
-    if (!coerce_uint(L, 1, &a) || !coerce_uint(L, 2, &b))
+    if (!CoerceUInt(L, 1, &a) || !CoerceUInt(L, 2, &b))
         return luaL_error(L, "UInt: cannot compare incompatible types");
     lua_pushboolean(L, a <= b ? 1 : 0);
     return 1;

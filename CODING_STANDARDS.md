@@ -30,11 +30,18 @@ Conflicts with third-party code (include resolution, name clashes, behaviour) ar
 
 | What | Pattern | Example |
 |---|---|---|
-| Module registration | `luaopen_<name>` | `luaopen_json` |
-| Userdata helpers | `lua_push<type>`, `lua_to<type>`, `luaL_check<type>` | `lua_pushtoml`, `luaL_checktoml` |
-| Lua-callable functions | `<Module>_<Method>` PascalCase | `Json_Parse`, `DateTime_FromUnixSeconds`, `RedisKey_Delete` |
-| Metamethods | `<Module>_GC`, `<Module>_ToString`, `<Module>_Index`, … | `Toml_GC` |
+| Module registration | `luaopen_<folder>` | `luaopen_json` |
+| Userdata helpers | `lua_push<type>`, `lua_to<type>`, `luaL_check<type>`, `lua_is<type>`; a helper pushing the type's string form is `lua_push<type>string` | `lua_pushtoml`, `luaL_checktoml`, `lua_pushdatetimestring` |
+| Lua-callable functions | `<Prefix>_<Key>` | `Json_Decode`, `TCP_Connect`, `RedisKey_Delete` |
+| Metamethods | `<Prefix>_GC`, `<Prefix>_ToString`, `<Prefix>_Index`, … | `Toml_GC` |
+| Loose Lua globals | `Global_<LuaName>` | `Global_Sleep`, `Global_getenv` |
 | Internal helpers | PascalCase; `static` when file-local | `BsonToLua`, `PushSqliteValue` |
+
+For Lua-callable functions:
+- `<Prefix>` is spelled exactly as Lua sees it: the module's global for functions on the global table (`TCP`, `MCP`, `UInt`, `MongoDB`), or the object type's name (its C struct without the leading `Lua`) for methods of a distinct object type (`TcpClient`, `McpQuestion`). Functions added to Lua's own libraries use that table's name (`string_equal`, `io_lines`).
+- `<Key>` is the Lua key exactly as registered (`"Decode"` gives `Json_Decode`). A function registered under several keys takes its non-metamethod key (`"Dispose"` + `__gc` gives `Tasks_Dispose`).
+- `<type>` in helper names is the lowercase prefix (`lua_pushmongodb`).
+- Internal names must not collide with Windows, CRT or POSIX names; prefix with the module if they would (`StdlibOpenFile`, `FileStreamGetInfo`).
 
 Never rename:
 - the exported `Kitsune*` API (C# P/Invoke binds by name)

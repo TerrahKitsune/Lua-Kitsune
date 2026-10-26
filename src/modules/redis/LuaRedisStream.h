@@ -1,33 +1,33 @@
 #pragma once
 #include "redis/LuaRedis.h"
 
-int redisstream_tostring(lua_State* L);
-int redisstream_gc(lua_State* L);
-int redisstream_call(lua_State* L);
+int RedisStream_ToString(lua_State* L);
+int RedisStream_GC(lua_State* L);
+int RedisStream_Call(lua_State* L);
 
-int redisstream_add(lua_State* L);
-int redisstream_read(lua_State* L);
-int redisstream_trim(lua_State* L);
+int RedisStream_Add(lua_State* L);
+int RedisStream_Read(lua_State* L);
+int RedisStream_Trim(lua_State* L);
 
 typedef struct LuaRedisStream {
 	LuaRedisKey key;
 } LuaRedisStream;
 
 static const struct luaL_Reg redisstreamfunctions[] = {
-	{ "Add", redisstream_add },
-	{ "Read", redisstream_read },
-	{ "Trim", redisstream_trim },
+	{ "Add", RedisStream_Add },
+	{ "Read", RedisStream_Read },
+	{ "Trim", RedisStream_Trim },
 	{ NULL, NULL }
 };
 
 static const luaL_Reg redisstreammeta[] = {
-	{ "__call",  redisstream_call },
-	{ "__gc",  redisstream_gc },
-	{ "__tostring",  redisstream_tostring },
+	{ "__call",  RedisStream_Call },
+	{ "__gc",  RedisStream_GC },
+	{ "__tostring",  RedisStream_ToString },
 	{ NULL, NULL }
 };
 
-static int internal_luaopen_redisstream(lua_State* L) {
+static int InternalLuaOpenRedisStream(lua_State* L) {
 
 	luaL_newlibtable(L, redisstreamfunctions);
 	luaL_setfuncs(L, redisstreamfunctions, 0);

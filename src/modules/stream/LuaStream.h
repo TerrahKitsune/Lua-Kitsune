@@ -9,7 +9,7 @@ static const char* STREAM = "STREAM";
 #define STREAM_CAP_READ   (1 << 0)
 #define STREAM_CAP_WRITE  (1 << 1)
 #define STREAM_CAP_SEEK   (1 << 2)
-// Note: CAP_PEEK (1 << 3) is intentionally absent.  PeekStreamByte is gated on
+// Note: CAP_PEEK (1 << 3) is intentionally absent.  Stream_PeekByte is gated on
 // CAP_READ | CAP_SEEK — any stream that can seek can be peeked by the generic
 // save-pos / read / restore-pos path.  Lua fn backends that still return bit 3
 // in their open caps have it silently stored but it is never consulted.
@@ -72,92 +72,92 @@ static const size_t MIN_STREAM_SIZE  = 1024;
 static const BYTE   HEAP_STREAM_CAPS = STREAM_CAP_READ | STREAM_CAP_WRITE | STREAM_CAP_SEEK;
 
 // ── Constructor helpers ───────────────────────────────────────────────────────
-LuaStream* lua_pushluastream(lua_State* L);
-LuaStream* lua_pushluastream(lua_State* L, const BYTE* data, size_t len);
+LuaStream* lua_pushstream(lua_State* L);
+LuaStream* lua_pushstream(lua_State* L, const BYTE* data, size_t len);
 // Pushes a native-backed LuaStream (STREAM metatable) with the given vtable,
 // native pointer, and capability flags.  Always uses the STREAM metatable so
-// luastream_gc fires the vtable close correctly.
-LuaStream* lua_pushluastream_native(lua_State* L, const LuaStreamVtable* vtbl,
+// Stream_Close fires the vtable close correctly.
+LuaStream* lua_pushstreamnative(lua_State* L, const LuaStreamVtable* vtbl,
 	void* native, BYTE caps);
-LuaStream* lua_toluastream(lua_State* L, int index);
+LuaStream* lua_tostream(lua_State* L, int index);
 int        lua_isstream(lua_State* L, int index);
 
 // Reads up to 'len' bytes from a stream via vtable or Lua fn backend.
 // Pushes a non-empty Lua string on success, or nil on EOF/error.
 // Used by JSON and CSV streaming chunk readers.  Returns 1.
-int lua_stream_read_chunk(lua_State* L, LuaStream* s, size_t len);
+int LuaStreamReadChunk(lua_State* L, LuaStream* s, size_t len);
 
 // Writes 'len' bytes to a stream via vtable or Lua fn backend.
 // Leaves one boolean result on the Lua stack (true = success).  Returns 1.
-int lua_stream_write_bytes(lua_State* L, LuaStream* s, const char* data, size_t len);
+int LuaStreamWriteBytes(lua_State* L, LuaStream* s, const char* data, size_t len);
 
 // Returns the current cursor position without touching the Lua stack.
-lua_Integer lua_stream_curpos(lua_State* L, LuaStream* s);
+lua_Integer LuaStreamCurPos(lua_State* L, LuaStream* s);
 
 // Sets the cursor position; returns true on success.  Does not touch the Lua stack.
-bool lua_stream_setpos(lua_State* L, LuaStream* s, lua_Integer pos);
+bool LuaStreamSetPos(lua_State* L, LuaStream* s, lua_Integer pos);
 
 // Returns the total data length of a stream without touching the Lua stack.
-lua_Integer lua_stream_getlen(lua_State* L, LuaStream* s);
+lua_Integer LuaStreamGetLen(lua_State* L, LuaStream* s);
 
 // Returns a stable identity value for the stream suitable for cache-key comparison.
 // Calls vtbl->getid if available; falls back to (uint64_t)native, then (uint64_t)stream.
-uint64_t lua_stream_getid(const LuaStream* s);
+uint64_t LuaStreamGetId(const LuaStream* s);
 
 // ── Stream construction
-int NewStream(lua_State* L);
-int OpenFile(lua_State* L);
+int Stream_New(lua_State* L);
+int Stream_Open(lua_State* L);
 
 // ── Stream info
-int StreamPos(lua_State* L);
-int StreamLen(lua_State* L);
-int StreamSetPos(lua_State* L);
-int GetStreamInfo(lua_State* L);
-int StreamId(lua_State* L);
+int Stream_pos(lua_State* L);
+int Stream_len(lua_State* L);
+int Stream_Seek(lua_State* L);
+int Stream_GetInfo(lua_State* L);
+int Stream_Id(lua_State* L);
 
 // ── Read operations ───────────────────────────────────────────────────────────
-int ReadLuaStream(lua_State* L);
-int ReadStreamByte(lua_State* L);
-int PeekStreamByte(lua_State* L);
+int Stream_Read(lua_State* L);
+int Stream_ReadByte(lua_State* L);
+int Stream_PeekByte(lua_State* L);
 // Non-blocking: returns the number of bytes ready (or true/false for backends
 // with a dedicated hasdata check).  Returns false when no data is immediately
 // available.  Sync streams without vtbl->hasdata return bytes-remaining instead.
-int HasDataLuaStream(lua_State* L);
-int ReadUtf8(lua_State* L);
-int ReadFloat(lua_State* L);
-int ReadDouble(lua_State* L);
-int ReadShort(lua_State* L);
-int ReadUShort(lua_State* L);
-int ReadInt(lua_State* L);
-int ReadUInt(lua_State* L);
-int ReadLong(lua_State* L);
-int ReadUnsignedLong(lua_State* L);
-int ReadUInt64(lua_State* L);
-int ReadDecimal(lua_State* L);
-int ReadIdentifier(lua_State* L);
-int ReadDateTime(lua_State* L);
-int ReadTimeSpan(lua_State* L);
-int ReadUtf16(lua_State* L);
-int WriteUtf16(lua_State* L);
+int Stream_HasData(lua_State* L);
+int Stream_ReadUtf8(lua_State* L);
+int Stream_ReadFloat(lua_State* L);
+int Stream_ReadDouble(lua_State* L);
+int Stream_ReadShort(lua_State* L);
+int Stream_ReadUnsignedShort(lua_State* L);
+int Stream_ReadInt(lua_State* L);
+int Stream_ReadUnsignedInt(lua_State* L);
+int Stream_ReadLong(lua_State* L);
+int Stream_ReadUnsignedLong(lua_State* L);
+int Stream_ReadUInt64(lua_State* L);
+int Stream_ReadDecimal(lua_State* L);
+int Stream_ReadIdentifier(lua_State* L);
+int Stream_ReadDateTime(lua_State* L);
+int Stream_ReadTimeSpan(lua_State* L);
+int Stream_ReadUtf16(lua_State* L);
+int Stream_WriteUtf16(lua_State* L);
 
 // ── Write operations ──────────────────────────────────────────────────────────
-int WriteLuaValue(lua_State* L);
-int WriteStreamByte(lua_State* L);
-int SetStreamByte(lua_State* L);
-int WriteUtf8(lua_State* L);
-int WriteFloat(lua_State* L);
-int WriteDouble(lua_State* L);
-int WriteShort(lua_State* L);
-int WriteUShort(lua_State* L);
-int WriteInt(lua_State* L);
-int WriteUInt(lua_State* L);
-int WriteLong(lua_State* L);
-int WriteUnsignedLong(lua_State* L);
+int Stream_Write(lua_State* L);
+int Stream_WriteByte(lua_State* L);
+int Stream_SetByte(lua_State* L);
+int Stream_WriteUtf8(lua_State* L);
+int Stream_WriteFloat(lua_State* L);
+int Stream_WriteDouble(lua_State* L);
+int Stream_WriteShort(lua_State* L);
+int Stream_WriteUnsignedShort(lua_State* L);
+int Stream_WriteInt(lua_State* L);
+int Stream_WriteUnsignedInt(lua_State* L);
+int Stream_WriteLong(lua_State* L);
+int Stream_WriteUnsignedLong(lua_State* L);
 
 // ── Compression ───────────────────────────────────────────────────────────────
-int CompressStream(lua_State* L);
-int DecompressStream(lua_State* L);
+int Stream_Compress(lua_State* L);
+int Stream_Decompress(lua_State* L);
 
 // ── Metamethods ───────────────────────────────────────────────────────────────
-int luastream_gc(lua_State* L);
-int luastream_tostring(lua_State* L);
+int Stream_Close(lua_State* L);
+int Stream_ToString(lua_State* L);

@@ -10,7 +10,7 @@
 #endif
 #include "Mem.h"
 
-int L_GetMemory(lua_State *L) {
+int Global_GetMemory(lua_State *L) {
 	lua_pop(L, lua_gettop(L));
 	// 64-bit so totals above 2 GB don't overflow.
 	lua_Integer mem = (lua_Integer)lua_gc(L, LUA_GCCOUNT, 0);
@@ -21,7 +21,7 @@ int L_GetMemory(lua_State *L) {
 }
 
 #ifdef _WIN32
-int L_ShellExecute(lua_State *L) {
+int Global_ShellExecute(lua_State *L) {
 	// W form so non-ASCII paths, URLs and arguments are passed intact.
 	wchar_t* file = kitsune_utf8_to_wide_alloc(luaL_checkstring(L, 1));
 	wchar_t* params = kitsune_utf8_to_wide_alloc(luaL_checkstring(L, 2));

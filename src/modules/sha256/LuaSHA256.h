@@ -14,9 +14,9 @@ typedef struct LuaSHA256 {
 LuaSHA256 * lua_tosha256(lua_State *L, int index);
 LuaSHA256 * lua_pushsha256(lua_State *L);
 
-int NewSHA256(lua_State *L);
-int UpdateSHA256(lua_State *L);
-int FinalSHA256(lua_State *L);
+int SHA256_New(lua_State *L);
+int SHA256_Update(lua_State *L);
+int SHA256_Finish(lua_State *L);
 
-int sha256_gc(lua_State *L);
-int sha256_tostring(lua_State *L);
+int SHA256_GC(lua_State *L);
+int SHA256_ToString(lua_State *L);

@@ -14,7 +14,7 @@
 // ── Random byte generators ────────────────────────────────────────────────────
 
 #ifdef _WIN32
-static int generate_uuid_bytes(uint8_t* out) {
+static int GenerateUuidBytes(uint8_t* out) {
     GUID guid;
     if (CoCreateGuid(&guid) != S_OK)
         return 0;
@@ -28,7 +28,7 @@ static int generate_uuid_bytes(uint8_t* out) {
     return 1;
 }
 
-static int generate_random_bytes(uint8_t* out, int n) {
+static int GenerateRandomBytes(uint8_t* out, int n) {
     GUID g;
     if (CoCreateGuid(&g) != S_OK)
         return 0;
@@ -36,7 +36,7 @@ static int generate_random_bytes(uint8_t* out, int n) {
     return 1;
 }
 #else
-static int generate_uuid_bytes(uint8_t* out) {
+static int GenerateUuidBytes(uint8_t* out) {
     if (getrandom(out, 16, 0) != (ssize_t)16)
         return 0;
     out[6] = (out[6] & 0x0F) | 0x40;
@@ -44,7 +44,7 @@ static int generate_uuid_bytes(uint8_t* out) {
     return 1;
 }
 
-static int generate_random_bytes(uint8_t* out, int n) {
+static int GenerateRandomBytes(uint8_t* out, int n) {
     return getrandom(out, (size_t)n, 0) == (ssize_t)n;
 }
 #endif
@@ -53,10 +53,10 @@ static int generate_random_bytes(uint8_t* out, int n) {
 
 static std::atomic<uint32_t> g_oid_counter(0);
 
-static int generate_oid_bytes(uint8_t* out) {
+static int GenerateOidBytes(uint8_t* out) {
     uint32_t ts = (uint32_t)time(NULL);
     uint8_t rand5[5];
-    if (!generate_random_bytes(rand5, 5))
+    if (!GenerateRandomBytes(rand5, 5))
         return 0;
     uint32_t cnt = (g_oid_counter.fetch_add(1) + 1) & 0xFFFFFF;
 
@@ -73,7 +73,7 @@ static int generate_oid_bytes(uint8_t* out) {
 
 // ── String formatters ─────────────────────────────────────────────────────────
 
-static void uuid_bytes_to_string(const uint8_t* b, char* out) {
+static void UuidBytesToString(const uint8_t* b, char* out) {
     sprintf(out,
         "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
         b[0],  b[1],  b[2],  b[3],
@@ -83,7 +83,7 @@ static void uuid_bytes_to_string(const uint8_t* b, char* out) {
         b[10], b[11], b[12], b[13], b[14], b[15]);
 }
 
-static void oid_bytes_to_string(const uint8_t* b, char* out) {
+static void OidBytesToString(const uint8_t* b, char* out) {
     for (int i = 0; i < 12; i++)
         sprintf(&out[i * 2], "%02x", b[i]);
     out[24] = '\0';
@@ -112,9 +112,9 @@ LuaIdentifier* lua_toidentifier(lua_State* L, int index) {
 
 // ── Constructor functions ─────────────────────────────────────────────────────
 
-int identifier_newuuid(lua_State* L) {
+int Identifier_NewUUID(lua_State* L) {
     LuaIdentifier* id = lua_pushidentifier(L);
-    if (!generate_uuid_bytes(id->bytes)) {
+    if (!GenerateUuidBytes(id->bytes)) {
         lua_pushnil(L);
         return 1;
     }
@@ -123,9 +123,9 @@ int identifier_newuuid(lua_State* L) {
     return 1;
 }
 
-int identifier_newoid(lua_State* L) {
+int Identifier_NewOID(lua_State* L) {
     LuaIdentifier* id = lua_pushidentifier(L);
-    if (!generate_oid_bytes(id->bytes)) {
+    if (!GenerateOidBytes(id->bytes)) {
         lua_pushnil(L);
         return 1;
     }
@@ -134,7 +134,7 @@ int identifier_newoid(lua_State* L) {
     return 1;
 }
 
-LuaIdentifier* lua_pushidentifier_fromstring(lua_State* L, const char* str, size_t len) {
+LuaIdentifier* lua_pushidentifierfromstring(lua_State* L, const char* str, size_t len) {
     if (len == 36 && str[8] == '-' && str[13] == '-' && str[18] == '-' && str[23] == '-') {
         LuaIdentifier* id = lua_pushidentifier(L);
         char hex[33];
@@ -157,11 +157,11 @@ LuaIdentifier* lua_pushidentifier_fromstring(lua_State* L, const char* str, size
     return NULL;
 }
 
-int identifier_fromstring(lua_State* L) {
+int Identifier_FromString(lua_State* L) {
     size_t len;
     const char* str = luaL_checklstring(L, 1, &len);
 
-    if (lua_pushidentifier_fromstring(L, str, len))
+    if (lua_pushidentifierfromstring(L, str, len))
         return 1;
 
     if (len == 24) {
@@ -180,11 +180,11 @@ int identifier_fromstring(lua_State* L) {
         return 1;
     }
 
-    // nil was already pushed by lua_pushidentifier_fromstring on the non-UUID path
+    // nil was already pushed by lua_pushidentifierfromstring on the non-UUID path
     return 1;
 }
 
-int identifier_frombytes(lua_State* L) {
+int Identifier_FromBytes(lua_State* L) {
     size_t len;
     const char* bytes = luaL_checklstring(L, 1, &len);
     LuaIdentifier* id = lua_pushidentifier(L);
@@ -207,7 +207,7 @@ int identifier_frombytes(lua_State* L) {
 
 // ── Instance methods ──────────────────────────────────────────────────────────
 
-int identifier_gettype(lua_State* L) {
+int Identifier_GetType(lua_State* L) {
     LuaIdentifier* id = lua_toidentifier(L, 1);
     switch (id->type) {
     case IDENTIFIER_UUID:
@@ -223,13 +223,13 @@ int identifier_gettype(lua_State* L) {
     return 1;
 }
 
-int identifier_asbytes(lua_State* L) {
+int Identifier_AsBytes(lua_State* L) {
     LuaIdentifier* id = lua_toidentifier(L, 1);
     lua_pushlstring(L, (const char*)id->bytes, (size_t)id->len);
     return 1;
 }
 
-int identifier_isempty(lua_State* L) {
+int Identifier_IsEmpty(lua_State* L) {
     LuaIdentifier* id = lua_toidentifier(L, 1);
     for (int i = 0; i < id->len; i++) {
         if (id->bytes[i] != 0) {
@@ -241,13 +241,13 @@ int identifier_isempty(lua_State* L) {
     return 1;
 }
 
-int identifier_asstring(lua_State* L) {
-    return identifier_tostring(L);
+int Identifier_AsString(lua_State* L) {
+    return Identifier_ToString(L);
 }
 
 // ── Metamethods ───────────────────────────────────────────────────────────────
 
-int identifier_eq(lua_State* L) {
+int Identifier_Eq(lua_State* L) {
     // Like the other typed values, comparing with a different kind of userdata is
     // simply false rather than an error.
     LuaIdentifier* a = (LuaIdentifier*)luaL_testudata(L, 1, LUAIDENTIFIER);
@@ -263,14 +263,14 @@ int identifier_eq(lua_State* L) {
     return 1;
 }
 
-int identifier_tostring(lua_State* L) {
+int Identifier_ToString(lua_State* L) {
     LuaIdentifier* id = lua_toidentifier(L, 1);
     char buf[37];
     if (id->type == IDENTIFIER_UUID) {
-        uuid_bytes_to_string(id->bytes, buf);
+        UuidBytesToString(id->bytes, buf);
         lua_pushstring(L, buf);
     } else {
-        oid_bytes_to_string(id->bytes, buf);
+        OidBytesToString(id->bytes, buf);
         lua_pushstring(L, buf);
     }
     return 1;
@@ -285,12 +285,12 @@ int lua_isidentifier(lua_State* L, int index) {
     return result;
 }
 
-void lua_identifier_push_string(lua_State* L, int index) {
+void lua_pushidentifierstring(lua_State* L, int index) {
     LuaIdentifier* id = (LuaIdentifier*)lua_touserdata(L, index);
     char buf[37];
     if (id->type == IDENTIFIER_UUID)
-        uuid_bytes_to_string(id->bytes, buf);
+        UuidBytesToString(id->bytes, buf);
     else
-        oid_bytes_to_string(id->bytes, buf);
+        OidBytesToString(id->bytes, buf);
     lua_pushstring(L, buf);
 }
