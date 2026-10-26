@@ -43,22 +43,6 @@ public sealed class SQLiteBugFixTests
 
     // RegisterFunction array growth
     [Fact]
-    public async Task SQLite_RegisterFunction_Two_BothCallable()
-    {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync(@"
-			local db = SQLite.Open()
-			db:RegisterFunction(function(a) return 'f1_' .. a end, 'f1', 1)
-			db:RegisterFunction(function(a) return 'f2_' .. a end, 'f2', 1)
-			db:Query([[SELECT f1('x'), f2('y')]])
-			local a, b = db:GetRow(1), db:GetRow(2)
-			db:Close()
-			return tostring(a) .. ',' .. tostring(b)
-		");
-        r.String.ShouldBe("f1_x,f2_y");
-    }
-
-    [Fact]
     public async Task SQLite_RegisterFunction_ThreeWithAggregate_AllCallable()
     {
         using KitsuneEngine engine = new();

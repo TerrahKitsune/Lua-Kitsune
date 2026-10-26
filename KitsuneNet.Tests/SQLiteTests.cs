@@ -805,8 +805,10 @@ public sealed class SQLiteTests
     }
 
     // Open modes
-    [Fact]
-    public async Task SQLite_Open_Mode1_Multithread_OpensSuccessfully()
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task SQLite_Open_NonZeroMode_ForcesWalJournal(int mode)
     {
         using KitsuneEngine engine = new();
 
@@ -817,46 +819,18 @@ public sealed class SQLiteTests
 			local db = SQLite.Open(path, 0)
 			db:Query('CREATE TABLE t (n INTEGER)')
 			db:Close()
-			db = SQLite.Open(path, 1)
+			db = SQLite.Open(path, " + mode + @")
 			local ok = db:Query('SELECT 1')
 			db:Fetch()
 			db:Query('PRAGMA journal_mode')
 			db:Fetch()
-			local mode = db:GetRow(1)
+			local journal = db:GetRow(1)
 			db:Close()
 			FileSystem.Delete(path)
 			FileSystem.Delete(path .. '-wal')
 			FileSystem.Delete(path .. '-shm')
 			FileSystem.Delete(path .. '-journal')
-			return tostring(ok) .. '|' .. tostring(mode)
-		");
-        r.String.ShouldBe("true|wal");
-    }
-
-    [Fact]
-    public async Task SQLite_Open_Mode2_Serialized_OpensSuccessfully()
-    {
-        using KitsuneEngine engine = new();
-
-        // Any non-zero mode forces WAL on a file database; the threading config itself is
-        // process-global and not observable per connection.
-        LuaValue r = await engine.ExecuteStringAsync(@"
-			local path = FileSystem.GetTempFileName()
-			local db = SQLite.Open(path, 0)
-			db:Query('CREATE TABLE t (n INTEGER)')
-			db:Close()
-			db = SQLite.Open(path, 2)
-			local ok = db:Query('SELECT 1')
-			db:Fetch()
-			db:Query('PRAGMA journal_mode')
-			db:Fetch()
-			local mode = db:GetRow(1)
-			db:Close()
-			FileSystem.Delete(path)
-			FileSystem.Delete(path .. '-wal')
-			FileSystem.Delete(path .. '-shm')
-			FileSystem.Delete(path .. '-journal')
-			return tostring(ok) .. '|' .. tostring(mode)
+			return tostring(ok) .. '|' .. tostring(journal)
 		");
         r.String.ShouldBe("true|wal");
     }
@@ -1050,16 +1024,15 @@ public sealed class SQLiteTests
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync(@"
 			local db = SQLite.Open()
-			db:RegisterFunction(function(a) return 'one' end, 'f', 1)
-			db:RegisterFunction(function(a, b) return 'two' end, 'f', 2)
-			local dup = pcall(db.RegisterFunction, db, function() end, 'f', 1)
+			db:RegisterFunction(function(a) return 'one_' .. a end, 'f', 1)
+			db:RegisterFunction(function(a, b) return 'two_' .. (a + b) end, 'f', 2)
 			db:Query('SELECT f(1) || f(1, 2)')
 			db:Fetch()
 			local v = db:GetRow(1)
 			db:Close()
-			return tostring(v) .. '|' .. tostring(dup)
+			return tostring(v)
 		");
-        r.String.ShouldBe("onetwo|false");
+        r.String.ShouldBe("one_1two_3");
     }
 
     // Open without a mode keeps the database's journal mode

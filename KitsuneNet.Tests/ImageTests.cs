@@ -502,7 +502,7 @@ public sealed class ImageTests
     }
 
     [Fact]
-    public async Task Image_DropShadow_ProducesLargerOffsetSilhouette()
+    public async Task Image_DropShadow_ZeroOffsetNoBlur_PadsCanvasAndTintsSilhouette()
     {
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync(@"

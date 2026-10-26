@@ -44,7 +44,7 @@ public sealed class MiscBugFixTests
 
     // Base64
     [Fact]
-    public async Task Base64_Decode_EmptyString_ReturnsEmptyString()
+    public async Task Base64_Decode_EmptyInvalidAndRoundTrip_ReturnExpectedValues()
     {
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync(@"

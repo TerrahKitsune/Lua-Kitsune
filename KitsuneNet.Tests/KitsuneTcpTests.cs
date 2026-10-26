@@ -49,7 +49,7 @@ public sealed class KitsuneTcpTests
     }
 
     [Fact]
-    public async System.Threading.Tasks.Task StartListener_BindsSuccessfully()
+    public async System.Threading.Tasks.Task StartListener_FreePort_ReturnsListenerWithTcpListenerTostring()
     {
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync(@"
@@ -63,7 +63,7 @@ public sealed class KitsuneTcpTests
     }
 
     [Fact]
-    public async System.Threading.Tasks.Task Connect_ReturnsClient()
+    public async System.Threading.Tasks.Task Connect_ToListener_ReturnsClientWithTcpClientTostring()
     {
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync(@"

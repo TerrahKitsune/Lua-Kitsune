@@ -716,11 +716,10 @@ public sealed class SQLiteExtensionTests
         result.String.ShouldBe("2|b|z|10");
     }
 
-    // RegisterTable V2 — UPDATE with a WHERE that matches nothing returns SQL success
+    // RegisterTable V2 — UPDATE with a WHERE that matches nothing leaves the existing row untouched
     // (SQLite handles the WHERE filter before xUpdate; 0 rows affected is not an error).
-    // Verifies the existing row is untouched.
     [WindowsOnlyFact]
-    public async Task SQLiteExtension_RegisterTable_Update_KeyNotFound_ReturnsSuccess()
+    public async Task SQLiteExtension_RegisterTable_Update_KeyNotFound_LeavesRowUnchanged()
     {
         using KitsuneEngine engine = new();
         engine.SetString("extPath", ExtensionPath);

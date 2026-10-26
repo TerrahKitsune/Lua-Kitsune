@@ -71,7 +71,7 @@ public sealed class ArchiveTests
     // ReadAll
     [Theory]
     [MemberData(nameof(ArchiveFiles))]
-    public async Task ReadAll_FirstEntry_ReturnsNonEmptyData(string path)
+    public async Task ReadAll_FirstEntry_ReturnsExpectedContentOfDeclaredSize(string path)
     {
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync("""
@@ -81,6 +81,7 @@ public sealed class ArchiveTests
             assert(name, "SetEntry returned nil for entry 1")
             local data = Archive.ReadAll(arc)
             assert(data ~= nil, "ReadAll returned nil")
+            assert(#data == size, "ReadAll size " .. #data .. " != declared " .. size)
             return data
             """,
             args: [LuaValue.FromString(path)]);
@@ -89,7 +90,7 @@ public sealed class ArchiveTests
 
     [Theory]
     [MemberData(nameof(ArchiveFiles))]
-    public async Task ReadAll_SecondEntry_ReturnsNonEmptyData(string path)
+    public async Task ReadAll_SecondEntry_ReturnsExpectedContentOfDeclaredSize(string path)
     {
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync("""
@@ -99,33 +100,11 @@ public sealed class ArchiveTests
             assert(name, "SetEntry returned nil for entry 2")
             local data = Archive.ReadAll(arc)
             assert(data ~= nil, "ReadAll returned nil")
+            assert(#data == size, "ReadAll size " .. #data .. " != declared " .. size)
             return data
             """,
             args: [LuaValue.FromString(path)]);
         r.String.ShouldBe(string.Concat(Enumerable.Repeat("bla", 57)));
-    }
-
-    [Theory]
-    [MemberData(nameof(ArchiveFiles))]
-    public async Task ReadAll_BothEntries_DataMatchesDeclaredSize(string path)
-    {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync("""
-            local arc, err = Archive.OpenRead((...))
-            assert(arc, err or "failed to open archive")
-            local entries = Archive.Entries(arc)
-            for i = 1, #entries do
-                local name, size = Archive.SetEntry(arc, i)
-                assert(name, "SetEntry returned nil for entry " .. i)
-                local data = Archive.ReadAll(arc)
-                assert(data, "ReadAll returned nil for entry " .. i)
-                assert(#data == size,
-                    "entry " .. i .. ": ReadAll size " .. #data .. " != declared " .. size)
-            end
-            return "ok"
-            """,
-            args: [LuaValue.FromString(path)]);
-        r.String.ShouldBe("ok");
     }
 
     // Read (chunked)

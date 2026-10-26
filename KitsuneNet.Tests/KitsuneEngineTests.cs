@@ -122,39 +122,11 @@ namespace KitsuneNet.Tests
 
         // ExecuteString (sync)
         [Fact]
-        public void ExecuteString_Returns_PositiveId_On_Success()
+        public void ExecuteString_ScriptWithoutResult_WaitFreesSlot()
         {
             using KitsuneEngine engine = new();
             engine.ExecuteString("local x = 1");
             engine.Wait();
-            engine.GetActiveIds().ShouldBeEmpty();
-        }
-
-        [Fact]
-        public void ExecuteString_CanWaitAndGetResult()
-        {
-            using KitsuneEngine engine = new();
-            engine.RunString("return 'sync result'").String.ShouldBe("sync result");
-            engine.GetActiveIds().ShouldBeEmpty();
-        }
-
-        [Fact]
-        public async Task ExecuteString_RuntimeError_CanGetError()
-        {
-            using KitsuneEngine engine = new();
-            LuaException ex = await Should.ThrowAsync<LuaException>(
-                engine.ExecuteStringAsync("error('sync boom')"));
-            ex.Message.ShouldContain("sync boom");
-            engine.GetActiveIds().ShouldBeEmpty();
-        }
-
-        [Fact]
-        public async Task ExecuteString_SyntaxError_CanGetError()
-        {
-            using KitsuneEngine engine = new();
-            LuaException ex = await Should.ThrowAsync<LuaException>(
-                engine.ExecuteStringAsync("~~~~invalid"));
-            ex.Message.ShouldContain("unexpected symbol");
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
@@ -183,22 +155,6 @@ namespace KitsuneNet.Tests
             byte[]? result = engine.RunString("return 'bytes'").Bytes;
             result.ShouldNotBeNull();
             Encoding.UTF8.GetString(result!).ShouldBe("bytes");
-            engine.GetActiveIds().ShouldBeEmpty();
-        }
-
-        [Fact]
-        public void GetResult_ReturnsExpectedValue()
-        {
-            using KitsuneEngine engine = new();
-            engine.RunString("return 'consume me'").String.ShouldBe("consume me");
-            engine.GetActiveIds().ShouldBeEmpty();
-        }
-
-        [Fact]
-        public void GetError_SuccessfulCoroutine_ReturnsNull()
-        {
-            using KitsuneEngine engine = new();
-            engine.RunString("return 'ok'").String.ShouldBe("ok");  // no exception thrown
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
@@ -241,39 +197,11 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public void HasResult_ReturnsFalse_WhileRunning_TrueWhenFinished()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue result = engine.RunString("return 'done'");
-            result.String.ShouldBe("done");
-            result.Bytes?.Length.ShouldBe(4);  // "done" is 4 bytes
-            engine.GetActiveIds().ShouldBeEmpty();
-        }
-
-        [Fact]
         public void HasResult_NonStringResult_LenIsZero()
         {
             using KitsuneEngine engine = new();
             LuaValue result = engine.RunString("return 42");
             result.Bytes.ShouldBeNull();  // non-string results have no byte representation
-            engine.GetActiveIds().ShouldBeEmpty();
-        }
-
-        [Fact]
-        public void HasResult_NonExistentId_ReturnsFalse()
-        {
-            using KitsuneEngine engine = new();
-            engine.GetStatus(99999).ShouldBe(CoroutineStatus.None);
-            engine.GetRuntime(99999).ShouldBe(0.0);
-        }
-
-        [Fact]
-        public void HasResult_AfterResultConsumed_ReturnsFalse()
-        {
-            using KitsuneEngine engine = new();
-            engine.RunString("return 'done'").String.ShouldBe("done");
-
-            // RunString consumes the result; slot is auto-released
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
@@ -626,24 +554,6 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public void GetVariable_TableType_ReturnsLuaTypeTable()
-        {
-            using KitsuneEngine engine = new();
-            engine.ExecuteString("tableVar = {}");
-            engine.Wait();
-            LuaValue v = engine.GetVariable("tableVar");
-            try
-            {
-                v.Type.ShouldBe(LuaType.Table);
-                v.Bytes.ShouldBeNull();
-            }
-            finally
-            {
-                v.TableRef?.Dispose();  // release the live Lua registry ref
-            }
-        }
-
-        [Fact]
         public void GetVariable_EmptyPath_ReturnsGlobalTableRef()
         {
             // An empty path returns _G itself as a live KITSUNE_TTABLE registry ref
@@ -753,23 +663,6 @@ namespace KitsuneNet.Tests
 
         // ExecuteFile
         [Fact]
-        public void ExecuteFile_CreatesFileRunsAndCleansUp()
-        {
-            string path = Path.GetTempFileName();
-            try
-            {
-                File.WriteAllText(path, "return 'file result'");
-                using KitsuneEngine engine = new();
-                engine.RunFile(path).String.ShouldBe("file result");
-                engine.GetActiveIds().ShouldBeEmpty();
-            }
-            finally
-            {
-                File.Delete(path);
-            }
-        }
-
-        [Fact]
         public void ExecuteFile_ArgsOneIsFilePath()
         {
             string path = Path.GetTempFileName();
@@ -778,25 +671,6 @@ namespace KitsuneNet.Tests
                 File.WriteAllText(path, "local p = ...; return p");  // first vararg is the file path
                 using KitsuneEngine engine = new();
                 engine.RunFile(path).String.ShouldBe(path);
-                engine.GetActiveIds().ShouldBeEmpty();
-            }
-            finally
-            {
-                File.Delete(path);
-            }
-        }
-
-        [Fact]
-        public async Task ExecuteFile_RuntimeError_CanGetError()
-        {
-            string path = Path.GetTempFileName();
-            try
-            {
-                File.WriteAllText(path, "error('file error')");
-                using KitsuneEngine engine = new();
-                LuaException ex = await Should.ThrowAsync<LuaException>(
-                    engine.ExecuteFileAsync(path));
-                ex.Message.ShouldContain("file error");
                 engine.GetActiveIds().ShouldBeEmpty();
             }
             finally
@@ -908,26 +782,7 @@ namespace KitsuneNet.Tests
                 engine.IsRunning.ShouldBeTrue();
                 int id = engine.RunningCoroutineId;
                 id.ShouldBeGreaterThan(0);
-                engine.GetActiveIds().ShouldContain(id);
-            }
-            finally
-            {
-                engine.Interrupt();
-                engine.Wait();
-                engine.GetActiveIds().ShouldBeEmpty();
-            }
-        }
-
-        [Fact]
-        public void RunningCoroutineId_DuringExecution_MatchesStartedId()
-        {
-            using KitsuneEngine engine = new();
-            engine.ExecuteString("while true do end");
-            try
-            {
-                SpinUntilRunning(engine);
-                int id = engine.GetActiveIds()[0];
-                engine.RunningCoroutineId.ShouldBe(id);
+                engine.GetActiveIds().ShouldHaveSingleItem().ShouldBe(id);
             }
             finally
             {
@@ -1095,23 +950,6 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task ConcurrentCoroutines_WaitedFromParallelThreads_AllComplete()
-        {
-            const int count = 16;
-            using KitsuneEngine engine = new();
-            Task<LuaValue>[] tasks = Enumerable.Range(0, count)
-                .Select(i => engine.ExecuteStringAsync($"return 'parallel_{i}'"))
-                .ToArray();
-            LuaValue[] results = await Task.WhenAll(tasks);
-            for (int i = 0; i < count; i++)
-            {
-                results[i].String.ShouldBe($"parallel_{i}");
-            }
-
-            engine.GetActiveIds().ShouldBeEmpty();
-        }
-
-        [Fact]
         public async Task ConcurrentCoroutines_SuperConcurrency_AllComplete()
         {
             // Fill every slot with a coroutine that cannot finish yet; the next submit must
@@ -1146,24 +984,6 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             engine.GetActiveIds().ShouldBeEmpty();
-        }
-
-        [Fact]
-        public void GetActiveIds_WhileRunning_ContainsId()
-        {
-            using KitsuneEngine engine = new();
-            engine.ExecuteString("while true do end");
-            try
-            {
-                SpinUntilRunning(engine);
-                engine.GetActiveIds().Length.ShouldBeGreaterThan(0);
-            }
-            finally
-            {
-                engine.Interrupt();
-                engine.Wait();
-                engine.GetActiveIds().ShouldBeEmpty();
-            }
         }
 
         [Fact]
@@ -1256,23 +1076,6 @@ namespace KitsuneNet.Tests
             while (engine.GetActiveIds().Length > 0 && DateTime.UtcNow < deadline)
             {
                 Thread.Sleep(1);
-            }
-
-            engine.GetActiveIds().ShouldBeEmpty();
-        }
-
-        [Fact]
-        public async Task ExecuteStringAsync_MultipleConcurrent_AllReturnCorrectResults()
-        {
-            const int count = 8;
-            using KitsuneEngine engine = new();
-            Task<LuaValue>[] tasks = Enumerable.Range(0, count)
-                .Select(i => engine.ExecuteStringAsync($"return 'async_{i}'"))
-                .ToArray();
-            LuaValue[] results = await Task.WhenAll(tasks);
-            for (int i = 0; i < count; i++)
-            {
-                results[i].ShouldBe($"async_{i}");
             }
 
             engine.GetActiveIds().ShouldBeEmpty();
@@ -1862,10 +1665,10 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public void Pause_CalledFromRegisteredFunction_IsNoOp()
+        public void Pause_InRunStringBeforeRegisteredFunction_ScriptStillReachesFunction()
         {
-            // Pause() must be a no-op when called from a C# registered function
-            // (not inside the scheduler's lua_resume), to avoid corrupting the inline path.
+            // Pause() must be a no-op outside the scheduler's lua_resume (the inline path),
+            // otherwise the blocking RunString would never reach the registered function.
             using KitsuneEngine engine = new();
             bool callbackRan = false;
             engine.RegisterFunction("DoWork", _ =>
@@ -1942,7 +1745,7 @@ namespace KitsuneNet.Tests
 
         // Cancel
         [Fact]
-        public void Cancel_RunningCoroutine_SetsErrorAndFreesSlot()
+        public void Cancel_RunningCoroutine_FreesSlot()
         {
             using KitsuneEngine engine = new();
             engine.ExecuteString("while true do end");
@@ -2107,24 +1910,6 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public void GetStatus_AfterSuccess_ReturnsDone()
-        {
-            using KitsuneEngine engine = new();
-            engine.RunString("return 42").AsInt64.ShouldBe(42L);
-            engine.GetActiveIds().ShouldBeEmpty();
-        }
-
-        [Fact]
-        public async Task GetStatus_AfterRuntimeError_ReturnsFaulted()
-        {
-            using KitsuneEngine engine = new();
-            LuaException ex = await Should.ThrowAsync<LuaException>(
-                engine.ExecuteStringAsync("error('test error')"));
-            ex.Message.ShouldContain("test error");
-            engine.GetActiveIds().ShouldBeEmpty();
-        }
-
-        [Fact]
         public async Task GetStatus_AfterCancelOnSleepingCoroutine_ReturnsCancelled()
         {
             // After Cancel, GetStatus returns Cancelled until the scheduler frees the slot.
@@ -2179,17 +1964,6 @@ namespace KitsuneNet.Tests
             }
 
             engine.GetActiveIds().ShouldBeEmpty();
-        }
-
-        [Fact]
-        public void GetRuntime_AfterCoroutineReleased_ReturnsZero()
-        {
-            using KitsuneEngine engine = new();
-
-            // RunString is synchronous; after return the slot is auto-released
-            engine.RunString("return 'done'").String.ShouldBe("done");
-            engine.GetActiveIds().ShouldBeEmpty();
-            engine.GetRuntime(99999).ShouldBe(0.0);  // non-existent id returns 0
         }
 
         // Stress tests
@@ -2341,22 +2115,6 @@ namespace KitsuneNet.Tests
             {
                 results[i].ShouldBe(i.ToString());
                 engine.GetNumber($"slot_{i}").ShouldBe((double)i);
-            }
-            engine.GetActiveIds().ShouldBeEmpty();
-        }
-
-        [Fact]
-        public async Task Stress_WaitAsync_ConcurrentPollers_AllComplete()
-        {
-            using KitsuneEngine engine = new();
-            const int count = 30;
-            Task<LuaValue>[] tasks = Enumerable.Range(0, count)
-                .Select(i => engine.ExecuteStringAsync($"return tostring({i})"))
-                .ToArray();
-            LuaValue[] results = await Task.WhenAll(tasks);
-            for (int i = 0; i < count; i++)
-            {
-                results[i].String.ShouldBe(i.ToString());
             }
             engine.GetActiveIds().ShouldBeEmpty();
         }
@@ -2828,31 +2586,6 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task Thread_IterateAsync_PassedAsArg_LuaCanResume()
-        {
-            using KitsuneEngine engine = new();
-
-            // Pass the thread as a variable set on the global bridge
-            LuaValue thread = await engine.ExecuteStringAsync(
-                "return coroutine.create(function() for i = 1, 5 do coroutine.yield(i) end end)");
-            try
-            {
-                engine.SetVariable("Gen", thread);
-
-                // Lua can also resume a thread set via SetVariable
-                LuaValue result = await engine.ExecuteStringAsync(
-                    "local ok, v = coroutine.resume(Gen) return v");
-                result.AsDouble.ShouldBe(1.0);
-            }
-            finally
-            {
-                thread.ThreadRef?.Dispose();
-            }
-
-            await engine.ExecuteStringAsync("Sleep(0)");
-        }
-
-        [Fact]
         public async Task Thread_IterateAsync_NilYield_ContinuesIteration()
         {
             // coroutine.yield(nil) produces LuaType.Nil — iteration must NOT stop.
@@ -3033,36 +2766,6 @@ namespace KitsuneNet.Tests
                 });
 
                 values.ShouldBe([1.0, 2.0, 3.0]);
-            }
-            finally
-            {
-                thread.ThreadRef?.Dispose();
-            }
-
-            await engine.ExecuteStringAsync("Sleep(0)");
-        }
-
-        [Fact]
-        public async Task Thread_IterateAsync_FromCallback_ThrowsLuaException()
-        {
-            // IterateThreadAsync must refuse to start (inLuaCallback guard) when called
-            // from within a RegisterFunction callback on the scheduler thread.
-            using KitsuneEngine engine = new();
-            LuaValue thread = engine.RunString(
-                "return coroutine.create(function() coroutine.yield(1) end)");
-
-            try
-            {
-                engine.RegisterFunction("TryIterate", _ =>
-                {
-                    thread.ThreadRef!.Iterate().GetEnumerator().MoveNext();
-                    return LuaValue.None;
-                });
-
-                LuaException ex = await Should.ThrowAsync<LuaException>(
-                    engine.ExecuteStringAsync("TryIterate()"));
-                ex.Message.ShouldContain("registered function");
-                engine.GetActiveIds().ShouldBeEmpty();
             }
             finally
             {
@@ -3430,7 +3133,7 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public void Thread_Iterate_PassedAsArg_LuaCanResume()
+        public void Thread_SetAsVariable_LuaCanResume()
         {
             using KitsuneEngine engine = new();
             LuaValue thread = engine.RunString(
@@ -3509,28 +3212,6 @@ namespace KitsuneNet.Tests
         }
 
         // Shallow / deep table bridge
-        [Fact]
-        public void GetVariable_TableValue_IsOpaqueWithNoContents()
-        {
-            // GetVariable returns type=Table with .Table (old snapshot) null.
-            // The live registry ref is in .TableRef — use .TableRef!.GetContents() to access.
-            using KitsuneEngine engine = new();
-            engine.ExecuteString("t = {x=1, y=2}");
-            engine.Wait();
-
-            LuaValue v = engine.GetVariable("t");
-            try
-            {
-                v.Type.ShouldBe(LuaType.Table);
-                v.Table.ShouldBeNull();         // .Table snapshot is never populated by GetVariable
-                v.TableRef.ShouldNotBeNull();   // but a live ref IS available via TableRef
-            }
-            finally
-            {
-                v.TableRef!.Dispose();
-            }
-        }
-
         [Fact]
         public void GetAll_NestedTableValue_IsOpaque()
         {
@@ -3622,6 +3303,8 @@ namespace KitsuneNet.Tests
             engine.Wait();
             LuaValue v = engine.GetVariable("t");
             v.Type.ShouldBe(LuaType.Table);
+            v.Bytes.ShouldBeNull();
+            v.Table.ShouldBeNull();  // the snapshot is never populated by GetVariable
             using var tref = v.TableRef;
             tref.ShouldNotBeNull();
             var contents = tref!.GetContents();
@@ -3756,7 +3439,7 @@ namespace KitsuneNet.Tests
 
         // TableRef stability
         [Fact]
-        public void TableRef_RemainsValidAfterGcCycles_AndConcurrentCoroutines()
+        public void TableRef_AfterGcCycles_RemainsValid()
         {
             // The luaL_ref keeps the table in the Lua registry; .NET GC and Lua GC
             // cycles must not invalidate it while C# holds the ref.
@@ -3989,17 +3672,6 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task Coroutine_YieldWithValue_ValueIsDiscardedByScheduler()
-        {
-            // Any value passed to coroutine.yield() in a Kitsune coroutine is silently
-            // discarded by the scheduler. The result comes from return, not yield.
-            using KitsuneEngine engine = new();
-            LuaValue result = await engine.ExecuteStringAsync("coroutine.yield('hello')");
-            result.String.ShouldBeNull();  // no return statement ? result is nil/none
-            engine.GetActiveIds().ShouldBeEmpty();
-        }
-
-        [Fact]
         public async Task Coroutine_YieldWithValue_ResumeReceivesNil()
         {
             // The scheduler always resumes with 0 args after a yield,
@@ -4217,7 +3889,7 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task RegisterUserdata_GcFreesHandle_EngineDisposeDoesNotLeak()
+        public async Task RegisterUserdata_GlobalNilledAndCollected_VariableIsGoneAndNoActiveSlots()
         {
             var engine = new KitsuneEngine();
             try
@@ -4795,7 +4467,7 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public void TableRef_GetContentsAsJson_EmptyTable_ProducesEmptyJsonObject()
+        public void TableRef_GetContentsAsJson_EmptyTable_ProducesEmptyJsonArray()
         {
             using KitsuneEngine engine = new();
 
@@ -5143,21 +4815,6 @@ namespace KitsuneNet.Tests
             syncResult.String.ShouldBe("true");
             (await asyncTask).ShouldBe("async done");
             engine.GetActiveIds().ShouldBeEmpty();
-        }
-
-        [Fact]
-        public async Task RunString_Yield_AsyncCoroutine_DoesNotBreakSchedulerCycle()
-        {
-            // Verify Yield() on an async coroutine is unaffected by inline calls.
-            // The async coroutine uses coroutine.yield(); scheduler must resume it.
-            using KitsuneEngine engine = new();
-            LuaValue result = await engine.ExecuteStringAsync(@"
-                local x = 1
-                coroutine.yield()
-                x = x + 1
-                return x
-            ");
-            result.AsInt64.ShouldBe(2L);
         }
 
         // Inline path: GetStatus == Inline during yield window
@@ -5755,6 +5412,10 @@ namespace KitsuneNet.Tests
                 engine.ExecuteVariableAsync(LuaValue.FromBool(true)));
             boolEx.Message.ShouldContain("not executable");
 
+            LuaException floatEx = await Should.ThrowAsync<LuaException>(
+                engine.ExecuteVariableAsync(LuaValue.FromNumber(3.14)));
+            floatEx.Message.ShouldContain("not executable");
+
             engine.GetActiveIds().ShouldBeEmpty();
         }
 
@@ -5870,33 +5531,6 @@ namespace KitsuneNet.Tests
 
         // ExecuteVariable / ExecuteVariableAsync / RunVariable (boundary cases)
         [Fact]
-        public async Task ExecuteVariable_FunctionValue_IdIsPositive()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue fn = engine.RunString("return function() return 1 end");
-            try
-            {
-                fn.Type.ShouldBe(LuaType.Function);
-                (await engine.ExecuteVariableAsync(fn)).AsInt64.ShouldBe(1L);
-                engine.GetActiveIds().ShouldBeEmpty();
-            }
-            finally
-            {
-                fn.FunctionRef?.Dispose();
-            }
-        }
-
-        [Fact]
-        public async Task ExecuteVariable_NotExecutable_IdIsPositiveAndFaulted()
-        {
-            using KitsuneEngine engine = new();
-            LuaException ex = await Should.ThrowAsync<LuaException>(
-                engine.ExecuteVariableAsync(LuaValue.FromNumber(3.14)));
-            ex.Message.ShouldContain("not executable");
-            engine.GetActiveIds().ShouldBeEmpty();
-        }
-
-        [Fact]
         public async Task RegisterFunction_CallingRunVariable_ReturnsResult()
         {
             using KitsuneEngine engine = new();
@@ -5978,7 +5612,7 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public void ReleaseResult_FunctionResult_SchedulerFreesViaPendingResults_NoLeak()
+        public void ExecuteString_FunctionResultNeverConsumed_SchedulerFreesViaPendingResults_NoLeak()
         {
             // ReleaseResult marks the slot for scheduler cleanup without the C# side consuming
             // the result.  The scheduler's step-4 pendingResults array takes ownership of the
@@ -6001,7 +5635,7 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public void ReleaseResult_TableWithFunctionResult_SchedulerFreesViaPendingResults_NoLeak()
+        public void ExecuteString_TableWithFunctionResultNeverConsumed_SchedulerFreesViaPendingResults_NoLeak()
         {
             // A table result containing function entries: FreeKVNode must luaL_unref every
             // nested function ref.  This happens outside slotsLock
@@ -6063,7 +5697,7 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public void Wait_ForId_WithDeferredFunctionsEnqueued_CompletesWithoutDeadlock()
+        public void RunString_WithDeferredFunctionsEnqueued_CompletesWithoutDeadlock()
         {
             // Exercises the drain path in RunInline: dispose function refs (enqueuing to
             // g_pendingVariableChainHead) then run a sync call with Sleep() so the yield
@@ -6130,33 +5764,7 @@ namespace KitsuneNet.Tests
 
         // Boundary / edge cases
         [Fact]
-        public void GetError_NonExistentId_ReturnsNull()
-        {
-            using KitsuneEngine engine = new();
-            engine.GetStatus(99999).ShouldBe(CoroutineStatus.None);
-        }
-
-        [Fact]
-        public void GetResult_WhileCoroutineStillRunning_ReturnsNull()
-        {
-            using KitsuneEngine engine = new();
-            engine.ExecuteString("while true do end");
-            SpinUntilRunning(engine);
-            try
-            {
-                engine.IsRunning.ShouldBeTrue();
-                engine.GetActiveIds().Length.ShouldBeGreaterThan(0);
-            }
-            finally
-            {
-                engine.Interrupt();
-                engine.Wait();
-                engine.GetActiveIds().ShouldBeEmpty();
-            }
-        }
-
-        [Fact]
-        public void ReleaseResult_NonExistentId_IsNoOp()
+        public void Cancel_NonExistentId_IsNoOp()
         {
             using KitsuneEngine engine = new();
             Should.NotThrow(() => engine.Cancel(99999));
@@ -6170,40 +5778,6 @@ namespace KitsuneNet.Tests
         {
             using KitsuneEngine engine = new();
             engine.GetRuntime(99999).ShouldBe(0.0);
-        }
-
-        [Fact]
-        public void GetResultVariable_FunctionResult_SlotReleasedAfterConsume()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue result = engine.RunString("return function() end");
-            try
-            {
-                result.Type.ShouldBe(LuaType.Function);
-
-                // RunString consumes the result; slot is auto-released
-                engine.GetActiveIds().ShouldBeEmpty();
-            }
-            finally
-            {
-                result.FunctionRef?.Dispose();
-            }
-        }
-
-        [Fact]
-        public void GetResultVariable_FunctionReturn_ConsumedTwice_ReturnsNoneSecondTime()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue result = engine.RunString("return function() end");
-            try
-            {
-                result.Type.ShouldBe(LuaType.Function);
-                engine.GetActiveIds().ShouldBeEmpty();
-            }
-            finally
-            {
-                result.FunctionRef?.Dispose();
-            }
         }
 
         // LuaFunctionRef.Invoke / InvokeAsync
@@ -7044,27 +6618,6 @@ namespace KitsuneNet.Tests
             }
         }
 
-        [Fact]
-        public void FunctionRef_NativePtrIsZero_AfterDispose()
-        {
-            using KitsuneEngine engine = new();
-            LuaFunctionRef fref = engine.RunString("return function() end").FunctionRef!;
-
-            fref.Dispose();
-            Should.Throw<ObjectDisposedException>(() => fref.Invoke());
-        }
-
-        [Fact]
-        public void ThreadRef_NativePtrIsZero_AfterDispose()
-        {
-            using KitsuneEngine engine = new();
-            LuaThreadRef tref = engine.RunString(
-                "return coroutine.create(function() end)").ThreadRef!;
-
-            tref.Dispose();
-            Should.Throw<ObjectDisposedException>(() => tref.Step());
-        }
-
         // CallMetamethod
         [Fact]
         public void TableRef_CallMetamethod_InvokesNamedMetamethod()
@@ -7840,25 +7393,6 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task Resume_SleepingTask_ReturnsFalseWhenAlreadyDone()
-        {
-            // Resume on a non-sleeping (done) id returns false. The long sleep keeps the
-            // slot visible until its id is captured; Resume wakes it so it can finish.
-            using KitsuneEngine engine = new();
-            engine.ExecuteString("Sleep(60000)");
-            int id = SingleActiveId(engine);
-            DateTime deadline = DateTime.UtcNow.AddSeconds(5);
-            while (engine.GetStatus(id) != CoroutineStatus.Sleeping && DateTime.UtcNow < deadline)
-            {
-                await Task.Delay(1);
-            }
-
-            engine.Resume(id).ShouldBeTrue();
-            await engine.WaitAsync(id);
-            engine.Resume(id).ShouldBeFalse();
-        }
-
-        [Fact]
         public async Task Resume_SleepingTask_ValueDiscarded()
         {
             // Resume(id, value) on a sleeping coroutine wakes it but discards the value.
@@ -7926,24 +7460,6 @@ namespace KitsuneNet.Tests
 
             await engine.WaitAsync(outerId);
             engine.GetBool("waitReturned").ShouldBe(true);
-        }
-
-        [Fact]
-        public async Task Resume_WithValue_PauseReceivesValue_SleepDoesNot()
-        {
-            // Verify that Resume(id, value) delivers value to Pause() but not to Sleep().
-            using KitsuneEngine engine = new();
-            engine.SetVariable("pauseResult", 0L);
-            await engine.ExecuteStringAsync(@"
-                local t = Tasks.New(function()
-                    pauseResult = Pause()
-                end)
-                while t:GetStatus() ~= TaskStatus.Paused do Sleep(5) end
-                t:Resume(77)
-                t:Wait()
-                t:Dispose()
-            ");
-            engine.GetInt64("pauseResult").ShouldBe(77L);
         }
 
         [Fact]
@@ -8316,7 +7832,7 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public void ActiveCount_WhenIdle_IsZero()
+        public void GetActiveIds_AfterScriptCompletes_ReturnsEmpty()
         {
             using KitsuneEngine engine = new();
             engine.RunString("return 1");

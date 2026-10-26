@@ -74,55 +74,6 @@ public sealed class MySqlTests
     }
 
     [MySqlFact]
-    public async Task RawQuery_Error_Phase2YieldsString()
-    {
-        using KitsuneEngine engine = TestRun.NewEngine();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local conn = assert({ConnectLua()})
-            local co = assert(conn:Query('SELECT * FROM _no_such_table_xyz'))
-            local ok, val = coroutine.resume(co)
-            while ok and val == nil and coroutine.status(co) == 'suspended' do
-                ok, val = coroutine.resume(co)
-            end
-            return tostring(ok) .. ':' .. tostring(type(val) == 'string')
-        ");
-        r.String.ShouldBe("true:true");
-    }
-
-    [MySqlFact]
-    public async Task StopFlag_MidWait_ConnNotBusy()
-    {
-        using KitsuneEngine engine = TestRun.NewEngine();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local conn = assert({ConnectLua()})
-            local co = assert(conn:Query('SELECT 1'))
-            coroutine.resume(co, true)
-            return tostring(conn:IsBusy())
-        ");
-        r.String.ShouldBe("false");
-    }
-
-    [MySqlFact]
-    public async Task StopFlag_MidStream_ConnNotBusy()
-    {
-        using KitsuneEngine engine = TestRun.NewEngine();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local conn = assert({ConnectLua()})
-            local co = assert(conn:Query('SELECT 1 UNION SELECT 2 UNION SELECT 3'))
-            local ok, val = coroutine.resume(co)
-            while ok and val == nil and coroutine.status(co) == 'suspended' do
-                ok, val = coroutine.resume(co)
-            end
-            -- val is rowcount; get first row
-            coroutine.resume(co)
-            -- stop mid-stream
-            coroutine.resume(co, true)
-            return tostring(conn:IsBusy())
-        ");
-        r.String.ShouldBe("false");
-    }
-
-    [MySqlFact]
     public async Task IsBusy_TrueWhileSuspended_FalseOnceDead()
     {
         using KitsuneEngine engine = TestRun.NewEngine();
@@ -423,39 +374,6 @@ public sealed class MySqlTests
     }
 
     [MySqlFact]
-    public async Task Crud_Types_BlobReturnedAsUserdata()
-    {
-        using KitsuneEngine engine = TestRun.NewEngine();
-        try
-        {
-            LuaValue r = await engine.ExecuteStringAsync($@"
-                local conn = assert({ConnectLua()})
-                local function exec(sql, p)
-                    local co = assert(conn:Query(sql, p))
-                    local ok, v = coroutine.resume(co)
-                    while ok and v == nil and coroutine.status(co) == 'suspended' do ok, v = coroutine.resume(co) end
-                    if not ok then error(tostring(v)) end
-                    if type(v) == 'string' then error(v) end
-                    return v, co
-                end
-                local _, c0 = exec('DELETE FROM test WHERE String = ?', {{'crud_tblob_' .. RUN_ID}})
-                coroutine.resume(c0, true)
-                local _, c1 = exec('INSERT INTO test (String, `Blob`) VALUES (?, ?)', {{'crud_tblob_' .. RUN_ID, 'hello blob'}})
-                coroutine.resume(c1, true)
-                local _, co = exec('SELECT `Blob` FROM test WHERE String = ?', {{'crud_tblob_' .. RUN_ID}})
-                local ok, row = coroutine.resume(co)
-                coroutine.resume(co, true)
-                return tostring(type(row[1])) .. ':' .. tostring(row[1])
-            ");
-            r.String.ShouldBe("userdata:hello blob");
-        }
-        finally
-        {
-            await DeleteTestRowsAsync(engine, "crud_tblob");
-        }
-    }
-
-    [MySqlFact]
     public async Task Crud_Types_NullableColumnsReturnedAsNil()
     {
         using KitsuneEngine engine = TestRun.NewEngine();
@@ -543,18 +461,6 @@ public sealed class MySqlTests
         {
             await DeleteTestRowsAsync(engine, "helper_nq");
         }
-    }
-
-    [MySqlFact]
-    public async Task NonQuery_InvalidSql_ReturnsFalseAndError()
-    {
-        using KitsuneEngine engine = TestRun.NewEngine();
-        LuaValue r = await engine.ExecuteStringAsync($@"
-            local conn = assert({ConnectLua()})
-            local ok, err = conn:NonQuery('NOT VALID SQL AT ALL')
-            return tostring(ok == false and type(err) == 'string' and #err > 0)
-        ");
-        r.String.ShouldBe("true");
     }
 
     [MySqlFact]

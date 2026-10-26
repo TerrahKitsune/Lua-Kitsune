@@ -137,16 +137,6 @@ public sealed class ModuleBugFixTests
 
     // Tasks: TaskStatus.Waiting
     [Fact]
-    public async Task TaskStatus_Waiting_IsNine()
-    {
-        using KitsuneEngine engine = TestRun.NewEngine();
-        LuaValue r = await engine.ExecuteStringAsync(@"
-            return tostring(TaskStatus.Waiting)
-        ");
-        r.String.ShouldBe("9");
-    }
-
-    [Fact]
     public async Task TaskStatus_TaskSuspendedInWait_ReportsWaiting()
     {
         using KitsuneEngine engine = TestRun.NewEngine();
@@ -167,9 +157,9 @@ public sealed class ModuleBugFixTests
             waiter:Wait()
             blocker:Dispose()
             waiter:Dispose()
-            return tostring(seen) .. ':' .. tostring(finished)
+            return tostring(seen) .. ':' .. tostring(finished) .. ':' .. tostring(TaskStatus.Waiting)
         ");
-        r.String.ShouldBe("true:false");
+        r.String.ShouldBe("true:false:9");
     }
 
     // Redis
@@ -252,6 +242,7 @@ public sealed class ModuleBugFixTests
                     coroutine.resume(co)
                 end
                 if coroutine.status(co) == 'suspended' then coroutine.resume(co, true) end
+                if conn:IsBusy() then return 'busy at ' .. k end
                 local ok, v = conn:Scalar('SELECT 42')
                 if not ok or v ~= 42 then return 'fail at ' .. k .. ': ' .. tostring(v) end
             end
@@ -274,10 +265,10 @@ public sealed class ModuleBugFixTests
             local status = coroutine.status(co)
             local busy = conn:IsBusy()
             local ok2, v = conn:Scalar('SELECT 7')
-            return type(val) .. ':' .. status .. ':' .. tostring(busy) .. ':'
+            return tostring(ok) .. ':' .. type(val) .. ':' .. status .. ':' .. tostring(busy) .. ':'
                 .. tostring(ok2) .. ':' .. tostring(v)
             """);
-        r.String.ShouldBe("string:dead:false:true:7");
+        r.String.ShouldBe("true:string:dead:false:true:7");
     }
 
     [MySqlFact]
@@ -288,7 +279,7 @@ public sealed class ModuleBugFixTests
             local conn = assert({{MySqlConnect()}})
             local ok1, err = conn:NonQuery('THIS IS NOT SQL')
             local ok2, v = conn:Scalar('SELECT 5')
-            return tostring(ok1) .. ':' .. tostring(type(err) == 'string') .. ':'
+            return tostring(ok1) .. ':' .. tostring(type(err) == 'string' and #err > 0) .. ':'
                 .. tostring(ok2) .. ':' .. tostring(v)
             """);
         r.String.ShouldBe("false:true:true:5");
@@ -305,12 +296,17 @@ public sealed class ModuleBugFixTests
             local ok, rows = conn:QueryAll('SELECT t, b, b1, b8, b64 FROM kt_types')
             assert(ok, rows)
             local row = rows[1]
+            assert(conn:NonQuery('INSERT INTO kt_types (b) VALUES (?)', {'hello blob'}))
+            local okParam, paramRows = conn:QueryAll('SELECT b FROM kt_types WHERE t IS NULL')
+            assert(okParam, paramRows)
+            local paramBlob = paramRows[1][1]
             return table.concat({
                 type(row[1]), row[1] == 'h\u{00E9}llo' and 'eq' or 'ne',
                 type(row[2]), tostring(row[2]),
-                math.type(row[3]), row[3], row[4], tostring(row[5])}, ',')
+                math.type(row[3]), row[3], row[4], tostring(row[5]),
+                type(paramBlob), tostring(paramBlob)}, ',')
             """);
-        r.String.ShouldBe("string,eq,userdata,bin,integer,1,129,18446744073709551615");
+        r.String.ShouldBe("string,eq,userdata,bin,integer,1,129,18446744073709551615,userdata,hello blob");
     }
 
     // helpers

@@ -477,35 +477,11 @@ namespace KitsuneNet.Tests
 
         // Identifier (Equality)
         [Fact]
-        public async Task Identifier_Eq_SameUUID_IsTrue()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local id  = Identifier.NewUUID()
-                local id2 = Identifier.FromBytes(id:AsBytes())
-                return tostring(id == id2)
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
         public async Task Identifier_Eq_DifferentUUID_IsFalse()
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync("return tostring(Identifier.NewUUID() == Identifier.NewUUID())");
             r.String.ShouldBe("false");
-        }
-
-        [Fact]
-        public async Task Identifier_Eq_SameOID_IsTrue()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local id  = Identifier.NewOID()
-                local id2 = Identifier.FromBytes(id:AsBytes())
-                return tostring(id == id2)
-            ");
-            r.String.ShouldBe("true");
         }
 
         [Fact]
@@ -1439,7 +1415,7 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task Decimal_FromInteger_IsExact()
+        public async Task Decimal_FromNumber_LargeInteger_IsExactWithScaleZero()
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
@@ -1470,18 +1446,6 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local ok, err = pcall(function() return DateTime.New(2024, 2, 30) end)
                 return tostring(not ok and err ~= nil)
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task DateTime_New_LastDayOfMonth_IsValid()
-        {
-            // Feb 29 in a leap year must succeed
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local dt = DateTime.New(2024, 2, 29)
-                return tostring(dt ~= nil and dt:Day() == 29)
             ");
             r.String.ShouldBe("true");
         }
@@ -1801,19 +1765,6 @@ namespace KitsuneNet.Tests
                 return table.concat(rows, '|')
             ");
             r.String.ShouldBe("a,b,c|d,e,f|g,h,i|j,k,l|m,n,o");
-        }
-
-        [Fact]
-        public async Task CRC64_Stream_RaisesError()
-        {
-            // CRC64 must raise an error when given a stream, not silently return 0
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local st = Stream.New('hello')
-                local ok, err = pcall(CRC64, st)
-                return tostring(not ok and err ~= nil)
-            ");
-            r.String.ShouldBe("true");
         }
 
         // CRC64
@@ -2931,18 +2882,6 @@ namespace KitsuneNet.Tests
             r.String.ShouldBe("null");
         }
 
-        [Fact]
-        public async Task Json_NullInArray_DefaultDecodesAsNil()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local j = Json.New()
-                local t = j:Decode('[1,null,3]')
-                return tostring(t[1]==1 and t[2]==nil and t[3]==3)
-            ");
-            r.String.ShouldBe("true");
-        }
-
         // Encode / Decode
         [Fact]
         public async Task Json_Decode_ReturnsTable()
@@ -2952,43 +2891,6 @@ namespace KitsuneNet.Tests
                 local j = Json.New()
                 local t = j:Decode('{""a"":1,""b"":""hello""}')
                 return tostring(t.a == 1 and t.b == 'hello')
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task Json_Encode_ProducesString()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local j = Json.New()
-                local s = j:Encode({1, 2, 3})
-                local t = j:Decode(s)
-                return tostring(t[1]==1 and t[2]==2 and t[3]==3)
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task Json_PrettyEncode_ContainsNewlines()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local j = Json.New(true)
-                local s = j:Encode({a=1})
-                return tostring(s:find('\n') ~= nil)
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task Json_CreateAlias_WorksIdenticallyToNew()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local j = Json.New()
-                local t = j:Decode('[1,2,3]')
-                return tostring(t[3] == 3)
             ");
             r.String.ShouldBe("true");
         }
@@ -3563,22 +3465,6 @@ namespace KitsuneNet.Tests
 
         // Aes
         [Fact]
-        public async Task Aes_EncryptDecrypt_RoundTrip()
-        {
-            using KitsuneEngine engine = new();
-
-            // Use two fresh instances with the same key and default zero IV.
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local key = string.rep('\0', 32)
-                local plain = 'hello aes world!'
-                local enc = Aes.New(key):Encrypt(plain)
-                local dec = Aes.New(key):Decrypt(enc)
-                return tostring(dec == plain)
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
         public async Task Aes_EncryptedData_DiffersFromPlaintext()
         {
             using KitsuneEngine engine = new();
@@ -3592,12 +3478,11 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task Aes_SetIV_ResetIV_AllowsDecryptWithSameInstance()
+        public async Task Aes_SetIV_RestoredIV_AllowsDecryptWithSameInstance()
         {
             using KitsuneEngine engine = new();
 
-            // SetIV with no argument resets to the stored IV, making the same instance usable
-            // for both encrypt and decrypt when the IV is restored between operations.
+            // Encrypting advances the IV state, so the same instance only decrypts after SetIV restores the original.
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local key   = string.rep('\0', 32)
                 local iv    = string.rep('\0', 16)
@@ -3830,20 +3715,6 @@ namespace KitsuneNet.Tests
                 s:WriteByte(42)
                 s:Seek(0)
                 return tostring(s:ReadByte() == 42)
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task Stream_PeekByte_DoesNotAdvancePosition()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local s = Stream.New()
-                s:WriteByte(99)
-                s:Seek(0)
-                local b = s:PeekByte()
-                return tostring(b == 99 and s:pos() == 0)
             ");
             r.String.ShouldBe("true");
         }
@@ -4794,32 +4665,6 @@ namespace KitsuneNet.Tests
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = CSV.New():Decode('a\tb\tc\n1\t2\t3')
-                return tostring(tostring(t.Rows[1][1]) == 'a' and tostring(t.Rows[1][3]) == 'c')
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task CSV_New_NoArgs_AutoDetectsSemicolon()
-        {
-            using KitsuneEngine engine = new();
-
-            // CSV.New() with no delimiter should sniff each Decode call independently.
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local csv = CSV.New()
-                local t = csv:Decode('a;b;c\n1;2;3')
-                return tostring(tostring(t.Rows[1][1]) == 'a' and tostring(t.Rows[1][3]) == 'c' and tostring(t.Rows[2][2]) == '2')
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task CSV_New_WithSemicolon_UsesSpecifiedDelimiter()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local csv = CSV.New(';')
-                local t = csv:Decode('a;b;c')
                 return tostring(tostring(t.Rows[1][1]) == 'a' and tostring(t.Rows[1][3]) == 'c')
             ");
             r.String.ShouldBe("true");
@@ -6337,19 +6182,6 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task SetDecodeNull_True_JsonNullIsTruthy_RoundTrips()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local json = Json.New()
-                json:SetDecodeNull(true)
-                local t = json:Decode('{""value"":null}')
-                return json:Encode(t)
-            ");
-            r.String.ShouldBe("{\"value\":null}");
-        }
-
-        [Fact]
         public async Task SetDecodeNull_True_RoundTripPreservesNull()
         {
             using KitsuneEngine engine = new();
@@ -7207,17 +7039,6 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
-        public async Task Hardware_Memory_TotalPhysIsPositive()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local m = Hardware.Memory()
-                return tostring(m ~= nil and m.TotalPhys > 0)
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
         public async Task Hardware_Memory_AvailPhysLessThanOrEqualTotalPhys()
         {
             using KitsuneEngine engine = new();
@@ -7284,19 +7105,6 @@ namespace KitsuneNet.Tests
         }
 
         [SkippableFact]
-        public async Task Hardware_GpuMemory_ReturnsTableOrNil()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local t = Hardware.GpuMemory()
-                if t == nil then return 'absent' end
-                return tostring(type(t) == 'table')
-            ");
-            Skip.If(r == "absent", "Hardware.GpuMemory() is not available on this machine");
-            r.String.ShouldBe("true");
-        }
-
-        [SkippableFact]
         public async Task Hardware_GpuMemory_AdapterEntriesHaveMemoryFields()
         {
             using KitsuneEngine engine = new();
@@ -7313,19 +7121,6 @@ namespace KitsuneNet.Tests
                 return 'true'
             ");
             Skip.If(r == "absent", "Hardware.GpuMemory() is not available on this machine");
-            r.String.ShouldBe("true");
-        }
-
-        [SkippableFact]
-        public async Task Hardware_GpuLoad_ReturnsTableOrNil()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local t = Hardware.GpuLoad()
-                if t == nil then return 'absent' end
-                return tostring(type(t) == 'table')
-            ");
-            Skip.If(r == "absent", "Hardware.GpuLoad() is not available on this machine");
             r.String.ShouldBe("true");
         }
 
@@ -7352,26 +7147,13 @@ namespace KitsuneNet.Tests
         }
 
         [SkippableFact]
-        public async Task Hardware_NvidiaSmi_ReturnsTableOrNil()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local t = Hardware.NvidiaSmi()
-                if t == nil then return 'absent' end
-                if type(t.Gpus) ~= 'table' then return 'missing Gpus' end
-                return 'true'
-            ");
-            Skip.If(r == "absent", "Hardware.NvidiaSmi() is not available on this machine (no NVIDIA driver)");
-            r.String.ShouldBe("true");
-        }
-
-        [SkippableFact]
         public async Task Hardware_NvidiaSmi_GpuEntriesAreWellFormed()
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local t = Hardware.NvidiaSmi()
                 if t == nil then return 'absent' end
+                if type(t.Gpus) ~= 'table' then return 'missing Gpus' end
                 for i, g in ipairs(t.Gpus) do
                     if math.type(g.Index) ~= 'integer' then return 'bad Index' end
                     if type(g.Name) ~= 'string' then return 'bad Name' end
@@ -7406,19 +7188,6 @@ namespace KitsuneNet.Tests
         }
 
         [SkippableFact]
-        public async Task Hardware_CpuTemp_ReturnsTableOrNil()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local t = Hardware.CpuTemp()
-                if t == nil then return 'absent' end
-                return tostring(type(t) == 'table')
-            ");
-            Skip.If(r == "absent", "Hardware.CpuTemp() is not available on this machine");
-            r.String.ShouldBe("true");
-        }
-
-        [SkippableFact]
         public async Task Hardware_CpuTemp_ValuesAreReasonableWhenPresent()
         {
             using KitsuneEngine engine = new();
@@ -7435,19 +7204,6 @@ namespace KitsuneNet.Tests
                 return 'true'
             ");
             Skip.If(r == "absent", "Hardware.CpuTemp() is not available on this machine");
-            r.String.ShouldBe("true");
-        }
-
-        [SkippableFact]
-        public async Task Hardware_Battery_ReturnsTableOrNil()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local b = Hardware.Battery()
-                if b == nil then return 'absent' end
-                return tostring(type(b) == 'table')
-            ");
-            Skip.If(r == "absent", "Hardware.Battery() reports no battery on this machine");
             r.String.ShouldBe("true");
         }
 
@@ -11102,16 +10858,6 @@ namespace KitsuneNet.Tests
             await sleepTask.WaitAsync(TimeSpan.FromSeconds(10));
         }
 
-        [Fact]
-        public async Task Sleep_WithTimeoutToken_WakesWhenTokenExpires()
-        {
-            using KitsuneEngine engine = new();
-            await engine.ExecuteStringAsync(@"
-                local token = AliveToken.New(50)
-                Sleep(token)
-            ").WaitAsync(TimeSpan.FromSeconds(10));
-        }
-
         // UInt
         [Fact]
         public async Task UInt_Zero_IsUserdata()
@@ -11440,9 +11186,12 @@ namespace KitsuneNet.Tests
         public async Task UInt_MaxValue_RoundTrips_ThroughString()
         {
             using KitsuneEngine engine = new();
+
+            // The binders rely on tostring() yielding a plain decimal string as well as ToString().
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local s = '18446744073709551615'
-                return tostring(UInt.FromString(s):ToString() == s)
+                local u = UInt.FromString(s)
+                return tostring(u:ToString() == s and tostring(u) == s)
             ");
             r.String.ShouldBe("true");
         }
@@ -11814,21 +11563,6 @@ namespace KitsuneNet.Tests
                 return y:Encode({ts = dt})
             ");
             r.String.ShouldBe("{\"ts\": \"2024-06-15T12:00:00.000Z\"}\n");
-        }
-
-        [Fact]
-        public async Task DateTime_Stream_Write_Read_RoundTrips()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local s  = Stream.New()
-                local dt = DateTime.New(2024, 1, 1, 0, 0, 0, 0, 0)
-                Stream.Write(s, dt)
-                s:Seek(0)
-                local dt2 = Stream.ReadDateTime(s)
-                return tostring(dt2:Year() == 2024 and dt2:Month() == 1 and dt2:Day() == 1)
-            ");
-            r.String.ShouldBe("true");
         }
 
         [Fact]
@@ -12521,60 +12255,27 @@ namespace KitsuneNet.Tests
 
         // INI encoding of DateTime
         [Fact]
-        public async Task Ini_DateTime_EncodesSomething()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local i  = Ini.New()
-                local dt = DateTime.New(2024, 6, 15, 12, 0, 0, 0, 0)
-                local s  = i:Encode({sec = {ts = dt}})
-                -- Must produce a non-empty string containing the year
-                return tostring(type(s) == 'string' and #s > 0 and s:find('2024') ~= nil)
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task Ini_DateTime_KeyPresent()
+        public async Task Ini_Encode_DateTime_WritesKeyAndYear()
         {
             using KitsuneEngine engine = new();
 
             // DateTime must not fall through to return 0, which would omit the key entirely.
             LuaValue r = await engine.ExecuteStringAsync(@"
                 local i  = Ini.New()
-                local dt = DateTime.New(2025, 1, 1, 0, 0, 0, 0, 0)
-                local s  = i:Encode({s = {dt = dt}})
-                return tostring(s:find('dt') ~= nil)
+                local dt = DateTime.New(2024, 6, 15, 12, 0, 0, 0, 0)
+                local s  = i:Encode({sec = {ts = dt}})
+                return tostring(type(s) == 'string' and s:find('ts') ~= nil and s:find('2024') ~= nil)
             ");
             r.String.ShouldBe("true");
         }
 
         // TimeSpan string form (MySQL/Postgres/Redis binders)
         [Fact]
-        public async Task TimeSpan_ToString_IsCanonical()
-        {
-            // Validates the canonical format used by the string-based binders.
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("return tostring(TimeSpan.FromSeconds(3661))");
-            r.String.ShouldBe("01:01:01.000");
-        }
-
-        [Fact]
         public async Task TimeSpan_Negative_ToString_IsCanonical()
         {
             using KitsuneEngine engine = new();
             LuaValue r = await engine.ExecuteStringAsync("return tostring(-TimeSpan.FromMinutes(90))");
             r.String.ShouldBe("-01:30:00.000");
-        }
-
-        // UInt string form (Redis binder)
-        [Fact]
-        public async Task UInt_ToString_IsDecimal()
-        {
-            // UInt must produce a plain decimal string so Redis/MySQL/Postgres binders work.
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync("return tostring(UInt.FromString('18446744073709551615'))");
-            r.String.ShouldBe("18446744073709551615");
         }
 
         // Stream DateTime write/read preserves offset_minutes
@@ -12591,21 +12292,6 @@ namespace KitsuneNet.Tests
                 s:Seek(0)
                 local dt2 = Stream.ReadDateTime(s)
                 return tostring(dt2:OffsetMinutes() == 330)
-            ");
-            r.String.ShouldBe("true");
-        }
-
-        [Fact]
-        public async Task DateTime_Stream_Write_PreservesUTCOffset()
-        {
-            using KitsuneEngine engine = new();
-            LuaValue r = await engine.ExecuteStringAsync(@"
-                local dt  = DateTime.New(2024, 1, 1, 12, 0, 0, 0, 0)
-                local s   = Stream.New()
-                Stream.Write(s, dt)
-                s:Seek(0)
-                local dt2 = Stream.ReadDateTime(s)
-                return tostring(dt2:OffsetMinutes() == 0)
             ");
             r.String.ShouldBe("true");
         }

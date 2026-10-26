@@ -121,17 +121,6 @@ public sealed class KitsuneHttpServerTests
         r.String.ShouldBe("true");
     }
 
-    // GET returns 200
-    [Fact]
-    public async Task Server_GET_RespondsWith200()
-    {
-        var (engine, pump) = await StartLuaServer("127.0.0.1:19803", "resp:SetCode(200); resp:Send('hello')");
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
-        var response = await client.GetAsync("http://127.0.0.1:19803/hello");
-        await StopLuaServer(engine, pump);
-        ((int)response.StatusCode).ShouldBe(200);
-    }
-
     // Response body
     [Fact]
     public async Task Server_GET_ResponseBodyIsReturned()
@@ -164,17 +153,6 @@ public sealed class KitsuneHttpServerTests
         string body = await response.Content.ReadAsStringAsync();
         await StopLuaServer(engine, pump);
         body.ShouldBe("ping payload");
-    }
-
-    // Reject returns error code
-    [Fact]
-    public async Task Server_Reject_Returns404()
-    {
-        var (engine, pump) = await StartLuaServer("127.0.0.1:19807", "resp:Reject(404, 'Not Found')");
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
-        var response = await client.GetAsync("http://127.0.0.1:19807/gone");
-        await StopLuaServer(engine, pump);
-        ((int)response.StatusCode).ShouldBe(404);
     }
 
     // The context is per request: stable within one request, fresh for the next one.
@@ -390,26 +368,6 @@ public sealed class KitsuneHttpServerTests
     }
 
     [Fact]
-    public async Task CSharpClient_GET_DefaultStatusIs200()
-    {
-        var (engine, pump) = await StartLuaServer("127.0.0.1:19830", "resp:Send('hello')");
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
-        var response = await client.GetAsync("http://127.0.0.1:19830/");
-        await StopLuaServer(engine, pump);
-        ((int)response.StatusCode).ShouldBe(200);
-    }
-
-    [Fact]
-    public async Task CSharpClient_GET_DefaultBodyIsReturned()
-    {
-        var (engine, pump) = await StartLuaServer("127.0.0.1:19831", "resp:Send('kitsune')");
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
-        string body = await client.GetStringAsync("http://127.0.0.1:19831/");
-        await StopLuaServer(engine, pump);
-        body.ShouldBe("kitsune");
-    }
-
-    [Fact]
     public async Task CSharpClient_GET_DefaultContentTypeIsNonEmpty()
     {
         var (engine, pump) = await StartLuaServer("127.0.0.1:19832", "resp:Send('ok')");
@@ -420,50 +378,16 @@ public sealed class KitsuneHttpServerTests
         response.Content.Headers.ContentType.MediaType.ShouldNotBeNullOrEmpty();
     }
 
-    [Fact]
-    public async Task CSharpClient_RequestHeader_IsReceivedByServer()
-    {
-        var (engine, pump) = await StartLuaServer("127.0.0.1:19833",
-            "resp:Send(tostring(req:GetHeaders()['x-test-header']))");
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
-        var request = new HttpRequestMessage(HttpMethod.Get, "http://127.0.0.1:19833/");
-        request.Headers.Add("X-Test-Header", "csharp-value");
-        var response = await client.SendAsync(request);
-        string body = await response.Content.ReadAsStringAsync();
-        await StopLuaServer(engine, pump);
-        body.ShouldBe("csharp-value");
-    }
-
-    [Fact]
-    public async Task CSharpClient_POST_BodyIsReceivedByServer()
-    {
-        var (engine, pump) = await StartLuaServer("127.0.0.1:19834", "resp:Send(req:GetBody())");
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
-        var response = await client.PostAsync("http://127.0.0.1:19834/",
-            new StringContent("hello from csharp"));
-        string body = await response.Content.ReadAsStringAsync();
-        await StopLuaServer(engine, pump);
-        body.ShouldBe("hello from csharp");
-    }
-
-    [Fact]
-    public async Task CSharpClient_SetCode_404_IsReceivedByClient()
-    {
-        var (engine, pump) = await StartLuaServer("127.0.0.1:19835",
-            "resp:SetCode(404); resp:Send('not found')");
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
-        var response = await client.GetAsync("http://127.0.0.1:19835/");
-        await StopLuaServer(engine, pump);
-        ((int)response.StatusCode).ShouldBe(404);
-        response.ReasonPhrase.ShouldBe("Not Found");
-    }
-
     [Theory]
     [InlineData(19842, "resp:Send()", 200, "OK")]
+    [InlineData(19803, "resp:SetCode(200); resp:Send('hello')", 200, "OK")]
+    [InlineData(19835, "resp:SetCode(404); resp:Send('not found')", 404, "Not Found")]
     [InlineData(19843, "resp:SetCode(500); resp:Send('boom')", 500, "Internal Server Error")]
     [InlineData(19844, "resp:SetCode(201); resp:Send(Stream.New())", 201, "Created")]
     [InlineData(19845, "req:GetResponse():Reject(403, 'no')", 403, "Forbidden")]
-    public async Task CSharpClient_ReasonPhrase_MatchesStatusCode(int port, string handler, int code, string reason)
+    [InlineData(19807, "resp:Reject(404, 'Not Found')", 404, "Not Found")]
+    [InlineData(19841, "resp:Reject(503, 'Service Unavailable')", 503, "Service Unavailable")]
+    public async Task CSharpClient_Handler_ResponseHasExpectedStatusAndReasonPhrase(int port, string handler, int code, string reason)
     {
         var (engine, pump) = await StartLuaServer($"127.0.0.1:{port}", handler);
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
@@ -496,16 +420,6 @@ public sealed class KitsuneHttpServerTests
     }
 
     [Fact]
-    public async Task CSharpClient_GetMethod_ReturnsGET()
-    {
-        var (engine, pump) = await StartLuaServer("127.0.0.1:19838", "resp:Send(req:GetMethod())");
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
-        string body = await client.GetStringAsync("http://127.0.0.1:19838/");
-        await StopLuaServer(engine, pump);
-        body.ShouldBe("GET");
-    }
-
-    [Fact]
     public async Task CSharpClient_GetIp_IsNonEmpty()
     {
         var (engine, pump) = await StartLuaServer("127.0.0.1:19839", "resp:Send(req:GetIp())");
@@ -528,31 +442,9 @@ public sealed class KitsuneHttpServerTests
         id.ShouldNotBe(0L);
     }
 
-    [Fact]
-    public async Task CSharpClient_Reject_Returns503()
-    {
-        var (engine, pump) = await StartLuaServer("127.0.0.1:19841",
-            "resp:Reject(503, 'Service Unavailable')");
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
-        var response = await client.GetAsync("http://127.0.0.1:19841/");
-        await StopLuaServer(engine, pump);
-        ((int)response.StatusCode).ShouldBe(503);
-    }
-
     // Chunked stream tests
     [Fact]
-    public async Task Server_SendChunkedStream_BodyIsReceived()
-    {
-        var (engine, pump) = await StartLuaServer("127.0.0.1:19850",
-            MakeChunkedStream + "\nresp:Send(make_chunked_stream('chunked body content'))");
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
-        string body = await client.GetStringAsync("http://127.0.0.1:19850/chunked");
-        await StopLuaServer(engine, pump);
-        body.ShouldBe("chunked body content");
-    }
-
-    [Fact]
-    public async Task Server_SendChunkedStream_TransferEncodingIsChunked()
+    public async Task Server_SendChunkedStream_NonSeekableStream_IsChunkedWithIntactBody()
     {
         var (engine, pump) = await StartLuaServer("127.0.0.1:19851",
             MakeChunkedStream + "\nresp:Send(make_chunked_stream('hello chunked'))");
@@ -576,58 +468,9 @@ public sealed class KitsuneHttpServerTests
         body.Length.ShouldBe(200000);
     }
 
-    // Chunked stream tests (C# client)
-    [Fact]
-    public async Task CSharpClient_SendChunkedStream_BodyIsReceived()
-    {
-        var (engine, pump) = await StartLuaServer("127.0.0.1:19853", """
-            local function make_chunked_stream(data)
-                local pos = 0
-                return Stream.New(function(op, arg)
-                    if op == 0 then return 1
-                    elseif op == 2 then
-                        local chunk = data:sub(pos + 1, pos + arg)
-                        pos = pos + #chunk
-                        return chunk
-                    end
-                end)
-            end
-            resp:Send(make_chunked_stream('chunked from csharp'))
-            """);
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
-        string body = await client.GetStringAsync("http://127.0.0.1:19853/");
-        await StopLuaServer(engine, pump);
-        body.ShouldBe("chunked from csharp");
-    }
-
-    [Fact]
-    public async Task CSharpClient_SendChunkedStream_TransferEncodingIsChunked()
-    {
-        var (engine, pump) = await StartLuaServer("127.0.0.1:19854", """
-            local function make_chunked_stream(data)
-                local pos = 0
-                return Stream.New(function(op, arg)
-                    if op == 0 then return 1
-                    elseif op == 2 then
-                        local chunk = data:sub(pos + 1, pos + arg)
-                        pos = pos + #chunk
-                        return chunk
-                    end
-                end)
-            end
-            resp:Send(make_chunked_stream('hello'))
-            """);
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
-        var response = await client.GetAsync("http://127.0.0.1:19854/");
-        await StopLuaServer(engine, pump);
-
-        // System.Net.Http transparently decodes chunked; verify the header was present.
-        response.Headers.TransferEncodingChunked.ShouldBe(true);
-    }
-
     // AliveToken integration
     [Fact]
-    public async Task Server_SetAliveToken_DoesNotRaise()
+    public async Task Server_SetAliveToken_DisposedToken_EndsAcceptCoroutineAndReleasesPort()
     {
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync("""
@@ -664,26 +507,6 @@ public sealed class KitsuneHttpServerTests
             local aliveAfterDispose = coroutine.status(co) == 'suspended'
             coroutine.resume(co, true)
             return tostring(aliveAfterDispose and coroutine.status(co) == 'dead')
-            """);
-        r.String.ShouldBe("true");
-    }
-
-    [Fact]
-    public async Task Server_AliveToken_DisposedToken_StopsAcceptLoop()
-    {
-        using KitsuneEngine engine = new();
-
-        // Start the server, run one pump iteration to prime it, dispose the token,
-        // then resume — the coroutine should die without hanging.
-        LuaValue r = await engine.ExecuteStringAsync("""
-            local server = assert(HttpServer.Listen('127.0.0.1:19872'))
-            local token = AliveToken.New()
-            server:SetAliveToken(token)
-            local co = server:Accept()
-            coroutine.resume(co)        -- prime the pump
-            token:Dispose()
-            coroutine.resume(co)        -- should trigger teardown
-            return tostring(coroutine.status(co) == 'dead')
             """);
         r.String.ShouldBe("true");
     }
@@ -819,18 +642,6 @@ public sealed class KitsuneHttpServerTests
         await StopWsServer(engine, pump);
         ws.Dispose();
         r.String.ShouldBe("true");
-    }
-
-    [Fact]
-    public async Task Server_WebSocket_CSharpClient_TextEcho_RoundTrips()
-    {
-        var (engine, pump) = await StartWsServer("127.0.0.1:19888", """
-            local msg = _server_ws:Poll()
-            if msg then _server_ws:Send(msg:GetData()) end
-            """);
-        var (data, _) = await WsCsEchoOnce("ws://127.0.0.1:19888/", "hello from csharp");
-        await StopWsServer(engine, pump);
-        data.ShouldBe("hello from csharp");
     }
 
     // SSE tests

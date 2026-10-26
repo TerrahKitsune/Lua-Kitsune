@@ -416,24 +416,14 @@ public sealed class SoundTests
         r.String.ShouldBe("0.50,0.90");
     }
 
-    [Fact]
-    public async Task Sound_Noise_Pink_ProducesNonSilentBufferAtRequestedPeak()
+    [Theory]
+    [InlineData("pink")]
+    [InlineData("brown")]
+    public async Task Sound_Noise_PinkOrBrown_PeaksAtRequestedAmplitude(string noiseType)
     {
         using KitsuneEngine engine = new();
         LuaValue r = await engine.ExecuteStringAsync(@"
-            local snd = Sound.Noise(44100, 1, 4410, 0.5, 'pink')
-            local mn, mx = snd:GetPeak()
-            return string.format('%.2f', math.max(mx, -mn))
-        ");
-        r.String.ShouldBe("0.50");
-    }
-
-    [Fact]
-    public async Task Sound_Noise_Brown_ProducesNonSilentBufferAtRequestedPeak()
-    {
-        using KitsuneEngine engine = new();
-        LuaValue r = await engine.ExecuteStringAsync(@"
-            local snd = Sound.Noise(44100, 1, 4410, 0.5, 'brown')
+            local snd = Sound.Noise(44100, 1, 4410, 0.5, '" + noiseType + @"')
             local mn, mx = snd:GetPeak()
             return string.format('%.2f', math.max(mx, -mn))
         ");

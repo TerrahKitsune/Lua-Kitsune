@@ -360,23 +360,6 @@ public sealed class KafkaTests
 
     // round-trip
     [KafkaFact]
-    public async Task Consumer_RoundTrip_ReceivesProducedMessage()
-    {
-        LuaValue r = await Run("roundtrip", @"
-            local uniqueVal = 'kitsune-rt-' .. RUN_ID
-            local hi0 = produce({{key='rt-key', value=uniqueVal}})
-
-            local consumer = newConsumer()
-            assert(consumer:Assign({topic .. ':' .. part .. ':' .. hi0}))
-
-            local got = pollUntil(consumer, function(d) return d.Value == uniqueVal end, 1)
-            consumer:Close()
-            return tostring(#got > 0)
-        ");
-        r.String.ShouldBe("true");
-    }
-
-    [KafkaFact]
     public async Task Consumer_RoundTrip_MessageFieldsArePopulated()
     {
         LuaValue r = await Run("fields", @"
@@ -440,33 +423,6 @@ public sealed class KafkaTests
             return tostring(found) .. ':' .. tostring(got[1].Offset == hi0) .. ':' .. tostring(committed == hi0 + 1)
         ");
         r.String.ShouldBe("true:true:true");
-    }
-
-    // AutoCommit toggle
-    [KafkaFact]
-    public async Task Consumer_Assign_Partition_RoundTrip()
-    {
-        LuaValue r = await Run("assign_rt", @"
-            local count  = 5
-            local prefix = 'assign-p' .. part .. '-' .. RUN_ID .. '-'
-
-            local messages = {}
-            for i = 1, count do
-                messages[i] = {key = 'pk-' .. i, value = prefix .. i}
-            end
-            local hi0 = produce(messages)
-
-            local consumer = newConsumer()
-            assert(consumer:Assign({topic .. ':' .. part .. ':' .. hi0}))
-
-            local got = pollUntil(consumer, function(d)
-                return string.sub(d.Value, 1, #prefix) == prefix
-            end, count)
-
-            consumer:Close()
-            return tostring(#got) .. '/' .. tostring(count)
-        ");
-        r.String.ShouldBe("5/5");
     }
 
     // Group operations
@@ -867,12 +823,14 @@ public sealed class KafkaTests
             local consumer = newConsumer('latest')
             assert(consumer:Assign({topic .. ':' .. part .. ':' .. hi0}))
 
-            local got = pollUntil(consumer, function(d)
-                return string.sub(d.Value, 1, #prefix) == prefix
-            end, count)
-
+            local got = pollUntil(consumer, function(d) return true end, count)
             consumer:Close()
-            return tostring(#got) .. '/' .. tostring(count)
+
+            local ours = 0
+            for _, d in ipairs(got) do
+                if string.sub(d.Value, 1, #prefix) == prefix then ours = ours + 1 end
+            end
+            return tostring(ours) .. '/' .. tostring(count)
         ");
         r.String.ShouldBe("4/4");
     }
@@ -940,27 +898,6 @@ public sealed class KafkaTests
             return tostring(#got) .. '/' .. tostring(count)
         ");
         r.String.ShouldBe("3/3");
-    }
-
-    [KafkaFact]
-    public async Task Consumer_GetGroupOffsets_WithPartitionFilter()
-    {
-        LuaValue r = await Run("groupoff_filter", @"
-            local key = topic .. ':' .. part
-
-            local p = newProducer()
-            local ok0, lo0, hi0 = p:GetOffsets(topic, part)
-            assert(ok0, tostring(lo0))
-            local ok, err = p:SetGroupOffsets(groupId, {[key] = hi0})
-            assert(ok, tostring(err))
-
-            -- GetGroupOffsets with an explicit partition list
-            local ok2, offsets = p:GetGroupOffsets(groupId, {key})
-            p:Close()
-            if not ok2 then return 'err:' .. tostring(offsets) end
-            return tostring(offsets[key] == hi0)
-        ");
-        r.String.ShouldBe("true");
     }
 
     [KafkaFact]
@@ -1169,7 +1106,7 @@ public sealed class KafkaTests
     }
 
     [KafkaFact]
-    public async Task StressTest_OneProducerTwoConsumers_SharedGroupSplitPartitions()
+    public async Task StressTest_OneProducerTwoConsumers_AssignedPartitions_ReceiveAllMessages()
     {
         using KitsuneEngine engine = TestRun.NewEngine();
         string guid = Guid.NewGuid().ToString("N");
@@ -1179,7 +1116,7 @@ public sealed class KafkaTests
         string groupId = stressTopic;
 
         // Create a 2-partition topic and wait for it to appear in metadata so
-        // both consumers can each be assigned one partition by the group coordinator.
+        // each consumer can be assigned one partition.
         string createLua = $@"
             local p = Kafka.NewProducer({{['bootstrap.servers']='{Bootstrap()}'}})
             local ok, err = p:CreateTopic('{stressTopic}', 2)
