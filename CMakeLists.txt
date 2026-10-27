@@ -10,6 +10,14 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 	add_compile_options(-Wall -Wno-unused-function -Wno-unused-variable)
 endif()
 
+# AddressSanitizer + LeakSanitizer build, used by build-linux-asan-and-test.ps1.
+# The host process (dotnet) is not instrumented, so the runtime must be LD_PRELOADed.
+option(KITSUNE_SANITIZE "Build with AddressSanitizer and LeakSanitizer" OFF)
+if(KITSUNE_SANITIZE)
+	add_compile_options(-fsanitize=address -fno-omit-frame-pointer)
+	add_link_options(-fsanitize=address)
+endif()
+
 # ── Lua core static library ───────────────────────────────────────────────────
 # Compile all Lua C files into a static lib that is linked into KitsuneEngine.
 # lua.c (standalone interpreter) and luac.c (compiler) are not present in this

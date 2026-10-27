@@ -968,6 +968,16 @@ static void CallTaskErrorHandler(KitsuneState* state, KitsuneCoroutine* slot, in
 	}
 }
 
+// The error value a failed coroutine left on top of T as a message. A non-string error object gets the
+// standalone interpreter's wording; nothing runs on T, which can no longer execute Lua code.
+static const char* CoroutineErrorMessage(lua_State* T, char* buf, size_t bufSize) {
+	const char* err = lua_tolstring(T, -1, NULL);
+	if (err)
+		return err;
+	snprintf(buf, bufSize, "(error object is a %s value)", luaL_typename(T, -1));
+	return buf;
+}
+
 static void FinishCoroutine(KitsuneState* state, KitsuneCoroutine* slot, lua_State* T, int rc, int nresults) {
 	if (rc == LUA_OK) {
 		if (nresults > 0)
@@ -977,8 +987,8 @@ static void FinishCoroutine(KitsuneState* state, KitsuneCoroutine* slot, lua_Sta
 	}
 	else {
 		slot->result.type = LUA_TNONE;
-		const char* err = lua_tolstring(T, -1, NULL);
-		SetSlotError(slot, err ? err : "unknown error");
+		char buf[64];
+		SetSlotError(slot, CoroutineErrorMessage(T, buf, sizeof(buf)));
 	}
 	lua_settop(T, 0);
 	slot->state.store(KITSUNE_COROUTINE_STATE_DONE);
@@ -2062,8 +2072,8 @@ extern "C" {
 			memset(&tmp.result, 0, sizeof(KitsuneVariable));
 			return out;
 		}
-		const char* err = lua_tolstring(T, -1, NULL);
-		return MakeErrorVariable(err ? err : "unknown error");
+		char buf[64];
+		return MakeErrorVariable(CoroutineErrorMessage(T, buf, sizeof(buf)));
 	}
 
 	// Tears down an inline slot after its coroutine finishes: acquires slotsLock,

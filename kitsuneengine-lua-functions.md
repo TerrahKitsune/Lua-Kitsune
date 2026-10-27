@@ -1431,7 +1431,7 @@ bool Process:Stop(opt exitcode)
 int/nil Process:GetExitCode()
 int Process:GetID()
 string Process:GetName()
-number Process:GetCPU()              -- Windows only
+number/nil Process:GetCPU()          -- Windows only; % since the last sample, nil when no time has passed
 number Process:GetRAM()
 int/bool Process:Priority(opt prio)  -- Windows only
 int, int Process:Affinity(opt newmask) -- Windows only
@@ -1670,7 +1670,7 @@ nil  server:Close()
 
 | Method | Description |
 |--------|-------------|
-| `SetOnDisconnect` | Register a `function(req)` called when each response finishes writing (so once per request under keep-alive), or when the TCP connection closes before a response was sent |
+| `SetOnDisconnect` | Register a `function(req)` called when each response finishes writing (so once per request under keep-alive), or when the client disconnects before a response was sent (then `req:GetError()` returns `"client disconnected"`) |
 | `SetAliveToken` | Attach an `AliveToken` to this server. When the token is disposed the `Accept()` coroutine tears down the server and dies cleanly — identical to `coroutine.resume(co, true)`. Pass `nil` to detach |
 | `Close` | Tear down the server immediately. Idempotent — safe to call more than once. `__gc` calls this automatically |
 
@@ -1690,10 +1690,12 @@ integer  req:GetId()         -- identity of this request; 0 after the response i
 bool     req:IsFinished()    -- true once headers and body have been fully received
 table    req:GetContext()    -- Lua table for this request; created lazily
 HttpResponse req:GetResponse() -- returns the paired response object
-string   req:GetError()      -- currently always nil
+string   req:GetError()      -- "client disconnected" when the client left before the response was sent, else nil
 ```
 
 Read `GetIp()` / `GetId()` **before** sending the response if you need them (for example in logging or in `SetOnDisconnect`).
+
+A handler that keeps a request across `Accept()` resumes (long-poll, or work in a task) can tell whether the client is still there: each resume checks the requests handed to Lua that have no response yet. If the client has closed its connection, the server releases the connection, `GetError()` returns `"client disconnected"`, the `SetOnDisconnect` handler fires once for that request, and the response is finalized, so `Send` raises "response already finalized". A client that half-closes its side of the connection while it waits for the reply is also treated as disconnected. A client that leaves during a streamed (chunked) response is not reported through `GetError()`.
 
 ---
 
@@ -3224,7 +3226,7 @@ string   dec:ToString()    -- canonical decimal string, alias: AsString()
 string   dec:AsString()
 number   dec:ToNumber()    -- convert to Lua number (lossy)
 int      dec:Scale()       -- digits after decimal point
-int      dec:Precision()   -- total significant digits
+int      dec:Precision()   -- digits in the unscaled value (123.456 → 6, 0 → 1)
 bool     dec:IsEmpty()     -- true when value is zero
 bool     dec:IsNegative()  -- true when value < 0
 Decimal  dec:Abs()         -- absolute value
@@ -4417,7 +4419,7 @@ Only the first value a task returns is kept; return a table to pass back several
 
 `ConsumeResult` frees the result data immediately after pushing it to the Lua stack and advances the slot to `RELEASED` so the scheduler can compact it on the next tick — no waiting for GC. Use this when you want to eagerly release a large result (e.g. a full database query table) as soon as it has been consumed. After calling `ConsumeResult`, `Finished()` returns `true` and `GetResult()` returns `nil`.
 
-If the task faulted (has an error), `ConsumeResult` returns `nil` and still releases the slot — call `GetError()` before `ConsumeResult()` if you need the error message.
+If the task faulted (has an error), `ConsumeResult` returns `nil` and still releases the slot — call `GetError()` before `ConsumeResult()` if you need the error message: afterwards `GetError()` returns `nil`, on every handle to the task.
 
 ### Cancellation
 

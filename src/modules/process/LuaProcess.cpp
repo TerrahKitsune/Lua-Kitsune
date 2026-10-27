@@ -11,10 +11,7 @@
 #endif
 
 LuaProcess* lua_toprocess(lua_State* L, int index) {
-	LuaProcess* proc = (LuaProcess*)lua_touserdata(L, index);
-	if (proc == NULL)
-		luaL_error(L, "parameter is not a %s", LUAPROCESS);
-	return proc;
+	return (LuaProcess*)luaL_checkudata(L, index, LUAPROCESS);
 }
 
 LuaProcess* lua_pushprocess(lua_State* L) {
@@ -523,31 +520,40 @@ int Process_GetName(lua_State* L) {
 	return 1;
 }
 
-static double GetCurrentValue(LuaProcess* proc) {
+// CPU use since the previous sample, as a percentage of all processors. Fails when the process times
+// can't be read or no wall-clock time has passed (the system clock ticks every 1-16 ms); the previous
+// sample is then kept, so the next call measures the whole interval.
+static bool SampleCpuPercent(LuaProcess* proc, double* percent) {
 	FILETIME ftime, fsys, fuser;
 	ULARGE_INTEGER now, sys, user;
-	double percent;
 
 	GetSystemTimeAsFileTime(&ftime);
 	memcpy(&now, &ftime, sizeof(FILETIME));
+	if (now.QuadPart <= proc->lastCPU.QuadPart || proc->numProcessors <= 0)
+		return false;
 
-	GetProcessTimes(proc->processInfo.hProcess, &ftime, &ftime, &fsys, &fuser);
+	if (!GetProcessTimes(proc->processInfo.hProcess, &ftime, &ftime, &fsys, &fuser))
+		return false;
 	memcpy(&sys, &fsys, sizeof(FILETIME));
 	memcpy(&user, &fuser, sizeof(FILETIME));
-	percent = (double)(sys.QuadPart - proc->lastSysCPU.QuadPart) +
-		(user.QuadPart - proc->lastUserCPU.QuadPart);
-	percent /= (now.QuadPart - proc->lastCPU.QuadPart);
-	percent /= proc->numProcessors;
+
+	double busy = (double)(sys.QuadPart - proc->lastSysCPU.QuadPart) +
+		(double)(user.QuadPart - proc->lastUserCPU.QuadPart);
+	*percent = busy / (double)(now.QuadPart - proc->lastCPU.QuadPart) / proc->numProcessors * 100;
 	proc->lastCPU = now;
 	proc->lastUserCPU = user;
 	proc->lastSysCPU = sys;
-	return percent * 100;
+	return true;
 }
 
 int Process_GetCPU(lua_State* L) {
 	LuaProcess* proc = lua_toprocess(L, 1);
 	lua_pop(L, lua_gettop(L));
-	lua_pushnumber(L, GetCurrentValue(proc));
+	double percent;
+	if (SampleCpuPercent(proc, &percent))
+		lua_pushnumber(L, percent);
+	else
+		lua_pushnil(L);
 	return 1;
 }
 

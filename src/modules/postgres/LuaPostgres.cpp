@@ -318,12 +318,7 @@ static void FreeQuery(lua_State* L, LuaPostgresQuery* q) {
 }
 
 LuaPostgres* lua_topostgres(lua_State* L, int index) {
-	LuaPostgres* pg = (LuaPostgres*)lua_touserdata(L, index);
-	if (!pg) {
-		luaL_error(L, "parameter is not a %s", LUAPOSTGRES);
-		return NULL;
-	}
-	return pg;
+	return (LuaPostgres*)luaL_checkudata(L, index, LUAPOSTGRES);
 }
 
 LuaPostgres* lua_pushpostgres(lua_State* L) {
@@ -389,11 +384,12 @@ int Postgres_Connect(lua_State* L) {
 	}
 
 	if (PQstatus(pg->connection) != CONNECTION_OK) {
+		// The message lives in the connection, so format it before PQfinish frees it.
 		const char* err = PQerrorMessage(pg->connection);
-		PQfinish(pg->connection);
-		pg->connection = NULL;
 		lua_pushnil(L);
 		lua_pushfstring(L, "Failed to connect: %s", err && err[0] ? err : "unknown error");
+		PQfinish(pg->connection);
+		pg->connection = NULL;
 		return 2;
 	}
 
@@ -891,9 +887,7 @@ int Postgres_SetAliveToken(lua_State* L) {
 }
 
 int Postgres_Close(lua_State* L) {
-	LuaPostgres* pg = (LuaPostgres*)lua_touserdata(L, 1);
-	if (!pg)
-		return 0;
+	LuaPostgres* pg = lua_topostgres(L, 1);
 
 	if (pg->activeQuery)
 		FreeQuery(L, (LuaPostgresQuery*)pg->activeQuery);

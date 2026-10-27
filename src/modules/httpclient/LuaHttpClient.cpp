@@ -368,7 +368,16 @@ static size_t WriteHeaderCallback(char* buffer, size_t size, size_t nitems, void
 	return total;
 }
 
+static void ReleaseRequestClient(lua_State* L, LuaHttpCurlRequest* req) {
+	if (req->clientRef > 0) {
+		luaL_unref(L, LUA_REGISTRYINDEX, req->clientRef);
+		req->clientRef = LUA_NOREF;
+	}
+	req->client = NULL;
+}
+
 static int BuildHttpResultTable(lua_State* L, LuaHttpCurlRequest* req) {
+	ReleaseRequestClient(L, req);
 	if (req->streamOutputRef > 0) {
 		luaL_unref(L, LUA_REGISTRYINDEX, req->streamOutputRef);
 		req->streamOutputRef = LUA_NOREF;
@@ -495,6 +504,7 @@ int HttpClient_Request(lua_State* L) {
 	luaL_setmetatable(L, LUAHTTPCURLREQUEST);
 	req->streamOutputRef = LUA_NOREF;
 	req->streamInputRef  = LUA_NOREF;
+	req->clientRef       = LUA_NOREF;
 	int reqIdx = lua_gettop(L);
 
 	req->multi = multi;
@@ -562,6 +572,8 @@ int HttpClient_Request(lua_State* L) {
 	curl_multi_add_handle(multi, req->easy);
 	req->addedToMulti = true;
 	req->client       = client;
+	lua_pushvalue(L, 1);
+	req->clientRef    = luaL_ref(L, LUA_REGISTRYINDEX);
 	req->startNs      = HttpNowNs();
 
 	// Create the coroutine; prime it so the first user coroutine.resume resumes
@@ -608,6 +620,7 @@ int HttpCurlRequest_GC(lua_State* L) {
 		luaL_unref(L, LUA_REGISTRYINDEX, req->streamInputRef);
 		req->streamInputRef = LUA_NOREF;
 	}
+	ReleaseRequestClient(L, req);
 	FreeHeaderArrays(req->headerKeys, req->headerVals, req->headerCount);
 	req->headerKeys  = NULL;
 	req->headerVals  = NULL;

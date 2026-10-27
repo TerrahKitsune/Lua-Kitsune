@@ -39,7 +39,7 @@ int Decimal_Zero(lua_State* L);
 int Decimal_ToString(lua_State* L);    // __tostring / ToString
 int Decimal_ToNumber(lua_State* L);    // ToNumber  (lossy lua_Number)
 int Decimal_Scale(lua_State* L);       // Scale()   decimal digits after point
-int Decimal_Precision(lua_State* L);   // Precision() total significant digits
+int Decimal_Precision(lua_State* L);   // Precision() digits in the unscaled value; zero has 1
 int Decimal_IsEmpty(lua_State* L);     // IsEmpty() true when value is zero
 int Decimal_IsNegative(lua_State* L);  // IsNegative()
 int Decimal_Abs(lua_State* L);         // Abs()

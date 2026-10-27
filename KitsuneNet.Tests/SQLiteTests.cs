@@ -1035,6 +1035,19 @@ public sealed class SQLiteTests
         r.String.ShouldBe("one_1two_3");
     }
 
+    // The engine's Dispose fails the test if the path buffer leaks on this error path.
+    [Fact]
+    public async Task SQLite_Open_NonIntegerMode_RaisesErrorWithoutLeaking()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync(@"
+			local ok, err = pcall(SQLite.Open, ':memory:', 'wal')
+			return tostring(ok) .. '|' .. tostring(err)
+        ");
+        r.String.ShouldStartWith("false|");
+        r.String.ShouldContain("number expected, got string");
+    }
+
     // Open without a mode keeps the database's journal mode
     [Fact]
     public async Task SQLite_Open_NoMode_NewDatabaseIsWal()

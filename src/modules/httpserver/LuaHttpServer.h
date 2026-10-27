@@ -11,6 +11,7 @@ typedef struct LuaHttpServer {
 	HttpOpenConnection*  queueHead;   /* oldest event — dequeue from here */
 	HttpOpenConnection*  queueTail;   /* newest event  — enqueue here     */
 	HttpOpenConnection*  senders;      /* connections with active stream send */
+	HttpOpenConnection*  dispatched;   /* requests handed to Lua whose response has not completed */
 	int                  coroutineRef;/* LUA_NOREF until Accept() first called */
 	int                  disconnectRef;/* LUA_NOREF or server-wide disconnect fn */
 	int                  aliveTokenRef; /* LUA_NOREF when not set */

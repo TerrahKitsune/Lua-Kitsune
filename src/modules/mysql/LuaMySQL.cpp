@@ -328,12 +328,7 @@ static void FreeQuery(lua_State* L, LuaMySQLQuery* q) {
 }
 
 LuaMySQL* lua_tomysql(lua_State* L, int index) {
-	LuaMySQL* luamysql = (LuaMySQL*)lua_touserdata(L, index);
-	if (!luamysql) {
-		luaL_error(L, "parameter is not a %s", LUAMYSQL);
-		return NULL;
-	}
-	return luamysql;
+	return (LuaMySQL*)luaL_checkudata(L, index, LUAMYSQL);
 }
 
 LuaMySQL* lua_pushmysql(lua_State* L) {
@@ -876,11 +871,12 @@ static int MySqlConnectCont(lua_State* L, int status, lua_KContext ctx) {
 		return lua_yieldk(L, 0, ctx, MySqlConnectCont);  // still connecting — no work done
 
 	if (nas == NET_ASYNC_ERROR) {
+		// The message lives in the connection, so format it before mysql_close frees it.
 		const char* err = mysql_error(mysqld->connection);
-		mysql_close(mysqld->connection);
-		mysqld->connection = NULL;
 		lua_pushnil(L);
 		lua_pushfstring(L, "Failed to connect: %s", err ? err : "unknown error");
+		mysql_close(mysqld->connection);
+		mysqld->connection = NULL;
 		return 2;
 	}
 
@@ -918,11 +914,12 @@ int MySQL_Connect(lua_State* L) {
 	}
 
 	if (nas == NET_ASYNC_ERROR) {
+		// The message lives in the connection, so format it before mysql_close frees it.
 		const char* err = mysql_error(con);
-		mysql_close(con);
-		mysqld->connection = NULL;
 		lua_pushnil(L);
 		lua_pushfstring(L, "Failed to connect: %s", err ? err : "unknown error");
+		mysql_close(con);
+		mysqld->connection = NULL;
 		return 2;
 	}
 
@@ -944,9 +941,7 @@ int MySQL_SetAliveToken(lua_State* L) {
 }
 
 int MySQL_Close(lua_State* L) {
-	LuaMySQL* m = (LuaMySQL*)lua_touserdata(L, 1);
-	if (!m)
-		return 0;
+	LuaMySQL* m = lua_tomysql(L, 1);
 
 	if (m->activeQuery) {
 		FreeQuery(L, (LuaMySQLQuery*)m->activeQuery);

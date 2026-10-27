@@ -42,7 +42,8 @@ typedef struct LuaHttpCurlRequest {
 	// can call vtbl->read.  Always valid during callbacks because Kitsune is
 	// single-threaded and curl_multi_perform is only called from within a Lua continuation.
 	lua_State*         callbackL;
-	LuaHttpClient*     client;          // borrowed; used to write lastRequestElapsedTicks on completion
+	LuaHttpClient*     client;          // used to write lastRequestElapsedTicks on completion
+	int                clientRef;       // registry ref keeping the client alive while the request is pending
 	int64_t            startNs;         // steady_clock ns when the request was submitted
 	// Response body — one of the two is active, never both
 	char*              body;            // NULL when streamOutput is set

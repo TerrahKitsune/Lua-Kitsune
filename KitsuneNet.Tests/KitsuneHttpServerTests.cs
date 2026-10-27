@@ -442,6 +442,74 @@ public sealed class KitsuneHttpServerTests
         id.ShouldNotBe(0L);
     }
 
+    [Fact]
+    public async Task Request_GetError_HealthyRequest_ReturnsNil()
+    {
+        var (engine, pump) = await StartLuaServer("127.0.0.1:19853", "resp:Send(tostring(req:GetError()))");
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
+        string body = await client.GetStringAsync("http://127.0.0.1:19853/");
+        await StopLuaServer(engine, pump);
+        body.ShouldBe("nil");
+    }
+
+    [Fact]
+    public async Task Request_GetError_NotARequest_Raises()
+    {
+        var (engine, pump) = await StartLuaServer("127.0.0.1:19854", "resp:Send(tostring((pcall(req.GetError, 'x'))))");
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
+        string body = await client.GetStringAsync("http://127.0.0.1:19854/");
+        await StopLuaServer(engine, pump);
+        body.ShouldBe("false");
+    }
+
+    [Fact]
+    public async Task Request_GetError_ClientDisconnectsBeforeReply_ReturnsClientDisconnected()
+    {
+        var (engine, pump) = await StartLuaServer("127.0.0.1:19855", "_held = req");
+        await engine.ExecuteStringAsync("_server:SetOnDisconnect(function(req) if req == _held then _disconnectError = req:GetError() end end)");
+        bool held;
+        using (var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) })
+        using (var cts = new CancellationTokenSource())
+        {
+            Task<HttpResponseMessage> pending = client.GetAsync("http://127.0.0.1:19855/leave", cts.Token);
+            held = await WaitForLuaAsync(engine, "_held ~= nil");
+            cts.Cancel();
+            await Should.ThrowAsync<TaskCanceledException>(pending);
+        }
+
+        bool flagged = await WaitForLuaAsync(engine, "_held:GetError() ~= nil");
+        LuaValue r = await engine.ExecuteStringAsync("""
+            local resp = _held:GetResponse()
+            return tostring(_held:GetError()) .. '|' .. tostring(_disconnectError) .. '|' .. tostring((pcall(resp.Send, resp, 'late')))
+            """);
+        await StopLuaServer(engine, pump);
+        held.ShouldBeTrue();
+        flagged.ShouldBeTrue();
+        r.String.ShouldBe("client disconnected|client disconnected|false");
+    }
+
+    [Fact]
+    public async Task Request_GetError_ClientStillWaiting_IsNilAndLateReplyArrives()
+    {
+        var (engine, pump) = await StartLuaServer("127.0.0.1:19856", "_held = req");
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+        Task<string> pending = client.GetStringAsync("http://127.0.0.1:19856/wait");
+        bool held = await WaitForLuaAsync(engine, "_held ~= nil");
+
+        // Gives the pump many passes over the open connection before checking it was not flagged.
+        await Task.Delay(200);
+        LuaValue r = await engine.ExecuteStringAsync("""
+            local err = tostring(_held:GetError())
+            _held:GetResponse():Send('late reply')
+            return err
+            """);
+        string body = await pending;
+        await StopLuaServer(engine, pump);
+        held.ShouldBeTrue();
+        r.String.ShouldBe("nil");
+        body.ShouldBe("late reply");
+    }
+
     // Chunked stream tests
     [Fact]
     public async Task Server_SendChunkedStream_NonSeekableStream_IsChunkedWithIntactBody()
@@ -849,6 +917,20 @@ public sealed class KitsuneHttpServerTests
             """));
 
         return (engine, pumpTask);
+    }
+
+    private static async Task<bool> WaitForLuaAsync(KitsuneEngine engine, string condition)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (DateTime.UtcNow < deadline)
+        {
+            if ((await engine.ExecuteStringAsync($"return tostring({condition})")).String == "true")
+            {
+                return true;
+            }
+            await Task.Delay(20);
+        }
+        return false;
     }
 
     private static async Task StopLuaServer(KitsuneEngine engine, Task pumpTask)

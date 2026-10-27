@@ -6,14 +6,21 @@
 #include <event2/event.h>
 #include <event2/http.h>
 #include <event2/buffer.h>
+#include <event2/bufferevent.h>
 #include <event2/keyvalq_struct.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <ctype.h>
-#ifndef _WIN32
+#ifdef _WIN32
+#include <winsock2.h>
+#else
+#include <sys/socket.h>
+#include <errno.h>
 #define _strdup strdup
 #endif
+
+#define CLIENT_DISCONNECTED "client disconnected"
 
 /* defensive helpers */
 
@@ -35,6 +42,13 @@ static void ReleaseNode(lua_State* L, HttpOpenConnection* node) {
 		luaL_unref(L, LUA_REGISTRYINDEX, node->requestRef);
 		node->requestRef = LUA_NOREF;
 	}
+	kitsune_free(node);
+}
+
+/* Drops a node without cleaning up its request, which Lua may still be using. */
+static void DropNode(lua_State* L, HttpOpenConnection* node) {
+	if (node->requestRef > 0)
+		luaL_unref(L, LUA_REGISTRYINDEX, node->requestRef);
 	kitsune_free(node);
 }
 
@@ -110,6 +124,30 @@ static void SendersRemoveReq(LuaHttpServer* s, lua_State* L, struct evhttp_reque
 	}
 }
 
+/* Matches on the request userdata: by the time a response completes, the send path has
+   already cleared r->req. */
+static void DispatchedRemove(LuaHttpServer* s, lua_State* L, LuaHttpRequest* target) {
+	HttpOpenConnection* prev = NULL;
+	HttpOpenConnection* cur = s->dispatched;
+	while (cur) {
+		lua_rawgeti(L, LUA_REGISTRYINDEX, cur->requestRef);
+		LuaHttpRequest* r = (LuaHttpRequest*)lua_touserdata(L, -1);
+		lua_pop(L, 1);
+		HttpOpenConnection* next = cur->next;
+		if (r == target) {
+			if (prev)
+				prev->next = next;
+			else
+				s->dispatched = next;
+			DropNode(L, cur);
+		}
+		else {
+			prev = cur;
+		}
+		cur = next;
+	}
+}
+
 /* Call the SetOnDisconnect handler. Stack on entry: [handler, request]. These
    callbacks run inside event_base_loop on the Accept coroutine's stack, so an
    error message left behind would sit at index 1, where AcceptCont reads its
@@ -146,7 +184,7 @@ static void ConnCloseCleanup(LuaHttpServer* s, lua_State* L,
 	if (resp)
 		resp->finalized = true;
 
-	/* 3. Disconnect handler or error event */
+	/* 3. Record the error, then call the disconnect handler */
 	if (r) {
 		if (errmsg) {
 			SafeFreeS(&r->errorMsg);
@@ -159,25 +197,6 @@ static void ConnCloseCleanup(LuaHttpServer* s, lua_State* L,
 			lua_pushlightuserdata(L, (void*)req);
 			lua_rawget(L, LUA_REGISTRYINDEX);
 			CallDisconnectHandler(L);
-		}
-		else if (r->is_error) {
-			/* Enqueue a final event so GetError() surfaces it */
-			lua_pushlightuserdata(L, (void*)req);
-			lua_rawget(L, LUA_REGISTRYINDEX);
-			int ref = luaL_ref(L, LUA_REGISTRYINDEX);
-			HttpOpenConnection* node = (HttpOpenConnection*)kitsune_malloc(sizeof(HttpOpenConnection));
-			if (node) {
-				node->requestRef = ref;
-				node->next = NULL;
-				if (s->queueTail)
-					s->queueTail->next = node;
-				else
-					s->queueHead = node;
-				s->queueTail = node;
-			}
-			else {
-				luaL_unref(L, LUA_REGISTRYINDEX, ref);
-			}
 		}
 	}
 
@@ -196,7 +215,7 @@ static void ConnCloseCleanup(LuaHttpServer* s, lua_State* L,
 /* Called by libevent when a TCP connection closes.  Looks up the request that
    was registered under Registry[con*] in HttpRequestCb.
    - If r->req is still set, the connection closed before we responded:
-	 run full cleanup (removes from queue, fires disconnect/error handler).
+	 run full cleanup (removes from queue, fires disconnect handler).
    - If r->req is NULL, we already sent a response: just fire the disconnect
 	 handler so Lua code that called SetOnDisconnect can react to the close. */
 static void ConnCloseCb(struct evhttp_connection* con, void* arg) {
@@ -273,14 +292,93 @@ static void ResponseCompleteCb(struct evhttp_request* req, void* arg) {
 	lua_rawget(L, LUA_REGISTRYINDEX);
 	LuaHttpRequest* r = (LuaHttpRequest*)lua_touserdata(L, -1);
 	lua_pop(L, 1);
-	if (r)
+	if (r) {
 		r->con = NULL;
+		DispatchedRemove(s, L, r);
+	}
 	lua_pushlightuserdata(L, (void*)con);
 	lua_pushnil(L);
 	lua_rawset(L, LUA_REGISTRYINDEX);
 	lua_pushlightuserdata(L, (void*)req);
 	lua_pushnil(L);
 	lua_rawset(L, LUA_REGISTRYINDEX);
+}
+
+/* early client disconnect */
+
+static bool SocketErrorIsTransient(void) {
+#ifdef _WIN32
+	int err = WSAGetLastError();
+	return err == WSAEWOULDBLOCK || err == WSAEINTR;
+#else
+	return errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR;
+#endif
+}
+
+/* libevent stops reading a connection once it hands the request to us, so it cannot
+   see the client leave while Lua holds the request. Peeking leaves pipelined bytes for
+   libevent. A client that half-closes and still waits for the reply reads as gone. */
+static bool ClientHasLeft(struct evhttp_connection* con) {
+	evutil_socket_t fd = bufferevent_getfd(evhttp_connection_get_bufferevent(con));
+	if (fd == EVUTIL_INVALID_SOCKET)
+		return false;
+	char peek;
+#ifdef _WIN32
+	int n = recv((SOCKET)fd, &peek, 1, MSG_PEEK);
+#else
+	ssize_t n = recv(fd, &peek, 1, MSG_PEEK);
+#endif
+	if (n > 0)
+		return false;
+	return n == 0 || !SocketErrorIsTransient();
+}
+
+/* Unlinks and returns the first dispatched request whose client left before Lua replied. */
+static HttpOpenConnection* DispatchedTakeDisconnected(LuaHttpServer* s, lua_State* L) {
+	HttpOpenConnection* prev = NULL;
+	for (HttpOpenConnection* cur = s->dispatched; cur; prev = cur, cur = cur->next) {
+		lua_rawgeti(L, LUA_REGISTRYINDEX, cur->requestRef);
+		LuaHttpRequest* r = (LuaHttpRequest*)lua_touserdata(L, -1);
+		lua_pop(L, 1);
+		if (!r || !r->req || !r->con || r->responseRef <= 0)
+			continue;
+
+		lua_rawgeti(L, LUA_REGISTRYINDEX, r->responseRef);
+		LuaHttpResponse* resp = (LuaHttpResponse*)lua_touserdata(L, -1);
+		lua_pop(L, 1);
+		if (!resp || resp->finalized || !ClientHasLeft(r->con))
+			continue;
+
+		if (prev)
+			prev->next = cur->next;
+		else
+			s->dispatched = cur->next;
+		return cur;
+	}
+	return NULL;
+}
+
+/* The node is unlinked before any Lua runs, so the disconnect handler may answer other
+   requests or close the server. The close callback is cleared first so the handler does
+   not run inside evhttp_connection_free, while the connection is still listed in the evhttp. */
+static void ReapDisconnectedClients(LuaHttpServer* s, lua_State* L) {
+	HttpOpenConnection* node;
+	while (s->httpInit && (node = DispatchedTakeDisconnected(s, L)) != NULL) {
+		lua_rawgeti(L, LUA_REGISTRYINDEX, node->requestRef);
+		LuaHttpRequest* r = (LuaHttpRequest*)lua_touserdata(L, -1);
+		lua_pop(L, 1);
+		struct evhttp_request*    req = r->req;
+		struct evhttp_connection* con = r->con;
+
+		evhttp_connection_set_closecb(con, NULL, NULL);
+		ConnCloseCleanup(s, L, req, CLIENT_DISCONNECTED);
+		/* A handler that closed the server has already freed con through evhttp_free. */
+		if (s->httpInit)
+			evhttp_connection_free(con);
+		evhttp_request_free(req);
+		r->req = NULL;
+		DropNode(L, node);
+	}
 }
 
 /* method enum → string */
@@ -522,6 +620,32 @@ static void ServerTeardown(LuaHttpServer* s, lua_State* L) {
 	}
 	s->senders = NULL;
 
+	for (HttpOpenConnection* cur = s->dispatched; cur; ) {
+		HttpOpenConnection* next = cur->next;
+		lua_rawgeti(L, LUA_REGISTRYINDEX, cur->requestRef);
+		LuaHttpRequest* r = (LuaHttpRequest*)lua_touserdata(L, -1);
+		lua_pop(L, 1);
+		if (r) {
+			if (r->req) {
+				/* Handed to Lua and never answered: orphaned and user-owned like the queue above. */
+				lua_pushlightuserdata(L, (void*)r->req);
+				lua_pushnil(L);
+				lua_rawset(L, LUA_REGISTRYINDEX);
+				evhttp_request_free(r->req);
+				r->req = NULL;
+			}
+			if (r->con) {
+				lua_pushlightuserdata(L, (void*)r->con);
+				lua_pushnil(L);
+				lua_rawset(L, LUA_REGISTRYINDEX);
+				r->con = NULL;
+			}
+		}
+		DropNode(L, cur);
+		cur = next;
+	}
+	s->dispatched = NULL;
+
 	/* Clear coroutine + server anchor */
 	if (s->coroutineRef > 0) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, s->coroutineRef);
@@ -635,7 +759,10 @@ static int AcceptCont(lua_State* L, int status, lua_KContext ctx) {
 		sender = next;
 	}
 
-	/* Step 2 — poll libevent (non-blocking, drains all pending I/O).
+	/* Step 2 — fail requests whose client left before Lua replied */
+	ReapDisconnectedClients(s, L);
+
+	/* Step 3 — poll libevent (non-blocking, drains all pending I/O).
 	   Update s->L to the current coroutine state so any callbacks that fire
 	   during the poll (ResponseCompleteCb, ConnCloseCb) use the right L. */
 	if (s->base) {
@@ -643,16 +770,15 @@ static int AcceptCont(lua_State* L, int status, lua_KContext ctx) {
 		event_base_loop(s->base, EVLOOP_NONBLOCK);
 	}
 
-	/* Step 3 — dispatch one queued request to Lua */
+	/* Step 4 — dispatch one queued request to Lua */
 	if (s->queueHead) {
 		HttpOpenConnection* node = s->queueHead;
 		s->queueHead = node->next;
 		if (!s->queueHead)
 			s->queueTail = NULL;
 		lua_rawgeti(L, LUA_REGISTRYINDEX, node->requestRef);
-		luaL_unref(L, LUA_REGISTRYINDEX, node->requestRef);
-		node->requestRef = LUA_NOREF;
-		kitsune_free(node);
+		node->next = s->dispatched;
+		s->dispatched = node;
 		return lua_yieldk(L, 1, ctx, AcceptCont);
 	}
 

@@ -1,4 +1,5 @@
 ﻿#include "kafka/LuaKafkaHelpers.h"
+#include "Mem.h"
 
 rd_kafka_conf_t* ToKafkaConf(lua_State* L, int idx, const char* defaultgroup) {
 
@@ -659,12 +660,19 @@ int KafkaDescribeGroups(lua_State* L, rd_kafka_t* rd) {
 	int timeout_ms = (int)luaL_optinteger(L, 3, 5000);
 
 	int n = (int)luaL_len(L, 2);
-	const char** groupIds = (const char**)malloc((size_t)n * sizeof(const char*));
+	for (int i = 1; i <= n; i++) {
+		if (lua_rawgeti(L, 2, i) != LUA_TSTRING)
+			return luaL_error(L, "group id %d must be a string", i);
+		lua_pop(L, 1);
+	}
+
+	const char** groupIds = (const char**)kitsune_malloc((size_t)n * sizeof(const char*));
 	if (!groupIds) {
 		lua_pushboolean(L, false);
 		lua_pushstring(L, "out of memory");
 		return 2;
 	}
+	// The strings stay valid without being on the stack: the table at index 2 still references them.
 	for (int i = 0; i < n; i++) {
 		lua_rawgeti(L, 2, i + 1);
 		groupIds[i] = lua_tostring(L, -1);
@@ -678,7 +686,7 @@ int KafkaDescribeGroups(lua_State* L, rd_kafka_t* rd) {
 	rd_kafka_queue_t* queue = rd_kafka_queue_new(rd);
 	rd_kafka_DescribeConsumerGroups(rd, groupIds, (size_t)n, options, queue);
 	rd_kafka_AdminOptions_destroy(options);
-	free(groupIds);
+	kitsune_free(groupIds);
 
 	rd_kafka_event_t* event = rd_kafka_queue_poll(queue, timeout_ms + 5000);
 	rd_kafka_queue_destroy(queue);

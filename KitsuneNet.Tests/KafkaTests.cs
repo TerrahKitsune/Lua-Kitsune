@@ -469,6 +469,19 @@ public sealed class KafkaTests
     }
 
     [KafkaFact]
+    public async Task Producer_DescribeGroups_NonStringGroupId_RaisesError()
+    {
+        LuaValue r = await Run("describebad", @"
+            local p = newProducer()
+            local ok, err = pcall(p.DescribeGroups, p, {groupId, 42})
+            p:Close()
+            return tostring(ok) .. '|' .. tostring(err)
+        ");
+        r.String.ShouldStartWith("false|");
+        r.String.ShouldContain("group id 2 must be a string");
+    }
+
+    [KafkaFact]
     public async Task Producer_GetGroupOffsets_ReturnsTable()
     {
         // Create a group with committed offsets, then query them
@@ -1200,7 +1213,7 @@ public sealed class KafkaTests
     }
 
     // Parses KITSUNE_KAFKA_TEST=host:port:topic:partition; only the broker address is used
-    private static string Bootstrap()
+    internal static string Bootstrap()
     {
         var parts = Environment.GetEnvironmentVariable("KITSUNE_KAFKA_TEST")!.Split(':');
         return $"{parts[0]}:{parts[1]}";

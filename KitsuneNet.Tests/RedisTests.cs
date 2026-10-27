@@ -2295,6 +2295,14 @@ public sealed class RedisTests : IAsyncLifetime
         r.String.ShouldBe("true");
     }
 
+    // Returns a Lua snippet that opens a Redis connection with the test settings.
+    internal static string Open()
+    {
+        var pass = Password();
+        var passLua = pass is not null ? $"'{pass}'" : "nil";
+        return $"Redis.Open('{Host()}', {Port()}, false, 10, nil, {passLua})";
+    }
+
     // Parses KITSUNE_REDIS_TEST=host:port[:password]
     private static string Host()
     {
@@ -2311,14 +2319,6 @@ public sealed class RedisTests : IAsyncLifetime
     {
         var parts = Environment.GetEnvironmentVariable("KITSUNE_REDIS_TEST")!.Split(':');
         return parts.Length > 2 && parts[2].Length > 0 ? parts[2] : null;
-    }
-
-    // Returns a Lua snippet that opens a Redis connection with the test settings.
-    private static string Open()
-    {
-        var pass = Password();
-        var passLua = pass is not null ? $"'{pass}'" : "nil";
-        return $"Redis.Open('{Host()}', {Port()}, false, 10, nil, {passLua})";
     }
 
     // GetJson

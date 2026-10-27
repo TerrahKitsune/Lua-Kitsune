@@ -680,6 +680,12 @@ int SQLite_Open(lua_State* L) {
 
 	size_t len;
 	const char* db = luaL_optlstring(L, 1, ":memory:", &len);
+
+	//No mode: keep the journal mode the database already has (new databases get WAL)
+	//and leave SQLite's threading config at its compiled-in default
+	bool hasMode = !lua_isnoneornil(L, 2);
+	int mode = hasMode ? (int)luaL_checkinteger(L, 2) : 0;
+
 	char* file = (char*)kitsune_malloc(len + 1);
 	if (!file) {
 		luaL_error(L, "Unable to allocate memory for sqlite");
@@ -688,11 +694,6 @@ int SQLite_Open(lua_State* L) {
 
 	file[len] = '\0';
 	memcpy(file, db, len);
-
-	//No mode: keep the journal mode the database already has (new databases get WAL)
-	//and leave SQLite's threading config at its compiled-in default
-	bool hasMode = !lua_isnoneornil(L, 2);
-	int mode = hasMode ? (int)luaL_checkinteger(L, 2) : 0;
 
 	lua_pop(L, lua_gettop(L));
 	LuaSQLite* luasqlite = lua_pushsqlite(L);

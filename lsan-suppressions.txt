@@ -1,0 +1,17 @@
+# LeakSanitizer suppressions for build-linux-asan-and-test.ps1.
+# Only leaks owned by the .NET host or by process-lifetime library state belong here.
+# Never suppress frames in libKitsuneEngine.so's own sources.
+
+# .NET runtime and host: not our allocations, and freed only at process exit if at all.
+leak:libcoreclr.so
+leak:libclrjit.so
+leak:libhostfxr.so
+leak:libhostpolicy.so
+leak:libSystem.Native.so
+leak:libSystem.Security.Cryptography.Native.OpenSsl.so
+leak:libSystem.Globalization.Native.so
+
+# NVIDIA driver (loaded by the Hardware module's NVML probe): one-time init state the driver allocates
+# inside its own code and never frees.
+leak:libcuda.so
+leak:libnvidia-ml.so

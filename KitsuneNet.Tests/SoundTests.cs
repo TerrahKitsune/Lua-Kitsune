@@ -453,4 +453,46 @@ public sealed class SoundTests
         ");
         r.String.ShouldBe("false");
     }
+
+    [Fact]
+    public async Task Sound_GetDuration_IsFramesDividedBySampleRate()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync(@"
+            return Sound.New(44100, 1, 22050):GetDuration()
+                .. '|' .. Sound.New(8000, 2, 12000):GetDuration()
+                .. '|' .. Sound.New(1000, 1, 1):GetDuration()
+        ");
+        r.String.ShouldBe("0.5|1.5|0.001");
+    }
+
+    [Fact]
+    public async Task Sound_GetDuration_ChannelCountDoesNotChangeDuration()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync(@"
+            local mono = Sound.New(44100, 1, 4410)
+            return mono:GetDuration() .. '|' .. mono:ToChannels(2):GetDuration()
+        ");
+        r.String.ShouldBe("0.1|0.1");
+    }
+
+    [Fact]
+    public async Task Sound_GetDuration_SurvivesResampling()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync(@"
+            return Sound.New(44100, 1, 22050):Resample(22050):GetDuration()
+        ");
+        r.Number.ShouldBe(0.5, 0.0001);
+    }
+
+    [Fact]
+    public async Task Sound_GetDuration_NotASound_Throws()
+    {
+        using KitsuneEngine engine = new();
+        LuaException ex = await Should.ThrowAsync<LuaException>(
+            engine.ExecuteStringAsync("return Sound.New(44100, 1, 10).GetDuration(5)"));
+        ex.Message.ShouldContain("LuaSound expected");
+    }
 }

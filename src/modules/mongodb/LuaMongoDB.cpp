@@ -944,8 +944,8 @@ int MongoDB_Close(lua_State* L) {
 }
 
 int MongoDB_ToString(lua_State* L) {
-	LuaMongo* m = (LuaMongo*)lua_touserdata(L, 1);
-	if (!m || !m->worker) {
+	LuaMongo* m = luaL_checkmongodb(L, 1);
+	if (!m->worker) {
 		lua_pushliteral(L, "MongoDB: (closed)");
 	}
 	else {

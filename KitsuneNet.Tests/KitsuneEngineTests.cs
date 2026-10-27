@@ -1610,6 +1610,192 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
+        public async Task TasksGetAllIds_RunningTask_IsListedUntilConsumed()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local function listed(id)
+                    for _, x in ipairs(Tasks.GetAllIds()) do
+                        if x == id then return true end
+                    end
+                    return false
+                end
+                local t = Tasks.New(function() Sleep(100) return 1 end)
+                local id = t:GetId()
+                local whileRunning = listed(id)
+                while not t:Finished() do Sleep(5) end
+                local whenDone = listed(id)
+                t:ConsumeResult()
+                local afterConsume = listed(id)
+                return tostring(id > 0) .. '|' .. tostring(whileRunning) .. '|' .. tostring(whenDone) .. '|' .. tostring(afterConsume)
+            ");
+            r.String.ShouldBe("true|true|true|false");
+        }
+
+        [Fact]
+        public async Task TasksGetAllIds_SeveralTasks_AllListedOnceAsIntegers()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local tasks = {}
+                for i = 1, 3 do
+                    tasks[i] = Tasks.New(function() Sleep(200) end)
+                end
+                local counts = {}
+                local allIntegers = true
+                for _, id in ipairs(Tasks.GetAllIds()) do
+                    counts[id] = (counts[id] or 0) + 1
+                    if math.type(id) ~= 'integer' or id <= 0 then allIntegers = false end
+                end
+                local each = true
+                for _, t in ipairs(tasks) do
+                    if counts[t:GetId()] ~= 1 then each = false end
+                end
+                for _, t in ipairs(tasks) do t:Cancel() end
+                return tostring(allIntegers) .. '|' .. tostring(each)
+            ");
+            r.String.ShouldBe("true|true");
+        }
+
+        [Fact]
+        public async Task TasksGetAllIds_NoTasks_ReturnsTable()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local ids = Tasks.GetAllIds()
+                return type(ids) .. '|' .. tostring(Tasks.GetAllIds() ~= ids)
+            ");
+            r.String.ShouldBe("table|true");
+        }
+
+        [Fact]
+        public async Task TaskGetError_FaultedTask_ReturnsErrorMessage()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Tasks.New(function() error('boom', 0) end)
+                while not t:Finished() do Sleep(5) end
+                return t:GetError()
+            ");
+            r.String.ShouldBe("boom");
+        }
+
+        [Fact]
+        public async Task TaskGetError_RuntimeError_IncludesLocationAndMessage()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Tasks.New(function() local x = nil; return x.y end)
+                while not t:Finished() do Sleep(5) end
+                local err = t:GetError()
+                return tostring(err:find('attempt to index a nil value', 1, true) ~= nil)
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task TaskGetError_SuccessfulTask_ReturnsNilAndKeepsResult()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Tasks.New(function() return 42 end)
+                while not t:Finished() do Sleep(5) end
+                return tostring(t:GetError()) .. '|' .. tostring(t:GetResult())
+            ");
+            r.String.ShouldBe("nil|42");
+        }
+
+        [Fact]
+        public async Task TaskGetError_StillRunning_ReturnsNil()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Tasks.New(function() Sleep(200) error('late', 0) end)
+                local early = t:GetError()
+                while not t:Finished() do Sleep(5) end
+                return tostring(early) .. '|' .. tostring(t:GetError())
+            ");
+            r.String.ShouldBe("nil|late");
+        }
+
+        [Fact]
+        public async Task TaskGetError_FaultedTask_NilAfterConsumeResult()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Tasks.New(function() error('boom', 0) end)
+                while not t:Finished() do Sleep(5) end
+                local before = t:GetError()
+                local consumed = t:ConsumeResult()
+                return tostring(before) .. '|' .. tostring(consumed) .. '|' .. tostring(t:GetError())
+            ");
+            r.String.ShouldBe("boom|nil|nil");
+        }
+
+        [Fact]
+        public async Task TaskGetError_NonStringErrorObject_NamesItsType()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Tasks.New(function() error({code = 1}) end)
+                local n = Tasks.New(function() error(nil) end)
+                while not (t:Finished() and n:Finished()) do Sleep(5) end
+                return tostring(t:GetError()) .. '|' .. tostring(n:GetError())
+            ");
+
+            // Lua itself turns a nil error value into the string "<no error object>".
+            r.String.ShouldBe("(error object is a table value)|<no error object>");
+        }
+
+        [Fact]
+        public async Task ExecuteStringAsync_NonStringErrorObject_ExceptionNamesItsType()
+        {
+            using KitsuneEngine engine = new();
+            LuaException ex = await Should.ThrowAsync<LuaException>(engine.ExecuteStringAsync("error({code = 1})"));
+            ex.Message.ShouldContain("(error object is a table value)");
+        }
+
+        [Fact]
+        public async Task TaskGetError_ConsumedThroughOtherHandle_NilOnBoth()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Tasks.New(function() error('boom', 0) end)
+                while not t:Finished() do Sleep(5) end
+                local other = Tasks.Open(t:GetId())
+                local before = other:GetError()
+                t:ConsumeResult()
+                return tostring(before) .. '|' .. tostring(t:GetError()) .. '|' .. tostring(other:GetError())
+            ");
+            r.String.ShouldBe("boom|nil|nil");
+        }
+
+        [Fact]
+        public async Task TaskGetError_DisposedHandle_ReturnsNil()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Tasks.New(function() error('boom', 0) end)
+                while not t:Finished() do Sleep(5) end
+                t:Dispose()
+                return tostring(t:GetError())
+            ");
+            r.String.ShouldBe("nil");
+        }
+
+        [Fact]
+        public async Task TaskGetError_NotATask_Throws()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local t = Tasks.New(function() end)
+                local ok, err = pcall(t.GetError, 5)
+                return tostring(ok) .. '|' .. tostring(err):match('LuaTask expected')
+            ");
+            r.String.ShouldBe("false|LuaTask expected");
+        }
+
+        [Fact]
         public async Task TasksNew_WithArgs_ArgsPassedToFunction()
         {
             // Arguments after the function are passed as parameters on first resume.

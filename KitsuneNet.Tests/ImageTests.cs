@@ -709,4 +709,67 @@ public sealed class ImageTests
         ");
         r.String.ShouldBe("255,0,0,4");
     }
+
+    [Fact]
+    public async Task Image_PadCanvas_GrowsCanvasAndPlacesOriginalAtOffset()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync(@"
+            local img = Image.New(2, 3)
+            img:SetPixel(0, 0, 255, 0, 0, 255)
+            img:SetPixel(1, 2, 0, 0, 255, 128)
+            local p = img:PadCanvas(1, 2, 3, 4)
+            local function px(x, y) return table.concat({ p:GetPixel(x, y) }, ',') end
+            return p:GetWidth() .. 'x' .. p:GetHeight()
+                .. '|' .. px(1, 2)
+                .. '|' .. px(2, 4)
+                .. '|' .. px(0, 0)
+                .. '|' .. px(5, 8)
+        ");
+        r.String.ShouldBe("6x9|255,0,0,255|0,0,255,128|0,0,0,0|0,0,0,0");
+    }
+
+    [Fact]
+    public async Task Image_PadCanvas_LeavesSourceUnchanged()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync(@"
+            local img = Image.New(2, 3)
+            img:SetPixel(0, 0, 255, 0, 0, 255)
+            img:PadCanvas(5, 5, 5, 5)
+            return img:GetWidth() .. 'x' .. img:GetHeight() .. '|' .. table.concat({ img:GetPixel(0, 0) }, ',')
+        ");
+        r.String.ShouldBe("2x3|255,0,0,255");
+    }
+
+    [Fact]
+    public async Task Image_PadCanvas_ZeroPadding_ReturnsSameSizedCopy()
+    {
+        using KitsuneEngine engine = new();
+        LuaValue r = await engine.ExecuteStringAsync(@"
+            local img = Image.New(2, 3)
+            img:SetPixel(1, 1, 9, 8, 7, 255)
+            local p = img:PadCanvas(0, 0, 0, 0)
+            return p:GetWidth() .. 'x' .. p:GetHeight() .. '|' .. table.concat({ p:GetPixel(1, 1) }, ',')
+        ");
+        r.String.ShouldBe("2x3|9,8,7,255");
+    }
+
+    [Fact]
+    public async Task Image_PadCanvas_NegativePadding_Throws()
+    {
+        using KitsuneEngine engine = new();
+        LuaException ex = await Should.ThrowAsync<LuaException>(
+            engine.ExecuteStringAsync("return Image.New(2, 2):PadCanvas(-1, 0, 0, 0)"));
+        ex.Message.ShouldContain("padding must be non-negative");
+    }
+
+    [Fact]
+    public async Task Image_PadCanvas_MissingArgument_Throws()
+    {
+        using KitsuneEngine engine = new();
+        LuaException ex = await Should.ThrowAsync<LuaException>(
+            engine.ExecuteStringAsync("return Image.New(2, 2):PadCanvas(1, 2, 3)"));
+        ex.Message.ShouldContain("PadCanvas");
+    }
 }

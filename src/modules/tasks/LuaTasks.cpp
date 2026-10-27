@@ -300,7 +300,7 @@ int Tasks_GetError(lua_State* L) {
 	g_state->slotsLock.lock();
 	KitsuneCoroutine* slot = FindSlot(g_state, task->id);
 	long st = slot ? slot->state.load() : KITSUNE_COROUTINE_STATE_NOT_USED;
-	if (!slot || (st != KITSUNE_COROUTINE_STATE_DONE && st != KITSUNE_COROUTINE_STATE_RELEASED) || !slot->error) {
+	if (!slot || (st != KITSUNE_COROUTINE_STATE_DONE && st != KITSUNE_COROUTINE_STATE_RELEASED) || !slot->error || slot->resultConsumed) {
 		g_state->slotsLock.unlock();
 		lua_pushnil(L);
 		return 1;
@@ -355,6 +355,7 @@ int Tasks_ConsumeResult(lua_State* L) {
 	// Free the pinned result data immediately — Lua now owns the value.
 	FreeVariableData(&slot->result, L);
 	slot->result.type = LUA_TNONE;
+	slot->resultConsumed = true;
 	// Advance to RELEASED so the scheduler compacts this slot on its next tick.
 	slot->state.store(KITSUNE_COROUTINE_STATE_RELEASED);
 	g_state->workEvent.Set();

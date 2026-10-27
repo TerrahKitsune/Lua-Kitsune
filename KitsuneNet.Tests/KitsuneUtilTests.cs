@@ -739,6 +739,70 @@ namespace KitsuneNet.Tests
         }
 
         [Fact]
+        public async Task DateTime_ToLocal_PreservesTheInstant()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local dt = DateTime.New(2024, 1, 1, 12, 0, 0, 0, 120)
+                local local_ = dt:ToLocal()
+                return dt:UnixMilliseconds() .. '|' .. local_:UnixMilliseconds()
+                    .. '|' .. tostring(dt == local_)
+                    .. '|' .. local_:ToUtc():UnixMilliseconds()
+            ");
+            r.String.ShouldBe("1704103200000|1704103200000|true|1704103200000");
+        }
+
+        [Fact]
+        public async Task DateTime_ToLocal_UsesTheSystemOffsetOfNow()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local offset = DateTime.UtcNow():ToLocal():OffsetMinutes()
+                return tostring(offset == DateTime.Now():OffsetMinutes())
+                    .. '|' .. tostring(offset >= -840 and offset <= 840)
+            ");
+            r.String.ShouldBe("true|true");
+        }
+
+        [Fact]
+        public async Task DateTime_ToLocal_DisplaysSameWallClockAsToOffset()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local utc = DateTime.FromUnixMilliseconds(1700000000123)
+                local local_ = utc:ToLocal()
+                return tostring(tostring(local_) == tostring(utc:ToOffset(local_:OffsetMinutes())))
+            ");
+            r.String.ShouldBe("true");
+        }
+
+        [Fact]
+        public async Task DateTime_ToLocal_IsIdempotentAndLeavesSourceUnchanged()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local dt = DateTime.New(2024, 1, 1, 12, 0, 0, 0, 120)
+                local once = dt:ToLocal()
+                local twice = once:ToLocal()
+                return tostring(twice:OffsetMinutes() == once:OffsetMinutes())
+                    .. '|' .. tostring(twice:UnixMilliseconds() == once:UnixMilliseconds())
+                    .. '|' .. dt:OffsetMinutes()
+            ");
+            r.String.ShouldBe("true|true|120");
+        }
+
+        [Fact]
+        public async Task DateTime_ToLocal_NotADateTime_Throws()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local ok, err = pcall(DateTime.UtcNow().ToLocal, 5)
+                return tostring(ok) .. '|' .. tostring(err):match('DATETIME expected')
+            ");
+            r.String.ShouldBe("false|DATETIME expected");
+        }
+
+        [Fact]
         public async Task DateTime_ToOffset_ChangesDisplayedHour()
         {
             using KitsuneEngine engine = new();
@@ -1308,6 +1372,141 @@ namespace KitsuneNet.Tests
                 return tostring(ok) .. '|' .. tostring(err ~= nil)
             ");
             r.String.ShouldBe("false|true");
+        }
+
+        [Fact]
+        public async Task Decimal_MulMethod_AddsScalesOfOperands()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local D = Decimal.FromString
+                return tostring(D('1.5'):Mul(2))
+                    .. '|' .. tostring(D('1.5'):Mul(D('2.5')))
+                    .. '|' .. tostring(D('2.50'):Mul(D('4.0')))
+            ");
+            r.String.ShouldBe("3.0|3.75|10.000");
+        }
+
+        [Fact]
+        public async Task Decimal_MulMethod_AcceptsNumericStringAndLuaNumber()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local D = Decimal.FromString
+                return tostring(D('1.5'):Mul('2')) .. '|' .. tostring(D('1.5'):Mul(2.5))
+            ");
+            r.String.ShouldBe("3.0|3.75");
+        }
+
+        [Fact]
+        public async Task Decimal_MulMethod_SignRules()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local D = Decimal.FromString
+                return tostring(D('-1.5'):Mul(D('2')))
+                    .. '|' .. tostring(D('-1.5'):Mul(D('-2')))
+                    .. '|' .. tostring(D('0'):Mul(D('-5')))
+                    .. '|' .. tostring(D('0'):Mul(D('-5')):IsNegative())
+            ");
+            r.String.ShouldBe("-3.0|3.0|0|false");
+        }
+
+        [Fact]
+        public async Task Decimal_MulMethod_NonNumericOperand_Throws()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local ok, err = pcall(function() return Decimal.FromString('1'):Mul({}) end)
+                return tostring(ok) .. '|' .. tostring(err):match('Decimal expected for multiplication')
+            ");
+            r.String.ShouldBe("false|Decimal expected for multiplication");
+        }
+
+        [Fact]
+        public async Task Decimal_DivMethod_TruncatesToTenExtraDecimalPlaces()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local D = Decimal.FromString
+                return tostring(D('1'):Div(D('3')))
+                    .. '|' .. tostring(D('6'):Div(D('3')))
+                    .. '|' .. tostring(D('10'):Div('4'))
+            ");
+            r.String.ShouldBe("0.3333333333|2.0000000000|2.5000000000");
+        }
+
+        [Fact]
+        public async Task Decimal_DivMethod_ScaleGrowsWithDividendScale()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local D = Decimal.FromString
+                return tostring(D('-7.5'):Div(2))
+                    .. '|' .. tostring(D('-0.5'):Div(D('0.25')))
+                    .. '|' .. tostring(D('0'):Div(5))
+            ");
+            r.String.ShouldBe("-3.75000000000|-2.0000000000|0.0000000000");
+        }
+
+        [Fact]
+        public async Task Decimal_DivMethod_ByZero_ThrowsWithMessage()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local ok, err = pcall(function() return Decimal.FromString('1'):Div(0) end)
+                return tostring(ok) .. '|' .. tostring(err):match('Decimal division by zero')
+            ");
+            r.String.ShouldBe("false|Decimal division by zero");
+        }
+
+        [Fact]
+        public async Task Decimal_DivMethod_NonNumericOperand_Throws()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local ok, err = pcall(function() return Decimal.FromString('1'):Div({}) end)
+                return tostring(ok) .. '|' .. tostring(err):match('Decimal expected for division')
+            ");
+            r.String.ShouldBe("false|Decimal expected for division");
+        }
+
+        [Fact]
+        public async Task Decimal_Precision_CountsSignificantDigits()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local D = Decimal.FromString
+                return D('123.456'):Precision()
+                    .. '|' .. D('100'):Precision()
+                    .. '|' .. D('-12.50'):Precision()
+                    .. '|' .. D('0.10'):Precision()
+                    .. '|' .. D('1234567890123456789012345678901234'):Precision()
+            ");
+            r.String.ShouldBe("6|3|4|2|34");
+        }
+
+        [Fact]
+        public async Task Decimal_Precision_ReturnsIntegerAndIgnoresSign()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local p = Decimal.FromString('-99.9'):Precision()
+                return math.type(p) .. '|' .. p
+            ");
+            r.String.ShouldBe("integer|3");
+        }
+
+        [Fact]
+        public async Task Decimal_Precision_GrowsWithMultiplicationOfOperands()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local D = Decimal.FromString
+                local product = D('123.456') * D('0.001')
+                return tostring(product) .. '|' .. product:Precision()
+            ");
+            r.String.ShouldBe("0.123456|6");
         }
 
         [Fact]
@@ -4909,6 +5108,67 @@ namespace KitsuneNet.Tests
             }
         }
 
+        // GetSpecialFolder is only registered on Windows.
+        [WindowsOnlyFact]
+        public async Task FileSystem_GetSpecialFolder_Default_IsExistingDesktopDirectory()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync("return FileSystem.GetSpecialFolder()");
+            string path = r.String.ShouldNotBeNull();
+            Path.IsPathRooted(path).ShouldBeTrue();
+            path.EndsWith('\\').ShouldBeFalse();
+            string.Equals(path, Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), StringComparison.OrdinalIgnoreCase)
+                .ShouldBeTrue($"expected the desktop directory, got {path}");
+            Directory.Exists(path).ShouldBeTrue();
+        }
+
+        [WindowsOnlyFact]
+        public async Task FileSystem_GetSpecialFolder_NoArgument_EqualsDesktopDirectoryCsidl()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(
+                "return tostring(FileSystem.GetSpecialFolder() == FileSystem.GetSpecialFolder(0x10))");
+            r.String.ShouldBe("true");
+        }
+
+        [WindowsOnlyFact]
+        public async Task FileSystem_GetSpecialFolder_KnownCsidls_MatchTheOperatingSystemFolders()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                return FileSystem.GetSpecialFolder(0x1a)
+                    .. '|' .. FileSystem.GetSpecialFolder(0x1c)
+                    .. '|' .. FileSystem.GetSpecialFolder(0x23)
+            ");
+            string[] folders = r.String!.Split('|');
+            folders.Length.ShouldBe(3);
+            string.Equals(folders[0], Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), StringComparison.OrdinalIgnoreCase)
+                .ShouldBeTrue($"ApplicationData: {folders[0]}");
+            string.Equals(folders[1], Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), StringComparison.OrdinalIgnoreCase)
+                .ShouldBeTrue($"LocalApplicationData: {folders[1]}");
+            string.Equals(folders[2], Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), StringComparison.OrdinalIgnoreCase)
+                .ShouldBeTrue($"CommonApplicationData: {folders[2]}");
+        }
+
+        [WindowsOnlyFact]
+        public async Task FileSystem_GetSpecialFolder_UnknownCsidl_ReturnsNil()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync("return tostring(FileSystem.GetSpecialFolder(0x7777))");
+            r.String.ShouldBe("nil");
+        }
+
+        [WindowsOnlyFact]
+        public async Task FileSystem_GetSpecialFolder_NonNumericArgument_Throws()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local ok, err = pcall(FileSystem.GetSpecialFolder, 'desktop')
+                return tostring(ok) .. '|' .. tostring(err):match('number expected, got string')
+            ");
+            r.String.ShouldBe("false|number expected, got string");
+        }
+
         [Fact]
         public async Task FileSystem_GetDrives_ReturnsList()
         {
@@ -7066,6 +7326,102 @@ namespace KitsuneNet.Tests
         }
 
         [SkippableFact]
+        public async Task Hardware_DiskIO_EntriesHaveNonNegativeRates()
+        {
+            using KitsuneEngine engine = new();
+
+            // The first call only primes the baseline (needed on Linux); the second reports the rates.
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                Hardware.DiskIO()
+                Sleep(200)
+                local t = Hardware.DiskIO()
+                local n = 0
+                for name, io in pairs(t) do
+                    n = n + 1
+                    if type(name) ~= 'string' or #name == 0 then return 'bad name' end
+                    if type(io) ~= 'table' then return 'bad entry ' .. name end
+                    for _, field in ipairs({ 'ReadBytesPerSec', 'WriteBytesPerSec' }) do
+                        local v = io[field]
+                        if v ~= nil and (type(v) ~= 'number' or v ~= v or v < 0) then
+                            return 'bad ' .. field .. ' of ' .. name
+                        end
+                    end
+                    local active = io.ActivePercent
+                    if active ~= nil and (type(active) ~= 'number' or active < 0 or active > 100) then
+                        return 'bad ActivePercent of ' .. name
+                    end
+                end
+                if n == 0 then return 'absent' end
+                return 'ok'
+            ");
+            Skip.If(r == "absent", "Hardware.DiskIO() reports no disks on this machine");
+            r.String.ShouldBe("ok");
+        }
+
+        [SkippableFact]
+        public async Task Hardware_DiskIO_EachCallReturnsAFreshTable()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                Hardware.DiskIO()
+                Sleep(100)
+                local a = Hardware.DiskIO()
+                local b = Hardware.DiskIO()
+                if next(a) == nil then return 'absent' end
+                return tostring(type(a) == 'table' and type(b) == 'table' and a ~= b)
+            ");
+            Skip.If(r == "absent", "Hardware.DiskIO() reports no disks on this machine");
+            r.String.ShouldBe("true");
+        }
+
+        [SkippableFact]
+        public async Task Hardware_NetworkIO_EntriesHaveConsistentNonNegativeRates()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                Hardware.NetworkIO()
+                Sleep(200)
+                local t = Hardware.NetworkIO()
+                local n = 0
+                for name, io in pairs(t) do
+                    n = n + 1
+                    if type(name) ~= 'string' or #name == 0 then return 'bad name' end
+                    if type(io) ~= 'table' then return 'bad entry ' .. name end
+                    for _, field in ipairs({ 'RecvBytesPerSec', 'SendBytesPerSec', 'TotalBytesPerSec' }) do
+                        local v = io[field]
+                        if v ~= nil and (type(v) ~= 'number' or v ~= v or v < 0) then
+                            return 'bad ' .. field .. ' of ' .. name
+                        end
+                    end
+                    if io.RecvBytesPerSec and io.SendBytesPerSec and io.TotalBytesPerSec
+                        and math.abs(io.TotalBytesPerSec - (io.RecvBytesPerSec + io.SendBytesPerSec)) > 1e-6 then
+                        return 'Total is not Recv + Send for ' .. name
+                    end
+                end
+                if n == 0 then return 'absent' end
+                return 'ok'
+            ");
+            Skip.If(r == "absent", "Hardware.NetworkIO() reports no adapters on this machine");
+            r.String.ShouldBe("ok");
+        }
+
+        [SkippableFact]
+        public async Task Hardware_NetworkIO_EachCallReturnsAFreshTable()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                Hardware.NetworkIO()
+                Sleep(100)
+                local a = Hardware.NetworkIO()
+                local b = Hardware.NetworkIO()
+                if next(a) == nil then return 'absent' end
+                return tostring(type(a) == 'table' and type(b) == 'table' and a ~= b)
+            ");
+            Skip.If(r == "absent", "Hardware.NetworkIO() reports no adapters on this machine");
+            r.String.ShouldBe("true");
+        }
+
+        [SkippableFact]
         public async Task Hardware_GpuMemory_AdapterEntriesHaveMemoryFields()
         {
             using KitsuneEngine engine = new();
@@ -7268,6 +7624,126 @@ namespace KitsuneNet.Tests
             // PID 2147483647 (INT32_MAX) is above both Linux PID_MAX and any real Windows PID.
             LuaValue r = await engine.ExecuteStringAsync("return tostring(Process.Open(2147483647) == nil)");
             r.String.ShouldBe("true");
+        }
+
+        // GetCPU and Threads are only registered on Windows.
+        [WindowsOnlyFact]
+        public async Task Process_GetCPU_CurrentProcess_IsPercentageInRange()
+        {
+            using KitsuneEngine engine = new();
+
+            // The first reading needs a measurable interval since Open; without one it returns nil.
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local p = Process.Open()
+                Sleep(100)
+                local v = p:GetCPU()
+                return math.type(v) .. '|finite=' .. tostring(v == v and v ~= math.huge)
+                    .. '|>=0=' .. tostring(v >= 0) .. '|<=100=' .. tostring(v <= 101)
+            ");
+            r.String.ShouldBe("float|finite=true|>=0=true|<=100=true");
+        }
+
+        [WindowsOnlyFact]
+        public async Task Process_GetCPU_AfterBusyLoop_ReportsPositiveLoad()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local p = Process.Open()
+                Sleep(100)
+                p:GetCPU()
+                local start = os.clock()
+                while os.clock() - start < 0.3 do end
+                local v = p:GetCPU()
+                return tostring(v > 0) .. '|' .. tostring(v <= 101)
+            ");
+            r.String.ShouldBe("true|true");
+        }
+
+        [WindowsOnlyFact]
+        public async Task Process_GetCPU_BackToBackCalls_ReturnNilOrFinitePercentage()
+        {
+            using KitsuneEngine engine = new();
+
+            // The system clock ticks every 1-16 ms, so most of these calls see no elapsed time.
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local p = Process.Open()
+                local nils, valid, invalid = 0, 0, 0
+                for i = 1, 2000 do
+                    local v = p:GetCPU()
+                    if v == nil then nils = nils + 1
+                    elseif v == v and v >= 0 and v <= 101 then valid = valid + 1
+                    else invalid = invalid + 1 end
+                end
+                return 'nil>0=' .. tostring(nils > 0) .. '|invalid=' .. invalid
+            ");
+            r.String.ShouldBe("nil>0=true|invalid=0");
+        }
+
+        [WindowsOnlyFact]
+        public async Task Process_GetCPU_NotAProcess_Throws()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local ok, err = pcall(Process.Open().GetCPU, 5)
+                return tostring(ok) .. '|' .. tostring(err):match('LuaProcess expected, got number')
+            ");
+            r.String.ShouldBe("false|LuaProcess expected, got number");
+        }
+
+        [WindowsOnlyFact]
+        public async Task Process_Threads_CurrentProcess_ListsWellFormedThreads()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local threads, err = Process.Open():Threads()
+                if not threads then return 'nil|' .. tostring(err) end
+                local seen, unique, wellFormed = {}, true, true
+                for _, t in ipairs(threads) do
+                    if seen[t.ID] then unique = false end
+                    seen[t.ID] = true
+                    if math.type(t.ID) ~= 'integer' or t.ID <= 0
+                        or math.type(t.BasePrio) ~= 'integer'
+                        or math.type(t.DeltaPrio) ~= 'integer' then
+                        wellFormed = false
+                    end
+                end
+                return 'count>=1=' .. tostring(#threads >= 1)
+                    .. '|unique=' .. tostring(unique)
+                    .. '|wellFormed=' .. tostring(wellFormed)
+            ");
+            r.String.ShouldBe("count>=1=true|unique=true|wellFormed=true");
+        }
+
+        [WindowsOnlyFact]
+        public async Task Process_Threads_StartedChild_HasItsOwnThreads()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local proc = Process.Start(nil, 'cmd /c ping -n 3 127.0.0.1 > nul', nil, true)
+                assert(proc, 'Process.Start returned nil')
+                local threads = proc:Threads()
+                local own = Process.Open():Threads()
+                local ownIds = {}
+                for _, t in ipairs(own) do ownIds[t.ID] = true end
+                local overlap = false
+                for _, t in ipairs(threads) do
+                    if ownIds[t.ID] then overlap = true end
+                end
+                proc:Stop(0)
+                return 'count>=1=' .. tostring(#threads >= 1) .. '|overlap=' .. tostring(overlap)
+            ");
+            r.String.ShouldBe("count>=1=true|overlap=false");
+        }
+
+        [WindowsOnlyFact]
+        public async Task Process_Threads_NotAProcess_Throws()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local ok, err = pcall(Process.Open().Threads, {})
+                return tostring(ok) .. '|' .. tostring(err):match('LuaProcess expected, got table')
+            ");
+            r.String.ShouldBe("false|LuaProcess expected, got table");
         }
 
         [Fact]
@@ -10934,6 +11410,95 @@ namespace KitsuneNet.Tests
                 return tostring(a / b)
             ");
             r.String.ShouldBe("42");
+        }
+
+        [Fact]
+        public async Task UInt_MulMethod_MultipliesAndAcceptsCoercibleOperands()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local U = UInt.FromString
+                return tostring(U('6'):Mul(U('7')))
+                    .. '|' .. tostring(U('3'):Mul('5'))
+                    .. '|' .. tostring(U('10'):Mul(3))
+                    .. '|' .. tostring(U('5'):Mul(UInt.Zero()))
+            ");
+            r.String.ShouldBe("42|15|30|0");
+        }
+
+        [Fact]
+        public async Task UInt_MulMethod_WrapsModuloTwoToThe64()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local U = UInt.FromString
+                return tostring(U('18446744073709551615'):Mul(U('2')))
+                    .. '|' .. tostring(U('4294967296'):Mul(U('4294967296')))
+                    .. '|' .. tostring(U('9223372036854775808'):Mul(2))
+            ");
+            r.String.ShouldBe("18446744073709551614|0|0");
+        }
+
+        [Fact]
+        public async Task UInt_MulMethod_UnparsableOperand_Throws()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local U = UInt.FromString
+                local _, e1 = pcall(function() return U('1'):Mul('abc') end)
+                local _, e2 = pcall(function() return U('1'):Mul({}) end)
+                return tostring(e1):match('UInt: cannot multiply incompatible types')
+                    .. '|' .. tostring(e2):match('UInt: cannot multiply incompatible types')
+            ");
+            r.String.ShouldBe("UInt: cannot multiply incompatible types|UInt: cannot multiply incompatible types");
+        }
+
+        [Fact]
+        public async Task UInt_DivMethod_TruncatesTowardZero()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local U = UInt.FromString
+                return tostring(U('100'):Div(U('7')))
+                    .. '|' .. tostring(U('1'):Div(U('2')))
+                    .. '|' .. tostring(U('100'):Div('3'))
+                    .. '|' .. tostring(U('100'):Div(2.0))
+            ");
+            r.String.ShouldBe("14|0|33|50");
+        }
+
+        [Fact]
+        public async Task UInt_DivMethod_TreatsValuesAboveInt64AsUnsigned()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local U = UInt.FromString
+                return tostring(U('18446744073709551615'):Div(U('2')))
+                    .. '|' .. tostring(U('18446744073709551615'):Div(U('18446744073709551615')))
+            ");
+            r.String.ShouldBe("9223372036854775807|1");
+        }
+
+        [Fact]
+        public async Task UInt_DivMethod_ByZero_ThrowsWithMessage()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local _, err = pcall(function() return UInt.FromString('1'):Div(UInt.Zero()) end)
+                return tostring(err):match('UInt: division by zero')
+            ");
+            r.String.ShouldBe("UInt: division by zero");
+        }
+
+        [Fact]
+        public async Task UInt_DivMethod_NegativeFloatOperand_Throws()
+        {
+            using KitsuneEngine engine = new();
+            LuaValue r = await engine.ExecuteStringAsync(@"
+                local _, err = pcall(function() return UInt.FromString('1'):Div(-1.5) end)
+                return tostring(err):match('UInt: cannot divide incompatible types')
+            ");
+            r.String.ShouldBe("UInt: cannot divide incompatible types");
         }
 
         [Fact]

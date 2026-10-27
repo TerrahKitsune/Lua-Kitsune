@@ -652,6 +652,13 @@ public sealed class PostgresTests
         r.String.ShouldBe("false|cancelled");
     }
 
+    // Reads KITSUNE_POSTGRES_TEST=<libpq conninfo>
+    internal static string ConnectLua()
+    {
+        var conninfo = Environment.GetEnvironmentVariable("KITSUNE_POSTGRES_TEST")!;
+        return $"Postgres.Connect('{conninfo}')";
+    }
+
     private static async Task DeleteTestRowsAsync(KitsuneEngine engine, params string[] markers)
     {
         var markerList = string.Join(", ", markers.Select(m => $"'{m}'"));
@@ -662,12 +669,5 @@ public sealed class PostgresTests
 			end
 			conn:Close()
 		");
-    }
-
-    // Reads KITSUNE_POSTGRES_TEST=<libpq conninfo>
-    private static string ConnectLua()
-    {
-        var conninfo = Environment.GetEnvironmentVariable("KITSUNE_POSTGRES_TEST")!;
-        return $"Postgres.Connect('{conninfo}')";
     }
 }

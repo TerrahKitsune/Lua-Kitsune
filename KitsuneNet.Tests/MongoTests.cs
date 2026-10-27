@@ -1537,6 +1537,9 @@ public sealed class MongoTests
         r.String.ShouldBe("true");
     }
 
+    internal static string ConnectLua() =>
+        "MongoDB.Connect(os.getenv('KITSUNE_MONGO_TEST'))";
+
     private static System.Threading.Tasks.Task<LuaValue> RunAsync(KitsuneEngine engine, string lua) =>
         engine.ExecuteStringAsync(lua).WaitAsync(System.TimeSpan.FromSeconds(30));
 
@@ -1558,9 +1561,6 @@ public sealed class MongoTests
             ");
         }
     }
-
-    private static string ConnectLua() =>
-        "MongoDB.Connect(os.getenv('KITSUNE_MONGO_TEST'))";
 
     private static string Db() =>
         "os.getenv('KITSUNE_MONGO_DB')";

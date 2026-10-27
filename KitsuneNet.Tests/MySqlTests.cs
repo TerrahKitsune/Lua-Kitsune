@@ -648,6 +648,13 @@ public sealed class MySqlTests
         r.String.ShouldBe("false|cancelled");
     }
 
+    // Parses KITSUNE_MYSQL_TEST=host:port:user:pass:db
+    internal static string ConnectLua()
+    {
+        var parts = Environment.GetEnvironmentVariable("KITSUNE_MYSQL_TEST")!.Split(':');
+        return $"MySQL.Connect('{parts[0]}','{parts[2]}','{parts[3]}','{parts[4]}',{parts[1]})";
+    }
+
     private static async Task DeleteTestRowsAsync(KitsuneEngine engine, params string[] markers)
     {
         var markerList = string.Join(", ", markers.Select(m => $"'{m}'"));
@@ -658,12 +665,5 @@ public sealed class MySqlTests
             end
             conn:Close()
         ");
-    }
-
-    // Parses KITSUNE_MYSQL_TEST=host:port:user:pass:db
-    private static string ConnectLua()
-    {
-        var parts = Environment.GetEnvironmentVariable("KITSUNE_MYSQL_TEST")!.Split(':');
-        return $"MySQL.Connect('{parts[0]}','{parts[2]}','{parts[3]}','{parts[4]}',{parts[1]})";
     }
 }

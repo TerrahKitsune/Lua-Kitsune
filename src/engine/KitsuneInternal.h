@@ -44,6 +44,7 @@ struct KitsuneCoroutine {
 	int           luaRefCount;
 	bool          apiOwned;
 	bool          didWork;  // set by Yield(true) or cooperative C yields with data; cleared by scheduler each tick
+	bool          resultConsumed;  // set by task:ConsumeResult(); GetError then reports nothing, like GetResult
 };
 
 struct KitsuneState {
