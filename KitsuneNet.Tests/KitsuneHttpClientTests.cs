@@ -53,8 +53,8 @@ namespace KitsuneNet.Tests
                 return s
             end
             local function ws_connect(client, url)
-                local ws = client:Connect(url)
-                if not ws then error('Connect failed') end
+                local ws, err = client:Connect(url)
+                if not ws then error('Connect failed: ' .. tostring(err)) end
                 return ws
             end
         ";
@@ -492,8 +492,8 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(StreamHelper + $@"
                 run_http(function()                    local client = HttpClient.New()
                     client:SetTimeout(8000)
-                    local ws = client:Connect(WS_URL)
-                    if not ws then error('connect failed') end
+                    local ws, err = client:Connect(WS_URL)
+                    if not ws then error('connect failed: ' .. tostring(err)) end
                     ws:Dispose()
                     _outcome = 'true'
                 end)
@@ -509,8 +509,8 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(StreamHelper + $@"
                 run_http(function()                    local client = HttpClient.New()
                     client:SetTimeout(8000)
-                    local ws = client:Connect(WS_URL)
-                    if not ws then error('connect failed') end
+                    local ws, err = client:Connect(WS_URL)
+                    if not ws then error('connect failed: ' .. tostring(err)) end
                     local connected = ws:IsConnected()
                     ws:Dispose()
                     local after = ws:IsConnected()
@@ -528,8 +528,8 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(StreamHelper + $@"
                 run_http(function()                    local client = HttpClient.New()
                     client:SetTimeout(8000)
-                    local ws = client:Connect(WS_URL)
-                    if not ws then error('connect failed') end
+                    local ws, err = client:Connect(WS_URL)
+                    if not ws then error('connect failed: ' .. tostring(err)) end
                     local id1 = ws:GetId()
                     local id2 = ws:GetId()
                     ws:Dispose()
@@ -547,8 +547,8 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(StreamHelper + $@"
                 run_http(function()                    local client = HttpClient.New()
                     client:SetTimeout(8000)
-                    local ws = client:Connect(WS_URL)
-                    if not ws then error('connect failed') end
+                    local ws, err = client:Connect(WS_URL)
+                    if not ws then error('connect failed: ' .. tostring(err)) end
                     local ctx1 = ws:GetContext()
                     ctx1.foo = 'bar'
                     local ctx2 = ws:GetContext()
@@ -610,8 +610,8 @@ namespace KitsuneNet.Tests
             LuaValue r = await engine.ExecuteStringAsync(StreamHelper + $@"
                 run_http(function()                    local client = HttpClient.New()
                     client:SetTimeout(8000)
-                    local ws = client:Connect(WS_URL)
-                    if not ws then error('connect failed') end
+                    local ws, err = client:Connect(WS_URL)
+                    if not ws then error('connect failed: ' .. tostring(err)) end
                     ws:Dispose()
                     local msg = ws:Read()
                     _outcome = tostring(msg)

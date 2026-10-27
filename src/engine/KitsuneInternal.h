@@ -5,7 +5,6 @@
 #include <atomic>
 #include <mutex>
 #include <condition_variable>
-#include <thread>
 #include <unordered_map>
 #include <cstdint>
 #include "Platform.h"
@@ -61,7 +60,7 @@ struct KitsuneState {
 
 	std::mutex    accessLock;
 
-	std::thread           schedulerThread;
+	bool                  schedulerStarted = false;
 	std::atomic<long>     schedulerStop{ 0 };
 	PlatformEvent         workEvent;
 	PlatformEvent         schedulerDoneEvent;

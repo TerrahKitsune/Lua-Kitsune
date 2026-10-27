@@ -10,7 +10,9 @@
 #include <condition_variable> // std::condition_variable
 #include <mutex>    // std::mutex
 #include <new>      // std::nothrow
-#include <thread>   // std::thread
+#ifndef _WIN32
+#include <pthread.h>
+#endif
 
 #ifdef _WIN32
 // WinSock2 must be included before windows.h or any headers that include it
@@ -1283,6 +1285,37 @@ static void SchedulerProc(KitsuneState* state) {
 	state->schedulerDoneEvent.Set();
 }
 
+// The scheduler runs on a native thread rather than std::thread: std::thread heap-allocates its
+// launch state and frees it only after SchedulerProc returns, which can be after KitsuneCleanup
+// has stopped waiting and counted live allocations, so the debug leak check would count it.
+#ifdef _WIN32
+static DWORD WINAPI SchedulerThreadStart(LPVOID arg) {
+	SchedulerProc((KitsuneState*)arg);
+	return 0;
+}
+#else
+static void* SchedulerThreadStart(void* arg) {
+	SchedulerProc((KitsuneState*)arg);
+	return nullptr;
+}
+#endif
+
+// Starts the scheduler detached: KitsuneCleanup waits on schedulerDoneEvent and never joins.
+static bool StartSchedulerThread(KitsuneState* state) {
+#ifdef _WIN32
+	HANDLE thread = CreateThread(NULL, 0, SchedulerThreadStart, state, 0, NULL);
+	if (!thread)
+		return false;
+	CloseHandle(thread);
+#else
+	pthread_t thread;
+	if (pthread_create(&thread, NULL, SchedulerThreadStart, state) != 0)
+		return false;
+	pthread_detach(thread);
+#endif
+	return true;
+}
+
 static int Global_Runtime(lua_State* L) {
 	void* ud;
 	lua_getallocf(L, &ud);
@@ -1712,8 +1745,8 @@ extern "C" {
 		lua_pop(L, 1);
 
 		// Coroutine threads each receive their own hook; no hook is set on the main state.
-		state->schedulerThread = std::thread(SchedulerProc, state);
-		if (!state->schedulerThread.joinable()) {
+		state->schedulerStarted = StartSchedulerThread(state);
+		if (!state->schedulerStarted) {
 			lua_close(state->L);
 			delete state;
 #ifdef _WIN32
@@ -3996,7 +4029,7 @@ extern "C" {
 
 		if (state) {
 			// Signal the scheduler to exit and wait for it to finish.
-			if (state->schedulerThread.joinable()) {
+			if (state->schedulerStarted) {
 				// Interrupt any running coroutines first so the scheduler is not stuck inside
 				// lua_resume waiting for a script to yield; the Ticker will call luaL_error at
 				// the next instruction boundary, unblocking the scheduler promptly.
@@ -4012,7 +4045,7 @@ extern "C" {
 				// schedulerDoneEvent fires before the thread exits, so state is safe to use
 				// immediately after. The thread then exits asynchronously.
 				state->schedulerDoneEvent.Wait();
-				state->schedulerThread.detach();
+				state->schedulerStarted = false;
 				state->doneCV.notify_all(); // wake any threads blocked in WaitForResult or KitsuneWait
 
 				// If an inline sync call was running when Dispose was called, it still holds

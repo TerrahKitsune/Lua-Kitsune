@@ -1992,8 +1992,9 @@ namespace KitsuneNet.Tests
 
         // A Cancel that lands while the coroutine is running must not be lost when the
         // coroutine then suspends itself; CancelSelf issues it from inside the coroutine.
-        // A cancelled coroutine is released without a result, so the call returns nil
-        // promptly instead of sleeping out its deadline or reaching 'finished'.
+        // The cancel must end the call promptly instead of sleeping out its deadline or reaching
+        // 'finished'. The id is invalid after Cancel (KitsuneEngine.h), so whether the call returns nil
+        // or throws "cancelled" depends on whether the scheduler has compacted the slot yet.
         [Theory]
         [InlineData("Sleep(60000)")]
         [InlineData("Pause()")]
@@ -2007,9 +2008,16 @@ namespace KitsuneNet.Tests
                 return LuaValue.None;
             });
 
-            LuaValue r = await engine.ExecuteStringAsync("CancelSelf() " + suspend + " return 'finished'")
-                .WaitAsync(TimeSpan.FromSeconds(10));
-            r.String.ShouldBeNull();
+            try
+            {
+                LuaValue r = await engine.ExecuteStringAsync("CancelSelf() " + suspend + " return 'finished'")
+                    .WaitAsync(TimeSpan.FromSeconds(10));
+                r.String.ShouldBeNull();
+            }
+            catch (LuaException ex)
+            {
+                ex.Message.ShouldContain("cancelled");
+            }
         }
 
         // GetStatus
