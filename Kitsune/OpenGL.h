@@ -33,5 +33,7 @@ int OpenGL_IsLoaded(int argc, const KitsuneVariable* argv, const kitsune_ResultS
 int OpenGL_GetTextureCount(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter setter, void* ud);
 int OpenGL_GetFrameUVs(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter setter, void* ud);
 int OpenGL_GetAllLoadedTextures(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter setter, void* ud);
+int OpenGL_CreateTexture(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter setter, void* ud);
+int OpenGL_UpdateTexture(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter setter, void* ud);
 
 #endif // KITSUNE_IMGUI

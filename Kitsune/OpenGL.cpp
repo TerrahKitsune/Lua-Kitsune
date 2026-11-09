@@ -14,6 +14,7 @@
 #include <SDL.h>
 #include <cstdlib>
 #include <cstring>
+#include <cstdio>
 
 #define IMGUI_ARGC  (argc - 1)
 #define IMGUI_ARGV  (argc > 0 ? argv + 1 : argv)
@@ -481,6 +482,106 @@ int OpenGL_LoadTexture(int argc, const KitsuneVariable* argv,
 	r.integer = luaId;
 	setter(&r);
 	return 1;
+}
+
+// OpenGL.CreateTexture(w, h) -> integer
+// Creates a blank RGBA8 texture for raw per-frame pixel uploads (e.g. a game
+// framebuffer). Uses nearest filtering so a low-res buffer upscales crisply.
+// Must be called during renderFn (a current GL context is required).
+
+int OpenGL_CreateTexture(int argc, const KitsuneVariable* argv,
+	const kitsune_ResultSetter setter, void* ud) {
+	if (!g_imguiCtx)
+		return terror(setter, "OpenGL.CreateTexture: no active session");
+	if (argc < 2)
+		return terror(setter, "OpenGL.CreateTexture(w, h)");
+
+	int w = (int)KitsuneAsInt(&argv[0], 0);
+	int h = (int)KitsuneAsInt(&argv[1], 0);
+	if (w <= 0 || h <= 0)
+		return terror(setter, "OpenGL.CreateTexture: w and h must be positive");
+
+	static int g_rawSeq = 0;
+	g_rawSeq++;
+	char srcBuf[48];
+	int  srcLen = snprintf(srcBuf, sizeof(srcBuf), "__raw:%d", g_rawSeq);
+
+	ImguiTexture* tex = alloc_texture();
+	if (!tex)
+		return terror(setter, "OpenGL.CreateTexture: out of memory");
+	if (!set_source(&tex->resource, srcBuf, srcLen)) {
+		free(tex);
+		return terror(setter, "OpenGL.CreateTexture: out of memory");
+	}
+
+	void* blankPixels = calloc((size_t)w * (size_t)h, 4);
+	if (!blankPixels) {
+		free(tex->resource.source);
+		free(tex);
+		return terror(setter, "OpenGL.CreateTexture: out of memory");
+	}
+
+	GLuint glId = 0;
+	glGenTextures(1, &glId);
+	if (glId == 0) {
+		free(blankPixels);
+		free(tex->resource.source);
+		free(tex);
+		return terror(setter, "OpenGL.CreateTexture: GL texture generation failed (no current GL context?)");
+	}
+	glBindTexture(GL_TEXTURE_2D, glId);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, blankPixels);
+	free(blankPixels);
+
+	tex->glId   = (unsigned int)glId;
+	tex->width  = w;
+	tex->height = h;
+	tex->format = "raw";
+
+	if (!ResourceCacheAdd(&tex->resource)) {
+		texture_finalizer(&tex->resource);
+		return terror(setter, "OpenGL.CreateTexture: out of memory");
+	}
+
+	KitsuneVariable r = {};
+	r.type = KITSUNE_TINTEGER;
+	r.integer = tex->resource.luaId;
+	setter(&r);
+	return 1;
+}
+
+// OpenGL.UpdateTexture(texId, bytes)
+// Uploads a raw RGBA8 pixel buffer into a texture created by OpenGL.CreateTexture.
+// bytes must be exactly width*height*4 bytes, top-left origin. Replaces the
+// texture's previous contents. Must be called during renderFn.
+
+int OpenGL_UpdateTexture(int argc, const KitsuneVariable* argv,
+	const kitsune_ResultSetter setter, void* ud) {
+	if (!g_imguiCtx)
+		return terror(setter, "OpenGL.UpdateTexture: no active session");
+	if (argc < 2 || argv[1].type != KITSUNE_TSTRING)
+		return terror(setter, "OpenGL.UpdateTexture(texId, bytes): byte string expected");
+
+	int luaId = (int)KitsuneAsInt(&argv[0], 0);
+	ImguiTexture* tex = (ImguiTexture*)ResourceCacheGetById(luaId, RESOURCE_TEXTURE);
+	if (!tex)
+		return terror(setter, "OpenGL.UpdateTexture: unknown texture id");
+	if (tex->glId == 0)
+		return terror(setter, "OpenGL.UpdateTexture: texture is unloaded (sentinel)");
+
+	size_t expected = (size_t)tex->width * (size_t)tex->height * 4;
+	if ((size_t)argv[1].length != expected)
+		return terror(setter, "OpenGL.UpdateTexture: bytes length must equal width*height*4 (RGBA8)");
+
+	glBindTexture(GL_TEXTURE_2D, (GLuint)tex->glId);
+	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, tex->width, tex->height,
+		GL_RGBA, GL_UNSIGNED_BYTE, argv[1].data);
+
+	return 0;
 }
 
 // OpenGL.UnloadTexture(id)
@@ -979,6 +1080,8 @@ int OpenGL_GetFrameUVs(int argc, const KitsuneVariable* argv,
 }
 
 void RegisterOpenGLFunctions() {
+	KitsuneRegisterFunction("OpenGL.CreateTexture",        OpenGL_CreateTexture,        nullptr);
+	KitsuneRegisterFunction("OpenGL.UpdateTexture",        OpenGL_UpdateTexture,        nullptr);
 	KitsuneRegisterFunction("OpenGL.LoadTexture",          OpenGL_LoadTexture,          nullptr);
 	KitsuneRegisterFunction("OpenGL.UnloadTexture",        OpenGL_UnloadTexture,        nullptr);
 	KitsuneRegisterFunction("OpenGL.DestroyTexture",       OpenGL_DestroyTexture,       nullptr);

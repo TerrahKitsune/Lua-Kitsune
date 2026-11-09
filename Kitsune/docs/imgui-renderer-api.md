@@ -192,6 +192,15 @@ Texture management. All functions require an active session (called after `Imgui
 | `OpenGL.DestroyTexture(id)` | `integer` | — | Full tombstone — slot freed for reuse. Caller responsible for re-load loops if called from post-loader |
 | `OpenGL.DestroyAllTextures()` | — | — | Free all textures and zero the resource cache |
 
+### Raw Framebuffers
+
+Upload raw pixel data directly for per-frame rendering (e.g. a software raycaster or a game framebuffer). Unlike `LoadTexture` (which decodes an image file), these work on a live texture you own and update every frame. Both must be called during `renderFn` (a current GL context is required).
+
+| Function | Parameters | Returns | Notes |
+|---|---|---|---|
+| `OpenGL.CreateTexture(w, h)` | `integer, integer` | `integer` | Create a blank RGBA8 texture with nearest filtering (crisp upscale). Returns a luaId. Fill it every frame with `UpdateTexture` |
+| `OpenGL.UpdateTexture(texId, bytes)` | `integer, string` | — | Upload a raw RGBA8 pixel buffer into the texture. `bytes` must be exactly `w*h*4` bytes, top-left origin. Replaces the previous contents |
+
 ### Queries
 
 | Function | Parameters | Returns | Notes |
