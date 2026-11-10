@@ -484,32 +484,44 @@ int OpenGL_LoadTexture(int argc, const KitsuneVariable* argv,
 	return 1;
 }
 
-// OpenGL.CreateTexture(w, h) -> integer
+// OpenGL.CreateTexture(name, w, h) -> integer
 // Creates a blank RGBA8 texture for raw per-frame pixel uploads (e.g. a game
 // framebuffer). Uses nearest filtering so a low-res buffer upscales crisply.
-// Must be called during renderFn (a current GL context is required).
+// Idempotent by name: if a texture is already registered under `name`, its
+// existing id is returned and nothing new is allocated; a different size is an
+// error. Must be called during renderFn (a current GL context is required).
 
 int OpenGL_CreateTexture(int argc, const KitsuneVariable* argv,
 	const kitsune_ResultSetter setter, void* ud) {
 	if (!g_imguiCtx)
 		return terror(setter, "OpenGL.CreateTexture: no active session");
-	if (argc < 2)
-		return terror(setter, "OpenGL.CreateTexture(w, h)");
+	if (argc < 3 || argv[0].type != KITSUNE_TSTRING)
+		return terror(setter, "OpenGL.CreateTexture(name, w, h)");
 
-	int w = (int)KitsuneAsInt(&argv[0], 0);
-	int h = (int)KitsuneAsInt(&argv[1], 0);
+	const char* name    = (const char*)argv[0].data;
+	int         nameLen = (int)argv[0].length;
+	int         w       = (int)KitsuneAsInt(&argv[1], 0);
+	int         h       = (int)KitsuneAsInt(&argv[2], 0);
+	if (nameLen <= 0)
+		return terror(setter, "OpenGL.CreateTexture: name must not be empty");
 	if (w <= 0 || h <= 0)
 		return terror(setter, "OpenGL.CreateTexture: w and h must be positive");
 
-	static int g_rawSeq = 0;
-	g_rawSeq++;
-	char srcBuf[48];
-	int  srcLen = snprintf(srcBuf, sizeof(srcBuf), "__raw:%d", g_rawSeq);
+	ImguiTexture* existing = (ImguiTexture*)ResourceCacheGetBySource(name, RESOURCE_TEXTURE);
+	if (existing) {
+		if (existing->width != w || existing->height != h)
+			return terror(setter, "OpenGL.CreateTexture: name is already registered with a different size");
+		KitsuneVariable r = {};
+		r.type = KITSUNE_TINTEGER;
+		r.integer = existing->resource.luaId;
+		setter(&r);
+		return 1;
+	}
 
 	ImguiTexture* tex = alloc_texture();
 	if (!tex)
 		return terror(setter, "OpenGL.CreateTexture: out of memory");
-	if (!set_source(&tex->resource, srcBuf, srcLen)) {
+	if (!set_source(&tex->resource, name, nameLen)) {
 		free(tex);
 		return terror(setter, "OpenGL.CreateTexture: out of memory");
 	}

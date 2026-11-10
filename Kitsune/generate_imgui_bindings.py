@@ -815,7 +815,7 @@ def main():
         f.write("Unlike `LoadTexture` (which decodes an image file), these work on a live texture you own and update every frame. ")
         f.write("Both must be called during `renderFn` (a current GL context is required).\n\n")
         f.write("| Function | Parameters | Returns | Notes |\n|---|---|---|---|\n")
-        f.write("| `OpenGL.CreateTexture(w, h)` | `integer, integer` | `integer` | Create a blank RGBA8 texture with nearest filtering (crisp upscale). Returns a luaId. Fill it every frame with `UpdateTexture` |\n")
+        f.write("| `OpenGL.CreateTexture(name, w, h)` | `string, integer, integer` | `integer` | Create a blank RGBA8 texture with nearest filtering (crisp upscale). **Idempotent by name** — if a texture is already registered under `name`, its existing id is returned and nothing new is allocated; a different size is an error. Returns a luaId. Fill it with `UpdateTexture` |\n")
         f.write("| `OpenGL.UpdateTexture(texId, bytes)` | `integer, string` | — | Upload a raw RGBA8 pixel buffer into the texture. `bytes` must be exactly `w*h*4` bytes, top-left origin. Replaces the previous contents |\n")
         f.write("\n")
 
