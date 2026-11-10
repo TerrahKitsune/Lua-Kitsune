@@ -32,6 +32,12 @@ static void PushArchiveError(lua_State* L, struct archive* a, const char* fallba
 // Opens a UTF-8 path. archive_read_open_filename() reads the path in the ANSI code
 // page on Windows, so the wide-char variant is used there.
 static int OpenArchiveFile(struct archive* a, const char* path) {
+	// libarchive reads from stdin when the filename is empty, which blocks on an open stdin.
+	if (path[0] == '\0') {
+		archive_set_error(a, EINVAL, "empty archive path");
+		return ARCHIVE_FATAL;
+	}
+
 #ifdef _WIN32
 	wchar_t* wpath = kitsune_utf8_to_wide_alloc(path);
 	if (!wpath) {
