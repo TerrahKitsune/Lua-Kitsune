@@ -44,6 +44,7 @@ struct KitsuneCoroutine {
 	bool          apiOwned;
 	bool          didWork;  // set by Yield(true) or cooperative C yields with data; cleared by scheduler each tick
 	bool          resultConsumed;  // set by task:ConsumeResult(); GetError then reports nothing, like GetResult
+	bool          stopRaised;  // the cancel/interrupt error was raised once; if the script caught it, the next tick yields for disposal
 };
 
 struct KitsuneState {
@@ -76,6 +77,11 @@ struct KitsuneState {
 	std::atomic<long> runningCount{ 0 };
 	std::atomic<long> currentCoroutineId{ 0 };
 	int               taskErrorHandlerRef{ 0 };
+
+	// Advanced by the scheduler each time it has offered every coroutine a time-slice.
+	// An inline call that was preempted waits for the count to move before resuming.
+	std::atomic<long>   schedulerPassCount{ 0 };
+	std::atomic<double> lastSchedulerPass{ 0.0 };
 
 	// Dual-hook registry: one entry per tracked lua_State*.
 	// Owned here so there are no dangling globals and cleanup is trivially

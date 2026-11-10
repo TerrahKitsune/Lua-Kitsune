@@ -267,6 +267,10 @@ int Tasks_Wait(lua_State* L) {
 		g_state->slotsLock.unlock();
 		return 0;
 	}
+	if (!lua_isyieldable(L)) {
+		g_state->slotsLock.unlock();
+		return luaL_error(L, "task:Wait: cannot be called from a non-yieldable context");
+	}
 	caller->waitingForId = target->id;
 	caller->sleepUntil = (timeoutMs > 0.0) ? (GetCounter(g_state) + timeoutMs) : 0.0;
 	// A Cancel that arrived while this coroutine was running must survive the yield.

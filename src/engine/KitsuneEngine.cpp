@@ -10,6 +10,7 @@
 #include <condition_variable> // std::condition_variable
 #include <mutex>    // std::mutex
 #include <new>      // std::nothrow
+#include <thread>   // std::this_thread::yield
 #ifndef _WIN32
 #include <pthread.h>
 #endif
@@ -162,6 +163,12 @@ static std::atomic<KitsuneVariableChain*> g_pendingVariableChainHead{ nullptr };
 // True on a calling thread while it is inside RunInline (holds accessLock, running lua_resume).
 // Suppresses the Ticker's pause-park so AcquireLuaAccess on the same thread doesn't deadlock.
 static thread_local bool g_inlineExecution = false;
+// True on a thread while it is inside RunInlineTight, where a yield is re-resumed at once
+// and so never reaches anyone who could dispose the coroutine.
+static thread_local bool g_tightExecution = false;
+// True only on the scheduler thread; set once in SchedulerProc and never cleared.
+// Used by all KitsuneExecute* guards on every platform without OS-specific thread IDs.
+static thread_local bool g_isSchedulerThread = false;
 
 
 // Must be called from a context that holds Lua access (scheduler thread or KitsuneCleanup).
@@ -876,28 +883,99 @@ static void ReleaseLuaAccess(KitsuneState* state) {
 	state->accessLock.unlock();
 }
 
+// Wakes KitsuneWait after a slot changed. Passing through doneMtx first closes the window in
+// which a waiter has just found its condition false but is not blocked yet and would miss the
+// notify. Never call while holding slotsLock: the waiter takes slotsLock under doneMtx.
+static void NotifyDone(KitsuneState* state) {
+	{ std::lock_guard<std::mutex> lk(state->doneMtx); }
+	state->doneCV.notify_all();
+}
+
+// How often a coroutine sleeping on a token is re-checked; matches the scheduler's idle poll.
+#define TOKEN_POLL_INTERVAL_MS 10.0
+
+// True when a coroutine other than selfId needs the scheduler (or another inline caller needs
+// Lua access) now. Caller must own Lua access, so no slot changes its sleep or wait fields.
+static bool OtherCoroutineNeedsTurn(KitsuneState* state, int selfId) {
+	double now = GetCounter(state);
+	bool tokenPollDue = now - state->lastSchedulerPass.load() >= TOKEN_POLL_INTERVAL_MS;
+	bool needsTurn = false;
+
+	state->slotsLock.lock();
+	for (int i = 0; i < state->slotCount && !needsTurn; i++) {
+		KitsuneCoroutine* slot = state->slots[i];
+		if (slot->id == 0 || slot->id == selfId)
+			continue;
+		if (slot->isInline.load()) {
+			needsTurn = true;
+			continue;
+		}
+
+		switch (slot->state.load()) {
+		case KITSUNE_COROUTINE_STATE_WORKING:
+		case KITSUNE_COROUTINE_STATE_ABORTED:
+		case KITSUNE_COROUTINE_STATE_RELEASED:
+			needsTurn = true;
+			break;
+		case KITSUNE_COROUTINE_STATE_SLEEPING:
+			if (slot->sleepUntil > 0.0 && now >= slot->sleepUntil)
+				needsTurn = true;
+			else if (slot->sleepTokenRef > 0 && tokenPollDue)
+				needsTurn = true;
+			break;
+		case KITSUNE_COROUTINE_STATE_WAITING: {
+			KitsuneCoroutine* target = FindSlot(state, slot->waitingForId);
+			long targetState = target ? target->state.load() : KITSUNE_COROUTINE_STATE_RELEASED;
+			if (targetState == KITSUNE_COROUTINE_STATE_DONE || targetState == KITSUNE_COROUTINE_STATE_RELEASED)
+				needsTurn = true;
+			else if (slot->sleepUntil > 0.0 && now >= slot->sleepUntil)
+				needsTurn = true;
+			break;
+		}
+		default:
+			break;
+		}
+	}
+	state->slotsLock.unlock();
+	return needsTurn;
+}
+
+// Stops a cancelled or interrupted coroutine from inside the hook. The first time, the error
+// is raised so the script can unwind and clean up. A script that caught it would otherwise
+// run on and never yield again, so on a later tick the coroutine yields instead: the scheduler
+// (interrupt sweep, or its ABORTED check) or RunInline then disposes it without resuming it.
+// Raises again where a yield is impossible or would not reach either of them.
+static void StopCondemnedCoroutine(lua_State* L, KitsuneCoroutine* slot, const char* reason) {
+	if (slot && slot->stopRaised && !g_tightExecution && lua_isyieldable(L)) {
+		slot->didWork = true;
+		lua_yield(L, 0);
+		return;
+	}
+	if (slot)
+		slot->stopRaised = true;
+	luaL_error(L, reason);
+}
+
 static void Ticker(lua_State* L, lua_Debug* ar) {
 	void* ud;
 	lua_getallocf(L, &ud);
 	KitsuneState* state = (KitsuneState*)ud;
 
-	// Do not auto-clear interrupt here; the scheduler clears it once all coroutines are done.
-	// Inline coroutines are owned by the calling thread and not subject to the global interrupt
-	// (which targets scheduler-managed async coroutines only).
-	if (state->interrupt.load() && !g_inlineExecution) {
-		luaL_error(L, "interrupted");
+	// currentCoroutineId is set by whoever resumes the coroutine, immediately before lua_resume.
+	KitsuneCoroutine* selfSlot = FindSlot(state, (int)state->currentCoroutineId.load());
+
+	// Do not auto-clear interrupt here; the scheduler clears it after its interrupt sweep.
+	// Inline calls from other threads are owned by the calling thread and not subject to the
+	// global interrupt. A nested call on the scheduler thread is part of a scheduler-managed
+	// coroutine, so it is: otherwise a long nested call could not be stopped at all.
+	if (state->interrupt.load() && (!g_inlineExecution || g_isSchedulerThread)) {
+		StopCondemnedCoroutine(L, selfSlot, "interrupted");
 		return;
 	}
 
-	// Per-coroutine cancel: check whether this specific coroutine has been cancelled.
-	// currentCoroutineId is set by the scheduler immediately before lua_resume.
-	int cancelId = (int)state->currentCoroutineId.load();
-	if (cancelId) {
-		KitsuneCoroutine* curSlot = FindSlot(state, cancelId);
-		if (curSlot && curSlot->state.load() == KITSUNE_COROUTINE_STATE_ABORTED) {
-			luaL_error(L, "cancelled");
-			return;
-		}
+	if (selfSlot && selfSlot->state.load() == KITSUNE_COROUTINE_STATE_ABORTED) {
+		StopCondemnedCoroutine(L, selfSlot, "cancelled");
+		return;
 	}
 
 	if (state->pauseFlag.load() && !g_inlineExecution) {
@@ -911,7 +989,7 @@ static void Ticker(lua_State* L, lua_Debug* ar) {
 		state->resumeEvent.Wait();
 		state->currentCoroutineId.store(savedId);
 		if (state->interrupt.load()) {
-			luaL_error(L, "interrupted");
+			StopCondemnedCoroutine(L, selfSlot, "interrupted");
 			return;
 		}
 	}
@@ -922,14 +1000,16 @@ static void Ticker(lua_State* L, lua_Debug* ar) {
 	// luaD_callnoyield (non-yieldable) when L->ci is a C frame, so lua_yield would raise
 	// "attempt to yield across a C-call boundary".  Skipping the yield here is safe — the
 	// coroutine will be preempted at the next hook firing that lands in a yieldable Lua frame.
-	if (state->runningCount.load() > 1 && state->currentCoroutineId.load() && lua_isyieldable(L)) {
+	// An inline call owns its thread, so preempting it only pays off when something else can
+	// actually use the Lua state; the scheduler's own coroutines keep plain round-robin.
+	if (state->runningCount.load() > 1 && state->currentCoroutineId.load() && lua_isyieldable(L)
+		&& (!g_inlineExecution || OtherCoroutineNeedsTurn(state, (int)state->currentCoroutineId.load()))) {
 		// This is a forced preemption, not a voluntary idle Yield()/Yield(false): the
 		// coroutine burned a full instruction-count timeslice, so it did real work and
 		// wants the CPU back immediately. Mark didWork so the scheduler's idle-sleep
 		// path (Step 5, "all active coroutines yielded with no work done") doesn't
 		// mistake this for genuine idleness and insert a real OS sleep between every
 		// 1000-instruction slice of a busy coroutine.
-		KitsuneCoroutine* selfSlot = FindSlot(state, (int)state->currentCoroutineId.load());
 		if (selfSlot)
 			selfSlot->didWork = true;
 		lua_yield(L, 0);
@@ -994,8 +1074,10 @@ static void FinishCoroutine(KitsuneState* state, KitsuneCoroutine* slot, lua_Sta
 	}
 	lua_settop(T, 0);
 	slot->state.store(KITSUNE_COROUTINE_STATE_DONE);
-	state->doneCV.notify_all();
-	if (slot->error) {
+	NotifyDone(state);
+	// A task stopped by cancel or interrupt is not reported as failed, matching one that was
+	// stopped while idle and never resumed.
+	if (slot->error && !slot->stopRaised) {
 		// Per-task handler takes priority over the global one.
 		int handlerRef = (slot->onErrorRef > 0) ? slot->onErrorRef : 0;
 		bool useGlobal = (handlerRef <= 0) && slot->fireAndForget.load() && (state->taskErrorHandlerRef > 0);
@@ -1010,10 +1092,6 @@ static void FinishCoroutine(KitsuneState* state, KitsuneCoroutine* slot, lua_Sta
 	if (slot->fireAndForget.load())
 		slot->state.store(KITSUNE_COROUTINE_STATE_RELEASED);
 }
-
-// True only on the scheduler thread; set once in SchedulerProc and never cleared.
-// Used by all KitsuneExecute* guards on every platform without OS-specific thread IDs.
-static thread_local bool g_isSchedulerThread = false;
 
 // RAII guard that acquires the Lua access lock when the calling thread does not already
 // own it (i.e. is not the scheduler or an inline-execution thread), and releases it in
@@ -1054,7 +1132,8 @@ static void SchedulerProc(KitsuneState* state) {
 		bool anyDidWork = false;
 
 		// -- Step 2: Interrupt all non-done coroutines if requested ------------
-		if (state->interrupt.load()) {
+		bool interruptSwept = state->interrupt.load() != 0;
+		if (interruptSwept) {
 			for (int i = 0; i < state->slotCount; i++) {
 				KitsuneCoroutine* slot = state->slots[i];
 				long st = slot->state.load();
@@ -1065,12 +1144,15 @@ static void SchedulerProc(KitsuneState* state) {
 					if (T)
 						lua_settop(T, 0);
 					slot->state.store(KITSUNE_COROUTINE_STATE_RELEASED);
-					state->doneCV.notify_all();
+					NotifyDone(state);
 				}
 			}
 		}
 		else {
 			// -- Step 2: Resume each active coroutine once ---------------------
+			// One clock read serves every deadline check in the pass. A deadline that falls due
+			// while an earlier coroutine runs is picked up on the next pass.
+			double passNow = GetCounter(state);
 			for (int i = 0; i < state->slotCount; i++) {
 				// Service any pause request between coroutine resumes.
 				// Without this, an external caller (AcquireLuaAccess — variable bridge,
@@ -1080,6 +1162,7 @@ static void SchedulerProc(KitsuneState* state) {
 				while (state->pauseFlag.load()) {
 					state->pausedEvent.Set();
 					state->resumeEvent.Wait();
+					passNow = GetCounter(state);
 				}
 				if (state->schedulerStop.load())
 					break;
@@ -1108,7 +1191,7 @@ static void SchedulerProc(KitsuneState* state) {
 					if (Tc)
 						lua_settop(Tc, 0);
 					slot->state.store(KITSUNE_COROUTINE_STATE_RELEASED);
-					state->doneCV.notify_all();
+					NotifyDone(state);
 					continue;
 				}
 				// Sleeping coroutine: check wake conditions and transition to WORKING if met.
@@ -1125,7 +1208,7 @@ static void SchedulerProc(KitsuneState* state) {
 							wake = true;
 						}
 					}
-					if (!wake && slot->sleepUntil > 0.0 && GetCounter(state) >= slot->sleepUntil) {
+					if (!wake && slot->sleepUntil > 0.0 && passNow >= slot->sleepUntil) {
 						slot->sleepUntil = 0.0;
 						if (slot->sleepTokenRef > 0) {
 							luaL_unref(state->L, LUA_REGISTRYINDEX, slot->sleepTokenRef);
@@ -1157,7 +1240,7 @@ static void SchedulerProc(KitsuneState* state) {
 					else {
 						wake = true; // no target — shouldn't happen, but don't hang
 					}
-					if (!wake && slot->sleepUntil > 0.0 && GetCounter(state) >= slot->sleepUntil)
+					if (!wake && slot->sleepUntil > 0.0 && passNow >= slot->sleepUntil)
 						wake = true;
 					if (!wake)
 						continue;
@@ -1175,7 +1258,7 @@ static void SchedulerProc(KitsuneState* state) {
 					SetSlotError(slot, "internal: coroutine thread unavailable");
 					slot->result.type = LUA_TNONE;
 					slot->state.store(KITSUNE_COROUTINE_STATE_RELEASED);
-					state->doneCV.notify_all();
+					NotifyDone(state);
 					continue;
 				}
 
@@ -1207,8 +1290,14 @@ static void SchedulerProc(KitsuneState* state) {
 			}
 		}
 
-		// -- Step 3: Clear interrupt once no coroutines remain active ----------
-		if (state->runningCount.load() == 0)
+		state->lastSchedulerPass.store(GetCounter(state));
+		++state->schedulerPassCount;
+
+		// -- Step 3: Clear interrupt once the sweep has released its targets ----
+		// Finished-but-uncollected and inline slots are not targets, so they must not keep it
+		// set: every coroutine started afterwards would be interrupted before it ran. No
+		// coroutine can start between the sweep and here; starting one needs a pause point.
+		if (interruptSwept)
 			state->interrupt.store(0);
 
 		// -- Step 4: Release done + released slots – zero the struct for reuse -
@@ -1226,7 +1315,7 @@ static void SchedulerProc(KitsuneState* state) {
 			state->slotsLock.unlock();
 
 			if (didFree)
-				state->doneCV.notify_all(); // wake KitsuneWait: slots were compacted
+				NotifyDone(state); // wake KitsuneWait: slots were compacted
 		}
 
 		// -- Step 5: Sleep until new work arrives -----------------------------
@@ -1234,50 +1323,33 @@ static void SchedulerProc(KitsuneState* state) {
 		// incrementally under allocation pressure.  Forced full cycles belong only in
 		// KitsuneCleanup (before lua_close) and in the explicit KitsuneGC() API.
 		if (!anyActive) {
-			// Compute how long we can sleep without missing a deadline.
-			// - Pure-timer slots (sleepUntil > 0): sleep until the nearest deadline.
-			// - Token/waiting slots (no sleepUntil): must poll at least every 10ms.
-			// - Truly idle (no sleeping slots): sleep up to 10ms waiting for workEvent.
+			// Sleep until the nearest deadline, but never longer than 10 ms: token sleeps,
+			// waits without a timeout, released slots and queued variable frees are only
+			// noticed on a pass, and not everything that changes them sets workEvent.
 			double now = GetCounter(state);
 			double nearestDeadline = -1.0;
-			bool hasNonTimerSleeping = false;
 			for (int i = 0; i < state->slotCount; i++) {
 				KitsuneCoroutine* slot = state->slots[i];
 				long st = slot->state.load();
 				if (st != KITSUNE_COROUTINE_STATE_SLEEPING && st != KITSUNE_COROUTINE_STATE_WAITING)
 					continue;
-				if (slot->sleepUntil > 0.0) {
-					if (nearestDeadline < 0.0 || slot->sleepUntil < nearestDeadline)
-						nearestDeadline = slot->sleepUntil;
-				}
-				else {
-					// Token-death sleep or Wait() with no timeout — must poll periodically.
-					hasNonTimerSleeping = true;
-				}
+				if (slot->sleepUntil > 0.0 && (nearestDeadline < 0.0 || slot->sleepUntil < nearestDeadline))
+					nearestDeadline = slot->sleepUntil;
 			}
-			int waitMs;
+			int waitMs = 10;
 			if (nearestDeadline > 0.0) {
 				double msUntil = nearestDeadline - now;
-				// Cap at 10ms so token slots and waiting slots are still checked promptly.
-				int capped = (msUntil <= 0.0) ? 0 : (msUntil < 10.0) ? (int)msUntil : 10;
-				waitMs = capped;
-			}
-			else if (hasNonTimerSleeping) {
-				waitMs = 10;
-			}
-			else {
-				waitMs = 10;
+				waitMs = (msUntil <= 0.0) ? 0 : (msUntil < 10.0) ? (int)msUntil : 10;
 			}
 			if (waitMs > 0)
 				state->workEvent.WaitFor(waitMs);
 		}
 		else if (!anyDidWork) {
-			// All active coroutines yielded with no work done (pure idle spin).
-			// Sleep(1) blocks for ~1ms, dropping scheduler CPU to near-zero.
-			// Sleep(0) is insufficient on Windows — it only yields the timeslice
-			// if a same-or-higher priority thread is ready, otherwise returns
-			// immediately and the spin continues.
-			Sleep(1);
+			// All active coroutines yielded with no work done (pure idle spin). Waiting ~1 ms
+			// drops scheduler CPU to near-zero; a zero-length sleep is not enough on Windows,
+			// where it returns at once unless an equal-priority thread is ready. Waiting on
+			// workEvent rather than sleeping lets a pending access request in immediately.
+			state->workEvent.WaitFor(1);
 		}
 	}
 	// All work is done; signal KitsuneCleanup that it is safe to proceed.
@@ -1604,7 +1676,7 @@ extern "C" {
 			return false;
 		}
 		// Raise the Windows timer resolution from the default ~15.6ms tick to ~1ms.
-		// Without this, SchedulerProc's idle Sleep(1) (Step 5, "all active coroutines
+		// Without this, SchedulerProc's idle 1 ms wait (Step 5, "all active coroutines
 		// yielded with no work done") actually blocks ~15.6ms per call instead of ~1ms,
 		// which is disastrous when combined with Ticker's forced per-1000-instruction
 		// preemption of a busy coroutine. Matched by timeEndPeriod(1) in KitsuneCleanup.
@@ -1855,12 +1927,13 @@ extern "C" {
 			SetSlotError(slot, err);
 		slot->result.type = LUA_TNONE;
 		if (slot->threadRef > 0) {
+			kitsune_hook_remove_state(slot->thread);
 			luaL_unref(state->L, LUA_REGISTRYINDEX, slot->threadRef);
 			slot->threadRef = LUA_NOREF;
 			slot->thread = NULL;
 		}
 		slot->state.store(KITSUNE_COROUTINE_STATE_DONE);
-		state->doneCV.notify_all();
+		NotifyDone(state);
 		if (slot->fireAndForget.load())
 			slot->state.store(KITSUNE_COROUTINE_STATE_RELEASED);
 	}
@@ -2115,7 +2188,37 @@ extern "C" {
 		state->slotsLock.lock();
 		FreeSlot(state, slot);
 		state->slotsLock.unlock();
-		state->doneCV.notify_all();
+		NotifyDone(state);
+	}
+
+	// Lets the scheduler offer every coroutine one time-slice before an inline call that was
+	// preempted mid-work takes Lua access back. Re-acquiring straight away would starve them:
+	// the scheduler would wake, see the pause flag set again and park without running anything.
+	// Gives up after 1 ms (scheduler stopped) or once another caller holds Lua access.
+	static void WaitForSchedulerPass(KitsuneState* state, long passBeforeRelease) {
+		double deadline = GetCounter(state) + 1.0;
+		while (state->schedulerPassCount.load() == passBeforeRelease
+			&& !state->pauseFlag.load()
+			&& GetCounter(state) < deadline) {
+			std::this_thread::yield();
+		}
+	}
+
+	// Longest an inline call sleeps before re-checking whether it has been cancelled.
+#define INLINE_CANCEL_POLL_MS 10.0
+
+	// Sleeps an inline call for ms (whole milliseconds, at least one), returning early once
+	// the call is cancelled. A remainder under 1 ms is dropped rather than slept, so a 1 ms
+	// idle wait costs one OS sleep, not two.
+	// Called without Lua access; the slot belongs to the calling thread until it frees it.
+	static void SleepUnlessCancelled(KitsuneState* state, KitsuneCoroutine* slot, double ms) {
+		double deadline = GetCounter(state) + ms;
+		double remaining = ms;
+		do {
+			double slice = remaining > INLINE_CANCEL_POLL_MS ? INLINE_CANCEL_POLL_MS : remaining;
+			::Sleep(slice > 1.0 ? (unsigned long)slice : 1);
+			remaining = deadline - GetCounter(state);
+		} while (remaining >= 1.0 && slot->state.load() != KITSUNE_COROUTINE_STATE_ABORTED);
 	}
 
 	// RunInline: runs a pre-configured coroutine T on the calling thread
@@ -2136,6 +2239,7 @@ extern "C" {
 		g_inlineExecution = true;
 
 		int nresults = 0;
+		slot->didWork = false;
 		int rc = lua_resume(T, state->L, initialNArgs, &nresults);
 
 		g_inlineExecution = false;
@@ -2154,6 +2258,9 @@ extern "C" {
 			int sleepTokenRef = slot->sleepTokenRef;
 			slot->sleepTokenRef = LUA_NOREF;
 
+			bool didWork = slot->didWork;
+			long passBeforeRelease = state->schedulerPassCount.load();
+
 			state->currentCoroutineId.store(0);
 
 			ReleaseLuaAccess(state);
@@ -2165,6 +2272,8 @@ extern "C" {
 				double deadline = (sleepMs > 0.0) ? (GetCounter(state) + sleepMs) : -1.0;
 				while (true) {
 					::Sleep(1);
+					if (slot->state.load() == KITSUNE_COROUTINE_STATE_ABORTED)
+						break;
 					AcquireLuaAccess(state);
 					lua_rawgeti(state->L, LUA_REGISTRYINDEX, sleepTokenRef);
 					int alive = AliveTokenIsAlive(state->L, -1);
@@ -2178,11 +2287,12 @@ extern "C" {
 				AcquireLuaAccess(state);
 				luaL_unref(state->L, LUA_REGISTRYINDEX, sleepTokenRef);
 			}
+			else if (sleepMs > 0.0 || !didWork) {
+				SleepUnlessCancelled(state, slot, sleepMs > 1.0 ? sleepMs : 1.0);
+				AcquireLuaAccess(state);
+			}
 			else {
-				unsigned long sleepDur = (sleepMs > 1.0)
-					? (unsigned long)(sleepMs > (double)MAXDWORD ? MAXDWORD : sleepMs)
-					: 1;
-				::Sleep(sleepDur);
+				WaitForSchedulerPass(state, passBeforeRelease);
 				AcquireLuaAccess(state);
 			}
 
@@ -2200,6 +2310,7 @@ extern "C" {
 			state->currentCoroutineId.store((long)id);
 			g_inlineExecution = true;
 
+			slot->didWork = false;
 			rc = lua_resume(T, state->L, 0, &nresults);
 
 			g_inlineExecution = false;
@@ -2232,8 +2343,10 @@ extern "C" {
 
 		long prevCoroutineId = state->currentCoroutineId.load();
 		bool prevInlineExecution = g_inlineExecution;
+		bool prevTightExecution = g_tightExecution;
 		state->currentCoroutineId.store((long)id);
 		g_inlineExecution = true;
+		g_tightExecution = true;
 
 		int nresults = 0;
 		int rc = lua_resume(T, state->L, initialNArgs, &nresults);
@@ -2251,6 +2364,7 @@ extern "C" {
 		}
 
 		g_inlineExecution = prevInlineExecution;
+		g_tightExecution = prevTightExecution;
 		state->currentCoroutineId.store(prevCoroutineId);
 
 		KitsuneVariable* out = ExtractCoroutineResult(T, rc, nresults);
@@ -4046,7 +4160,7 @@ extern "C" {
 				// immediately after. The thread then exits asynchronously.
 				state->schedulerDoneEvent.Wait();
 				state->schedulerStarted = false;
-				state->doneCV.notify_all(); // wake any threads blocked in WaitForResult or KitsuneWait
+				NotifyDone(state); // wake any threads blocked in WaitForResult or KitsuneWait
 
 				// If an inline sync call was running when Dispose was called, it still holds
 				// accessLock inside RunInline.  The interrupt above will cause the Ticker to raise

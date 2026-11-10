@@ -807,7 +807,7 @@ namespace KitsuneNet.Tests
         [Fact]
         public void ExecuteString_AfterInterruptAndWait_WorksNormally()
         {
-            // The scheduler clears the interrupt flag once runningCount hits 0.
+            // The scheduler clears the interrupt flag after its interrupt sweep.
             // Verifies the engine is fully reusable after an interrupt + wait cycle.
             using KitsuneEngine engine = new();
             engine.ExecuteString("while true do end");
@@ -816,6 +816,100 @@ namespace KitsuneNet.Tests
             engine.Wait();
             engine.RunString("return 'after interrupt'").String.ShouldBe("after interrupt");
             engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task ExecuteStringAsync_AfterInterruptWithFinishedTaskHeld_RunsNormally()
+        {
+            // A finished task whose handle is still referenced keeps its slot. That slot is not an
+            // interrupt target and must not keep the interrupt set for coroutines started later.
+            using KitsuneEngine engine = new();
+            engine.RunString("held = Tasks.New(function() end)");
+            Task<LuaValue> busy = engine.ExecuteStringAsync("while true do end");
+            await Task.Delay(100);
+            engine.Interrupt();
+            await Should.ThrowAsync<LuaException>(async () => await busy);
+
+            // Lets the scheduler finish the pass that sweeps and clears the interrupt.
+            await Task.Delay(200);
+            LuaValue after = await engine.ExecuteStringAsync("return 'after interrupt'");
+            after.String.ShouldBe("after interrupt");
+        }
+
+        [Fact]
+        public async Task Cancel_CaughtByPcall_CleanupRunsThenTaskIsDisposed()
+        {
+            // The script catches the cancel once, gets to clean up, and is then disposed
+            // instead of running on and starving every other coroutine.
+            using KitsuneEngine engine = new();
+            Task<LuaValue> stubborn = engine.ExecuteStringAsync(@"
+                pcall(function() while true do end end)
+                cleaned = 'yes'
+                while true do pcall(function() while true do end end) end");
+            await Task.Delay(100);
+            foreach (int id in engine.GetActiveIds())
+            {
+                engine.Cancel(id);
+            }
+
+            LuaValue other = await engine.ExecuteStringAsync("return 'ran'").WaitAsync(TimeSpan.FromSeconds(5));
+            other.String.ShouldBe("ran");
+            try
+            {
+                await stubborn.WaitAsync(TimeSpan.FromSeconds(5));
+            }
+            catch (LuaException)
+            {
+            }
+
+            engine.RunString("return cleaned").String.ShouldBe("yes");
+            engine.Wait();
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
+        [Fact]
+        public async Task Cancel_InlineCallSleeping_ReturnsPromptly()
+        {
+            using KitsuneEngine engine = new();
+            Task<Exception?> call = Task.Run<Exception?>(() => Record.Exception(() => engine.RunString("Sleep(30000)")));
+            await Task.Delay(200);
+            foreach (int id in engine.GetActiveIds())
+            {
+                engine.Cancel(id);
+            }
+
+            Exception? thrown = await call.WaitAsync(TimeSpan.FromSeconds(5));
+            thrown.ShouldBeOfType<LuaException>().Message.ShouldContain("cancelled");
+        }
+
+        [Fact]
+        public async Task Cancel_RunningTask_IsNotReportedToTheErrorHandler()
+        {
+            // Cancelling a task while it runs is reported the same way as cancelling an idle one: not at all.
+            using KitsuneEngine engine = new();
+            engine.RunString("reported = 'nothing' Tasks.SetErrorHandler(function(id, err) reported = err end)");
+            engine.ExecuteString("while true do end");
+            await Task.Delay(100);
+            foreach (int id in engine.GetActiveIds())
+            {
+                engine.Cancel(id);
+            }
+
+            engine.Wait();
+            engine.RunString("return reported").String.ShouldBe("nothing");
+        }
+
+        [Fact]
+        public void Interrupt_CaughtByPcall_TaskIsDisposed()
+        {
+            using KitsuneEngine engine = new();
+            engine.ExecuteString("while true do pcall(function() while true do end end) end");
+            SpinUntilRunning(engine);
+            Thread.Sleep(100);
+            engine.Interrupt();
+            engine.Wait();
+            engine.GetActiveIds().ShouldBeEmpty();
+            engine.RunString("return 'after interrupt'").String.ShouldBe("after interrupt");
         }
 
         [Fact]
