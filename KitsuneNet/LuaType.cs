@@ -108,5 +108,10 @@ namespace KitsuneNet
         /// The blocking public methods (<see cref="KitsuneEngine.ExecuteFileBlocking"/> etc.)
         /// convert this into a <see cref="LuaException"/> automatically.</summary>
         Error = -2,
+
+        /// <summary>The script was stopped by <c>os.exit</c> (KITSUNE_TEXIT = -4).
+        /// <see cref="LuaValue.Int64"/> holds the exit code. The execute methods convert this
+        /// into a <see cref="LuaExitException"/> automatically.</summary>
+        Exit = -4,
     }
 }

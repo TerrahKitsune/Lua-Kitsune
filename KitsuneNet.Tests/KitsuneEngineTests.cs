@@ -836,6 +836,117 @@ namespace KitsuneNet.Tests
             after.String.ShouldBe("after interrupt");
         }
 
+        // os.exit: stops every coroutine and hands the code to the host; the process lives on.
+        [Theory]
+        [InlineData("os.exit(3)", 3)]
+        [InlineData("os.exit()", 0)]
+        [InlineData("os.exit(true)", 0)]
+        [InlineData("os.exit(false)", 1)]
+        [InlineData("os.exit(-2)", -2)]
+        [InlineData("os.exit(4, true)", 4)]
+        public async Task OsExit_Async_ThrowsLuaExitExceptionWithTheCode(string script, int expected)
+        {
+            using KitsuneEngine engine = new();
+            LuaExitException exit = await Should.ThrowAsync<LuaExitException>(async () => await engine.ExecuteStringAsync(script));
+            exit.ExitCode.ShouldBe(expected);
+        }
+
+        [Fact]
+        public void OsExit_Sync_ThrowsLuaExitExceptionWithTheCode()
+        {
+            using KitsuneEngine engine = new();
+            LuaExitException exit = Should.Throw<LuaExitException>(() => engine.RunString("ran = 'before' os.exit(6) ran = 'after'"));
+            exit.ExitCode.ShouldBe(6);
+            engine.RunString("return ran").String.ShouldBe("before");
+        }
+
+        [Fact]
+        public async Task OsExit_IsALuaException()
+        {
+            using KitsuneEngine engine = new();
+            await Should.ThrowAsync<LuaException>(async () => await engine.ExecuteStringAsync("os.exit(1)"));
+        }
+
+        [Fact]
+        public async Task OsExit_StopsSleepingAndBusyCoroutinesWithTheSameCode()
+        {
+            using KitsuneEngine engine = new();
+            Task<LuaValue> sleeping = engine.ExecuteStringAsync("while true do Sleep(10) end");
+            Task<LuaValue> busy = engine.ExecuteStringAsync("while true do end");
+            Task<LuaValue> paused = engine.ExecuteStringAsync("Pause()");
+            await Task.Delay(100);
+
+            Task<LuaValue> exiting = engine.ExecuteStringAsync("os.exit(7)");
+
+            foreach (Task<LuaValue> stopped in new[] { exiting, sleeping, busy, paused })
+            {
+                LuaExitException exit = await Should.ThrowAsync<LuaExitException>(async () => await stopped);
+                exit.ExitCode.ShouldBe(7);
+            }
+        }
+
+        [Fact]
+        public async Task OsExit_FromATask_StopsTheScriptThatStartedIt()
+        {
+            using KitsuneEngine engine = new();
+            LuaExitException exit = await Should.ThrowAsync<LuaExitException>(async () => await engine.ExecuteStringAsync(@"
+                Tasks.New(function() Sleep(20) os.exit(5) end)
+                while true do Sleep(5) end"));
+            exit.ExitCode.ShouldBe(5);
+        }
+
+        [Fact]
+        public async Task OsExit_CaughtByPcall_StillStopsTheScript()
+        {
+            using KitsuneEngine engine = new();
+            LuaExitException exit = await Should.ThrowAsync<LuaExitException>(async () => await engine.ExecuteStringAsync(@"
+                caught = select(2, pcall(os.exit, 4))
+                while true do Sleep(5) end"));
+            exit.ExitCode.ShouldBe(4);
+        }
+
+        [Fact]
+        public async Task OsExit_TaskHandles_ReportExitForStoppedTasksOnly()
+        {
+            using KitsuneEngine engine = new();
+            await Should.ThrowAsync<LuaExitException>(async () => await engine.ExecuteStringAsync(@"
+                finished = Tasks.New(function() return 'done' end)
+                stopped = Tasks.New(function() while true do Sleep(10) end end)
+                Sleep(50)
+                os.exit(2)"));
+
+            LuaValue statuses = await engine.ExecuteStringAsync(@"
+                return tostring(stopped:GetStatus() == TaskStatus.Exit) .. '|' .. TaskStatus.Exit
+                    .. '|' .. tostring(finished:GetStatus() == TaskStatus.Done) .. '|' .. tostring(finished:GetResult())
+                    .. '|' .. tostring(stopped:GetError()) .. '|' .. tostring(stopped:GetResult())");
+            statuses.String.ShouldBe("true|10|true|done|nil|nil");
+        }
+
+        [Fact]
+        public async Task OsExit_ScriptsStartedAfterwards_RunNormally()
+        {
+            using KitsuneEngine engine = new();
+            await Should.ThrowAsync<LuaExitException>(async () => await engine.ExecuteStringAsync("os.exit(1)"));
+
+            // Lets the scheduler finish the pass that sweeps and clears the exit request.
+            await Task.Delay(200);
+            LuaValue after = await engine.ExecuteStringAsync("Sleep(20) return 'after exit'");
+            after.String.ShouldBe("after exit");
+            engine.RunString("return 'sync after exit'").String.ShouldBe("sync after exit");
+        }
+
+        [Fact]
+        public async Task OsExit_FireAndForgetScripts_AreReleased()
+        {
+            using KitsuneEngine engine = new();
+            engine.ExecuteString("while true do Sleep(10) end");
+            SpinUntilRunning(engine);
+            await Should.ThrowAsync<LuaExitException>(async () => await engine.ExecuteStringAsync("os.exit(1)"));
+
+            engine.Wait();
+            engine.GetActiveIds().ShouldBeEmpty();
+        }
+
         [Fact]
         public async Task Cancel_CaughtByPcall_CleanupRunsThenTaskIsDisposed()
         {

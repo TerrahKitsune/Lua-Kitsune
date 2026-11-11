@@ -1726,6 +1726,7 @@ namespace KitsuneNet
                 LuaType.TableContents => ReadNativeTable(nv.Data),  // snapshot from KitsuneGetTableContents
                 LuaType.Error when nv.Data != IntPtr.Zero => NativeCopyBytes(nv.Data, nv.Length) with { Type = LuaType.Error },
                 LuaType.None => LuaValue.None,
+                LuaType.Exit => new LuaValue { Type = LuaType.Exit, Int64 = nv.Integer },
                 _ => new LuaValue { Type = t },  // Nil/LightUserdata/etc.
             };
             KitsuneVariableFree(ptr);
@@ -2250,7 +2251,12 @@ namespace KitsuneNet
         }
 
         /// <summary>Returns the typed result and releases the slot.</summary>
-        private static LuaValue GetResultVariable(int id) => NativePtrToLuaValue(KitsuneGetResult(id));
+        // A coroutine stopped by os.exit has no error, only an Exit result; GetOrThrow surfaces it.
+        private static LuaValue GetResultVariable(int id)
+        {
+            LuaValue result = NativePtrToLuaValue(KitsuneGetResult(id));
+            return result.Type == LuaType.Exit ? result.GetOrThrow() : result;
+        }
 
         private bool RegisterUserdataCore(
             string name,

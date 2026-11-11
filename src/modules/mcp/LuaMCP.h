@@ -37,6 +37,16 @@ struct McpPendingRequest {
 	int  msgRef = LUA_NOREF; // the decoded response message, once done
 };
 
+// What one client told us in its `initialize` handshake. stdio has exactly one;
+// the HTTP transport keeps one per MCP-Session-Id.
+struct McpSession {
+	std::string clientName;
+	std::string clientVersion;
+	std::string protocolVersion;          // negotiated in initialize
+	int  clientCapsRef     = LUA_NOREF;   // the client's `capabilities` table from initialize
+	bool clientElicitation = false;       // client declared capabilities.elicitation
+};
+
 // The MCP server userdata. Only ever exists via placement-new inside a Lua
 // userdata block (see lua_pushmcpserver) -- never as a plain C++ global/static,
 // since its std::string/std::vector members must be destroyed through the
@@ -46,11 +56,15 @@ struct LuaMcpServer {
 	std::string name;
 	std::string version;
 	std::string instructions;
-	std::string clientName;
-	std::string clientVersion;
-	std::string protocolVersion;          // negotiated in initialize
-	int  clientCapsRef     = LUA_NOREF;   // the client's `capabilities` table from initialize
-	bool clientElicitation = false;       // client declared capabilities.elicitation
+
+	McpSession stdioSession;
+
+	// HTTP transport (see LuaMCPHttp.cpp). `sessions` is keyed by MCP-Session-Id.
+	bool        http = false;
+	std::string address;
+	int         httpServerRef = LUA_NOREF; // the HttpServer userdata
+	int         acceptRef     = LUA_NOREF; // its Accept coroutine
+	std::map<std::string, McpSession> sessions;
 
 	std::vector<McpTool> tools;
 
@@ -91,9 +105,47 @@ LuaMcpServer* lua_pushmcpserver(lua_State* L);
 LuaMcpServer* luaL_checkmcpserver(lua_State* L, int idx);
 bool          lua_ismcpserver(lua_State* L, int idx);
 
+// Protocol helpers shared by the stdio and HTTP transports.
+
+// Decodes JSON text, pushing the value. Returns false with nothing pushed on failure.
+bool McpJsonDecode(lua_State* L, const char* data, size_t len);
+// True for nil and for the Json.Null sentinel.
+bool McpIsNull(lua_State* L, int idx);
+void McpPushEmptyObject(lua_State* L);
+bool McpIsSupportedVersion(const char* version);
+
+// Each pushes the encoded JSON-RPC response for the id at idIdx (nil gives a
+// response without an id). Returns false with nothing pushed if encoding failed.
+bool McpPushResultJson(lua_State* L, int idIdx, int resultIdx);
+bool McpPushErrorJson(lua_State* L, int idIdx, int code, const char* message);
+
+// Fills `session` from the `initialize` params at paramsIdx.
+void McpApplyInitialize(lua_State* L, McpSession& session, int paramsIdx);
+void McpPushInitializeResult(lua_State* L, LuaMcpServer* server, const McpSession& session);
+void McpPushToolsListResult(lua_State* L, LuaMcpServer* server);
+
+const McpTool* McpFindTool(LuaMcpServer* server, const char* name);
+// Pushes the `request` table a tool callback receives. argsIdx is the call's
+// `arguments` value (a table, or anything else for none).
+void McpPushToolRequest(lua_State* L, const McpTool* tool, const McpSession& session,
+	const char* sessionId, bool canElicit, int idIdx, int argsIdx);
+// Pushes the tools/call result for the callback's return value (or error) at
+// valueIdx, with the server's captured output ahead of it.
+void McpPushToolResult(lua_State* L, LuaMcpServer* server, int pcallStatus, int valueIdx);
+
+// The bodies of the print / io.write replacements: append the arguments to
+// the server's captured output.
+int McpCapturePrint(lua_State* L, LuaMcpServer* server);
+int McpCaptureWrite(lua_State* L, LuaMcpServer* server);
+
+// Starts the scheduler task that runs the entry function on top of the stack
+// (popped). Returns false with the error message pushed on failure.
+bool McpStartPollTask(lua_State* L, LuaMcpServer* server);
+
 // MCP.Create(opt settings, opt context) -> mcp
-// Singleton: if a live instance already exists, returns it unchanged and
-// ignores the arguments (see the singleton tracking slot in LuaMCP.cpp).
+// The stdio instance is a singleton: if one already exists, it is returned
+// unchanged and the arguments are ignored (see the tracking slot in LuaMCP.cpp).
+// Each HTTP instance is its own server.
 int MCP_Create(lua_State* L);
 
 // mcp:AddTool(name, description, parameters, fn)

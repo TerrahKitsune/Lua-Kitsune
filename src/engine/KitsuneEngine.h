@@ -23,7 +23,7 @@
 #define KITSUNE_TITERATOR      (-7) // Kitsune extension: iterator type; data is a pointer to a kitsune_Iterator struct containing the iteration state. Not a value returned by lua_type() — only used in KitsuneVariable for iterating tables with KitsuneGetAll, and never appears in Lua or in a variable returned by the engine. Data should be a pointer to a kitsune_Iterator.
 #define KITSUNE_TCFUNCTION     (-6) // Kitsune extension: C function pointer type; data is a pointer to a kitsune_CFunctionData struct containing the function pointer and its userdata. Not a value returned by lua_type() — only used in KitsuneVariable for passing C function pointers to Lua, and never appears in Lua or in a variable returned by the engine. Data should be a pointer to a kitsune_CFunctionData.
 #define KITSUNE_TJSON          (-5) // Kitsune extension: JSON string type; data is a UTF-8 char* and length is in bytes (excluding null terminator). Not a value returned by lua_type().
-// (-4) is reserved and unused so that values of the former KITSUNE_TCHAR16 (UTF-16 strings) are never misread.
+#define KITSUNE_TEXIT          (-4) // Kitsune extension: the script was stopped by os.exit; integer holds the requested exit code. Only ever returned by the engine as an execution result (see os.exit below); pushed to Lua as nil.
 #define KITSUNE_TINTEGER       (-3) // Kitsune extension: Lua 5.3+ integer subtype (lua_isinteger); not a value returned by lua_type()
 #define KITSUNE_TERROR         (-2) // Kitsune extension: The variable represents an error message (UTF-8 char*); length is in bytes (excluding null terminator). Not a value returned by lua_type(); Used to signal an error when passed too and from Lua via kitsune_ResultSetter and KitsuneVariableReturnFromLua.
 #define KITSUNE_TNONE          (-1)
@@ -54,6 +54,17 @@
 #define KITSUNE_STATUS_INLINE    (7)  // inline sync call paused in cooperative yield window; calling thread will resume imminently
 #define KITSUNE_STATUS_PAUSED    (8)  // suspended inside the coroutine via Pause(); waiting for KitsuneResume(id, value) / task:Resume(value)
 #define KITSUNE_STATUS_WAITING   (9)  // suspended inside the coroutine via task:Wait(); can be force-woken via KitsuneResume(id, NULL) — value discarded
+#define KITSUNE_STATUS_EXIT      (10) // stopped by os.exit; KitsuneGetResult returns a KITSUNE_TEXIT variable holding the exit code
+
+// os.exit([code [, close]]) does not end the process. It stops every coroutine, like
+// KitsuneInterrupt, and hands the code to the host, which decides what exiting means:
+//   - code: an integer, or true (0) / false (1); default 0. `close` is ignored.
+//   - Every coroutine that was still alive ends with status KITSUNE_STATUS_EXIT, no error,
+//     and a KITSUNE_TEXIT result with that code. Fire-and-forget coroutines are released.
+//     Coroutines that had already finished keep their own result.
+//   - A synchronous KitsuneExecute* call whose script called os.exit returns a KITSUNE_TEXIT
+//     variable. Sync calls running on other threads are not stopped, as with KitsuneInterrupt.
+//   - Scripts started afterwards run normally.
 
 struct KitsuneKeyValuePairVariableNode;
 // Forward declaration required so KitsuneVariable can hold a kitsune_CFunctionData* in its union;
@@ -318,6 +329,7 @@ extern "C" {
 	// A result with type KITSUNE_TNONE means the script returned no value.
 	// A result with type KITSUNE_TERROR means the script raised a Lua error;
 	// the error message is in result->data (UTF-8, length in result->length).
+	// A result with type KITSUNE_TEXIT means the script called os.exit; the code is in result->integer.
 	// Calling from within a kitsune_CFunction IS supported via a re-entrant tight-loop
 	// path; Sleep() and Yield() inside the called script are no-ops in that case.
 	// Do not call recursively from the same non-scheduler thread while already blocking
@@ -355,6 +367,7 @@ extern "C" {
 	// the coroutine is not yet done, or memory allocation fails. A coroutine that returned
 	// nothing (no return statement, or finished with error) yields a non-NULL variable with
 	// type == KITSUNE_TNONE — use KitsuneGetError to distinguish the two cases.
+	// A coroutine stopped by os.exit yields type == KITSUNE_TEXIT with the code in integer.
 	// Call KitsuneVariableFree on the result when done. Thread-safe.
 	KITSUNE_API KitsuneVariable* KitsuneGetResult(int id);
 	// Releases the slot of a finished coroutine without consuming its result value.

@@ -14,11 +14,24 @@ kitsune.exe [script.lua] [arg1 arg2 ...]
 2. Executes the supplied Lua script file (defaults to `main.lua` in the working directory) as a coroutine.
 3. Waits for the coroutine to finish or an OS signal (`CTRL+C`, `SIGINT`, `SIGTERM`).
 4. If the script called `Imgui.Start(...)` before returning, the render loop is entered and blocks until the window is closed or `renderFn` returns `false`.
-5. Prints the script's return value to stdout (string, number, or boolean) then exits.
+5. Exits. The script's return value is not printed; a script that wants output calls `print`.
 
 On Windows the console input and output code pages are set to UTF-8 (CP 65001) at startup and restored on exit, so `print`, `io.write` and `io.read` exchange UTF-8 text. The executable's manifest also makes UTF-8 the process code page (Windows 10 1903 or later), so command-line arguments (`arg`) and the script path arrive as UTF-8. The engine itself handles UTF-8 file names in every host, independent of the manifest: `FileSystem.*` and the standard Lua `io`/`os`/`loadfile`/`require` functions (see the UTF-8 notes at the top of `kitsuneengine-lua-functions.md`, under "Userdata Return Values (read first)").
 
-Exit code `0` = success; `1` = the script raised an uncaught error, or the ImGui session ended because of an unhandled render error or a window/OpenGL setup failure (message printed to stderr in every case).
+Exit code:
+
+| Outcome | Exit code |
+|---------|-----------|
+| The script (or a `-e` expression) raised an uncaught error, or the ImGui session ended because of an unhandled render error or a window/OpenGL setup failure. The message is printed to stderr in every case | `-1` (seen as `255` on Linux and macOS) |
+| The script, a task or a `-e` expression called `os.exit(code)` | `code` (`0` for `os.exit()` and `os.exit(true)`, `1` for `os.exit(false)`). Everything is stopped at once and the engine is shut down normally; after `os.exit` in a `-e` expression the script is not run |
+| The script returned a number | That number, truncated to an integer: `return 3` exits with `3` |
+| The script returned anything else, or nothing | `0` |
+
+```lua
+if not ok then return 1 end   -- report failure to the caller without raising an error
+```
+
+When the script started an ImGui session, its return value is still the exit code unless the session itself fails.
 
 ---
 

@@ -956,6 +956,20 @@ static void StopCondemnedCoroutine(lua_State* L, KitsuneCoroutine* slot, const c
 	luaL_error(L, reason);
 }
 
+static void StopInterruptedCoroutine(lua_State* L, KitsuneState* state, KitsuneCoroutine* slot) {
+	if (slot && state->exitRequested.load())
+		slot->exited = true;
+	StopCondemnedCoroutine(L, slot, "interrupted");
+}
+
+// The result of a coroutine stopped by os.exit: no error, and the requested code.
+static void SetSlotExit(KitsuneState* state, KitsuneCoroutine* slot) {
+	SetSlotError(slot, NULL);
+	memset(&slot->result, 0, sizeof(slot->result));
+	slot->result.type = KITSUNE_TEXIT;
+	slot->result.integer = state->exitCode.load();
+}
+
 static void Ticker(lua_State* L, lua_Debug* ar) {
 	void* ud;
 	lua_getallocf(L, &ud);
@@ -969,7 +983,7 @@ static void Ticker(lua_State* L, lua_Debug* ar) {
 	// global interrupt. A nested call on the scheduler thread is part of a scheduler-managed
 	// coroutine, so it is: otherwise a long nested call could not be stopped at all.
 	if (state->interrupt.load() && (!g_inlineExecution || g_isSchedulerThread)) {
-		StopCondemnedCoroutine(L, selfSlot, "interrupted");
+		StopInterruptedCoroutine(L, state, selfSlot);
 		return;
 	}
 
@@ -989,7 +1003,7 @@ static void Ticker(lua_State* L, lua_Debug* ar) {
 		state->resumeEvent.Wait();
 		state->currentCoroutineId.store(savedId);
 		if (state->interrupt.load()) {
-			StopCondemnedCoroutine(L, selfSlot, "interrupted");
+			StopInterruptedCoroutine(L, state, selfSlot);
 			return;
 		}
 	}
@@ -1067,6 +1081,9 @@ static void FinishCoroutine(KitsuneState* state, KitsuneCoroutine* slot, lua_Sta
 		else
 			slot->result.type = LUA_TNONE;
 	}
+	else if (slot->exited) {
+		SetSlotExit(state, slot);
+	}
 	else {
 		slot->result.type = LUA_TNONE;
 		char buf[64];
@@ -1134,16 +1151,25 @@ static void SchedulerProc(KitsuneState* state) {
 		// -- Step 2: Interrupt all non-done coroutines if requested ------------
 		bool interruptSwept = state->interrupt.load() != 0;
 		if (interruptSwept) {
+			// After os.exit the host still has to read the code, so a slot someone can
+			// collect is kept as DONE; a plain interrupt releases everything.
+			bool exiting = state->exitRequested.load() != 0;
 			for (int i = 0; i < state->slotCount; i++) {
 				KitsuneCoroutine* slot = state->slots[i];
 				long st = slot->state.load();
 				if (slot->id != 0 && st != KITSUNE_COROUTINE_STATE_DONE && st != KITSUNE_COROUTINE_STATE_RELEASED && !slot->isInline.load()) {
-					SetSlotError(slot, "interrupted");
-					slot->result.type = LUA_TNONE;
+					bool keepForHost = exiting && !slot->fireAndForget.load();
+					if (exiting) {
+						SetSlotExit(state, slot);
+					}
+					else {
+						SetSlotError(slot, "interrupted");
+						slot->result.type = LUA_TNONE;
+					}
 					lua_State* T = GetCoroutineThread(state, slot);
 					if (T)
 						lua_settop(T, 0);
-					slot->state.store(KITSUNE_COROUTINE_STATE_RELEASED);
+					slot->state.store(keepForHost ? KITSUNE_COROUTINE_STATE_DONE : KITSUNE_COROUTINE_STATE_RELEASED);
 					NotifyDone(state);
 				}
 			}
@@ -1297,8 +1323,10 @@ static void SchedulerProc(KitsuneState* state) {
 		// Finished-but-uncollected and inline slots are not targets, so they must not keep it
 		// set: every coroutine started afterwards would be interrupted before it ran. No
 		// coroutine can start between the sweep and here; starting one needs a pause point.
-		if (interruptSwept)
+		if (interruptSwept) {
 			state->interrupt.store(0);
+			state->exitRequested.store(0);
+		}
 
 		// -- Step 4: Release done + released slots – zero the struct for reuse -
 		{
@@ -1562,6 +1590,33 @@ static int Global_Pause(lua_State* L) {
 	return lua_yieldk(L, 0, 0, PauseContinuation);
 }
 
+// os.exit([code [, close]]) — replaces Lua's, which calls the C exit() and so would end the
+// host process without any cleanup. Stops every coroutine instead and leaves the code for the
+// host to act on (see KITSUNE_STATUS_EXIT in KitsuneEngine.h). `close` has no meaning here.
+static int os_exit(lua_State* L) {
+	lua_Integer code;
+	if (lua_isboolean(L, 1))
+		code = lua_toboolean(L, 1) ? EXIT_SUCCESS : EXIT_FAILURE;
+	else
+		code = luaL_optinteger(L, 1, EXIT_SUCCESS);
+
+	void* ud;
+	lua_getallocf(L, &ud);
+	KitsuneState* state = (KitsuneState*)ud;
+
+	state->exitCode.store(code);
+	state->exitRequested.store(1);
+	state->interrupt.store(1);
+
+	// Unwind the caller now; the scheduler's interrupt sweep stops everything else.
+	KitsuneCoroutine* slot = FindSlot(state, (int)state->currentCoroutineId.load());
+	if (slot) {
+		slot->exited = true;
+		slot->stopRaised = true;
+	}
+	return luaL_error(L, "exit");
+}
+
 static void* LAlloc(void* ud, void* ptr, size_t osize, size_t nsize) {
 	if (nsize == 0) {
 		kitsune_free(ptr);
@@ -1597,6 +1652,14 @@ static KitsuneVariable* MakeStringVariable(int type, const char* data, size_t le
 // The caller must free the returned pointer with KitsuneVariableFree.
 static KitsuneVariable* MakeErrorVariable(const char* msg) {
 	return MakeStringVariable(KITSUNE_TERROR, msg, msg ? strlen(msg) : 0);
+}
+
+// Allocates a heap KitsuneVariable with KITSUNE_TEXIT and the exit code os.exit asked for.
+static KitsuneVariable* MakeExitVariable(long long code) {
+	KitsuneVariable* out = MakeStringVariable(KITSUNE_TEXIT, NULL, 0);
+	if (out)
+		out->integer = code;
+	return out;
 }
 
 // Allocates a heap KitsuneVariable with KITSUNE_TNONE (no result, method/metamethod absent).
@@ -1711,6 +1774,11 @@ extern "C" {
 		luaL_openlibs(L);
 		// UTF-8 file names for io / os / loadfile / require on Windows (see KitsuneStdlib.h).
 		kitsune_open_utf8_stdlib(L);
+
+		lua_getglobal(L, "os");
+		lua_pushcfunction(L, os_exit);
+		lua_setfield(L, -2, "exit");
+		lua_pop(L, 1);
 
 		// Force LC_NUMERIC to "C" so Lua's tostring / string.format always use '.' as the
 		// decimal separator, regardless of the OS locale.  Without this, machines with a
@@ -2182,6 +2250,13 @@ extern "C" {
 		return MakeErrorVariable(CoroutineErrorMessage(T, buf, sizeof(buf)));
 	}
 
+	// ExtractCoroutineResult for an inline call, which os.exit ends with an exit code instead of an error.
+	static KitsuneVariable* ExtractInlineResult(KitsuneState* state, KitsuneCoroutine* slot, lua_State* T, int rc, int nresults) {
+		if (rc != LUA_OK && slot->exited)
+			return MakeExitVariable(state->exitCode.load());
+		return ExtractCoroutineResult(T, rc, nresults);
+	}
+
 	// Tears down an inline slot after its coroutine finishes: acquires slotsLock,
 	// delegates full cleanup (including runningCount decrement) to FreeSlot, and notifies waiters.
 	static void CleanupInlineSlot(KitsuneState* state, KitsuneCoroutine* slot) {
@@ -2318,7 +2393,7 @@ extern "C" {
 
 		KitsuneVariable* out = cancelledInYield
 			? MakeErrorVariable("cancelled")
-			: ExtractCoroutineResult(T, rc, nresults);
+			: ExtractInlineResult(state, slot, T, rc, nresults);
 
 		lua_settop(T, 0);
 		DrainPendingVariableChain(state->L);
@@ -2367,7 +2442,7 @@ extern "C" {
 		g_tightExecution = prevTightExecution;
 		state->currentCoroutineId.store(prevCoroutineId);
 
-		KitsuneVariable* out = ExtractCoroutineResult(T, rc, nresults);
+		KitsuneVariable* out = ExtractInlineResult(state, slot, T, rc, nresults);
 
 		lua_settop(T, 0);
 		DrainPendingVariableChain(state->L);
@@ -2964,6 +3039,8 @@ int GetSlotStatus(KitsuneState* state, KitsuneCoroutine* slot) {
 	if (st == KITSUNE_COROUTINE_STATE_DONE || st == KITSUNE_COROUTINE_STATE_RELEASED) {
 		if (slot->error)
 			return KITSUNE_STATUS_FAULTED;
+		if (slot->result.type == KITSUNE_TEXIT)
+			return KITSUNE_STATUS_EXIT;
 		return KITSUNE_STATUS_DONE;
 	}
 	if (st == KITSUNE_COROUTINE_STATE_ABORTED)

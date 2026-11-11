@@ -133,6 +133,7 @@
     <ClCompile Include="src\modules\timespan\LuaTimeSpan.cpp" />
     <ClCompile Include="src\modules\toml\LuaToml.cpp" />
     <ClCompile Include="src\modules\mcp\LuaMCP.cpp" />
+    <ClCompile Include="src\modules\mcp\LuaMCPHttp.cpp" />
     <ClCompile Include="src\modules\mcp\LuaMCPMain.cpp" />
     <ClCompile Include="src\modules\uint\LuaUInt.cpp" />
     <ClCompile Include="src\modules\websocket\LuaWebSocket.cpp" />
@@ -340,6 +341,7 @@
     <ClInclude Include="src\modules\alivetoken\LuaAliveToken.h" />
     <ClInclude Include="src\modules\alivetoken\LuaAliveTokenMain.h" />
     <ClInclude Include="src\modules\mcp\LuaMCP.h" />
+    <ClInclude Include="src\modules\mcp\LuaMCPHttp.h" />
     <ClInclude Include="src\modules\mcp\LuaMCPMain.h" />
     <ClInclude Include="src\modules\uint\LuaUInt.h" />
     <ClInclude Include="src\modules\websocket\LuaWebSocket.h" />

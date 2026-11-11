@@ -42,5 +42,8 @@ namespace KitsuneNet
         /// <summary>Suspended inside the coroutine via <c>task:Wait()</c>.
         /// Can be force-woken early via <see cref="KitsuneEngine.Resume(int)"/> — no value is delivered.</summary>
         Waiting = 9,
+
+        /// <summary>Stopped by <c>os.exit</c>. Awaiting it throws <see cref="LuaExitException"/> with the exit code.</summary>
+        Exit = 10,
     }
 }

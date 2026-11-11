@@ -1,6 +1,8 @@
 #include "mcp/LuaMCP.h"
+#include "mcp/LuaMCPHttp.h"
 #include "json/LuaJson.h"
 #include "KitsuneEngine.h"
+#include "KitsuneInternal.h"
 #include <chrono>
 #include <cstring>
 #include <cstdio>
@@ -139,8 +141,16 @@ int McpServer_GC(lua_State* L) {
 	}
 	if (server->contextRef > 0)
 		luaL_unref(L, LUA_REGISTRYINDEX, server->contextRef);
-	if (server->clientCapsRef > 0)
-		luaL_unref(L, LUA_REGISTRYINDEX, server->clientCapsRef);
+	if (server->stdioSession.clientCapsRef > 0)
+		luaL_unref(L, LUA_REGISTRYINDEX, server->stdioSession.clientCapsRef);
+	for (auto& kv : server->sessions) {
+		if (kv.second.clientCapsRef > 0)
+			luaL_unref(L, LUA_REGISTRYINDEX, kv.second.clientCapsRef);
+	}
+	if (server->httpServerRef > 0)
+		luaL_unref(L, LUA_REGISTRYINDEX, server->httpServerRef);
+	if (server->acceptRef > 0)
+		luaL_unref(L, LUA_REGISTRYINDEX, server->acceptRef);
 	for (auto& kv : server->pending) {
 		if (kv.second.msgRef > 0)
 			luaL_unref(L, LUA_REGISTRYINDEX, kv.second.msgRef);
@@ -181,7 +191,7 @@ int McpServer_ToString(lua_State* L) {
 
 // Decodes `data`/`len` (a JSON-RPC line) into a Lua value, pushing the result.
 // Returns true on success (value on top of stack); false on failure (nothing pushed).
-static bool McpJsonDecode(lua_State* L, const char* data, size_t len) {
+bool McpJsonDecode(lua_State* L, const char* data, size_t len) {
 	lua_pushcfunction(L, Json_Decode);
 	lua_rawgetp(L, LUA_REGISTRYINDEX, LuaJsonBridgeRegistryKey());
 	lua_pushlstring(L, data, len);
@@ -207,7 +217,7 @@ static bool McpJsonEncode(lua_State* L, int valueIdx) {
 }
 
 // The bridge decodes JSON null as the Json.Null sentinel, not nil: treat both as absent.
-static bool McpIsNull(lua_State* L, int idx) {
+bool McpIsNull(lua_State* L, int idx) {
 	return lua_isnil(L, idx) || lua_touserdata(L, idx) == LuaJsonNull();
 }
 
@@ -217,29 +227,30 @@ static void McpWriteLine(const char* data, size_t len) {
 	fflush(stdout);
 }
 
-// Writes {jsonrpc="2.0", id=<value at idIdx>, result=<value at result_idx>}.
-static void McpSendResult(lua_State* L, int idIdx, int result_idx) {
+// Replaces the envelope table on top of the stack with its JSON encoding.
+static bool McpEncodeEnvelope(lua_State* L) {
+	bool ok = McpJsonEncode(L, -1);
+	lua_remove(L, ok ? -2 : -1);
+	return ok;
+}
+
+// {jsonrpc="2.0", id=<value at idIdx>, result=<value at resultIdx>}
+bool McpPushResultJson(lua_State* L, int idIdx, int resultIdx) {
 	idIdx     = lua_absindex(L, idIdx);
-	result_idx = lua_absindex(L, result_idx);
+	resultIdx = lua_absindex(L, resultIdx);
 
 	lua_newtable(L);
 	lua_pushliteral(L, "2.0");
 	lua_setfield(L, -2, "jsonrpc");
 	lua_pushvalue(L, idIdx);
 	lua_setfield(L, -2, "id");
-	lua_pushvalue(L, result_idx);
+	lua_pushvalue(L, resultIdx);
 	lua_setfield(L, -2, "result");
 
-	if (McpJsonEncode(L, -1)) {
-		size_t len;
-		const char* s = lua_tolstring(L, -1, &len);
-		if (s) McpWriteLine(s, len);
-		lua_pop(L, 1); // encoded string
-	}
-	lua_pop(L, 1); // envelope table
+	return McpEncodeEnvelope(L);
 }
 
-static void McpSendError(lua_State* L, int idIdx, int code, const char* message) {
+bool McpPushErrorJson(lua_State* L, int idIdx, int code, const char* message) {
 	idIdx = lua_absindex(L, idIdx);
 
 	lua_newtable(L); // envelope
@@ -255,27 +266,39 @@ static void McpSendError(lua_State* L, int idIdx, int code, const char* message)
 	lua_setfield(L, -2, "message");
 	lua_setfield(L, -2, "error");
 
-	if (McpJsonEncode(L, -1)) {
-		size_t len;
-		const char* s = lua_tolstring(L, -1, &len);
-		if (s) McpWriteLine(s, len);
-		lua_pop(L, 1);
-	}
+	return McpEncodeEnvelope(L);
+}
+
+// Writes the encoded message on top of the stack to stdout and pops it.
+static void McpWriteTop(lua_State* L) {
+	size_t len;
+	const char* s = lua_tolstring(L, -1, &len);
+	if (s) McpWriteLine(s, len);
 	lua_pop(L, 1);
+}
+
+static void McpSendResult(lua_State* L, int idIdx, int resultIdx) {
+	if (McpPushResultJson(L, idIdx, resultIdx))
+		McpWriteTop(L);
+}
+
+static void McpSendError(lua_State* L, int idIdx, int code, const char* message) {
+	if (McpPushErrorJson(L, idIdx, code, message))
+		McpWriteTop(L);
 }
 
 // Result builders
 
-static void McpPushEmptyObject(lua_State* L) {
+void McpPushEmptyObject(lua_State* L) {
 	// Guarantees `{}` on encode regardless of the bridge's emptyObjectAsSentinel
 	// setting (default off, which would otherwise encode an empty Lua table as `[]`).
 	lua_pushlightuserdata(L, LuaJsonEmptyObject());
 }
 
-static void McpPushInitializeResult(lua_State* L, LuaMcpServer* server) {
+void McpPushInitializeResult(lua_State* L, LuaMcpServer* server, const McpSession& session) {
 	lua_newtable(L); // result
 
-	lua_pushlstring(L, server->protocolVersion.c_str(), server->protocolVersion.size());
+	lua_pushlstring(L, session.protocolVersion.c_str(), session.protocolVersion.size());
 	lua_setfield(L, -2, "protocolVersion");
 
 	lua_newtable(L); // capabilities
@@ -339,7 +362,7 @@ static void McpPushToolDescriptor(lua_State* L, const McpTool& tool) {
 	lua_setfield(L, -2, "inputSchema");
 }
 
-static void McpPushToolsListResult(lua_State* L, LuaMcpServer* server) {
+void McpPushToolsListResult(lua_State* L, LuaMcpServer* server) {
 	lua_newtable(L); // result
 	lua_newtable(L); // tools array
 	for (size_t i = 0; i < server->tools.size(); i++) {
@@ -361,50 +384,60 @@ static const char* const mcpSupportedVersions[] = {
 	"2024-11-05",
 };
 
-static void McpHandleInitialize(lua_State* L, LuaMcpServer* server, int paramsIdx, int idIdx) {
+bool McpIsSupportedVersion(const char* version) {
+	for (const char* v : mcpSupportedVersions) {
+		if (strcmp(v, version) == 0) return true;
+	}
+	return false;
+}
+
+void McpApplyInitialize(lua_State* L, McpSession& session, int paramsIdx) {
+	paramsIdx = lua_absindex(L, paramsIdx);
+
 	// Echo the client's requested version when we support it, otherwise offer
 	// our latest and let the client decide (per the lifecycle spec).
-	server->protocolVersion = mcpSupportedVersions[0];
-	server->clientElicitation = false;
-	if (server->clientCapsRef > 0) {
-		luaL_unref(L, LUA_REGISTRYINDEX, server->clientCapsRef);
-		server->clientCapsRef = LUA_NOREF;
+	session.protocolVersion = mcpSupportedVersions[0];
+	session.clientElicitation = false;
+	if (session.clientCapsRef > 0) {
+		luaL_unref(L, LUA_REGISTRYINDEX, session.clientCapsRef);
+		session.clientCapsRef = LUA_NOREF;
 	}
 
-	if (lua_istable(L, paramsIdx)) {
-		lua_getfield(L, paramsIdx, "protocolVersion");
-		const char* requested = lua_isstring(L, -1) ? lua_tostring(L, -1) : NULL;
-		if (requested) {
-			for (const char* v : mcpSupportedVersions) {
-				if (strcmp(v, requested) == 0) { server->protocolVersion = v; break; }
-			}
-		}
+	if (!lua_istable(L, paramsIdx))
+		return;
+
+	lua_getfield(L, paramsIdx, "protocolVersion");
+	const char* requested = lua_isstring(L, -1) ? lua_tostring(L, -1) : NULL;
+	if (requested && McpIsSupportedVersion(requested))
+		session.protocolVersion = requested;
+	lua_pop(L, 1);
+
+	lua_getfield(L, paramsIdx, "capabilities");
+	if (lua_istable(L, -1)) {
+		lua_getfield(L, -1, "elicitation"); // `{}` decodes to an empty table, so test for presence
+		session.clientElicitation = !McpIsNull(L, -1);
+		lua_pop(L, 1);
+		session.clientCapsRef = luaL_ref(L, LUA_REGISTRYINDEX); // pops capabilities
+	} else {
+		lua_pop(L, 1);
+	}
+
+	lua_getfield(L, paramsIdx, "clientInfo");
+	if (lua_istable(L, -1)) {
+		lua_getfield(L, -1, "name");
+		if (lua_isstring(L, -1)) session.clientName = lua_tostring(L, -1);
 		lua_pop(L, 1);
 
-		lua_getfield(L, paramsIdx, "capabilities");
-		if (lua_istable(L, -1)) {
-			lua_getfield(L, -1, "elicitation"); // `{}` decodes to an empty table, so test for presence
-			server->clientElicitation = !McpIsNull(L, -1);
-			lua_pop(L, 1);
-			server->clientCapsRef = luaL_ref(L, LUA_REGISTRYINDEX); // pops capabilities
-		} else {
-			lua_pop(L, 1);
-		}
-
-		lua_getfield(L, paramsIdx, "clientInfo");
-		if (lua_istable(L, -1)) {
-			lua_getfield(L, -1, "name");
-			if (lua_isstring(L, -1)) server->clientName = lua_tostring(L, -1);
-			lua_pop(L, 1);
-
-			lua_getfield(L, -1, "version");
-			if (lua_isstring(L, -1)) server->clientVersion = lua_tostring(L, -1);
-			lua_pop(L, 1);
-		}
-		lua_pop(L, 1); // clientInfo
+		lua_getfield(L, -1, "version");
+		if (lua_isstring(L, -1)) session.clientVersion = lua_tostring(L, -1);
+		lua_pop(L, 1);
 	}
+	lua_pop(L, 1); // clientInfo
+}
 
-	McpPushInitializeResult(L, server);
+static void McpHandleInitialize(lua_State* L, LuaMcpServer* server, int paramsIdx, int idIdx) {
+	McpApplyInitialize(L, server->stdioSession, paramsIdx);
+	McpPushInitializeResult(L, server, server->stdioSession);
 	McpSendResult(L, idIdx, -1);
 	lua_pop(L, 1); // result table
 }
@@ -420,15 +453,21 @@ static void McpHandleInitialize(lua_State* L, LuaMcpServer* server, int paramsId
 // looks like [..., msg, id, params, method, result_or_error] -- so
 // McpToolFinish can derive every needed index purely from lua_gettop(L).
 
-static int McpToolFinish(lua_State* L, LuaMcpServer* server, int pcallStatus) {
-	server->toolThread = nullptr;
-	int top      = lua_gettop(L);
-	int idIdx   = top - 3;
-	int msgIdx  = top - 4;
-
+void McpPushToolResult(lua_State* L, LuaMcpServer* server, int pcallStatus, int valueIdx) {
 	bool ok = (pcallStatus == LUA_OK || pcallStatus == LUA_YIELD);
-	const char* raw = lua_tostring(L, top);
-	std::string text = ok ? (raw ? raw : "") : (std::string("error: ") + (raw ? raw : "unknown error"));
+	const char* raw = lua_tostring(L, valueIdx);
+	std::string text;
+	if (ok) {
+		text = raw ? raw : "";
+	}
+	else if (g_state && g_state->exitRequested.load()) {
+		// The callback was unwound by os.exit, which is not a failure of the tool.
+		text = "exit " + std::to_string(g_state->exitCode.load());
+		ok   = true;
+	}
+	else {
+		text = std::string("error: ") + (raw ? raw : "unknown error");
+	}
 
 	lua_newtable(L); // envelope
 	lua_newtable(L); // content array
@@ -456,7 +495,15 @@ static int McpToolFinish(lua_State* L, LuaMcpServer* server, int pcallStatus) {
 		lua_pushboolean(L, 1);
 		lua_setfield(L, -2, "isError");
 	}
+}
 
+static int McpToolFinish(lua_State* L, LuaMcpServer* server, int pcallStatus) {
+	server->toolThread = nullptr;
+	int top      = lua_gettop(L);
+	int idIdx   = top - 3;
+	int msgIdx  = top - 4;
+
+	McpPushToolResult(L, server, pcallStatus, top);
 	McpSendResult(L, idIdx, -1);
 	lua_pop(L, 1); // envelope
 
@@ -468,34 +515,20 @@ static int McpToolContinuation(lua_State* L, int status, lua_KContext ctx) {
 	return McpToolFinish(L, (LuaMcpServer*)ctx, status);
 }
 
-static int McpDispatchToolsCall(lua_State* L, LuaMcpServer* server, int paramsIdx, int idIdx) {
-	int msgIdx = idIdx - 1;
-
-	lua_getfield(L, paramsIdx, "name");
-	const char* toolName = lua_tostring(L, -1);
-
-	const McpTool* tool = NULL;
-	if (toolName) {
-		for (const McpTool& t : server->tools) {
-			if (t.name == toolName) { tool = &t; break; }
-		}
+const McpTool* McpFindTool(LuaMcpServer* server, const char* name) {
+	if (!name)
+		return NULL;
+	for (const McpTool& t : server->tools) {
+		if (t.name == name) return &t;
 	}
-	lua_pop(L, 1); // name
+	return NULL;
+}
 
-	if (!tool) {
-		McpSendError(L, idIdx, -32602, toolName ? "Unknown tool" : "Missing tool name");
-		lua_settop(L, msgIdx - 1);
-		return McpPollStep(L, server);
-	}
-
-	lua_getfield(L, paramsIdx, "arguments"); // table or nil
-	int  argsIdx = lua_gettop(L);
+void McpPushToolRequest(lua_State* L, const McpTool* tool, const McpSession& session,
+	const char* sessionId, bool canElicit, int idIdx, int argsIdx) {
+	idIdx   = lua_absindex(L, idIdx);
+	argsIdx = lua_absindex(L, argsIdx);
 	bool hasArgs = lua_istable(L, argsIdx);
-
-	server->capturedOutput.clear();
-
-	lua_rawgeti(L, LUA_REGISTRYINDEX, tool->fnRef);        // fn
-	lua_rawgeti(L, LUA_REGISTRYINDEX, server->contextRef); // context
 
 	lua_newtable(L); // request
 	int reqIdx = lua_gettop(L);
@@ -518,23 +551,48 @@ static int McpDispatchToolsCall(lua_State* L, LuaMcpServer* server, int paramsId
 	lua_pushvalue(L, idIdx);
 	lua_setfield(L, reqIdx, "RequestId");
 
-	// Caller-specific data lives on the request, not the server: a future HTTP
-	// transport serves several callers from one process. stdio is one connection, "0".
-	lua_pushliteral(L, "0");
+	// Caller-specific data lives on the request, not the server: the HTTP
+	// transport serves several callers from one process.
+	lua_pushstring(L, sessionId);
 	lua_setfield(L, reqIdx, "McpSessionId");
-	lua_pushboolean(L, server->clientElicitation ? 1 : 0);
+	lua_pushboolean(L, canElicit ? 1 : 0);
 	lua_setfield(L, reqIdx, "CanElicit");
 
 	lua_newtable(L); // Client
-	lua_pushlstring(L, server->clientName.c_str(), server->clientName.size());
+	lua_pushlstring(L, session.clientName.c_str(), session.clientName.size());
 	lua_setfield(L, -2, "Name");
-	lua_pushlstring(L, server->clientVersion.c_str(), server->clientVersion.size());
+	lua_pushlstring(L, session.clientVersion.c_str(), session.clientVersion.size());
 	lua_setfield(L, -2, "Version");
-	if (server->clientCapsRef > 0) {
-		lua_rawgeti(L, LUA_REGISTRYINDEX, server->clientCapsRef);
+	if (session.clientCapsRef > 0) {
+		lua_rawgeti(L, LUA_REGISTRYINDEX, session.clientCapsRef);
 		lua_setfield(L, -2, "Capabilities");
 	}
 	lua_setfield(L, reqIdx, "Client");
+}
+
+static int McpDispatchToolsCall(lua_State* L, LuaMcpServer* server, int paramsIdx, int idIdx) {
+	int msgIdx = idIdx - 1;
+
+	lua_getfield(L, paramsIdx, "name");
+	const char* toolName = lua_tostring(L, -1);
+	const McpTool* tool = McpFindTool(server, toolName);
+	lua_pop(L, 1); // name; toolName is only tested for NULL from here on
+
+	if (!tool) {
+		McpSendError(L, idIdx, -32602, toolName ? "Unknown tool" : "Missing tool name");
+		lua_settop(L, msgIdx - 1);
+		return McpPollStep(L, server);
+	}
+
+	lua_getfield(L, paramsIdx, "arguments"); // table or nil
+	int argsIdx = lua_gettop(L);
+
+	server->capturedOutput.clear();
+
+	lua_rawgeti(L, LUA_REGISTRYINDEX, tool->fnRef);        // fn
+	lua_rawgeti(L, LUA_REGISTRYINDEX, server->contextRef); // context
+	// stdio is one connection: session "0"
+	McpPushToolRequest(L, tool, server->stdioSession, "0", server->stdioSession.clientElicitation, idIdx, argsIdx);
 
 	lua_remove(L, argsIdx); // fn/context/request shift down by one to become contiguous
 
@@ -694,8 +752,7 @@ static int McpPollEntrypoint(lua_State* L) {
 // merged into that call's response -- see McpDispatchToolsCall (clears
 // the buffer before dispatch) and McpToolFinish (merges it after).
 
-static int McpPrintOverride(lua_State* L) {
-	LuaMcpServer* server = (LuaMcpServer*)lua_touserdata(L, lua_upvalueindex(1));
+int McpCapturePrint(lua_State* L, LuaMcpServer* server) {
 	int n = lua_gettop(L);
 	for (int i = 1; i <= n; i++) {
 		size_t len;
@@ -708,8 +765,7 @@ static int McpPrintOverride(lua_State* L) {
 	return 0;
 }
 
-static int McpIoWriteOverride(lua_State* L) {
-	LuaMcpServer* server = (LuaMcpServer*)lua_touserdata(L, lua_upvalueindex(1));
+int McpCaptureWrite(lua_State* L, LuaMcpServer* server) {
 	int n = lua_gettop(L);
 	for (int i = 1; i <= n; i++) {
 		size_t len;
@@ -718,6 +774,14 @@ static int McpIoWriteOverride(lua_State* L) {
 		lua_pop(L, 1);
 	}
 	return 0;
+}
+
+static int McpPrintOverride(lua_State* L) {
+	return McpCapturePrint(L, (LuaMcpServer*)lua_touserdata(L, lua_upvalueindex(1)));
+}
+
+static int McpIoWriteOverride(lua_State* L) {
+	return McpCaptureWrite(L, (LuaMcpServer*)lua_touserdata(L, lua_upvalueindex(1)));
 }
 
 // io.write is always captured (above), so redirecting the default output with io.output
@@ -1749,12 +1813,14 @@ int McpElicitation_Elicit(lua_State* L) {
 	lua_pushnil(L); // EL_ID
 	lua_pushnil(L); // EL_DEADLINE
 
+	// The HTTP transport has no stream to send the form on, so its callers can never elicit.
+	bool canElicit = !server->http && server->stdioSession.clientElicitation;
 	// Titled answers and multi-select need 2025-11-25; ISO dates compare as strings.
-	bool titled = strcmp(server->protocolVersion.c_str(), "2025-11-25") >= 0;
+	bool titled = strcmp(server->stdioSession.protocolVersion.c_str(), "2025-11-25") >= 0;
 	bool needsMultiple = false;
 	for (const McpQuestion& q : e->questions)
 		needsMultiple = needsMultiple || q.multiple;
-	if (!server->clientElicitation || (needsMultiple && !titled))
+	if (!canElicit || (needsMultiple && !titled))
 		return McpElicitRunDefault(L, e, "unsupported");
 
 	char id[32];
@@ -1852,6 +1918,32 @@ int McpServer_AddTool(lua_State* L) {
 	return 1;
 }
 
+bool McpStartPollTask(lua_State* L, LuaMcpServer* server) {
+	// Tasks.New(fn) -- the engine's own Lua-facing primitive for spinning up an
+	// independently-scheduled coroutine. Called here as a plain Lua function
+	// call (not through the public KitsuneEngine.h host API), because it's
+	// designed to be invoked from *inside* already-running script code -- unlike
+	// KitsuneExecuteVariableAsync et al., which explicitly refuse calls made
+	// from the scheduler thread (which is exactly where this Lua call executes).
+	lua_getglobal(L, "Tasks");
+	lua_getfield(L, -1, "New");
+	lua_remove(L, -2);  // drop the Tasks table
+	lua_insert(L, -2);  // New below the entry function
+
+	if (lua_pcall(L, 1, 1, 0) != LUA_OK) {
+		if (!lua_isstring(L, -1)) {
+			lua_pop(L, 1);
+			lua_pushliteral(L, "Tasks.New failed");
+		}
+		return false;
+	}
+
+	// Result is a LuaTask userdata; pin it so IsRunning()/__gc can query/release it later.
+	server->taskRef = luaL_ref(L, LUA_REGISTRYINDEX);
+	server->started = true;
+	return true;
+}
+
 int McpServer_Start(lua_State* L) {
 	LuaMcpServer* server = luaL_checkmcpserver(L, 1);
 
@@ -1859,6 +1951,9 @@ int McpServer_Start(lua_State* L) {
 		lua_pushboolean(L, 1);
 		return 1;
 	}
+
+	if (server->http)
+		return McpHttpStart(L, server);
 
 	if (!McpStdioAvailable()) {
 		lua_pushboolean(L, 0);
@@ -1868,29 +1963,14 @@ int McpServer_Start(lua_State* L) {
 
 	McpInstallOutputRedirect(L, server);
 
-	// Tasks.New(fn) -- the engine's own Lua-facing primitive for spinning up an
-	// independently-scheduled coroutine. Called here as a plain Lua function
-	// call (not through the public KitsuneEngine.h host API), because it's
-	// designed to be invoked from *inside* already-running script code -- unlike
-	// KitsuneExecuteVariableAsync et al., which explicitly refuse calls made
-	// from the scheduler thread (which is exactly where this Lua call executes).
-	lua_getglobal(L, "Tasks");
-	lua_getfield(L, -1, "New");
-	lua_remove(L, -2); // drop the Tasks table, keep New on top
-
 	lua_pushlightuserdata(L, server);
 	lua_pushcclosure(L, McpPollEntrypoint, 1);
-
-	if (lua_pcall(L, 1, 1, 0) != LUA_OK) {
-		const char* err = lua_tostring(L, -1);
+	if (!McpStartPollTask(L, server)) {
 		lua_pushboolean(L, 0);
-		lua_pushstring(L, err ? err : "Tasks.New failed");
+		lua_insert(L, -2);
 		return 2;
 	}
 
-	// Result is a LuaTask userdata; pin it so IsRunning()/__gc can query/release it later.
-	server->taskRef = luaL_ref(L, LUA_REGISTRYINDEX);
-	server->started = true;
 	lua_pushboolean(L, 1);
 	return 1;
 }
@@ -1919,7 +1999,8 @@ int McpServer_IsRunning(lua_State* L) {
 	if (lua_pcall(L, 1, 1, 0) == LUA_OK) {
 		int status = (int)lua_tointeger(L, -1);
 		running = status != KITSUNE_STATUS_NONE && status != KITSUNE_STATUS_DONE &&
-		          status != KITSUNE_STATUS_FAULTED && status != KITSUNE_STATUS_CANCELLED;
+		          status != KITSUNE_STATUS_FAULTED && status != KITSUNE_STATUS_CANCELLED &&
+		          status != KITSUNE_STATUS_EXIT;
 	}
 	lua_pop(L, 2); // status-or-error, task
 
@@ -1928,7 +2009,31 @@ int McpServer_IsRunning(lua_State* L) {
 }
 
 int MCP_Create(lua_State* L) {
-	if (g_mcpInstanceRef > 0) {
+	bool        http    = false;
+	const char* address = NULL; // owned by the settings table, which stays on the stack
+	if (lua_istable(L, 1)) {
+		lua_getfield(L, 1, "Transport");
+		if (!lua_isnil(L, -1)) {
+			const char* transport = lua_tostring(L, -1);
+			if (transport && strcmp(transport, "http") == 0)
+				http = true;
+			else if (!transport || strcmp(transport, "stdio") != 0)
+				return luaL_error(L, "MCP.Create: Transport must be \"stdio\" or \"http\"");
+		}
+		lua_pop(L, 1);
+
+		if (http) {
+			lua_getfield(L, 1, "Address");
+			address = lua_isstring(L, -1) ? lua_tostring(L, -1) : NULL;
+			lua_pop(L, 1);
+			if (!address)
+				return luaL_error(L, "MCP.Create: the http transport needs an Address (\"127.0.0.1:port\")");
+			if (!McpHttpIsLoopbackAddress(address))
+				return luaL_error(L, "MCP.Create: Address '%s' is not a loopback address (use 127.0.0.1:port or localhost:port)", address);
+		}
+	}
+
+	if (!http && g_mcpInstanceRef > 0) {
 		lua_rawgeti(L, LUA_REGISTRYINDEX, g_mcpInstanceRef);
 		if (lua_ismcpserver(L, -1))
 			return 1;
@@ -1960,6 +2065,12 @@ int MCP_Create(lua_State* L) {
 	if (lua_istable(L, 2)) lua_pushvalue(L, 2);
 	else                   lua_newtable(L);
 	server->contextRef = luaL_ref(L, LUA_REGISTRYINDEX);
+
+	if (http) {
+		server->http    = true;
+		server->address = address;
+		return 1;
+	}
 
 	lua_pushvalue(L, -1); // duplicate the userdata for the singleton tracking slot
 	g_mcpInstanceRef = luaL_ref(L, LUA_REGISTRYINDEX);

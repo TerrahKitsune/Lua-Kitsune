@@ -50,6 +50,7 @@ set(KITSUNE_ENGINE_SOURCES
 
 	# ── MCP (Model Context Protocol server) ─────────────────────────────────
 	src/modules/mcp/LuaMCP.cpp
+	src/modules/mcp/LuaMCPHttp.cpp
 	src/modules/mcp/LuaMCPMain.cpp
 
 	# ── Hashing / encoding ─────────────────────────────────────────────────

@@ -223,11 +223,17 @@ namespace KitsuneNet
         /// <c>Run*</c> methods to surface native rejections as exceptions rather than
         /// silent <see cref="None"/> returns.</summary>
         /// <exception cref="LuaException">Thrown when <see cref="Type"/> is <see cref="LuaType.Error"/>.</exception>
+        /// <exception cref="LuaExitException">Thrown when <see cref="Type"/> is <see cref="LuaType.Exit"/>.</exception>
         public LuaValue GetOrThrow()
         {
             if (Type == LuaType.Error)
             {
                 throw new LuaException(String ?? string.Empty);
+            }
+
+            if (Type == LuaType.Exit)
+            {
+                throw new LuaExitException((int)Int64);
             }
 
             return this;

@@ -268,6 +268,9 @@
     <ClCompile Include="src\modules\mcp\LuaMCP.cpp">
       <Filter>Modules\mcp</Filter>
     </ClCompile>
+    <ClCompile Include="src\modules\mcp\LuaMCPHttp.cpp">
+      <Filter>Modules\mcp</Filter>
+    </ClCompile>
     <ClCompile Include="src\modules\mcp\LuaMCPMain.cpp">
       <Filter>Modules\mcp</Filter>
     </ClCompile>
@@ -847,6 +850,9 @@
       <Filter>Modules\alivetoken</Filter>
     </ClInclude>
     <ClInclude Include="src\modules\mcp\LuaMCP.h">
+      <Filter>Modules\mcp</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modules\mcp\LuaMCPHttp.h">
       <Filter>Modules\mcp</Filter>
     </ClInclude>
     <ClInclude Include="src\modules\mcp\LuaMCPMain.h">

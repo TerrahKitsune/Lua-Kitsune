@@ -135,6 +135,19 @@ string, code GetLastError(opt lasterrorcode)
 ```
 Retrieves the last error code as a message (UTF-8, localized by the OS, without trailing newline) and code. The default code is `GetLastError()` on Windows and `errno` on Linux (message from `strerror`).
 
+### Exiting
+
+```lua
+os.exit(opt code, opt close)   -- does not return
+```
+Stops the whole script: every coroutine and task, not just the caller. Unlike standard Lua it does **not** end the process itself. The engine hands `code` to its host, which decides what exiting means: `kitsune.exe` shuts down normally and uses it as the process exit code, while an embedding application (for example a .NET host) receives it and keeps running.
+
+- `code` is an integer, or `true` (0) / `false` (1); the default is 0. `close` is accepted and ignored, because the Lua state is always closed properly.
+- Nothing after the call runs. A script that catches the call with `pcall` is still stopped the next time it would be scheduled.
+- Tasks stopped this way report `TaskStatus.Exit`, with no error and no result. Tasks that had already finished keep their status and result.
+- An [MCP](#mcp) tool may call it: that call is answered with the text `exit <code>` as a normal result (after anything the tool printed), not as an error, and then the server stops with everything else.
+- To finish with an exit code without stopping other work abruptly, return a number from the main script instead (see `Kitsune/docs/kitsune-exe.md`).
+
 ### Shell
 
 ```lua
@@ -4282,6 +4295,7 @@ TaskStatus.Cancelled = 6   -- Cancel() requested and not yet processed (see Canc
 TaskStatus.Inline    = 7   -- running as an inline sync call (RunString / RunFunction etc.)
 TaskStatus.Paused    = 8   -- suspended inside the coroutine via Pause(); waiting for Resume()
 TaskStatus.Waiting   = 9   -- suspended inside the coroutine via task:Wait(); can be force-woken via Resume()
+TaskStatus.Exit      = 10  -- stopped by os.exit(); no error and no result
 ```
 
 ### Construction
@@ -4576,9 +4590,12 @@ slow:Dispose()
 
 ## MCP
 
-Implements a [Model Context Protocol](https://modelcontextprotocol.io) server directly in the engine — register Lua functions as MCP tools and serve them to any MCP client (Claude Code, Claude Desktop, etc.) over the process's own stdin/stdout. No networking of any kind is involved: MCP's stdio transport is exactly this — the client spawns the process and exchanges newline-delimited JSON-RPC messages over the two standard pipes every process already has. There is no HTTP/network transport in this version.
+Implements a [Model Context Protocol](https://modelcontextprotocol.io) server directly in the engine — register Lua functions as MCP tools and serve them to any MCP client (Claude Code, Claude Desktop, etc.). There are two transports:
 
-Only one `MCP` instance can exist per process (there is exactly one stdin/stdout to poll); `MCP.Create` is a singleton constructor — see below.
+- **stdio** (the default): the client spawns the process and exchanges newline-delimited JSON-RPC messages over the process's own stdin/stdout. No networking is involved. Use it when the script *is* the MCP server.
+- **HTTP** (opt-in): the server listens on a local port and clients connect to `http://127.0.0.1:<port>/mcp`. Use it when the script needs its own stdin/stdout, or when a client must attach to a process that is already running. See [HTTP transport](#mcp-http-transport).
+
+Only one stdio `MCP` instance can exist per process (there is exactly one stdin/stdout to poll); for stdio `MCP.Create` is a singleton constructor — see below. HTTP instances are independent of it and of each other.
 
 ### Creation
 
@@ -4588,13 +4605,21 @@ Mcp  MCP.Create(opt settings, opt context)
 
 | Argument | Type | Description |
 |----------|------|-------------|
-| `settings` | table (opt) | `Name` (string), `Version` (string), `Instructions` (string) — reported to the client in the `initialize` handshake. All fields optional; `Name` defaults to `"kitsune-lua"`, `Version` to `"1.0.0"` |
+| `settings` | table (opt) | `Name` (string), `Version` (string), `Instructions` (string) — reported to the client in the `initialize` handshake. All fields optional; `Name` defaults to `"kitsune-lua"`, `Version` to `"1.0.0"`. `Transport` and `Address` select the transport, see below |
 | `context` | table (opt) | Shared state passed as the first argument to every tool callback (a DB handle, counters, config, whatever the tool author needs). An empty table is created automatically if omitted |
 
-If an `MCP` instance already exists in this process, `MCP.Create` returns that **same instance** unchanged — new `settings`/`context` arguments are ignored. This is deliberate: there is only one stdin/stdout, so only one server can meaningfully poll it.
+| Transport setting | Description |
+|-------------------|-------------|
+| `Transport` | `"stdio"` (default) or `"http"`. Anything else raises an error |
+| `Address` | Required for `"http"`, ignored for stdio: `"127.0.0.1:port"` or `"localhost:port"`, the same format as [`HttpServer.Listen`](#httpserver). Only loopback addresses are accepted; a missing address or any other host (including `":port"`, which would listen on every interface) raises an error |
+
+If a stdio `MCP` instance already exists in this process, `MCP.Create` without `Transport = "http"` returns that **same instance** unchanged — new `settings`/`context` arguments are ignored. This is deliberate: there is only one stdin/stdout, so only one server can meaningfully poll it. With `Transport = "http"` every call creates a new server, and never returns the stdio instance.
 
 ```lua
 local mcp = MCP.Create({ Name = "kitsune-lua", Version = "1.0.0" }, { logPath = "server.log" })
+
+-- Served at http://127.0.0.1:8765/mcp
+local httpMcp = MCP.Create({ Name = "kitsune-lua", Transport = "http", Address = "127.0.0.1:8765" })
 ```
 
 ### mcp:AddTool
@@ -4631,8 +4656,8 @@ Registers a tool. Normally called before `mcp:Start()`; registering later also w
   | `request.Parameters` | The same values as a 1-based positional array, in declared parameter order (e.g. `request.Parameters[1]`) |
   | `request.Name` | The tool name being called (useful if one function is registered for several tools) |
   | `request.RequestId` | The JSON-RPC request id of this call, for correlation/logging |
-  | `request.McpSessionId` | Identifies the MCP connection the call came from, as a string: `"0"` over stdio (one connection per process). It identifies a connection or conversation, not a user. Use it to key per-caller data on the shared `context`, e.g. `context.Cache[request.McpSessionId]` |
-  | `request.CanElicit` | `true` if this caller declared the `elicitation` capability, i.e. it can show [elicitation](#elicitation) forms |
+  | `request.McpSessionId` | Identifies the MCP connection the call came from, as a string: `"0"` over stdio (one connection per process), the session's `MCP-Session-Id` over HTTP. It identifies a connection or conversation, not a user. Use it to key per-caller data on the shared `context`, e.g. `context.Cache[request.McpSessionId]` |
+  | `request.CanElicit` | `true` if this caller declared the `elicitation` capability, i.e. it can show [elicitation](#elicitation) forms. Always `false` over HTTP |
   | `request.Client` | `{ Name=, Version=, Capabilities= }` from the MCP `initialize` handshake. `Capabilities` is the client's decoded `capabilities` object (absent if the client sent none) |
 
 The callback's return value becomes the tool's text result: **return a string or number**. Other values (`nil`, booleans, tables) yield an empty text result, so encode tables yourself (`Json.New():Encode(t)`). The callback is yield-safe (built on `lua_pcallk` continuations) — it may call `Sleep()`, `HttpClient:Call()`, or any other yieldable engine function without stalling the server. A Lua error raised inside the callback is caught and reported back to the client as a normal MCP tool-execution error (`isError = true`), not a protocol-level failure. Calling a tool name that isn't registered returns a JSON-RPC error (`-32602 "Unknown tool"`) instead.
@@ -4657,11 +4682,13 @@ mcp:AddTool(
 ok, err = mcp:Start()
 ```
 
-Starts the server: spins up its own independently-scheduled task (via `Tasks.New`, the same mechanism `Tasks.New(fn)` gives any script) that polls stdin non-blockingly, decodes JSON-RPC requests, and dispatches them to registered tools. Returns immediately.
+Starts the server: spins up its own independently-scheduled task (via `Tasks.New`, the same mechanism `Tasks.New(fn)` gives any script) that polls stdin non-blockingly (or, for HTTP, the listening socket), decodes JSON-RPC requests, and dispatches them to registered tools. Returns immediately.
 
-Returns `true` on success. Returns `false, "stdin/stdout not available"` if stdin/stdout are not available in this host (e.g. a GUI-subsystem process launched with no console and no redirected pipes) — there is no reasonable MCP client to serve in that case, so `Start()` fails cleanly rather than guessing. If the polling task can't be created it returns `false, errmsg`.
+Returns `true` on success. Over stdio it returns `false, "stdin/stdout not available"` if stdin/stdout are not available in this host (e.g. a GUI-subsystem process launched with no console and no redirected pipes) — there is no reasonable MCP client to serve in that case, so `Start()` fails cleanly rather than guessing. Over HTTP it returns `false, errmsg` when the address can't be bound (for example, the port is already in use). If the polling task can't be created it returns `false, errmsg`.
 
 Calling `Start()` again while the server is running returns `true` and does nothing. After `Stop()` the server can't be restarted (`IsRunning()` stays `false`).
+
+The rest of this section describes stdio; for HTTP see [Output in HTTP mode](#mcp-http-output).
 
 **`print`/`io.write` are globally redirected the moment `Start()` succeeds.** stdout is reserved for JSON-RPC responses, so once the server is running nothing may write to it directly — this holds regardless of which coroutine calls `print`/`io.write` or when. Output isn't discarded: whatever a tool callback prints while it runs is captured and added as its own entry in that call's `content` array, ahead of the callback's actual return value. Output produced outside of any tool dispatch (nothing currently listening) is dropped the next time a dispatch starts. Because `io.write` is always captured, `io.output` is disabled in MCP mode and raises an error; to write a file, use the handle from `io.open(path, "w")` (`f:write(...)`).
 
@@ -4673,7 +4700,7 @@ Only the **global** `print` and `io.write` are replaced. `io.stdout:write(...)`,
 bool  mcp:IsRunning()
 ```
 
-Returns `true` while the server's polling task is still active. Becomes `false` once the client closes its end of the pipe (the normal MCP disconnect path — stdin reaches EOF) or after `mcp:Stop()` is called. Since `Start()` returns immediately, the idiomatic top-level script keeps itself (and therefore `kitsune.exe`) alive by polling this:
+Returns `true` while the server's polling task is still active. Becomes `false` once the client closes its end of the pipe (the normal MCP disconnect path — stdin reaches EOF) or after `mcp:Stop()` is called. An HTTP server has no such disconnect: it runs until `mcp:Stop()`. Since `Start()` returns immediately, the idiomatic top-level script keeps itself (and therefore `kitsune.exe`) alive by polling this:
 
 ```lua
 local ok, err = mcp:Start()
@@ -4690,7 +4717,33 @@ end
 nil  mcp:Stop()
 ```
 
-Signals the polling task to stop; it exits cleanly on its next poll iteration (typically within a few milliseconds).
+Signals the polling task to stop; it exits cleanly on its next poll iteration (typically within a few milliseconds). An HTTP server closes its listening socket at that point. A tool may call `Stop()` on its own server; its result is still sent.
+
+<a id="mcp-http-transport"></a>
+### HTTP transport
+
+```lua
+local mcp = MCP.Create({ Name = "my-tools", Transport = "http", Address = "127.0.0.1:8765" })
+mcp:AddTool("ping_game", "Returns the current frame", {}, function(context, request)
+    return tostring(context.frame or 0)
+end)
+assert(mcp:Start())
+-- the script carries on with its own work; stdin and stdout are untouched
+```
+
+The client connects to `http://127.0.0.1:8765/mcp` (for Claude Code: `claude mcp add --transport http my-tools http://127.0.0.1:8765/mcp`).
+
+This is the JSON-response half of MCP's [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#streamable-http) transport:
+
+- **One request, one response.** Every JSON-RPC message is its own `POST /mcp` and gets its own response: `application/json` for a request, `202 Accepted` with no body for a notification. No connection is kept open between messages, so there is nothing to reconnect; a client may reuse a connection or open a new one per message.
+- **Sessions.** `initialize` returns an `MCP-Session-Id` header. Every later request must carry it: without it the server answers `400`, with an unknown one `404`. `DELETE /mcp` with the header ends the session. Sessions otherwise live until `Stop()`. When the process restarts, old session ids are unknown, the client gets `404` and starts over with a new `initialize`. The id is `request.McpSessionId` in tool callbacks.
+- **One at a time.** Requests are handled in arrival order, and a tool call is finished before the next request is looked at. While a tool callback runs or yields (`Sleep()`, a database call), the rest of the script keeps running, but other MCP requests, including `ping` and `tools/list`, wait until that call has been answered. A client that drops its connection during a call does not cancel it.
+- **Local only.** The server binds a loopback address and there is no authentication, so every process on the machine can call the tools. A request with an `Origin` header that isn't a loopback origin (a web page in a browser) is rejected with `403`.
+- **Not supported:** server-sent events (`GET /mcp` answers `405`), and with them everything the server would have to send on its own: [elicitation](#elicitation) (`request.CanElicit` is always `false`, so `Elicit` runs the default callback with reason `"unsupported"`), notifications to the client, and resumable streams. JSON-RPC batches are rejected with `400`.
+
+Other statuses: `404` for any path but `/mcp`, `400` for a body that isn't a single JSON-RPC message or for an `MCP-Protocol-Version` header naming a version the server doesn't speak, `405` for methods other than `POST` and `DELETE`.
+
+<a id="mcp-http-output"></a>**Output in HTTP mode.** stdout is not reserved, so `print` and `io.write` keep working for the script. Only what the tool callback's own coroutine prints while the call runs is captured, and added to that call's `content` ahead of the return value, exactly as over stdio. Output from anywhere else (the rest of the script, tasks the tool started) goes where it went before `Start()`. `io.output` is not disabled.
 
 ### Elicitation
 
@@ -4816,7 +4869,7 @@ Mistakes in the definition that only show up once everything is added, such as a
 | What happened | `ok` | `results` |
 |---|---|---|
 | User submitted the form | `true` | Results table (below) |
-| Caller can't show forms (`request.CanElicit` is `false`) | `true` | Return value of the default callback, reason `"unsupported"` |
+| Caller can't show forms (`request.CanElicit` is `false`; always the case over [HTTP](#mcp-http-transport)) | `true` | Return value of the default callback, reason `"unsupported"` |
 | User clicked decline | `true` | Return value of the default callback, reason `"decline"` |
 | User closed the dialog | `true` | Return value of the default callback, reason `"cancel"` |
 | The timeout passed | `true` | Return value of the default callback, reason `"timeout"` (the client is sent `notifications/cancelled`) |

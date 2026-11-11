@@ -131,6 +131,8 @@ public sealed class McpTests
 
         mcp:AddTool('load_time', '', {}, function() return tostring(loadTimeErr) end)
 
+        mcp:AddTool('exit_now', '', {}, function() os.exit(3) return 'unreachable' end)
+
         mcp:AddTool('in_task', '', {}, function(context, request)
             local err
             Tasks.New(function()
@@ -194,6 +196,15 @@ public sealed class McpTests
     {
         await using var client = await McpClient.StartAsync(ElicitingCapabilities);
         (await client.CallToolAsync("no_yield")).ShouldContain("Elicit: can't wait here");
+    }
+
+    // os.exit inside a tool
+    [KitsuneExeFact]
+    public async Task ToolsCall_ToolCallsOsExit_ReturnsACleanResultAndExitsWithTheCode()
+    {
+        await using var client = await McpClient.StartAsync("{}");
+        (await client.CallToolAsync("exit_now")).ShouldBe("exit 3");
+        (await client.WaitForExitAsync()).ShouldBe(3);
     }
 
     // JSON null in the client's messages
@@ -896,6 +907,14 @@ public sealed class McpTests
             response["id"]!.GetValue<int>().ShouldBe(id);
             ToolText(response).ShouldBe("default:decline");
             return request;
+        }
+
+        // For a server that ends on its own; stdin stays open, so nothing else makes it exit.
+        public async Task<int> WaitForExitAsync()
+        {
+            using var cts = new CancellationTokenSource(ReadTimeout);
+            await process.WaitForExitAsync(cts.Token);
+            return process.ExitCode;
         }
 
         public async ValueTask DisposeAsync()

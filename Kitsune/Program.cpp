@@ -84,6 +84,23 @@ int Test(int argc, const KitsuneVariable* argv, const kitsune_ResultSetter resul
 
 static std::atomic<long> g_exitSignaled{ 0 };
 
+#define EXIT_CODE_ERROR (-1)
+
+// A number returned by the script, or the code it passed to os.exit, is the process exit
+// code; any other return value means success.
+static int ExitCodeFromScriptResult(int id) {
+	int exitCode = 0;
+	KitsuneVariable* result = KitsuneGetResult(id);
+	if (result) {
+		if (result->type == KITSUNE_TINTEGER || result->type == KITSUNE_TEXIT)
+			exitCode = (int)result->integer;
+		else if (result->type == KITSUNE_TNUMBER)
+			exitCode = (int)result->number;
+		KitsuneVariableFree(result);
+	}
+	return exitCode;
+}
+
 #ifdef _WIN32
 static UINT s_origConsoleOutputCP = 0;
 static UINT s_origConsoleInputCP = 0;
@@ -251,7 +268,8 @@ int main(int argc, char* argv[]) {
 	int ret = 0;
 
 	// Run all -e expressions first, blocking, in order
-	for (int i = 0; i < eCount && ret == 0; i++) {
+	bool exitRequested = false;
+	for (int i = 0; i < eCount && ret == 0 && !exitRequested; i++) {
 		KitsuneVariable* result = KitsuneExecuteString(eExprs[i], 0, nullptr);
 		if (!result) {
 			fprintf(stderr, "Failed to execute -e expression\n");
@@ -263,13 +281,17 @@ int main(int argc, char* argv[]) {
 		if (result->type == KITSUNE_TERROR) {
 			if (result->data && result->length > 0)
 				fprintf(stderr, "%.*s\n", (int)result->length, (char*)result->data);
-			ret = 1;
+			ret = EXIT_CODE_ERROR;
+		}
+		else if (result->type == KITSUNE_TEXIT) {
+			ret = (int)result->integer;
+			exitRequested = true;
 		}
 		KitsuneVariableFree(result);
 	}
 	free(eExprs);
 
-	if (ret != 0) {
+	if (ret != 0 || exitRequested) {
 		free(vars);
 		KitsuneCleanup();
 		return ret;
@@ -299,46 +321,20 @@ int main(int argc, char* argv[]) {
 			KitsuneWait();
 
 		size_t errLen = KitsuneGetError(id, nullptr, 0);
-		ret = errLen > 0 ? 1 : 0;
 		if (errLen > 0) {
 			char* errBuf = (char*)malloc(errLen + 1);
 			KitsuneGetError(id, errBuf, errLen + 1);
 			fprintf(stderr, "%s\n", errBuf);
 			free(errBuf);
+			ret = EXIT_CODE_ERROR;
+		}
+		else {
+			ret = ExitCodeFromScriptResult(id);
 		}
 
 #ifdef KITSUNE_IMGUI
-		if (g_imguiCtx) {
-			if (!RunImguiSession())
-				ret = 1;
-		}
-		else {
-			KitsuneVariable* result = KitsuneGetResult(id);
-			if (result) {
-				if (result->type == KITSUNE_TSTRING && result->data && result->length > 0)
-					printf("%.*s\n", (int)result->length, (char*)result->data);
-				else if (result->type == KITSUNE_TNUMBER)
-					printf("%f\n", result->number);
-				else if (result->type == KITSUNE_TBOOLEAN)
-					printf("%s\n", result->boolean ? "true" : "false");
-				else if (result->type != KITSUNE_TNIL || result->type != KITSUNE_TNONE)
-					printf("(type %d)\n", result->type);
-				KitsuneVariableFree(result);
-			}
-		}
-#else
-		KitsuneVariable* result = KitsuneGetResult(id);
-		if (result) {
-			if (result->type == KITSUNE_TSTRING && result->data && result->length > 0)
-				printf("%.*s\n", (int)result->length, (char*)result->data);
-			else if (result->type == KITSUNE_TNUMBER)
-				printf("%f\n", result->number);
-			else if (result->type == KITSUNE_TBOOLEAN)
-				printf("%s\n", result->boolean ? "true" : "false");
-			else if (result->type != KITSUNE_TNIL || result->type != KITSUNE_TNONE)
-				printf("(type %d)\n", result->type);
-			KitsuneVariableFree(result);
-		}
+		if (g_imguiCtx && !RunImguiSession())
+			ret = EXIT_CODE_ERROR;
 #endif
 	}
 

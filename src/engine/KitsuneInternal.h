@@ -45,6 +45,7 @@ struct KitsuneCoroutine {
 	bool          didWork;  // set by Yield(true) or cooperative C yields with data; cleared by scheduler each tick
 	bool          resultConsumed;  // set by task:ConsumeResult(); GetError then reports nothing, like GetResult
 	bool          stopRaised;  // the cancel/interrupt error was raised once; if the script caught it, the next tick yields for disposal
+	bool          exited;      // stopped by os.exit: finishing with that error reports the exit code, not the error
 };
 
 struct KitsuneState {
@@ -55,6 +56,10 @@ struct KitsuneState {
 	char*         lastCallError;
 
 	std::atomic<long> interrupt{ 0 };
+	// Set together with interrupt by os.exit and cleared with it: the sweep then reports
+	// exitCode for the coroutines it stops.
+	std::atomic<long>      exitRequested{ 0 };
+	std::atomic<long long> exitCode{ 0 };
 	std::atomic<long> pauseFlag{ 0 };
 	PlatformEvent pausedEvent;
 	PlatformEvent resumeEvent;
