@@ -283,7 +283,63 @@ public sealed class McpHttpTests
         using HttpResponseMessage response = await server.SendAsync(HttpMethod.Get);
 
         response.StatusCode.ShouldBe(HttpStatusCode.MethodNotAllowed);
-        response.Content.Headers.Allow.ShouldBe(new[] { "POST", "DELETE" });
+        response.Content.Headers.Allow.ShouldBe(new[] { "POST", "DELETE", "OPTIONS" });
+    }
+
+    // CORS, for a web UI on another loopback port calling from the browser
+    [Fact]
+    public async Task Options_LoopbackOrigin_AllowsTheRequest()
+    {
+        await using var server = await McpHttpServer.StartAsync(initialize: false);
+        using HttpResponseMessage response = await server.SendAsync(HttpMethod.Options, m =>
+        {
+            m.Headers.TryAddWithoutValidation("Origin", "http://127.0.0.1:9931");
+            m.Headers.TryAddWithoutValidation("Access-Control-Request-Method", "POST");
+            m.Headers.TryAddWithoutValidation("Access-Control-Request-Headers", "content-type,mcp-session-id,mcp-protocol-version");
+        });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        response.Headers.GetValues("Access-Control-Allow-Origin").Single().ShouldBe("http://127.0.0.1:9931");
+        response.Headers.GetValues("Access-Control-Allow-Methods").Single().ShouldBe("POST, DELETE");
+        response.Headers.GetValues("Access-Control-Allow-Headers").Single().ShouldBe("content-type,mcp-session-id,mcp-protocol-version");
+    }
+
+    [Fact]
+    public async Task Options_ForeignOrigin_Returns403WithoutCorsHeaders()
+    {
+        await using var server = await McpHttpServer.StartAsync(initialize: false);
+        using HttpResponseMessage response = await server.SendAsync(HttpMethod.Options, m =>
+        {
+            m.Headers.TryAddWithoutValidation("Origin", "https://evil.example");
+            m.Headers.TryAddWithoutValidation("Access-Control-Request-Method", "POST");
+        });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        response.Headers.Contains("Access-Control-Allow-Origin").ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Post_LoopbackOrigin_NamesTheOriginAndExposesTheSessionId()
+    {
+        await using var server = await McpHttpServer.StartAsync(initialize: false);
+        using HttpResponseMessage response = await server.PostAsync(
+            McpHttpServer.InitializeJson,
+            withSession: false,
+            configure: m => m.Headers.TryAddWithoutValidation("Origin", "http://127.0.0.1:9931"));
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        response.Headers.GetValues("Access-Control-Allow-Origin").Single().ShouldBe("http://127.0.0.1:9931");
+        response.Headers.GetValues("Access-Control-Expose-Headers").Single().ShouldBe("MCP-Session-Id");
+    }
+
+    [Fact]
+    public async Task Post_WithoutOrigin_HasNoCorsHeaders()
+    {
+        await using var server = await McpHttpServer.StartAsync(initialize: false);
+        using HttpResponseMessage response = await server.PostAsync(McpHttpServer.InitializeJson, withSession: false);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        response.Headers.Contains("Access-Control-Allow-Origin").ShouldBeFalse();
     }
 
     [Fact]
@@ -580,7 +636,8 @@ public sealed class McpHttpTests
             string path = "/mcp")
             => client.SendAsync(HttpMethod.Post, json, withSession, configure, path);
 
-        public Task<HttpResponseMessage> SendAsync(HttpMethod method) => client.SendAsync(method, null);
+        public Task<HttpResponseMessage> SendAsync(HttpMethod method, Action<HttpRequestMessage>? configure = null)
+            => client.SendAsync(method, null, configure: configure);
 
         public Task<JsonNode> RequestAsync(string method, string paramsJson) => client.RequestAsync(method, paramsJson);
 

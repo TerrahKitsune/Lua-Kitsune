@@ -154,6 +154,11 @@ public sealed class McpTests
             return ok and 'no error' or tostring(err)
         end)
 
+        mcp:AddTool('quick', '', {}, function() return 'quick' end)
+        mcp:AddTool('slow', '', {}, function() Sleep(200) return 'slow' end)
+        mcp:AddTool('sleep_forever', '', {}, function() while true do Sleep(50) end end)
+        mcp:AddTool('spin', '', {}, function() while true do end end)
+
         assert(mcp:Start())
         while mcp:IsRunning() do Sleep(5) end
     ";
@@ -205,6 +210,96 @@ public sealed class McpTests
         await using var client = await McpClient.StartAsync("{}");
         (await client.CallToolAsync("exit_now")).ShouldBe("exit 3");
         (await client.WaitForExitAsync()).ShouldBe(3);
+    }
+
+    // Cancellation (notifications/cancelled)
+    [KitsuneExeFact]
+    public async Task ToolsCall_CancelledWhileSuspended_SendsNoResponseAndServesTheNextCall()
+    {
+        await using var client = await McpClient.StartAsync("{}");
+        int id = await client.StartToolCallAsync("sleep_forever");
+        await client.CancelAsync(id);
+        (await client.CallToolAsync("quick")).ShouldBe("quick");
+    }
+
+    [KitsuneExeFact]
+    public async Task ToolsCall_CancelledWhileBusyInALuaLoop_SendsNoResponseAndServesTheNextCall()
+    {
+        await using var client = await McpClient.StartAsync("{}");
+        int id = await client.StartToolCallAsync("spin");
+        await client.CancelAsync(id);
+        (await client.CallToolAsync("quick")).ShouldBe("quick");
+    }
+
+    [KitsuneExeFact]
+    public async Task ToolsCall_CancelledWhileEliciting_CancelsTheFormAndServesTheNextCall()
+    {
+        await using var client = await McpClient.StartAsync(ElicitingCapabilities);
+        int id = await client.StartToolCallAsync("form");
+        string elicitId = await client.ReadElicitationAsync();
+        await client.CancelAsync(id);
+        (await client.ReadCancelledAsync()).ShouldBe(elicitId);
+        (await client.CallToolAsync("quick")).ShouldBe("quick");
+    }
+
+    [KitsuneExeFact]
+    public async Task ToolsCall_FormAnsweredAfterCancel_AnswerIsIgnored()
+    {
+        await using var client = await McpClient.StartAsync(ElicitingCapabilities);
+        int id = await client.StartToolCallAsync("form");
+        string elicitId = await client.ReadElicitationAsync();
+        await client.CancelAsync(id);
+        (await client.ReadCancelledAsync()).ShouldBe(elicitId);
+        await client.AnswerAsync(elicitId, @"{""action"":""accept"",""content"":{""n"":1}}");
+        (await client.CallToolAsync("quick")).ShouldBe("quick");
+    }
+
+    [KitsuneExeFact]
+    public async Task Cancel_StringRequestId_StopsTheCallWithThatId()
+    {
+        await using var client = await McpClient.StartAsync("{}");
+        await client.StartToolCallAsync("sleep_forever", @"""call-1""");
+        await client.CancelAsync(@"""call-1""");
+        (await client.CallToolAsync("quick")).ShouldBe("quick");
+    }
+
+    [KitsuneExeFact]
+    public async Task Ping_DuringToolCall_IsAnswered()
+    {
+        await using var client = await McpClient.StartAsync("{}");
+        int id = await client.StartToolCallAsync("sleep_forever");
+        await client.PingAsync();
+        await client.CancelAsync(id);
+    }
+
+    [KitsuneExeFact]
+    public async Task Cancel_QueuedRequest_NeverRuns()
+    {
+        await using var client = await McpClient.StartAsync("{}");
+        int running = await client.StartToolCallAsync("sleep_forever");
+        int queued = await client.StartToolCallAsync("quick");
+        await client.CancelAsync(queued);
+        await client.CancelAsync(running);
+        (await client.CallToolAsync("quick")).ShouldBe("quick");
+    }
+
+    [KitsuneExeFact]
+    public async Task Cancel_OtherId_LetsTheRunningCallFinish()
+    {
+        await using var client = await McpClient.StartAsync("{}");
+        int id = await client.StartToolCallAsync("slow");
+        await client.CancelAsync(id + 100);
+        (await client.ReadToolResultAsync(id)).ShouldBe("slow");
+    }
+
+    [KitsuneExeFact]
+    public async Task Cancel_FinishedCall_IsIgnored()
+    {
+        await using var client = await McpClient.StartAsync("{}");
+        int id = await client.StartToolCallAsync("quick");
+        (await client.ReadToolResultAsync(id)).ShouldBe("quick");
+        await client.CancelAsync(id);
+        (await client.CallToolAsync("quick")).ShouldBe("quick");
     }
 
     // JSON null in the client's messages
@@ -907,6 +1002,52 @@ public sealed class McpTests
             response["id"]!.GetValue<int>().ShouldBe(id);
             ToolText(response).ShouldBe("default:decline");
             return request;
+        }
+
+        // Sends a tools/call without waiting for its result; returns its request id.
+        public async Task<int> StartToolCallAsync(string name)
+        {
+            int id = nextId++;
+            await StartToolCallAsync(name, id.ToString());
+            return id;
+        }
+
+        // idJson is the request id as JSON: 3 or "abc".
+        public Task StartToolCallAsync(string name, string idJson) =>
+            SendAsync($@"{{""jsonrpc"":""2.0"",""id"":{idJson},""method"":""tools/call"",""params"":{{""name"":""{name}"",""arguments"":{{}}}}}}");
+
+        public Task CancelAsync(int id) => CancelAsync(id.ToString());
+
+        public Task CancelAsync(string requestIdJson) =>
+            SendAsync($@"{{""jsonrpc"":""2.0"",""method"":""notifications/cancelled"",""params"":{{""requestId"":{requestIdJson},""reason"":""test""}}}}");
+
+        public Task AnswerAsync(string elicitId, string resultJson) =>
+            SendAsync($@"{{""jsonrpc"":""2.0"",""id"":""{elicitId}"",""result"":{resultJson}}}");
+
+        // The next message must be a notifications/cancelled from the server; returns its requestId.
+        public async Task<string> ReadCancelledAsync()
+        {
+            JsonNode notification = await ReadAsync();
+            notification["method"]?.GetValue<string>().ShouldBe("notifications/cancelled");
+            return notification["params"]!["requestId"]!.GetValue<string>();
+        }
+
+        public Task PingAsync() => RequestAsync("ping", "{}");
+
+        // The next message must be the result of the call with this id.
+        public async Task<string> ReadToolResultAsync(int id)
+        {
+            JsonNode response = await ReadAsync();
+            response["id"]!.GetValue<int>().ShouldBe(id);
+            return ToolText(response);
+        }
+
+        // The next message must be an elicitation/create, left unanswered; returns its id.
+        public async Task<string> ReadElicitationAsync()
+        {
+            JsonNode request = await ReadAsync();
+            request["method"]?.GetValue<string>().ShouldBe("elicitation/create");
+            return request["id"]!.GetValue<string>();
         }
 
         // For a server that ends on its own; stdin stays open, so nothing else makes it exit.

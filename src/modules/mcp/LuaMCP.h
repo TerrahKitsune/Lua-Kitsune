@@ -29,9 +29,9 @@ struct McpTool {
 };
 
 // A server-to-client request (e.g. elicitation/create) awaiting its response.
-// Keyed by the request id string in LuaMcpServer::pending. Whoever reads the
-// matching response line off stdin (the poll loop or any waiting Elicit call)
-// decodes it once and parks it here as a registry ref for the waiter to take.
+// Keyed by the request id string in LuaMcpServer::pending. The poll loop reads
+// the matching response line off stdin, decodes it once and parks it here as a
+// registry ref for the waiter to take.
 struct McpPendingRequest {
 	bool done    = false;
 	int  msgRef = LUA_NOREF; // the decoded response message, once done
@@ -72,13 +72,18 @@ struct LuaMcpServer {
 	std::map<std::string, McpPendingRequest> pending;
 	long long nextRequestId = 1;
 
-	// Client requests read off stdin while an Elicit call was waiting for its
-	// response (e.g. a second tools/call). Held raw and dispatched by the poll
-	// loop, in order, before it reads anything new.
+	// Client requests read off stdin while a tool call was running (e.g. a second
+	// tools/call). Held raw and dispatched by the poll loop, in order, once the
+	// call is over and before it reads anything new.
 	std::deque<std::string> deferred;
 	std::string line; // the poll loop's current line (see McpPollStep)
 	bool eof = false; // stdin reached EOF (client disconnected)
 	lua_State* toolThread = nullptr; // coroutine running the current tool callback, null between calls
+
+	// stdio: the task running the current tools/call and that call's request id,
+	// held while the call is in flight so a notifications/cancelled can stop it.
+	int toolTaskRef = LUA_NOREF;
+	int toolIdRef   = LUA_NOREF;
 
 	int  contextRef = LUA_NOREF; // the shared table passed to every tool callback
 	int  taskRef      = LUA_NOREF; // registry ref to the LuaTask (Tasks.New) running the poll loop

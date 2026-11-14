@@ -4694,6 +4694,8 @@ The rest of this section describes stdio; for HTTP see [Output in HTTP mode](#mc
 
 Only the **global** `print` and `io.write` are replaced. `io.stdout:write(...)`, and any `print` / `io.write` saved in a local variable *before* `Start()`, still write straight to stdout and corrupt the JSON-RPC stream, so never use them in MCP mode.
 
+**One tool call at a time, and cancellable.** Each tool callback runs in a task of its own while the server keeps reading stdin: a `ping` is answered during a call, other requests wait until the call has been answered. When the client sends `notifications/cancelled` for the running call, it is stopped and no response is sent. A callback suspended in `Sleep()` or another yielding call is dropped without being resumed, and one busy in a Lua loop is stopped at its next time slice. A callback blocked inside a C function that never returns to Lua can't be stopped. A cancel for a request that is still waiting removes it, so it never runs.
+
 ### mcp:IsRunning
 
 ```lua
@@ -4739,9 +4741,10 @@ This is the JSON-response half of MCP's [Streamable HTTP](https://modelcontextpr
 - **Sessions.** `initialize` returns an `MCP-Session-Id` header. Every later request must carry it: without it the server answers `400`, with an unknown one `404`. `DELETE /mcp` with the header ends the session. Sessions otherwise live until `Stop()`. When the process restarts, old session ids are unknown, the client gets `404` and starts over with a new `initialize`. The id is `request.McpSessionId` in tool callbacks.
 - **One at a time.** Requests are handled in arrival order, and a tool call is finished before the next request is looked at. While a tool callback runs or yields (`Sleep()`, a database call), the rest of the script keeps running, but other MCP requests, including `ping` and `tools/list`, wait until that call has been answered. A client that drops its connection during a call does not cancel it.
 - **Local only.** The server binds a loopback address and there is no authentication, so every process on the machine can call the tools. A request with an `Origin` header that isn't a loopback origin (a web page in a browser) is rejected with `403`.
+- **Browser pages on loopback.** A page served from another loopback address or port (for example llama.cpp's web UI on `http://127.0.0.1:9931`) can call the server from the browser: the CORS preflight (`OPTIONS`) is answered with `204`, and every response to a loopback `Origin` names that origin in `Access-Control-Allow-Origin` and exposes the `MCP-Session-Id` header.
 - **Not supported:** server-sent events (`GET /mcp` answers `405`), and with them everything the server would have to send on its own: [elicitation](#elicitation) (`request.CanElicit` is always `false`, so `Elicit` runs the default callback with reason `"unsupported"`), notifications to the client, and resumable streams. JSON-RPC batches are rejected with `400`.
 
-Other statuses: `404` for any path but `/mcp`, `400` for a body that isn't a single JSON-RPC message or for an `MCP-Protocol-Version` header naming a version the server doesn't speak, `405` for methods other than `POST` and `DELETE`.
+Other statuses: `404` for any path but `/mcp`, `400` for a body that isn't a single JSON-RPC message or for an `MCP-Protocol-Version` header naming a version the server doesn't speak, `405` for methods other than `POST`, `DELETE` and `OPTIONS`.
 
 <a id="mcp-http-output"></a>**Output in HTTP mode.** stdout is not reserved, so `print` and `io.write` keep working for the script. Only what the tool callback's own coroutine prints while the call runs is captured, and added to that call's `content` ahead of the return value, exactly as over stdio. Output from anywhere else (the rest of the script, tasks the tool started) goes where it went before `Start()`. `io.output` is not disabled.
 

@@ -33,11 +33,11 @@ static int  McpPollContinuation(lua_State* L, int status, lua_KContext ctx);
 static int  McpPollEntrypoint(lua_State* L);
 static int  McpDispatchLine(lua_State* L, LuaMcpServer* server, const char* data, size_t len);
 static int  McpDispatchToolsCall(lua_State* L, LuaMcpServer* server, int paramsIdx, int idIdx);
-static int  McpToolFinish(lua_State* L, LuaMcpServer* server, int pcallStatus);
-static int  McpToolContinuation(lua_State* L, int status, lua_KContext ctx);
+static void McpAbandonPending(lua_State* L, LuaMcpServer* server);
 static void McpHandleInitialize(lua_State* L, LuaMcpServer* server, int paramsIdx, int idIdx);
 static int  McpNextLine(LuaMcpServer* server, std::string& out);
 static void McpRouteResponse(lua_State* L, LuaMcpServer* server, int msgIdx, int idIdx);
+static void McpHandleLineWhileWaiting(lua_State* L, LuaMcpServer* server, std::string& line);
 
 // Platform: stdio availability + non-blocking poll.
 // Direct adaptation of LuaProcess.cpp's Process_ReadFromPipe/ReadNonblocking, pointed
@@ -141,6 +141,10 @@ int McpServer_GC(lua_State* L) {
 	}
 	if (server->contextRef > 0)
 		luaL_unref(L, LUA_REGISTRYINDEX, server->contextRef);
+	if (server->toolTaskRef > 0)
+		luaL_unref(L, LUA_REGISTRYINDEX, server->toolTaskRef);
+	if (server->toolIdRef > 0)
+		luaL_unref(L, LUA_REGISTRYINDEX, server->toolIdRef);
 	if (server->stdioSession.clientCapsRef > 0)
 		luaL_unref(L, LUA_REGISTRYINDEX, server->stdioSession.clientCapsRef);
 	for (auto& kv : server->sessions) {
@@ -442,16 +446,11 @@ static void McpHandleInitialize(lua_State* L, LuaMcpServer* server, int paramsId
 	lua_pop(L, 1); // result table
 }
 
-// Dispatch: tools/call -- yield-safe via a lua_pcallk continuation. MCP
-// dispatches exactly one call per request, so no batch bookkeeping is
-// needed. `server` itself (already Lua-GC-owned) is passed as the lua_KContext,
-// so no extra heap allocation is needed for the yield to survive on.
-//
-// Stack discipline: by the time lua_pcallk is invoked, the stack is exactly
-// [..., msg, id, params, method, fn, context, request]. After the call
-// resolves (synchronously or via the continuation), Lua guarantees the stack
-// looks like [..., msg, id, params, method, result_or_error] -- so
-// McpToolFinish can derive every needed index purely from lua_gettop(L).
+// Dispatch: tools/call. The callback runs in a task of its own, one call at a
+// time, while the poll loop keeps reading stdin: it answers pings and handles
+// notifications/cancelled for the call, and queues every other request until
+// the call is over. Cancelling drops the task: the scheduler never resumes an
+// aborted task again, whether it was suspended or busy in a Lua loop.
 
 void McpPushToolResult(lua_State* L, LuaMcpServer* server, int pcallStatus, int valueIdx) {
 	bool ok = (pcallStatus == LUA_OK || pcallStatus == LUA_YIELD);
@@ -497,22 +496,67 @@ void McpPushToolResult(lua_State* L, LuaMcpServer* server, int pcallStatus, int 
 	}
 }
 
-static int McpToolFinish(lua_State* L, LuaMcpServer* server, int pcallStatus) {
-	server->toolThread = nullptr;
-	int top      = lua_gettop(L);
-	int idIdx   = top - 3;
-	int msgIdx  = top - 4;
-
-	McpPushToolResult(L, server, pcallStatus, top);
-	McpSendResult(L, idIdx, -1);
-	lua_pop(L, 1); // envelope
-
-	lua_settop(L, msgIdx - 1); // drop msg/id/params/method/result entirely
-	return McpPollStep(L, server);
+// Tasks.New(fn, ...) for the function and `nargs` arguments on top of the stack: the
+// engine's own primitive for an independently scheduled coroutine, callable from the
+// scheduler thread (unlike KitsuneExecuteVariableAsync et al.). Replaces them with the
+// task, or with the error message and returns false.
+static bool McpNewTask(lua_State* L, int nargs) {
+	lua_getglobal(L, "Tasks");
+	lua_getfield(L, -1, "New");
+	lua_remove(L, -2);
+	lua_insert(L, -(nargs + 2));
+	if (lua_pcall(L, nargs + 1, 1, 0) != LUA_OK) {
+		if (!lua_isstring(L, -1)) {
+			lua_pop(L, 1);
+			lua_pushliteral(L, "Tasks.New failed");
+		}
+		return false;
+	}
+	return true;
 }
 
-static int McpToolContinuation(lua_State* L, int status, lua_KContext ctx) {
-	return McpToolFinish(L, (LuaMcpServer*)ctx, status);
+static void McpEndToolCall(lua_State* L, LuaMcpServer* server) {
+	if (server->toolTaskRef > 0)
+		luaL_unref(L, LUA_REGISTRYINDEX, server->toolTaskRef);
+	if (server->toolIdRef > 0)
+		luaL_unref(L, LUA_REGISTRYINDEX, server->toolIdRef);
+	server->toolTaskRef = LUA_NOREF;
+	server->toolIdRef   = LUA_NOREF;
+	server->toolThread  = nullptr;
+}
+
+static void McpCancelToolCall(lua_State* L, LuaMcpServer* server) {
+	lua_rawgeti(L, LUA_REGISTRYINDEX, server->toolTaskRef);
+	lua_getfield(L, -1, "Cancel");
+	lua_insert(L, -2);
+	if (lua_pcall(L, 1, 0, 0) != LUA_OK)
+		lua_pop(L, 1);
+	McpAbandonPending(L, server);
+	McpEndToolCall(L, server);
+}
+
+// The tool task's stack here: 1 request id, 2 the callback's result or error.
+static int McpToolTaskFinish(lua_State* L, LuaMcpServer* server, int pcallStatus) {
+	// Cancelled: the call has already ended, and the client expects no response to it.
+	if (server->toolThread != L)
+		return 0;
+	McpPushToolResult(L, server, pcallStatus, 2);
+	McpSendResult(L, 1, -1);
+	McpEndToolCall(L, server);
+	return 0;
+}
+
+static int McpToolTaskContinuation(lua_State* L, int status, lua_KContext ctx) {
+	return McpToolTaskFinish(L, (LuaMcpServer*)ctx, status);
+}
+
+// Task entry (fn, context, request, id): runs fn(context, request) and sends its response.
+static int McpToolTaskEntry(lua_State* L) {
+	LuaMcpServer* server = (LuaMcpServer*)lua_touserdata(L, lua_upvalueindex(1));
+	server->toolThread = L; // lets Elicit tell it's inside this call
+	lua_insert(L, 1);       // id below fn
+	int rc = lua_pcallk(L, 2, 1, 0, (lua_KContext)server, McpToolTaskContinuation);
+	return McpToolTaskFinish(L, server, rc);
 }
 
 const McpTool* McpFindTool(LuaMcpServer* server, const char* name) {
@@ -589,16 +633,24 @@ static int McpDispatchToolsCall(lua_State* L, LuaMcpServer* server, int paramsId
 
 	server->capturedOutput.clear();
 
-	lua_rawgeti(L, LUA_REGISTRYINDEX, tool->fnRef);        // fn
-	lua_rawgeti(L, LUA_REGISTRYINDEX, server->contextRef); // context
+	lua_pushlightuserdata(L, server);
+	lua_pushcclosure(L, McpToolTaskEntry, 1);
+	lua_rawgeti(L, LUA_REGISTRYINDEX, tool->fnRef);
+	lua_rawgeti(L, LUA_REGISTRYINDEX, server->contextRef);
 	// stdio is one connection: session "0"
 	McpPushToolRequest(L, tool, server->stdioSession, "0", server->stdioSession.clientElicitation, idIdx, argsIdx);
+	lua_pushvalue(L, idIdx);
+	if (McpNewTask(L, 4)) {
+		server->toolTaskRef = luaL_ref(L, LUA_REGISTRYINDEX);
+		lua_pushvalue(L, idIdx);
+		server->toolIdRef = luaL_ref(L, LUA_REGISTRYINDEX);
+	}
+	else {
+		McpSendError(L, idIdx, -32603, lua_tostring(L, -1));
+	}
 
-	lua_remove(L, argsIdx); // fn/context/request shift down by one to become contiguous
-
-	server->toolThread = L; // lets Elicit tell it's inside this call
-	int rc = lua_pcallk(L, 2, 1, 0, (lua_KContext)server, McpToolContinuation);
-	return McpToolFinish(L, server, rc);
+	lua_settop(L, msgIdx - 1);
+	return McpPollStep(L, server);
 }
 
 static int McpDispatchLine(lua_State* L, LuaMcpServer* server, const char* data, size_t len) {
@@ -678,8 +730,7 @@ static void McpLinebufAppend(LuaMcpServer* server, const char* data, size_t len)
 }
 
 // Takes the next complete '\n'-terminated line from linebuf, reading more from
-// stdin as needed. Shared by the poll loop and waiting Elicit calls, so both
-// consume the same stream. Returns 1 = line in `out`, 0 = nothing available
+// stdin as needed. Returns 1 = line in `out`, 0 = nothing available
 // right now, -1 = EOF (also latched in server->eof).
 static int McpNextLine(LuaMcpServer* server, std::string& out) {
 	for (;;) {
@@ -718,7 +769,16 @@ static int McpPollStep(lua_State* L, LuaMcpServer* server) {
 	// dispatch decodes it before anything can yield or read the next line.
 	std::string& line = server->line;
 
-	// Requests that arrived while an Elicit call was waiting go first, in order.
+	if (server->toolTaskRef > 0) {
+		int r;
+		while ((r = McpNextLine(server, line)) > 0)
+			McpHandleLineWhileWaiting(L, server, line);
+		if (r < 0)
+			return 0;
+		return lua_yieldk(L, 0, (lua_KContext)server, McpPollContinuation);
+	}
+
+	// Requests that arrived while a tool call was running go first, in order.
 	if (!server->deferred.empty()) {
 		line = std::move(server->deferred.front());
 		server->deferred.pop_front();
@@ -750,7 +810,7 @@ static int McpPollEntrypoint(lua_State* L) {
 // of which coroutine tries. Output is captured into server->capturedOutput
 // rather than silently discarded, so a tool callback's debug output can be
 // merged into that call's response -- see McpDispatchToolsCall (clears
-// the buffer before dispatch) and McpToolFinish (merges it after).
+// the buffer before dispatch) and McpToolTaskFinish (merges it after).
 
 int McpCapturePrint(lua_State* L, LuaMcpServer* server) {
 	int n = lua_gettop(L);
@@ -805,12 +865,12 @@ static void McpInstallOutputRedirect(lua_State* L, LuaMcpServer* server) {
 	lua_pop(L, 1); // io table
 }
 
-// Server-to-client requests: waiting for a response
+// Reading stdin while a tool call runs
 //
-// Elicit writes elicitation/create, then waits for the response by reading stdin
-// itself -- it only runs inside a tool callback, where the poll loop is suspended
-// and can't read it for us. While waiting it answers `ping`, parks responses in
-// `pending` by id, and defers every other message for the poll loop to dispatch later.
+// The poll loop keeps reading while a call is in flight and hands each line to
+// McpHandleLineWhileWaiting: it answers `ping`, parks responses in `pending` by
+// id for a waiting Elicit, handles notifications/cancelled, and defers every
+// other message for the poll loop to dispatch once the call is over.
 
 static double McpNowMs() {
 	using namespace std::chrono;
@@ -830,6 +890,49 @@ static void McpRouteResponse(lua_State* L, LuaMcpServer* server, int msgIdx, int
 	lua_pushvalue(L, msgIdx);
 	it->second.msgRef = luaL_ref(L, LUA_REGISTRYINDEX);
 	it->second.done    = true;
+}
+
+static void McpDropDeferred(lua_State* L, LuaMcpServer* server, int idIdx) {
+	idIdx = lua_absindex(L, idIdx);
+	for (auto it = server->deferred.begin(); it != server->deferred.end(); ++it) {
+		if (!McpJsonDecode(L, it->data(), it->size()))
+			continue;
+		bool match = false;
+		if (lua_istable(L, -1)) {
+			lua_getfield(L, -1, "id");
+			match = !McpIsNull(L, -1) && lua_rawequal(L, -1, idIdx);
+			lua_pop(L, 1);
+		}
+		lua_pop(L, 1);
+		if (match) {
+			server->deferred.erase(it);
+			return;
+		}
+	}
+}
+
+// notifications/cancelled: stops the running call, or drops the queued request, with
+// that id. The client expects no response either way; any other id is ignored.
+static void McpHandleCancelled(lua_State* L, LuaMcpServer* server, int msgIdx) {
+	int base = lua_gettop(L);
+	lua_getfield(L, msgIdx, "params");
+	if (lua_istable(L, -1)) {
+		lua_getfield(L, -1, "requestId");
+		int reqIdx = lua_gettop(L);
+		if (!McpIsNull(L, reqIdx)) {
+			bool current = false;
+			if (server->toolIdRef > 0) {
+				lua_rawgeti(L, LUA_REGISTRYINDEX, server->toolIdRef);
+				current = lua_rawequal(L, -1, reqIdx) != 0;
+				lua_pop(L, 1);
+			}
+			if (current)
+				McpCancelToolCall(L, server);
+			else
+				McpDropDeferred(L, server, reqIdx);
+		}
+	}
+	lua_settop(L, base);
 }
 
 static void McpHandleLineWhileWaiting(lua_State* L, LuaMcpServer* server, std::string& line) {
@@ -854,6 +957,10 @@ static void McpHandleLineWhileWaiting(lua_State* L, LuaMcpServer* server, std::s
 		} else if (strcmp(method, "ping") == 0 && !lua_isnil(L, idIdx)) {
 			McpPushEmptyObject(L);
 			McpSendResult(L, idIdx, -1);
+			lua_settop(L, base);
+			return;
+		} else if (strcmp(method, "notifications/cancelled") == 0) {
+			McpHandleCancelled(L, server, msgIdx);
 			lua_settop(L, base);
 			return;
 		}
@@ -892,6 +999,18 @@ static void McpPendingErase(lua_State* L, LuaMcpServer* server, const std::strin
 	if (it->second.msgRef > 0)
 		luaL_unref(L, LUA_REGISTRYINDEX, it->second.msgRef);
 	server->pending.erase(it);
+}
+
+// Only one tool call runs at a time, so every outstanding request is the cancelled call's:
+// the client is told to close the ones still open, and a late answer has nowhere to go.
+static void McpAbandonPending(lua_State* L, LuaMcpServer* server) {
+	for (auto& kv : server->pending) {
+		if (!kv.second.done)
+			McpSendCancelled(L, kv.first.c_str(), "tool call cancelled");
+		if (kv.second.msgRef > 0)
+			luaL_unref(L, LUA_REGISTRYINDEX, kv.second.msgRef);
+	}
+	server->pending.clear();
 }
 
 // Elicitation / Question userdata -- definition side.
@@ -1729,43 +1848,35 @@ static int McpElicitProcess(lua_State* L, LuaMcpElicitation* e) {
 	return McpElicitPlan(L, e, lua_gettop(L));
 }
 
-// One wait attempt. Returns: >= 0 results pushed (an error), -1 = nothing yet
-// (yield), -2 = response message pushed, -3 = timed out.
+// One wait attempt; the poll loop reads stdin and parks the response in `pending`.
+// Returns: >= 0 results pushed (an error), -1 = nothing yet (yield), -2 = response
+// message pushed, -3 = timed out.
 // Kept free of any C++ object that would be live across the caller's yield.
 static int McpElicitPoll(lua_State* L, LuaMcpServer* server, const std::string& key) {
-	for (;;) {
-		auto it = server->pending.find(key);
-		if (it == server->pending.end())
-			return McpElicitFail(L, "elicitation request was abandoned");
-		if (it->second.done) {
-			int ref = it->second.msgRef;
-			server->pending.erase(it);
-			lua_rawgeti(L, LUA_REGISTRYINDEX, ref);
-			luaL_unref(L, LUA_REGISTRYINDEX, ref);
-			return -2;
-		}
-		if (server->stopRequested) {
-			McpPendingErase(L, server, key);
-			return McpElicitFail(L, "MCP server stopped");
-		}
-		if (server->eof) {
-			McpPendingErase(L, server, key);
-			return McpElicitFail(L, "client disconnected");
-		}
-		if (!lua_isnil(L, EL_DEADLINE) && McpNowMs() >= lua_tonumber(L, EL_DEADLINE)) {
-			McpSendCancelled(L, key.c_str(), "timeout");
-			McpPendingErase(L, server, key);
-			return -3;
-		}
-
-		std::string line;
-		int r = McpNextLine(server, line);
-		if (r > 0)
-			McpHandleLineWhileWaiting(L, server, line);
-		else if (r == 0)
-			return -1;
-		// r < 0: eof is latched; the next iteration reports it
+	auto it = server->pending.find(key);
+	if (it == server->pending.end())
+		return McpElicitFail(L, "elicitation request was abandoned");
+	if (it->second.done) {
+		int ref = it->second.msgRef;
+		server->pending.erase(it);
+		lua_rawgeti(L, LUA_REGISTRYINDEX, ref);
+		luaL_unref(L, LUA_REGISTRYINDEX, ref);
+		return -2;
 	}
+	if (server->stopRequested) {
+		McpPendingErase(L, server, key);
+		return McpElicitFail(L, "MCP server stopped");
+	}
+	if (server->eof) {
+		McpPendingErase(L, server, key);
+		return McpElicitFail(L, "client disconnected");
+	}
+	if (!lua_isnil(L, EL_DEADLINE) && McpNowMs() >= lua_tonumber(L, EL_DEADLINE)) {
+		McpSendCancelled(L, key.c_str(), "timeout");
+		McpPendingErase(L, server, key);
+		return -3;
+	}
+	return -1;
 }
 
 static int McpElicitWaitContinuation(lua_State* L, int status, lua_KContext ctx);
@@ -1919,24 +2030,8 @@ int McpServer_AddTool(lua_State* L) {
 }
 
 bool McpStartPollTask(lua_State* L, LuaMcpServer* server) {
-	// Tasks.New(fn) -- the engine's own Lua-facing primitive for spinning up an
-	// independently-scheduled coroutine. Called here as a plain Lua function
-	// call (not through the public KitsuneEngine.h host API), because it's
-	// designed to be invoked from *inside* already-running script code -- unlike
-	// KitsuneExecuteVariableAsync et al., which explicitly refuse calls made
-	// from the scheduler thread (which is exactly where this Lua call executes).
-	lua_getglobal(L, "Tasks");
-	lua_getfield(L, -1, "New");
-	lua_remove(L, -2);  // drop the Tasks table
-	lua_insert(L, -2);  // New below the entry function
-
-	if (lua_pcall(L, 1, 1, 0) != LUA_OK) {
-		if (!lua_isstring(L, -1)) {
-			lua_pop(L, 1);
-			lua_pushliteral(L, "Tasks.New failed");
-		}
+	if (!McpNewTask(L, 0))
 		return false;
-	}
 
 	// Result is a LuaTask userdata; pin it so IsRunning()/__gc can query/release it later.
 	server->taskRef = luaL_ref(L, LUA_REGISTRYINDEX);

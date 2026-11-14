@@ -129,7 +129,26 @@ static McpSession* McpHttpRequireSession(lua_State* L, LuaMcpServer* server, con
 	return &it->second;
 }
 
-// Tool calls. Same lua_pcallk shape as the stdio dispatch: when the callback
+// CORS for a page on another loopback port (a web UI calling from the browser):
+// the browser only hands it responses that name its origin, and only the
+// response headers listed here.
+static void McpHttpAllowOrigin(lua_State* L, const char* origin) {
+	McpHttpSetHeader(L, "Access-Control-Allow-Origin", origin);
+	McpHttpSetHeader(L, "Access-Control-Expose-Headers", "MCP-Session-Id");
+	McpHttpSetHeader(L, "Vary", "Origin");
+}
+
+// The preflight a browser sends before a cross-origin POST or DELETE.
+static void McpHttpHandlePreflight(lua_State* L) {
+	McpHttpSetHeader(L, "Access-Control-Allow-Methods", "POST, DELETE");
+	const char* requested = McpHttpHeader(L, "access-control-request-headers");
+	if (requested)
+		McpHttpSetHeader(L, "Access-Control-Allow-Headers", requested);
+	McpHttpSetHeader(L, "Access-Control-Max-Age", "600");
+	McpHttpSend(L, 204, false);
+}
+
+// Tool calls run on the poll coroutine through lua_pcallk: when the callback
 // finishes, synchronously or through the continuation, the stack is the HT_
 // slots followed by the callback's result or error.
 
@@ -301,6 +320,8 @@ static int McpHttpHandleRequest(lua_State* L, LuaMcpServer* server) {
 		McpHttpSendError(L, 403, -32600, "Origin not allowed");
 		return MCP_HTTP_HANDLED;
 	}
+	if (origin)
+		McpHttpAllowOrigin(L, origin);
 
 	const char* method = request->method ? request->method : "";
 	if (strcmp(method, "POST") == 0)
@@ -308,9 +329,11 @@ static int McpHttpHandleRequest(lua_State* L, LuaMcpServer* server) {
 
 	if (strcmp(method, "DELETE") == 0) {
 		McpHttpHandleDelete(L, server);
+	} else if (strcmp(method, "OPTIONS") == 0) {
+		McpHttpHandlePreflight(L);
 	} else {
 		// GET included: this server offers no SSE stream.
-		McpHttpSetHeader(L, "Allow", "POST, DELETE");
+		McpHttpSetHeader(L, "Allow", "POST, DELETE, OPTIONS");
 		McpHttpSend(L, 405, false);
 	}
 	return MCP_HTTP_HANDLED;
