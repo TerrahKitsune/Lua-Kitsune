@@ -1,31 +1,5 @@
 #include "mcp/LuaMCPHttp.h"
-#include "httpserver/LuaHttpServer.h"
-#include "httpserver/LuaHttpServerRequest.h"
-#include "identifier/LuaIdentifier.h"
 #include <cstring>
-
-// The JSON-response half of MCP's Streamable HTTP transport: every JSON-RPC
-// message is one POST to MCP_HTTP_PATH and gets one HTTP response. There is no
-// SSE stream, so the server can never send a request of its own (elicitation).
-//
-// Everything runs on the poll task, one request at a time. While a tool
-// callback runs or yields, the Accept coroutine is not resumed, so later
-// requests wait in the socket until that call has been answered.
-
-#define MCP_HTTP_PATH    "/mcp"
-#define MCP_HTTP_HANDLED (-1)
-
-// Fixed stack slots of the poll task while it handles one request. A tool
-// callback's result lands right above them.
-enum {
-	HT_REQUEST = 1, // HttpRequest userdata
-	HT_RESPONSE,    // its HttpResponse
-	HT_HEADERS,     // request headers, lowercase names
-	HT_MESSAGE,     // decoded JSON-RPC message, nil until decoded
-	HT_ID,          // its id, nil for none
-};
-
-static int McpHttpPollStep(lua_State* L, LuaMcpServer* server);
 
 // Loopback checks
 
@@ -51,6 +25,35 @@ bool McpHttpIsLoopbackAddress(const char* address) {
 	// HttpServer.Listen can't bind a bracketed IPv6 host, so [::1] is not offered.
 	return McpHttpHostIs(address, len, "127.0.0.1") || McpHttpHostIs(address, len, "localhost");
 }
+
+#ifdef KITSUNE_HTTP
+
+#include "httpserver/LuaHttpServer.h"
+#include "httpserver/LuaHttpServerRequest.h"
+#include "identifier/LuaIdentifier.h"
+
+// The JSON-response half of MCP's Streamable HTTP transport: every JSON-RPC
+// message is one POST to MCP_HTTP_PATH and gets one HTTP response. There is no
+// SSE stream, so the server can never send a request of its own (elicitation).
+//
+// Everything runs on the poll task, one request at a time. While a tool
+// callback runs or yields, the Accept coroutine is not resumed, so later
+// requests wait in the socket until that call has been answered.
+
+#define MCP_HTTP_PATH    "/mcp"
+#define MCP_HTTP_HANDLED (-1)
+
+// Fixed stack slots of the poll task while it handles one request. A tool
+// callback's result lands right above them.
+enum {
+	HT_REQUEST = 1, // HttpRequest userdata
+	HT_RESPONSE,    // its HttpResponse
+	HT_HEADERS,     // request headers, lowercase names
+	HT_MESSAGE,     // decoded JSON-RPC message, nil until decoded
+	HT_ID,          // its id, nil for none
+};
+
+static int McpHttpPollStep(lua_State* L, LuaMcpServer* server);
 
 // A browser page served from anywhere else must not reach a local server (DNS rebinding).
 static bool McpHttpOriginIsLoopback(const char* origin) {
@@ -495,3 +498,14 @@ int McpHttpStart(lua_State* L, LuaMcpServer* server) {
 	lua_pushboolean(L, 1);
 	return 1;
 }
+
+#else // !KITSUNE_HTTP
+
+int McpHttpStart(lua_State* L, LuaMcpServer* server) {
+	(void)server;
+	lua_pushboolean(L, 0);
+	lua_pushliteral(L, "MCP http transport not compiled (needs KITSUNE_HTTP)");
+	return 2;
+}
+
+#endif // KITSUNE_HTTP
